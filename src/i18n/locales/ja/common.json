@@ -10,6 +10,7 @@
         "settings": "設定",
         "devConsole": "開発者コンソール",
         "models": "モデル",
+        "security": "セキュリティ",
         "deleteSessionConfirm": "セッション \"{{label}}\" を削除してもよろしいですか？",
         "openClawPage": "OpenClaw ページ"
     },

@@ -11,6 +11,7 @@ import {
   Puzzle,
   Clock,
   Settings as SettingsIcon,
+  Shield,
   PanelLeftClose,
   PanelLeft,
   Plus,
@@ -168,9 +169,6 @@ export function Sidebar() {
   }
 
   const navItems = [
-    { to: '/models', icon: <Cpu className="h-[18px] w-[18px]" strokeWidth={2} />, label: t('sidebar.models') },
-    { to: '/agents', icon: <Bot className="h-[18px] w-[18px]" strokeWidth={2} />, label: t('sidebar.agents') },
-    { to: '/channels', icon: <Network className="h-[18px] w-[18px]" strokeWidth={2} />, label: t('sidebar.channels') },
     { to: '/skills', icon: <Puzzle className="h-[18px] w-[18px]" strokeWidth={2} />, label: t('sidebar.skills') },
     { to: '/cron', icon: <Clock className="h-[18px] w-[18px]" strokeWidth={2} />, label: t('sidebar.cronTasks') },
   ];
@@ -186,9 +184,9 @@ export function Sidebar() {
       <div className={cn("flex items-center p-2 h-12", sidebarCollapsed ? "justify-center" : "justify-between")}>
         {!sidebarCollapsed && (
           <div className="flex items-center gap-2 px-2 overflow-hidden">
-            <img src={logoSvg} alt="ClawX" className="h-5 w-auto shrink-0" />
+            <img src={logoSvg} alt="XzClaw" className="h-5 w-auto shrink-0" />
             <span className="text-sm font-semibold truncate whitespace-nowrap text-foreground/90">
-              ClawX
+              XzClaw
             </span>
           </div>
         )}
@@ -286,16 +284,100 @@ export function Sidebar() {
       {/* Footer */}
       <div className="p-2 mt-auto">
         <NavLink
-            to="/settings"
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors',
-                'hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80',
-                isActive && 'bg-black/5 dark:bg-white/10 text-foreground',
-                sidebarCollapsed ? 'justify-center px-0' : ''
-              )
-            }
-          >
+          to="/channels"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors',
+              'hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80',
+              isActive && 'bg-black/5 dark:bg-white/10 text-foreground',
+              sidebarCollapsed ? 'justify-center px-0' : ''
+            )
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <div className={cn("flex shrink-0 items-center justify-center", isActive ? "text-foreground" : "text-muted-foreground")}>
+                <Network className="h-[18px] w-[18px]" strokeWidth={2} />
+              </div>
+              {!sidebarCollapsed && <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{t('sidebar.channels')}</span>}
+            </>
+          )}
+        </NavLink>
+
+        <NavLink
+          to="/models"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors mt-1',
+              'hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80',
+              isActive && 'bg-black/5 dark:bg-white/10 text-foreground',
+              sidebarCollapsed ? 'justify-center px-0' : ''
+            )
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <div className={cn("flex shrink-0 items-center justify-center", isActive ? "text-foreground" : "text-muted-foreground")}>
+                <Cpu className="h-[18px] w-[18px]" strokeWidth={2} />
+              </div>
+              {!sidebarCollapsed && <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{t('sidebar.models')}</span>}
+            </>
+          )}
+        </NavLink>
+
+        <NavLink
+          to="/agents"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors mt-1',
+              'hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80',
+              isActive && 'bg-black/5 dark:bg-white/10 text-foreground',
+              sidebarCollapsed ? 'justify-center px-0' : ''
+            )
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <div className={cn("flex shrink-0 items-center justify-center", isActive ? "text-foreground" : "text-muted-foreground")}>
+                <Bot className="h-[18px] w-[18px]" strokeWidth={2} />
+              </div>
+              {!sidebarCollapsed && <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{t('sidebar.agents')}</span>}
+            </>
+          )}
+        </NavLink>
+
+        <NavLink
+          to="/security"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors mt-1',
+              'hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80',
+              isActive && 'bg-black/5 dark:bg-white/10 text-foreground',
+              sidebarCollapsed ? 'justify-center px-0' : ''
+            )
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <div className={cn("flex shrink-0 items-center justify-center", isActive ? "text-foreground" : "text-muted-foreground")}>
+                <Shield className="h-[18px] w-[18px]" strokeWidth={2} />
+              </div>
+              {!sidebarCollapsed && <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{t('sidebar.security')}</span>}
+            </>
+          )}
+        </NavLink>
+
+        <NavLink
+          to="/settings"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors mt-1',
+              'hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80',
+              isActive && 'bg-black/5 dark:bg-white/10 text-foreground',
+              sidebarCollapsed ? 'justify-center px-0' : ''
+            )
+          }
+        >
           {({ isActive }) => (
             <>
               <div className={cn("flex shrink-0 items-center justify-center", isActive ? "text-foreground" : "text-muted-foreground")}>
