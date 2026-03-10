@@ -54,7 +54,10 @@ async function sanitizeConfig(filePath: string): Promise<boolean> {
   }
 
   // Mirror: remove stale tools.web.search.kimi.apiKey when moonshot provider exists.
-  const providers = ((config.models as Record<string, unknown> | undefined)?.providers as Record<string, unknown> | undefined) || {};
+  const providers =
+    ((config.models as Record<string, unknown> | undefined)?.providers as
+      | Record<string, unknown>
+      | undefined) || {};
   if (providers.moonshot) {
     const tools = (config.tools as Record<string, unknown> | undefined) || {};
     const web = (tools.web as Record<string, unknown> | undefined) || {};
@@ -77,7 +80,7 @@ async function sanitizeConfig(filePath: string): Promise<boolean> {
 }
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(join(tmpdir(), 'clawx-test-'));
+  tempDir = await mkdtemp(join(tmpdir(), 'clawclaw-test-'));
   configPath = join(tempDir, 'openclaw.json');
 });
 
@@ -116,7 +119,7 @@ describe('sanitizeOpenClawConfig (blocklist approach)', () => {
     await writeConfig({
       skills: {
         disabled: false,
-        entries: { 'x': { enabled: false } },
+        entries: { x: { enabled: false } },
       },
     });
 
@@ -135,7 +138,7 @@ describe('sanitizeOpenClawConfig (blocklist approach)', () => {
       skills: {
         enabled: true,
         disabled: false,
-        entries: { 'a': { enabled: true } },
+        entries: { a: { enabled: true } },
         allowBundled: ['web-search'],
       },
     });
@@ -173,12 +176,12 @@ describe('sanitizeOpenClawConfig (blocklist approach)', () => {
     // the blocklist approach should NOT strip them.
     const original = {
       skills: {
-        entries: { 'x': { enabled: true } },
+        entries: { x: { enabled: true } },
         allowBundled: ['web-search'],
         load: { extraDirs: ['/my/dir'], watch: true },
         install: { preferBrew: false },
         limits: { maxSkillsInPrompt: 5 },
-        futureNewKey: { some: 'value' },  // hypothetical future key
+        futureNewKey: { some: 'value' }, // hypothetical future key
       },
     };
     await writeConfig(original);
@@ -264,7 +267,12 @@ describe('sanitizeOpenClawConfig (blocklist approach)', () => {
     expect(modified).toBe(true);
 
     const result = await readConfig();
-    const kimi = ((((result.tools as Record<string, unknown>).web as Record<string, unknown>).search as Record<string, unknown>).kimi as Record<string, unknown>);
+    const kimi = (
+      ((result.tools as Record<string, unknown>).web as Record<string, unknown>).search as Record<
+        string,
+        unknown
+      >
+    ).kimi as Record<string, unknown>;
     expect(kimi).not.toHaveProperty('apiKey');
     expect(kimi.baseUrl).toBe('https://api.moonshot.cn/v1');
   });

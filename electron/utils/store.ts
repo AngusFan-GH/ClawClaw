@@ -13,7 +13,7 @@ let settingsStoreInstance: any = null;
  * Generate a random token for gateway authentication
  */
 function generateToken(): string {
-  return `clawx-${randomBytes(16).toString('hex')}`;
+  return `clawclaw-${randomBytes(16).toString('hex')}`;
 }
 
 /**
@@ -25,7 +25,7 @@ export interface AppSettings {
   language: string;
   startMinimized: boolean;
   launchAtStartup: boolean;
-  
+
   // Gateway
   gatewayAutoStart: boolean;
   gatewayPort: number;
@@ -36,17 +36,17 @@ export interface AppSettings {
   proxyHttpsServer: string;
   proxyAllServer: string;
   proxyBypassRules: string;
-  
+
   // Update
   updateChannel: 'stable' | 'beta' | 'dev';
   autoCheckUpdate: boolean;
   autoDownloadUpdate: boolean;
   skippedVersions: string[];
-  
+
   // UI State
   sidebarCollapsed: boolean;
   devModeUnlocked: boolean;
-  
+
   // Presets
   selectedBundles: string[];
   enabledSkills: string[];
@@ -62,7 +62,7 @@ const defaults: AppSettings = {
   language: 'en',
   startMinimized: false,
   launchAtStartup: false,
-  
+
   // Gateway
   gatewayAutoStart: true,
   gatewayPort: 18789,
@@ -73,17 +73,17 @@ const defaults: AppSettings = {
   proxyHttpsServer: '',
   proxyAllServer: '',
   proxyBypassRules: '<local>;localhost;127.0.0.1;::1',
-  
+
   // Update
   updateChannel: 'stable',
   autoCheckUpdate: true,
   autoDownloadUpdate: false,
   skippedVersions: [],
-  
+
   // UI State
   sidebarCollapsed: false,
   devModeUnlocked: false,
-  
+
   // Presets
   selectedBundles: ['productivity', 'developer'],
   enabledSkills: [],

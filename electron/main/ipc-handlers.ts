@@ -8,17 +8,29 @@ import { homedir } from 'node:os';
 import { join, extname, basename } from 'node:path';
 import crypto from 'node:crypto';
 import { GatewayManager } from '../gateway/manager';
-import { ClawHubService, ClawHubSearchParams, ClawHubInstallParams, ClawHubUninstallParams } from '../gateway/clawhub';
 import {
-  type ProviderConfig,
-} from '../utils/secure-storage';
-import { getOpenClawStatus, getOpenClawDir, getOpenClawConfigDir, getOpenClawSkillsDir, ensureDir } from '../utils/paths';
+  ClawHubService,
+  ClawHubSearchParams,
+  ClawHubInstallParams,
+  ClawHubUninstallParams,
+} from '../gateway/clawhub';
+import { type ProviderConfig } from '../utils/secure-storage';
+import {
+  getOpenClawStatus,
+  getOpenClawDir,
+  getOpenClawConfigDir,
+  getOpenClawSkillsDir,
+  ensureDir,
+} from '../utils/paths';
 import { getOpenClawCliCommand } from '../utils/openclaw-cli';
-import { getAllSettings, getSetting, resetSettings, setSetting, type AppSettings } from '../utils/store';
 import {
-  saveProviderKeyToOpenClaw,
-  removeProviderFromOpenClaw,
-} from '../utils/openclaw-auth';
+  getAllSettings,
+  getSetting,
+  resetSettings,
+  setSetting,
+  type AppSettings,
+} from '../utils/store';
+import { saveProviderKeyToOpenClaw, removeProviderFromOpenClaw } from '../utils/openclaw-auth';
 import { logger } from '../utils/logger';
 import {
   saveChannelConfig,
@@ -60,7 +72,13 @@ type AppRequest = {
   payload?: unknown;
 };
 
-type AppErrorCode = 'VALIDATION' | 'PERMISSION' | 'TIMEOUT' | 'GATEWAY' | 'INTERNAL' | 'UNSUPPORTED';
+type AppErrorCode =
+  | 'VALIDATION'
+  | 'PERMISSION'
+  | 'TIMEOUT'
+  | 'GATEWAY'
+  | 'INTERNAL'
+  | 'UNSUPPORTED';
 
 type AppResponse = {
   id?: string;
@@ -207,7 +225,8 @@ function registerHostApiProxyHandlers(): void {
 function mapAppErrorCode(error: unknown): AppErrorCode {
   const msg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
   if (msg.includes('timeout')) return 'TIMEOUT';
-  if (msg.includes('permission') || msg.includes('denied') || msg.includes('forbidden')) return 'PERMISSION';
+  if (msg.includes('permission') || msg.includes('denied') || msg.includes('forbidden'))
+    return 'PERMISSION';
   if (msg.includes('gateway')) return 'GATEWAY';
   if (msg.includes('invalid') || msg.includes('required')) return 'VALIDATION';
   return 'INTERNAL';
@@ -308,7 +327,9 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             const providerType = provider?.type || providerId;
             const registryBaseUrl = getProviderConfig(providerType)?.baseUrl;
             const resolvedBaseUrl = options?.baseUrl || provider?.baseUrl || registryBaseUrl;
-            data = await validateApiKeyWithProvider(providerType, apiKey, { baseUrl: resolvedBaseUrl });
+            data = await validateApiKeyWithProvider(providerType, apiKey, {
+              baseUrl: resolvedBaseUrl,
+            });
             break;
           }
           if (request.action === 'save') {
@@ -370,7 +391,8 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
               | undefined;
             const providerId = Array.isArray(payload) ? payload[0] : payload?.providerId;
             const apiKey = Array.isArray(payload) ? payload[1] : payload?.apiKey;
-            if (!providerId || typeof apiKey !== 'string') throw new Error('Invalid provider.setApiKey payload');
+            if (!providerId || typeof apiKey !== 'string')
+              throw new Error('Invalid provider.setApiKey payload');
 
             try {
               await providerService.setLegacyProviderApiKey(providerId, apiKey);
@@ -538,7 +560,12 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             break;
           }
           if (request.action === 'setChannel') {
-            const payload = request.payload as { channel?: 'stable' | 'beta' | 'dev' } | 'stable' | 'beta' | 'dev' | undefined;
+            const payload = request.payload as
+              | { channel?: 'stable' | 'beta' | 'dev' }
+              | 'stable'
+              | 'beta'
+              | 'dev'
+              | undefined;
             const channel = typeof payload === 'string' ? payload : payload?.channel;
             if (!channel) throw new Error('Invalid update.setChannel payload');
             appUpdater.setChannel(channel);
@@ -548,7 +575,8 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
           if (request.action === 'setAutoDownload') {
             const payload = request.payload as { enable?: boolean } | boolean | undefined;
             const enable = typeof payload === 'boolean' ? payload : payload?.enable;
-            if (typeof enable !== 'boolean') throw new Error('Invalid update.setAutoDownload payload');
+            if (typeof enable !== 'boolean')
+              throw new Error('Invalid update.setAutoDownload payload');
             appUpdater.setAutoDownload(enable);
             data = { success: true };
             break;
@@ -575,7 +603,12 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             break;
           }
           if (request.action === 'create') {
-            type CronCreateInput = { name: string; message: string; schedule: string; enabled?: boolean };
+            type CronCreateInput = {
+              name: string;
+              message: string;
+              schedule: string;
+              enabled?: boolean;
+            };
             const payload = request.payload as
               | { input?: CronCreateInput }
               | [CronCreateInput]
@@ -600,7 +633,10 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
               delivery: { mode: 'none' },
             };
             const created = await gatewayManager.rpc('cron.add', gatewayInput);
-            data = created && typeof created === 'object' ? transformCronJob(created as GatewayCronJob) : created;
+            data =
+              created && typeof created === 'object'
+                ? transformCronJob(created as GatewayCronJob)
+                : created;
             break;
           }
           if (request.action === 'update') {
@@ -612,7 +648,8 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             const input = Array.isArray(payload) ? payload[1] : payload?.input;
             if (!id || !input) throw new Error('Invalid cron.update payload');
             const patch = { ...input };
-            if (typeof patch.schedule === 'string') patch.schedule = { kind: 'cron', expr: patch.schedule };
+            if (typeof patch.schedule === 'string')
+              patch.schedule = { kind: 'cron', expr: patch.schedule };
             if (typeof patch.message === 'string') {
               patch.payload = { kind: 'agentTurn', message: patch.message };
               delete patch.message;
@@ -628,7 +665,10 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             break;
           }
           if (request.action === 'toggle') {
-            const payload = request.payload as { id?: string; enabled?: boolean } | [string, boolean] | undefined;
+            const payload = request.payload as
+              | { id?: string; enabled?: boolean }
+              | [string, boolean]
+              | undefined;
             const id = Array.isArray(payload) ? payload[0] : payload?.id;
             const enabled = Array.isArray(payload) ? payload[1] : payload?.enabled;
             if (!id || typeof enabled !== 'boolean') throw new Error('Invalid cron.toggle payload');
@@ -655,9 +695,10 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
           if (request.action === 'recentTokenHistory') {
             const payload = request.payload as { limit?: number } | number | undefined;
             const limit = typeof payload === 'number' ? payload : payload?.limit;
-            const safeLimit = typeof limit === 'number' && Number.isFinite(limit)
-              ? Math.max(Math.floor(limit), 1)
-              : undefined;
+            const safeLimit =
+              typeof limit === 'number' && Number.isFinite(limit)
+                ? Math.max(Math.floor(limit), 1)
+                : undefined;
             data = await getRecentTokenUsageHistory(safeLimit);
             break;
           }
@@ -676,7 +717,10 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             break;
           }
           if (request.action === 'get') {
-            const payload = request.payload as { key?: keyof AppSettings } | [keyof AppSettings] | undefined;
+            const payload = request.payload as
+              | { key?: keyof AppSettings }
+              | [keyof AppSettings]
+              | undefined;
             const key = Array.isArray(payload) ? payload[0] : payload?.key;
             if (!key) throw new Error('Invalid settings.get payload');
             data = await getSetting(key);
@@ -699,7 +743,9 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
           }
           if (request.action === 'setMany') {
             const patch = (request.payload ?? {}) as Partial<AppSettings>;
-            const entries = Object.entries(patch) as Array<[keyof AppSettings, AppSettings[keyof AppSettings]]>;
+            const entries = Object.entries(patch) as Array<
+              [keyof AppSettings, AppSettings[keyof AppSettings]]
+            >;
             for (const [key, value] of entries) {
               await setSetting(key, value as never);
             }
@@ -756,16 +802,22 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
  */
 function registerSkillConfigHandlers(): void {
   // Update skill config (apiKey and env)
-  ipcMain.handle('skill:updateConfig', async (_, params: {
-    skillKey: string;
-    apiKey?: string;
-    env?: Record<string, string>;
-  }) => {
-    return await updateSkillConfig(params.skillKey, {
-      apiKey: params.apiKey,
-      env: params.env,
-    });
-  });
+  ipcMain.handle(
+    'skill:updateConfig',
+    async (
+      _,
+      params: {
+        skillKey: string;
+        apiKey?: string;
+        env?: Record<string, string>;
+      }
+    ) => {
+      return await updateSkillConfig(params.skillKey, {
+        apiKey: params.apiKey,
+        env: params.env,
+      });
+    }
+  );
 
   // Get skill config
   ipcMain.handle('skill:getConfig', async (_, skillKey: string) => {
@@ -817,11 +869,11 @@ function transformCronJob(job: GatewayCronJob) {
   // Build lastRun from state
   const lastRun = job.state?.lastRunAtMs
     ? {
-      time: new Date(job.state.lastRunAtMs).toISOString(),
-      success: job.state.lastStatus === 'ok',
-      error: job.state.lastError,
-      duration: job.state.lastDurationMs,
-    }
+        time: new Date(job.state.lastRunAtMs).toISOString(),
+        success: job.state.lastStatus === 'ok',
+        error: job.state.lastError,
+        duration: job.state.lastDurationMs,
+      }
     : undefined;
 
   // Build nextRun from state
@@ -867,9 +919,7 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
           (job.sessionTarget === 'isolated' || !job.sessionTarget) &&
           job.payload?.kind === 'agentTurn';
         const needsRepair =
-          isIsolatedAgent &&
-          job.delivery?.mode === 'announce' &&
-          !job.delivery?.channel;
+          isIsolatedAgent && job.delivery?.mode === 'announce' && !job.delivery?.channel;
 
         if (needsRepair) {
           try {
@@ -898,40 +948,46 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
   });
 
   // Create a new cron job
-  // UI-created tasks have no delivery target — results go to the ClawX chat page.
+  // UI-created tasks have no delivery target — results go to the ClawClaw chat page.
   // Tasks created via external channels (Feishu, Discord, etc.) are handled
   // directly by the OpenClaw Gateway and do not pass through this IPC handler.
-  ipcMain.handle('cron:create', async (_, input: {
-    name: string;
-    message: string;
-    schedule: string;
-    enabled?: boolean;
-  }) => {
-    try {
-      const gatewayInput = {
-        name: input.name,
-        schedule: { kind: 'cron', expr: input.schedule },
-        payload: { kind: 'agentTurn', message: input.message },
-        enabled: input.enabled ?? true,
-        wakeMode: 'next-heartbeat',
-        sessionTarget: 'isolated',
-        // UI-created jobs deliver results via ClawX WebSocket chat events,
-        // not external messaging channels.  Setting mode='none' prevents
-        // the Gateway from attempting channel delivery (which would fail
-        // with "Channel is required" when no channels are configured).
-        delivery: { mode: 'none' },
-      };
-      const result = await gatewayManager.rpc('cron.add', gatewayInput);
-      // Transform the returned job to frontend format
-      if (result && typeof result === 'object') {
-        return transformCronJob(result as GatewayCronJob);
+  ipcMain.handle(
+    'cron:create',
+    async (
+      _,
+      input: {
+        name: string;
+        message: string;
+        schedule: string;
+        enabled?: boolean;
       }
-      return result;
-    } catch (error) {
-      console.error('Failed to create cron job:', error);
-      throw error;
+    ) => {
+      try {
+        const gatewayInput = {
+          name: input.name,
+          schedule: { kind: 'cron', expr: input.schedule },
+          payload: { kind: 'agentTurn', message: input.message },
+          enabled: input.enabled ?? true,
+          wakeMode: 'next-heartbeat',
+          sessionTarget: 'isolated',
+          // UI-created jobs deliver results via ClawClaw WebSocket chat events,
+          // not external messaging channels.  Setting mode='none' prevents
+          // the Gateway from attempting channel delivery (which would fail
+          // with "Channel is required" when no channels are configured).
+          delivery: { mode: 'none' },
+        };
+        const result = await gatewayManager.rpc('cron.add', gatewayInput);
+        // Transform the returned job to frontend format
+        if (result && typeof result === 'object') {
+          return transformCronJob(result as GatewayCronJob);
+        }
+        return result;
+      } catch (error) {
+        console.error('Failed to create cron job:', error);
+        throw error;
+      }
     }
-  });
+  );
 
   // Update an existing cron job
   ipcMain.handle('cron:update', async (_, id: string, input: Record<string, unknown>) => {
@@ -1048,10 +1104,7 @@ function registerLogHandlers(): void {
 /**
  * Gateway-related IPC handlers
  */
-function registerGatewayHandlers(
-  gatewayManager: GatewayManager,
-  mainWindow: BrowserWindow
-): void {
+function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: BrowserWindow): void {
   type GatewayHttpProxyRequest = {
     path?: string;
     method?: string;
@@ -1120,9 +1173,7 @@ function registerGatewayHandlers(
       const path = request?.path && request.path.startsWith('/') ? request.path : '/';
       const method = (request?.method || 'GET').toUpperCase();
       const timeoutMs =
-        typeof request?.timeoutMs === 'number' && request.timeoutMs > 0
-          ? request.timeoutMs
-          : 15000;
+        typeof request?.timeoutMs === 'number' && request.timeoutMs > 0 ? request.timeoutMs : 15000;
 
       const token = await getSetting('gatewayToken');
       const headers: Record<string, string> = {
@@ -1180,86 +1231,97 @@ function registerGatewayHandlers(
   // Raster images (png/jpg/gif/webp) are inlined as base64 vision attachments.
   // All other files are referenced by path in the message text so the model
   // can access them via tools (the same format channels use).
-  const VISION_MIME_TYPES = new Set([
-    'image/png', 'image/jpeg', 'image/bmp', 'image/webp',
-  ]);
+  const VISION_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/bmp', 'image/webp']);
 
-  ipcMain.handle('chat:sendWithMedia', async (_, params: {
-    sessionKey: string;
-    message: string;
-    deliver?: boolean;
-    idempotencyKey: string;
-    media?: Array<{ filePath: string; mimeType: string; fileName: string }>;
-  }) => {
-    try {
-      let message = params.message;
-      // The Gateway processes image attachments through TWO parallel paths:
-      // Path A: `attachments` param → parsed via `parseMessageWithAttachments` →
-      //   injected as inline vision content when the model supports images.
-      //   Format: { content: base64, mimeType: string, fileName?: string }
-      // Path B: `[media attached: ...]` in message text → Gateway's native image
-      //   detection (`detectAndLoadPromptImages`) reads the file from disk and
-      //   injects it as inline vision content. Also works for history messages.
-      // We use BOTH paths for maximum reliability.
-      const imageAttachments: Array<Record<string, unknown>> = [];
-      const fileReferences: string[] = [];
+  ipcMain.handle(
+    'chat:sendWithMedia',
+    async (
+      _,
+      params: {
+        sessionKey: string;
+        message: string;
+        deliver?: boolean;
+        idempotencyKey: string;
+        media?: Array<{ filePath: string; mimeType: string; fileName: string }>;
+      }
+    ) => {
+      try {
+        let message = params.message;
+        // The Gateway processes image attachments through TWO parallel paths:
+        // Path A: `attachments` param → parsed via `parseMessageWithAttachments` →
+        //   injected as inline vision content when the model supports images.
+        //   Format: { content: base64, mimeType: string, fileName?: string }
+        // Path B: `[media attached: ...]` in message text → Gateway's native image
+        //   detection (`detectAndLoadPromptImages`) reads the file from disk and
+        //   injects it as inline vision content. Also works for history messages.
+        // We use BOTH paths for maximum reliability.
+        const imageAttachments: Array<Record<string, unknown>> = [];
+        const fileReferences: string[] = [];
 
-      if (params.media && params.media.length > 0) {
-        const fsP = await import('fs/promises');
-        for (const m of params.media) {
-          const exists = await fsP.access(m.filePath).then(() => true, () => false);
-          logger.info(`[chat:sendWithMedia] Processing file: ${m.fileName} (${m.mimeType}), path: ${m.filePath}, exists: ${exists}, isVision: ${VISION_MIME_TYPES.has(m.mimeType)}`);
+        if (params.media && params.media.length > 0) {
+          const fsP = await import('fs/promises');
+          for (const m of params.media) {
+            const exists = await fsP.access(m.filePath).then(
+              () => true,
+              () => false
+            );
+            logger.info(
+              `[chat:sendWithMedia] Processing file: ${m.fileName} (${m.mimeType}), path: ${m.filePath}, exists: ${exists}, isVision: ${VISION_MIME_TYPES.has(m.mimeType)}`
+            );
 
-          // Always add file path reference so the model can access it via tools
-          fileReferences.push(
-            `[media attached: ${m.filePath} (${m.mimeType}) | ${m.filePath}]`,
-          );
+            // Always add file path reference so the model can access it via tools
+            fileReferences.push(`[media attached: ${m.filePath} (${m.mimeType}) | ${m.filePath}]`);
 
-          if (VISION_MIME_TYPES.has(m.mimeType)) {
-            // Send as base64 attachment in the format the Gateway expects:
-            // { content: base64String, mimeType: string, fileName?: string }
-            // The Gateway normalizer looks for `a.content` (NOT `a.source.data`).
-            const fileBuffer = await fsP.readFile(m.filePath);
-            const base64Data = fileBuffer.toString('base64');
-            logger.info(`[chat:sendWithMedia] Read ${fileBuffer.length} bytes, base64 length: ${base64Data.length}`);
-            imageAttachments.push({
-              content: base64Data,
-              mimeType: m.mimeType,
-              fileName: m.fileName,
-            });
+            if (VISION_MIME_TYPES.has(m.mimeType)) {
+              // Send as base64 attachment in the format the Gateway expects:
+              // { content: base64String, mimeType: string, fileName?: string }
+              // The Gateway normalizer looks for `a.content` (NOT `a.source.data`).
+              const fileBuffer = await fsP.readFile(m.filePath);
+              const base64Data = fileBuffer.toString('base64');
+              logger.info(
+                `[chat:sendWithMedia] Read ${fileBuffer.length} bytes, base64 length: ${base64Data.length}`
+              );
+              imageAttachments.push({
+                content: base64Data,
+                mimeType: m.mimeType,
+                fileName: m.fileName,
+              });
+            }
           }
         }
+
+        // Append file references to message text so the model knows about them
+        if (fileReferences.length > 0) {
+          const refs = fileReferences.join('\n');
+          message = message ? `${message}\n\n${refs}` : refs;
+        }
+
+        const rpcParams: Record<string, unknown> = {
+          sessionKey: params.sessionKey,
+          message,
+          deliver: params.deliver ?? false,
+          idempotencyKey: params.idempotencyKey,
+        };
+
+        if (imageAttachments.length > 0) {
+          rpcParams.attachments = imageAttachments;
+        }
+
+        logger.info(
+          `[chat:sendWithMedia] Sending: message="${message.substring(0, 100)}", attachments=${imageAttachments.length}, fileRefs=${fileReferences.length}`
+        );
+
+        // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
+        const timeoutMs = 120000;
+        const result = await gatewayManager.rpc('chat.send', rpcParams, timeoutMs);
+        logger.info(`[chat:sendWithMedia] RPC result: ${JSON.stringify(result)}`);
+        return { success: true, result };
+      } catch (error) {
+        logger.error(`[chat:sendWithMedia] Error: ${String(error)}`);
+        return { success: false, error: String(error) };
       }
-
-      // Append file references to message text so the model knows about them
-      if (fileReferences.length > 0) {
-        const refs = fileReferences.join('\n');
-        message = message ? `${message}\n\n${refs}` : refs;
-      }
-
-      const rpcParams: Record<string, unknown> = {
-        sessionKey: params.sessionKey,
-        message,
-        deliver: params.deliver ?? false,
-        idempotencyKey: params.idempotencyKey,
-      };
-
-      if (imageAttachments.length > 0) {
-        rpcParams.attachments = imageAttachments;
-      }
-
-      logger.info(`[chat:sendWithMedia] Sending: message="${message.substring(0, 100)}", attachments=${imageAttachments.length}, fileRefs=${fileReferences.length}`);
-
-      // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
-      const timeoutMs = 120000;
-      const result = await gatewayManager.rpc('chat.send', rpcParams, timeoutMs);
-      logger.info(`[chat:sendWithMedia] RPC result: ${JSON.stringify(result)}`);
-      return { success: true, result };
-    } catch (error) {
-      logger.error(`[chat:sendWithMedia] Error: ${String(error)}`);
-      return { success: false, error: String(error) };
     }
-  });
+  );
 
   // Get the Control UI URL with token for embedding
   ipcMain.handle('gateway:getControlUiUrl', async () => {
@@ -1343,7 +1405,10 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
     }
   };
 
-  async function ensureDingTalkPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
+  async function ensureDingTalkPluginInstalled(): Promise<{
+    installed: boolean;
+    warning?: string;
+  }> {
     const targetDir = join(homedir(), '.openclaw', 'extensions', 'dingtalk');
     const targetManifest = join(targetDir, 'openclaw.plugin.json');
 
@@ -1354,19 +1419,21 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
 
     const candidateSources = app.isPackaged
       ? [
-        join(process.resourcesPath, 'openclaw-plugins', 'dingtalk'),
-        join(process.resourcesPath, 'app.asar.unpacked', 'build', 'openclaw-plugins', 'dingtalk'),
-        join(process.resourcesPath, 'app.asar.unpacked', 'openclaw-plugins', 'dingtalk')
-      ]
+          join(process.resourcesPath, 'openclaw-plugins', 'dingtalk'),
+          join(process.resourcesPath, 'app.asar.unpacked', 'build', 'openclaw-plugins', 'dingtalk'),
+          join(process.resourcesPath, 'app.asar.unpacked', 'openclaw-plugins', 'dingtalk'),
+        ]
       : [
-        join(app.getAppPath(), 'build', 'openclaw-plugins', 'dingtalk'),
-        join(process.cwd(), 'build', 'openclaw-plugins', 'dingtalk'),
-        join(__dirname, '../../build/openclaw-plugins/dingtalk'),
-      ];
+          join(app.getAppPath(), 'build', 'openclaw-plugins', 'dingtalk'),
+          join(process.cwd(), 'build', 'openclaw-plugins', 'dingtalk'),
+          join(__dirname, '../../build/openclaw-plugins/dingtalk'),
+        ];
 
     const sourceDir = candidateSources.find((dir) => existsSync(join(dir, 'openclaw.plugin.json')));
     if (!sourceDir) {
-      logger.warn('Bundled DingTalk plugin mirror not found in candidate paths', { candidateSources });
+      logger.warn('Bundled DingTalk plugin mirror not found in candidate paths', {
+        candidateSources,
+      });
       return {
         installed: false,
         warning: `Bundled DingTalk plugin mirror not found. Checked: ${candidateSources.join(' | ')}`,
@@ -1379,7 +1446,10 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
       cpSync(sourceDir, targetDir, { recursive: true, dereference: true });
 
       if (!existsSync(targetManifest)) {
-        return { installed: false, warning: 'Failed to install DingTalk plugin mirror (manifest missing).' };
+        return {
+          installed: false,
+          warning: 'Failed to install DingTalk plugin mirror (manifest missing).',
+        };
       }
 
       logger.info(`Installed DingTalk plugin from bundled mirror: ${sourceDir}`);
@@ -1406,7 +1476,7 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
       ? [
           join(process.resourcesPath, 'openclaw-plugins', 'wecom'),
           join(process.resourcesPath, 'app.asar.unpacked', 'build', 'openclaw-plugins', 'wecom'),
-          join(process.resourcesPath, 'app.asar.unpacked', 'openclaw-plugins', 'wecom')
+          join(process.resourcesPath, 'app.asar.unpacked', 'openclaw-plugins', 'wecom'),
         ]
       : [
           join(app.getAppPath(), 'build', 'openclaw-plugins', 'wecom'),
@@ -1429,7 +1499,10 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
       cpSync(sourceDir, targetDir, { recursive: true, dereference: true });
 
       if (!existsSync(targetManifest)) {
-        return { installed: false, warning: 'Failed to install WeCom plugin mirror (manifest missing).' };
+        return {
+          installed: false,
+          warning: 'Failed to install WeCom plugin mirror (manifest missing).',
+        };
       }
 
       logger.info(`Installed WeCom plugin from bundled mirror: ${sourceDir}`);
@@ -1456,7 +1529,7 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
       ? [
           join(process.resourcesPath, 'openclaw-plugins', 'qqbot'),
           join(process.resourcesPath, 'app.asar.unpacked', 'build', 'openclaw-plugins', 'qqbot'),
-          join(process.resourcesPath, 'app.asar.unpacked', 'openclaw-plugins', 'qqbot')
+          join(process.resourcesPath, 'app.asar.unpacked', 'openclaw-plugins', 'qqbot'),
         ]
       : [
           join(app.getAppPath(), 'build', 'openclaw-plugins', 'qqbot'),
@@ -1466,7 +1539,9 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
 
     const sourceDir = candidateSources.find((dir) => existsSync(join(dir, 'openclaw.plugin.json')));
     if (!sourceDir) {
-      logger.warn('Bundled QQ Bot plugin mirror not found in candidate paths', { candidateSources });
+      logger.warn('Bundled QQ Bot plugin mirror not found in candidate paths', {
+        candidateSources,
+      });
       return {
         installed: false,
         warning: `Bundled QQ Bot plugin mirror not found. Checked: ${candidateSources.join(' | ')}`,
@@ -1479,7 +1554,10 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
       cpSync(sourceDir, targetDir, { recursive: true, dereference: true });
 
       if (!existsSync(targetManifest)) {
-        return { installed: false, warning: 'Failed to install QQ Bot plugin mirror (manifest missing).' };
+        return {
+          installed: false,
+          warning: 'Failed to install QQ Bot plugin mirror (manifest missing).',
+        };
       }
 
       logger.info(`Installed QQ Bot plugin from bundled mirror: ${sourceDir}`);
@@ -1539,74 +1617,78 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
     }
   });
 
-
   // ==================== Channel Configuration Handlers ====================
 
   // Save channel configuration
-  ipcMain.handle('channel:saveConfig', async (_, channelType: string, config: Record<string, unknown>) => {
-    try {
-      logger.info('channel:saveConfig', { channelType, keys: Object.keys(config || {}) });
-      if (channelType === 'dingtalk') {
-        const installResult = await ensureDingTalkPluginInstalled();
-        if (!installResult.installed) {
+  ipcMain.handle(
+    'channel:saveConfig',
+    async (_, channelType: string, config: Record<string, unknown>) => {
+      try {
+        logger.info('channel:saveConfig', { channelType, keys: Object.keys(config || {}) });
+        if (channelType === 'dingtalk') {
+          const installResult = await ensureDingTalkPluginInstalled();
+          if (!installResult.installed) {
+            return {
+              success: false,
+              error: installResult.warning || 'DingTalk plugin install failed',
+            };
+          }
+          await saveChannelConfig(channelType, config);
+          scheduleGatewayChannelRestart(`channel:saveConfig (${channelType})`);
           return {
-            success: false,
-            error: installResult.warning || 'DingTalk plugin install failed',
+            success: true,
+            pluginInstalled: installResult.installed,
+            warning: installResult.warning,
+          };
+        }
+        if (channelType === 'wecom') {
+          const installResult = await ensureWeComPluginInstalled();
+          if (!installResult.installed) {
+            return {
+              success: false,
+              error: installResult.warning || 'WeCom plugin install failed',
+            };
+          }
+          await saveChannelConfig(channelType, config);
+          scheduleGatewayChannelRestart(`channel:saveConfig (${channelType})`);
+          return {
+            success: true,
+            pluginInstalled: installResult.installed,
+            warning: installResult.warning,
+          };
+        }
+        if (channelType === 'qqbot') {
+          const installResult = await ensureQQBotPluginInstalled();
+          if (!installResult.installed) {
+            return {
+              success: false,
+              error: installResult.warning || 'QQ Bot plugin install failed',
+            };
+          }
+          await saveChannelConfig(channelType, config);
+          if (gatewayManager.getStatus().state !== 'stopped') {
+            logger.info(`Scheduling Gateway reload after channel:saveConfig (${channelType})`);
+            gatewayManager.debouncedReload();
+          } else {
+            logger.info(
+              `Gateway is stopped; skip immediate reload after channel:saveConfig (${channelType})`
+            );
+          }
+          return {
+            success: true,
+            pluginInstalled: installResult.installed,
+            warning: installResult.warning,
           };
         }
         await saveChannelConfig(channelType, config);
         scheduleGatewayChannelRestart(`channel:saveConfig (${channelType})`);
-        return {
-          success: true,
-          pluginInstalled: installResult.installed,
-          warning: installResult.warning,
-        };
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to save channel config:', error);
+        return { success: false, error: String(error) };
       }
-      if (channelType === 'wecom') {
-        const installResult = await ensureWeComPluginInstalled();
-        if (!installResult.installed) {
-          return {
-            success: false,
-            error: installResult.warning || 'WeCom plugin install failed',
-          };
-        }
-        await saveChannelConfig(channelType, config);
-        scheduleGatewayChannelRestart(`channel:saveConfig (${channelType})`);
-        return {
-          success: true,
-          pluginInstalled: installResult.installed,
-          warning: installResult.warning,
-        };
-      }
-      if (channelType === 'qqbot') {
-        const installResult = await ensureQQBotPluginInstalled();
-        if (!installResult.installed) {
-          return {
-            success: false,
-            error: installResult.warning || 'QQ Bot plugin install failed',
-          };
-        }
-        await saveChannelConfig(channelType, config);
-        if (gatewayManager.getStatus().state !== 'stopped') {
-          logger.info(`Scheduling Gateway reload after channel:saveConfig (${channelType})`);
-          gatewayManager.debouncedReload();
-        } else {
-          logger.info(`Gateway is stopped; skip immediate reload after channel:saveConfig (${channelType})`);
-        }
-        return {
-          success: true,
-          pluginInstalled: installResult.installed,
-          warning: installResult.warning,
-        };
-      }
-      await saveChannelConfig(channelType, config);
-      scheduleGatewayChannelRestart(`channel:saveConfig (${channelType})`);
-      return { success: true };
-    } catch (error) {
-      console.error('Failed to save channel config:', error);
-      return { success: false, error: String(error) };
     }
-  });
+  );
 
   // Get channel configuration
   ipcMain.handle('channel:getConfig', async (_, channelType: string) => {
@@ -1677,15 +1759,18 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
   });
 
   // Validate channel credentials by calling actual service APIs (before saving)
-  ipcMain.handle('channel:validateCredentials', async (_, channelType: string, config: Record<string, string>) => {
-    try {
-      const result = await validateChannelCredentials(channelType, config);
-      return { success: true, ...result };
-    } catch (error) {
-      console.error('Failed to validate channel credentials:', error);
-      return { success: false, valid: false, errors: [String(error)], warnings: [] };
+  ipcMain.handle(
+    'channel:validateCredentials',
+    async (_, channelType: string, config: Record<string, string>) => {
+      try {
+        const result = await validateChannelCredentials(channelType, config);
+        return { success: true, ...result };
+      } catch (error) {
+        console.error('Failed to validate channel credentials:', error);
+        return { success: false, valid: false, errors: [String(error)], warnings: [] };
+      }
     }
-  });
+  );
 }
 
 /**
@@ -1754,7 +1839,7 @@ function registerDeviceOAuthHandlers(mainWindow: BrowserWindow): void {
       _,
       provider: OAuthProviderType | BrowserOAuthProviderType,
       region?: 'global' | 'cn',
-      options?: { accountId?: string; label?: string },
+      options?: { accountId?: string; label?: string }
     ) => {
       try {
         logger.info(`provider:requestOAuth for ${provider}`);
@@ -1768,7 +1853,7 @@ function registerDeviceOAuthHandlers(mainWindow: BrowserWindow): void {
         logger.error('provider:requestOAuth failed', error);
         return { success: false, error: String(error) };
       }
-    },
+    }
   );
 
   // Cancel Provider OAuth
@@ -1794,7 +1879,7 @@ function registerProviderHandlers(gatewayManager: GatewayManager): void {
     if (legacyProviderChannelsWarned.has(channel)) return;
     legacyProviderChannelsWarned.add(channel);
     logger.warn(
-      `[provider-migration] Legacy IPC channel "${channel}" is deprecated. Prefer app:request provider actions and account APIs.`,
+      `[provider-migration] Legacy IPC channel "${channel}" is deprecated. Prefer app:request provider actions and account APIs.`
     );
   };
 
@@ -1804,11 +1889,15 @@ function registerProviderHandlers(gatewayManager: GatewayManager): void {
   // restart.  Without this, the OAuth restart fires first with stale config, and the
   // subsequent provider:setDefault restart is deferred and dropped.
   deviceOAuthManager.on('oauth:success', ({ provider, accountId }) => {
-    logger.info(`[IPC] Scheduling Gateway restart after ${provider} OAuth success for ${accountId}...`);
+    logger.info(
+      `[IPC] Scheduling Gateway restart after ${provider} OAuth success for ${accountId}...`
+    );
     gatewayManager.debouncedRestart(8000);
   });
   browserOAuthManager.on('oauth:success', ({ provider, accountId }) => {
-    logger.info(`[IPC] Scheduling Gateway restart after ${provider} OAuth success for ${accountId}...`);
+    logger.info(
+      `[IPC] Scheduling Gateway restart after ${provider} OAuth success for ${accountId}...`
+    );
     gatewayManager.debouncedRestart(8000);
   });
 
@@ -1918,12 +2007,7 @@ function registerProviderHandlers(gatewayManager: GatewayManager): void {
   // Atomically update provider config and API key
   ipcMain.handle(
     'provider:updateWithKey',
-    async (
-      _,
-      providerId: string,
-      updates: Partial<ProviderConfig>,
-      apiKey?: string
-    ) => {
+    async (_, providerId: string, updates: Partial<ProviderConfig>, apiKey?: string) => {
       logLegacyProviderChannel('provider:updateWithKey');
       const existing = await providerService.getLegacyProvider(providerId);
       if (!existing) {
@@ -2034,8 +2118,6 @@ function registerProviderHandlers(gatewayManager: GatewayManager): void {
     }
   });
 
-
-
   // Get default provider
   ipcMain.handle('provider:getDefault', async () => {
     logLegacyProviderChannel('provider:getDefault');
@@ -2046,12 +2128,7 @@ function registerProviderHandlers(gatewayManager: GatewayManager): void {
   // providerId can be either a stored provider ID or a provider type.
   ipcMain.handle(
     'provider:validateKey',
-    async (
-      _,
-      providerId: string,
-      apiKey: string,
-      options?: { baseUrl?: string }
-    ) => {
+    async (_, providerId: string, apiKey: string, options?: { baseUrl?: string }) => {
       logLegacyProviderChannel('provider:validateKey');
       try {
         // First try to get existing provider
@@ -2065,7 +2142,7 @@ function registerProviderHandlers(gatewayManager: GatewayManager): void {
         // This ensures Setup/Settings validation reflects unsaved edits immediately.
         const resolvedBaseUrl = options?.baseUrl || provider?.baseUrl || registryBaseUrl;
 
-        console.log(`[clawx-validate] validating provider type: ${providerType}`);
+        console.log(`[clawclaw-validate] validating provider type: ${providerType}`);
         return await validateApiKeyWithProvider(providerType, apiKey, { baseUrl: resolvedBaseUrl });
       } catch (error) {
         console.error('Validation error:', error);
@@ -2226,37 +2303,45 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
     return await getAllSettings();
   });
 
-  ipcMain.handle('settings:set', async (_, key: keyof AppSettings, value: AppSettings[keyof AppSettings]) => {
-    await setSetting(key, value as never);
+  ipcMain.handle(
+    'settings:set',
+    async (_, key: keyof AppSettings, value: AppSettings[keyof AppSettings]) => {
+      await setSetting(key, value as never);
 
-    if (
-      key === 'proxyEnabled' ||
-      key === 'proxyServer' ||
-      key === 'proxyHttpServer' ||
-      key === 'proxyHttpsServer' ||
-      key === 'proxyAllServer' ||
-      key === 'proxyBypassRules'
-    ) {
-      await handleProxySettingsChange();
+      if (
+        key === 'proxyEnabled' ||
+        key === 'proxyServer' ||
+        key === 'proxyHttpServer' ||
+        key === 'proxyHttpsServer' ||
+        key === 'proxyAllServer' ||
+        key === 'proxyBypassRules'
+      ) {
+        await handleProxySettingsChange();
+      }
+
+      return { success: true };
     }
-
-    return { success: true };
-  });
+  );
 
   ipcMain.handle('settings:setMany', async (_, patch: Partial<AppSettings>) => {
-    const entries = Object.entries(patch) as Array<[keyof AppSettings, AppSettings[keyof AppSettings]]>;
+    const entries = Object.entries(patch) as Array<
+      [keyof AppSettings, AppSettings[keyof AppSettings]]
+    >;
     for (const [key, value] of entries) {
       await setSetting(key, value as never);
     }
 
-    if (entries.some(([key]) =>
-      key === 'proxyEnabled' ||
-      key === 'proxyServer' ||
-      key === 'proxyHttpServer' ||
-      key === 'proxyHttpsServer' ||
-      key === 'proxyAllServer' ||
-      key === 'proxyBypassRules'
-    )) {
+    if (
+      entries.some(
+        ([key]) =>
+          key === 'proxyEnabled' ||
+          key === 'proxyServer' ||
+          key === 'proxyHttpServer' ||
+          key === 'proxyHttpsServer' ||
+          key === 'proxyAllServer' ||
+          key === 'proxyBypassRules'
+      )
+    ) {
       await handleProxySettingsChange();
     }
 
@@ -2272,9 +2357,10 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
 }
 function registerUsageHandlers(): void {
   ipcMain.handle('usage:recentTokenHistory', async (_, limit?: number) => {
-    const safeLimit = typeof limit === 'number' && Number.isFinite(limit)
-      ? Math.max(Math.floor(limit), 1)
-      : undefined;
+    const safeLimit =
+      typeof limit === 'number' && Number.isFinite(limit)
+        ? Math.max(Math.floor(limit), 1)
+        : undefined;
     return await getRecentTokenUsageHistory(safeLimit);
   });
 }
@@ -2374,9 +2460,10 @@ async function generateImagePreview(filePath: string, mimeType: string): Promise
     const maxDim = 512; // keep enough resolution for crisp display on Retina
     // Only resize if larger than threshold — specify ONE dimension to keep ratio
     if (size.width > maxDim || size.height > maxDim) {
-      const resized = size.width >= size.height
-        ? img.resize({ width: maxDim })   // landscape / square → constrain width
-        : img.resize({ height: maxDim }); // portrait → constrain height
+      const resized =
+        size.width >= size.height
+          ? img.resize({ width: maxDim }) // landscape / square → constrain width
+          : img.resize({ height: maxDim }); // portrait → constrain height
       return `data:image/png;base64,${resized.toPNG().toString('base64')}`;
     }
     // Small image — use original (async read to avoid blocking)
@@ -2421,90 +2508,105 @@ function registerFileHandlers(): void {
   });
 
   // Stage file from buffer (used for clipboard paste / drag-drop)
-  ipcMain.handle('file:stageBuffer', async (_, payload: {
-    base64: string;
-    fileName: string;
-    mimeType: string;
-  }) => {
-    const fsP = await import('fs/promises');
-    await fsP.mkdir(OUTBOUND_DIR, { recursive: true });
+  ipcMain.handle(
+    'file:stageBuffer',
+    async (
+      _,
+      payload: {
+        base64: string;
+        fileName: string;
+        mimeType: string;
+      }
+    ) => {
+      const fsP = await import('fs/promises');
+      await fsP.mkdir(OUTBOUND_DIR, { recursive: true });
 
-    const id = crypto.randomUUID();
-    const ext = extname(payload.fileName) || mimeToExt(payload.mimeType);
-    const stagedPath = join(OUTBOUND_DIR, `${id}${ext}`);
-    const buffer = Buffer.from(payload.base64, 'base64');
-    await fsP.writeFile(stagedPath, buffer);
+      const id = crypto.randomUUID();
+      const ext = extname(payload.fileName) || mimeToExt(payload.mimeType);
+      const stagedPath = join(OUTBOUND_DIR, `${id}${ext}`);
+      const buffer = Buffer.from(payload.base64, 'base64');
+      await fsP.writeFile(stagedPath, buffer);
 
-    const mimeType = payload.mimeType || getMimeType(ext);
-    const fileSize = buffer.length;
+      const mimeType = payload.mimeType || getMimeType(ext);
+      const fileSize = buffer.length;
 
-    // Generate preview for images
-    let preview: string | null = null;
-    if (mimeType.startsWith('image/')) {
-      preview = await generateImagePreview(stagedPath, mimeType);
+      // Generate preview for images
+      let preview: string | null = null;
+      if (mimeType.startsWith('image/')) {
+        preview = await generateImagePreview(stagedPath, mimeType);
+      }
+
+      return { id, fileName: payload.fileName, mimeType, fileSize, stagedPath, preview };
     }
-
-    return { id, fileName: payload.fileName, mimeType, fileSize, stagedPath, preview };
-  });
+  );
 
   // Load thumbnails for file paths on disk (used to restore previews in history)
   // Save an image to a user-chosen location (base64 data URI or existing file path)
-  ipcMain.handle('media:saveImage', async (_, params: {
-    base64?: string;
-    mimeType?: string;
-    filePath?: string;
-    defaultFileName: string;
-  }) => {
-    try {
-      const ext = params.defaultFileName.includes('.')
-        ? params.defaultFileName.split('.').pop()!
-        : (params.mimeType?.split('/')[1] || 'png');
-      const result = await dialog.showSaveDialog({
-        defaultPath: join(homedir(), 'Downloads', params.defaultFileName),
-        filters: [
-          { name: 'Images', extensions: [ext, 'png', 'jpg', 'jpeg', 'webp', 'gif'] },
-          { name: 'All Files', extensions: ['*'] },
-        ],
-      });
-      if (result.canceled || !result.filePath) return { success: false };
-
-      const fsP = await import('fs/promises');
-      if (params.filePath) {
-        try {
-          await fsP.access(params.filePath);
-          await fsP.copyFile(params.filePath, result.filePath);
-        } catch {
-          return { success: false, error: 'Source file not found' };
-        }
-      } else if (params.base64) {
-        const buffer = Buffer.from(params.base64, 'base64');
-        await fsP.writeFile(result.filePath, buffer);
-      } else {
-        return { success: false, error: 'No image data provided' };
+  ipcMain.handle(
+    'media:saveImage',
+    async (
+      _,
+      params: {
+        base64?: string;
+        mimeType?: string;
+        filePath?: string;
+        defaultFileName: string;
       }
-      return { success: true, savedPath: result.filePath };
-    } catch (err) {
-      return { success: false, error: String(err) };
-    }
-  });
-
-  ipcMain.handle('media:getThumbnails', async (_, paths: Array<{ filePath: string; mimeType: string }>) => {
-    const fsP = await import('fs/promises');
-    const results: Record<string, { preview: string | null; fileSize: number }> = {};
-    for (const { filePath, mimeType } of paths) {
+    ) => {
       try {
-        const s = await fsP.stat(filePath);
-        let preview: string | null = null;
-        if (mimeType.startsWith('image/')) {
-          preview = await generateImagePreview(filePath, mimeType);
+        const ext = params.defaultFileName.includes('.')
+          ? params.defaultFileName.split('.').pop()!
+          : params.mimeType?.split('/')[1] || 'png';
+        const result = await dialog.showSaveDialog({
+          defaultPath: join(homedir(), 'Downloads', params.defaultFileName),
+          filters: [
+            { name: 'Images', extensions: [ext, 'png', 'jpg', 'jpeg', 'webp', 'gif'] },
+            { name: 'All Files', extensions: ['*'] },
+          ],
+        });
+        if (result.canceled || !result.filePath) return { success: false };
+
+        const fsP = await import('fs/promises');
+        if (params.filePath) {
+          try {
+            await fsP.access(params.filePath);
+            await fsP.copyFile(params.filePath, result.filePath);
+          } catch {
+            return { success: false, error: 'Source file not found' };
+          }
+        } else if (params.base64) {
+          const buffer = Buffer.from(params.base64, 'base64');
+          await fsP.writeFile(result.filePath, buffer);
+        } else {
+          return { success: false, error: 'No image data provided' };
         }
-        results[filePath] = { preview, fileSize: s.size };
-      } catch {
-        results[filePath] = { preview: null, fileSize: 0 };
+        return { success: true, savedPath: result.filePath };
+      } catch (err) {
+        return { success: false, error: String(err) };
       }
     }
-    return results;
-  });
+  );
+
+  ipcMain.handle(
+    'media:getThumbnails',
+    async (_, paths: Array<{ filePath: string; mimeType: string }>) => {
+      const fsP = await import('fs/promises');
+      const results: Record<string, { preview: string | null; fileSize: number }> = {};
+      for (const { filePath, mimeType } of paths) {
+        try {
+          const s = await fsP.stat(filePath);
+          let preview: string | null = null;
+          if (mimeType.startsWith('image/')) {
+            preview = await generateImagePreview(filePath, mimeType);
+          }
+          results[filePath] = { preview, fileSize: s.size };
+        } catch {
+          results[filePath] = { preview: null, fileSize: 0 };
+        }
+      }
+      return results;
+    }
+  );
 }
 
 /**
@@ -2555,8 +2657,9 @@ function registerSessionHandlers(): void {
 
       // Shape A / C — array under "sessions" key
       if (Array.isArray(sessionsJson.sessions)) {
-        const entry = (sessionsJson.sessions as Array<Record<string, unknown>>)
-          .find((s) => s.key === sessionKey || s.sessionKey === sessionKey);
+        const entry = (sessionsJson.sessions as Array<Record<string, unknown>>).find(
+          (s) => s.key === sessionKey || s.sessionKey === sessionKey
+        );
         if (entry) {
           // Could be "file", "fileName", "id" + ".jsonl", or "path"
           uuidFileName = (entry.file ?? entry.fileName ?? entry.path) as string | undefined;
@@ -2577,7 +2680,9 @@ function registerSessionHandlers(): void {
         } else if (typeof val === 'object' && val !== null) {
           const entry = val as Record<string, unknown>;
           // Priority: absolute sessionFile path > relative file/fileName/path > id/sessionId as UUID
-          const absFile = (entry.sessionFile ?? entry.file ?? entry.fileName ?? entry.path) as string | undefined;
+          const absFile = (entry.sessionFile ?? entry.file ?? entry.fileName ?? entry.path) as
+            | string
+            | undefined;
           if (absFile) {
             if (absFile.startsWith('/') || absFile.match(/^[A-Za-z]:\\/)) {
               // Absolute path — use directly
@@ -2595,7 +2700,9 @@ function registerSessionHandlers(): void {
 
       if (!uuidFileName && !resolvedSrcPath) {
         const rawVal = sessionsJson[sessionKey];
-        logger.warn(`[session:delete] Cannot resolve file for "${sessionKey}". Raw value: ${JSON.stringify(rawVal)}`);
+        logger.warn(
+          `[session:delete] Cannot resolve file for "${sessionKey}". Raw value: ${JSON.stringify(rawVal)}`
+        );
         return { success: false, error: `Cannot resolve file for session: ${sessionKey}` };
       }
 
@@ -2624,8 +2731,9 @@ function registerSessionHandlers(): void {
         const json2 = JSON.parse(raw2) as Record<string, unknown>;
 
         if (Array.isArray(json2.sessions)) {
-          json2.sessions = (json2.sessions as Array<Record<string, unknown>>)
-            .filter((s) => s.key !== sessionKey && s.sessionKey !== sessionKey);
+          json2.sessions = (json2.sessions as Array<Record<string, unknown>>).filter(
+            (s) => s.key !== sessionKey && s.sessionKey !== sessionKey
+          );
         } else if (json2[sessionKey]) {
           delete json2[sessionKey];
         }

@@ -4,21 +4,21 @@
 
 ### Overview
 
-ClawX is a cross-platform **Electron desktop app** (React 19 + Vite + TypeScript) providing a GUI for the OpenClaw AI agent runtime. It uses pnpm as its package manager (pinned version in `package.json`'s `packageManager` field).
+ClawClaw is a cross-platform **Electron desktop app** (React 19 + Vite + TypeScript) providing a GUI for the OpenClaw AI agent runtime. It uses pnpm as its package manager (pinned version in `package.json`'s `packageManager` field).
 
 ### Quick reference
 
 Standard dev commands are in `package.json` scripts and `README.md`. Key ones:
 
-| Task | Command |
-|------|---------|
-| Install deps + download uv | `pnpm run init` |
-| Dev server (Vite + Electron) | `pnpm dev` |
-| Lint (ESLint, auto-fix) | `pnpm run lint` |
-| Type check | `pnpm run typecheck` |
-| Unit tests (Vitest) | `pnpm test` |
-| E2E tests (Playwright) | `pnpm run test:e2e` |
-| Build frontend only | `pnpm run build:vite` |
+| Task                         | Command               |
+| ---------------------------- | --------------------- |
+| Install deps + download uv   | `pnpm run init`       |
+| Dev server (Vite + Electron) | `pnpm dev`            |
+| Lint (ESLint, auto-fix)      | `pnpm run lint`       |
+| Type check                   | `pnpm run typecheck`  |
+| Unit tests (Vitest)          | `pnpm test`           |
+| E2E tests (Playwright)       | `pnpm run test:e2e`   |
+| Build frontend only          | `pnpm run build:vite` |
 
 ### Non-obvious caveats
 

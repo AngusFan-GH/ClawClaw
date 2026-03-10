@@ -26,7 +26,7 @@ function getEventSource(): EventSource {
 
 function allowSseFallback(): boolean {
   try {
-    return window.localStorage.getItem('clawx:allow-sse-fallback') === '1';
+    return window.localStorage.getItem('clawclaw:allow-sse-fallback') === '1';
   } catch {
     return false;
   }
@@ -34,7 +34,7 @@ function allowSseFallback(): boolean {
 
 export function subscribeHostEvent<T = unknown>(
   eventName: string,
-  handler: (payload: T) => void,
+  handler: (payload: T) => void
 ): () => void {
   const ipc = window.electron?.ipcRenderer;
   const ipcChannel = HOST_EVENT_TO_IPC_CHANNEL[eventName];

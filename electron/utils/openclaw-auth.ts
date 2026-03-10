@@ -13,11 +13,7 @@ import { constants } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { listConfiguredAgentIds } from './agent-config';
-import {
-  getProviderEnvVar,
-  getProviderDefaultModel,
-  getProviderConfig,
-} from './provider-registry';
+import { getProviderEnvVar, getProviderDefaultModel, getProviderConfig } from './provider-registry';
 import {
   OPENCLAW_PROVIDER_KEY_MOONSHOT,
   isOAuthProviderType,
@@ -137,19 +133,22 @@ async function readOpenClawJson(): Promise<Record<string, unknown>> {
 }
 
 function normalizeAgentsDefaultsCompactionMode(config: Record<string, unknown>): void {
-  const agents = (config.agents && typeof config.agents === 'object'
-    ? config.agents as Record<string, unknown>
-    : null);
+  const agents =
+    config.agents && typeof config.agents === 'object'
+      ? (config.agents as Record<string, unknown>)
+      : null;
   if (!agents) return;
 
-  const defaults = (agents.defaults && typeof agents.defaults === 'object'
-    ? agents.defaults as Record<string, unknown>
-    : null);
+  const defaults =
+    agents.defaults && typeof agents.defaults === 'object'
+      ? (agents.defaults as Record<string, unknown>)
+      : null;
   if (!defaults) return;
 
-  const compaction = (defaults.compaction && typeof defaults.compaction === 'object'
-    ? defaults.compaction as Record<string, unknown>
-    : null);
+  const compaction =
+    defaults.compaction && typeof defaults.compaction === 'object'
+      ? (defaults.compaction as Record<string, unknown>)
+      : null;
   if (!compaction) return;
 
   const mode = compaction.mode;
@@ -211,13 +210,15 @@ export async function saveOAuthTokenToOpenClaw(
 
     await writeAuthProfiles(store, id);
   }
-  console.log(`Saved OAuth token for provider "${provider}" to OpenClaw auth-profiles (agents: ${agentIds.join(', ')})`);
+  console.log(
+    `Saved OAuth token for provider "${provider}" to OpenClaw auth-profiles (agents: ${agentIds.join(', ')})`
+  );
 }
 
 /**
  * Retrieve an OAuth token from OpenClaw's auth-profiles.json.
  * Useful when the Gateway does not natively inject the Authorization header.
- * 
+ *
  * @param provider - Provider type (e.g., 'minimax-portal')
  * @param agentId - Optional single agent ID to read from, defaults to 'main'
  * @returns The OAuth token access string or null if not found
@@ -249,7 +250,9 @@ export async function saveProviderKeyToOpenClaw(
   agentId?: string
 ): Promise<void> {
   if (isOAuthProviderType(provider) && !apiKey) {
-    console.log(`Skipping auth-profiles write for OAuth provider "${provider}" (no API key provided, using OAuth)`);
+    console.log(
+      `Skipping auth-profiles write for OAuth provider "${provider}" (no API key provided, using OAuth)`
+    );
     return;
   }
   const agentIds = agentId ? [agentId] : await discoverAgentIds();
@@ -272,7 +275,9 @@ export async function saveProviderKeyToOpenClaw(
 
     await writeAuthProfiles(store, id);
   }
-  console.log(`Saved API key for provider "${provider}" to OpenClaw auth-profiles (agents: ${agentIds.join(', ')})`);
+  console.log(
+    `Saved API key for provider "${provider}" to OpenClaw auth-profiles (agents: ${agentIds.join(', ')})`
+  );
 }
 
 /**
@@ -283,7 +288,9 @@ export async function removeProviderKeyFromOpenClaw(
   agentId?: string
 ): Promise<void> {
   if (isOAuthProviderType(provider)) {
-    console.log(`Skipping auth-profiles removal for OAuth provider "${provider}" (managed by OpenClaw plugin)`);
+    console.log(
+      `Skipping auth-profiles removal for OAuth provider "${provider}" (managed by OpenClaw plugin)`
+    );
     return;
   }
   const agentIds = agentId ? [agentId] : await discoverAgentIds();
@@ -303,7 +310,9 @@ export async function removeProviderKeyFromOpenClaw(
 
     await writeAuthProfiles(store, id);
   }
-  console.log(`Removed API key for provider "${provider}" from OpenClaw auth-profiles (agents: ${agentIds.join(', ')})`);
+  console.log(
+    `Removed API key for provider "${provider}" from OpenClaw auth-profiles (agents: ${agentIds.join(', ')})`
+  );
 }
 
 /**
@@ -382,7 +391,9 @@ export async function removeProviderFromOpenClaw(provider: string): Promise<void
  * Build environment variables object with all stored API keys
  * for passing to the Gateway process
  */
-export function buildProviderEnvVars(providers: Array<{ type: string; apiKey: string }>): Record<string, string> {
+export function buildProviderEnvVars(
+  providers: Array<{ type: string; apiKey: string }>
+): Record<string, string> {
   const env: Record<string, string> = {};
   for (const { type, apiKey } of providers) {
     const envVar = getProviderEnvVar(type);
@@ -436,7 +447,9 @@ export async function setOpenClawDefaultModel(
       includeRegistryModels: true,
       mergeExistingModels: true,
     });
-    console.log(`Configured models.providers.${provider} with baseUrl=${providerCfg.baseUrl}, model=${modelId}`);
+    console.log(
+      `Configured models.providers.${provider} with baseUrl=${providerCfg.baseUrl}, model=${modelId}`
+    );
   } else {
     // Built-in provider: remove any stale models.providers entry
     const models = (config.models || {}) as Record<string, unknown>;
@@ -513,22 +526,24 @@ function mergeProviderModels(
 function upsertOpenClawProviderEntry(
   config: Record<string, unknown>,
   provider: string,
-  options: ProviderEntryBuildOptions,
+  options: ProviderEntryBuildOptions
 ): void {
   const models = (config.models || {}) as Record<string, unknown>;
   const providers = (models.providers || {}) as Record<string, unknown>;
   const removedLegacyMoonshot = removeLegacyMoonshotProviderEntry(provider, providers);
-  const existingProvider = (
+  const existingProvider =
     providers[provider] && typeof providers[provider] === 'object'
       ? (providers[provider] as Record<string, unknown>)
-      : {}
-  );
+      : {};
 
-  const existingModels = options.mergeExistingModels && Array.isArray(existingProvider.models)
-    ? (existingProvider.models as Array<Record<string, unknown>>)
-    : [];
+  const existingModels =
+    options.mergeExistingModels && Array.isArray(existingProvider.models)
+      ? (existingProvider.models as Array<Record<string, unknown>>)
+      : [];
   const registryModels = options.includeRegistryModels
-    ? ((getProviderConfig(provider)?.models ?? []).map((m) => ({ ...m })) as Array<Record<string, unknown>>)
+    ? ((getProviderConfig(provider)?.models ?? []).map((m) => ({ ...m })) as Array<
+        Record<string, unknown>
+      >)
     : [];
   const runtimeModels = (options.modelIds ?? []).map((id) => ({ id, name: id }));
 
@@ -566,15 +581,19 @@ function removeLegacyMoonshotProviderEntry(
   return false;
 }
 
-function ensureMoonshotKimiWebSearchCnBaseUrl(config: Record<string, unknown>, provider: string): void {
+function ensureMoonshotKimiWebSearchCnBaseUrl(
+  config: Record<string, unknown>,
+  provider: string
+): void {
   if (provider !== OPENCLAW_PROVIDER_KEY_MOONSHOT) return;
 
   const tools = (config.tools || {}) as Record<string, unknown>;
   const web = (tools.web || {}) as Record<string, unknown>;
   const search = (web.search || {}) as Record<string, unknown>;
-  const kimi = (search.kimi && typeof search.kimi === 'object' && !Array.isArray(search.kimi))
-    ? (search.kimi as Record<string, unknown>)
-    : {};
+  const kimi =
+    search.kimi && typeof search.kimi === 'object' && !Array.isArray(search.kimi)
+      ? (search.kimi as Record<string, unknown>)
+      : {};
 
   // Prefer env/auth-profiles for key resolution; stale inline kimi.apiKey can cause persistent 401.
   delete kimi.apiKey;
@@ -610,7 +629,7 @@ export async function syncProviderConfigToOpenClaw(
   // Ensure extension is enabled for oauth providers to prevent gateway wiping config
   if (isOpenClawOAuthPluginProviderKey(provider)) {
     const plugins = (config.plugins || {}) as Record<string, unknown>;
-    const allow = Array.isArray(plugins.allow) ? [...plugins.allow as string[]] : [];
+    const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
     const pEntries = (plugins.entries || {}) as Record<string, unknown>;
     const pluginId = getOAuthPluginId(provider);
     if (!allow.includes(pluginId)) {
@@ -673,7 +692,7 @@ export async function setOpenClawDefaultModelWithOverride(
   // Ensure the extension plugin is marked as enabled in openclaw.json
   if (isOpenClawOAuthPluginProviderKey(provider)) {
     const plugins = (config.plugins || {}) as Record<string, unknown>;
-    const allow = Array.isArray(plugins.allow) ? [...plugins.allow as string[]] : [];
+    const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
     const pEntries = (plugins.entries || {}) as Record<string, unknown>;
     const pluginId = getOAuthPluginId(provider);
     if (!allow.includes(pluginId)) {
@@ -726,7 +745,7 @@ export async function getActiveOpenClawProviders(): Promise<Set<string>> {
 }
 
 /**
- * Write the ClawX gateway token into ~/.openclaw/openclaw.json.
+ * Write the ClawClaw gateway token into ~/.openclaw/openclaw.json.
  */
 export async function syncGatewayTokenToConfig(token: string): Promise<void> {
   const config = await readOpenClawJson();
@@ -747,7 +766,7 @@ export async function syncGatewayTokenToConfig(token: string): Promise<void> {
   auth.token = token;
   gateway.auth = auth;
 
-  // Packaged ClawX loads the renderer from file://, so the gateway must allow
+  // Packaged ClawClaw loads the renderer from file://, so the gateway must allow
   // that origin for the chat WebSocket handshake.
   const controlUi = (
     gateway.controlUi && typeof gateway.controlUi === 'object'
@@ -755,7 +774,9 @@ export async function syncGatewayTokenToConfig(token: string): Promise<void> {
       : {}
   ) as Record<string, unknown>;
   const allowedOrigins = Array.isArray(controlUi.allowedOrigins)
-    ? (controlUi.allowedOrigins as unknown[]).filter((value): value is string => typeof value === 'string')
+    ? (controlUi.allowedOrigins as unknown[]).filter(
+        (value): value is string => typeof value === 'string'
+      )
     : [];
   if (!allowedOrigins.includes('file://')) {
     controlUi.allowedOrigins = [...allowedOrigins, 'file://'];
@@ -866,7 +887,7 @@ export async function updateAgentModelProvider(
  * Removes known-invalid keys that cause OpenClaw's strict Zod validation
  * to reject the entire config on startup.  Uses a conservative **blocklist**
  * approach: only strips keys that are KNOWN to be misplaced by older
- * OpenClaw/ClawX versions or external tools.
+ * OpenClaw/ClawClaw versions or external tools.
  *
  * Why blocklist instead of allowlist?
  *   • Allowlist (e.g. `VALID_SKILLS_KEYS`) would strip any NEW valid keys
@@ -927,7 +948,9 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
         for (const p of pluginsObj.load) {
           if (typeof p === 'string' && p.startsWith('/')) {
             if (p.includes('node_modules/openclaw/extensions') || !(await fileExists(p))) {
-              console.log(`[sanitize] Removing stale/bundled plugin path "${p}" from openclaw.json`);
+              console.log(
+                `[sanitize] Removing stale/bundled plugin path "${p}" from openclaw.json`
+              );
               modified = true;
             } else {
               validLoad.push(p);
@@ -958,16 +981,21 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
   // ── tools.web.search.kimi ─────────────────────────────────────
   // OpenClaw web_search(kimi) prioritizes tools.web.search.kimi.apiKey over
   // environment/auth-profiles. A stale inline key can cause persistent 401s.
-  // When ClawX-managed moonshot provider exists, prefer centralized key
+  // When ClawClaw-managed moonshot provider exists, prefer centralized key
   // resolution and strip the inline key.
-  const providers = ((config.models as Record<string, unknown> | undefined)?.providers as Record<string, unknown> | undefined) || {};
+  const providers =
+    ((config.models as Record<string, unknown> | undefined)?.providers as
+      | Record<string, unknown>
+      | undefined) || {};
   if (providers[OPENCLAW_PROVIDER_KEY_MOONSHOT]) {
     const tools = (config.tools as Record<string, unknown> | undefined) || {};
     const web = (tools.web as Record<string, unknown> | undefined) || {};
     const search = (web.search as Record<string, unknown> | undefined) || {};
     const kimi = (search.kimi as Record<string, unknown> | undefined) || {};
     if ('apiKey' in kimi) {
-      console.log('[sanitize] Removing stale key "tools.web.search.kimi.apiKey" from openclaw.json');
+      console.log(
+        '[sanitize] Removing stale key "tools.web.search.kimi.apiKey" from openclaw.json'
+      );
       delete kimi.apiKey;
       search.kimi = kimi;
       web.search = search;

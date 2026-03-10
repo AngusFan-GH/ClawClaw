@@ -1,9 +1,8 @@
-
 <p align="center">
-  <img src="src/assets/logo.svg" width="128" height="128" alt="ClawX Logo" />
+  <img src="src/assets/logo.svg" width="128" height="128" alt="ClawClaw Logo" />
 </p>
 
-<h1 align="center">ClawX</h1>
+<h1 align="center">ClawClaw</h1>
 
 <p align="center">
   <strong>OpenClaw AI 智能体的桌面客户端</strong>
@@ -11,7 +10,7 @@
 
 <p align="center">
   <a href="#功能特性">功能特性</a> •
-  <a href="#为什么选择-clawx">为什么选择 ClawX</a> •
+  <a href="#为什么选择-clawclaw">为什么选择 ClawClaw</a> •
   <a href="#快速上手">快速上手</a> •
   <a href="#系统架构">系统架构</a> •
   <a href="#开发指南">开发指南</a> •
@@ -25,7 +24,7 @@
   <a href="https://discord.com/invite/84Kex3GGAh" target="_blank">
   <img src="https://img.shields.io/discord/1399603591471435907?logo=discord&labelColor=%20%235462eb&logoColor=%20%23f5f5f5&color=%20%235462eb" alt="chat on Discord" />
   </a>
-  <img src="https://img.shields.io/github/downloads/ValueCell-ai/ClawX/total?color=%23027DEB" alt="Downloads" />
+  <img src="https://img.shields.io/github/downloads/Xzinfra/ClawClaw/total?color=%23027DEB" alt="Downloads" />
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License" />
 </p>
 
@@ -37,11 +36,11 @@
 
 ## 概述
 
-**ClawX** 是连接强大 AI 智能体与普通用户之间的桥梁。基于 [OpenClaw](https://github.com/OpenClaw) 构建，它将命令行式的 AI 编排转变为易用、美观的桌面体验——无需使用终端。
+**ClawClaw** 是连接强大 AI 智能体与普通用户之间的桥梁。基于 [OpenClaw](https://github.com/OpenClaw) 构建，它将命令行式的 AI 编排转变为易用、美观的桌面体验——无需使用终端。
 
-无论是自动化工作流、连接通讯软件，还是调度智能定时任务，ClawX 都能提供高效易用的图形界面，帮助你充分发挥 AI 智能体的能力。
+无论是自动化工作流、连接通讯软件，还是调度智能定时任务，ClawClaw 都能提供高效易用的图形界面，帮助你充分发挥 AI 智能体的能力。
 
-ClawX 预置了最佳实践的模型供应商配置，原生支持 Windows 平台以及多语言设置。当然，你也可以通过 **设置 → 高级 → 开发者模式** 来进行精细的高级配置。
+ClawClaw 预置了最佳实践的模型供应商配置，原生支持 Windows 平台以及多语言设置。当然，你也可以通过 **设置 → 高级 → 开发者模式** 来进行精细的高级配置。
 
 ---
 
@@ -73,21 +72,21 @@ ClawX 预置了最佳实践的模型供应商配置，原生支持 Windows 平�
 
 ---
 
-## 为什么选择 ClawX
+## 为什么选择 ClawClaw
 
-构建 AI 智能体不应该需要精通命令行。ClawX 的设计理念很简单：**强大的技术值得拥有一个尊重用户时间的界面。**
+构建 AI 智能体不应该需要精通命令行。ClawClaw 的设计理念很简单：**强大的技术值得拥有一个尊重用户时间的界面。**
 
-| 痛点 | ClawX 解决方案 |
-|------|----------------|
-| 复杂的命令行配置 | 一键安装，配合引导式设置向导 |
-| 手动编辑配置文件 | 可视化设置界面，实时校验 |
-| 进程管理繁琐 | 自动管理网关生命周期 |
-| 多 AI 供应商切换 | 统一的供应商配置面板 |
-| 技能/插件安装复杂 | 内置技能市场与管理界面 |
+| 痛点              | ClawClaw 解决方案            |
+| ----------------- | ---------------------------- |
+| 复杂的命令行配置  | 一键安装，配合引导式设置向导 |
+| 手动编辑配置文件  | 可视化设置界面，实时校验     |
+| 进程管理繁琐      | 自动管理网关生命周期         |
+| 多 AI 供应商切换  | 统一的供应商配置面板         |
+| 技能/插件安装复杂 | 内置技能市场与管理界面       |
 
 ### 内置 OpenClaw 核心
 
-ClawX 直接基于官方 **OpenClaw** 核心构建。无需单独安装，我们将运行时嵌入应用内部，提供开箱即用的无缝体验。
+ClawClaw 直接基于官方 **OpenClaw** 核心构建。无需单独安装，我们将运行时嵌入应用内部，提供开箱即用的无缝体验。
 
 我们致力于与上游 OpenClaw 项目保持严格同步，确保你始终可以使用官方发布的最新功能、稳定性改进和生态兼容性。
 
@@ -96,25 +95,32 @@ ClawX 直接基于官方 **OpenClaw** 核心构建。无需单独安装，我们
 ## 功能特性
 
 ### 🎯 零配置门槛
+
 从安装到第一次 AI 对话，全程通过直观的图形界面完成。无需终端命令，无需 YAML 文件，无需到处寻找环境变量。
 
 ### 💬 智能聊天界面
+
 通过现代化的聊天体验与 AI 智能体交互。支持多会话上下文、消息历史记录以及 Markdown 富文本渲染。
 
 ### 📡 多频道管理
+
 同时配置和监控多个 AI 频道。每个频道独立运行，允许你为不同任务运行专门的智能体。
 
 ### ⏰ 定时任务自动化
+
 调度 AI 任务自动执行。定义触发器、设置时间间隔，让 AI 智能体 7×24 小时不间断工作。
 
 ### 🧩 可扩展技能系统
+
 通过预构建的技能扩展 AI 智能体的能力。在集成的技能面板中浏览、安装和管理技能——无需包管理器。
 
 ### 🔐 安全的供应商集成
+
 连接多个 AI 供应商（OpenAI、Anthropic 等），凭证安全存储在系统原生密钥链中。
 
 ### 🌙 自适应主题
-支持浅色模式、深色模式或跟随系统主题。ClawX 自动适应你的偏好设置。
+
+支持浅色模式、深色模式或跟随系统主题。ClawClaw 自动适应你的偏好设置。
 
 ---
 
@@ -130,14 +136,14 @@ ClawX 直接基于官方 **OpenClaw** 核心构建。无需单独安装，我们
 
 #### 预构建版本（推荐）
 
-从 [Releases](https://github.com/ValueCell-ai/ClawX/releases) 页面下载适用于你平台的最新版本。
+从 [Releases](https://github.com/Xzinfra/ClawClaw/releases) 页面下载适用于你平台的最新版本。
 
 #### 从源码构建
 
 ```bash
 # 克隆仓库
-git clone https://github.com/ValueCell-ai/ClawX.git
-cd ClawX
+git clone https://github.com/Xzinfra/ClawClaw.git
+cd ClawClaw
 
 # 初始化项目
 pnpm run init
@@ -145,21 +151,22 @@ pnpm run init
 # 以开发模式启动
 pnpm dev
 ```
+
 ### 首次启动
 
-首次启动 ClawX 时，**设置向导** 将引导你完成以下步骤：
+首次启动 ClawClaw 时，**设置向导** 将引导你完成以下步骤：
 
 1. **语言与区域** – 配置你的首选语言和地区
 2. **AI 供应商** – 输入所支持供应商的 API 密钥
 3. **技能包** – 选择适用于常见场景的预配置技能
 4. **验证** – 在进入主界面前测试你的配置
 
-> Moonshot（Kimi）说明：ClawX 默认保持开启 Kimi 的 web search。  
-> 当配置 Moonshot 后，ClawX 也会将 OpenClaw 配置中的 Kimi web search 同步到中国区端点（`https://api.moonshot.cn/v1`）。
+> Moonshot（Kimi）说明：ClawClaw 默认保持开启 Kimi 的 web search。  
+> 当配置 Moonshot 后，ClawClaw 也会将 OpenClaw 配置中的 Kimi web search 同步到中国区端点（`https://api.moonshot.cn/v1`）。
 
 ### 代理设置
 
-ClawX 内置了代理设置，适用于需要通过本地代理客户端访问外网的场景，包括 Electron 本身、OpenClaw Gateway，以及 Telegram 这类频道的联网请求。
+ClawClaw 内置了代理设置，适用于需要通过本地代理客户端访问外网的场景，包括 Electron 本身、OpenClaw Gateway，以及 Telegram 这类频道的联网请求。
 
 打开 **设置 → 网关 → 代理**，配置以下内容：
 
@@ -175,21 +182,22 @@ ClawX 内置了代理设置，适用于需要通过本地代理客户端访问�
 ```text
 代理服务器: http://127.0.0.1:7890
 ```
+
 说明：
 
 - 只填写 `host:port` 时，会按 HTTP 代理处理。
 - 高级代理项留空时，会自动回退到“代理服务器”。
 - 保存代理设置后，Electron 网络层会立即重新应用代理，并自动重启 Gateway。
-- 如果启用了 Telegram，ClawX 还会把代理同步到 OpenClaw 的 Telegram 频道配置中。
+- 如果启用了 Telegram，ClawClaw 还会把代理同步到 OpenClaw 的 Telegram 频道配置中。
 
 ---
 
 ## 系统架构
 
-ClawX 采用 **双进程 + Host API 统一接入架构**。渲染进程只调用统一客户端抽象，协议选择与进程生命周期由 Electron 主进程统一管理：
+ClawClaw 采用 **双进程 + Host API 统一接入架构**。渲染进程只调用统一客户端抽象，协议选择与进程生命周期由 Electron 主进程统一管理：
 
 ```┌─────────────────────────────────────────────────────────────────┐
-│                        ClawX 桌面应用                             │
+│                        ClawClaw 桌面应用                             │
 │                                                                  │
 │  ┌────────────────────────────────────────────────────────────┐  │
 │  │              Electron 主进程                                 │  │
@@ -232,6 +240,7 @@ ClawX 采用 **双进程 + Host API 统一接入架构**。渲染进程只调用
 │  • 供应商抽象层                                                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
 ### 设计原则
 
 - **进程隔离**：AI 运行时在独立进程中运行，确保即使在高负载计算期间 UI 也能保持响应
@@ -246,15 +255,19 @@ ClawX 采用 **双进程 + Host API 统一接入架构**。渲染进程只调用
 ## 使用场景
 
 ### 🤖 个人 AI 助手
+
 配置一个通用 AI 智能体，可以回答问题、撰写邮件、总结文档并协助处理日常任务——全部通过简洁的桌面界面完成。
 
 ### 📊 自动化监控
+
 设置定时智能体来监控新闻动态、追踪价格变动或监听特定事件。结果将推送到你偏好的通知渠道。
 
 ### 💻 开发者效率工具
+
 将 AI 融入你的开发工作流。使用智能体进行代码审查、生成文档或自动化重复性编码任务。
 
 ### 🔄 工作流自动化
+
 将多个技能串联起来，创建复杂的自动化流水线。处理数据、转换内容、触发操作——全部通过可视化方式编排。
 
 ---
@@ -268,7 +281,7 @@ ClawX 采用 **双进程 + Host API 统一接入架构**。渲染进程只调用
 
 ### 项目结构
 
-```ClawX/
+```ClawClaw/
 ├── electron/                 # Electron 主进程
 │   ├── api/                 # 主进程 API 路由与处理器
 │   │   └── routes/          # RPC/HTTP 代理路由模块
@@ -293,6 +306,7 @@ ClawX 采用 **双进程 + Host API 统一接入架构**。渲染进程只调用
 ├── resources/                # 静态资源（图标、图片）
 └── scripts/                  # 构建与工具脚本
 ```
+
 ### 常用命令
 
 ```bash
@@ -315,24 +329,25 @@ pnpm package:mac          # 为 macOS 打包
 pnpm package:win          # 为 Windows 打包
 pnpm package:linux        # 为 Linux 打包
 ```
+
 ### 技术栈
 
-| 层级 | 技术 |
-|------|------|
-| 运行时 | Electron 40+ |
-| UI 框架 | React 19 + TypeScript |
-| 样式 | Tailwind CSS + shadcn/ui |
-| 状态管理 | Zustand |
-| 构建工具 | Vite + electron-builder |
-| 测试 | Vitest + Playwright |
-| 动画 | Framer Motion |
-| 图标 | Lucide React |
+| 层级     | 技术                     |
+| -------- | ------------------------ |
+| 运行时   | Electron 40+             |
+| UI 框架  | React 19 + TypeScript    |
+| 样式     | Tailwind CSS + shadcn/ui |
+| 状态管理 | Zustand                  |
+| 构建工具 | Vite + electron-builder  |
+| 测试     | Vitest + Playwright      |
+| 动画     | Framer Motion            |
+| 图标     | Lucide React             |
 
 ---
 
 ## 参与贡献
 
-我们欢迎社区的各种贡献！无论是修复 Bug、开发新功能、改进文档还是翻译——每一份贡献都让 ClawX 变得更好。
+我们欢迎社区的各种贡献！无论是修复 Bug、开发新功能、改进文档还是翻译——每一份贡献都让 ClawClaw 变得更好。
 
 ### 如何贡献
 
@@ -353,7 +368,7 @@ pnpm package:linux        # 为 Linux 打包
 
 ## 致谢
 
-ClawX 构建于以下优秀的开源项目之上：
+ClawClaw 构建于以下优秀的开源项目之上：
 
 - [OpenClaw](https://github.com/OpenClaw) – AI 智能体运行时
 - [Electron](https://www.electronjs.org/) – 跨平台桌面框架
@@ -367,36 +382,36 @@ ClawX 构建于以下优秀的开源项目之上：
 
 加入我们的社区，与其他用户交流、获取帮助、分享你的使用体验。
 
-| 企业微信 | 飞书群组 | Discord |
-| :---: | :---: | :---: |
+|                                     企业微信                                     |                                   飞书群组                                    |                                         Discord                                         |
+| :------------------------------------------------------------------------------: | :---------------------------------------------------------------------------: | :-------------------------------------------------------------------------------------: |
 | <img src="src/assets/community/wecom-qr.png" width="150" alt="企业微信二维码" /> | <img src="src/assets/community/feishu-qr.png" width="150" alt="飞书二维码" /> | <img src="src/assets/community/20260212-185822.png" width="150" alt="Discord 二维码" /> |
 
-### ClawX 合作伙伴计划 🚀
+### ClawClaw 合作伙伴计划 🚀
 
-我们正在启动 ClawX 合作伙伴计划，寻找能够帮助我们将 ClawX 介绍给更多客户的合作伙伴，尤其是那些有定制化 AI 智能体或自动化需求的客户。
+我们正在启动 ClawClaw 合作伙伴计划，寻找能够帮助我们将 ClawClaw 介绍给更多客户的合作伙伴，尤其是那些有定制化 AI 智能体或自动化需求的客户。
 
-合作伙伴负责帮助我们连接潜在用户和项目，ClawX 团队则提供完整的技术支持、定制开发与集成服务。
+合作伙伴负责帮助我们连接潜在用户和项目，ClawClaw 团队则提供完整的技术支持、定制开发与集成服务。
 
 如果你服务的客户对 AI 工具或自动化方案感兴趣，欢迎与我们合作。
 
-欢迎私信我们，或发送邮件至 [public@valuecell.ai](mailto:public@valuecell.ai) 了解更多。
+欢迎私信我们，或发送邮件至 [public@xzinfra.com](mailto:public@xzinfra.com) 了解更多。
 
 ---
 
 ## Stars 历史
 
 <p align="center">
-  <img src="https://api.star-history.com/svg?repos=ValueCell-ai/ClawX&type=Date" alt="Stars 历史图表" />
+  <img src="https://api.star-history.com/svg?repos=Xzinfra/ClawClaw&type=Date" alt="Stars 历史图表" />
 </p>
 
 ---
 
 ## 许可证
 
-ClawX 基于 [MIT 许可证](LICENSE) 发布。你可以自由地使用、修改和分发本软件。
+ClawClaw 基于 [MIT 许可证](LICENSE) 发布。你可以自由地使用、修改和分发本软件。
 
 ---
 
 <p align="center">
-  <sub>由 ValueCell 团队用 ❤️ 打造</sub>
+  <sub>由 Xzinfra 团队用 ❤️ 打造</sub>
 </p>

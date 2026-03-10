@@ -18,7 +18,7 @@ import {
 describe('api-client', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    window.localStorage.removeItem('clawx:gateway-ws-diagnostic');
+    window.localStorage.removeItem('clawclaw:gateway-ws-diagnostic');
     configureApiClient({
       enabled: { ws: false, http: false },
       rules: [{ matcher: /.*/, order: ['ipc'] }],
@@ -40,7 +40,7 @@ describe('api-client', () => {
       expect.objectContaining({
         module: 'settings',
         action: 'getAll',
-      }),
+      })
     );
   });
 
@@ -102,7 +102,7 @@ describe('api-client', () => {
         module: 'settings',
         action: 'set',
         payload: ['language', 'en'],
-      }),
+      })
     );
   });
 
@@ -197,10 +197,10 @@ describe('api-client', () => {
     });
 
     const invoker = createGatewayHttpTransportInvoker();
-    const result = await invoker<{ success: boolean; result: { rows: number[] } }>(
-      'gateway:rpc',
-      ['chat.history', { sessionKey: 's1' }],
-    );
+    const result = await invoker<{ success: boolean; result: { rows: number[] } }>('gateway:rpc', [
+      'chat.history',
+      { sessionKey: 's1' },
+    ]);
 
     expect(result.success).toBe(true);
     expect(result.result.rows).toEqual([1, 2]);
@@ -209,7 +209,7 @@ describe('api-client', () => {
       expect.objectContaining({
         path: '/rpc',
         method: 'POST',
-      }),
+      })
     );
   });
 
@@ -238,7 +238,7 @@ describe('api-client', () => {
     const invoker = createGatewayHttpTransportInvoker();
     const result = await invoker<{ success: boolean; result: { channels: Array<{ id: string }> } }>(
       'gateway:rpc',
-      ['channels.status', { probe: false }],
+      ['channels.status', { probe: false }]
     );
 
     expect(result.success).toBe(true);

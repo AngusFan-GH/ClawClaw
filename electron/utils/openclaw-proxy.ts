@@ -3,7 +3,7 @@ import { resolveProxySettings, type ProxySettings } from './proxy';
 import { logger } from './logger';
 
 /**
- * Sync ClawX global proxy settings into OpenClaw channel config where the
+ * Sync ClawClaw global proxy settings into OpenClaw channel config where the
  * upstream runtime expects an explicit per-channel proxy knob.
  */
 export async function syncProxyConfigToOpenClaw(settings: ProxySettings): Promise<void> {
@@ -16,7 +16,7 @@ export async function syncProxyConfigToOpenClaw(settings: ProxySettings): Promis
 
   const resolved = resolveProxySettings(settings);
   const nextProxy = settings.proxyEnabled
-    ? (resolved.allProxy || resolved.httpsProxy || resolved.httpProxy)
+    ? resolved.allProxy || resolved.httpsProxy || resolved.httpProxy
     : '';
   const currentProxy = typeof telegramConfig.proxy === 'string' ? telegramConfig.proxy : '';
 

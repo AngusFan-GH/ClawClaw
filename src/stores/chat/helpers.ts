@@ -43,7 +43,7 @@ function clearHistoryPoll(): void {
 // [media attached: <path> ...] reference in the Gateway's user message text).
 // Keying by path avoids the race condition of keying by runId (which is only
 // available after the RPC returns, but history may load before that).
-const IMAGE_CACHE_KEY = 'clawx:image-cache';
+const IMAGE_CACHE_KEY = 'clawclaw:image-cache';
 const IMAGE_CACHE_MAX = 100; // max entries to prevent unbounded growth
 
 function loadImageCache(): Map<string, AttachedFileMeta> {
@@ -53,7 +53,9 @@ function loadImageCache(): Map<string, AttachedFileMeta> {
       const entries = JSON.parse(raw) as Array<[string, AttachedFileMeta]>;
       return new Map(entries);
     }
-  } catch { /* ignore parse errors */ }
+  } catch {
+    /* ignore parse errors */
+  }
   return new Map();
 }
 
@@ -61,11 +63,12 @@ function saveImageCache(cache: Map<string, AttachedFileMeta>): void {
   try {
     // Evict oldest entries if over limit
     const entries = Array.from(cache.entries());
-    const trimmed = entries.length > IMAGE_CACHE_MAX
-      ? entries.slice(entries.length - IMAGE_CACHE_MAX)
-      : entries;
+    const trimmed =
+      entries.length > IMAGE_CACHE_MAX ? entries.slice(entries.length - IMAGE_CACHE_MAX) : entries;
     localStorage.setItem(IMAGE_CACHE_KEY, JSON.stringify(trimmed));
-  } catch { /* ignore quota errors */ }
+  } catch {
+    /* ignore quota errors */
+  }
 }
 
 const _imageCache = loadImageCache();
@@ -80,8 +83,8 @@ function getMessageText(content: unknown): string {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
     return (content as Array<{ type?: string; text?: string }>)
-      .filter(b => b.type === 'text' && b.text)
-      .map(b => b.text!)
+      .filter((b) => b.type === 'text' && b.text)
+      .map((b) => b.text!)
       .join('\n');
   }
   return '';
@@ -103,47 +106,47 @@ function mimeFromExtension(filePath: string): string {
   const ext = filePath.split('.').pop()?.toLowerCase() || '';
   const map: Record<string, string> = {
     // Images
-    'png': 'image/png',
-    'jpg': 'image/jpeg',
-    'jpeg': 'image/jpeg',
-    'gif': 'image/gif',
-    'webp': 'image/webp',
-    'bmp': 'image/bmp',
-    'avif': 'image/avif',
-    'svg': 'image/svg+xml',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    bmp: 'image/bmp',
+    avif: 'image/avif',
+    svg: 'image/svg+xml',
     // Documents
-    'pdf': 'application/pdf',
-    'doc': 'application/msword',
-    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'xls': 'application/vnd.ms-excel',
-    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'ppt': 'application/vnd.ms-powerpoint',
-    'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    'txt': 'text/plain',
-    'csv': 'text/csv',
-    'md': 'text/markdown',
-    'rtf': 'application/rtf',
-    'epub': 'application/epub+zip',
+    pdf: 'application/pdf',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    txt: 'text/plain',
+    csv: 'text/csv',
+    md: 'text/markdown',
+    rtf: 'application/rtf',
+    epub: 'application/epub+zip',
     // Archives
-    'zip': 'application/zip',
-    'tar': 'application/x-tar',
-    'gz': 'application/gzip',
-    'rar': 'application/vnd.rar',
+    zip: 'application/zip',
+    tar: 'application/x-tar',
+    gz: 'application/gzip',
+    rar: 'application/vnd.rar',
     '7z': 'application/x-7z-compressed',
     // Audio
-    'mp3': 'audio/mpeg',
-    'wav': 'audio/wav',
-    'ogg': 'audio/ogg',
-    'aac': 'audio/aac',
-    'flac': 'audio/flac',
-    'm4a': 'audio/mp4',
+    mp3: 'audio/mpeg',
+    wav: 'audio/wav',
+    ogg: 'audio/ogg',
+    aac: 'audio/aac',
+    flac: 'audio/flac',
+    m4a: 'audio/mp4',
     // Video
-    'mp4': 'video/mp4',
-    'mov': 'video/quicktime',
-    'avi': 'video/x-msvideo',
-    'mkv': 'video/x-matroska',
-    'webm': 'video/webm',
-    'm4v': 'video/mp4',
+    mp4: 'video/mp4',
+    mov: 'video/quicktime',
+    avi: 'video/x-msvideo',
+    mkv: 'video/x-matroska',
+    webm: 'video/webm',
+    m4v: 'video/mp4',
   };
   return map[ext] || 'application/octet-stream';
 }
@@ -156,12 +159,19 @@ function mimeFromExtension(filePath: string): string {
 function extractRawFilePaths(text: string): Array<{ filePath: string; mimeType: string }> {
   const refs: Array<{ filePath: string; mimeType: string }> = [];
   const seen = new Set<string>();
-  const exts = 'png|jpe?g|gif|webp|bmp|avif|svg|pdf|docx?|xlsx?|pptx?|txt|csv|md|rtf|epub|zip|tar|gz|rar|7z|mp3|wav|ogg|aac|flac|m4a|mp4|mov|avi|mkv|webm|m4v';
+  const exts =
+    'png|jpe?g|gif|webp|bmp|avif|svg|pdf|docx?|xlsx?|pptx?|txt|csv|md|rtf|epub|zip|tar|gz|rar|7z|mp3|wav|ogg|aac|flac|m4a|mp4|mov|avi|mkv|webm|m4v';
   // Unix absolute paths (/... or ~/...) — lookbehind rejects mid-token slashes
   // (e.g. "path/to/file.mp4", "https://example.com/file.mp4")
-  const unixRegex = new RegExp(`(?<![\\w./:])((?:\\/|~\\/)[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
+  const unixRegex = new RegExp(
+    `(?<![\\w./:])((?:\\/|~\\/)[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`,
+    'gi'
+  );
   // Windows absolute paths (C:\... D:\...) — lookbehind rejects drive letter glued to a word
-  const winRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\\\[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
+  const winRegex = new RegExp(
+    `(?<![\\w])([A-Za-z]:\\\\[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`,
+    'gi'
+  );
   for (const regex of [unixRegex, winRegex]) {
     let match;
     while ((match = regex.exec(text)) !== null) {
@@ -265,8 +275,13 @@ function getToolCallFilePath(msg: RawMessage, toolCallId: string): string | unde
       const fn = (tc.function ?? tc) as Record<string, unknown>;
       let args: Record<string, unknown> | undefined;
       try {
-        args = typeof fn.arguments === 'string' ? JSON.parse(fn.arguments) : (fn.arguments ?? fn.input) as Record<string, unknown>;
-      } catch { /* ignore */ }
+        args =
+          typeof fn.arguments === 'string'
+            ? JSON.parse(fn.arguments)
+            : ((fn.arguments ?? fn.input) as Record<string, unknown>);
+      } catch {
+        /* ignore */
+      }
       if (args) {
         const fp = args.file_path ?? args.filePath ?? args.path ?? args.file;
         if (typeof fp === 'string') return fp;
@@ -302,8 +317,13 @@ function collectToolCallPaths(msg: RawMessage, paths: Map<string, string>): void
       const fn = (tc.function ?? tc) as Record<string, unknown>;
       let args: Record<string, unknown> | undefined;
       try {
-        args = typeof fn.arguments === 'string' ? JSON.parse(fn.arguments) : (fn.arguments ?? fn.input) as Record<string, unknown>;
-      } catch { /* ignore */ }
+        args =
+          typeof fn.arguments === 'string'
+            ? JSON.parse(fn.arguments)
+            : ((fn.arguments ?? fn.input) as Record<string, unknown>);
+      } catch {
+        /* ignore */
+      }
       if (args) {
         const fp = args.file_path ?? args.filePath ?? args.path ?? args.file;
         if (typeof fp === 'string') paths.set(id, fp);
@@ -351,7 +371,7 @@ function enrichWithToolResultFiles(messages: RawMessage[]): RawMessage[] {
       const text = getMessageText(msg.content);
       if (text) {
         const mediaRefs = extractMediaRefs(text);
-        const mediaRefPaths = new Set(mediaRefs.map(r => r.filePath));
+        const mediaRefPaths = new Set(mediaRefs.map((r) => r.filePath));
         for (const ref of mediaRefs) {
           pending.push(makeAttachedFile(ref));
         }
@@ -370,9 +390,9 @@ function enrichWithToolResultFiles(messages: RawMessage[]): RawMessage[] {
       const toAttach = pending.splice(0);
       // Deduplicate against files already on the assistant message
       const existingPaths = new Set(
-        (msg._attachedFiles || []).map(f => f.filePath).filter(Boolean),
+        (msg._attachedFiles || []).map((f) => f.filePath).filter(Boolean)
       );
-      const newFiles = toAttach.filter(f => !f.filePath || !existingPaths.has(f.filePath));
+      const newFiles = toAttach.filter((f) => !f.filePath || !existingPaths.has(f.filePath));
       if (newFiles.length === 0) return msg;
       return {
         ...msg,
@@ -399,7 +419,7 @@ function enrichWithCachedImages(messages: RawMessage[]): RawMessage[] {
 
     // Path 1: [media attached: path (mime) | path] — guaranteed format from attachment button
     const mediaRefs = extractMediaRefs(text);
-    const mediaRefPaths = new Set(mediaRefs.map(r => r.filePath));
+    const mediaRefPaths = new Set(mediaRefs.map((r) => r.filePath));
 
     // Path 2: Raw file paths.
     // For assistant messages: scan own text AND the nearest preceding user message text,
@@ -410,10 +430,10 @@ function enrichWithCachedImages(messages: RawMessage[]): RawMessage[] {
     let rawRefs: Array<{ filePath: string; mimeType: string }> = [];
     if (msg.role === 'assistant' && !isToolOnlyMessage(msg)) {
       // Own text
-      rawRefs = extractRawFilePaths(text).filter(r => !mediaRefPaths.has(r.filePath));
+      rawRefs = extractRawFilePaths(text).filter((r) => !mediaRefPaths.has(r.filePath));
 
       // Nearest preceding user message text (look back up to 5 messages)
-      const seenPaths = new Set(rawRefs.map(r => r.filePath));
+      const seenPaths = new Set(rawRefs.map((r) => r.filePath));
       for (let i = idx - 1; i >= Math.max(0, idx - 5); i--) {
         const prev = messages[i];
         if (!prev) break;
@@ -433,11 +453,17 @@ function enrichWithCachedImages(messages: RawMessage[]): RawMessage[] {
     const allRefs = [...mediaRefs, ...rawRefs];
     if (allRefs.length === 0) return msg;
 
-    const files: AttachedFileMeta[] = allRefs.map(ref => {
+    const files: AttachedFileMeta[] = allRefs.map((ref) => {
       const cached = _imageCache.get(ref.filePath);
       if (cached) return { ...cached, filePath: ref.filePath };
       const fileName = ref.filePath.split(/[\\/]/).pop() || 'file';
-      return { fileName, mimeType: ref.mimeType, fileSize: 0, preview: null, filePath: ref.filePath };
+      return {
+        fileName,
+        mimeType: ref.mimeType,
+        fileSize: 0,
+        preview: null,
+        filePath: ref.filePath,
+      };
     });
     return { ...msg, _attachedFiles: files };
   });
@@ -461,9 +487,7 @@ async function loadMissingPreviews(messages: RawMessage[]): Promise<boolean> {
       const fp = file.filePath;
       if (!fp || seenPaths.has(fp)) continue;
       // Images: need preview. Non-images: need file size (for FileCard display).
-      const needsLoad = file.mimeType.startsWith('image/')
-        ? !file.preview
-        : file.fileSize === 0;
+      const needsLoad = file.mimeType.startsWith('image/') ? !file.preview : file.fileSize === 0;
       if (needsLoad) {
         seenPaths.add(fp);
         needPreview.push({ filePath: fp, mimeType: file.mimeType });
@@ -490,10 +514,10 @@ async function loadMissingPreviews(messages: RawMessage[]): Promise<boolean> {
   if (needPreview.length === 0) return false;
 
   try {
-    const thumbnails = await invokeIpc(
-      'media:getThumbnails',
-      needPreview,
-    ) as Record<string, { preview: string | null; fileSize: number }>;
+    const thumbnails = (await invokeIpc('media:getThumbnails', needPreview)) as Record<
+      string,
+      { preview: string | null; fileSize: number }
+    >;
 
     let updated = false;
     for (const msg of messages) {
@@ -573,7 +597,12 @@ function isToolOnlyMessage(message: RawMessage | undefined): boolean {
   let hasNonToolContent = false;
 
   for (const block of content as ContentBlock[]) {
-    if (block.type === 'tool_use' || block.type === 'tool_result' || block.type === 'toolCall' || block.type === 'toolResult') {
+    if (
+      block.type === 'tool_use' ||
+      block.type === 'tool_result' ||
+      block.type === 'toolCall' ||
+      block.type === 'toolResult'
+    ) {
       hasTool = true;
       continue;
     }
@@ -613,7 +642,10 @@ function extractTextFromContent(content: unknown): string {
 function summarizeToolOutput(text: string): string | undefined {
   const trimmed = text.trim();
   if (!trimmed) return undefined;
-  const lines = trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
   if (lines.length === 0) return undefined;
   const summaryLines = lines.slice(0, 2);
   let summary = summaryLines.join(' / ');
@@ -623,7 +655,10 @@ function summarizeToolOutput(text: string): string | undefined {
   return summary;
 }
 
-function normalizeToolStatus(rawStatus: unknown, fallback: 'running' | 'completed'): ToolStatus['status'] {
+function normalizeToolStatus(
+  rawStatus: unknown,
+  fallback: 'running' | 'completed'
+): ToolStatus['status'] {
   const status = typeof rawStatus === 'string' ? rawStatus.toLowerCase() : '';
   if (status === 'error' || status === 'failed') return 'error';
   if (status === 'completed' || status === 'success' || status === 'done') return 'completed';
@@ -709,18 +744,27 @@ function extractToolResultUpdate(message: unknown, eventState: string): ToolStat
   const role = typeof msg.role === 'string' ? msg.role.toLowerCase() : '';
   if (!isToolResultRole(role)) return null;
 
-  const toolName = typeof msg.toolName === 'string' ? msg.toolName : (typeof msg.name === 'string' ? msg.name : '');
+  const toolName =
+    typeof msg.toolName === 'string' ? msg.toolName : typeof msg.name === 'string' ? msg.name : '';
   const toolCallId = typeof msg.toolCallId === 'string' ? msg.toolCallId : undefined;
-  const details = (msg.details && typeof msg.details === 'object') ? msg.details as Record<string, unknown> : undefined;
-  const rawStatus = (msg.status ?? details?.status);
+  const details =
+    msg.details && typeof msg.details === 'object'
+      ? (msg.details as Record<string, unknown>)
+      : undefined;
+  const rawStatus = msg.status ?? details?.status;
   const fallback = eventState === 'delta' ? 'running' : 'completed';
   const status = normalizeToolStatus(rawStatus, fallback);
-  const durationMs = parseDurationMs(details?.durationMs ?? details?.duration ?? (msg as Record<string, unknown>).durationMs);
+  const durationMs = parseDurationMs(
+    details?.durationMs ?? details?.duration ?? (msg as Record<string, unknown>).durationMs
+  );
 
-  const outputText = (details && typeof details.aggregated === 'string')
-    ? details.aggregated
-    : extractTextFromContent(msg.content);
-  const summary = summarizeToolOutput(outputText) ?? summarizeToolOutput(String(details?.error ?? msg.error ?? ''));
+  const outputText =
+    details && typeof details.aggregated === 'string'
+      ? details.aggregated
+      : extractTextFromContent(msg.content);
+  const summary =
+    summarizeToolOutput(outputText) ??
+    summarizeToolOutput(String(details?.error ?? msg.error ?? ''));
 
   const name = toolName || toolCallId || 'tool';
   const id = toolCallId || name;
@@ -736,7 +780,10 @@ function extractToolResultUpdate(message: unknown, eventState: string): ToolStat
   };
 }
 
-function mergeToolStatus(existing: ToolStatus['status'], incoming: ToolStatus['status']): ToolStatus['status'] {
+function mergeToolStatus(
+  existing: ToolStatus['status'],
+  incoming: ToolStatus['status']
+): ToolStatus['status'] {
   const order: Record<ToolStatus['status'], number> = { running: 0, completed: 1, error: 2 };
   return order[incoming] >= order[existing] ? incoming : existing;
 }

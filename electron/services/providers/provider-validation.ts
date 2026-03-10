@@ -9,7 +9,7 @@ type ValidationProfile =
   | 'none';
 
 function logValidationStatus(provider: string, status: number): void {
-  console.log(`[clawx-validate] ${provider} HTTP ${status}`);
+  console.log(`[clawclaw-validate] ${provider} HTTP ${status}`);
 }
 
 function maskSecret(secret: string): string {
@@ -53,10 +53,10 @@ function logValidationRequest(
   provider: string,
   method: string,
   url: string,
-  headers: Record<string, string>,
+  headers: Record<string, string>
 ): void {
   console.log(
-    `[clawx-validate] ${provider} request ${method} ${sanitizeValidationUrl(url)} headers=${JSON.stringify(sanitizeHeaders(headers))}`,
+    `[clawclaw-validate] ${provider} request ${method} ${sanitizeValidationUrl(url)} headers=${JSON.stringify(sanitizeHeaders(headers))}`
   );
 }
 
@@ -89,7 +89,7 @@ function getValidationProfile(
 async function performProviderValidationRequest(
   providerLabel: string,
   url: string,
-  headers: Record<string, string>,
+  headers: Record<string, string>
 ): Promise<{ valid: boolean; error?: string }> {
   try {
     logValidationRequest(providerLabel, 'GET', url, headers);
@@ -105,10 +105,7 @@ async function performProviderValidationRequest(
   }
 }
 
-function classifyAuthResponse(
-  status: number,
-  data: unknown,
-): { valid: boolean; error?: string } {
+function classifyAuthResponse(status: number, data: unknown): { valid: boolean; error?: string } {
   if (status >= 200 && status < 300) return { valid: true };
   if (status === 429) return { valid: true };
   if (status === 401 || status === 403) return { valid: false, error: 'Invalid API key' };
@@ -121,11 +118,14 @@ function classifyAuthResponse(
 async function validateOpenAiCompatibleKey(
   providerType: string,
   apiKey: string,
-  baseUrl?: string,
+  baseUrl?: string
 ): Promise<{ valid: boolean; error?: string }> {
   const trimmedBaseUrl = baseUrl?.trim();
   if (!trimmedBaseUrl) {
-    return { valid: false, error: `Base URL is required for provider "${providerType}" validation` };
+    return {
+      valid: false,
+      error: `Base URL is required for provider "${providerType}" validation`,
+    };
   }
 
   const headers = { Authorization: `Bearer ${apiKey}` };
@@ -134,7 +134,7 @@ async function validateOpenAiCompatibleKey(
 
   if (modelsResult.error?.includes('API error: 404')) {
     console.log(
-      `[clawx-validate] ${providerType} /models returned 404, falling back to /chat/completions probe`,
+      `[clawclaw-validate] ${providerType} /models returned 404, falling back to /chat/completions probe`
     );
     const base = normalizeBaseUrl(trimmedBaseUrl);
     const chatUrl = `${base}/chat/completions`;
@@ -147,7 +147,7 @@ async function validateOpenAiCompatibleKey(
 async function performChatCompletionsProbe(
   providerLabel: string,
   url: string,
-  headers: Record<string, string>,
+  headers: Record<string, string>
 ): Promise<{ valid: boolean; error?: string }> {
   try {
     logValidationRequest(providerLabel, 'POST', url, headers);
@@ -185,7 +185,7 @@ async function performChatCompletionsProbe(
 async function performAnthropicMessagesProbe(
   providerLabel: string,
   url: string,
-  headers: Record<string, string>,
+  headers: Record<string, string>
 ): Promise<{ valid: boolean; error?: string }> {
   try {
     logValidationRequest(providerLabel, 'POST', url, headers);
@@ -223,7 +223,7 @@ async function performAnthropicMessagesProbe(
 async function validateGoogleQueryKey(
   providerType: string,
   apiKey: string,
-  baseUrl?: string,
+  baseUrl?: string
 ): Promise<{ valid: boolean; error?: string }> {
   const base = normalizeBaseUrl(baseUrl || 'https://generativelanguage.googleapis.com/v1beta');
   const url = `${base}/models?pageSize=1&key=${encodeURIComponent(apiKey)}`;
@@ -233,7 +233,7 @@ async function validateGoogleQueryKey(
 async function validateAnthropicHeaderKey(
   providerType: string,
   apiKey: string,
-  baseUrl?: string,
+  baseUrl?: string
 ): Promise<{ valid: boolean; error?: string }> {
   const rawBase = normalizeBaseUrl(baseUrl || 'https://api.anthropic.com/v1');
   const base = rawBase.endsWith('/v1') ? rawBase : `${rawBase}/v1`;
@@ -246,9 +246,12 @@ async function validateAnthropicHeaderKey(
   const modelsResult = await performProviderValidationRequest(providerType, url, headers);
 
   // If the endpoint doesn't implement /models (like Minimax Anthropic compatibility), fallback to a /messages probe.
-  if (modelsResult.error?.includes('API error: 404') || modelsResult.error?.includes('API error: 400')) {
+  if (
+    modelsResult.error?.includes('API error: 404') ||
+    modelsResult.error?.includes('API error: 400')
+  ) {
     console.log(
-      `[clawx-validate] ${providerType} /models returned error, falling back to /messages probe`,
+      `[clawclaw-validate] ${providerType} /models returned error, falling back to /messages probe`
     );
     const messagesUrl = `${base}/messages`;
     return await performAnthropicMessagesProbe(providerType, messagesUrl, headers);
@@ -259,7 +262,7 @@ async function validateAnthropicHeaderKey(
 
 async function validateOpenRouterKey(
   providerType: string,
-  apiKey: string,
+  apiKey: string
 ): Promise<{ valid: boolean; error?: string }> {
   const url = 'https://openrouter.ai/api/v1/auth/key';
   const headers = { Authorization: `Bearer ${apiKey}` };
@@ -269,7 +272,7 @@ async function validateOpenRouterKey(
 export async function validateApiKeyWithProvider(
   providerType: string,
   apiKey: string,
-  options?: { baseUrl?: string; apiProtocol?: string },
+  options?: { baseUrl?: string; apiProtocol?: string }
 ): Promise<{ valid: boolean; error?: string }> {
   const profile = getValidationProfile(providerType, options);
   const resolvedBaseUrl = options?.baseUrl || getProviderConfig(providerType)?.baseUrl;
@@ -294,7 +297,10 @@ export async function validateApiKeyWithProvider(
       case 'openrouter':
         return await validateOpenRouterKey(providerType, trimmedKey);
       default:
-        return { valid: false, error: `Unsupported validation profile for provider: ${providerType}` };
+        return {
+          valid: false,
+          error: `Unsupported validation profile for provider: ${providerType}`,
+        };
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

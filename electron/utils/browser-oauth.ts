@@ -24,7 +24,7 @@ class BrowserOAuthManager extends EventEmitter {
 
   async startFlow(
     provider: BrowserOAuthProviderType,
-    options?: { accountId?: string; label?: string },
+    options?: { accountId?: string; label?: string }
   ): Promise<boolean> {
     if (this.active) {
       await this.stopFlow();
@@ -51,7 +51,7 @@ class BrowserOAuthManager extends EventEmitter {
           logger.info(`[BrowserOAuth] ${title || 'OAuth note'}: ${message}`);
         },
         prompt: async () => {
-          throw new Error('Manual browser OAuth fallback is not implemented in ClawX yet.');
+          throw new Error('Manual browser OAuth fallback is not implemented in ClawClaw yet.');
         },
         progress: {
           update: (message) => logger.info(`[BrowserOAuth] ${message}`),
@@ -89,7 +89,7 @@ class BrowserOAuthManager extends EventEmitter {
 
   private async onSuccess(
     providerType: BrowserOAuthProviderType,
-    token: GeminiCliOAuthCredentials,
+    token: GeminiCliOAuthCredentials
   ) {
     const accountId = this.activeAccountId || providerType;
     const accountLabel = this.activeLabel;

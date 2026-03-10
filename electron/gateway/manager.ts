@@ -9,10 +9,7 @@ import WebSocket from 'ws';
 import { PORTS } from '../utils/config';
 import { JsonRpcNotification, isNotification, isResponse } from './protocol';
 import { logger } from '../utils/logger';
-import {
-  loadOrCreateDeviceIdentity,
-  type DeviceIdentity,
-} from '../utils/device-identity';
+import { loadOrCreateDeviceIdentity, type DeviceIdentity } from '../utils/device-identity';
 import {
   DEFAULT_RECONNECT_CONFIG,
   type ReconnectConfig,
@@ -115,7 +112,7 @@ export class GatewayManager extends EventEmitter {
             void this.restart().catch((error) => {
               logger.warn('Deferred Gateway restart failed:', error);
             });
-          },
+          }
         );
       },
     });
@@ -127,7 +124,7 @@ export class GatewayManager extends EventEmitter {
   private async initDeviceIdentity(): Promise<void> {
     if (this.deviceIdentity) return; // already loaded
     try {
-      const identityPath = path.join(app.getPath('userData'), 'clawx-device-identity.json');
+      const identityPath = path.join(app.getPath('userData'), 'clawclaw-device-identity.json');
       this.deviceIdentity = await loadOrCreateDeviceIdentity(identityPath);
       logger.debug(`Device identity loaded (deviceId=${this.deviceIdentity.deviceId})`);
     } catch (err) {
@@ -271,7 +268,7 @@ export class GatewayManager extends EventEmitter {
           void this.restart().catch((error) => {
             logger.warn('Deferred Gateway restart failed:', error);
           });
-        },
+        }
       );
     }
   }
@@ -290,14 +287,20 @@ export class GatewayManager extends EventEmitter {
 
     // If this manager is attached to an external gateway process, ask it to shut down
     // over protocol before closing the socket.
-    if (!this.ownsProcess && this.ws?.readyState === WebSocket.OPEN && this.externalShutdownSupported !== false) {
+    if (
+      !this.ownsProcess &&
+      this.ws?.readyState === WebSocket.OPEN &&
+      this.externalShutdownSupported !== false
+    ) {
       try {
         await this.rpc('shutdown', undefined, 5000);
         this.externalShutdownSupported = true;
       } catch (error) {
         if (this.isUnsupportedShutdownError(error)) {
           this.externalShutdownSupported = false;
-          logger.info('External Gateway does not support "shutdown"; skipping shutdown RPC for future stops');
+          logger.info(
+            'External Gateway does not support "shutdown"; skipping shutdown RPC for future stops'
+          );
         } else {
           logger.warn('Failed to request shutdown for externally managed Gateway:', error);
         }
@@ -324,17 +327,25 @@ export class GatewayManager extends EventEmitter {
     clearPendingGatewayRequests(this.pendingRequests, new Error('Gateway stopped'));
 
     this.restartController.resetDeferredRestart();
-    this.setStatus({ state: 'stopped', error: undefined, pid: undefined, connectedAt: undefined, uptime: undefined });
+    this.setStatus({
+      state: 'stopped',
+      error: undefined,
+      pid: undefined,
+      connectedAt: undefined,
+      uptime: undefined,
+    });
   }
 
   /**
    * Restart Gateway process
    */
   async restart(): Promise<void> {
-    if (this.restartController.isRestartDeferred({
-      state: this.status.state,
-      startLock: this.startLock,
-    })) {
+    if (
+      this.restartController.isRestartDeferred({
+        state: this.status.state,
+        startLock: this.startLock,
+      })
+    ) {
       this.restartController.markDeferredRestart('restart', {
         state: this.status.state,
         startLock: this.startLock,
@@ -369,7 +380,7 @@ export class GatewayManager extends EventEmitter {
           void this.restart().catch((error) => {
             logger.warn('Deferred Gateway restart failed:', error);
           });
-        },
+        }
       );
     }
   }
@@ -394,10 +405,12 @@ export class GatewayManager extends EventEmitter {
    * Falls back to restart on unsupported platforms or signaling failures.
    */
   async reload(): Promise<void> {
-    if (this.restartController.isRestartDeferred({
-      state: this.status.state,
-      startLock: this.startLock,
-    })) {
+    if (
+      this.restartController.isRestartDeferred({
+        state: this.status.state,
+        startLock: this.startLock,
+      })
+    ) {
       this.restartController.markDeferredRestart('reload', {
         state: this.status.state,
         startLock: this.startLock,
@@ -512,7 +525,11 @@ export class GatewayManager extends EventEmitter {
       try {
         this.ws.send(JSON.stringify(request));
       } catch (error) {
-        rejectPendingGatewayRequest(this.pendingRequests, id, new Error(`Failed to send RPC request: ${error}`));
+        rejectPendingGatewayRequest(
+          this.pendingRequests,
+          id,
+          new Error(`Failed to send RPC request: ${error}`)
+        );
       }
     });
   }
@@ -614,7 +631,8 @@ export class GatewayManager extends EventEmitter {
       deviceIdentity: this.deviceIdentity,
       platform: process.platform,
       pendingRequests: this.pendingRequests,
-      getToken: async () => await import('../utils/store').then(({ getSetting }) => getSetting('gatewayToken')),
+      getToken: async () =>
+        await import('../utils/store').then(({ getSetting }) => getSetting('gatewayToken')),
       onHandshakeComplete: (ws) => {
         this.ws = ws;
         this.setStatus({
@@ -669,9 +687,10 @@ export class GatewayManager extends EventEmitter {
     // Fallback: Check if this is a JSON-RPC 2.0 response (legacy support)
     if (isResponse(message) && message.id && this.pendingRequests.has(String(message.id))) {
       if (message.error) {
-        const errorMsg = typeof message.error === 'object'
-          ? (message.error as { message?: string }).message || JSON.stringify(message.error)
-          : String(message.error);
+        const errorMsg =
+          typeof message.error === 'object'
+            ? (message.error as { message?: string }).message || JSON.stringify(message.error)
+            : String(message.error);
         rejectPendingGatewayRequest(this.pendingRequests, String(message.id), new Error(errorMsg));
       } else {
         resolvePendingGatewayRequest(this.pendingRequests, String(message.id), message.result);
@@ -726,7 +745,7 @@ export class GatewayManager extends EventEmitter {
       this.setStatus({
         state: 'error',
         error: 'Failed to reconnect after maximum attempts',
-        reconnectAttempts: this.reconnectAttempts
+        reconnectAttempts: this.reconnectAttempts,
       });
       return;
     }
@@ -737,7 +756,7 @@ export class GatewayManager extends EventEmitter {
 
     this.setStatus({
       state: 'reconnecting',
-      reconnectAttempts: this.reconnectAttempts
+      reconnectAttempts: this.reconnectAttempts,
     });
     const scheduledEpoch = this.lifecycleController.getCurrentEpoch();
 

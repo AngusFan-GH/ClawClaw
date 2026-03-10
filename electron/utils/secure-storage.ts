@@ -146,7 +146,7 @@ export async function saveProvider(config: ProviderConfig): Promise<void> {
 
   const defaultProviderId = (s.get('defaultProvider') ?? null) as string | null;
   await saveProviderAccount(
-    providerConfigToAccount(config, { isDefault: defaultProviderId === config.id }),
+    providerConfigToAccount(config, { isDefault: defaultProviderId === config.id })
   );
 }
 
@@ -226,8 +226,10 @@ export async function setDefaultProvider(providerId: string): Promise<void> {
 export async function getDefaultProvider(): Promise<string | undefined> {
   await ensureProviderStoreMigrated();
   const s = await getClawXProviderStore();
-  return (s.get('defaultProvider') as string | undefined)
-    ?? (s.get('defaultProviderAccountId') as string | undefined);
+  return (
+    (s.get('defaultProvider') as string | undefined) ??
+    (s.get('defaultProviderAccountId') as string | undefined)
+  );
 }
 
 /**
@@ -259,7 +261,7 @@ export async function getProviderWithKeyInfo(
 
 /**
  * Get all providers with key info (for UI display)
- * Also synchronizes ClawX local provider list with OpenClaw's actual config.
+ * Also synchronizes ClawClaw local provider list with OpenClaw's actual config.
  */
 export async function getAllProvidersWithKeyInfo(): Promise<
   Array<ProviderConfig & { hasKey: boolean; keyMasked: string | null }>
@@ -271,7 +273,7 @@ export async function getAllProvidersWithKeyInfo(): Promise<
   for (const provider of providers) {
     // Sync check: If it's a custom/OAuth provider and it no longer exists in OpenClaw config
     // (e.g. wiped by Gateway due to missing plugin, or manually deleted by user)
-    // we should remove it from ClawX UI to stay consistent.
+    // we should remove it from ClawClaw UI to stay consistent.
     const isBuiltin = BUILTIN_PROVIDER_TYPES.includes(provider.type);
     // For custom/ollama providers, the OpenClaw config key is derived as
     // "<type>-<suffix>" where suffix = first 8 chars of providerId with hyphens stripped.
@@ -279,8 +281,15 @@ export async function getAllProvidersWithKeyInfo(): Promise<
     // → openClawKey = "custom-customa1"
     // This must match getOpenClawProviderKey() in ipc-handlers.ts exactly.
     const openClawKey = getOpenClawProviderKeyForType(provider.type, provider.id);
-    if (!isBuiltin && !activeOpenClawProviders.has(provider.type) && !activeOpenClawProviders.has(provider.id) && !activeOpenClawProviders.has(openClawKey)) {
-      console.log(`[Sync] Provider ${provider.id} (${provider.type}) missing from OpenClaw, dropping from ClawX UI`);
+    if (
+      !isBuiltin &&
+      !activeOpenClawProviders.has(provider.type) &&
+      !activeOpenClawProviders.has(provider.id) &&
+      !activeOpenClawProviders.has(openClawKey)
+    ) {
+      console.log(
+        `[Sync] Provider ${provider.id} (${provider.type}) missing from OpenClaw, dropping from ClawClaw UI`
+      );
       await deleteProvider(provider.id);
       continue;
     }

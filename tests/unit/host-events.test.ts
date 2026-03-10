@@ -48,14 +48,14 @@ describe('host-events', () => {
     const unsubscribe = subscribeHostEvent('unknown:event', vi.fn());
     expect(createHostEventSourceMock).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledWith(
-      '[host-events] no IPC mapping for event "unknown:event", SSE fallback disabled',
+      '[host-events] no IPC mapping for event "unknown:event", SSE fallback disabled'
     );
     unsubscribe();
     warnSpy.mockRestore();
   });
 
   it('uses SSE fallback only when explicitly enabled', async () => {
-    window.localStorage.setItem('clawx:allow-sse-fallback', '1');
+    window.localStorage.setItem('clawclaw:allow-sse-fallback', '1');
     const { subscribeHostEvent } = await import('@/lib/host-events');
     const handler = vi.fn();
     const unsubscribe = subscribeHostEvent('unknown:event', handler);
@@ -71,4 +71,3 @@ describe('host-events', () => {
     expect(removeEventListenerMock).toHaveBeenCalledWith('unknown:event', expect.any(Function));
   });
 });
-

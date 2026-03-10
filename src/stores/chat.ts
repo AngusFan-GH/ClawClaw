@@ -104,7 +104,16 @@ interface ChatState {
   deleteSession: (key: string) => Promise<void>;
   cleanupEmptySession: () => void;
   loadHistory: (quiet?: boolean) => Promise<void>;
-  sendMessage: (text: string, attachments?: Array<{ fileName: string; mimeType: string; fileSize: number; stagedPath: string; preview: string | null }>) => Promise<void>;
+  sendMessage: (
+    text: string,
+    attachments?: Array<{
+      fileName: string;
+      mimeType: string;
+      fileSize: number;
+      stagedPath: string;
+      preview: string | null;
+    }>
+  ) => Promise<void>;
   abortRun: () => Promise<void>;
   handleChatEvent: (event: Record<string, unknown>) => void;
   toggleThinking: () => void;
@@ -157,7 +166,7 @@ const DEFAULT_SESSION_KEY = `${DEFAULT_CANONICAL_PREFIX}:main`;
 // [media attached: <path> ...] reference in the Gateway's user message text).
 // Keying by path avoids the race condition of keying by runId (which is only
 // available after the RPC returns, but history may load before that).
-const IMAGE_CACHE_KEY = 'clawx:image-cache';
+const IMAGE_CACHE_KEY = 'clawclaw:image-cache';
 const IMAGE_CACHE_MAX = 100; // max entries to prevent unbounded growth
 
 function loadImageCache(): Map<string, AttachedFileMeta> {
@@ -167,7 +176,9 @@ function loadImageCache(): Map<string, AttachedFileMeta> {
       const entries = JSON.parse(raw) as Array<[string, AttachedFileMeta]>;
       return new Map(entries);
     }
-  } catch { /* ignore parse errors */ }
+  } catch {
+    /* ignore parse errors */
+  }
   return new Map();
 }
 
@@ -175,11 +186,12 @@ function saveImageCache(cache: Map<string, AttachedFileMeta>): void {
   try {
     // Evict oldest entries if over limit
     const entries = Array.from(cache.entries());
-    const trimmed = entries.length > IMAGE_CACHE_MAX
-      ? entries.slice(entries.length - IMAGE_CACHE_MAX)
-      : entries;
+    const trimmed =
+      entries.length > IMAGE_CACHE_MAX ? entries.slice(entries.length - IMAGE_CACHE_MAX) : entries;
     localStorage.setItem(IMAGE_CACHE_KEY, JSON.stringify(trimmed));
-  } catch { /* ignore quota errors */ }
+  } catch {
+    /* ignore quota errors */
+  }
 }
 
 const _imageCache = loadImageCache();
@@ -189,8 +201,8 @@ function getMessageText(content: unknown): string {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
     return (content as Array<{ type?: string; text?: string }>)
-      .filter(b => b.type === 'text' && b.text)
-      .map(b => b.text!)
+      .filter((b) => b.type === 'text' && b.text)
+      .map((b) => b.text!)
       .join('\n');
   }
   return '';
@@ -212,47 +224,47 @@ function mimeFromExtension(filePath: string): string {
   const ext = filePath.split('.').pop()?.toLowerCase() || '';
   const map: Record<string, string> = {
     // Images
-    'png': 'image/png',
-    'jpg': 'image/jpeg',
-    'jpeg': 'image/jpeg',
-    'gif': 'image/gif',
-    'webp': 'image/webp',
-    'bmp': 'image/bmp',
-    'avif': 'image/avif',
-    'svg': 'image/svg+xml',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    bmp: 'image/bmp',
+    avif: 'image/avif',
+    svg: 'image/svg+xml',
     // Documents
-    'pdf': 'application/pdf',
-    'doc': 'application/msword',
-    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'xls': 'application/vnd.ms-excel',
-    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'ppt': 'application/vnd.ms-powerpoint',
-    'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    'txt': 'text/plain',
-    'csv': 'text/csv',
-    'md': 'text/markdown',
-    'rtf': 'application/rtf',
-    'epub': 'application/epub+zip',
+    pdf: 'application/pdf',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    txt: 'text/plain',
+    csv: 'text/csv',
+    md: 'text/markdown',
+    rtf: 'application/rtf',
+    epub: 'application/epub+zip',
     // Archives
-    'zip': 'application/zip',
-    'tar': 'application/x-tar',
-    'gz': 'application/gzip',
-    'rar': 'application/vnd.rar',
+    zip: 'application/zip',
+    tar: 'application/x-tar',
+    gz: 'application/gzip',
+    rar: 'application/vnd.rar',
     '7z': 'application/x-7z-compressed',
     // Audio
-    'mp3': 'audio/mpeg',
-    'wav': 'audio/wav',
-    'ogg': 'audio/ogg',
-    'aac': 'audio/aac',
-    'flac': 'audio/flac',
-    'm4a': 'audio/mp4',
+    mp3: 'audio/mpeg',
+    wav: 'audio/wav',
+    ogg: 'audio/ogg',
+    aac: 'audio/aac',
+    flac: 'audio/flac',
+    m4a: 'audio/mp4',
     // Video
-    'mp4': 'video/mp4',
-    'mov': 'video/quicktime',
-    'avi': 'video/x-msvideo',
-    'mkv': 'video/x-matroska',
-    'webm': 'video/webm',
-    'm4v': 'video/mp4',
+    mp4: 'video/mp4',
+    mov: 'video/quicktime',
+    avi: 'video/x-msvideo',
+    mkv: 'video/x-matroska',
+    webm: 'video/webm',
+    m4v: 'video/mp4',
   };
   return map[ext] || 'application/octet-stream';
 }
@@ -265,12 +277,19 @@ function mimeFromExtension(filePath: string): string {
 function extractRawFilePaths(text: string): Array<{ filePath: string; mimeType: string }> {
   const refs: Array<{ filePath: string; mimeType: string }> = [];
   const seen = new Set<string>();
-  const exts = 'png|jpe?g|gif|webp|bmp|avif|svg|pdf|docx?|xlsx?|pptx?|txt|csv|md|rtf|epub|zip|tar|gz|rar|7z|mp3|wav|ogg|aac|flac|m4a|mp4|mov|avi|mkv|webm|m4v';
+  const exts =
+    'png|jpe?g|gif|webp|bmp|avif|svg|pdf|docx?|xlsx?|pptx?|txt|csv|md|rtf|epub|zip|tar|gz|rar|7z|mp3|wav|ogg|aac|flac|m4a|mp4|mov|avi|mkv|webm|m4v';
   // Unix absolute paths (/... or ~/...) — lookbehind rejects mid-token slashes
   // (e.g. "path/to/file.mp4", "https://example.com/file.mp4")
-  const unixRegex = new RegExp(`(?<![\\w./:])((?:\\/|~\\/)[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
+  const unixRegex = new RegExp(
+    `(?<![\\w./:])((?:\\/|~\\/)[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`,
+    'gi'
+  );
   // Windows absolute paths (C:\... D:\...) — lookbehind rejects drive letter glued to a word
-  const winRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\\\[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
+  const winRegex = new RegExp(
+    `(?<![\\w])([A-Za-z]:\\\\[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`,
+    'gi'
+  );
   for (const regex of [unixRegex, winRegex]) {
     let match;
     while ((match = regex.exec(text)) !== null) {
@@ -374,8 +393,13 @@ function getToolCallFilePath(msg: RawMessage, toolCallId: string): string | unde
       const fn = (tc.function ?? tc) as Record<string, unknown>;
       let args: Record<string, unknown> | undefined;
       try {
-        args = typeof fn.arguments === 'string' ? JSON.parse(fn.arguments) : (fn.arguments ?? fn.input) as Record<string, unknown>;
-      } catch { /* ignore */ }
+        args =
+          typeof fn.arguments === 'string'
+            ? JSON.parse(fn.arguments)
+            : ((fn.arguments ?? fn.input) as Record<string, unknown>);
+      } catch {
+        /* ignore */
+      }
       if (args) {
         const fp = args.file_path ?? args.filePath ?? args.path ?? args.file;
         if (typeof fp === 'string') return fp;
@@ -411,8 +435,13 @@ function collectToolCallPaths(msg: RawMessage, paths: Map<string, string>): void
       const fn = (tc.function ?? tc) as Record<string, unknown>;
       let args: Record<string, unknown> | undefined;
       try {
-        args = typeof fn.arguments === 'string' ? JSON.parse(fn.arguments) : (fn.arguments ?? fn.input) as Record<string, unknown>;
-      } catch { /* ignore */ }
+        args =
+          typeof fn.arguments === 'string'
+            ? JSON.parse(fn.arguments)
+            : ((fn.arguments ?? fn.input) as Record<string, unknown>);
+      } catch {
+        /* ignore */
+      }
       if (args) {
         const fp = args.file_path ?? args.filePath ?? args.path ?? args.file;
         if (typeof fp === 'string') paths.set(id, fp);
@@ -460,7 +489,7 @@ function enrichWithToolResultFiles(messages: RawMessage[]): RawMessage[] {
       const text = getMessageText(msg.content);
       if (text) {
         const mediaRefs = extractMediaRefs(text);
-        const mediaRefPaths = new Set(mediaRefs.map(r => r.filePath));
+        const mediaRefPaths = new Set(mediaRefs.map((r) => r.filePath));
         for (const ref of mediaRefs) {
           pending.push(makeAttachedFile(ref));
         }
@@ -479,9 +508,9 @@ function enrichWithToolResultFiles(messages: RawMessage[]): RawMessage[] {
       const toAttach = pending.splice(0);
       // Deduplicate against files already on the assistant message
       const existingPaths = new Set(
-        (msg._attachedFiles || []).map(f => f.filePath).filter(Boolean),
+        (msg._attachedFiles || []).map((f) => f.filePath).filter(Boolean)
       );
-      const newFiles = toAttach.filter(f => !f.filePath || !existingPaths.has(f.filePath));
+      const newFiles = toAttach.filter((f) => !f.filePath || !existingPaths.has(f.filePath));
       if (newFiles.length === 0) return msg;
       return {
         ...msg,
@@ -508,7 +537,7 @@ function enrichWithCachedImages(messages: RawMessage[]): RawMessage[] {
 
     // Path 1: [media attached: path (mime) | path] — guaranteed format from attachment button
     const mediaRefs = extractMediaRefs(text);
-    const mediaRefPaths = new Set(mediaRefs.map(r => r.filePath));
+    const mediaRefPaths = new Set(mediaRefs.map((r) => r.filePath));
 
     // Path 2: Raw file paths.
     // For assistant messages: scan own text AND the nearest preceding user message text,
@@ -519,10 +548,10 @@ function enrichWithCachedImages(messages: RawMessage[]): RawMessage[] {
     let rawRefs: Array<{ filePath: string; mimeType: string }> = [];
     if (msg.role === 'assistant' && !isToolOnlyMessage(msg)) {
       // Own text
-      rawRefs = extractRawFilePaths(text).filter(r => !mediaRefPaths.has(r.filePath));
+      rawRefs = extractRawFilePaths(text).filter((r) => !mediaRefPaths.has(r.filePath));
 
       // Nearest preceding user message text (look back up to 5 messages)
-      const seenPaths = new Set(rawRefs.map(r => r.filePath));
+      const seenPaths = new Set(rawRefs.map((r) => r.filePath));
       for (let i = idx - 1; i >= Math.max(0, idx - 5); i--) {
         const prev = messages[i];
         if (!prev) break;
@@ -542,11 +571,17 @@ function enrichWithCachedImages(messages: RawMessage[]): RawMessage[] {
     const allRefs = [...mediaRefs, ...rawRefs];
     if (allRefs.length === 0) return msg;
 
-    const files: AttachedFileMeta[] = allRefs.map(ref => {
+    const files: AttachedFileMeta[] = allRefs.map((ref) => {
       const cached = _imageCache.get(ref.filePath);
       if (cached) return { ...cached, filePath: ref.filePath };
       const fileName = ref.filePath.split(/[\\/]/).pop() || 'file';
-      return { fileName, mimeType: ref.mimeType, fileSize: 0, preview: null, filePath: ref.filePath };
+      return {
+        fileName,
+        mimeType: ref.mimeType,
+        fileSize: 0,
+        preview: null,
+        filePath: ref.filePath,
+      };
     });
     return { ...msg, _attachedFiles: files };
   });
@@ -570,9 +605,7 @@ async function loadMissingPreviews(messages: RawMessage[]): Promise<boolean> {
       const fp = file.filePath;
       if (!fp || seenPaths.has(fp)) continue;
       // Images: need preview. Non-images: need file size (for FileCard display).
-      const needsLoad = file.mimeType.startsWith('image/')
-        ? !file.preview
-        : file.fileSize === 0;
+      const needsLoad = file.mimeType.startsWith('image/') ? !file.preview : file.fileSize === 0;
       if (needsLoad) {
         seenPaths.add(fp);
         needPreview.push({ filePath: fp, mimeType: file.mimeType });
@@ -599,13 +632,12 @@ async function loadMissingPreviews(messages: RawMessage[]): Promise<boolean> {
   if (needPreview.length === 0) return false;
 
   try {
-    const thumbnails = await hostApiFetch<Record<string, { preview: string | null; fileSize: number }>>(
-      '/api/files/thumbnails',
-      {
-        method: 'POST',
-        body: JSON.stringify({ paths: needPreview }),
-      },
-    );
+    const thumbnails = await hostApiFetch<
+      Record<string, { preview: string | null; fileSize: number }>
+    >('/api/files/thumbnails', {
+      method: 'POST',
+      body: JSON.stringify({ paths: needPreview }),
+    });
 
     let updated = false;
     for (const msg of messages) {
@@ -698,7 +730,12 @@ function isToolOnlyMessage(message: RawMessage | undefined): boolean {
   let hasNonToolContent = false;
 
   for (const block of content as ContentBlock[]) {
-    if (block.type === 'tool_use' || block.type === 'tool_result' || block.type === 'toolCall' || block.type === 'toolResult') {
+    if (
+      block.type === 'tool_use' ||
+      block.type === 'tool_result' ||
+      block.type === 'toolCall' ||
+      block.type === 'toolResult'
+    ) {
       hasTool = true;
       continue;
     }
@@ -738,7 +775,10 @@ function extractTextFromContent(content: unknown): string {
 function summarizeToolOutput(text: string): string | undefined {
   const trimmed = text.trim();
   if (!trimmed) return undefined;
-  const lines = trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
   if (lines.length === 0) return undefined;
   const summaryLines = lines.slice(0, 2);
   let summary = summaryLines.join(' / ');
@@ -748,7 +788,10 @@ function summarizeToolOutput(text: string): string | undefined {
   return summary;
 }
 
-function normalizeToolStatus(rawStatus: unknown, fallback: 'running' | 'completed'): ToolStatus['status'] {
+function normalizeToolStatus(
+  rawStatus: unknown,
+  fallback: 'running' | 'completed'
+): ToolStatus['status'] {
   const status = typeof rawStatus === 'string' ? rawStatus.toLowerCase() : '';
   if (status === 'error' || status === 'failed') return 'error';
   if (status === 'completed' || status === 'success' || status === 'done') return 'completed';
@@ -834,18 +877,27 @@ function extractToolResultUpdate(message: unknown, eventState: string): ToolStat
   const role = typeof msg.role === 'string' ? msg.role.toLowerCase() : '';
   if (!isToolResultRole(role)) return null;
 
-  const toolName = typeof msg.toolName === 'string' ? msg.toolName : (typeof msg.name === 'string' ? msg.name : '');
+  const toolName =
+    typeof msg.toolName === 'string' ? msg.toolName : typeof msg.name === 'string' ? msg.name : '';
   const toolCallId = typeof msg.toolCallId === 'string' ? msg.toolCallId : undefined;
-  const details = (msg.details && typeof msg.details === 'object') ? msg.details as Record<string, unknown> : undefined;
-  const rawStatus = (msg.status ?? details?.status);
+  const details =
+    msg.details && typeof msg.details === 'object'
+      ? (msg.details as Record<string, unknown>)
+      : undefined;
+  const rawStatus = msg.status ?? details?.status;
   const fallback = eventState === 'delta' ? 'running' : 'completed';
   const status = normalizeToolStatus(rawStatus, fallback);
-  const durationMs = parseDurationMs(details?.durationMs ?? details?.duration ?? (msg as Record<string, unknown>).durationMs);
+  const durationMs = parseDurationMs(
+    details?.durationMs ?? details?.duration ?? (msg as Record<string, unknown>).durationMs
+  );
 
-  const outputText = (details && typeof details.aggregated === 'string')
-    ? details.aggregated
-    : extractTextFromContent(msg.content);
-  const summary = summarizeToolOutput(outputText) ?? summarizeToolOutput(String(details?.error ?? msg.error ?? ''));
+  const outputText =
+    details && typeof details.aggregated === 'string'
+      ? details.aggregated
+      : extractTextFromContent(msg.content);
+  const summary =
+    summarizeToolOutput(outputText) ??
+    summarizeToolOutput(String(details?.error ?? msg.error ?? ''));
 
   const name = toolName || toolCallId || 'tool';
   const id = toolCallId || name;
@@ -861,7 +913,10 @@ function extractToolResultUpdate(message: unknown, eventState: string): ToolStat
   };
 }
 
-function mergeToolStatus(existing: ToolStatus['status'], incoming: ToolStatus['status']): ToolStatus['status'] {
+function mergeToolStatus(
+  existing: ToolStatus['status'],
+  incoming: ToolStatus['status']
+): ToolStatus['status'] {
   const order: Record<ToolStatus['status'], number> = { running: 0, completed: 1, error: 2 };
   return order[incoming] >= order[existing] ? incoming : existing;
 }
@@ -948,16 +1003,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   loadSessions: async () => {
     try {
-      const data = await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.list', {});
+      const data = await useGatewayStore
+        .getState()
+        .rpc<Record<string, unknown>>('sessions.list', {});
       if (data) {
         const rawSessions = Array.isArray(data.sessions) ? data.sessions : [];
-        const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => ({
-          key: String(s.key || ''),
-          label: s.label ? String(s.label) : undefined,
-          displayName: s.displayName ? String(s.displayName) : undefined,
-          thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
-          model: s.model ? String(s.model) : undefined,
-        })).filter((s: ChatSession) => s.key);
+        const sessions: ChatSession[] = rawSessions
+          .map((s: Record<string, unknown>) => ({
+            key: String(s.key || ''),
+            label: s.label ? String(s.label) : undefined,
+            displayName: s.displayName ? String(s.displayName) : undefined,
+            thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
+            model: s.model ? String(s.model) : undefined,
+          }))
+          .filter((s: ChatSession) => s.key);
 
         const canonicalBySuffix = new Map<string, string>();
         for (const session of sessions) {
@@ -990,18 +1049,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (!dedupedSessions.find((s) => s.key === nextSessionKey) && dedupedSessions.length > 0) {
           // Preserve only locally-created pending sessions. On initial boot the
           // default ghost key (`agent:main:main`) should yield to real history.
-          const hasLocalPendingSession = localSessions.some((session) => session.key === nextSessionKey);
+          const hasLocalPendingSession = localSessions.some(
+            (session) => session.key === nextSessionKey
+          );
           if (!hasLocalPendingSession) {
             nextSessionKey = dedupedSessions[0].key;
           }
         }
 
-        const sessionsWithCurrent = !dedupedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
-          ? [
-            ...dedupedSessions,
-            { key: nextSessionKey, displayName: nextSessionKey },
-          ]
-          : dedupedSessions;
+        const sessionsWithCurrent =
+          !dedupedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
+            ? [...dedupedSessions, { key: nextSessionKey, displayName: nextSessionKey }]
+            : dedupedSessions;
 
         set({
           sessions: sessionsWithCurrent,
@@ -1020,11 +1079,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
           void Promise.all(
             sessionsToLabel.map(async (session) => {
               try {
-                const r = await useGatewayStore.getState().rpc<Record<string, unknown>>(
-                  'chat.history',
-                  { sessionKey: session.key, limit: 1000 },
-                );
-                const msgs = Array.isArray(r.messages) ? r.messages as RawMessage[] : [];
+                const r = await useGatewayStore
+                  .getState()
+                  .rpc<
+                    Record<string, unknown>
+                  >('chat.history', { sessionKey: session.key, limit: 1000 });
+                const msgs = Array.isArray(r.messages) ? (r.messages as RawMessage[]) : [];
                 const firstUser = msgs.find((m) => m.role === 'user');
                 const lastMsg = msgs[msgs.length - 1];
                 set((s) => {
@@ -1032,17 +1092,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   if (firstUser) {
                     const labelText = getMessageText(firstUser.content).trim();
                     if (labelText) {
-                      const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
+                      const truncated =
+                        labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
                       next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
                     }
                   }
                   if (lastMsg?.timestamp) {
-                    next.sessionLastActivity = { ...s.sessionLastActivity, [session.key]: toMs(lastMsg.timestamp) };
+                    next.sessionLastActivity = {
+                      ...s.sessionLastActivity,
+                      [session.key]: toMs(lastMsg.timestamp),
+                    };
                   }
                   return next;
                 });
-              } catch { /* ignore per-session errors */ }
-            }),
+              } catch {
+                /* ignore per-session errors */
+              }
+            })
           );
         }
       }
@@ -1068,15 +1134,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       pendingFinal: false,
       lastUserMessageAt: null,
       pendingToolImages: [],
-      ...(leavingEmpty ? {
-        sessions: s.sessions.filter((s) => s.key !== currentSessionKey),
-        sessionLabels: Object.fromEntries(
-          Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey),
-        ),
-        sessionLastActivity: Object.fromEntries(
-          Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey),
-        ),
-      } : {}),
+      ...(leavingEmpty
+        ? {
+            sessions: s.sessions.filter((s) => s.key !== currentSessionKey),
+            sessionLabels: Object.fromEntries(
+              Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey)
+            ),
+            sessionLastActivity: Object.fromEntries(
+              Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey)
+            ),
+          }
+        : {}),
     }));
     get().loadHistory();
   },
@@ -1117,8 +1185,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const next = remaining[0];
       set((s) => ({
         sessions: remaining,
-        sessionLabels: Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== key)),
-        sessionLastActivity: Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)),
+        sessionLabels: Object.fromEntries(
+          Object.entries(s.sessionLabels).filter(([k]) => k !== key)
+        ),
+        sessionLastActivity: Object.fromEntries(
+          Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)
+        ),
         messages: [],
         streamingText: '',
         streamingMessage: null,
@@ -1137,8 +1209,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } else {
       set((s) => ({
         sessions: remaining,
-        sessionLabels: Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== key)),
-        sessionLastActivity: Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)),
+        sessionLabels: Object.fromEntries(
+          Object.entries(s.sessionLabels).filter(([k]) => k !== key)
+        ),
+        sessionLastActivity: Object.fromEntries(
+          Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)
+        ),
       }));
     }
   },
@@ -1152,23 +1228,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // conversation history inaccessible when the user switches back to it.
     const { currentSessionKey, messages, sessions } = get();
     const leavingEmpty = !currentSessionKey.endsWith(':main') && messages.length === 0;
-    const prefix = getCanonicalPrefixFromSessionKey(currentSessionKey)
-      ?? getCanonicalPrefixFromSessions(sessions)
-      ?? DEFAULT_CANONICAL_PREFIX;
+    const prefix =
+      getCanonicalPrefixFromSessionKey(currentSessionKey) ??
+      getCanonicalPrefixFromSessions(sessions) ??
+      DEFAULT_CANONICAL_PREFIX;
     const newKey = `${prefix}:session-${Date.now()}`;
     const newSessionEntry: ChatSession = { key: newKey, displayName: newKey };
     set((s) => ({
       currentSessionKey: newKey,
       currentAgentId: getAgentIdFromSessionKey(newKey),
       sessions: [
-        ...(leavingEmpty ? s.sessions.filter((sess) => sess.key !== currentSessionKey) : s.sessions),
+        ...(leavingEmpty
+          ? s.sessions.filter((sess) => sess.key !== currentSessionKey)
+          : s.sessions),
         newSessionEntry,
       ],
       sessionLabels: leavingEmpty
-        ? Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey))
+        ? Object.fromEntries(
+            Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey)
+          )
         : s.sessionLabels,
       sessionLastActivity: leavingEmpty
-        ? Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey))
+        ? Object.fromEntries(
+            Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey)
+          )
         : s.sessionLastActivity,
       messages: [],
       streamingText: '',
@@ -1195,10 +1278,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({
       sessions: s.sessions.filter((sess) => sess.key !== currentSessionKey),
       sessionLabels: Object.fromEntries(
-        Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey),
+        Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey)
       ),
       sessionLastActivity: Object.fromEntries(
-        Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey),
+        Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey)
       ),
     }));
   },
@@ -1210,16 +1293,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!quiet) set({ loading: true, error: null });
 
     try {
-      const data = await useGatewayStore.getState().rpc<Record<string, unknown>>(
-        'chat.history',
-        { sessionKey: currentSessionKey, limit: 200 },
-      );
+      const data = await useGatewayStore
+        .getState()
+        .rpc<
+          Record<string, unknown>
+        >('chat.history', { sessionKey: currentSessionKey, limit: 200 });
       if (data) {
-        const rawMessages = Array.isArray(data.messages) ? data.messages as RawMessage[] : [];
+        const rawMessages = Array.isArray(data.messages) ? (data.messages as RawMessage[]) : [];
 
         // Before filtering: attach images/files from tool_result messages to the next assistant message
         const messagesWithToolImages = enrichWithToolResultFiles(rawMessages);
-        const filteredMessages = messagesWithToolImages.filter((msg) => !isToolResultRole(msg.role));
+        const filteredMessages = messagesWithToolImages.filter(
+          (msg) => !isToolResultRole(msg.role)
+        );
         // Restore file attachments for user/assistant messages (from cache + text patterns)
         const enrichedMessages = enrichWithCachedImages(filteredMessages);
         const thinkingLevel = data.thinkingLevel ? String(data.thinkingLevel) : null;
@@ -1232,13 +1318,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (get().sending && userMsgAt) {
           const userMsMs = toMs(userMsgAt);
           const hasRecentUser = enrichedMessages.some(
-            (m) => m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsMs) < 5000,
+            (m) => m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsMs) < 5000
           );
           if (!hasRecentUser) {
             const currentMsgs = get().messages;
-            const optimistic = [...currentMsgs].reverse().find(
-              (m) => m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsMs) < 5000,
-            );
+            const optimistic = [...currentMsgs]
+              .reverse()
+              .find(
+                (m) =>
+                  m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsMs) < 5000
+              );
             if (optimistic) {
               finalMessages = [...enrichedMessages, optimistic];
             }
@@ -1249,7 +1338,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         // Extract first user message text as a session label for display in the toolbar.
         // Skip main sessions (key ends with ":main") — they rely on the Gateway-provided
-        // displayName (e.g. the configured agent name "ClawX") instead.
+        // displayName (e.g. the configured agent name "ClawClaw") instead.
         const isMainSession = currentSessionKey.endsWith(':main');
         if (!isMainSession) {
           const firstUserMsg = finalMessages.find((m) => m.role === 'user');
@@ -1280,9 +1369,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             // loadMissingPreviews mutates AttachedFileMeta in place, so we
             // must produce fresh message + file references for each affected msg.
             set({
-              messages: finalMessages.map(msg =>
+              messages: finalMessages.map((msg) =>
                 msg._attachedFiles
-                  ? { ...msg, _attachedFiles: msg._attachedFiles.map(f => ({ ...f })) }
+                  ? { ...msg, _attachedFiles: msg._attachedFiles.map((f) => ({ ...f })) }
                   : msg
               ),
             });
@@ -1332,7 +1421,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // ── Send message ──
 
-  sendMessage: async (text: string, attachments?: Array<{ fileName: string; mimeType: string; fileSize: number; stagedPath: string; preview: string | null }>) => {
+  sendMessage: async (
+    text: string,
+    attachments?: Array<{
+      fileName: string;
+      mimeType: string;
+      fileSize: number;
+      stagedPath: string;
+      preview: string | null;
+    }>
+  ) => {
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
 
@@ -1345,7 +1443,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       content: trimmed || (attachments?.length ? '(file attached)' : ''),
       timestamp: nowMs / 1000,
       id: crypto.randomUUID(),
-      _attachedFiles: attachments?.map(a => ({
+      _attachedFiles: attachments?.map((a) => ({
         fileName: a.fileName,
         mimeType: a.mimeType,
         fileSize: a.fileSize,
@@ -1367,7 +1465,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Update session label with first user message text as soon as it's sent
     const { sessionLabels, messages } = get();
     const isFirstMessage = !messages.slice(0, -1).some((m) => m.role === 'user');
-    if (!currentSessionKey.endsWith(':main') && isFirstMessage && !sessionLabels[currentSessionKey] && trimmed) {
+    if (
+      !currentSessionKey.endsWith(':main') &&
+      isFirstMessage &&
+      !sessionLabels[currentSessionKey] &&
+      trimmed
+    ) {
       const truncated = trimmed.length > 50 ? `${trimmed.slice(0, 50)}…` : trimmed;
       set((s) => ({ sessionLabels: { ...s.sessionLabels, [currentSessionKey]: truncated } }));
     }
@@ -1386,7 +1489,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const POLL_INTERVAL = 4_000;
     const pollHistory = () => {
       const state = get();
-      if (!state.sending) { clearHistoryPoll(); return; }
+      if (!state.sending) {
+        clearHistoryPoll();
+        return;
+      }
       if (state.streamingMessage) {
         _historyPollTimer = setTimeout(pollHistory, POLL_INTERVAL);
         return;
@@ -1411,7 +1517,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       clearHistoryPoll();
       set({
-        error: 'No response received from the model. The provider may be unavailable or the API key may have insufficient quota. Please check your provider settings.',
+        error:
+          'No response received from the model. The provider may be unavailable or the API key may have insufficient quota. Please check your provider settings.',
         sending: false,
         activeRunId: null,
         lastUserMessageAt: null,
@@ -1423,7 +1530,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const idempotencyKey = crypto.randomUUID();
       const hasMedia = attachments && attachments.length > 0;
       if (hasMedia) {
-        console.log('[sendMessage] Media paths:', attachments!.map(a => a.stagedPath));
+        console.log(
+          '[sendMessage] Media paths:',
+          attachments!.map((a) => a.stagedPath)
+        );
       }
 
       // Cache image attachments BEFORE the IPC call to avoid race condition:
@@ -1447,23 +1557,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const CHAT_SEND_TIMEOUT_MS = 120_000;
 
       if (hasMedia) {
-        result = await hostApiFetch<{ success: boolean; result?: { runId?: string }; error?: string }>(
-          '/api/chat/send-with-media',
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              sessionKey: currentSessionKey,
-              message: trimmed || 'Process the attached file(s).',
-              deliver: false,
-              idempotencyKey,
-              media: attachments.map((a) => ({
-                filePath: a.stagedPath,
-                mimeType: a.mimeType,
-                fileName: a.fileName,
-              })),
-            }),
-          },
-        );
+        result = await hostApiFetch<{
+          success: boolean;
+          result?: { runId?: string };
+          error?: string;
+        }>('/api/chat/send-with-media', {
+          method: 'POST',
+          body: JSON.stringify({
+            sessionKey: currentSessionKey,
+            message: trimmed || 'Process the attached file(s).',
+            deliver: false,
+            idempotencyKey,
+            media: attachments.map((a) => ({
+              filePath: a.stagedPath,
+              mimeType: a.mimeType,
+              fileName: a.fileName,
+            })),
+          }),
+        });
       } else {
         const rpcResult = await useGatewayStore.getState().rpc<{ runId?: string }>(
           'chat.send',
@@ -1473,12 +1584,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
             deliver: false,
             idempotencyKey,
           },
-          CHAT_SEND_TIMEOUT_MS,
+          CHAT_SEND_TIMEOUT_MS
         );
         result = { success: true, result: rpcResult };
       }
 
-      console.log(`[sendMessage] RPC result: success=${result.success}, runId=${result.result?.runId || 'none'}`);
+      console.log(
+        `[sendMessage] RPC result: success=${result.success}, runId=${result.result?.runId || 'none'}`
+      );
 
       if (!result.success) {
         clearHistoryPoll();
@@ -1498,14 +1611,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     clearHistoryPoll();
     clearErrorRecoveryTimer();
     const { currentSessionKey } = get();
-    set({ sending: false, streamingText: '', streamingMessage: null, pendingFinal: false, lastUserMessageAt: null, pendingToolImages: [] });
+    set({
+      sending: false,
+      streamingText: '',
+      streamingMessage: null,
+      pendingFinal: false,
+      lastUserMessageAt: null,
+      pendingToolImages: [],
+    });
     set({ streamingTools: [] });
 
     try {
-      await useGatewayStore.getState().rpc(
-        'chat.abort',
-        { sessionKey: currentSessionKey },
-      );
+      await useGatewayStore.getState().rpc('chat.abort', { sessionKey: currentSessionKey });
     } catch (err) {
       set({ error: String(err) });
     }
@@ -1543,8 +1660,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // The gateway sends "agent" events with { phase, startedAt } that carry
     // no message — these must NOT kill the poll, since the poll is our only
     // way to track progress when the gateway doesn't stream intermediate turns.
-    const hasUsefulData = resolvedState === 'delta' || resolvedState === 'final'
-      || resolvedState === 'error' || resolvedState === 'aborted';
+    const hasUsefulData =
+      resolvedState === 'delta' ||
+      resolvedState === 'final' ||
+      resolvedState === 'error' ||
+      resolvedState === 'aborted';
     if (hasUsefulData) {
       clearHistoryPoll();
       // Adopt run started from another client (e.g. console at 127.0.0.1:18789):
@@ -1581,7 +1701,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
             return event.message ?? s.streamingMessage;
           })(),
-          streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
+          streamingTools:
+            updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
         }));
         break;
       }
@@ -1595,9 +1716,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           if (isToolResultRole(finalMsg.role)) {
             // Resolve file path from the streaming assistant message's matching tool call
             const currentStreamForPath = get().streamingMessage as RawMessage | null;
-            const matchedPath = (currentStreamForPath && finalMsg.toolCallId)
-              ? getToolCallFilePath(currentStreamForPath, finalMsg.toolCallId)
-              : undefined;
+            const matchedPath =
+              currentStreamForPath && finalMsg.toolCallId
+                ? getToolCallFilePath(currentStreamForPath, finalMsg.toolCallId)
+                : undefined;
 
             // Mirror enrichWithToolResultFiles: collect images + file refs for next assistant msg
             const toolFiles: AttachedFileMeta[] = [
@@ -1614,7 +1736,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const text = getMessageText(finalMsg.content);
             if (text) {
               const mediaRefs = extractMediaRefs(text);
-              const mediaRefPaths = new Set(mediaRefs.map(r => r.filePath));
+              const mediaRefPaths = new Set(mediaRefs.map((r) => r.filePath));
               for (const ref of mediaRefs) toolFiles.push(makeAttachedFile(ref));
               for (const ref of extractRawFilePaths(text)) {
                 if (!mediaRefPaths.has(ref.filePath)) toolFiles.push(makeAttachedFile(ref));
@@ -1632,9 +1754,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 const streamRole = currentStream.role;
                 if (streamRole === 'assistant' || streamRole === undefined) {
                   // Use message's own id if available, otherwise derive a stable one from runId
-                  const snapId = currentStream.id
-                    || `${runId || 'run'}-turn-${s.messages.length}`;
-                  if (!s.messages.some(m => m.id === snapId)) {
+                  const snapId = currentStream.id || `${runId || 'run'}-turn-${s.messages.length}`;
+                  if (!s.messages.some((m) => m.id === snapId)) {
                     snapshotMsgs.push({
                       ...(currentStream as RawMessage),
                       role: 'assistant',
@@ -1648,69 +1769,84 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 streamingText: '',
                 streamingMessage: null,
                 pendingFinal: true,
-                pendingToolImages: toolFiles.length > 0
-                  ? [...s.pendingToolImages, ...toolFiles]
-                  : s.pendingToolImages,
-                streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
+                pendingToolImages:
+                  toolFiles.length > 0
+                    ? [...s.pendingToolImages, ...toolFiles]
+                    : s.pendingToolImages,
+                streamingTools:
+                  updates.length > 0
+                    ? upsertToolStatuses(s.streamingTools, updates)
+                    : s.streamingTools,
               };
             });
             break;
           }
           const toolOnly = isToolOnlyMessage(finalMsg);
           const hasOutput = hasNonToolAssistantContent(finalMsg);
-          const msgId = finalMsg.id || (toolOnly ? `run-${runId}-tool-${Date.now()}` : `run-${runId}`);
+          const msgId =
+            finalMsg.id || (toolOnly ? `run-${runId}-tool-${Date.now()}` : `run-${runId}`);
           set((s) => {
-            const nextTools = updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools;
+            const nextTools =
+              updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools;
             const streamingTools = hasOutput ? [] : nextTools;
 
             // Attach any images collected from preceding tool results
             const pendingImgs = s.pendingToolImages;
-            const msgWithImages: RawMessage = pendingImgs.length > 0
-              ? {
-                ...finalMsg,
-                role: (finalMsg.role || 'assistant') as RawMessage['role'],
-                id: msgId,
-                _attachedFiles: [...(finalMsg._attachedFiles || []), ...pendingImgs],
-              }
-              : { ...finalMsg, role: (finalMsg.role || 'assistant') as RawMessage['role'], id: msgId };
+            const msgWithImages: RawMessage =
+              pendingImgs.length > 0
+                ? {
+                    ...finalMsg,
+                    role: (finalMsg.role || 'assistant') as RawMessage['role'],
+                    id: msgId,
+                    _attachedFiles: [...(finalMsg._attachedFiles || []), ...pendingImgs],
+                  }
+                : {
+                    ...finalMsg,
+                    role: (finalMsg.role || 'assistant') as RawMessage['role'],
+                    id: msgId,
+                  };
             const clearPendingImages = { pendingToolImages: [] as AttachedFileMeta[] };
 
             // Check if message already exists (prevent duplicates)
-            const alreadyExists = s.messages.some(m => m.id === msgId);
+            const alreadyExists = s.messages.some((m) => m.id === msgId);
             if (alreadyExists) {
-              return toolOnly ? {
-                streamingText: '',
-                streamingMessage: null,
-                pendingFinal: true,
-                streamingTools,
-                ...clearPendingImages,
-              } : {
-                streamingText: '',
-                streamingMessage: null,
-                sending: hasOutput ? false : s.sending,
-                activeRunId: hasOutput ? null : s.activeRunId,
-                pendingFinal: hasOutput ? false : true,
-                streamingTools,
-                ...clearPendingImages,
-              };
+              return toolOnly
+                ? {
+                    streamingText: '',
+                    streamingMessage: null,
+                    pendingFinal: true,
+                    streamingTools,
+                    ...clearPendingImages,
+                  }
+                : {
+                    streamingText: '',
+                    streamingMessage: null,
+                    sending: hasOutput ? false : s.sending,
+                    activeRunId: hasOutput ? null : s.activeRunId,
+                    pendingFinal: hasOutput ? false : true,
+                    streamingTools,
+                    ...clearPendingImages,
+                  };
             }
-            return toolOnly ? {
-              messages: [...s.messages, msgWithImages],
-              streamingText: '',
-              streamingMessage: null,
-              pendingFinal: true,
-              streamingTools,
-              ...clearPendingImages,
-            } : {
-              messages: [...s.messages, msgWithImages],
-              streamingText: '',
-              streamingMessage: null,
-              sending: hasOutput ? false : s.sending,
-              activeRunId: hasOutput ? null : s.activeRunId,
-              pendingFinal: hasOutput ? false : true,
-              streamingTools,
-              ...clearPendingImages,
-            };
+            return toolOnly
+              ? {
+                  messages: [...s.messages, msgWithImages],
+                  streamingText: '',
+                  streamingMessage: null,
+                  pendingFinal: true,
+                  streamingTools,
+                  ...clearPendingImages,
+                }
+              : {
+                  messages: [...s.messages, msgWithImages],
+                  streamingText: '',
+                  streamingMessage: null,
+                  sending: hasOutput ? false : s.sending,
+                  activeRunId: hasOutput ? null : s.activeRunId,
+                  pendingFinal: hasOutput ? false : true,
+                  streamingTools,
+                  ...clearPendingImages,
+                };
           });
           // After the final response, quietly reload history to surface all intermediate
           // tool-use turns (thinking + tool blocks) from the Gateway's authoritative record.
@@ -1733,13 +1869,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // content ("Let me get that written down...") is preserved in the UI
         // rather than being silently discarded.
         const currentStream = get().streamingMessage as RawMessage | null;
-        if (currentStream && (currentStream.role === 'assistant' || currentStream.role === undefined)) {
-          const snapId = (currentStream as RawMessage).id
-            || `error-snap-${Date.now()}`;
-          const alreadyExists = get().messages.some(m => m.id === snapId);
+        if (
+          currentStream &&
+          (currentStream.role === 'assistant' || currentStream.role === undefined)
+        ) {
+          const snapId = (currentStream as RawMessage).id || `error-snap-${Date.now()}`;
+          const alreadyExists = get().messages.some((m) => m.id === snapId);
           if (!alreadyExists) {
             set((s) => ({
-              messages: [...s.messages, { ...currentStream, role: 'assistant' as const, id: snapId }],
+              messages: [
+                ...s.messages,
+                { ...currentStream, role: 'assistant' as const, id: snapId },
+              ],
             }));
           }
         }
@@ -1803,11 +1944,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // edge cases where the Gateway sends events without a state field.
         const { sending } = get();
         if (sending && event.message && typeof event.message === 'object') {
-          console.warn(`[handleChatEvent] Unknown event state "${resolvedState}", treating message as streaming delta. Event keys:`, Object.keys(event));
+          console.warn(
+            `[handleChatEvent] Unknown event state "${resolvedState}", treating message as streaming delta. Event keys:`,
+            Object.keys(event)
+          );
           const updates = collectToolUpdates(event.message, 'delta');
           set((s) => ({
             streamingMessage: event.message ?? s.streamingMessage,
-            streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
+            streamingTools:
+              updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
           }));
         }
         break;

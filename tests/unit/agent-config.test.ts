@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { testHome, testUserData } = vi.hoisted(() => {
   const suffix = Math.random().toString(36).slice(2);
   return {
-    testHome: `/tmp/clawx-agent-config-${suffix}`,
-    testUserData: `/tmp/clawx-agent-config-user-data-${suffix}`,
+    testHome: `/tmp/clawclaw-agent-config-${suffix}`,
+    testUserData: `/tmp/clawclaw-agent-config-user-data-${suffix}`,
   };
 });
 
@@ -126,7 +126,7 @@ describe('agent config lifecycle', () => {
     await writeFile(
       join(test2RuntimeDir, 'agent', 'auth-profiles.json'),
       JSON.stringify({ version: 1, profiles: {} }, null, 2),
-      'utf8',
+      'utf8'
     );
     await writeFile(join(test2WorkspaceDir, 'AGENTS.md'), '# test2', 'utf8');
 
@@ -139,10 +139,9 @@ describe('agent config lifecycle', () => {
     expect(snapshot.channelOwners.feishu).toBe('main');
 
     const config = await readOpenClawJson();
-    expect((config.agents as { list: Array<{ id: string }> }).list.map((agent) => agent.id)).toEqual([
-      'main',
-      'test3',
-    ]);
+    expect(
+      (config.agents as { list: Array<{ id: string }> }).list.map((agent) => agent.id)
+    ).toEqual(['main', 'test3']);
     expect(config.bindings).toEqual([]);
     await expect(access(test2RuntimeDir)).rejects.toThrow();
     await expect(access(test2WorkspaceDir)).rejects.toThrow();

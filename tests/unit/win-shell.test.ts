@@ -45,8 +45,9 @@ describe('quoteForCmd', () => {
 
   it('wraps user home paths with spaces', () => {
     setPlatform('win32');
-    expect(quoteForCmd('C:\\Users\\John Doe\\AppData\\Local\\uv.exe'))
-      .toBe('"C:\\Users\\John Doe\\AppData\\Local\\uv.exe"');
+    expect(quoteForCmd('C:\\Users\\John Doe\\AppData\\Local\\uv.exe')).toBe(
+      '"C:\\Users\\John Doe\\AppData\\Local\\uv.exe"'
+    );
   });
 
   it('does not double-quote already quoted values', () => {
@@ -105,7 +106,7 @@ describe('prepareWinSpawn', () => {
   let prepareWinSpawn: (
     command: string,
     args: string[],
-    forceShell?: boolean,
+    forceShell?: boolean
   ) => { shell: boolean; command: string; args: string[] };
 
   beforeEach(async () => {
@@ -126,7 +127,7 @@ describe('prepareWinSpawn', () => {
     const result = prepareWinSpawn(
       'C:\\Program Files\\uv.exe',
       ['python', 'install', '3.12'],
-      true,
+      true
     );
     expect(result.shell).toBe(true);
     expect(result.command).toBe('"C:\\Program Files\\uv.exe"');
@@ -138,7 +139,7 @@ describe('prepareWinSpawn', () => {
     const result = prepareWinSpawn(
       'node',
       ['C:\\Users\\John Doe\\script.js', '--port', '18789'],
-      true,
+      true
     );
     expect(result.shell).toBe(true);
     expect(result.command).toBe('node');
@@ -147,16 +148,10 @@ describe('prepareWinSpawn', () => {
 
   it('auto-detects shell need based on absolute path on Windows', () => {
     setPlatform('win32');
-    const absResult = prepareWinSpawn(
-      'C:\\tools\\uv.exe',
-      ['python', 'find', '3.12'],
-    );
+    const absResult = prepareWinSpawn('C:\\tools\\uv.exe', ['python', 'find', '3.12']);
     expect(absResult.shell).toBe(false);
 
-    const relResult = prepareWinSpawn(
-      'uv',
-      ['python', 'find', '3.12'],
-    );
+    const relResult = prepareWinSpawn('uv', ['python', 'find', '3.12']);
     expect(relResult.shell).toBe(true);
   });
 });
@@ -171,25 +166,33 @@ describe('normalizeNodeRequirePathForNodeOptions', () => {
 
   it('returns path unchanged on non-Windows', () => {
     setPlatform('linux');
-    expect(normalizeNodeRequirePathForNodeOptions('/home/user/.config/app/preload.cjs'))
-      .toBe('/home/user/.config/app/preload.cjs');
+    expect(normalizeNodeRequirePathForNodeOptions('/home/user/.config/app/preload.cjs')).toBe(
+      '/home/user/.config/app/preload.cjs'
+    );
   });
 
   it('converts backslashes to forward slashes on Windows', () => {
     setPlatform('win32');
-    expect(normalizeNodeRequirePathForNodeOptions('C:\\Users\\70954\\AppData\\Roaming\\clawx\\gateway-fetch-preload.cjs'))
-      .toBe('C:/Users/70954/AppData/Roaming/clawx/gateway-fetch-preload.cjs');
+    expect(
+      normalizeNodeRequirePathForNodeOptions(
+        'C:\\Users\\70954\\AppData\\Roaming\\clawclaw\\gateway-fetch-preload.cjs'
+      )
+    ).toBe('C:/Users/70954/AppData/Roaming/clawclaw/gateway-fetch-preload.cjs');
   });
 
   it('leaves forward slashes intact on Windows', () => {
     setPlatform('win32');
-    expect(normalizeNodeRequirePathForNodeOptions('C:/already/forward/slashes.cjs'))
-      .toBe('C:/already/forward/slashes.cjs');
+    expect(normalizeNodeRequirePathForNodeOptions('C:/already/forward/slashes.cjs')).toBe(
+      'C:/already/forward/slashes.cjs'
+    );
   });
 });
 
 describe('appendNodeRequireToNodeOptions', () => {
-  let appendNodeRequireToNodeOptions: (nodeOptions: string | undefined, modulePath: string) => string;
+  let appendNodeRequireToNodeOptions: (
+    nodeOptions: string | undefined,
+    modulePath: string
+  ) => string;
 
   beforeEach(async () => {
     const mod = await import('@electron/utils/win-shell');
@@ -198,25 +201,29 @@ describe('appendNodeRequireToNodeOptions', () => {
 
   it('creates NODE_OPTIONS from undefined', () => {
     setPlatform('linux');
-    expect(appendNodeRequireToNodeOptions(undefined, '/tmp/preload.cjs'))
-      .toBe('--require "/tmp/preload.cjs"');
+    expect(appendNodeRequireToNodeOptions(undefined, '/tmp/preload.cjs')).toBe(
+      '--require "/tmp/preload.cjs"'
+    );
   });
 
   it('appends to existing NODE_OPTIONS', () => {
     setPlatform('linux');
-    expect(appendNodeRequireToNodeOptions('--disable-warning=ExperimentalWarning', '/tmp/preload.cjs'))
-      .toBe('--disable-warning=ExperimentalWarning --require "/tmp/preload.cjs"');
+    expect(
+      appendNodeRequireToNodeOptions('--disable-warning=ExperimentalWarning', '/tmp/preload.cjs')
+    ).toBe('--disable-warning=ExperimentalWarning --require "/tmp/preload.cjs"');
   });
 
   it('normalizes Windows backslashes in the module path', () => {
     setPlatform('win32');
-    expect(appendNodeRequireToNodeOptions(undefined, 'C:\\Users\\test\\preload.cjs'))
-      .toBe('--require "C:/Users/test/preload.cjs"');
+    expect(appendNodeRequireToNodeOptions(undefined, 'C:\\Users\\test\\preload.cjs')).toBe(
+      '--require "C:/Users/test/preload.cjs"'
+    );
   });
 
   it('appends to existing NODE_OPTIONS on Windows with normalized path', () => {
     setPlatform('win32');
-    expect(appendNodeRequireToNodeOptions('--max-old-space-size=4096', 'D:\\app\\data\\preload.cjs'))
-      .toBe('--max-old-space-size=4096 --require "D:/app/data/preload.cjs"');
+    expect(
+      appendNodeRequireToNodeOptions('--max-old-space-size=4096', 'D:\\app\\data\\preload.cjs')
+    ).toBe('--max-old-space-size=4096 --require "D:/app/data/preload.cjs"');
   });
 });

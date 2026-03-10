@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { testHome, testUserData } = vi.hoisted(() => {
   const suffix = Math.random().toString(36).slice(2);
   return {
-    testHome: `/tmp/clawx-openclaw-auth-${suffix}`,
-    testUserData: `/tmp/clawx-openclaw-auth-user-data-${suffix}`,
+    testHome: `/tmp/clawclaw-openclaw-auth-${suffix}`,
+    testUserData: `/tmp/clawclaw-openclaw-auth-user-data-${suffix}`,
   };
 });
 
@@ -37,7 +37,10 @@ async function writeOpenClawJson(config: unknown): Promise<void> {
 }
 
 async function readAuthProfiles(agentId: string): Promise<Record<string, unknown>> {
-  const content = await readFile(join(testHome, '.openclaw', 'agents', agentId, 'agent', 'auth-profiles.json'), 'utf8');
+  const content = await readFile(
+    join(testHome, '.openclaw', 'agents', agentId, 'agent', 'auth-profiles.json'),
+    'utf8'
+  );
   return JSON.parse(content) as Record<string, unknown>;
 }
 
@@ -73,17 +76,21 @@ describe('saveProviderKeyToOpenClaw', () => {
     await mkdir(join(testHome, '.openclaw', 'agents', 'test2', 'agent'), { recursive: true });
     await writeFile(
       join(testHome, '.openclaw', 'agents', 'test2', 'agent', 'auth-profiles.json'),
-      JSON.stringify({
-        version: 1,
-        profiles: {
-          'legacy:default': {
-            type: 'api_key',
-            provider: 'legacy',
-            key: 'legacy-key',
+      JSON.stringify(
+        {
+          version: 1,
+          profiles: {
+            'legacy:default': {
+              type: 'api_key',
+              provider: 'legacy',
+              key: 'legacy-key',
+            },
           },
         },
-      }, null, 2),
-      'utf8',
+        null,
+        2
+      ),
+      'utf8'
     );
 
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -95,8 +102,12 @@ describe('saveProviderKeyToOpenClaw', () => {
     const test3Profiles = await readAuthProfiles('test3');
     const staleProfiles = await readAuthProfiles('test2');
 
-    expect((mainProfiles.profiles as Record<string, { key: string }>)['openrouter:default'].key).toBe('sk-test');
-    expect((test3Profiles.profiles as Record<string, { key: string }>)['openrouter:default'].key).toBe('sk-test');
+    expect(
+      (mainProfiles.profiles as Record<string, { key: string }>)['openrouter:default'].key
+    ).toBe('sk-test');
+    expect(
+      (test3Profiles.profiles as Record<string, { key: string }>)['openrouter:default'].key
+    ).toBe('sk-test');
     expect(staleProfiles.profiles).toEqual({
       'legacy:default': {
         type: 'api_key',
@@ -105,7 +116,7 @@ describe('saveProviderKeyToOpenClaw', () => {
       },
     });
     expect(logSpy).toHaveBeenCalledWith(
-      'Saved API key for provider "openrouter" to OpenClaw auth-profiles (agents: main, test3)',
+      'Saved API key for provider "openrouter" to OpenClaw auth-profiles (agents: main, test3)'
     );
 
     logSpy.mockRestore();
