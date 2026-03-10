@@ -38,7 +38,9 @@ if (!fs.existsSync(openclawLink)) {
   process.exit(1);
 }
 
-const openclawReal = fs.realpathSync(normWin(openclawLink));
+// realpath on Windows can mis-handle extended-length prefixes (\\?\) in
+// some Node versions; resolve symlinks using the native path form.
+const openclawReal = fs.realpathSync.native(openclawLink);
 echo`   openclaw resolved: ${openclawReal}`;
 
 // 2. Clean and create output directory
@@ -152,7 +154,7 @@ while (queue.length > 0) {
 
     let realPath;
     try {
-      realPath = fs.realpathSync(normWin(fullPath));
+      realPath = fs.realpathSync.native(fullPath);
     } catch {
       continue; // broken symlink, skip
     }

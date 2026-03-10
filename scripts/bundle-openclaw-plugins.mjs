@@ -86,7 +86,9 @@ function bundleOnePlugin({ npmName, pluginId }) {
     throw new Error(`Missing dependency "${npmName}". Run pnpm install first.`);
   }
 
-  const realPluginPath = fs.realpathSync(normWin(pkgPath));
+  // realpath on Windows can mis-handle extended-length prefixes (\\?\) in
+  // some Node versions; resolve symlinks using the native path form.
+  const realPluginPath = fs.realpathSync.native(pkgPath);
   const outputDir = path.join(OUTPUT_ROOT, pluginId);
 
   echo`📦 Bundling plugin ${npmName} -> ${outputDir}`;
@@ -126,7 +128,7 @@ function bundleOnePlugin({ npmName, pluginId }) {
 
       let realPath;
       try {
-        realPath = fs.realpathSync(normWin(fullPath));
+        realPath = fs.realpathSync.native(fullPath);
       } catch {
         continue;
       }
