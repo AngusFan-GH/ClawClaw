@@ -1,6 +1,6 @@
 appId: app.clawclaw.desktop
 productName: ClawClaw
-copyright: Copyright © 2026 ClawClaw
+copyright: Copyright © 2026 Xzinfra. All rights reserved.
 compression: maximum
 artifactName: ${productName}-v${version}-${os}-${arch}.${ext}
 

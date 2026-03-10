@@ -7,6 +7,14 @@
   !include "nsProcess.nsh"
 !endif
 
+!macro customWelcomePage
+  !insertmacro MUI_HEADER_TEXT "Welcome to ClawClaw" "Your desktop AI copilot by Xzinfra"
+!macroend
+
+!macro customFinishPage
+  !insertmacro MUI_HEADER_TEXT "ClawClaw is ready" "Launch ClawClaw to finish your first-time setup"
+!macroend
+
 !macro customCheckAppRunning
   ; Pre-emptively remove old shortcuts to prevent the Windows "Missing Shortcut"
   ; dialog during upgrades.  The built-in NSIS uninstaller deletes ClawClaw.exe
