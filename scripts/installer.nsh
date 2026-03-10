@@ -1,4 +1,4 @@
-; ClawClaw Custom NSIS Installer/Uninstaller Script
+; ${PRODUCT_NAME} Custom NSIS Installer/Uninstaller Script
 ;
 ; Install: enables long paths, adds resources\cli to user PATH for openclaw CLI.
 ; Uninstall: removes the PATH entry and optionally deletes user data.
@@ -8,16 +8,16 @@
 !endif
 
 !macro customWelcomePage
-  !insertmacro MUI_HEADER_TEXT "Welcome to ClawClaw" "Your desktop AI copilot by Xzinfra"
+  !insertmacro MUI_HEADER_TEXT "Welcome to ${PRODUCT_NAME}" "Your desktop AI copilot by Xzinfra"
 !macroend
 
 !macro customFinishPage
-  !insertmacro MUI_HEADER_TEXT "ClawClaw is ready" "Launch ClawClaw to finish your first-time setup"
+  !insertmacro MUI_HEADER_TEXT "${PRODUCT_NAME} is ready" "Launch ${PRODUCT_NAME} to finish your first-time setup"
 !macroend
 
 !macro customCheckAppRunning
   ; Pre-emptively remove old shortcuts to prevent the Windows "Missing Shortcut"
-  ; dialog during upgrades.  The built-in NSIS uninstaller deletes ClawClaw.exe
+  ; dialog during upgrades.  The built-in NSIS uninstaller deletes ${PRODUCT_NAME}.exe
   ; *before* removing shortcuts; Windows Shell link tracking can detect the
   ; broken target in that brief window and pop a resolver dialog.
   ; Delete is a silent no-op when the file doesn't exist (safe for fresh installs).
@@ -81,7 +81,7 @@
 !macroend
 
 !macro customInstall
-  DetailPrint "Configuring ClawClaw for first launch..."
+  DetailPrint "Configuring ${PRODUCT_NAME} for first launch..."
 
   ; Enable Windows long path support (Windows 10 1607+ / Windows 11).
   ; pnpm virtual store paths can exceed the default MAX_PATH limit of 260 chars.
@@ -128,7 +128,7 @@
 
   ; Ask user if they want to completely remove all user data
   MessageBox MB_YESNO|MB_ICONQUESTION \
-    "Remove all local ClawClaw data as well?$\r$\n$\r$\nThis will permanently delete:$\r$\n  • .openclaw workspace data$\r$\n  • AppData\Local\clawclaw$\r$\n  • AppData\Roaming\clawclaw$\r$\n$\r$\nChoose 'No' to keep your data for a future reinstall." \
+    "Remove all local ${PRODUCT_NAME} data as well?$\r$\n$\r$\nThis will permanently delete:$\r$\n  • .openclaw workspace data$\r$\n  • AppData\Local\clawclaw$\r$\n  • AppData\Roaming\clawclaw$\r$\n$\r$\nChoose 'No' to keep your data for a future reinstall." \
     /SD IDNO IDYES _cu_removeData IDNO _cu_skipRemove
 
   _cu_removeData:
