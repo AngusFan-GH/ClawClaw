@@ -3,7 +3,7 @@
 # - appId should stay stable after first public release to preserve update continuity
 appId: app.clawclaw.desktop
 productName: ClawClaw
-copyright: Copyright © 2026 Xzinfra. All rights reserved.
+copyright: Copyright © 2026 xzinfra (新智惠想科技有限公司). All rights reserved.
 compression: maximum
 artifactName: ${productName}-v${version}-${os}-${arch}.${ext}
 
@@ -105,7 +105,7 @@ dmg:
 # Windows Configuration
 win:
   artifactName: ${productName}-Setup-v${version}-${arch}.${ext}
-  publisherName: Xzinfra
+  publisherName: xzinfra
   forceCodeSigning: false
   verifyUpdateCodeSignature: false
   signAndEditExecutable: true

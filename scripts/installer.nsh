@@ -8,7 +8,7 @@
 !endif
 
 !macro customWelcomePage
-  !insertmacro MUI_HEADER_TEXT "Welcome to ${PRODUCT_NAME}" "Your desktop AI copilot by Xzinfra"
+  !insertmacro MUI_HEADER_TEXT "Welcome to ${PRODUCT_NAME}" "Your desktop AI copilot by xzinfra"
 !macroend
 
 !macro customFinishPage
