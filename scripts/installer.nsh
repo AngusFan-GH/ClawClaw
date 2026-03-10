@@ -73,6 +73,8 @@
 !macroend
 
 !macro customInstall
+  DetailPrint "Configuring ClawClaw for first launch..."
+
   ; Enable Windows long path support (Windows 10 1607+ / Windows 11).
   ; pnpm virtual store paths can exceed the default MAX_PATH limit of 260 chars.
   ; Writing to HKLM requires admin privileges; on per-user installs without
@@ -118,7 +120,7 @@
 
   ; Ask user if they want to completely remove all user data
   MessageBox MB_YESNO|MB_ICONQUESTION \
-    "Do you want to completely remove all ClawClaw user data?$\r$\n$\r$\nThis will delete:$\r$\n  • .openclaw folder (configuration & skills)$\r$\n  • AppData\Local\clawclaw (local app data)$\r$\n  • AppData\Roaming\clawclaw (roaming app data)$\r$\n$\r$\nSelect 'No' to keep your data for future reinstallation." \
+    "Remove all local ClawClaw data as well?$\r$\n$\r$\nThis will permanently delete:$\r$\n  • .openclaw workspace data$\r$\n  • AppData\Local\clawclaw$\r$\n  • AppData\Roaming\clawclaw$\r$\n$\r$\nChoose 'No' to keep your data for a future reinstall." \
     /SD IDNO IDYES _cu_removeData IDNO _cu_skipRemove
 
   _cu_removeData:

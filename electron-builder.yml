@@ -2,7 +2,7 @@ appId: app.clawclaw.desktop
 productName: ClawClaw
 copyright: Copyright © 2026 ClawClaw
 compression: maximum
-artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+artifactName: ${productName}-v${version}-${os}-${arch}.${ext}
 
 directories:
   output: release
@@ -56,6 +56,7 @@ publish:
 
 # macOS Configuration
 mac:
+  artifactName: ${productName}-v${version}-${arch}.${ext}
   extraResources:
     - from: resources/bin/darwin-${arch}
       to: bin
@@ -100,6 +101,8 @@ dmg:
 
 # Windows Configuration
 win:
+  artifactName: ${productName}-Setup-v${version}-${arch}.${ext}
+  publisherName: Xzinfra
   forceCodeSigning: false
   verifyUpdateCodeSignature: false
   signAndEditExecutable: true
@@ -117,6 +120,7 @@ win:
 
 nsis:
   oneClick: false
+  runAfterFinish: true
   perMachine: false
   warningsAsErrors: false
   allowToChangeInstallationDirectory: true
@@ -126,7 +130,7 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: ClawClaw
   uninstallDisplayName: ClawClaw
-  license: LICENSE
+  license: resources/legal/EULA.rtf
   include: scripts/installer.nsh
   installerIcon: resources/icons/icon.ico
   uninstallerIcon: resources/icons/icon.ico
