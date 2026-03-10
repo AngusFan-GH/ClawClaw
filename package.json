@@ -5,7 +5,9 @@
         "onlyBuiltDependencies": [
             "@discordjs/opus",
             "@whiskeysockets/baileys",
+            "clawdbot",
             "electron",
+            "electron-winstaller",
             "esbuild",
             "koffi",
             "node-llama-cpp",

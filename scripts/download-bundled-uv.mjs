@@ -6,6 +6,57 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const UV_VERSION = '0.10.0';
 const BASE_URL = `https://github.com/astral-sh/uv/releases/download/${UV_VERSION}`;
 const OUTPUT_BASE = path.join(ROOT_DIR, 'resources', 'bin');
+const PROXY_ENV_KEYS = [
+  'HTTPS_PROXY',
+  'https_proxy',
+  'HTTP_PROXY',
+  'http_proxy',
+  'ALL_PROXY',
+  'all_proxy',
+  'NO_PROXY',
+  'no_proxy',
+];
+
+function getEnvValue(key) {
+  const value = process.env[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function getProxyEnvSnapshot() {
+  return PROXY_ENV_KEYS.reduce((acc, key) => {
+    const value = getEnvValue(key);
+    if (value) acc[key] = value;
+    return acc;
+  }, {});
+}
+
+function hasProxyServerEnv(envSnapshot) {
+  return Boolean(
+    envSnapshot.HTTPS_PROXY ||
+      envSnapshot.https_proxy ||
+      envSnapshot.HTTP_PROXY ||
+      envSnapshot.http_proxy ||
+      envSnapshot.ALL_PROXY ||
+      envSnapshot.all_proxy
+  );
+}
+
+async function createFetchDispatcherFromEnv() {
+  const envSnapshot = getProxyEnvSnapshot();
+  if (!hasProxyServerEnv(envSnapshot)) {
+    return null;
+  }
+
+  const { EnvHttpProxyAgent } = await import('undici');
+  const activeKeys = Object.keys(envSnapshot)
+    .filter(Boolean)
+    .sort()
+    .join(', ');
+  echo(chalk.cyan(`🌍 Using proxy env for downloads: ${activeKeys}`));
+  return new EnvHttpProxyAgent();
+}
+
+const fetchDispatcher = await createFetchDispatcherFromEnv();
 
 // Mapping Node platforms/archs to uv release naming
 const TARGETS = {
@@ -65,7 +116,10 @@ async function setupTarget(id) {
   try {
     // Download
     echo`⬇️ Downloading: ${downloadUrl}`;
-    const response = await fetch(downloadUrl);
+    const response = await fetch(
+      downloadUrl,
+      fetchDispatcher ? { dispatcher: fetchDispatcher } : undefined
+    );
     if (!response.ok) throw new Error(`Failed to download: ${response.statusText}`);
     const buffer = await response.arrayBuffer();
     await fs.writeFile(archivePath, Buffer.from(buffer));
@@ -115,44 +169,50 @@ async function setupTarget(id) {
   }
 }
 
-// Main logic
-const downloadAll = argv.all;
-const platform = argv.platform;
+try {
+  // Main logic
+  const downloadAll = argv.all;
+  const platform = argv.platform;
 
-if (downloadAll) {
-  // Download for all platforms
-  echo(chalk.cyan`🌐 Downloading uv binaries for ALL supported platforms...`);
-  for (const id of Object.keys(TARGETS)) {
-    await setupTarget(id);
-  }
-} else if (platform) {
-  // Download for a specific platform (e.g., --platform=mac)
-  const targets = PLATFORM_GROUPS[platform];
-  if (!targets) {
-    echo(chalk.red`❌ Unknown platform: ${platform}`);
-    echo(`Available platforms: ${Object.keys(PLATFORM_GROUPS).join(', ')}`);
-    process.exit(1);
-  }
-  
-  echo(chalk.cyan`🎯 Downloading uv binaries for platform: ${platform}`);
-  echo(`   Architectures: ${targets.join(', ')}`);
-  for (const id of targets) {
-    await setupTarget(id);
-  }
-} else {
-  // Download for current system only (default for local dev)
-  const currentId = `${os.platform()}-${os.arch()}`;
-  echo(chalk.cyan`💻 Detected system: ${currentId}`);
-  
-  if (TARGETS[currentId]) {
-    await setupTarget(currentId);
+  if (downloadAll) {
+    // Download for all platforms
+    echo(chalk.cyan`🌐 Downloading uv binaries for ALL supported platforms...`);
+    for (const id of Object.keys(TARGETS)) {
+      await setupTarget(id);
+    }
+  } else if (platform) {
+    // Download for a specific platform (e.g., --platform=mac)
+    const targets = PLATFORM_GROUPS[platform];
+    if (!targets) {
+      echo(chalk.red`❌ Unknown platform: ${platform}`);
+      echo(`Available platforms: ${Object.keys(PLATFORM_GROUPS).join(', ')}`);
+      process.exit(1);
+    }
+
+    echo(chalk.cyan`🎯 Downloading uv binaries for platform: ${platform}`);
+    echo(`   Architectures: ${targets.join(', ')}`);
+    for (const id of targets) {
+      await setupTarget(id);
+    }
   } else {
-    echo(chalk.red`❌ Current system ${currentId} is not in the supported download list.`);
-    echo(`Supported targets: ${Object.keys(TARGETS).join(', ')}`);
-    echo(`\nTip: Use --platform=<platform> to download for a specific platform`);
-    echo(`     Use --all to download for all platforms`);
-    process.exit(1);
+    // Download for current system only (default for local dev)
+    const currentId = `${os.platform()}-${os.arch()}`;
+    echo(chalk.cyan`💻 Detected system: ${currentId}`);
+
+    if (TARGETS[currentId]) {
+      await setupTarget(currentId);
+    } else {
+      echo(chalk.red`❌ Current system ${currentId} is not in the supported download list.`);
+      echo(`Supported targets: ${Object.keys(TARGETS).join(', ')}`);
+      echo(`\nTip: Use --platform=<platform> to download for a specific platform`);
+      echo(`     Use --all to download for all platforms`);
+      process.exit(1);
+    }
+  }
+
+  echo(chalk.green`\n🎉 Done!`);
+} finally {
+  if (fetchDispatcher && typeof fetchDispatcher.close === 'function') {
+    await fetchDispatcher.close();
   }
 }
-
-echo(chalk.green`\n🎉 Done!`);
