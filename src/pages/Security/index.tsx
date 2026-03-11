@@ -147,12 +147,17 @@ export function Security() {
         }),
       });
 
-      const applyResult = await hostApiFetch<{ success: boolean; applied?: AppliedSnapshot }>(
-        '/api/security/apply',
-        { method: 'POST' }
-      );
+      const applyResult = await hostApiFetch<{
+        success: boolean;
+        warning?: string;
+        applied?: AppliedSnapshot;
+      }>('/api/security/apply', { method: 'POST' });
       if (applyResult.applied) {
         setLastApplied(applyResult.applied);
+        setPolicy((prev) => ({ ...prev, mode: applyResult.applied!.mode }));
+      }
+      if (applyResult.warning) {
+        toast.warning(applyResult.warning);
       }
       toast.success('策略已应用并重启 Gateway');
     } catch (error) {
@@ -227,19 +232,10 @@ export function Security() {
 
         <div className="space-y-2">
           <Label className="text-base">防护模式</Label>
-          <div className="flex gap-2 flex-wrap">
-            <Button
-              variant={policy.mode === 'workspace-only' ? 'default' : 'outline'}
-              onClick={() => setPolicy((prev) => ({ ...prev, mode: 'workspace-only' }))}
-            >
-              工作区限制（推荐起步）
-            </Button>
-            <Button
-              variant={policy.mode === 'strict-sandbox' ? 'default' : 'outline'}
-              onClick={() => setPolicy((prev) => ({ ...prev, mode: 'strict-sandbox' }))}
-            >
-              严格沙箱（高安全）
-            </Button>
+          <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+            当前采用简化模式：优先启用“工作区硬限制”（稳定）。
+            <br />
+            严格 Docker 沙箱仅在非 Windows 且环境可用时自动启用。
           </div>
           <p className="text-xs text-muted-foreground">{modeDescription}</p>
         </div>

@@ -1,5 +1,5 @@
 import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { homedir, platform } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { HostApiContext } from '../context';
@@ -226,12 +226,15 @@ function applySecurityPolicyToConfig(config: Record<string, unknown>, policy: Se
 
     entry.workspace = policy.allowedPaths[0];
 
-    const agentSandbox = ensureObject(entry, 'sandbox');
-    agentSandbox.mode = 'all';
-    agentSandbox.scope = 'agent';
-    agentSandbox.workspaceAccess = 'none';
-    const agentDocker = ensureObject(agentSandbox, 'docker');
-    agentDocker.binds = policy.allowedPaths.map((hostPath, index) => `${hostPath}:/allowed/${index}:rw`);
+    const canUseStrictSandbox = platform() !== 'win32' && policy.mode === 'strict-sandbox';
+    if (canUseStrictSandbox) {
+      const agentSandbox = ensureObject(entry, 'sandbox');
+      agentSandbox.mode = 'all';
+      agentSandbox.scope = 'agent';
+      agentSandbox.workspaceAccess = 'none';
+      const agentDocker = ensureObject(agentSandbox, 'docker');
+      agentDocker.binds = policy.allowedPaths.map((hostPath, index) => `${hostPath}:/allowed/${index}:rw`);
+    }
 
     const agentTools = ensureObject(entry, 'tools');
     const agentDeny = ensureStringArray(agentTools, 'deny');
@@ -257,15 +260,19 @@ function applySecurityPolicyToConfig(config: Record<string, unknown>, policy: Se
   const elevated = ensureObject(tools, 'elevated');
   elevated.enabled = false;
 
-  // Hard boundary: once enabled, always sandbox tools and expose only allowlisted mounts.
-  // This prevents non-workspace file access even if host fs guards drift.
-  const sandbox = ensureObject(defaults, 'sandbox');
-  sandbox.mode = 'all';
-  sandbox.scope = 'agent';
-  sandbox.workspaceAccess = 'none';
+  // Sandbox is optional and can break startup on Windows/dev setups without Docker.
+  // Keep the default UX simple: always enforce host-side hardening above,
+  // and only apply sandbox binds on non-Windows when strict mode is explicitly chosen.
+  const canUseStrictSandbox = platform() !== 'win32' && policy.mode === 'strict-sandbox';
+  if (canUseStrictSandbox) {
+    const sandbox = ensureObject(defaults, 'sandbox');
+    sandbox.mode = 'all';
+    sandbox.scope = 'agent';
+    sandbox.workspaceAccess = 'none';
 
-  const docker = ensureObject(sandbox, 'docker');
-  docker.binds = policy.allowedPaths.map((hostPath, index) => `${hostPath}:/allowed/${index}:rw`);
+    const docker = ensureObject(sandbox, 'docker');
+    docker.binds = policy.allowedPaths.map((hostPath, index) => `${hostPath}:/allowed/${index}:rw`);
+  }
 
   const clawclaw = ensureObject(config, 'clawclaw');
   const security = ensureObject(clawclaw, 'security');
@@ -333,11 +340,18 @@ export async function handleSecurityRoutes(
         await ctx.gatewayManager.restart();
       }
 
+      const strictSandboxActive = policy.enabled && policy.mode === 'strict-sandbox' && platform() !== 'win32';
+      const warning =
+        policy.enabled && policy.mode === 'strict-sandbox' && platform() === 'win32'
+          ? 'Windows 环境默认降级为工作区硬限制（未启用 Docker 严格沙箱），以避免 Gateway 启动失败。'
+          : undefined;
+
       sendJson(res, 200, {
         success: true,
+        warning,
         applied: {
           enabled: policy.enabled,
-          mode: policy.mode,
+          mode: strictSandboxActive ? 'strict-sandbox' : 'workspace-only',
           allowedPaths: policy.allowedPaths,
           harden: {
             fsWorkspaceOnly: policy.enabled,
