@@ -131,13 +131,19 @@ export function Security() {
   }, [policy]);
 
   const applyPolicy = useCallback(async () => {
+    const normalized = compactPaths(policy.allowedPaths);
+    if (normalized.length > 0 && !policy.enabled) {
+      toast.error('你已配置目录，但“启用目录访问限制”是关闭状态。请先开启再应用。');
+      return;
+    }
+
     setApplying(true);
     try {
       await hostApiFetch('/api/security/policy', {
         method: 'PUT',
         body: JSON.stringify({
           ...policy,
-          allowedPaths: compactPaths(policy.allowedPaths),
+          allowedPaths: normalized,
         }),
       });
 
