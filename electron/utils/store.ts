@@ -20,9 +20,15 @@ function generateToken(): string {
  * Application settings schema
  */
 export interface SecurityPolicy {
-  enabled: boolean;
-  allowedPaths: string[];
-  allowExec: boolean;
+  workspace: {
+    enabled: boolean;
+    path: string;
+    allowExec: boolean;
+  };
+  prompt: {
+    enabled: boolean;
+    allowedPaths: string[];
+  };
 }
 
 export interface AppSettings {
@@ -100,9 +106,15 @@ const defaults: AppSettings = {
 
   // Security
   securityPolicy: {
-    enabled: false,
-    allowedPaths: [],
-    allowExec: false,
+    workspace: {
+      enabled: false,
+      path: '',
+      allowExec: false,
+    },
+    prompt: {
+      enabled: false,
+      allowedPaths: [],
+    },
   },
 };
 
