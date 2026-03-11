@@ -54,3 +54,26 @@ export const SECURITY_RULE_DEFINITIONS: SecurityRuleDefinition[] = [
     description: 'Deny browser, web_search, and web_fetch access.',
   },
 ];
+
+export function normalizeLinkedSecurityRules(values: unknown): SecurityRuleKey[] {
+  const next = new Set<SecurityRuleKey>(
+    Array.isArray(values)
+      ? values.filter((item): item is SecurityRuleKey => typeof item === 'string')
+      : [],
+  );
+  const hasRuntime = next.has('denyRuntime');
+  const hasWrite = next.has('denyWrite');
+
+  if (next.has('lockPolicy')) {
+    next.add('denyRuntime');
+    next.add('denyWrite');
+  }
+
+  if (hasRuntime && hasWrite) {
+    next.add('lockPolicy');
+  } else if (!next.has('lockPolicy')) {
+    next.delete('lockPolicy');
+  }
+
+  return Array.from(next);
+}

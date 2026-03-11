@@ -11,7 +11,7 @@ import {
   type SecurityPolicy,
   SECURITY_RULE_DEFINITIONS,
   getManagedToolDenyForRules,
-  normalizeSecurityRules,
+  normalizeLinkedSecurityRules,
 } from '../../shared/security-policy';
 
 const OPENCLAW_CONFIG_DIR = getOpenClawConfigDir();
@@ -119,7 +119,7 @@ function normalizeStoredPolicy(raw: unknown): SecurityPolicy {
   const deniedPaths = hasDeniedPaths
     ? prompt.deniedPaths.filter((item): item is string => typeof item === 'string')
     : [];
-  const rules = normalizeSecurityRules(prompt.rules);
+  const rules = normalizeLinkedSecurityRules(prompt.rules);
 
   return {
     prompt: {
@@ -287,7 +287,7 @@ async function syncSecurityPolicyArtifacts(
 
 async function normalizePolicyInput(body: Partial<SecurityPolicy>): Promise<SecurityPolicy> {
   const deniedPaths = await canonicalizeDeniedPaths(body.prompt?.deniedPaths || []);
-  const rules = normalizeSecurityRules(body.prompt?.rules);
+  const rules = normalizeLinkedSecurityRules(body.prompt?.rules);
 
   return {
     prompt: {

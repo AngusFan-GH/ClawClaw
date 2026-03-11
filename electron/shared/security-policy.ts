@@ -66,6 +66,25 @@ export function normalizeSecurityRules(values: unknown): SecurityRuleKey[] {
   return Array.from(new Set(values.filter(isSecurityRuleKey)));
 }
 
+export function normalizeLinkedSecurityRules(values: unknown): SecurityRuleKey[] {
+  const next = new Set<SecurityRuleKey>(normalizeSecurityRules(values));
+  const hasRuntime = next.has('denyRuntime');
+  const hasWrite = next.has('denyWrite');
+
+  if (next.has('lockPolicy')) {
+    next.add('denyRuntime');
+    next.add('denyWrite');
+  }
+
+  if (hasRuntime && hasWrite) {
+    next.add('lockPolicy');
+  } else if (!next.has('lockPolicy')) {
+    next.delete('lockPolicy');
+  }
+
+  return Array.from(next);
+}
+
 export function getSecurityRuleDefinition(key: SecurityRuleKey): SecurityRuleDefinition | undefined {
   return SECURITY_RULE_DEFINITIONS.find((rule) => rule.key === key);
 }

@@ -5,7 +5,7 @@
 
 import { randomBytes } from 'crypto';
 import type { SecurityPolicy } from '../shared/security-policy';
-import { normalizeSecurityRules } from '../shared/security-policy';
+import { normalizeLinkedSecurityRules } from '../shared/security-policy';
 
 // Lazy-load electron-store (ESM module)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -101,6 +101,7 @@ const defaults: AppSettings = {
     prompt: {
       enabled: false,
       deniedPaths: [],
+      rules: [],
     },
   },
 };
@@ -114,7 +115,7 @@ function normalizeSecurityPolicy(raw: unknown): SecurityPolicy {
   const deniedPaths = Array.isArray(prompt.deniedPaths)
     ? prompt.deniedPaths.filter((item): item is string => typeof item === 'string')
     : [];
-  const rules = normalizeSecurityRules(prompt.rules);
+  const rules = normalizeLinkedSecurityRules(prompt.rules);
 
   return {
     prompt: {

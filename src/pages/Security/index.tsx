@@ -11,6 +11,7 @@ import {
   type SecurityPolicy,
   type SecurityRuleKey,
   SECURITY_RULE_DEFINITIONS,
+  normalizeLinkedSecurityRules,
 } from '@/shared/security-policy';
 
 const defaultPolicy: SecurityPolicy = {
@@ -22,7 +23,15 @@ const defaultPolicy: SecurityPolicy = {
 };
 
 function normalizePath(value: string): string {
-  return value.trim().replace(/[\\/]+$/, '');
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (/^[A-Za-z]:[\\/]+$/.test(trimmed)) {
+    return `${trimmed[0].toUpperCase()}:\\`;
+  }
+  if (trimmed === '/' || trimmed === '\\') {
+    return trimmed;
+  }
+  return trimmed.replace(/[\\/]+$/, '');
 }
 
 function compactPaths(paths: string[]): string[] {
@@ -48,20 +57,6 @@ function compactPaths(paths: string[]): string[] {
   return result;
 }
 
-function normalizeLinkedRules(rules: SecurityRuleKey[]): SecurityRuleKey[] {
-  const next = new Set<SecurityRuleKey>(rules);
-  const hasRuntime = next.has('denyRuntime');
-  const hasWrite = next.has('denyWrite');
-
-  if (hasRuntime && hasWrite) {
-    next.add('lockPolicy');
-  } else {
-    next.delete('lockPolicy');
-  }
-
-  return Array.from(next);
-}
-
 export function Security() {
   const { t } = useTranslation('settings');
   const [loading, setLoading] = useState(true);
@@ -79,7 +74,7 @@ export function Security() {
         prompt: {
           enabled: !!data?.prompt?.enabled,
           deniedPaths: compactPaths(data?.prompt?.deniedPaths || []),
-          rules: normalizeLinkedRules(Array.isArray(data?.prompt?.rules) ? data.prompt.rules : []),
+          rules: normalizeLinkedSecurityRules(Array.isArray(data?.prompt?.rules) ? data.prompt.rules : []),
         },
       };
       setPolicy(nextPolicy);
@@ -136,7 +131,7 @@ export function Security() {
         prompt: {
           ...prev.prompt,
           rules: checked
-            ? normalizeLinkedRules([...prev.prompt.rules, 'lockPolicy', 'denyRuntime', 'denyWrite'])
+            ? normalizeLinkedSecurityRules([...prev.prompt.rules, 'lockPolicy', 'denyRuntime', 'denyWrite'])
             : prev.prompt.rules.filter((item) => item !== 'lockPolicy' && item !== 'denyRuntime' && item !== 'denyWrite'),
         },
       }));
@@ -147,7 +142,7 @@ export function Security() {
       ...prev,
       prompt: {
         ...prev.prompt,
-        rules: normalizeLinkedRules(checked
+        rules: normalizeLinkedSecurityRules(checked
           ? Array.from(new Set([...prev.prompt.rules, rule]))
           : prev.prompt.rules.filter((item) => item !== rule)),
       },
@@ -258,7 +253,7 @@ export function Security() {
                   prompt: {
                     ...prev.prompt,
                     enabled: true,
-                    rules: normalizeLinkedRules([...prev.prompt.rules, 'lockPolicy', 'denyRuntime', 'denyWrite']),
+                    rules: normalizeLinkedSecurityRules([...prev.prompt.rules, 'lockPolicy', 'denyRuntime', 'denyWrite']),
                   },
                 }));
                 toast.message(t('security.toasts.lockPolicyAutoEnabled'));
