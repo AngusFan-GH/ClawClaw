@@ -127,6 +127,8 @@ async function discoverAgentIds(): Promise<string[]> {
 
 const OPENCLAW_CONFIG_PATH = join(homedir(), '.openclaw', 'openclaw.json');
 const VALID_COMPACTION_MODES = new Set(['default', 'safeguard']);
+const VALID_MEMORY_SEARCH_PROVIDERS = new Set(['openai', 'local', 'gemini', 'voyage', 'mistral']);
+const VALID_MEMORY_SEARCH_FALLBACKS = new Set(['openai', 'gemini', 'local', 'voyage', 'mistral', 'none']);
 
 async function readOpenClawJson(): Promise<Record<string, unknown>> {
   return (await readJsonFile<Record<string, unknown>>(OPENCLAW_CONFIG_PATH)) ?? {};
@@ -155,6 +157,56 @@ function normalizeAgentsDefaultsCompactionMode(config: Record<string, unknown>):
   if (typeof mode === 'string' && mode.length > 0 && !VALID_COMPACTION_MODES.has(mode)) {
     compaction.mode = 'default';
   }
+}
+
+function sanitizeAgentsDefaultsMemorySearch(config: Record<string, unknown>): boolean {
+  const agents =
+    config.agents && typeof config.agents === 'object'
+      ? (config.agents as Record<string, unknown>)
+      : null;
+  if (!agents) return false;
+
+  const defaults =
+    agents.defaults && typeof agents.defaults === 'object'
+      ? (agents.defaults as Record<string, unknown>)
+      : null;
+  if (!defaults) return false;
+
+  const memorySearch =
+    defaults.memorySearch && typeof defaults.memorySearch === 'object'
+      ? (defaults.memorySearch as Record<string, unknown>)
+      : null;
+  if (!memorySearch) return false;
+
+  let modified = false;
+
+  const provider = memorySearch.provider;
+  if (
+    typeof provider === 'string'
+    && provider.length > 0
+    && !VALID_MEMORY_SEARCH_PROVIDERS.has(provider)
+  ) {
+    console.log(
+      `[sanitize] Removing invalid agents.defaults.memorySearch.provider="${provider}" from openclaw.json`
+    );
+    delete memorySearch.provider;
+    modified = true;
+  }
+
+  const fallback = memorySearch.fallback;
+  if (
+    typeof fallback === 'string'
+    && fallback.length > 0
+    && !VALID_MEMORY_SEARCH_FALLBACKS.has(fallback)
+  ) {
+    console.log(
+      `[sanitize] Removing invalid agents.defaults.memorySearch.fallback="${fallback}" from openclaw.json`
+    );
+    delete memorySearch.fallback;
+    modified = true;
+  }
+
+  return modified;
 }
 
 async function writeOpenClawJson(config: Record<string, unknown>): Promise<void> {
@@ -1003,6 +1055,14 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
       config.tools = tools;
       modified = true;
     }
+  }
+
+  // ── agents.defaults.memorySearch ─────────────────────────────
+  // Some user configs carry provider values that older or newer OpenClaw
+  // builds no longer accept (for example "ollama"). Remove only the known
+  // invalid enum values so Gateway startup is not blocked by schema failure.
+  if (sanitizeAgentsDefaultsMemorySearch(config)) {
+    modified = true;
   }
 
   if (modified) {

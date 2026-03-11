@@ -8,6 +8,20 @@ import { AppError, normalizeAppError } from '@/lib/error-model';
 import { useGatewayStore } from './gateway';
 import type { Skill, MarketplaceSkill } from '../types/skill';
 
+type SkillMetadataResult = {
+  slug: string;
+  skillKey?: string;
+  emoji?: string;
+  primaryEnv?: string;
+  requires?: {
+    env?: string[];
+    bins?: string[];
+    anyBins?: string[];
+    config?: string[];
+    os?: string[];
+  };
+};
+
 type GatewaySkillStatus = {
   skillKey: string;
   slug?: string;
@@ -49,7 +63,7 @@ function mapErrorCodeToSkillErrorKey(
         ? 'installRateLimitError'
         : 'fetchRateLimitError';
   }
-  return 'rateLimitError';
+  return '';
 }
 
 interface SkillsState {
@@ -87,37 +101,88 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
       set({ loading: true, error: null });
     }
     try {
-      // 1. Fetch from Gateway (running skills)
-      const gatewayData = await useGatewayStore.getState().rpc<GatewaySkillsStatusResult>('skills.status');
-
-      // 2. Fetch from ClawHub (installed on disk)
+      // 1. Fetch from ClawHub (installed on disk)
       const clawhubResult = await hostApiFetch<{ success: boolean; results?: ClawHubListResult[]; error?: string }>('/api/clawhub/list');
 
-      // 3. Fetch configurations directly from Electron (since Gateway doesn't return them)
+      // 2. Fetch configurations directly from Electron (since Gateway doesn't return them)
       const configResult = await hostApiFetch<Record<string, { apiKey?: string; env?: Record<string, string> }>>('/api/skills/configs');
+
+      // 3. Fetch runtime state from Gateway when available
+      let gatewayData: GatewaySkillsStatusResult | null = null;
+      const gatewayStatus = useGatewayStore.getState().status;
+      if (gatewayStatus.state === 'running') {
+        try {
+          gatewayData = await useGatewayStore.getState().rpc<GatewaySkillsStatusResult>(
+            'skills.status',
+            undefined,
+            3000,
+          );
+        } catch (error) {
+          console.warn(
+            'Failed to fetch skills from gateway, falling back to local installed list:',
+            error,
+          );
+        }
+      }
 
       let combinedSkills: Skill[] = [];
       const currentSkills = get().skills;
+      const candidateSlugs = new Set<string>();
+      clawhubResult.results?.forEach((skill) => candidateSlugs.add(skill.slug));
+      gatewayData?.skills?.forEach((skill) => candidateSlugs.add(skill.slug || skill.skillKey));
+
+      const metadataResult = await hostApiFetch<{
+        success: boolean;
+        results?: Record<string, SkillMetadataResult>;
+        error?: string;
+      }>('/api/skills/metadata', {
+        method: 'POST',
+        body: JSON.stringify({ slugs: Array.from(candidateSlugs) }),
+      }).catch(() => ({ success: false as const }));
+      const metadataMap = metadataResult.success ? metadataResult.results || {} : {};
+      const installedVersionBySlug = new Map(
+        (clawhubResult.success && clawhubResult.results ? clawhubResult.results : []).map((skill) => [
+          skill.slug,
+          skill.version,
+        ]),
+      );
 
       // Map gateway skills info
-      if (gatewayData.skills) {
+      if (gatewayData?.skills) {
         combinedSkills = gatewayData.skills.map((s: GatewaySkillStatus) => {
           // Merge with direct config if available
           const directConfig = configResult[s.skillKey] || {};
+          const skillSlug = s.slug || s.skillKey;
+          const previous = currentSkills.find((skill) => skill.id === s.skillKey || skill.slug === skillSlug);
+          const metadata = metadataMap[skillSlug] || metadataMap[s.skillKey];
+          const version =
+            s.version ||
+            installedVersionBySlug.get(skillSlug) ||
+            previous?.version;
+          const envConfig = directConfig.env || {};
+          const hasEditableConfig = Boolean(
+            metadata?.primaryEnv ||
+            metadata?.requires?.env?.length ||
+            directConfig.apiKey ||
+            Object.keys(envConfig).length,
+          );
 
           return {
             id: s.skillKey,
-            slug: s.slug || s.skillKey,
+            slug: skillSlug,
             name: s.name || s.skillKey,
             description: s.description || '',
             enabled: !s.disabled,
-            icon: s.emoji || '📦',
-            version: s.version || '1.0.0',
+            icon: s.emoji || metadata?.emoji || '📦',
+            version: version || '',
             author: s.author,
             config: {
               ...(s.config || {}),
               ...directConfig,
             },
+            primaryEnv: metadata?.primaryEnv,
+            requirements: metadata?.requires,
+            configurable: hasEditableConfig,
             isCore: s.bundled && s.always,
             isBundled: s.bundled,
           };
@@ -130,19 +195,30 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
       // Merge with ClawHub results
       if (clawhubResult.success && clawhubResult.results) {
         clawhubResult.results.forEach((cs: ClawHubListResult) => {
-          const existing = combinedSkills.find(s => s.id === cs.slug);
+          const existing = combinedSkills.find((s) => s.id === cs.slug || s.slug === cs.slug);
           if (!existing) {
             const directConfig = configResult[cs.slug] || {};
+            const previous = currentSkills.find((s) => s.id === cs.slug || s.slug === cs.slug);
+            const metadata = metadataMap[cs.slug];
+            const envConfig = directConfig.env || {};
             combinedSkills.push({
               id: cs.slug,
               slug: cs.slug,
-              name: cs.slug,
-              description: 'Recently installed, initializing...',
-              enabled: false,
-              icon: '⌛',
-              version: cs.version || 'unknown',
-              author: undefined,
+              name: previous?.name || cs.slug,
+              description: previous?.description || 'Recently installed, initializing...',
+              enabled: previous?.enabled || false,
+              icon: previous?.icon || metadata?.emoji || '⌛',
+              version: cs.version || previous?.version || '',
+              author: previous?.author,
               config: directConfig,
+              primaryEnv: metadata?.primaryEnv,
+              requirements: metadata?.requires,
+              configurable: Boolean(
+                metadata?.primaryEnv ||
+                metadata?.requires?.env?.length ||
+                directConfig.apiKey ||
+                Object.keys(envConfig).length,
+              ),
               isCore: false,
               isBundled: false,
             });
@@ -154,7 +230,10 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
     } catch (error) {
       console.error('Failed to fetch skills:', error);
       const appError = normalizeAppError(error, { module: 'skills', operation: 'fetch' });
-      set({ loading: false, error: mapErrorCodeToSkillErrorKey(appError.code, 'fetch') });
+      set({
+        loading: false,
+        error: mapErrorCodeToSkillErrorKey(appError.code, 'fetch') || appError.message,
+      });
     }
   },
 
@@ -175,7 +254,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
       }
     } catch (error) {
       const appError = normalizeAppError(error, { module: 'skills', operation: 'search' });
-      set({ searchError: mapErrorCodeToSkillErrorKey(appError.code, 'search') });
+      set({ searchError: mapErrorCodeToSkillErrorKey(appError.code, 'search') || appError.message });
     } finally {
       set({ searching: false });
     }
@@ -193,7 +272,11 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
           module: 'skills',
           operation: 'install',
         });
-        throw new Error(mapErrorCodeToSkillErrorKey(appError.code, 'install'));
+        const mappedErrorKey = mapErrorCodeToSkillErrorKey(appError.code, 'install');
+        if (mappedErrorKey) {
+          throw new Error(mappedErrorKey);
+        }
+        throw new Error(result.error || appError.message || 'Install failed');
       }
       // Refresh skills after install
       await get().fetchSkills();

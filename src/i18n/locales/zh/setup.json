@@ -13,7 +13,7 @@
       "description": "配置您的 AI 服务"
     },
     "channel": {
-      "title": "连接渠道",
+      "title": "连接",
       "description": "连接消息平台（可选）"
     },
     "installing": {
@@ -75,15 +75,15 @@
     "storedLocally": "您的 API 密钥存储在本地机器上。"
   },
   "channel": {
-    "title": "连接消息渠道",
-    "subtitle": "选择要连接 AI 助手的平台。您可以稍后在设置中添加更多渠道。",
+    "title": "连接消息平台",
+    "subtitle": "选择要连接 AI 助手的平台。您可以稍后在设置中添加更多连接。",
     "configure": "配置 {{name}}",
     "howTo": "如何连接：",
     "viewDocs": "查看文档",
     "validationError": "验证失败",
     "connected": "{{name}} 已连接",
-    "connectedDesc": "您的渠道已配置。将在网关启动时连接。",
-    "configureAnother": "配置另一个渠道"
+    "connectedDesc": "您的连接已配置。将在网关启动时连接。",
+    "configureAnother": "配置另一个连接"
   },
   "installing": {
     "title": "安装必要组件",
@@ -107,7 +107,7 @@
     "components": "组件",
     "gateway": "网关",
     "running": "运行中",
-    "footer": "您可以在设置中自定义技能并连接渠道"
+    "footer": "您可以在设置中自定义技能并管理连接"
   },
   "nav": {
     "next": "下一步",

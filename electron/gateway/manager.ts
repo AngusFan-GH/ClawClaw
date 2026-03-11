@@ -145,6 +145,14 @@ export class GatewayManager extends EventEmitter {
     const message = error instanceof Error ? error.message : String(error);
     return /unknown method:\s*shutdown/i.test(message);
   }
+
+  private enrichStartupError(error: unknown): Error {
+    const base = error instanceof Error ? error : new Error(String(error));
+    const lastStderr = this.recentStartupStderrLines.at(-1);
+    if (!lastStderr) return base;
+    if (base.message.includes(lastStderr)) return base;
+    return new Error(`${base.message}. Gateway stderr: ${lastStderr}`);
+  }
   /**
    * Get current Gateway status
    */
@@ -249,12 +257,13 @@ export class GatewayManager extends EventEmitter {
         logger.debug(error.message);
         return;
       }
+      const enrichedError = this.enrichStartupError(error);
       logger.error(
         `Gateway start failed (port=${this.status.port}, reconnectAttempts=${this.reconnectAttempts}, spawn=${this.lastSpawnSummary ?? 'n/a'})`,
-        error
+        enrichedError
       );
-      this.setStatus({ state: 'error', error: String(error) });
-      throw error;
+      this.setStatus({ state: 'error', error: String(enrichedError) });
+      throw enrichedError;
     } finally {
       this.startLock = false;
       this.restartController.flushDeferredRestart(

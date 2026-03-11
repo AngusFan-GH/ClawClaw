@@ -13,8 +13,6 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { useSettingsStore } from '@/stores/settings';
 import { useGatewayStore } from '@/stores/gateway';
-import { useUpdateStore } from '@/stores/update';
-import { UpdateSettings } from '@/components/settings/UpdateSettings';
 import {
   getGatewayWsDiagnosticEnabled,
   invokeIpc,
@@ -59,17 +57,11 @@ export function Settings() {
     setProxyHttpsServer,
     setProxyAllServer,
     setProxyBypassRules,
-    autoCheckUpdate,
-    setAutoCheckUpdate,
-    autoDownloadUpdate,
-    setAutoDownloadUpdate,
     devModeUnlocked,
     setDevModeUnlocked,
   } = useSettingsStore();
 
   const { status: gatewayStatus, restart: restartGateway } = useGatewayStore();
-  const currentVersion = useUpdateStore((state) => state.currentVersion);
-  const updateSetAutoDownload = useUpdateStore((state) => state.setAutoDownload);
   const [controlUiInfo, setControlUiInfo] = useState<ControlUiInfo | null>(null);
   const [openclawCliCommand, setOpenclawCliCommand] = useState('');
   const [openclawCliError, setOpenclawCliError] = useState<string | null>(null);
@@ -88,6 +80,7 @@ export function Settings() {
   const showCliTools = true;
   const [showLogs, setShowLogs] = useState(false);
   const [logContent, setLogContent] = useState('');
+  const [appVersion, setAppVersion] = useState('');
 
   const handleShowLogs = async () => {
     try {
@@ -188,6 +181,22 @@ export function Settings() {
     );
     return () => {
       unsubscribe?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void invokeIpc<string>('app:version')
+      .then((version) => {
+        if (!cancelled) {
+          setAppVersion(version);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -949,51 +958,6 @@ export function Settings() {
 
           <Separator className="bg-black/5 dark:bg-white/5" />
 
-          {/* Updates */}
-          <div>
-            <h2
-              className="text-3xl font-serif text-foreground mb-6 font-normal tracking-tight"
-              style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}
-            >
-              {t('updates.title')}
-            </h2>
-            <div className="space-y-6">
-              <UpdateSettings />
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-[15px] font-medium text-foreground">
-                    {t('updates.autoCheck')}
-                  </Label>
-                  <p className="text-[13px] text-muted-foreground mt-1">
-                    {t('updates.autoCheckDesc')}
-                  </p>
-                </div>
-                <Switch checked={autoCheckUpdate} onCheckedChange={setAutoCheckUpdate} />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-[15px] font-medium text-foreground">
-                    {t('updates.autoDownload')}
-                  </Label>
-                  <p className="text-[13px] text-muted-foreground mt-1">
-                    {t('updates.autoDownloadDesc')}
-                  </p>
-                </div>
-                <Switch
-                  checked={autoDownloadUpdate}
-                  onCheckedChange={(value) => {
-                    setAutoDownloadUpdate(value);
-                    updateSetAutoDownload(value);
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-
-          <Separator className="bg-black/5 dark:bg-white/5" />
-
           {/* About */}
           <div>
             <h2
@@ -1008,7 +972,7 @@ export function Settings() {
                 {t('about.tagline')}
               </p>
               <p>{t('about.basedOn')}</p>
-              <p>{t('about.version', { version: currentVersion })}</p>
+              <p>{t('about.version', { version: appVersion })}</p>
               {/* <div className="flex gap-4 pt-3">
                 <Button
                   variant="link"

@@ -3,8 +3,6 @@ import {
   X,
   Loader2,
   QrCode,
-  ExternalLink,
-  BookOpen,
   Eye,
   EyeOff,
   Check,
@@ -339,20 +337,6 @@ export function ChannelConfigModal({
     }
   };
 
-  const openDocs = () => {
-    if (!meta?.docsUrl) return;
-    const url = t(meta.docsUrl);
-    try {
-      if (window.electron?.openExternal) {
-        window.electron.openExternal(url);
-      } else {
-        window.open(url, '_blank');
-      }
-    } catch {
-      window.open(url, '_blank');
-    }
-  };
-
   const isFormValid = () => {
     if (!meta) return false;
     return meta.configFields
@@ -488,22 +472,13 @@ export function ChannelConfigModal({
               )}
 
               <div className="bg-[#eeece3] dark:bg-[#151514] p-4 rounded-2xl space-y-4 shadow-sm border border-black/10 dark:border-white/10">
-                <div className="flex items-center justify-between gap-3">
+                <div>
                   <div>
                     <p className={labelClasses}>{t('dialog.howToConnect')}</p>
                     <p className="text-[13px] text-muted-foreground mt-1">
                       {meta ? t(meta.description.replace('channels:', '')) : ''}
                     </p>
                   </div>
-                  <Button
-                    variant="outline"
-                    className={cn(outlineButtonClasses, 'h-8 px-3 shrink-0')}
-                    onClick={openDocs}
-                  >
-                    <BookOpen className="h-3 w-3 mr-1" />
-                    {t('dialog.viewDocs')}
-                    <ExternalLink className="h-3 w-3 ml-1" />
-                  </Button>
                 </div>
                 <ol className="list-decimal pl-5 text-[13px] text-muted-foreground leading-relaxed space-y-1.5">
                   {meta?.instructions.map((instruction, index) => (

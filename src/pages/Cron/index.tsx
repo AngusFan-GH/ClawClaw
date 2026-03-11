@@ -609,7 +609,7 @@ export function Cron() {
 
           {/* Statistics */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <div className="p-5 rounded-[24px] bg-black/5 dark:bg-white/5 border border-transparent flex flex-col justify-between min-h-[130px] relative overflow-hidden group hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+            <div className="p-5 rounded-[10px] bg-black/5 dark:bg-white/5 border border-transparent flex flex-col justify-between min-h-[130px] relative overflow-hidden group hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
               <div className="flex items-center justify-between">
                 <div className="h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center">
                   <Clock className="h-5 w-5 text-primary" />
@@ -621,7 +621,7 @@ export function Cron() {
               </div>
             </div>
 
-            <div className="p-5 rounded-[24px] bg-black/5 dark:bg-white/5 border border-transparent flex flex-col justify-between min-h-[130px] relative overflow-hidden group hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+            <div className="p-5 rounded-[10px] bg-black/5 dark:bg-white/5 border border-transparent flex flex-col justify-between min-h-[130px] relative overflow-hidden group hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
               <div className="flex items-center justify-between">
                 <div className="h-11 w-11 rounded-full bg-green-500/10 flex items-center justify-center">
                   <Play className="h-5 w-5 text-green-600 dark:text-green-500 ml-0.5" />
@@ -633,7 +633,7 @@ export function Cron() {
               </div>
             </div>
 
-            <div className="p-5 rounded-[24px] bg-black/5 dark:bg-white/5 border border-transparent flex flex-col justify-between min-h-[130px] relative overflow-hidden group hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+            <div className="p-5 rounded-[10px] bg-black/5 dark:bg-white/5 border border-transparent flex flex-col justify-between min-h-[130px] relative overflow-hidden group hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
               <div className="flex items-center justify-between">
                 <div className="h-11 w-11 rounded-full bg-yellow-500/10 flex items-center justify-center">
                   <Pause className="h-5 w-5 text-yellow-600 dark:text-yellow-500" />
@@ -645,7 +645,7 @@ export function Cron() {
               </div>
             </div>
 
-            <div className="p-5 rounded-[24px] bg-black/5 dark:bg-white/5 border border-transparent flex flex-col justify-between min-h-[130px] relative overflow-hidden group hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+            <div className="p-5 rounded-[10px] bg-black/5 dark:bg-white/5 border border-transparent flex flex-col justify-between min-h-[130px] relative overflow-hidden group hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
               <div className="flex items-center justify-between">
                 <div className="h-11 w-11 rounded-full bg-destructive/10 flex items-center justify-center">
                   <XCircle className="h-5 w-5 text-destructive" />

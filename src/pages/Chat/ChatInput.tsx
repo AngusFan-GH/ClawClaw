@@ -353,7 +353,7 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
         )}
 
         {/* Input Row */}
-        <div className={`flex items-end gap-1.5 bg-white dark:bg-[#1a1a19] rounded-[28px] shadow-sm border p-1.5 transition-all ${dragOver ? 'border-primary ring-1 ring-primary' : 'border-black/10 dark:border-white/10'}`}>
+        <div className={`flex items-end gap-1.5 bg-white dark:bg-[#1a1a19] rounded-[10px] shadow-sm border p-1.5 transition-all ${dragOver ? 'border-primary ring-1 ring-primary' : 'border-black/10 dark:border-white/10'}`}>
 
           {/* Attach Button */}
           <Button

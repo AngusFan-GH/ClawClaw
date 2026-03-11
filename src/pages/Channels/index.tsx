@@ -9,7 +9,6 @@ import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useChannelsStore } from '@/stores/channels';
 import { useGatewayStore } from '@/stores/gateway';
-import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { hostApiFetch } from '@/lib/host-api';
 import { subscribeHostEvent } from '@/lib/host-events';
 import { ChannelConfigModal } from '@/components/channels/ChannelConfigModal';
@@ -18,6 +17,7 @@ import {
   CHANNEL_ICONS,
   CHANNEL_NAMES,
   CHANNEL_META,
+  getAllChannels,
   getPrimaryChannels,
   type ChannelType,
   type Channel,
@@ -40,11 +40,8 @@ export function Channels() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedChannelType, setSelectedChannelType] = useState<ChannelType | null>(null);
   const [configuredTypes, setConfiguredTypes] = useState<string[]>([]);
+  const [configuredTypesReady, setConfiguredTypesReady] = useState(false);
   const [channelToDelete, setChannelToDelete] = useState<{ id: string } | null>(null);
-
-  useEffect(() => {
-    void fetchChannels();
-  }, [fetchChannels]);
 
   const fetchConfiguredTypes = useCallback(async () => {
     try {
@@ -57,15 +54,15 @@ export function Channels() {
       }
     } catch {
       // Ignore refresh errors here and keep the last known state.
+    } finally {
+      setConfiguredTypesReady(true);
     }
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void fetchConfiguredTypes();
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [fetchConfiguredTypes]);
+    void fetchConfiguredTypes();
+    void fetchChannels();
+  }, [fetchChannels, fetchConfiguredTypes]);
 
   useEffect(() => {
     const unsubscribe = subscribeHostEvent('gateway:channel-status', () => {
@@ -79,21 +76,39 @@ export function Channels() {
     };
   }, [fetchChannels, fetchConfiguredTypes]);
 
+  const safeChannels = Array.isArray(channels) ? channels : [];
   const displayedChannelTypes = getPrimaryChannels();
+  const allChannelTypes = getAllChannels();
+  const configuredChannelTypeSet = new Set<ChannelType>();
+  const configuredDisplayChannels: Channel[] = [];
+
+  for (const channel of safeChannels) {
+    configuredChannelTypeSet.add(channel.type);
+    configuredDisplayChannels.push(channel);
+  }
+
+  for (const type of configuredTypes) {
+    if (!(type in CHANNEL_META)) continue;
+    const typedType = type as ChannelType;
+    if (configuredChannelTypeSet.has(typedType)) continue;
+    configuredChannelTypeSet.add(typedType);
+    configuredDisplayChannels.push({
+      id: `${typedType}-default`,
+      type: typedType,
+      name: CHANNEL_NAMES[typedType],
+      status: 'disconnected',
+    });
+  }
+
+  configuredDisplayChannels.sort((a, b) => {
+    return allChannelTypes.indexOf(a.type) - allChannelTypes.indexOf(b.type);
+  });
 
   const handleRefresh = () => {
     void Promise.all([fetchChannels(), fetchConfiguredTypes()]);
   };
 
-  if (loading) {
-    return (
-      <div className="flex flex-col -m-6 dark:bg-background min-h-[calc(100vh-2.5rem)] items-center justify-center">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
-
-  const safeChannels = Array.isArray(channels) ? channels : [];
+  const showRefreshingHint = loading && configuredTypesReady;
 
   return (
     <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
@@ -109,6 +124,11 @@ export function Channels() {
           </div>
 
           <div className="flex items-center gap-3 md:mt-2">
+            {showRefreshingHint && (
+              <span className="text-[13px] text-foreground/55">
+                正在刷新连接状态...
+              </span>
+            )}
             <Button
               variant="outline"
               onClick={handleRefresh}
@@ -140,13 +160,13 @@ export function Channels() {
             </div>
           )}
 
-          {safeChannels.length > 0 && (
+          {configuredDisplayChannels.length > 0 && (
             <div className="mb-12">
               <h2 className="text-3xl font-serif text-foreground mb-6 font-normal tracking-tight" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}>
-                {t('availableChannels')}
+                {t('configured')}
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                {safeChannels.map((channel) => (
+                {configuredDisplayChannels.map((channel) => (
                   <ChannelCard
                     key={channel.id}
                     channel={channel}
@@ -169,8 +189,7 @@ export function Channels() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
               {displayedChannelTypes.map((type) => {
                 const meta = CHANNEL_META[type];
-                const isConfigured = safeChannels.some((channel) => channel.type === type)
-                  || configuredTypes.includes(type);
+                const isConfigured = configuredChannelTypeSet.has(type);
                 if (isConfigured) return null;
 
                 return (

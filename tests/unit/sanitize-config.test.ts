@@ -39,6 +39,8 @@ async function sanitizeConfig(filePath: string): Promise<boolean> {
 
   const config = JSON.parse(raw) as Record<string, unknown>;
   let modified = false;
+  const VALID_MEMORY_SEARCH_PROVIDERS = new Set(['openai', 'local', 'gemini', 'voyage', 'mistral']);
+  const VALID_MEMORY_SEARCH_FALLBACKS = new Set(['openai', 'gemini', 'local', 'voyage', 'mistral', 'none']);
 
   // Mirror of the production blocklist logic
   const skills = config.skills;
@@ -69,6 +71,40 @@ async function sanitizeConfig(filePath: string): Promise<boolean> {
       web.search = search;
       tools.web = web;
       config.tools = tools;
+      modified = true;
+    }
+  }
+
+  const agents =
+    config.agents && typeof config.agents === 'object'
+      ? (config.agents as Record<string, unknown>)
+      : null;
+  const defaults =
+    agents?.defaults && typeof agents.defaults === 'object'
+      ? (agents.defaults as Record<string, unknown>)
+      : null;
+  const memorySearch =
+    defaults?.memorySearch && typeof defaults.memorySearch === 'object'
+      ? (defaults.memorySearch as Record<string, unknown>)
+      : null;
+  if (memorySearch) {
+    const provider = memorySearch.provider;
+    if (
+      typeof provider === 'string'
+      && provider.length > 0
+      && !VALID_MEMORY_SEARCH_PROVIDERS.has(provider)
+    ) {
+      delete memorySearch.provider;
+      modified = true;
+    }
+
+    const fallback = memorySearch.fallback;
+    if (
+      typeof fallback === 'string'
+      && fallback.length > 0
+      && !VALID_MEMORY_SEARCH_FALLBACKS.has(fallback)
+    ) {
+      delete memorySearch.fallback;
       modified = true;
     }
   }
@@ -301,5 +337,55 @@ describe('sanitizeOpenClawConfig (blocklist approach)', () => {
 
     const result = await readConfig();
     expect(result).toEqual(original);
+  });
+
+  it('removes invalid agents.defaults.memorySearch.provider values', async () => {
+    await writeConfig({
+      agents: {
+        defaults: {
+          memorySearch: {
+            enabled: true,
+            provider: 'ollama',
+            fallback: 'none',
+            remote: { baseUrl: 'http://127.0.0.1:11434' },
+          },
+        },
+      },
+    });
+
+    const modified = await sanitizeConfig(configPath);
+    expect(modified).toBe(true);
+
+    const result = await readConfig();
+    const memorySearch = (
+      (result.agents as Record<string, unknown>).defaults as Record<string, unknown>
+    ).memorySearch as Record<string, unknown>;
+    expect(memorySearch).not.toHaveProperty('provider');
+    expect(memorySearch.fallback).toBe('none');
+    expect(memorySearch.remote).toEqual({ baseUrl: 'http://127.0.0.1:11434' });
+  });
+
+  it('removes invalid agents.defaults.memorySearch.fallback values', async () => {
+    await writeConfig({
+      agents: {
+        defaults: {
+          memorySearch: {
+            enabled: true,
+            provider: 'local',
+            fallback: 'ollama',
+          },
+        },
+      },
+    });
+
+    const modified = await sanitizeConfig(configPath);
+    expect(modified).toBe(true);
+
+    const result = await readConfig();
+    const memorySearch = (
+      (result.agents as Record<string, unknown>).defaults as Record<string, unknown>
+    ).memorySearch as Record<string, unknown>;
+    expect(memorySearch.provider).toBe('local');
+    expect(memorySearch).not.toHaveProperty('fallback');
   });
 });

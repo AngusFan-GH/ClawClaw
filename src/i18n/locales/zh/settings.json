@@ -241,35 +241,35 @@
     "github": "GitHub"
   },
   "security": {
-    "title": "Directory Policy",
-    "loading": "Loading directory policy...",
-    "enableDirectoryPolicy": "Enable directory policy",
-    "enableDirectoryPolicyDesc": "Directory policy is enabled.",
-    "addAllowedDirectories": "Add allowed directory",
-    "noAllowedDirectory": "No allowed directory configured.",
+    "title": "目录策略",
+    "loading": "正在加载目录策略...",
+    "enableDirectoryPolicy": "启用目录策略",
+    "enableDirectoryPolicyDesc": "目录策略已启用。",
+    "addAllowedDirectories": "添加允许目录",
+    "noAllowedDirectory": "尚未配置允许目录。",
     "actions": {
-      "reload": "Reload",
-      "reset": "Reset"
+      "reload": "重新加载",
+      "reset": "重置"
     },
-    "apply": "Apply",
-    "applying": "Applying...",
-    "lastApplied": "Last applied: {{time}}",
+    "apply": "应用",
+    "applying": "正在应用...",
+    "lastApplied": "上次应用时间：{{time}}",
     "summary": {
-      "disabled": "Directory policy is disabled.",
-      "enabled": "Directory policy is enabled for {{count}} directories."
+      "disabled": "目录策略未启用。",
+      "enabled": "目录策略已对 {{count}} 个目录启用。"
     },
     "toasts": {
-      "loadFailed": "Load security policy failed",
-      "selectDirectoryFailed": "Select directory failed",
-      "applySuccess": "Security policy applied.",
-      "applyFailed": "Apply failed",
-      "resetSuccess": "Security policy reset.",
-      "resetFailed": "Reset failed",
-      "enableDirectoryPolicyFirst": "Please add at least one allowed directory before enable.",
-      "selectAllowedDirs": "Select allowed directories"
+      "loadFailed": "加载安全策略失败",
+      "selectDirectoryFailed": "选择目录失败",
+      "applySuccess": "安全策略已应用。",
+      "applyFailed": "应用失败",
+      "resetSuccess": "安全策略已重置。",
+      "resetFailed": "重置失败",
+      "enableDirectoryPolicyFirst": "请先添加至少一个允许目录，再启用目录策略。",
+      "selectAllowedDirs": "选择允许的目录"
     },
     "dialog": {
-      "selectAllowedDirs": "Select allowed directories"
+      "selectAllowedDirs": "选择允许的目录"
     }
   }
 }

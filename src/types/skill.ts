@@ -17,6 +17,14 @@ export interface Skill {
   author?: string;
   configurable?: boolean;
   config?: Record<string, unknown>;
+  primaryEnv?: string;
+  requirements?: {
+    env?: string[];
+    bins?: string[];
+    anyBins?: string[];
+    config?: string[];
+    os?: string[];
+  };
   isCore?: boolean;
   isBundled?: boolean;
   dependencies?: string[];

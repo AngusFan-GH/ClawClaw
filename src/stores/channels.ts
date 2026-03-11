@@ -37,6 +37,13 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
 
   fetchChannels: async () => {
     set({ loading: true, error: null });
+    const gatewayStatus = useGatewayStore.getState().status;
+
+    if (gatewayStatus.state !== 'running') {
+      set({ channels: [], loading: false });
+      return;
+    }
+
     try {
       const data = await useGatewayStore.getState().rpc<{
           channelOrder?: string[];
@@ -54,7 +61,7 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
             lastOutboundAt?: number | null;
           }>>;
           channelDefaultAccountId?: Record<string, string>;
-      }>('channels.status', { probe: true });
+      }>('channels.status', { probe: true }, 2500);
       if (data) {
         const channels: Channel[] = [];
 
