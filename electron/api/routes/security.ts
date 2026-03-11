@@ -100,10 +100,40 @@ function removeFromArray(target: Record<string, unknown>, key: string, values: s
   target[key] = current.filter((item) => !valueSet.has(item));
 }
 
+function restoreManagedAgentWorkspaces(config: Record<string, unknown>): void {
+  const clawclaw = ensureObject(config, 'clawclaw');
+  const security = ensureObject(clawclaw, 'security');
+  const original =
+    security.originalAgentWorkspaces && typeof security.originalAgentWorkspaces === 'object'
+      ? (security.originalAgentWorkspaces as Record<string, unknown>)
+      : {};
+
+  const agents = ensureObject(config, 'agents');
+  const list = Array.isArray(agents.list) ? agents.list : [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as Record<string, unknown>;
+    const id = typeof entry.id === 'string' ? entry.id : null;
+    if (!id) continue;
+    if (Object.prototype.hasOwnProperty.call(original, id)) {
+      const restored = original[id];
+      if (typeof restored === 'string' && restored.trim()) {
+        entry.workspace = restored;
+      } else {
+        delete entry.workspace;
+      }
+    }
+  }
+
+  delete security.originalAgentWorkspaces;
+}
+
 function removeManagedSecurityConfig(config: Record<string, unknown>): void {
   const agents = ensureObject(config, 'agents');
   const defaults = ensureObject(agents, 'defaults');
   const tools = ensureObject(config, 'tools');
+
+  restoreManagedAgentWorkspaces(config);
 
   const fsCfg = ensureObject(tools, 'fs');
   delete fsCfg.workspaceOnly;
@@ -144,6 +174,18 @@ function applySecurityPolicyToConfig(config: Record<string, unknown>, policy: Se
 
   defaults.workspace = policy.allowedPaths[0];
 
+  // Force every configured agent onto the same restricted workspace boundary.
+  const list = Array.isArray(agents.list) ? agents.list : [];
+  const originalAgentWorkspaces: Record<string, string | null> = {};
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as Record<string, unknown>;
+    const id = typeof entry.id === 'string' ? entry.id : null;
+    if (!id) continue;
+    originalAgentWorkspaces[id] = typeof entry.workspace === 'string' ? entry.workspace : null;
+    entry.workspace = policy.allowedPaths[0];
+  }
+
   const fsCfg = ensureObject(tools, 'fs');
   fsCfg.workspaceOnly = true;
 
@@ -175,6 +217,7 @@ function applySecurityPolicyToConfig(config: Record<string, unknown>, policy: Se
   security.lastAppliedAt = new Date().toISOString();
   security.mode = policy.mode;
   security.allowedPaths = policy.allowedPaths;
+  security.originalAgentWorkspaces = originalAgentWorkspaces;
 
   return config;
 }
