@@ -1,16 +1,19 @@
-import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+﻿import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { HostApiContext } from '../context';
 import { getSetting, setSetting } from '../../utils/store';
+import { logger } from '../../utils/logger';
+import { getOpenClawConfigDir } from '../../utils/paths';
 import { parseJsonBody, sendJson } from '../route-utils';
 
-const OPENCLAW_CONFIG_PATH = join(homedir(), '.openclaw', 'openclaw.json');
+const OPENCLAW_CONFIG_PATH = join(getOpenClawConfigDir(), 'openclaw.json');
 const SECURITY_POLICY_FILE = 'SECURITY_POLICY.md';
 const AGENTS_FILE = 'AGENTS.md';
 const POLICY_BEGIN = '<!-- clawclaw-security:begin -->';
 const POLICY_END = '<!-- clawclaw-security:end -->';
+const DEFAULT_WORKSPACE_POLICY_ROOT = join(getOpenClawConfigDir(), 'workspace');
 
 interface WorkspacePolicy {
   enabled: boolean;
@@ -28,6 +31,19 @@ interface SecurityPolicy {
   prompt: PromptPolicy;
 }
 
+interface SyncFailure {
+  workspace: string;
+  file: string;
+  error: string;
+}
+
+interface SecuritySyncResult {
+  targets: string[];
+  succeeded: string[];
+  skipped: string[];
+  failures: SyncFailure[];
+}
+
 const DEFAULT_POLICY: SecurityPolicy = {
   workspace: {
     enabled: false,
@@ -41,7 +57,36 @@ const DEFAULT_POLICY: SecurityPolicy = {
 };
 
 function normalizePath(value: string): string {
-  return value.trim().replace(/[\\/]+$/, '');
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  if (/^[A-Za-z]:[\\/]+$/.test(trimmed)) {
+    return `${trimmed[0].toUpperCase()}:\\`;
+  }
+  if (trimmed === '/' || trimmed === '\\') {
+    return trimmed;
+  }
+
+  return trimmed.replace(/[\\/]+$/, '');
+}
+
+function expandHomePath(value: string): string {
+  return value.startsWith('~') ? value.replace(/^~/, homedir()) : value;
+}
+
+async function canonicalizeOrPreservePath(rawPath: string): Promise<string> {
+  const normalized = normalizePath(expandHomePath(rawPath));
+  if (!normalized) {
+    return '';
+  }
+
+  try {
+    return await realpath(normalized);
+  } catch {
+    return normalized;
+  }
 }
 
 function dedupeAndCompactPaths(paths: string[]): string[] {
@@ -62,25 +107,39 @@ function dedupeAndCompactPaths(paths: string[]): string[] {
 }
 
 async function canonicalizePath(path: string): Promise<string> {
-  if (!path?.trim()) return '';
-  try {
-    return await realpath(path);
-  } catch {
-    return '';
-  }
+  return canonicalizeOrPreservePath(path);
 }
 
 async function canonicalizeAllowedPaths(paths: string[]): Promise<string[]> {
   const out: string[] = [];
   for (const p of paths) {
-    try {
-      const resolved = await realpath(p);
+    const resolved = await canonicalizeOrPreservePath(p);
+    if (resolved) {
       out.push(resolved);
-    } catch {
-      // ignore invalid paths
     }
   }
   return dedupeAndCompactPaths(out);
+}
+
+function mergePolicyInput(previous: SecurityPolicy, patch: Partial<SecurityPolicy>): SecurityPolicy {
+  return {
+    workspace: {
+      enabled: patch.workspace?.enabled ?? previous.workspace.enabled,
+      path: patch.workspace?.path ?? previous.workspace.path,
+      allowExec: patch.workspace?.allowExec ?? previous.workspace.allowExec,
+    },
+    prompt: {
+      enabled: patch.prompt?.enabled ?? previous.prompt.enabled,
+      allowedPaths:
+        patch.prompt?.allowedPaths !== undefined
+          ? patch.prompt.allowedPaths
+          : previous.prompt.allowedPaths,
+    },
+  };
+}
+
+function mergePolicySyncTargets(previous: SecurityPolicy, next: SecurityPolicy): string[] {
+  return dedupeAndCompactPaths([...previous.prompt.allowedPaths, ...next.prompt.allowedPaths]);
 }
 
 async function readOpenclawConfig(): Promise<Record<string, unknown>> {
@@ -229,84 +288,159 @@ function applyWorkspacePolicy(config: Record<string, unknown>, workspace: Worksp
   }
 }
 
-function renderPolicyMarkdown(policy: SecurityPolicy): string {
-  const lines = policy.prompt.allowedPaths.map((p) => `- ${p}`).join('\n');
+interface SecuritySyncOptions {
+  extraPromptPaths?: string[];
+}
+
+async function collectSecurityWorkspaces(
+  config: Record<string, unknown>,
+  policy: SecurityPolicy,
+  options: SecuritySyncOptions = {}
+): Promise<string[]> {
+  const agents = ensureObject(config, 'agents');
+  const defaults = ensureObject(agents, 'defaults');
+  const workspaces = new Set<string>();
+
+  const addWorkspace = async (value: unknown): Promise<void> => {
+    if (typeof value !== 'string') return;
+    const normalized = await canonicalizeOrPreservePath(value);
+    if (!normalized) return;
+    workspaces.add(normalized);
+  };
+
+  const { extraPromptPaths = [] } = options;
+
+  await addWorkspace(DEFAULT_WORKSPACE_POLICY_ROOT);
+  if (policy.workspace.enabled) {
+    await addWorkspace(policy.workspace.path);
+  }
+  await addWorkspace(defaults.workspace);
+
+  const list = Array.isArray(agents.list) ? agents.list : [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as Record<string, unknown>;
+    await addWorkspace(entry.workspace);
+  }
+
+  if (policy.prompt.enabled) {
+    for (const path of policy.prompt.allowedPaths) {
+      await addWorkspace(path);
+    }
+  }
+
+  for (const path of extraPromptPaths) {
+    await addWorkspace(path);
+  }
+
+  if (workspaces.size === 0) {
+    workspaces.add(DEFAULT_WORKSPACE_POLICY_ROOT);
+  }
+
+  return [...workspaces].sort((a, b) => a.localeCompare(b));
+}
+
+function renderPolicyLine(label: string, enabled: boolean): string {
+  return `- ${label}: ${enabled ? 'enabled' : 'disabled'}`;
+}
+
+function renderSecurityPolicyMarkdown(policy: SecurityPolicy): string {
+  const promptLines = policy.prompt.allowedPaths.map((p) => `- ${p}`).join('\n');
   return [
     '# SECURITY_POLICY.md',
     '',
-    '这是由 ClawClaw 安全页面自动生成的提示词安全策略。',
+    'This file is generated by ClawClaw to document current security policy.',
     '',
-    '## 允许目录（提示词层，多目录）',
-    lines || '- (未配置)',
+    '## Directory allowlist',
+    renderPolicyLine('status', policy.prompt.enabled),
+    policy.prompt.enabled ? promptLines || '- (none configured)' : '- not configured',
     '',
-    '## 规则',
-    '- 仅在上述目录中执行文件相关操作。',
-    '- 白名单外路径一律拒绝。',
-    '- 如用户要求跨目录操作，先明确说明风险并请求重新配置。',
-    '',
-    '## 工作空间硬限制（配置层）',
-    policy.workspace.enabled
-      ? `- 已启用：${policy.workspace.path}`
-      : '- 未启用（仅提示词限制）',
-    policy.workspace.allowExec
-      ? '- 允许 exec/process（高风险）'
-      : '- 禁止 exec/process，禁止 elevated',
+    '## Workspace policy',
+    policy.workspace.enabled ? `- enforced path: ${policy.workspace.path}` : '- disabled',
+    policy.workspace.allowExec ? '- exec/process allowed' : '- exec/process denied',
     '',
   ].join('\n');
 }
 
-function mergePolicySection(existing: string): string {
+function mergeAgentsSecuritySection(existing: string, policy: SecurityPolicy): string {
+  const promptPaths = policy.prompt.enabled
+    ? policy.prompt.allowedPaths.map((p) => `  - ${p}`).join('\n')
+    : '  - not configured';
+
   const section = [
     POLICY_BEGIN,
     '## Security Policy (Managed by ClawClaw)',
-    `- 必须先阅读并执行 \`${SECURITY_POLICY_FILE}\`。`,
-    '- 文件操作仅限安全策略中列出的允许目录。',
+    renderPolicyLine('directory allowlist', policy.prompt.enabled),
+    `- workspace policy: ${policy.workspace.enabled ? 'enabled' : 'disabled'}`,
+    `- workspace policy path: ${policy.workspace.enabled ? policy.workspace.path : 'N/A'}`,
+    `- exec/process allowed: ${policy.workspace.allowExec ? 'yes' : 'no'}`,
+    '- directory allowlist:',
+    `  - enabled: ${policy.prompt.enabled ? 'yes' : 'no'}`,
+    `  - allowed paths:\n${promptPaths}`,
     POLICY_END,
   ].join('\n');
 
   const begin = existing.indexOf(POLICY_BEGIN);
   const end = existing.indexOf(POLICY_END);
   if (begin !== -1 && end !== -1) {
-    return existing.slice(0, begin) + section + existing.slice(end + POLICY_END.length);
+    return `${existing.slice(0, begin)}${section}${existing.slice(end + POLICY_END.length)}`;
   }
   return `${existing.trimEnd()}\n\n${section}\n`;
 }
 
-async function syncPromptPolicyFiles(config: Record<string, unknown>, policy: SecurityPolicy): Promise<void> {
-  const agents = ensureObject(config, 'agents');
-  const defaults = ensureObject(agents, 'defaults');
-  const workspaces = new Set<string>();
+async function syncSecurityPolicyArtifacts(
+  config: Record<string, unknown>,
+  policy: SecurityPolicy,
+  options: SecuritySyncOptions = {}
+): Promise<SecuritySyncResult> {
+  const workspaces = await collectSecurityWorkspaces(config, policy, options);
+  const result: SecuritySyncResult = {
+    targets: [...workspaces],
+    succeeded: [],
+    skipped: [],
+    failures: [],
+  };
 
-  if (typeof defaults.workspace === 'string' && defaults.workspace.trim()) {
-    workspaces.add(defaults.workspace);
-  }
-
-  const list = Array.isArray(agents.list) ? agents.list : [];
-  for (const item of list) {
-    if (!item || typeof item !== 'object') continue;
-    const entry = item as Record<string, unknown>;
-    if (typeof entry.workspace === 'string' && entry.workspace.trim()) {
-      workspaces.add(entry.workspace);
+  for (const workspace of workspaces) {
+    const targetWorkspace = normalizePath(expandHomePath(workspace));
+    if (!targetWorkspace) {
+      result.failures.push({ workspace, file: SECURITY_POLICY_FILE, error: 'Invalid workspace path' });
+      continue;
     }
-  }
 
-  for (const ws of workspaces) {
+    const agentsPath = join(targetWorkspace, AGENTS_FILE);
+    const policyPath = join(targetWorkspace, SECURITY_POLICY_FILE);
+
     try {
-      await mkdir(ws, { recursive: true });
-      await writeFile(join(ws, SECURITY_POLICY_FILE), renderPolicyMarkdown(policy), 'utf8');
+      await mkdir(targetWorkspace, { recursive: true });
+      await writeFile(policyPath, renderSecurityPolicyMarkdown(policy), 'utf8');
 
-      const agentsPath = join(ws, AGENTS_FILE);
-      let existing = '';
+      let existingAgents = '# AGENTS.md\n';
       try {
-        existing = await readFile(agentsPath, 'utf8');
+        existingAgents = await readFile(agentsPath, 'utf8');
       } catch {
-        existing = '# AGENTS.md\n';
+        existingAgents = '# AGENTS.md\n';
       }
-      await writeFile(agentsPath, mergePolicySection(existing), 'utf8');
-    } catch {
-      // best effort
+
+      const mergedAgents = mergeAgentsSecuritySection(existingAgents, policy);
+      if (mergedAgents === existingAgents) {
+        result.skipped.push(agentsPath);
+      } else {
+        await writeFile(agentsPath, mergedAgents, 'utf8');
+      }
+
+      result.succeeded.push(targetWorkspace);
+    } catch (error) {
+      result.failures.push({
+        workspace: targetWorkspace,
+        file: AGENTS_FILE,
+        error: String(error),
+      });
+      logger.warn(`[security] Failed to sync policy docs for workspace: ${targetWorkspace}`, error);
     }
   }
+
+  return result;
 }
 
 function verifyAppliedConfig(config: Record<string, unknown>, policy: SecurityPolicy) {
@@ -324,12 +458,28 @@ function verifyAppliedConfig(config: Record<string, unknown>, policy: SecurityPo
 
   const issues: string[] = [];
   const shouldEnforce = policy.workspace.enabled;
-  if (shouldEnforce && !checks.fsWorkspaceOnly) issues.push('tools.fs.workspaceOnly 未生效');
+  if (shouldEnforce && !checks.fsWorkspaceOnly) issues.push('tools.fs.workspaceOnly is not effective');
   if (shouldEnforce && !policy.workspace.allowExec && !checks.execDenied) issues.push('tools.deny 缺少 exec');
   if (shouldEnforce && !policy.workspace.allowExec && !checks.processDenied) issues.push('tools.deny 缺少 process');
-  if (shouldEnforce && !checks.elevatedDisabled) issues.push('tools.elevated.enabled 未关闭');
+  if (shouldEnforce && !checks.elevatedDisabled) issues.push('tools.elevated.enabled is not disabled');
 
   return { checks, issues, ok: issues.length === 0 };
+}
+
+async function restartGatewayIfRunning(
+  ctx: HostApiContext
+): Promise<{ ok: boolean; error?: string }> {
+  if (ctx.gatewayManager.getStatus().state !== 'running') {
+    return { ok: true };
+  }
+
+  try {
+    await ctx.gatewayManager.restart();
+    return { ok: true };
+  } catch (error) {
+    logger.warn('[security] Failed to restart Gateway after syncing security policy', error);
+    return { ok: false, error: String(error) };
+  }
 }
 
 async function normalizePolicyInput(body: Partial<SecurityPolicy>): Promise<SecurityPolicy> {
@@ -376,8 +526,11 @@ export async function handleSecurityRoutes(
 
   if (url.pathname === '/api/security/apply' && req.method === 'POST') {
     try {
-      const current = ((await getSetting('securityPolicy')) || DEFAULT_POLICY) as SecurityPolicy;
-      const policy = await normalizePolicyInput(current);
+      const storedPolicy = await getSetting('securityPolicy');
+      const previousPolicy = await normalizePolicyInput(storedPolicy || DEFAULT_POLICY);
+      const payload = await parseJsonBody<Partial<SecurityPolicy>>(req);
+      const mergedPolicy = mergePolicyInput(previousPolicy, payload);
+      const policy = await normalizePolicyInput(mergedPolicy);
 
       if (policy.workspace.enabled && !policy.workspace.path) {
         sendJson(res, 400, { success: false, error: 'Workspace policy enabled but no valid workspace path.' });
@@ -395,16 +548,18 @@ export async function handleSecurityRoutes(
       removeManagedSecurityConfig(config);
       applyWorkspacePolicy(config, policy.workspace);
       await writeOpenclawConfig(config);
-      await syncPromptPolicyFiles(config, policy);
-
-      if (ctx.gatewayManager.getStatus().state === 'running') {
-        await ctx.gatewayManager.restart();
-      }
+      const syncPromptTargets = mergePolicySyncTargets(previousPolicy, policy);
+      const syncResult = await syncSecurityPolicyArtifacts(config, policy, {
+        extraPromptPaths: syncPromptTargets,
+      });
+      const gatewayRestart = await restartGatewayIfRunning(ctx);
 
       sendJson(res, 200, {
         success: true,
         applied: policy,
         verify: verifyAppliedConfig(config, policy),
+        sync: syncResult,
+        gatewayRestart,
       });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -417,14 +572,18 @@ export async function handleSecurityRoutes(
       const config = await readOpenclawConfig();
       removeManagedSecurityConfig(config);
       await writeOpenclawConfig(config);
+      const previousPolicy = await normalizePolicyInput(
+        (await getSetting('securityPolicy')) || DEFAULT_POLICY
+      );
+      const fallbackPromptPaths = previousPolicy.prompt.allowedPaths;
       await setSetting('securityPolicy', DEFAULT_POLICY);
-      await syncPromptPolicyFiles(config, DEFAULT_POLICY);
+      const syncResult = await syncSecurityPolicyArtifacts(config, DEFAULT_POLICY, {
+        extraPromptPaths: fallbackPromptPaths,
+      });
 
-      if (ctx.gatewayManager.getStatus().state === 'running') {
-        await ctx.gatewayManager.restart();
-      }
+      const gatewayRestart = await restartGatewayIfRunning(ctx);
 
-      sendJson(res, 200, { success: true });
+      sendJson(res, 200, { success: true, sync: syncResult, gatewayRestart });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }
@@ -433,3 +592,5 @@ export async function handleSecurityRoutes(
 
   return false;
 }
+
+

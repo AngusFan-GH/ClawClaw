@@ -196,6 +196,38 @@
     "devMode": "Developer Mode",
     "devModeDesc": "Show developer tools and shortcuts"
   },
+  "security": {
+    "title": "Directory Policy",
+    "loading": "Loading directory policy...",
+    "enableDirectoryPolicy": "Enable directory policy",
+    "enableDirectoryPolicyDesc": "Directory policy is enabled.",
+    "addAllowedDirectories": "Add allowed directory",
+    "noAllowedDirectory": "No allowed directory configured.",
+    "actions": {
+      "reload": "Reload",
+      "reset": "Reset"
+    },
+    "apply": "Apply",
+    "applying": "Applying...",
+    "lastApplied": "Last applied: {{time}}",
+    "summary": {
+      "disabled": "Directory policy is disabled.",
+      "enabled": "Directory policy is enabled for {{count}} directories."
+    },
+    "toasts": {
+      "loadFailed": "Load security policy failed",
+      "selectDirectoryFailed": "Select directory failed",
+      "applySuccess": "Security policy applied.",
+      "applyFailed": "Apply failed",
+      "resetSuccess": "Security policy reset.",
+      "resetFailed": "Reset failed",
+      "enableDirectoryPolicyFirst": "Please add at least one allowed directory before enable.",
+      "selectAllowedDirs": "Select allowed directories"
+    },
+    "dialog": {
+      "selectAllowedDirs": "Select allowed directories"
+    }
+  },
   "developer": {
     "title": "Developer",
     "description": "Advanced options for developers",

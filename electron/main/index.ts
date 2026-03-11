@@ -32,6 +32,8 @@ import { browserOAuthManager } from '../utils/browser-oauth';
 import { whatsAppLoginManager } from '../utils/whatsapp-login';
 import { syncAllProviderAuthToRuntime } from '../services/providers/provider-runtime-sync';
 
+const isDev = !app.isPackaged;
+
 // Disable GPU hardware acceleration globally for maximum stability across
 // all GPU configurations (no GPU, integrated, discrete).
 //
@@ -47,6 +49,11 @@ import { syncAllProviderAuthToRuntime } from '../services/providers/provider-run
 // Users who want GPU acceleration can pass `--enable-gpu` on the CLI or
 // set `"disable-hardware-acceleration": false` in the app config (future).
 app.disableHardwareAcceleration();
+
+// Avoid transient Chromium cache read failures in development hot-reload loops.
+if (isDev) {
+  app.commandLine.appendSwitch('disable-http-cache');
+}
 
 // On Linux, set CHROME_DESKTOP so Chromium can find the correct .desktop file.
 // On Wayland this maps the running window to clawclaw.desktop (→ icon + app grouping);
@@ -161,6 +168,12 @@ async function initialize(): Promise<void> {
   // Apply persisted proxy settings before creating windows or network requests.
   await applyProxySettings();
 
+  if (isDev) {
+    await session.defaultSession.clearCache().catch((error: unknown) => {
+      logger.warn('Failed to clear Chromium cache in dev mode:', error);
+    });
+  }
+
   // Set application menu
   createMenu();
 
@@ -192,6 +205,31 @@ async function initialize(): Promise<void> {
       callback({ responseHeaders: headers });
     }
   );
+
+  if (isDev) {
+    const devCsp = [
+      "default-src 'self' http://localhost:5173 ws://localhost:5173",
+      // Vite + React Fast Refresh injects inline preamble scripts in dev.
+      "script-src 'self' 'unsafe-inline' http://localhost:5173",
+      "style-src 'self' 'unsafe-inline' http://localhost:5173",
+      "img-src 'self' data: blob: http://localhost:5173",
+      "font-src 'self' data: http://localhost:5173",
+      "connect-src 'self' ws://localhost:5173 http://localhost:5173 http://127.0.0.1:18789 http://localhost:18789",
+      "worker-src 'self' blob:",
+    ].join('; ');
+
+    session.defaultSession.webRequest.onHeadersReceived(
+      { urls: ['http://localhost:5173/*'] },
+      (details, callback) => {
+        callback({
+          responseHeaders: {
+            ...details.responseHeaders,
+            'Content-Security-Policy': [devCsp],
+          },
+        });
+      }
+    );
+  }
 
   // Register IPC handlers
   registerIpcHandlers(gatewayManager, clawHubService, mainWindow);
