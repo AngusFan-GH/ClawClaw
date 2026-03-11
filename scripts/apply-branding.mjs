@@ -22,7 +22,6 @@ function replaceInFile(file, replacers) {
 // 1) electron-builder metadata
 replaceInFile(path.join(root, 'electron-builder.yml'), [
   [/^productName:\s.*$/m, `productName: ${productName}`],
-  [/^\s*publisherName:\s.*$/m, `  publisherName: ${companyEn}`],
   [
     /^copyright:\s.*$/m,
     `copyright: Copyright © ${copyrightYear} ${companyEn} (${companyZh}). All rights reserved.`,
@@ -32,8 +31,8 @@ replaceInFile(path.join(root, 'electron-builder.yml'), [
 // 2) NSIS copy
 replaceInFile(path.join(root, 'scripts/installer.nsh'), [
   [
-    /!insertmacro MUI_HEADER_TEXT "Welcome to \$\{PRODUCT_NAME\}" ".*"/,
-    `!insertmacro MUI_HEADER_TEXT "Welcome to \${PRODUCT_NAME}" "Your desktop AI copilot by ${companyEn}"`,
+    /!define MUI_WELCOMEPAGE_TEXT ".*"/,
+    `!define MUI_WELCOMEPAGE_TEXT "Your desktop AI copilot by ${companyEn}"`,
   ],
 ]);
 
