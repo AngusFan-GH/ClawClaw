@@ -1,5 +1,5 @@
 import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
-import { homedir, platform } from 'node:os';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { HostApiContext } from '../context';
@@ -8,18 +8,16 @@ import { parseJsonBody, sendJson } from '../route-utils';
 
 const OPENCLAW_CONFIG_PATH = join(homedir(), '.openclaw', 'openclaw.json');
 
-type SecurityMode = 'workspace-only' | 'strict-sandbox';
-
 interface SecurityPolicy {
   enabled: boolean;
-  mode: SecurityMode;
   allowedPaths: string[];
+  allowExec: boolean;
 }
 
 const DEFAULT_POLICY: SecurityPolicy = {
   enabled: false,
-  mode: 'workspace-only',
   allowedPaths: [],
+  allowExec: false,
 };
 
 function normalizePath(value: string): string {
@@ -36,11 +34,7 @@ function dedupeAndCompactPaths(paths: string[]): string[] {
     const lower = current.toLowerCase();
     const covered = compacted.some((base) => {
       const baseLower = base.toLowerCase();
-      return (
-        lower === baseLower ||
-        lower.startsWith(`${baseLower}\\`) ||
-        lower.startsWith(`${baseLower}/`)
-      );
+      return lower === baseLower || lower.startsWith(`${baseLower}\\`) || lower.startsWith(`${baseLower}/`);
     });
     if (!covered) compacted.push(current);
   }
@@ -100,20 +94,12 @@ function removeFromArray(target: Record<string, unknown>, key: string, values: s
   target[key] = current.filter((item) => !valueSet.has(item));
 }
 
-function restoreManagedAgentOverrides(config: Record<string, unknown>): void {
+function restoreManagedAgentWorkspaces(config: Record<string, unknown>): void {
   const clawclaw = ensureObject(config, 'clawclaw');
   const security = ensureObject(clawclaw, 'security');
-  const originalWorkspaces =
+  const original =
     security.originalAgentWorkspaces && typeof security.originalAgentWorkspaces === 'object'
       ? (security.originalAgentWorkspaces as Record<string, unknown>)
-      : {};
-  const originalSandboxes =
-    security.originalAgentSandboxes && typeof security.originalAgentSandboxes === 'object'
-      ? (security.originalAgentSandboxes as Record<string, unknown>)
-      : {};
-  const originalAgentTools =
-    security.originalAgentTools && typeof security.originalAgentTools === 'object'
-      ? (security.originalAgentTools as Record<string, unknown>)
       : {};
 
   const agents = ensureObject(config, 'agents');
@@ -123,38 +109,17 @@ function restoreManagedAgentOverrides(config: Record<string, unknown>): void {
     const entry = item as Record<string, unknown>;
     const id = typeof entry.id === 'string' ? entry.id : null;
     if (!id) continue;
-
-    if (Object.prototype.hasOwnProperty.call(originalWorkspaces, id)) {
-      const restoredWorkspace = originalWorkspaces[id];
-      if (typeof restoredWorkspace === 'string' && restoredWorkspace.trim()) {
-        entry.workspace = restoredWorkspace;
+    if (Object.prototype.hasOwnProperty.call(original, id)) {
+      const restored = original[id];
+      if (typeof restored === 'string' && restored.trim()) {
+        entry.workspace = restored;
       } else {
         delete entry.workspace;
-      }
-    }
-
-    if (Object.prototype.hasOwnProperty.call(originalSandboxes, id)) {
-      const restoredSandbox = originalSandboxes[id];
-      if (restoredSandbox && typeof restoredSandbox === 'object') {
-        entry.sandbox = restoredSandbox;
-      } else {
-        delete entry.sandbox;
-      }
-    }
-
-    if (Object.prototype.hasOwnProperty.call(originalAgentTools, id)) {
-      const restoredTools = originalAgentTools[id];
-      if (restoredTools && typeof restoredTools === 'object') {
-        entry.tools = restoredTools;
-      } else {
-        delete entry.tools;
       }
     }
   }
 
   delete security.originalAgentWorkspaces;
-  delete security.originalAgentSandboxes;
-  delete security.originalAgentTools;
 }
 
 function removeManagedSecurityConfig(config: Record<string, unknown>): void {
@@ -162,7 +127,7 @@ function removeManagedSecurityConfig(config: Record<string, unknown>): void {
   const defaults = ensureObject(agents, 'defaults');
   const tools = ensureObject(config, 'tools');
 
-  restoreManagedAgentOverrides(config);
+  restoreManagedAgentWorkspaces(config);
 
   const fsCfg = ensureObject(tools, 'fs');
   delete fsCfg.workspaceOnly;
@@ -175,14 +140,6 @@ function removeManagedSecurityConfig(config: Record<string, unknown>): void {
 
   const elevated = ensureObject(tools, 'elevated');
   delete elevated.enabled;
-
-  const sandbox = ensureObject(defaults, 'sandbox');
-  delete sandbox.mode;
-  delete sandbox.scope;
-  delete sandbox.workspaceAccess;
-
-  const docker = ensureObject(sandbox, 'docker');
-  delete docker.binds;
 
   const clawclaw = ensureObject(config, 'clawclaw');
   const security = ensureObject(clawclaw, 'security');
@@ -203,46 +160,15 @@ function applySecurityPolicyToConfig(config: Record<string, unknown>, policy: Se
 
   defaults.workspace = policy.allowedPaths[0];
 
-  // Force every configured agent onto the same restricted boundary.
   const list = Array.isArray(agents.list) ? agents.list : [];
   const originalAgentWorkspaces: Record<string, string | null> = {};
-  const originalAgentSandboxes: Record<string, Record<string, unknown> | null> = {};
-  const originalAgentTools: Record<string, Record<string, unknown> | null> = {};
   for (const item of list) {
     if (!item || typeof item !== 'object') continue;
     const entry = item as Record<string, unknown>;
     const id = typeof entry.id === 'string' ? entry.id : null;
     if (!id) continue;
-
     originalAgentWorkspaces[id] = typeof entry.workspace === 'string' ? entry.workspace : null;
-    originalAgentSandboxes[id] =
-      entry.sandbox && typeof entry.sandbox === 'object'
-        ? ({ ...(entry.sandbox as Record<string, unknown>) } as Record<string, unknown>)
-        : null;
-    originalAgentTools[id] =
-      entry.tools && typeof entry.tools === 'object'
-        ? ({ ...(entry.tools as Record<string, unknown>) } as Record<string, unknown>)
-        : null;
-
     entry.workspace = policy.allowedPaths[0];
-
-    const canUseStrictSandbox = platform() !== 'win32' && policy.mode === 'strict-sandbox';
-    if (canUseStrictSandbox) {
-      const agentSandbox = ensureObject(entry, 'sandbox');
-      agentSandbox.mode = 'all';
-      agentSandbox.scope = 'agent';
-      agentSandbox.workspaceAccess = 'none';
-      const agentDocker = ensureObject(agentSandbox, 'docker');
-      agentDocker.binds = policy.allowedPaths.map((hostPath, index) => `${hostPath}:/allowed/${index}:rw`);
-    }
-
-    const agentTools = ensureObject(entry, 'tools');
-    const agentDeny = ensureStringArray(agentTools, 'deny');
-    for (const item of ['exec', 'process']) {
-      if (!agentDeny.includes(item)) agentDeny.push(item);
-    }
-    const agentElevated = ensureObject(agentTools, 'elevated');
-    agentElevated.enabled = false;
   }
 
   const fsCfg = ensureObject(tools, 'fs');
@@ -252,39 +178,47 @@ function applySecurityPolicyToConfig(config: Record<string, unknown>, policy: Se
   const applyPatchCfg = ensureObject(execCfg, 'applyPatch');
   applyPatchCfg.workspaceOnly = true;
 
-  const deny = ensureStringArray(tools, 'deny');
-  for (const item of ['exec', 'process']) {
-    if (!deny.includes(item)) deny.push(item);
+  if (!policy.allowExec) {
+    const deny = ensureStringArray(tools, 'deny');
+    for (const item of ['exec', 'process']) {
+      if (!deny.includes(item)) deny.push(item);
+    }
   }
 
   const elevated = ensureObject(tools, 'elevated');
   elevated.enabled = false;
 
-  // Sandbox is optional and can break startup on Windows/dev setups without Docker.
-  // Keep the default UX simple: always enforce host-side hardening above,
-  // and only apply sandbox binds on non-Windows when strict mode is explicitly chosen.
-  const canUseStrictSandbox = platform() !== 'win32' && policy.mode === 'strict-sandbox';
-  if (canUseStrictSandbox) {
-    const sandbox = ensureObject(defaults, 'sandbox');
-    sandbox.mode = 'all';
-    sandbox.scope = 'agent';
-    sandbox.workspaceAccess = 'none';
-
-    const docker = ensureObject(sandbox, 'docker');
-    docker.binds = policy.allowedPaths.map((hostPath, index) => `${hostPath}:/allowed/${index}:rw`);
-  }
-
   const clawclaw = ensureObject(config, 'clawclaw');
   const security = ensureObject(clawclaw, 'security');
   security.managed = true;
   security.lastAppliedAt = new Date().toISOString();
-  security.mode = policy.mode;
   security.allowedPaths = policy.allowedPaths;
+  security.allowExec = policy.allowExec;
   security.originalAgentWorkspaces = originalAgentWorkspaces;
-  security.originalAgentSandboxes = originalAgentSandboxes;
-  security.originalAgentTools = originalAgentTools;
 
   return config;
+}
+
+function verifyAppliedConfig(config: Record<string, unknown>, policy: SecurityPolicy) {
+  const tools = ensureObject(config, 'tools');
+  const fsCfg = ensureObject(tools, 'fs');
+  const deny = ensureStringArray(tools, 'deny');
+  const elevated = ensureObject(tools, 'elevated');
+
+  const checks = {
+    fsWorkspaceOnly: fsCfg.workspaceOnly === true,
+    execDenied: deny.includes('exec'),
+    processDenied: deny.includes('process'),
+    elevatedDisabled: elevated.enabled === false,
+  };
+
+  const issues: string[] = [];
+  if (!checks.fsWorkspaceOnly) issues.push('tools.fs.workspaceOnly 未生效');
+  if (!policy.allowExec && !checks.execDenied) issues.push('tools.deny 缺少 exec');
+  if (!policy.allowExec && !checks.processDenied) issues.push('tools.deny 缺少 process');
+  if (!checks.elevatedDisabled) issues.push('tools.elevated.enabled 未关闭');
+
+  return { checks, issues, ok: issues.length === 0 };
 }
 
 export async function handleSecurityRoutes(
@@ -301,12 +235,12 @@ export async function handleSecurityRoutes(
 
   if (url.pathname === '/api/security/policy' && req.method === 'PUT') {
     try {
-      const body = await parseJsonBody<SecurityPolicy>(req);
+      const body = await parseJsonBody<Partial<SecurityPolicy>>(req);
       const canonicalPaths = await canonicalizeAllowedPaths(body.allowedPaths || []);
       const policy: SecurityPolicy = {
         enabled: !!body.enabled,
-        mode: body.mode === 'strict-sandbox' ? 'strict-sandbox' : 'workspace-only',
         allowedPaths: canonicalPaths,
+        allowExec: !!body.allowExec,
       };
       await setSetting('securityPolicy', policy);
       sendJson(res, 200, { success: true, policy });
@@ -321,7 +255,7 @@ export async function handleSecurityRoutes(
       const current = ((await getSetting('securityPolicy')) || DEFAULT_POLICY) as SecurityPolicy;
       const policy: SecurityPolicy = {
         enabled: !!current.enabled,
-        mode: current.mode === 'strict-sandbox' ? 'strict-sandbox' : 'workspace-only',
+        allowExec: !!current.allowExec,
         allowedPaths: await canonicalizeAllowedPaths(current.allowedPaths || []),
       };
 
@@ -340,26 +274,29 @@ export async function handleSecurityRoutes(
         await ctx.gatewayManager.restart();
       }
 
-      const strictSandboxActive = policy.enabled && policy.mode === 'strict-sandbox' && platform() !== 'win32';
-      const warning =
-        policy.enabled && policy.mode === 'strict-sandbox' && platform() === 'win32'
-          ? 'Windows 环境默认降级为工作区硬限制（未启用 Docker 严格沙箱），以避免 Gateway 启动失败。'
-          : undefined;
-
       sendJson(res, 200, {
         success: true,
-        warning,
-        applied: {
-          enabled: policy.enabled,
-          mode: strictSandboxActive ? 'strict-sandbox' : 'workspace-only',
-          allowedPaths: policy.allowedPaths,
-          harden: {
-            fsWorkspaceOnly: policy.enabled,
-            denyExecProcess: policy.enabled,
-            disableElevated: policy.enabled,
-          },
-        },
+        applied: policy,
+        verify: verifyAppliedConfig(updated, policy),
       });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/security/reset' && req.method === 'POST') {
+    try {
+      const config = await readOpenclawConfig();
+      removeManagedSecurityConfig(config);
+      await writeOpenclawConfig(config);
+      await setSetting('securityPolicy', DEFAULT_POLICY);
+
+      if (ctx.gatewayManager.getStatus().state === 'running') {
+        await ctx.gatewayManager.restart();
+      }
+
+      sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

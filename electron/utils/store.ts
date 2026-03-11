@@ -21,8 +21,8 @@ function generateToken(): string {
  */
 export interface SecurityPolicy {
   enabled: boolean;
-  mode: 'workspace-only' | 'strict-sandbox';
   allowedPaths: string[];
+  allowExec: boolean;
 }
 
 export interface AppSettings {
@@ -101,8 +101,8 @@ const defaults: AppSettings = {
   // Security
   securityPolicy: {
     enabled: false,
-    mode: 'workspace-only',
     allowedPaths: [],
+    allowExec: false,
   },
 };
 

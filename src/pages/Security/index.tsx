@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ShieldCheck, FolderPlus, Trash2, RefreshCw, ShieldAlert } from 'lucide-react';
+import { ShieldCheck, FolderPlus, Trash2, RefreshCw, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -7,29 +7,27 @@ import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { toast } from 'sonner';
 
-type SecurityMode = 'workspace-only' | 'strict-sandbox';
-
 interface SecurityPolicy {
   enabled: boolean;
-  mode: SecurityMode;
   allowedPaths: string[];
+  allowExec: boolean;
 }
 
-interface AppliedSnapshot {
-  enabled: boolean;
-  mode: SecurityMode;
-  allowedPaths: string[];
-  harden?: {
+interface VerifyState {
+  ok: boolean;
+  issues: string[];
+  checks: {
     fsWorkspaceOnly: boolean;
-    denyExecProcess: boolean;
-    disableElevated: boolean;
+    execDenied: boolean;
+    processDenied: boolean;
+    elevatedDisabled: boolean;
   };
 }
 
 const defaultPolicy: SecurityPolicy = {
   enabled: false,
-  mode: 'workspace-only',
   allowedPaths: [],
+  allowExec: false,
 };
 
 function normalizePath(value: string): string {
@@ -62,7 +60,8 @@ export function Security() {
   const [saving, setSaving] = useState(false);
   const [applying, setApplying] = useState(false);
   const [policy, setPolicy] = useState<SecurityPolicy>(defaultPolicy);
-  const [lastApplied, setLastApplied] = useState<AppliedSnapshot | null>(null);
+  const [verify, setVerify] = useState<VerifyState | null>(null);
+  const [lastAppliedAt, setLastAppliedAt] = useState<string | null>(null);
 
   const loadPolicy = useCallback(async () => {
     setLoading(true);
@@ -70,9 +69,10 @@ export function Security() {
       const data = await hostApiFetch<SecurityPolicy>('/api/security/policy');
       setPolicy({
         enabled: !!data.enabled,
-        mode: data.mode === 'strict-sandbox' ? 'strict-sandbox' : 'workspace-only',
         allowedPaths: compactPaths(data.allowedPaths || []),
+        allowExec: !!data.allowExec,
       });
+      setVerify(null);
     } catch (error) {
       toast.error(`加载安全策略失败: ${String(error)}`);
     } finally {
@@ -122,7 +122,7 @@ export function Security() {
         body: JSON.stringify(payload),
       });
       setPolicy(payload);
-      toast.success('安全策略已保存');
+      toast.success('策略已保存');
     } catch (error) {
       toast.error(`保存失败: ${String(error)}`);
     } finally {
@@ -132,8 +132,8 @@ export function Security() {
 
   const applyPolicy = useCallback(async () => {
     const normalized = compactPaths(policy.allowedPaths);
-    if (normalized.length > 0 && !policy.enabled) {
-      toast.error('你已配置目录，但“启用目录访问限制”是关闭状态。请先开启再应用。');
+    if (policy.enabled && normalized.length === 0) {
+      toast.error('启用白名单时必须至少配置一个目录。');
       return;
     }
 
@@ -141,24 +141,15 @@ export function Security() {
     try {
       await hostApiFetch('/api/security/policy', {
         method: 'PUT',
-        body: JSON.stringify({
-          ...policy,
-          allowedPaths: normalized,
-        }),
+        body: JSON.stringify({ ...policy, allowedPaths: normalized }),
       });
 
-      const applyResult = await hostApiFetch<{
-        success: boolean;
-        warning?: string;
-        applied?: AppliedSnapshot;
-      }>('/api/security/apply', { method: 'POST' });
-      if (applyResult.applied) {
-        setLastApplied(applyResult.applied);
-        setPolicy((prev) => ({ ...prev, mode: applyResult.applied!.mode }));
-      }
-      if (applyResult.warning) {
-        toast.warning(applyResult.warning);
-      }
+      const result = await hostApiFetch<{ success: boolean; verify?: VerifyState }>(
+        '/api/security/apply',
+        { method: 'POST' }
+      );
+      setVerify(result.verify ?? null);
+      setLastAppliedAt(new Date().toLocaleString());
       toast.success('策略已应用并重启 Gateway');
     } catch (error) {
       toast.error(`应用失败: ${String(error)}`);
@@ -167,34 +158,26 @@ export function Security() {
     }
   }, [policy]);
 
-  const hasPaths = policy.allowedPaths.length > 0;
-  const canApply = policy.enabled ? hasPaths : true;
-
-  const modeDescription = useMemo(() => {
-    if (policy.mode === 'strict-sandbox') {
-      return '严格沙箱：工具运行在容器中，仅挂载你选择的目录（更安全，兼容性要求更高）';
+  const resetPolicy = useCallback(async () => {
+    setApplying(true);
+    try {
+      await hostApiFetch('/api/security/reset', { method: 'POST' });
+      setPolicy(defaultPolicy);
+      setVerify(null);
+      setLastAppliedAt(new Date().toLocaleString());
+      toast.success('已恢复默认策略并重启 Gateway');
+    } catch (error) {
+      toast.error(`恢复默认失败: ${String(error)}`);
+    } finally {
+      setApplying(false);
     }
-    return '工作区限制：仅限制文件工具到允许目录（兼容性更好）';
-  }, [policy.mode]);
+  }, []);
 
-  const effectivePreview = useMemo(() => {
-    const allowedPaths = compactPaths(policy.allowedPaths);
-    const enabled = policy.enabled && allowedPaths.length > 0;
-    return {
-      enabled,
-      mode: policy.mode,
-      allowedPaths,
-      harden: {
-        fsWorkspaceOnly: enabled,
-        denyExecProcess: enabled,
-        disableElevated: enabled,
-      },
-      workspace: enabled ? allowedPaths[0] : '(未启用)',
-      sandboxBinds:
-        enabled && policy.mode === 'strict-sandbox'
-          ? allowedPaths.map((hostPath, index) => `${hostPath}:/allowed/${index}:rw`)
-          : [],
-    };
+  const hasPaths = policy.allowedPaths.length > 0;
+
+  const summary = useMemo(() => {
+    if (!policy.enabled) return '当前：白名单未启用';
+    return `当前：已启用白名单（${policy.allowedPaths.length} 个目录）${policy.allowExec ? '，允许 exec/process' : '，已禁用 exec/process'}`;
   }, [policy]);
 
   if (loading) {
@@ -213,16 +196,14 @@ export function Security() {
           <ShieldCheck className="h-6 w-6" />
           安全策略
         </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          控制 OpenClaw 可访问的本地目录范围。建议先从“工作区限制”模式开始。
-        </p>
+        <p className="text-sm text-muted-foreground mt-1">{summary}</p>
       </div>
 
       <div className="rounded-xl border p-4 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-base">启用目录访问限制</Label>
-            <p className="text-xs text-muted-foreground mt-1">关闭后，不会向 openclaw.json 写入新的限制策略。</p>
+            <Label className="text-base">启用目录白名单</Label>
+            <p className="text-xs text-muted-foreground mt-1">开启后仅允许访问你配置的目录。</p>
           </div>
           <Switch
             checked={policy.enabled}
@@ -230,14 +211,23 @@ export function Security() {
           />
         </div>
 
-        <div className="space-y-2">
-          <Label className="text-base">防护模式</Label>
-          <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
-            当前采用简化模式：优先启用“工作区硬限制”（稳定）。
-            <br />
-            严格 Docker 沙箱仅在非 Windows 且环境可用时自动启用。
+        <div className="flex items-center justify-between">
+          <div>
+            <Label className="text-base">允许执行命令（高级）</Label>
+            <p className="text-xs text-muted-foreground mt-1">
+              默认关闭。关闭时自动禁用 exec/process/elevated，安全性更高。
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground">{modeDescription}</p>
+          <Switch
+            checked={policy.allowExec}
+            onCheckedChange={(checked) => {
+              if (checked) {
+                const ok = window.confirm('开启后会放开命令执行能力，存在越权风险。确认继续？');
+                if (!ok) return;
+              }
+              setPolicy((prev) => ({ ...prev, allowExec: checked }));
+            }}
+          />
         </div>
       </div>
 
@@ -245,9 +235,7 @@ export function Security() {
         <div className="flex items-center justify-between">
           <div>
             <Label className="text-base">允许目录（可多选）</Label>
-            <p className="text-xs text-muted-foreground mt-1">
-              自动去重并折叠嵌套目录（父目录优先）。
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">自动去重并折叠嵌套目录（父目录优先）。</p>
           </div>
           <Button variant="outline" onClick={addDirectory}>
             <FolderPlus className="h-4 w-4 mr-2" />
@@ -256,9 +244,9 @@ export function Security() {
         </div>
 
         <div className="space-y-2">
-          {policy.allowedPaths.length === 0 ? (
+          {!hasPaths ? (
             <div className="text-sm text-muted-foreground rounded-lg border border-dashed p-4">
-              还没有允许目录。至少添加一个目录后再启用策略。
+              暂无目录。
             </div>
           ) : (
             policy.allowedPaths.map((path) => (
@@ -273,60 +261,34 @@ export function Security() {
         </div>
       </div>
 
-      <div className="rounded-xl border p-4 space-y-3">
-        <Label className="text-base">策略预览（应用后）</Label>
-        <div className="text-sm space-y-1 text-muted-foreground">
-          <p>状态：{effectivePreview.enabled ? '启用' : '未启用'}</p>
-          <p>模式：{effectivePreview.mode === 'strict-sandbox' ? '严格沙箱' : '工作区限制'}</p>
-          <p>Workspace：{effectivePreview.workspace}</p>
-          <p>
-            硬化开关：
-            fs.workspaceOnly={String(effectivePreview.harden.fsWorkspaceOnly)}，deny(exec/process)
-            ={String(effectivePreview.harden.denyExecProcess)}，elevated.disabled=
-            {String(effectivePreview.harden.disableElevated)}
-          </p>
-          {effectivePreview.sandboxBinds.length > 0 && (
-            <div>
-              <p>Sandbox binds：</p>
-              <ul className="list-disc pl-5">
-                {effectivePreview.sandboxBinds.map((bind) => (
-                  <li key={bind} className="break-all font-mono text-xs">
-                    {bind}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+      {policy.enabled && !hasPaths && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm flex gap-2">
+          <AlertTriangle className="h-4 w-4 mt-0.5" />
+          启用白名单时必须至少配置一个目录。
         </div>
-      </div>
+      )}
 
-      {lastApplied && (
-        <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-4 space-y-2">
-          <Label className="text-base">最近一次生效快照</Label>
-          <p className="text-sm text-muted-foreground">
-            状态：{lastApplied.enabled ? '启用' : '未启用'} / 模式：
-            {lastApplied.mode === 'strict-sandbox' ? '严格沙箱' : '工作区限制'}
-          </p>
-          {lastApplied.allowedPaths.length > 0 && (
+      {verify && (
+        <div
+          className={`rounded-xl border p-4 space-y-2 ${
+            verify.ok ? 'border-green-500/40 bg-green-500/5' : 'border-red-500/40 bg-red-500/5'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className={`h-4 w-4 ${verify.ok ? 'text-green-500' : 'text-red-500'}`} />
+            <span className="text-sm font-medium">配置自检：{verify.ok ? '通过' : '失败'}</span>
+          </div>
+          {!verify.ok && (
             <ul className="list-disc pl-5 text-xs text-muted-foreground">
-              {lastApplied.allowedPaths.map((p) => (
-                <li key={p} className="break-all font-mono">
-                  {p}
-                </li>
+              {verify.issues.map((issue) => (
+                <li key={issue}>{issue}</li>
               ))}
             </ul>
           )}
         </div>
       )}
 
-      {policy.enabled && !hasPaths && (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm flex gap-2">
-          <ShieldAlert className="h-4 w-4 mt-0.5" />
-          启用了限制但未配置任何目录。请先添加允许目录。
-        </div>
-      )}
-
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <Button variant="outline" onClick={() => void loadPolicy()}>
           <RefreshCw className="h-4 w-4 mr-2" />
           重新加载
@@ -334,9 +296,13 @@ export function Security() {
         <Button onClick={() => void savePolicy()} disabled={saving}>
           {saving ? '保存中...' : '保存策略'}
         </Button>
-        <Button onClick={() => void applyPolicy()} disabled={!canApply || applying}>
-          {applying ? '应用中...' : '应用并重启 Gateway'}
+        <Button onClick={() => void applyPolicy()} disabled={applying || (policy.enabled && !hasPaths)}>
+          {applying ? '应用中...' : '应用策略'}
         </Button>
+        <Button variant="destructive" onClick={() => void resetPolicy()} disabled={applying}>
+          恢复默认
+        </Button>
+        {lastAppliedAt && <span className="text-xs text-muted-foreground self-center">上次应用：{lastAppliedAt}</span>}
       </div>
     </div>
   );
