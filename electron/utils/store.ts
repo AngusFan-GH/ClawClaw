@@ -19,6 +19,12 @@ function generateToken(): string {
 /**
  * Application settings schema
  */
+export interface SecurityPolicy {
+  enabled: boolean;
+  mode: 'workspace-only' | 'strict-sandbox';
+  allowedPaths: string[];
+}
+
 export interface AppSettings {
   // General
   theme: 'light' | 'dark' | 'system';
@@ -51,6 +57,9 @@ export interface AppSettings {
   selectedBundles: string[];
   enabledSkills: string[];
   disabledSkills: string[];
+
+  // Security
+  securityPolicy: SecurityPolicy;
 }
 
 /**
@@ -88,6 +97,13 @@ const defaults: AppSettings = {
   selectedBundles: ['productivity', 'developer'],
   enabledSkills: [],
   disabledSkills: [],
+
+  // Security
+  securityPolicy: {
+    enabled: false,
+    mode: 'workspace-only',
+    allowedPaths: [],
+  },
 };
 
 /**
