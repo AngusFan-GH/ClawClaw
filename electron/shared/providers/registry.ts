@@ -13,7 +13,7 @@ export const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     placeholder: 'Optional',
     model: 'OpenAI-Compatible',
     requiresApiKey: false,
-    defaultBaseUrl: 'http://127.0.0.1:1234/v1',
+    defaultBaseUrl: '',
     showBaseUrl: true,
     showModelId: true,
     modelIdPlaceholder: 'local-model-id',

@@ -5,8 +5,10 @@
  */
 import { RefreshCw, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useChatStore } from '@/stores/chat';
+import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
 
@@ -15,10 +17,34 @@ export function ChatToolbar() {
   const loading = useChatStore((s) => s.loading);
   const showThinking = useChatStore((s) => s.showThinking);
   const toggleThinking = useChatStore((s) => s.toggleThinking);
-  const { t } = useTranslation('chat');
+  const gatewayStatus = useGatewayStore((s) => s.status);
+  const { t } = useTranslation(['chat', 'common']);
+
+  const gatewayStatusLabel =
+    gatewayStatus.state === 'running'
+      ? t('common:status.connected')
+      : gatewayStatus.state === 'error'
+        ? t('common:status.error')
+        : gatewayStatus.state === 'starting'
+          ? t('common:status.loading')
+          : t('common:status.disconnected');
 
   return (
     <div className="flex items-center gap-2">
+      <Badge
+        variant="secondary"
+        className={cn(
+          'h-8 rounded-[10px] border px-3 text-[12px]',
+          gatewayStatus.state === 'running'
+            ? 'border-green-500/20 bg-green-500/10 text-green-600 dark:text-green-500'
+            : gatewayStatus.state === 'error'
+              ? 'border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-500'
+              : 'border-black/10 bg-white/80 text-muted-foreground dark:border-white/10 dark:bg-white/[0.06]'
+        )}
+      >
+        {gatewayStatusLabel}
+      </Badge>
+
       {/* Refresh */}
       <Tooltip>
         <TooltipTrigger asChild>

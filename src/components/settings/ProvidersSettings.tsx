@@ -452,20 +452,35 @@ function ProviderCard({
   const currentLabelClasses = isDefault ? "text-[13px] text-muted-foreground" : labelClasses;
   const currentSectionLabelClasses = isDefault ? "text-[14px] font-bold text-foreground/80" : labelClasses;
   const vendorDisplayName = vendor?.name || account.vendorId;
-  const showVendorName = account.label.trim().toLowerCase() !== vendorDisplayName.trim().toLowerCase();
+  const showVendorName =
+    account.vendorId !== 'local-model'
+    && account.label.trim().toLowerCase() !== vendorDisplayName.trim().toLowerCase();
 
   return (
     <div
+      role={!isEditing && !isDefault ? 'button' : undefined}
+      tabIndex={!isEditing && !isDefault ? 0 : undefined}
+      onClick={!isEditing && !isDefault ? onSetDefault : undefined}
+      onKeyDown={
+        !isEditing && !isDefault
+          ? (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onSetDefault();
+              }
+            }
+          : undefined
+      }
       className={cn(
-        "group flex flex-col p-4 rounded-2xl transition-all relative overflow-hidden",
+        "flex flex-col p-4 rounded-2xl transition-all relative overflow-hidden",
         isDefault
           ? "bg-white dark:bg-accent border border-black/10 dark:border-white/10 shadow-sm"
-          : "bg-transparent border border-black/10 dark:border-white/10"
+          : "bg-transparent border border-black/10 dark:border-white/10 cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
       )}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className={cn("h-[42px] w-[42px] shrink-0 flex items-center justify-center text-foreground border border-black/5 dark:border-white/10 rounded-full shadow-sm group-hover:scale-105 transition-transform", isDefault ? "bg-black/5 dark:bg-white/5" : "bg-white dark:bg-accent")}>
+          <div className={cn("h-[42px] w-[42px] shrink-0 flex items-center justify-center text-foreground border border-black/5 dark:border-white/10 rounded-full shadow-sm transition-transform", isDefault ? "bg-black/5 dark:bg-white/5" : "bg-white dark:bg-accent")}>
             {getProviderIconUrl(account.vendorId) ? (
               <img src={getProviderIconUrl(account.vendorId)} alt={typeInfo?.name || account.vendorId} className={cn('h-5 w-5', shouldInvertInDark(account.vendorId) && 'dark:invert')} />
             ) : (
@@ -523,23 +538,15 @@ function ProviderCard({
         </div>
 
         {!isEditing && (
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            {!isDefault && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-full text-muted-foreground hover:text-blue-600 hover:bg-white dark:hover:bg-[#1a1a19] shadow-sm"
-                onClick={onSetDefault}
-                title={t('aiProviders.card.setDefault')}
-              >
-                <Check className="h-4 w-4" />
-              </Button>
-            )}
+          <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="icon"
               className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-white dark:hover:bg-[#1a1a19] shadow-sm"
-              onClick={onEdit}
+              onClick={(event) => {
+                event.stopPropagation();
+                onEdit();
+              }}
               title={t('aiProviders.card.editKey')}
             >
               <Edit className="h-4 w-4" />
@@ -548,7 +555,10 @@ function ProviderCard({
               variant="ghost"
               size="icon"
               className="h-8 w-8 rounded-full text-muted-foreground hover:text-destructive hover:bg-white dark:hover:bg-[#1a1a19] shadow-sm"
-              onClick={onDelete}
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete();
+              }}
               title={t('aiProviders.card.delete')}
             >
               <Trash2 className="h-4 w-4" />

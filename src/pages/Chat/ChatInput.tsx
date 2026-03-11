@@ -13,7 +13,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { hostApiFetch } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
-import { useGatewayStore } from '@/stores/gateway';
 import { useTranslation } from 'react-i18next';
 
 // ── Types ────────────────────────────────────────────────────────
@@ -42,7 +41,6 @@ interface ChatInputProps {
   sending?: boolean;
   isEmpty?: boolean;
   modelOptions?: ChatModelOption[];
-  defaultModelLabel?: string;
   defaultModelShortLabel?: string;
   defaultModelValue?: string;
   selectedModel?: string;
@@ -101,7 +99,6 @@ export function ChatInput({
   sending = false,
   isEmpty = false,
   modelOptions = [],
-  defaultModelLabel,
   defaultModelShortLabel,
   defaultModelValue,
   selectedModel,
@@ -115,7 +112,6 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
-  const gatewayStatus = useGatewayStore((s) => s.status);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -290,12 +286,7 @@ export function ChatInput({
   const hasFailedAttachments = attachments.some((a) => a.status === 'error');
   const canSend = (input.trim() || attachments.length > 0) && allReady && !disabled && !sending;
   const canStop = sending && !disabled && !!onStop;
-  const hasDefaultInOptions = Boolean(
-    defaultModelValue && modelOptions.some((option) => option.value === defaultModelValue)
-  );
-  const currentModelValue = selectedModel || (hasDefaultInOptions && defaultModelValue ? defaultModelValue : '__default__');
-  const selectedIsDefault = Boolean(defaultModelValue) && currentModelValue === defaultModelValue;
-  const showDefaultOption = !hasDefaultInOptions;
+  const currentModelValue = selectedModel || defaultModelValue;
   const selectedOption = modelOptions.find((option) => option.value === currentModelValue);
   const currentModelShortLabel = selectedOption?.shortLabel || defaultModelShortLabel || t('composer.defaultModel');
 
@@ -461,19 +452,6 @@ export function ChatInput({
             </button>
             {modelMenuOpen && (
               <div className="absolute bottom-full right-0 z-50 mb-2 min-w-[220px] overflow-hidden rounded-[10px] border border-black/10 bg-[#f7f5ee] p-1 dark:border-white/10 dark:bg-[#161615]">
-                {showDefaultOption && (
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left text-[13px] text-foreground hover:bg-black/5 dark:hover:bg-white/5"
-                    onClick={() => {
-                      setModelMenuOpen(false);
-                      void onModelChange?.(undefined);
-                    }}
-                  >
-                    <span className="flex-1 truncate">{defaultModelLabel || t('composer.defaultModel')}</span>
-                    {!selectedModel && <Check className="h-3.5 w-3.5 shrink-0" />}
-                  </button>
-                )}
                 {modelOptions.map((option) => (
                   <button
                     key={option.value}
@@ -482,17 +460,14 @@ export function ChatInput({
                     onClick={() => {
                       setModelMenuOpen(false);
                       void onModelChange?.(
-                        defaultModelValue && option.value === defaultModelValue
+                        selectedModel && defaultModelValue && option.value === defaultModelValue
                           ? undefined
                           : option.value
                       );
                     }}
                   >
                     <span className="flex-1 truncate">{option.label}</span>
-                    {(
-                      currentModelValue === option.value
-                      || (selectedIsDefault && defaultModelValue === option.value)
-                    ) && <Check className="h-3.5 w-3.5 shrink-0" />}
+                    {currentModelValue === option.value && <Check className="h-3.5 w-3.5 shrink-0" />}
                   </button>
                 ))}
               </div>
@@ -519,13 +494,7 @@ export function ChatInput({
             )}
           </Button>
         </div>
-        <div className="mt-2.5 flex items-center justify-between gap-2 text-[11px] text-muted-foreground/60 px-4">
-          <div className="flex items-center gap-1.5">
-            <div className={cn("w-1.5 h-1.5 rounded-full", gatewayStatus.state === 'running' ? "bg-green-500/80" : "bg-red-500/80")} />
-            <span>
-              gateway {gatewayStatus.state === 'running' ? 'connected' : gatewayStatus.state} | port: {gatewayStatus.port} {gatewayStatus.pid ? `| pid: ${gatewayStatus.pid}` : ''}
-            </span>
-          </div>
+        <div className="mt-2.5 flex items-center justify-end gap-2 px-4">
           {hasFailedAttachments && (
             <Button
               variant="link"

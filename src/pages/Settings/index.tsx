@@ -701,7 +701,7 @@ export function Settings() {
                           <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
                             {t('gateway.status')}
                           </div>
-                          <div className="mt-2 flex items-center gap-3">
+                          <div className="mt-2 flex flex-wrap items-center gap-3">
                             <Badge
                               variant="secondary"
                               className={cn(
@@ -718,6 +718,11 @@ export function Settings() {
                             <span className="text-[13px] text-muted-foreground">
                               {t('gateway.port')}: {gatewayStatus.port || 18789}
                             </span>
+                            {gatewayStatus.pid ? (
+                              <span className="text-[13px] text-muted-foreground">
+                                PID: {gatewayStatus.pid}
+                              </span>
+                            ) : null}
                           </div>
                         </div>
 
