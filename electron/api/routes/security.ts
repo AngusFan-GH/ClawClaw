@@ -213,10 +213,11 @@ function verifyAppliedConfig(config: Record<string, unknown>, policy: SecurityPo
   };
 
   const issues: string[] = [];
-  if (!checks.fsWorkspaceOnly) issues.push('tools.fs.workspaceOnly 未生效');
-  if (!policy.allowExec && !checks.execDenied) issues.push('tools.deny 缺少 exec');
-  if (!policy.allowExec && !checks.processDenied) issues.push('tools.deny 缺少 process');
-  if (!checks.elevatedDisabled) issues.push('tools.elevated.enabled 未关闭');
+  const shouldEnforce = policy.enabled;
+  if (shouldEnforce && !checks.fsWorkspaceOnly) issues.push('tools.fs.workspaceOnly 未生效');
+  if (shouldEnforce && !policy.allowExec && !checks.execDenied) issues.push('tools.deny 缺少 exec');
+  if (shouldEnforce && !policy.allowExec && !checks.processDenied) issues.push('tools.deny 缺少 process');
+  if (shouldEnforce && !checks.elevatedDisabled) issues.push('tools.elevated.enabled 未关闭');
 
   return { checks, issues, ok: issues.length === 0 };
 }
