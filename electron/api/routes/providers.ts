@@ -109,6 +109,8 @@ export async function handleProviderRoutes(
       const existing = await providerService.getAccount(accountId);
       const runtimeProviderKey = existing?.vendorId === 'google' && existing.authMode === 'oauth_browser'
         ? 'google-gemini-cli'
+        : existing?.vendorId === 'openai' && existing.authMode === 'oauth_device'
+          ? 'openai-codex'
         : undefined;
       if (url.searchParams.get('apiKeyOnly') === '1') {
         await providerService.deleteLegacyProviderApiKey(accountId);

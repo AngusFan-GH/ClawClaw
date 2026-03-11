@@ -32,6 +32,7 @@
     },
     "add": "添加提供商",
     "custom": "自定义",
+    "localModel": "本地模型",
     "notRequired": "非必填",
     "empty": {
       "title": "未配置提供商",

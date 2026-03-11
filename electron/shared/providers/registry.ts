@@ -7,6 +7,22 @@ import type {
 
 export const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
   {
+    id: 'local-model',
+    name: 'Local Model',
+    icon: '🖥️',
+    placeholder: 'Optional',
+    model: 'OpenAI-Compatible',
+    requiresApiKey: false,
+    defaultBaseUrl: 'http://127.0.0.1:1234/v1',
+    showBaseUrl: true,
+    showModelId: true,
+    modelIdPlaceholder: 'local-model-id',
+    category: 'local',
+    supportedAuthModes: ['local'],
+    defaultAuthMode: 'local',
+    supportsMultipleAccounts: true,
+  },
+  {
     id: 'anthropic',
     name: 'Anthropic',
     icon: '🤖',
@@ -30,7 +46,9 @@ export const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     category: 'official',
     envVar: 'OPENAI_API_KEY',
     defaultModelId: 'gpt-5.2',
-    supportedAuthModes: ['api_key'],
+    isOAuth: true,
+    supportsApiKey: true,
+    supportedAuthModes: ['api_key', 'oauth_device'],
     defaultAuthMode: 'api_key',
     supportsMultipleAccounts: true,
     providerConfig: {

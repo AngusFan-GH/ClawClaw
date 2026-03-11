@@ -93,7 +93,15 @@ function getAuthModeLabel(
   }
 }
 
-export function ProvidersSettings() {
+export function ProvidersSettings({
+  embedded = false,
+  hideHeader = false,
+  actionOnly = false,
+}: {
+  embedded?: boolean;
+  hideHeader?: boolean;
+  actionOnly?: boolean;
+}) {
   const { t } = useTranslation('settings');
   const devModeUnlocked = useSettingsStore((state) => state.devModeUnlocked);
   const {
@@ -138,7 +146,7 @@ export function ProvidersSettings() {
         id,
         vendorId: type,
         label: name,
-        authMode: options?.authMode || vendor?.defaultAuthMode || (type === 'ollama' ? 'local' : 'api_key'),
+        authMode: options?.authMode || vendor?.defaultAuthMode || (type === 'ollama' || type === 'local-model' ? 'local' : 'api_key'),
         baseUrl: options?.baseUrl,
         apiProtocol: options?.apiProtocol,
         model: options?.model,
@@ -178,17 +186,48 @@ export function ProvidersSettings() {
     }
   };
 
+  const addButton = (
+    <Button onClick={() => setShowAddDialog(true)} className="rounded-full px-5 h-9 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-foreground border border-transparent shadow-none font-medium text-[13px]">
+      <Plus className="h-4 w-4 mr-2" />
+      {t('aiProviders.add')}
+    </Button>
+  );
+
+  if (actionOnly) {
+    return (
+      <>
+        {addButton}
+        {showAddDialog && (
+          <AddProviderDialog
+            existingVendorIds={existingVendorIds}
+            vendors={vendors}
+            onClose={() => setShowAddDialog(false)}
+            onAdd={handleAddProvider}
+            onValidateKey={(type, key, options) => validateAccountApiKey(type, key, options)}
+            devModeUnlocked={devModeUnlocked}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-serif text-foreground font-normal tracking-tight" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}>
-          {t('aiProviders.title', 'AI Providers')}
-        </h2>
-        <Button onClick={() => setShowAddDialog(true)} className="rounded-full px-5 h-9 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-foreground border border-transparent shadow-none font-medium text-[13px]">
-          <Plus className="h-4 w-4 mr-2" />
-          {t('aiProviders.add')}
-        </Button>
-      </div>
+    <div className={cn("space-y-6", embedded && "space-y-4")}>
+      {!hideHeader && (
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-3xl font-serif text-foreground font-normal tracking-tight" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}>
+              {t('aiProviders.title', 'AI Providers')}
+            </h2>
+            {!embedded && (
+              <p className="mt-1 text-[13px] text-muted-foreground">
+                {t('aiProviders.description')}
+              </p>
+            )}
+          </div>
+          {addButton}
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-12 text-muted-foreground bg-black/5 dark:bg-white/5 rounded-3xl border border-transparent border-dashed">
@@ -344,7 +383,7 @@ function ProviderCard({
         setValidating(true);
         const result = await onValidateKey(newKey, {
           baseUrl: baseUrl.trim() || undefined,
-          apiProtocol: (account.vendorId === 'custom' || account.vendorId === 'ollama') ? apiProtocol : undefined,
+          apiProtocol: (account.vendorId === 'custom' || account.vendorId === 'ollama' || account.vendorId === 'local-model') ? apiProtocol : undefined,
         });
         setValidating(false);
         if (!result.valid) {
@@ -366,7 +405,7 @@ function ProviderCard({
         if (typeInfo?.showBaseUrl && (baseUrl.trim() || undefined) !== (account.baseUrl || undefined)) {
           updates.baseUrl = baseUrl.trim() || undefined;
         }
-        if ((account.vendorId === 'custom' || account.vendorId === 'ollama') && apiProtocol !== account.apiProtocol) {
+        if ((account.vendorId === 'custom' || account.vendorId === 'ollama' || account.vendorId === 'local-model') && apiProtocol !== account.apiProtocol) {
           updates.apiProtocol = apiProtocol;
         }
         if (showModelIdField && (modelId.trim() || undefined) !== (account.model || undefined)) {
@@ -385,7 +424,7 @@ function ProviderCard({
 
       // Keep Ollama key optional in UI, but persist a placeholder when
       // editing legacy configs that have no stored key.
-      if (account.vendorId === 'ollama' && !status?.hasKey && !payload.newApiKey) {
+      if ((account.vendorId === 'ollama' || account.vendorId === 'local-model') && !status?.hasKey && !payload.newApiKey) {
         payload.newApiKey = resolveProviderApiKeyForSave(account.vendorId, '') as string;
       }
 
@@ -412,6 +451,8 @@ function ProviderCard({
 
   const currentLabelClasses = isDefault ? "text-[13px] text-muted-foreground" : labelClasses;
   const currentSectionLabelClasses = isDefault ? "text-[14px] font-bold text-foreground/80" : labelClasses;
+  const vendorDisplayName = vendor?.name || account.vendorId;
+  const showVendorName = account.label.trim().toLowerCase() !== vendorDisplayName.trim().toLowerCase();
 
   return (
     <div
@@ -437,13 +478,17 @@ function ProviderCard({
               {isDefault && (
                 <span className="flex items-center gap-1 text-[11px] font-medium text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
                   <Check className="h-3 w-3" />
-                  Default
+                  {t('aiProviders.card.default')}
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 mt-0.5 text-[13px] text-muted-foreground">
-              <span className="capitalize">{vendor?.name || account.vendorId}</span>
-              <span className="w-1 h-1 rounded-full bg-black/20 dark:bg-white/20" />
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5 text-[13px] text-muted-foreground">
+              {showVendorName && (
+                <>
+                  <span className="capitalize">{vendorDisplayName}</span>
+                  <span className="w-1 h-1 rounded-full bg-black/20 dark:bg-white/20" />
+                </>
+              )}
               <span>{getAuthModeLabel(account.authMode, t)}</span>
               {account.model && (
                 <>
@@ -451,14 +496,15 @@ function ProviderCard({
                   <span className="truncate max-w-[200px]">{account.model}</span>
                 </>
               )}
-              <span className="w-1 h-1 rounded-full bg-black/20 dark:bg-white/20" />
-              <span className="flex items-center gap-1">
-                {hasConfiguredCredentials(account, status) ? (
-                  <><div className="w-1.5 h-1.5 rounded-full bg-green-500" /> {t('aiProviders.card.configured')}</>
-                ) : (
-                  <><div className="w-1.5 h-1.5 rounded-full bg-red-500" /> {t('aiProviders.dialog.apiKeyMissing')}</>
-                )}
-              </span>
+              {!hasConfiguredCredentials(account, status) && (
+                <>
+                  <span className="w-1 h-1 rounded-full bg-black/20 dark:bg-white/20" />
+                  <span className="flex items-center gap-1 text-red-500 dark:text-red-400">
+                    <div className="w-1.5 h-1.5 rounded-full bg-current" />
+                    {t('aiProviders.dialog.apiKeyMissing')}
+                  </span>
+                </>
+              )}
               {((account.fallbackModels?.length ?? 0) > 0 || (account.fallbackAccountIds?.length ?? 0) > 0) && (
                 <>
                   <span className="w-1 h-1 rounded-full bg-black/20 dark:bg-white/20" />
@@ -538,7 +584,7 @@ function ProviderCard({
                   />
                 </div>
               )}
-              {account.vendorId === 'custom' && (
+              {(account.vendorId === 'custom' || account.vendorId === 'local-model') && (
                 <div className="space-y-1.5 pt-2">
                   <Label className={currentLabelClasses}>{t('aiProviders.dialog.protocol', 'Protocol')}</Label>
                   <div className="flex gap-2 text-[13px]">
@@ -647,7 +693,7 @@ function ProviderCard({
                 <div className="relative flex-1">
                   <Input
                     type={showKey ? 'text' : 'password'}
-                    placeholder={typeInfo?.requiresApiKey ? typeInfo?.placeholder : (typeInfo?.id === 'ollama' ? t('aiProviders.notRequired') : t('aiProviders.card.editKey'))}
+                    placeholder={typeInfo?.requiresApiKey ? typeInfo?.placeholder : ((typeInfo?.id === 'ollama' || typeInfo?.id === 'local-model') ? t('aiProviders.notRequired') : t('aiProviders.card.editKey'))}
                     value={newKey}
                     onChange={(e) => setNewKey(e.target.value)}
                     className={cn(currentInputClasses, 'pr-10')}
@@ -920,7 +966,7 @@ function AddProviderDialog({
       if (requiresKey && apiKey) {
         const result = await onValidateKey(selectedType, apiKey, {
           baseUrl: baseUrl.trim() || undefined,
-          apiProtocol: (selectedType === 'custom' || selectedType === 'ollama') ? apiProtocol : undefined,
+          apiProtocol: (selectedType === 'custom' || selectedType === 'ollama' || selectedType === 'local-model') ? apiProtocol : undefined,
         });
         if (!result.valid) {
           setValidationError(result.error || t('aiProviders.toast.invalidKey'));
@@ -938,13 +984,13 @@ function AddProviderDialog({
 
       await onAdd(
         selectedType,
-        name || (typeInfo?.id === 'custom' ? t('aiProviders.custom') : typeInfo?.name) || selectedType,
+        name || (typeInfo?.id === 'custom' ? t('aiProviders.custom') : typeInfo?.id === 'local-model' ? t('aiProviders.localModel') : typeInfo?.name) || selectedType,
         apiKey.trim(),
         {
           baseUrl: baseUrl.trim() || undefined,
-          apiProtocol: (selectedType === 'custom' || selectedType === 'ollama') ? apiProtocol : undefined,
+          apiProtocol: (selectedType === 'custom' || selectedType === 'ollama' || selectedType === 'local-model') ? apiProtocol : undefined,
           model: resolveProviderModelForSave(typeInfo, modelId, devModeUnlocked),
-          authMode: useOAuthFlow ? (preferredOAuthMode || 'oauth_device') : selectedType === 'ollama'
+          authMode: useOAuthFlow ? (preferredOAuthMode || 'oauth_device') : (selectedType === 'ollama' || selectedType === 'local-model')
             ? 'local'
             : (isOAuth && supportsApiKey && authMode === 'apikey')
               ? 'api_key'
@@ -983,7 +1029,7 @@ function AddProviderDialog({
                   key={type.id}
                   onClick={() => {
                     setSelectedType(type.id);
-                    setName(type.id === 'custom' ? t('aiProviders.custom') : type.name);
+                    setName(type.id === 'custom' ? t('aiProviders.custom') : type.id === 'local-model' ? t('aiProviders.localModel') : type.name);
                     setBaseUrl(type.defaultBaseUrl || '');
                     setModelId(type.defaultModelId || '');
                   }}
@@ -996,7 +1042,7 @@ function AddProviderDialog({
                       <span className="text-2xl">{type.icon}</span>
                     )}
                   </div>
-                  <p className="font-medium text-[13px]">{type.id === 'custom' ? t('aiProviders.custom') : type.name}</p>
+                  <p className="font-medium text-[13px]">{type.id === 'custom' ? t('aiProviders.custom') : type.id === 'local-model' ? t('aiProviders.localModel') : type.name}</p>
                 </button>
               ))}
             </div>
@@ -1011,7 +1057,7 @@ function AddProviderDialog({
                   )}
                 </div>
                 <div>
-                  <p className="font-semibold text-[15px]">{typeInfo?.id === 'custom' ? t('aiProviders.custom') : typeInfo?.name}</p>
+                  <p className="font-semibold text-[15px]">{typeInfo?.id === 'custom' ? t('aiProviders.custom') : typeInfo?.id === 'local-model' ? t('aiProviders.localModel') : typeInfo?.name}</p>
                   <button
                     onClick={() => {
                       setSelectedType(null);
@@ -1031,7 +1077,7 @@ function AddProviderDialog({
                   <Label htmlFor="name" className={labelClasses}>{t('aiProviders.dialog.displayName')}</Label>
                   <Input
                     id="name"
-                    placeholder={typeInfo?.id === 'custom' ? t('aiProviders.custom') : typeInfo?.name}
+                    placeholder={typeInfo?.id === 'custom' ? t('aiProviders.custom') : typeInfo?.id === 'local-model' ? t('aiProviders.localModel') : typeInfo?.name}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className={inputClasses}
@@ -1083,7 +1129,7 @@ function AddProviderDialog({
                       <Input
                         id="apiKey"
                         type={showKey ? 'text' : 'password'}
-                        placeholder={typeInfo?.id === 'ollama' ? t('aiProviders.notRequired') : typeInfo?.placeholder}
+                        placeholder={(typeInfo?.id === 'ollama' || typeInfo?.id === 'local-model') ? t('aiProviders.notRequired') : typeInfo?.placeholder}
                         value={apiKey}
                         onChange={(e) => {
                           setApiKey(e.target.value);
@@ -1136,7 +1182,7 @@ function AddProviderDialog({
                     />
                   </div>
                 )}
-                {selectedType === 'custom' && (
+                {(selectedType === 'custom' || selectedType === 'local-model') && (
                   <div className="space-y-2.5">
                     <Label className={labelClasses}>{t('aiProviders.dialog.protocol', 'Protocol')}</Label>
                     <div className="flex gap-2 text-[13px]">

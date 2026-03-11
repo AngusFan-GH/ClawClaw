@@ -11,7 +11,16 @@
     "gatewayNotRunning": "网关未运行",
     "models": {
         "title": "模型",
-        "subtitle": "管理您的 AI 提供商并监控 Token 用量。"
+        "subtitle": "管理您的 AI 提供商并监控 Token 用量。",
+        "description": "统一查看提供商配置、默认模型来源以及近期的模型消耗趋势。",
+        "providersTitle": "AI 提供商",
+        "providersSubtitle": "配置 API 密钥、默认账户与可用模型来源。",
+        "stats": {
+            "records": "记录数",
+            "models": "模型数",
+            "tokens": "Token",
+            "cost": "费用"
+        }
     },
     "quickActions": {
         "title": "快捷操作",

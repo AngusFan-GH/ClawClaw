@@ -7,6 +7,7 @@
  */
 
 export const PROVIDER_TYPES = [
+  'local-model',
   'anthropic',
   'openai',
   'google',
@@ -23,6 +24,7 @@ export const PROVIDER_TYPES = [
 export type ProviderType = (typeof PROVIDER_TYPES)[number];
 
 export const BUILTIN_PROVIDER_TYPES = [
+  'local-model',
   'anthropic',
   'openai',
   'google',
@@ -121,8 +123,30 @@ import { providerIcons } from '@/assets/providers';
 
 /** All supported provider types with UI metadata */
 export const PROVIDER_TYPE_INFO: ProviderTypeInfo[] = [
+  {
+    id: 'local-model',
+    name: 'Local Model',
+    icon: '🖥️',
+    placeholder: 'Optional',
+    model: 'OpenAI-Compatible',
+    requiresApiKey: false,
+    defaultBaseUrl: 'http://127.0.0.1:1234/v1',
+    showBaseUrl: true,
+    showModelId: true,
+    modelIdPlaceholder: 'local-model-id',
+  },
   { id: 'anthropic', name: 'Anthropic', icon: '🤖', placeholder: 'sk-ant-api03-...', model: 'Claude', requiresApiKey: true },
-  { id: 'openai', name: 'OpenAI', icon: '💚', placeholder: 'sk-proj-...', model: 'GPT', requiresApiKey: true },
+  {
+    id: 'openai',
+    name: 'OpenAI',
+    icon: '💚',
+    placeholder: 'sk-proj-...',
+    model: 'GPT',
+    requiresApiKey: true,
+    isOAuth: true,
+    supportsApiKey: true,
+    defaultModelId: 'gpt-5.3-codex',
+  },
   {
     id: 'google',
     name: 'Google',
@@ -189,7 +213,7 @@ export function resolveProviderModelForSave(
 /** Normalize provider API key before saving; Ollama uses a local placeholder when blank. */
 export function resolveProviderApiKeyForSave(type: ProviderType | string, apiKey: string): string | undefined {
   const trimmed = apiKey.trim();
-  if (type === 'ollama') {
+  if (type === 'ollama' || type === 'local-model') {
     return trimmed || OLLAMA_PLACEHOLDER_API_KEY;
   }
   return trimmed || undefined;

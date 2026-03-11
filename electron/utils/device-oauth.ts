@@ -18,10 +18,16 @@
  */
 import { EventEmitter } from 'events';
 import { BrowserWindow, shell } from 'electron';
+import { readFile } from 'fs/promises';
+import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
+import { homedir } from 'os';
+import { join } from 'path';
 import { logger } from './logger';
 import { saveProvider, getProvider, ProviderConfig } from './secure-storage';
 import { getProviderDefaultModel } from './provider-registry';
 import { isOpenClawPresent } from './paths';
+import { getProviderService } from '../services/providers/provider-service';
+import { getSecretStore } from '../services/secrets/secret-store';
 import {
   loginMiniMaxPortalOAuth,
   type MiniMaxOAuthToken,
@@ -33,8 +39,22 @@ import {
 } from '../../node_modules/openclaw/extensions/qwen-portal-auth/oauth';
 import { saveOAuthTokenToOpenClaw, setOpenClawDefaultModelWithOverride } from './openclaw-auth';
 
-export type OAuthProviderType = 'minimax-portal' | 'minimax-portal-cn' | 'qwen-portal';
+export type OAuthProviderType = 'minimax-portal' | 'minimax-portal-cn' | 'qwen-portal' | 'openai';
 export type { MiniMaxRegion };
+
+const OPENAI_CODEX_PROVIDER_ID = 'openai-codex';
+const OPENAI_CODEX_DEFAULT_MODEL = 'gpt-5.3-codex';
+const OPENAI_DEVICE_VERIFICATION_URL = 'https://auth.openai.com/codex/device';
+
+type OpenAICodexAuthFile = {
+  auth_mode?: string;
+  tokens?: {
+    access_token?: string;
+    refresh_token?: string;
+    account_id?: string;
+    id_token?: string;
+  };
+};
 
 // ─────────────────────────────────────────────────────────────
 // DeviceOAuthManager
@@ -46,6 +66,7 @@ class DeviceOAuthManager extends EventEmitter {
   private activeLabel: string | null = null;
   private active: boolean = false;
   private mainWindow: BrowserWindow | null = null;
+  private activeChild: ChildProcessWithoutNullStreams | null = null;
 
   setWindow(window: BrowserWindow) {
     this.mainWindow = window;
@@ -72,6 +93,8 @@ class DeviceOAuthManager extends EventEmitter {
         await this.runMiniMaxFlow(actualRegion, provider);
       } else if (provider === 'qwen-portal') {
         await this.runQwenFlow();
+      } else if (provider === 'openai') {
+        await this.runOpenAIFlow();
       } else {
         throw new Error(`Unsupported OAuth provider type: ${provider}`);
       }
@@ -92,6 +115,10 @@ class DeviceOAuthManager extends EventEmitter {
   }
 
   async stopFlow(): Promise<void> {
+    if (this.activeChild && !this.activeChild.killed) {
+      this.activeChild.kill('SIGINT');
+    }
+    this.activeChild = null;
     this.active = false;
     this.activeProvider = null;
     this.activeAccountId = null;
@@ -195,6 +222,83 @@ class DeviceOAuthManager extends EventEmitter {
       // Qwen uses OpenAI Completions API format
       api: 'openai-completions',
     });
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // OpenAI Codex flow
+  // ─────────────────────────────────────────────────────────
+
+  private async runOpenAIFlow(): Promise<void> {
+    const child = spawn('codex', ['login', '--device-auth'], {
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    this.activeChild = child;
+
+    let stdout = '';
+    let stderr = '';
+    let emittedCode = false;
+
+    await new Promise<void>((resolve, reject) => {
+      const tryEmitDeviceCode = (): void => {
+        if (emittedCode) return;
+        const parsed = this.parseOpenAIDeviceOutput(`${stdout}\n${stderr}`);
+        if (!parsed.verificationUri || !parsed.userCode) return;
+
+        emittedCode = true;
+        shell.openExternal(parsed.verificationUri).catch((error) => {
+          logger.warn('[DeviceOAuth] Failed to open OpenAI device login page:', error);
+        });
+        this.emitCode({
+          provider: 'openai',
+          verificationUri: parsed.verificationUri,
+          userCode: parsed.userCode,
+          expiresIn: parsed.expiresIn ?? 900,
+        });
+      };
+
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk.toString();
+        tryEmitDeviceCode();
+      });
+
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk.toString();
+        tryEmitDeviceCode();
+      });
+
+      child.on('error', (error) => {
+        this.activeChild = null;
+        reject(
+          new Error(
+            `Failed to launch Codex login. Make sure the Codex CLI is installed and available in PATH. ${String(error)}`
+          )
+        );
+      });
+
+      child.on('close', (code) => {
+        this.activeChild = null;
+        if (!this.active) {
+          resolve();
+          return;
+        }
+        if (code !== 0) {
+          reject(new Error(stderr.trim() || stdout.trim() || `Codex login exited with code ${code}`));
+          return;
+        }
+        resolve();
+      });
+    });
+
+    if (!this.active) return;
+
+    const token = await this.readOpenAICodexToken();
+    if (!token) {
+      throw new Error('Codex login finished, but no OAuth token was found in ~/.codex/auth.json.');
+    }
+
+    await this.onOpenAISuccess(token);
   }
 
   // ─────────────────────────────────────────────────────────
@@ -319,6 +423,73 @@ class DeviceOAuthManager extends EventEmitter {
     }
   }
 
+  private async onOpenAISuccess(token: {
+    access: string;
+    refresh: string;
+    expires: number;
+    accountId?: string;
+    email?: string;
+  }) {
+    const accountId = this.activeAccountId || 'openai';
+    const accountLabel = this.activeLabel;
+    this.active = false;
+    this.activeProvider = null;
+    this.activeAccountId = null;
+    this.activeLabel = null;
+    this.activeChild = null;
+    logger.info('[DeviceOAuth] Successfully completed OAuth for openai');
+
+    const providerService = getProviderService();
+    const existing = await providerService.getAccount(accountId);
+    const nextAccount = await providerService.createAccount({
+      id: accountId,
+      vendorId: 'openai',
+      label: accountLabel || existing?.label || 'OpenAI Codex',
+      authMode: 'oauth_device',
+      baseUrl: existing?.baseUrl,
+      apiProtocol: existing?.apiProtocol,
+      model: existing?.model || OPENAI_CODEX_DEFAULT_MODEL,
+      fallbackModels: existing?.fallbackModels,
+      fallbackAccountIds: existing?.fallbackAccountIds,
+      enabled: existing?.enabled ?? true,
+      isDefault: existing?.isDefault ?? false,
+      metadata: {
+        ...existing?.metadata,
+        email: token.email,
+        resourceUrl: OPENAI_CODEX_PROVIDER_ID,
+      },
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    await getSecretStore().set({
+      type: 'oauth',
+      accountId,
+      accessToken: token.access,
+      refreshToken: token.refresh,
+      expiresAt: token.expires,
+      email: token.email,
+      subject: token.accountId,
+    });
+
+    await saveOAuthTokenToOpenClaw(OPENAI_CODEX_PROVIDER_ID, {
+      access: token.access,
+      refresh: token.refresh,
+      expires: token.expires,
+      email: token.email,
+      projectId: token.accountId,
+    });
+
+    this.emit('oauth:success', { provider: 'openai', accountId: nextAccount.id });
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('oauth:success', {
+        provider: 'openai',
+        accountId: nextAccount.id,
+        success: true,
+      });
+    }
+  }
+
   // ─────────────────────────────────────────────────────────
   // Helpers
   // ─────────────────────────────────────────────────────────
@@ -359,6 +530,72 @@ class DeviceOAuthManager extends EventEmitter {
     }
 
     return { verificationUri, userCode };
+  }
+
+  private parseOpenAIDeviceOutput(
+    message: string
+  ): { verificationUri?: string; userCode?: string; expiresIn?: number } {
+    const urlMatch = message.match(/https:\/\/auth\.openai\.com\/codex\/device/i);
+    const codeMatch = message.match(/\b([A-Z0-9]{4,}-[A-Z0-9]{4,})\b/);
+    const expiresMatch = message.match(/expires in\s+(\d+)\s+minutes/i);
+    return {
+      verificationUri: urlMatch ? OPENAI_DEVICE_VERIFICATION_URL : undefined,
+      userCode: codeMatch?.[1],
+      expiresIn: expiresMatch?.[1] ? Number(expiresMatch[1]) * 60 : undefined,
+    };
+  }
+
+  private async readOpenAICodexToken(): Promise<{
+    access: string;
+    refresh: string;
+    expires: number;
+    accountId?: string;
+    email?: string;
+  } | null> {
+    const authPath = join(homedir(), '.codex', 'auth.json');
+
+    try {
+      const raw = await readFile(authPath, 'utf-8');
+      const parsed = JSON.parse(raw) as OpenAICodexAuthFile;
+      const access = parsed.tokens?.access_token?.trim();
+      const refresh = parsed.tokens?.refresh_token?.trim();
+      if (!access || !refresh) {
+        return null;
+      }
+
+      const accessPayload = this.decodeJwtPayload(access);
+      const email =
+        typeof accessPayload?.['https://api.openai.com/profile'] === 'object'
+          ? (accessPayload['https://api.openai.com/profile'] as Record<string, unknown>).email as string | undefined
+          : undefined;
+      const expires =
+        typeof accessPayload?.exp === 'number'
+          ? accessPayload.exp
+          : Math.floor(Date.now() / 1000) + 3600;
+
+      return {
+        access,
+        refresh,
+        expires,
+        accountId: parsed.tokens?.account_id,
+        email,
+      };
+    } catch (error) {
+      logger.info(`[DeviceOAuth] No reusable Codex auth found at ${authPath}: ${String(error)}`);
+      return null;
+    }
+  }
+
+  private decodeJwtPayload(token: string): Record<string, unknown> | null {
+    try {
+      const [, payload] = token.split('.');
+      if (!payload) return null;
+      const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const normalized = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+      return JSON.parse(Buffer.from(normalized, 'base64').toString('utf-8')) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
   }
 
   private emitCode(data: {

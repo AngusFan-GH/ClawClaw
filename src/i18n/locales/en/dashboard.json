@@ -11,7 +11,16 @@
     "gatewayNotRunning": "Gateway not running",
     "models": {
         "title": "Models",
-        "subtitle": "Manage your AI providers and monitor token usage."
+        "subtitle": "Manage your AI providers and monitor token usage.",
+        "description": "Review provider setup, default model sources, and recent model usage trends in one place.",
+        "providersTitle": "AI Providers",
+        "providersSubtitle": "Configure API keys, default accounts, and available model sources.",
+        "stats": {
+            "records": "Records",
+            "models": "Models",
+            "tokens": "Tokens",
+            "cost": "Cost"
+        }
     },
     "quickActions": {
         "title": "Quick Actions",

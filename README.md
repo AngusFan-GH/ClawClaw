@@ -116,7 +116,7 @@ Extend your AI agents with pre-built skills. Browse, install, and manage skills 
 
 ### 🔐 Secure Provider Integration
 
-Connect to multiple AI providers (OpenAI, Anthropic, and more) with credentials stored securely in your system's native keychain.
+Connect to multiple AI providers (OpenAI, Anthropic, and more) with API keys or supported OAuth flows. Credentials are stored securely in your system's native keychain.
 
 ### 🌙 Adaptive Theming
 
@@ -157,7 +157,7 @@ pnpm dev
 When you launch ClawClaw for the first time, the **Setup Wizard** will guide you through:
 
 1. **Language & Region** – Configure your preferred locale
-2. **AI Provider** – Enter your API keys for supported providers
+2. **AI Provider** – Add supported providers with API keys or OAuth login
 3. **Skill Bundles** – Select pre-configured skills for common use cases
 4. **Verification** – Test your configuration before entering the main interface
 

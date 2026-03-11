@@ -32,6 +32,7 @@
     },
     "add": "Add Provider",
     "custom": "Custom",
+    "localModel": "Local Model",
     "notRequired": "Not required",
     "empty": {
       "title": "No providers configured",
