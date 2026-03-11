@@ -116,7 +116,7 @@ ClawClaw 直接基于官方 **OpenClaw** 核心构建。无需单独安装，我
 
 ### 🔐 安全的供应商集成
 
-连接多个 AI 供应商（OpenAI、Anthropic 等），支持 API 密钥和已接入的 OAuth 登录方式，凭证安全存储在系统原生密钥链中。
+连接多个 AI 供应商（OpenAI、Anthropic 等），支持 API 密钥和已接入的 OAuth 登录方式。OpenAI Codex 登录现已对齐 OpenClaw 原生浏览器 OAuth 流程，凭证安全存储在系统原生密钥链中。
 
 ### 🌙 自适应主题
 

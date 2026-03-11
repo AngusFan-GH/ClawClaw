@@ -4,7 +4,7 @@ import { buildElectronProxyConfig } from '../utils/proxy';
 import { logger } from '../utils/logger';
 
 export async function applyProxySettings(
-  partialSettings?: Pick<AppSettings, 'proxyEnabled' | 'proxyServer' | 'proxyBypassRules'>
+  partialSettings?: Pick<AppSettings, 'proxyMode' | 'proxyEnabled' | 'proxyServer' | 'proxyHttpServer' | 'proxyHttpsServer' | 'proxyAllServer' | 'proxyBypassRules'>
 ): Promise<void> {
   const settings = partialSettings ?? await getAllSettings();
   const config = buildElectronProxyConfig(settings);

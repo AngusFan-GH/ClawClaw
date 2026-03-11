@@ -42,6 +42,7 @@ export interface AppSettings {
   gatewayAutoStart: boolean;
   gatewayPort: number;
   gatewayToken: string;
+  proxyMode: 'system' | 'custom' | 'direct';
   proxyEnabled: boolean;
   proxyServer: string;
   proxyHttpServer: string;
@@ -82,6 +83,7 @@ const defaults: AppSettings = {
   gatewayAutoStart: true,
   gatewayPort: 18789,
   gatewayToken: generateToken(),
+  proxyMode: 'system',
   proxyEnabled: false,
   proxyServer: '',
   proxyHttpServer: '',
@@ -132,12 +134,33 @@ async function getSettingsStore() {
   return settingsStoreInstance;
 }
 
+function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
+  const proxyMode =
+    settings.proxyMode
+    || (settings.proxyEnabled ? 'custom' : 'system');
+
+  return {
+    ...defaults,
+    ...settings,
+    proxyMode,
+    proxyEnabled: proxyMode === 'custom',
+  };
+}
+
 /**
  * Get a setting value
  */
 export async function getSetting<K extends keyof AppSettings>(key: K): Promise<AppSettings[K]> {
   const store = await getSettingsStore();
-  return store.get(key);
+  if (key === 'proxyMode') {
+    const rawMode = store.get('proxyMode');
+    if (rawMode === 'system' || rawMode === 'custom' || rawMode === 'direct') {
+      return rawMode as AppSettings[K];
+    }
+    const legacyEnabled = Boolean(store.get('proxyEnabled'));
+    return (legacyEnabled ? 'custom' : 'system') as AppSettings[K];
+  }
+  return normalizeSettings(store.store)[key];
 }
 
 /**
@@ -156,7 +179,7 @@ export async function setSetting<K extends keyof AppSettings>(
  */
 export async function getAllSettings(): Promise<AppSettings> {
   const store = await getSettingsStore();
-  return store.store;
+  return normalizeSettings(store.store);
 }
 
 /**

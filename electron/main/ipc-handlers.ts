@@ -1844,9 +1844,13 @@ function registerDeviceOAuthHandlers(mainWindow: BrowserWindow): void {
       try {
         logger.info(`provider:requestOAuth for ${provider}`);
         if (provider === 'google') {
-          await browserOAuthManager.startFlow(provider, options);
+          void browserOAuthManager.startFlow(provider, options).catch((error) => {
+            logger.error('provider:requestOAuth browser flow failed', error);
+          });
         } else {
-          await deviceOAuthManager.startFlow(provider, region, options);
+          void deviceOAuthManager.startFlow(provider, region, options).catch((error) => {
+            logger.error('provider:requestOAuth device flow failed', error);
+          });
         }
         return { success: true };
       } catch (error) {
@@ -2310,6 +2314,7 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
 
       if (
         key === 'proxyEnabled' ||
+        key === 'proxyMode' ||
         key === 'proxyServer' ||
         key === 'proxyHttpServer' ||
         key === 'proxyHttpsServer' ||
@@ -2335,6 +2340,7 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
       entries.some(
         ([key]) =>
           key === 'proxyEnabled' ||
+          key === 'proxyMode' ||
           key === 'proxyServer' ||
           key === 'proxyHttpServer' ||
           key === 'proxyHttpsServer' ||

@@ -15,6 +15,10 @@
     "showThinking": "显示思考过程",
     "hideThinking": "隐藏思考过程"
   },
+  "composer": {
+    "defaultModel": "默认模型",
+    "modelAriaLabel": "切换当前对话模型"
+  },
   "historyBuckets": {
     "today": "今天",
     "yesterday": "昨天",

@@ -7,13 +7,14 @@
  * are sent with the message (no base64 over WebSocket).
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { SendHorizontal, Square, X, Paperclip, FileText, Film, Music, FileArchive, File, Loader2 } from 'lucide-react';
+import { SendHorizontal, Square, X, Paperclip, FileText, Film, Music, FileArchive, File, Loader2, Check, ChevronsUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { hostApiFetch } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { useGatewayStore } from '@/stores/gateway';
+import { useTranslation } from 'react-i18next';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -28,12 +29,25 @@ export interface FileAttachment {
   error?: string;
 }
 
+export interface ChatModelOption {
+  value: string;
+  label: string;
+  shortLabel: string;
+}
+
 interface ChatInputProps {
   onSend: (text: string, attachments?: FileAttachment[]) => void;
   onStop?: () => void;
   disabled?: boolean;
   sending?: boolean;
   isEmpty?: boolean;
+  modelOptions?: ChatModelOption[];
+  defaultModelLabel?: string;
+  defaultModelShortLabel?: string;
+  defaultModelValue?: string;
+  selectedModel?: string;
+  onModelChange?: (model?: string) => void | Promise<void>;
+  modelDisabled?: boolean;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -80,10 +94,26 @@ function readFileAsBase64(file: globalThis.File): Promise<string> {
 
 // ── Component ────────────────────────────────────────────────────
 
-export function ChatInput({ onSend, onStop, disabled = false, sending = false, isEmpty = false }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  onStop,
+  disabled = false,
+  sending = false,
+  isEmpty = false,
+  modelOptions = [],
+  defaultModelLabel,
+  defaultModelShortLabel,
+  defaultModelValue,
+  selectedModel,
+  onModelChange,
+  modelDisabled = false,
+}: ChatInputProps) {
+  const { t } = useTranslation('chat');
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const modelMenuRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
   const gatewayStatus = useGatewayStore((s) => s.status);
 
@@ -101,6 +131,28 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
       textareaRef.current.focus();
     }
   }, [disabled]);
+
+  useEffect(() => {
+    if (!modelMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!modelMenuRef.current?.contains(event.target as Node)) {
+        setModelMenuOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setModelMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [modelMenuOpen]);
 
   // ── File staging via native dialog ─────────────────────────────
 
@@ -238,6 +290,14 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
   const hasFailedAttachments = attachments.some((a) => a.status === 'error');
   const canSend = (input.trim() || attachments.length > 0) && allReady && !disabled && !sending;
   const canStop = sending && !disabled && !!onStop;
+  const hasDefaultInOptions = Boolean(
+    defaultModelValue && modelOptions.some((option) => option.value === defaultModelValue)
+  );
+  const currentModelValue = selectedModel || (hasDefaultInOptions && defaultModelValue ? defaultModelValue : '__default__');
+  const selectedIsDefault = Boolean(defaultModelValue) && currentModelValue === defaultModelValue;
+  const showDefaultOption = !hasDefaultInOptions;
+  const selectedOption = modelOptions.find((option) => option.value === currentModelValue);
+  const currentModelShortLabel = selectedOption?.shortLabel || defaultModelShortLabel || t('composer.defaultModel');
 
   const handleSend = useCallback(() => {
     if (!canSend) return;
@@ -386,6 +446,57 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
               className="min-h-[40px] max-h-[200px] resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none bg-transparent py-2.5 px-2 text-[15px] placeholder:text-muted-foreground/60 leading-relaxed"
               rows={1}
             />
+          </div>
+
+          <div className="relative shrink-0 self-center" ref={modelMenuRef}>
+            <button
+              type="button"
+              aria-label={t('composer.modelAriaLabel')}
+              className="flex h-10 min-w-[148px] max-w-[184px] items-center gap-2 rounded-[10px] border border-black/10 bg-[#f3f1e8] px-3 text-left text-[13px] text-foreground transition-colors hover:border-black/20 dark:border-white/10 dark:bg-[#151514] dark:hover:border-white/20"
+              disabled={disabled || sending || modelDisabled || modelOptions.length === 0}
+              onClick={() => setModelMenuOpen((open) => !open)}
+            >
+              <span className="truncate font-medium">{currentModelShortLabel}</span>
+              <ChevronsUpDown className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            </button>
+            {modelMenuOpen && (
+              <div className="absolute bottom-full right-0 z-50 mb-2 min-w-[220px] overflow-hidden rounded-[10px] border border-black/10 bg-[#f7f5ee] p-1 dark:border-white/10 dark:bg-[#161615]">
+                {showDefaultOption && (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left text-[13px] text-foreground hover:bg-black/5 dark:hover:bg-white/5"
+                    onClick={() => {
+                      setModelMenuOpen(false);
+                      void onModelChange?.(undefined);
+                    }}
+                  >
+                    <span className="flex-1 truncate">{defaultModelLabel || t('composer.defaultModel')}</span>
+                    {!selectedModel && <Check className="h-3.5 w-3.5 shrink-0" />}
+                  </button>
+                )}
+                {modelOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left text-[13px] text-foreground hover:bg-black/5 dark:hover:bg-white/5"
+                    onClick={() => {
+                      setModelMenuOpen(false);
+                      void onModelChange?.(
+                        defaultModelValue && option.value === defaultModelValue
+                          ? undefined
+                          : option.value
+                      );
+                    }}
+                  >
+                    <span className="flex-1 truncate">{option.label}</span>
+                    {(
+                      currentModelValue === option.value
+                      || (selectedIsDefault && defaultModelValue === option.value)
+                    ) && <Check className="h-3.5 w-3.5 shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Send Button */}

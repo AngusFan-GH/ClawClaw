@@ -18,7 +18,7 @@ import { logger } from '../../utils/logger';
 const GOOGLE_OAUTH_RUNTIME_PROVIDER = 'google-gemini-cli';
 const GOOGLE_OAUTH_DEFAULT_MODEL_REF = `${GOOGLE_OAUTH_RUNTIME_PROVIDER}/gemini-3-pro-preview`;
 const OPENAI_OAUTH_RUNTIME_PROVIDER = 'openai-codex';
-const OPENAI_OAUTH_DEFAULT_MODEL_REF = `${OPENAI_OAUTH_RUNTIME_PROVIDER}/gpt-5.3-codex`;
+const OPENAI_OAUTH_DEFAULT_MODEL_REF = `${OPENAI_OAUTH_RUNTIME_PROVIDER}/gpt-5.4`;
 
 type RuntimeProviderSyncContext = {
   runtimeProviderKey: string;
@@ -58,7 +58,10 @@ async function resolveRuntimeProviderKey(config: ProviderConfig): Promise<string
   if (config.type === 'google' && account?.authMode === 'oauth_browser') {
     return GOOGLE_OAUTH_RUNTIME_PROVIDER;
   }
-  if (config.type === 'openai' && account?.authMode === 'oauth_device') {
+  if (
+    config.type === 'openai'
+    && (account?.authMode === 'oauth_browser' || account?.authMode === 'oauth_device')
+  ) {
     return OPENAI_OAUTH_RUNTIME_PROVIDER;
   }
   return getOpenClawProviderKey(config.type, config.id);
@@ -76,7 +79,10 @@ async function isGoogleBrowserOAuthProvider(config: ProviderConfig): Promise<boo
 
 async function isOpenAIOAuthProvider(config: ProviderConfig): Promise<boolean> {
   const account = await getProviderAccount(config.id);
-  if (config.type !== 'openai' || account?.authMode !== 'oauth_device') {
+  if (
+    config.type !== 'openai'
+    || (account?.authMode !== 'oauth_browser' && account?.authMode !== 'oauth_device')
+  ) {
     return false;
   }
 

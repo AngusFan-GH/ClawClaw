@@ -91,6 +91,7 @@ export interface ChatState {
   newSession: () => void;
   deleteSession: (key: string) => Promise<void>;
   cleanupEmptySession: () => void;
+  setSessionModel: (model?: string) => Promise<void>;
   loadHistory: (quiet?: boolean) => Promise<void>;
   sendMessage: (
     text: string,

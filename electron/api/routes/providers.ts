@@ -33,6 +33,9 @@ export async function handleProviderRoutes(
 ): Promise<boolean> {
   const providerService = getProviderService();
   const logLegacyProviderRoute = (route: string): void => {
+    if (route.startsWith('POST /api/providers/oauth/')) {
+      return;
+    }
     if (legacyProviderRoutesWarned.has(route)) return;
     legacyProviderRoutesWarned.add(route);
     logger.warn(
@@ -109,7 +112,8 @@ export async function handleProviderRoutes(
       const existing = await providerService.getAccount(accountId);
       const runtimeProviderKey = existing?.vendorId === 'google' && existing.authMode === 'oauth_browser'
         ? 'google-gemini-cli'
-        : existing?.vendorId === 'openai' && existing.authMode === 'oauth_device'
+        : existing?.vendorId === 'openai'
+            && (existing.authMode === 'oauth_browser' || existing.authMode === 'oauth_device')
           ? 'openai-codex'
         : undefined;
       if (url.searchParams.get('apiKeyOnly') === '1') {
@@ -187,14 +191,18 @@ export async function handleProviderRoutes(
         label?: string;
       }>(req);
       if (body.provider === 'google') {
-        await browserOAuthManager.startFlow(body.provider, {
+        void browserOAuthManager.startFlow(body.provider, {
           accountId: body.accountId,
           label: body.label,
+        }).catch((error) => {
+          logger.error('[providers] Browser OAuth start failed:', error);
         });
       } else {
-        await deviceOAuthManager.startFlow(body.provider, body.region, {
+        void deviceOAuthManager.startFlow(body.provider, body.region, {
           accountId: body.accountId,
           label: body.label,
+        }).catch((error) => {
+          logger.error('[providers] Device OAuth start failed:', error);
         });
       }
       sendJson(res, 200, { success: true });
@@ -209,6 +217,18 @@ export async function handleProviderRoutes(
     try {
       await deviceOAuthManager.stopFlow();
       await browserOAuthManager.stopFlow();
+      sendJson(res, 200, { success: true });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/providers/oauth/respond' && req.method === 'POST') {
+    logLegacyProviderRoute('POST /api/providers/oauth/respond');
+    try {
+      const body = await parseJsonBody<{ input: string }>(req);
+      deviceOAuthManager.submitPromptInput(body.input);
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

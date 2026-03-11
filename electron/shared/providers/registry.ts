@@ -48,7 +48,7 @@ export const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     defaultModelId: 'gpt-5.2',
     isOAuth: true,
     supportsApiKey: true,
-    supportedAuthModes: ['api_key', 'oauth_device'],
+    supportedAuthModes: ['api_key', 'oauth_browser'],
     defaultAuthMode: 'api_key',
     supportsMultipleAccounts: true,
     providerConfig: {

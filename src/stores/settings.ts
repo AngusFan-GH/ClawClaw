@@ -9,6 +9,7 @@ import { hostApiFetch } from '@/lib/host-api';
 
 type Theme = 'light' | 'dark' | 'system';
 type UpdateChannel = 'stable' | 'beta' | 'dev';
+type ProxyMode = 'system' | 'custom' | 'direct';
 
 interface SettingsState {
   // General
@@ -20,6 +21,7 @@ interface SettingsState {
   // Gateway
   gatewayAutoStart: boolean;
   gatewayPort: number;
+  proxyMode: ProxyMode;
   proxyEnabled: boolean;
   proxyServer: string;
   proxyHttpServer: string;
@@ -47,6 +49,7 @@ interface SettingsState {
   setLaunchAtStartup: (value: boolean) => void;
   setGatewayAutoStart: (value: boolean) => void;
   setGatewayPort: (port: number) => void;
+  setProxyMode: (value: ProxyMode) => void;
   setProxyEnabled: (value: boolean) => void;
   setProxyServer: (value: string) => void;
   setProxyHttpServer: (value: string) => void;
@@ -74,6 +77,7 @@ const defaultSettings = {
   launchAtStartup: false,
   gatewayAutoStart: true,
   gatewayPort: 18789,
+  proxyMode: 'system' as ProxyMode,
   proxyEnabled: false,
   proxyServer: '',
   proxyHttpServer: '',
@@ -96,7 +100,15 @@ export const useSettingsStore = create<SettingsState>()(
       init: async () => {
         try {
           const settings = await hostApiFetch<Partial<typeof defaultSettings>>('/api/settings');
-          set((state) => ({ ...state, ...settings }));
+          const normalizedProxyMode =
+            settings.proxyMode
+            || (settings.proxyEnabled ? 'custom' : 'system');
+          set((state) => ({
+            ...state,
+            ...settings,
+            proxyMode: normalizedProxyMode,
+            proxyEnabled: normalizedProxyMode === 'custom',
+          }));
           if (settings.language) {
             i18n.changeLanguage(settings.language);
           }
@@ -131,17 +143,36 @@ export const useSettingsStore = create<SettingsState>()(
           body: JSON.stringify({ value: gatewayPort }),
         }).catch(() => {});
       },
-      setProxyEnabled: (proxyEnabled) => set({ proxyEnabled }),
+      setProxyMode: (proxyMode) => set({ proxyMode, proxyEnabled: proxyMode === 'custom' }),
+      setProxyEnabled: (proxyEnabled) => set({ proxyEnabled, proxyMode: proxyEnabled ? 'custom' : 'system' }),
       setProxyServer: (proxyServer) => set({ proxyServer }),
       setProxyHttpServer: (proxyHttpServer) => set({ proxyHttpServer }),
       setProxyHttpsServer: (proxyHttpsServer) => set({ proxyHttpsServer }),
       setProxyAllServer: (proxyAllServer) => set({ proxyAllServer }),
       setProxyBypassRules: (proxyBypassRules) => set({ proxyBypassRules }),
       setUpdateChannel: (updateChannel) => set({ updateChannel }),
-      setAutoCheckUpdate: (autoCheckUpdate) => set({ autoCheckUpdate }),
-      setAutoDownloadUpdate: (autoDownloadUpdate) => set({ autoDownloadUpdate }),
+      setAutoCheckUpdate: (autoCheckUpdate) => {
+        set({ autoCheckUpdate });
+        void hostApiFetch('/api/settings/autoCheckUpdate', {
+          method: 'PUT',
+          body: JSON.stringify({ value: autoCheckUpdate }),
+        }).catch(() => {});
+      },
+      setAutoDownloadUpdate: (autoDownloadUpdate) => {
+        set({ autoDownloadUpdate });
+        void hostApiFetch('/api/settings/autoDownloadUpdate', {
+          method: 'PUT',
+          body: JSON.stringify({ value: autoDownloadUpdate }),
+        }).catch(() => {});
+      },
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
-      setDevModeUnlocked: (devModeUnlocked) => set({ devModeUnlocked }),
+      setDevModeUnlocked: (devModeUnlocked) => {
+        set({ devModeUnlocked });
+        void hostApiFetch('/api/settings/devModeUnlocked', {
+          method: 'PUT',
+          body: JSON.stringify({ value: devModeUnlocked }),
+        }).catch(() => {});
+      },
       markSetupComplete: () => set({ setupComplete: true }),
       resetSettings: () => set(defaultSettings),
     }),

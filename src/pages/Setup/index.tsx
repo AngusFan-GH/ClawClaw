@@ -752,16 +752,29 @@ function ProviderContent({
   const [oauthFlowing, setOauthFlowing] = useState(false);
   const [oauthData, setOauthData] = useState<{
     verificationUri: string;
-    userCode: string;
+    userCode?: string;
     expiresIn: number;
+    mode?: 'device' | 'browser';
+    manualInputRequired?: boolean;
+    promptMessage?: string;
+    placeholder?: string;
   } | null>(null);
   const [oauthError, setOauthError] = useState<string | null>(null);
+  const [oauthManualInput, setOauthManualInput] = useState('');
   const pendingOAuthRef = useRef<{ accountId: string; label: string } | null>(null);
 
   // Manage OAuth events
   useEffect(() => {
     const handleCode = (data: unknown) => {
-      setOauthData(data as { verificationUri: string; userCode: string; expiresIn: number });
+      setOauthData(data as {
+        verificationUri: string;
+        userCode?: string;
+        expiresIn: number;
+        mode?: 'device' | 'browser';
+        manualInputRequired?: boolean;
+        promptMessage?: string;
+        placeholder?: string;
+      });
       setOauthError(null);
     };
 
@@ -828,6 +841,7 @@ function ProviderContent({
     setOauthFlowing(true);
     setOauthData(null);
     setOauthError(null);
+    setOauthManualInput('');
 
     try {
       const snapshot = await fetchProviderSnapshot();
@@ -853,8 +867,22 @@ function ProviderContent({
     setOauthFlowing(false);
     setOauthData(null);
     setOauthError(null);
+    setOauthManualInput('');
     pendingOAuthRef.current = null;
     await hostApiFetch('/api/providers/oauth/cancel', { method: 'POST' });
+  };
+
+  const handleSubmitOAuthManualInput = async () => {
+    const input = oauthManualInput.trim();
+    if (!input) return;
+    try {
+      await hostApiFetch('/api/providers/oauth/respond', {
+        method: 'POST',
+        body: JSON.stringify({ input }),
+      });
+    } catch (error) {
+      setOauthError(String(error));
+    }
   };
 
   // On mount, try to restore previously configured provider
@@ -1331,7 +1359,7 @@ function ProviderContent({
             <div className="space-y-4 pt-2">
               <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 p-4 text-center">
                 <p className="text-sm text-blue-200 mb-3 block">
-                  This provider requires signing in via your browser.
+                  {t('settings:aiProviders.oauth.loginPrompt')}
                 </p>
                 <Button
                   onClick={handleStartOAuth}
@@ -1340,10 +1368,10 @@ function ProviderContent({
                 >
                   {oauthFlowing ? (
                     <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Waiting...
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> {t('settings:aiProviders.oauth.waiting')}
                     </>
                   ) : (
-                    'Login with Browser'
+                    t('settings:aiProviders.oauth.loginButton')
                   )}
                 </Button>
               </div>
@@ -1358,7 +1386,7 @@ function ProviderContent({
                     {oauthError ? (
                       <div className="text-red-400 space-y-2">
                         <XCircle className="h-8 w-8 mx-auto" />
-                        <p className="font-medium">Authentication Failed</p>
+                        <p className="font-medium">{t('settings:aiProviders.oauth.authFailed')}</p>
                         <p className="text-sm opacity-80">{oauthError}</p>
                         <Button
                           variant="outline"
@@ -1366,24 +1394,79 @@ function ProviderContent({
                           onClick={handleCancelOAuth}
                           className="mt-2"
                         >
-                          Try Again
+                          {t('settings:aiProviders.oauth.tryAgain')}
                         </Button>
                       </div>
                     ) : !oauthData ? (
                       <div className="space-y-3 py-4">
                         <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
                         <p className="text-sm text-muted-foreground animate-pulse">
-                          Requesting secure login code...
+                          {t('settings:aiProviders.oauth.requestingCode')}
                         </p>
+                      </div>
+                    ) : oauthData.mode === 'browser' ? (
+                      <div className="space-y-4 w-full">
+                        <div className="space-y-1">
+                          <h3 className="font-medium text-lg">{t('settings:aiProviders.oauth.browserApproveTitle')}</h3>
+                          <div className="text-sm text-muted-foreground text-left mt-2 space-y-1">
+                            <p>{t('settings:aiProviders.oauth.browserApproveDesc')}</p>
+                            <p>{t('settings:aiProviders.oauth.browserApproveHint')}</p>
+                          </div>
+                        </div>
+
+                        {oauthData.verificationUri ? (
+                          <Button
+                            variant="secondary"
+                            className="w-full"
+                            onClick={() => invokeIpc('shell:openExternal', oauthData.verificationUri)}
+                          >
+                            <ExternalLink className="h-4 w-4 mr-2" />
+                            {t('settings:aiProviders.oauth.openLoginPage')}
+                          </Button>
+                        ) : null}
+
+                        {oauthData.manualInputRequired ? (
+                          <div className="space-y-2 text-left">
+                            <p className="text-sm font-medium">
+                              {oauthData.promptMessage || t('settings:aiProviders.oauth.manualPrompt')}
+                            </p>
+                            <Input
+                              value={oauthManualInput}
+                              onChange={(event) => setOauthManualInput(event.target.value)}
+                              placeholder={oauthData.placeholder || t('settings:aiProviders.oauth.manualPlaceholder')}
+                            />
+                            <Button
+                              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                              onClick={handleSubmitOAuthManualInput}
+                              disabled={!oauthManualInput.trim()}
+                            >
+                              {t('settings:aiProviders.oauth.manualSubmit')}
+                            </Button>
+                          </div>
+                        ) : null}
+
+                        <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pt-2">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <span>{t('settings:aiProviders.oauth.waitingApproval')}</span>
+                        </div>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-full mt-2"
+                          onClick={handleCancelOAuth}
+                        >
+                          {t('settings:aiProviders.oauth.cancel')}
+                        </Button>
                       </div>
                     ) : (
                       <div className="space-y-4 w-full">
                         <div className="space-y-1">
-                          <h3 className="font-medium text-lg">Approve Login</h3>
+                          <h3 className="font-medium text-lg">{t('settings:aiProviders.oauth.approveLogin')}</h3>
                           <div className="text-sm text-muted-foreground text-left mt-2 space-y-1">
-                            <p>1. Copy the authorization code below.</p>
-                            <p>2. Open the login page in your browser.</p>
-                            <p>3. Paste the code to approve access.</p>
+                            <p>1. {t('settings:aiProviders.oauth.step1')}</p>
+                            <p>2. {t('settings:aiProviders.oauth.step2')}</p>
+                            <p>3. {t('settings:aiProviders.oauth.step3')}</p>
                           </div>
                         </div>
 
@@ -1395,8 +1478,8 @@ function ProviderContent({
                             variant="ghost"
                             size="icon"
                             onClick={() => {
-                              navigator.clipboard.writeText(oauthData.userCode);
-                              toast.success('Code copied to clipboard');
+                              navigator.clipboard.writeText(oauthData.userCode || '');
+                              toast.success(t('settings:aiProviders.oauth.codeCopied'));
                             }}
                           >
                             <Copy className="h-4 w-4" />
@@ -1409,12 +1492,12 @@ function ProviderContent({
                           onClick={() => invokeIpc('shell:openExternal', oauthData.verificationUri)}
                         >
                           <ExternalLink className="h-4 w-4 mr-2" />
-                          Open Login Page
+                          {t('settings:aiProviders.oauth.openLoginPage')}
                         </Button>
 
                         <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pt-2">
                           <Loader2 className="h-3 w-3 animate-spin" />
-                          <span>Waiting for approval in browser...</span>
+                          <span>{t('settings:aiProviders.oauth.waitingApproval')}</span>
                         </div>
 
                         <Button
@@ -1423,7 +1506,7 @@ function ProviderContent({
                           className="w-full mt-2"
                           onClick={handleCancelOAuth}
                         >
-                          Cancel
+                          {t('settings:aiProviders.oauth.cancel')}
                         </Button>
                       </div>
                     )}

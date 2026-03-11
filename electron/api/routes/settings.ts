@@ -14,6 +14,7 @@ async function handleProxySettingsChange(ctx: HostApiContext): Promise<void> {
 
 function patchTouchesProxy(patch: Partial<AppSettings>): boolean {
   return Object.keys(patch).some((key) => (
+    key === 'proxyMode' ||
     key === 'proxyEnabled' ||
     key === 'proxyServer' ||
     key === 'proxyHttpServer' ||
@@ -68,6 +69,7 @@ export async function handleSettingsRoutes(
       await setSetting(key, body.value);
       if (
         key === 'proxyEnabled' ||
+        key === 'proxyMode' ||
         key === 'proxyServer' ||
         key === 'proxyHttpServer' ||
         key === 'proxyHttpsServer' ||

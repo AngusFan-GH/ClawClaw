@@ -3,6 +3,7 @@
  */
 
 export interface ProxySettings {
+  proxyMode?: 'system' | 'custom' | 'direct';
   proxyEnabled: boolean;
   proxyServer: string;
   proxyHttpServer: string;
@@ -19,7 +20,7 @@ export interface ResolvedProxySettings {
 }
 
 export interface ElectronProxyConfig {
-  mode: 'direct' | 'fixed_servers';
+  mode: 'direct' | 'fixed_servers' | 'system';
   proxyRules?: string;
   proxyBypassRules?: string;
 }
@@ -55,7 +56,12 @@ export function resolveProxySettings(settings: ProxySettings): ResolvedProxySett
 }
 
 export function buildElectronProxyConfig(settings: ProxySettings): ElectronProxyConfig {
-  if (!settings.proxyEnabled) {
+  const mode = settings.proxyMode || (settings.proxyEnabled ? 'custom' : 'system');
+
+  if (mode === 'system') {
+    return { mode: 'system' };
+  }
+  if (mode === 'direct') {
     return { mode: 'direct' };
   }
 
@@ -76,7 +82,7 @@ export function buildElectronProxyConfig(settings: ProxySettings): ElectronProxy
   }
 
   if (rules.length === 0) {
-    return { mode: 'direct' };
+    return { mode: 'system' };
   }
 
   return {

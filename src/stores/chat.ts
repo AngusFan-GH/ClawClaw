@@ -103,6 +103,7 @@ interface ChatState {
   newSession: () => void;
   deleteSession: (key: string) => Promise<void>;
   cleanupEmptySession: () => void;
+  setSessionModel: (model?: string) => Promise<void>;
   loadHistory: (quiet?: boolean) => Promise<void>;
   sendMessage: (
     text: string,
@@ -1284,6 +1285,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
         Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey)
       ),
     }));
+  },
+
+  setSessionModel: async (model) => {
+    const { currentSessionKey } = get();
+    const trimmedModel = model?.trim() || undefined;
+
+    try {
+      await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.patch', {
+        key: currentSessionKey,
+        model: trimmedModel ?? 'default',
+      });
+
+      set((s) => ({
+        sessions: s.sessions.map((session) => (
+          session.key === currentSessionKey
+            ? { ...session, model: trimmedModel }
+            : session
+        )),
+      }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({ error: message });
+      throw err;
+    }
   },
 
   // ── Load chat history ──

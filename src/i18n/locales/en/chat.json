@@ -15,6 +15,10 @@
     "showThinking": "Show thinking",
     "hideThinking": "Hide thinking"
   },
+  "composer": {
+    "defaultModel": "Default model",
+    "modelAriaLabel": "Switch model for current conversation"
+  },
   "historyBuckets": {
     "today": "Today",
     "yesterday": "Yesterday",

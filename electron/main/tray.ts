@@ -120,16 +120,6 @@ export function createTray(mainWindow: BrowserWindow): Tray {
       type: 'separator',
     },
     {
-      label: 'Check for Updates...',
-      click: () => {
-        if (mainWindow.isDestroyed()) return;
-        mainWindow.webContents.send('update:check');
-      },
-    },
-    {
-      type: 'separator',
-    },
-    {
       label: 'Quit ClawClaw',
       click: () => {
         app.quit();

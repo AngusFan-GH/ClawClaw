@@ -4,17 +4,77 @@
  * via gateway:rpc IPC. Session selector, thinking toggle, and refresh
  * are in the toolbar; messages render with markdown + streaming.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Loader2, Sparkles } from 'lucide-react';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
+import { useProviderStore } from '@/stores/providers';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ChatMessage } from './ChatMessage';
-import { ChatInput } from './ChatInput';
+import { ChatInput, type ChatModelOption } from './ChatInput';
 import { ChatToolbar } from './ChatToolbar';
 import { extractImages, extractText, extractThinking, extractToolUse } from './message-utils';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { PROVIDER_TYPE_INFO, type ProviderAccount, type ProviderVendorInfo } from '@/lib/providers';
+
+function getRuntimeProviderKey(account: ProviderAccount): string {
+  if (account.vendorId === 'google' && account.authMode === 'oauth_browser') {
+    return 'google-gemini-cli';
+  }
+  if (
+    account.vendorId === 'openai'
+    && (account.authMode === 'oauth_browser' || account.authMode === 'oauth_device')
+  ) {
+    return 'openai-codex';
+  }
+  if (account.vendorId === 'custom' || account.vendorId === 'ollama' || account.vendorId === 'local-model') {
+    const suffix = account.id.replace(/-/g, '').slice(0, 8);
+    return `${account.vendorId}-${suffix}`;
+  }
+  if (account.vendorId === 'minimax-portal-cn') {
+    return 'minimax-portal';
+  }
+  return account.vendorId;
+}
+
+function resolveAccountModelLabel(
+  account: ProviderAccount,
+  vendor?: ProviderVendorInfo,
+): { modelRef?: string; modelName?: string } {
+  const runtimeProviderKey = getRuntimeProviderKey(account);
+  const fallbackVendor = PROVIDER_TYPE_INFO.find((item) => item.id === account.vendorId);
+  const rawModel = account.model || vendor?.defaultModelId || fallbackVendor?.defaultModelId;
+
+  if (!rawModel) {
+    return {
+      modelName: vendor?.model || fallbackVendor?.model || account.label,
+    };
+  }
+
+  return {
+    modelRef: rawModel.startsWith(`${runtimeProviderKey}/`) ? rawModel : `${runtimeProviderKey}/${rawModel}`,
+    modelName: rawModel.split('/').pop() || rawModel,
+  };
+}
+
+function normalizeSessionModelValue(
+  currentModel: string | undefined,
+  options: ChatModelOption[],
+): string | undefined {
+  if (!currentModel) return undefined;
+
+  const exact = options.find((option) => option.value === currentModel);
+  if (exact) return exact.value;
+
+  const normalizedCurrent = currentModel.split('/').pop() || currentModel;
+  const bySuffix = options.find((option) => {
+    const optionSuffix = option.value.split('/').pop() || option.value;
+    return optionSuffix === normalizedCurrent;
+  });
+
+  return bySuffix?.value || currentModel;
+}
 
 export function Chat() {
   const { t } = useTranslation('chat');
@@ -26,6 +86,8 @@ export function Chat() {
   const sending = useChatStore((s) => s.sending);
   const error = useChatStore((s) => s.error);
   const showThinking = useChatStore((s) => s.showThinking);
+  const sessions = useChatStore((s) => s.sessions);
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
@@ -34,11 +96,18 @@ export function Chat() {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
+  const setSessionModel = useChatStore((s) => s.setSessionModel);
 
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
+  const providerAccounts = useProviderStore((s) => s.accounts);
+  const providerStatuses = useProviderStore((s) => s.statuses);
+  const providerVendors = useProviderStore((s) => s.vendors);
+  const defaultAccountId = useProviderStore((s) => s.defaultAccountId);
+  const refreshProviderSnapshot = useProviderStore((s) => s.refreshProviderSnapshot);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
+  const currentSession = sessions.find((session) => session.key === currentSessionKey);
 
   // Load data when gateway is running.
   // When the store already holds messages for this session (i.e. the user
@@ -61,6 +130,10 @@ export function Chat() {
       cleanupEmptySession();
     };
   }, [isGatewayRunning, loadHistory, loadSessions, cleanupEmptySession]);
+
+  useEffect(() => {
+    void refreshProviderSnapshot();
+  }, [refreshProviderSnapshot]);
 
   // Auto-scroll on new messages, streaming, or activity changes
   useEffect(() => {
@@ -95,6 +168,74 @@ export function Chat() {
   const hasAnyStreamContent = hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasStreamToolStatus;
 
   const isEmpty = messages.length === 0 && !loading && !sending;
+  const providerStatusMap = useMemo(
+    () => new Map(providerStatuses.map((status) => [status.id, status])),
+    [providerStatuses],
+  );
+  const vendorMap = useMemo(
+    () => new Map(providerVendors.map((vendor) => [vendor.id, vendor])),
+    [providerVendors],
+  );
+  const modelOptions = useMemo<ChatModelOption[]>(() => {
+    const options = providerAccounts
+      .filter((account) => account.enabled)
+      .filter((account) => (
+        account.authMode === 'local'
+        || account.authMode === 'oauth_device'
+        || account.authMode === 'oauth_browser'
+        || Boolean(providerStatusMap.get(account.id)?.hasKey)
+      ))
+      .map((account) => {
+        const vendor = vendorMap.get(account.vendorId);
+        const { modelRef, modelName } = resolveAccountModelLabel(account, vendor);
+        if (!modelRef) return null;
+
+        return {
+          value: modelRef,
+          label: `${account.label} · ${modelName || modelRef}`,
+          shortLabel: modelName || modelRef,
+        };
+      })
+      .filter((option): option is ChatModelOption => Boolean(option))
+      .sort((left, right) => left.label.localeCompare(right.label));
+
+    const normalizedCurrentModel = normalizeSessionModelValue(currentSession?.model, options);
+
+    if (
+      currentSession?.model
+      && normalizedCurrentModel === currentSession.model
+      && !options.some((option) => option.value === currentSession.model)
+    ) {
+      options.unshift({
+        value: currentSession.model,
+        label: currentSession.model,
+        shortLabel: currentSession.model.split('/').pop() || currentSession.model,
+      });
+    }
+
+    return options;
+  }, [currentSession?.model, providerAccounts, providerStatusMap, vendorMap]);
+  const normalizedSelectedModel = useMemo(
+    () => normalizeSessionModelValue(currentSession?.model, modelOptions),
+    [currentSession?.model, modelOptions],
+  );
+  const defaultModelMeta = useMemo(() => {
+    const defaultAccount = providerAccounts.find((account) => account.id === defaultAccountId);
+    if (!defaultAccount) {
+      return {
+        label: modelOptions[0]?.label,
+        value: modelOptions[0]?.value,
+      };
+    }
+
+    const vendor = vendorMap.get(defaultAccount.vendorId);
+    const { modelName, modelRef } = resolveAccountModelLabel(defaultAccount, vendor);
+    return {
+      label: `${defaultAccount.label} · ${modelName || modelRef || defaultAccount.label}`,
+      shortLabel: modelName || modelRef || defaultAccount.label,
+      value: modelRef,
+    };
+  }, [defaultAccountId, modelOptions, providerAccounts, vendorMap]);
 
   return (
     <div className={cn("flex flex-col -m-6 transition-colors duration-500 dark:bg-background")} style={{ height: 'calc(100vh - 2.5rem)' }}>
@@ -185,6 +326,13 @@ export function Chat() {
         disabled={!isGatewayRunning}
         sending={sending}
         isEmpty={isEmpty}
+        modelOptions={modelOptions}
+        defaultModelLabel={defaultModelMeta.label}
+        defaultModelShortLabel={defaultModelMeta.shortLabel}
+        defaultModelValue={defaultModelMeta.value}
+        selectedModel={normalizedSelectedModel}
+        onModelChange={setSessionModel}
+        modelDisabled={!isGatewayRunning}
       />
     </div>
   );
