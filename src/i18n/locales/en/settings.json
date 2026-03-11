@@ -211,12 +211,41 @@
     "devModeDesc": "Show developer tools and shortcuts"
   },
   "security": {
-    "title": "Directory Policy",
-    "loading": "Loading directory policy...",
-    "enableDirectoryPolicy": "Enable directory policy",
-    "enableDirectoryPolicyDesc": "Directory policy is enabled.",
-    "addAllowedDirectories": "Add allowed directory",
-    "noAllowedDirectory": "No allowed directory configured.",
+    "title": "Prompt Policy",
+    "loading": "Loading prompt policy...",
+    "enableDirectoryPolicy": "Enable prompt policy",
+    "enableDirectoryPolicyDesc": "Prompt policy is enabled.",
+    "addDeniedDirectories": "Add denied directory",
+    "noDeniedDirectory": "No denied directory configured.",
+    "rules": {
+      "title": "Preset restrictions",
+      "description": "Selected rules are applied to runtime permissions and synced into workspace policy docs.",
+      "recommended": "Recommended",
+      "linked": "Linked",
+      "lockHint": "If you want to prevent the model from changing these limits itself, enable “Lock security policy”. It blocks command execution and file modifications while gateway configuration stays denied.",
+      "items": {
+        "lockPolicy": {
+          "label": "Lock security policy",
+          "description": "Recommended baseline: block command execution and file modifications together."
+        },
+        "denyRuntime": {
+          "label": "Block runtime commands",
+          "description": "Deny exec, bash, and process runtime commands."
+        },
+        "denyWrite": {
+          "label": "Block file writes",
+          "description": "Deny write, edit, and apply_patch file modifications."
+        },
+        "denyRead": {
+          "label": "Block file reads",
+          "description": "Deny direct file reads from the agent tool surface."
+        },
+        "denyWeb": {
+          "label": "Block web access",
+          "description": "Deny browser, web_search, and web_fetch access."
+        }
+      }
+    },
     "actions": {
       "reload": "Reload",
       "reset": "Reset"
@@ -225,8 +254,14 @@
     "applying": "Applying...",
     "lastApplied": "Last applied: {{time}}",
     "summary": {
-      "disabled": "Directory policy is disabled.",
-      "enabled": "Directory policy is enabled for {{count}} directories."
+      "disabled": "Prompt policy is disabled.",
+      "enabled": "Prompt policy blocks {{count}} directories and enables {{rules}} preset restrictions."
+    },
+    "sections": {
+      "directories": "Denied directories",
+      "directoriesDesc": "These directories are written into the prompt policy docs so the agent avoids them during execution.",
+      "behavior": "Behavior restrictions",
+      "behaviorDesc": "These rules are applied to runtime tool restrictions and synced into policy docs."
     },
     "toasts": {
       "loadFailed": "Load security policy failed",
@@ -235,11 +270,11 @@
       "applyFailed": "Apply failed",
       "resetSuccess": "Security policy reset.",
       "resetFailed": "Reset failed",
-      "enableDirectoryPolicyFirst": "Please add at least one allowed directory before enable.",
-      "selectAllowedDirs": "Select allowed directories"
+      "enablePromptPolicyFirst": "Please add at least one denied directory or enable at least one preset restriction before enabling prompt policy.",
+      "lockPolicyAutoEnabled": "Lock security policy has been enabled automatically as the recommended baseline."
     },
     "dialog": {
-      "selectAllowedDirs": "Select allowed directories"
+      "selectDeniedDirs": "Select denied directories"
     }
   },
   "developer": {

@@ -255,35 +255,70 @@
     "github": "GitHub"
   },
   "security": {
-    "title": "Directory Policy",
-    "loading": "Loading directory policy...",
-    "enableDirectoryPolicy": "Enable directory policy",
-    "enableDirectoryPolicyDesc": "Directory policy is enabled.",
-    "addAllowedDirectories": "Add allowed directory",
-    "noAllowedDirectory": "No allowed directory configured.",
-    "actions": {
-      "reload": "Reload",
-      "reset": "Reset"
+    "title": "プロンプトポリシー",
+    "loading": "プロンプトポリシーを読み込み中...",
+    "enableDirectoryPolicy": "プロンプトポリシーを有効化",
+    "enableDirectoryPolicyDesc": "プロンプトポリシーは有効です。",
+    "addDeniedDirectories": "禁止ディレクトリを追加",
+    "noDeniedDirectory": "禁止ディレクトリはまだ設定されていません。",
+    "rules": {
+      "title": "プリセット制限ルール",
+      "description": "選択したルールは実行時の権限制限へ反映され、ワークスペースのポリシードキュメントにも同期されます。",
+      "recommended": "推奨",
+      "linked": "連動中",
+      "lockHint": "これらの制限をモデル自身に変更させたくない場合は、「セキュリティポリシーをロック」を有効にしてください。コマンド実行とファイル変更をまとめて禁止し、gateway 設定機能も引き続き拒否します。",
+      "items": {
+        "lockPolicy": {
+          "label": "セキュリティポリシーをロック",
+          "description": "推奨ベースライン: コマンド実行とファイル変更を同時に禁止します。"
+        },
+        "denyRuntime": {
+          "label": "コマンド実行を禁止",
+          "description": "exec、bash、process などのランタイムコマンドを拒否します。"
+        },
+        "denyWrite": {
+          "label": "ファイル変更を禁止",
+          "description": "write、edit、apply_patch などの書き込み能力を拒否します。"
+        },
+        "denyRead": {
+          "label": "ファイル読み取りを禁止",
+          "description": "read によるファイル読み取り能力を拒否します。"
+        },
+        "denyWeb": {
+          "label": "Web アクセスを禁止",
+          "description": "browser、web_search、web_fetch などの Web アクセスを拒否します。"
+        }
+      }
     },
-    "apply": "Apply",
-    "applying": "Applying...",
-    "lastApplied": "Last applied: {{time}}",
+    "actions": {
+      "reload": "再読み込み",
+      "reset": "リセット"
+    },
+    "apply": "適用",
+    "applying": "適用中...",
+    "lastApplied": "最終適用: {{time}}",
     "summary": {
-      "disabled": "Directory policy is disabled.",
-      "enabled": "Directory policy is enabled for {{count}} directories."
+      "disabled": "プロンプトポリシーは無効です。",
+      "enabled": "プロンプトポリシーは {{count}} 個のディレクトリを禁止し、{{rules}} 個の制限ルールを有効化しています。"
+    },
+    "sections": {
+      "directories": "禁止ディレクトリ",
+      "directoriesDesc": "これらのディレクトリはプロンプトポリシードキュメントに書き込まれ、agent が実行前に回避する対象になります。",
+      "behavior": "動作制限",
+      "behaviorDesc": "これらのルールは実行時のツール制限に反映され、ポリシードキュメントにも同期されます。"
     },
     "toasts": {
-      "loadFailed": "Load security policy failed",
-      "selectDirectoryFailed": "Select directory failed",
-      "applySuccess": "Security policy applied.",
-      "applyFailed": "Apply failed",
-      "resetSuccess": "Security policy reset.",
-      "resetFailed": "Reset failed",
-      "enableDirectoryPolicyFirst": "Please add at least one allowed directory before enable.",
-      "selectAllowedDirs": "Select allowed directories"
+      "loadFailed": "セキュリティポリシーの読み込みに失敗しました",
+      "selectDirectoryFailed": "ディレクトリの選択に失敗しました",
+      "applySuccess": "セキュリティポリシーを適用しました。",
+      "applyFailed": "適用に失敗しました",
+      "resetSuccess": "セキュリティポリシーをリセットしました。",
+      "resetFailed": "リセットに失敗しました",
+      "enablePromptPolicyFirst": "プロンプトポリシーを有効にする前に、少なくとも 1 つの禁止ディレクトリを追加するか、少なくとも 1 つの制限ルールを有効にしてください。",
+      "lockPolicyAutoEnabled": "推奨ベースラインとして「セキュリティポリシーをロック」を自動で有効化しました。"
     },
     "dialog": {
-      "selectAllowedDirs": "Select allowed directories"
+      "selectDeniedDirs": "禁止ディレクトリを選択"
     }
   }
 }

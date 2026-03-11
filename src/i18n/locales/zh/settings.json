@@ -255,12 +255,41 @@
     "github": "GitHub"
   },
   "security": {
-    "title": "目录策略",
-    "loading": "正在加载目录策略...",
-    "enableDirectoryPolicy": "启用目录策略",
-    "enableDirectoryPolicyDesc": "目录策略已启用。",
-    "addAllowedDirectories": "添加允许目录",
-    "noAllowedDirectory": "尚未配置允许目录。",
+    "title": "提示策略",
+    "loading": "正在加载提示策略...",
+    "enableDirectoryPolicy": "启用提示策略",
+    "enableDirectoryPolicyDesc": "提示策略已启用。",
+    "addDeniedDirectories": "添加禁止目录",
+    "noDeniedDirectory": "尚未配置禁止目录。",
+    "rules": {
+      "title": "预设限制规则",
+      "description": "勾选后会同步写入运行时权限限制，并写入工作区策略文档。",
+      "recommended": "推荐",
+      "linked": "已联动",
+      "lockHint": "如果要防止模型自己修改限制，建议启用“锁定安全策略”。它会同时禁止运行命令和修改文件，并继续封锁 gateway 配置能力。",
+      "items": {
+        "lockPolicy": {
+          "label": "锁定安全策略",
+          "description": "推荐基线：同时禁止运行命令和修改文件。"
+        },
+        "denyRuntime": {
+          "label": "禁止运行命令",
+          "description": "拒绝 exec、bash、process 等运行时命令。"
+        },
+        "denyWrite": {
+          "label": "禁止修改文件",
+          "description": "拒绝 write、edit、apply_patch 等写入能力。"
+        },
+        "denyRead": {
+          "label": "禁止读取文件",
+          "description": "拒绝 read 文件读取能力。"
+        },
+        "denyWeb": {
+          "label": "禁止网页访问",
+          "description": "拒绝 browser、web_search、web_fetch 等网页访问能力。"
+        }
+      }
+    },
     "actions": {
       "reload": "重新加载",
       "reset": "重置"
@@ -269,8 +298,14 @@
     "applying": "正在应用...",
     "lastApplied": "上次应用时间：{{time}}",
     "summary": {
-      "disabled": "目录策略未启用。",
-      "enabled": "目录策略已对 {{count}} 个目录启用。"
+      "disabled": "提示策略未启用。",
+      "enabled": "提示策略已阻止 {{count}} 个目录，并启用 {{rules}} 条限制规则。"
+    },
+    "sections": {
+      "directories": "禁止目录",
+      "directoriesDesc": "这些目录会被写入提示策略文档，供 agent 在执行前规避。",
+      "behavior": "行为限制",
+      "behaviorDesc": "这些规则会真正写入运行时工具限制，并同步到策略文档。"
     },
     "toasts": {
       "loadFailed": "加载安全策略失败",
@@ -279,11 +314,11 @@
       "applyFailed": "应用失败",
       "resetSuccess": "安全策略已重置。",
       "resetFailed": "重置失败",
-      "enableDirectoryPolicyFirst": "请先添加至少一个允许目录，再启用目录策略。",
-      "selectAllowedDirs": "选择允许的目录"
+      "enablePromptPolicyFirst": "请先添加至少一个禁止目录，或勾选至少一条限制规则，再启用提示策略。",
+      "lockPolicyAutoEnabled": "已自动启用“锁定安全策略”作为推荐基线。"
     },
     "dialog": {
-      "selectAllowedDirs": "选择允许的目录"
+      "selectDeniedDirs": "选择禁止的目录"
     }
   }
 }

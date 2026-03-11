@@ -1,4 +1,4 @@
-﻿import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'http';
@@ -7,29 +7,21 @@ import { getSetting, setSetting } from '../../utils/store';
 import { logger } from '../../utils/logger';
 import { getOpenClawConfigDir } from '../../utils/paths';
 import { parseJsonBody, sendJson } from '../route-utils';
+import {
+  type SecurityPolicy,
+  SECURITY_RULE_DEFINITIONS,
+  getManagedToolDenyForRules,
+  normalizeSecurityRules,
+} from '../../shared/security-policy';
 
-const OPENCLAW_CONFIG_PATH = join(getOpenClawConfigDir(), 'openclaw.json');
+const OPENCLAW_CONFIG_DIR = getOpenClawConfigDir();
+const OPENCLAW_CONFIG_PATH = join(OPENCLAW_CONFIG_DIR, 'openclaw.json');
 const SECURITY_POLICY_FILE = 'SECURITY_POLICY.md';
 const AGENTS_FILE = 'AGENTS.md';
 const POLICY_BEGIN = '<!-- clawclaw-security:begin -->';
 const POLICY_END = '<!-- clawclaw-security:end -->';
 const DEFAULT_WORKSPACE_POLICY_ROOT = join(getOpenClawConfigDir(), 'workspace');
-
-interface WorkspacePolicy {
-  enabled: boolean;
-  path: string;
-  allowExec: boolean;
-}
-
-interface PromptPolicy {
-  enabled: boolean;
-  allowedPaths: string[];
-}
-
-interface SecurityPolicy {
-  workspace: WorkspacePolicy;
-  prompt: PromptPolicy;
-}
+const ALWAYS_MANAGED_DENY = ['gateway'];
 
 interface SyncFailure {
   workspace: string;
@@ -45,22 +37,16 @@ interface SecuritySyncResult {
 }
 
 const DEFAULT_POLICY: SecurityPolicy = {
-  workspace: {
-    enabled: false,
-    path: '',
-    allowExec: false,
-  },
   prompt: {
     enabled: false,
-    allowedPaths: [],
+    deniedPaths: [],
+    rules: [],
   },
 };
 
 function normalizePath(value: string): string {
   const trimmed = value.trim();
-  if (!trimmed) {
-    return '';
-  }
+  if (!trimmed) return '';
 
   if (/^[A-Za-z]:[\\/]+$/.test(trimmed)) {
     return `${trimmed[0].toUpperCase()}:\\`;
@@ -78,9 +64,7 @@ function expandHomePath(value: string): string {
 
 async function canonicalizeOrPreservePath(rawPath: string): Promise<string> {
   const normalized = normalizePath(expandHomePath(rawPath));
-  if (!normalized) {
-    return '';
-  }
+  if (!normalized) return '';
 
   try {
     return await realpath(normalized);
@@ -91,7 +75,7 @@ async function canonicalizeOrPreservePath(rawPath: string): Promise<string> {
 
 function dedupeAndCompactPaths(paths: string[]): string[] {
   const normalized = Array.from(new Set(paths.map((item) => normalizePath(item)).filter(Boolean))).sort(
-    (a, b) => a.length - b.length
+    (a, b) => a.length - b.length,
   );
 
   const compacted: string[] = [];
@@ -106,40 +90,44 @@ function dedupeAndCompactPaths(paths: string[]): string[] {
   return compacted;
 }
 
-async function canonicalizePath(path: string): Promise<string> {
-  return canonicalizeOrPreservePath(path);
-}
-
-async function canonicalizeAllowedPaths(paths: string[]): Promise<string[]> {
+async function canonicalizeDeniedPaths(paths: string[]): Promise<string[]> {
   const out: string[] = [];
   for (const p of paths) {
     const resolved = await canonicalizeOrPreservePath(p);
-    if (resolved) {
-      out.push(resolved);
-    }
+    if (resolved) out.push(resolved);
   }
   return dedupeAndCompactPaths(out);
 }
 
-function mergePolicyInput(previous: SecurityPolicy, patch: Partial<SecurityPolicy>): SecurityPolicy {
-  return {
-    workspace: {
-      enabled: patch.workspace?.enabled ?? previous.workspace.enabled,
-      path: patch.workspace?.path ?? previous.workspace.path,
-      allowExec: patch.workspace?.allowExec ?? previous.workspace.allowExec,
-    },
-    prompt: {
-      enabled: patch.prompt?.enabled ?? previous.prompt.enabled,
-      allowedPaths:
-        patch.prompt?.allowedPaths !== undefined
-          ? patch.prompt.allowedPaths
-          : previous.prompt.allowedPaths,
-    },
-  };
+function ensureObject(parent: Record<string, unknown>, key: string): Record<string, unknown> {
+  const existing = parent[key];
+  if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+    return existing as Record<string, unknown>;
+  }
+  const created: Record<string, unknown> = {};
+  parent[key] = created;
+  return created;
 }
 
-function mergePolicySyncTargets(previous: SecurityPolicy, next: SecurityPolicy): string[] {
-  return dedupeAndCompactPaths([...previous.prompt.allowedPaths, ...next.prompt.allowedPaths]);
+function normalizeStoredPolicy(raw: unknown): SecurityPolicy {
+  const prompt =
+    raw && typeof raw === 'object' && 'prompt' in raw && raw.prompt && typeof raw.prompt === 'object'
+      ? raw.prompt as Record<string, unknown>
+      : {};
+
+  const hasDeniedPaths = Array.isArray(prompt.deniedPaths);
+  const deniedPaths = hasDeniedPaths
+    ? prompt.deniedPaths.filter((item): item is string => typeof item === 'string')
+    : [];
+  const rules = normalizeSecurityRules(prompt.rules);
+
+  return {
+    prompt: {
+      enabled: hasDeniedPaths || rules.length > 0 ? Boolean(prompt.enabled) : false,
+      deniedPaths: dedupeAndCompactPaths(deniedPaths),
+      rules,
+    },
+  };
 }
 
 async function readOpenclawConfig(): Promise<Record<string, unknown>> {
@@ -156,147 +144,7 @@ async function writeOpenclawConfig(config: Record<string, unknown>): Promise<voi
   await writeFile(OPENCLAW_CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
 }
 
-function ensureObject(parent: Record<string, unknown>, key: string): Record<string, unknown> {
-  const existing = parent[key];
-  if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
-    return existing as Record<string, unknown>;
-  }
-  const created: Record<string, unknown> = {};
-  parent[key] = created;
-  return created;
-}
-
-function ensureStringArray(target: Record<string, unknown>, key: string): string[] {
-  const current = target[key];
-  if (Array.isArray(current)) {
-    const filtered = current.filter((item): item is string => typeof item === 'string');
-    target[key] = filtered;
-    return filtered;
-  }
-  const arr: string[] = [];
-  target[key] = arr;
-  return arr;
-}
-
-function removeFromArray(target: Record<string, unknown>, key: string, values: string[]): void {
-  const current = ensureStringArray(target, key);
-  const valueSet = new Set(values);
-  target[key] = current.filter((item) => !valueSet.has(item));
-}
-
-function restoreManagedAgentWorkspaces(config: Record<string, unknown>): void {
-  const clawclaw = ensureObject(config, 'clawclaw');
-  const security = ensureObject(clawclaw, 'security');
-  const original =
-    security.originalAgentWorkspaces && typeof security.originalAgentWorkspaces === 'object'
-      ? (security.originalAgentWorkspaces as Record<string, unknown>)
-      : {};
-
-  const agents = ensureObject(config, 'agents');
-  const list = Array.isArray(agents.list) ? agents.list : [];
-  for (const item of list) {
-    if (!item || typeof item !== 'object') continue;
-    const entry = item as Record<string, unknown>;
-    const id = typeof entry.id === 'string' ? entry.id : null;
-    if (!id) continue;
-    if (Object.prototype.hasOwnProperty.call(original, id)) {
-      const restored = original[id];
-      if (typeof restored === 'string' && restored.trim()) {
-        entry.workspace = restored;
-      } else {
-        delete entry.workspace;
-      }
-    }
-  }
-
-  delete security.originalAgentWorkspaces;
-}
-
-function removeManagedSecurityConfig(config: Record<string, unknown>): void {
-  const agents = ensureObject(config, 'agents');
-  const tools = ensureObject(config, 'tools');
-
-  restoreManagedAgentWorkspaces(config);
-
-  const fsCfg = ensureObject(tools, 'fs');
-  delete fsCfg.workspaceOnly;
-
-  const execCfg = ensureObject(tools, 'exec');
-  const applyPatchCfg = ensureObject(execCfg, 'applyPatch');
-  delete applyPatchCfg.workspaceOnly;
-
-  removeFromArray(tools, 'deny', ['exec', 'process']);
-
-  const elevated = ensureObject(tools, 'elevated');
-  delete elevated.enabled;
-
-  const clawclaw = ensureObject(config, 'clawclaw');
-  const security = ensureObject(clawclaw, 'security');
-  delete security.lastAppliedAt;
-  security.managed = false;
-
-  // Keep defaults.workspace untouched on reset; users may rely on their existing config.
-  const defaults = ensureObject(agents, 'defaults');
-  if (security.originalDefaultsWorkspace !== undefined) {
-    const restored = security.originalDefaultsWorkspace;
-    if (typeof restored === 'string' && restored.trim()) {
-      defaults.workspace = restored;
-    }
-    delete security.originalDefaultsWorkspace;
-  }
-}
-
-function applyWorkspacePolicy(config: Record<string, unknown>, workspace: WorkspacePolicy): void {
-  if (!workspace.enabled || !workspace.path) return;
-
-  const agents = ensureObject(config, 'agents');
-  const defaults = ensureObject(agents, 'defaults');
-  const tools = ensureObject(config, 'tools');
-  const clawclaw = ensureObject(config, 'clawclaw');
-  const security = ensureObject(clawclaw, 'security');
-
-  security.originalDefaultsWorkspace = typeof defaults.workspace === 'string' ? defaults.workspace : '';
-  defaults.workspace = workspace.path;
-
-  const list = Array.isArray(agents.list) ? agents.list : [];
-  const originalAgentWorkspaces: Record<string, string | null> = {};
-  for (const item of list) {
-    if (!item || typeof item !== 'object') continue;
-    const entry = item as Record<string, unknown>;
-    const id = typeof entry.id === 'string' ? entry.id : null;
-    if (!id) continue;
-    originalAgentWorkspaces[id] = typeof entry.workspace === 'string' ? entry.workspace : null;
-    entry.workspace = workspace.path;
-  }
-  security.originalAgentWorkspaces = originalAgentWorkspaces;
-
-  const fsCfg = ensureObject(tools, 'fs');
-  fsCfg.workspaceOnly = true;
-
-  const execCfg = ensureObject(tools, 'exec');
-  const applyPatchCfg = ensureObject(execCfg, 'applyPatch');
-  applyPatchCfg.workspaceOnly = true;
-
-  const elevated = ensureObject(tools, 'elevated');
-  elevated.enabled = false;
-
-  if (!workspace.allowExec) {
-    const deny = ensureStringArray(tools, 'deny');
-    for (const item of ['exec', 'process']) {
-      if (!deny.includes(item)) deny.push(item);
-    }
-  }
-}
-
-interface SecuritySyncOptions {
-  extraPromptPaths?: string[];
-}
-
-async function collectSecurityWorkspaces(
-  config: Record<string, unknown>,
-  policy: SecurityPolicy,
-  options: SecuritySyncOptions = {}
-): Promise<string[]> {
+async function collectSecurityWorkspaces(config: Record<string, unknown>): Promise<string[]> {
   const agents = ensureObject(config, 'agents');
   const defaults = ensureObject(agents, 'defaults');
   const workspaces = new Set<string>();
@@ -308,12 +156,7 @@ async function collectSecurityWorkspaces(
     workspaces.add(normalized);
   };
 
-  const { extraPromptPaths = [] } = options;
-
   await addWorkspace(DEFAULT_WORKSPACE_POLICY_ROOT);
-  if (policy.workspace.enabled) {
-    await addWorkspace(policy.workspace.path);
-  }
   await addWorkspace(defaults.workspace);
 
   const list = Array.isArray(agents.list) ? agents.list : [];
@@ -321,16 +164,6 @@ async function collectSecurityWorkspaces(
     if (!item || typeof item !== 'object') continue;
     const entry = item as Record<string, unknown>;
     await addWorkspace(entry.workspace);
-  }
-
-  if (policy.prompt.enabled) {
-    for (const path of policy.prompt.allowedPaths) {
-      await addWorkspace(path);
-    }
-  }
-
-  for (const path of extraPromptPaths) {
-    await addWorkspace(path);
   }
 
   if (workspaces.size === 0) {
@@ -345,38 +178,48 @@ function renderPolicyLine(label: string, enabled: boolean): string {
 }
 
 function renderSecurityPolicyMarkdown(policy: SecurityPolicy): string {
-  const promptLines = policy.prompt.allowedPaths.map((p) => `- ${p}`).join('\n');
+  const deniedLines = policy.prompt.deniedPaths.map((p) => `- ${p}`).join('\n');
+  const selectedRules = policy.prompt.rules
+    .map((key) => SECURITY_RULE_DEFINITIONS.find((rule) => rule.key === key))
+    .filter((item): item is (typeof SECURITY_RULE_DEFINITIONS)[number] => Boolean(item));
+  const ruleLines = selectedRules.map((rule) => `- ${rule.title}: ${rule.description}`).join('\n');
   return [
     '# SECURITY_POLICY.md',
     '',
     'This file is generated by ClawClaw to document current security policy.',
     '',
-    '## Directory allowlist',
+    '## Prompt directory denylist',
     renderPolicyLine('status', policy.prompt.enabled),
-    policy.prompt.enabled ? promptLines || '- (none configured)' : '- not configured',
+    policy.prompt.enabled ? deniedLines || '- (none configured)' : '- not configured',
     '',
-    '## Workspace policy',
-    policy.workspace.enabled ? `- enforced path: ${policy.workspace.path}` : '- disabled',
-    policy.workspace.allowExec ? '- exec/process allowed' : '- exec/process denied',
+    '## Preset restrictions',
+    renderPolicyLine('status', policy.prompt.enabled && selectedRules.length > 0),
+    selectedRules.length > 0 ? ruleLines : '- not configured',
     '',
   ].join('\n');
 }
 
 function mergeAgentsSecuritySection(existing: string, policy: SecurityPolicy): string {
-  const promptPaths = policy.prompt.enabled
-    ? policy.prompt.allowedPaths.map((p) => `  - ${p}`).join('\n')
+  const deniedPaths = policy.prompt.enabled
+    ? policy.prompt.deniedPaths.map((p) => `  - ${p}`).join('\n')
+    : '  - not configured';
+  const selectedRules = policy.prompt.rules
+    .map((key) => SECURITY_RULE_DEFINITIONS.find((rule) => rule.key === key))
+    .filter((item): item is (typeof SECURITY_RULE_DEFINITIONS)[number] => Boolean(item));
+  const ruleLines = selectedRules.length > 0
+    ? selectedRules.map((rule) => `  - ${rule.title}: ${rule.description}`).join('\n')
     : '  - not configured';
 
   const section = [
     POLICY_BEGIN,
     '## Security Policy (Managed by ClawClaw)',
-    renderPolicyLine('directory allowlist', policy.prompt.enabled),
-    `- workspace policy: ${policy.workspace.enabled ? 'enabled' : 'disabled'}`,
-    `- workspace policy path: ${policy.workspace.enabled ? policy.workspace.path : 'N/A'}`,
-    `- exec/process allowed: ${policy.workspace.allowExec ? 'yes' : 'no'}`,
-    '- directory allowlist:',
+    renderPolicyLine('prompt directory denylist', policy.prompt.enabled),
+    '- denied directories:',
     `  - enabled: ${policy.prompt.enabled ? 'yes' : 'no'}`,
-    `  - allowed paths:\n${promptPaths}`,
+    `  - paths:\n${deniedPaths}`,
+    '- preset restrictions:',
+    `  - enabled: ${selectedRules.length > 0 ? 'yes' : 'no'}`,
+    `  - rules:\n${ruleLines}`,
     POLICY_END,
   ].join('\n');
 
@@ -391,9 +234,8 @@ function mergeAgentsSecuritySection(existing: string, policy: SecurityPolicy): s
 async function syncSecurityPolicyArtifacts(
   config: Record<string, unknown>,
   policy: SecurityPolicy,
-  options: SecuritySyncOptions = {}
 ): Promise<SecuritySyncResult> {
-  const workspaces = await collectSecurityWorkspaces(config, policy, options);
+  const workspaces = await collectSecurityWorkspaces(config);
   const result: SecuritySyncResult = {
     targets: [...workspaces],
     succeeded: [],
@@ -443,60 +285,81 @@ async function syncSecurityPolicyArtifacts(
   return result;
 }
 
-function verifyAppliedConfig(config: Record<string, unknown>, policy: SecurityPolicy) {
-  const tools = ensureObject(config, 'tools');
-  const fsCfg = ensureObject(tools, 'fs');
-  const deny = ensureStringArray(tools, 'deny');
-  const elevated = ensureObject(tools, 'elevated');
-
-  const checks = {
-    fsWorkspaceOnly: fsCfg.workspaceOnly === true,
-    execDenied: deny.includes('exec'),
-    processDenied: deny.includes('process'),
-    elevatedDisabled: elevated.enabled === false,
-  };
-
-  const issues: string[] = [];
-  const shouldEnforce = policy.workspace.enabled;
-  if (shouldEnforce && !checks.fsWorkspaceOnly) issues.push('tools.fs.workspaceOnly is not effective');
-  if (shouldEnforce && !policy.workspace.allowExec && !checks.execDenied) issues.push('tools.deny 缺少 exec');
-  if (shouldEnforce && !policy.workspace.allowExec && !checks.processDenied) issues.push('tools.deny 缺少 process');
-  if (shouldEnforce && !checks.elevatedDisabled) issues.push('tools.elevated.enabled is not disabled');
-
-  return { checks, issues, ok: issues.length === 0 };
-}
-
-async function restartGatewayIfRunning(
-  ctx: HostApiContext
-): Promise<{ ok: boolean; error?: string }> {
-  if (ctx.gatewayManager.getStatus().state !== 'running') {
-    return { ok: true };
-  }
-
-  try {
-    await ctx.gatewayManager.restart();
-    return { ok: true };
-  } catch (error) {
-    logger.warn('[security] Failed to restart Gateway after syncing security policy', error);
-    return { ok: false, error: String(error) };
-  }
-}
-
 async function normalizePolicyInput(body: Partial<SecurityPolicy>): Promise<SecurityPolicy> {
-  const workspaceEnabled = !!body.workspace?.enabled;
-  const workspacePath = await canonicalizePath(body.workspace?.path || '');
-  const promptPaths = await canonicalizeAllowedPaths(body.prompt?.allowedPaths || []);
+  const deniedPaths = await canonicalizeDeniedPaths(body.prompt?.deniedPaths || []);
+  const rules = normalizeSecurityRules(body.prompt?.rules);
 
   return {
-    workspace: {
-      enabled: workspaceEnabled,
-      path: workspacePath,
-      allowExec: !!body.workspace?.allowExec,
-    },
     prompt: {
       enabled: !!body.prompt?.enabled,
-      allowedPaths: promptPaths,
+      deniedPaths,
+      rules,
     },
+  };
+}
+
+function normalizeToolEntries(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of values) {
+    if (typeof item !== 'string') continue;
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+  }
+  return out;
+}
+
+function mergeManagedToolDeny(existing: string[], previousManaged: string[], nextManaged: string[]): string[] {
+  const previousSet = new Set(previousManaged.map((item) => item.toLowerCase()));
+  const merged = existing.filter((item) => !previousSet.has(item.toLowerCase()));
+
+  const seen = new Set(merged.map((item) => item.toLowerCase()));
+  for (const item of nextManaged) {
+    const key = item.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+  return merged;
+}
+
+async function applyPolicyRuntimeConfig(
+  config: Record<string, unknown>,
+  previousPolicy: SecurityPolicy,
+  nextPolicy: SecurityPolicy,
+): Promise<{ managedToolDeny: string[]; totalToolDeny: string[] }> {
+  const previousManaged = previousPolicy.prompt.enabled
+    ? [...ALWAYS_MANAGED_DENY, ...getManagedToolDenyForRules(previousPolicy.prompt.rules)]
+    : [];
+  const nextManaged = nextPolicy.prompt.enabled
+    ? [...ALWAYS_MANAGED_DENY, ...getManagedToolDenyForRules(nextPolicy.prompt.rules)]
+    : [];
+
+  const tools = ensureObject(config, 'tools');
+  const existingDeny = normalizeToolEntries(tools.deny);
+  const mergedDeny = mergeManagedToolDeny(existingDeny, previousManaged, nextManaged);
+
+  if (mergedDeny.length > 0) {
+    tools.deny = mergedDeny;
+  } else {
+    delete tools.deny;
+  }
+
+  if (Object.keys(tools).length === 0) {
+    delete config.tools;
+  }
+
+  await writeOpenclawConfig(config);
+
+  return {
+    managedToolDeny: nextManaged,
+    totalToolDeny: mergedDeny,
   };
 }
 
@@ -504,11 +367,11 @@ export async function handleSecurityRoutes(
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
-  ctx: HostApiContext
+  ctx: HostApiContext,
 ): Promise<boolean> {
   if (url.pathname === '/api/security/policy' && req.method === 'GET') {
-    const current = await getSetting('securityPolicy');
-    sendJson(res, 200, { ...(current || DEFAULT_POLICY) });
+    const current = normalizeStoredPolicy(await getSetting('securityPolicy'));
+    sendJson(res, 200, current);
     return true;
   }
 
@@ -526,40 +389,31 @@ export async function handleSecurityRoutes(
 
   if (url.pathname === '/api/security/apply' && req.method === 'POST') {
     try {
-      const storedPolicy = await getSetting('securityPolicy');
-      const previousPolicy = await normalizePolicyInput(storedPolicy || DEFAULT_POLICY);
       const payload = await parseJsonBody<Partial<SecurityPolicy>>(req);
-      const mergedPolicy = mergePolicyInput(previousPolicy, payload);
-      const policy = await normalizePolicyInput(mergedPolicy);
+      const policy = await normalizePolicyInput(payload);
 
-      if (policy.workspace.enabled && !policy.workspace.path) {
-        sendJson(res, 400, { success: false, error: 'Workspace policy enabled but no valid workspace path.' });
+      if (policy.prompt.enabled && policy.prompt.deniedPaths.length === 0 && policy.prompt.rules.length === 0) {
+        sendJson(res, 400, { success: false, error: 'Prompt policy enabled but no denied directories or preset restrictions configured.' });
         return true;
       }
 
-      if (policy.prompt.enabled && policy.prompt.allowedPaths.length === 0) {
-        sendJson(res, 400, { success: false, error: 'Prompt policy enabled but no valid allowed directories.' });
-        return true;
-      }
-
-      await setSetting('securityPolicy', policy);
-
+      const current = normalizeStoredPolicy(await getSetting('securityPolicy'));
       const config = await readOpenclawConfig();
-      removeManagedSecurityConfig(config);
-      applyWorkspacePolicy(config, policy.workspace);
-      await writeOpenclawConfig(config);
-      const syncPromptTargets = mergePolicySyncTargets(previousPolicy, policy);
-      const syncResult = await syncSecurityPolicyArtifacts(config, policy, {
-        extraPromptPaths: syncPromptTargets,
-      });
-      const gatewayRestart = await restartGatewayIfRunning(ctx);
+      const verify = await applyPolicyRuntimeConfig(config, current, policy);
+      await setSetting('securityPolicy', policy);
+      const syncResult = await syncSecurityPolicyArtifacts(config, policy);
+      let gatewayRestarted = false;
+      if (ctx.gatewayManager.getStatus().state === 'running') {
+        await ctx.gatewayManager.restart();
+        gatewayRestarted = true;
+      }
 
       sendJson(res, 200, {
         success: true,
         applied: policy,
-        verify: verifyAppliedConfig(config, policy),
+        verify,
         sync: syncResult,
-        gatewayRestart,
+        gatewayRestarted,
       });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -570,20 +424,17 @@ export async function handleSecurityRoutes(
   if (url.pathname === '/api/security/reset' && req.method === 'POST') {
     try {
       const config = await readOpenclawConfig();
-      removeManagedSecurityConfig(config);
-      await writeOpenclawConfig(config);
-      const previousPolicy = await normalizePolicyInput(
-        (await getSetting('securityPolicy')) || DEFAULT_POLICY
-      );
-      const fallbackPromptPaths = previousPolicy.prompt.allowedPaths;
+      const current = normalizeStoredPolicy(await getSetting('securityPolicy'));
+      const verify = await applyPolicyRuntimeConfig(config, current, DEFAULT_POLICY);
       await setSetting('securityPolicy', DEFAULT_POLICY);
-      const syncResult = await syncSecurityPolicyArtifacts(config, DEFAULT_POLICY, {
-        extraPromptPaths: fallbackPromptPaths,
-      });
+      const syncResult = await syncSecurityPolicyArtifacts(config, DEFAULT_POLICY);
+      let gatewayRestarted = false;
+      if (ctx.gatewayManager.getStatus().state === 'running') {
+        await ctx.gatewayManager.restart();
+        gatewayRestarted = true;
+      }
 
-      const gatewayRestart = await restartGatewayIfRunning(ctx);
-
-      sendJson(res, 200, { success: true, sync: syncResult, gatewayRestart });
+      sendJson(res, 200, { success: true, verify, sync: syncResult, gatewayRestarted });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }
@@ -592,5 +443,3 @@ export async function handleSecurityRoutes(
 
   return false;
 }
-
-
