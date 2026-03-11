@@ -363,17 +363,24 @@ export function Chat() {
 // ── Welcome Screen ──────────────────────────────────────────────
 
 function WelcomeScreen() {
+  const { t } = useTranslation('chat');
+  const welcomeActions = [
+    t('welcome.askQuestions'),
+    t('welcome.creativeTasks'),
+    t('welcome.brainstorming'),
+  ];
+
   return (
     <div className="flex flex-col items-center justify-center text-center h-[60vh]">
       <h1 className="text-6xl md:text-7xl font-serif text-foreground mb-3 font-normal tracking-tight" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}>
-        Welcome
+        {t('welcome.title')}
       </h1>
       <p className="text-[17px] text-foreground/80 mb-8 font-medium">
-        Your AI assistant is ready. Start a conversation below.
+        {t('welcome.subtitle')}
       </p>
 
       <div className="flex flex-wrap items-center justify-center gap-2.5 max-w-lg w-full">
-        {['Ask Questions', 'Creative Tasks', 'Brainstorming'].map((label, i) => (
+        {welcomeActions.map((label, i) => (
           <button 
             key={i} 
             className="px-4 py-1.5 rounded-full border border-black/10 dark:border-white/10 text-[13px] font-medium text-foreground/70 hover:bg-black/5 dark:hover:bg-white/5 transition-colors bg-black/[0.02]"

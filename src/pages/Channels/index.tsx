@@ -3,7 +3,7 @@
  * Manage messaging channel connections with configuration UI
  */
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Trash2, AlertCircle } from 'lucide-react';
+import { RefreshCw, Trash2, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -108,7 +108,13 @@ export function Channels() {
     void Promise.all([fetchChannels(), fetchConfiguredTypes()]);
   };
 
+  const isLoadingConfiguredTypes = !configuredTypesReady;
   const showRefreshingHint = loading && configuredTypesReady;
+  const statusText = isLoadingConfiguredTypes
+    ? t('loadingConfiguredStatus', '正在加载连接配置...')
+    : showRefreshingHint
+      ? t('refreshingStatus', '正在刷新连接状态...')
+      : null;
 
   return (
     <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
@@ -124,10 +130,11 @@ export function Channels() {
           </div>
 
           <div className="flex items-center gap-3 md:mt-2">
-            {showRefreshingHint && (
-              <span className="text-[13px] text-foreground/55">
-                正在刷新连接状态...
-              </span>
+            {statusText && (
+              <div className="inline-flex h-9 items-center gap-2 rounded-full border border-black/10 bg-black/[0.03] px-3 text-[13px] font-medium text-foreground/65 dark:border-white/10 dark:bg-white/[0.04]">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>{statusText}</span>
+              </div>
             )}
             <Button
               variant="outline"

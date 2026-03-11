@@ -6,11 +6,17 @@ import { create } from 'zustand';
 import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from './gateway';
 import type { Channel, ChannelType } from '../types/channel';
+import { CHANNEL_NAMES } from '../types/channel';
 
 interface AddChannelParams {
   type: ChannelType;
   name: string;
   token?: string;
+}
+
+function resolveChannelTypeFromId(channelId: string): ChannelType | undefined {
+  const channelTypes = Object.keys(CHANNEL_NAMES) as ChannelType[];
+  return channelTypes.find((type) => channelId === type || channelId.startsWith(`${type}-`));
 }
 
 interface ChannelsState {
@@ -116,7 +122,7 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
           channels.push({
             id: `${channelId}-${primaryAccount?.accountId || 'default'}`,
             type: channelId as ChannelType,
-            name: primaryAccount?.name || channelId,
+            name: primaryAccount?.name || CHANNEL_NAMES[channelId as ChannelType] || channelId,
             status,
             accountId: primaryAccount?.accountId,
             error:
@@ -174,8 +180,10 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
   },
 
   deleteChannel: async (channelId) => {
-    // Extract channel type from the channelId (format: "channelType-accountId")
-    const channelType = channelId.split('-')[0];
+    const channelType = resolveChannelTypeFromId(channelId);
+    if (!channelType) {
+      throw new Error(`Unknown channel type for id: ${channelId}`);
+    }
 
     try {
       // Delete the channel configuration from openclaw.json

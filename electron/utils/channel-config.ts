@@ -4,17 +4,36 @@
  *
  * All file I/O uses async fs/promises to avoid blocking the main thread.
  */
-import { access, mkdir, readFile, writeFile, readdir, stat, rm } from 'fs/promises';
+import { access, mkdir, readFile, writeFile, readdir, rm } from 'fs/promises';
 import { constants } from 'fs';
-import { join } from 'path';
+import { existsSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { dirname, join } from 'path';
 import { homedir } from 'os';
-import { getOpenClawResolvedDir } from './paths';
+import { app } from 'electron';
+import { getOpenClawEntryPath, getOpenClawResolvedDir, getOpenClawDir } from './paths';
 import * as logger from './logger';
 import { proxyAwareFetch } from './proxy-fetch';
 
 const OPENCLAW_DIR = join(homedir(), '.openclaw');
 const CONFIG_FILE = join(OPENCLAW_DIR, 'openclaw.json');
 const WECOM_PLUGIN_ID = 'wecom-openclaw-plugin';
+const SUPPORTED_CHANNEL_IDS = [
+    'whatsapp',
+    'dingtalk',
+    'telegram',
+    'discord',
+    'signal',
+    'feishu',
+    'wecom',
+    'imessage',
+    'matrix',
+    'line',
+    'msteams',
+    'googlechat',
+    'mattermost',
+    'qqbot',
+] as const;
 
 // Channels that are managed as plugins (config goes under plugins.entries, not channels)
 const PLUGIN_CHANNELS = ['whatsapp'];
@@ -23,6 +42,179 @@ const PLUGIN_CHANNELS = ['whatsapp'];
 
 async function fileExists(p: string): Promise<boolean> {
     try { await access(p, constants.F_OK); return true; } catch { return false; }
+}
+
+async function hasChildEntries(dir: string): Promise<boolean> {
+    try {
+        const entries = await readdir(dir);
+        return entries.length > 0;
+    } catch {
+        return false;
+    }
+}
+
+function extractTrailingJsonObject(raw: string): Record<string, unknown> | null {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+
+    const directMatch = trimmed.match(/(\{[\s\S]*\})\s*$/);
+    if (directMatch) {
+        try {
+            return JSON.parse(directMatch[1]) as Record<string, unknown>;
+        } catch {
+            // fall through
+        }
+    }
+
+    const lastObjectStart = trimmed.lastIndexOf('\n{');
+    const candidate = lastObjectStart >= 0 ? trimmed.slice(lastObjectStart + 1) : trimmed;
+    try {
+        return JSON.parse(candidate) as Record<string, unknown>;
+    } catch {
+        return null;
+    }
+}
+
+function getOpenClawCliSpawnConfig(): { command: string; args: string[]; env: NodeJS.ProcessEnv; cwd: string } {
+    const cwd = getOpenClawResolvedDir();
+
+    if (!app.isPackaged) {
+        const openclawDir = getOpenClawDir();
+        const binName = process.platform === 'win32' ? 'openclaw.cmd' : 'openclaw';
+        const binPath = join(dirname(openclawDir), '.bin', binName);
+        if (existsSync(binPath)) {
+            return {
+                command: binPath,
+                args: ['channels', 'list', '--json', '--no-usage'],
+                env: {
+                    ...process.env,
+                    OPENCLAW_NO_RESPAWN: '1',
+                    OPENCLAW_EMBEDDED_IN: 'ClawClaw',
+                },
+                cwd,
+            };
+        }
+    }
+
+    const entryPath = getOpenClawEntryPath();
+    const packagedCli =
+        process.platform === 'win32'
+            ? join(process.resourcesPath, 'cli', 'openclaw.cmd')
+            : join(process.resourcesPath, 'cli', 'openclaw');
+    if (app.isPackaged && existsSync(packagedCli)) {
+        return {
+            command: packagedCli,
+            args: ['channels', 'list', '--json', '--no-usage'],
+            env: {
+                ...process.env,
+                OPENCLAW_NO_RESPAWN: '1',
+                OPENCLAW_EMBEDDED_IN: 'ClawClaw',
+            },
+            cwd,
+        };
+    }
+
+    return {
+        command: process.execPath,
+        args: [entryPath, 'channels', 'list', '--json', '--no-usage'],
+        env: {
+            ...process.env,
+            ELECTRON_RUN_AS_NODE: '1',
+            OPENCLAW_NO_RESPAWN: '1',
+            OPENCLAW_EMBEDDED_IN: 'ClawClaw',
+        },
+        cwd,
+    };
+}
+
+async function listConfiguredChannelsFromCli(): Promise<string[]> {
+    const supported = new Set<string>(SUPPORTED_CHANNEL_IDS);
+    const { command, args, env, cwd } = getOpenClawCliSpawnConfig();
+
+    return await new Promise((resolve) => {
+        const child = spawn(command, args, {
+            cwd,
+            env,
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        child.stdout.on('data', (chunk) => {
+            stdout += chunk.toString();
+        });
+
+        child.stderr.on('data', (chunk) => {
+            stderr += chunk.toString();
+        });
+
+        child.on('error', (error) => {
+            logger.warn('Failed to execute openclaw channels list:', error);
+            resolve([]);
+        });
+
+        child.on('close', () => {
+            const parsed = extractTrailingJsonObject(`${stdout}\n${stderr}`);
+            if (!parsed) {
+                resolve([]);
+                return;
+            }
+
+            const configured = new Set<string>();
+            const chat = parsed.chat;
+            if (chat && typeof chat === 'object') {
+                for (const key of Object.keys(chat as Record<string, unknown>)) {
+                    if (supported.has(key)) {
+                        configured.add(key);
+                    }
+                }
+            }
+
+            resolve(Array.from(configured));
+        });
+    });
+}
+
+async function detectLegacyConfiguredChannels(): Promise<string[]> {
+    const detected = new Set<string>();
+    const credentialsDir = join(OPENCLAW_DIR, 'credentials');
+    const agentsDir = join(OPENCLAW_DIR, 'agents');
+    const workspaceAgentsDir = join(OPENCLAW_DIR, 'workspace', 'agents');
+
+    let credentialEntries: string[] = [];
+    let agentEntries: string[] = [];
+    let workspaceAgentEntries: string[] = [];
+
+    try {
+        credentialEntries = await readdir(credentialsDir);
+    } catch {
+        credentialEntries = [];
+    }
+    try {
+        agentEntries = await readdir(agentsDir);
+    } catch {
+        agentEntries = [];
+    }
+    try {
+        workspaceAgentEntries = await readdir(workspaceAgentsDir);
+    } catch {
+        workspaceAgentEntries = [];
+    }
+
+    for (const channelId of SUPPORTED_CHANNEL_IDS) {
+        const hasNamedDir = await fileExists(join(OPENCLAW_DIR, channelId));
+        const hasCredentialFiles = credentialEntries.some((entry) => entry.startsWith(`${channelId}-`));
+        const hasAgentDir = agentEntries.some((entry) => entry === `${channelId}-agent` || entry.startsWith(`${channelId}-agent-`));
+        const hasWorkspaceAgentDir = workspaceAgentEntries.some((entry) => entry === `${channelId}-agent` || entry.startsWith(`${channelId}-agent-`));
+        const hasSessionDir = await hasChildEntries(join(OPENCLAW_DIR, channelId, 'sessions'));
+
+        if (hasNamedDir || hasCredentialFiles || hasAgentDir || hasWorkspaceAgentDir || hasSessionDir) {
+            detected.add(channelId);
+        }
+    }
+
+    return Array.from(detected);
 }
 
 // ── Types ────────────────────────────────────────────────────────
@@ -353,38 +545,34 @@ export async function deleteChannelConfig(channelType: string): Promise<void> {
 
 export async function listConfiguredChannels(): Promise<string[]> {
     const config = await readOpenClawConfig();
-    const channels: string[] = [];
+    const channels = new Set<string>();
+
+    for (const channelType of await listConfiguredChannelsFromCli()) {
+        channels.add(channelType);
+    }
 
     if (config.channels) {
-        channels.push(...Object.keys(config.channels).filter(
-            (channelType) => config.channels![channelType]?.enabled !== false
-        ));
+        for (const channelType of Object.keys(config.channels).filter(
+            (item) => config.channels![item]?.enabled !== false
+        )) {
+            channels.add(channelType);
+        }
     }
 
-    // Check for WhatsApp credentials directory
-    try {
-        const whatsappDir = join(homedir(), '.openclaw', 'credentials', 'whatsapp');
-        if (await fileExists(whatsappDir)) {
-            const entries = await readdir(whatsappDir);
-            const hasSession = await (async () => {
-                for (const entry of entries) {
-                    try {
-                        const s = await stat(join(whatsappDir, entry));
-                        if (s.isDirectory()) return true;
-                    } catch { /* ignore */ }
-                }
-                return false;
-            })();
-
-            if (hasSession && !channels.includes('whatsapp')) {
-                channels.push('whatsapp');
+    if (config.plugins?.entries) {
+        for (const [pluginId, pluginConfig] of Object.entries(config.plugins.entries)) {
+            if (pluginConfig?.enabled === false) continue;
+            if (pluginId === 'qqbot' || pluginId === 'whatsapp' || pluginId === 'feishu') {
+                channels.add(pluginId);
             }
         }
-    } catch {
-        // Ignore errors checking whatsapp dir
     }
 
-    return channels;
+    for (const channelType of await detectLegacyConfiguredChannels()) {
+        channels.add(channelType);
+    }
+
+    return Array.from(channels);
 }
 
 export async function setChannelEnabled(channelType: string, enabled: boolean): Promise<void> {
