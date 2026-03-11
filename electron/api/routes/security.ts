@@ -100,12 +100,20 @@ function removeFromArray(target: Record<string, unknown>, key: string, values: s
   target[key] = current.filter((item) => !valueSet.has(item));
 }
 
-function restoreManagedAgentWorkspaces(config: Record<string, unknown>): void {
+function restoreManagedAgentOverrides(config: Record<string, unknown>): void {
   const clawclaw = ensureObject(config, 'clawclaw');
   const security = ensureObject(clawclaw, 'security');
-  const original =
+  const originalWorkspaces =
     security.originalAgentWorkspaces && typeof security.originalAgentWorkspaces === 'object'
       ? (security.originalAgentWorkspaces as Record<string, unknown>)
+      : {};
+  const originalSandboxes =
+    security.originalAgentSandboxes && typeof security.originalAgentSandboxes === 'object'
+      ? (security.originalAgentSandboxes as Record<string, unknown>)
+      : {};
+  const originalAgentTools =
+    security.originalAgentTools && typeof security.originalAgentTools === 'object'
+      ? (security.originalAgentTools as Record<string, unknown>)
       : {};
 
   const agents = ensureObject(config, 'agents');
@@ -115,17 +123,38 @@ function restoreManagedAgentWorkspaces(config: Record<string, unknown>): void {
     const entry = item as Record<string, unknown>;
     const id = typeof entry.id === 'string' ? entry.id : null;
     if (!id) continue;
-    if (Object.prototype.hasOwnProperty.call(original, id)) {
-      const restored = original[id];
-      if (typeof restored === 'string' && restored.trim()) {
-        entry.workspace = restored;
+
+    if (Object.prototype.hasOwnProperty.call(originalWorkspaces, id)) {
+      const restoredWorkspace = originalWorkspaces[id];
+      if (typeof restoredWorkspace === 'string' && restoredWorkspace.trim()) {
+        entry.workspace = restoredWorkspace;
       } else {
         delete entry.workspace;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(originalSandboxes, id)) {
+      const restoredSandbox = originalSandboxes[id];
+      if (restoredSandbox && typeof restoredSandbox === 'object') {
+        entry.sandbox = restoredSandbox;
+      } else {
+        delete entry.sandbox;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(originalAgentTools, id)) {
+      const restoredTools = originalAgentTools[id];
+      if (restoredTools && typeof restoredTools === 'object') {
+        entry.tools = restoredTools;
+      } else {
+        delete entry.tools;
       }
     }
   }
 
   delete security.originalAgentWorkspaces;
+  delete security.originalAgentSandboxes;
+  delete security.originalAgentTools;
 }
 
 function removeManagedSecurityConfig(config: Record<string, unknown>): void {
@@ -133,7 +162,7 @@ function removeManagedSecurityConfig(config: Record<string, unknown>): void {
   const defaults = ensureObject(agents, 'defaults');
   const tools = ensureObject(config, 'tools');
 
-  restoreManagedAgentWorkspaces(config);
+  restoreManagedAgentOverrides(config);
 
   const fsCfg = ensureObject(tools, 'fs');
   delete fsCfg.workspaceOnly;
@@ -174,16 +203,43 @@ function applySecurityPolicyToConfig(config: Record<string, unknown>, policy: Se
 
   defaults.workspace = policy.allowedPaths[0];
 
-  // Force every configured agent onto the same restricted workspace boundary.
+  // Force every configured agent onto the same restricted boundary.
   const list = Array.isArray(agents.list) ? agents.list : [];
   const originalAgentWorkspaces: Record<string, string | null> = {};
+  const originalAgentSandboxes: Record<string, Record<string, unknown> | null> = {};
+  const originalAgentTools: Record<string, Record<string, unknown> | null> = {};
   for (const item of list) {
     if (!item || typeof item !== 'object') continue;
     const entry = item as Record<string, unknown>;
     const id = typeof entry.id === 'string' ? entry.id : null;
     if (!id) continue;
+
     originalAgentWorkspaces[id] = typeof entry.workspace === 'string' ? entry.workspace : null;
+    originalAgentSandboxes[id] =
+      entry.sandbox && typeof entry.sandbox === 'object'
+        ? ({ ...(entry.sandbox as Record<string, unknown>) } as Record<string, unknown>)
+        : null;
+    originalAgentTools[id] =
+      entry.tools && typeof entry.tools === 'object'
+        ? ({ ...(entry.tools as Record<string, unknown>) } as Record<string, unknown>)
+        : null;
+
     entry.workspace = policy.allowedPaths[0];
+
+    const agentSandbox = ensureObject(entry, 'sandbox');
+    agentSandbox.mode = 'all';
+    agentSandbox.scope = 'agent';
+    agentSandbox.workspaceAccess = 'none';
+    const agentDocker = ensureObject(agentSandbox, 'docker');
+    agentDocker.binds = policy.allowedPaths.map((hostPath, index) => `${hostPath}:/allowed/${index}:rw`);
+
+    const agentTools = ensureObject(entry, 'tools');
+    const agentDeny = ensureStringArray(agentTools, 'deny');
+    for (const item of ['exec', 'process']) {
+      if (!agentDeny.includes(item)) agentDeny.push(item);
+    }
+    const agentElevated = ensureObject(agentTools, 'elevated');
+    agentElevated.enabled = false;
   }
 
   const fsCfg = ensureObject(tools, 'fs');
@@ -218,6 +274,8 @@ function applySecurityPolicyToConfig(config: Record<string, unknown>, policy: Se
   security.mode = policy.mode;
   security.allowedPaths = policy.allowedPaths;
   security.originalAgentWorkspaces = originalAgentWorkspaces;
+  security.originalAgentSandboxes = originalAgentSandboxes;
+  security.originalAgentTools = originalAgentTools;
 
   return config;
 }
