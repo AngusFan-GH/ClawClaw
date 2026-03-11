@@ -17,6 +17,7 @@ import { extractImages, extractText, extractThinking, extractToolUse } from './m
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { PROVIDER_TYPE_INFO, type ProviderAccount, type ProviderVendorInfo } from '@/lib/providers';
+import { useNavigate } from 'react-router-dom';
 
 function getRuntimeProviderKey(account: ProviderAccount): string {
   if (account.vendorId === 'google' && account.authMode === 'oauth_browser') {
@@ -94,6 +95,7 @@ function dedupeModelOptions(options: ChatModelOption[]): ChatModelOption[] {
 
 export function Chat() {
   const { t } = useTranslation('chat');
+  const navigate = useNavigate();
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
 
@@ -346,6 +348,7 @@ export function Chat() {
       <ChatInput
         onSend={sendMessage}
         onStop={abortRun}
+        onConfigureModels={() => navigate('/models')}
         disabled={!isGatewayRunning}
         sending={sending}
         isEmpty={isEmpty}

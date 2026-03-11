@@ -130,7 +130,7 @@ export function Models() {
                 <ProvidersSettings actionOnly />
               </div>
             </div>
-            <ProvidersSettings embedded hideHeader />
+            <ProvidersSettings embedded hideHeader autoOpenOnEmpty />
           </section>
 
           {/* Token Usage History Section */}

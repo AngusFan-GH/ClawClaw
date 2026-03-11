@@ -2,7 +2,7 @@
  * Providers Settings Component
  * Manage AI provider configurations and API keys
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus,
   Trash2,
@@ -97,10 +97,12 @@ export function ProvidersSettings({
   embedded = false,
   hideHeader = false,
   actionOnly = false,
+  autoOpenOnEmpty = false,
 }: {
   embedded?: boolean;
   hideHeader?: boolean;
   actionOnly?: boolean;
+  autoOpenOnEmpty?: boolean;
 }) {
   const { t } = useTranslation('settings');
   const devModeUnlocked = useSettingsStore((state) => state.devModeUnlocked);
@@ -119,6 +121,7 @@ export function ProvidersSettings({
   } = useProviderStore();
 
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const autoOpenedRef = useRef(false);
   const [editingProvider, setEditingProvider] = useState<string | null>(null);
   const vendorMap = new Map(vendors.map((vendor) => [vendor.id, vendor]));
   const existingVendorIds = new Set(accounts.map((account) => account.vendorId));
@@ -131,6 +134,16 @@ export function ProvidersSettings({
   useEffect(() => {
     refreshProviderSnapshot();
   }, [refreshProviderSnapshot]);
+
+  useEffect(() => {
+    if (!autoOpenOnEmpty || actionOnly || loading || autoOpenedRef.current) {
+      return;
+    }
+    if (displayProviders.length === 0) {
+      autoOpenedRef.current = true;
+      setShowAddDialog(true);
+    }
+  }, [actionOnly, autoOpenOnEmpty, displayProviders.length, loading]);
 
   const handleAddProvider = async (
     type: ProviderType,

@@ -37,6 +37,7 @@ export interface ChatModelOption {
 interface ChatInputProps {
   onSend: (text: string, attachments?: FileAttachment[]) => void;
   onStop?: () => void;
+  onConfigureModels?: () => void;
   disabled?: boolean;
   sending?: boolean;
   isEmpty?: boolean;
@@ -95,6 +96,7 @@ function readFileAsBase64(file: globalThis.File): Promise<string> {
 export function ChatInput({
   onSend,
   onStop,
+  onConfigureModels,
   disabled = false,
   sending = false,
   isEmpty = false,
@@ -440,7 +442,7 @@ export function ChatInput({
             />
           </div>
 
-          {hasModelOptions && (
+          {hasModelOptions ? (
             <div className="relative shrink-0 self-center" ref={modelMenuRef}>
               <button
                 type="button"
@@ -475,6 +477,15 @@ export function ChatInput({
                 </div>
               )}
             </div>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onConfigureModels}
+              className="h-10 shrink-0 rounded-[10px] border-black/10 bg-[#f3f1e8] px-3 text-[13px] font-medium text-foreground/80 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:bg-[#151514] dark:hover:bg-white/5"
+            >
+              {t('composer.configureModels')}
+            </Button>
           )}
 
           {/* Send Button */}

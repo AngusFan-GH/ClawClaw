@@ -18,7 +18,8 @@
   },
   "composer": {
     "defaultModel": "默认模型",
-    "modelAriaLabel": "切换当前对话模型"
+    "modelAriaLabel": "切换当前对话模型",
+    "configureModels": "未配置模型"
   },
   "historyBuckets": {
     "today": "今天",
