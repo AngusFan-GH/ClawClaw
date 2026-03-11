@@ -15,6 +15,17 @@ interface SecurityPolicy {
   allowedPaths: string[];
 }
 
+interface AppliedSnapshot {
+  enabled: boolean;
+  mode: SecurityMode;
+  allowedPaths: string[];
+  harden?: {
+    fsWorkspaceOnly: boolean;
+    denyExecProcess: boolean;
+    disableElevated: boolean;
+  };
+}
+
 const defaultPolicy: SecurityPolicy = {
   enabled: false,
   mode: 'workspace-only',
@@ -51,6 +62,7 @@ export function Security() {
   const [saving, setSaving] = useState(false);
   const [applying, setApplying] = useState(false);
   const [policy, setPolicy] = useState<SecurityPolicy>(defaultPolicy);
+  const [lastApplied, setLastApplied] = useState<AppliedSnapshot | null>(null);
 
   const loadPolicy = useCallback(async () => {
     setLoading(true);
@@ -129,7 +141,13 @@ export function Security() {
         }),
       });
 
-      await hostApiFetch('/api/security/apply', { method: 'POST' });
+      const applyResult = await hostApiFetch<{ success: boolean; applied?: AppliedSnapshot }>(
+        '/api/security/apply',
+        { method: 'POST' }
+      );
+      if (applyResult.applied) {
+        setLastApplied(applyResult.applied);
+      }
       toast.success('策略已应用并重启 Gateway');
     } catch (error) {
       toast.error(`应用失败: ${String(error)}`);
@@ -147,6 +165,26 @@ export function Security() {
     }
     return '工作区限制：仅限制文件工具到允许目录（兼容性更好）';
   }, [policy.mode]);
+
+  const effectivePreview = useMemo(() => {
+    const allowedPaths = compactPaths(policy.allowedPaths);
+    const enabled = policy.enabled && allowedPaths.length > 0;
+    return {
+      enabled,
+      mode: policy.mode,
+      allowedPaths,
+      harden: {
+        fsWorkspaceOnly: enabled,
+        denyExecProcess: enabled,
+        disableElevated: enabled,
+      },
+      workspace: enabled ? allowedPaths[0] : '(未启用)',
+      sandboxBinds:
+        enabled && policy.mode === 'strict-sandbox'
+          ? allowedPaths.map((hostPath, index) => `${hostPath}:/allowed/${index}:rw`)
+          : [],
+    };
+  }, [policy]);
 
   if (loading) {
     return (
@@ -232,6 +270,52 @@ export function Security() {
           )}
         </div>
       </div>
+
+      <div className="rounded-xl border p-4 space-y-3">
+        <Label className="text-base">策略预览（应用后）</Label>
+        <div className="text-sm space-y-1 text-muted-foreground">
+          <p>状态：{effectivePreview.enabled ? '启用' : '未启用'}</p>
+          <p>模式：{effectivePreview.mode === 'strict-sandbox' ? '严格沙箱' : '工作区限制'}</p>
+          <p>Workspace：{effectivePreview.workspace}</p>
+          <p>
+            硬化开关：
+            fs.workspaceOnly={String(effectivePreview.harden.fsWorkspaceOnly)}，deny(exec/process)
+            ={String(effectivePreview.harden.denyExecProcess)}，elevated.disabled=
+            {String(effectivePreview.harden.disableElevated)}
+          </p>
+          {effectivePreview.sandboxBinds.length > 0 && (
+            <div>
+              <p>Sandbox binds：</p>
+              <ul className="list-disc pl-5">
+                {effectivePreview.sandboxBinds.map((bind) => (
+                  <li key={bind} className="break-all font-mono text-xs">
+                    {bind}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {lastApplied && (
+        <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-4 space-y-2">
+          <Label className="text-base">最近一次生效快照</Label>
+          <p className="text-sm text-muted-foreground">
+            状态：{lastApplied.enabled ? '启用' : '未启用'} / 模式：
+            {lastApplied.mode === 'strict-sandbox' ? '严格沙箱' : '工作区限制'}
+          </p>
+          {lastApplied.allowedPaths.length > 0 && (
+            <ul className="list-disc pl-5 text-xs text-muted-foreground">
+              {lastApplied.allowedPaths.map((p) => (
+                <li key={p} className="break-all font-mono">
+                  {p}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {policy.enabled && !hasPaths && (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm flex gap-2">
