@@ -246,7 +246,7 @@ export function Security() {
   }
 
   return (
-    <div className="p-6 max-w-5xl space-y-6">
+    <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-semibold flex items-center gap-2">
           <ShieldCheck className="h-6 w-6" />
@@ -255,7 +255,7 @@ export function Security() {
         <p className="text-sm text-muted-foreground mt-1">{summary}</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="space-y-4">
         <div className="rounded-xl border p-4 space-y-4">
           <div className="flex items-center gap-2 text-base font-medium">
             <FolderSearch className="h-4 w-4" />
