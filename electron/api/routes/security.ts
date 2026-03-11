@@ -81,7 +81,9 @@ function ensureObject(parent: Record<string, unknown>, key: string): Record<stri
 function ensureStringArray(target: Record<string, unknown>, key: string): string[] {
   const current = target[key];
   if (Array.isArray(current)) {
-    return current.filter((item): item is string => typeof item === 'string');
+    const filtered = current.filter((item): item is string => typeof item === 'string');
+    target[key] = filtered;
+    return filtered;
   }
   const arr: string[] = [];
   target[key] = arr;
