@@ -57,7 +57,6 @@ function compactPaths(paths: string[]): string[] {
 
 export function Security() {
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [applying, setApplying] = useState(false);
   const [policy, setPolicy] = useState<SecurityPolicy>(defaultPolicy);
   const [verify, setVerify] = useState<VerifyState | null>(null);
@@ -109,26 +108,6 @@ export function Security() {
       allowedPaths: prev.allowedPaths.filter((item) => item !== path),
     }));
   }, []);
-
-  const savePolicy = useCallback(async () => {
-    setSaving(true);
-    try {
-      const payload: SecurityPolicy = {
-        ...policy,
-        allowedPaths: compactPaths(policy.allowedPaths),
-      };
-      await hostApiFetch('/api/security/policy', {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      });
-      setPolicy(payload);
-      toast.success('策略已保存');
-    } catch (error) {
-      toast.error(`保存失败: ${String(error)}`);
-    } finally {
-      setSaving(false);
-    }
-  }, [policy]);
 
   const applyPolicy = useCallback(async () => {
     const normalized = compactPaths(policy.allowedPaths);
@@ -292,9 +271,6 @@ export function Security() {
         <Button variant="outline" onClick={() => void loadPolicy()}>
           <RefreshCw className="h-4 w-4 mr-2" />
           重新加载
-        </Button>
-        <Button onClick={() => void savePolicy()} disabled={saving}>
-          {saving ? '保存中...' : '保存策略'}
         </Button>
         <Button onClick={() => void applyPolicy()} disabled={applying || (policy.enabled && !hasPaths)}>
           {applying ? '应用中...' : '应用策略'}
