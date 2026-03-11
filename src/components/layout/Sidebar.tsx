@@ -7,7 +7,6 @@ import { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Network,
-  Bot,
   Puzzle,
   Clock,
   Settings as SettingsIcon,
@@ -15,10 +14,9 @@ import {
   PanelLeftClose,
   PanelLeft,
   Plus,
-  Terminal,
-  ExternalLink,
   Trash2,
   Cpu,
+  ChevronUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
@@ -26,7 +24,6 @@ import { useChatStore } from '@/stores/chat';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { hostApiFetch } from '@/lib/host-api';
 import { useTranslation } from 'react-i18next';
 import logoSvg from '@/assets/logo.svg';
 
@@ -121,33 +118,18 @@ export function Sidebar() {
   const deleteSession = useChatStore((s) => s.deleteSession);
 
   const navigate = useNavigate();
-  const isOnChat = useLocation().pathname === '/';
+  const location = useLocation();
+  const isOnChat = location.pathname === '/';
 
   const getSessionLabel = (key: string, displayName?: string, label?: string) =>
     sessionLabels[key] ?? label ?? displayName ?? key;
-
-  const openDevConsole = async () => {
-    try {
-      const result = await hostApiFetch<{
-        success: boolean;
-        url?: string;
-        error?: string;
-      }>('/api/gateway/control-ui');
-      if (result.success && result.url) {
-        window.electron.openExternal(result.url);
-      } else {
-        console.error('Failed to get Dev Console URL:', result.error);
-      }
-    } catch (err) {
-      console.error('Error opening Dev Console:', err);
-    }
-  };
 
   const { t } = useTranslation(['common', 'chat']);
   const [sessionToDelete, setSessionToDelete] = useState<{ key: string; label: string } | null>(
     null
   );
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -187,6 +169,31 @@ export function Sidebar() {
       label: t('sidebar.cronTasks'),
     },
   ];
+
+  const settingsItems = [
+    {
+      to: '/channels',
+      icon: <Network className="h-[18px] w-[18px]" strokeWidth={2} />,
+      label: t('sidebar.channels'),
+    },
+    {
+      to: '/models',
+      icon: <Cpu className="h-[18px] w-[18px]" strokeWidth={2} />,
+      label: t('sidebar.models'),
+    },
+    {
+      to: '/security',
+      icon: <Shield className="h-[18px] w-[18px]" strokeWidth={2} />,
+      label: t('sidebar.security'),
+    },
+    {
+      to: '/settings',
+      icon: <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />,
+      label: t('sidebar.other'),
+    },
+  ];
+
+  const settingsAreaActive = settingsItems.some((item) => location.pathname.startsWith(item.to));
 
   return (
     <aside
@@ -305,178 +312,94 @@ export function Sidebar() {
       )}
 
       {/* Footer */}
-      <div className="p-2 mt-auto">
-        <NavLink
-          to="/channels"
-          className={({ isActive }) =>
-            cn(
-              'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors',
-              'hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80',
-              isActive && 'bg-black/5 dark:bg-white/10 text-foreground',
-              sidebarCollapsed ? 'justify-center px-0' : ''
-            )
-          }
+      <div className="relative mt-auto p-2">
+        <div
+          className="relative"
+          onMouseEnter={() => setSettingsMenuOpen(true)}
+          onMouseLeave={() => setSettingsMenuOpen(false)}
+          onFocus={() => setSettingsMenuOpen(true)}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              setSettingsMenuOpen(false);
+            }
+          }}
         >
-          {({ isActive }) => (
-            <>
-              <div
-                className={cn(
-                  'flex shrink-0 items-center justify-center',
-                  isActive ? 'text-foreground' : 'text-muted-foreground'
-                )}
-              >
-                <Network className="h-[18px] w-[18px]" strokeWidth={2} />
-              </div>
-              {!sidebarCollapsed && (
-                <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                  {t('sidebar.channels')}
-                </span>
+          <button
+            type="button"
+            className={cn(
+              'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors',
+              'hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80',
+              settingsAreaActive && 'bg-black/5 dark:bg-white/10 text-foreground',
+              sidebarCollapsed ? 'justify-center px-0' : ''
+            )}
+            aria-haspopup="menu"
+            aria-expanded={settingsMenuOpen}
+          >
+            <div
+              className={cn(
+                'flex shrink-0 items-center justify-center',
+                settingsAreaActive ? 'text-foreground' : 'text-muted-foreground'
               )}
-            </>
-          )}
-        </NavLink>
-
-        <NavLink
-          to="/models"
-          className={({ isActive }) =>
-            cn(
-              'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors mt-1',
-              'hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80',
-              isActive && 'bg-black/5 dark:bg-white/10 text-foreground',
-              sidebarCollapsed ? 'justify-center px-0' : ''
-            )
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <div
-                className={cn(
-                  'flex shrink-0 items-center justify-center',
-                  isActive ? 'text-foreground' : 'text-muted-foreground'
-                )}
-              >
-                <Cpu className="h-[18px] w-[18px]" strokeWidth={2} />
-              </div>
-              {!sidebarCollapsed && (
-                <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                  {t('sidebar.models')}
-                </span>
-              )}
-            </>
-          )}
-        </NavLink>
-
-        {/* <NavLink
-          to="/agents"
-          className={({ isActive }) =>
-            cn(
-              'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors mt-1',
-              'hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80',
-              isActive && 'bg-black/5 dark:bg-white/10 text-foreground',
-              sidebarCollapsed ? 'justify-center px-0' : ''
-            )
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <div
-                className={cn(
-                  'flex shrink-0 items-center justify-center',
-                  isActive ? 'text-foreground' : 'text-muted-foreground'
-                )}
-              >
-                <Bot className="h-[18px] w-[18px]" strokeWidth={2} />
-              </div>
-              {!sidebarCollapsed && (
-                <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                  {t('sidebar.agents')}
-                </span>
-              )}
-            </>
-          )}
-        </NavLink> */}
-
-        <NavLink
-          to="/security"
-          className={({ isActive }) =>
-            cn(
-              'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors mt-1',
-              'hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80',
-              isActive && 'bg-black/5 dark:bg-white/10 text-foreground',
-              sidebarCollapsed ? 'justify-center px-0' : ''
-            )
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <div
-                className={cn(
-                  'flex shrink-0 items-center justify-center',
-                  isActive ? 'text-foreground' : 'text-muted-foreground'
-                )}
-              >
-                <Shield className="h-[18px] w-[18px]" strokeWidth={2} />
-              </div>
-              {!sidebarCollapsed && (
-                <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                  {t('sidebar.security')}
-                </span>
-              )}
-            </>
-          )}
-        </NavLink>
-
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            cn(
-              'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors mt-1',
-              'hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80',
-              isActive && 'bg-black/5 dark:bg-white/10 text-foreground',
-              sidebarCollapsed ? 'justify-center px-0' : ''
-            )
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <div
-                className={cn(
-                  'flex shrink-0 items-center justify-center',
-                  isActive ? 'text-foreground' : 'text-muted-foreground'
-                )}
-              >
-                <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />
-              </div>
-              {!sidebarCollapsed && (
-                <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+            >
+              <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />
+            </div>
+            {!sidebarCollapsed && (
+              <>
+                <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">
                   {t('sidebar.settings')}
                 </span>
-              )}
-            </>
-          )}
-        </NavLink>
+                <ChevronUp
+                  className={cn(
+                    'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+                    settingsMenuOpen && 'rotate-180'
+                  )}
+                />
+              </>
+            )}
+          </button>
 
-        {/* <Button
-          variant="ghost"
-          className={cn(
-            'flex items-center gap-2.5 rounded-lg px-2.5 py-2 h-auto text-[14px] font-medium transition-colors w-full mt-1',
-            'hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80',
-            sidebarCollapsed ? 'justify-center px-0' : 'justify-start'
+          {settingsMenuOpen && (
+            <div
+              className={cn(
+                'absolute bottom-[calc(100%-2px)] z-20 rounded-[10px] border border-black/10 bg-[#f3f1ea] p-2 shadow-sm dark:border-white/10 dark:bg-[#1d1d1c]',
+                sidebarCollapsed ? 'left-0 w-56' : 'left-0 right-0'
+              )}
+            >
+              <div className="space-y-1">
+                {settingsItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => setSettingsMenuOpen(false)}
+                    className={({ isActive }) =>
+                      cn(
+                        'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors',
+                        'hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80',
+                        isActive && 'bg-black/5 dark:bg-white/10 text-foreground'
+                      )
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        <div
+                          className={cn(
+                            'flex shrink-0 items-center justify-center',
+                            isActive ? 'text-foreground' : 'text-muted-foreground'
+                          )}
+                        >
+                          {item.icon}
+                        </div>
+                        <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+                          {item.label}
+                        </span>
+                      </>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           )}
-          onClick={openDevConsole}
-        >
-          <div className="flex shrink-0 items-center justify-center text-muted-foreground">
-            <Terminal className="h-[18px] w-[18px]" strokeWidth={2} />
-          </div>
-          {!sidebarCollapsed && (
-            <>
-              <span className="flex-1 text-left overflow-hidden text-ellipsis whitespace-nowrap">
-                {t('common:sidebar.openClawPage')}
-              </span>
-              <ExternalLink className="h-3 w-3 shrink-0 ml-auto opacity-50 text-muted-foreground" />
-            </>
-          )}
-        </Button> */}
+        </div>
       </div>
 
       <ConfirmDialog
