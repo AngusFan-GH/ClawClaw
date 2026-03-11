@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'http';
@@ -27,24 +27,37 @@ function normalizePath(value: string): string {
 }
 
 function dedupeAndCompactPaths(paths: string[]): string[] {
-  const normalized = Array.from(
-    new Set(
-      paths
-        .map((item) => normalizePath(item))
-        .filter(Boolean)
-    )
-  ).sort((a, b) => a.length - b.length);
+  const normalized = Array.from(new Set(paths.map((item) => normalizePath(item)).filter(Boolean))).sort(
+    (a, b) => a.length - b.length
+  );
 
   const compacted: string[] = [];
   for (const current of normalized) {
     const lower = current.toLowerCase();
     const covered = compacted.some((base) => {
       const baseLower = base.toLowerCase();
-      return lower === baseLower || lower.startsWith(`${baseLower}\\`) || lower.startsWith(`${baseLower}/`);
+      return (
+        lower === baseLower ||
+        lower.startsWith(`${baseLower}\\`) ||
+        lower.startsWith(`${baseLower}/`)
+      );
     });
     if (!covered) compacted.push(current);
   }
   return compacted;
+}
+
+async function canonicalizeAllowedPaths(paths: string[]): Promise<string[]> {
+  const out: string[] = [];
+  for (const p of paths) {
+    try {
+      const resolved = await realpath(p);
+      out.push(resolved);
+    } catch {
+      // ignore invalid paths
+    }
+  }
+  return dedupeAndCompactPaths(out);
 }
 
 async function readOpenclawConfig(): Promise<Record<string, unknown>> {
@@ -71,20 +84,65 @@ function ensureObject(parent: Record<string, unknown>, key: string): Record<stri
   return created;
 }
 
-function applySecurityPolicyToConfig(
-  config: Record<string, unknown>,
-  policy: SecurityPolicy
-): Record<string, unknown> {
-  const allowedPaths = dedupeAndCompactPaths(policy.allowedPaths);
+function ensureStringArray(target: Record<string, unknown>, key: string): string[] {
+  const current = target[key];
+  if (Array.isArray(current)) {
+    return current.filter((item): item is string => typeof item === 'string');
+  }
+  const arr: string[] = [];
+  target[key] = arr;
+  return arr;
+}
+
+function removeFromArray(target: Record<string, unknown>, key: string, values: string[]): void {
+  const current = ensureStringArray(target, key);
+  const valueSet = new Set(values);
+  target[key] = current.filter((item) => !valueSet.has(item));
+}
+
+function removeManagedSecurityConfig(config: Record<string, unknown>): void {
   const agents = ensureObject(config, 'agents');
   const defaults = ensureObject(agents, 'defaults');
   const tools = ensureObject(config, 'tools');
 
-  if (!policy.enabled || allowedPaths.length === 0) {
+  const fsCfg = ensureObject(tools, 'fs');
+  delete fsCfg.workspaceOnly;
+
+  const execCfg = ensureObject(tools, 'exec');
+  const applyPatchCfg = ensureObject(execCfg, 'applyPatch');
+  delete applyPatchCfg.workspaceOnly;
+
+  removeFromArray(tools, 'deny', ['exec', 'process']);
+
+  const elevated = ensureObject(tools, 'elevated');
+  delete elevated.enabled;
+
+  const sandbox = ensureObject(defaults, 'sandbox');
+  delete sandbox.mode;
+  delete sandbox.scope;
+  delete sandbox.workspaceAccess;
+
+  const docker = ensureObject(sandbox, 'docker');
+  delete docker.binds;
+
+  const clawclaw = ensureObject(config, 'clawclaw');
+  const security = ensureObject(clawclaw, 'security');
+  delete security.lastAppliedAt;
+  security.managed = false;
+}
+
+function applySecurityPolicyToConfig(config: Record<string, unknown>, policy: SecurityPolicy): Record<string, unknown> {
+  const agents = ensureObject(config, 'agents');
+  const defaults = ensureObject(agents, 'defaults');
+  const tools = ensureObject(config, 'tools');
+
+  removeManagedSecurityConfig(config);
+
+  if (!policy.enabled || policy.allowedPaths.length === 0) {
     return config;
   }
 
-  defaults.workspace = allowedPaths[0];
+  defaults.workspace = policy.allowedPaths[0];
 
   const fsCfg = ensureObject(tools, 'fs');
   fsCfg.workspaceOnly = true;
@@ -93,6 +151,14 @@ function applySecurityPolicyToConfig(
   const applyPatchCfg = ensureObject(execCfg, 'applyPatch');
   applyPatchCfg.workspaceOnly = true;
 
+  const deny = ensureStringArray(tools, 'deny');
+  for (const item of ['exec', 'process']) {
+    if (!deny.includes(item)) deny.push(item);
+  }
+
+  const elevated = ensureObject(tools, 'elevated');
+  elevated.enabled = false;
+
   if (policy.mode === 'strict-sandbox') {
     const sandbox = ensureObject(defaults, 'sandbox');
     sandbox.mode = 'all';
@@ -100,11 +166,15 @@ function applySecurityPolicyToConfig(
     sandbox.workspaceAccess = 'none';
 
     const docker = ensureObject(sandbox, 'docker');
-    docker.binds = allowedPaths.map((hostPath, index) => `${hostPath}:/allowed/${index}:rw`);
-
-    const elevated = ensureObject(tools, 'elevated');
-    elevated.enabled = false;
+    docker.binds = policy.allowedPaths.map((hostPath, index) => `${hostPath}:/allowed/${index}:rw`);
   }
+
+  const clawclaw = ensureObject(config, 'clawclaw');
+  const security = ensureObject(clawclaw, 'security');
+  security.managed = true;
+  security.lastAppliedAt = new Date().toISOString();
+  security.mode = policy.mode;
+  security.allowedPaths = policy.allowedPaths;
 
   return config;
 }
@@ -124,10 +194,11 @@ export async function handleSecurityRoutes(
   if (url.pathname === '/api/security/policy' && req.method === 'PUT') {
     try {
       const body = await parseJsonBody<SecurityPolicy>(req);
+      const canonicalPaths = await canonicalizeAllowedPaths(body.allowedPaths || []);
       const policy: SecurityPolicy = {
         enabled: !!body.enabled,
         mode: body.mode === 'strict-sandbox' ? 'strict-sandbox' : 'workspace-only',
-        allowedPaths: dedupeAndCompactPaths(body.allowedPaths || []),
+        allowedPaths: canonicalPaths,
       };
       await setSetting('securityPolicy', policy);
       sendJson(res, 200, { success: true, policy });
@@ -143,8 +214,15 @@ export async function handleSecurityRoutes(
       const policy: SecurityPolicy = {
         enabled: !!current.enabled,
         mode: current.mode === 'strict-sandbox' ? 'strict-sandbox' : 'workspace-only',
-        allowedPaths: dedupeAndCompactPaths(current.allowedPaths || []),
+        allowedPaths: await canonicalizeAllowedPaths(current.allowedPaths || []),
       };
+
+      if (policy.enabled && policy.allowedPaths.length === 0) {
+        sendJson(res, 400, { success: false, error: 'No valid allowed paths configured.' });
+        return true;
+      }
+
+      await setSetting('securityPolicy', policy);
 
       const config = await readOpenclawConfig();
       const updated = applySecurityPolicyToConfig(config, policy);
@@ -160,6 +238,11 @@ export async function handleSecurityRoutes(
           enabled: policy.enabled,
           mode: policy.mode,
           allowedPaths: policy.allowedPaths,
+          harden: {
+            fsWorkspaceOnly: policy.enabled,
+            denyExecProcess: policy.enabled,
+            disableElevated: policy.enabled,
+          },
         },
       });
     } catch (error) {
