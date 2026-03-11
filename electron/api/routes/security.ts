@@ -7,6 +7,10 @@ import { getSetting, setSetting } from '../../utils/store';
 import { parseJsonBody, sendJson } from '../route-utils';
 
 const OPENCLAW_CONFIG_PATH = join(homedir(), '.openclaw', 'openclaw.json');
+const SECURITY_POLICY_FILE = 'SECURITY_POLICY.md';
+const AGENTS_FILE = 'AGENTS.md';
+const POLICY_BEGIN = '<!-- clawclaw-security:begin -->';
+const POLICY_END = '<!-- clawclaw-security:end -->';
 
 interface SecurityPolicy {
   enabled: boolean;
@@ -201,6 +205,83 @@ function applySecurityPolicyToConfig(config: Record<string, unknown>, policy: Se
   return config;
 }
 
+function renderPolicyMarkdown(policy: SecurityPolicy): string {
+  const lines = policy.allowedPaths.map((p) => `- ${p}`).join('\n');
+  return [
+    '# SECURITY_POLICY.md',
+    '',
+    '这是由 ClawClaw 安全页面自动生成的策略。',
+    '硬性要求：只能在以下白名单目录内执行文件相关操作；白名单外路径一律拒绝。',
+    '',
+    '## 白名单目录',
+    lines || '- (未配置)',
+    '',
+    '## 执行限制',
+    policy.allowExec
+      ? '- 允许 exec/process（高风险，需谨慎）'
+      : '- 禁止 exec/process，禁止 elevated 执行',
+    '',
+    '若收到超出白名单目录的请求，必须明确拒绝并解释原因。',
+    '',
+  ].join('\n');
+}
+
+function mergePolicySection(existing: string): string {
+  const section = [
+    POLICY_BEGIN,
+    '## Security Policy (Managed by ClawClaw)',
+    `- 必须先阅读并严格执行 \`${SECURITY_POLICY_FILE}\`。`,
+    '- 任何超出白名单目录的文件操作请求都必须拒绝。',
+    POLICY_END,
+  ].join('\n');
+
+  const begin = existing.indexOf(POLICY_BEGIN);
+  const end = existing.indexOf(POLICY_END);
+  if (begin !== -1 && end !== -1) {
+    return existing.slice(0, begin) + section + existing.slice(end + POLICY_END.length);
+  }
+  return `${existing.trimEnd()}\n\n${section}\n`;
+}
+
+async function syncPromptPolicyFiles(config: Record<string, unknown>, policy: SecurityPolicy): Promise<void> {
+  const agents = ensureObject(config, 'agents');
+  const defaults = ensureObject(agents, 'defaults');
+  const workspaces = new Set<string>();
+
+  if (typeof defaults.workspace === 'string' && defaults.workspace.trim()) {
+    workspaces.add(defaults.workspace);
+  }
+
+  const list = Array.isArray(agents.list) ? agents.list : [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as Record<string, unknown>;
+    if (typeof entry.workspace === 'string' && entry.workspace.trim()) {
+      workspaces.add(entry.workspace);
+    }
+  }
+
+  for (const ws of workspaces) {
+    try {
+      await mkdir(ws, { recursive: true });
+      const policyPath = join(ws, SECURITY_POLICY_FILE);
+      await writeFile(policyPath, renderPolicyMarkdown(policy), 'utf8');
+
+      const agentsPath = join(ws, AGENTS_FILE);
+      let existing = '';
+      try {
+        existing = await readFile(agentsPath, 'utf8');
+      } catch {
+        existing = '# AGENTS.md\n';
+      }
+      const merged = mergePolicySection(existing);
+      await writeFile(agentsPath, merged, 'utf8');
+    } catch {
+      // best effort
+    }
+  }
+}
+
 function verifyAppliedConfig(config: Record<string, unknown>, policy: SecurityPolicy) {
   const tools = ensureObject(config, 'tools');
   const fsCfg = ensureObject(tools, 'fs');
@@ -272,6 +353,7 @@ export async function handleSecurityRoutes(
       const config = await readOpenclawConfig();
       const updated = applySecurityPolicyToConfig(config, policy);
       await writeOpenclawConfig(updated);
+      await syncPromptPolicyFiles(updated, policy);
 
       if (ctx.gatewayManager.getStatus().state === 'running') {
         await ctx.gatewayManager.restart();
@@ -294,6 +376,7 @@ export async function handleSecurityRoutes(
       removeManagedSecurityConfig(config);
       await writeOpenclawConfig(config);
       await setSetting('securityPolicy', DEFAULT_POLICY);
+      await syncPromptPolicyFiles(config, DEFAULT_POLICY);
 
       if (ctx.gatewayManager.getStatus().state === 'running') {
         await ctx.gatewayManager.restart();

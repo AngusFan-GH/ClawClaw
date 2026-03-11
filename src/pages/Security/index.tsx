@@ -87,15 +87,18 @@ export function Security() {
     try {
       const result = (await invokeIpc('dialog:open', {
         title: '选择允许 OpenClaw 访问的目录',
-        properties: ['openDirectory', 'multiSelections', 'dontAddToRecent'],
+        properties: ['openDirectory', 'dontAddToRecent'],
       })) as { canceled: boolean; filePaths?: string[] };
 
       const selected = result.filePaths ?? [];
       if (result.canceled || selected.length === 0) return;
 
+      const picked = compactPaths(selected)[0];
+      if (!picked) return;
+
       setPolicy((prev) => ({
         ...prev,
-        allowedPaths: compactPaths([...prev.allowedPaths, ...selected]),
+        allowedPaths: [picked],
       }));
     } catch (error) {
       toast.error(`选择目录失败: ${String(error)}`);
@@ -213,12 +216,12 @@ export function Security() {
       <div className="rounded-xl border p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-base">允许目录（可多选）</Label>
-            <p className="text-xs text-muted-foreground mt-1">自动去重并折叠嵌套目录（父目录优先）。</p>
+            <Label className="text-base">允许目录（单目录）</Label>
+            <p className="text-xs text-muted-foreground mt-1">当前版本仅生效一个目录；重新选择会覆盖旧目录。</p>
           </div>
           <Button variant="outline" onClick={addDirectory}>
             <FolderPlus className="h-4 w-4 mr-2" />
-            添加目录
+选择目录
           </Button>
         </div>
 
