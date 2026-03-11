@@ -159,15 +159,15 @@ function applySecurityPolicyToConfig(config: Record<string, unknown>, policy: Se
   const elevated = ensureObject(tools, 'elevated');
   elevated.enabled = false;
 
-  if (policy.mode === 'strict-sandbox') {
-    const sandbox = ensureObject(defaults, 'sandbox');
-    sandbox.mode = 'all';
-    sandbox.scope = 'agent';
-    sandbox.workspaceAccess = 'none';
+  // Hard boundary: once enabled, always sandbox tools and expose only allowlisted mounts.
+  // This prevents non-workspace file access even if host fs guards drift.
+  const sandbox = ensureObject(defaults, 'sandbox');
+  sandbox.mode = 'all';
+  sandbox.scope = 'agent';
+  sandbox.workspaceAccess = 'none';
 
-    const docker = ensureObject(sandbox, 'docker');
-    docker.binds = policy.allowedPaths.map((hostPath, index) => `${hostPath}:/allowed/${index}:rw`);
-  }
+  const docker = ensureObject(sandbox, 'docker');
+  docker.binds = policy.allowedPaths.map((hostPath, index) => `${hostPath}:/allowed/${index}:rw`);
 
   const clawclaw = ensureObject(config, 'clawclaw');
   const security = ensureObject(clawclaw, 'security');
