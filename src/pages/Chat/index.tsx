@@ -73,7 +73,23 @@ function normalizeSessionModelValue(
     return optionSuffix === normalizedCurrent;
   });
 
-  return bySuffix?.value || currentModel;
+  return bySuffix?.value;
+}
+
+function dedupeModelOptions(options: ChatModelOption[]): ChatModelOption[] {
+  const seenValues = new Set<string>();
+  const seenLabels = new Set<string>();
+
+  return options.filter((option) => {
+    const valueKey = option.value.trim().toLowerCase();
+    const labelKey = option.label.trim().toLowerCase();
+    if (seenValues.has(valueKey) || seenLabels.has(labelKey)) {
+      return false;
+    }
+    seenValues.add(valueKey);
+    seenLabels.add(labelKey);
+    return true;
+  });
 }
 
 export function Chat() {
@@ -103,6 +119,7 @@ export function Chat() {
   const providerStatuses = useProviderStore((s) => s.statuses);
   const providerVendors = useProviderStore((s) => s.vendors);
   const defaultAccountId = useProviderStore((s) => s.defaultAccountId);
+  const providerLoading = useProviderStore((s) => s.loading);
   const refreshProviderSnapshot = useProviderStore((s) => s.refreshProviderSnapshot);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -177,7 +194,7 @@ export function Chat() {
     [providerVendors],
   );
   const modelOptions = useMemo<ChatModelOption[]>(() => {
-    const options = providerAccounts
+    const baseOptions = providerAccounts
       .filter((account) => account.enabled)
       .filter((account) => (
         account.authMode === 'local'
@@ -199,22 +216,8 @@ export function Chat() {
       .filter((option): option is ChatModelOption => Boolean(option))
       .sort((left, right) => left.label.localeCompare(right.label));
 
-    const normalizedCurrentModel = normalizeSessionModelValue(currentSession?.model, options);
-
-    if (
-      currentSession?.model
-      && normalizedCurrentModel === currentSession.model
-      && !options.some((option) => option.value === currentSession.model)
-    ) {
-      options.unshift({
-        value: currentSession.model,
-        label: currentSession.model,
-        shortLabel: currentSession.model.split('/').pop() || currentSession.model,
-      });
-    }
-
-    return options;
-  }, [currentSession?.model, providerAccounts, providerStatusMap, vendorMap]);
+    return dedupeModelOptions(baseOptions);
+  }, [providerAccounts, providerStatusMap, vendorMap]);
   const normalizedSelectedModel = useMemo(
     () => normalizeSessionModelValue(currentSession?.model, modelOptions),
     [currentSession?.model, modelOptions],
@@ -236,6 +239,26 @@ export function Chat() {
       value: modelRef,
     };
   }, [defaultAccountId, modelOptions, providerAccounts, vendorMap]);
+  const normalizedDefaultModelValue = useMemo(
+    () => normalizeSessionModelValue(defaultModelMeta.value, modelOptions),
+    [defaultModelMeta.value, modelOptions],
+  );
+
+  useEffect(() => {
+    if (!isGatewayRunning || providerLoading || !currentSession?.model || normalizedSelectedModel) {
+      return;
+    }
+
+    void setSessionModel(undefined).catch((err) => {
+      console.warn('Failed to clear stale session model override:', err);
+    });
+  }, [
+    currentSession?.model,
+    isGatewayRunning,
+    normalizedSelectedModel,
+    providerLoading,
+    setSessionModel,
+  ]);
 
   return (
     <div className={cn("flex flex-col -m-6 transition-colors duration-500 dark:bg-background")} style={{ height: 'calc(100vh - 2.5rem)' }}>
@@ -327,9 +350,8 @@ export function Chat() {
         sending={sending}
         isEmpty={isEmpty}
         modelOptions={modelOptions}
-        defaultModelLabel={defaultModelMeta.label}
         defaultModelShortLabel={defaultModelMeta.shortLabel}
-        defaultModelValue={defaultModelMeta.value}
+        defaultModelValue={normalizedDefaultModelValue}
         selectedModel={normalizedSelectedModel}
         onModelChange={setSessionModel}
         modelDisabled={!isGatewayRunning}
