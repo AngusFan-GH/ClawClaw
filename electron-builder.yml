@@ -46,6 +46,11 @@ asarUnpack:
 # own process — @electron/rebuild must NOT touch them.
 npmRebuild: false
 
+# Use the modern Windows code-signing bundle to avoid symlink extraction
+# failures on non-admin Windows sessions.
+toolsets:
+  winCodeSign: '1.1.0'
+
 # Auto-update configuration
 # Primary: Alibaba Cloud OSS (fast for Chinese users, used for auto-update)
 # Fallback: GitHub Releases (backup, used when OSS is unavailable)
@@ -105,7 +110,6 @@ dmg:
 # Windows Configuration
 win:
   artifactName: ${productName}-Setup-v${version}-${arch}.${ext}
-  publisherName: xzinfra
   forceCodeSigning: false
   verifyUpdateCodeSignature: false
   signAndEditExecutable: true

@@ -8,11 +8,11 @@
 !endif
 
 !macro customWelcomePage
-  !insertmacro MUI_HEADER_TEXT "Welcome to ${PRODUCT_NAME}" "Your desktop AI copilot by xzinfra"
-!macroend
-
-!macro customFinishPage
-  !insertmacro MUI_HEADER_TEXT "${PRODUCT_NAME} is ready" "Launch ${PRODUCT_NAME} to finish your first-time setup"
+  ; customWelcomePage is expanded at compile-time in assistedInstaller.nsh.
+  ; Use MUI welcome-page defines/macros here, not runtime UI commands.
+  !define MUI_WELCOMEPAGE_TITLE "Welcome to ${PRODUCT_NAME}"
+  !define MUI_WELCOMEPAGE_TEXT "Your desktop AI copilot by xzinfra"
+  !insertmacro MUI_PAGE_WELCOME
 !macroend
 
 !macro customCheckAppRunning
@@ -161,4 +161,3 @@
   _cu_enumDone:
   _cu_skipRemove:
 !macroend
-
