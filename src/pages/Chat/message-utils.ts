@@ -26,6 +26,14 @@ function cleanUserText(text: string): string {
     .trim();
 }
 
+function prettifyRuntimeProviderText(text: string): string {
+  if (!/Providers:\s*/i.test(text)) return text;
+  const localProviderLabel = i18n.t('chat:composer.localModelProvider', '本地模型');
+  return text.replace(/(^|\n)(\s*)custom-[a-z0-9]+(?:\s*\(\d+\))?/gi, (_m, lead, indent) => {
+    return `${lead}${indent}${localProviderLabel}`;
+  });
+}
+
 /**
  * Extract displayable text from a message's content field.
  * Handles both string content and array-of-blocks content.
@@ -62,6 +70,10 @@ export function extractText(message: RawMessage | unknown): string {
   // Strip Gateway metadata from user messages for clean display
   if (isUser && result && shouldCleanUserText) {
     result = cleanUserText(result);
+  }
+
+  if (!isUser && result) {
+    result = prettifyRuntimeProviderText(result);
   }
 
   return result;

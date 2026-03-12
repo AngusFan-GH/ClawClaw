@@ -56,6 +56,7 @@ export interface ChatSession {
   displayName?: string;
   thinkingLevel?: string;
   model?: string;
+  modelProvider?: string;
   updatedAt?: number;
 }
 
@@ -100,6 +101,8 @@ interface ChatState {
   // Thinking
   showThinking: boolean;
   thinkingLevel: string | null;
+  allowedModelRefs: string[];
+  defaultModelRef?: string;
 
   // Actions
   loadSessions: (preferMostRecent?: boolean) => Promise<void>;
@@ -124,6 +127,7 @@ interface ChatState {
   toggleThinking: () => void;
   refresh: () => Promise<void>;
   clearError: () => void;
+  setModelGuard: (allowedModelRefs: string[], defaultModelRef?: string) => void;
 }
 
 // Module-level timestamp tracking the last chat event received.
@@ -200,6 +204,20 @@ function isEmptyEphemeralSession(
   pendingLocalSessionKeys: Record<string, true>
 ): boolean {
   return Boolean(pendingLocalSessionKeys[sessionKey]) && messages.length === 0;
+}
+
+function normalizeModelRefs(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+  }
+  return out;
 }
 
 function getMostRecentSessionKey(
@@ -1043,8 +1061,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   showThinking: true,
   thinkingLevel: null,
+  allowedModelRefs: [],
+  defaultModelRef: undefined,
 
   // ── Load sessions via sessions.list ──
+
+  setModelGuard: (allowedModelRefs, defaultModelRef) => {
+    const normalizedAllowed = normalizeModelRefs(allowedModelRefs);
+    const normalizedDefault = defaultModelRef?.trim() || undefined;
+    set({
+      allowedModelRefs: normalizedAllowed,
+      defaultModelRef: normalizedDefault,
+    });
+  },
 
   loadSessions: async (preferMostRecent = false) => {
     try {
@@ -1060,6 +1089,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
             displayName: s.displayName ? String(s.displayName) : undefined,
             thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
             model: s.model ? String(s.model) : undefined,
+            modelProvider:
+              typeof s.modelProvider === 'string'
+                ? s.modelProvider
+                : typeof s.provider === 'string'
+                  ? s.provider
+                  : undefined,
             updatedAt:
               typeof s.updatedAt === 'number'
                 ? s.updatedAt
@@ -1378,19 +1413,93 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   setSessionModel: async (model) => {
-    const { currentSessionKey } = get();
+    const { currentSessionKey, allowedModelRefs, defaultModelRef, sessions } = get();
     const trimmedModel = model?.trim() || undefined;
+    const hasGuard = allowedModelRefs.length > 0;
+    const resolvedDefaultModel =
+      (defaultModelRef && (!hasGuard || allowedModelRefs.includes(defaultModelRef)))
+        ? defaultModelRef
+        : allowedModelRefs[0];
+    const modelForPatch = trimmedModel ?? resolvedDefaultModel ?? 'default';
+
+    if (hasGuard && !allowedModelRefs.includes(modelForPatch)) {
+      const message = `Model is not available in current runtime: ${modelForPatch}`;
+      set({ error: message });
+      throw new Error(message);
+    }
 
     try {
-      await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.patch', {
-        key: currentSessionKey,
-        model: trimmedModel ?? 'default',
-      });
+      const currentSession = sessions.find((session) => session.key === currentSessionKey);
+      const splitIndex = modelForPatch.indexOf('/');
+      const targetProvider = splitIndex > 0 ? modelForPatch.slice(0, splitIndex) : undefined;
+      const targetModelId = splitIndex > 0 ? modelForPatch.slice(splitIndex + 1) : modelForPatch;
+      const currentProvider = currentSession?.modelProvider
+        || (currentSession?.model?.includes('/')
+          ? currentSession.model.slice(0, currentSession.model.indexOf('/'))
+          : undefined);
+      const isCrossProvider = Boolean(targetProvider && currentProvider && targetProvider !== currentProvider);
+      const patchOnce = async (value: string) => {
+        await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.patch', {
+          key: currentSessionKey,
+          model: value,
+        });
+      };
+      const providerCandidates = targetProvider
+        ? allowedModelRefs.filter((ref) => ref.startsWith(`${targetProvider}/`))
+        : [];
+      const providerDefaultRef = providerCandidates.find((ref) => ref === defaultModelRef) || providerCandidates[0];
+      const providerDefaultId = providerDefaultRef?.split('/').slice(1).join('/');
+      const attempts = new Set<string>();
+      const queueAttempt = (value: string | undefined) => {
+        const trimmed = value?.trim();
+        if (!trimmed) return;
+        attempts.add(trimmed);
+      };
+
+      if (targetProvider && !isCrossProvider) {
+        queueAttempt(targetModelId);
+        queueAttempt(modelForPatch);
+      } else {
+        queueAttempt(modelForPatch);
+        queueAttempt(targetModelId);
+      }
+
+      if (isCrossProvider) {
+        queueAttempt(providerDefaultRef);
+        queueAttempt(providerDefaultId);
+        queueAttempt(targetModelId);
+        queueAttempt(modelForPatch);
+      }
+
+      let lastError: unknown = null;
+      let patched = false;
+      for (const candidate of attempts) {
+        try {
+          await patchOnce(candidate);
+          patched = true;
+          break;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          if (!/model not allowed/i.test(message)) {
+            throw err;
+          }
+          lastError = err;
+        }
+      }
+      if (!patched && lastError) {
+        throw lastError;
+      }
 
       set((s) => ({
         sessions: s.sessions.map((session) => (
           session.key === currentSessionKey
-            ? { ...session, model: trimmedModel }
+            ? {
+              ...session,
+              model: (trimmedModel ?? modelForPatch).includes('/')
+                ? (trimmedModel ?? modelForPatch).split('/').slice(1).join('/')
+                : (trimmedModel ?? modelForPatch),
+              modelProvider: targetProvider ?? session.modelProvider,
+            }
             : session
         )),
       }));
@@ -1570,7 +1679,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
 
-    const { currentSessionKey } = get();
+    const { currentSessionKey, sessions, allowedModelRefs, defaultModelRef } = get();
+    const currentSession = sessions.find((session) => session.key === currentSessionKey);
+    const currentSessionModel = currentSession?.model?.trim() || undefined;
+    const hasGuard = allowedModelRefs.length > 0;
+    const sessionModelInvalid =
+      Boolean(currentSessionModel) && hasGuard && !allowedModelRefs.includes(currentSessionModel as string);
+
+    if (sessionModelInvalid) {
+      const fallbackModel = defaultModelRef || 'default';
+      try {
+        const splitIndex = fallbackModel.indexOf('/');
+        const providerOverride = splitIndex > 0 ? fallbackModel.slice(0, splitIndex) : undefined;
+        const modelOverride = splitIndex > 0 ? fallbackModel.slice(splitIndex + 1) : fallbackModel;
+        await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.patch', {
+          key: currentSessionKey,
+          model: fallbackModel,
+        });
+        set((s) => ({
+          sessions: s.sessions.map((session) => (
+            session.key === currentSessionKey
+              ? {
+                ...session,
+                model: fallbackModel === 'default' ? undefined : modelOverride,
+                modelProvider: providerOverride ?? session.modelProvider,
+              }
+              : session
+          )),
+        }));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        set({ error: message });
+        return;
+      }
+    }
 
     // Add user message optimistically (with local file metadata for UI display)
     const nowMs = Date.now();
@@ -1663,7 +1805,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     setTimeout(checkStuck, 30_000);
 
     try {
-      const idempotencyKey = crypto.randomUUID();
+      const createIdempotencyKey = () => crypto.randomUUID();
       const hasMedia = attachments && attachments.length > 0;
       if (hasMedia) {
         console.log(
@@ -1692,26 +1834,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
       const CHAT_SEND_TIMEOUT_MS = 120_000;
 
-      if (hasMedia) {
-        result = await hostApiFetch<{
-          success: boolean;
-          result?: { runId?: string };
-          error?: string;
-        }>('/api/chat/send-with-media', {
-          method: 'POST',
-          body: JSON.stringify({
-            sessionKey: currentSessionKey,
-            message: trimmed || 'Process the attached file(s).',
-            deliver: false,
-            idempotencyKey,
-            media: attachments.map((a) => ({
-              filePath: a.stagedPath,
-              mimeType: a.mimeType,
-              fileName: a.fileName,
-            })),
-          }),
-        });
-      } else {
+      const executeSend = async (idempotencyKey: string) => {
+        if (hasMedia) {
+          return await hostApiFetch<{
+            success: boolean;
+            result?: { runId?: string };
+            error?: string;
+          }>('/api/chat/send-with-media', {
+            method: 'POST',
+            body: JSON.stringify({
+              sessionKey: currentSessionKey,
+              message: trimmed || 'Process the attached file(s).',
+              deliver: false,
+              idempotencyKey,
+              media: attachments.map((a) => ({
+                filePath: a.stagedPath,
+                mimeType: a.mimeType,
+                fileName: a.fileName,
+              })),
+            }),
+          });
+        }
+
         const rpcResult = await useGatewayStore.getState().rpc<{ runId?: string }>(
           'chat.send',
           {
@@ -1722,7 +1866,42 @@ export const useChatStore = create<ChatState>((set, get) => ({
           },
           CHAT_SEND_TIMEOUT_MS
         );
-        result = { success: true, result: rpcResult };
+        return { success: true, result: rpcResult } as { success: boolean; result?: { runId?: string }; error?: string };
+      };
+
+      result = await executeSend(createIdempotencyKey());
+
+      const modelNotAllowed = !result.success && /model not allowed/i.test(result.error || '');
+      if (modelNotAllowed) {
+        const fallbackModel =
+          (defaultModelRef && (!hasGuard || allowedModelRefs.includes(defaultModelRef)))
+            ? defaultModelRef
+            : allowedModelRefs[0] || 'default';
+        try {
+          const splitIndex = fallbackModel.indexOf('/');
+          const providerOverride = splitIndex > 0 ? fallbackModel.slice(0, splitIndex) : undefined;
+          const modelOverride = splitIndex > 0 ? fallbackModel.slice(splitIndex + 1) : fallbackModel;
+          await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.patch', {
+            key: currentSessionKey,
+            model: fallbackModel,
+          });
+
+          set((s) => ({
+            sessions: s.sessions.map((session) => (
+              session.key === currentSessionKey
+                ? {
+                  ...session,
+                  model: fallbackModel === 'default' ? undefined : modelOverride,
+                  modelProvider: providerOverride ?? session.modelProvider,
+                }
+                : session
+            )),
+          }));
+
+          result = await executeSend(createIdempotencyKey());
+        } catch {
+          // Keep the original error handling below if fallback patch/retry fails.
+        }
       }
 
       console.log(

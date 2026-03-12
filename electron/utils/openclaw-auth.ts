@@ -486,6 +486,7 @@ export async function setOpenClawDefaultModel(
   };
   agents.defaults = defaults;
   config.agents = agents;
+  ensureAgentsDefaultModelsAllowlist(config, model, fallbackModels);
 
   // Configure models.providers for providers that need explicit registration.
   const providerCfg = getProviderConfig(provider);
@@ -656,6 +657,30 @@ function ensureMoonshotKimiWebSearchCnBaseUrl(
   config.tools = tools;
 }
 
+function ensureAgentsDefaultModelsAllowlist(
+  config: Record<string, unknown>,
+  primaryModelRef: string,
+  fallbackModelRefs: string[],
+): void {
+  const agents = (config.agents || {}) as Record<string, unknown>;
+  const defaults = (agents.defaults || {}) as Record<string, unknown>;
+  const existingAllowlist =
+    defaults.models && typeof defaults.models === 'object' && !Array.isArray(defaults.models)
+      ? { ...(defaults.models as Record<string, unknown>) }
+      : {};
+
+  existingAllowlist[primaryModelRef] = existingAllowlist[primaryModelRef] ?? {};
+  for (const fallback of fallbackModelRefs) {
+    const ref = fallback?.trim();
+    if (!ref) continue;
+    existingAllowlist[ref] = existingAllowlist[ref] ?? {};
+  }
+
+  defaults.models = existingAllowlist;
+  agents.defaults = defaults;
+  config.agents = agents;
+}
+
 /**
  * Register or update a provider's configuration in openclaw.json
  * without changing the current default model.
@@ -725,6 +750,7 @@ export async function setOpenClawDefaultModelWithOverride(
   };
   agents.defaults = defaults;
   config.agents = agents;
+  ensureAgentsDefaultModelsAllowlist(config, model, fallbackModels);
 
   if (override.baseUrl && override.api) {
     upsertOpenClawProviderEntry(config, provider, {

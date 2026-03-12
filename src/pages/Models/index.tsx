@@ -127,17 +127,24 @@ export function Models() {
     [accounts],
   );
   const localModelCards = useMemo(
-    () => localModelPresets.map((preset) => {
-      const account = presetLocalAccounts.find((candidate) => candidate.metadata?.presetId === preset.id);
+    () => localModelPresets.map((preset, index) => {
+      const account = presetLocalAccounts[0];
+      const currentPrimaryPresetId = account?.metadata?.primaryPresetId || account?.metadata?.presetId;
       return {
         preset,
         account,
-        isDefault: account?.id === defaultAccountId,
+        isDefault:
+          account?.id === defaultAccountId
+          && (
+            currentPrimaryPresetId
+              ? currentPrimaryPresetId === preset.id
+              : account?.model === preset.modelId
+          ),
+        isRecommended: index === 0,
       };
     }),
     [defaultAccountId, localModelPresets, presetLocalAccounts],
   );
-  const defaultLocalModel = localModelCards.find((item) => item.isDefault);
   const otherModelAccounts = useMemo(
     () => accounts.filter((account) => !(account.vendorId === 'custom' && account.metadata?.managedBy === 'preset-local-model')),
     [accounts],
@@ -204,7 +211,7 @@ export function Models() {
                 </div>
               ) : (
                 <div className="grid gap-4 xl:grid-cols-2">
-                  {localModelCards.map(({ preset, account, isDefault }) => (
+                  {localModelCards.map(({ preset, account, isDefault, isRecommended }) => (
                     <button
                       key={preset.id}
                       type="button"
@@ -230,7 +237,7 @@ export function Models() {
                             <div>
                               <div className="flex flex-wrap items-center gap-2">
                                 <h3 className="text-[18px] font-semibold tracking-tight text-foreground">{preset.name}</h3>
-                                {preset.id === localModelPresets[0]?.id && (
+                                {isRecommended && (
                                   <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">
                                     推荐
                                   </span>

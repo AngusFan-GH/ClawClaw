@@ -100,7 +100,7 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
       setTimeout(checkStuck, 30_000);
 
       try {
-        const idempotencyKey = crypto.randomUUID();
+        const createIdempotencyKey = () => crypto.randomUUID();
         const hasMedia = attachments && attachments.length > 0;
         if (hasMedia) {
           console.log('[sendMessage] Media paths:', attachments!.map(a => a.stagedPath));
@@ -125,23 +125,25 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
         // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
         const CHAT_SEND_TIMEOUT_MS = 120_000;
 
-        if (hasMedia) {
-          result = await invokeIpc(
-            'chat:sendWithMedia',
-            {
-              sessionKey: currentSessionKey,
-              message: trimmed || 'Process the attached file(s).',
-              deliver: false,
-              idempotencyKey,
-              media: attachments.map((a) => ({
-                filePath: a.stagedPath,
-                mimeType: a.mimeType,
-                fileName: a.fileName,
-              })),
-            },
-          ) as { success: boolean; result?: { runId?: string }; error?: string };
-        } else {
-          result = await invokeIpc(
+        const executeSend = async (idempotencyKey: string) => {
+          if (hasMedia) {
+            return await invokeIpc(
+              'chat:sendWithMedia',
+              {
+                sessionKey: currentSessionKey,
+                message: trimmed || 'Process the attached file(s).',
+                deliver: false,
+                idempotencyKey,
+                media: attachments.map((a) => ({
+                  filePath: a.stagedPath,
+                  mimeType: a.mimeType,
+                  fileName: a.fileName,
+                })),
+              },
+            ) as { success: boolean; result?: { runId?: string }; error?: string };
+          }
+
+          return await invokeIpc(
             'gateway:rpc',
             'chat.send',
             {
@@ -152,6 +154,32 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
             },
             CHAT_SEND_TIMEOUT_MS,
           ) as { success: boolean; result?: { runId?: string }; error?: string };
+        };
+
+        result = await executeSend(createIdempotencyKey());
+
+        const modelNotAllowed = !result.success && /model not allowed/i.test(result.error || '');
+        if (modelNotAllowed) {
+          try {
+            await invokeIpc(
+              'gateway:rpc',
+              'sessions.patch',
+              {
+                key: currentSessionKey,
+                model: 'default',
+              },
+            );
+            set((s) => ({
+              sessions: s.sessions.map((session) => (
+                session.key === currentSessionKey
+                  ? { ...session, model: undefined }
+                  : session
+              )),
+            }));
+            result = await executeSend(createIdempotencyKey());
+          } catch {
+            // Keep original error path below if reset/retry fails.
+          }
         }
 
         console.log(`[sendMessage] RPC result: success=${result.success}, runId=${result.result?.runId || 'none'}`);

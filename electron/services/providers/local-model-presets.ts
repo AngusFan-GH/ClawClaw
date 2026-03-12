@@ -91,74 +91,94 @@ export async function ensurePresetLocalModelsApplied(gatewayManager?: GatewayMan
     return;
   }
 
+  await applyPresetLocalModelSelection(presets[0].id, gatewayManager);
+}
+
+export async function applyPresetLocalModelSelection(
+  primaryPresetId: string,
+  gatewayManager?: GatewayManager,
+): Promise<{ accountId: string; primaryPresetId: string }> {
+  const presets = await readLocalModelPresets();
+  const primaryPreset = presets.find((preset) => preset.id === primaryPresetId);
+  if (!primaryPreset) {
+    throw new Error('Preset not found');
+  }
+
+  const orderedPresets = [primaryPreset, ...presets.filter((preset) => preset.id !== primaryPreset.id)];
+  const fallbackModels = orderedPresets.slice(1).map((preset) => preset.modelId).filter(Boolean);
+
   const providerService = getProviderService();
   const vendors = await providerService.listVendors();
   const accounts = await providerService.listAccounts();
   const presetAccounts = accounts.filter(
     (account) => account.vendorId === 'custom' && account.metadata?.managedBy === PRESET_MANAGED_BY,
   );
+  const preferredAccount = presetAccounts.find((account) => account.metadata?.presetId === primaryPreset.id);
+  const targetAccount = preferredAccount ?? presetAccounts[0];
+  const now = new Date().toISOString();
 
-  let defaultAccountId: string | null = null;
+  const updatePatch = {
+    label: primaryPreset.name,
+    authMode: 'local' as const,
+    baseUrl: primaryPreset.baseUrl,
+    apiProtocol: primaryPreset.apiProtocol || 'openai-completions',
+    model: primaryPreset.modelId,
+    fallbackModels,
+    enabled: true,
+    metadata: {
+      ...(targetAccount?.metadata ?? {}),
+      presetId: primaryPreset.id,
+      managedBy: PRESET_MANAGED_BY,
+      primaryPresetId: primaryPreset.id,
+      presetIds: orderedPresets.map((preset) => preset.id),
+    },
+    updatedAt: now,
+  };
 
-  for (const [index, preset] of presets.entries()) {
-    const existing = presetAccounts.find((account) => account.metadata?.presetId === preset.id);
-    const now = new Date().toISOString();
-
-    if (existing) {
-      const updated = await providerService.updateAccount(
-        existing.id,
-        {
-          label: preset.name,
-          authMode: 'local',
-          baseUrl: preset.baseUrl,
-          apiProtocol: preset.apiProtocol || 'openai-completions',
-          model: preset.modelId,
-          enabled: true,
-          metadata: {
-            ...existing.metadata,
-            presetId: preset.id,
-            managedBy: PRESET_MANAGED_BY,
-          },
-          updatedAt: now,
-        },
-        resolveProviderApiKeyForSave('custom', preset.apiKey ?? '') as string,
-      );
-      await syncUpdatedProviderToRuntime(providerAccountToConfig(updated), undefined, gatewayManager);
-      if (index === 0) {
-        defaultAccountId = updated.id;
-      }
-      continue;
-    }
-
-    const accountId = buildRuntimeProviderAccountId('custom', null, vendors);
-      const created = await providerService.createAccount(
-        {
-        id: accountId,
+  const account = targetAccount
+    ? await providerService.updateAccount(
+      targetAccount.id,
+      updatePatch,
+      resolveProviderApiKeyForSave('custom', primaryPreset.apiKey ?? '') as string,
+    )
+    : await providerService.createAccount(
+      {
+        id: buildRuntimeProviderAccountId('custom', null, vendors),
         vendorId: 'custom',
-        label: preset.name,
+        label: primaryPreset.name,
         authMode: 'local',
-        baseUrl: preset.baseUrl,
-        apiProtocol: preset.apiProtocol || 'openai-completions',
-        model: preset.modelId,
+        baseUrl: primaryPreset.baseUrl,
+        apiProtocol: primaryPreset.apiProtocol || 'openai-completions',
+        model: primaryPreset.modelId,
+        fallbackModels,
         enabled: true,
         isDefault: false,
         metadata: {
-          presetId: preset.id,
+          presetId: primaryPreset.id,
           managedBy: PRESET_MANAGED_BY,
+          primaryPresetId: primaryPreset.id,
+          presetIds: orderedPresets.map((preset) => preset.id),
         },
         createdAt: now,
-          updatedAt: now,
-        },
-        resolveProviderApiKeyForSave('custom', preset.apiKey ?? '') as string,
-      );
-    await syncSavedProviderToRuntime(providerAccountToConfig(created), undefined, gatewayManager);
-    if (index === 0) {
-      defaultAccountId = created.id;
-    }
+        updatedAt: now,
+      },
+      resolveProviderApiKeyForSave('custom', primaryPreset.apiKey ?? '') as string,
+    );
+
+  if (targetAccount) {
+    await syncUpdatedProviderToRuntime(providerAccountToConfig(account), undefined, gatewayManager);
+  } else {
+    await syncSavedProviderToRuntime(providerAccountToConfig(account), undefined, gatewayManager);
   }
 
-  if (defaultAccountId) {
-    await providerService.setDefaultAccount(defaultAccountId);
-    await syncDefaultProviderToRuntime(defaultAccountId, gatewayManager);
+  for (const staleAccount of presetAccounts) {
+    if (staleAccount.id === account.id) continue;
+    await providerService.deleteAccount(staleAccount.id);
+    await syncDeletedProviderToRuntime(providerAccountToConfig(staleAccount), staleAccount.id, gatewayManager);
   }
+
+  await providerService.setDefaultAccount(account.id);
+  await syncDefaultProviderToRuntime(account.id, gatewayManager);
+
+  return { accountId: account.id, primaryPresetId: primaryPreset.id };
 }

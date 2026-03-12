@@ -33,6 +33,8 @@
     "send": "发送",
     "stop": "停止",
     "retryFailedAttachments": "重试失败附件"
+    ,
+    "localModelProvider": "本地模型"
   },
   "message": {
     "thinking": "思考过程",

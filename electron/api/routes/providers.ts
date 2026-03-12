@@ -24,7 +24,8 @@ import { providerAccountToConfig } from '../../services/providers/provider-store
 import type { ProviderAccount } from '../../shared/providers/types';
 import { logger } from '../../utils/logger';
 import { getOpenClawCliSpawnConfig } from '../../utils/openclaw-cli';
-import { readLocalModelPresets } from '../../services/providers/local-model-presets';
+import { applyPresetLocalModelSelection, readLocalModelPresets } from '../../services/providers/local-model-presets';
+import { getOpenClawProviderKeyForType } from '../../utils/provider-keys';
 
 type OpenClawModelListResponse = {
   count?: number;
@@ -35,30 +36,48 @@ type OpenClawModelListResponse = {
   }>;
 };
 
+async function listRuntimeModelRefs(): Promise<string[]> {
+  const { command, args, env, cwd } = getOpenClawCliSpawnConfig(['models', 'list', '--json']);
+  return await new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', (error) => reject(error));
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr.trim() || `openclaw models list exited with code ${code}`));
+        return;
+      }
+      try {
+        const parsed = JSON.parse(stdout) as OpenClawModelListResponse;
+        const refs = (parsed.models ?? [])
+          .filter((model) => model.available !== false)
+          .map((model) => (typeof model.key === 'string' ? model.key : ''))
+          .filter((value): value is string => Boolean(value));
+        resolve(Array.from(new Set(refs)));
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
 const OPENAI_OAUTH_RUNTIME_PROVIDER = 'openai-codex';
 const OPENAI_OAUTH_PREFERRED_MODEL = 'gpt-5.4';
-const LOCAL_PROVIDER_PLACEHOLDER_API_KEY = 'ollama-local';
-
-function buildRuntimeProviderAccountId(
-  vendorId: string,
-  existingAccountId: string | null,
-  vendors: Array<{ id: string; supportsMultipleAccounts?: boolean }>,
-): string {
-  if (existingAccountId) {
-    return existingAccountId;
-  }
-
-  const vendor = vendors.find((candidate) => candidate.id === vendorId);
-  return vendor?.supportsMultipleAccounts ? `${vendorId}-${crypto.randomUUID()}` : vendorId;
-}
-
-function resolveProviderApiKeyForSave(type: string, apiKey: string): string | undefined {
-  const trimmed = apiKey.trim();
-  if (type === 'ollama' || type === 'local-model' || type === 'custom') {
-    return trimmed || LOCAL_PROVIDER_PLACEHOLDER_API_KEY;
-  }
-  return trimmed || undefined;
-}
 
 function normalizeProviderModelId(runtimeProviderId: string, modelId: string): string {
   if (
@@ -97,12 +116,39 @@ function getRuntimeProviderId(vendorId: string, authMode?: string | null): strin
   return vendorId;
 }
 
-async function listProviderModelOptions(
+async function resolveRuntimeProviderId(
+  providerService: ReturnType<typeof getProviderService>,
   vendorId: string,
   authMode?: string | null,
+  accountId?: string | null,
+): Promise<string> {
+  if (!accountId) {
+    return getRuntimeProviderId(vendorId, authMode);
+  }
+
+  const account = await providerService.getAccount(accountId);
+  if (!account) {
+    return getRuntimeProviderId(vendorId, authMode);
+  }
+
+  if (
+    account.vendorId === 'openai'
+    && (account.authMode === 'oauth_browser' || account.authMode === 'oauth_device')
+  ) {
+    return OPENAI_OAUTH_RUNTIME_PROVIDER;
+  }
+
+  if (account.vendorId === 'google' && account.authMode === 'oauth_browser') {
+    return 'google-gemini-cli';
+  }
+
+  return getOpenClawProviderKeyForType(account.vendorId, account.id);
+}
+
+async function listProviderModelOptions(
+  runtimeProviderId: string,
   scope: 'catalog' | 'runtime' = 'catalog',
 ): Promise<Array<{ id: string; name: string }>> {
-  const runtimeProviderId = getRuntimeProviderId(vendorId, authMode);
   const cliArgs = scope === 'runtime'
     ? ['models', 'list', '--json']
     : ['models', 'list', '--all', '--json'];
@@ -190,17 +236,34 @@ export async function handleProviderRoutes(
     try {
       const vendorId = url.searchParams.get('vendorId');
       const authMode = url.searchParams.get('authMode');
+      const accountId = url.searchParams.get('accountId');
       const scopeParam = url.searchParams.get('scope');
       const scope = scopeParam === 'runtime' ? 'runtime' : 'catalog';
       if (!vendorId) {
         sendJson(res, 400, { error: 'vendorId is required' });
         return true;
       }
-      const runtimeProviderId = getRuntimeProviderId(vendorId, authMode);
-      const models = await listProviderModelOptions(vendorId, authMode, scope);
+      const runtimeProviderId = await resolveRuntimeProviderId(
+        providerService,
+        vendorId,
+        authMode,
+        accountId,
+      );
+      const models = await listProviderModelOptions(runtimeProviderId, scope);
       sendJson(res, 200, { runtimeProviderId, models });
     } catch (error) {
       logger.warn('[providers] Failed to list provider model options:', error);
+      sendJson(res, 500, { error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/runtime-model-refs' && req.method === 'GET') {
+    try {
+      const models = await listRuntimeModelRefs();
+      sendJson(res, 200, { models });
+    } catch (error) {
+      logger.warn('[providers] Failed to list runtime model refs:', error);
       sendJson(res, 500, { error: String(error) });
     }
     return true;
@@ -229,70 +292,9 @@ export async function handleProviderRoutes(
       const presetId = decodeURIComponent(
         url.pathname.slice('/api/local-model-presets/'.length, -'/activate'.length),
       );
-      const presets = await readLocalModelPresets();
-      const preset = presets.find((item) => item.id === presetId);
-      if (!preset) {
-        sendJson(res, 404, { success: false, error: 'Preset not found' });
-        return true;
-      }
-
-      const vendors = await providerService.listVendors();
-      const accounts = await providerService.listAccounts();
-      const existing = accounts.find(
-        (account) => account.vendorId === 'custom'
-          && account.metadata?.managedBy === 'preset-local-model'
-          && account.metadata?.presetId === preset.id,
-      );
-
-      const now = new Date().toISOString();
-      let account: ProviderAccount;
-      if (existing) {
-        account = await providerService.updateAccount(
-          existing.id,
-          {
-            label: preset.name,
-            authMode: 'local',
-            baseUrl: preset.baseUrl,
-            apiProtocol: preset.apiProtocol || 'openai-completions',
-            model: preset.modelId,
-            enabled: true,
-            metadata: {
-              ...existing.metadata,
-              presetId: preset.id,
-              managedBy: 'preset-local-model',
-            },
-            updatedAt: now,
-          },
-          resolveProviderApiKeyForSave('custom', preset.apiKey ?? '') as string,
-        );
-        await syncUpdatedProviderToRuntime(providerAccountToConfig(account), undefined, ctx.gatewayManager);
-      } else {
-        account = await providerService.createAccount(
-          {
-            id: buildRuntimeProviderAccountId('custom', null, vendors),
-            vendorId: 'custom',
-            label: preset.name,
-            authMode: 'local',
-            baseUrl: preset.baseUrl,
-            apiProtocol: preset.apiProtocol || 'openai-completions',
-            model: preset.modelId,
-            enabled: true,
-            isDefault: false,
-            metadata: {
-              presetId: preset.id,
-              managedBy: 'preset-local-model',
-            },
-            createdAt: now,
-            updatedAt: now,
-          },
-          resolveProviderApiKeyForSave('custom', preset.apiKey ?? '') as string,
-        );
-        await syncSavedProviderToRuntime(providerAccountToConfig(account), undefined, ctx.gatewayManager);
-      }
-
-      await providerService.setDefaultAccount(account.id);
-      await syncDefaultProviderToRuntime(account.id, ctx.gatewayManager);
-      sendJson(res, 200, { success: true, account });
+      const result = await applyPresetLocalModelSelection(presetId, ctx.gatewayManager);
+      const account = await providerService.getAccount(result.accountId);
+      sendJson(res, 200, { success: true, account, primaryPresetId: result.primaryPresetId });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

@@ -664,11 +664,7 @@ export function ChatInput({
                       className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-left text-[13px] text-foreground hover:bg-black/5 dark:hover:bg-white/5"
                       onClick={() => {
                         setModelMenuOpen(false);
-                        void onModelChange?.(
-                          selectedModel && defaultModelValue && option.value === defaultModelValue
-                            ? undefined
-                            : option.value
-                        );
+                        void onModelChange?.(option.value);
                       }}
                     >
                       <span className="flex-1 truncate">{option.label}</span>

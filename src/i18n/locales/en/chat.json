@@ -32,7 +32,8 @@
     "gatewayNotConnected": "Gateway not connected...",
     "send": "Send",
     "stop": "Stop",
-    "retryFailedAttachments": "Retry failed attachments"
+    "retryFailedAttachments": "Retry failed attachments",
+    "localModelProvider": "Local Model"
   },
   "message": {
     "thinking": "Thinking",

@@ -11,7 +11,7 @@ import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { useAgentsStore } from '@/stores/agents';
-import { LoadingIcon, LoadingSpinner, PageLoader } from '@/components/common/LoadingSpinner';
+import { LoadingIcon, PageLoader } from '@/components/common/LoadingSpinner';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput, type ChatAgentOption, type FileAttachment } from './ChatInput';
 import { ChatToolbar, type ChatToolbarModelOption } from './ChatToolbar';
@@ -21,13 +21,9 @@ import { cn } from '@/lib/utils';
 import { PROVIDER_TYPE_INFO, type ProviderAccount, type ProviderVendorInfo } from '@/lib/providers';
 import { useNavigate } from 'react-router-dom';
 import { hostApiFetch } from '@/lib/host-api';
+import i18n from '@/i18n';
 
-function getProviderInstanceSuffix(providerId: string): string {
-  const normalized = providerId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-  return normalized || 'default';
-}
-
-function getRuntimeProviderKey(account: ProviderAccount): string {
+function getRuntimeProviderFallbackKey(account: ProviderAccount): string | undefined {
   if (account.vendorId === 'google' && account.authMode === 'oauth_browser') {
     return 'google-gemini-cli';
   }
@@ -37,16 +33,11 @@ function getRuntimeProviderKey(account: ProviderAccount): string {
   ) {
     return 'openai-codex';
   }
-  if (
-    account.vendorId === 'custom' ||
-    account.vendorId === 'ollama' ||
-    account.vendorId === 'local-model'
-  ) {
-    const suffix = getProviderInstanceSuffix(account.id);
-    return `${account.vendorId}-${suffix}`;
-  }
   if (account.vendorId === 'minimax-portal-cn') {
     return 'minimax-portal';
+  }
+  if (account.vendorId === 'custom' || account.vendorId === 'ollama' || account.vendorId === 'local-model') {
+    return undefined;
   }
   return account.vendorId;
 }
@@ -64,9 +55,11 @@ function normalizeAccountModel(account: ProviderAccount, model?: string): string
 
 function resolveAccountModelLabel(
   account: ProviderAccount,
-  vendor?: ProviderVendorInfo
+  vendor: ProviderVendorInfo | undefined,
+  providerDisplayName: string,
+  runtimeProviderId?: string,
 ): { modelRef?: string; modelName?: string } {
-  const runtimeProviderKey = getRuntimeProviderKey(account);
+  const runtimeProviderKey = runtimeProviderId || getRuntimeProviderFallbackKey(account);
   const fallbackVendor = PROVIDER_TYPE_INFO.find((item) => item.id === account.vendorId);
   const rawModel = normalizeAccountModel(
     account,
@@ -80,18 +73,20 @@ function resolveAccountModelLabel(
   }
 
   return {
-    modelRef: rawModel.startsWith(`${runtimeProviderKey}/`)
-      ? rawModel
-      : `${runtimeProviderKey}/${rawModel}`,
+    modelRef: runtimeProviderKey
+      ? (rawModel.startsWith(`${runtimeProviderKey}/`) ? rawModel : `${runtimeProviderKey}/${rawModel}`)
+      : rawModel,
     modelName: rawModel.split('/').pop() || rawModel,
   };
 }
 
 function resolveAccountModelOptions(
   account: ProviderAccount,
-  vendor?: ProviderVendorInfo
+  vendor: ProviderVendorInfo | undefined,
+  providerDisplayName: string,
+  runtimeProviderId?: string,
 ): ChatToolbarModelOption[] {
-  const runtimeProviderKey = getRuntimeProviderKey(account);
+  const runtimeProviderKey = runtimeProviderId || getRuntimeProviderFallbackKey(account);
   const fallbackVendor = PROVIDER_TYPE_INFO.find((item) => item.id === account.vendorId);
   const primaryModel = normalizeAccountModel(
     account,
@@ -103,9 +98,9 @@ function resolveAccountModelOptions(
   const seen = new Set<string>();
 
   return candidates.flatMap((candidate) => {
-    const normalizedRef = candidate.startsWith(`${runtimeProviderKey}/`)
-      ? candidate
-      : `${runtimeProviderKey}/${candidate}`;
+    const normalizedRef = runtimeProviderKey
+      ? (candidate.startsWith(`${runtimeProviderKey}/`) ? candidate : `${runtimeProviderKey}/${candidate}`)
+      : candidate;
     if (seen.has(normalizedRef)) {
       return [];
     }
@@ -113,10 +108,21 @@ function resolveAccountModelOptions(
     const modelName = normalizedRef.split('/').pop() || normalizedRef;
     return [{
       value: normalizedRef,
-      label: `${account.label} · ${modelName}`,
+      label: `${providerDisplayName} · ${modelName}`,
       shortLabel: modelName,
     }];
   });
+}
+
+function isMultiInstanceRuntimeVendor(vendorId: ProviderAccount['vendorId']): boolean {
+  return vendorId === 'custom' || vendorId === 'ollama' || vendorId === 'local-model';
+}
+
+function getProviderDisplayName(account: ProviderAccount, vendor?: ProviderVendorInfo): string {
+  if (account.metadata?.managedBy === 'preset-local-model') {
+    return i18n.t('chat:composer.localModelProvider', '本地模型');
+  }
+  return account.label || vendor?.name || account.vendorId;
 }
 
 type ProviderCatalogModelOption = {
@@ -125,15 +131,17 @@ type ProviderCatalogModelOption = {
 };
 
 type ProviderCatalogResponse = {
-  runtimeProviderId: string;
+  runtimeProviderId?: string;
   models: ProviderCatalogModelOption[];
+  resolved?: boolean;
 };
 
 function resolveAccountCatalogModelOptions(
   account: ProviderAccount,
+  providerDisplayName: string,
   catalog: ProviderCatalogResponse | undefined,
 ): ChatToolbarModelOption[] {
-  const runtimeProviderKey = catalog?.runtimeProviderId || getRuntimeProviderKey(account);
+  const runtimeProviderKey = catalog?.runtimeProviderId || getRuntimeProviderFallbackKey(account);
   const seen = new Set<string>();
   const models = catalog?.models ?? [];
 
@@ -143,9 +151,9 @@ function resolveAccountCatalogModelOptions(
       return [];
     }
 
-    const normalizedRef = normalizedId.startsWith(`${runtimeProviderKey}/`)
-      ? normalizedId
-      : `${runtimeProviderKey}/${normalizedId}`;
+    const normalizedRef = runtimeProviderKey
+      ? (normalizedId.startsWith(`${runtimeProviderKey}/`) ? normalizedId : `${runtimeProviderKey}/${normalizedId}`)
+      : normalizedId;
     if (seen.has(normalizedRef)) {
       return [];
     }
@@ -154,28 +162,34 @@ function resolveAccountCatalogModelOptions(
     const displayName = candidate.name?.trim() || normalizedId.split('/').pop() || normalizedId;
     return [{
       value: normalizedRef,
-      label: `${account.label} · ${displayName}`,
+      label: `${providerDisplayName} · ${displayName}`,
       shortLabel: displayName,
     }];
   });
 }
 
 function normalizeSessionModelValue(
-  currentModel: string | undefined,
+  session: { model?: string; modelProvider?: string } | undefined,
   options: ChatToolbarModelOption[]
 ): string | undefined {
+  const currentModel = session?.model?.trim();
   if (!currentModel) return undefined;
-
   const exact = options.find((option) => option.value === currentModel);
   if (exact) return exact.value;
 
-  const normalizedCurrent = currentModel.split('/').pop() || currentModel;
-  const bySuffix = options.find((option) => {
-    const optionSuffix = option.value.split('/').pop() || option.value;
-    return optionSuffix === normalizedCurrent;
-  });
+  const provider = session?.modelProvider?.trim();
+  if (provider && !currentModel.includes('/')) {
+    const withProvider = `${provider}/${currentModel}`;
+    const byProvider = options.find((option) => option.value === withProvider);
+    if (byProvider) return byProvider.value;
+  }
 
-  return bySuffix?.value;
+  const suffixMatches = options.filter((option) => option.value.split('/').pop() === currentModel);
+  if (suffixMatches.length === 1) {
+    return suffixMatches[0].value;
+  }
+
+  return undefined;
 }
 
 function dedupeModelOptions(options: ChatToolbarModelOption[]): ChatToolbarModelOption[] {
@@ -215,6 +229,7 @@ export function Chat() {
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
   const setSessionModel = useChatStore((s) => s.setSessionModel);
+  const setModelGuard = useChatStore((s) => s.setModelGuard);
   const newSession = useChatStore((s) => s.newSession);
   const toggleThinking = useChatStore((s) => s.toggleThinking);
 
@@ -228,6 +243,7 @@ export function Chat() {
   const providerLoading = useProviderStore((s) => s.loading);
   const refreshProviderSnapshot = useProviderStore((s) => s.refreshProviderSnapshot);
   const [providerCatalogMap, setProviderCatalogMap] = useState<Record<string, ProviderCatalogResponse>>({});
+  const [runtimeModelRefs, setRuntimeModelRefs] = useState<string[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
@@ -272,38 +288,69 @@ export function Chat() {
   }, [fetchAgents]);
 
   useEffect(() => {
+    if (!isGatewayRunning) {
+      queueMicrotask(() => {
+        setRuntimeModelRefs([]);
+      });
+      return;
+    }
+    let cancelled = false;
+    hostApiFetch<{ models?: string[] }>('/api/runtime-model-refs')
+      .then((response) => {
+        if (cancelled) return;
+        setRuntimeModelRefs(Array.isArray(response.models) ? response.models : []);
+      })
+      .catch((error) => {
+        console.warn('Failed to load runtime model refs:', error);
+        if (!cancelled) setRuntimeModelRefs([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isGatewayRunning, providerAccounts, providerStatuses]);
+
+  useEffect(() => {
     let cancelled = false;
     const eligibleAccounts = providerAccounts.filter((account) => account.enabled)
       .filter(
         (account) =>
-          account.vendorId !== 'custom'
-          && account.vendorId !== 'local-model'
-          && (
-            account.authMode === 'local'
-            || account.authMode === 'oauth_device'
-            || account.authMode === 'oauth_browser'
-            || Boolean(providerStatusMap.get(account.id)?.hasKey)
-          ),
+          account.authMode === 'local'
+          || account.authMode === 'oauth_device'
+          || account.authMode === 'oauth_browser'
+          || Boolean(providerStatusMap.get(account.id)?.hasKey),
       );
-    const requestKeys = Array.from(
-      new Set(eligibleAccounts.map((account) => `${account.vendorId}:${account.authMode}`)),
-    );
+    const requestKeys = eligibleAccounts.map((account) => account.id);
 
     if (requestKeys.length === 0) {
-      setProviderCatalogMap({});
+      queueMicrotask(() => {
+        if (!cancelled) {
+          setProviderCatalogMap({});
+        }
+      });
       return;
     }
 
-    Promise.all(requestKeys.map(async (requestKey) => {
-      const [vendorId, authMode] = requestKey.split(':');
+    Promise.all(requestKeys.map(async (accountId) => {
+      const account = eligibleAccounts.find((item) => item.id === accountId);
+      if (!account) {
+        return [accountId, { runtimeProviderId: undefined, models: [] }] as const;
+      }
       try {
         const response = await hostApiFetch<ProviderCatalogResponse>(
-          `/api/provider-model-options?vendorId=${encodeURIComponent(vendorId)}&authMode=${encodeURIComponent(authMode)}&scope=runtime`,
+          `/api/provider-model-options?vendorId=${encodeURIComponent(account.vendorId)}&authMode=${encodeURIComponent(account.authMode)}&accountId=${encodeURIComponent(account.id)}&scope=runtime`,
         );
-        return [requestKey, { runtimeProviderId: response.runtimeProviderId, models: response.models ?? [] }] as const;
+        return [accountId, {
+          runtimeProviderId: response.runtimeProviderId,
+          models: response.models ?? [],
+          resolved: true,
+        }] as const;
       } catch (error) {
-        console.warn(`Failed to load provider model options for ${requestKey}:`, error);
-        return [requestKey, { runtimeProviderId: vendorId, models: [] }] as const;
+        console.warn(`Failed to load provider model options for ${accountId}:`, error);
+        return [accountId, {
+          runtimeProviderId: getRuntimeProviderFallbackKey(account),
+          models: [],
+          resolved: false,
+        }] as const;
       }
     })).then((entries) => {
       if (cancelled) return;
@@ -374,21 +421,38 @@ export function Chat() {
       )
       .flatMap((account) => {
         const vendor = vendorMap.get(account.vendorId);
-        const requestKey = `${account.vendorId}:${account.authMode}`;
-        const catalog = providerCatalogMap[requestKey];
-        const catalogOptions = resolveAccountCatalogModelOptions(account, catalog);
-        const explicitOptions = resolveAccountModelOptions(account, vendor);
-        return catalog?.models?.length
-          ? catalogOptions
-          : explicitOptions;
+        const providerDisplayName = getProviderDisplayName(account, vendor);
+        const catalog = providerCatalogMap[account.id];
+        if (isMultiInstanceRuntimeVendor(account.vendorId)) {
+          if (!catalog?.resolved || !catalog.runtimeProviderId) {
+            return [];
+          }
+          return resolveAccountCatalogModelOptions(account, providerDisplayName, catalog);
+        }
+        const catalogOptions = resolveAccountCatalogModelOptions(account, providerDisplayName, catalog);
+        const explicitOptions = resolveAccountModelOptions(
+          account,
+          vendor,
+          providerDisplayName,
+          catalog?.runtimeProviderId,
+        );
+        if (catalog?.resolved) {
+          return catalogOptions;
+        }
+        return explicitOptions;
       })
       .sort((left, right) => left.label.localeCompare(right.label));
 
-    return dedupeModelOptions(baseOptions);
-  }, [providerAccounts, providerCatalogMap, providerStatusMap, vendorMap]);
+    const deduped = dedupeModelOptions(baseOptions);
+    if (runtimeModelRefs.length === 0) {
+      return deduped;
+    }
+    const runtimeSet = new Set(runtimeModelRefs);
+    return deduped.filter((option) => runtimeSet.has(option.value));
+  }, [providerAccounts, providerCatalogMap, providerStatusMap, runtimeModelRefs, vendorMap]);
   const normalizedSelectedModel = useMemo(
-    () => normalizeSessionModelValue(currentSession?.model, modelOptions),
-    [currentSession?.model, modelOptions]
+    () => normalizeSessionModelValue(currentSession, modelOptions),
+    [currentSession, modelOptions]
   );
   const defaultModelMeta = useMemo(() => {
     const defaultAccount = providerAccounts.find((account) => account.id === defaultAccountId);
@@ -400,15 +464,25 @@ export function Chat() {
     }
 
     const vendor = vendorMap.get(defaultAccount.vendorId);
-    const { modelName, modelRef } = resolveAccountModelLabel(defaultAccount, vendor);
+    const providerDisplayName = getProviderDisplayName(defaultAccount, vendor);
+    const defaultCatalog = providerCatalogMap[defaultAccount.id];
+    const { modelName, modelRef } = resolveAccountModelLabel(
+      defaultAccount,
+      vendor,
+      providerDisplayName,
+      defaultCatalog?.runtimeProviderId,
+    );
     return {
-      label: `${defaultAccount.label} · ${modelName || modelRef || defaultAccount.label}`,
+      label: `${providerDisplayName} · ${modelName || modelRef || providerDisplayName}`,
       shortLabel: modelName || modelRef || defaultAccount.label,
       value: modelRef,
     };
-  }, [defaultAccountId, modelOptions, providerAccounts, vendorMap]);
+  }, [defaultAccountId, modelOptions, providerAccounts, providerCatalogMap, vendorMap]);
   const normalizedDefaultModelValue = useMemo(
-    () => normalizeSessionModelValue(defaultModelMeta.value, modelOptions),
+    () => normalizeSessionModelValue(
+      defaultModelMeta.value ? { model: defaultModelMeta.value } : undefined,
+      modelOptions,
+    ),
     [defaultModelMeta.value, modelOptions]
   );
   const agentOptions = useMemo<ChatAgentOption[]>(() => {
@@ -432,7 +506,18 @@ export function Chat() {
   );
 
   useEffect(() => {
-    if (!isGatewayRunning || providerLoading || !currentSession?.model || normalizedSelectedModel) {
+    const allowed = modelOptions.map((option) => option.value);
+    setModelGuard(allowed, normalizedDefaultModelValue);
+  }, [modelOptions, normalizedDefaultModelValue, setModelGuard]);
+
+  useEffect(() => {
+    if (
+      !isGatewayRunning
+      || providerLoading
+      || modelOptions.length === 0
+      || !currentSession?.model
+      || normalizedSelectedModel
+    ) {
       return;
     }
 
@@ -442,6 +527,7 @@ export function Chat() {
   }, [
     currentSession?.model,
     isGatewayRunning,
+    modelOptions.length,
     normalizedSelectedModel,
     providerLoading,
     setSessionModel,
@@ -606,12 +692,6 @@ function WelcomeScreen({
     compact: boolean;
     maxHeight: number;
   } | null>(null);
-  const welcomeActions = [
-    t('welcome.askQuestions'),
-    t('welcome.creativeTasks'),
-    t('welcome.brainstorming'),
-  ];
-
   useEffect(() => {
     if (!agentMenuOpen) return;
 
@@ -767,7 +847,6 @@ function TypingIndicator() {
 // ── Activity Indicator (shown between tool cycles) ─────────────
 
 function ActivityIndicator({ phase }: { phase: 'tool_processing' }) {
-  const { t } = useTranslation('chat');
   void phase;
   return (
     <div className="flex items-center gap-3 px-1">
@@ -777,7 +856,7 @@ function ActivityIndicator({ phase }: { phase: 'tool_processing' }) {
       <div className="rounded-[16px] border border-slate-200/80 bg-slate-50 px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <LoadingIcon className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
-          <span>{t('status.processingToolResults')}</span>
+          <span>{i18n.t('chat:status.processingToolResults')}</span>
         </div>
       </div>
     </div>

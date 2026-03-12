@@ -128,6 +128,8 @@ export interface ProviderAccount {
     resourceUrl?: string;
     customModels?: string[];
     presetId?: string;
+    primaryPresetId?: string;
+    presetIds?: string[];
     managedBy?: 'preset-local-model';
   };
   createdAt: string;
