@@ -11,7 +11,7 @@ import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { useAgentsStore } from '@/stores/agents';
-import { LoadingIcon, LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { LoadingIcon, LoadingSpinner, PageLoader } from '@/components/common/LoadingSpinner';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput, type ChatAgentOption, type FileAttachment } from './ChatInput';
 import { ChatToolbar, type ChatToolbarModelOption } from './ChatToolbar';
@@ -21,6 +21,11 @@ import { cn } from '@/lib/utils';
 import { PROVIDER_TYPE_INFO, type ProviderAccount, type ProviderVendorInfo } from '@/lib/providers';
 import { useNavigate } from 'react-router-dom';
 import { hostApiFetch } from '@/lib/host-api';
+
+function getProviderInstanceSuffix(providerId: string): string {
+  const normalized = providerId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+  return normalized || 'default';
+}
 
 function getRuntimeProviderKey(account: ProviderAccount): string {
   if (account.vendorId === 'google' && account.authMode === 'oauth_browser') {
@@ -37,7 +42,7 @@ function getRuntimeProviderKey(account: ProviderAccount): string {
     account.vendorId === 'ollama' ||
     account.vendorId === 'local-model'
   ) {
-    const suffix = account.id.replace(/-/g, '').slice(0, 8);
+    const suffix = getProviderInstanceSuffix(account.id);
     return `${account.vendorId}-${suffix}`;
   }
   if (account.vendorId === 'minimax-portal-cn') {
@@ -119,12 +124,18 @@ type ProviderCatalogModelOption = {
   name: string;
 };
 
+type ProviderCatalogResponse = {
+  runtimeProviderId: string;
+  models: ProviderCatalogModelOption[];
+};
+
 function resolveAccountCatalogModelOptions(
   account: ProviderAccount,
-  models: ProviderCatalogModelOption[],
+  catalog: ProviderCatalogResponse | undefined,
 ): ChatToolbarModelOption[] {
-  const runtimeProviderKey = getRuntimeProviderKey(account);
+  const runtimeProviderKey = catalog?.runtimeProviderId || getRuntimeProviderKey(account);
   const seen = new Set<string>();
+  const models = catalog?.models ?? [];
 
   return models.flatMap((candidate) => {
     const normalizedId = normalizeAccountModel(account, candidate.id)?.trim();
@@ -216,7 +227,7 @@ export function Chat() {
   const defaultAccountId = useProviderStore((s) => s.defaultAccountId);
   const providerLoading = useProviderStore((s) => s.loading);
   const refreshProviderSnapshot = useProviderStore((s) => s.refreshProviderSnapshot);
-  const [providerCatalogMap, setProviderCatalogMap] = useState<Record<string, ProviderCatalogModelOption[]>>({});
+  const [providerCatalogMap, setProviderCatalogMap] = useState<Record<string, ProviderCatalogResponse>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
@@ -286,13 +297,13 @@ export function Chat() {
     Promise.all(requestKeys.map(async (requestKey) => {
       const [vendorId, authMode] = requestKey.split(':');
       try {
-        const response = await hostApiFetch<{ models: ProviderCatalogModelOption[] }>(
-          `/api/provider-model-options?vendorId=${encodeURIComponent(vendorId)}&authMode=${encodeURIComponent(authMode)}`,
+        const response = await hostApiFetch<ProviderCatalogResponse>(
+          `/api/provider-model-options?vendorId=${encodeURIComponent(vendorId)}&authMode=${encodeURIComponent(authMode)}&scope=runtime`,
         );
-        return [requestKey, response.models ?? []] as const;
+        return [requestKey, { runtimeProviderId: response.runtimeProviderId, models: response.models ?? [] }] as const;
       } catch (error) {
         console.warn(`Failed to load provider model options for ${requestKey}:`, error);
-        return [requestKey, []] as const;
+        return [requestKey, { runtimeProviderId: vendorId, models: [] }] as const;
       }
     })).then((entries) => {
       if (cancelled) return;
@@ -349,6 +360,8 @@ export function Chat() {
     hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasStreamToolStatus;
 
   const isEmpty = messages.length === 0 && !loading && !sending;
+  const shouldShowWelcome =
+    isEmpty && (!currentSession || Boolean(pendingLocalSessionKeys[currentSessionKey]));
   const modelOptions = useMemo<ChatToolbarModelOption[]>(() => {
     const baseOptions = providerAccounts
       .filter((account) => account.enabled)
@@ -362,12 +375,12 @@ export function Chat() {
       .flatMap((account) => {
         const vendor = vendorMap.get(account.vendorId);
         const requestKey = `${account.vendorId}:${account.authMode}`;
-        const catalogOptions = resolveAccountCatalogModelOptions(
-          account,
-          providerCatalogMap[requestKey] ?? [],
-        );
+        const catalog = providerCatalogMap[requestKey];
+        const catalogOptions = resolveAccountCatalogModelOptions(account, catalog);
         const explicitOptions = resolveAccountModelOptions(account, vendor);
-        return [...catalogOptions, ...explicitOptions];
+        return catalog?.models?.length
+          ? catalogOptions
+          : explicitOptions;
       })
       .sort((left, right) => left.label.localeCompare(right.label));
 
@@ -460,10 +473,13 @@ export function Chat() {
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         <div className="max-w-4xl mx-auto space-y-4">
           {loading && !sending ? (
-            <div className="flex h-[60vh] items-center justify-center">
-              <LoadingSpinner size="lg" />
-            </div>
-          ) : isEmpty ? (
+            <PageLoader
+              compact
+              title={t('loading.title', '正在加载对话')}
+              description={t('loading.description', '正在同步当前会话内容，请稍候。')}
+              className="h-[60vh]"
+            />
+          ) : shouldShowWelcome ? (
             <WelcomeScreen
               canSwitchAgent={canSwitchAgent}
               currentAgentId={currentAgentId}
@@ -547,7 +563,7 @@ export function Chat() {
         onSend={(text: string, attachments?: FileAttachment[]) => sendMessage(text, attachments)}
         onStop={abortRun}
         onToggleThinking={toggleThinking}
-        resetKey={`${currentSessionKey || 'no-session'}:${isEmpty ? 'empty' : 'active'}`}
+        resetKey={`${currentSessionKey || 'no-session'}:${shouldShowWelcome ? 'welcome' : isEmpty ? 'empty' : 'active'}`}
         modelOptions={modelOptions}
         selectedModel={normalizedSelectedModel}
         defaultModelValue={normalizedDefaultModelValue}
@@ -557,7 +573,7 @@ export function Chat() {
         modelDisabled={!isGatewayRunning}
         disabled={!isGatewayRunning}
         sending={sending}
-        isEmpty={isEmpty}
+        isEmpty={shouldShowWelcome}
         showThinking={showThinking}
       />
     </div>

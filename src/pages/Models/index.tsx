@@ -1,18 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  CheckCircle2,
   ChevronLeft,
+  Cpu,
   ChevronRight,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useGatewayStore } from '@/stores/gateway';
 import { useSettingsStore } from '@/stores/settings';
+import { useProviderStore } from '@/stores/providers';
 import { hostApiFetch } from '@/lib/host-api';
 import { trackUiEvent } from '@/lib/telemetry';
 import { ProvidersSettings } from '@/components/settings/ProvidersSettings';
 import { FeedbackState } from '@/components/common/FeedbackState';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { PageLoader } from '@/components/common/LoadingSpinner';
+import { cn } from '@/lib/utils';
 
 type UsageHistoryEntry = {
   timestamp: string;
@@ -31,11 +36,26 @@ type UsageHistoryEntry = {
 
 type UsageWindow = '7d' | '30d' | 'all';
 type UsageGroupBy = 'model' | 'day';
+type LocalModelPreset = {
+  id: string;
+  name: string;
+  description?: string;
+  modelId: string;
+  baseUrl: string;
+  apiProtocol?: 'openai-completions' | 'openai-responses' | 'anthropic-messages';
+  capabilities?: string[];
+};
 
 export function Models() {
   const { t } = useTranslation(['dashboard', 'settings']);
   const gatewayStatus = useGatewayStore((state) => state.status);
   const devModeUnlocked = useSettingsStore((state) => state.devModeUnlocked);
+  const {
+    accounts,
+    defaultAccountId,
+    loading: providerLoading,
+    refreshProviderSnapshot,
+  } = useProviderStore();
   const isGatewayRunning = gatewayStatus.state === 'running';
 
   const [usageHistory, setUsageHistory] = useState<UsageHistoryEntry[]>([]);
@@ -43,9 +63,40 @@ export function Models() {
   const [usageWindow, setUsageWindow] = useState<UsageWindow>('7d');
   const [usagePage, setUsagePage] = useState(1);
   const [selectedUsageEntry, setSelectedUsageEntry] = useState<UsageHistoryEntry | null>(null);
+  const [localModelPresets, setLocalModelPresets] = useState<LocalModelPreset[]>([]);
+  const [loadingLocalModelPresets, setLoadingLocalModelPresets] = useState(true);
+  const [switchingPresetId, setSwitchingPresetId] = useState<string | null>(null);
 
   useEffect(() => {
     trackUiEvent('models.page_viewed');
+  }, []);
+
+  useEffect(() => {
+    void refreshProviderSnapshot();
+  }, [refreshProviderSnapshot]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingLocalModelPresets(true);
+    hostApiFetch<LocalModelPreset[]>('/api/local-model-presets')
+      .then((presets) => {
+        if (!cancelled) {
+          setLocalModelPresets(Array.isArray(presets) ? presets : []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLocalModelPresets([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingLocalModelPresets(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -69,9 +120,40 @@ export function Models() {
   const safeUsagePage = Math.min(usagePage, usageTotalPages);
   const pagedUsageHistory = filteredUsageHistory.slice((safeUsagePage - 1) * usagePageSize, safeUsagePage * usagePageSize);
   const usageLoading = isGatewayRunning && visibleUsageHistory.length === 0;
-  const uniqueModels = new Set(filteredUsageHistory.map((entry) => entry.model).filter(Boolean)).size;
   const totalTokensInWindow = filteredUsageHistory.reduce((sum, entry) => sum + entry.totalTokens, 0);
   const totalCostInWindow = filteredUsageHistory.reduce((sum, entry) => sum + (entry.costUsd || 0), 0);
+  const presetLocalAccounts = useMemo(
+    () => accounts.filter((account) => account.vendorId === 'custom' && account.metadata?.managedBy === 'preset-local-model'),
+    [accounts],
+  );
+  const localModelCards = useMemo(
+    () => localModelPresets.map((preset) => {
+      const account = presetLocalAccounts.find((candidate) => candidate.metadata?.presetId === preset.id);
+      return {
+        preset,
+        account,
+        isDefault: account?.id === defaultAccountId,
+      };
+    }),
+    [defaultAccountId, localModelPresets, presetLocalAccounts],
+  );
+  const defaultLocalModel = localModelCards.find((item) => item.isDefault);
+  const otherModelAccounts = useMemo(
+    () => accounts.filter((account) => !(account.vendorId === 'custom' && account.metadata?.managedBy === 'preset-local-model')),
+    [accounts],
+  );
+
+  const handleSetDefaultPreset = async (presetId: string) => {
+    setSwitchingPresetId(presetId);
+    try {
+      await hostApiFetch(`/api/local-model-presets/${encodeURIComponent(presetId)}/activate`, {
+        method: 'POST',
+      });
+      await refreshProviderSnapshot();
+    } finally {
+      setSwitchingPresetId(null);
+    }
+  };
 
   return (
     <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
@@ -81,14 +163,10 @@ export function Models() {
           subtitle={t('dashboard:models.subtitle')}
           description={t('dashboard:models.description')}
           actions={(
-            <div className="grid grid-cols-2 gap-2.5 lg:max-w-[540px] lg:grid-cols-4 xl:min-w-[540px]">
+            <div className="grid grid-cols-2 gap-2.5 lg:max-w-[410px] lg:grid-cols-3 xl:min-w-[410px]">
               <div className="rounded-[10px] border border-black/8 bg-black/[0.03] px-4 py-3 dark:border-white/8 dark:bg-white/[0.04]">
                 <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('dashboard:models.stats.records')}</div>
                 <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">{filteredUsageHistory.length}</div>
-              </div>
-              <div className="rounded-[10px] border border-black/8 bg-black/[0.03] px-4 py-3 dark:border-white/8 dark:bg-white/[0.04]">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('dashboard:models.stats.models')}</div>
-                <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">{uniqueModels}</div>
               </div>
               <div className="rounded-[10px] border border-black/8 bg-black/[0.03] px-4 py-3 dark:border-white/8 dark:bg-white/[0.04]">
                 <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('dashboard:models.stats.tokens')}</div>
@@ -104,23 +182,111 @@ export function Models() {
 
         {/* Content Area */}
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-1 pb-10">
+          {localModelPresets.length > 0 && (
+            <section className="rounded-[10px] border border-black/10 bg-[rgba(255,255,255,0.3)] p-4 dark:border-white/10 dark:bg-white/[0.03] sm:p-5">
+              <div className="mb-5">
+                <div>
+                  <h2 className="text-2xl font-semibold tracking-tight text-foreground">本地模型</h2>
+                  <p className="mt-1 text-[13px] text-muted-foreground">
+                    预装模型会在启动时自动写入 OpenClaw 并立即可用。若存在多个预装模型，第一个会自动设为默认模型。
+                  </p>
+                </div>
+              </div>
+
+              {loadingLocalModelPresets || providerLoading ? (
+                <div className="flex items-center justify-center rounded-[10px] border border-dashed border-border/80 bg-muted/35 py-12 text-muted-foreground">
+                  <PageLoader
+                    compact
+                    title="正在加载本地模型"
+                    description="正在同步预装模型和当前配置，请稍候。"
+                    className="w-full py-0"
+                  />
+                </div>
+              ) : (
+                <div className="grid gap-4 xl:grid-cols-2">
+                  {localModelCards.map(({ preset, account, isDefault }) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      disabled={isDefault || !account || switchingPresetId === preset.id}
+                      onClick={() => {
+                        if (!isDefault && account) {
+                          void handleSetDefaultPreset(preset.id);
+                        }
+                      }}
+                      className={cn(
+                        'w-full rounded-[10px] border border-black/10 bg-black/[0.025] p-4 text-left transition-colors dark:border-white/10 dark:bg-white/[0.02]',
+                        !isDefault && account && 'hover:border-blue-300 hover:bg-blue-50/40 dark:hover:border-blue-500/30 dark:hover:bg-blue-500/5',
+                        (isDefault || !account) && 'cursor-default',
+                        switchingPresetId === preset.id && 'opacity-70',
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-blue-500/10 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300">
+                              <Cpu className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="text-[18px] font-semibold tracking-tight text-foreground">{preset.name}</h3>
+                                {preset.id === localModelPresets[0]?.id && (
+                                  <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">
+                                    推荐
+                                  </span>
+                                )}
+                                {isDefault && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-green-500/12 px-2 py-0.5 text-[11px] font-medium text-green-700 dark:bg-green-400/10 dark:text-green-200">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    默认
+                                  </span>
+                                )}
+                              </div>
+                              <p className="mt-0.5 text-[13px] text-muted-foreground">{preset.description}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {(preset.capabilities ?? []).map((capability) => (
+                          <span
+                            key={capability}
+                            className="rounded-full border border-black/8 bg-white/60 px-2.5 py-1 text-[11px] font-medium text-foreground/75 dark:border-white/8 dark:bg-white/[0.05]"
+                          >
+                            {capability}
+                          </span>
+                        ))}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
           
           {/* AI Providers Section */}
           <section className="rounded-[10px] border border-black/10 bg-[rgba(255,255,255,0.3)] p-4 dark:border-white/10 dark:bg-white/[0.03] sm:p-5">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-                  {t('dashboard:models.providersTitle')}
+                  模型提供商
                 </h2>
                 <p className="mt-1 text-[13px] text-muted-foreground">
-                  {t('dashboard:models.providersSubtitle')}
+                  手动管理云端模型来源，以及额外添加的自定义兼容端点。
                 </p>
               </div>
               <div className="shrink-0">
                 <ProvidersSettings actionOnly />
               </div>
             </div>
-            <ProvidersSettings embedded hideHeader autoOpenOnEmpty />
+            {otherModelAccounts.length === 0 ? (
+              <div className="rounded-[10px] border border-dashed border-border/80 bg-muted/35 px-5 py-8 text-sm text-muted-foreground">
+                目前没有额外的模型提供商。需要时可以添加 OpenAI、OpenRouter 或自定义兼容端点。
+              </div>
+            ) : (
+              <ProvidersSettings embedded hideHeader autoOpenOnEmpty />
+            )}
           </section>
 
           {/* Token Usage History Section */}
@@ -138,7 +304,12 @@ export function Models() {
             <div>
               {usageLoading ? (
                 <div className="flex items-center justify-center rounded-[10px] border border-dashed border-border/80 bg-muted/35 py-12 text-muted-foreground">
-                  <FeedbackState state="loading" title={t('dashboard:recentTokenHistory.loading')} />
+                  <PageLoader
+                    compact
+                    title={t('dashboard:recentTokenHistory.loading')}
+                    description={t('dashboard:models.loadingDescription', '正在同步模型和用量记录，请稍候。')}
+                    className="w-full py-0"
+                  />
                 </div>
               ) : visibleUsageHistory.length === 0 ? (
                 <div className="flex items-center justify-center rounded-[10px] border border-dashed border-border/80 bg-muted/35 py-12 text-muted-foreground">

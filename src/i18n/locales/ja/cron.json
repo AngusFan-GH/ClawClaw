@@ -106,5 +106,7 @@
       "fri": "金",
       "sat": "土"
     }
-  }
+  },
+  "loadingTitle": "定期タスクを読み込み中",
+  "loadingDescription": "OpenClaw のタスクリストを同期しています。しばらくお待ちください。"
 }

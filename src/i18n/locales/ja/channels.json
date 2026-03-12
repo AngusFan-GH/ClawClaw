@@ -349,5 +349,7 @@
   },
   "viewDocs": "ドキュメントを表示",
   "loadingConfiguredStatus": "設定済みの接続を読み込んでいます...",
-  "refreshingStatus": "接続状態を更新しています..."
+  "refreshingStatus": "接続状態を更新しています...",
+  "loadingTitle": "接続を読み込み中",
+  "loadingDescription": "設定済みチャンネルとランタイム状態を同期しています。しばらくお待ちください。"
 }

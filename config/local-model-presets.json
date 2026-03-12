@@ -1,0 +1,22 @@
+[
+  {
+    "id": "qwen3.5-27b",
+    "name": "Qwen3.5-27B",
+    "description": "通用对话与代码辅助，适合作为默认本地模型。",
+    "modelId": "Qwen3.5-27B",
+    "baseUrl": "http://122.224.109.54:20001/spiritx-api/v1",
+    "apiProtocol": "openai-completions",
+    "capabilities": ["阿里", "多模态-视觉语言模型", "英伟达(RTX-4090)"],
+    "apiKey": "sk-DBg2D0wAWTTUh0GF7dF5Cf796b5b47488f0c5aF467B26446"
+  },
+  {
+    "id": "qwen3.5-35b-a3b",
+    "name": "Qwen3.5-35B-A3B",
+    "description": "更强的推理与长文本能力，适合作为高质量本地模型。",
+    "modelId": "Qwen3.5-35B-A3B",
+    "baseUrl": "http://122.224.109.54:20001/spiritx-api/v1",
+    "apiProtocol": "openai-completions",
+    "capabilities": ["阿里", "多模态-视觉语言模型", "英伟达(RTX-4090)"],
+    "apiKey": "sk-DBg2D0wAWTTUh0GF7dF5Cf796b5b47488f0c5aF467B26446"
+  }
+]

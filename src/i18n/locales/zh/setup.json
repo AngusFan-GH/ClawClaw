@@ -12,6 +12,10 @@
       "title": "AI 提供商",
       "description": "配置您的 AI 服务"
     },
+    "localModel": {
+      "title": "本地模型",
+      "description": "预装模型已自动配置，启动完成后即可直接使用"
+    },
     "channel": {
       "title": "连接",
       "description": "连接消息平台（可选）"
@@ -28,6 +32,7 @@
   "welcome": {
     "title": "欢迎使用 ClawClaw",
     "description": "ClawClaw 是 OpenClaw 的图形界面，让您可以在喜爱的消息平台上轻松使用 AI 助手。",
+    "autoContinue": "正在自动完成初始化，请稍候。",
     "features": {
       "noCommand": "无需命令行",
       "modernUI": "现代美观的界面",
@@ -74,6 +79,15 @@
     "invalid": "无效的 API 密钥",
     "storedLocally": "您的 API 密钥存储在本地机器上。"
   },
+  "localModel": {
+    "autoConfiguredTitle": "本地模型已自动配置",
+    "autoConfiguredDesc": "预装模型已写入 OpenClaw，启动完成后即可直接开始对话。",
+    "waitingTitle": "正在同步本地模型",
+    "waitingDesc": "正在写入预装模型配置，请稍候。",
+    "modelsTitle": "已准备的模型",
+    "defaultBadge": "默认",
+    "autoConfiguredHelp": "这些模型无需手动启用。您稍后仍可在模型页面切换默认模型。"
+  },
   "channel": {
     "title": "连接消息平台",
     "subtitle": "选择要连接 AI 助手的平台。您可以稍后在设置中添加更多连接。",
@@ -104,6 +118,8 @@
     "title": "设置完成！",
     "subtitle": "ClawClaw 已配置并准备就绪。您现在可以开始与您的 AI 助手聊天了。",
     "provider": "AI 提供商",
+    "model": "本地模型",
+    "localModelReady": "已自动配置",
     "components": "组件",
     "gateway": "网关",
     "running": "运行中",

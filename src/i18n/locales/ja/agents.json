@@ -66,5 +66,7 @@
     "channelAssignFailed": "Channel の割り当てに失敗しました: {{error}}",
     "channelRemoved": "{{channel}} を削除しました",
     "channelRemoveFailed": "Channel の削除に失敗しました: {{error}}"
-  }
+  },
+  "loadingTitle": "Agent を読み込み中",
+  "loadingDescription": "Agent 設定と Channel バインドを同期しています。しばらくお待ちください。"
 }

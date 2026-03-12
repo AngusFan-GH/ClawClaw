@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { StatusBadge } from '@/components/common/StatusBadge';
-import { LoadingIcon, LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { LoadingIcon, PageLoader } from '@/components/common/LoadingSpinner';
 import { ChannelConfigModal } from '@/components/channels/ChannelConfigModal';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAgentsStore } from '@/stores/agents';
@@ -66,8 +66,11 @@ export function Agents() {
 
   if (loading) {
     return (
-      <div className="flex flex-col -m-6 dark:bg-background min-h-[calc(100vh-2.5rem)] items-center justify-center">
-        <LoadingSpinner size="lg" />
+      <div className="flex flex-col -m-6 dark:bg-background min-h-[calc(100vh-2.5rem)]">
+        <PageLoader
+          title={t('loadingTitle', '正在加载分身')}
+          description={t('loadingDescription', '正在同步分身配置和绑定关系，请稍候。')}
+        />
       </div>
     );
   }

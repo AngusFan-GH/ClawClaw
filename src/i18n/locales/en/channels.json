@@ -349,5 +349,7 @@
   },
   "viewDocs": "View Documentation",
   "loadingConfiguredStatus": "Loading configured connections...",
-  "refreshingStatus": "Refreshing connection status..."
+  "refreshingStatus": "Refreshing connection status...",
+  "loadingTitle": "Loading channels",
+  "loadingDescription": "Syncing configured channels and runtime status. Please wait."
 }

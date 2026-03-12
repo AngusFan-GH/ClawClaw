@@ -12,6 +12,10 @@
             "title": "AIプロバイダー",
             "description": "AIサービスを構成"
         },
+        "localModel": {
+            "title": "ローカルモデル",
+            "description": "プリセットモデルはすでに構成され、起動後すぐに使えます"
+        },
         "channel": {
             "title": "チャンネル接続",
             "description": "メッセージングプラットフォームを接続（オプション）"
@@ -28,6 +32,7 @@
     "welcome": {
         "title": "ClawClawへようこそ",
         "description": "ClawClawはOpenClawのグラフィカルインターフェースで、お気に入りのメッセージングプラットフォームでAIアシスタントを簡単に使用できます。",
+        "autoContinue": "初期化を自動で進めています。しばらくお待ちください。",
         "features": {
             "noCommand": "コマンドライン不要",
             "modernUI": "モダンで美しいインターフェース",
@@ -74,6 +79,15 @@
         "invalid": "無効な API キー",
         "storedLocally": "API キーはローカルマシンに保存されます。"
     },
+    "localModel": {
+        "autoConfiguredTitle": "ローカルモデルは自動設定済みです",
+        "autoConfiguredDesc": "プリセットモデルはすでに OpenClaw に書き込まれており、起動後すぐに利用できます。",
+        "waitingTitle": "ローカルモデルを同期中",
+        "waitingDesc": "プリセットモデル設定を書き込んでいます。しばらくお待ちください。",
+        "modelsTitle": "準備済みモデル",
+        "defaultBadge": "既定",
+        "autoConfiguredHelp": "これらのモデルは手動で有効化する必要はありません。既定モデルは後でモデルページから切り替えられます。"
+    },
     "channel": {
         "title": "メッセージングチャンネルを接続",
         "subtitle": "AIアシスタントを接続するプラットフォームを選択してください。チャンネルは後で設定で追加できます。",
@@ -104,6 +118,8 @@
         "title": "セットアップ完了！",
         "subtitle": "ClawClawの構成が完了し、使用準備が整いました。AIアシスタントとのチャットを開始できます。",
         "provider": "AI プロバイダー",
+        "model": "ローカルモデル",
+        "localModelReady": "自動設定済み",
         "components": "コンポーネント",
         "gateway": "ゲートウェイ",
         "running": "実行中",

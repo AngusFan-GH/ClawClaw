@@ -56,6 +56,7 @@ export interface ChatSession {
   displayName?: string;
   thinkingLevel?: string;
   model?: string;
+  updatedAt?: number;
 }
 
 export interface ToolStatus {
@@ -1059,6 +1060,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
             displayName: s.displayName ? String(s.displayName) : undefined,
             thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
             model: s.model ? String(s.model) : undefined,
+            updatedAt:
+              typeof s.updatedAt === 'number'
+                ? s.updatedAt
+                : typeof s.updatedAt === 'string'
+                  ? Number(s.updatedAt)
+                  : undefined,
           }))
           .filter((s: ChatSession) => s.key && isChatSidebarSessionKey(s.key));
         const realSessionKeys = new Set(sessions.map((session) => session.key));
@@ -1090,6 +1097,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
           sessionLastActivity,
           messages,
         } = get();
+        const hydratedSessionLastActivity = dedupedSessions.reduce<Record<string, number>>(
+          (acc, session) => {
+            if (!acc[session.key] && session.updatedAt) {
+              acc[session.key] = session.updatedAt;
+            }
+            return acc;
+          },
+          { ...sessionLastActivity }
+        );
         let nextSessionKey = currentSessionKey || DEFAULT_SESSION_KEY;
         if (!nextSessionKey.startsWith('agent:')) {
           const canonicalMatch = canonicalBySuffix.get(nextSessionKey);
@@ -1101,7 +1117,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           Boolean(pendingLocalSessionKeys[nextSessionKey]) &&
           localSessions.some((session) => session.key === nextSessionKey) &&
           !realSessionKeys.has(nextSessionKey);
-        const preferredSessionKey = getMostRecentSessionKey(dedupedSessions, sessionLastActivity);
+        const preferredSessionKey = getMostRecentSessionKey(
+          dedupedSessions,
+          hydratedSessionLastActivity
+        );
         const shouldAutoChooseLatest =
           !hasLocalPendingSession &&
           (
@@ -1137,6 +1156,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           currentSessionKey: nextSessionKey,
           currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
           pendingLocalSessionKeys: nextPendingLocalSessionKeys,
+          sessionLastActivity: hydratedSessionLastActivity,
         });
 
         if (currentSessionKey !== nextSessionKey) {

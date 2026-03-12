@@ -31,7 +31,7 @@
       "fallback": "フォールバック設定"
     },
     "add": "プロバイダーを追加",
-    "custom": "カスタム",
+    "custom": "カスタムモデル",
     "localModel": "ローカルモデル",
     "notRequired": "不要",
     "empty": {
@@ -316,6 +316,8 @@
     },
     "dialog": {
       "selectDeniedDirs": "禁止ディレクトリを選択"
-    }
+    },
+    "loadingTitle": "セキュリティ設定を読み込み中",
+    "loadingDescription": "現在のセキュリティポリシーを同期しています。しばらくお待ちください。"
   }
 }

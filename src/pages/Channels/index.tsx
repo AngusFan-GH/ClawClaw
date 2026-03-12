@@ -7,7 +7,7 @@ import { RefreshCw, Trash2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { LoadingIcon } from '@/components/common/LoadingSpinner';
+import { LoadingIcon, PageLoader } from '@/components/common/LoadingSpinner';
 import { useChannelsStore } from '@/stores/channels';
 import { useGatewayStore } from '@/stores/gateway';
 import { hostApiFetch } from '@/lib/host-api';
@@ -38,6 +38,37 @@ type DisplayChannel = Channel & {
   configured: boolean;
   runtimeLoaded: boolean;
   runtimeStatus: Channel['status'] | 'unknown';
+};
+
+const CHANNEL_BRAND_STYLES: Partial<Record<ChannelType, { shell: string; icon: string }>> = {
+  telegram: {
+    shell: 'bg-[#27A7E7] border-[#1f8ec7] shadow-[0_10px_24px_rgba(39,167,231,0.22)]',
+    icon: 'brightness-0 invert',
+  },
+  discord: {
+    shell: 'bg-[#5865F2] border-[#4752c4] shadow-[0_10px_24px_rgba(88,101,242,0.22)]',
+    icon: 'brightness-0 invert',
+  },
+  whatsapp: {
+    shell: 'bg-[#25D366] border-[#1faf54] shadow-[0_10px_24px_rgba(37,211,102,0.2)]',
+    icon: 'brightness-0 invert',
+  },
+  feishu: {
+    shell: 'bg-[linear-gradient(135deg,#0F67FF,#00C2FF)] border-[#0f67ff] shadow-[0_10px_24px_rgba(15,103,255,0.22)]',
+    icon: 'brightness-0 invert',
+  },
+  dingtalk: {
+    shell: 'bg-[#1677FF] border-[#0f5fd1] shadow-[0_10px_24px_rgba(22,119,255,0.22)]',
+    icon: 'brightness-0 invert',
+  },
+  wecom: {
+    shell: 'bg-[linear-gradient(135deg,#07C160,#00A1EA)] border-[#07c160] shadow-[0_10px_24px_rgba(7,193,96,0.22)]',
+    icon: 'brightness-0 invert',
+  },
+  qqbot: {
+    shell: 'bg-[linear-gradient(135deg,#12B7F5,#4E8CFF)] border-[#12b7f5] shadow-[0_10px_24px_rgba(18,183,245,0.22)]',
+    icon: 'brightness-0 invert',
+  },
 };
 
 export function Channels() {
@@ -132,6 +163,9 @@ export function Channels() {
       ? t('refreshingStatus', '正在刷新连接状态...')
       : null;
 
+  const showPageLoader =
+    (loading || isLoadingConfiguredTypes) && configuredDisplayChannels.length === 0;
+
   return (
     <div className="flex flex-col -m-6 bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
       <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-6 pb-8 pt-10 md:px-8">
@@ -139,9 +173,9 @@ export function Channels() {
           title={t('title')}
           subtitle={t('subtitle')}
           actions={(
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
               {statusText && (
-                <div className="inline-flex h-9 items-center gap-2 rounded-xl border border-border/70 bg-card/85 px-3 text-[13px] font-medium text-muted-foreground">
+                <div className="inline-flex h-9 items-center gap-2 rounded-[12px] border border-border/70 bg-card/85 px-3 text-[13px] font-medium text-muted-foreground">
                   <LoadingIcon className="h-3.5 w-3.5" />
                   <span>{statusText}</span>
                 </div>
@@ -150,7 +184,7 @@ export function Channels() {
                 variant="outline"
                 onClick={handleRefresh}
                 disabled={gatewayStatus.state !== 'running'}
-                className="h-9 rounded-xl border-black/10 bg-transparent px-4 text-[13px] font-medium text-foreground/80 shadow-none transition-colors hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
+                className="h-9 rounded-[12px] border-black/10 bg-transparent px-4 text-[13px] font-medium text-foreground/80 shadow-none transition-colors hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
               >
                 {loading ? <LoadingIcon className="h-3.5 w-3.5 mr-2" /> : <RefreshCw className="h-3.5 w-3.5 mr-2" />}
                 {t('refresh')}
@@ -160,6 +194,13 @@ export function Channels() {
         />
 
         <div className="flex-1 overflow-y-auto pr-2 pb-10 min-h-0 -mr-2">
+          {showPageLoader ? (
+            <PageLoader
+              title={t('loadingTitle', '正在加载连接')}
+              description={t('loadingDescription', '正在同步已配置渠道和运行状态，请稍候。')}
+            />
+          ) : (
+            <>
           {gatewayStatus.state !== 'running' && (
             <div className="mb-8 p-4 rounded-xl border border-yellow-500/50 bg-yellow-500/10 flex items-center gap-3">
               <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
@@ -179,11 +220,18 @@ export function Channels() {
           )}
 
           {configuredDisplayChannels.length > 0 && (
-            <section className="mb-8 rounded-2xl border border-border/70 bg-card/75 p-4 md:p-5">
-              <h2 className="mb-4 text-2xl font-semibold tracking-tight text-foreground">
-                {t('configured')}
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            <section className="mb-8 rounded-[18px] border border-border/70 bg-card/78 p-4 md:p-5">
+              <div className="mb-5 flex items-end justify-between gap-3">
+                <div>
+                  <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+                    {t('configured')}
+                  </h2>
+                  <p className="mt-1 text-[13px] text-muted-foreground">
+                    {t('configuredDesc')}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 {configuredDisplayChannels.map((channel) => (
                   <ChannelCard
                     key={channel.id}
@@ -199,12 +247,19 @@ export function Channels() {
             </section>
           )}
 
-          <section className="mb-8 rounded-2xl border border-border/70 bg-card/75 p-4 md:p-5">
-            <h2 className="mb-4 text-2xl font-semibold tracking-tight text-foreground">
-              {t('supportedChannels')}
-            </h2>
+          <section className="mb-8 rounded-[18px] border border-border/70 bg-card/78 p-4 md:p-5">
+            <div className="mb-5 flex items-end justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+                  {t('supportedChannels')}
+                </h2>
+                <p className="mt-1 text-[13px] text-muted-foreground">
+                  {t('availableDesc')}
+                </p>
+              </div>
+            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               {displayedChannelTypes.map((type) => {
                 const meta = CHANNEL_META[type];
                 const isConfigured = configuredChannelTypeSet.has(type);
@@ -218,22 +273,22 @@ export function Channels() {
                       setShowAddDialog(true);
                     }}
                     className={cn(
-                      'group relative flex items-start gap-4 overflow-hidden rounded-2xl border border-border/60 bg-card/80 p-4 text-left transition-colors hover:bg-accent/50'
+                      'group relative flex items-start gap-4 overflow-hidden rounded-[16px] border border-border/60 bg-card/84 p-4 text-left transition-colors hover:border-black/10 hover:bg-accent/45 dark:hover:border-white/10'
                     )}
                   >
-                    <div className="mb-3 h-[46px] w-[46px] shrink-0 flex items-center justify-center rounded-full border border-border/70 bg-card shadow-sm">
-                      <ChannelLogo type={type} />
+                    <div className="mt-0.5 shrink-0">
+                      <ChannelLogo type={type} branded />
                     </div>
-                    <div className="flex flex-col flex-1 min-w-0 py-0.5 mt-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-[16px] font-semibold text-foreground truncate">{meta.name}</h3>
+                    <div className="mt-0.5 flex min-w-0 flex-1 flex-col">
+                      <div className="mb-2 flex items-center gap-2">
+                        <h3 className="truncate text-[17px] font-semibold tracking-[-0.02em] text-foreground">{meta.name}</h3>
                         {meta.isPlugin && (
-                          <Badge variant="secondary" className="rounded-xl border-0 bg-muted px-2 py-0.5 font-mono text-[10px] font-medium text-foreground/70 shadow-none">
+                          <Badge variant="secondary" className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[10px] font-medium text-foreground/70 shadow-none dark:border-white/10 dark:bg-white/[0.04]">
                             {t('pluginBadge')}
                           </Badge>
                         )}
                       </div>
-                      <p className="text-[13.5px] text-muted-foreground line-clamp-2 leading-[1.5]">
+                      <p className="text-[14px] text-muted-foreground line-clamp-2 leading-[1.55]">
                         {t(meta.description.replace('channels:', ''))}
                       </p>
                     </div>
@@ -242,6 +297,8 @@ export function Channels() {
               })}
             </div>
           </section>
+          </>
+          )}
         </div>
       </div>
 
@@ -281,24 +338,45 @@ export function Channels() {
   );
 }
 
-function ChannelLogo({ type }: { type: ChannelType }) {
+function ChannelLogo({ type, branded = false }: { type: ChannelType; branded?: boolean }) {
+  const brand = CHANNEL_BRAND_STYLES[type];
+  const shellClass = branded
+    ? brand?.shell ?? 'bg-slate-900 border-slate-800 shadow-[0_10px_24px_rgba(15,23,42,0.16)]'
+    : 'border-border/70 bg-card shadow-sm';
+  const iconClass = branded ? brand?.icon ?? 'brightness-0 invert' : '';
+
+  const wrap = (content: React.ReactNode) => (
+    <div
+      className={cn(
+        'flex h-[50px] w-[50px] items-center justify-center rounded-[16px] border',
+        shellClass
+      )}
+    >
+      {content}
+    </div>
+  );
+
   switch (type) {
     case 'telegram':
-      return <img src={telegramIcon} alt="Telegram" className="w-[22px] h-[22px]" />;
+      return wrap(<img src={telegramIcon} alt="Telegram" className={cn('h-[22px] w-[22px]', iconClass)} />);
     case 'discord':
-      return <img src={discordIcon} alt="Discord" className="w-[22px] h-[22px]" />;
+      return wrap(<img src={discordIcon} alt="Discord" className={cn('h-[22px] w-[22px]', iconClass)} />);
     case 'whatsapp':
-      return <img src={whatsappIcon} alt="WhatsApp" className="w-[22px] h-[22px]" />;
+      return wrap(<img src={whatsappIcon} alt="WhatsApp" className={cn('h-[22px] w-[22px]', iconClass)} />);
     case 'dingtalk':
-      return <img src={dingtalkIcon} alt="DingTalk" className="w-[22px] h-[22px]" />;
+      return wrap(<img src={dingtalkIcon} alt="DingTalk" className={cn('h-[22px] w-[22px]', iconClass)} />);
     case 'feishu':
-      return <img src={feishuIcon} alt="Feishu" className="w-[22px] h-[22px]" />;
+      return wrap(<img src={feishuIcon} alt="Feishu" className={cn('h-[22px] w-[22px]', iconClass)} />);
     case 'wecom':
-      return <img src={wecomIcon} alt="WeCom" className="w-[22px] h-[22px]" />;
+      return wrap(<img src={wecomIcon} alt="WeCom" className={cn('h-[22px] w-[22px]', iconClass)} />);
     case 'qqbot':
-      return <img src={qqIcon} alt="QQ" className="w-[22px] h-[22px]" />;
+      return wrap(<img src={qqIcon} alt="QQ" className={cn('h-[22px] w-[22px]', iconClass)} />);
     default:
-      return <span className="text-[22px]">{CHANNEL_ICONS[type] || '💬'}</span>;
+      return wrap(
+        <span className={cn('text-[22px]', branded ? 'brightness-0 invert' : '')}>
+          {CHANNEL_ICONS[type] || '💬'}
+        </span>
+      );
   }
 }
 
@@ -326,55 +404,52 @@ function ChannelCard({ channel, onClick, onDelete }: ChannelCardProps) {
   return (
     <div 
       onClick={onClick}
-      className="group relative flex cursor-pointer items-start gap-4 overflow-hidden rounded-2xl border border-border/60 bg-card/80 p-4 text-left transition-colors hover:bg-accent/50"
+      className="group relative flex cursor-pointer items-start gap-4 overflow-hidden rounded-[16px] border border-border/60 bg-card/84 p-4 text-left transition-colors hover:border-black/10 hover:bg-accent/45 dark:hover:border-white/10"
     >
-      <div
-        className={cn(
-          'mb-3 h-[46px] w-[46px] shrink-0 flex items-center justify-center rounded-full border shadow-sm',
-          channel.status === 'connected'
-            ? 'bg-emerald-500/12 border-emerald-500/30'
-            : 'bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/10'
-        )}
-      >
-        <ChannelLogo type={channel.type} />
+      <div className="mt-0.5 shrink-0">
+        <ChannelLogo type={channel.type} branded />
       </div>
-      <div className="flex flex-col flex-1 min-w-0 py-0.5 mt-1">
-        <div className="flex items-center justify-between gap-2 mb-1">
-          <div className="flex items-center gap-2 min-w-0">
-            <h3 className="text-[16px] font-semibold text-foreground truncate">{channel.name}</h3>
-            <Badge
-              variant="secondary"
-              className="rounded-xl border-0 bg-black/[0.05] px-2 py-0.5 font-mono text-[10px] font-medium text-foreground/70 shadow-none dark:bg-white/[0.08]"
-            >
-              {t('configuredBadge')}
-            </Badge>
-            {meta?.isPlugin && (
+      <div className="mt-0.5 flex min-w-0 flex-1 flex-col">
+        <div className="mb-2 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <h3 className="truncate text-[17px] font-semibold tracking-[-0.02em] text-foreground">{channel.name}</h3>
+              <span
+                className={cn(
+                  'h-2.5 w-2.5 rounded-full shrink-0',
+                  runtimeStatus === 'connected'
+                    ? 'bg-emerald-500'
+                    : runtimeStatus === 'connecting'
+                      ? 'bg-amber-500 animate-pulse'
+                      : runtimeStatus === 'error'
+                        ? 'bg-destructive'
+                        : 'bg-muted-foreground'
+                )}
+                title={runtimeLabel}
+              />
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               <Badge
                 variant="secondary"
-                className="rounded-xl border-0 bg-muted px-2 py-0.5 font-mono text-[10px] font-medium text-foreground/70 shadow-none"
+                className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[10px] font-semibold text-foreground/70 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
               >
-                {t('pluginBadge', 'Plugin')}
+                {t('configuredBadge')}
               </Badge>
-            )}
-            <div
-              className={cn(
-                'w-2 h-2 rounded-full shrink-0',
-                runtimeStatus === 'connected'
-                  ? 'bg-green-500'
-                  : runtimeStatus === 'connecting'
-                    ? 'bg-yellow-500 animate-pulse'
-                    : runtimeStatus === 'error'
-                      ? 'bg-destructive'
-                      : 'bg-muted-foreground'
+              {meta?.isPlugin && (
+                <Badge
+                  variant="secondary"
+                  className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[10px] font-semibold text-foreground/70 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
+                >
+                  {t('pluginBadge', 'Plugin')}
+                </Badge>
               )}
-              title={runtimeLabel}
-            />
+            </div>
           </div>
 
           <Button
             variant="dangerGhost"
             size="icon"
-            className="opacity-0 group-hover:opacity-100 h-8 w-8 rounded-[10px] transition-all shrink-0 -mr-2"
+            className="h-8 w-8 rounded-[10px] shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
             onClick={(event) => {
               event.stopPropagation();
               onDelete();
@@ -385,15 +460,28 @@ function ChannelCard({ channel, onClick, onDelete }: ChannelCardProps) {
         </div>
 
         {channel.error ? (
-          <p className="text-[13.5px] text-destructive line-clamp-2 leading-[1.5]">
+          <p className="text-[14px] leading-[1.55] text-destructive line-clamp-2">
             {channel.error}
           </p>
         ) : (
-          <div className="space-y-1">
-            <p className="text-[12px] font-medium text-foreground/70">
-              {t('runtime.label')}: {channel.runtimeLoaded ? runtimeLabel : t('runtime.notLoaded')}
+          <div className="space-y-1.5">
+            <p
+              className={cn(
+                'text-[12px] font-medium',
+                channel.runtimeLoaded
+                  ? runtimeStatus === 'connected'
+                    ? 'text-emerald-700 dark:text-emerald-300'
+                    : runtimeStatus === 'connecting'
+                      ? 'text-amber-700 dark:text-amber-300'
+                      : runtimeStatus === 'error'
+                        ? 'text-destructive'
+                        : 'text-foreground/62 dark:text-foreground/70'
+                  : 'text-foreground/62 dark:text-foreground/70'
+              )}
+            >
+              {channel.runtimeLoaded ? runtimeLabel : t('runtime.notLoaded')}
             </p>
-            <p className="text-[13.5px] text-muted-foreground line-clamp-2 leading-[1.5]">
+            <p className="text-[14px] text-muted-foreground line-clamp-2 leading-[1.55]">
               {meta ? t(meta.description.replace('channels:', '')) : CHANNEL_NAMES[channel.type]}
             </p>
           </div>

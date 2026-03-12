@@ -3,7 +3,7 @@ import { FolderPlus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { LoadingIcon } from '@/components/common/LoadingSpinner';
+import { LoadingIcon, PageLoader } from '@/components/common/LoadingSpinner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
@@ -215,9 +215,11 @@ export function Security() {
 
   if (loading) {
     return (
-      <div className="p-6 text-muted-foreground flex items-center gap-2">
-        <LoadingIcon className="h-4 w-4" />
-        {t('security.loading')}
+      <div className="-m-6 h-[calc(100vh-2.5rem)] overflow-hidden dark:bg-background">
+        <PageLoader
+          title={t('security.loadingTitle', '正在加载安全设置')}
+          description={t('security.loadingDescription', '正在同步当前安全策略，请稍候。')}
+        />
       </div>
     );
   }

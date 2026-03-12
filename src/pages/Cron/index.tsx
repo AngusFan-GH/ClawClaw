@@ -26,7 +26,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { LoadingIcon, LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { LoadingIcon, PageLoader } from '@/components/common/LoadingSpinner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useGatewayStore } from '@/stores/gateway';
 import { useCronStore } from '@/stores/cron';
@@ -572,8 +572,11 @@ export function Cron() {
 
   if (loading) {
     return (
-      <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)] items-center justify-center">
-        <LoadingSpinner size="lg" />
+      <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)]">
+        <PageLoader
+          title={t('loadingTitle', '正在加载定时任务')}
+          description={t('loadingDescription', '正在同步 OpenClaw 的任务列表，请稍候。')}
+        />
       </div>
     );
   }

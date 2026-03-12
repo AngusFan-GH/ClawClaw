@@ -54,6 +54,29 @@ import { LoadingIcon } from '@/components/common/LoadingSpinner';
 const inputClasses = 'h-[44px] rounded-xl font-mono text-[13px] bg-muted/70 dark:bg-muted/40 border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40';
 const labelClasses = 'text-[14px] text-foreground/80 font-bold';
 
+function getOpenClawRuntimeProviderKeyPreview(account: Pick<ProviderAccount, 'id' | 'vendorId' | 'authMode'>): string {
+  if (account.vendorId === 'google' && account.authMode === 'oauth_browser') {
+    return 'google-gemini-cli';
+  }
+  if (
+    account.vendorId === 'openai'
+    && (account.authMode === 'oauth_browser' || account.authMode === 'oauth_device')
+  ) {
+    return 'openai-codex';
+  }
+  if (
+    account.vendorId === 'custom'
+    || account.vendorId === 'ollama'
+  ) {
+    const normalized = account.id.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'default';
+    return `${account.vendorId}-${normalized}`;
+  }
+  if (account.vendorId === 'minimax-portal-cn') {
+    return 'minimax-portal';
+  }
+  return account.vendorId;
+}
+
 function normalizeFallbackProviderIds(ids?: string[]): string[] {
   return Array.from(new Set((ids ?? []).filter(Boolean)));
 }
@@ -72,6 +95,10 @@ function fallbackModelsEqual(a?: string[], b?: string[]): boolean {
   const left = normalizeFallbackModels(a);
   const right = normalizeFallbackModels(b);
   return left.length === right.length && left.every((model, index) => model === right[index]);
+}
+
+function isPresetManagedCustomAccount(account: Pick<ProviderAccount, 'vendorId' | 'metadata'>): boolean {
+  return account.vendorId === 'custom' && account.metadata?.managedBy === 'preset-local-model';
 }
 
 type ProviderModelOption = {
@@ -166,7 +193,9 @@ export function ProvidersSettings({
   const vendorMap = new Map(vendors.map((vendor) => [vendor.id, vendor]));
   const existingVendorIds = new Set(accounts.map((account) => account.vendorId));
   const displayProviders = useMemo(
-    () => buildProviderListItems(accounts, statuses, vendors, defaultAccountId),
+    () => buildProviderListItems(accounts, statuses, vendors, defaultAccountId)
+      .filter((item) => item.account.vendorId !== 'local-model')
+      .filter((item) => !isPresetManagedCustomAccount(item.account)),
     [accounts, statuses, vendors, defaultAccountId],
   );
 
@@ -199,7 +228,7 @@ export function ProvidersSettings({
         id,
         vendorId: type,
         label: name,
-        authMode: options?.authMode || vendor?.defaultAuthMode || (type === 'ollama' || type === 'local-model' ? 'local' : 'api_key'),
+        authMode: options?.authMode || vendor?.defaultAuthMode || (type === 'ollama' || type === 'custom' ? 'local' : 'api_key'),
         baseUrl: options?.baseUrl,
         apiProtocol: options?.apiProtocol,
         model: options?.model,
@@ -406,6 +435,7 @@ function ProviderCard({
   const showModelIdField = shouldShowProviderModelId(typeInfo, devModeUnlocked);
   const canEditModelConfig = Boolean(typeInfo?.showBaseUrl || showModelIdField);
   const usesOpenAIOAuthModelPicker = account.vendorId === 'openai' && account.authMode === 'oauth_browser';
+  const runtimeProviderKey = getOpenClawRuntimeProviderKeyPreview(account);
 
   useEffect(() => {
     if (isEditing) {
@@ -476,7 +506,7 @@ function ProviderCard({
         setValidating(true);
         const result = await onValidateKey(newKey, {
           baseUrl: baseUrl.trim() || undefined,
-          apiProtocol: (account.vendorId === 'custom' || account.vendorId === 'ollama' || account.vendorId === 'local-model') ? apiProtocol : undefined,
+          apiProtocol: (account.vendorId === 'custom' || account.vendorId === 'ollama') ? apiProtocol : undefined,
         });
         setValidating(false);
         if (!result.valid) {
@@ -498,7 +528,7 @@ function ProviderCard({
         if (typeInfo?.showBaseUrl && (baseUrl.trim() || undefined) !== (account.baseUrl || undefined)) {
           updates.baseUrl = baseUrl.trim() || undefined;
         }
-        if ((account.vendorId === 'custom' || account.vendorId === 'ollama' || account.vendorId === 'local-model') && apiProtocol !== account.apiProtocol) {
+        if ((account.vendorId === 'custom' || account.vendorId === 'ollama') && apiProtocol !== account.apiProtocol) {
           updates.apiProtocol = apiProtocol;
         }
         if (showModelIdField && (modelId.trim() || undefined) !== (account.model || undefined)) {
@@ -517,7 +547,7 @@ function ProviderCard({
 
       // Keep Ollama key optional in UI, but persist a placeholder when
       // editing legacy configs that have no stored key.
-      if ((account.vendorId === 'ollama' || account.vendorId === 'local-model') && !status?.hasKey && !payload.newApiKey) {
+      if ((account.vendorId === 'ollama' || account.vendorId === 'custom') && !status?.hasKey && !payload.newApiKey) {
         payload.newApiKey = resolveProviderApiKeyForSave(account.vendorId, '') as string;
       }
 
@@ -546,7 +576,7 @@ function ProviderCard({
   const currentSectionLabelClasses = isDefault ? "text-[14px] font-bold text-foreground/80" : labelClasses;
   const vendorDisplayName = vendor?.name || account.vendorId;
   const showVendorName =
-    account.vendorId !== 'local-model'
+    account.vendorId !== 'custom'
     && account.label.trim().toLowerCase() !== vendorDisplayName.trim().toLowerCase();
 
   return (
@@ -602,6 +632,14 @@ function ProviderCard({
                 <>
                   <span className="w-1 h-1 rounded-full bg-black/20 dark:bg-white/20" />
                   <span className="truncate max-w-[200px]">{account.model}</span>
+                </>
+              )}
+              {(account.vendorId === 'custom' || account.vendorId === 'ollama') && (
+                <>
+                  <span className="w-1 h-1 rounded-full bg-black/20 dark:bg-white/20" />
+                  <span className="truncate max-w-[220px] font-mono text-[12px]" title={runtimeProviderKey}>
+                    OpenClaw · {runtimeProviderKey}
+                  </span>
                 </>
               )}
               {!hasConfiguredCredentials(account, status) && (
@@ -704,7 +742,7 @@ function ProviderCard({
                   </select>
                 </div>
               )}
-              {(account.vendorId === 'custom' || account.vendorId === 'local-model') && (
+              {account.vendorId === 'custom' && (
                 <div className="space-y-1.5 pt-2">
                   <Label className={currentLabelClasses}>{t('aiProviders.dialog.protocol', 'Protocol')}</Label>
                   <div className="flex gap-2 text-[13px]">
@@ -813,7 +851,7 @@ function ProviderCard({
                 <div className="relative flex-1">
                   <Input
                     type={showKey ? 'text' : 'password'}
-                    placeholder={typeInfo?.requiresApiKey ? typeInfo?.placeholder : ((typeInfo?.id === 'ollama' || typeInfo?.id === 'local-model') ? t('aiProviders.notRequired') : t('aiProviders.card.editKey'))}
+                    placeholder={typeInfo?.requiresApiKey ? typeInfo?.placeholder : ((typeInfo?.id === 'ollama' || typeInfo?.id === 'custom') ? t('aiProviders.notRequired') : t('aiProviders.card.editKey'))}
                     value={newKey}
                     onChange={(e) => setNewKey(e.target.value)}
                     className={cn(currentInputClasses, 'pr-10')}
@@ -1133,7 +1171,7 @@ function AddProviderDialog({
   };
 
   const availableTypes = PROVIDER_TYPE_INFO.filter((type) => {
-    if (type.id === 'custom') {
+    if (type.id === 'local-model') {
       return false;
     }
 
@@ -1170,7 +1208,7 @@ function AddProviderDialog({
       if (requiresKey && apiKey) {
         const result = await onValidateKey(selectedType, apiKey, {
           baseUrl: baseUrl.trim() || undefined,
-          apiProtocol: (selectedType === 'custom' || selectedType === 'ollama' || selectedType === 'local-model') ? apiProtocol : undefined,
+          apiProtocol: (selectedType === 'custom' || selectedType === 'ollama') ? apiProtocol : undefined,
         });
         if (!result.valid) {
           setValidationError(result.error || t('aiProviders.toast.invalidKey'));
@@ -1188,7 +1226,7 @@ function AddProviderDialog({
 
       if (useOpenAIOAuthModelPicker && oauthAuthedAccountId) {
         const accountLabel = name
-          || (typeInfo?.id === 'local-model' ? t('aiProviders.localModel') : typeInfo?.name)
+          || typeInfo?.name
           || selectedType;
         const result = await hostApiFetch<{ success: boolean; error?: string }>(
           `/api/provider-accounts/${encodeURIComponent(oauthAuthedAccountId)}`,
@@ -1216,13 +1254,13 @@ function AddProviderDialog({
 
       await onAdd(
         selectedType,
-        name || (typeInfo?.id === 'custom' ? t('aiProviders.custom') : typeInfo?.id === 'local-model' ? t('aiProviders.localModel') : typeInfo?.name) || selectedType,
+        name || (typeInfo?.id === 'custom' ? t('aiProviders.custom') : typeInfo?.name) || selectedType,
         apiKey.trim(),
         {
           baseUrl: baseUrl.trim() || undefined,
-          apiProtocol: (selectedType === 'custom' || selectedType === 'ollama' || selectedType === 'local-model') ? apiProtocol : undefined,
+          apiProtocol: (selectedType === 'custom' || selectedType === 'ollama') ? apiProtocol : undefined,
           model: resolveProviderModelForSave(typeInfo, modelId, devModeUnlocked),
-          authMode: useOAuthFlow ? (preferredOAuthMode || 'oauth_device') : (selectedType === 'ollama' || selectedType === 'local-model')
+          authMode: useOAuthFlow ? (preferredOAuthMode || 'oauth_device') : (selectedType === 'ollama' || (selectedType === 'custom' && !apiKey.trim()))
             ? 'local'
             : (isOAuth && supportsApiKey && authMode === 'apikey')
               ? 'api_key'
@@ -1261,7 +1299,7 @@ function AddProviderDialog({
                   key={type.id}
                   onClick={() => {
                     setSelectedType(type.id);
-                    setName(type.id === 'custom' ? t('aiProviders.custom') : type.id === 'local-model' ? t('aiProviders.localModel') : type.name);
+                    setName(type.id === 'custom' ? t('aiProviders.custom') : type.name);
                     setBaseUrl(type.defaultBaseUrl || '');
                     setModelId(normalizeOAuthSelectedModel(type.id, type.defaultModelId || ''));
                   }}
@@ -1274,7 +1312,7 @@ function AddProviderDialog({
                       <span className="text-2xl">{type.icon}</span>
                     )}
                   </div>
-                  <p className="font-medium text-[13px]">{type.id === 'custom' ? t('aiProviders.custom') : type.id === 'local-model' ? t('aiProviders.localModel') : type.name}</p>
+                  <p className="font-medium text-[13px]">{type.id === 'custom' ? t('aiProviders.custom') : type.name}</p>
                 </button>
               ))}
             </div>
@@ -1289,7 +1327,7 @@ function AddProviderDialog({
                   )}
                 </div>
                 <div>
-                  <p className="font-semibold text-[15px]">{typeInfo?.id === 'custom' ? t('aiProviders.custom') : typeInfo?.id === 'local-model' ? t('aiProviders.localModel') : typeInfo?.name}</p>
+                  <p className="font-semibold text-[15px]">{typeInfo?.id === 'custom' ? t('aiProviders.custom') : typeInfo?.name}</p>
                   <button
                     onClick={() => {
                       setSelectedType(null);
@@ -1309,7 +1347,7 @@ function AddProviderDialog({
                   <Label htmlFor="name" className={labelClasses}>{t('aiProviders.dialog.displayName')}</Label>
                   <Input
                     id="name"
-                    placeholder={typeInfo?.id === 'custom' ? t('aiProviders.custom') : typeInfo?.id === 'local-model' ? t('aiProviders.localModel') : typeInfo?.name}
+                    placeholder={typeInfo?.id === 'custom' ? t('aiProviders.custom') : typeInfo?.name}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className={inputClasses}
@@ -1361,7 +1399,7 @@ function AddProviderDialog({
                       <Input
                         id="apiKey"
                         type={showKey ? 'text' : 'password'}
-                        placeholder={(typeInfo?.id === 'ollama' || typeInfo?.id === 'local-model') ? t('aiProviders.notRequired') : typeInfo?.placeholder}
+                        placeholder={(typeInfo?.id === 'ollama' || typeInfo?.id === 'custom') ? t('aiProviders.notRequired') : typeInfo?.placeholder}
                         value={apiKey}
                         onChange={(e) => {
                           setApiKey(e.target.value);
@@ -1438,7 +1476,7 @@ function AddProviderDialog({
                     </p>
                   </div>
                 )}
-                {(selectedType === 'custom' || selectedType === 'local-model') && (
+                {selectedType === 'custom' && (
                   <div className="space-y-2.5">
                     <Label className={labelClasses}>{t('aiProviders.dialog.protocol', 'Protocol')}</Label>
                     <div className="flex gap-2 text-[13px]">

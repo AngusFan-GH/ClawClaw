@@ -32,8 +32,13 @@ import { browserOAuthManager } from '../utils/browser-oauth';
 import { whatsAppLoginManager } from '../utils/whatsapp-login';
 import {
   syncAllProviderAuthToRuntime,
+  syncAllProvidersToRuntime,
   syncDefaultProviderToRuntime,
 } from '../services/providers/provider-runtime-sync';
+import {
+  ensurePresetLocalModelsApplied,
+  migrateLegacyLocalModelAccounts,
+} from '../services/providers/local-model-presets';
 import { getProviderService } from '../services/providers/provider-service';
 
 const isDev = !app.isPackaged;
@@ -351,6 +356,9 @@ async function initialize(): Promise<void> {
   const gatewayAutoStart = await getSetting('gatewayAutoStart');
   if (gatewayAutoStart) {
     try {
+      await migrateLegacyLocalModelAccounts(gatewayManager);
+      await ensurePresetLocalModelsApplied(gatewayManager);
+      await syncAllProvidersToRuntime();
       await syncAllProviderAuthToRuntime();
       const defaultProviderAccountId = await getProviderService().getDefaultAccountId();
       if (defaultProviderAccountId) {
@@ -364,6 +372,8 @@ async function initialize(): Promise<void> {
       mainWindow?.webContents.send('gateway:error', String(error));
     }
   } else {
+    await migrateLegacyLocalModelAccounts();
+    await ensurePresetLocalModelsApplied();
     logger.info('Gateway auto-start disabled in settings');
   }
 

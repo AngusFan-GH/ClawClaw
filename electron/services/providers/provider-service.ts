@@ -28,6 +28,7 @@ import {
 } from '../../utils/secure-storage';
 import type { ProviderWithKeyInfo } from '../../shared/providers/types';
 import { logger } from '../../utils/logger';
+import { getOpenClawProviderKeyForType } from '../../utils/provider-keys';
 
 function maskApiKey(apiKey: string | null): string | null {
   if (!apiKey) return null;
@@ -47,6 +48,28 @@ function logLegacyProviderApiUsage(method: string, replacement: string): void {
   logger.warn(
     `[provider-migration] Legacy provider API "${method}" is deprecated. Migrate to "${replacement}".`,
   );
+}
+
+const UNIQUE_RUNTIME_PROVIDER_TYPES = new Set(['custom', 'ollama', 'local-model']);
+
+async function assertNoRuntimeProviderKeyConflict(account: ProviderAccount, ignoreAccountId?: string): Promise<void> {
+  if (!UNIQUE_RUNTIME_PROVIDER_TYPES.has(account.vendorId)) {
+    return;
+  }
+
+  const nextRuntimeKey = getOpenClawProviderKeyForType(account.vendorId, account.id);
+  const accounts = await listProviderAccounts();
+  const conflict = accounts.find((candidate) => (
+    candidate.id !== ignoreAccountId
+    && candidate.vendorId === account.vendorId
+    && getOpenClawProviderKeyForType(candidate.vendorId, candidate.id) === nextRuntimeKey
+  ));
+
+  if (conflict) {
+    throw new Error(
+      `OpenClaw provider key "${nextRuntimeKey}" conflicts with "${conflict.label}".`,
+    );
+  }
 }
 
 export class ProviderService {
@@ -71,6 +94,7 @@ export class ProviderService {
 
   async createAccount(account: ProviderAccount, apiKey?: string): Promise<ProviderAccount> {
     await ensureProviderStoreMigrated();
+    await assertNoRuntimeProviderKeyConflict(account);
     await saveProvider(providerAccountToConfig(account));
     await saveProviderAccount(account);
     if (apiKey !== undefined && apiKey.trim()) {
@@ -97,6 +121,7 @@ export class ProviderService {
       updatedAt: patch.updatedAt ?? new Date().toISOString(),
     };
 
+    await assertNoRuntimeProviderKeyConflict(nextAccount, accountId);
     await saveProvider(providerAccountToConfig(nextAccount));
     await saveProviderAccount(nextAccount);
     if (apiKey !== undefined) {

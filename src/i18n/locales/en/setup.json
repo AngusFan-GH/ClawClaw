@@ -12,6 +12,10 @@
       "title": "AI Provider",
       "description": "Configure your AI service"
     },
+    "localModel": {
+      "title": "Local Models",
+      "description": "Preset models are already configured and will be ready after startup"
+    },
     "channel": {
       "title": "Connect a Channel",
       "description": "Connect a messaging platform (optional)"
@@ -28,6 +32,7 @@
   "welcome": {
     "title": "Welcome to ClawClaw",
     "description": "ClawClaw is a graphical interface for OpenClaw, making it easy to use AI assistants across your favorite messaging platforms.",
+    "autoContinue": "Initialization is running automatically. Please wait.",
     "features": {
       "noCommand": "Zero command-line required",
       "modernUI": "Modern, beautiful interface",
@@ -74,6 +79,15 @@
     "invalid": "Invalid API key",
     "storedLocally": "Your API key is stored locally on your machine."
   },
+  "localModel": {
+    "autoConfiguredTitle": "Local models are ready",
+    "autoConfiguredDesc": "Preset models have already been written to OpenClaw and will be available immediately after startup.",
+    "waitingTitle": "Syncing local models",
+    "waitingDesc": "Writing preset model configuration, please wait.",
+    "modelsTitle": "Prepared models",
+    "defaultBadge": "default",
+    "autoConfiguredHelp": "These models do not require manual enablement. You can still switch the default model later from the Models page."
+  },
   "channel": {
     "title": "Connect a Messaging Channel",
     "subtitle": "Choose a platform to connect your AI assistant to. You can add more channels later in Settings.",
@@ -104,6 +118,8 @@
     "title": "Setup Complete!",
     "subtitle": "ClawClaw is configured and ready to use. You can now start chatting with your AI assistant.",
     "provider": "AI Provider",
+    "model": "Local Models",
+    "localModelReady": "Auto-configured",
     "components": "Components",
     "gateway": "Gateway",
     "running": "Running",

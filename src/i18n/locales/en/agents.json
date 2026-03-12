@@ -66,5 +66,7 @@
     "channelAssignFailed": "Failed to assign channel: {{error}}",
     "channelRemoved": "{{channel}} removed",
     "channelRemoveFailed": "Failed to remove channel: {{error}}"
-  }
+  },
+  "loadingTitle": "Loading agents",
+  "loadingDescription": "Syncing agent configuration and channel bindings. Please wait."
 }

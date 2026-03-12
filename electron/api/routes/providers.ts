@@ -24,6 +24,7 @@ import { providerAccountToConfig } from '../../services/providers/provider-store
 import type { ProviderAccount } from '../../shared/providers/types';
 import { logger } from '../../utils/logger';
 import { getOpenClawCliSpawnConfig } from '../../utils/openclaw-cli';
+import { readLocalModelPresets } from '../../services/providers/local-model-presets';
 
 type OpenClawModelListResponse = {
   count?: number;
@@ -36,6 +37,28 @@ type OpenClawModelListResponse = {
 
 const OPENAI_OAUTH_RUNTIME_PROVIDER = 'openai-codex';
 const OPENAI_OAUTH_PREFERRED_MODEL = 'gpt-5.4';
+const LOCAL_PROVIDER_PLACEHOLDER_API_KEY = 'ollama-local';
+
+function buildRuntimeProviderAccountId(
+  vendorId: string,
+  existingAccountId: string | null,
+  vendors: Array<{ id: string; supportsMultipleAccounts?: boolean }>,
+): string {
+  if (existingAccountId) {
+    return existingAccountId;
+  }
+
+  const vendor = vendors.find((candidate) => candidate.id === vendorId);
+  return vendor?.supportsMultipleAccounts ? `${vendorId}-${crypto.randomUUID()}` : vendorId;
+}
+
+function resolveProviderApiKeyForSave(type: string, apiKey: string): string | undefined {
+  const trimmed = apiKey.trim();
+  if (type === 'ollama' || type === 'local-model' || type === 'custom') {
+    return trimmed || LOCAL_PROVIDER_PLACEHOLDER_API_KEY;
+  }
+  return trimmed || undefined;
+}
 
 function normalizeProviderModelId(runtimeProviderId: string, modelId: string): string {
   if (
@@ -74,9 +97,16 @@ function getRuntimeProviderId(vendorId: string, authMode?: string | null): strin
   return vendorId;
 }
 
-async function listProviderModelOptions(vendorId: string, authMode?: string | null): Promise<Array<{ id: string; name: string }>> {
+async function listProviderModelOptions(
+  vendorId: string,
+  authMode?: string | null,
+  scope: 'catalog' | 'runtime' = 'catalog',
+): Promise<Array<{ id: string; name: string }>> {
   const runtimeProviderId = getRuntimeProviderId(vendorId, authMode);
-  const { command, args, env, cwd } = getOpenClawCliSpawnConfig(['models', 'list', '--all', '--json']);
+  const cliArgs = scope === 'runtime'
+    ? ['models', 'list', '--json']
+    : ['models', 'list', '--all', '--json'];
+  const { command, args, env, cwd } = getOpenClawCliSpawnConfig(cliArgs);
 
   return await new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -160,16 +190,111 @@ export async function handleProviderRoutes(
     try {
       const vendorId = url.searchParams.get('vendorId');
       const authMode = url.searchParams.get('authMode');
+      const scopeParam = url.searchParams.get('scope');
+      const scope = scopeParam === 'runtime' ? 'runtime' : 'catalog';
       if (!vendorId) {
         sendJson(res, 400, { error: 'vendorId is required' });
         return true;
       }
       const runtimeProviderId = getRuntimeProviderId(vendorId, authMode);
-      const models = await listProviderModelOptions(vendorId, authMode);
+      const models = await listProviderModelOptions(vendorId, authMode, scope);
       sendJson(res, 200, { runtimeProviderId, models });
     } catch (error) {
       logger.warn('[providers] Failed to list provider model options:', error);
       sendJson(res, 500, { error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/local-model-presets' && req.method === 'GET') {
+    try {
+      const presets = await readLocalModelPresets();
+      sendJson(
+        res,
+        200,
+        presets.map(({ apiKey: _apiKey, ...preset }) => preset),
+      );
+    } catch (error) {
+      sendJson(res, 500, { error: String(error) });
+    }
+    return true;
+  }
+
+  if (
+    url.pathname.startsWith('/api/local-model-presets/')
+    && url.pathname.endsWith('/activate')
+    && req.method === 'POST'
+  ) {
+    try {
+      const presetId = decodeURIComponent(
+        url.pathname.slice('/api/local-model-presets/'.length, -'/activate'.length),
+      );
+      const presets = await readLocalModelPresets();
+      const preset = presets.find((item) => item.id === presetId);
+      if (!preset) {
+        sendJson(res, 404, { success: false, error: 'Preset not found' });
+        return true;
+      }
+
+      const vendors = await providerService.listVendors();
+      const accounts = await providerService.listAccounts();
+      const existing = accounts.find(
+        (account) => account.vendorId === 'custom'
+          && account.metadata?.managedBy === 'preset-local-model'
+          && account.metadata?.presetId === preset.id,
+      );
+
+      const now = new Date().toISOString();
+      let account: ProviderAccount;
+      if (existing) {
+        account = await providerService.updateAccount(
+          existing.id,
+          {
+            label: preset.name,
+            authMode: 'local',
+            baseUrl: preset.baseUrl,
+            apiProtocol: preset.apiProtocol || 'openai-completions',
+            model: preset.modelId,
+            enabled: true,
+            metadata: {
+              ...existing.metadata,
+              presetId: preset.id,
+              managedBy: 'preset-local-model',
+            },
+            updatedAt: now,
+          },
+          resolveProviderApiKeyForSave('custom', preset.apiKey ?? '') as string,
+        );
+        await syncUpdatedProviderToRuntime(providerAccountToConfig(account), undefined, ctx.gatewayManager);
+      } else {
+        account = await providerService.createAccount(
+          {
+            id: buildRuntimeProviderAccountId('custom', null, vendors),
+            vendorId: 'custom',
+            label: preset.name,
+            authMode: 'local',
+            baseUrl: preset.baseUrl,
+            apiProtocol: preset.apiProtocol || 'openai-completions',
+            model: preset.modelId,
+            enabled: true,
+            isDefault: false,
+            metadata: {
+              presetId: preset.id,
+              managedBy: 'preset-local-model',
+            },
+            createdAt: now,
+            updatedAt: now,
+          },
+          resolveProviderApiKeyForSave('custom', preset.apiKey ?? '') as string,
+        );
+        await syncSavedProviderToRuntime(providerAccountToConfig(account), undefined, ctx.gatewayManager);
+      }
+
+      await providerService.setDefaultAccount(account.id);
+      await syncDefaultProviderToRuntime(account.id, ctx.gatewayManager);
+      sendJson(res, 200, { success: true, account });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;
   }

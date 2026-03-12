@@ -106,5 +106,7 @@
       "fri": "周五",
       "sat": "周六"
     }
-  }
+  },
+  "loadingTitle": "正在加载定时任务",
+  "loadingDescription": "正在同步 OpenClaw 的任务列表，请稍候。"
 }

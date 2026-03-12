@@ -7,7 +7,6 @@
  */
 
 export const PROVIDER_TYPES = [
-  'local-model',
   'anthropic',
   'openai',
   'google',
@@ -20,11 +19,11 @@ export const PROVIDER_TYPES = [
   'qwen-portal',
   'ollama',
   'custom',
+  'local-model',
 ] as const;
 export type ProviderType = (typeof PROVIDER_TYPES)[number];
 
 export const BUILTIN_PROVIDER_TYPES = [
-  'local-model',
   'anthropic',
   'openai',
   'google',
@@ -36,6 +35,7 @@ export const BUILTIN_PROVIDER_TYPES = [
   'minimax-portal-cn',
   'qwen-portal',
   'ollama',
+  'local-model',
 ] as const;
 
 export const OLLAMA_PLACEHOLDER_API_KEY = 'ollama-local';
@@ -106,6 +106,8 @@ export interface ProviderAccount {
     email?: string;
     resourceUrl?: string;
     customModels?: string[];
+    presetId?: string;
+    managedBy?: 'preset-local-model';
   };
   createdAt: string;
   updatedAt: string;
@@ -115,18 +117,6 @@ import { providerIcons } from '@/assets/providers';
 
 /** All supported provider types with UI metadata */
 export const PROVIDER_TYPE_INFO: ProviderTypeInfo[] = [
-  {
-    id: 'local-model',
-    name: 'Local Model',
-    icon: '🖥️',
-    placeholder: 'Optional',
-    model: 'OpenAI-Compatible',
-    requiresApiKey: false,
-    defaultBaseUrl: '',
-    showBaseUrl: true,
-    showModelId: true,
-    modelIdPlaceholder: 'local-model-id',
-  },
   {
     id: 'anthropic',
     name: 'Anthropic',
@@ -255,11 +245,23 @@ export const PROVIDER_TYPE_INFO: ProviderTypeInfo[] = [
     id: 'custom',
     name: 'Custom',
     icon: '⚙️',
-    placeholder: 'API key...',
-    requiresApiKey: true,
+    placeholder: 'Optional',
+    requiresApiKey: false,
     showBaseUrl: true,
     showModelId: true,
     modelIdPlaceholder: 'your-provider/model-id',
+  },
+  {
+    id: 'local-model',
+    name: 'Legacy Local Model',
+    icon: '🖥️',
+    placeholder: 'Optional',
+    model: 'OpenAI-Compatible',
+    requiresApiKey: false,
+    defaultBaseUrl: '',
+    showBaseUrl: true,
+    showModelId: true,
+    modelIdPlaceholder: 'legacy-local-model-id',
   },
 ];
 
@@ -311,7 +313,7 @@ export function resolveProviderApiKeyForSave(
   apiKey: string
 ): string | undefined {
   const trimmed = apiKey.trim();
-  if (type === 'ollama' || type === 'local-model') {
+  if (type === 'ollama' || type === 'local-model' || type === 'custom') {
     return trimmed || OLLAMA_PLACEHOLDER_API_KEY;
   }
   return trimmed || undefined;

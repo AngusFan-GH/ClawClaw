@@ -31,7 +31,7 @@
       "fallback": "Fallback Settings"
     },
     "add": "Add Provider",
-    "custom": "Custom",
+    "custom": "Custom Model",
     "localModel": "Local Model",
     "notRequired": "Not required",
     "empty": {
@@ -272,7 +272,9 @@
     },
     "dialog": {
       "selectDeniedDirs": "Select denied directories"
-    }
+    },
+    "loadingTitle": "Loading security settings",
+    "loadingDescription": "Syncing the current security policy. Please wait."
   },
   "developer": {
     "title": "Developer",

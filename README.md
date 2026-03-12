@@ -40,7 +40,7 @@
 
 Whether you're automating workflows, managing AI-powered channels, or scheduling intelligent tasks, ClawClaw provides the interface you need to harness AI agents effectively.
 
-ClawClaw comes pre-configured with best-practice model providers and natively supports Windows as well as multi-language settings. Of course, you can also fine-tune advanced configurations via **Settings → Advanced → Developer Mode**.
+ClawClaw supports preinstalled local model presets, mainstream cloud providers, and multi-language settings out of the box. Of course, you can also fine-tune advanced configurations via **Settings → Advanced → Developer Mode**.
 
 ---
 
@@ -78,7 +78,7 @@ Building AI agents shouldn't require mastering the command line. ClawClaw was de
 
 | Challenge                 | ClawClaw Solution                               |
 | ------------------------- | ----------------------------------------------- |
-| Complex CLI setup         | One-click installation with guided setup wizard |
+| Complex CLI setup         | One-click installation with automatic startup flow |
 | Configuration files       | Visual settings with real-time validation       |
 | Process management        | Automatic gateway lifecycle management          |
 | Multiple AI providers     | Unified provider configuration panel            |
@@ -96,7 +96,7 @@ We are committed to maintaining strict alignment with the upstream OpenClaw proj
 
 ### 🎯 Zero Configuration Barrier
 
-Complete the entire setup—from installation to your first AI interaction—through an intuitive graphical interface. No terminal commands, no YAML files, no environment variable hunting.
+Complete the entire setup—from installation to your first AI interaction—through an automatic startup flow. No terminal commands, no YAML files, no environment variable hunting.
 
 ### 💬 Intelligent Chat Interface
 
@@ -117,6 +117,10 @@ Extend your AI agents with pre-built skills. Browse, install, and manage skills 
 ### 🔐 Secure Provider Integration
 
 Connect to multiple AI providers (OpenAI, Anthropic, and more) with API keys or supported OAuth flows. OpenAI Codex sign-in follows OpenClaw's native browser OAuth flow and now chooses the model from OpenClaw's available Codex model list after sign-in. Other provider accounts can still set model IDs and fallback models, and credentials are stored securely in your system's native keychain.
+
+### 💻 Preinstalled Local Models
+
+If `config/local-model-presets.json` is present, ClawClaw writes every preset into OpenClaw as managed `custom` providers during startup. The first preset becomes the default model automatically, so users can chat immediately after installation without manually enabling a provider.
 
 ### 🌙 Adaptive Theming
 
@@ -154,12 +158,10 @@ pnpm dev
 
 ### First Launch
 
-When you launch ClawClaw for the first time, the **Setup Wizard** will guide you through:
+When you launch ClawClaw for the first time, the **startup flow** shows a welcome screen, automatically verifies the runtime environment, and finishes the remaining setup.
 
-1. **Language & Region** – Configure your preferred locale
-2. **AI Provider** – Add supported providers with API keys or OAuth login
-3. **Skill Bundles** – Select pre-configured skills for common use cases
-4. **Verification** – Test your configuration before entering the main interface
+- If preinstalled local model presets exist, they are already written into OpenClaw before the wizard completes.
+- If no presets exist, you can add a provider manually later from **Models** or **Settings → AI Providers**.
 
 > Note for Moonshot (Kimi): ClawClaw keeps Kimi web search enabled by default.  
 > When Moonshot is configured, ClawClaw also syncs Kimi web search to the China endpoint (`https://api.moonshot.cn/v1`) in OpenClaw config.

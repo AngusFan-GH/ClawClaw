@@ -66,5 +66,7 @@
     "channelAssignFailed": "分配连接失败：{{error}}",
     "channelRemoved": "{{channel}} 已移除",
     "channelRemoveFailed": "移除连接失败：{{error}}"
-  }
+  },
+  "loadingTitle": "正在加载分身",
+  "loadingDescription": "正在同步分身配置和绑定关系，请稍候。"
 }

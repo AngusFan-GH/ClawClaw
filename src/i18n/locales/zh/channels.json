@@ -349,5 +349,7 @@
   },
   "viewDocs": "查看文档",
   "loadingConfiguredStatus": "正在加载连接配置...",
-  "refreshingStatus": "正在刷新连接状态..."
+  "refreshingStatus": "正在刷新连接状态...",
+  "loadingTitle": "正在加载连接",
+  "loadingDescription": "正在同步已配置渠道和运行状态，请稍候。"
 }

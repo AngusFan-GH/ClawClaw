@@ -27,7 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useSkillsStore } from '@/stores/skills';
 import { useGatewayStore } from '@/stores/gateway';
-import { LoadingIcon, LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { LoadingIcon, LoadingSpinner, PageLoader } from '@/components/common/LoadingSpinner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { cn } from '@/lib/utils';
 import { invokeIpc } from '@/lib/api-client';
@@ -938,10 +938,11 @@ export function Skills() {
           <div className="flex flex-col gap-4">
             {activeTab === 'all' && (
               loading && safeSkills.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                  <LoadingSpinner size="lg" />
-                  <p className="mt-4 text-sm">{t('marketplace.searching')}</p>
-                </div>
+                <PageLoader
+                  compact
+                  title={t('loadingTitle', '正在加载技能')}
+                  description={t('loadingDescription', '正在同步已安装技能和运行状态，请稍候。')}
+                />
               ) : filteredSkills.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
                   <Puzzle className="h-10 w-10 mb-4 opacity-50" />
@@ -987,17 +988,11 @@ export function Skills() {
                 )}
 
                 {activeTab === 'marketplace' && marketplaceQuery && searching && (
-                  <div className="flex justify-center py-16 sm:py-20">
-                    <div className="flex w-full max-w-md flex-col items-center rounded-[16px] border border-border/70 bg-card/70 px-6 py-8 text-center">
-                      <LoadingSpinner size="lg" />
-                      <h3 className="mt-5 text-[20px] font-semibold tracking-[-0.02em] text-foreground">
-                        {t('marketplace.searchingTitle')}
-                      </h3>
-                      <p className="mt-2 text-[14px] leading-[1.7] text-muted-foreground">
-                        {t('marketplace.searchingDescription')}
-                      </p>
-                    </div>
-                  </div>
+                  <PageLoader
+                    compact
+                    title={t('marketplace.searchingTitle')}
+                    description={t('marketplace.searchingDescription')}
+                  />
                 )}
 
                 {searchResults.length > 0 ? (

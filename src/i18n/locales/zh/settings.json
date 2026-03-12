@@ -31,7 +31,7 @@
       "fallback": "回退配置"
     },
     "add": "添加提供商",
-    "custom": "自定义",
+    "custom": "自定义模型",
     "localModel": "本地模型",
     "notRequired": "非必填",
     "empty": {
@@ -316,6 +316,8 @@
     },
     "dialog": {
       "selectDeniedDirs": "选择禁止的目录"
-    }
+    },
+    "loadingTitle": "正在加载安全设置",
+    "loadingDescription": "正在同步当前安全策略，请稍候。"
   }
 }

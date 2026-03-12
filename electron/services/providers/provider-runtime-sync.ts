@@ -13,6 +13,7 @@ import {
   syncProviderConfigToOpenClaw,
   updateAgentModelProvider,
 } from '../../utils/openclaw-auth';
+import { getOpenClawProviderKeyForType } from '../../utils/provider-keys';
 import { logger } from '../../utils/logger';
 
 const GOOGLE_OAUTH_RUNTIME_PROVIDER = 'google-gemini-cli';
@@ -67,6 +68,10 @@ function shouldUseExplicitDefaultOverride(config: ProviderConfig, runtimeProvide
 }
 
 export function getOpenClawProviderKey(type: string, providerId: string): string {
+  return getOpenClawProviderKeyForType(type, providerId);
+}
+
+function getLegacyOpenClawProviderKey(type: string, providerId: string): string {
   if (type === 'custom' || type === 'ollama' || type === 'local-model') {
     const suffix = providerId.replace(/-/g, '').slice(0, 8);
     return `${type}-${suffix}`;
@@ -245,6 +250,14 @@ export async function syncAllProviderAuthToRuntime(): Promise<void> {
   }
 }
 
+export async function syncAllProvidersToRuntime(): Promise<void> {
+  const providers = await getAllProviders();
+
+  for (const provider of providers) {
+    await syncProviderToRuntime(provider, undefined);
+  }
+}
+
 async function syncProviderSecretToRuntime(
   config: ProviderConfig,
   runtimeProviderKey: string,
@@ -341,6 +354,11 @@ async function syncProviderToRuntime(
   const context = await resolveRuntimeSyncContext(config);
   if (!context) {
     return null;
+  }
+
+  const legacyProviderKey = getLegacyOpenClawProviderKey(config.type, config.id);
+  if (legacyProviderKey !== context.runtimeProviderKey) {
+    await removeProviderFromOpenClaw(legacyProviderKey);
   }
 
   await syncProviderSecretToRuntime(config, context.runtimeProviderKey, apiKey);

@@ -48,6 +48,7 @@ export interface ChatSession {
   displayName?: string;
   thinkingLevel?: string;
   model?: string;
+  updatedAt?: number;
 }
 
 export interface ToolStatus {
