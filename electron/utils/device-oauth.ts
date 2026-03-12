@@ -51,6 +51,7 @@ class DeviceOAuthManager extends EventEmitter {
   private activeProvider: OAuthProviderType | null = null;
   private activeAccountId: string | null = null;
   private activeLabel: string | null = null;
+  private activeModel: string | null = null;
   private active: boolean = false;
   private mainWindow: BrowserWindow | null = null;
   private openAIManualPrompt: {
@@ -65,7 +66,7 @@ class DeviceOAuthManager extends EventEmitter {
   async startFlow(
     provider: OAuthProviderType,
     region: MiniMaxRegion = 'global',
-    options?: { accountId?: string; label?: string }
+    options?: { accountId?: string; label?: string; model?: string }
   ): Promise<boolean> {
     if (this.active) {
       await this.stopFlow();
@@ -76,6 +77,7 @@ class DeviceOAuthManager extends EventEmitter {
     this.activeProvider = provider;
     this.activeAccountId = options?.accountId || provider;
     this.activeLabel = options?.label || null;
+    this.activeModel = options?.model || null;
 
     try {
       if (provider === 'minimax-portal' || provider === 'minimax-portal-cn') {
@@ -100,6 +102,7 @@ class DeviceOAuthManager extends EventEmitter {
       this.activeProvider = null;
       this.activeAccountId = null;
       this.activeLabel = null;
+      this.activeModel = null;
       return false;
     }
   }
@@ -113,6 +116,7 @@ class DeviceOAuthManager extends EventEmitter {
     this.activeProvider = null;
     this.activeAccountId = null;
     this.activeLabel = null;
+    this.activeModel = null;
     logger.info('[DeviceOAuth] Flow explicitly stopped');
   }
 
@@ -305,10 +309,12 @@ class DeviceOAuthManager extends EventEmitter {
   ) {
     const accountId = this.activeAccountId || providerType;
     const accountLabel = this.activeLabel;
+    const accountModel = this.activeModel;
     this.active = false;
     this.activeProvider = null;
     this.activeAccountId = null;
     this.activeLabel = null;
+    this.activeModel = null;
     logger.info(`[DeviceOAuth] Successfully completed OAuth for ${providerType}`);
 
     // 1. Write OAuth token to OpenClaw's auth-profiles.json in native OAuth format.
@@ -391,7 +397,7 @@ class DeviceOAuthManager extends EventEmitter {
       enabled: existing?.enabled ?? true,
       baseUrl, // Save the dynamically resolved URL (Global vs CN)
 
-      model: existing?.model || getProviderDefaultModel(providerType),
+      model: existing?.model || accountModel || getProviderDefaultModel(providerType),
       createdAt: existing?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -419,10 +425,12 @@ class DeviceOAuthManager extends EventEmitter {
   }) {
     const accountId = this.activeAccountId || 'openai';
     const accountLabel = this.activeLabel;
+    const accountModel = this.activeModel;
     this.active = false;
     this.activeProvider = null;
     this.activeAccountId = null;
     this.activeLabel = null;
+    this.activeModel = null;
     logger.info('[DeviceOAuth] Successfully completed OAuth for openai');
 
     const providerService = getProviderService();
@@ -434,7 +442,7 @@ class DeviceOAuthManager extends EventEmitter {
       authMode: 'oauth_browser',
       baseUrl: existing?.baseUrl,
       apiProtocol: existing?.apiProtocol,
-      model: existing?.model || OPENAI_CODEX_DEFAULT_MODEL,
+      model: existing?.model || accountModel || OPENAI_CODEX_DEFAULT_MODEL,
       fallbackModels: existing?.fallbackModels,
       fallbackAccountIds: existing?.fallbackAccountIds,
       enabled: existing?.enabled ?? true,

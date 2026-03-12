@@ -4,6 +4,12 @@
   "welcome": {
     "title": "ようこそ",
     "subtitle": "AI アシスタントの準備ができました。下の入力欄から会話を始めましょう。",
+    "subtitleHint": "まず質問を入力するか、下の方向から始めてください。",
+    "subtitleWithAgent": "入力を始める前に、この新しい会話で使う分身を選んでください。",
+    "agentEyebrow": "現在の分身",
+    "agentHelper": "この新しい会話はこの分身で開始されます",
+    "agentCurrent": "現在選択中",
+    "agentSwitchTo": "切り替えるとこの分身の新しい会話を作成します",
     "askQuestions": "質問する",
     "askQuestionsDesc": "あらゆるトピックの回答を得る",
     "creativeTasks": "クリエイティブ作業",
@@ -19,6 +25,7 @@
   "composer": {
     "defaultModel": "デフォルトモデル",
     "modelAriaLabel": "現在の会話モデルを切り替える",
+    "agentAriaLabel": "新しい会話の分身を切り替える",
     "configureModels": "モデルを設定",
     "attachFiles": "ファイルを添付",
     "gatewayNotConnected": "ゲートウェイに未接続...",

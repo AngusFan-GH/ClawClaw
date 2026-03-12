@@ -3,7 +3,7 @@
  * Navigation sidebar with menu items.
  * No longer fixed - sits inside the flex layout below the title bar.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   MessageCircleMore,
@@ -17,15 +17,17 @@ import {
   Trash2,
   Bot,
   ChevronUp,
+  Copy,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { useChatStore } from '@/stores/chat';
+import { useAgentsStore } from '@/stores/agents';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useTranslation } from 'react-i18next';
-import logoSvg from '@/assets/logo.svg';
+import logoFullSvg from '@/assets/logo-full.svg';
 
 type SessionBucketKey =
   | 'today'
@@ -113,16 +115,24 @@ export function Sidebar() {
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const sessionLabels = useChatStore((s) => s.sessionLabels);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
+  const pendingLocalSessionKeys = useChatStore((s) => s.pendingLocalSessionKeys);
   const switchSession = useChatStore((s) => s.switchSession);
   const newSession = useChatStore((s) => s.newSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
+  const agents = useAgentsStore((s) => s.agents);
+  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
   const navigate = useNavigate();
   const location = useLocation();
   const isOnChat = location.pathname === '/';
 
-  const getSessionLabel = (key: string, displayName?: string, label?: string) =>
-    sessionLabels[key] ?? label ?? displayName ?? key;
+  const getSessionLabel = (key: string, displayName?: string, label?: string) => {
+    const derivedLabel = sessionLabels[key] ?? label;
+    if (derivedLabel) return derivedLabel;
+    if (displayName && displayName !== key) return displayName;
+    if (pendingLocalSessionKeys[key]) return t('common:sidebar.newChat');
+    return key;
+  };
 
   const { t } = useTranslation(['common', 'chat']);
   const [sessionToDelete, setSessionToDelete] = useState<{ key: string; label: string } | null>(
@@ -130,6 +140,21 @@ export function Sidebar() {
   );
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+
+  useEffect(() => {
+    void fetchAgents();
+  }, [fetchAgents]);
+
+  const agentNameMap = useMemo(
+    () => new Map(agents.map((agent) => [agent.id, agent.name])),
+    [agents]
+  );
+
+  const getSessionAgentLabel = (key: string) => {
+    const parts = key.split(':');
+    const agentId = parts[1] || 'main';
+    return agentNameMap.get(agentId) || agentId;
+  };
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -172,14 +197,19 @@ export function Sidebar() {
 
   const settingsItems = [
     {
+      to: '/models',
+      icon: <Bot className="h-[18px] w-[18px]" strokeWidth={2} />,
+      label: t('sidebar.models'),
+    },
+    {
       to: '/channels',
       icon: <MessageCircleMore className="h-[18px] w-[18px]" strokeWidth={2} />,
       label: t('sidebar.channels'),
     },
     {
-      to: '/models',
-      icon: <Bot className="h-[18px] w-[18px]" strokeWidth={2} />,
-      label: t('sidebar.models'),
+      to: '/agents',
+      icon: <Copy className="h-[18px] w-[18px]" strokeWidth={2} />,
+      label: t('sidebar.agents'),
     },
     {
       to: '/security',
@@ -193,7 +223,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'flex shrink-0 flex-col rounded-2xl border border-border/70 bg-card/88 backdrop-blur-xl shadow-[0_12px_30px_rgba(15,23,42,0.08)] transition-all duration-300',
+        'flex shrink-0 flex-col rounded-2xl border border-black/10 bg-[#eceff3] shadow-[0_12px_30px_rgba(15,23,42,0.08)] transition-all duration-300 dark:border-white/10 dark:bg-[#16181c]',
         sidebarCollapsed ? 'w-16' : 'w-64'
       )}
     >
@@ -205,11 +235,8 @@ export function Sidebar() {
         )}
       >
         {!sidebarCollapsed && (
-          <div className="flex items-center gap-2 px-2 overflow-hidden">
-            <img src={logoSvg} alt="ClawClaw" className="h-5 w-auto shrink-0" />
-            <span className="text-sm font-semibold truncate whitespace-nowrap text-foreground/90">
-              ClawClaw
-            </span>
+          <div className="flex items-center px-2 overflow-hidden">
+            <img src={logoFullSvg} alt="ClawClaw" className="h-7 w-auto shrink-0" />
           </div>
         )}
         <Button
@@ -230,8 +257,7 @@ export function Sidebar() {
       <nav className="flex flex-col px-2 gap-0.5">
         <button
           onClick={() => {
-            const { messages } = useChatStore.getState();
-            if (messages.length > 0) newSession();
+            newSession();
             navigate('/');
           }}
           className={cn(
@@ -272,14 +298,29 @@ export function Sidebar() {
                         navigate('/');
                       }}
                       className={cn(
-                        'w-full text-left rounded-xl px-2.5 py-1.5 text-[13px] truncate transition-colors pr-7',
+                        'w-full text-left rounded-xl border px-2.5 py-1.5 transition-colors pr-7',
                         'hover:bg-black/5 dark:hover:bg-white/10',
                         isOnChat && currentSessionKey === s.key
-                          ? 'bg-accent/70 text-foreground font-medium'
-                          : 'text-foreground/75'
+                          ? 'border-black/10 bg-white/80 text-foreground font-semibold shadow-sm dark:border-white/10 dark:bg-white/10'
+                          : 'border-transparent text-foreground/75'
                       )}
                     >
-                      {getSessionLabel(s.key, s.displayName, s.label)}
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="min-w-0 flex-1 truncate text-[13px]">
+                          {getSessionLabel(s.key, s.displayName, s.label)}
+                        </span>
+                        <span
+                          title={getSessionAgentLabel(s.key)}
+                          className={cn(
+                            'ml-auto max-w-[104px] shrink-0 truncate rounded-md px-1.5 py-0.5 text-[10px]',
+                            isOnChat && currentSessionKey === s.key
+                              ? 'bg-black/6 text-foreground/70 dark:bg-white/10 dark:text-foreground/80'
+                              : 'bg-black/5 text-muted-foreground dark:bg-white/10'
+                          )}
+                        >
+                          {getSessionAgentLabel(s.key)}
+                        </span>
+                      </div>
                     </button>
                     <button
                       aria-label={t('common:actions.delete')}

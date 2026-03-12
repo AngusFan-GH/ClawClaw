@@ -18,8 +18,6 @@ import {
   FileArchive,
   File,
   Loader2,
-  Check,
-  ChevronsUpDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -41,25 +39,17 @@ export interface FileAttachment {
   error?: string;
 }
 
-export interface ChatModelOption {
-  value: string;
+export interface ChatAgentOption {
+  id: string;
   label: string;
-  shortLabel: string;
 }
 
 interface ChatInputProps {
   onSend: (text: string, attachments?: FileAttachment[]) => void;
   onStop?: () => void;
-  onConfigureModels?: () => void;
   disabled?: boolean;
   sending?: boolean;
   isEmpty?: boolean;
-  modelOptions?: ChatModelOption[];
-  defaultModelShortLabel?: string;
-  defaultModelValue?: string;
-  selectedModel?: string;
-  onModelChange?: (model?: string) => void | Promise<void>;
-  modelDisabled?: boolean;
 }
 
 // 鈹€鈹€ Helpers 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
@@ -122,23 +112,14 @@ function readFileAsBase64(file: globalThis.File): Promise<string> {
 export function ChatInput({
   onSend,
   onStop,
-  onConfigureModels,
   disabled = false,
   sending = false,
   isEmpty = false,
-  modelOptions = [],
-  defaultModelShortLabel,
-  defaultModelValue,
-  selectedModel,
-  onModelChange,
-  modelDisabled = false,
 }: ChatInputProps) {
   const { t } = useTranslation('chat');
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
-  const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const modelMenuRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
 
   // Auto-resize textarea
@@ -155,28 +136,6 @@ export function ChatInput({
       textareaRef.current.focus();
     }
   }, [disabled]);
-
-  useEffect(() => {
-    if (!modelMenuOpen) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!modelMenuRef.current?.contains(event.target as Node)) {
-        setModelMenuOpen(false);
-      }
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setModelMenuOpen(false);
-      }
-    };
-
-    window.addEventListener('mousedown', handlePointerDown);
-    window.addEventListener('keydown', handleEscape);
-    return () => {
-      window.removeEventListener('mousedown', handlePointerDown);
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, [modelMenuOpen]);
 
   // 鈹€鈹€ File staging via native dialog 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
@@ -330,11 +289,6 @@ export function ChatInput({
   const hasFailedAttachments = attachments.some((a) => a.status === 'error');
   const canSend = (input.trim() || attachments.length > 0) && allReady && !disabled && !sending;
   const canStop = sending && !disabled && !!onStop;
-  const hasModelOptions = modelOptions.length > 0;
-  const currentModelValue = selectedModel || defaultModelValue;
-  const selectedOption = modelOptions.find((option) => option.value === currentModelValue);
-  const currentModelShortLabel =
-    selectedOption?.shortLabel || defaultModelShortLabel || t('composer.defaultModel');
 
   const handleSend = useCallback(() => {
     if (!canSend) return;
@@ -495,54 +449,6 @@ export function ChatInput({
               rows={1}
             />
           </div>
-
-          {hasModelOptions ? (
-            <div className="relative shrink-0 self-end" ref={modelMenuRef}>
-              <button
-                type="button"
-                aria-label={t('composer.modelAriaLabel')}
-                className="flex h-10 min-w-[148px] max-w-[184px] items-center gap-2 rounded-[10px] border border-black/10 bg-muted/70 px-3 text-left text-[13px] text-foreground transition-colors hover:border-black/20 dark:border-white/10 dark:bg-muted/40 dark:hover:border-white/20"
-                disabled={disabled || sending || modelDisabled}
-                onClick={() => setModelMenuOpen((open) => !open)}
-              >
-                <span className="truncate font-medium">{currentModelShortLabel}</span>
-                <ChevronsUpDown className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              </button>
-              {modelMenuOpen && (
-                <div className="absolute bottom-full right-0 z-50 mb-2 min-w-[220px] overflow-hidden rounded-[10px] border border-black/10 bg-card/95 p-1 dark:border-white/10 dark:bg-card/95">
-                  {modelOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left text-[13px] text-foreground hover:bg-black/5 dark:hover:bg-white/5"
-                      onClick={() => {
-                        setModelMenuOpen(false);
-                        void onModelChange?.(
-                          selectedModel && defaultModelValue && option.value === defaultModelValue
-                            ? undefined
-                            : option.value
-                        );
-                      }}
-                    >
-                      <span className="flex-1 truncate">{option.label}</span>
-                      {currentModelValue === option.value && (
-                        <Check className="h-3.5 w-3.5 shrink-0" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onConfigureModels}
-              className="h-10 shrink-0 rounded-[10px] border-black/10 bg-muted/70 px-3 text-[13px] font-medium text-foreground/80 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:bg-muted/40 dark:hover:bg-white/5"
-            >
-              {t('composer.configureModels')}
-            </Button>
-          )}
 
           {/* Send Button */}
           <Button

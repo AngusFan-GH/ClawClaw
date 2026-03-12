@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from './gateway';
+import { useAgentsStore } from './agents';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -92,6 +93,8 @@ interface ChatState {
   sessionLabels: Record<string, string>;
   /** Last message timestamp (ms) per session key, used for sorting */
   sessionLastActivity: Record<string, number>;
+  /** Locally-created sessions not yet materialized in Gateway */
+  pendingLocalSessionKeys: Record<string, true>;
 
   // Thinking
   showThinking: boolean;
@@ -100,7 +103,7 @@ interface ChatState {
   // Actions
   loadSessions: () => Promise<void>;
   switchSession: (key: string) => void;
-  newSession: () => void;
+  newSession: (agentId?: string) => void;
   deleteSession: (key: string) => Promise<void>;
   cleanupEmptySession: () => void;
   setSessionModel: (model?: string) => Promise<void>;
@@ -162,8 +165,57 @@ function clearHistoryPoll(): void {
 const DEFAULT_CANONICAL_PREFIX = 'agent:main';
 const DEFAULT_SESSION_KEY = `${DEFAULT_CANONICAL_PREFIX}:main`;
 
-function isEphemeralLocalSessionKey(key: string): boolean {
-  return /:session-\d{10,}$/.test(key);
+function isCronSessionKey(key: string): boolean {
+  return key.includes(':cron:');
+}
+
+function isChatSidebarSessionKey(key: string): boolean {
+  return key.startsWith('agent:') && !isCronSessionKey(key);
+}
+
+function omitSessionKey<T>(record: Record<string, T>, key: string): Record<string, T> {
+  return Object.fromEntries(Object.entries(record).filter(([recordKey]) => recordKey !== key));
+}
+
+function removeSessionArtifacts<
+  T extends {
+    sessions: ChatSession[];
+    sessionLabels: Record<string, string>;
+    sessionLastActivity: Record<string, number>;
+    pendingLocalSessionKeys: Record<string, true>;
+  },
+>(state: T, key: string): Pick<T, 'sessions' | 'sessionLabels' | 'sessionLastActivity' | 'pendingLocalSessionKeys'> {
+  return {
+    sessions: state.sessions.filter((session) => session.key !== key),
+    sessionLabels: omitSessionKey(state.sessionLabels, key),
+    sessionLastActivity: omitSessionKey(state.sessionLastActivity, key),
+    pendingLocalSessionKeys: omitSessionKey(state.pendingLocalSessionKeys, key),
+  };
+}
+
+function isEmptyEphemeralSession(
+  sessionKey: string,
+  messages: RawMessage[],
+  pendingLocalSessionKeys: Record<string, true>
+): boolean {
+  return Boolean(pendingLocalSessionKeys[sessionKey]) && messages.length === 0;
+}
+
+function getMostRecentSessionKey(
+  sessions: ChatSession[],
+  sessionLastActivity: Record<string, number>
+): string | undefined {
+  const sorted = [...sessions].sort((left, right) => {
+    const rightActivity = sessionLastActivity[right.key] ?? 0;
+    const leftActivity = sessionLastActivity[left.key] ?? 0;
+    if (rightActivity !== leftActivity) {
+      return rightActivity - leftActivity;
+    }
+    if (left.key === DEFAULT_SESSION_KEY) return 1;
+    if (right.key === DEFAULT_SESSION_KEY) return -1;
+    return right.key.localeCompare(left.key);
+  });
+  return sorted[0]?.key;
 }
 
 // ── Local image cache ─────────────────────────────────────────
@@ -688,25 +740,10 @@ async function loadMissingPreviews(messages: RawMessage[]): Promise<boolean> {
   }
 }
 
-function getCanonicalPrefixFromSessions(sessions: ChatSession[]): string | null {
-  const canonical = sessions.find((s) => s.key.startsWith('agent:'))?.key;
-  if (!canonical) return null;
-  const parts = canonical.split(':');
-  if (parts.length < 2) return null;
-  return `${parts[0]}:${parts[1]}`;
-}
-
 function getAgentIdFromSessionKey(sessionKey: string): string {
   if (!sessionKey.startsWith('agent:')) return 'main';
   const parts = sessionKey.split(':');
   return parts[1] || 'main';
-}
-
-function getCanonicalPrefixFromSessionKey(sessionKey: string): string | null {
-  if (!sessionKey.startsWith('agent:')) return null;
-  const parts = sessionKey.split(':');
-  if (parts.length < 2) return null;
-  return `${parts[0]}:${parts[1]}`;
 }
 
 function isToolOnlyMessage(message: RawMessage | undefined): boolean {
@@ -1001,6 +1038,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   currentAgentId: 'main',
   sessionLabels: {},
   sessionLastActivity: {},
+  pendingLocalSessionKeys: {},
 
   showThinking: true,
   thinkingLevel: null,
@@ -1022,7 +1060,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
             thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
             model: s.model ? String(s.model) : undefined,
           }))
-          .filter((s: ChatSession) => s.key);
+          .filter((s: ChatSession) => s.key && isChatSidebarSessionKey(s.key));
+        const realSessionKeys = new Set(sessions.map((session) => session.key));
 
         const canonicalBySuffix = new Map<string, string>();
         for (const session of sessions) {
@@ -1044,7 +1083,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
           return true;
         });
 
-        const { currentSessionKey, sessions: localSessions, messages: localMessages } = get();
+        const {
+          currentSessionKey,
+          sessions: localSessions,
+          pendingLocalSessionKeys,
+          sessionLastActivity,
+          messages,
+        } = get();
         let nextSessionKey = currentSessionKey || DEFAULT_SESSION_KEY;
         if (!nextSessionKey.startsWith('agent:')) {
           const canonicalMatch = canonicalBySuffix.get(nextSessionKey);
@@ -1053,16 +1098,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         }
         const hasLocalPendingSession =
-          localMessages.length === 0 &&
-          isEphemeralLocalSessionKey(nextSessionKey) &&
-          localSessions.some((session) => session.key === nextSessionKey);
+          Boolean(pendingLocalSessionKeys[nextSessionKey]) &&
+          localSessions.some((session) => session.key === nextSessionKey) &&
+          !realSessionKeys.has(nextSessionKey);
+        const preferredSessionKey = getMostRecentSessionKey(dedupedSessions, sessionLastActivity);
+        const shouldAutoChooseLatest =
+          !hasLocalPendingSession &&
+          messages.length === 0 &&
+          (!currentSessionKey || currentSessionKey === DEFAULT_SESSION_KEY);
 
         if (!dedupedSessions.find((s) => s.key === nextSessionKey) && dedupedSessions.length > 0) {
-          // Preserve only locally-created empty pending sessions.
-          // Any other unknown key should fall back to a real gateway session.
+          // Preserve locally-created synthetic sessions until they materialize
+          // in Gateway. Otherwise background refresh can snap the UI back to an
+          // older real session right after the user clicks "New chat".
           if (!hasLocalPendingSession) {
-            nextSessionKey = dedupedSessions[0].key;
+            nextSessionKey = preferredSessionKey || dedupedSessions[0].key;
           }
+        } else if (shouldAutoChooseLatest && preferredSessionKey) {
+          nextSessionKey = preferredSessionKey;
         }
 
         const shouldKeepSyntheticCurrent = hasLocalPendingSession || dedupedSessions.length === 0;
@@ -1073,10 +1126,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ? [...dedupedSessions, { key: nextSessionKey, displayName: nextSessionKey }]
             : dedupedSessions;
 
+        const nextPendingLocalSessionKeys = Object.fromEntries(
+          Object.entries(pendingLocalSessionKeys).filter(([key]) => !realSessionKeys.has(key))
+        ) as Record<string, true>;
+
         set({
           sessions: sessionsWithCurrent,
           currentSessionKey: nextSessionKey,
           currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
+          pendingLocalSessionKeys: nextPendingLocalSessionKeys,
         });
 
         if (currentSessionKey !== nextSessionKey) {
@@ -1089,6 +1147,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (sessionsToLabel.length > 0) {
           void Promise.all(
             sessionsToLabel.map(async (session) => {
+              if (!realSessionKeys.has(session.key)) {
+                return;
+              }
               try {
                 const r = await useGatewayStore
                   .getState()
@@ -1102,16 +1163,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   const next: Partial<typeof s> = {};
                   const isEmptyEphemeral =
                     msgs.length === 0 &&
-                    isEphemeralLocalSessionKey(session.key) &&
+                    Boolean(s.pendingLocalSessionKeys[session.key]) &&
                     s.currentSessionKey !== session.key;
                   if (isEmptyEphemeral) {
-                    next.sessions = s.sessions.filter((item) => item.key !== session.key);
-                    next.sessionLabels = Object.fromEntries(
-                      Object.entries(s.sessionLabels).filter(([k]) => k !== session.key)
-                    );
-                    next.sessionLastActivity = Object.fromEntries(
-                      Object.entries(s.sessionLastActivity).filter(([k]) => k !== session.key)
-                    );
+                    Object.assign(next, removeSessionArtifacts(s, session.key));
                     return next;
                   }
                   if (firstUser) {
@@ -1134,7 +1189,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 /* ignore per-session errors */
               }
             })
-          );
+          ).then(() => {
+            const state = get();
+            if (
+              state.currentSessionKey !== DEFAULT_SESSION_KEY ||
+              state.messages.length > 0 ||
+              state.pendingLocalSessionKeys[DEFAULT_SESSION_KEY]
+            ) {
+              return;
+            }
+            const mostRecentSessionKey = getMostRecentSessionKey(
+              state.sessions.filter((session) => !state.pendingLocalSessionKeys[session.key]),
+              state.sessionLastActivity
+            );
+            if (mostRecentSessionKey && mostRecentSessionKey !== state.currentSessionKey) {
+              set({
+                currentSessionKey: mostRecentSessionKey,
+                currentAgentId: getAgentIdFromSessionKey(mostRecentSessionKey),
+              });
+              get().loadHistory();
+            }
+          });
         }
       }
     } catch (err) {
@@ -1145,8 +1220,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ── Switch session ──
 
   switchSession: (key: string) => {
-    const { currentSessionKey, messages } = get();
-    const leavingEmpty = !currentSessionKey.endsWith(':main') && messages.length === 0;
+    const { currentSessionKey, messages, pendingLocalSessionKeys } = get();
+    const leavingEmpty =
+      !currentSessionKey.endsWith(':main')
+      && isEmptyEphemeralSession(currentSessionKey, messages, pendingLocalSessionKeys);
     set((s) => ({
       currentSessionKey: key,
       currentAgentId: getAgentIdFromSessionKey(key),
@@ -1160,15 +1237,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       lastUserMessageAt: null,
       pendingToolImages: [],
       ...(leavingEmpty
-        ? {
-            sessions: s.sessions.filter((s) => s.key !== currentSessionKey),
-            sessionLabels: Object.fromEntries(
-              Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey)
-            ),
-            sessionLastActivity: Object.fromEntries(
-              Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey)
-            ),
-          }
+        ? removeSessionArtifacts(s, currentSessionKey)
         : {}),
     }));
     get().loadHistory();
@@ -1209,13 +1278,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Switched away from deleted session — pick the first remaining or create new
       const next = remaining[0];
       set((s) => ({
-        sessions: remaining,
-        sessionLabels: Object.fromEntries(
-          Object.entries(s.sessionLabels).filter(([k]) => k !== key)
-        ),
-        sessionLastActivity: Object.fromEntries(
-          Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)
-        ),
+        ...removeSessionArtifacts(s, key),
         messages: [],
         streamingText: '',
         streamingMessage: null,
@@ -1232,52 +1295,39 @@ export const useChatStore = create<ChatState>((set, get) => ({
         get().loadHistory();
       }
     } else {
-      set((s) => ({
-        sessions: remaining,
-        sessionLabels: Object.fromEntries(
-          Object.entries(s.sessionLabels).filter(([k]) => k !== key)
-        ),
-        sessionLastActivity: Object.fromEntries(
-          Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)
-        ),
-      }));
+      set((s) => removeSessionArtifacts(s, key));
     }
   },
 
   // ── New session ──
 
-  newSession: () => {
-    // Generate a new unique session key and switch to it.
-    // NOTE: We intentionally do NOT call sessions.reset on the old session.
-    // sessions.reset archives (renames) the session JSONL file, making old
-    // conversation history inaccessible when the user switches back to it.
-    const { currentSessionKey, messages, sessions } = get();
-    const leavingEmpty = !currentSessionKey.endsWith(':main') && messages.length === 0;
-    const prefix =
-      getCanonicalPrefixFromSessionKey(currentSessionKey) ??
-      getCanonicalPrefixFromSessions(sessions) ??
-      DEFAULT_CANONICAL_PREFIX;
+  newSession: (targetAgentId) => {
+    const { currentSessionKey, messages, pendingLocalSessionKeys } = get();
+    const nextAgentId = targetAgentId || get().currentAgentId || useAgentsStore.getState().defaultAgentId || 'main';
+    const isCurrentEmptyEphemeral =
+      !currentSessionKey.endsWith(':main')
+      && isEmptyEphemeralSession(currentSessionKey, messages, pendingLocalSessionKeys);
+    const prefix = `agent:${nextAgentId}`;
     const newKey = `${prefix}:session-${Date.now()}`;
     const newSessionEntry: ChatSession = { key: newKey, displayName: newKey };
+    const nowMs = Date.now();
     set((s) => ({
       currentSessionKey: newKey,
-      currentAgentId: getAgentIdFromSessionKey(newKey),
+      currentAgentId: nextAgentId,
       sessions: [
-        ...(leavingEmpty
-          ? s.sessions.filter((sess) => sess.key !== currentSessionKey)
-          : s.sessions),
+        ...(isCurrentEmptyEphemeral ? s.sessions.filter((session) => session.key !== currentSessionKey) : s.sessions),
         newSessionEntry,
       ],
-      sessionLabels: leavingEmpty
-        ? Object.fromEntries(
-            Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey)
-          )
+      sessionLabels: isCurrentEmptyEphemeral
+        ? omitSessionKey(s.sessionLabels, currentSessionKey)
         : s.sessionLabels,
-      sessionLastActivity: leavingEmpty
-        ? Object.fromEntries(
-            Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey)
-          )
-        : s.sessionLastActivity,
+      sessionLastActivity: { ...s.sessionLastActivity, [newKey]: nowMs },
+      pendingLocalSessionKeys: {
+        ...(isCurrentEmptyEphemeral
+          ? omitSessionKey(s.pendingLocalSessionKeys, currentSessionKey)
+          : s.pendingLocalSessionKeys),
+        [newKey]: true,
+      },
       messages: [],
       streamingText: '',
       streamingMessage: null,
@@ -1293,22 +1343,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ── Cleanup empty session on navigate away ──
 
   cleanupEmptySession: () => {
-    const { currentSessionKey, messages } = get();
+    const { currentSessionKey, messages, pendingLocalSessionKeys } = get();
     // Only remove non-main sessions that were never used (no messages sent).
     // This mirrors the "leavingEmpty" logic in switchSession so that creating
     // a new session and immediately navigating away doesn't leave a ghost entry
     // in the sidebar.
-    const isEmptyNonMain = !currentSessionKey.endsWith(':main') && messages.length === 0;
+    const isEmptyNonMain =
+      !currentSessionKey.endsWith(':main')
+      && isEmptyEphemeralSession(currentSessionKey, messages, pendingLocalSessionKeys);
     if (!isEmptyNonMain) return;
-    set((s) => ({
-      sessions: s.sessions.filter((sess) => sess.key !== currentSessionKey),
-      sessionLabels: Object.fromEntries(
-        Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey)
-      ),
-      sessionLastActivity: Object.fromEntries(
-        Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey)
-      ),
-    }));
+    set((s) => removeSessionArtifacts(s, currentSessionKey));
   },
 
   setSessionModel: async (model) => {
@@ -1338,12 +1382,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ── Load chat history ──
 
   loadHistory: async (quiet = false) => {
-    const { currentSessionKey } = get();
+    const { currentSessionKey, pendingLocalSessionKeys } = get();
     const requestSessionKey = currentSessionKey;
     const requestSeq = ++_historyLoadSeq;
     const isStale = () =>
       get().currentSessionKey !== requestSessionKey || requestSeq !== _historyLoadSeq;
     if (!quiet) set({ loading: true, error: null });
+
+    // Brand-new local sessions do not exist in Gateway yet. Querying chat.history
+    // for them can fall back to an older real transcript, which makes "New chat"
+    // appear to jump back into a previous conversation. Keep them empty until the
+    // first user message materializes the session in Gateway.
+    if (isEmptyEphemeralSession(requestSessionKey, get().messages, pendingLocalSessionKeys)) {
+      if (!quiet) {
+        set({ loading: false, error: null, messages: [] });
+      }
+      return;
+    }
 
     try {
       const data = await useGatewayStore

@@ -829,7 +829,7 @@ export function Skills() {
                   className={cn(
                     "rounded-[10px] px-4 py-2 text-[14px] font-medium transition-all",
                     activeTab === 'all' && selectedSource === 'all'
-                      ? "bg-foreground text-background"
+                      ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
                   )}
                 >
@@ -840,7 +840,7 @@ export function Skills() {
                   className={cn(
                     "rounded-[10px] px-4 py-2 text-[14px] font-medium transition-all",
                     activeTab === 'all' && selectedSource === 'built-in'
-                      ? "bg-foreground text-background"
+                      ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
                   )}
                 >
@@ -851,7 +851,7 @@ export function Skills() {
                   className={cn(
                     "rounded-[10px] px-4 py-2 text-[14px] font-medium transition-all",
                     activeTab === 'marketplace'
-                      ? "bg-foreground text-background"
+                      ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
                   )}
                 >
@@ -1023,4 +1023,3 @@ export function Skills() {
 }
 
 export default Skills;
-

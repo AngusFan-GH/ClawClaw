@@ -12,7 +12,7 @@ import {
   type SecurityPolicy,
   type SecurityRuleKey,
   SECURITY_RULE_DEFINITIONS,
-  normalizeLinkedSecurityRules,
+  normalizeSecurityRules,
 } from '@/shared/security-policy';
 
 const defaultPolicy: SecurityPolicy = {
@@ -75,7 +75,7 @@ export function Security() {
         prompt: {
           enabled: !!data?.prompt?.enabled,
           deniedPaths: compactPaths(data?.prompt?.deniedPaths || []),
-          rules: normalizeLinkedSecurityRules(
+          rules: normalizeSecurityRules(
             Array.isArray(data?.prompt?.rules) ? data.prompt.rules : []
           ),
         },
@@ -128,31 +128,11 @@ export function Security() {
   }, []);
 
   const toggleRule = useCallback((rule: SecurityRuleKey, checked: boolean) => {
-    if (rule === 'lockPolicy') {
-      setPolicy((prev) => ({
-        ...prev,
-        prompt: {
-          ...prev.prompt,
-          rules: checked
-            ? normalizeLinkedSecurityRules([
-                ...prev.prompt.rules,
-                'lockPolicy',
-                'denyRuntime',
-                'denyWrite',
-              ])
-            : prev.prompt.rules.filter(
-                (item) => item !== 'lockPolicy' && item !== 'denyRuntime' && item !== 'denyWrite'
-              ),
-        },
-      }));
-      return;
-    }
-
     setPolicy((prev) => ({
       ...prev,
       prompt: {
         ...prev.prompt,
-        rules: normalizeLinkedSecurityRules(
+        rules: normalizeSecurityRules(
           checked
             ? Array.from(new Set([...prev.prompt.rules, rule]))
             : prev.prompt.rules.filter((item) => item !== rule)
@@ -161,8 +141,6 @@ export function Security() {
     }));
   }, []);
 
-  const hasConfiguredGuards =
-    policy.prompt.deniedPaths.length > 0 || policy.prompt.rules.length > 0;
   const isDirty = useMemo(
     () => JSON.stringify(policy) !== JSON.stringify(savedPolicy),
     [policy, savedPolicy]
@@ -213,9 +191,6 @@ export function Security() {
     });
   }, [policy.prompt.deniedPaths.length, policy.prompt.enabled, policy.prompt.rules.length, t]);
 
-  const lockPolicyActive = policy.prompt.rules.includes('lockPolicy');
-  const detailRules = SECURITY_RULE_DEFINITIONS.filter((rule) => rule.key !== 'lockPolicy');
-
   useEffect(() => {
     if (loading || applying || !isDirty) {
       return;
@@ -252,45 +227,33 @@ export function Security() {
         <PageHeader
           title={<span className="inline-flex items-center gap-2">{t('security.title')}</span>}
           subtitle={summary}
-          className="mb-6"
+          className="mb-5"
         />
 
         <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2 pb-6">
-          <div className="rounded-xl border p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>{t('security.enableDirectoryPolicy')}</Label>
+          <div className="space-y-4">
+            <section className="rounded-xl border bg-card px-4 py-4 md:px-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <Label className="text-base">{t('security.enableDirectoryPolicy')}</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {t('security.enableDirectoryPolicyDesc')}
+                  </p>
+                </div>
+                <Switch
+                  checked={policy.prompt.enabled}
+                  onCheckedChange={(checked) => {
+                    setPolicy((prev) => ({ ...prev, prompt: { ...prev.prompt, enabled: checked } }));
+                  }}
+                />
               </div>
-              <Switch
-                checked={policy.prompt.enabled}
-                onCheckedChange={(checked) => {
-                  if (checked && !hasConfiguredGuards) {
-                    setPolicy((prev) => ({
-                      ...prev,
-                      prompt: {
-                        ...prev.prompt,
-                        enabled: true,
-                        rules: normalizeLinkedSecurityRules([
-                          ...prev.prompt.rules,
-                          'lockPolicy',
-                          'denyRuntime',
-                          'denyWrite',
-                        ]),
-                      },
-                    }));
-                    toast.message(t('security.toasts.lockPolicyAutoEnabled'));
-                    return;
-                  }
-                  setPolicy((prev) => ({ ...prev, prompt: { ...prev.prompt, enabled: checked } }));
-                }}
-              />
-            </div>
+            </section>
 
-            <div className="space-y-3 rounded-lg border p-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <Label>{t('security.sections.directories')}</Label>
-                  <p className="mt-1 text-sm text-muted-foreground">
+            <section className="rounded-xl border bg-card px-4 py-4 md:px-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <Label className="text-base">{t('security.sections.directories')}</Label>
+                  <p className="text-sm text-muted-foreground">
                     {t('security.sections.directoriesDesc')}
                   </p>
                 </div>
@@ -300,18 +263,18 @@ export function Security() {
                 </Button>
               </div>
 
-              <div className="space-y-2 max-h-56 overflow-auto pr-1">
+              <div className="mt-4 space-y-2">
                 {policy.prompt.deniedPaths.length === 0 ? (
-                  <div className="text-sm text-muted-foreground rounded-lg border border-dashed p-3">
+                  <div className="rounded-lg border border-dashed px-3 py-4 text-sm text-muted-foreground">
                     {t('security.noDeniedDirectory')}
                   </div>
                 ) : (
                   policy.prompt.deniedPaths.map((path) => (
                     <div
                       key={path}
-                      className="flex items-center justify-between rounded-lg border p-2"
+                      className="flex items-center justify-between gap-3 rounded-lg border px-3 py-3"
                     >
-                      <code className="text-xs break-all">{path}</code>
+                      <code className="min-w-0 flex-1 break-all text-xs">{path}</code>
                       <Button variant="ghost" size="icon" onClick={() => removePromptDir(path)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -319,67 +282,27 @@ export function Security() {
                   ))
                 )}
               </div>
-            </div>
+            </section>
 
-            <div className="space-y-3 rounded-lg border p-4">
-              <div>
-                <Label>{t('security.sections.behavior')}</Label>
-                <p className="mt-1 text-sm text-muted-foreground">
+            <section className="rounded-xl border bg-card px-4 py-4 md:px-5">
+              <div className="space-y-1">
+                <Label className="text-base">{t('security.sections.behavior')}</Label>
+                <p className="text-sm text-muted-foreground">
                   {t('security.sections.behaviorDesc')}
                 </p>
-                <p className="mt-2 text-sm text-muted-foreground">{t('security.rules.lockHint')}</p>
               </div>
 
-              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <div className="text-sm font-medium">
-                        {t('security.rules.items.lockPolicy.label')}
-                      </div>
-                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                        {t('security.rules.recommended')}
-                      </span>
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {t('security.rules.items.lockPolicy.description')}
-                    </div>
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
-                        {t('security.rules.items.denyRuntime.label')}
-                      </span>
-                      <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
-                        {t('security.rules.items.denyWrite.label')}
-                      </span>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={lockPolicyActive}
-                    onCheckedChange={(nextChecked) => toggleRule('lockPolicy', nextChecked)}
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-3">
-                {detailRules.map((rule) => {
+              <div className="mt-4 grid gap-3">
+                {SECURITY_RULE_DEFINITIONS.map((rule) => {
                   const checked = policy.prompt.rules.includes(rule.key);
-                  const linkedToLock =
-                    lockPolicyActive && (rule.key === 'denyRuntime' || rule.key === 'denyWrite');
                   return (
                     <div
                       key={rule.key}
-                      className="flex items-start justify-between gap-4 rounded-lg border p-3 transition-colors hover:border-primary/40"
+                      className="flex items-start justify-between gap-4 rounded-lg border px-4 py-3 transition-colors hover:border-primary/40"
                     >
                       <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <div className="text-sm font-medium">
-                            {t(`security.rules.items.${rule.key}.label`)}
-                          </div>
-                          {linkedToLock ? (
-                            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                              {t('security.rules.linked')}
-                            </span>
-                          ) : null}
+                        <div className="text-sm font-medium">
+                          {t(`security.rules.items.${rule.key}.label`)}
                         </div>
                         <div className="text-sm text-muted-foreground">
                           {t(`security.rules.items.${rule.key}.description`)}
@@ -393,7 +316,7 @@ export function Security() {
                   );
                 })}
               </div>
-            </div>
+            </section>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

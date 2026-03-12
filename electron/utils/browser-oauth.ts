@@ -15,6 +15,7 @@ class BrowserOAuthManager extends EventEmitter {
   private activeProvider: BrowserOAuthProviderType | null = null;
   private activeAccountId: string | null = null;
   private activeLabel: string | null = null;
+  private activeModel: string | null = null;
   private active = false;
   private mainWindow: BrowserWindow | null = null;
 
@@ -24,7 +25,7 @@ class BrowserOAuthManager extends EventEmitter {
 
   async startFlow(
     provider: BrowserOAuthProviderType,
-    options?: { accountId?: string; label?: string }
+    options?: { accountId?: string; label?: string; model?: string }
   ): Promise<boolean> {
     if (this.active) {
       await this.stopFlow();
@@ -34,6 +35,7 @@ class BrowserOAuthManager extends EventEmitter {
     this.activeProvider = provider;
     this.activeAccountId = options?.accountId || provider;
     this.activeLabel = options?.label || null;
+    this.activeModel = options?.model || null;
     this.emit('oauth:start', { provider, accountId: this.activeAccountId });
 
     try {
@@ -75,6 +77,7 @@ class BrowserOAuthManager extends EventEmitter {
       this.activeProvider = null;
       this.activeAccountId = null;
       this.activeLabel = null;
+      this.activeModel = null;
       return false;
     }
   }
@@ -84,6 +87,7 @@ class BrowserOAuthManager extends EventEmitter {
     this.activeProvider = null;
     this.activeAccountId = null;
     this.activeLabel = null;
+    this.activeModel = null;
     logger.info('[BrowserOAuth] Flow explicitly stopped');
   }
 
@@ -93,10 +97,12 @@ class BrowserOAuthManager extends EventEmitter {
   ) {
     const accountId = this.activeAccountId || providerType;
     const accountLabel = this.activeLabel;
+    const accountModel = this.activeModel;
     this.active = false;
     this.activeProvider = null;
     this.activeAccountId = null;
     this.activeLabel = null;
+    this.activeModel = null;
     logger.info(`[BrowserOAuth] Successfully completed OAuth for ${providerType}`);
 
     const providerService = getProviderService();
@@ -108,7 +114,7 @@ class BrowserOAuthManager extends EventEmitter {
       authMode: 'oauth_browser',
       baseUrl: existing?.baseUrl,
       apiProtocol: existing?.apiProtocol,
-      model: existing?.model || GOOGLE_OAUTH_DEFAULT_MODEL,
+      model: existing?.model || accountModel || GOOGLE_OAUTH_DEFAULT_MODEL,
       fallbackModels: existing?.fallbackModels,
       fallbackAccountIds: existing?.fallbackAccountIds,
       enabled: existing?.enabled ?? true,

@@ -1,5 +1,4 @@
 export type SecurityRuleKey =
-  | 'lockPolicy'
   | 'denyRuntime'
   | 'denyWrite'
   | 'denyRead'
@@ -23,12 +22,6 @@ export interface SecurityRuleDefinition {
 }
 
 export const SECURITY_RULE_DEFINITIONS: SecurityRuleDefinition[] = [
-  {
-    key: 'lockPolicy',
-    managedDeny: ['group:runtime', 'write', 'edit', 'apply_patch'],
-    title: 'Lock security policy',
-    description: 'Recommended baseline that blocks command execution and file modifications.',
-  },
   {
     key: 'denyRuntime',
     managedDeny: ['group:runtime'],
@@ -55,25 +48,16 @@ export const SECURITY_RULE_DEFINITIONS: SecurityRuleDefinition[] = [
   },
 ];
 
-export function normalizeLinkedSecurityRules(values: unknown): SecurityRuleKey[] {
-  const next = new Set<SecurityRuleKey>(
-    Array.isArray(values)
-      ? values.filter((item): item is SecurityRuleKey => typeof item === 'string')
-      : [],
-  );
-  const hasRuntime = next.has('denyRuntime');
-  const hasWrite = next.has('denyWrite');
-
-  if (next.has('lockPolicy')) {
-    next.add('denyRuntime');
-    next.add('denyWrite');
+export function normalizeSecurityRules(values: unknown): SecurityRuleKey[] {
+  const next = new Set<SecurityRuleKey>();
+  if (!Array.isArray(values)) {
+    return [];
   }
-
-  if (hasRuntime && hasWrite) {
-    next.add('lockPolicy');
-  } else if (!next.has('lockPolicy')) {
-    next.delete('lockPolicy');
+  for (const item of values) {
+    if (typeof item !== 'string') continue;
+    if (SECURITY_RULE_DEFINITIONS.some((rule) => rule.key === item)) {
+      next.add(item as SecurityRuleKey);
+    }
   }
-
   return Array.from(next);
 }

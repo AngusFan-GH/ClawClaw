@@ -255,23 +255,16 @@
     "github": "GitHub"
   },
   "security": {
-    "title": "プロンプトポリシー",
-    "loading": "プロンプトポリシーを読み込み中...",
-    "enableDirectoryPolicy": "プロンプトポリシーを有効化",
-    "enableDirectoryPolicyDesc": "プロンプトポリシーは有効です。",
+    "title": "セキュリティポリシー",
+    "loading": "セキュリティポリシーを読み込み中...",
+    "enableDirectoryPolicy": "セキュリティポリシーを有効化",
+    "enableDirectoryPolicyDesc": "有効にすると、下のディレクトリ制限と動作制限がすぐに適用されます。",
     "addDeniedDirectories": "禁止ディレクトリを追加",
     "noDeniedDirectory": "禁止ディレクトリはまだ設定されていません。",
     "rules": {
       "title": "プリセット制限ルール",
       "description": "選択したルールは実行時の権限制限へ反映され、ワークスペースのポリシードキュメントにも同期されます。",
-      "recommended": "推奨",
-      "linked": "連動中",
-      "lockHint": "これらの制限をモデル自身に変更させたくない場合は、「セキュリティポリシーをロック」を有効にしてください。コマンド実行とファイル変更をまとめて禁止し、gateway 設定機能も引き続き拒否します。",
       "items": {
-        "lockPolicy": {
-          "label": "セキュリティポリシーをロック",
-          "description": "推奨ベースライン: コマンド実行とファイル変更を同時に禁止します。"
-        },
         "denyRuntime": {
           "label": "コマンド実行を禁止",
           "description": "exec、bash、process などのランタイムコマンドを拒否します。"
@@ -298,14 +291,14 @@
     "applying": "適用中...",
     "lastApplied": "最終適用: {{time}}",
     "summary": {
-      "disabled": "プロンプトポリシーは無効です。",
-      "enabled": "プロンプトポリシーは {{count}} 個のディレクトリを禁止し、{{rules}} 個の制限ルールを有効化しています。"
+      "disabled": "セキュリティポリシーは無効です。",
+      "enabled": "{{rules}} 個の制限ルールを有効化し、{{count}} 個の禁止ディレクトリを設定しています。"
     },
     "sections": {
       "directories": "禁止ディレクトリ",
-      "directoriesDesc": "これらのディレクトリはプロンプトポリシードキュメントに書き込まれ、agent が実行前に回避する対象になります。",
+      "directoriesDesc": "これらのディレクトリはセキュリティドキュメントに書き込まれ、agent が実行前に回避する対象になります。",
       "behavior": "動作制限",
-      "behaviorDesc": "これらのルールは実行時のツール制限に反映され、ポリシードキュメントにも同期されます。"
+      "behaviorDesc": "これらのルールは実行時のツール制限に反映され、セキュリティドキュメントにも同期されます。"
     },
     "toasts": {
       "loadFailed": "セキュリティポリシーの読み込みに失敗しました",
@@ -314,8 +307,7 @@
       "applyFailed": "適用に失敗しました",
       "resetSuccess": "セキュリティポリシーをリセットしました。",
       "resetFailed": "リセットに失敗しました",
-      "enablePromptPolicyFirst": "プロンプトポリシーを有効にする前に、少なくとも 1 つの禁止ディレクトリを追加するか、少なくとも 1 つの制限ルールを有効にしてください。",
-      "lockPolicyAutoEnabled": "推奨ベースラインとして「セキュリティポリシーをロック」を自動で有効化しました。"
+      "enablePromptPolicyFirst": "セキュリティポリシーを有効にする前に、少なくとも 1 つの禁止ディレクトリを追加するか、少なくとも 1 つの制限ルールを有効にしてください。"
     },
     "dialog": {
       "selectDeniedDirs": "禁止ディレクトリを選択"

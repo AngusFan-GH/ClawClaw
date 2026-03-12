@@ -853,15 +853,65 @@ interface GatewayCronJob {
   };
 }
 
+function isUiManagedAgentTurn(job: GatewayCronJob): boolean {
+  return (job.sessionTarget === 'isolated' || !job.sessionTarget) && job.payload?.kind === 'agentTurn';
+}
+
+function needsDeliveryRepair(job: GatewayCronJob): boolean {
+  return isUiManagedAgentTurn(job) && (job.delivery?.mode ?? 'announce') !== 'none';
+}
+
+function clearChannelRequiredError(job: GatewayCronJob): void {
+  if (job.state?.lastError?.includes('Channel is required')) {
+    job.state.lastError = undefined;
+    job.state.lastStatus = 'ok';
+  }
+}
+
+function clearStaleUiDeliveryError(job: GatewayCronJob): void {
+  if (isUiManagedAgentTurn(job) && job.delivery?.mode === 'none') {
+    clearChannelRequiredError(job);
+  }
+}
+
+async function repairCronDeliveryIfNeeded(
+  gatewayManager: GatewayManager,
+  job: GatewayCronJob,
+): Promise<GatewayCronJob> {
+  if (!needsDeliveryRepair(job)) {
+    return job;
+  }
+
+  try {
+    await gatewayManager.rpc('cron.update', {
+      id: job.id,
+      patch: { delivery: { mode: 'none' } },
+    });
+    job.delivery = { mode: 'none' };
+    clearChannelRequiredError(job);
+  } catch (e) {
+    console.warn(`Failed to auto-repair cron job ${job.id}:`, e);
+  }
+
+  return job;
+}
+
+async function getCronJobById(gatewayManager: GatewayManager, id: string): Promise<GatewayCronJob | undefined> {
+  const result = await gatewayManager.rpc('cron.list', { includeDisabled: true });
+  const data = result as { jobs?: GatewayCronJob[] };
+  return (data?.jobs ?? []).find((job) => job.id === id);
+}
+
 /**
  * Transform a Gateway CronJob to the frontend CronJob format
  */
 function transformCronJob(job: GatewayCronJob) {
   // Extract message from payload
   const message = job.payload?.message || job.payload?.text || '';
+  clearStaleUiDeliveryError(job);
 
   // Build target from delivery info — only if a delivery channel is specified
-  const channelType = job.delivery?.channel;
+  const channelType = job.delivery?.mode === 'announce' ? job.delivery?.channel : undefined;
   const target = channelType
     ? { channelType, channelId: channelType, channelName: channelType }
     : undefined;
@@ -915,28 +965,7 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
       // to delivery: { mode: 'announce' } which then fails with
       // "Channel is required" when no external channels are configured.
       for (const job of jobs) {
-        const isIsolatedAgent =
-          (job.sessionTarget === 'isolated' || !job.sessionTarget) &&
-          job.payload?.kind === 'agentTurn';
-        const needsRepair =
-          isIsolatedAgent && job.delivery?.mode === 'announce' && !job.delivery?.channel;
-
-        if (needsRepair) {
-          try {
-            await gatewayManager.rpc('cron.update', {
-              id: job.id,
-              patch: { delivery: { mode: 'none' } },
-            });
-            job.delivery = { mode: 'none' };
-            // Clear stale channel-resolution error from the last run
-            if (job.state?.lastError?.includes('Channel is required')) {
-              job.state.lastError = undefined;
-              job.state.lastStatus = 'ok';
-            }
-          } catch (e) {
-            console.warn(`Failed to auto-repair cron job ${job.id}:`, e);
-          }
-        }
+        await repairCronDeliveryIfNeeded(gatewayManager, job);
       }
 
       // Transform Gateway format to frontend format
@@ -1002,6 +1031,10 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
         patch.payload = { kind: 'agentTurn', message: patch.message };
         delete patch.message;
       }
+      const current = await getCronJobById(gatewayManager, id);
+      if (current && isUiManagedAgentTurn(current)) {
+        patch.delivery = { mode: 'none' };
+      }
       const result = await gatewayManager.rpc('cron.update', { id, patch });
       return result;
     } catch (error) {
@@ -1035,6 +1068,10 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
   // Trigger a cron job manually
   ipcMain.handle('cron:trigger', async (_, id: string) => {
     try {
+      const current = await getCronJobById(gatewayManager, id);
+      if (current) {
+        await repairCronDeliveryIfNeeded(gatewayManager, current);
+      }
       const result = await gatewayManager.rpc('cron.run', { id, mode: 'force' });
       return result;
     } catch (error) {

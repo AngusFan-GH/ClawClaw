@@ -4,6 +4,12 @@
   "welcome": {
     "title": "欢迎",
     "subtitle": "你的 AI 助手已就绪。在下方开始对话。",
+    "subtitleHint": "先输入你的问题，或者从下面选一个方向开始。",
+    "subtitleWithAgent": "先确认这次对话使用哪个分身，再开始输入内容。",
+    "agentEyebrow": "当前分身",
+    "agentHelper": "新对话将使用这个分身开始",
+    "agentCurrent": "当前正在使用",
+    "agentSwitchTo": "切换后会新建该分身对话",
     "askQuestions": "提问",
     "askQuestionsDesc": "获取任意话题的答案",
     "creativeTasks": "创意任务",
@@ -19,6 +25,7 @@
   "composer": {
     "defaultModel": "默认模型",
     "modelAriaLabel": "切换当前对话模型",
+    "agentAriaLabel": "切换新对话分身",
     "configureModels": "未配置模型",
     "attachFiles": "添加文件",
     "gatewayNotConnected": "网关未连接...",

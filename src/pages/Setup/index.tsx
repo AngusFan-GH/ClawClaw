@@ -850,10 +850,15 @@ function ProviderContent({
         snapshot.vendors
       );
       const label = selectedProviderData?.name || selectedProvider;
+      const model = resolveProviderModelForSave(
+        selectedProviderData,
+        modelId,
+        devModeUnlocked
+      );
       pendingOAuthRef.current = { accountId, label };
       await hostApiFetch('/api/providers/oauth/start', {
         method: 'POST',
-        body: JSON.stringify({ provider: selectedProvider, accountId, label }),
+        body: JSON.stringify({ provider: selectedProvider, accountId, label, model }),
       });
     } catch (e) {
       setOauthError(String(e));

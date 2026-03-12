@@ -541,21 +541,21 @@ export function Cron() {
 
   if (loading) {
     return (
-      <div className="flex flex-col -m-6 dark:bg-background min-h-[calc(100vh-2.5rem)] items-center justify-center">
+      <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)] items-center justify-center">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col -m-6 min-h-[calc(100vh-2.5rem)] bg-background">
-      <div className="w-full max-w-6xl mx-auto p-6 md:p-10 space-y-6">
+    <div className="flex flex-col -m-6 h-[calc(100vh-2.5rem)] overflow-hidden bg-background">
+      <div className="w-full max-w-6xl mx-auto px-6 pt-5 pb-3 md:px-10 md:pt-6 md:pb-3">
         <PageHeader
           title={t('title')}
           subtitle={t('subtitle')}
           actions={(
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={handleRefresh} disabled={!isGatewayRunning || refreshing} className="rounded-xl">
+            <div className="flex flex-nowrap items-center gap-2">
+              <Button variant="outline" onClick={handleRefresh} disabled={!isGatewayRunning || refreshing} className="shrink-0 rounded-xl">
                 <RefreshCw className={cn('h-4 w-4 mr-2', refreshing && 'animate-spin')} />
                 {t('refresh')}
               </Button>
@@ -565,7 +565,7 @@ export function Cron() {
                   setShowDialog(true);
                 }}
                 disabled={!isGatewayRunning}
-                className="rounded-xl"
+                className="shrink-0 rounded-xl"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 {t('newTask')}
@@ -573,103 +573,109 @@ export function Cron() {
             </div>
           )}
         />
+      </div>
 
-        {!isGatewayRunning && (
-          <div className="rounded-2xl border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-300 flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            {t('gatewayWarning')}
-          </div>
-        )}
-
-        {error && (
-          <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            {error}
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard icon={<Clock className="h-4 w-4" />} label={t('stats.total')} value={safeJobs.length} />
-          <StatCard icon={<Play className="h-4 w-4" />} label={t('stats.active')} value={activeJobs.length} />
-          <StatCard icon={<Pause className="h-4 w-4" />} label={t('stats.paused')} value={pausedJobs.length} />
-          <StatCard icon={<XCircle className="h-4 w-4" />} label={t('stats.failed')} value={failedJobs.length} />
-        </div>
-
-        <Card className="rounded-2xl">
-          <CardContent className="p-4 md:p-6 space-y-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="relative w-full lg:max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={t('filters.searchPlaceholder')}
-                  className="rounded-xl bg-card/85 pl-9"
-                />
-              </div>
-              <div className="inline-flex items-center gap-1 rounded-xl border border-border/70 bg-card/85 p-1">
-                {(['all', 'active', 'paused', 'failed'] as const).map((item) => (
-                  <Button
-                    key={item}
-                    variant={statusFilter === item ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setStatusFilter(item)}
-                    className={cn(
-                      "rounded-xl px-4",
-                      statusFilter === item
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-accent/70"
-                    )}
-                  >
-                    {t(`filters.${item}`)}
-                  </Button>
-                ))}
-              </div>
+      <div className="min-h-0 flex-1 px-6 pb-8 md:px-10">
+        <div className="flex h-full w-full max-w-6xl mx-auto flex-col space-y-4">
+          {!isGatewayRunning && (
+            <div className="rounded-2xl border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-300 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" />
+              {t('gatewayWarning')}
             </div>
+          )}
 
-            {safeJobs.length === 0 ? (
-              <div className="text-center py-12 rounded-2xl border border-dashed border-border/80 bg-muted/35">
-                <Clock className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
-                <h3 className="text-lg font-medium">{t('empty.title')}</h3>
-                <p className="text-sm text-muted-foreground max-w-xl mx-auto mt-1">{t('empty.description')}</p>
-                <Button
-                  onClick={() => {
-                    setEditingJob(undefined);
-                    setShowDialog(true);
-                  }}
-                  disabled={!isGatewayRunning}
-                  className="mt-4 rounded-xl"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  {t('empty.create')}
-                </Button>
-              </div>
-            ) : filteredJobs.length === 0 ? (
-              <div className="text-center py-10 rounded-2xl border border-dashed border-border/80 bg-muted/35">
-                <Search className="h-7 w-7 mx-auto text-muted-foreground mb-2" />
-                <h3 className="text-base font-medium">{t('empty.noMatchTitle')}</h3>
-                <p className="text-sm text-muted-foreground mt-1">{t('empty.noMatchDescription')}</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                {filteredJobs.map((job) => (
-                  <CronJobCard
-                    key={job.id}
-                    job={job}
-                    busy={Boolean(busyJobIds[job.id])}
-                    onToggle={(enabled) => handleToggle(job.id, enabled)}
-                    onEdit={() => {
-                      setEditingJob(job);
-                      setShowDialog(true);
-                    }}
-                    onDelete={() => setJobToDelete({ id: job.id })}
-                    onTrigger={() => triggerJob(job.id)}
+          {error && (
+            <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" />
+              {error}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatCard icon={<Clock className="h-4 w-4" />} label={t('stats.total')} value={safeJobs.length} />
+            <StatCard icon={<Play className="h-4 w-4" />} label={t('stats.active')} value={activeJobs.length} />
+            <StatCard icon={<Pause className="h-4 w-4" />} label={t('stats.paused')} value={pausedJobs.length} />
+            <StatCard icon={<XCircle className="h-4 w-4" />} label={t('stats.failed')} value={failedJobs.length} />
+          </div>
+
+          <Card className="flex min-h-0 flex-1 flex-col rounded-2xl">
+            <CardContent className="flex min-h-0 flex-1 flex-col p-4 md:p-6">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="relative w-full lg:max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder={t('filters.searchPlaceholder')}
+                    className="rounded-xl bg-card/85 pl-9"
                   />
-                ))}
+                </div>
+                <div className="inline-flex items-center gap-1 rounded-xl border border-border/70 bg-card/85 p-1">
+                  {(['all', 'active', 'paused', 'failed'] as const).map((item) => (
+                    <Button
+                      key={item}
+                      variant={statusFilter === item ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setStatusFilter(item)}
+                      className={cn(
+                        "rounded-xl px-4",
+                        statusFilter === item
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-accent/70"
+                      )}
+                    >
+                      {t(`filters.${item}`)}
+                    </Button>
+                  ))}
+                </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
+
+              <div className="-mr-2 mt-4 min-h-0 flex-1 overflow-y-auto pr-2 pb-1">
+                {safeJobs.length === 0 ? (
+                  <div className="text-center py-12 rounded-2xl border border-dashed border-border/80 bg-muted/35">
+                    <Clock className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
+                    <h3 className="text-lg font-medium">{t('empty.title')}</h3>
+                    <p className="text-sm text-muted-foreground max-w-xl mx-auto mt-1">{t('empty.description')}</p>
+                    <Button
+                      onClick={() => {
+                        setEditingJob(undefined);
+                        setShowDialog(true);
+                      }}
+                      disabled={!isGatewayRunning}
+                      className="mt-4 rounded-xl"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      {t('empty.create')}
+                    </Button>
+                  </div>
+                ) : filteredJobs.length === 0 ? (
+                  <div className="text-center py-10 rounded-2xl border border-dashed border-border/80 bg-muted/35">
+                    <Search className="h-7 w-7 mx-auto text-muted-foreground mb-2" />
+                    <h3 className="text-base font-medium">{t('empty.noMatchTitle')}</h3>
+                    <p className="text-sm text-muted-foreground mt-1">{t('empty.noMatchDescription')}</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4">
+                    {filteredJobs.map((job) => (
+                      <CronJobCard
+                        key={job.id}
+                        job={job}
+                        busy={Boolean(busyJobIds[job.id])}
+                        onToggle={(enabled) => handleToggle(job.id, enabled)}
+                        onEdit={() => {
+                          setEditingJob(job);
+                          setShowDialog(true);
+                        }}
+                        onDelete={() => setJobToDelete({ id: job.id })}
+                        onTrigger={() => triggerJob(job.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {showDialog && (

@@ -946,10 +946,11 @@ function AddProviderDialog({
       const supportsMultipleAccounts = vendor?.supportsMultipleAccounts ?? selectedType === 'custom';
       const accountId = supportsMultipleAccounts ? `${selectedType}-${crypto.randomUUID()}` : selectedType;
       const label = name || (typeInfo?.id === 'custom' ? t('aiProviders.custom') : typeInfo?.name) || selectedType;
+      const model = resolveProviderModelForSave(typeInfo, modelId, devModeUnlocked);
       pendingOAuthRef.current = { accountId, label };
       await hostApiFetch('/api/providers/oauth/start', {
         method: 'POST',
-        body: JSON.stringify({ provider: selectedType, accountId, label }),
+        body: JSON.stringify({ provider: selectedType, accountId, label, model }),
       });
     } catch (e) {
       setOauthError(String(e));
@@ -1424,4 +1425,3 @@ function AddProviderDialog({
     </div>
   );
 }
-

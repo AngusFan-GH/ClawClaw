@@ -4,6 +4,12 @@
   "welcome": {
     "title": "Welcome",
     "subtitle": "Your AI assistant is ready. Start a conversation below.",
+    "subtitleHint": "Start with a question, or pick one of the directions below.",
+    "subtitleWithAgent": "Pick which agent should handle this new conversation before you start typing.",
+    "agentEyebrow": "Current agent",
+    "agentHelper": "This new conversation will start with this agent",
+    "agentCurrent": "Currently selected",
+    "agentSwitchTo": "Switching creates a new conversation for this agent",
     "askQuestions": "Ask Questions",
     "askQuestionsDesc": "Get answers on any topic",
     "creativeTasks": "Creative Tasks",
@@ -19,6 +25,7 @@
   "composer": {
     "defaultModel": "Default model",
     "modelAriaLabel": "Switch model for current conversation",
+    "agentAriaLabel": "Switch agent for this new conversation",
     "configureModels": "Configure models",
     "attachFiles": "Attach files",
     "gatewayNotConnected": "Gateway not connected...",

@@ -255,23 +255,16 @@
     "github": "GitHub"
   },
   "security": {
-    "title": "提示策略",
-    "loading": "正在加载提示策略...",
-    "enableDirectoryPolicy": "启用提示策略",
-    "enableDirectoryPolicyDesc": "提示策略已启用。",
+    "title": "安全策略",
+    "loading": "正在加载安全策略...",
+    "enableDirectoryPolicy": "启用安全策略",
+    "enableDirectoryPolicyDesc": "开启后，下面的目录限制和行为限制会立即生效。",
     "addDeniedDirectories": "添加禁止目录",
     "noDeniedDirectory": "尚未配置禁止目录。",
     "rules": {
       "title": "预设限制规则",
       "description": "勾选后会同步写入运行时权限限制，并写入工作区策略文档。",
-      "recommended": "推荐",
-      "linked": "已联动",
-      "lockHint": "如果要防止模型自己修改限制，建议启用“锁定安全策略”。它会同时禁止运行命令和修改文件，并继续封锁 gateway 配置能力。",
       "items": {
-        "lockPolicy": {
-          "label": "锁定安全策略",
-          "description": "推荐基线：同时禁止运行命令和修改文件。"
-        },
         "denyRuntime": {
           "label": "禁止运行命令",
           "description": "拒绝 exec、bash、process 等运行时命令。"
@@ -298,14 +291,14 @@
     "applying": "正在应用...",
     "lastApplied": "上次应用时间：{{time}}",
     "summary": {
-      "disabled": "提示策略未启用。",
-      "enabled": "提示策略已阻止 {{count}} 个目录，并启用 {{rules}} 条限制规则。"
+      "disabled": "安全策略未启用。",
+      "enabled": "已启用 {{rules}} 条限制规则，并配置 {{count}} 个禁止目录。"
     },
     "sections": {
       "directories": "禁止目录",
-      "directoriesDesc": "这些目录会被写入提示策略文档，供 agent 在执行前规避。",
+      "directoriesDesc": "这些目录会被写入安全文档，供 agent 在执行前规避。",
       "behavior": "行为限制",
-      "behaviorDesc": "这些规则会真正写入运行时工具限制，并同步到策略文档。"
+      "behaviorDesc": "这些规则会真正写入运行时工具限制，并同步到安全文档。"
     },
     "toasts": {
       "loadFailed": "加载安全策略失败",
@@ -314,8 +307,7 @@
       "applyFailed": "应用失败",
       "resetSuccess": "安全策略已重置。",
       "resetFailed": "重置失败",
-      "enablePromptPolicyFirst": "请先添加至少一个禁止目录，或勾选至少一条限制规则，再启用提示策略。",
-      "lockPolicyAutoEnabled": "已自动启用“锁定安全策略”作为推荐基线。"
+      "enablePromptPolicyFirst": "请先添加至少一个禁止目录，或勾选至少一条限制规则，再启用安全策略。"
     },
     "dialog": {
       "selectDeniedDirs": "选择禁止的目录"

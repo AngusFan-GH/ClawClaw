@@ -19,8 +19,8 @@ export function PageHeader({
   contentClassName,
 }: PageHeaderProps) {
   return (
-    <header className={cn('mb-7 shrink-0', className)}>
-      <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+    <header className={cn('mb-5 shrink-0', className)}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className={cn('max-w-3xl', contentClassName)}>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">{title}</h1>
           {subtitle ? <p className="mt-2 text-sm text-muted-foreground md:text-[15px]">{subtitle}</p> : null}

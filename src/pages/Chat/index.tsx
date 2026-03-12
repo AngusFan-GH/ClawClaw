@@ -5,14 +5,15 @@
  * are in the toolbar; messages render with markdown + streaming.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Loader2, Sparkles } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, Loader2, Sparkles } from 'lucide-react';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
+import { useAgentsStore } from '@/stores/agents';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ChatMessage } from './ChatMessage';
-import { ChatInput, type ChatModelOption } from './ChatInput';
-import { ChatToolbar } from './ChatToolbar';
+import { ChatInput, type ChatAgentOption, type FileAttachment } from './ChatInput';
+import { ChatToolbar, type ChatToolbarModelOption } from './ChatToolbar';
 import { extractImages, extractText, extractThinking, extractToolUse } from './message-utils';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -65,9 +66,38 @@ function resolveAccountModelLabel(
   };
 }
 
+function resolveAccountModelOptions(
+  account: ProviderAccount,
+  vendor?: ProviderVendorInfo
+): ChatToolbarModelOption[] {
+  const runtimeProviderKey = getRuntimeProviderKey(account);
+  const fallbackVendor = PROVIDER_TYPE_INFO.find((item) => item.id === account.vendorId);
+  const primaryModel = account.model || vendor?.defaultModelId || fallbackVendor?.defaultModelId;
+  const candidates = [primaryModel, ...(account.fallbackModels ?? [])]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
+  const seen = new Set<string>();
+
+  return candidates.flatMap((candidate) => {
+    const normalizedRef = candidate.startsWith(`${runtimeProviderKey}/`)
+      ? candidate
+      : `${runtimeProviderKey}/${candidate}`;
+    if (seen.has(normalizedRef)) {
+      return [];
+    }
+    seen.add(normalizedRef);
+    const modelName = normalizedRef.split('/').pop() || normalizedRef;
+    return [{
+      value: normalizedRef,
+      label: `${account.label} · ${modelName}`,
+      shortLabel: modelName,
+    }];
+  });
+}
+
 function normalizeSessionModelValue(
   currentModel: string | undefined,
-  options: ChatModelOption[]
+  options: ChatToolbarModelOption[]
 ): string | undefined {
   if (!currentModel) return undefined;
 
@@ -83,7 +113,7 @@ function normalizeSessionModelValue(
   return bySuffix?.value;
 }
 
-function dedupeModelOptions(options: ChatModelOption[]): ChatModelOption[] {
+function dedupeModelOptions(options: ChatToolbarModelOption[]): ChatToolbarModelOption[] {
   const seenValues = new Set<string>();
   const seenLabels = new Set<string>();
 
@@ -112,6 +142,8 @@ export function Chat() {
   const showThinking = useChatStore((s) => s.showThinking);
   const sessions = useChatStore((s) => s.sessions);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const currentAgentId = useChatStore((s) => s.currentAgentId);
+  const pendingLocalSessionKeys = useChatStore((s) => s.pendingLocalSessionKeys);
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
@@ -121,8 +153,11 @@ export function Chat() {
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
   const setSessionModel = useChatStore((s) => s.setSessionModel);
+  const newSession = useChatStore((s) => s.newSession);
 
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
+  const agents = useAgentsStore((s) => s.agents);
+  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const providerAccounts = useProviderStore((s) => s.accounts);
   const providerStatuses = useProviderStore((s) => s.statuses);
   const providerVendors = useProviderStore((s) => s.vendors);
@@ -159,6 +194,10 @@ export function Chat() {
   useEffect(() => {
     void refreshProviderSnapshot();
   }, [refreshProviderSnapshot]);
+
+  useEffect(() => {
+    void fetchAgents();
+  }, [fetchAgents]);
 
   // Auto-scroll on new messages, streaming, or activity changes
   useEffect(() => {
@@ -213,7 +252,7 @@ export function Chat() {
     () => new Map(providerVendors.map((vendor) => [vendor.id, vendor])),
     [providerVendors]
   );
-  const modelOptions = useMemo<ChatModelOption[]>(() => {
+  const modelOptions = useMemo<ChatToolbarModelOption[]>(() => {
     const baseOptions = providerAccounts
       .filter((account) => account.enabled)
       .filter(
@@ -223,18 +262,10 @@ export function Chat() {
           account.authMode === 'oauth_browser' ||
           Boolean(providerStatusMap.get(account.id)?.hasKey)
       )
-      .map((account) => {
+      .flatMap((account) => {
         const vendor = vendorMap.get(account.vendorId);
-        const { modelRef, modelName } = resolveAccountModelLabel(account, vendor);
-        if (!modelRef) return null;
-
-        return {
-          value: modelRef,
-          label: `${account.label} · ${modelName || modelRef}`,
-          shortLabel: modelName || modelRef,
-        };
+        return resolveAccountModelOptions(account, vendor);
       })
-      .filter((option): option is ChatModelOption => Boolean(option))
       .sort((left, right) => left.label.localeCompare(right.label));
 
     return dedupeModelOptions(baseOptions);
@@ -264,6 +295,25 @@ export function Chat() {
     () => normalizeSessionModelValue(defaultModelMeta.value, modelOptions),
     [defaultModelMeta.value, modelOptions]
   );
+  const agentOptions = useMemo<ChatAgentOption[]>(() => {
+    const sorted = [...agents].sort((left, right) => {
+      if (left.isDefault) return -1;
+      if (right.isDefault) return 1;
+      return left.name.localeCompare(right.name);
+    });
+    return sorted.map((agent) => ({
+      id: agent.id,
+      label: agent.name,
+    }));
+  }, [agents]);
+  const canSwitchAgent = Boolean(pendingLocalSessionKeys[currentSessionKey]);
+  const currentAgentLabel = useMemo(
+    () =>
+      agentOptions.find((option) => option.id === currentAgentId)?.label ||
+      agents.find((agent) => agent.id === currentAgentId)?.name ||
+      currentAgentId,
+    [agentOptions, agents, currentAgentId]
+  );
 
   useEffect(() => {
     if (!isGatewayRunning || providerLoading || !currentSession?.model || normalizedSelectedModel) {
@@ -289,7 +339,17 @@ export function Chat() {
     >
       {/* Toolbar */}
       <div className="flex shrink-0 items-center justify-end px-4 py-2">
-        <ChatToolbar />
+        <ChatToolbar
+          modelOptions={modelOptions}
+          selectedModel={normalizedSelectedModel}
+          defaultModelValue={normalizedDefaultModelValue}
+          defaultModelShortLabel={defaultModelMeta.shortLabel}
+          currentAgentLabel={currentAgentLabel}
+          showAgentLabel={!canSwitchAgent}
+          onModelChange={setSessionModel}
+          onConfigureModels={() => navigate('/models')}
+          modelDisabled={!isGatewayRunning}
+        />
       </div>
 
       {/* Messages Area */}
@@ -300,7 +360,16 @@ export function Chat() {
               <LoadingSpinner size="lg" />
             </div>
           ) : isEmpty ? (
-            <WelcomeScreen />
+            <WelcomeScreen
+              canSwitchAgent={canSwitchAgent}
+              currentAgentId={currentAgentId}
+              currentAgentLabel={currentAgentLabel}
+              agentOptions={agentOptions}
+              onAgentChange={(agentId) => {
+                if (agentId === currentAgentId) return;
+                newSession(agentId);
+              }}
+            />
           ) : (
             <>
               {messages.map((msg, idx) => (
@@ -371,18 +440,11 @@ export function Chat() {
 
       {/* Input Area */}
       <ChatInput
-        onSend={sendMessage}
+        onSend={(text: string, attachments?: FileAttachment[]) => sendMessage(text, attachments)}
         onStop={abortRun}
-        onConfigureModels={() => navigate('/models')}
         disabled={!isGatewayRunning}
         sending={sending}
         isEmpty={isEmpty}
-        modelOptions={modelOptions}
-        defaultModelShortLabel={defaultModelMeta.shortLabel}
-        defaultModelValue={normalizedDefaultModelValue}
-        selectedModel={normalizedSelectedModel}
-        onModelChange={setSessionModel}
-        modelDisabled={!isGatewayRunning}
       />
     </div>
   );
@@ -390,26 +452,122 @@ export function Chat() {
 
 // ── Welcome Screen ──────────────────────────────────────────────
 
-function WelcomeScreen() {
+function WelcomeScreen({
+  canSwitchAgent,
+  currentAgentId,
+  currentAgentLabel,
+  agentOptions,
+  onAgentChange,
+}: {
+  canSwitchAgent: boolean;
+  currentAgentId?: string;
+  currentAgentLabel?: string;
+  agentOptions: ChatAgentOption[];
+  onAgentChange: (agentId: string) => void;
+}) {
   const { t } = useTranslation('chat');
+  const [agentMenuOpen, setAgentMenuOpen] = useState(false);
+  const agentMenuRef = useRef<HTMLDivElement>(null);
   const welcomeActions = [
     t('welcome.askQuestions'),
     t('welcome.creativeTasks'),
     t('welcome.brainstorming'),
   ];
 
+  useEffect(() => {
+    if (!agentMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!agentMenuRef.current?.contains(event.target as Node)) {
+        setAgentMenuOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setAgentMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [agentMenuOpen]);
+
   return (
-    <div className="flex flex-col items-center justify-center text-center h-[60vh]">
+    <div className="flex h-[60vh] flex-col items-center justify-center text-center">
+      {canSwitchAgent ? (
+        <div className="mb-5 flex flex-col items-center gap-2">
+          <span className="text-[12px] font-medium uppercase tracking-[0.18em] text-foreground/40">
+            {t('welcome.agentEyebrow')}
+          </span>
+          <div className="relative" ref={agentMenuRef}>
+            <button
+              type="button"
+              aria-label={t('composer.agentAriaLabel')}
+              className="flex min-w-[220px] max-w-[280px] items-center gap-3 rounded-[14px] border border-black/10 bg-white/70 px-4 py-3 text-left transition-colors hover:border-black/20 hover:bg-white/90 dark:border-white/10 dark:bg-white/[0.05] dark:hover:border-white/20 dark:hover:bg-white/[0.08]"
+              onClick={() => setAgentMenuOpen((open) => !open)}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[15px] font-semibold text-foreground">
+                  {currentAgentLabel}
+                </div>
+                <div className="truncate text-[12px] text-foreground/55">
+                  {t('welcome.agentHelper')}
+                </div>
+              </div>
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+            </button>
+            {agentMenuOpen && (
+              <div className="absolute left-1/2 top-full z-50 mt-2 min-w-[260px] -translate-x-1/2 overflow-hidden rounded-[14px] border border-black/10 bg-card/95 p-1.5 text-left shadow-lg dark:border-white/10 dark:bg-card/95">
+                {agentOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className="flex w-full items-center gap-3 rounded-[10px] px-3 py-2.5 text-left text-[13px] text-foreground hover:bg-black/5 dark:hover:bg-white/5"
+                    onClick={() => {
+                      setAgentMenuOpen(false);
+                      if (option.id !== currentAgentId) {
+                        onAgentChange(option.id);
+                      }
+                    }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium">{option.label}</div>
+                      <div className="truncate text-[11px] text-foreground/55">
+                        {option.id === currentAgentId
+                          ? t('welcome.agentCurrent')
+                          : t('welcome.agentSwitchTo')}
+                      </div>
+                    </div>
+                    {currentAgentId === option.id ? (
+                      <Check className="h-4 w-4 shrink-0 text-primary" />
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       <h1 className="mb-3 text-5xl font-semibold tracking-tight text-foreground md:text-6xl">
         {t('welcome.title')}
       </h1>
-      <p className="text-[17px] text-foreground/80 mb-8 font-medium">{t('welcome.subtitle')}</p>
+      <p className="mb-3 max-w-2xl text-[18px] font-medium text-foreground/80">
+        {t('welcome.subtitle')}
+      </p>
+      <p className="mb-8 text-[14px] text-foreground/50">
+        {canSwitchAgent ? t('welcome.subtitleWithAgent') : t('welcome.subtitleHint')}
+      </p>
 
-      <div className="flex flex-wrap items-center justify-center gap-2.5 max-w-lg w-full">
+      <div className="flex w-full max-w-lg flex-wrap items-center justify-center gap-2.5">
         {welcomeActions.map((label, i) => (
           <button
             key={i}
-            className="px-4 py-1.5 rounded-full border border-black/10 dark:border-white/10 text-[13px] font-medium text-foreground/70 hover:bg-black/5 dark:hover:bg-white/5 transition-colors bg-black/[0.02]"
+            className="rounded-full border border-black/10 bg-black/[0.02] px-4 py-1.5 text-[13px] font-medium text-foreground/70 transition-colors hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
           >
             {label}
           </button>

@@ -189,11 +189,13 @@ export async function handleProviderRoutes(
         region?: 'global' | 'cn';
         accountId?: string;
         label?: string;
+        model?: string;
       }>(req);
       if (body.provider === 'google') {
         void browserOAuthManager.startFlow(body.provider, {
           accountId: body.accountId,
           label: body.label,
+          model: body.model,
         }).catch((error) => {
           logger.error('[providers] Browser OAuth start failed:', error);
         });
@@ -201,6 +203,7 @@ export async function handleProviderRoutes(
         void deviceOAuthManager.startFlow(body.provider, body.region, {
           accountId: body.accountId,
           label: body.label,
+          model: body.model,
         }).catch((error) => {
           logger.error('[providers] Device OAuth start failed:', error);
         });

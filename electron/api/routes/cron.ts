@@ -22,9 +22,59 @@ interface GatewayCronJob {
   };
 }
 
+function isUiManagedAgentTurn(job: GatewayCronJob): boolean {
+  return (job.sessionTarget === 'isolated' || !job.sessionTarget) && job.payload?.kind === 'agentTurn';
+}
+
+function needsDeliveryRepair(job: GatewayCronJob): boolean {
+  return isUiManagedAgentTurn(job) && (job.delivery?.mode ?? 'announce') !== 'none';
+}
+
+function clearChannelRequiredError(job: GatewayCronJob): void {
+  if (job.state?.lastError?.includes('Channel is required')) {
+    job.state.lastError = undefined;
+    job.state.lastStatus = 'ok';
+  }
+}
+
+function clearStaleUiDeliveryError(job: GatewayCronJob): void {
+  if (isUiManagedAgentTurn(job) && job.delivery?.mode === 'none') {
+    clearChannelRequiredError(job);
+  }
+}
+
+async function repairCronDeliveryIfNeeded(
+  ctx: HostApiContext,
+  job: GatewayCronJob,
+): Promise<GatewayCronJob> {
+  if (!needsDeliveryRepair(job)) {
+    return job;
+  }
+
+  try {
+    await ctx.gatewayManager.rpc('cron.update', {
+      id: job.id,
+      patch: { delivery: { mode: 'none' } },
+    });
+    job.delivery = { mode: 'none' };
+    clearChannelRequiredError(job);
+  } catch {
+    // ignore per-job repair failure
+  }
+
+  return job;
+}
+
+async function getCronJobById(ctx: HostApiContext, id: string): Promise<GatewayCronJob | undefined> {
+  const result = await ctx.gatewayManager.rpc('cron.list', { includeDisabled: true });
+  const data = result as { jobs?: GatewayCronJob[] };
+  return (data?.jobs ?? []).find((job) => job.id === id);
+}
+
 function transformCronJob(job: GatewayCronJob) {
   const message = job.payload?.message || job.payload?.text || '';
-  const channelType = job.delivery?.channel;
+  clearStaleUiDeliveryError(job);
+  const channelType = job.delivery?.mode === 'announce' ? job.delivery?.channel : undefined;
   const target = channelType
     ? { channelType, channelId: channelType, channelName: channelType }
     : undefined;
@@ -66,28 +116,7 @@ export async function handleCronRoutes(
       const data = result as { jobs?: GatewayCronJob[] };
       const jobs = data?.jobs ?? [];
       for (const job of jobs) {
-        const isIsolatedAgent =
-          (job.sessionTarget === 'isolated' || !job.sessionTarget) &&
-          job.payload?.kind === 'agentTurn';
-        const needsRepair =
-          isIsolatedAgent &&
-          job.delivery?.mode === 'announce' &&
-          !job.delivery?.channel;
-        if (needsRepair) {
-          try {
-            await ctx.gatewayManager.rpc('cron.update', {
-              id: job.id,
-              patch: { delivery: { mode: 'none' } },
-            });
-            job.delivery = { mode: 'none' };
-            if (job.state?.lastError?.includes('Channel is required')) {
-              job.state.lastError = undefined;
-              job.state.lastStatus = 'ok';
-            }
-          } catch {
-            // ignore per-job repair failure
-          }
-        }
+        await repairCronDeliveryIfNeeded(ctx, job);
       }
       sendJson(res, 200, jobs.map(transformCronJob));
     } catch (error) {
@@ -127,6 +156,10 @@ export async function handleCronRoutes(
         patch.payload = { kind: 'agentTurn', message: patch.message };
         delete patch.message;
       }
+      const current = await getCronJobById(ctx, id);
+      if (current && isUiManagedAgentTurn(current)) {
+        patch.delivery = { mode: 'none' };
+      }
       sendJson(res, 200, await ctx.gatewayManager.rpc('cron.update', { id, patch }));
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -157,6 +190,10 @@ export async function handleCronRoutes(
   if (url.pathname === '/api/cron/trigger' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ id: string }>(req);
+      const current = await getCronJobById(ctx, body.id);
+      if (current) {
+        await repairCronDeliveryIfNeeded(ctx, current);
+      }
       sendJson(res, 200, await ctx.gatewayManager.rpc('cron.run', { id: body.id, mode: 'force' }));
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
