@@ -276,7 +276,7 @@ export function Security() {
                       className="flex items-center justify-between gap-3 rounded-lg border px-3 py-3"
                     >
                       <code className="min-w-0 flex-1 break-all text-xs">{path}</code>
-                      <Button variant="ghost" size="icon" onClick={() => removePromptDir(path)}>
+                      <Button variant="dangerGhost" size="icon" className="h-8 w-8 rounded-[10px]" onClick={() => removePromptDir(path)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>

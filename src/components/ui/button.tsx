@@ -16,6 +16,8 @@ const buttonVariants = cva(
         default: 'bg-primary text-primary-foreground shadow-[0_8px_18px_rgba(37,99,235,0.24)] hover:bg-primary/92',
         destructive:
           'bg-destructive text-destructive-foreground shadow-[0_8px_20px_rgba(255,59,48,0.22)] hover:bg-destructive/90',
+        dangerGhost:
+          'border border-transparent bg-transparent text-muted-foreground shadow-none hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive',
         outline:
           'border border-border/80 bg-card/80 backdrop-blur hover:bg-accent/80 hover:text-accent-foreground',
         secondary:

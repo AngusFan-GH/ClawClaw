@@ -86,7 +86,7 @@ function normalizeOAuthSelectedModel(vendorId: string, modelId?: string | null):
   if (!normalized) {
     return '';
   }
-  if (vendorId === 'openai' && normalized === 'gpt-5.3-codex') {
+  if (vendorId === 'openai' && (normalized === 'gpt-5.2' || normalized === 'gpt-5.3-codex')) {
     return OPENAI_OAUTH_PREFERRED_MODEL_ID;
   }
   return normalized;
@@ -645,9 +645,9 @@ function ProviderCard({
               <Edit className="h-4 w-4" />
             </Button>
             <Button
-              variant="ghost"
+              variant="dangerGhost"
               size="icon"
-              className="h-8 w-8 rounded-full text-muted-foreground hover:text-destructive hover:bg-white dark:hover:bg-card shadow-sm"
+              className="h-8 w-8 rounded-[10px]"
               onClick={(event) => {
                 event.stopPropagation();
                 onDelete();

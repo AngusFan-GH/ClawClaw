@@ -45,7 +45,7 @@ const OPENAI_CODEX_DEFAULT_MODEL = 'gpt-5.4';
 
 function normalizeOpenAICodexModel(model?: string | null): string {
   const normalized = model?.trim() || '';
-  if (!normalized || normalized === 'gpt-5.3-codex') {
+  if (!normalized || normalized === 'gpt-5.2' || normalized === 'gpt-5.3-codex') {
     return OPENAI_CODEX_DEFAULT_MODEL;
   }
   return normalized;

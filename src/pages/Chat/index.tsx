@@ -5,7 +5,8 @@
  * are in the toolbar; messages render with markdown + streaming.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Check, ChevronDown, Sparkles } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { AlertCircle, Bot, Check, ChevronDown } from 'lucide-react';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
@@ -49,7 +50,7 @@ function normalizeAccountModel(account: ProviderAccount, model?: string): string
   if (
     account.vendorId === 'openai'
     && (account.authMode === 'oauth_browser' || account.authMode === 'oauth_device')
-    && model === 'gpt-5.3-codex'
+    && (model === 'gpt-5.2' || model === 'gpt-5.3-codex')
   ) {
     return 'gpt-5.4';
   }
@@ -204,6 +205,7 @@ export function Chat() {
   const clearError = useChatStore((s) => s.clearError);
   const setSessionModel = useChatStore((s) => s.setSessionModel);
   const newSession = useChatStore((s) => s.newSession);
+  const toggleThinking = useChatStore((s) => s.toggleThinking);
 
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
   const agents = useAgentsStore((s) => s.agents);
@@ -450,6 +452,7 @@ export function Chat() {
           onModelChange={setSessionModel}
           onConfigureModels={() => navigate('/models')}
           modelDisabled={!isGatewayRunning}
+          isEmpty={isEmpty}
         />
       </div>
 
@@ -543,9 +546,19 @@ export function Chat() {
       <ChatInput
         onSend={(text: string, attachments?: FileAttachment[]) => sendMessage(text, attachments)}
         onStop={abortRun}
+        onToggleThinking={toggleThinking}
+        resetKey={`${currentSessionKey || 'no-session'}:${isEmpty ? 'empty' : 'active'}`}
+        modelOptions={modelOptions}
+        selectedModel={normalizedSelectedModel}
+        defaultModelValue={normalizedDefaultModelValue}
+        defaultModelShortLabel={defaultModelMeta.shortLabel}
+        onModelChange={setSessionModel}
+        onConfigureModels={() => navigate('/models')}
+        modelDisabled={!isGatewayRunning}
         disabled={!isGatewayRunning}
         sending={sending}
         isEmpty={isEmpty}
+        showThinking={showThinking}
       />
     </div>
   );
@@ -569,6 +582,14 @@ function WelcomeScreen({
   const { t } = useTranslation('chat');
   const [agentMenuOpen, setAgentMenuOpen] = useState(false);
   const agentMenuRef = useRef<HTMLDivElement>(null);
+  const agentTriggerRef = useRef<HTMLButtonElement>(null);
+  const [agentMenuPosition, setAgentMenuPosition] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    compact: boolean;
+    maxHeight: number;
+  } | null>(null);
   const welcomeActions = [
     t('welcome.askQuestions'),
     t('welcome.creativeTasks'),
@@ -577,6 +598,21 @@ function WelcomeScreen({
 
   useEffect(() => {
     if (!agentMenuOpen) return;
+
+    const updatePosition = () => {
+      const rect = agentTriggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const compact = window.innerWidth < 640;
+      setAgentMenuPosition({
+        top: compact ? rect.top : rect.bottom + 8,
+        left: compact ? rect.left : rect.left + rect.width / 2,
+        width: rect.width,
+        compact,
+        maxHeight: Math.max(220, window.innerHeight - rect.top - 16),
+      });
+    };
+
+    updatePosition();
 
     const handlePointerDown = (event: MouseEvent) => {
       if (!agentMenuRef.current?.contains(event.target as Node)) {
@@ -591,88 +627,94 @@ function WelcomeScreen({
 
     window.addEventListener('mousedown', handlePointerDown);
     window.addEventListener('keydown', handleEscape);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
     return () => {
       window.removeEventListener('mousedown', handlePointerDown);
       window.removeEventListener('keydown', handleEscape);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
     };
   }, [agentMenuOpen]);
 
   return (
-    <div className="flex h-[60vh] flex-col items-center justify-center text-center">
-      {canSwitchAgent ? (
-        <div className="mb-5 flex flex-col items-center gap-2">
-          <span className="text-[12px] font-medium uppercase tracking-[0.18em] text-foreground/40">
-            {t('welcome.agentEyebrow')}
-          </span>
-          <div className="relative" ref={agentMenuRef}>
-            <button
-              type="button"
-              aria-label={t('composer.agentAriaLabel')}
-              className="flex min-w-[220px] max-w-[280px] items-center gap-3 rounded-[14px] border border-black/10 bg-white/70 px-4 py-3 text-left transition-colors hover:border-black/20 hover:bg-white/90 dark:border-white/10 dark:bg-white/[0.05] dark:hover:border-white/20 dark:hover:bg-white/[0.08]"
-              onClick={() => setAgentMenuOpen((open) => !open)}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[15px] font-semibold text-foreground">
-                  {currentAgentLabel}
-                </div>
-                <div className="truncate text-[12px] text-foreground/55">
-                  {t('welcome.agentHelper')}
-                </div>
-              </div>
-              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-            </button>
-            {agentMenuOpen && (
-              <div className="absolute left-1/2 top-full z-50 mt-2 min-w-[260px] -translate-x-1/2 overflow-hidden rounded-[14px] border border-black/10 bg-card/95 p-1.5 text-left shadow-lg dark:border-white/10 dark:bg-card/95">
-                {agentOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className="flex w-full items-center gap-3 rounded-[10px] px-3 py-2.5 text-left text-[13px] text-foreground hover:bg-black/5 dark:hover:bg-white/5"
-                    onClick={() => {
-                      setAgentMenuOpen(false);
-                      if (option.id !== currentAgentId) {
-                        onAgentChange(option.id);
-                      }
-                    }}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{option.label}</div>
-                      <div className="truncate text-[11px] text-foreground/55">
-                        {option.id === currentAgentId
-                          ? t('welcome.agentCurrent')
-                          : t('welcome.agentSwitchTo')}
-                      </div>
-                    </div>
-                    {currentAgentId === option.id ? (
-                      <Check className="h-4 w-4 shrink-0 text-primary" />
-                    ) : null}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      ) : null}
-
-      <h1 className="mb-3 text-5xl font-semibold tracking-tight text-foreground md:text-6xl">
+    <div className="flex h-[52vh] flex-col items-center justify-center px-4 text-center sm:h-[58vh]">
+      <h1 className="text-[clamp(2.25rem,7vw,3.75rem)] font-semibold leading-[1.08] tracking-[-0.05em] text-foreground">
         {t('welcome.title')}
       </h1>
-      <p className="mb-3 max-w-2xl text-[18px] font-medium text-foreground/80">
+      <p className="mt-3 max-w-2xl text-[15px] font-medium text-foreground/52 sm:mt-4 sm:text-[18px]">
         {t('welcome.subtitle')}
       </p>
-      <p className="mb-8 text-[14px] text-foreground/50">
-        {canSwitchAgent ? t('welcome.subtitleWithAgent') : t('welcome.subtitleHint')}
-      </p>
 
-      <div className="flex w-full max-w-lg flex-wrap items-center justify-center gap-2.5">
-        {welcomeActions.map((label, i) => (
-          <button
-            key={i}
-            className="rounded-full border border-black/10 bg-black/[0.02] px-4 py-1.5 text-[13px] font-medium text-foreground/70 transition-colors hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
-          >
-            {label}
-          </button>
-        ))}
+      <div className="mt-8 w-full max-w-[360px] relative sm:mt-10" ref={agentMenuRef}>
+        <button
+          ref={agentTriggerRef}
+          type="button"
+          aria-label={t('composer.agentAriaLabel')}
+          className={cn(
+            'flex w-full items-center gap-3 rounded-[14px] border border-black/10 bg-white/80 px-4 py-3.5 text-left transition-colors hover:border-black/20 hover:bg-white/90 dark:border-white/10 dark:bg-white/[0.05] dark:hover:border-white/20 dark:hover:bg-white/[0.08] sm:gap-4 sm:px-5 sm:py-4',
+            agentMenuOpen && agentMenuPosition?.compact && 'invisible'
+          )}
+          onClick={() => {
+            if (canSwitchAgent) {
+              setAgentMenuOpen((open) => !open);
+            }
+          }}
+        >
+          <div className="min-w-0 flex-1">
+            <div className="text-[12px] text-foreground/40 sm:text-[13px]">
+              {t('welcome.agentEyebrow')}
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+              <div className="truncate text-[17px] font-semibold text-foreground sm:text-[18px]">
+                {currentAgentLabel}
+              </div>
+            </div>
+          </div>
+          {canSwitchAgent ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : null}
+        </button>
+        {agentMenuOpen && canSwitchAgent && agentMenuPosition
+          ? createPortal(
+              <div
+                ref={agentMenuRef}
+                className="fixed z-[120] overflow-hidden rounded-[14px] border border-black/10 bg-card/95 p-1.5 text-left shadow-lg dark:border-white/10 dark:bg-card/95"
+                style={{
+                  top: agentMenuPosition.top,
+                  left: agentMenuPosition.left,
+                  width: agentMenuPosition.compact
+                    ? Math.min(agentMenuPosition.width, window.innerWidth - 32)
+                    : Math.max(agentMenuPosition.width, Math.min(window.innerWidth - 32, 320)),
+                  transform: agentMenuPosition.compact ? 'none' : 'translateX(-50%)',
+                  maxHeight: agentMenuPosition.maxHeight,
+                }}
+              >
+                <div className="max-h-[inherit] overflow-y-auto">
+                  {agentOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className="flex w-full items-center gap-3 rounded-[10px] px-3 py-2.5 text-left text-[13px] text-foreground hover:bg-black/5 dark:hover:bg-white/5"
+                      onClick={() => {
+                        setAgentMenuOpen(false);
+                        if (option.id !== currentAgentId) {
+                          onAgentChange(option.id);
+                        }
+                      }}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">{option.label}</div>
+                      </div>
+                      {currentAgentId === option.id ? (
+                        <Check className="h-4 w-4 shrink-0 text-primary" />
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              </div>,
+              document.body
+            )
+          : null}
       </div>
     </div>
   );
@@ -682,22 +724,22 @@ function WelcomeScreen({
 
 function TypingIndicator() {
   return (
-    <div className="flex gap-3">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
-        <Sparkles className="h-4 w-4" />
+    <div className="flex items-center gap-3 px-1">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] border border-slate-200/90 bg-slate-50 text-slate-700 shadow-[0_6px_20px_rgba(15,23,42,0.05)] dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-200">
+        <Bot className="h-[18px] w-[18px]" />
       </div>
-      <div className="bg-muted rounded-2xl px-4 py-3">
-        <div className="flex gap-1">
+      <div className="rounded-[16px] border border-slate-200/80 bg-slate-50 px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
+        <div className="flex gap-1.5">
           <span
-            className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce"
+            className="h-3 w-3 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
             style={{ animationDelay: '0ms' }}
           />
           <span
-            className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce"
+            className="h-3 w-3 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
             style={{ animationDelay: '150ms' }}
           />
           <span
-            className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce"
+            className="h-3 w-3 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
             style={{ animationDelay: '300ms' }}
           />
         </div>
@@ -712,13 +754,13 @@ function ActivityIndicator({ phase }: { phase: 'tool_processing' }) {
   const { t } = useTranslation('chat');
   void phase;
   return (
-    <div className="flex gap-3">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
-        <Sparkles className="h-4 w-4" />
+    <div className="flex items-center gap-3 px-1">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] border border-slate-200/90 bg-slate-50 text-slate-700 shadow-[0_6px_20px_rgba(15,23,42,0.05)] dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-200">
+        <Bot className="h-[18px] w-[18px]" />
       </div>
-      <div className="bg-muted rounded-2xl px-4 py-3">
+      <div className="rounded-[16px] border border-slate-200/80 bg-slate-50 px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <LoadingIcon className="h-3.5 w-3.5 text-primary" />
+          <LoadingIcon className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
           <span>{t('status.processingToolResults')}</span>
         </div>
       </div>

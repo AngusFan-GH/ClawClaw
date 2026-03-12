@@ -196,9 +196,11 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
             name: s.name || s.skillKey,
             description: s.description || '',
             enabled: !s.disabled,
+            runtimeEnabled: !s.disabled,
             installedOnDisk: s.bundled || installedVersionBySlug.has(skillSlug),
             loadedInGateway: true,
             runtimeStatus: 'loaded',
+            runtimeReason: undefined,
             icon: normalizeSkillIcon(s.emoji, metadata?.emoji, previous?.icon),
             version: version || '',
             author: s.author,
@@ -214,8 +216,14 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
           };
         });
       } else if (currentSkills.length > 0) {
-        // ... if gateway down ...
-        combinedSkills = [...currentSkills];
+        combinedSkills = currentSkills.map((skill) => ({
+          ...skill,
+          enabled: Boolean(skill.runtimeEnabled ?? skill.enabled),
+          runtimeEnabled: false,
+          loadedInGateway: false,
+          runtimeStatus: 'unknown',
+          runtimeReason: 'gateway_offline',
+        }));
       }
 
       // Merge with ClawHub results
@@ -233,9 +241,11 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
               name: previous?.name || cs.slug,
               description: previous?.description || 'Recently installed, initializing...',
               enabled: previous?.enabled || false,
+              runtimeEnabled: false,
               installedOnDisk: true,
               loadedInGateway: false,
               runtimeStatus: gatewayData ? 'not_loaded' : 'unknown',
+              runtimeReason: gatewayData ? 'not_loaded' : 'gateway_offline',
               runtimeError: undefined,
               icon: normalizeSkillIcon(previous?.icon, metadata?.emoji, '⌛'),
               version: cs.version || previous?.version || '',
@@ -355,10 +365,25 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
 
   enableSkill: async (skillId) => {
     const { updateSkill } = get();
+    const gatewayStatus = useGatewayStore.getState().status;
+    const skill = get().skills.find((s) => s.id === skillId);
+
+    if (gatewayStatus.state !== 'running') {
+      throw new Error('Gateway is not running');
+    }
+    if (!skill?.loadedInGateway) {
+      throw new Error('Skill is not loaded in Gateway');
+    }
 
     try {
       await useGatewayStore.getState().rpc('skills.update', { skillKey: skillId, enabled: true });
-      updateSkill(skillId, { enabled: true });
+      updateSkill(skillId, {
+        enabled: true,
+        runtimeEnabled: true,
+        loadedInGateway: true,
+        runtimeStatus: 'loaded',
+        runtimeReason: undefined,
+      });
     } catch (error) {
       console.error('Failed to enable skill:', error);
       throw error;
@@ -367,15 +392,28 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
 
   disableSkill: async (skillId) => {
     const { updateSkill, skills } = get();
+    const gatewayStatus = useGatewayStore.getState().status;
 
     const skill = skills.find((s) => s.id === skillId);
     if (skill?.isCore) {
       throw new Error('Cannot disable core skill');
     }
+    if (gatewayStatus.state !== 'running') {
+      throw new Error('Gateway is not running');
+    }
+    if (!skill?.loadedInGateway) {
+      throw new Error('Skill is not loaded in Gateway');
+    }
 
     try {
       await useGatewayStore.getState().rpc('skills.update', { skillKey: skillId, enabled: false });
-      updateSkill(skillId, { enabled: false });
+      updateSkill(skillId, {
+        enabled: false,
+        runtimeEnabled: false,
+        loadedInGateway: true,
+        runtimeStatus: 'loaded',
+        runtimeReason: undefined,
+      });
     } catch (error) {
       console.error('Failed to disable skill:', error);
       throw error;

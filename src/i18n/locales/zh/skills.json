@@ -16,6 +16,8 @@
         "loadedEnabled": "已加载并启用",
         "loaded": "已加载到网关",
         "installedOnly": "仅安装",
+        "gatewayOffline": "网关离线",
+        "loadFailed": "加载失败",
         "runtimeUnknown": "运行态未知"
     },
     "gatewayWarning": "网关未运行。没有活跃的网关，无法加载技能。",
@@ -89,6 +91,8 @@
         "failedOpenFolder": "无法打开技能文件夹",
         "failedInstall": "安装失败",
         "failedUninstall": "卸载失败",
+        "gatewayRequired": "需要先启动网关后才能切换技能状态。",
+        "skillNotLoaded": "这个技能当前还没有被网关加载，无法直接切换。",
         "failedFolderNotFound": "技能文件夹尚不存在，请先安装一个技能。",
         "searchTimeoutError": "搜索超时，请检查网络。您也可访问 ClawHub.ai 搜索并下载压缩包，解压到 \"{{path}}\"",
         "installTimeoutError": "安装超时，请检查网络。您也可在 ClawHub.ai 下载该技能压缩包，解压到 \"{{path}}\"",
@@ -113,6 +117,8 @@
         "securityNote": "安装前请点击技能卡片，在 ClawHub 上查看其文档和安全信息。",
         "manualInstallHint": "遇到网络问题？您可以随时从 ClawHub.ai 下载技能压缩包，并将其解压至 \"{{path}}\" 目录来完成手动安装。",
         "searching": "正在搜索 ClawHub...",
+        "searchingTitle": "正在搜索技能市场",
+        "searchingDescription": "正在从 ClawHub 获取匹配结果，请稍候。",
         "noResults": "未找到匹配的技能。",
         "emptyPrompt": "搜索新技能以扩展您的能力。",
         "searchError": "ClawHub 搜索失败。请检查您的连接或安装。"

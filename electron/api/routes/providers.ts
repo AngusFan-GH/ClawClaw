@@ -38,7 +38,10 @@ const OPENAI_OAUTH_RUNTIME_PROVIDER = 'openai-codex';
 const OPENAI_OAUTH_PREFERRED_MODEL = 'gpt-5.4';
 
 function normalizeProviderModelId(runtimeProviderId: string, modelId: string): string {
-  if (runtimeProviderId === OPENAI_OAUTH_RUNTIME_PROVIDER && modelId === 'gpt-5.3-codex') {
+  if (
+    runtimeProviderId === OPENAI_OAUTH_RUNTIME_PROVIDER
+    && (modelId === 'gpt-5.2' || modelId === 'gpt-5.3-codex')
+  ) {
     return OPENAI_OAUTH_PREFERRED_MODEL;
   }
   return modelId;

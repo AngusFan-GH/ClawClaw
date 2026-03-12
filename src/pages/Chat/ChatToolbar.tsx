@@ -3,7 +3,7 @@
  * Model selector, gateway status, refresh, and thinking toggle.
  * Rendered in the Header when on the Chat page.
  */
-import { RefreshCw, Brain, Check, ChevronsUpDown } from 'lucide-react';
+import { RefreshCw, Brain, Check, ChevronsUpDown, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -30,6 +30,7 @@ export function ChatToolbar({
   onModelChange,
   onConfigureModels,
   modelDisabled = false,
+  isEmpty = false,
 }: {
   modelOptions?: ChatToolbarModelOption[];
   selectedModel?: string;
@@ -40,6 +41,7 @@ export function ChatToolbar({
   onModelChange?: (model?: string) => void | Promise<void>;
   onConfigureModels?: () => void;
   modelDisabled?: boolean;
+  isEmpty?: boolean;
 }) {
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const modelMenuRef = useRef<HTMLDivElement>(null);
@@ -55,6 +57,8 @@ export function ChatToolbar({
   const selectedOption = modelOptions.find((option) => option.value === currentModelValue);
   const currentModelShortLabel =
     selectedOption?.shortLabel || defaultModelShortLabel || t('chat:composer.defaultModel');
+  void hasModelOptions;
+  void currentModelShortLabel;
 
   useEffect(() => {
     if (!modelMenuOpen) return;
@@ -90,86 +94,94 @@ export function ChatToolbar({
   return (
     <div className="flex w-full items-center justify-between gap-3">
       <div className="flex min-w-0 items-center">
-        <div className="flex min-w-0 items-center gap-2">
-          {showAgentLabel && currentAgentLabel ? (
-            <div
-              className="flex h-8 max-w-[140px] items-center rounded-[10px] border border-black/10 bg-white/80 px-3 text-[12px] text-foreground/80 dark:border-white/10 dark:bg-white/[0.06]"
-              title={currentAgentLabel}
-            >
-              <span className="truncate font-medium">{currentAgentLabel}</span>
-            </div>
-          ) : null}
-          {hasModelOptions ? (
-            <div className="relative" ref={modelMenuRef}>
-              <button
-                type="button"
-                aria-label={t('chat:composer.modelAriaLabel')}
-                className="flex h-8 min-w-[132px] max-w-[180px] items-center gap-2 rounded-[10px] border border-black/10 bg-white/80 px-3 text-left text-[12px] text-foreground transition-colors hover:border-black/20 dark:border-white/10 dark:bg-white/[0.06] dark:hover:border-white/20"
-                disabled={loading || modelDisabled}
-                onClick={() => setModelMenuOpen((open) => !open)}
-              >
-                <span className="truncate font-medium">{currentModelShortLabel}</span>
-                <ChevronsUpDown className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              </button>
-              {modelMenuOpen && (
-                <div className="absolute left-0 top-full z-50 mt-2 min-w-[220px] overflow-hidden rounded-[10px] border border-black/10 bg-card/95 p-1 dark:border-white/10 dark:bg-card/95">
-                  {modelOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left text-[13px] text-foreground hover:bg-black/5 dark:hover:bg-white/5"
-                      onClick={() => {
-                        setModelMenuOpen(false);
-                        void onModelChange?.(
-                          selectedModel && defaultModelValue && option.value === defaultModelValue
-                            ? undefined
-                            : option.value
-                        );
-                      }}
-                    >
-                      <span className="flex-1 truncate">{option.label}</span>
-                      {currentModelValue === option.value && (
-                        <Check className="h-3.5 w-3.5 shrink-0" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : onConfigureModels ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onConfigureModels}
-              className="h-8 rounded-[10px] border-black/10 bg-white/80 px-3 text-[12px] font-medium text-foreground/80 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:bg-white/[0.06] dark:hover:bg-white/5"
-            >
-              {t('chat:composer.configureModels')}
-            </Button>
-          ) : null}
-        </div>
+        {showAgentLabel && currentAgentLabel ? (
+          <div
+            className="flex h-8 max-w-[140px] items-center rounded-[10px] border border-black/10 bg-white/80 px-3 text-[12px] text-foreground/80 dark:border-white/10 dark:bg-white/[0.06]"
+            title={currentAgentLabel}
+          >
+            <span className="truncate font-medium">{currentAgentLabel}</span>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        <Badge
-          variant="secondary"
-          className={cn(
-            'h-8 rounded-[10px] border px-3 text-[12px]',
-            gatewayStatus.state === 'running'
-              ? 'border-green-500/20 bg-green-500/10 text-green-600 dark:text-green-500'
-              : gatewayStatus.state === 'error'
-                ? 'border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-500'
-                : 'border-black/10 bg-white/80 text-muted-foreground dark:border-white/10 dark:bg-white/[0.06]'
-          )}
-        >
-          {gatewayStatusLabel}
-        </Badge>
+        {isEmpty ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  'relative h-10 w-10 rounded-[12px] border shadow-none',
+                  gatewayStatus.state === 'running'
+                    ? 'border-emerald-500/40 bg-emerald-500/12 text-emerald-600 hover:bg-emerald-500/16 dark:text-emerald-400'
+                    : gatewayStatus.state === 'error'
+                      ? 'border-red-500/35 bg-red-500/10 text-red-600 hover:bg-red-500/14 dark:text-red-400'
+                      : gatewayStatus.state === 'starting'
+                        ? 'border-sky-500/35 bg-sky-500/10 text-sky-600 hover:bg-sky-500/14 dark:text-sky-400'
+                        : 'border-black/10 bg-white/80 text-muted-foreground/80 hover:bg-black/5 dark:border-white/10 dark:bg-white/[0.06] dark:hover:bg-white/5'
+                )}
+                disabled
+              >
+                {gatewayStatus.state === 'starting' ? (
+                  <>
+                    <span className="absolute inset-0 rounded-[12px] border border-sky-500/30 animate-ping" />
+                    <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-sky-500 shadow-[0_0_0_2px_rgba(255,255,255,0.9)] dark:shadow-[0_0_0_2px_rgba(17,24,39,0.9)]" />
+                  </>
+                ) : gatewayStatus.state === 'running' ? (
+                  <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_2px_rgba(255,255,255,0.9)] dark:shadow-[0_0_0_2px_rgba(17,24,39,0.9)]" />
+                ) : gatewayStatus.state === 'error' ? (
+                  <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 shadow-[0_0_0_2px_rgba(255,255,255,0.9)] dark:shadow-[0_0_0_2px_rgba(17,24,39,0.9)]" />
+                ) : null}
+                <Link2 className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{gatewayStatusLabel}</p>
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <Badge
+            variant="secondary"
+            className={cn(
+              'h-8 rounded-[10px] border px-3 text-[12px]',
+              gatewayStatus.state === 'running'
+                ? 'border-emerald-500/30 bg-emerald-500/12 text-emerald-700 dark:text-emerald-400'
+                : gatewayStatus.state === 'error'
+                  ? 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
+                  : gatewayStatus.state === 'starting'
+                    ? 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400'
+                    : 'border-black/10 bg-white/80 text-muted-foreground dark:border-white/10 dark:bg-white/[0.06]'
+            )}
+          >
+            <span className="inline-flex items-center gap-2">
+              <span
+                className={cn(
+                  'h-2 w-2 rounded-full',
+                  gatewayStatus.state === 'running'
+                    ? 'bg-emerald-500'
+                    : gatewayStatus.state === 'error'
+                      ? 'bg-red-500'
+                      : gatewayStatus.state === 'starting'
+                        ? 'bg-sky-500 animate-pulse'
+                        : 'bg-muted-foreground/60'
+                )}
+              />
+              {gatewayStatusLabel}
+            </span>
+          </Badge>
+        )}
 
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className={cn(
+                isEmpty
+                  ? 'h-10 w-10 rounded-[12px] border border-black/10 bg-white/80 shadow-none hover:bg-black/5 dark:border-white/10 dark:bg-white/[0.06] dark:hover:bg-white/5'
+                  : 'h-8 w-8'
+              )}
               onClick={() => refresh()}
               disabled={loading}
             >
@@ -181,24 +193,7 @@ export function ChatToolbar({
           </TooltipContent>
         </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                'h-8 w-8',
-                showThinking && 'bg-primary/10 text-primary',
-              )}
-              onClick={toggleThinking}
-            >
-              <Brain className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>{showThinking ? t('toolbar.hideThinking') : t('toolbar.showThinking')}</p>
-          </TooltipContent>
-        </Tooltip>
+        {null}
       </div>
     </div>
   );

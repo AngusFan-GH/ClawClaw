@@ -738,7 +738,7 @@ function normalizeOAuthSelectedModel(vendorId: string, modelId?: string | null):
   if (!normalized) {
     return '';
   }
-  if (vendorId === 'openai' && normalized === 'gpt-5.3-codex') {
+  if (vendorId === 'openai' && (normalized === 'gpt-5.2' || normalized === 'gpt-5.3-codex')) {
     return OPENAI_OAUTH_PREFERRED_MODEL_ID;
   }
   return normalized;

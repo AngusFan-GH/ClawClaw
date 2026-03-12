@@ -372,9 +372,9 @@ function ChannelCard({ channel, onClick, onDelete }: ChannelCardProps) {
           </div>
 
           <Button
-            variant="ghost"
+            variant="dangerGhost"
             size="icon"
-            className="opacity-0 group-hover:opacity-100 h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all shrink-0 -mr-2"
+            className="opacity-0 group-hover:opacity-100 h-8 w-8 rounded-[10px] transition-all shrink-0 -mr-2"
             onClick={(event) => {
               event.stopPropagation();
               onDelete();

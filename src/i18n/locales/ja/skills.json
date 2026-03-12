@@ -16,6 +16,8 @@
         "loadedEnabled": "ロード済みかつ有効",
         "loaded": "Gateway にロード済み",
         "installedOnly": "インストールのみ",
+        "gatewayOffline": "Gateway オフライン",
+        "loadFailed": "読み込み失敗",
         "runtimeUnknown": "ランタイム不明"
     },
     "gatewayWarning": "ゲートウェイが稼働していません。アクティブなゲートウェイがないとスキルを読み込めません。",
@@ -79,6 +81,8 @@
         "failedOpenFolder": "スキルフォルダを開けませんでした",
         "failedInstall": "インストールに失敗しました",
         "failedUninstall": "アンインストールに失敗しました",
+        "gatewayRequired": "スキル状態を切り替える前に Gateway を起動してください。",
+        "skillNotLoaded": "このスキルはまだ Gateway に読み込まれていません。",
         "failedFolderNotFound": "スキルフォルダがまだ存在しません。先にスキルをインストールしてください。",
         "searchTimeoutError": "検索がタイムアウトしました。ClawHub.aiで検索してZIPをダウンロードし、\"{{path}}\" に展開することも可能です",
         "installTimeoutError": "インストールがタイムアウトしました。ClawHub.aiでZIPをダウンロードし、\"{{path}}\" に展開することも可能です",
@@ -97,6 +101,8 @@
         "securityNote": "インストール前にスキルカードをクリックして、ClawHubでドキュメントとセキュリティ情報を確認してください。",
         "manualInstallHint": "ネットワークに問題がありますか？いつでもClawHub.aiからスキルのZIPをダウンロードし、手動で \"{{path}}\" に展開してインストールできます。",
         "searching": "ClawHubを検索中...",
+        "searchingTitle": "マーケットプレイスを検索中",
+        "searchingDescription": "ClawHub から一致するスキルを取得しています。しばらくお待ちください。",
         "noResults": "検索に一致するスキルが見つかりません。",
         "emptyPrompt": "新しいスキルを検索して機能を拡張しましょう。",
         "searchError": "ClawHub検索に失敗しました。接続またはインストールを確認してください。"

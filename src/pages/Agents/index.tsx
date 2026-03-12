@@ -268,9 +268,9 @@ function AgentCard({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
-                        variant="ghost"
+                        variant="dangerGhost"
                         size="icon"
-                        className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        className="h-8 w-8 rounded-[10px]"
                         onClick={onDelete}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -586,9 +586,9 @@ function AgentSettingsModal({
                     <div className="flex items-center gap-2 shrink-0">
                       <StatusBadge status={channel.status} label={channel.statusLabel} />
                       <Button
-                        variant="ghost"
+                        variant="dangerGhost"
                         size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        className="h-8 w-8 rounded-[10px]"
                         onClick={() => setChannelToRemove(channel.channelType)}
                       >
                         <Trash2 className="h-4 w-4" />

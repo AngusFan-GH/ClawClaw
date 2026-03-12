@@ -12,9 +12,11 @@ export interface Skill {
   name: string;
   description: string;
   enabled: boolean;
+  runtimeEnabled?: boolean;
   installedOnDisk?: boolean;
   loadedInGateway?: boolean;
   runtimeStatus?: 'loaded' | 'not_loaded' | 'unknown';
+  runtimeReason?: 'gateway_offline' | 'not_loaded' | 'load_failed' | 'unknown';
   runtimeError?: string;
   icon?: string;
   version?: string;

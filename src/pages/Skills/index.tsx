@@ -73,10 +73,11 @@ interface SkillDetailDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onToggle: (enabled: boolean) => void;
+  canToggle: boolean;
   onUninstall?: (slug: string) => void;
 }
 
-function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall }: SkillDetailDialogProps) {
+function SkillDetailDialog({ skill, isOpen, onClose, onToggle, canToggle, onUninstall }: SkillDetailDialogProps) {
   const { t } = useTranslation('skills');
   const { fetchSkills } = useSkillsStore();
   const [envVars, setEnvVars] = useState<Array<{ key: string; value: string }>>([]);
@@ -231,7 +232,7 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall }: Sk
                 <Badge variant="secondary" className="rounded-[10px] border-0 bg-black/[0.05] px-2.5 py-1 text-[10px] font-medium text-foreground/70 dark:bg-white/[0.08]">
                   {skill.isCore ? t('detail.coreSystem') : skill.isBundled ? t('detail.bundled') : t('detail.userInstalled')}
                 </Badge>
-                {skill.version ? (
+                {skill.version && !skill.isBundled ? (
                   <span className="font-mono text-[11px] text-foreground/45">v{skill.version}</span>
                 ) : null}
               </div>
@@ -386,9 +387,10 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall }: Sk
               <Button
                 variant="outline"
                 className="h-[42px] flex-1 rounded-[10px] border-black/20 bg-transparent text-[13px] font-semibold text-foreground/80 transition-colors hover:bg-black/5 hover:text-foreground dark:border-white/20 dark:hover:bg-white/5"
-                onClick={() => onToggle(!skill.enabled)}
+                onClick={() => onToggle(!(skill.runtimeEnabled ?? skill.enabled))}
+                disabled={!canToggle}
               >
-                {skill.enabled ? t('detail.disable') : t('detail.enable')}
+                {(skill.runtimeEnabled ?? skill.enabled) ? t('detail.disable') : t('detail.enable')}
               </Button>
             )}
 
@@ -413,19 +415,30 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall }: Sk
 
 interface SkillGridCardProps {
   skill: Skill;
+  isGatewayRunning: boolean;
   onClick: () => void;
   onToggle: (skillId: string, enable: boolean) => void;
 }
 
-function SkillGridCard({ skill, onClick, onToggle }: SkillGridCardProps) {
+function SkillGridCard({ skill, isGatewayRunning, onClick, onToggle }: SkillGridCardProps) {
   const { t } = useTranslation('skills');
-  const installLabel = skill.installedOnDisk ? t('status.installed') : t('status.notInstalled');
+  const runtimeEnabled = skill.runtimeEnabled ?? (skill.loadedInGateway ? skill.enabled : false);
   const runtimeLabel =
-    skill.loadedInGateway
-      ? (skill.enabled ? t('status.loadedEnabled') : t('status.loaded'))
-      : skill.runtimeStatus === 'not_loaded'
-        ? t('status.installedOnly')
-        : t('status.runtimeUnknown');
+    skill.runtimeError
+      ? t('status.loadFailed')
+      : skill.loadedInGateway
+        ? (runtimeEnabled ? t('status.loadedEnabled') : t('status.loaded'))
+        : skill.runtimeReason === 'gateway_offline'
+          ? t('status.gatewayOffline')
+          : skill.runtimeReason === 'not_loaded'
+            ? t('status.installedOnly')
+            : t('status.runtimeUnknown');
+  const canToggle = isGatewayRunning && Boolean(skill.loadedInGateway) && !skill.isCore;
+  const runtimeBadgeClass = skill.runtimeError
+    ? 'bg-destructive/10 text-destructive'
+    : skill.loadedInGateway
+      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+      : 'bg-amber-500/10 text-amber-700 dark:text-amber-300';
 
   return (
     <div
@@ -450,8 +463,6 @@ function SkillGridCard({ skill, onClick, onToggle }: SkillGridCardProps) {
               <h3 className="truncate text-[15px] font-semibold tracking-[-0.02em] text-foreground">{skill.name}</h3>
               {skill.isCore ? (
                 <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              ) : skill.isBundled ? (
-                <Puzzle className="h-3.5 w-3.5 shrink-0 text-blue-500/70" />
               ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
@@ -463,17 +474,14 @@ function SkillGridCard({ skill, onClick, onToggle }: SkillGridCardProps) {
               </Badge>
               <Badge
                 variant="secondary"
-                className="h-6 rounded-[10px] border-0 bg-blue-500/10 px-2.5 py-0 text-[10px] font-medium text-blue-700 dark:text-blue-300"
-              >
-                {installLabel}
-              </Badge>
-              <Badge
-                variant="secondary"
-                className="h-6 rounded-[10px] border-0 bg-emerald-500/10 px-2.5 py-0 text-[10px] font-medium text-emerald-700 dark:text-emerald-300"
+                className={cn(
+                  'h-6 rounded-[10px] border-0 px-2.5 py-0 text-[10px] font-medium',
+                  runtimeBadgeClass,
+                )}
               >
                 {runtimeLabel}
               </Badge>
-              {skill.version ? (
+              {skill.version && !skill.isBundled ? (
                 <span className="font-mono text-[11px] text-foreground/45">
                   v{skill.version}
                 </span>
@@ -484,9 +492,9 @@ function SkillGridCard({ skill, onClick, onToggle }: SkillGridCardProps) {
 
         <div className="shrink-0 pl-2 pt-1" onClick={(event) => event.stopPropagation()}>
           <Switch
-            checked={skill.enabled}
+            checked={runtimeEnabled}
             onCheckedChange={(checked) => onToggle(skill.id, checked)}
-            disabled={skill.isCore}
+            disabled={!canToggle}
             className="h-7 w-12 border border-border/70 bg-muted data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=unchecked]:bg-muted"
           />
         </div>
@@ -673,8 +681,10 @@ export function Skills() {
     return matchesSearch && matchesSource;
   }).sort((a, b) => {
     // Enabled skills first
-    if (a.enabled && !b.enabled) return -1;
-    if (!a.enabled && b.enabled) return 1;
+    const aRuntimeEnabled = a.runtimeEnabled ?? false;
+    const bRuntimeEnabled = b.runtimeEnabled ?? false;
+    if (aRuntimeEnabled && !bRuntimeEnabled) return -1;
+    if (!aRuntimeEnabled && bRuntimeEnabled) return 1;
     // Then core/bundled
     if (a.isCore && !b.isCore) return -1;
     if (!a.isCore && b.isCore) return 1;
@@ -687,12 +697,18 @@ export function Skills() {
     builtIn: safeSkills.filter(s => s.isBundled).length,
     marketplace: searchResults.length,
   };
-  const enabledSkillsCount = safeSkills.filter((skill) => skill.enabled).length;
-  const loadedSkillsCount = safeSkills.filter((skill) => skill.loadedInGateway).length;
-  const userSkillsCount = safeSkills.filter((skill) => !skill.isBundled).length;
 
   // Handle toggle
   const handleToggle = useCallback(async (skillId: string, enable: boolean) => {
+    const skill = safeSkills.find((item) => item.id === skillId);
+    if (!isGatewayRunning) {
+      toast.error(t('toast.gatewayRequired'));
+      return;
+    }
+    if (!skill?.loadedInGateway) {
+      toast.error(t('toast.skillNotLoaded'));
+      return;
+    }
     try {
       if (enable) {
         await enableSkill(skillId);
@@ -704,7 +720,7 @@ export function Skills() {
     } catch (err) {
       toast.error(String(err));
     }
-  }, [enableSkill, disableSkill, t]);
+  }, [disableSkill, enableSkill, isGatewayRunning, safeSkills, t]);
 
   const hasInstalledSkills = safeSkills.some(s => !s.isBundled);
 
@@ -806,30 +822,10 @@ export function Skills() {
 
   return (
     <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
-      <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-6 pb-8 pt-10 md:px-8">
+      <div className="mx-auto flex h-full w-full max-w-7xl flex-col px-4 pb-6 pt-6 sm:px-6 md:px-8 md:pb-8 md:pt-8">
         <PageHeader
           title={t('title')}
           subtitle={t('subtitle')}
-          actions={(
-            <div className="grid grid-cols-2 gap-2.5 lg:max-w-[520px] lg:grid-cols-4 xl:min-w-[520px]">
-              <div className="rounded-[10px] border border-border/70 bg-card/85 px-4 py-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('stats.all')}</div>
-                <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">{safeSkills.length}</div>
-              </div>
-              <div className="rounded-[10px] border border-border/70 bg-card/85 px-4 py-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('stats.enabled')}</div>
-                <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">{enabledSkillsCount}</div>
-              </div>
-              <div className="rounded-[10px] border border-border/70 bg-card/85 px-4 py-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('stats.loaded')}</div>
-                <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">{loadedSkillsCount}</div>
-              </div>
-              <div className="rounded-[10px] border border-border/70 bg-card/85 px-4 py-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('stats.custom')}</div>
-                <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">{userSkillsCount}</div>
-              </div>
-            </div>
-          )}
         />
 
         {/* Gateway Warning */}
@@ -843,14 +839,14 @@ export function Skills() {
         )}
 
         {/* Sub Navigation and Actions */}
-        <div className="mb-5 shrink-0 rounded-[10px] border border-border/70 bg-card/85 p-3.5 sm:p-4">
+        <div className="mb-5 shrink-0 rounded-[14px] border border-border/70 bg-card/85 p-3.5 sm:p-4">
           <div className="flex flex-col gap-3.5">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <button
                   onClick={() => { setActiveTab('all'); setSelectedSource('all'); }}
                   className={cn(
-                    "rounded-[10px] px-4 py-2 text-[14px] font-medium transition-all",
+                    "rounded-[12px] px-4 py-2 text-[14px] font-medium transition-all",
                     activeTab === 'all' && selectedSource === 'all'
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
@@ -861,7 +857,7 @@ export function Skills() {
                 <button
                   onClick={() => { setActiveTab('all'); setSelectedSource('built-in'); }}
                   className={cn(
-                    "rounded-[10px] px-4 py-2 text-[14px] font-medium transition-all",
+                    "rounded-[12px] px-4 py-2 text-[14px] font-medium transition-all",
                     activeTab === 'all' && selectedSource === 'built-in'
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
@@ -872,7 +868,7 @@ export function Skills() {
                 <button
                   onClick={() => setActiveTab('marketplace')}
                   className={cn(
-                    "rounded-[10px] px-4 py-2 text-[14px] font-medium transition-all",
+                    "rounded-[12px] px-4 py-2 text-[14px] font-medium transition-all",
                     activeTab === 'marketplace'
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
@@ -882,11 +878,11 @@ export function Skills() {
                 </button>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
                 {hasInstalledSkills && (
                   <button
                     onClick={handleOpenSkillsFolder}
-                    className="h-10 rounded-[10px] border border-border/70 px-4 text-[13px] font-medium text-foreground/80 transition-colors hover:bg-accent/70 hover:text-foreground"
+                    className="h-10 rounded-[12px] border border-border/70 px-4 text-[13px] font-medium text-foreground/80 transition-colors hover:bg-accent/70 hover:text-foreground"
                   >
                     <FolderOpen className="mr-2 inline h-4 w-4" />
                     {t('openFolder')}
@@ -897,7 +893,7 @@ export function Skills() {
                   size="icon"
                   onClick={fetchSkills}
                   disabled={!isGatewayRunning}
-                  className="h-10 w-10 rounded-[10px] border-border/70 bg-transparent shadow-none text-muted-foreground hover:bg-accent/70 hover:text-foreground"
+                  className="h-10 w-10 rounded-[12px] border-border/70 bg-transparent shadow-none text-muted-foreground hover:bg-accent/70 hover:text-foreground"
                   title={t('refresh')}
                 >
                   {loading ? <LoadingIcon className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}
@@ -905,10 +901,10 @@ export function Skills() {
               </div>
             </div>
 
-            <div className="relative group flex h-11 min-w-0 items-center rounded-[10px] border border-black/8 bg-black/[0.04] px-4 transition-colors focus-within:border-black/12 focus-within:bg-black/[0.06] dark:border-white/10 dark:bg-white/[0.04] dark:focus-within:border-white/15 dark:focus-within:bg-white/[0.06]">
+            <div className="relative group flex h-11 min-w-0 items-center rounded-[12px] border border-black/8 bg-black/[0.04] px-4 transition-colors focus-within:border-black/12 focus-within:bg-black/[0.06] dark:border-white/10 dark:bg-white/[0.04] dark:focus-within:border-white/15 dark:focus-within:bg-white/[0.06]">
               <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
               <input
-                placeholder={t('search')}
+                placeholder={activeTab === 'marketplace' ? t('searchMarketplace') : t('search')}
                 value={activeTab === 'marketplace' ? marketplaceQuery : searchQuery}
                 onChange={(e) => activeTab === 'marketplace' ? setMarketplaceQuery(e.target.value) : setSearchQuery(e.target.value)}
                 className="ml-2 w-full bg-transparent text-[14px] font-medium text-foreground outline-none placeholder:text-foreground/45"
@@ -927,7 +923,7 @@ export function Skills() {
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto px-1 pb-12 pt-2 min-h-0">
+        <div className="min-h-0 flex-1 overflow-y-auto px-0 pb-10 pt-1 sm:px-1 md:pt-2">
           {error && activeTab === 'all' && (
             <div className="mb-4 p-4 rounded-xl border border-destructive/50 bg-destructive/10 text-destructive text-sm font-medium flex items-center gap-2">
               <AlertCircle className="h-5 w-5 shrink-0" />
@@ -952,14 +948,15 @@ export function Skills() {
                   <p>{searchQuery ? t('noSkillsSearch') : t('noSkillsAvailable')}</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
                   {filteredSkills.map((skill) => (
                     <SkillGridCard
-                    key={skill.id}
-                    onClick={() => setSelectedSkill(skill)}
-                    skill={skill}
-                    onToggle={handleToggle}
-                  />
+                      key={skill.id}
+                      onClick={() => setSelectedSkill(skill)}
+                      skill={skill}
+                      isGatewayRunning={isGatewayRunning}
+                      onToggle={handleToggle}
+                    />
                   ))}
                 </div>
               )
@@ -990,14 +987,21 @@ export function Skills() {
                 )}
 
                 {activeTab === 'marketplace' && marketplaceQuery && searching && (
-                  <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                    <LoadingSpinner size="lg" />
-                    <p className="mt-4 text-sm">{t('marketplace.searching')}</p>
+                  <div className="flex justify-center py-16 sm:py-20">
+                    <div className="flex w-full max-w-md flex-col items-center rounded-[16px] border border-border/70 bg-card/70 px-6 py-8 text-center">
+                      <LoadingSpinner size="lg" />
+                      <h3 className="mt-5 text-[20px] font-semibold tracking-[-0.02em] text-foreground">
+                        {t('marketplace.searchingTitle')}
+                      </h3>
+                      <p className="mt-2 text-[14px] leading-[1.7] text-muted-foreground">
+                        {t('marketplace.searchingDescription')}
+                      </p>
+                    </div>
                   </div>
                 )}
 
                 {searchResults.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
                     {searchResults.map((skill) => {
                       const isInstalled = safeSkills.some(s => s.id === skill.slug || s.name === skill.name);
                       const isInstallLoading = !!installing[skill.slug];
@@ -1034,10 +1038,11 @@ export function Skills() {
         skill={selectedSkill}
         isOpen={!!selectedSkill}
         onClose={() => setSelectedSkill(null)}
+        canToggle={Boolean(isGatewayRunning && selectedSkill?.loadedInGateway && !selectedSkill?.isCore)}
         onToggle={(enabled) => {
           if (!selectedSkill) return;
           handleToggle(selectedSkill.id, enabled);
-          setSelectedSkill({ ...selectedSkill, enabled });
+          setSelectedSkill({ ...selectedSkill, enabled, runtimeEnabled: enabled });
         }}
         onUninstall={handleUninstall}
       />

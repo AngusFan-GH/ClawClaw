@@ -30,7 +30,12 @@ function normalizeOpenAIOAuthModel(model?: string): string | undefined {
     return undefined;
   }
 
-  if (normalized === 'gpt-5.3-codex' || normalized === `${OPENAI_OAUTH_RUNTIME_PROVIDER}/gpt-5.3-codex`) {
+  if (
+    normalized === 'gpt-5.2'
+    || normalized === `${OPENAI_OAUTH_RUNTIME_PROVIDER}/gpt-5.2`
+    || normalized === 'gpt-5.3-codex'
+    || normalized === `${OPENAI_OAUTH_RUNTIME_PROVIDER}/gpt-5.3-codex`
+  ) {
     return 'gpt-5.4';
   }
 

@@ -2,11 +2,11 @@
   "gatewayNotRunning": "ゲートウェイが停止中",
   "gatewayRequired": "チャットを利用するには OpenClaw ゲートウェイの起動が必要です。通常は自動で起動されますが、設定から手動起動もできます。",
   "welcome": {
-    "title": "ようこそ",
-    "subtitle": "AI アシスタントの準備ができました。下の入力欄から会話を始めましょう。",
+    "title": "ClawClaw、あらゆる発想に応える",
+    "subtitle": "あなたの着想を的確に受け止める AI アシスタント",
     "subtitleHint": "まず質問を入力するか、下の方向から始めてください。",
-    "subtitleWithAgent": "入力を始める前に、この新しい会話で使う分身を選んでください。",
-    "agentEyebrow": "現在の分身",
+    "subtitleWithAgent": "この会話を担当する分身を確認してください。",
+    "agentEyebrow": "この会話を担当する分身",
     "agentHelper": "この新しい会話はこの分身で開始されます",
     "agentCurrent": "現在選択中",
     "agentSwitchTo": "切り替えるとこの分身の新しい会話を作成します",
@@ -28,6 +28,7 @@
     "agentAriaLabel": "新しい会話の分身を切り替える",
     "configureModels": "モデルを設定",
     "attachFiles": "ファイルを添付",
+    "emptyPlaceholder": "ClawClaw に聞く",
     "gatewayNotConnected": "ゲートウェイに未接続...",
     "send": "送信",
     "stop": "停止",
@@ -41,6 +42,9 @@
   },
   "status": {
     "processingToolResults": "ツール結果を処理中..."
+  },
+  "history": {
+    "title": "最近の会話"
   },
   "historyBuckets": {
     "today": "今日",

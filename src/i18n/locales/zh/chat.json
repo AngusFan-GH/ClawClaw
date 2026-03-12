@@ -2,11 +2,11 @@
   "gatewayNotRunning": "网关未运行",
   "gatewayRequired": "使用聊天功能需要 OpenClaw 网关正在运行。它会自动启动，你也可以在设置中手动启动。",
   "welcome": {
-    "title": "欢迎",
-    "subtitle": "你的 AI 助手已就绪。在下方开始对话。",
+    "title": "ClawClaw，万物皆有回响",
+    "subtitle": "懂你的 AI 助手，精准捕捉每一个奇思妙想",
     "subtitleHint": "先输入你的问题，或者从下面选一个方向开始。",
-    "subtitleWithAgent": "先确认这次对话使用哪个分身，再开始输入内容。",
-    "agentEyebrow": "当前分身",
+    "subtitleWithAgent": "正在为你服务的分身，请确认：",
+    "agentEyebrow": "正在为你服务的分身，请确认：",
     "agentHelper": "新对话将使用这个分身开始",
     "agentCurrent": "当前正在使用",
     "agentSwitchTo": "切换后会新建该分身对话",
@@ -28,6 +28,7 @@
     "agentAriaLabel": "切换新对话分身",
     "configureModels": "未配置模型",
     "attachFiles": "添加文件",
+    "emptyPlaceholder": "询问 ClawClaw",
     "gatewayNotConnected": "网关未连接...",
     "send": "发送",
     "stop": "停止",
@@ -41,6 +42,9 @@
   },
   "status": {
     "processingToolResults": "正在处理工具结果..."
+  },
+  "history": {
+    "title": "最近对话"
   },
   "historyBuckets": {
     "today": "今天",
