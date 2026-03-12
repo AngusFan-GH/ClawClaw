@@ -1130,7 +1130,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
           sessions: localSessions,
           pendingLocalSessionKeys,
           sessionLastActivity,
-          messages,
         } = get();
         const hydratedSessionLastActivity = dedupedSessions.reduce<Record<string, number>>(
           (acc, session) => {
@@ -1156,12 +1155,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           dedupedSessions,
           hydratedSessionLastActivity
         );
+        const currentSessionMissing = !dedupedSessions.some((session) => session.key === nextSessionKey);
         const shouldAutoChooseLatest =
-          !hasLocalPendingSession &&
-          (
-            preferMostRecent
-            || (messages.length === 0 && (!currentSessionKey || currentSessionKey === DEFAULT_SESSION_KEY))
-          );
+          !hasLocalPendingSession && (preferMostRecent || currentSessionMissing);
 
         if (!dedupedSessions.find((s) => s.key === nextSessionKey) && dedupedSessions.length > 0) {
           // Preserve locally-created synthetic sessions until they materialize
@@ -1246,27 +1242,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 /* ignore per-session errors */
               }
             })
-          ).then(() => {
-            const state = get();
-            if (
-              state.currentSessionKey !== DEFAULT_SESSION_KEY ||
-              state.messages.length > 0 ||
-              state.pendingLocalSessionKeys[DEFAULT_SESSION_KEY]
-            ) {
-              return;
-            }
-            const mostRecentSessionKey = getMostRecentSessionKey(
-              state.sessions.filter((session) => !state.pendingLocalSessionKeys[session.key]),
-              state.sessionLastActivity
-            );
-            if (mostRecentSessionKey && mostRecentSessionKey !== state.currentSessionKey) {
-              set({
-                currentSessionKey: mostRecentSessionKey,
-                currentAgentId: getAgentIdFromSessionKey(mostRecentSessionKey),
-              });
-              get().loadHistory();
-            }
-          });
+          );
         }
       }
     } catch (err) {
@@ -1525,9 +1501,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // appear to jump back into a previous conversation. Keep them empty until the
     // first user message materializes the session in Gateway.
     if (isEmptyEphemeralSession(requestSessionKey, get().messages, pendingLocalSessionKeys)) {
-      if (!quiet) {
-        set({ loading: false, error: null, messages: [] });
-      }
+      set({
+        ...(quiet ? {} : { loading: false }),
+        error: null,
+        messages: [],
+      });
       return;
     }
 
@@ -2283,7 +2261,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   refresh: async () => {
     const { loadHistory, loadSessions } = get();
-    await Promise.all([loadHistory(), loadSessions()]);
+    await loadSessions();
+    await loadHistory();
   },
 
   clearError: () => set({ error: null }),

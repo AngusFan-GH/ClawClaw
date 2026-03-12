@@ -19,7 +19,7 @@ import { extractImages, extractText, extractThinking, extractToolUse } from './m
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { PROVIDER_TYPE_INFO, type ProviderAccount, type ProviderVendorInfo } from '@/lib/providers';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { hostApiFetch } from '@/lib/host-api';
 import i18n from '@/i18n';
 
@@ -208,6 +208,7 @@ function dedupeModelOptions(options: ChatToolbarModelOption[]): ChatToolbarModel
 export function Chat() {
   const { t } = useTranslation('chat');
   const navigate = useNavigate();
+  const location = useLocation();
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
 
@@ -218,6 +219,7 @@ export function Chat() {
   const showThinking = useChatStore((s) => s.showThinking);
   const sessions = useChatStore((s) => s.sessions);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const switchSession = useChatStore((s) => s.switchSession);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const pendingLocalSessionKeys = useChatStore((s) => s.pendingLocalSessionKeys);
   const streamingMessage = useChatStore((s) => s.streamingMessage);
@@ -233,7 +235,6 @@ export function Chat() {
   const newSession = useChatStore((s) => s.newSession);
   const toggleThinking = useChatStore((s) => s.toggleThinking);
 
-  const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const providerAccounts = useProviderStore((s) => s.accounts);
@@ -256,6 +257,11 @@ export function Chat() {
     () => new Map(providerVendors.map((vendor) => [vendor.id, vendor])),
     [providerVendors]
   );
+  const forceSessionKeyFromRoute = useMemo(() => {
+    const state = location.state as { forceSessionKey?: string } | null;
+    const candidate = state?.forceSessionKey;
+    return typeof candidate === 'string' && candidate.trim() ? candidate : undefined;
+  }, [location.state]);
 
   // Load data when gateway is running.
   // When the store already holds messages for this session (i.e. the user
@@ -265,19 +271,35 @@ export function Chat() {
   useEffect(() => {
     if (!isGatewayRunning) return;
     let cancelled = false;
-    const hasExistingMessages = useChatStore.getState().messages.length > 0;
     (async () => {
+      if (forceSessionKeyFromRoute) {
+        if (forceSessionKeyFromRoute !== useChatStore.getState().currentSessionKey) {
+          switchSession(forceSessionKeyFromRoute);
+        }
+        navigate(location.pathname, { replace: true, state: null });
+        await loadHistory(false);
+        if (!cancelled) {
+          void loadSessions(false);
+        }
+        return;
+      }
+
       await loadSessions(true);
       if (cancelled) return;
-      await loadHistory(hasExistingMessages);
+      await loadHistory(false);
     })();
     return () => {
       cancelled = true;
-      // If the user navigates away without sending any messages, remove the
-      // empty session so it doesn't linger as a ghost entry in the sidebar.
-      cleanupEmptySession();
     };
-  }, [isGatewayRunning, loadHistory, loadSessions, cleanupEmptySession]);
+  }, [
+    isGatewayRunning,
+    loadHistory,
+    loadSessions,
+    forceSessionKeyFromRoute,
+    switchSession,
+    navigate,
+    location.pathname,
+  ]);
 
   useEffect(() => {
     void refreshProviderSnapshot();

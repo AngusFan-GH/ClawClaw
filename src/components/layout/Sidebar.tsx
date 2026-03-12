@@ -258,7 +258,8 @@ export function Sidebar() {
         <button
           onClick={() => {
             newSession();
-            navigate('/');
+            const forcedSessionKey = useChatStore.getState().currentSessionKey;
+            navigate('/', { state: { forceSessionKey: forcedSessionKey } });
           }}
           className={cn(
             'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-[14px] font-medium transition-colors mb-2',
