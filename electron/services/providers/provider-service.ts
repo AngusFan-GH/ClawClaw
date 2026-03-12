@@ -144,6 +144,24 @@ export class ProviderService {
     return results;
   }
 
+  async listAccountStatuses(): Promise<ProviderWithKeyInfo[]> {
+    await ensureProviderStoreMigrated();
+    const accounts = await listProviderAccounts();
+    const results: ProviderWithKeyInfo[] = [];
+
+    for (const account of accounts) {
+      const config = providerAccountToConfig(account);
+      const apiKey = await getApiKey(account.id);
+      results.push({
+        ...config,
+        hasKey: !!apiKey || account.authMode === 'oauth_device' || account.authMode === 'oauth_browser' || account.authMode === 'local',
+        keyMasked: maskApiKey(apiKey),
+      });
+    }
+
+    return results;
+  }
+
   /**
    * @deprecated Use getAccount(accountId).
    */

@@ -10,7 +10,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Loader2,
   AlertCircle,
   Eye,
   EyeOff,
@@ -26,6 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { useGatewayStore } from '@/stores/gateway';
 import { useSettingsStore } from '@/stores/settings';
 import { useTranslation } from 'react-i18next';
@@ -590,7 +590,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
     if (status === 'checking') {
       return (
         <span className="flex items-center gap-2 text-yellow-400 whitespace-nowrap">
-          <Loader2 className="h-5 w-5 flex-shrink-0 animate-spin" />
+          <LoadingIcon className="h-5 w-5 flex-shrink-0" />
           {message || 'Checking...'}
         </span>
       );
@@ -726,6 +726,47 @@ interface ProviderContentProps {
   onConfiguredChange: (configured: boolean) => void;
 }
 
+type ProviderModelOption = {
+  id: string;
+  name: string;
+};
+
+const OPENAI_OAUTH_PREFERRED_MODEL_ID = 'gpt-5.4';
+
+function normalizeOAuthSelectedModel(vendorId: string, modelId?: string | null): string {
+  const normalized = modelId?.trim() || '';
+  if (!normalized) {
+    return '';
+  }
+  if (vendorId === 'openai' && normalized === 'gpt-5.3-codex') {
+    return OPENAI_OAUTH_PREFERRED_MODEL_ID;
+  }
+  return normalized;
+}
+
+function pickOAuthModelSelection(
+  vendorId: string,
+  options: ProviderModelOption[],
+  preferred?: string | null,
+  fallback?: string | null,
+): string {
+  const normalizedPreferred = normalizeOAuthSelectedModel(vendorId, preferred);
+  if (normalizedPreferred && options.some((option) => option.id === normalizedPreferred)) {
+    return normalizedPreferred;
+  }
+
+  const normalizedFallback = normalizeOAuthSelectedModel(vendorId, fallback);
+  if (normalizedFallback && options.some((option) => option.id === normalizedFallback)) {
+    return normalizedFallback;
+  }
+
+  if (vendorId === 'openai' && options.some((option) => option.id === OPENAI_OAUTH_PREFERRED_MODEL_ID)) {
+    return OPENAI_OAUTH_PREFERRED_MODEL_ID;
+  }
+
+  return options[0]?.id || normalizedFallback || normalizedPreferred || '';
+}
+
 function ProviderContent({
   providers,
   selectedProvider,
@@ -761,6 +802,9 @@ function ProviderContent({
   const [oauthError, setOauthError] = useState<string | null>(null);
   const [oauthManualInput, setOauthManualInput] = useState('');
   const pendingOAuthRef = useRef<{ accountId: string; label: string } | null>(null);
+  const [oauthAuthedAccountId, setOauthAuthedAccountId] = useState<string | null>(null);
+  const [oauthModelOptions, setOauthModelOptions] = useState<ProviderModelOption[]>([]);
+  const [loadingOAuthModels, setLoadingOAuthModels] = useState(false);
 
   // Manage OAuth events
   useEffect(() => {
@@ -787,13 +831,27 @@ function ProviderContent({
 
       if (accountId) {
         try {
+          setSelectedAccountId(accountId);
+          if (selectedProvider === 'openai') {
+            setOauthAuthedAccountId(accountId);
+            setLoadingOAuthModels(true);
+            const models = await loadOAuthModelOptions('openai', 'oauth_browser');
+            setOauthModelOptions(models);
+            setModelId((current) => pickOAuthModelSelection('openai', models, current, modelId));
+            setLoadingOAuthModels(false);
+            pendingOAuthRef.current = null;
+            onConfiguredChange(false);
+            toast.success(t('settings:aiProviders.oauth.authSucceeded'));
+            return;
+          }
+
           await hostApiFetch('/api/provider-accounts/default', {
             method: 'PUT',
             body: JSON.stringify({ accountId }),
           });
-          setSelectedAccountId(accountId);
         } catch (error) {
           console.error('Failed to set default provider account:', error);
+          setLoadingOAuthModels(false);
         }
       }
 
@@ -805,6 +863,9 @@ function ProviderContent({
     const handleError = (data: unknown) => {
       setOauthError((data as { message: string }).message);
       setOauthData(null);
+      setOauthAuthedAccountId(null);
+      setOauthModelOptions([]);
+      setLoadingOAuthModels(false);
       pendingOAuthRef.current = null;
     };
 
@@ -841,6 +902,9 @@ function ProviderContent({
     setOauthData(null);
     setOauthError(null);
     setOauthManualInput('');
+    setOauthAuthedAccountId(null);
+    setOauthModelOptions([]);
+    setLoadingOAuthModels(false);
 
     try {
       const snapshot = await fetchProviderSnapshot();
@@ -850,15 +914,17 @@ function ProviderContent({
         snapshot.vendors
       );
       const label = selectedProviderData?.name || selectedProvider;
-      const model = resolveProviderModelForSave(
-        selectedProviderData,
-        modelId,
-        devModeUnlocked
-      );
       pendingOAuthRef.current = { accountId, label };
       await hostApiFetch('/api/providers/oauth/start', {
         method: 'POST',
-        body: JSON.stringify({ provider: selectedProvider, accountId, label, model }),
+        body: JSON.stringify({
+          provider: selectedProvider,
+          accountId,
+          label,
+          model: selectedProvider === 'openai'
+            ? undefined
+            : resolveProviderModelForSave(selectedProviderData, modelId, devModeUnlocked),
+        }),
       });
     } catch (e) {
       setOauthError(String(e));
@@ -872,6 +938,9 @@ function ProviderContent({
     setOauthData(null);
     setOauthError(null);
     setOauthManualInput('');
+    setOauthAuthedAccountId(null);
+    setOauthModelOptions([]);
+    setLoadingOAuthModels(false);
     pendingOAuthRef.current = null;
     await hostApiFetch('/api/providers/oauth/cancel', { method: 'POST' });
   };
@@ -966,7 +1035,12 @@ function ProviderContent({
 
           const info = providers.find((p) => p.id === selectedProvider);
           setBaseUrl(savedProvider?.baseUrl || info?.defaultBaseUrl || '');
-          setModelId(savedProvider?.model || info?.defaultModelId || '');
+          setModelId(
+            normalizeOAuthSelectedModel(
+              selectedProvider,
+              savedProvider?.model || info?.defaultModelId || '',
+            ),
+          );
         }
       } catch (error) {
         if (!cancelled) {
@@ -1002,6 +1076,12 @@ function ProviderContent({
     };
   }, [providerMenuOpen]);
 
+  useEffect(() => {
+    setOauthAuthedAccountId(null);
+    setOauthModelOptions([]);
+    setLoadingOAuthModels(false);
+  }, [selectedProvider, authMode]);
+
   const selectedProviderData = providers.find((p) => p.id === selectedProvider);
   const selectedProviderIconUrl = selectedProviderData
     ? getProviderIconUrl(selectedProviderData.id)
@@ -1012,6 +1092,15 @@ function ProviderContent({
   const isOAuth = selectedProviderData?.isOAuth ?? false;
   const supportsApiKey = selectedProviderData?.supportsApiKey ?? false;
   const useOAuthFlow = isOAuth && (!supportsApiKey || authMode === 'oauth');
+  const useOpenAIOAuthModelPicker = selectedProvider === 'openai' && useOAuthFlow;
+  const showEditableModelField = showModelIdField && !useOpenAIOAuthModelPicker;
+
+  const loadOAuthModelOptions = async (vendorId: string, authModeValue: 'oauth_browser' | 'oauth_device') => {
+    const response = await hostApiFetch<{ models: ProviderModelOption[] }>(
+      `/api/provider-model-options?vendorId=${encodeURIComponent(vendorId)}&authMode=${encodeURIComponent(authModeValue)}`
+    );
+    return response.models ?? [];
+  };
 
   const handleValidateAndSave = async () => {
     if (!selectedProvider) return;
@@ -1035,6 +1124,42 @@ function ProviderContent({
     setKeyValid(null);
 
     try {
+      if (useOpenAIOAuthModelPicker && oauthAuthedAccountId) {
+        const saveResult = await hostApiFetch<{ success: boolean; error?: string }>(
+          `/api/provider-accounts/${encodeURIComponent(oauthAuthedAccountId)}`,
+          {
+            method: 'PUT',
+            body: JSON.stringify({
+              updates: {
+                label: selectedProviderData?.name || selectedProvider,
+                model: modelId.trim(),
+              },
+            }),
+          }
+        );
+
+        if (!saveResult.success) {
+          throw new Error(saveResult.error || 'Failed to save provider config');
+        }
+
+        const defaultResult = await hostApiFetch<{ success: boolean; error?: string }>(
+          '/api/provider-accounts/default',
+          {
+            method: 'PUT',
+            body: JSON.stringify({ accountId: oauthAuthedAccountId }),
+          }
+        );
+
+        if (!defaultResult.success) {
+          throw new Error(defaultResult.error || 'Failed to set default provider');
+        }
+
+        setSelectedAccountId(oauthAuthedAccountId);
+        onConfiguredChange(true);
+        toast.success(t('provider.valid'));
+        return;
+      }
+
       // Validate key if the provider requires one and a key was entered
       const isApiKeyRequired = requiresKey || (supportsApiKey && authMode === 'apikey');
       if (isApiKeyRequired && apiKey) {
@@ -1140,8 +1265,8 @@ function ProviderContent({
   const canSubmit =
     selectedProvider &&
     (isApiKeyRequired ? apiKey.length > 0 : true) &&
-    (showModelIdField ? modelId.trim().length > 0 : true) &&
-    !useOAuthFlow;
+    ((showEditableModelField || useOpenAIOAuthModelPicker) ? modelId.trim().length > 0 : true) &&
+    (!useOAuthFlow || Boolean(oauthAuthedAccountId));
 
   const handleSelectProvider = (providerId: string) => {
     onSelectProvider(providerId);
@@ -1274,7 +1399,7 @@ function ProviderContent({
           )}
 
           {/* Model ID field (for siliconflow etc.) */}
-          {showModelIdField && (
+          {showEditableModelField && (
             <div className="space-y-2">
               <Label htmlFor="modelId">{t('provider.modelId')}</Label>
               <Input
@@ -1285,13 +1410,35 @@ function ProviderContent({
                 }
                 value={modelId}
                 onChange={(e) => {
-                  setModelId(e.target.value);
+                  setModelId(normalizeOAuthSelectedModel(selectedProvider, e.target.value));
                   onConfiguredChange(false);
                 }}
                 autoComplete="off"
                 className="bg-background border-input"
               />
               <p className="text-xs text-muted-foreground">{t('provider.modelIdDesc')}</p>
+            </div>
+          )}
+          {useOpenAIOAuthModelPicker && oauthAuthedAccountId && (
+            <div className="space-y-2">
+              <Label htmlFor="oauthModelId">{t('settings:aiProviders.dialog.model')}</Label>
+              <select
+                id="oauthModelId"
+                value={modelId}
+                onChange={(e) => {
+                  setModelId(normalizeOAuthSelectedModel(selectedProvider, e.target.value));
+                  onConfiguredChange(false);
+                }}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                disabled={loadingOAuthModels}
+              >
+                {oauthModelOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">{t('settings:aiProviders.oauth.modelAfterLogin')}</p>
             </div>
           )}
 
@@ -1357,17 +1504,21 @@ function ProviderContent({
             <div className="space-y-4 pt-2">
               <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 p-4 text-center">
                 <p className="text-sm text-blue-200 mb-3 block">
-                  {t('settings:aiProviders.oauth.loginPrompt')}
+                  {oauthAuthedAccountId
+                    ? t('settings:aiProviders.oauth.loginCompleted')
+                    : t('settings:aiProviders.oauth.loginPrompt')}
                 </p>
                 <Button
                   onClick={handleStartOAuth}
-                  disabled={oauthFlowing}
+                  disabled={oauthFlowing || Boolean(oauthAuthedAccountId)}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   {oauthFlowing ? (
                     <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> {t('settings:aiProviders.oauth.waiting')}
+                      <LoadingIcon className="h-4 w-4 mr-2" /> {t('settings:aiProviders.oauth.waiting')}
                     </>
+                  ) : oauthAuthedAccountId ? (
+                    t('settings:aiProviders.oauth.loggedIn')
                   ) : (
                     t('settings:aiProviders.oauth.loginButton')
                   )}
@@ -1397,7 +1548,7 @@ function ProviderContent({
                       </div>
                     ) : !oauthData ? (
                       <div className="space-y-3 py-4">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+                        <LoadingIcon className="h-8 w-8 text-primary mx-auto" />
                         <p className="text-sm text-muted-foreground animate-pulse">
                           {t('settings:aiProviders.oauth.requestingCode')}
                         </p>
@@ -1444,7 +1595,7 @@ function ProviderContent({
                         ) : null}
 
                         <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pt-2">
-                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <LoadingIcon className="h-3 w-3" />
                           <span>{t('settings:aiProviders.oauth.waitingApproval')}</span>
                         </div>
 
@@ -1494,7 +1645,7 @@ function ProviderContent({
                         </Button>
 
                         <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pt-2">
-                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <LoadingIcon className="h-3 w-3" />
                           <span>{t('settings:aiProviders.oauth.waitingApproval')}</span>
                         </div>
 
@@ -1518,10 +1669,10 @@ function ProviderContent({
           <Button
             onClick={handleValidateAndSave}
             disabled={!canSubmit || validating}
-            className={cn('w-full', useOAuthFlow && 'hidden')}
+            className="w-full"
           >
-            {validating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            {requiresKey ? t('provider.validateSave') : t('provider.save')}
+            {validating ? <LoadingIcon className="h-4 w-4 mr-2" /> : null}
+            {useOpenAIOAuthModelPicker ? t('provider.save') : (requiresKey ? t('provider.validateSave') : t('provider.save'))}
           </Button>
 
           {keyValid !== null && (
@@ -1607,7 +1758,7 @@ function InstallingContent({ skills, onComplete, onSkip }: InstallingContentProp
       case 'pending':
         return <div className="h-5 w-5 rounded-full border-2 border-slate-500" />;
       case 'installing':
-        return <Loader2 className="h-5 w-5 text-primary animate-spin" />;
+        return <LoadingIcon className="h-5 w-5 text-primary" />;
       case 'completed':
         return <CheckCircle2 className="h-5 w-5 text-green-400" />;
       case 'failed':

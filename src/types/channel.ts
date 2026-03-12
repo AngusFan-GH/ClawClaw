@@ -40,6 +40,9 @@ export interface Channel {
   type: ChannelType;
   name: string;
   status: ChannelStatus;
+  configured?: boolean;
+  runtimeLoaded?: boolean;
+  runtimeStatus?: ChannelStatus | 'unknown';
   accountId?: string;
   lastActivity?: string;
   error?: string;

@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   Clock,
   History,
-  Loader2,
   Pause,
   Play,
   Plus,
@@ -27,7 +26,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { LoadingIcon, LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useGatewayStore } from '@/stores/gateway';
 import { useCronStore } from '@/stores/cron';
@@ -194,6 +193,7 @@ interface TaskDialogProps {
 function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
   const { t } = useTranslation('cron');
   const [saving, setSaving] = useState(false);
+  const readOnly = Boolean(job && job.uiManaged === false);
 
   const [name, setName] = useState(job?.name || '');
   const [message, setMessage] = useState(job?.message || '');
@@ -208,6 +208,10 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
   const cronInvalid = useCustom && !validateCronExpression(finalSchedule);
 
   const handleSubmit = async () => {
+    if (readOnly) {
+      toast.error(t('advanced.readOnlyToast'));
+      return;
+    }
     if (!name.trim()) {
       toast.error(t('toast.nameRequired'));
       return;
@@ -256,6 +260,12 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
         </CardHeader>
 
         <CardContent className="space-y-5">
+          {readOnly && (
+            <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+              {t('advanced.readOnlyDescription')}
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="task-name">{t('dialog.taskName')}</Label>
             <Input
@@ -263,6 +273,7 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t('dialog.taskNamePlaceholder')}
+              disabled={readOnly}
             />
           </div>
 
@@ -274,6 +285,7 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
               onChange={(e) => setMessage(e.target.value)}
               rows={4}
               placeholder={t('dialog.messagePlaceholder')}
+              disabled={readOnly}
             />
           </div>
 
@@ -299,6 +311,7 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
                         : "bg-card/80"
                     )}
                     onClick={() => setSchedule(preset.value)}
+                    disabled={readOnly}
                   >
                     <Timer className="h-4 w-4 mr-2" />
                     {t(`presets.${preset.key}` as const)}
@@ -311,6 +324,7 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
                 onChange={(e) => setCustomSchedule(e.target.value)}
                 placeholder={t('dialog.cronPlaceholder')}
                 className={cn("rounded-xl bg-card/80", cronInvalid && 'border-destructive focus-visible:ring-destructive')}
+                disabled={readOnly}
               />
             )}
 
@@ -325,15 +339,15 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
               <p className="text-sm font-medium">{t('dialog.enableImmediately')}</p>
               <p className="text-xs text-muted-foreground">{t('dialog.enableImmediatelyDesc')}</p>
             </div>
-            <Switch checked={enabled} onCheckedChange={setEnabled} />
+            <Switch checked={enabled} onCheckedChange={setEnabled} disabled={readOnly} />
           </div>
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onClose} className="rounded-xl px-5">{t('common:actions.cancel', 'Cancel')}</Button>
-            <Button onClick={handleSubmit} disabled={saving} className="rounded-xl px-5">
+            <Button onClick={handleSubmit} disabled={saving || readOnly} className="rounded-xl px-5">
               {saving ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <LoadingIcon className="h-4 w-4 mr-2" />
                   {t('common:status.saving', 'Saving...')}
                 </>
               ) : job ? t('dialog.saveChanges') : t('dialog.createTitle')}
@@ -359,6 +373,7 @@ function CronJobCard({ job, busy = false, onToggle, onEdit, onDelete, onTrigger 
   const [triggering, setTriggering] = useState(false);
 
   const scheduleText = parseCronSchedule(job.schedule, t);
+  const isAdvancedJob = job.uiManaged === false;
 
   const handleTrigger = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -388,6 +403,14 @@ function CronJobCard({ job, busy = false, onToggle, onEdit, onDelete, onTrigger 
               )}>
                 {job.enabled ? t('stats.active') : t('stats.paused')}
               </span>
+              <span className={cn(
+                'inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium',
+                isAdvancedJob
+                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                  : 'bg-sky-500/15 text-sky-700 dark:text-sky-300'
+              )}>
+                {isAdvancedJob ? t('advanced.badge') : t('advanced.simpleBadge')}
+              </span>
             </div>
             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5" />
@@ -406,6 +429,13 @@ function CronJobCard({ job, busy = false, onToggle, onEdit, onDelete, onTrigger 
         </button>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+          {isAdvancedJob && (
+            <span className="inline-flex items-center gap-1.5">
+              <AlertCircle className="h-3.5 w-3.5" />
+              {t('advanced.readOnlyInline')}
+            </span>
+          )}
+
           {job.target && (
             <span className="inline-flex items-center gap-1.5">
               {CHANNEL_ICONS[job.target.channelType as ChannelType]}
@@ -442,7 +472,7 @@ function CronJobCard({ job, busy = false, onToggle, onEdit, onDelete, onTrigger 
 
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="outline" size="sm" onClick={handleTrigger} disabled={triggering || busy} className="rounded-xl">
-            {triggering ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-1.5" />}
+            {triggering ? <LoadingIcon className="h-3.5 w-3.5 mr-1.5" /> : <Play className="h-3.5 w-3.5 mr-1.5" />}
             {t('card.runNow')}
           </Button>
           <Button variant="outline" size="sm" className="rounded-xl border-destructive/30 text-destructive hover:bg-destructive/10" onClick={onDelete} disabled={busy || triggering}>
@@ -480,6 +510,7 @@ export function Cron() {
   const activeJobs = useMemo(() => safeJobs.filter((j) => j.enabled), [safeJobs]);
   const pausedJobs = useMemo(() => safeJobs.filter((j) => !j.enabled), [safeJobs]);
   const failedJobs = useMemo(() => safeJobs.filter((j) => j.lastRun && !j.lastRun.success), [safeJobs]);
+  const advancedJobs = useMemo(() => safeJobs.filter((j) => j.uiManaged === false), [safeJobs]);
 
   const orderedJobs = useMemo(() => {
     return [...safeJobs].sort((a, b) => {
@@ -556,7 +587,7 @@ export function Cron() {
           actions={(
             <div className="flex flex-nowrap items-center gap-2">
               <Button variant="outline" onClick={handleRefresh} disabled={!isGatewayRunning || refreshing} className="shrink-0 rounded-xl">
-                <RefreshCw className={cn('h-4 w-4 mr-2', refreshing && 'animate-spin')} />
+                {refreshing ? <LoadingIcon className="h-4 w-4 mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
                 {t('refresh')}
               </Button>
               <Button
@@ -588,6 +619,15 @@ export function Cron() {
             <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
               {error}
+            </div>
+          )}
+
+          {advancedJobs.length > 0 && (
+            <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>
+                {t('advanced.summary', { count: advancedJobs.length })}
+              </span>
             </div>
           )}
 

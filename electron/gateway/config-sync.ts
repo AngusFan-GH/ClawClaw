@@ -8,7 +8,7 @@ import { getOpenClawDir, getOpenClawEntryPath, isOpenClawPresent } from '../util
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { listConfiguredChannels } from '../utils/channel-config';
 import { syncGatewayTokenToConfig, syncBrowserConfigToOpenClaw, sanitizeOpenClawConfig } from '../utils/openclaw-auth';
-import { buildProxyEnv, resolveProxySettings } from '../utils/proxy';
+import { buildProxyEnvAsync, resolveProxySettingsAsync } from '../utils/proxy';
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { logger } from '../utils/logger';
 
@@ -148,11 +148,18 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
   const { providerEnv, loadedProviderKeyCount } = await loadProviderEnv();
   const { skipChannels, channelStartupSummary } = await resolveChannelStartupPolicy();
   const uvEnv = await getUvMirrorEnv();
-  const proxyEnv = buildProxyEnv(appSettings);
-  const resolvedProxy = resolveProxySettings(appSettings);
-  const proxySummary = appSettings.proxyEnabled
-    ? `http=${resolvedProxy.httpProxy || '-'}, https=${resolvedProxy.httpsProxy || '-'}, all=${resolvedProxy.allProxy || '-'}`
-    : 'disabled';
+  const proxyEnv = await buildProxyEnvAsync(appSettings);
+  const resolvedProxy = await resolveProxySettingsAsync(appSettings);
+  const hasResolvedProxy = Boolean(
+    resolvedProxy.httpProxy || resolvedProxy.httpsProxy || resolvedProxy.allProxy
+  );
+  const proxyMode = appSettings.proxyMode || (appSettings.proxyEnabled ? 'custom' : 'system');
+  const proxySummary =
+    proxyMode === 'direct'
+      ? 'direct'
+      : hasResolvedProxy
+        ? `${proxyMode}: http=${resolvedProxy.httpProxy || '-'}, https=${resolvedProxy.httpsProxy || '-'}, all=${resolvedProxy.allProxy || '-'}`
+        : `${proxyMode}: none`;
 
   const { NODE_OPTIONS: _nodeOptions, ...baseEnv } = process.env;
   const forkEnv: Record<string, string | undefined> = {

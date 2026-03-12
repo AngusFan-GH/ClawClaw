@@ -7,6 +7,7 @@ import { RefreshCw, Brain, Check, ChevronsUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
@@ -172,7 +173,7 @@ export function ChatToolbar({
               onClick={() => refresh()}
               disabled={loading}
             >
-              <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+              {loading ? <LoadingIcon className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}
             </Button>
           </TooltipTrigger>
           <TooltipContent>

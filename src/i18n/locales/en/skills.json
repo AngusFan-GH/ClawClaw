@@ -6,8 +6,17 @@
     "stats": {
         "all": "All",
         "enabled": "Enabled",
+        "loaded": "Loaded",
         "builtIn": "Built-in",
         "custom": "Custom"
+    },
+    "status": {
+        "installed": "Installed",
+        "notInstalled": "Not installed",
+        "loadedEnabled": "Loaded and enabled",
+        "loaded": "Loaded in Gateway",
+        "installedOnly": "Installed only",
+        "runtimeUnknown": "Runtime unknown"
     },
     "gatewayWarning": "Gateway is not running. Skills cannot be loaded without an active Gateway.",
     "tabs": {

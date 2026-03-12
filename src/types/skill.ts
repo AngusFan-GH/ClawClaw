@@ -12,6 +12,10 @@ export interface Skill {
   name: string;
   description: string;
   enabled: boolean;
+  installedOnDisk?: boolean;
+  loadedInGateway?: boolean;
+  runtimeStatus?: 'loaded' | 'not_loaded' | 'unknown';
+  runtimeError?: string;
   icon?: string;
   version?: string;
   author?: string;

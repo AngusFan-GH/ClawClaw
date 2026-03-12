@@ -38,6 +38,7 @@ import {
 } from '@/lib/telemetry';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { LoadingIcon } from '@/components/common/LoadingSpinner';
 
 type ControlUiInfo = {
   url: string;
@@ -978,7 +979,7 @@ export function Settings() {
                       proxySaveError ? 'text-red-500' : 'text-muted-foreground'
                     )}
                   >
-                    {savingProxy ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : null}
+                    {savingProxy ? <LoadingIcon className="h-3.5 w-3.5" /> : null}
                     <span>{proxyStatusText}</span>
                   </div>
                 </div>
@@ -1230,4 +1231,3 @@ export function Settings() {
 }
 
 export default Settings;
-

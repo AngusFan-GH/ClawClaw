@@ -294,7 +294,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
         throw new Error(result.error || 'Failed to set default provider');
       }
       
-      set({ defaultAccountId: providerId });
+      await get().refreshProviderSnapshot();
     } catch (error) {
       console.error('Failed to set default provider:', error);
       throw error;
@@ -312,7 +312,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
         throw new Error(result.error || 'Failed to set default provider account');
       }
 
-      set({ defaultAccountId: accountId });
+      await get().refreshProviderSnapshot();
     } catch (error) {
       console.error('Failed to set default account:', error);
       throw error;

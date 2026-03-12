@@ -30,6 +30,15 @@
         "last": "Last",
         "next": "Next"
     },
+    "advanced": {
+        "badge": "Advanced OpenClaw job",
+        "simpleBadge": "Simple UI task",
+        "readOnlyToast": "Advanced OpenClaw jobs cannot be edited from this page.",
+        "readOnlyDescription": "This task uses an advanced OpenClaw job shape. This page can view it, but cannot edit its message, schedule, or delivery settings safely.",
+        "readOnlyInline": "Read-only in this page",
+        "summary_one": "{{count}} advanced OpenClaw job is shown in read-only mode for message and schedule editing.",
+        "summary_other": "{{count}} advanced OpenClaw jobs are shown in read-only mode for message and schedule editing."
+    },
     "dialog": {
         "createTitle": "Create Task",
         "editTitle": "Edit Task",

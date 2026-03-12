@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { spawn } from 'node:child_process';
 import {
   type ProviderConfig,
 } from '../../utils/secure-storage';
@@ -22,6 +23,110 @@ import { getProviderService } from '../../services/providers/provider-service';
 import { providerAccountToConfig } from '../../services/providers/provider-store';
 import type { ProviderAccount } from '../../shared/providers/types';
 import { logger } from '../../utils/logger';
+import { getOpenClawCliSpawnConfig } from '../../utils/openclaw-cli';
+
+type OpenClawModelListResponse = {
+  count?: number;
+  models?: Array<{
+    key?: string;
+    name?: string;
+    available?: boolean;
+  }>;
+};
+
+const OPENAI_OAUTH_RUNTIME_PROVIDER = 'openai-codex';
+const OPENAI_OAUTH_PREFERRED_MODEL = 'gpt-5.4';
+
+function normalizeProviderModelId(runtimeProviderId: string, modelId: string): string {
+  if (runtimeProviderId === OPENAI_OAUTH_RUNTIME_PROVIDER && modelId === 'gpt-5.3-codex') {
+    return OPENAI_OAUTH_PREFERRED_MODEL;
+  }
+  return modelId;
+}
+
+function compareProviderModelOptions(
+  runtimeProviderId: string,
+  left: { id: string; name: string },
+  right: { id: string; name: string },
+): number {
+  if (runtimeProviderId === OPENAI_OAUTH_RUNTIME_PROVIDER) {
+    if (left.id === OPENAI_OAUTH_PREFERRED_MODEL && right.id !== OPENAI_OAUTH_PREFERRED_MODEL) {
+      return -1;
+    }
+    if (right.id === OPENAI_OAUTH_PREFERRED_MODEL && left.id !== OPENAI_OAUTH_PREFERRED_MODEL) {
+      return 1;
+    }
+  }
+
+  return left.name.localeCompare(right.name, 'en', { sensitivity: 'base' });
+}
+
+function getRuntimeProviderId(vendorId: string, authMode?: string | null): string {
+  if (vendorId === 'openai' && (authMode === 'oauth_browser' || authMode === 'oauth_device')) {
+    return OPENAI_OAUTH_RUNTIME_PROVIDER;
+  }
+  if (vendorId === 'google' && authMode === 'oauth_browser') {
+    return 'google-gemini-cli';
+  }
+  return vendorId;
+}
+
+async function listProviderModelOptions(vendorId: string, authMode?: string | null): Promise<Array<{ id: string; name: string }>> {
+  const runtimeProviderId = getRuntimeProviderId(vendorId, authMode);
+  const { command, args, env, cwd } = getOpenClawCliSpawnConfig(['models', 'list', '--all', '--json']);
+
+  return await new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', (error) => reject(error));
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr.trim() || `openclaw models list exited with code ${code}`));
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(stdout) as OpenClawModelListResponse;
+        const models = (parsed.models ?? [])
+          .filter((model) => typeof model.key === 'string' && model.key.startsWith(`${runtimeProviderId}/`))
+          .filter((model) => model.available !== false)
+          .map((model) => ({
+            id: normalizeProviderModelId(
+              runtimeProviderId,
+              String(model.key).slice(runtimeProviderId.length + 1),
+            ),
+            name:
+              normalizeProviderModelId(
+                runtimeProviderId,
+                model.name || String(model.key).slice(runtimeProviderId.length + 1),
+              ),
+          }));
+
+        const deduped = Array.from(
+          new Map(models.map((model) => [model.id, model])).values(),
+        ).sort((left, right) => compareProviderModelOptions(runtimeProviderId, left, right));
+        resolve(deduped);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
 
 const legacyProviderRoutesWarned = new Set<string>();
 
@@ -48,8 +153,31 @@ export async function handleProviderRoutes(
     return true;
   }
 
+  if (url.pathname === '/api/provider-model-options' && req.method === 'GET') {
+    try {
+      const vendorId = url.searchParams.get('vendorId');
+      const authMode = url.searchParams.get('authMode');
+      if (!vendorId) {
+        sendJson(res, 400, { error: 'vendorId is required' });
+        return true;
+      }
+      const runtimeProviderId = getRuntimeProviderId(vendorId, authMode);
+      const models = await listProviderModelOptions(vendorId, authMode);
+      sendJson(res, 200, { runtimeProviderId, models });
+    } catch (error) {
+      logger.warn('[providers] Failed to list provider model options:', error);
+      sendJson(res, 500, { error: String(error) });
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/provider-accounts' && req.method === 'GET') {
     sendJson(res, 200, await providerService.listAccounts());
+    return true;
+  }
+
+  if (url.pathname === '/api/provider-accounts/statuses' && req.method === 'GET') {
+    sendJson(res, 200, await providerService.listAccountStatuses());
     return true;
   }
 
@@ -203,7 +331,7 @@ export async function handleProviderRoutes(
         void deviceOAuthManager.startFlow(body.provider, body.region, {
           accountId: body.accountId,
           label: body.label,
-          model: body.model,
+          model: body.provider === 'openai' ? undefined : body.model,
         }).catch((error) => {
           logger.error('[providers] Device OAuth start failed:', error);
         });

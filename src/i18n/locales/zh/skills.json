@@ -6,8 +6,17 @@
     "stats": {
         "all": "全部",
         "enabled": "启用中",
+        "loaded": "已加载",
         "builtIn": "内置",
         "custom": "自定义"
+    },
+    "status": {
+        "installed": "已安装",
+        "notInstalled": "未安装",
+        "loadedEnabled": "已加载并启用",
+        "loaded": "已加载到网关",
+        "installedOnly": "仅安装",
+        "runtimeUnknown": "运行态未知"
     },
     "gatewayWarning": "网关未运行。没有活跃的网关，无法加载技能。",
     "tabs": {

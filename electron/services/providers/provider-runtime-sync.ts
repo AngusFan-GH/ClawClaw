@@ -20,6 +20,25 @@ const GOOGLE_OAUTH_DEFAULT_MODEL_REF = `${GOOGLE_OAUTH_RUNTIME_PROVIDER}/gemini-
 const OPENAI_OAUTH_RUNTIME_PROVIDER = 'openai-codex';
 const OPENAI_OAUTH_DEFAULT_MODEL_REF = `${OPENAI_OAUTH_RUNTIME_PROVIDER}/gpt-5.4`;
 
+function normalizeOpenAIOAuthModel(model?: string): string | undefined {
+  if (!model) {
+    return undefined;
+  }
+
+  const normalized = model.trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (normalized === 'gpt-5.3-codex' || normalized === `${OPENAI_OAUTH_RUNTIME_PROVIDER}/gpt-5.3-codex`) {
+    return 'gpt-5.4';
+  }
+
+  return normalized.startsWith(`${OPENAI_OAUTH_RUNTIME_PROVIDER}/`)
+    ? normalized.slice(OPENAI_OAUTH_RUNTIME_PROVIDER.length + 1)
+    : normalized;
+}
+
 type RuntimeProviderSyncContext = {
   runtimeProviderKey: string;
   meta: ReturnType<typeof getProviderConfig>;
@@ -358,12 +377,11 @@ export async function syncUpdatedProviderToRuntime(
   if (defaultProviderId === config.id) {
     const modelOverride = config.model ? `${ock}/${config.model}` : undefined;
     if (config.type === 'openai' && ock === OPENAI_OAUTH_RUNTIME_PROVIDER) {
+      const normalizedModel = normalizeOpenAIOAuthModel(config.model);
       await setOpenClawDefaultModel(
         OPENAI_OAUTH_RUNTIME_PROVIDER,
-        config.model
-          ? (config.model.startsWith(`${OPENAI_OAUTH_RUNTIME_PROVIDER}/`)
-            ? config.model
-            : `${OPENAI_OAUTH_RUNTIME_PROVIDER}/${config.model}`)
+        normalizedModel
+          ? `${OPENAI_OAUTH_RUNTIME_PROVIDER}/${normalizedModel}`
           : OPENAI_OAUTH_DEFAULT_MODEL_REF,
         fallbackModels,
       );
@@ -505,10 +523,9 @@ export async function syncDefaultProviderToRuntime(
         });
       }
 
-      const modelOverride = provider.model
-        ? (provider.model.startsWith(`${OPENAI_OAUTH_RUNTIME_PROVIDER}/`)
-          ? provider.model
-          : `${OPENAI_OAUTH_RUNTIME_PROVIDER}/${provider.model}`)
+      const normalizedModel = normalizeOpenAIOAuthModel(provider.model);
+      const modelOverride = normalizedModel
+        ? `${OPENAI_OAUTH_RUNTIME_PROVIDER}/${normalizedModel}`
         : OPENAI_OAUTH_DEFAULT_MODEL_REF;
 
       await setOpenClawDefaultModel(OPENAI_OAUTH_RUNTIME_PROVIDER, modelOverride, fallbackModels);

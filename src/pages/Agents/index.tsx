@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Bot, Plus, RefreshCw, Settings2, Trash2, X } from 'lucide-react';
+import { AlertCircle, Bot, PencilLine, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { StatusBadge } from '@/components/common/StatusBadge';
-import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { LoadingIcon, LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ChannelConfigModal } from '@/components/channels/ChannelConfigModal';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAgentsStore } from '@/stores/agents';
@@ -49,6 +50,15 @@ export function Agents() {
   const activeAgent = useMemo(
     () => agents.find((agent) => agent.id === activeAgentId) ?? null,
     [activeAgentId, agents],
+  );
+  const stats = useMemo(
+    () => ({
+      total: agents.length,
+      defaults: agents.filter((agent) => agent.isDefault).length,
+      custom: agents.filter((agent) => !agent.isDefault).length,
+      connected: agents.filter((agent) => agent.channelTypes.length > 0).length,
+    }),
+    [agents],
   );
   const handleRefresh = () => {
     void Promise.all([fetchAgents(), fetchChannels()]);
@@ -108,16 +118,41 @@ export function Agents() {
             </div>
           )}
 
-          <div className="space-y-3">
-            {agents.map((agent) => (
-              <AgentCard
-                key={agent.id}
-                agent={agent}
-                onOpenSettings={() => setActiveAgentId(agent.id)}
-                onDelete={() => setAgentToDelete(agent)}
-              />
-            ))}
+          <div className="grid gap-3 mb-5 md:grid-cols-2 xl:grid-cols-4">
+            <AgentStatCard label={t('stats.total')} value={stats.total} />
+            <AgentStatCard label={t('stats.defaults')} value={stats.defaults} />
+            <AgentStatCard label={t('stats.custom')} value={stats.custom} />
+            <AgentStatCard label={t('stats.connected')} value={stats.connected} />
           </div>
+
+          <section className="rounded-xl border bg-card p-4 md:p-5">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold tracking-tight text-foreground">
+                {t('list.title')}
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t('list.description')}
+              </p>
+            </div>
+
+            {agents.length === 0 ? (
+              <div className="rounded-xl border border-dashed px-4 py-8 text-center">
+                <p className="text-sm font-medium text-foreground">{t('empty.title')}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{t('empty.description')}</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {agents.map((agent) => (
+                  <AgentCard
+                    key={agent.id}
+                    agent={agent}
+                    onOpenSettings={() => setActiveAgentId(agent.id)}
+                    onDelete={() => setAgentToDelete(agent)}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       </div>
 
@@ -162,6 +197,17 @@ export function Agents() {
   );
 }
 
+function AgentStatCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border bg-card px-4 py-4">
+      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/80">
+        {label}
+      </div>
+      <div className="mt-3 text-3xl font-semibold tracking-tight text-foreground">{value}</div>
+    </div>
+  );
+}
+
 function AgentCard({
   agent,
   onOpenSettings,
@@ -179,61 +225,84 @@ function AgentCard({
   return (
     <div
       className={cn(
-        'group flex items-start gap-4 p-4 rounded-2xl transition-all text-left border relative overflow-hidden bg-transparent border-transparent hover:bg-black/5 dark:hover:bg-white/5',
-        agent.isDefault && 'bg-black/[0.04] dark:bg-white/[0.06]'
+        'rounded-xl border bg-background/70 px-4 py-4 transition-colors hover:border-primary/35 hover:bg-background',
+        agent.isDefault && 'border-primary/20 bg-primary/[0.04]'
       )}
     >
-      <div className="h-[46px] w-[46px] shrink-0 flex items-center justify-center text-primary bg-primary/10 rounded-full shadow-sm mb-3">
-        <Bot className="h-[22px] w-[22px]" />
-      </div>
-      <div className="flex flex-col flex-1 min-w-0 py-0.5 mt-1">
-        <div className="flex items-center justify-between gap-3 mb-1">
-          <div className="flex items-center gap-2 min-w-0">
-            <h2 className="text-[16px] font-semibold text-foreground truncate">{agent.name}</h2>
-            {agent.isDefault && (
-              <Badge
-                variant="secondary"
-                className="font-mono text-[10px] font-medium px-2 py-0.5 rounded-full bg-black/[0.04] dark:bg-white/[0.08] border-0 shadow-none text-foreground/70"
-              >
-                {t('defaultBadge')}
-              </Badge>
-            )}
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border bg-primary/10 text-primary">
+          <Bot className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <h2 className="truncate text-[17px] font-semibold text-foreground">{agent.name}</h2>
+                {agent.isDefault && (
+                  <Badge
+                    variant="secondary"
+                    className="rounded-full border-0 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary shadow-none"
+                  >
+                    {t('defaultBadge')}
+                  </Badge>
+                )}
+              </div>
+              <p className="mt-1 font-mono text-[12px] text-muted-foreground/85">{agent.id}</p>
+            </div>
+            <TooltipProvider delayDuration={120}>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
+                      onClick={onOpenSettings}
+                    >
+                      <PencilLine className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{t('settings')}</TooltipContent>
+                </Tooltip>
+                {!agent.isDefault && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        onClick={onDelete}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t('deleteAgent')}</TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+            </TooltipProvider>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            {!agent.isDefault && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="opacity-0 group-hover:opacity-100 h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
-                onClick={onDelete}
-                title={t('deleteAgent')}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                'h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/10 transition-all',
-                !agent.isDefault && 'opacity-0 group-hover:opacity-100',
-              )}
-              onClick={onOpenSettings}
-              title={t('settings')}
-            >
-              <Settings2 className="h-4 w-4" />
-            </Button>
+
+          <div className="mt-4 grid gap-2.5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+            <div className="rounded-lg border bg-muted/25 px-3 py-3">
+              <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
+                {t('fieldLabels.model')}
+              </div>
+              <p className="mt-1 truncate text-[15px] font-medium text-foreground">
+                {agent.modelDisplay}
+                {agent.inheritedModel ? (
+                  <span className="text-muted-foreground"> ({t('inherited')})</span>
+                ) : null}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/25 px-3 py-3">
+              <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
+                {t('fieldLabels.channels')}
+              </div>
+              <p className="mt-1 line-clamp-2 text-[15px] text-foreground/80">{channelsText}</p>
+            </div>
           </div>
         </div>
-        <p className="text-[13.5px] text-muted-foreground line-clamp-2 leading-[1.5]">
-          {t('modelLine', {
-            model: agent.modelDisplay,
-            suffix: agent.inheritedModel ? ` (${t('inherited')})` : '',
-          })}
-        </p>
-        <p className="text-[13.5px] text-muted-foreground line-clamp-2 leading-[1.5]">
-          {t('channelsLine', { channels: channelsText })}
-        </p>
       </div>
     </div>
   );
@@ -324,7 +393,7 @@ function AddAgentDialog({
             >
               {saving ? (
                 <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  <LoadingIcon className="h-4 w-4 mr-2" />
                   {t('creating')}
                 </>
               ) : (
@@ -394,6 +463,7 @@ function AgentSettingsModal({
       channelType: channelType as ChannelType,
       name: runtimeChannel?.name || CHANNEL_NAMES[channelType as ChannelType] || channelType,
       status: runtimeChannel?.status || 'disconnected',
+      statusLabel: runtimeChannel ? undefined : t('settingsDialog.assignedStatus'),
       error: runtimeChannel?.error,
     };
   });
@@ -439,7 +509,7 @@ function AgentSettingsModal({
                     className="h-[44px] text-[13px] font-medium rounded-xl px-4 border-black/10 dark:border-white/10 bg-muted/70 dark:bg-muted/40 hover:bg-black/5 dark:hover:bg-white/5 shadow-none text-foreground/80 hover:text-foreground"
                   >
                     {savingName ? (
-                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <LoadingIcon className="h-4 w-4" />
                     ) : (
                       t('common:actions.save')
                     )}
@@ -514,7 +584,7 @@ function AgentSettingsModal({
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <StatusBadge status={channel.status} />
+                      <StatusBadge status={channel.status} label={channel.statusLabel} />
                       <Button
                         variant="ghost"
                         size="icon"
@@ -571,4 +641,3 @@ function AgentSettingsModal({
 }
 
 export default Agents;
-

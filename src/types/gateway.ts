@@ -50,9 +50,23 @@ export interface GatewayNotification {
 export interface ProviderConfig {
   id: string;
   name: string;
-  type: 'openai' | 'anthropic' | 'ollama' | 'custom';
-  apiKey?: string;
+  type:
+    | 'anthropic'
+    | 'openai'
+    | 'google'
+    | 'openrouter'
+    | 'ark'
+    | 'moonshot'
+    | 'siliconflow'
+    | 'minimax-portal'
+    | 'minimax-portal-cn'
+    | 'qwen-portal'
+    | 'ollama'
+    | 'custom';
   baseUrl?: string;
+  apiProtocol?: 'openai-completions' | 'openai-responses' | 'anthropic-messages';
   model?: string;
+  fallbackModels?: string[];
+  fallbackProviderIds?: string[];
   enabled: boolean;
 }

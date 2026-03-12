@@ -43,6 +43,14 @@ export type { MiniMaxRegion };
 const OPENAI_CODEX_PROVIDER_ID = 'openai-codex';
 const OPENAI_CODEX_DEFAULT_MODEL = 'gpt-5.4';
 
+function normalizeOpenAICodexModel(model?: string | null): string {
+  const normalized = model?.trim() || '';
+  if (!normalized || normalized === 'gpt-5.3-codex') {
+    return OPENAI_CODEX_DEFAULT_MODEL;
+  }
+  return normalized;
+}
+
 // ─────────────────────────────────────────────────────────────
 // DeviceOAuthManager
 // ─────────────────────────────────────────────────────────────
@@ -442,7 +450,7 @@ class DeviceOAuthManager extends EventEmitter {
       authMode: 'oauth_browser',
       baseUrl: existing?.baseUrl,
       apiProtocol: existing?.apiProtocol,
-      model: existing?.model || accountModel || OPENAI_CODEX_DEFAULT_MODEL,
+      model: normalizeOpenAICodexModel(existing?.model || accountModel || OPENAI_CODEX_DEFAULT_MODEL),
       fallbackModels: existing?.fallbackModels,
       fallbackAccountIds: existing?.fallbackAccountIds,
       enabled: existing?.enabled ?? true,

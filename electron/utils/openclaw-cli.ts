@@ -87,6 +87,63 @@ export function getOpenClawCliCommand(): string {
   return `node ${quoteForPosix(entryPath)}`;
 }
 
+export function getOpenClawCliSpawnConfig(args: string[]): {
+  command: string;
+  args: string[];
+  env: NodeJS.ProcessEnv;
+  cwd: string;
+} {
+  const entryPath = getOpenClawEntryPath();
+  const platform = process.platform;
+  const cwd = getOpenClawDir();
+
+  if (!app.isPackaged) {
+    const openclawDir = getOpenClawDir();
+    const nodeModulesDir = dirname(openclawDir);
+    const binName = platform === 'win32' ? 'openclaw.cmd' : 'openclaw';
+    const binPath = join(nodeModulesDir, '.bin', binName);
+
+    if (existsSync(binPath)) {
+      return {
+        command: binPath,
+        args,
+        env: {
+          ...process.env,
+          OPENCLAW_NO_RESPAWN: '1',
+          OPENCLAW_EMBEDDED_IN: 'ClawClaw',
+        },
+        cwd,
+      };
+    }
+  }
+
+  const packagedCli = getPackagedCliWrapperPath();
+  if (packagedCli) {
+    return {
+      command: packagedCli,
+      args,
+      env: {
+        ...process.env,
+        OPENCLAW_NO_RESPAWN: '1',
+        OPENCLAW_EMBEDDED_IN: 'ClawClaw',
+      },
+      cwd,
+    };
+  }
+
+  return {
+    command: process.execPath,
+    args: [entryPath, ...args],
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
+      OPENCLAW_NO_RESPAWN: '1',
+      OPENCLAW_EMBEDDED_IN: 'ClawClaw',
+    },
+    cwd,
+  };
+}
+
 // ── Packaged CLI wrapper path ────────────────────────────────────────────────
 
 function getPackagedCliWrapperPath(): string | null {

@@ -1,12 +1,11 @@
-/**
- * Loading Spinner Component
- * Displays a spinning loader animation
- */
-import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface LoadingSpinnerProps {
   size?: 'sm' | 'md' | 'lg';
+  className?: string;
+}
+
+interface LoadingIconProps {
   className?: string;
 }
 
@@ -16,17 +15,24 @@ const sizeClasses = {
   lg: 'h-12 w-12',
 };
 
+export function LoadingIcon({ className }: LoadingIconProps) {
+  return (
+    <span className={cn('clawx-loading-icon', className)} aria-hidden="true">
+      <span className="clawx-loading-icon__dot" />
+      <span className="clawx-loading-icon__dot" />
+      <span className="clawx-loading-icon__dot" />
+    </span>
+  );
+}
+
 export function LoadingSpinner({ size = 'md', className }: LoadingSpinnerProps) {
   return (
     <div className={cn('flex items-center justify-center', className)}>
-      <Loader2 className={cn('animate-spin text-primary', sizeClasses[size])} />
+      <LoadingIcon className={cn('text-primary', sizeClasses[size])} />
     </div>
   );
 }
 
-/**
- * Full page loading spinner
- */
 export function PageLoader() {
   return (
     <div className="flex h-full items-center justify-center">

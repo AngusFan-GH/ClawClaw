@@ -235,6 +235,78 @@ function extractImagesAsAttachedFiles(content: unknown): AttachedFileMeta[] {
   return files;
 }
 
+function dedupeAttachedFiles(files: AttachedFileMeta[]): AttachedFileMeta[] {
+  const seen = new Set<string>();
+  const deduped: AttachedFileMeta[] = [];
+
+  for (const file of files) {
+    const key = file.filePath
+      ? `path:${file.filePath}`
+      : file.preview
+        ? `preview:${file.preview}`
+        : `name:${file.fileName}:${file.mimeType}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(file);
+  }
+
+  return deduped;
+}
+
+function extractStructuredFilesAsAttachedFiles(content: unknown): AttachedFileMeta[] {
+  if (!Array.isArray(content)) return [];
+
+  const files: AttachedFileMeta[] = [];
+
+  for (const rawBlock of content as Array<ContentBlock & Record<string, unknown>>) {
+    const block = rawBlock as ContentBlock & Record<string, unknown>;
+
+    if (block.type === 'image') {
+      files.push(...extractImagesAsAttachedFiles([block]));
+    } else {
+      const source = block.source;
+      const filePath =
+        typeof block.filePath === 'string' && block.filePath.trim()
+          ? block.filePath
+          : typeof block.path === 'string' && block.path.trim()
+            ? block.path
+            : undefined;
+      const remoteUrl =
+        typeof block.url === 'string' && block.url.trim()
+          ? block.url
+          : source?.type === 'url' && typeof source.url === 'string' && source.url.trim()
+            ? source.url
+            : undefined;
+      const mimeType =
+        block.mimeType
+        || source?.media_type
+        || (filePath ? mimeFromExtension(filePath) : 'application/octet-stream');
+      const fileName =
+        block.fileName
+        || block.name
+        || filePath?.split(/[\\/]/).pop()
+        || remoteUrl?.split('/').pop()
+        || 'file';
+
+      if (filePath || remoteUrl) {
+        files.push({
+          fileName,
+          mimeType,
+          fileSize: 0,
+          preview: remoteUrl && mimeType.startsWith('image/') ? remoteUrl : null,
+          filePath,
+        });
+      }
+    }
+
+    if (block.content) {
+      files.push(...extractStructuredFilesAsAttachedFiles(block.content));
+    }
+  }
+
+  return dedupeAttachedFiles(files);
+}
+
 /**
  * Build an AttachedFileMeta entry for a file ref, using cache if available.
  */
@@ -355,21 +427,21 @@ function enrichWithToolResultFiles(messages: RawMessage[]): RawMessage[] {
       // Resolve file path from the matching tool call
       const matchedPath = msg.toolCallId ? toolCallPaths.get(msg.toolCallId) : undefined;
 
-      // 1. Image/file content blocks in the structured content array
-      const imageFiles = extractImagesAsAttachedFiles(msg.content);
+      // 1. Structured content blocks from Gateway
+      const structuredFiles = extractStructuredFilesAsAttachedFiles(msg.content);
       if (matchedPath) {
-        for (const f of imageFiles) {
+        for (const f of structuredFiles) {
           if (!f.filePath) {
             f.filePath = matchedPath;
             f.fileName = matchedPath.split(/[\\/]/).pop() || 'image';
           }
         }
       }
-      pending.push(...imageFiles);
+      pending.push(...structuredFiles);
 
-      // 2. [media attached: ...] patterns in tool result text output
+      // 2. Text-pattern fallback for legacy/plaintext tool outputs
       const text = getMessageText(msg.content);
-      if (text) {
+      if (text && structuredFiles.length === 0) {
         const mediaRefs = extractMediaRefs(text);
         const mediaRefPaths = new Set(mediaRefs.map((r) => r.filePath));
         for (const ref of mediaRefs) {
@@ -416,19 +488,31 @@ function enrichWithCachedImages(messages: RawMessage[]): RawMessage[] {
     // Only process user and assistant messages; skip if already enriched
     if ((msg.role !== 'user' && msg.role !== 'assistant') || msg._attachedFiles) return msg;
     const text = getMessageText(msg.content);
+    const structuredFiles = extractStructuredFilesAsAttachedFiles(msg.content);
 
-    // Path 1: [media attached: path (mime) | path] — guaranteed format from attachment button
+    // Path 1: structured content blocks from Gateway
+    const files: AttachedFileMeta[] = [...structuredFiles];
+    const structuredPaths = new Set(structuredFiles.map((file) => file.filePath).filter(Boolean));
+
+    // Path 2: [media attached: path (mime) | path] — explicit text metadata fallback
     const mediaRefs = extractMediaRefs(text);
-    const mediaRefPaths = new Set(mediaRefs.map((r) => r.filePath));
+    const mediaRefPaths = new Set(
+      mediaRefs.map((r) => r.filePath).filter((filePath) => !structuredPaths.has(filePath))
+    );
+    for (const ref of mediaRefs) {
+      if (!structuredPaths.has(ref.filePath)) {
+        files.push(makeAttachedFile(ref));
+      }
+    }
 
-    // Path 2: Raw file paths.
+    // Path 3: Raw file paths, only as a last-resort fallback.
     // For assistant messages: scan own text AND the nearest preceding user message text,
     // but only for non-tool-only assistant messages (i.e. the final answer turn).
     // Tool-only messages (thinking + tool calls) should not show file previews — those
     // belong to the final answer message that comes after the tool results.
     // User messages never get raw-path previews so the image is not shown twice.
     let rawRefs: Array<{ filePath: string; mimeType: string }> = [];
-    if (msg.role === 'assistant' && !isToolOnlyMessage(msg)) {
+    if (files.length === 0 && msg.role === 'assistant' && !isToolOnlyMessage(msg)) {
       // Own text
       rawRefs = extractRawFilePaths(text).filter((r) => !mediaRefPaths.has(r.filePath));
 
@@ -450,22 +534,12 @@ function enrichWithCachedImages(messages: RawMessage[]): RawMessage[] {
       }
     }
 
-    const allRefs = [...mediaRefs, ...rawRefs];
-    if (allRefs.length === 0) return msg;
+    for (const ref of rawRefs) {
+      files.push(makeAttachedFile(ref));
+    }
 
-    const files: AttachedFileMeta[] = allRefs.map((ref) => {
-      const cached = _imageCache.get(ref.filePath);
-      if (cached) return { ...cached, filePath: ref.filePath };
-      const fileName = ref.filePath.split(/[\\/]/).pop() || 'file';
-      return {
-        fileName,
-        mimeType: ref.mimeType,
-        fileSize: 0,
-        preview: null,
-        filePath: ref.filePath,
-      };
-    });
-    return { ...msg, _attachedFiles: files };
+    if (files.length === 0) return msg;
+    return { ...msg, _attachedFiles: dedupeAttachedFiles(files) };
   });
 }
 
@@ -866,6 +940,7 @@ export {
   clearErrorRecoveryTimer,
   clearHistoryPoll,
   extractImagesAsAttachedFiles,
+  extractStructuredFilesAsAttachedFiles,
   getMessageText,
   extractMediaRefs,
   extractRawFilePaths,

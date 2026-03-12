@@ -116,7 +116,7 @@ ClawClaw 直接基于官方 **OpenClaw** 核心构建。无需单独安装，我
 
 ### 🔐 安全的供应商集成
 
-连接多个 AI 供应商（OpenAI、Anthropic 等），支持 API 密钥和已接入的 OAuth 登录方式。OpenAI Codex 登录现已对齐 OpenClaw 原生浏览器 OAuth 流程。每个供应商账户都可以单独配置模型 ID 和回退模型，凭证安全存储在系统原生密钥链中。
+连接多个 AI 供应商（OpenAI、Anthropic 等），支持 API 密钥和已接入的 OAuth 登录方式。OpenAI Codex 登录现已对齐 OpenClaw 原生浏览器 OAuth 流程，并在登录完成后从 OpenClaw 当前可用的 Codex 模型列表中选择模型。其他供应商账户仍可单独配置模型 ID 和回退模型，凭证安全存储在系统原生密钥链中。
 
 ### 🌙 自适应主题
 
@@ -188,6 +188,7 @@ ClawClaw 内置了代理设置，适用于需要通过本地代理客户端访�
 - 只填写 `host:port` 时，会按 HTTP 代理处理。
 - 高级代理项留空时，会自动回退到“代理服务器”。
 - 保存代理设置后，Electron 网络层会立即重新应用代理，并自动重启 Gateway。
+- 在“跟随系统”模式下，ClawClaw 也会解析系统代理，并传给自动启动的 OpenClaw Gateway 子进程。
 - 如果启用了 Telegram，ClawClaw 还会把代理同步到 OpenClaw 的 Telegram 频道配置中。
 
 ---

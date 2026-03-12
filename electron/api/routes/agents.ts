@@ -7,7 +7,6 @@ import {
   listAgentsSnapshot,
   updateAgentName,
 } from '../../utils/agent-config';
-import { deleteChannelConfig } from '../../utils/channel-config';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -92,7 +91,6 @@ export async function handleAgentRoutes(
     if (parts.length === 3 && parts[1] === 'channels') {
       try {
         const channelType = decodeURIComponent(parts[2]);
-        await deleteChannelConfig(channelType);
         const snapshot = await clearChannelBinding(channelType);
         scheduleGatewayReload(ctx, 'remove-agent-channel');
         sendJson(res, 200, { success: true, ...snapshot });

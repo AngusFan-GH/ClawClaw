@@ -1,8 +1,9 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FolderPlus, RefreshCw, Trash2 } from 'lucide-react';
+import { FolderPlus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
@@ -215,7 +216,7 @@ export function Security() {
   if (loading) {
     return (
       <div className="p-6 text-muted-foreground flex items-center gap-2">
-        <RefreshCw className="h-4 w-4 animate-spin" />
+        <LoadingIcon className="h-4 w-4" />
         {t('security.loading')}
       </div>
     );
@@ -322,7 +323,7 @@ export function Security() {
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             {applying ? (
               <>
-                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                <LoadingIcon className="h-3.5 w-3.5" />
                 <span>{t('security.applying')}</span>
               </>
             ) : lastAppliedAt ? (

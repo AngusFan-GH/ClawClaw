@@ -17,9 +17,9 @@ import {
   Music,
   FileArchive,
   File,
-  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { Textarea } from '@/components/ui/textarea';
 import { hostApiFetch } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
@@ -531,7 +531,7 @@ function AttachmentPreview({
       {/* Staging overlay */}
       {attachment.status === 'staging' && (
         <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-          <Loader2 className="h-4 w-4 text-white animate-spin" />
+          <LoadingIcon className="h-4 w-4 text-white" />
         </div>
       )}
 

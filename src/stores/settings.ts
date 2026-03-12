@@ -39,6 +39,7 @@ interface SettingsState {
   devModeUnlocked: boolean;
 
   // Setup
+  initialized: boolean;
   setupComplete: boolean;
 
   // Actions
@@ -67,12 +68,7 @@ interface SettingsState {
 
 const defaultSettings = {
   theme: 'system' as Theme,
-  language: (() => {
-    const lang = navigator.language.toLowerCase();
-    if (lang.startsWith('zh')) return 'zh';
-    if (lang.startsWith('ja')) return 'ja';
-    return 'en';
-  })(),
+  language: 'zh',
   startMinimized: false,
   launchAtStartup: false,
   gatewayAutoStart: true,
@@ -90,58 +86,86 @@ const defaultSettings = {
   sidebarCollapsed: false,
   devModeUnlocked: false,
   setupComplete: false,
+  initialized: false,
 };
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set) => ({
+    (set) => {
+      const syncFromMain = async (): Promise<void> => {
+        const settings = await hostApiFetch<Partial<typeof defaultSettings>>('/api/settings');
+        const normalizedProxyMode =
+          settings.proxyMode
+          || (settings.proxyEnabled ? 'custom' : 'system');
+        set((state) => ({
+          ...state,
+          ...settings,
+          proxyMode: normalizedProxyMode,
+          proxyEnabled: normalizedProxyMode === 'custom',
+          initialized: true,
+        }));
+        if (settings.language) {
+          i18n.changeLanguage(settings.language);
+        }
+      };
+
+      const persistMainSettings = async (patch: Partial<typeof defaultSettings>): Promise<void> => {
+        await hostApiFetch<{ success: boolean }>('/api/settings', {
+          method: 'PUT',
+          body: JSON.stringify(patch),
+        });
+        await syncFromMain();
+      };
+
+      return ({
       ...defaultSettings,
 
       init: async () => {
         try {
-          const settings = await hostApiFetch<Partial<typeof defaultSettings>>('/api/settings');
-          const normalizedProxyMode =
-            settings.proxyMode
-            || (settings.proxyEnabled ? 'custom' : 'system');
-          set((state) => ({
-            ...state,
-            ...settings,
-            proxyMode: normalizedProxyMode,
-            proxyEnabled: normalizedProxyMode === 'custom',
-          }));
-          if (settings.language) {
-            i18n.changeLanguage(settings.language);
-          }
+          await syncFromMain();
         } catch {
           // Keep renderer-persisted settings as a fallback when the main
           // process store is not reachable.
+          set({ initialized: true });
         }
       },
 
-      setTheme: (theme) => set({ theme }),
+      setTheme: (theme) => {
+        set({ theme });
+        void persistMainSettings({ theme }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
+      },
       setLanguage: (language) => {
         i18n.changeLanguage(language);
         set({ language });
-        void hostApiFetch('/api/settings/language', {
-          method: 'PUT',
-          body: JSON.stringify({ value: language }),
-        }).catch(() => {});
+        void persistMainSettings({ language }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
       },
-      setStartMinimized: (startMinimized) => set({ startMinimized }),
-      setLaunchAtStartup: (launchAtStartup) => set({ launchAtStartup }),
+      setStartMinimized: (startMinimized) => {
+        set({ startMinimized });
+        void persistMainSettings({ startMinimized }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
+      },
+      setLaunchAtStartup: (launchAtStartup) => {
+        set({ launchAtStartup });
+        void persistMainSettings({ launchAtStartup }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
+      },
       setGatewayAutoStart: (gatewayAutoStart) => {
         set({ gatewayAutoStart });
-        void hostApiFetch('/api/settings/gatewayAutoStart', {
-          method: 'PUT',
-          body: JSON.stringify({ value: gatewayAutoStart }),
-        }).catch(() => {});
+        void persistMainSettings({ gatewayAutoStart }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
       },
       setGatewayPort: (gatewayPort) => {
         set({ gatewayPort });
-        void hostApiFetch('/api/settings/gatewayPort', {
-          method: 'PUT',
-          body: JSON.stringify({ value: gatewayPort }),
-        }).catch(() => {});
+        void persistMainSettings({ gatewayPort }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
       },
       setProxyMode: (proxyMode) => set({ proxyMode, proxyEnabled: proxyMode === 'custom' }),
       setProxyEnabled: (proxyEnabled) => set({ proxyEnabled, proxyMode: proxyEnabled ? 'custom' : 'system' }),
@@ -150,34 +174,48 @@ export const useSettingsStore = create<SettingsState>()(
       setProxyHttpsServer: (proxyHttpsServer) => set({ proxyHttpsServer }),
       setProxyAllServer: (proxyAllServer) => set({ proxyAllServer }),
       setProxyBypassRules: (proxyBypassRules) => set({ proxyBypassRules }),
-      setUpdateChannel: (updateChannel) => set({ updateChannel }),
+      setUpdateChannel: (updateChannel) => {
+        set({ updateChannel });
+        void persistMainSettings({ updateChannel }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
+      },
       setAutoCheckUpdate: (autoCheckUpdate) => {
         set({ autoCheckUpdate });
-        void hostApiFetch('/api/settings/autoCheckUpdate', {
-          method: 'PUT',
-          body: JSON.stringify({ value: autoCheckUpdate }),
-        }).catch(() => {});
+        void persistMainSettings({ autoCheckUpdate }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
       },
       setAutoDownloadUpdate: (autoDownloadUpdate) => {
         set({ autoDownloadUpdate });
-        void hostApiFetch('/api/settings/autoDownloadUpdate', {
-          method: 'PUT',
-          body: JSON.stringify({ value: autoDownloadUpdate }),
-        }).catch(() => {});
+        void persistMainSettings({ autoDownloadUpdate }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
       },
-      setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
+      setSidebarCollapsed: (sidebarCollapsed) => {
+        set({ sidebarCollapsed });
+        void persistMainSettings({ sidebarCollapsed }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
+      },
       setDevModeUnlocked: (devModeUnlocked) => {
         set({ devModeUnlocked });
-        void hostApiFetch('/api/settings/devModeUnlocked', {
-          method: 'PUT',
-          body: JSON.stringify({ value: devModeUnlocked }),
-        }).catch(() => {});
+        void persistMainSettings({ devModeUnlocked }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
       },
-      markSetupComplete: () => set({ setupComplete: true }),
+      markSetupComplete: () => {
+        set({ setupComplete: true });
+        void persistMainSettings({ setupComplete: true }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
+      },
       resetSettings: () => set(defaultSettings),
-    }),
+    });
+    },
     {
       name: 'clawclaw-settings',
+      partialize: ({ initialized, ...state }) => state,
     }
   )
 );

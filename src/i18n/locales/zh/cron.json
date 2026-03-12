@@ -30,6 +30,15 @@
     "last": "上次",
     "next": "下次"
   },
+  "advanced": {
+    "badge": "高级 OpenClaw 任务",
+    "simpleBadge": "简单 UI 任务",
+    "readOnlyToast": "高级 OpenClaw 任务不能在此页面编辑。",
+    "readOnlyDescription": "该任务使用了高级 OpenClaw Job 结构。此页面可以查看，但不能安全地编辑它的消息、计划或投递设置。",
+    "readOnlyInline": "此页面中只读",
+    "summary_one": "当前有 {{count}} 个高级 OpenClaw 任务以只读方式展示消息和计划。",
+    "summary_other": "当前有 {{count}} 个高级 OpenClaw 任务以只读方式展示消息和计划。"
+  },
   "dialog": {
     "createTitle": "创建任务",
     "editTitle": "编辑任务",

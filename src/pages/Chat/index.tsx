@@ -5,12 +5,12 @@
  * are in the toolbar; messages render with markdown + streaming.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Check, ChevronDown, Loader2, Sparkles } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, Sparkles } from 'lucide-react';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { useAgentsStore } from '@/stores/agents';
-import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { LoadingIcon, LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput, type ChatAgentOption, type FileAttachment } from './ChatInput';
 import { ChatToolbar, type ChatToolbarModelOption } from './ChatToolbar';
@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { PROVIDER_TYPE_INFO, type ProviderAccount, type ProviderVendorInfo } from '@/lib/providers';
 import { useNavigate } from 'react-router-dom';
+import { hostApiFetch } from '@/lib/host-api';
 
 function getRuntimeProviderKey(account: ProviderAccount): string {
   if (account.vendorId === 'google' && account.authMode === 'oauth_browser') {
@@ -44,13 +45,27 @@ function getRuntimeProviderKey(account: ProviderAccount): string {
   return account.vendorId;
 }
 
+function normalizeAccountModel(account: ProviderAccount, model?: string): string | undefined {
+  if (
+    account.vendorId === 'openai'
+    && (account.authMode === 'oauth_browser' || account.authMode === 'oauth_device')
+    && model === 'gpt-5.3-codex'
+  ) {
+    return 'gpt-5.4';
+  }
+  return model;
+}
+
 function resolveAccountModelLabel(
   account: ProviderAccount,
   vendor?: ProviderVendorInfo
 ): { modelRef?: string; modelName?: string } {
   const runtimeProviderKey = getRuntimeProviderKey(account);
   const fallbackVendor = PROVIDER_TYPE_INFO.find((item) => item.id === account.vendorId);
-  const rawModel = account.model || vendor?.defaultModelId || fallbackVendor?.defaultModelId;
+  const rawModel = normalizeAccountModel(
+    account,
+    account.model || vendor?.defaultModelId || fallbackVendor?.defaultModelId,
+  );
 
   if (!rawModel) {
     return {
@@ -72,7 +87,10 @@ function resolveAccountModelOptions(
 ): ChatToolbarModelOption[] {
   const runtimeProviderKey = getRuntimeProviderKey(account);
   const fallbackVendor = PROVIDER_TYPE_INFO.find((item) => item.id === account.vendorId);
-  const primaryModel = account.model || vendor?.defaultModelId || fallbackVendor?.defaultModelId;
+  const primaryModel = normalizeAccountModel(
+    account,
+    account.model || vendor?.defaultModelId || fallbackVendor?.defaultModelId,
+  );
   const candidates = [primaryModel, ...(account.fallbackModels ?? [])]
     .map((value) => value?.trim())
     .filter((value): value is string => Boolean(value));
@@ -91,6 +109,41 @@ function resolveAccountModelOptions(
       value: normalizedRef,
       label: `${account.label} · ${modelName}`,
       shortLabel: modelName,
+    }];
+  });
+}
+
+type ProviderCatalogModelOption = {
+  id: string;
+  name: string;
+};
+
+function resolveAccountCatalogModelOptions(
+  account: ProviderAccount,
+  models: ProviderCatalogModelOption[],
+): ChatToolbarModelOption[] {
+  const runtimeProviderKey = getRuntimeProviderKey(account);
+  const seen = new Set<string>();
+
+  return models.flatMap((candidate) => {
+    const normalizedId = normalizeAccountModel(account, candidate.id)?.trim();
+    if (!normalizedId) {
+      return [];
+    }
+
+    const normalizedRef = normalizedId.startsWith(`${runtimeProviderKey}/`)
+      ? normalizedId
+      : `${runtimeProviderKey}/${normalizedId}`;
+    if (seen.has(normalizedRef)) {
+      return [];
+    }
+    seen.add(normalizedRef);
+
+    const displayName = candidate.name?.trim() || normalizedId.split('/').pop() || normalizedId;
+    return [{
+      value: normalizedRef,
+      label: `${account.label} · ${displayName}`,
+      shortLabel: displayName,
     }];
   });
 }
@@ -115,16 +168,13 @@ function normalizeSessionModelValue(
 
 function dedupeModelOptions(options: ChatToolbarModelOption[]): ChatToolbarModelOption[] {
   const seenValues = new Set<string>();
-  const seenLabels = new Set<string>();
 
   return options.filter((option) => {
     const valueKey = option.value.trim().toLowerCase();
-    const labelKey = option.label.trim().toLowerCase();
-    if (seenValues.has(valueKey) || seenLabels.has(labelKey)) {
+    if (seenValues.has(valueKey)) {
       return false;
     }
     seenValues.add(valueKey);
-    seenLabels.add(labelKey);
     return true;
   });
 }
@@ -164,10 +214,19 @@ export function Chat() {
   const defaultAccountId = useProviderStore((s) => s.defaultAccountId);
   const providerLoading = useProviderStore((s) => s.loading);
   const refreshProviderSnapshot = useProviderStore((s) => s.refreshProviderSnapshot);
+  const [providerCatalogMap, setProviderCatalogMap] = useState<Record<string, ProviderCatalogModelOption[]>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
   const currentSession = sessions.find((session) => session.key === currentSessionKey);
+  const providerStatusMap = useMemo(
+    () => new Map(providerStatuses.map((status) => [status.id, status])),
+    [providerStatuses]
+  );
+  const vendorMap = useMemo(
+    () => new Map(providerVendors.map((vendor) => [vendor.id, vendor])),
+    [providerVendors]
+  );
 
   // Load data when gateway is running.
   // When the store already holds messages for this session (i.e. the user
@@ -179,7 +238,7 @@ export function Chat() {
     let cancelled = false;
     const hasExistingMessages = useChatStore.getState().messages.length > 0;
     (async () => {
-      await loadSessions();
+      await loadSessions(true);
       if (cancelled) return;
       await loadHistory(hasExistingMessages);
     })();
@@ -198,6 +257,50 @@ export function Chat() {
   useEffect(() => {
     void fetchAgents();
   }, [fetchAgents]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const eligibleAccounts = providerAccounts.filter((account) => account.enabled)
+      .filter(
+        (account) =>
+          account.vendorId !== 'custom'
+          && account.vendorId !== 'local-model'
+          && (
+            account.authMode === 'local'
+            || account.authMode === 'oauth_device'
+            || account.authMode === 'oauth_browser'
+            || Boolean(providerStatusMap.get(account.id)?.hasKey)
+          ),
+      );
+    const requestKeys = Array.from(
+      new Set(eligibleAccounts.map((account) => `${account.vendorId}:${account.authMode}`)),
+    );
+
+    if (requestKeys.length === 0) {
+      setProviderCatalogMap({});
+      return;
+    }
+
+    Promise.all(requestKeys.map(async (requestKey) => {
+      const [vendorId, authMode] = requestKey.split(':');
+      try {
+        const response = await hostApiFetch<{ models: ProviderCatalogModelOption[] }>(
+          `/api/provider-model-options?vendorId=${encodeURIComponent(vendorId)}&authMode=${encodeURIComponent(authMode)}`,
+        );
+        return [requestKey, response.models ?? []] as const;
+      } catch (error) {
+        console.warn(`Failed to load provider model options for ${requestKey}:`, error);
+        return [requestKey, []] as const;
+      }
+    })).then((entries) => {
+      if (cancelled) return;
+      setProviderCatalogMap(Object.fromEntries(entries));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [providerAccounts, providerStatusMap]);
 
   // Auto-scroll on new messages, streaming, or activity changes
   useEffect(() => {
@@ -244,14 +347,6 @@ export function Chat() {
     hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasStreamToolStatus;
 
   const isEmpty = messages.length === 0 && !loading && !sending;
-  const providerStatusMap = useMemo(
-    () => new Map(providerStatuses.map((status) => [status.id, status])),
-    [providerStatuses]
-  );
-  const vendorMap = useMemo(
-    () => new Map(providerVendors.map((vendor) => [vendor.id, vendor])),
-    [providerVendors]
-  );
   const modelOptions = useMemo<ChatToolbarModelOption[]>(() => {
     const baseOptions = providerAccounts
       .filter((account) => account.enabled)
@@ -264,12 +359,18 @@ export function Chat() {
       )
       .flatMap((account) => {
         const vendor = vendorMap.get(account.vendorId);
-        return resolveAccountModelOptions(account, vendor);
+        const requestKey = `${account.vendorId}:${account.authMode}`;
+        const catalogOptions = resolveAccountCatalogModelOptions(
+          account,
+          providerCatalogMap[requestKey] ?? [],
+        );
+        const explicitOptions = resolveAccountModelOptions(account, vendor);
+        return [...catalogOptions, ...explicitOptions];
       })
       .sort((left, right) => left.label.localeCompare(right.label));
 
     return dedupeModelOptions(baseOptions);
-  }, [providerAccounts, providerStatusMap, vendorMap]);
+  }, [providerAccounts, providerCatalogMap, providerStatusMap, vendorMap]);
   const normalizedSelectedModel = useMemo(
     () => normalizeSessionModelValue(currentSession?.model, modelOptions),
     [currentSession?.model, modelOptions]
@@ -617,7 +718,7 @@ function ActivityIndicator({ phase }: { phase: 'tool_processing' }) {
       </div>
       <div className="bg-muted rounded-2xl px-4 py-3">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+          <LoadingIcon className="h-3.5 w-3.5 text-primary" />
           <span>{t('status.processingToolResults')}</span>
         </div>
       </div>

@@ -3,10 +3,11 @@
  * Manage messaging channel connections with configuration UI
  */
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Trash2, AlertCircle, Loader2 } from 'lucide-react';
+import { RefreshCw, Trash2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { useChannelsStore } from '@/stores/channels';
 import { useGatewayStore } from '@/stores/gateway';
 import { hostApiFetch } from '@/lib/host-api';
@@ -32,6 +33,12 @@ import dingtalkIcon from '@/assets/channels/dingtalk.svg';
 import feishuIcon from '@/assets/channels/feishu.svg';
 import wecomIcon from '@/assets/channels/wecom.svg';
 import qqIcon from '@/assets/channels/qq.svg';
+
+type DisplayChannel = Channel & {
+  configured: boolean;
+  runtimeLoaded: boolean;
+  runtimeStatus: Channel['status'] | 'unknown';
+};
 
 export function Channels() {
   const { t } = useTranslation('channels');
@@ -81,11 +88,16 @@ export function Channels() {
   const displayedChannelTypes = getPrimaryChannels();
   const allChannelTypes = getAllChannels();
   const configuredChannelTypeSet = new Set<ChannelType>();
-  const configuredDisplayChannels: Channel[] = [];
+  const configuredDisplayChannels: DisplayChannel[] = [];
 
   for (const channel of safeChannels) {
     configuredChannelTypeSet.add(channel.type);
-    configuredDisplayChannels.push(channel);
+    configuredDisplayChannels.push({
+      ...channel,
+      configured: channel.configured ?? true,
+      runtimeLoaded: channel.runtimeLoaded ?? true,
+      runtimeStatus: channel.runtimeStatus ?? channel.status,
+    });
   }
 
   for (const type of configuredTypes) {
@@ -98,6 +110,9 @@ export function Channels() {
       type: typedType,
       name: CHANNEL_NAMES[typedType],
       status: 'disconnected',
+      configured: true,
+      runtimeLoaded: false,
+      runtimeStatus: gatewayStatus.state === 'running' ? 'unknown' : 'disconnected',
     });
   }
 
@@ -127,7 +142,7 @@ export function Channels() {
             <div className="flex items-center gap-3">
               {statusText && (
                 <div className="inline-flex h-9 items-center gap-2 rounded-xl border border-border/70 bg-card/85 px-3 text-[13px] font-medium text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <LoadingIcon className="h-3.5 w-3.5" />
                   <span>{statusText}</span>
                 </div>
               )}
@@ -137,7 +152,7 @@ export function Channels() {
                 disabled={gatewayStatus.state !== 'running'}
                 className="h-9 rounded-xl border-black/10 bg-transparent px-4 text-[13px] font-medium text-foreground/80 shadow-none transition-colors hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
               >
-                <RefreshCw className={cn("h-3.5 w-3.5 mr-2", loading && "animate-spin")} />
+                {loading ? <LoadingIcon className="h-3.5 w-3.5 mr-2" /> : <RefreshCw className="h-3.5 w-3.5 mr-2" />}
                 {t('refresh')}
               </Button>
             </div>
@@ -256,8 +271,7 @@ export function Channels() {
         onConfirm={async () => {
           if (channelToDelete) {
             await deleteChannel(channelToDelete.id);
-            const [channelType] = channelToDelete.id.split('-');
-            setConfiguredTypes((prev) => prev.filter((type) => type !== channelType));
+            await fetchConfiguredTypes();
             setChannelToDelete(null);
           }
         }}
@@ -289,7 +303,7 @@ function ChannelLogo({ type }: { type: ChannelType }) {
 }
 
 interface ChannelCardProps {
-  channel: Channel;
+  channel: DisplayChannel;
   onClick: () => void;
   onDelete: () => void;
 }
@@ -297,6 +311,17 @@ interface ChannelCardProps {
 function ChannelCard({ channel, onClick, onDelete }: ChannelCardProps) {
   const { t } = useTranslation('channels');
   const meta = CHANNEL_META[channel.type];
+  const runtimeStatus = channel.runtimeStatus ?? channel.status;
+  const runtimeLabel =
+    runtimeStatus === 'connected'
+      ? t('runtime.connected')
+      : runtimeStatus === 'connecting'
+        ? t('runtime.connecting')
+        : runtimeStatus === 'error'
+          ? t('runtime.error')
+          : runtimeStatus === 'disconnected'
+            ? t('runtime.stopped')
+            : t('runtime.unknown');
 
   return (
     <div 
@@ -317,6 +342,12 @@ function ChannelCard({ channel, onClick, onDelete }: ChannelCardProps) {
         <div className="flex items-center justify-between gap-2 mb-1">
           <div className="flex items-center gap-2 min-w-0">
             <h3 className="text-[16px] font-semibold text-foreground truncate">{channel.name}</h3>
+            <Badge
+              variant="secondary"
+              className="rounded-xl border-0 bg-black/[0.05] px-2 py-0.5 font-mono text-[10px] font-medium text-foreground/70 shadow-none dark:bg-white/[0.08]"
+            >
+              {t('configuredBadge')}
+            </Badge>
             {meta?.isPlugin && (
               <Badge
                 variant="secondary"
@@ -328,15 +359,15 @@ function ChannelCard({ channel, onClick, onDelete }: ChannelCardProps) {
             <div
               className={cn(
                 'w-2 h-2 rounded-full shrink-0',
-                channel.status === 'connected'
+                runtimeStatus === 'connected'
                   ? 'bg-green-500'
-                  : channel.status === 'connecting'
+                  : runtimeStatus === 'connecting'
                     ? 'bg-yellow-500 animate-pulse'
-                    : channel.status === 'error'
+                    : runtimeStatus === 'error'
                       ? 'bg-destructive'
                       : 'bg-muted-foreground'
               )}
-              title={channel.status}
+              title={runtimeLabel}
             />
           </div>
 
@@ -358,9 +389,14 @@ function ChannelCard({ channel, onClick, onDelete }: ChannelCardProps) {
             {channel.error}
           </p>
         ) : (
-          <p className="text-[13.5px] text-muted-foreground line-clamp-2 leading-[1.5]">
-            {meta ? t(meta.description.replace('channels:', '')) : CHANNEL_NAMES[channel.type]}
-          </p>
+          <div className="space-y-1">
+            <p className="text-[12px] font-medium text-foreground/70">
+              {t('runtime.label')}: {channel.runtimeLoaded ? runtimeLabel : t('runtime.notLoaded')}
+            </p>
+            <p className="text-[13.5px] text-muted-foreground line-clamp-2 leading-[1.5]">
+              {meta ? t(meta.description.replace('channels:', '')) : CHANNEL_NAMES[channel.type]}
+            </p>
+          </div>
         )}
       </div>
     </div>

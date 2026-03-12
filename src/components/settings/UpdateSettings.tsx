@@ -3,11 +3,12 @@
  * Displays update status and allows manual update checking/installation
  */
 import { useEffect, useCallback } from 'react';
-import { Download, RefreshCw, Loader2, Rocket, XCircle } from 'lucide-react';
+import { Download, RefreshCw, Rocket, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useUpdateStore } from '@/stores/update';
 import { useTranslation } from 'react-i18next';
+import { LoadingIcon } from '@/components/common/LoadingSpinner';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -49,7 +50,7 @@ export function UpdateSettings() {
     switch (status) {
       case 'checking':
       case 'downloading':
-        return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
+        return <LoadingIcon className="h-4 w-4 text-muted-foreground" />;
       case 'available':
         return <Download className="h-4 w-4 text-primary" />;
       case 'downloaded':
@@ -88,14 +89,14 @@ export function UpdateSettings() {
       case 'checking':
         return (
           <Button disabled variant="outline" size="sm">
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            <LoadingIcon className="h-4 w-4 mr-2" />
             {t('updates.action.checking')}
           </Button>
         );
       case 'downloading':
         return (
           <Button disabled variant="outline" size="sm">
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            <LoadingIcon className="h-4 w-4 mr-2" />
             {t('updates.action.downloading')}
           </Button>
         );
@@ -141,7 +142,7 @@ export function UpdateSettings() {
   if (!isInitialized) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <LoadingIcon className="h-4 w-4" />
         <span>Loading...</span>
       </div>
     );

@@ -26,6 +26,10 @@ function isUiManagedAgentTurn(job: GatewayCronJob): boolean {
   return (job.sessionTarget === 'isolated' || !job.sessionTarget) && job.payload?.kind === 'agentTurn';
 }
 
+function isEditableUiJob(job: GatewayCronJob): boolean {
+  return isUiManagedAgentTurn(job) && (job.delivery?.mode ?? 'none') === 'none';
+}
+
 function needsDeliveryRepair(job: GatewayCronJob): boolean {
   return isUiManagedAgentTurn(job) && (job.delivery?.mode ?? 'announce') !== 'none';
 }
@@ -74,6 +78,7 @@ async function getCronJobById(ctx: HostApiContext, id: string): Promise<GatewayC
 function transformCronJob(job: GatewayCronJob) {
   const message = job.payload?.message || job.payload?.text || '';
   clearStaleUiDeliveryError(job);
+  const uiManaged = isEditableUiJob(job);
   const channelType = job.delivery?.mode === 'announce' ? job.delivery?.channel : undefined;
   const target = channelType
     ? { channelType, channelId: channelType, channelName: channelType }
@@ -101,6 +106,11 @@ function transformCronJob(job: GatewayCronJob) {
     updatedAt: new Date(job.updatedAtMs).toISOString(),
     lastRun,
     nextRun,
+    kind: job.payload?.kind ?? 'unknown',
+    uiManaged,
+    deliveryMode: job.delivery?.mode ?? 'none',
+    sessionTarget: job.sessionTarget ?? null,
+    readOnlyReason: uiManaged ? undefined : 'advanced-openclaw-job',
   };
 }
 
@@ -148,6 +158,18 @@ export async function handleCronRoutes(
     try {
       const id = decodeURIComponent(url.pathname.slice('/api/cron/jobs/'.length));
       const input = await parseJsonBody<Record<string, unknown>>(req);
+      const current = await getCronJobById(ctx, id);
+      if (!current) {
+        sendJson(res, 404, { success: false, error: 'Cron job not found' });
+        return true;
+      }
+      if (!isEditableUiJob(current)) {
+        sendJson(res, 400, {
+          success: false,
+          error: 'Advanced OpenClaw jobs cannot be edited from this UI',
+        });
+        return true;
+      }
       const patch = { ...input };
       if (typeof patch.schedule === 'string') {
         patch.schedule = { kind: 'cron', expr: patch.schedule };
@@ -156,10 +178,7 @@ export async function handleCronRoutes(
         patch.payload = { kind: 'agentTurn', message: patch.message };
         delete patch.message;
       }
-      const current = await getCronJobById(ctx, id);
-      if (current && isUiManagedAgentTurn(current)) {
-        patch.delivery = { mode: 'none' };
-      }
+      patch.delivery = { mode: 'none' };
       sendJson(res, 200, await ctx.gatewayManager.rpc('cron.update', { id, patch }));
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

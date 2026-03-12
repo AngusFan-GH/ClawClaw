@@ -124,6 +124,9 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
             type: channelId as ChannelType,
             name: primaryAccount?.name || CHANNEL_NAMES[channelId as ChannelType] || channelId,
             status,
+            configured: true,
+            runtimeLoaded: true,
+            runtimeStatus: status,
             accountId: primaryAccount?.accountId,
             error:
               (typeof primaryAccount?.lastError === 'string' ? primaryAccount.lastError : undefined) ||
@@ -143,68 +146,45 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
   },
 
   addChannel: async (params) => {
+    set({ error: null });
     try {
       const result = await useGatewayStore.getState().rpc<Channel>('channels.add', params);
-
-      if (result) {
-        set((state) => ({
-          channels: [...state.channels, result],
-        }));
-        return result;
-      } else {
-        // If gateway is not available, create a local channel for now
-        const newChannel: Channel = {
-          id: `local-${Date.now()}`,
-          type: params.type,
-          name: params.name,
-          status: 'disconnected',
-        };
-        set((state) => ({
-          channels: [...state.channels, newChannel],
-        }));
-        return newChannel;
+      if (!result) {
+        throw new Error(`Gateway did not confirm channel creation for ${params.type}`);
       }
-    } catch {
-      // Create local channel if gateway unavailable
-      const newChannel: Channel = {
-        id: `local-${Date.now()}`,
-        type: params.type,
-        name: params.name,
-        status: 'disconnected',
-      };
-      set((state) => ({
-        channels: [...state.channels, newChannel],
-      }));
-      return newChannel;
+      await get().fetchChannels();
+      return (
+        get().channels.find((channel) => (
+          channel.type === params.type
+          && (result.accountId == null || channel.accountId === result.accountId)
+        )) ?? result
+      );
+    } catch (error) {
+      set({ error: String(error) });
+      throw error;
     }
   },
 
   deleteChannel: async (channelId) => {
+    set({ error: null });
     const channelType = resolveChannelTypeFromId(channelId);
     if (!channelType) {
       throw new Error(`Unknown channel type for id: ${channelId}`);
     }
 
-    try {
-      // Delete the channel configuration from openclaw.json
-      await hostApiFetch(`/api/channels/config/${encodeURIComponent(channelType)}`, {
-        method: 'DELETE',
-      });
-    } catch (error) {
-      console.error('Failed to delete channel config:', error);
-    }
+    // Configuration deletion is the authoritative operation. If it fails,
+    // keep local UI state unchanged.
+    await hostApiFetch(`/api/channels/config/${encodeURIComponent(channelType)}`, {
+      method: 'DELETE',
+    });
 
     try {
       await useGatewayStore.getState().rpc('channels.delete', { channelId: channelType });
     } catch (error) {
-      // Continue with local deletion even if gateway fails
       console.error('Failed to delete channel from gateway:', error);
     }
 
-    // Remove from local state
-    set((state) => ({
-      channels: state.channels.filter((c) => c.id !== channelId),
-    }));
+    await get().fetchChannels();
   },
 
   connectChannel: async (channelId) => {

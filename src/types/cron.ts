@@ -47,6 +47,11 @@ export interface CronJob {
   updatedAt: string;
   lastRun?: CronJobLastRun;
   nextRun?: string;
+  kind?: string;
+  uiManaged?: boolean;
+  deliveryMode?: string;
+  sessionTarget?: string | null;
+  readOnlyReason?: string;
 }
 
 /**

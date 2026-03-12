@@ -30,6 +30,15 @@
     "last": "前回",
     "next": "次回"
   },
+  "advanced": {
+    "badge": "高度な OpenClaw ジョブ",
+    "simpleBadge": "シンプル UI タスク",
+    "readOnlyToast": "高度な OpenClaw ジョブはこのページでは編集できません。",
+    "readOnlyDescription": "このタスクは高度な OpenClaw ジョブ構造を使用しています。このページでは表示できますが、メッセージ、スケジュール、配信設定を安全に編集することはできません。",
+    "readOnlyInline": "このページでは読み取り専用",
+    "summary_one": "{{count}} 件の高度な OpenClaw ジョブが、メッセージとスケジュール編集に対して読み取り専用で表示されています。",
+    "summary_other": "{{count}} 件の高度な OpenClaw ジョブが、メッセージとスケジュール編集に対して読み取り専用で表示されています。"
+  },
   "dialog": {
     "createTitle": "タスク作成",
     "editTitle": "タスク編集",

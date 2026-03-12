@@ -2,7 +2,7 @@ import {
   clearErrorRecoveryTimer,
   clearHistoryPoll,
   collectToolUpdates,
-  extractImagesAsAttachedFiles,
+  extractStructuredFilesAsAttachedFiles,
   extractMediaRefs,
   extractRawFilePaths,
   getMessageText,
@@ -70,9 +70,7 @@ export function handleRuntimeEventState(
                 : undefined;
 
               // Mirror enrichWithToolResultFiles: collect images + file refs for next assistant msg
-              const toolFiles: AttachedFileMeta[] = [
-                ...extractImagesAsAttachedFiles(finalMsg.content),
-              ];
+              const toolFiles: AttachedFileMeta[] = extractStructuredFilesAsAttachedFiles(finalMsg.content);
               if (matchedPath) {
                 for (const f of toolFiles) {
                   if (!f.filePath) {
@@ -82,7 +80,7 @@ export function handleRuntimeEventState(
                 }
               }
               const text = getMessageText(finalMsg.content);
-              if (text) {
+              if (text && toolFiles.length === 0) {
                 const mediaRefs = extractMediaRefs(text);
                 const mediaRefPaths = new Set(mediaRefs.map(r => r.filePath));
                 for (const ref of mediaRefs) toolFiles.push(makeAttachedFile(ref));

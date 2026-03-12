@@ -11,7 +11,6 @@ import {
   EyeOff,
   Check,
   X,
-  Loader2,
   Key,
   ExternalLink,
   Copy,
@@ -50,6 +49,7 @@ import { invokeIpc } from '@/lib/api-client';
 import { useSettingsStore } from '@/stores/settings';
 import { hostApiFetch } from '@/lib/host-api';
 import { subscribeHostEvent } from '@/lib/host-events';
+import { LoadingIcon } from '@/components/common/LoadingSpinner';
 
 const inputClasses = 'h-[44px] rounded-xl font-mono text-[13px] bg-muted/70 dark:bg-muted/40 border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40';
 const labelClasses = 'text-[14px] text-foreground/80 font-bold';
@@ -72,6 +72,47 @@ function fallbackModelsEqual(a?: string[], b?: string[]): boolean {
   const left = normalizeFallbackModels(a);
   const right = normalizeFallbackModels(b);
   return left.length === right.length && left.every((model, index) => model === right[index]);
+}
+
+type ProviderModelOption = {
+  id: string;
+  name: string;
+};
+
+const OPENAI_OAUTH_PREFERRED_MODEL_ID = 'gpt-5.4';
+
+function normalizeOAuthSelectedModel(vendorId: string, modelId?: string | null): string {
+  const normalized = modelId?.trim() || '';
+  if (!normalized) {
+    return '';
+  }
+  if (vendorId === 'openai' && normalized === 'gpt-5.3-codex') {
+    return OPENAI_OAUTH_PREFERRED_MODEL_ID;
+  }
+  return normalized;
+}
+
+function pickOAuthModelSelection(
+  vendorId: string,
+  options: ProviderModelOption[],
+  preferred?: string | null,
+  fallback?: string | null,
+): string {
+  const normalizedPreferred = normalizeOAuthSelectedModel(vendorId, preferred);
+  if (normalizedPreferred && options.some((option) => option.id === normalizedPreferred)) {
+    return normalizedPreferred;
+  }
+
+  const normalizedFallback = normalizeOAuthSelectedModel(vendorId, fallback);
+  if (normalizedFallback && options.some((option) => option.id === normalizedFallback)) {
+    return normalizedFallback;
+  }
+
+  if (vendorId === 'openai' && options.some((option) => option.id === OPENAI_OAUTH_PREFERRED_MODEL_ID)) {
+    return OPENAI_OAUTH_PREFERRED_MODEL_ID;
+  }
+
+  return options[0]?.id || normalizedFallback || normalizedPreferred || '';
 }
 
 function getAuthModeLabel(
@@ -243,7 +284,7 @@ export function ProvidersSettings({
 
       {loading ? (
         <div className="flex items-center justify-center py-12 text-muted-foreground bg-black/5 dark:bg-white/5 rounded-2xl border border-transparent border-dashed">
-          <Loader2 className="h-6 w-6 animate-spin" />
+          <LoadingIcon className="h-6 w-6" />
         </div>
       ) : displayProviders.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground bg-black/5 dark:bg-white/5 rounded-2xl border border-transparent border-dashed">
@@ -358,10 +399,13 @@ function ProviderCard({
   const [showFallback, setShowFallback] = useState(false);
   const [validating, setValidating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [modelOptions, setModelOptions] = useState<ProviderModelOption[]>([]);
+  const [loadingModelOptions, setLoadingModelOptions] = useState(false);
 
   const typeInfo = PROVIDER_TYPE_INFO.find((t) => t.id === account.vendorId);
   const showModelIdField = shouldShowProviderModelId(typeInfo, devModeUnlocked);
   const canEditModelConfig = Boolean(typeInfo?.showBaseUrl || showModelIdField);
+  const usesOpenAIOAuthModelPicker = account.vendorId === 'openai' && account.authMode === 'oauth_browser';
 
   useEffect(() => {
     if (isEditing) {
@@ -369,11 +413,48 @@ function ProviderCard({
       setShowKey(false);
       setBaseUrl(account.baseUrl || '');
       setApiProtocol(account.apiProtocol || 'openai-completions');
-      setModelId(account.model || '');
+      setModelId(normalizeOAuthSelectedModel(account.vendorId, account.model));
       setFallbackModelsText(normalizeFallbackModels(account.fallbackModels).join('\n'));
       setFallbackProviderIds(normalizeFallbackProviderIds(account.fallbackAccountIds));
     }
   }, [isEditing, account.baseUrl, account.fallbackModels, account.fallbackAccountIds, account.model, account.apiProtocol]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isEditing || !usesOpenAIOAuthModelPicker) {
+      setModelOptions([]);
+      setLoadingModelOptions(false);
+      return;
+    }
+
+    setLoadingModelOptions(true);
+    hostApiFetch<{ models: ProviderModelOption[] }>('/api/provider-model-options?vendorId=openai&authMode=oauth_browser')
+      .then((response) => {
+        if (cancelled) return;
+        setModelOptions(response.models ?? []);
+        setModelId((current) => pickOAuthModelSelection(
+          account.vendorId,
+          response.models ?? [],
+          current || account.model,
+          typeInfo?.defaultModelId,
+        ));
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error('Failed to load OpenAI OAuth model options:', error);
+          setModelOptions([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingModelOptions(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [account.model, account.vendorId, isEditing, typeInfo?.defaultModelId, usesOpenAIOAuthModelPicker]);
 
   const fallbackOptions = allProviders.filter((candidate) => candidate.account.id !== account.id);
 
@@ -595,7 +676,7 @@ function ProviderCard({
                   />
                 </div>
               )}
-              {showModelIdField && (
+              {showModelIdField && !usesOpenAIOAuthModelPicker && (
                 <div className="space-y-1.5 pt-2">
                   <Label className={currentLabelClasses}>{t('aiProviders.dialog.modelId')}</Label>
                   <Input
@@ -604,6 +685,23 @@ function ProviderCard({
                     placeholder={typeInfo?.modelIdPlaceholder || 'provider/model-id'}
                     className={currentInputClasses}
                   />
+                </div>
+              )}
+              {showModelIdField && usesOpenAIOAuthModelPicker && (
+                <div className="space-y-1.5 pt-2">
+                  <Label className={currentLabelClasses}>{t('aiProviders.dialog.model')}</Label>
+                  <select
+                    value={modelId}
+                    onChange={(e) => setModelId(e.target.value)}
+                    className={cn(currentInputClasses, 'font-sans')}
+                    disabled={loadingModelOptions}
+                  >
+                    {modelOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
               {(account.vendorId === 'custom' || account.vendorId === 'local-model') && (
@@ -751,7 +849,7 @@ function ProviderCard({
                   }
                 >
                   {validating || saving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <LoadingIcon className="h-4 w-4" />
                   ) : (
                     <Check className="h-4 w-4 text-green-500" />
                   )}
@@ -830,6 +928,9 @@ function AddProviderDialog({
   } | null>(null);
   const [oauthError, setOauthError] = useState<string | null>(null);
   const [oauthManualInput, setOauthManualInput] = useState('');
+  const [oauthAuthedAccountId, setOauthAuthedAccountId] = useState<string | null>(null);
+  const [oauthModelOptions, setOauthModelOptions] = useState<ProviderModelOption[]>([]);
+  const [loadingOAuthModels, setLoadingOAuthModels] = useState(false);
   // For providers that support both OAuth and API key, let the user choose.
   // Default to the vendor's declared auth mode instead of hard-coding OAuth.
   const [authMode, setAuthMode] = useState<'oauth' | 'apikey'>('apikey');
@@ -847,6 +948,15 @@ function AddProviderDialog({
       : (selectedType === 'google' ? 'oauth_browser' : null));
   // Effective OAuth mode: pure OAuth providers, or dual-mode with oauth selected
   const useOAuthFlow = isOAuth && (!supportsApiKey || authMode === 'oauth');
+  const useOpenAIOAuthModelPicker = selectedType === 'openai' && useOAuthFlow;
+  const showEditableModelField = showModelIdField && !useOpenAIOAuthModelPicker;
+
+  const loadOAuthModelOptions = async (vendorId: string, authModeValue: 'oauth_browser' | 'oauth_device') => {
+    const response = await hostApiFetch<{ models: ProviderModelOption[] }>(
+      `/api/provider-model-options?vendorId=${encodeURIComponent(vendorId)}&authMode=${encodeURIComponent(authModeValue)}`
+    );
+    return response.models ?? [];
+  };
 
   useEffect(() => {
     if (!selectedVendor || !isOAuth || !supportsApiKey) {
@@ -854,6 +964,12 @@ function AddProviderDialog({
     }
     setAuthMode(selectedVendor.defaultAuthMode === 'api_key' ? 'apikey' : 'oauth');
   }, [selectedVendor, isOAuth, supportsApiKey]);
+
+  useEffect(() => {
+    setOauthAuthedAccountId(null);
+    setOauthModelOptions([]);
+    setLoadingOAuthModels(false);
+  }, [selectedType, authMode]);
 
   // Keep refs to the latest values so event handlers see the current dialog state.
   const latestRef = React.useRef({ selectedType, typeInfo, onAdd, onClose, t });
@@ -882,7 +998,7 @@ function AddProviderDialog({
       setOauthData(null);
       setValidationError(null);
 
-      const { onClose: close, t: translate } = latestRef.current;
+      const { onClose: close, t: translate, selectedType: currentSelectedType } = latestRef.current;
       const payload = (data as { accountId?: string } | undefined) || undefined;
       const accountId = payload?.accountId || pendingOAuthRef.current?.accountId;
 
@@ -898,8 +1014,28 @@ function AddProviderDialog({
         if (!store.defaultAccountId && accountId) {
           await store.setDefaultAccount(accountId);
         }
+
+        if (currentSelectedType === 'openai' && accountId) {
+          setOauthAuthedAccountId(accountId);
+          setLoadingOAuthModels(true);
+          const options = await loadOAuthModelOptions('openai', 'oauth_browser');
+          setOauthModelOptions(options);
+          const matchedAccount = store.accounts.find((account) => account.id === accountId);
+          const resolvedModel = pickOAuthModelSelection(
+            'openai',
+            options,
+            matchedAccount?.model,
+            latestRef.current.typeInfo?.defaultModelId,
+          );
+          setModelId(resolvedModel);
+          setLoadingOAuthModels(false);
+          pendingOAuthRef.current = null;
+          toast.success(translate('aiProviders.oauth.authSucceeded'));
+          return;
+        }
       } catch (err) {
         console.error('Failed to refresh providers after OAuth:', err);
+        setLoadingOAuthModels(false);
       }
 
       pendingOAuthRef.current = null;
@@ -910,6 +1046,9 @@ function AddProviderDialog({
     const handleError = (data: unknown) => {
       setOauthError((data as { message: string }).message);
       setOauthData(null);
+      setLoadingOAuthModels(false);
+      setOauthAuthedAccountId(null);
+      setOauthModelOptions([]);
       pendingOAuthRef.current = null;
     };
 
@@ -940,17 +1079,24 @@ function AddProviderDialog({
     setOauthData(null);
     setOauthError(null);
     setOauthManualInput('');
+    setOauthAuthedAccountId(null);
+    setOauthModelOptions([]);
+    setLoadingOAuthModels(false);
 
     try {
       const vendor = vendorMap.get(selectedType);
       const supportsMultipleAccounts = vendor?.supportsMultipleAccounts ?? selectedType === 'custom';
       const accountId = supportsMultipleAccounts ? `${selectedType}-${crypto.randomUUID()}` : selectedType;
       const label = name || (typeInfo?.id === 'custom' ? t('aiProviders.custom') : typeInfo?.name) || selectedType;
-      const model = resolveProviderModelForSave(typeInfo, modelId, devModeUnlocked);
       pendingOAuthRef.current = { accountId, label };
       await hostApiFetch('/api/providers/oauth/start', {
         method: 'POST',
-        body: JSON.stringify({ provider: selectedType, accountId, label, model }),
+        body: JSON.stringify({
+          provider: selectedType,
+          accountId,
+          label,
+          model: selectedType === 'openai' ? undefined : resolveProviderModelForSave(typeInfo, modelId, devModeUnlocked),
+        }),
       });
     } catch (e) {
       setOauthError(String(e));
@@ -964,6 +1110,9 @@ function AddProviderDialog({
     setOauthData(null);
     setOauthError(null);
     setOauthManualInput('');
+    setOauthAuthedAccountId(null);
+    setOauthModelOptions([]);
+    setLoadingOAuthModels(false);
     pendingOAuthRef.current = null;
     await hostApiFetch('/api/providers/oauth/cancel', {
       method: 'POST',
@@ -1037,6 +1186,34 @@ function AddProviderDialog({
         return;
       }
 
+      if (useOpenAIOAuthModelPicker && oauthAuthedAccountId) {
+        const accountLabel = name
+          || (typeInfo?.id === 'local-model' ? t('aiProviders.localModel') : typeInfo?.name)
+          || selectedType;
+        const result = await hostApiFetch<{ success: boolean; error?: string }>(
+          `/api/provider-accounts/${encodeURIComponent(oauthAuthedAccountId)}`,
+          {
+            method: 'PUT',
+            body: JSON.stringify({
+              updates: {
+                label: accountLabel,
+                model: modelId.trim(),
+              },
+            }),
+          }
+        );
+
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to update OAuth provider');
+        }
+
+        const store = useProviderStore.getState();
+        await store.refreshProviderSnapshot();
+        onClose();
+        toast.success(t('aiProviders.toast.added'));
+        return;
+      }
+
       await onAdd(
         selectedType,
         name || (typeInfo?.id === 'custom' ? t('aiProviders.custom') : typeInfo?.id === 'local-model' ? t('aiProviders.localModel') : typeInfo?.name) || selectedType,
@@ -1086,7 +1263,7 @@ function AddProviderDialog({
                     setSelectedType(type.id);
                     setName(type.id === 'custom' ? t('aiProviders.custom') : type.id === 'local-model' ? t('aiProviders.localModel') : type.name);
                     setBaseUrl(type.defaultBaseUrl || '');
-                    setModelId(type.defaultModelId || '');
+                    setModelId(normalizeOAuthSelectedModel(type.id, type.defaultModelId || ''));
                   }}
                   className="p-4 rounded-2xl border border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-center group"
                 >
@@ -1222,7 +1399,7 @@ function AddProviderDialog({
                   </div>
                 )}
 
-                {showModelIdField && (
+                {showEditableModelField && (
                   <div className="space-y-2.5">
                     <Label htmlFor="modelId" className={labelClasses}>{t('aiProviders.dialog.modelId')}</Label>
                     <Input
@@ -1230,11 +1407,35 @@ function AddProviderDialog({
                       placeholder={typeInfo?.modelIdPlaceholder || 'provider/model-id'}
                       value={modelId}
                       onChange={(e) => {
-                        setModelId(e.target.value);
+                        setModelId(normalizeOAuthSelectedModel(selectedType, e.target.value));
                         setValidationError(null);
                       }}
                       className={inputClasses}
                     />
+                  </div>
+                )}
+                {useOpenAIOAuthModelPicker && oauthAuthedAccountId && (
+                  <div className="space-y-2.5">
+                    <Label htmlFor="oauthModelId" className={labelClasses}>{t('aiProviders.dialog.model')}</Label>
+                    <select
+                      id="oauthModelId"
+                      value={modelId}
+                      onChange={(e) => {
+                        setModelId(e.target.value);
+                        setValidationError(null);
+                      }}
+                      className={cn(inputClasses, 'font-sans')}
+                      disabled={loadingOAuthModels}
+                    >
+                      {oauthModelOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[12px] text-muted-foreground">
+                      {t('aiProviders.oauth.modelAfterLogin')}
+                    </p>
                   </div>
                 )}
                 {(selectedType === 'custom' || selectedType === 'local-model') && (
@@ -1263,15 +1464,19 @@ function AddProviderDialog({
                   <div className="space-y-4 pt-2">
                     <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-5 text-center">
                       <p className="text-[13px] font-medium text-blue-600 dark:text-blue-400 mb-4 block">
-                        {t('aiProviders.oauth.loginPrompt')}
+                        {oauthAuthedAccountId
+                          ? t('aiProviders.oauth.loginCompleted')
+                          : t('aiProviders.oauth.loginPrompt')}
                       </p>
                       <Button
                         onClick={handleStartOAuth}
-                        disabled={oauthFlowing}
+                        disabled={oauthFlowing || Boolean(oauthAuthedAccountId)}
                         className="h-[42px] w-full rounded-xl bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
                       >
                         {oauthFlowing ? (
-                          <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{t('aiProviders.oauth.waiting')}</>
+                          <><LoadingIcon className="h-4 w-4 mr-2" />{t('aiProviders.oauth.waiting')}</>
+                        ) : oauthAuthedAccountId ? (
+                          t('aiProviders.oauth.loggedIn')
                         ) : (
                           t('aiProviders.oauth.loginButton')
                         )}
@@ -1296,7 +1501,7 @@ function AddProviderDialog({
                             </div>
                           ) : !oauthData ? (
                             <div className="space-y-4 py-6">
-                              <Loader2 className="h-10 w-10 animate-spin text-blue-500 mx-auto" />
+                              <LoadingIcon className="h-10 w-10 text-blue-500 mx-auto" />
                               <p className="text-[13px] font-medium text-muted-foreground animate-pulse">{t('aiProviders.oauth.requestingCode')}</p>
                             </div>
                           ) : oauthData.mode === 'browser' ? (
@@ -1342,7 +1547,7 @@ function AddProviderDialog({
                               ) : null}
 
                               <div className="flex items-center justify-center gap-2 text-[13px] font-medium text-muted-foreground pt-2">
-                                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                                <LoadingIcon className="h-4 w-4 text-blue-500" />
                                 <span>{t('aiProviders.oauth.waitingApproval')}</span>
                               </div>
 
@@ -1388,7 +1593,7 @@ function AddProviderDialog({
                               </Button>
 
                               <div className="flex items-center justify-center gap-2 text-[13px] font-medium text-muted-foreground pt-2">
-                                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                                <LoadingIcon className="h-4 w-4 text-blue-500" />
                                 <span>{t('aiProviders.oauth.waitingApproval')}</span>
                               </div>
 
@@ -1409,13 +1614,20 @@ function AddProviderDialog({
               <div className="flex justify-end gap-3">
                 <Button
                   onClick={handleAdd}
-                  className={cn("h-[42px] rounded-xl px-8 text-[13px] font-semibold bg-primary text-primary-foreground shadow-sm hover:bg-primary/90", useOAuthFlow && "hidden")}
-                  disabled={!selectedType || saving || (showModelIdField && modelId.trim().length === 0)}
+                  className={cn(
+                    "h-[42px] rounded-xl px-8 text-[13px] font-semibold bg-primary text-primary-foreground shadow-sm hover:bg-primary/90",
+                    useOAuthFlow && !oauthAuthedAccountId && "hidden",
+                  )}
+                  disabled={
+                    !selectedType
+                    || saving
+                    || ((showEditableModelField || useOpenAIOAuthModelPicker) && modelId.trim().length === 0)
+                  }
                 >
                   {saving ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    <LoadingIcon className="h-4 w-4 mr-2" />
                   ) : null}
-                  {t('aiProviders.dialog.add')}
+                  {useOpenAIOAuthModelPicker ? t('aiProviders.dialog.save') : t('aiProviders.dialog.add')}
                 </Button>
               </div>
             </div>

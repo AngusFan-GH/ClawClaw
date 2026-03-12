@@ -1,12 +1,30 @@
 {
   "title": "分身",
   "subtitle": "管理 OpenClaw 分身以及它们的连接归属",
+  "stats": {
+    "total": "分身总数",
+    "defaults": "默认分身",
+    "custom": "自定义分身",
+    "connected": "已绑定连接"
+  },
+  "list": {
+    "title": "分身列表",
+    "description": "每个分身都可以继承默认模型，并单独接管一组连接归属。"
+  },
+  "empty": {
+    "title": "还没有可显示的分身",
+    "description": "创建一个新的分身后，就可以分别承接不同的连接和对话。"
+  },
   "refresh": "刷新",
   "addAgent": "添加分身",
   "gatewayWarning": "Gateway 服务未运行。分身或连接变更可能需要一点时间生效。",
   "defaultBadge": "默认",
   "inherited": "默认",
   "none": "无",
+  "fieldLabels": {
+    "model": "模型",
+    "channels": "连接"
+  },
   "modelLine": "Model: {{model}}{{suffix}}",
   "channelsLine": "Channels: {{channels}}",
   "deleteAgent": "删除分身",
@@ -31,7 +49,8 @@
     "channelsTitle": "连接",
     "channelsDescription": "每种连接类型在 ClawClaw 中只保留一份配置。在这里保存已配置的连接会将归属切换到当前分身。",
     "addChannel": "添加连接",
-    "noChannels": "这个分身还没有分配任何连接。"
+    "noChannels": "这个分身还没有分配任何连接。",
+    "assignedStatus": "已分配"
   },
   "removeChannelDialog": {
     "title": "移除连接",

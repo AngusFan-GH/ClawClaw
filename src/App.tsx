@@ -93,6 +93,7 @@ function App() {
   const initSettings = useSettingsStore((state) => state.init);
   const theme = useSettingsStore((state) => state.theme);
   const language = useSettingsStore((state) => state.language);
+  const settingsInitialized = useSettingsStore((state) => state.initialized);
   const setupComplete = useSettingsStore((state) => state.setupComplete);
   const initGateway = useGatewayStore((state) => state.init);
 
@@ -114,10 +115,10 @@ function App() {
 
   // Redirect to setup wizard if not complete
   useEffect(() => {
-    if (!setupComplete && !location.pathname.startsWith('/setup')) {
+    if (settingsInitialized && !setupComplete && !location.pathname.startsWith('/setup')) {
       navigate('/setup');
     }
-  }, [setupComplete, location.pathname, navigate]);
+  }, [settingsInitialized, setupComplete, location.pathname, navigate]);
 
   // Listen for navigation events from main process
   useEffect(() => {

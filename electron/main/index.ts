@@ -30,7 +30,11 @@ import { HostEventBus } from '../api/event-bus';
 import { deviceOAuthManager } from '../utils/device-oauth';
 import { browserOAuthManager } from '../utils/browser-oauth';
 import { whatsAppLoginManager } from '../utils/whatsapp-login';
-import { syncAllProviderAuthToRuntime } from '../services/providers/provider-runtime-sync';
+import {
+  syncAllProviderAuthToRuntime,
+  syncDefaultProviderToRuntime,
+} from '../services/providers/provider-runtime-sync';
+import { getProviderService } from '../services/providers/provider-service';
 
 const isDev = !app.isPackaged;
 
@@ -348,6 +352,10 @@ async function initialize(): Promise<void> {
   if (gatewayAutoStart) {
     try {
       await syncAllProviderAuthToRuntime();
+      const defaultProviderAccountId = await getProviderService().getDefaultAccountId();
+      if (defaultProviderAccountId) {
+        await syncDefaultProviderToRuntime(defaultProviderAccountId);
+      }
       logger.debug('Auto-starting Gateway...');
       await gatewayManager.start();
       logger.info('Gateway auto-start succeeded');

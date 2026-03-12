@@ -23,7 +23,7 @@ export interface RawMessage {
 
 /** Content block inside a message */
 export interface ContentBlock {
-  type: 'text' | 'image' | 'thinking' | 'tool_use' | 'tool_result' | 'toolCall' | 'toolResult';
+  type: 'text' | 'image' | 'file' | 'thinking' | 'tool_use' | 'tool_result' | 'toolCall' | 'toolResult';
   text?: string;
   thinking?: string;
   source?: { type: string; media_type?: string; data?: string; url?: string };
@@ -32,6 +32,10 @@ export interface ContentBlock {
   mimeType?: string;
   id?: string;
   name?: string;
+  fileName?: string;
+  filePath?: string;
+  path?: string;
+  url?: string;
   input?: unknown;
   arguments?: unknown;
   content?: unknown;

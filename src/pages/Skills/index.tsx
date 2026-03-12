@@ -27,7 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useSkillsStore } from '@/stores/skills';
 import { useGatewayStore } from '@/stores/gateway';
-import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { LoadingIcon, LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { cn } from '@/lib/utils';
 import { invokeIpc } from '@/lib/api-client';
@@ -419,6 +419,13 @@ interface SkillGridCardProps {
 
 function SkillGridCard({ skill, onClick, onToggle }: SkillGridCardProps) {
   const { t } = useTranslation('skills');
+  const installLabel = skill.installedOnDisk ? t('status.installed') : t('status.notInstalled');
+  const runtimeLabel =
+    skill.loadedInGateway
+      ? (skill.enabled ? t('status.loadedEnabled') : t('status.loaded'))
+      : skill.runtimeStatus === 'not_loaded'
+        ? t('status.installedOnly')
+        : t('status.runtimeUnknown');
 
   return (
     <div
@@ -454,6 +461,18 @@ function SkillGridCard({ skill, onClick, onToggle }: SkillGridCardProps) {
               >
                 {skill.isCore ? t('detail.coreSystem') : skill.isBundled ? t('detail.bundled') : t('detail.userInstalled')}
               </Badge>
+              <Badge
+                variant="secondary"
+                className="h-6 rounded-[10px] border-0 bg-blue-500/10 px-2.5 py-0 text-[10px] font-medium text-blue-700 dark:text-blue-300"
+              >
+                {installLabel}
+              </Badge>
+              <Badge
+                variant="secondary"
+                className="h-6 rounded-[10px] border-0 bg-emerald-500/10 px-2.5 py-0 text-[10px] font-medium text-emerald-700 dark:text-emerald-300"
+              >
+                {runtimeLabel}
+              </Badge>
               {skill.version ? (
                 <span className="font-mono text-[11px] text-foreground/45">
                   v{skill.version}
@@ -476,6 +495,9 @@ function SkillGridCard({ skill, onClick, onToggle }: SkillGridCardProps) {
       <p className="mt-4 line-clamp-4 text-[13px] leading-[1.7] text-muted-foreground">
         {skill.description}
       </p>
+      {skill.runtimeError ? (
+        <p className="mt-3 text-[12px] font-medium text-destructive">{skill.runtimeError}</p>
+      ) : null}
     </div>
   );
 }
@@ -666,6 +688,7 @@ export function Skills() {
     marketplace: searchResults.length,
   };
   const enabledSkillsCount = safeSkills.filter((skill) => skill.enabled).length;
+  const loadedSkillsCount = safeSkills.filter((skill) => skill.loadedInGateway).length;
   const userSkillsCount = safeSkills.filter((skill) => !skill.isBundled).length;
 
   // Handle toggle
@@ -798,8 +821,8 @@ export function Skills() {
                 <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">{enabledSkillsCount}</div>
               </div>
               <div className="rounded-[10px] border border-border/70 bg-card/85 px-4 py-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('stats.builtIn')}</div>
-                <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">{sourceStats.builtIn}</div>
+                <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('stats.loaded')}</div>
+                <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">{loadedSkillsCount}</div>
               </div>
               <div className="rounded-[10px] border border-border/70 bg-card/85 px-4 py-3">
                 <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('stats.custom')}</div>
@@ -877,7 +900,7 @@ export function Skills() {
                   className="h-10 w-10 rounded-[10px] border-border/70 bg-transparent shadow-none text-muted-foreground hover:bg-accent/70 hover:text-foreground"
                   title={t('refresh')}
                 >
-                  <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+                  {loading ? <LoadingIcon className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}
                 </Button>
               </div>
             </div>

@@ -1,4 +1,5 @@
-import { AlertCircle, Inbox, Loader2 } from 'lucide-react';
+import { AlertCircle, Inbox } from 'lucide-react';
+import { LoadingIcon } from '@/components/common/LoadingSpinner';
 
 interface FeedbackStateProps {
   state: 'loading' | 'empty' | 'error';
@@ -9,7 +10,7 @@ interface FeedbackStateProps {
 
 export function FeedbackState({ state, title, description, action }: FeedbackStateProps) {
   const icon = state === 'loading'
-    ? <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    ? <LoadingIcon className="h-8 w-8 text-primary" />
     : state === 'error'
       ? <AlertCircle className="h-8 w-8 text-destructive" />
       : <Inbox className="h-8 w-8 text-muted-foreground" />;

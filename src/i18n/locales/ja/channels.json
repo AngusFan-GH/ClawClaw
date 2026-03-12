@@ -16,6 +16,15 @@
   "configured": "設定済みチャンネル",
   "configuredDesc": "すでに設定済みのチャンネルを管理",
   "configuredBadge": "設定済み",
+  "runtime": {
+    "label": "ランタイム",
+    "connected": "接続済み",
+    "connecting": "接続中",
+    "error": "エラー",
+    "stopped": "停止中",
+    "unknown": "不明",
+    "notLoaded": "Gateway に未ロード"
+  },
   "deleteConfirm": "このチャンネルを削除してもよろしいですか？",
   "showAll": "すべて表示",
   "pluginBadge": "プラグイン",

@@ -1,12 +1,30 @@
 {
   "title": "Agents",
   "subtitle": "Manage your OpenClaw agents and their channel ownership",
+  "stats": {
+    "total": "Total agents",
+    "defaults": "Default agents",
+    "custom": "Custom agents",
+    "connected": "Connected"
+  },
+  "list": {
+    "title": "Agent list",
+    "description": "Each agent can inherit the default model and own its own set of channel assignments."
+  },
+  "empty": {
+    "title": "No agents to show yet",
+    "description": "Create a new agent to split conversations and channel ownership by role."
+  },
   "refresh": "Refresh",
   "addAgent": "Add Agent",
   "gatewayWarning": "Gateway service is not running. Agent/channel changes may take a moment to apply.",
   "defaultBadge": "default",
   "inherited": "default",
   "none": "none",
+  "fieldLabels": {
+    "model": "Model",
+    "channels": "Channels"
+  },
   "modelLine": "Model: {{model}}{{suffix}}",
   "channelsLine": "Channels: {{channels}}",
   "deleteAgent": "Delete Agent",
@@ -31,7 +49,8 @@
     "channelsTitle": "Channels",
     "channelsDescription": "Each channel type has a single ClawClaw configuration. Saving a configured channel here moves ownership to this agent.",
     "addChannel": "Add Channel",
-    "noChannels": "No channels are assigned to this agent yet."
+    "noChannels": "No channels are assigned to this agent yet.",
+    "assignedStatus": "Assigned"
   },
   "removeChannelDialog": {
     "title": "Remove Channel",

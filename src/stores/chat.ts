@@ -101,7 +101,7 @@ interface ChatState {
   thinkingLevel: string | null;
 
   // Actions
-  loadSessions: () => Promise<void>;
+  loadSessions: (preferMostRecent?: boolean) => Promise<void>;
   switchSession: (key: string) => void;
   newSession: (agentId?: string) => void;
   deleteSession: (key: string) => Promise<void>;
@@ -1045,7 +1045,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // ── Load sessions via sessions.list ──
 
-  loadSessions: async () => {
+  loadSessions: async (preferMostRecent = false) => {
     try {
       const data = await useGatewayStore
         .getState()
@@ -1104,8 +1104,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const preferredSessionKey = getMostRecentSessionKey(dedupedSessions, sessionLastActivity);
         const shouldAutoChooseLatest =
           !hasLocalPendingSession &&
-          messages.length === 0 &&
-          (!currentSessionKey || currentSessionKey === DEFAULT_SESSION_KEY);
+          (
+            preferMostRecent
+            || (messages.length === 0 && (!currentSessionKey || currentSessionKey === DEFAULT_SESSION_KEY))
+          );
 
         if (!dedupedSessions.find((s) => s.key === nextSessionKey) && dedupedSessions.length > 0) {
           // Preserve locally-created synthetic sessions until they materialize

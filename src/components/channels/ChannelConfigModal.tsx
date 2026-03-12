@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X,
-  Loader2,
   QrCode,
   Eye,
   EyeOff,
@@ -16,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { useChannelsStore } from '@/stores/channels';
 import { useGatewayStore } from '@/stores/gateway';
 import { hostApiFetch } from '@/lib/host-api';
@@ -459,7 +459,7 @@ export function ChannelConfigModal({
             </div>
           ) : loadingConfig ? (
             <div className="flex items-center justify-center rounded-2xl border border-border/70 bg-card/85 py-10">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <LoadingIcon className="h-6 w-6 text-muted-foreground" />
               <span className="ml-2 text-[14px] text-muted-foreground">{t('dialog.loadingConfig')}</span>
             </div>
           ) : (
@@ -575,7 +575,7 @@ export function ChannelConfigModal({
                     >
                       {validating ? (
                         <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          <LoadingIcon className="h-4 w-4 mr-2" />
                           {t('dialog.validating')}
                         </>
                       ) : (
@@ -595,7 +595,7 @@ export function ChannelConfigModal({
                   >
                     {connecting ? (
                       <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        <LoadingIcon className="h-4 w-4 mr-2" />
                         {meta?.connectionType === 'qr' ? t('dialog.generatingQR') : t('dialog.validatingAndSaving')}
                       </>
                     ) : meta?.connectionType === 'qr' ? (
@@ -690,4 +690,3 @@ function ConfigField({ field, value, onChange, showSecret, onToggleSecret }: Con
     </div>
   );
 }
-

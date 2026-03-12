@@ -49,6 +49,7 @@ export interface AppSettings {
   // UI State
   sidebarCollapsed: boolean;
   devModeUnlocked: boolean;
+  setupComplete: boolean;
 
   // Presets
   selectedBundles: string[];
@@ -65,7 +66,7 @@ export interface AppSettings {
 const defaults: AppSettings = {
   // General
   theme: 'system',
-  language: 'en',
+  language: 'zh',
   startMinimized: false,
   launchAtStartup: false,
 
@@ -90,6 +91,7 @@ const defaults: AppSettings = {
   // UI State
   sidebarCollapsed: false,
   devModeUnlocked: false,
+  setupComplete: false,
 
   // Presets
   selectedBundles: ['productivity', 'developer'],

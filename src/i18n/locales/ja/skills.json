@@ -3,6 +3,21 @@
     "subtitle": "AI機能の閲覧と管理",
     "refresh": "更新",
     "openFolder": "スキルフォルダを開く",
+    "stats": {
+        "all": "すべて",
+        "enabled": "有効",
+        "loaded": "ロード済み",
+        "builtIn": "内蔵",
+        "custom": "カスタム"
+    },
+    "status": {
+        "installed": "インストール済み",
+        "notInstalled": "未インストール",
+        "loadedEnabled": "ロード済みかつ有効",
+        "loaded": "Gateway にロード済み",
+        "installedOnly": "インストールのみ",
+        "runtimeUnknown": "ランタイム不明"
+    },
     "gatewayWarning": "ゲートウェイが稼働していません。アクティブなゲートウェイがないとスキルを読み込めません。",
     "tabs": {
         "installed": "インストール済み",

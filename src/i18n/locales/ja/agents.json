@@ -1,12 +1,30 @@
 {
   "title": "Agents",
   "subtitle": "OpenClaw エージェントとチャンネルの所属を管理します",
+  "stats": {
+    "total": "総数",
+    "defaults": "デフォルト",
+    "custom": "カスタム",
+    "connected": "接続済み"
+  },
+  "list": {
+    "title": "Agent 一覧",
+    "description": "各 Agent はデフォルトモデルを継承でき、それぞれの Channel 所属を個別に持てます。"
+  },
+  "empty": {
+    "title": "表示できる Agent がまだありません",
+    "description": "新しい Agent を作成すると、役割ごとに会話と Channel 所属を分けられます。"
+  },
   "refresh": "更新",
   "addAgent": "Agent を追加",
   "gatewayWarning": "Gateway サービスが停止しています。Agent または Channel の変更が反映されるまで少し時間がかかる場合があります。",
   "defaultBadge": "default",
   "inherited": "デフォルト",
   "none": "なし",
+  "fieldLabels": {
+    "model": "Model",
+    "channels": "Channels"
+  },
   "modelLine": "Model: {{model}}{{suffix}}",
   "channelsLine": "Channels: {{channels}}",
   "deleteAgent": "Agent を削除",
@@ -31,7 +49,8 @@
     "channelsTitle": "Channels",
     "channelsDescription": "各 Channel 種別は ClawClaw で 1 つだけ設定されます。ここで既存の Channel を保存すると、この Agent に所属が移動します。",
     "addChannel": "Channel を追加",
-    "noChannels": "この Agent にはまだ Channel が割り当てられていません。"
+    "noChannels": "この Agent にはまだ Channel が割り当てられていません。",
+    "assignedStatus": "割り当て済み"
   },
   "removeChannelDialog": {
     "title": "Channel を削除",
