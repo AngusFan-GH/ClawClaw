@@ -118,6 +118,10 @@ ClawClaw 直接基于官方 **OpenClaw** 核心构建。无需单独安装，我
 
 连接多个 AI 供应商（OpenAI、Anthropic 等），支持 API 密钥和已接入的 OAuth 登录方式。OpenAI Codex 登录现已对齐 OpenClaw 原生浏览器 OAuth 流程，并在登录完成后从 OpenClaw 当前可用的 Codex 模型列表中选择模型。其他供应商账户仍可单独配置模型 ID 和回退模型，凭证安全存储在系统原生密钥链中。
 
+### 🛡️ 细粒度安全策略
+
+可分别配置禁止目录和按能力拆分的运行时限制。禁止目录会同步到工作区安全文档，作为 agent 的规避提示；行为限制则会直接写入 OpenClaw 工具 deny 层，可阻止运行命令、文件读写、浏览器自动化、联网搜索、网页抓取和 gateway 访问。
+
 ### 💻 预装本地模型
 
 如果存在 `config/local-model-presets.json`，ClawClaw 会在启动时把这些预装模型写入 OpenClaw，并作为受管理的 `custom` provider 使用。第一个预装模型会自动成为默认模型，用户安装完成后即可直接开始对话。

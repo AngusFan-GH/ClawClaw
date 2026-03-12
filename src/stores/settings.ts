@@ -6,6 +6,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import i18n from '@/i18n';
 import { hostApiFetch } from '@/lib/host-api';
+import type { ReminderItem } from '@/shared/reminders';
+import { normalizeReminders } from '@/shared/reminders';
 
 type Theme = 'light' | 'dark' | 'system';
 type UpdateChannel = 'stable' | 'beta' | 'dev';
@@ -37,6 +39,7 @@ interface SettingsState {
   // UI State
   sidebarCollapsed: boolean;
   devModeUnlocked: boolean;
+  reminders: ReminderItem[];
 
   // Setup
   initialized: boolean;
@@ -62,6 +65,7 @@ interface SettingsState {
   setAutoDownloadUpdate: (value: boolean) => void;
   setSidebarCollapsed: (value: boolean) => void;
   setDevModeUnlocked: (value: boolean) => void;
+  setReminders: (value: ReminderItem[]) => void;
   markSetupComplete: () => void;
   resetSettings: () => void;
 }
@@ -85,6 +89,7 @@ const defaultSettings = {
   autoDownloadUpdate: false,
   sidebarCollapsed: false,
   devModeUnlocked: false,
+  reminders: [] as ReminderItem[],
   setupComplete: false,
   initialized: false,
 };
@@ -100,6 +105,7 @@ export const useSettingsStore = create<SettingsState>()(
         set((state) => ({
           ...state,
           ...settings,
+          reminders: normalizeReminders(settings.reminders),
           proxyMode: normalizedProxyMode,
           proxyEnabled: normalizedProxyMode === 'custom',
           initialized: true,
@@ -115,6 +121,13 @@ export const useSettingsStore = create<SettingsState>()(
           body: JSON.stringify(patch),
         });
         await syncFromMain();
+      };
+
+      const syncReminderDocs = async (): Promise<void> => {
+        await hostApiFetch<{ success: boolean }>('/api/security/reminders/sync', {
+          method: 'POST',
+          body: JSON.stringify({}),
+        });
       };
 
       return ({
@@ -204,6 +217,14 @@ export const useSettingsStore = create<SettingsState>()(
           void syncFromMain().catch(() => {});
         });
       },
+      setReminders: (reminders) => {
+        const nextReminders = normalizeReminders(reminders);
+        set({ reminders: nextReminders });
+        void persistMainSettings({ reminders: nextReminders }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
+        void syncReminderDocs().catch(() => {});
+      },
       markSetupComplete: () => {
         set({ setupComplete: true });
         void persistMainSettings({ setupComplete: true }).catch(() => {
@@ -215,7 +236,10 @@ export const useSettingsStore = create<SettingsState>()(
     },
     {
       name: 'clawclaw-settings',
-      partialize: ({ initialized, ...state }) => state,
+      partialize: (state) => {
+        const { initialized: _initialized, ...persisted } = state;
+        return persisted;
+      },
     }
   )
 );

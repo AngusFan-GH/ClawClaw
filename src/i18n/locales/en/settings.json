@@ -10,6 +10,43 @@
     "system": "System",
     "language": "Language"
   },
+  "reminders": {
+    "title": "Reminders",
+    "description": "Tell this lobster the rules you care about most. It should keep these reminders in mind during future actions, so you do not need to repeat them every time.",
+    "compose": {
+      "title": "Add reminder",
+      "description": "Write your rules one by one, like a simple checklist.",
+      "activeCount": "{{count}} active",
+      "helper": "Short and direct reminders work best.",
+      "label": "Reminder text",
+      "placeholder": "For example: Do not delete or forward emails, do not send files to anyone, and do not expose personal information without my approval.",
+      "add": "Add reminder"
+    },
+    "presets": {
+      "title": "Quick presets",
+      "description": "Start with a few common rules, then adjust them to match your needs.",
+      "privacy": "Do not expose my personal or private information to anyone else.",
+      "files": "Do not send my files to other people without my approval.",
+      "mail": "Do not send, forward, or delete emails unless I confirm first.",
+      "approval": "Ask me before making payments, deleting things, sending things out, or making bulk changes.",
+      "externalShare": "Do not share contacts, accounts, attachments, or chat content with outside people."
+    },
+    "list": {
+      "title": "Current reminders",
+      "description": "Each reminder can be turned on, paused, edited, or removed.",
+      "empty": "No reminders yet. Start with a preset on the left or write your own.",
+      "enabled": "Active",
+      "paused": "Paused"
+    },
+    "defaults": {
+      "privacy": "Do not expose my personal information, contacts, or account details to other people.",
+      "mail": "Do not send, forward, or delete emails unless I approve first.",
+      "delete": "Ask me before deleting files, making bulk changes, or sending materials outside."
+    },
+    "toasts": {
+      "exists": "That reminder is already in the list"
+    }
+  },
   "aiProviders": {
     "title": "AI Providers",
     "description": "Configure your AI model providers and API keys",
@@ -219,28 +256,44 @@
     "title": "Security Policy",
     "loading": "Loading security policy...",
     "enableDirectoryPolicy": "Enable security policy",
-    "enableDirectoryPolicyDesc": "When enabled, the directory restrictions and behavior restrictions below apply immediately.",
+    "enableDirectoryPolicyDesc": "Turn this on to apply the limits below right away. Turn it off to keep the settings without actively blocking actions.",
     "addDeniedDirectories": "Add denied directory",
     "noDeniedDirectory": "No denied directory configured.",
+    "explainer": {
+      "policyScope": "Denied directories are a simple 'do not touch this area' rule. ClawClaw writes them into the workspace instructions so the assistant stays away.",
+      "runtimeScope": "Behavior restrictions are the actual blockers. Turn one on and that action is stopped directly."
+    },
     "rules": {
       "title": "Preset restrictions",
-      "description": "Selected rules are applied to runtime permissions and synced into workspace policy docs.",
+      "description": "Each switch controls one thing the assistant is allowed to do. Turn it on to stop that action.",
       "items": {
         "denyRuntime": {
           "label": "Block runtime commands",
-          "description": "Deny exec, bash, and process runtime commands."
+          "description": "When enabled, the assistant can no longer run commands or start programs."
         },
         "denyWrite": {
           "label": "Block file writes",
-          "description": "Deny write, edit, and apply_patch file modifications."
+          "description": "When enabled, the assistant can no longer create, edit, or overwrite files."
         },
         "denyRead": {
           "label": "Block file reads",
-          "description": "Deny direct file reads from the agent tool surface."
+          "description": "When enabled, the assistant can no longer directly read local files."
         },
-        "denyWeb": {
-          "label": "Block web access",
-          "description": "Deny browser, web_search, and web_fetch access."
+        "denyBrowser": {
+          "label": "Block browser automation",
+          "description": "When enabled, the assistant can no longer open pages, click buttons, fill forms, or control the browser."
+        },
+        "denyWebSearch": {
+          "label": "Block web search",
+          "description": "When enabled, the assistant can no longer search the web for information."
+        },
+        "denyWebFetch": {
+          "label": "Block web fetch",
+          "description": "When enabled, the assistant can no longer read page content directly from websites."
+        },
+        "denyGateway": {
+          "label": "Block gateway access",
+          "description": "When enabled, the assistant can no longer use the local connection channel."
         }
       }
     },
@@ -257,9 +310,15 @@
     },
     "sections": {
       "directories": "Denied directories",
-      "directoriesDesc": "These directories are written into the security docs so the agent avoids them during execution.",
+      "directoriesDesc": "List the folders the assistant should stay away from. They are saved as clear do-not-touch areas in the workspace instructions.",
       "behavior": "Behavior restrictions",
-      "behaviorDesc": "These rules are applied to runtime tool restrictions and synced into the security docs."
+      "behaviorDesc": "Each switch below controls one capability. Turn it on to block that action directly."
+    },
+    "runtimePreview": {
+      "title": "Actions that will be blocked",
+      "enabledDesc": "The policy is on. The actions below are currently blocked.",
+      "disabledDesc": "The policy is off. This is only a preview of what will be blocked after you turn it on.",
+      "none": "No blocked actions are selected right now."
     },
     "toasts": {
       "loadFailed": "Load security policy failed",

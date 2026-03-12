@@ -118,6 +118,10 @@ Extend your AI agents with pre-built skills. Browse, install, and manage skills 
 
 Connect to multiple AI providers (OpenAI, Anthropic, and more) with API keys or supported OAuth flows. OpenAI Codex sign-in follows OpenClaw's native browser OAuth flow and now chooses the model from OpenClaw's available Codex model list after sign-in. Other provider accounts can still set model IDs and fallback models, and credentials are stored securely in your system's native keychain.
 
+### 🛡️ Granular Security Policy
+
+Configure denied directories and capability-level runtime restrictions separately. Directory entries are synced into workspace policy docs as guidance, while behavior restrictions can block runtime commands, file access, browser automation, web search, web fetch, and gateway access at the OpenClaw tool layer.
+
 ### 💻 Preinstalled Local Models
 
 If `config/local-model-presets.json` is present, ClawClaw writes every preset into OpenClaw as managed `custom` providers during startup. The first preset becomes the default model automatically, so users can chat immediately after installation without manually enabling a provider.

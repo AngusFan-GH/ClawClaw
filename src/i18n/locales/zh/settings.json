@@ -10,6 +10,43 @@
     "system": "跟随系统",
     "language": "语言"
   },
+  "reminders": {
+    "title": "叮嘱",
+    "description": "把你最关切的话直接叮嘱给这只龙虾。她之后每次做事都会尽量记住这些提醒，不用你每次再重复强调。",
+    "compose": {
+      "title": "新增叮嘱",
+      "description": "像写待办一样，把你在意的规则一句一句写下来。",
+      "activeCount": "已启用 {{count}} 条",
+      "helper": "建议写得简短、明确，最好一条只说一件事。",
+      "label": "叮嘱内容",
+      "placeholder": "例如：未经我同意，不要删除邮件、不要把文件发给别人，也不要对外泄露个人隐私。",
+      "add": "加入叮嘱"
+    },
+    "presets": {
+      "title": "常用预设",
+      "description": "先挑几条常见的规则，一键加入后再按你的习惯修改。",
+      "privacy": "不要对外泄露我的个人隐私信息。",
+      "files": "未经我同意，不要把我的文件发送给别人。",
+      "mail": "未经我确认，不要发送、转发或删除邮件。",
+      "approval": "涉及付款、删除、外发、批量修改时，先问我再执行。",
+      "externalShare": "不要把联系人、账号、附件或聊天内容分享给外部人员。"
+    },
+    "list": {
+      "title": "当前叮嘱",
+      "description": "这里的每一条都可以单独启用、暂停、修改或删除。",
+      "empty": "还没有叮嘱。先从左侧预设里选几条，或者自己写一条。",
+      "enabled": "生效中",
+      "paused": "已暂停"
+    },
+    "defaults": {
+      "privacy": "不要对外泄露我的个人隐私、联系人信息或账号信息。",
+      "mail": "邮件不能随意发送、转发或删除，必须先经过我的同意。",
+      "delete": "涉及删除文件、批量改动、对外发送资料时，先征求我的确认。"
+    },
+    "toasts": {
+      "exists": "这条叮嘱已经在列表里了"
+    }
+  },
   "aiProviders": {
     "title": "AI 模型提供商",
     "description": "配置 AI 模型提供商和 API 密钥",
@@ -263,28 +300,44 @@
     "title": "安全策略",
     "loading": "正在加载安全策略...",
     "enableDirectoryPolicy": "启用安全策略",
-    "enableDirectoryPolicyDesc": "开启后，下面的目录限制和行为限制会立即生效。",
+    "enableDirectoryPolicyDesc": "开启后，下面这些限制会立刻生效；关闭后只保留当前设置，不再真正拦截。",
     "addDeniedDirectories": "添加禁止目录",
     "noDeniedDirectory": "尚未配置禁止目录。",
+    "explainer": {
+      "policyScope": "禁止目录更像“不要碰这里”的提醒。系统会把这些路径写进说明里，让助手主动避开。",
+      "runtimeScope": "行为限制才是真正的拦截。打开后，对应操作会被直接挡住。"
+    },
     "rules": {
       "title": "预设限制规则",
-      "description": "勾选后会同步写入运行时权限限制，并写入工作区策略文档。",
+      "description": "下面每个开关都代表一种能力。打开后，助手就不能再做这类操作。",
       "items": {
         "denyRuntime": {
           "label": "禁止运行命令",
-          "description": "拒绝 exec、bash、process 等运行时命令。"
+          "description": "打开后，助手不能再执行命令或启动程序。"
         },
         "denyWrite": {
           "label": "禁止修改文件",
-          "description": "拒绝 write、edit、apply_patch 等写入能力。"
+          "description": "打开后，助手不能创建、修改或覆盖文件。"
         },
         "denyRead": {
           "label": "禁止读取文件",
-          "description": "拒绝 read 文件读取能力。"
+          "description": "打开后，助手不能直接读取本地文件。"
         },
-        "denyWeb": {
-          "label": "禁止网页访问",
-          "description": "拒绝 browser、web_search、web_fetch 等网页访问能力。"
+        "denyBrowser": {
+          "label": "禁止浏览器自动化",
+          "description": "打开后，助手不能打开网页、点按钮、填表单或操作浏览器。"
+        },
+        "denyWebSearch": {
+          "label": "禁止联网搜索",
+          "description": "打开后，助手不能到网上搜索资料。"
+        },
+        "denyWebFetch": {
+          "label": "禁止网页抓取",
+          "description": "打开后，助手不能直接读取网页内容。"
+        },
+        "denyGateway": {
+          "label": "禁止网关访问",
+          "description": "打开后，助手不能再使用本地连接通道。"
         }
       }
     },
@@ -301,9 +354,15 @@
     },
     "sections": {
       "directories": "禁止目录",
-      "directoriesDesc": "这些目录会被写入安全文档，供 agent 在执行前规避。",
+      "directoriesDesc": "把不希望助手进入或操作的目录列在这里。它会被写进说明中，作为明确的避让规则。",
       "behavior": "行为限制",
-      "behaviorDesc": "这些规则会真正写入运行时工具限制，并同步到安全文档。"
+      "behaviorDesc": "下面每个开关都控制一种能力。打开后，对应操作会被系统直接拦截。"
+    },
+    "runtimePreview": {
+      "title": "实际会拦截的操作",
+      "enabledDesc": "当前已启用。下面这些操作现在会被挡住。",
+      "disabledDesc": "当前还没启用。下面只是预览开启后会挡住什么。",
+      "none": "当前还没有选中需要拦截的操作。"
     },
     "toasts": {
       "loadFailed": "加载安全策略失败",

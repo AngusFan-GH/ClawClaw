@@ -59,6 +59,13 @@ function compactPaths(paths: string[]): string[] {
   return result;
 }
 
+function getManagedToolDenyForRules(rules: SecurityRuleKey[]): string[] {
+  const selected = new Set(normalizeSecurityRules(rules));
+  return SECURITY_RULE_DEFINITIONS.flatMap((rule) =>
+    selected.has(rule.key) ? rule.managedDeny : []
+  );
+}
+
 export function Security() {
   const { t } = useTranslation('settings');
   const [loading, setLoading] = useState(true);
@@ -192,6 +199,11 @@ export function Security() {
     });
   }, [policy.prompt.deniedPaths.length, policy.prompt.enabled, policy.prompt.rules.length, t]);
 
+  const effectiveManagedDeny = useMemo(
+    () => getManagedToolDenyForRules(policy.prompt.rules),
+    [policy.prompt.rules]
+  );
+
   useEffect(() => {
     if (loading || applying || !isDirty) {
       return;
@@ -318,6 +330,31 @@ export function Security() {
                     </div>
                   );
                 })}
+              </div>
+
+              <div className="mt-4 rounded-lg border bg-muted/30 px-3 py-3">
+                <div className="text-sm font-medium">{t('security.runtimePreview.title')}</div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  {policy.prompt.enabled
+                    ? t('security.runtimePreview.enabledDesc')
+                    : t('security.runtimePreview.disabledDesc')}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {effectiveManagedDeny.length > 0 ? (
+                    effectiveManagedDeny.map((entry) => (
+                      <code
+                        key={entry}
+                        className="rounded-md border bg-background px-2 py-1 text-xs text-foreground"
+                      >
+                        {entry}
+                      </code>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      {t('security.runtimePreview.none')}
+                    </span>
+                  )}
+                </div>
               </div>
             </section>
           </div>

@@ -6,6 +6,8 @@
 import { randomBytes } from 'crypto';
 import type { SecurityPolicy } from '../shared/security-policy';
 import { normalizeSecurityRules } from '../shared/security-policy';
+import type { ReminderItem } from '../shared/reminders';
+import { normalizeReminders } from '../shared/reminders';
 
 // Lazy-load electron-store (ESM module)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -58,6 +60,7 @@ export interface AppSettings {
 
   // Security
   securityPolicy: SecurityPolicy;
+  reminders: ReminderItem[];
 }
 
 /**
@@ -106,6 +109,7 @@ const defaults: AppSettings = {
       rules: [],
     },
   },
+  reminders: [],
 };
 
 function normalizeSecurityPolicy(raw: unknown): SecurityPolicy {
@@ -153,6 +157,7 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     proxyMode,
     proxyEnabled: proxyMode === 'custom',
     securityPolicy: normalizeSecurityPolicy((settings as Partial<AppSettings>).securityPolicy),
+    reminders: normalizeReminders((settings as Partial<AppSettings>).reminders),
   };
 }
 
