@@ -33,7 +33,7 @@ import {
   loginQwenPortalOAuth,
   type QwenOAuthToken,
 } from '../../node_modules/openclaw/extensions/qwen-portal-auth/oauth';
-import { loginOpenAICodex } from '../../node_modules/@mariozechner/pi-ai/dist/oauth.js';
+import { loginOpenAICodex } from '@mariozechner/pi-ai/oauth';
 import { saveOAuthTokenToOpenClaw, setOpenClawDefaultModelWithOverride } from './openclaw-auth';
 import { proxyAwareFetch } from './proxy-fetch';
 

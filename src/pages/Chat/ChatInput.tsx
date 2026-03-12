@@ -3,11 +3,24 @@
  * Textarea with send button and universal file upload support.
  * Enter to send, Shift+Enter for new line.
  * Supports: native file picker, clipboard paste, drag & drop.
- * Files are staged to disk via IPC — only lightweight path references
+ * Files are staged to disk via IPC 鈥?only lightweight path references
  * are sent with the message (no base64 over WebSocket).
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { SendHorizontal, Square, X, Paperclip, FileText, Film, Music, FileArchive, File, Loader2, Check, ChevronsUpDown } from 'lucide-react';
+import {
+  SendHorizontal,
+  Square,
+  X,
+  Paperclip,
+  FileText,
+  Film,
+  Music,
+  FileArchive,
+  File,
+  Loader2,
+  Check,
+  ChevronsUpDown,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { hostApiFetch } from '@/lib/host-api';
@@ -15,15 +28,15 @@ import { invokeIpc } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
 
-// ── Types ────────────────────────────────────────────────────────
+// 鈹€鈹€ Types 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 export interface FileAttachment {
   id: string;
   fileName: string;
   mimeType: string;
   fileSize: number;
-  stagedPath: string;        // disk path for gateway
-  preview: string | null;    // data URL for images, null for others
+  stagedPath: string; // disk path for gateway
+  preview: string | null; // data URL for images, null for others
   status: 'staging' | 'ready' | 'error';
   error?: string;
 }
@@ -49,7 +62,7 @@ interface ChatInputProps {
   modelDisabled?: boolean;
 }
 
-// ── Helpers ──────────────────────────────────────────────────────
+// 鈹€鈹€ Helpers 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -61,8 +74,21 @@ function formatFileSize(bytes: number): string {
 function FileIcon({ mimeType, className }: { mimeType: string; className?: string }) {
   if (mimeType.startsWith('video/')) return <Film className={className} />;
   if (mimeType.startsWith('audio/')) return <Music className={className} />;
-  if (mimeType.startsWith('text/') || mimeType === 'application/json' || mimeType === 'application/xml') return <FileText className={className} />;
-  if (mimeType.includes('zip') || mimeType.includes('compressed') || mimeType.includes('archive') || mimeType.includes('tar') || mimeType.includes('rar') || mimeType.includes('7z')) return <FileArchive className={className} />;
+  if (
+    mimeType.startsWith('text/') ||
+    mimeType === 'application/json' ||
+    mimeType === 'application/xml'
+  )
+    return <FileText className={className} />;
+  if (
+    mimeType.includes('zip') ||
+    mimeType.includes('compressed') ||
+    mimeType.includes('archive') ||
+    mimeType.includes('tar') ||
+    mimeType.includes('rar') ||
+    mimeType.includes('7z')
+  )
+    return <FileArchive className={className} />;
   if (mimeType === 'application/pdf') return <FileText className={className} />;
   return <File className={className} />;
 }
@@ -91,7 +117,7 @@ function readFileAsBase64(file: globalThis.File): Promise<string> {
   });
 }
 
-// ── Component ────────────────────────────────────────────────────
+// 鈹€鈹€ Component 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 export function ChatInput({
   onSend,
@@ -152,13 +178,13 @@ export function ChatInput({
     };
   }, [modelMenuOpen]);
 
-  // ── File staging via native dialog ─────────────────────────────
+  // 鈹€鈹€ File staging via native dialog 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
   const pickFiles = useCallback(async () => {
     try {
-      const result = await invokeIpc('dialog:open', {
+      const result = (await invokeIpc('dialog:open', {
         properties: ['openFile', 'multiSelections'],
-      }) as { canceled: boolean; filePaths?: string[] };
+      })) as { canceled: boolean; filePaths?: string[] };
       if (result.canceled || !result.filePaths?.length) return;
 
       // Add placeholder entries immediately
@@ -168,50 +194,61 @@ export function ChatInput({
         tempIds.push(tempId);
         // Handle both Unix (/) and Windows (\) path separators
         const fileName = filePath.split(/[\\/]/).pop() || 'file';
-        setAttachments(prev => [...prev, {
-          id: tempId,
-          fileName,
-          mimeType: '',
-          fileSize: 0,
-          stagedPath: '',
-          preview: null,
-          status: 'staging' as const,
-        }]);
+        setAttachments((prev) => [
+          ...prev,
+          {
+            id: tempId,
+            fileName,
+            mimeType: '',
+            fileSize: 0,
+            stagedPath: '',
+            preview: null,
+            status: 'staging' as const,
+          },
+        ]);
       }
 
       // Stage all files via IPC
       console.log('[pickFiles] Staging files:', result.filePaths);
-      const staged = await hostApiFetch<Array<{
-        id: string;
-        fileName: string;
-        mimeType: string;
-        fileSize: number;
-        stagedPath: string;
-        preview: string | null;
-      }>>('/api/files/stage-paths', {
+      const staged = await hostApiFetch<
+        Array<{
+          id: string;
+          fileName: string;
+          mimeType: string;
+          fileSize: number;
+          stagedPath: string;
+          preview: string | null;
+        }>
+      >('/api/files/stage-paths', {
         method: 'POST',
         body: JSON.stringify({ filePaths: result.filePaths }),
       });
-      console.log('[pickFiles] Stage result:', staged?.map(s => ({ id: s?.id, fileName: s?.fileName, mimeType: s?.mimeType, fileSize: s?.fileSize, stagedPath: s?.stagedPath, hasPreview: !!s?.preview })));
+      console.log(
+        '[pickFiles] Stage result:',
+        staged?.map((s) => ({
+          id: s?.id,
+          fileName: s?.fileName,
+          mimeType: s?.mimeType,
+          fileSize: s?.fileSize,
+          stagedPath: s?.stagedPath,
+          hasPreview: !!s?.preview,
+        }))
+      );
 
       // Update each placeholder with real data
-      setAttachments(prev => {
+      setAttachments((prev) => {
         let updated = [...prev];
         for (let i = 0; i < tempIds.length; i++) {
           const tempId = tempIds[i];
           const data = staged[i];
           if (data) {
-            updated = updated.map(a =>
-              a.id === tempId
-                ? { ...data, status: 'ready' as const }
-                : a,
+            updated = updated.map((a) =>
+              a.id === tempId ? { ...data, status: 'ready' as const } : a
             );
           } else {
             console.warn(`[pickFiles] No staged data for tempId=${tempId} at index ${i}`);
-            updated = updated.map(a =>
-              a.id === tempId
-                ? { ...a, status: 'error' as const, error: 'Staging failed' }
-                : a,
+            updated = updated.map((a) =>
+              a.id === tempId ? { ...a, status: 'error' as const, error: 'Staging failed' } : a
             );
           }
         }
@@ -221,28 +258,31 @@ export function ChatInput({
       console.error('[pickFiles] Failed to stage files:', err);
       // Mark any stuck 'staging' attachments as 'error' so the user can remove them
       // and the send button isn't permanently blocked
-      setAttachments(prev => prev.map(a =>
-        a.status === 'staging'
-          ? { ...a, status: 'error' as const, error: String(err) }
-          : a,
-      ));
+      setAttachments((prev) =>
+        prev.map((a) =>
+          a.status === 'staging' ? { ...a, status: 'error' as const, error: String(err) } : a
+        )
+      );
     }
   }, []);
 
-  // ── Stage browser File objects (paste / drag-drop) ─────────────
+  // 鈹€鈹€ Stage browser File objects (paste / drag-drop) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
   const stageBufferFiles = useCallback(async (files: globalThis.File[]) => {
     for (const file of files) {
       const tempId = crypto.randomUUID();
-      setAttachments(prev => [...prev, {
-        id: tempId,
-        fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        fileSize: file.size,
-        stagedPath: '',
-        preview: null,
-        status: 'staging' as const,
-      }]);
+      setAttachments((prev) => [
+        ...prev,
+        {
+          id: tempId,
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          fileSize: file.size,
+          stagedPath: '',
+          preview: null,
+          status: 'staging' as const,
+        },
+      ]);
 
       try {
         console.log(`[stageBuffer] Reading file: ${file.name} (${file.type}, ${file.size} bytes)`);
@@ -263,49 +303,62 @@ export function ChatInput({
             mimeType: file.type || 'application/octet-stream',
           }),
         });
-        console.log(`[stageBuffer] Staged: id=${staged?.id}, path=${staged?.stagedPath}, size=${staged?.fileSize}`);
-        setAttachments(prev => prev.map(a =>
-          a.id === tempId ? { ...staged, status: 'ready' as const } : a,
-        ));
+        console.log(
+          `[stageBuffer] Staged: id=${staged?.id}, path=${staged?.stagedPath}, size=${staged?.fileSize}`
+        );
+        setAttachments((prev) =>
+          prev.map((a) => (a.id === tempId ? { ...staged, status: 'ready' as const } : a))
+        );
       } catch (err) {
         console.error(`[stageBuffer] Error staging ${file.name}:`, err);
-        setAttachments(prev => prev.map(a =>
-          a.id === tempId
-            ? { ...a, status: 'error' as const, error: String(err) }
-            : a,
-        ));
+        setAttachments((prev) =>
+          prev.map((a) =>
+            a.id === tempId ? { ...a, status: 'error' as const, error: String(err) } : a
+          )
+        );
       }
     }
   }, []);
 
-  // ── Attachment management ──────────────────────────────────────
+  // 鈹€鈹€ Attachment management 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
   const removeAttachment = useCallback((id: string) => {
-    setAttachments(prev => prev.filter(a => a.id !== id));
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
-  const allReady = attachments.length === 0 || attachments.every(a => a.status === 'ready');
+  const allReady = attachments.length === 0 || attachments.every((a) => a.status === 'ready');
   const hasFailedAttachments = attachments.some((a) => a.status === 'error');
   const canSend = (input.trim() || attachments.length > 0) && allReady && !disabled && !sending;
   const canStop = sending && !disabled && !!onStop;
   const hasModelOptions = modelOptions.length > 0;
   const currentModelValue = selectedModel || defaultModelValue;
   const selectedOption = modelOptions.find((option) => option.value === currentModelValue);
-  const currentModelShortLabel = selectedOption?.shortLabel || defaultModelShortLabel || t('composer.defaultModel');
+  const currentModelShortLabel =
+    selectedOption?.shortLabel || defaultModelShortLabel || t('composer.defaultModel');
 
   const handleSend = useCallback(() => {
     if (!canSend) return;
-    const readyAttachments = attachments.filter(a => a.status === 'ready');
-    // Capture values before clearing — clear input immediately for snappy UX,
+    const readyAttachments = attachments.filter((a) => a.status === 'ready');
+    // Capture values before clearing 鈥?clear input immediately for snappy UX,
     // but keep attachments available for the async send
     const textToSend = input.trim();
     const attachmentsToSend = readyAttachments.length > 0 ? readyAttachments : undefined;
-    console.log(`[handleSend] text="${textToSend.substring(0, 50)}", attachments=${attachments.length}, ready=${readyAttachments.length}, sending=${!!attachmentsToSend}`);
+    console.log(
+      `[handleSend] text="${textToSend.substring(0, 50)}", attachments=${attachments.length}, ready=${readyAttachments.length}, sending=${!!attachmentsToSend}`
+    );
     if (attachmentsToSend) {
-      console.log('[handleSend] Attachment details:', attachmentsToSend.map(a => ({
-        id: a.id, fileName: a.fileName, mimeType: a.mimeType, fileSize: a.fileSize,
-        stagedPath: a.stagedPath, status: a.status, hasPreview: !!a.preview,
-      })));
+      console.log(
+        '[handleSend] Attachment details:',
+        attachmentsToSend.map((a) => ({
+          id: a.id,
+          fileName: a.fileName,
+          mimeType: a.mimeType,
+          fileSize: a.fileSize,
+          stagedPath: a.stagedPath,
+          status: a.status,
+          hasPreview: !!a.preview,
+        }))
+      );
     }
     setInput('');
     setAttachments([]);
@@ -331,7 +384,7 @@ export function ChatInput({
         handleSend();
       }
     },
-    [handleSend],
+    [handleSend]
   );
 
   // Handle paste (Ctrl/Cmd+V with files)
@@ -352,7 +405,7 @@ export function ChatInput({
         stageBufferFiles(pastedFiles);
       }
     },
-    [stageBufferFiles],
+    [stageBufferFiles]
   );
 
   // Handle drag & drop
@@ -379,14 +432,14 @@ export function ChatInput({
         stageBufferFiles(Array.from(e.dataTransfer.files));
       }
     },
-    [stageBufferFiles],
+    [stageBufferFiles]
   );
 
   return (
     <div
       className={cn(
-        "p-4 pb-6 w-full mx-auto transition-all duration-300",
-        isEmpty ? "max-w-3xl" : "max-w-4xl"
+        'p-4 pb-4 w-full mx-auto transition-all duration-300',
+        isEmpty ? 'max-w-3xl' : 'max-w-4xl'
       )}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -407,16 +460,17 @@ export function ChatInput({
         )}
 
         {/* Input Row */}
-        <div className={`flex items-end gap-1.5 bg-white dark:bg-[#1a1a19] rounded-[10px] shadow-sm border p-1.5 transition-all ${dragOver ? 'border-primary ring-1 ring-primary' : 'border-black/10 dark:border-white/10'}`}>
-
+        <div
+          className={`flex items-end gap-1.5 bg-card/90 rounded-xl border border-border/70 p-1.5 shadow-sm transition-all ${dragOver ? 'border-primary ring-1 ring-primary' : 'border-black/10 dark:border-white/10'}`}
+        >
           {/* Attach Button */}
           <Button
             variant="ghost"
             size="icon"
-            className="shrink-0 h-10 w-10 rounded-full text-muted-foreground hover:bg-black/5 dark:hover:bg-white/10 hover:text-foreground transition-colors"
+            className="shrink-0 h-10 w-10 rounded-xl text-muted-foreground hover:bg-black/5 dark:hover:bg-white/10 hover:text-foreground transition-colors"
             onClick={pickFiles}
             disabled={disabled || sending}
-            title="Attach files"
+            title={t('composer.attachFiles')}
           >
             <Paperclip className="h-4 w-4" />
           </Button>
@@ -435,7 +489,7 @@ export function ChatInput({
                 isComposingRef.current = false;
               }}
               onPaste={handlePaste}
-              placeholder={disabled ? 'Gateway not connected...' : ''}
+              placeholder={disabled ? t('composer.gatewayNotConnected') : ''}
               disabled={disabled}
               className="min-h-[40px] max-h-[200px] resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none bg-transparent py-2.5 px-2 text-[15px] placeholder:text-muted-foreground/60 leading-relaxed"
               rows={1}
@@ -443,11 +497,11 @@ export function ChatInput({
           </div>
 
           {hasModelOptions ? (
-            <div className="relative shrink-0 self-center" ref={modelMenuRef}>
+            <div className="relative shrink-0 self-end" ref={modelMenuRef}>
               <button
                 type="button"
                 aria-label={t('composer.modelAriaLabel')}
-                className="flex h-10 min-w-[148px] max-w-[184px] items-center gap-2 rounded-[10px] border border-black/10 bg-[#f3f1e8] px-3 text-left text-[13px] text-foreground transition-colors hover:border-black/20 dark:border-white/10 dark:bg-[#151514] dark:hover:border-white/20"
+                className="flex h-10 min-w-[148px] max-w-[184px] items-center gap-2 rounded-[10px] border border-black/10 bg-muted/70 px-3 text-left text-[13px] text-foreground transition-colors hover:border-black/20 dark:border-white/10 dark:bg-muted/40 dark:hover:border-white/20"
                 disabled={disabled || sending || modelDisabled}
                 onClick={() => setModelMenuOpen((open) => !open)}
               >
@@ -455,7 +509,7 @@ export function ChatInput({
                 <ChevronsUpDown className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               </button>
               {modelMenuOpen && (
-                <div className="absolute bottom-full right-0 z-50 mb-2 min-w-[220px] overflow-hidden rounded-[10px] border border-black/10 bg-[#f7f5ee] p-1 dark:border-white/10 dark:bg-[#161615]">
+                <div className="absolute bottom-full right-0 z-50 mb-2 min-w-[220px] overflow-hidden rounded-[10px] border border-black/10 bg-card/95 p-1 dark:border-white/10 dark:bg-card/95">
                   {modelOptions.map((option) => (
                     <button
                       key={option.value}
@@ -471,7 +525,9 @@ export function ChatInput({
                       }}
                     >
                       <span className="flex-1 truncate">{option.label}</span>
-                      {currentModelValue === option.value && <Check className="h-3.5 w-3.5 shrink-0" />}
+                      {currentModelValue === option.value && (
+                        <Check className="h-3.5 w-3.5 shrink-0" />
+                      )}
                     </button>
                   ))}
                 </div>
@@ -482,7 +538,7 @@ export function ChatInput({
               type="button"
               variant="outline"
               onClick={onConfigureModels}
-              className="h-10 shrink-0 rounded-[10px] border-black/10 bg-[#f3f1e8] px-3 text-[13px] font-medium text-foreground/80 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:bg-[#151514] dark:hover:bg-white/5"
+              className="h-10 shrink-0 rounded-[10px] border-black/10 bg-muted/70 px-3 text-[13px] font-medium text-foreground/80 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:bg-muted/40 dark:hover:bg-white/5"
             >
               {t('composer.configureModels')}
             </Button>
@@ -493,13 +549,13 @@ export function ChatInput({
             onClick={sending ? handleStop : handleSend}
             disabled={sending ? !canStop : !canSend}
             size="icon"
-            className={`shrink-0 h-10 w-10 rounded-full transition-colors ${
-              (sending || canSend) 
-                ? 'bg-black/5 dark:bg-white/10 text-foreground hover:bg-black/10 dark:hover:bg-white/20' 
+            className={`shrink-0 self-end h-10 w-10 rounded-xl transition-colors ${
+              sending || canSend
+                ? 'bg-black/5 dark:bg-white/10 text-foreground hover:bg-black/10 dark:hover:bg-white/20'
                 : 'text-muted-foreground/50 hover:bg-transparent bg-transparent'
             }`}
             variant="ghost"
-            title={sending ? 'Stop' : 'Send'}
+            title={sending ? t('composer.stop') : t('composer.send')}
           >
             {sending ? (
               <Square className="h-4 w-4" fill="currentColor" />
@@ -508,8 +564,8 @@ export function ChatInput({
             )}
           </Button>
         </div>
-        <div className="mt-2.5 flex items-center justify-end gap-2 px-4">
-          {hasFailedAttachments && (
+        {hasFailedAttachments && (
+          <div className="mt-2 flex items-center justify-end gap-2 px-2">
             <Button
               variant="link"
               size="sm"
@@ -519,16 +575,16 @@ export function ChatInput({
                 void pickFiles();
               }}
             >
-              Retry failed attachments
+              {t('composer.retryFailedAttachments')}
             </Button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// ── Attachment Preview ───────────────────────────────────────────
+// 鈹€鈹€ Attachment Preview 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 function AttachmentPreview({
   attachment,
@@ -553,7 +609,10 @@ function AttachmentPreview({
       ) : (
         // Generic file card
         <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 max-w-[200px]">
-          <FileIcon mimeType={attachment.mimeType} className="h-5 w-5 shrink-0 text-muted-foreground" />
+          <FileIcon
+            mimeType={attachment.mimeType}
+            className="h-5 w-5 shrink-0 text-muted-foreground"
+          />
           <div className="min-w-0 overflow-hidden">
             <p className="text-xs font-medium truncate">{attachment.fileName}</p>
             <p className="text-[10px] text-muted-foreground">
@@ -573,14 +632,14 @@ function AttachmentPreview({
       {/* Error overlay */}
       {attachment.status === 'error' && (
         <div className="absolute inset-0 bg-destructive/20 flex items-center justify-center">
-          <span className="text-[10px] text-destructive font-medium px-1">Error</span>
+          <span className="text-[10px] text-destructive font-medium px-1">!</span>
         </div>
       )}
 
       {/* Remove button */}
       <button
         onClick={onRemove}
-        className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-xl p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
       >
         <X className="h-3 w-3" />
       </button>

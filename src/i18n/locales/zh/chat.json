@@ -1,25 +1,39 @@
 {
   "gatewayNotRunning": "网关未运行",
-  "gatewayRequired": "OpenClaw 网关需要运行才能使用聊天。它将自动启动，或者您可以从设置中启动。",
+  "gatewayRequired": "使用聊天功能需要 OpenClaw 网关正在运行。它会自动启动，你也可以在设置中手动启动。",
   "welcome": {
     "title": "欢迎",
-    "subtitle": "您的 AI 助手已就绪。在下方开始对话。",
+    "subtitle": "你的 AI 助手已就绪。在下方开始对话。",
     "askQuestions": "提问",
-    "askQuestionsDesc": "获取任何话题的答案",
+    "askQuestionsDesc": "获取任意话题的答案",
     "creativeTasks": "创意任务",
-    "creativeTasksDesc": "写作、头脑风暴、创意",
+    "creativeTasksDesc": "写作、头脑风暴、创意构思",
     "brainstorming": "头脑风暴"
   },
   "noLogs": "（暂无日志）",
   "toolbar": {
-    "refresh": "刷新聊天",
+    "refresh": "刷新对话",
     "showThinking": "显示思考过程",
     "hideThinking": "隐藏思考过程"
   },
   "composer": {
     "defaultModel": "默认模型",
     "modelAriaLabel": "切换当前对话模型",
-    "configureModels": "未配置模型"
+    "configureModels": "未配置模型",
+    "attachFiles": "添加文件",
+    "gatewayNotConnected": "网关未连接...",
+    "send": "发送",
+    "stop": "停止",
+    "retryFailedAttachments": "重试失败附件"
+  },
+  "message": {
+    "thinking": "思考过程",
+    "file": "文件",
+    "showInFolder": "在文件夹中显示",
+    "close": "关闭"
+  },
+  "status": {
+    "processingToolResults": "正在处理工具结果..."
   },
   "historyBuckets": {
     "today": "今天",

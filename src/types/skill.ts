@@ -53,6 +53,8 @@ export interface MarketplaceSkill {
   name: string;
   description: string;
   version: string;
+  icon?: string;
+  emoji?: string;
   author?: string;
   downloads?: number;
   stars?: number;

@@ -18,7 +18,22 @@
   },
   "composer": {
     "defaultModel": "Default model",
-    "modelAriaLabel": "Switch model for current conversation"
+    "modelAriaLabel": "Switch model for current conversation",
+    "configureModels": "Configure models",
+    "attachFiles": "Attach files",
+    "gatewayNotConnected": "Gateway not connected...",
+    "send": "Send",
+    "stop": "Stop",
+    "retryFailedAttachments": "Retry failed attachments"
+  },
+  "message": {
+    "thinking": "Thinking",
+    "file": "File",
+    "showInFolder": "Show in folder",
+    "close": "Close"
+  },
+  "status": {
+    "processingToolResults": "Processing tool results..."
   },
   "historyBuckets": {
     "today": "Today",

@@ -45,6 +45,27 @@ type ClawHubListResult = {
   version?: string;
 };
 
+function hasLikelyEmoji(value: string): boolean {
+  return Array.from(value).some((char) => {
+    const codePoint = char.codePointAt(0) ?? 0;
+    return codePoint >= 0x2600;
+  });
+}
+
+function normalizeSkillIcon(...candidates: Array<string | undefined>): string {
+  for (const candidate of candidates) {
+    const icon = (candidate || '').trim();
+    if (!icon) continue;
+    if (icon.includes('\uFFFD')) continue;
+    const hasCjk = /[\u3400-\u9FFF]/.test(icon);
+    const looksEmoji = hasLikelyEmoji(icon);
+    if (hasCjk && !looksEmoji) continue;
+    if (!looksEmoji && icon.length > 2) continue;
+    return icon;
+  }
+  return '📦';
+}
+
 function mapErrorCodeToSkillErrorKey(
   code: AppError['code'],
   operation: 'fetch' | 'search' | 'install',
@@ -101,29 +122,31 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
       set({ loading: true, error: null });
     }
     try {
-      // 1. Fetch from ClawHub (installed on disk)
-      const clawhubResult = await hostApiFetch<{ success: boolean; results?: ClawHubListResult[]; error?: string }>('/api/clawhub/list');
-
-      // 2. Fetch configurations directly from Electron (since Gateway doesn't return them)
-      const configResult = await hostApiFetch<Record<string, { apiKey?: string; env?: Record<string, string> }>>('/api/skills/configs');
-
-      // 3. Fetch runtime state from Gateway when available
-      let gatewayData: GatewaySkillsStatusResult | null = null;
+      // Fetch independent sources in parallel to reduce initial load latency.
       const gatewayStatus = useGatewayStore.getState().status;
-      if (gatewayStatus.state === 'running') {
-        try {
-          gatewayData = await useGatewayStore.getState().rpc<GatewaySkillsStatusResult>(
-            'skills.status',
-            undefined,
-            3000,
-          );
-        } catch (error) {
-          console.warn(
-            'Failed to fetch skills from gateway, falling back to local installed list:',
-            error,
-          );
-        }
-      }
+      const configPromise: Promise<Record<string, { apiKey?: string; env?: Record<string, string> }>> =
+        hostApiFetch<Record<string, { apiKey?: string; env?: Record<string, string> }>>(
+          '/api/skills/configs'
+        ).catch(() => ({} as Record<string, { apiKey?: string; env?: Record<string, string> }>));
+
+      const [clawhubResult, configResult, gatewayData] = await Promise.all([
+        hostApiFetch<{ success: boolean; results?: ClawHubListResult[]; error?: string }>(
+          '/api/clawhub/list'
+        ),
+        configPromise,
+        gatewayStatus.state === 'running'
+          ? useGatewayStore
+              .getState()
+              .rpc<GatewaySkillsStatusResult>('skills.status', undefined, 3000)
+              .catch((error) => {
+                console.warn(
+                  'Failed to fetch skills from gateway, falling back to local installed list:',
+                  error
+                );
+                return null;
+              })
+          : Promise.resolve(null),
+      ]);
 
       let combinedSkills: Skill[] = [];
       const currentSkills = get().skills;
@@ -173,7 +196,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
             name: s.name || s.skillKey,
             description: s.description || '',
             enabled: !s.disabled,
-            icon: s.emoji || metadata?.emoji || '📦',
+            icon: normalizeSkillIcon(s.emoji, metadata?.emoji, previous?.icon),
             version: version || '',
             author: s.author,
             config: {
@@ -207,7 +230,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
               name: previous?.name || cs.slug,
               description: previous?.description || 'Recently installed, initializing...',
               enabled: previous?.enabled || false,
-              icon: previous?.icon || metadata?.emoji || '⌛',
+              icon: normalizeSkillIcon(previous?.icon, metadata?.emoji, '⌛'),
               version: cs.version || previous?.version || '',
               author: previous?.author,
               config: directConfig,
@@ -245,7 +268,14 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
         body: JSON.stringify({ query }),
       });
       if (result.success) {
-        set({ searchResults: result.results || [] });
+        const mappedResults = (result.results || []).map((skill) => ({
+          ...skill,
+          icon: normalizeSkillIcon(
+            (skill as MarketplaceSkill & { icon?: string; emoji?: string }).icon,
+            (skill as MarketplaceSkill & { icon?: string; emoji?: string }).emoji
+          ),
+        }));
+        set({ searchResults: mappedResults });
       } else {
         throw normalizeAppError(new Error(result.error || 'Search failed'), {
           module: 'skills',

@@ -138,6 +138,7 @@ function toMs(ts: number): number {
 // If no streaming events arrive within a few seconds, we periodically
 // poll chat.history to surface intermediate tool-call turns.
 let _historyPollTimer: ReturnType<typeof setTimeout> | null = null;
+let _historyLoadSeq = 0;
 
 // Timer for delayed error finalization. When the Gateway reports a mid-stream
 // error (e.g. "terminated"), it may retry internally and recover. We wait
@@ -160,6 +161,10 @@ function clearHistoryPoll(): void {
 
 const DEFAULT_CANONICAL_PREFIX = 'agent:main';
 const DEFAULT_SESSION_KEY = `${DEFAULT_CANONICAL_PREFIX}:main`;
+
+function isEphemeralLocalSessionKey(key: string): boolean {
+  return /:session-\d{10,}$/.test(key);
+}
 
 // ── Local image cache ─────────────────────────────────────────
 // The Gateway doesn't store image attachments in session content blocks,
@@ -1039,7 +1044,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           return true;
         });
 
-        const { currentSessionKey, sessions: localSessions } = get();
+        const { currentSessionKey, sessions: localSessions, messages: localMessages } = get();
         let nextSessionKey = currentSessionKey || DEFAULT_SESSION_KEY;
         if (!nextSessionKey.startsWith('agent:')) {
           const canonicalMatch = canonicalBySuffix.get(nextSessionKey);
@@ -1047,19 +1052,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
             nextSessionKey = canonicalMatch;
           }
         }
+        const hasLocalPendingSession =
+          localMessages.length === 0 &&
+          isEphemeralLocalSessionKey(nextSessionKey) &&
+          localSessions.some((session) => session.key === nextSessionKey);
+
         if (!dedupedSessions.find((s) => s.key === nextSessionKey) && dedupedSessions.length > 0) {
-          // Preserve only locally-created pending sessions. On initial boot the
-          // default ghost key (`agent:main:main`) should yield to real history.
-          const hasLocalPendingSession = localSessions.some(
-            (session) => session.key === nextSessionKey
-          );
+          // Preserve only locally-created empty pending sessions.
+          // Any other unknown key should fall back to a real gateway session.
           if (!hasLocalPendingSession) {
             nextSessionKey = dedupedSessions[0].key;
           }
         }
 
+        const shouldKeepSyntheticCurrent = hasLocalPendingSession || dedupedSessions.length === 0;
         const sessionsWithCurrent =
-          !dedupedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
+          !dedupedSessions.find((s) => s.key === nextSessionKey) &&
+          nextSessionKey &&
+          shouldKeepSyntheticCurrent
             ? [...dedupedSessions, { key: nextSessionKey, displayName: nextSessionKey }]
             : dedupedSessions;
 
@@ -1090,6 +1100,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 const lastMsg = msgs[msgs.length - 1];
                 set((s) => {
                   const next: Partial<typeof s> = {};
+                  const isEmptyEphemeral =
+                    msgs.length === 0 &&
+                    isEphemeralLocalSessionKey(session.key) &&
+                    s.currentSessionKey !== session.key;
+                  if (isEmptyEphemeral) {
+                    next.sessions = s.sessions.filter((item) => item.key !== session.key);
+                    next.sessionLabels = Object.fromEntries(
+                      Object.entries(s.sessionLabels).filter(([k]) => k !== session.key)
+                    );
+                    next.sessionLastActivity = Object.fromEntries(
+                      Object.entries(s.sessionLastActivity).filter(([k]) => k !== session.key)
+                    );
+                    return next;
+                  }
                   if (firstUser) {
                     const labelText = getMessageText(firstUser.content).trim();
                     if (labelText) {
@@ -1315,6 +1339,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   loadHistory: async (quiet = false) => {
     const { currentSessionKey } = get();
+    const requestSessionKey = currentSessionKey;
+    const requestSeq = ++_historyLoadSeq;
+    const isStale = () =>
+      get().currentSessionKey !== requestSessionKey || requestSeq !== _historyLoadSeq;
     if (!quiet) set({ loading: true, error: null });
 
     try {
@@ -1322,7 +1350,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         .getState()
         .rpc<
           Record<string, unknown>
-        >('chat.history', { sessionKey: currentSessionKey, limit: 200 });
+        >('chat.history', { sessionKey: requestSessionKey, limit: 200 });
+      if (isStale()) return;
       if (data) {
         const rawMessages = Array.isArray(data.messages) ? (data.messages as RawMessage[]) : [];
 
@@ -1359,12 +1388,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         }
 
+        if (isStale()) return;
         set({ messages: finalMessages, thinkingLevel, loading: false });
 
         // Extract first user message text as a session label for display in the toolbar.
         // Skip main sessions (key ends with ":main") — they rely on the Gateway-provided
         // displayName (e.g. the configured agent name "ClawClaw") instead.
-        const isMainSession = currentSessionKey.endsWith(':main');
+        const isMainSession = requestSessionKey.endsWith(':main');
         if (!isMainSession) {
           const firstUserMsg = finalMessages.find((m) => m.role === 'user');
           if (firstUserMsg) {
@@ -1372,7 +1402,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             if (labelText) {
               const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
               set((s) => ({
-                sessionLabels: { ...s.sessionLabels, [currentSessionKey]: truncated },
+                sessionLabels: { ...s.sessionLabels, [requestSessionKey]: truncated },
               }));
             }
           }
@@ -1383,12 +1413,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (lastMsg?.timestamp) {
           const lastAt = toMs(lastMsg.timestamp);
           set((s) => ({
-            sessionLastActivity: { ...s.sessionLastActivity, [currentSessionKey]: lastAt },
+            sessionLastActivity: { ...s.sessionLastActivity, [requestSessionKey]: lastAt },
           }));
         }
 
         // Async: load missing image previews from disk (updates in background)
         loadMissingPreviews(finalMessages).then((updated) => {
+          if (isStale()) return;
           if (updated) {
             // Create new object references so React.memo detects changes.
             // loadMissingPreviews mutates AttachedFileMeta in place, so we
@@ -1403,6 +1434,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         });
         const { pendingFinal, lastUserMessageAt, sending: isSendingNow } = get();
+        if (isStale()) return;
 
         // If we're sending but haven't received streaming events, check
         // whether the loaded history reveals intermediate tool-call activity.
@@ -1436,9 +1468,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         }
       } else {
+        if (isStale()) return;
         set({ messages: [], loading: false });
       }
     } catch (err) {
+      if (isStale()) return;
       console.warn('Failed to load chat history:', err);
       set({ messages: [], loading: false });
     }

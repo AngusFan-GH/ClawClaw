@@ -13,7 +13,7 @@ const isMac = window.electron?.platform === 'darwin';
 export function TitleBar() {
   if (isMac) {
     // macOS: just a drag region, traffic lights are native
-    return <div className="drag-region h-10 shrink-0 border-b bg-background" />;
+    return <div className="drag-region h-11 shrink-0 border-b border-border/70 bg-background/85 backdrop-blur-xl" />;
   }
 
   return <WindowsTitleBar />;
@@ -46,32 +46,32 @@ function WindowsTitleBar() {
   };
 
   return (
-    <div className="drag-region flex h-10 shrink-0 items-center justify-between border-b bg-background">
+    <div className="drag-region flex h-11 shrink-0 items-center justify-between border-b border-border/70 bg-background/85 backdrop-blur-xl">
       {/* Left: Icon + App Name */}
       <div className="no-drag flex items-center gap-2 pl-3">
         <img src={logoSvg} alt="ClawClaw" className="h-5 w-auto" />
-        <span className="text-xs font-medium text-muted-foreground select-none">ClawClaw</span>
+        <span className="select-none text-xs font-medium text-foreground/70">ClawClaw</span>
       </div>
 
       {/* Right: Window Controls */}
       <div className="no-drag flex h-full">
         <button
           onClick={handleMinimize}
-          className="flex h-full w-11 items-center justify-center text-muted-foreground hover:bg-accent transition-colors"
+          className="flex h-full w-11 items-center justify-center text-foreground/60 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
           title="Minimize"
         >
           <Minus className="h-4 w-4" />
         </button>
         <button
           onClick={handleMaximize}
-          className="flex h-full w-11 items-center justify-center text-muted-foreground hover:bg-accent transition-colors"
+          className="flex h-full w-11 items-center justify-center text-foreground/60 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
           title={maximized ? 'Restore' : 'Maximize'}
         >
           {maximized ? <Copy className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
         </button>
         <button
           onClick={handleClose}
-          className="flex h-full w-11 items-center justify-center text-muted-foreground hover:bg-red-500 hover:text-white transition-colors"
+          className="flex h-full w-11 items-center justify-center text-foreground/60 transition-colors hover:bg-red-500 hover:text-white"
           title="Close"
         >
           <X className="h-4 w-4" />

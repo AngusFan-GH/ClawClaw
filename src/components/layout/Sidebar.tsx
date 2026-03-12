@@ -6,16 +6,16 @@
 import { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Network,
+  MessageCircleMore,
   Puzzle,
   Clock,
   Settings as SettingsIcon,
   Shield,
   PanelLeftClose,
   PanelLeft,
-  Plus,
+  SquarePen,
   Trash2,
-  Cpu,
+  Bot,
   ChevronUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -51,9 +51,9 @@ function NavItem({ to, icon, label, badge, collapsed, onClick }: NavItemProps) {
       onClick={onClick}
       className={({ isActive }) =>
         cn(
-          'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors',
-          'hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80',
-          isActive ? 'bg-black/5 dark:bg-white/10 text-foreground' : '',
+          'flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-[14px] font-medium transition-colors',
+          'hover:bg-black/5 dark:hover:bg-white/10 text-foreground/80',
+          isActive ? 'bg-accent/70 text-foreground shadow-sm' : '',
           collapsed && 'justify-center px-0'
         )
       }
@@ -173,12 +173,12 @@ export function Sidebar() {
   const settingsItems = [
     {
       to: '/channels',
-      icon: <Network className="h-[18px] w-[18px]" strokeWidth={2} />,
+      icon: <MessageCircleMore className="h-[18px] w-[18px]" strokeWidth={2} />,
       label: t('sidebar.channels'),
     },
     {
       to: '/models',
-      icon: <Cpu className="h-[18px] w-[18px]" strokeWidth={2} />,
+      icon: <Bot className="h-[18px] w-[18px]" strokeWidth={2} />,
       label: t('sidebar.models'),
     },
     {
@@ -186,19 +186,14 @@ export function Sidebar() {
       icon: <Shield className="h-[18px] w-[18px]" strokeWidth={2} />,
       label: t('sidebar.security'),
     },
-    {
-      to: '/settings',
-      icon: <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />,
-      label: t('sidebar.other'),
-    },
   ];
 
-  const settingsAreaActive = settingsItems.some((item) => location.pathname.startsWith(item.to));
+  const settingsActive = location.pathname.startsWith('/settings');
 
   return (
     <aside
       className={cn(
-        'flex shrink-0 flex-col border-r bg-[#eae8e1]/60 dark:bg-background transition-all duration-300',
+        'flex shrink-0 flex-col rounded-2xl border border-border/70 bg-card/88 backdrop-blur-xl shadow-[0_12px_30px_rgba(15,23,42,0.08)] transition-all duration-300',
         sidebarCollapsed ? 'w-16' : 'w-64'
       )}
     >
@@ -220,7 +215,7 @@ export function Sidebar() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-black/5 dark:hover:bg-white/10"
+          className="h-8 w-8 shrink-0 rounded-full text-muted-foreground hover:bg-black/5 dark:hover:bg-white/10"
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
         >
           {sidebarCollapsed ? (
@@ -240,13 +235,13 @@ export function Sidebar() {
             navigate('/');
           }}
           className={cn(
-            'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors mb-2',
-            'bg-white dark:bg-accent shadow-sm border border-black/5 dark:border-white/10 text-foreground',
+            'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-[14px] font-medium transition-colors mb-2',
+            'bg-primary text-primary-foreground shadow-sm border border-transparent',
             sidebarCollapsed && 'justify-center px-0'
           )}
         >
-          <div className="flex shrink-0 items-center justify-center text-foreground/80">
-            <Plus className="h-[18px] w-[18px]" strokeWidth={2} />
+          <div className="flex shrink-0 items-center justify-center text-inherit">
+            <SquarePen className="h-[18px] w-[18px]" strokeWidth={2} />
           </div>
           {!sidebarCollapsed && (
             <span className="flex-1 text-left overflow-hidden text-ellipsis whitespace-nowrap">
@@ -260,7 +255,7 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Session list — below Settings, only when expanded */}
+      {/* Session list 鈥?below Settings, only when expanded */}
       {!sidebarCollapsed && sessions.length > 0 && (
         <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 mt-4 space-y-0.5 pb-2">
           {sessionBuckets.map((bucket) =>
@@ -277,17 +272,17 @@ export function Sidebar() {
                         navigate('/');
                       }}
                       className={cn(
-                        'w-full text-left rounded-lg px-2.5 py-1.5 text-[13px] truncate transition-colors pr-7',
-                        'hover:bg-black/5 dark:hover:bg-white/5',
+                        'w-full text-left rounded-xl px-2.5 py-1.5 text-[13px] truncate transition-colors pr-7',
+                        'hover:bg-black/5 dark:hover:bg-white/10',
                         isOnChat && currentSessionKey === s.key
-                          ? 'bg-black/5 dark:bg-white/10 text-foreground font-medium'
+                          ? 'bg-accent/70 text-foreground font-medium'
                           : 'text-foreground/75'
                       )}
                     >
                       {getSessionLabel(s.key, s.displayName, s.label)}
                     </button>
                     <button
-                      aria-label="Delete session"
+                      aria-label={t('common:actions.delete')}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSessionToDelete({
@@ -324,79 +319,142 @@ export function Sidebar() {
             }
           }}
         >
-          <button
-            type="button"
-            className={cn(
-              'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors',
-              'hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80',
-              settingsAreaActive && 'bg-black/5 dark:bg-white/10 text-foreground',
-              sidebarCollapsed ? 'justify-center px-0' : ''
-            )}
-            aria-haspopup="menu"
-            aria-expanded={settingsMenuOpen}
-          >
-            <div
-              className={cn(
-                'flex shrink-0 items-center justify-center',
-                settingsAreaActive ? 'text-foreground' : 'text-muted-foreground'
+          {sidebarCollapsed ? (
+            <>
+              {settingsMenuOpen && (
+                <div className="absolute bottom-[calc(100%-4px)] left-0 z-20 w-56 overflow-hidden rounded-2xl border border-border/70 bg-card/95 p-1.5 shadow-[0_14px_34px_rgba(0,0,0,0.14)] backdrop-blur-xl">
+                  <div className="space-y-1">
+                    {settingsItems.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        onClick={() => setSettingsMenuOpen(false)}
+                        className={({ isActive }) =>
+                          cn(
+                            'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors',
+                            'hover:bg-black/5 dark:hover:bg-white/10 text-foreground/80',
+                            isActive && 'bg-accent/70 text-foreground shadow-sm'
+                          )
+                        }
+                      >
+                        {({ isActive }) => (
+                          <>
+                            <div
+                              className={cn(
+                                'flex shrink-0 items-center justify-center',
+                                isActive ? 'text-foreground' : 'text-muted-foreground'
+                              )}
+                            >
+                              {item.icon}
+                            </div>
+                            <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+                              {item.label}
+                            </span>
+                          </>
+                        )}
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
               )}
-            >
-              <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />
-            </div>
-            {!sidebarCollapsed && (
-              <>
+              <button
+                type="button"
+                className={cn(
+                  'flex w-full items-center justify-center rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors',
+                  'hover:bg-black/5 dark:hover:bg-white/10 text-foreground/80',
+                  settingsActive && 'bg-accent/70 text-foreground shadow-sm'
+                )}
+                aria-haspopup="menu"
+                aria-expanded={settingsMenuOpen}
+                onClick={() => {
+                  setSettingsMenuOpen(false);
+                  navigate('/settings');
+                }}
+              >
+                <div
+                  className={cn(
+                    'flex shrink-0 items-center justify-center',
+                    settingsActive ? 'text-foreground' : 'text-muted-foreground'
+                  )}
+                >
+                  <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />
+                </div>
+              </button>
+            </>
+          ) : (
+            <div className="overflow-hidden rounded-2xl border border-border/70 bg-card/95 p-1.5 shadow-lg backdrop-blur-xl transition-[box-shadow] duration-300">
+              <div
+                className={cn(
+                  'overflow-hidden transition-[max-height,opacity,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+                  settingsMenuOpen ? 'mb-1 max-h-56 opacity-100' : 'mb-0 max-h-0 opacity-0'
+                )}
+              >
+                <div className="space-y-1 pb-1">
+                  {settingsItems.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      onClick={() => setSettingsMenuOpen(false)}
+                      className={({ isActive }) =>
+                        cn(
+                          'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors',
+                          'hover:bg-black/5 dark:hover:bg-white/10 text-foreground/80',
+                          isActive && 'bg-accent/70 text-foreground shadow-sm'
+                        )
+                      }
+                    >
+                      {({ isActive }) => (
+                        <>
+                          <div
+                            className={cn(
+                              'flex shrink-0 items-center justify-center',
+                              isActive ? 'text-foreground' : 'text-muted-foreground'
+                            )}
+                          >
+                            {item.icon}
+                          </div>
+                          <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+                            {item.label}
+                          </span>
+                        </>
+                      )}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className={cn(
+                  'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors',
+                  'hover:bg-black/5 dark:hover:bg-white/10 text-foreground/80',
+                  settingsActive && 'bg-accent/70 text-foreground shadow-sm'
+                )}
+                aria-haspopup="menu"
+                aria-expanded={settingsMenuOpen}
+                onClick={() => {
+                  setSettingsMenuOpen(false);
+                  navigate('/settings');
+                }}
+              >
+                <div
+                  className={cn(
+                    'flex shrink-0 items-center justify-center',
+                    settingsActive ? 'text-foreground' : 'text-muted-foreground'
+                  )}
+                >
+                  <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />
+                </div>
                 <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">
                   {t('sidebar.settings')}
                 </span>
                 <ChevronUp
                   className={cn(
                     'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
-                    settingsMenuOpen && 'rotate-180'
+                    !settingsMenuOpen && 'rotate-180'
                   )}
                 />
-              </>
-            )}
-          </button>
-
-          {settingsMenuOpen && (
-            <div
-              className={cn(
-                'absolute bottom-[calc(100%-2px)] z-20 rounded-[10px] border border-black/10 bg-[#f3f1ea] p-2 shadow-sm dark:border-white/10 dark:bg-[#1d1d1c]',
-                sidebarCollapsed ? 'left-0 w-56' : 'left-0 right-0'
-              )}
-            >
-              <div className="space-y-1">
-                {settingsItems.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    onClick={() => setSettingsMenuOpen(false)}
-                    className={({ isActive }) =>
-                      cn(
-                        'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors',
-                        'hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80',
-                        isActive && 'bg-black/5 dark:bg-white/10 text-foreground'
-                      )
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        <div
-                          className={cn(
-                            'flex shrink-0 items-center justify-center',
-                            isActive ? 'text-foreground' : 'text-muted-foreground'
-                          )}
-                        >
-                          {item.icon}
-                        </div>
-                        <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                          {item.label}
-                        </span>
-                      </>
-                    )}
-                  </NavLink>
-                ))}
-              </div>
+              </button>
             </div>
           )}
         </div>
@@ -404,11 +462,12 @@ export function Sidebar() {
 
       <ConfirmDialog
         open={!!sessionToDelete}
-        title={t('common:actions.confirm')}
+        title={t('common:sidebar.deleteSessionTitle', { defaultValue: t('common:actions.confirm') })}
         message={t('common:sidebar.deleteSessionConfirm', { label: sessionToDelete?.label })}
         confirmLabel={t('common:actions.delete')}
         cancelLabel={t('common:actions.cancel')}
         variant="destructive"
+        size="sm"
         onConfirm={async () => {
           if (!sessionToDelete) return;
           await deleteSession(sessionToDelete.key);

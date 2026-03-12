@@ -28,6 +28,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useSkillsStore } from '@/stores/skills';
 import { useGatewayStore } from '@/stores/gateway';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { cn } from '@/lib/utils';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
@@ -48,6 +49,20 @@ function getRequiredEnvKeys(skill: Skill | null): string[] {
 
 function getPlaintextApiKey(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+function resolveSkillIcon(...candidates: Array<string | undefined>): string {
+  for (const candidate of candidates) {
+    const icon = (candidate || '').trim();
+    if (!icon) continue;
+    if (icon.includes('\uFFFD')) continue;
+    const hasCjk = /[\u3400-\u9FFF]/.test(icon);
+    const hasEmoji = Array.from(icon).some((char) => (char.codePointAt(0) ?? 0) >= 0x2600);
+    if (hasCjk && !hasEmoji) continue;
+    if (!hasEmoji && icon.length > 2) continue;
+    return icon;
+  }
+  return '🧩';
 }
 
 
@@ -194,15 +209,15 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall }: Sk
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <SheetContent
-        className="flex w-full flex-col border-l border-black/10 bg-[#f3f1e9] p-0 dark:border-white/10 dark:bg-[#1a1a19] sm:max-w-[460px]"
+        className="flex w-full flex-col border-l border-black/10 bg-card p-0 dark:border-white/10 dark:bg-card sm:max-w-[460px]"
         side="right"
       >
         <div className="border-b border-black/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.32),rgba(243,241,233,0.96))] px-5 pb-4 pt-4 dark:border-white/8 dark:bg-[linear-gradient(180deg,rgba(36,36,34,0.96),rgba(26,26,25,1))]">
           <div className="flex items-center gap-4">
-            <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-[10px] border border-black/6 bg-white/90 text-[30px] dark:border-white/10 dark:bg-[#20201e]">
-              <span>{skill.icon || '🔧'}</span>
+            <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-[10px] border border-black/6 bg-white/90 text-[30px] dark:border-white/10 dark:bg-card">
+              <span>{resolveSkillIcon(skill.icon)}</span>
               {skill.isCore && (
-                <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-[10px] border border-black/5 bg-[#f3f1e9] dark:border-white/10 dark:bg-[#1a1a19]">
+                <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-[10px] border border-black/5 bg-card dark:border-white/10 dark:bg-card">
                   <Lock className="h-3 w-3 text-muted-foreground" />
                 </div>
               )}
@@ -210,7 +225,7 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall }: Sk
 
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-[26px] font-serif font-normal tracking-tight text-foreground">
+                <h2 className="text-[26px] font-semibold tracking-tight text-foreground">
                   {skill.name}
                 </h2>
                 <Badge variant="secondary" className="rounded-[10px] border-0 bg-black/[0.05] px-2.5 py-1 text-[10px] font-medium text-foreground/70 dark:bg-white/[0.08]">
@@ -244,7 +259,7 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall }: Sk
                   value={primaryCredential}
                   onChange={(e) => setPrimaryCredential(e.target.value)}
                   type="password"
-                  className="h-[42px] rounded-[10px] border-black/10 bg-[#eeece3] font-mono text-[13px] text-foreground placeholder:text-foreground/40 transition-all focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/40 dark:border-white/10 dark:bg-[#151514]"
+                  className="h-[42px] rounded-[10px] border-black/10 bg-muted/70 font-mono text-[13px] text-foreground placeholder:text-foreground/40 transition-all focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/40 dark:border-white/10 dark:bg-muted/40"
                 />
                 <p className="mt-2 text-[12px] font-medium leading-[1.5] text-foreground/50">
                   {skill.primaryEnv
@@ -282,7 +297,7 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall }: Sk
 
                 <div className="space-y-2">
                   {envVars.length === 0 && (
-                    <div className="flex items-center rounded-[10px] border border-black/5 bg-[#eeece3] px-4 py-3 text-[13px] font-medium italic text-foreground/50 dark:border-white/5 dark:bg-[#151514]">
+                    <div className="flex items-center rounded-[10px] border border-black/5 bg-muted/70 px-4 py-3 text-[13px] font-medium italic text-foreground/50 dark:border-white/5 dark:bg-muted/40">
                       {t('detail.noEnvVars', 'No environment variables configured.')}
                     </div>
                   )}
@@ -292,13 +307,13 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall }: Sk
                       <Input
                         value={env.key}
                         onChange={(e) => handleUpdateEnv(index, 'key', e.target.value)}
-                        className="h-[40px] rounded-[10px] border-black/10 bg-[#eeece3] font-mono text-[13px] text-foreground focus-visible:ring-2 focus-visible:ring-blue-500/40 dark:border-white/10 dark:bg-[#151514]"
+                        className="h-[40px] rounded-[10px] border-black/10 bg-muted/70 font-mono text-[13px] text-foreground focus-visible:ring-2 focus-visible:ring-blue-500/40 dark:border-white/10 dark:bg-muted/40"
                         placeholder={t('detail.keyPlaceholder', 'Key')}
                       />
                       <Input
                         value={env.value}
                         onChange={(e) => handleUpdateEnv(index, 'value', e.target.value)}
-                        className="h-[40px] rounded-[10px] border-black/10 bg-[#eeece3] font-mono text-[13px] text-foreground focus-visible:ring-2 focus-visible:ring-blue-500/40 dark:border-white/10 dark:bg-[#151514]"
+                        className="h-[40px] rounded-[10px] border-black/10 bg-muted/70 font-mono text-[13px] text-foreground focus-visible:ring-2 focus-visible:ring-blue-500/40 dark:border-white/10 dark:bg-muted/40"
                         placeholder={t('detail.valuePlaceholder', 'Value')}
                       />
                       <Button
@@ -352,14 +367,14 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall }: Sk
 
         </div>
 
-        <div className="border-t border-black/6 bg-[#f3f1e9]/95 px-5 py-4 backdrop-blur dark:border-white/8 dark:bg-[#1a1a19]/95">
+        <div className="border-t border-black/6 bg-card/95 px-5 py-4 backdrop-blur dark:border-white/8 dark:bg-card/95">
           <div className="flex items-center gap-3">
             {!skill.isCore && showConfigEditor && (
               <Button
                 onClick={handleSaveConfig}
                 className={cn(
                   "h-[42px] flex-1 rounded-[10px] border border-transparent text-[13px] font-semibold transition-all",
-                  "bg-[#0a84ff] hover:bg-[#007aff] text-white"
+                  "bg-primary text-primary-foreground hover:bg-primary/90"
                 )}
                 disabled={isSaving}
               >
@@ -406,15 +421,22 @@ function SkillGridCard({ skill, onClick, onToggle }: SkillGridCardProps) {
   const { t } = useTranslation('skills');
 
   return (
-    <button
-      type="button"
-      className="group flex h-full flex-col rounded-[10px] border border-black/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.52),rgba(243,241,233,0.98))] px-4 py-3.5 text-left transition-[border-color,background-color] duration-200 hover:border-[#2463eb]/35 hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.76),rgba(240,244,255,0.98))] dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(34,34,32,0.96),rgba(21,21,20,0.98))] dark:hover:border-[#7aa2ff]/40 dark:hover:bg-[linear-gradient(180deg,rgba(40,44,54,0.98),rgba(24,26,32,1))]"
+    <div
+      role="button"
+      tabIndex={0}
+      className="group flex h-full flex-col rounded-xl border border-border/70 bg-card/85 px-4 py-3.5 text-left transition-colors duration-200 hover:border-primary/35 hover:bg-accent/45"
       onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClick();
+        }
+      }}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-black/6 bg-white/90 text-[21px] transition-colors duration-200 group-hover:border-[#2463eb]/20 dark:border-white/10 dark:bg-[#20201e]">
-            {skill.icon || '🧩'}
+          <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/70 bg-card text-[21px] transition-colors duration-200 group-hover:border-primary/25">
+            {resolveSkillIcon(skill.icon)}
           </div>
           <div className="min-w-0 pt-0.5">
             <div className="mb-1 flex items-center gap-2">
@@ -446,7 +468,7 @@ function SkillGridCard({ skill, onClick, onToggle }: SkillGridCardProps) {
             checked={skill.enabled}
             onCheckedChange={(checked) => onToggle(skill.id, checked)}
             disabled={skill.isCore}
-            className="h-7 w-12 border border-black/10 bg-black/[0.06] data-[state=checked]:border-[#2463eb] data-[state=checked]:bg-[#2463eb] data-[state=unchecked]:bg-black/[0.06] dark:border-white/10 dark:bg-white/[0.08] dark:data-[state=unchecked]:bg-white/[0.08]"
+            className="h-7 w-12 border border-border/70 bg-muted data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=unchecked]:bg-muted"
           />
         </div>
       </div>
@@ -454,7 +476,7 @@ function SkillGridCard({ skill, onClick, onToggle }: SkillGridCardProps) {
       <p className="mt-4 line-clamp-4 text-[13px] leading-[1.7] text-muted-foreground">
         {skill.description}
       </p>
-    </button>
+    </div>
   );
 }
 
@@ -478,15 +500,22 @@ function MarketplaceSkillCard({
   const { t } = useTranslation('skills');
 
   return (
-    <button
-      type="button"
-      className="group flex h-full flex-col rounded-[10px] border border-black/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.52),rgba(243,241,233,0.98))] px-4 py-3.5 text-left transition-[border-color,background-color] duration-200 hover:border-[#2463eb]/35 hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.76),rgba(240,244,255,0.98))] dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(34,34,32,0.96),rgba(21,21,20,0.98))] dark:hover:border-[#7aa2ff]/40 dark:hover:bg-[linear-gradient(180deg,rgba(40,44,54,0.98),rgba(24,26,32,1))]"
+    <div
+      role="button"
+      tabIndex={0}
+      className="group flex h-full flex-col rounded-xl border border-border/70 bg-card/85 px-4 py-3.5 text-left transition-colors duration-200 hover:border-primary/35 hover:bg-accent/45"
       onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] border border-black/5 bg-white/90 text-lg transition-colors duration-200 group-hover:border-[#2463eb]/20 dark:border-white/10 dark:bg-[#20201e]">
-            📦
+          <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-card text-lg transition-colors duration-200 group-hover:border-primary/25">
+            {resolveSkillIcon(skill.icon, skill.emoji)}
           </div>
           <div className="min-w-0 pt-0.5">
             <h3 className="truncate text-[15px] font-semibold tracking-[-0.02em] text-foreground">{skill.name}</h3>
@@ -552,7 +581,7 @@ function MarketplaceSkillCard({
           </Button>
         )}
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -752,50 +781,33 @@ export function Skills() {
     }
   }, [uninstallSkill, t]);
 
-  if (loading) {
-    return (
-      <div className="flex flex-col -m-6 dark:bg-background min-h-[calc(100vh-2.5rem)] items-center justify-center">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
-      <div className="w-full max-w-6xl mx-auto flex flex-col h-full px-5 pb-8 pt-10 sm:px-6 lg:px-8 lg:pt-12">
-
-        {/* Header */}
-        <div className="mb-5 shrink-0">
-          <div className="flex flex-col gap-5 lg:gap-6 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-            <h1 className="mb-2 text-5xl font-serif font-normal tracking-tight text-foreground sm:text-6xl" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}>
-              {t('title')}
-            </h1>
-            <p className="text-[16px] text-foreground/80 font-medium sm:text-[17px]">
-              {t('subtitle')}
-            </p>
-            </div>
-
+      <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-6 pb-8 pt-10 md:px-8">
+        <PageHeader
+          title={t('title')}
+          subtitle={t('subtitle')}
+          actions={(
             <div className="grid grid-cols-2 gap-2.5 lg:max-w-[520px] lg:grid-cols-4 xl:min-w-[520px]">
-              <div className="rounded-[10px] border border-black/8 bg-black/[0.03] px-4 py-3 dark:border-white/8 dark:bg-white/[0.04]">
+              <div className="rounded-[10px] border border-border/70 bg-card/85 px-4 py-3">
                 <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('stats.all')}</div>
                 <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">{safeSkills.length}</div>
               </div>
-              <div className="rounded-[10px] border border-black/8 bg-black/[0.03] px-4 py-3 dark:border-white/8 dark:bg-white/[0.04]">
+              <div className="rounded-[10px] border border-border/70 bg-card/85 px-4 py-3">
                 <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('stats.enabled')}</div>
                 <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">{enabledSkillsCount}</div>
               </div>
-              <div className="rounded-[10px] border border-black/8 bg-black/[0.03] px-4 py-3 dark:border-white/8 dark:bg-white/[0.04]">
+              <div className="rounded-[10px] border border-border/70 bg-card/85 px-4 py-3">
                 <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('stats.builtIn')}</div>
                 <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">{sourceStats.builtIn}</div>
               </div>
-              <div className="rounded-[10px] border border-black/8 bg-black/[0.03] px-4 py-3 dark:border-white/8 dark:bg-white/[0.04]">
+              <div className="rounded-[10px] border border-border/70 bg-card/85 px-4 py-3">
                 <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('stats.custom')}</div>
                 <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">{userSkillsCount}</div>
               </div>
             </div>
-          </div>
-        </div>
+          )}
+        />
 
         {/* Gateway Warning */}
         {showGatewayWarning && (
@@ -808,7 +820,7 @@ export function Skills() {
         )}
 
         {/* Sub Navigation and Actions */}
-        <div className="mb-5 shrink-0 rounded-[10px] border border-black/10 bg-[rgba(255,255,255,0.3)] p-3.5 dark:border-white/10 dark:bg-white/[0.03] sm:p-4">
+        <div className="mb-5 shrink-0 rounded-[10px] border border-border/70 bg-card/85 p-3.5 sm:p-4">
           <div className="flex flex-col gap-3.5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex flex-wrap items-center gap-2">
@@ -851,7 +863,7 @@ export function Skills() {
                 {hasInstalledSkills && (
                   <button
                     onClick={handleOpenSkillsFolder}
-                    className="h-10 rounded-[10px] border border-black/10 px-4 text-[13px] font-medium text-foreground/80 transition-colors hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
+                    className="h-10 rounded-[10px] border border-border/70 px-4 text-[13px] font-medium text-foreground/80 transition-colors hover:bg-accent/70 hover:text-foreground"
                   >
                     <FolderOpen className="mr-2 inline h-4 w-4" />
                     {t('openFolder')}
@@ -862,7 +874,7 @@ export function Skills() {
                   size="icon"
                   onClick={fetchSkills}
                   disabled={!isGatewayRunning}
-                  className="h-10 w-10 rounded-[10px] border-black/10 bg-transparent shadow-none text-muted-foreground hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
+                  className="h-10 w-10 rounded-[10px] border-border/70 bg-transparent shadow-none text-muted-foreground hover:bg-accent/70 hover:text-foreground"
                   title={t('refresh')}
                 >
                   <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
@@ -906,7 +918,12 @@ export function Skills() {
 
           <div className="flex flex-col gap-4">
             {activeTab === 'all' && (
-              filteredSkills.length === 0 ? (
+              loading && safeSkills.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                  <LoadingSpinner size="lg" />
+                  <p className="mt-4 text-sm">{t('marketplace.searching')}</p>
+                </div>
+              ) : filteredSkills.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
                   <Puzzle className="h-10 w-10 mb-4 opacity-50" />
                   <p>{searchQuery ? t('noSkillsSearch') : t('noSkillsAvailable')}</p>
@@ -1006,3 +1023,4 @@ export function Skills() {
 }
 
 export default Skills;
+

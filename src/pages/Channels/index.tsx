@@ -12,6 +12,7 @@ import { useGatewayStore } from '@/stores/gateway';
 import { hostApiFetch } from '@/lib/host-api';
 import { subscribeHostEvent } from '@/lib/host-events';
 import { ChannelConfigModal } from '@/components/channels/ChannelConfigModal';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { cn } from '@/lib/utils';
 import {
   CHANNEL_ICONS,
@@ -117,36 +118,31 @@ export function Channels() {
       : null;
 
   return (
-    <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
-      <div className="w-full max-w-5xl mx-auto flex flex-col h-full p-10 pt-16">
-        <div className="flex flex-col md:flex-row md:items-start justify-between mb-12 shrink-0 gap-4">
-          <div>
-            <h1 className="text-5xl md:text-6xl font-serif text-foreground mb-3 font-normal tracking-tight" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}>
-              {t('title')}
-            </h1>
-            <p className="text-[17px] text-foreground/80 font-medium">
-              {t('subtitle')}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3 md:mt-2">
-            {statusText && (
-              <div className="inline-flex h-9 items-center gap-2 rounded-full border border-black/10 bg-black/[0.03] px-3 text-[13px] font-medium text-foreground/65 dark:border-white/10 dark:bg-white/[0.04]">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                <span>{statusText}</span>
-              </div>
-            )}
-            <Button
-              variant="outline"
-              onClick={handleRefresh}
-              disabled={gatewayStatus.state !== 'running'}
-              className="h-9 text-[13px] font-medium rounded-full px-4 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none text-foreground/80 hover:text-foreground transition-colors"
-            >
-              <RefreshCw className={cn("h-3.5 w-3.5 mr-2", loading && "animate-spin")} />
-              {t('refresh')}
-            </Button>
-          </div>
-        </div>
+    <div className="flex flex-col -m-6 bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
+      <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-6 pb-8 pt-10 md:px-8">
+        <PageHeader
+          title={t('title')}
+          subtitle={t('subtitle')}
+          actions={(
+            <div className="flex items-center gap-3">
+              {statusText && (
+                <div className="inline-flex h-9 items-center gap-2 rounded-xl border border-border/70 bg-card/85 px-3 text-[13px] font-medium text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>{statusText}</span>
+                </div>
+              )}
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={gatewayStatus.state !== 'running'}
+                className="h-9 rounded-xl border-black/10 bg-transparent px-4 text-[13px] font-medium text-foreground/80 shadow-none transition-colors hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5 mr-2", loading && "animate-spin")} />
+                {t('refresh')}
+              </Button>
+            </div>
+          )}
+        />
 
         <div className="flex-1 overflow-y-auto pr-2 pb-10 min-h-0 -mr-2">
           {gatewayStatus.state !== 'running' && (
@@ -168,8 +164,8 @@ export function Channels() {
           )}
 
           {configuredDisplayChannels.length > 0 && (
-            <div className="mb-12">
-              <h2 className="text-3xl font-serif text-foreground mb-6 font-normal tracking-tight" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}>
+            <section className="mb-8 rounded-2xl border border-border/70 bg-card/75 p-4 md:p-5">
+              <h2 className="mb-4 text-2xl font-semibold tracking-tight text-foreground">
                 {t('configured')}
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
@@ -185,11 +181,11 @@ export function Channels() {
                   />
                 ))}
               </div>
-            </div>
+            </section>
           )}
 
-          <div className="mb-8">
-            <h2 className="text-3xl font-serif text-foreground mb-6 font-normal tracking-tight" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}>
+          <section className="mb-8 rounded-2xl border border-border/70 bg-card/75 p-4 md:p-5">
+            <h2 className="mb-4 text-2xl font-semibold tracking-tight text-foreground">
               {t('supportedChannels')}
             </h2>
 
@@ -207,17 +203,17 @@ export function Channels() {
                       setShowAddDialog(true);
                     }}
                     className={cn(
-                      'group flex items-start gap-4 p-4 rounded-2xl transition-all text-left border relative overflow-hidden bg-transparent border-transparent hover:bg-black/5 dark:hover:bg-white/5'
+                      'group relative flex items-start gap-4 overflow-hidden rounded-2xl border border-border/60 bg-card/80 p-4 text-left transition-colors hover:bg-accent/50'
                     )}
                   >
-                    <div className="h-[46px] w-[46px] shrink-0 flex items-center justify-center text-foreground bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-full shadow-sm mb-3">
+                    <div className="mb-3 h-[46px] w-[46px] shrink-0 flex items-center justify-center rounded-full border border-border/70 bg-card shadow-sm">
                       <ChannelLogo type={type} />
                     </div>
                     <div className="flex flex-col flex-1 min-w-0 py-0.5 mt-1">
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="text-[16px] font-semibold text-foreground truncate">{meta.name}</h3>
                         {meta.isPlugin && (
-                          <Badge variant="secondary" className="font-mono text-[10px] font-medium px-2 py-0.5 rounded-full bg-black/[0.04] dark:bg-white/[0.08] border-0 shadow-none text-foreground/70">
+                          <Badge variant="secondary" className="rounded-xl border-0 bg-muted px-2 py-0.5 font-mono text-[10px] font-medium text-foreground/70 shadow-none">
                             {t('pluginBadge')}
                           </Badge>
                         )}
@@ -230,7 +226,7 @@ export function Channels() {
                 );
               })}
             </div>
-          </div>
+          </section>
         </div>
       </div>
 
@@ -274,19 +270,19 @@ export function Channels() {
 function ChannelLogo({ type }: { type: ChannelType }) {
   switch (type) {
     case 'telegram':
-      return <img src={telegramIcon} alt="Telegram" className="w-[22px] h-[22px] dark:invert" />;
+      return <img src={telegramIcon} alt="Telegram" className="w-[22px] h-[22px]" />;
     case 'discord':
-      return <img src={discordIcon} alt="Discord" className="w-[22px] h-[22px] dark:invert" />;
+      return <img src={discordIcon} alt="Discord" className="w-[22px] h-[22px]" />;
     case 'whatsapp':
-      return <img src={whatsappIcon} alt="WhatsApp" className="w-[22px] h-[22px] dark:invert" />;
+      return <img src={whatsappIcon} alt="WhatsApp" className="w-[22px] h-[22px]" />;
     case 'dingtalk':
-      return <img src={dingtalkIcon} alt="DingTalk" className="w-[22px] h-[22px] dark:invert" />;
+      return <img src={dingtalkIcon} alt="DingTalk" className="w-[22px] h-[22px]" />;
     case 'feishu':
-      return <img src={feishuIcon} alt="Feishu" className="w-[22px] h-[22px] dark:invert" />;
+      return <img src={feishuIcon} alt="Feishu" className="w-[22px] h-[22px]" />;
     case 'wecom':
-      return <img src={wecomIcon} alt="WeCom" className="w-[22px] h-[22px] dark:invert" />;
+      return <img src={wecomIcon} alt="WeCom" className="w-[22px] h-[22px]" />;
     case 'qqbot':
-      return <img src={qqIcon} alt="QQ" className="w-[22px] h-[22px] dark:invert" />;
+      return <img src={qqIcon} alt="QQ" className="w-[22px] h-[22px]" />;
     default:
       return <span className="text-[22px]">{CHANNEL_ICONS[type] || '💬'}</span>;
   }
@@ -305,9 +301,16 @@ function ChannelCard({ channel, onClick, onDelete }: ChannelCardProps) {
   return (
     <div 
       onClick={onClick}
-      className="group flex items-start gap-4 p-4 rounded-2xl transition-all text-left border relative overflow-hidden bg-transparent border-transparent hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+      className="group relative flex cursor-pointer items-start gap-4 overflow-hidden rounded-2xl border border-border/60 bg-card/80 p-4 text-left transition-colors hover:bg-accent/50"
     >
-      <div className="h-[46px] w-[46px] shrink-0 flex items-center justify-center text-foreground bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-full shadow-sm mb-3">
+      <div
+        className={cn(
+          'mb-3 h-[46px] w-[46px] shrink-0 flex items-center justify-center rounded-full border shadow-sm',
+          channel.status === 'connected'
+            ? 'bg-emerald-500/12 border-emerald-500/30'
+            : 'bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/10'
+        )}
+      >
         <ChannelLogo type={channel.type} />
       </div>
       <div className="flex flex-col flex-1 min-w-0 py-0.5 mt-1">
@@ -317,7 +320,7 @@ function ChannelCard({ channel, onClick, onDelete }: ChannelCardProps) {
             {meta?.isPlugin && (
               <Badge
                 variant="secondary"
-                className="font-mono text-[10px] font-medium px-2 py-0.5 rounded-full bg-black/[0.04] dark:bg-white/[0.08] border-0 shadow-none text-foreground/70"
+                className="rounded-xl border-0 bg-muted px-2 py-0.5 font-mono text-[10px] font-medium text-foreground/70 shadow-none"
               >
                 {t('pluginBadge', 'Plugin')}
               </Badge>

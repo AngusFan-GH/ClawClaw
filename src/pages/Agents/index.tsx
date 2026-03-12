@@ -9,6 +9,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ChannelConfigModal } from '@/components/channels/ChannelConfigModal';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { useAgentsStore } from '@/stores/agents';
 import { useChannelsStore } from '@/stores/channels';
 import { useGatewayStore } from '@/stores/gateway';
@@ -63,35 +64,30 @@ export function Agents() {
 
   return (
     <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
-      <div className="w-full max-w-5xl mx-auto flex flex-col h-full p-10 pt-16">
-        <div className="flex flex-col md:flex-row md:items-start justify-between mb-12 shrink-0 gap-4">
-          <div>
-            <h1
-              className="text-5xl md:text-6xl font-serif text-foreground mb-3 font-normal tracking-tight"
-              style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}
-            >
-              {t('title')}
-            </h1>
-            <p className="text-[17px] text-foreground/80 font-medium">{t('subtitle')}</p>
-          </div>
-          <div className="flex items-center gap-3 md:mt-2">
-            <Button
-              variant="outline"
-              onClick={handleRefresh}
-              className="h-9 text-[13px] font-medium rounded-full px-4 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none text-foreground/80 hover:text-foreground transition-colors"
-            >
-              <RefreshCw className="h-3.5 w-3.5 mr-2" />
-              {t('refresh')}
-            </Button>
-            <Button
-              onClick={() => setShowAddDialog(true)}
-              className="h-9 text-[13px] font-medium rounded-full px-4 shadow-none"
-            >
-              <Plus className="h-3.5 w-3.5 mr-2" />
-              {t('addAgent')}
-            </Button>
-          </div>
-        </div>
+      <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-6 pb-8 pt-10 md:px-8">
+        <PageHeader
+          title={t('title')}
+          subtitle={t('subtitle')}
+          actions={(
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                className="h-9 rounded-xl border-black/10 bg-transparent px-4 text-[13px] font-medium text-foreground/80 shadow-none transition-colors hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
+              >
+                <RefreshCw className="h-3.5 w-3.5 mr-2" />
+                {t('refresh')}
+              </Button>
+              <Button
+                onClick={() => setShowAddDialog(true)}
+                className="h-9 rounded-xl px-4 text-[13px] font-medium shadow-none"
+              >
+                <Plus className="h-3.5 w-3.5 mr-2" />
+                {t('addAgent')}
+              </Button>
+            </div>
+          )}
+        />
 
         <div className="flex-1 overflow-y-auto pr-2 pb-10 min-h-0 -mr-2">
           {gatewayStatus.state !== 'running' && (
@@ -243,25 +239,25 @@ function AgentCard({
   );
 }
 
-const inputClasses = 'h-[44px] rounded-xl font-mono text-[13px] bg-[#eeece3] dark:bg-[#151514] border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40';
+const inputClasses = 'h-[44px] rounded-xl font-mono text-[13px] bg-muted/70 dark:bg-muted/40 border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40';
 const labelClasses = 'text-[14px] text-foreground/80 font-bold';
 
 function ChannelLogo({ type }: { type: ChannelType }) {
   switch (type) {
     case 'telegram':
-      return <img src={telegramIcon} alt="Telegram" className="w-[20px] h-[20px] dark:invert" />;
+      return <img src={telegramIcon} alt="Telegram" className="w-[20px] h-[20px]" />;
     case 'discord':
-      return <img src={discordIcon} alt="Discord" className="w-[20px] h-[20px] dark:invert" />;
+      return <img src={discordIcon} alt="Discord" className="w-[20px] h-[20px]" />;
     case 'whatsapp':
-      return <img src={whatsappIcon} alt="WhatsApp" className="w-[20px] h-[20px] dark:invert" />;
+      return <img src={whatsappIcon} alt="WhatsApp" className="w-[20px] h-[20px]" />;
     case 'dingtalk':
-      return <img src={dingtalkIcon} alt="DingTalk" className="w-[20px] h-[20px] dark:invert" />;
+      return <img src={dingtalkIcon} alt="DingTalk" className="w-[20px] h-[20px]" />;
     case 'feishu':
-      return <img src={feishuIcon} alt="Feishu" className="w-[20px] h-[20px] dark:invert" />;
+      return <img src={feishuIcon} alt="Feishu" className="w-[20px] h-[20px]" />;
     case 'wecom':
-      return <img src={wecomIcon} alt="WeCom" className="w-[20px] h-[20px] dark:invert" />;
+      return <img src={wecomIcon} alt="WeCom" className="w-[20px] h-[20px]" />;
     case 'qqbot':
-      return <img src={qqIcon} alt="QQ" className="w-[20px] h-[20px] dark:invert" />;
+      return <img src={qqIcon} alt="QQ" className="w-[20px] h-[20px]" />;
     default:
       return <span className="text-[20px] leading-none">{CHANNEL_ICONS[type] || '💬'}</span>;
   }
@@ -293,9 +289,9 @@ function AddAgentDialog({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md rounded-3xl border-0 shadow-2xl bg-[#f3f1e9] dark:bg-[#1a1a19] overflow-hidden">
+      <Card className="w-full max-w-md rounded-2xl bg-card overflow-hidden">
         <CardHeader className="pb-2">
-          <CardTitle className="text-2xl font-serif font-normal tracking-tight">
+          <CardTitle className="text-2xl font-semibold tracking-tight">
             {t('createDialog.title')}
           </CardTitle>
           <CardDescription className="text-[15px] mt-1 text-foreground/70">
@@ -317,14 +313,14 @@ function AddAgentDialog({
             <Button
               variant="outline"
               onClick={onClose}
-              className="h-9 text-[13px] font-medium rounded-full px-4 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none text-foreground/80 hover:text-foreground"
+              className="h-9 rounded-xl border-black/10 bg-transparent px-4 text-[13px] font-medium text-foreground/80 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
             >
               {t('common:actions.cancel')}
             </Button>
             <Button
               onClick={() => void handleSubmit()}
               disabled={saving || !name.trim()}
-              className="h-9 text-[13px] font-medium rounded-full px-4 shadow-none"
+              className="h-9 rounded-xl px-4 text-[13px] font-medium shadow-none"
             >
               {saving ? (
                 <>
@@ -404,10 +400,10 @@ function AgentSettingsModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl border-0 shadow-2xl bg-[#f3f1e9] dark:bg-[#1a1a19] overflow-hidden">
+      <Card className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl bg-card overflow-hidden">
         <CardHeader className="flex flex-row items-start justify-between pb-2 shrink-0">
           <div>
-            <CardTitle className="text-2xl font-serif font-normal tracking-tight">
+            <CardTitle className="text-2xl font-semibold tracking-tight">
               {t('settingsDialog.title', { name: agent.name })}
             </CardTitle>
             <CardDescription className="text-[15px] mt-1 text-foreground/70">
@@ -418,7 +414,7 @@ function AgentSettingsModal({
             variant="ghost"
             size="icon"
             onClick={onClose}
-            className="rounded-full h-8 w-8 -mr-2 -mt-2 text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
+            className="-mr-2 -mt-2 h-8 w-8 rounded-xl text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
           >
             <X className="h-4 w-4" />
           </Button>
@@ -440,7 +436,7 @@ function AgentSettingsModal({
                     variant="outline"
                     onClick={() => void handleSaveName()}
                     disabled={savingName || !name.trim() || name.trim() === agent.name}
-                    className="h-[44px] text-[13px] font-medium rounded-xl px-4 border-black/10 dark:border-white/10 bg-[#eeece3] dark:bg-[#151514] hover:bg-black/5 dark:hover:bg-white/5 shadow-none text-foreground/80 hover:text-foreground"
+                    className="h-[44px] text-[13px] font-medium rounded-xl px-4 border-black/10 dark:border-white/10 bg-muted/70 dark:bg-muted/40 hover:bg-black/5 dark:hover:bg-white/5 shadow-none text-foreground/80 hover:text-foreground"
                   >
                     {savingName ? (
                       <RefreshCw className="h-4 w-4 animate-spin" />
@@ -453,13 +449,13 @@ function AgentSettingsModal({
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-1 rounded-2xl bg-black/5 dark:bg-white/5 border border-transparent p-4">
+              <div className="space-y-1 rounded-2xl border border-border/70 bg-muted/35 p-4">
                 <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground/80 font-medium">
                   {t('settingsDialog.agentIdLabel')}
                 </p>
                 <p className="font-mono text-[13px] text-foreground">{agent.id}</p>
               </div>
-              <div className="space-y-1 rounded-2xl bg-black/5 dark:bg-white/5 border border-transparent p-4">
+              <div className="space-y-1 rounded-2xl border border-border/70 bg-muted/35 p-4">
                 <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground/80 font-medium">
                   {t('settingsDialog.modelLabel')}
                 </p>
@@ -474,14 +470,14 @@ function AgentSettingsModal({
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-xl font-serif text-foreground font-normal tracking-tight">
+                <h3 className="text-xl font-semibold text-foreground tracking-tight">
                   {t('settingsDialog.channelsTitle')}
                 </h3>
                 <p className="text-[14px] text-foreground/70 mt-1">{t('settingsDialog.channelsDescription')}</p>
               </div>
               <Button
                 onClick={() => setShowChannelModal(true)}
-                className="h-9 text-[13px] font-medium rounded-full px-4 shadow-none"
+                className="h-9 rounded-xl px-4 text-[13px] font-medium shadow-none"
               >
                 <Plus className="h-3.5 w-3.5 mr-2" />
                 {t('settingsDialog.addChannel')}
@@ -489,15 +485,22 @@ function AgentSettingsModal({
             </div>
 
             {assignedChannels.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-4 text-[13.5px] text-muted-foreground">
+              <div className="rounded-2xl border border-dashed border-border/80 bg-muted/35 p-4 text-[13.5px] text-muted-foreground">
                 {t('settingsDialog.noChannels')}
               </div>
             ) : (
               <div className="space-y-3">
                 {assignedChannels.map((channel) => (
-                  <div key={channel.channelType} className="flex items-center justify-between rounded-2xl bg-black/5 dark:bg-white/5 border border-transparent p-4">
+                  <div key={channel.channelType} className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/35 p-4">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-[40px] w-[40px] shrink-0 flex items-center justify-center text-foreground bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-full shadow-sm">
+                      <div
+                        className={cn(
+                          'h-[40px] w-[40px] shrink-0 flex items-center justify-center rounded-full border shadow-sm',
+                          channel.status === 'connected'
+                            ? 'bg-emerald-500/12 border-emerald-500/30'
+                            : 'bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/10'
+                        )}
+                      >
                         <ChannelLogo type={channel.channelType} />
                       </div>
                       <div className="min-w-0">
@@ -568,3 +571,4 @@ function AgentSettingsModal({
 }
 
 export default Agents;
+

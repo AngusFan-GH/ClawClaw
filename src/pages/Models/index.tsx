@@ -12,6 +12,7 @@ import { hostApiFetch } from '@/lib/host-api';
 import { trackUiEvent } from '@/lib/telemetry';
 import { ProvidersSettings } from '@/components/settings/ProvidersSettings';
 import { FeedbackState } from '@/components/common/FeedbackState';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 type UsageHistoryEntry = {
   timestamp: string;
@@ -75,22 +76,11 @@ export function Models() {
   return (
     <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
       <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-5 pb-8 pt-10 sm:px-6 lg:px-8 lg:pt-12">
-        
-        {/* Header */}
-        <div className="mb-6 shrink-0">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-            <h1 className="mb-2 text-5xl font-serif font-normal tracking-tight text-foreground sm:text-6xl" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}>
-              {t('dashboard:models.title')}
-            </h1>
-            <p className="text-[16px] font-medium text-foreground/80 sm:text-[17px]">
-              {t('dashboard:models.subtitle')}
-            </p>
-            <p className="mt-2 max-w-2xl text-[13px] text-muted-foreground">
-              {t('dashboard:models.description')}
-            </p>
-            </div>
-
+        <PageHeader
+          title={t('dashboard:models.title')}
+          subtitle={t('dashboard:models.subtitle')}
+          description={t('dashboard:models.description')}
+          actions={(
             <div className="grid grid-cols-2 gap-2.5 lg:max-w-[540px] lg:grid-cols-4 xl:min-w-[540px]">
               <div className="rounded-[10px] border border-black/8 bg-black/[0.03] px-4 py-3 dark:border-white/8 dark:bg-white/[0.04]">
                 <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('dashboard:models.stats.records')}</div>
@@ -109,8 +99,8 @@ export function Models() {
                 <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">${totalCostInWindow.toFixed(2)}</div>
               </div>
             </div>
-          </div>
-        </div>
+          )}
+        />
 
         {/* Content Area */}
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-1 pb-10">
@@ -119,7 +109,7 @@ export function Models() {
           <section className="rounded-[10px] border border-black/10 bg-[rgba(255,255,255,0.3)] p-4 dark:border-white/10 dark:bg-white/[0.03] sm:p-5">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h2 className="text-3xl font-serif font-normal tracking-tight text-foreground" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}>
+                <h2 className="text-2xl font-semibold tracking-tight text-foreground">
                   {t('dashboard:models.providersTitle')}
                 </h2>
                 <p className="mt-1 text-[13px] text-muted-foreground">
@@ -137,7 +127,7 @@ export function Models() {
           <section className="rounded-[10px] border border-black/10 bg-[rgba(255,255,255,0.3)] p-4 dark:border-white/10 dark:bg-white/[0.03] sm:p-5">
             <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <h2 className="text-3xl font-serif font-normal tracking-tight text-foreground" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}>
+                <h2 className="text-2xl font-semibold tracking-tight text-foreground">
                   {t('dashboard:recentTokenHistory.title', 'Token Usage History')}
                 </h2>
                 <p className="mt-1 text-[13px] text-muted-foreground">
@@ -147,15 +137,15 @@ export function Models() {
             </div>
             <div>
               {usageLoading ? (
-                <div className="flex items-center justify-center rounded-[10px] border border-dashed border-black/10 bg-black/5 py-12 text-muted-foreground dark:border-white/10 dark:bg-white/5">
+                <div className="flex items-center justify-center rounded-[10px] border border-dashed border-border/80 bg-muted/35 py-12 text-muted-foreground">
                   <FeedbackState state="loading" title={t('dashboard:recentTokenHistory.loading')} />
                 </div>
               ) : visibleUsageHistory.length === 0 ? (
-                <div className="flex items-center justify-center rounded-[10px] border border-dashed border-black/10 bg-black/5 py-12 text-muted-foreground dark:border-white/10 dark:bg-white/5">
+                <div className="flex items-center justify-center rounded-[10px] border border-dashed border-border/80 bg-muted/35 py-12 text-muted-foreground">
                   <FeedbackState state="empty" title={t('dashboard:recentTokenHistory.empty')} />
                 </div>
               ) : filteredUsageHistory.length === 0 ? (
-                <div className="flex items-center justify-center rounded-[10px] border border-dashed border-black/10 bg-black/5 py-12 text-muted-foreground dark:border-white/10 dark:bg-white/5">
+                <div className="flex items-center justify-center rounded-[10px] border border-dashed border-border/80 bg-muted/35 py-12 text-muted-foreground">
                   <FeedbackState state="empty" title={t('dashboard:recentTokenHistory.emptyForWindow')} />
                 </div>
               ) : (
@@ -458,7 +448,7 @@ function UsageBarChart({
 }) {
   if (groups.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-black/10 dark:border-white/10 p-8 text-center text-[14px] font-medium text-muted-foreground">
+      <div className="rounded-2xl border border-dashed border-border/80 bg-muted/35 p-8 text-center text-[14px] font-medium text-muted-foreground">
         {emptyLabel}
       </div>
     );

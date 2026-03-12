@@ -1,13 +1,13 @@
 {
   "gatewayNotRunning": "ゲートウェイが停止中",
-  "gatewayRequired": "チャットを使用するには OpenClaw ゲートウェイが実行されている必要があります。自動的に起動するか、設定から起動できます。",
+  "gatewayRequired": "チャットを利用するには OpenClaw ゲートウェイの起動が必要です。通常は自動で起動されますが、設定から手動起動もできます。",
   "welcome": {
     "title": "ようこそ",
     "subtitle": "AI アシスタントの準備ができました。下の入力欄から会話を始めましょう。",
     "askQuestions": "質問する",
-    "askQuestionsDesc": "あらゆるトピックについて回答を得る",
-    "creativeTasks": "クリエイティブタスク",
-    "creativeTasksDesc": "ライティング、ブレスト、アイデア",
+    "askQuestionsDesc": "あらゆるトピックの回答を得る",
+    "creativeTasks": "クリエイティブ作業",
+    "creativeTasksDesc": "執筆、ブレスト、アイデア出し",
     "brainstorming": "ブレインストーミング"
   },
   "noLogs": "（ログはまだありません）",
@@ -18,7 +18,22 @@
   },
   "composer": {
     "defaultModel": "デフォルトモデル",
-    "modelAriaLabel": "現在の会話モデルを切り替える"
+    "modelAriaLabel": "現在の会話モデルを切り替える",
+    "configureModels": "モデルを設定",
+    "attachFiles": "ファイルを添付",
+    "gatewayNotConnected": "ゲートウェイに未接続...",
+    "send": "送信",
+    "stop": "停止",
+    "retryFailedAttachments": "失敗した添付を再試行"
+  },
+  "message": {
+    "thinking": "思考過程",
+    "file": "ファイル",
+    "showInFolder": "フォルダーで表示",
+    "close": "閉じる"
+  },
+  "status": {
+    "processingToolResults": "ツール結果を処理中..."
   },
   "historyBuckets": {
     "today": "今日",

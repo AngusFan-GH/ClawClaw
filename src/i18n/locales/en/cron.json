@@ -3,6 +3,13 @@
     "subtitle": "Automate AI workflows with scheduled tasks",
     "newTask": "New Task",
     "refresh": "Refresh",
+    "filters": {
+        "searchPlaceholder": "Search by task name, message, or schedule",
+        "all": "All",
+        "active": "Active",
+        "paused": "Paused",
+        "failed": "Failed"
+    },
     "gatewayWarning": "Gateway is not running. Scheduled tasks cannot be managed without an active Gateway.",
     "stats": {
         "total": "Total Tasks",
@@ -13,7 +20,9 @@
     "empty": {
         "title": "No scheduled tasks",
         "description": "Create scheduled tasks to automate AI workflows. Tasks can send messages, run queries, or perform actions at specified times.",
-        "create": "Create Your First Task"
+        "create": "Create Your First Task",
+        "noMatchTitle": "No matching tasks",
+        "noMatchDescription": "Try changing keywords or status filters."
     },
     "card": {
         "runNow": "Run Now",
@@ -66,7 +75,8 @@
         "messageRequired": "Please enter a message",
         "channelRequired": "Please select a channel",
         "discordIdRequired": "Please enter a Discord Channel ID",
-        "scheduleRequired": "Please select or enter a schedule"
+        "scheduleRequired": "Please select or enter a schedule",
+        "invalidCron": "Invalid cron format. Use 5 fields like: 0 9 * * *"
     },
     "schedule": {
         "everySeconds": "Every {{count}}s",
@@ -77,6 +87,15 @@
         "weeklyAt": "Weekly on {{day}} at {{time}}",
         "monthlyAtDay": "Monthly on day {{day}} at {{time}}",
         "dailyAt": "Daily at {{time}}",
-        "unknown": "Unknown"
+        "unknown": "Unknown",
+        "days": {
+            "sun": "Sun",
+            "mon": "Mon",
+            "tue": "Tue",
+            "wed": "Wed",
+            "thu": "Thu",
+            "fri": "Fri",
+            "sat": "Sat"
+        }
     }
 }

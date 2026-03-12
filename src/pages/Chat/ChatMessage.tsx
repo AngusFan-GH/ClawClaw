@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { extractText, extractThinking, extractImages, extractToolUse, formatTimestamp } from './message-utils';
+import { useTranslation } from 'react-i18next';
 
 interface ChatMessageProps {
   message: RawMessage;
@@ -337,7 +338,7 @@ function MessageBubble({
         'relative rounded-2xl px-4 py-3',
         !isUser && 'w-full',
         isUser
-          ? 'bg-[#0a84ff] text-white shadow-sm'
+          ? 'bg-primary text-primary-foreground shadow-sm'
           : 'bg-black/5 dark:bg-white/5 text-foreground',
       )}
     >
@@ -390,6 +391,7 @@ function MessageBubble({
 // ── Thinking Block ──────────────────────────────────────────────
 
 function ThinkingBlock({ content }: { content: string }) {
+  const { t } = useTranslation('chat');
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -399,7 +401,7 @@ function ThinkingBlock({ content }: { content: string }) {
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        <span className="font-medium">Thinking</span>
+        <span className="font-medium">{t('message.thinking')}</span>
       </button>
       {expanded && (
         <div className="px-3 pb-3 text-muted-foreground">
@@ -431,13 +433,14 @@ function FileIcon({ mimeType, className }: { mimeType: string; className?: strin
 }
 
 function FileCard({ file }: { file: AttachedFileMeta }) {
+  const { t } = useTranslation('chat');
   return (
     <div className="flex items-center gap-3 rounded-xl border border-black/10 dark:border-white/10 px-3 py-2.5 bg-black/5 dark:bg-white/5 max-w-[220px]">
       <FileIcon mimeType={file.mimeType} className="h-5 w-5 shrink-0 text-muted-foreground" />
       <div className="min-w-0 overflow-hidden">
         <p className="text-xs font-medium truncate">{file.fileName}</p>
         <p className="text-[10px] text-muted-foreground">
-          {file.fileSize > 0 ? formatFileSize(file.fileSize) : 'File'}
+          {file.fileSize > 0 ? formatFileSize(file.fileSize) : t('message.file')}
         </p>
       </div>
     </div>
@@ -523,6 +526,7 @@ function ImageLightbox({
   mimeType?: string;
   onClose: () => void;
 }) {
+  const { t } = useTranslation('chat');
   void src; void base64; void mimeType; void fileName;
 
   useEffect(() => {
@@ -563,7 +567,7 @@ function ImageLightbox({
               size="icon"
               className="h-8 w-8 bg-white/10 hover:bg-white/20 text-white"
               onClick={handleShowInFolder}
-              title="在文件夹中显示"
+              title={t('message.showInFolder')}
             >
               <FolderOpen className="h-4 w-4" />
             </Button>
@@ -573,7 +577,7 @@ function ImageLightbox({
             size="icon"
             className="h-8 w-8 bg-white/10 hover:bg-white/20 text-white"
             onClick={onClose}
-            title="关闭"
+            title={t('message.close')}
           >
             <X className="h-4 w-4" />
           </Button>

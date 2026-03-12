@@ -37,6 +37,7 @@ import {
   type UiTelemetryEntry,
 } from '@/lib/telemetry';
 import { cn } from '@/lib/utils';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 type ControlUiInfo = {
   url: string;
@@ -58,12 +59,7 @@ function SectionCard({
   return (
     <section className="rounded-[10px] border border-black/10 bg-white/65 p-5 dark:border-white/10 dark:bg-white/[0.03] md:p-6">
       <div className="mb-5">
-        <h2
-          className="text-3xl font-serif font-normal tracking-tight text-foreground"
-          style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}
-        >
-          {title}
-        </h2>
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h2>
         {description ? (
           <p className="mt-1.5 max-w-2xl text-[14px] text-muted-foreground">{description}</p>
         ) : null}
@@ -112,7 +108,7 @@ function SettingRow({
   return (
     <div
       className={cn(
-        'rounded-[10px] border border-black/10 bg-white/70 p-4 dark:border-white/10 dark:bg-white/[0.04]',
+        'rounded-[10px] border border-black/10 bg-card/80 p-4 dark:border-white/10 dark:bg-card/50',
         stacked ? 'space-y-3' : 'flex flex-col gap-3 md:flex-row md:items-center md:justify-between'
       )}
     >
@@ -610,26 +606,18 @@ export function Settings() {
   return (
     <div className="-m-6 flex h-[calc(100vh-2.5rem)] flex-col overflow-hidden dark:bg-background">
       <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-6 py-8 md:px-10 md:py-10">
-        <header className="mb-6 shrink-0">
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-            <div className="max-w-2xl">
-              <h1
-                className="text-5xl font-serif font-normal tracking-tight text-foreground md:text-6xl"
-                style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}
-              >
-                {t('title')}
-              </h1>
-              <p className="mt-3 text-[17px] font-medium text-foreground/75">{t('subtitle')}</p>
-            </div>
-
+        <PageHeader
+          title={t('title')}
+          subtitle={t('subtitle')}
+          actions={(
             <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-[480px]">
-              <StatPill label={t('about.version', { version: '' }).replace(/\s+$/, '')} value={appVersion || '—'} />
+              <StatPill label={t('about.version', { version: '' }).replace(/\s+$/, '')} value={appVersion || '-'} />
               <StatPill label={t('gateway.status')} value={gatewayStateLabel} />
               <StatPill label={t('appearance.language')} value={languageLabel} />
               <StatPill label={t('gateway.port')} value={String(gatewayStatus.port || 18789)} />
             </div>
-          </div>
-        </header>
+          )}
+        />
 
         <div className="-mr-2 min-h-0 flex-1 space-y-6 overflow-y-auto pr-2 pb-8">
           <SectionCard title={t('appearance.title')} description={t('appearance.description')}>
@@ -1242,3 +1230,4 @@ export function Settings() {
 }
 
 export default Settings;
+

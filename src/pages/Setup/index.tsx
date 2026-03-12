@@ -120,7 +120,6 @@ import {
   getProviderIconUrl,
   resolveProviderApiKeyForSave,
   resolveProviderModelForSave,
-  shouldInvertInDark,
   shouldShowProviderModelId,
 } from '@/lib/providers';
 import {
@@ -222,9 +221,9 @@ export function Setup() {
                     'flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors',
                     i < safeStepIndex
                       ? 'border-primary bg-primary text-primary-foreground'
-                      : i === safeStepIndex
+                    : i === safeStepIndex
                         ? 'border-primary text-primary'
-                        : 'border-slate-600 text-slate-600'
+                        : 'border-border text-muted-foreground'
                   )}
                 >
                   {i < safeStepIndex ? (
@@ -237,7 +236,7 @@ export function Setup() {
                   <div
                     className={cn(
                       'h-0.5 w-8 transition-colors',
-                      i < safeStepIndex ? 'bg-primary' : 'bg-slate-600'
+                      i < safeStepIndex ? 'bg-primary' : 'bg-border'
                     )}
                   />
                 )}
@@ -256,12 +255,12 @@ export function Setup() {
             className="mx-auto max-w-2xl p-8"
           >
             <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold mb-2">{t(`steps.${step.id}.title`)}</h1>
-              <p className="text-slate-400">{t(`steps.${step.id}.description`)}</p>
+              <h1 className="mb-2 text-3xl font-semibold tracking-tight">{t(`steps.${step.id}.title`)}</h1>
+              <p className="text-muted-foreground">{t(`steps.${step.id}.description`)}</p>
             </div>
 
             {/* Step-specific content */}
-            <div className="rounded-xl bg-card text-card-foreground border shadow-sm p-8 mb-8">
+            <div className="mb-8 rounded-2xl border border-border/70 bg-card/90 p-8 text-card-foreground shadow-sm">
               {safeStepIndex === STEP.WELCOME && <WelcomeContent />}
               {safeStepIndex === STEP.RUNTIME && (
                 <RuntimeContent onStatusChange={setRuntimeChecksPassed} />
@@ -296,7 +295,7 @@ export function Setup() {
               <div className="flex justify-between">
                 <div>
                   {!isFirstStep && (
-                    <Button variant="ghost" onClick={handleBack}>
+                    <Button variant="ghost" className="rounded-xl" onClick={handleBack}>
                       <ChevronLeft className="h-4 w-4 mr-2" />
                       {t('nav.back')}
                     </Button>
@@ -304,11 +303,11 @@ export function Setup() {
                 </div>
                 <div className="flex gap-2">
                   {!isLastStep && safeStepIndex !== STEP.RUNTIME && (
-                    <Button variant="ghost" onClick={handleSkip}>
+                    <Button variant="ghost" className="rounded-xl" onClick={handleSkip}>
                       {t('nav.skipSetup')}
                     </Button>
                   )}
-                  <Button onClick={handleNext} disabled={!canProceed}>
+                  <Button className="rounded-xl" onClick={handleNext} disabled={!canProceed}>
                     {isLastStep ? (
                       t('nav.getStarted')
                     ) : (
@@ -1172,10 +1171,7 @@ function ProviderContent({
                   <img
                     src={selectedProviderIconUrl}
                     alt={selectedProviderData.name}
-                    className={cn(
-                      'h-4 w-4 shrink-0',
-                      shouldInvertInDark(selectedProviderData.id) && 'dark:invert'
-                    )}
+                    className="h-4 w-4 shrink-0"
                   />
                 ) : (
                   <span className="text-sm leading-none shrink-0">{selectedProviderData.icon}</span>
@@ -1226,10 +1222,7 @@ function ProviderContent({
                         <img
                           src={iconUrl}
                           alt={p.name}
-                          className={cn(
-                            'h-4 w-4 shrink-0',
-                            shouldInvertInDark(p.id) && 'dark:invert'
-                          )}
+                          className="h-4 w-4 shrink-0"
                         />
                       ) : (
                         <span className="text-sm leading-none shrink-0">{p.icon}</span>
@@ -1746,7 +1739,7 @@ function CompleteContent({ selectedProvider, installedSkills }: CompleteContentP
                   <img
                     src={getProviderIconUrl(providerData.id)}
                     alt={providerData.name}
-                    className={`h-4 w-4 inline-block ${shouldInvertInDark(providerData.id) ? 'dark:invert' : ''}`}
+                    className="h-4 w-4 inline-block"
                   />
                 ) : (
                   providerData.icon
