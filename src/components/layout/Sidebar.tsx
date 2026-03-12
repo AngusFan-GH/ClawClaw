@@ -283,7 +283,7 @@ export function Sidebar() {
 
       {/* Session list 鈥?below Settings, only when expanded */}
       {!sidebarCollapsed && sessions.length > 0 && (
-        <div className="mt-5 mb-28 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-4 pr-1">
+        <div className="mt-5 mb-20 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-3 pr-1">
           <div className="px-2.5 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/55">
             {t('chat:history.title')}
           </div>
