@@ -249,8 +249,9 @@ export function Models() {
     }
     const apiKey = await getAccountApiKey(localProviderAccount.id);
     const now = new Date().toISOString();
+    const accountId = `local-model-${crypto.randomUUID()}`;
     await createAccount({
-      id: `local-model-${crypto.randomUUID()}`,
+      id: accountId,
       vendorId: 'local-model',
       label: trimmedLabel,
       authMode: 'api_key',
@@ -265,6 +266,10 @@ export function Models() {
       createdAt: now,
       updatedAt: now,
     }, apiKey || undefined);
+
+    if (!defaultAccountId) {
+      await setDefaultAccount(accountId);
+    }
   };
 
   return (
@@ -329,7 +334,7 @@ export function Models() {
               </div>
             </div>
 
-            <div className="mb-4 rounded-[10px] border border-black/10 bg-black/[0.025] p-4 dark:border-white/10 dark:bg-white/[0.02]">
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-[10px] border border-black/10 bg-black/[0.025] p-4 dark:border-white/10 dark:bg-white/[0.02]">
               {localProviderAccount ? (
                 <div className="text-sm text-muted-foreground">
                   已配置本地模型提供商。需要调整 API Key、Base URL 或协议时，使用右上角“配置”。
@@ -339,6 +344,23 @@ export function Models() {
                   还没有配置本地模型提供商。先完成提供商配置，再添加模型。
                 </div>
               )}
+              {localProviderAccount ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0 rounded-[10px] border-red-500/25 bg-transparent px-3 text-red-600 hover:bg-red-500/5 hover:text-red-600 dark:border-red-400/20 dark:text-red-300 dark:hover:bg-red-400/10 dark:hover:text-red-300"
+                  onClick={() => void (async () => {
+                    try {
+                      await removeAccount(localProviderAccount.id);
+                      toast.success('本地模型提供商配置已清除');
+                    } catch (error) {
+                      toast.error(`清除失败: ${String(error)}`);
+                    }
+                  })()}
+                >
+                  清除配置
+                </Button>
+              ) : null}
             </div>
 
             {providerLoading ? (
@@ -356,7 +378,7 @@ export function Models() {
               </div>
             ) : localModelAccounts.length === 0 ? (
               <div className="rounded-[10px] border border-dashed border-border/80 bg-muted/35 px-5 py-8 text-sm text-muted-foreground">
-                还没有添加本地模型。点击右上角“添加模型”。
+                还没有添加本地模型。配置完成后，直接添加一个模型即可开始使用。
               </div>
             ) : (
               <div className="grid gap-4 xl:grid-cols-2">
@@ -599,9 +621,13 @@ export function Models() {
           account={localProviderSeed}
           onClose={() => setShowLocalProviderDialog(false)}
           onSave={async (payload) => {
+            const shouldOpenModelDialog = !localProviderAccount || localModelAccounts.length === 0;
             await handleSaveLocalProvider(payload);
             setShowLocalProviderDialog(false);
             toast.success(localProviderAccount ? '本地模型提供商已更新' : '本地模型提供商已配置');
+            if (shouldOpenModelDialog) {
+              setShowAddLocalModelDialog(true);
+            }
           }}
         />
       ) : null}

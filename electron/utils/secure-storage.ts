@@ -145,8 +145,16 @@ export async function saveProvider(config: ProviderConfig): Promise<void> {
   s.set('providers', providers);
 
   const defaultProviderId = (s.get('defaultProvider') ?? null) as string | null;
+  const existingAccount = await getProviderAccount(config.id);
+  const nextAccount = providerConfigToAccount(config, { isDefault: defaultProviderId === config.id });
   await saveProviderAccount(
-    providerConfigToAccount(config, { isDefault: defaultProviderId === config.id })
+    existingAccount
+      ? {
+          ...nextAccount,
+          authMode: existingAccount.authMode,
+          metadata: existingAccount.metadata,
+        }
+      : nextAccount,
   );
 }
 
