@@ -46,6 +46,38 @@ type OpenClawModelCacheEntry = {
 
 const OPENCLAW_MODEL_LIST_CACHE_TTL_MS = 10_000;
 const openClawModelListCache = new Map<OpenClawModelScope, OpenClawModelCacheEntry>();
+let openClawModelListQueue: Promise<void> = Promise.resolve();
+
+const WINDOWS_MODELS_JSON_RENAME_RETRY_DELAYS_MS = [120, 250, 500];
+
+function isWindowsModelsJsonRenameError(error: unknown): boolean {
+  const text = String(error);
+  return (
+    process.platform === 'win32'
+    && text.includes('EPERM:')
+    && text.includes('models.json')
+    && text.includes('.tmp')
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function runSerializedOpenClawModelList<T>(task: () => Promise<T>): Promise<T> {
+  const previous = openClawModelListQueue;
+  let release!: () => void;
+  openClawModelListQueue = new Promise((resolve) => {
+    release = resolve;
+  });
+
+  await previous.catch(() => {});
+  try {
+    return await task();
+  } finally {
+    release();
+  }
+}
 
 function isLocalModelProviderConfig(account: Pick<ProviderAccount, 'vendorId' | 'metadata'> | null | undefined): boolean {
   return account?.vendorId === 'local-model' && account.metadata?.localModelProvider === true;
@@ -55,7 +87,7 @@ function invalidateOpenClawModelListCache(): void {
   openClawModelListCache.clear();
 }
 
-async function fetchOpenClawModelList(scope: OpenClawModelScope): Promise<OpenClawModelEntry[]> {
+async function fetchOpenClawModelListOnce(scope: OpenClawModelScope): Promise<OpenClawModelEntry[]> {
   const cliArgs = scope === 'runtime'
     ? ['models', 'list', '--json']
     : ['models', 'list', '--all', '--json'];
@@ -93,6 +125,29 @@ async function fetchOpenClawModelList(scope: OpenClawModelScope): Promise<OpenCl
       }
     });
   });
+}
+
+async function fetchOpenClawModelList(scope: OpenClawModelScope): Promise<OpenClawModelEntry[]> {
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await runSerializedOpenClawModelList(() => fetchOpenClawModelListOnce(scope));
+    } catch (error) {
+      if (
+        !isWindowsModelsJsonRenameError(error)
+        || attempt >= WINDOWS_MODELS_JSON_RENAME_RETRY_DELAYS_MS.length
+      ) {
+        throw error;
+      }
+
+      const delayMs = WINDOWS_MODELS_JSON_RENAME_RETRY_DELAYS_MS[attempt];
+      attempt += 1;
+      logger.warn(
+        `[providers] openclaw models list hit Windows models.json rename lock; retrying in ${delayMs}ms (attempt ${attempt})`,
+      );
+      await sleep(delayMs);
+    }
+  }
 }
 
 async function getOpenClawModelList(scope: OpenClawModelScope): Promise<OpenClawModelEntry[]> {
