@@ -324,7 +324,7 @@ exports.default = async function afterPack(context) {
     .length;
 
   console.log(`[after-pack] Copying ${depCount} openclaw dependencies to ${dest} ...`);
-  cpSync(normWin(src), normWin(dest), { recursive: true });
+  cpSync(normWin(src), normWin(dest), { recursive: true, dereference: true });
   console.log('[after-pack] ✅ openclaw node_modules copied.');
 
   // Patch broken modules whose CJS transpiled output sets module.exports = undefined,
