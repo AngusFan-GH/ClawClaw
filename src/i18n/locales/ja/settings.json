@@ -70,6 +70,20 @@
     "add": "プロバイダーを追加",
     "custom": "カスタムモデル",
     "localModel": "ローカルモデル",
+    "localModelDialog": {
+      "title": "ローカルモデルを追加",
+      "desc": "ローカルモデル項目を追加します。モデル名、API キー、サービス URL、プロトコルを入力すると、アプリが OpenClaw に同期します。",
+      "displayName": "モデル名",
+      "displayNamePlaceholder": "例: Qwen3.5-27B",
+      "displayNameHelp": "一覧表示と既定モデル概要に使います。分かりやすいモデル名を手動で入力してください。",
+      "nameRequired": "モデル名を入力してください",
+      "serviceUrl": "サービス URL",
+      "serviceUrlHelp": "このモデルサービスのエンドポイント URL を入力してください。たとえば社内ゲートウェイやプライベート配備の `/v1` URL です。",
+      "protocol": "プロトコル",
+      "apiKeyRequired": "API キーを入力してください",
+      "baseUrlRequired": "サービス URL を入力してください",
+      "add": "モデルを追加"
+    },
     "notRequired": "不要",
     "empty": {
       "title": "プロバイダーが構成されていません",
@@ -89,6 +103,10 @@
       "baseUrl": "ベース URL",
       "model": "モデル",
       "modelId": "モデル ID",
+      "verifiedModels": "検証済みモデル",
+      "verifiedModelsHelp": "無効なモデル ID を保存しないよう、この接続先が返した実在モデルを優先して選択します。",
+      "loadingModels": "この接続先のモデル一覧を取得中...",
+      "noVerifiedModels": "検証済みモデル一覧をまだ取得できません。モデル ID は手入力できます。",
       "fallbackModels": "フォールバックモデル",
       "fallbackProviders": "別プロバイダーへのフォールバック",
       "fallbackModelIds": "同一プロバイダーのフォールバックモデル ID",
@@ -109,6 +127,10 @@
       "none": "なし",
       "fallbacks_one": "フォールバック: {{names}}",
       "fallbacks_other": "フォールバック ({{count}}): {{names}}",
+      "runtimeProvider": "実行時プロバイダー",
+      "verifiedModelCount_one": "検証済みモデル {{count}} 件",
+      "verifiedModelCount_other": "検証済みモデル {{count}} 件",
+      "invalidCurrentModel": "現在のモデルは無効です",
       "setDefault": "デフォルトに設定",
       "editKey": "API キーを編集",
       "delete": "プロバイダーを削除"
@@ -124,6 +146,7 @@
       "failedUpdate": "プロバイダーの更新に失敗しました",
       "invalidKey": "無効な API キー",
       "modelRequired": "モデル ID が必要です",
+      "modelMustMatchVerified": "この接続先の検証済みモデルから選択してください",
       "minimaxConflict": "MiniMax (Global) と MiniMax (CN) は同時に追加できません。"
     },
     "oauth": {

@@ -36,7 +36,6 @@ import {
   syncDefaultProviderToRuntime,
 } from '../services/providers/provider-runtime-sync';
 import {
-  ensurePresetLocalModelsApplied,
   migrateLegacyLocalModelAccounts,
 } from '../services/providers/local-model-presets';
 import { getProviderService } from '../services/providers/provider-service';
@@ -357,7 +356,6 @@ async function initialize(): Promise<void> {
   if (gatewayAutoStart) {
     try {
       await migrateLegacyLocalModelAccounts(gatewayManager);
-      await ensurePresetLocalModelsApplied(gatewayManager);
       await syncAllProvidersToRuntime();
       await syncAllProviderAuthToRuntime();
       const defaultProviderAccountId = await getProviderService().getDefaultAccountId();
@@ -373,7 +371,6 @@ async function initialize(): Promise<void> {
     }
   } else {
     await migrateLegacyLocalModelAccounts();
-    await ensurePresetLocalModelsApplied();
     logger.info('Gateway auto-start disabled in settings');
   }
 

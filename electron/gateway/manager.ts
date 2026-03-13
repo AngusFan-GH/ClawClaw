@@ -582,8 +582,12 @@ export class GatewayManager extends EventEmitter {
    * Uses OpenClaw npm package from node_modules (dev) or resources (production)
    */
   private async startProcess(): Promise<void> {
+    logger.debug('Preparing Gateway launch context...');
     const launchContext = await prepareGatewayLaunchContext(this.status.port);
+    logger.debug('Gateway launch context ready');
+    logger.debug('Ensuring legacy launchctl Gateway service is unloaded...');
     await unloadLaunchctlGatewayService();
+    logger.debug('Legacy launchctl Gateway service check complete');
     this.processExitCode = null;
 
     const { child, lastSpawnSummary } = await launchGatewayProcess({

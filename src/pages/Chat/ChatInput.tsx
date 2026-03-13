@@ -11,10 +11,10 @@ import { createPortal } from 'react-dom';
 import {
   SendHorizontal,
   Square,
-  X,
   Paperclip,
   Check,
   ChevronsUpDown,
+  LoaderCircle,
   Trash2,
   FileText,
   Film,
@@ -61,6 +61,7 @@ interface ChatInputProps {
   onModelChange?: (model?: string) => void | Promise<void>;
   onConfigureModels?: () => void;
   modelDisabled?: boolean;
+  modelState?: 'disabled' | 'ready' | 'syncing' | 'invalid' | 'unconfigured';
   disabled?: boolean;
   sending?: boolean;
   isEmpty?: boolean;
@@ -136,6 +137,7 @@ export function ChatInput({
   onModelChange,
   onConfigureModels,
   modelDisabled = false,
+  modelState = 'ready',
   disabled = false,
   sending = false,
   isEmpty = false,
@@ -161,6 +163,13 @@ export function ChatInput({
   const selectedOption = modelOptions.find((option) => option.value === currentModelValue);
   const currentModelShortLabel =
     selectedOption?.shortLabel || defaultModelShortLabel || t('composer.defaultModel');
+  const showModelPicker = hasModelOptions && modelState !== 'syncing';
+  const showConfigureModels = !showModelPicker && modelState !== 'syncing' && !!onConfigureModels;
+  const modelButtonLabel = modelState === 'syncing'
+    ? t('composer.modelsSyncing')
+    : modelState === 'unconfigured'
+      ? t('composer.configureModels')
+      : currentModelShortLabel;
 
   // Auto-resize textarea
   useEffect(() => {
@@ -557,7 +566,7 @@ export function ChatInput({
             </Button>
 
             <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-nowrap">
-              {hasModelOptions ? (
+              {showModelPicker ? (
                 <div className="relative" ref={modelMenuRef}>
                   <Button
                     ref={modelTriggerRef}
@@ -570,11 +579,24 @@ export function ChatInput({
                     disabled={sending || modelDisabled}
                     onClick={() => setModelMenuOpen((open) => !open)}
                   >
-                    <span className="truncate">{currentModelShortLabel}</span>
+                    <span className="truncate">{modelButtonLabel}</span>
                     <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   </Button>
                 </div>
-              ) : onConfigureModels ? (
+              ) : modelState === 'syncing' ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={cn(
+                    'w-full border border-black/10 bg-white/70 px-3 text-[13px] font-medium text-foreground shadow-none dark:border-white/10 dark:bg-white/[0.05] sm:w-auto',
+                    isEmpty ? 'h-10 rounded-[14px]' : 'h-11 rounded-[14px]'
+                  )}
+                  disabled
+                >
+                  <LoaderCircle className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  {modelButtonLabel}
+                </Button>
+              ) : showConfigureModels ? (
                 <Button
                   type="button"
                   variant="ghost"
@@ -584,7 +606,7 @@ export function ChatInput({
                   )}
                   onClick={onConfigureModels}
                 >
-                  {t('composer.configureModels')}
+                  {modelButtonLabel}
                 </Button>
               ) : null}
               {onToggleThinking ? (

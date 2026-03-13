@@ -84,6 +84,21 @@ function parseUnifiedProxyResponse<T>(
     status: data.status ?? 200,
   });
 
+  if (data.ok === false || (typeof data.status === 'number' && data.status >= 400)) {
+    const jsonError =
+      data.json && typeof data.json === 'object' && 'error' in (data.json as Record<string, unknown>)
+        ? String((data.json as Record<string, unknown>).error)
+        : undefined;
+    const textError = typeof data.text === 'string' && data.text.trim() ? data.text.trim() : undefined;
+    const message = jsonError || textError || `HTTP ${data.status ?? 'unknown'}`;
+    throw normalizeAppError(new Error(message), {
+      source: 'ipc-proxy',
+      status: data.status,
+      path,
+      method,
+    });
+  }
+
   if (data.status === 204) return undefined as T;
   if (data.json !== undefined) return data.json as T;
   return data.text as T;

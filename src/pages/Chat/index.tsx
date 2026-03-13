@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertCircle, Bot, Check, ChevronDown } from 'lucide-react';
-import { useChatStore, type RawMessage } from '@/stores/chat';
+import { DEFAULT_SESSION_KEY, useChatStore, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { useAgentsStore } from '@/stores/agents';
@@ -56,7 +56,6 @@ function normalizeAccountModel(account: ProviderAccount, model?: string): string
 function resolveAccountModelLabel(
   account: ProviderAccount,
   vendor: ProviderVendorInfo | undefined,
-  providerDisplayName: string,
   runtimeProviderId?: string,
 ): { modelRef?: string; modelName?: string } {
   const runtimeProviderKey = runtimeProviderId || getRuntimeProviderFallbackKey(account);
@@ -118,8 +117,16 @@ function isMultiInstanceRuntimeVendor(vendorId: ProviderAccount['vendorId']): bo
   return vendorId === 'custom' || vendorId === 'ollama' || vendorId === 'local-model';
 }
 
+function isLocalModelProviderAccount(account: Pick<ProviderAccount, 'vendorId' | 'metadata'>): boolean {
+  return account.vendorId === 'local-model' && account.metadata?.localModelProvider === true;
+}
+
 function getProviderDisplayName(account: ProviderAccount, vendor?: ProviderVendorInfo): string {
-  if (account.metadata?.managedBy === 'preset-local-model') {
+  if (
+    account.vendorId === 'local-model'
+    || account.metadata?.localModel
+    || account.metadata?.managedBy === 'preset-local-model'
+  ) {
     return i18n.t('chat:composer.localModelProvider', '本地模型');
   }
   return account.label || vendor?.name || account.vendorId;
@@ -241,10 +248,9 @@ export function Chat() {
   const providerStatuses = useProviderStore((s) => s.statuses);
   const providerVendors = useProviderStore((s) => s.vendors);
   const defaultAccountId = useProviderStore((s) => s.defaultAccountId);
-  const providerLoading = useProviderStore((s) => s.loading);
   const refreshProviderSnapshot = useProviderStore((s) => s.refreshProviderSnapshot);
   const [providerCatalogMap, setProviderCatalogMap] = useState<Record<string, ProviderCatalogResponse>>({});
-  const [runtimeModelRefs, setRuntimeModelRefs] = useState<string[]>([]);
+  const [runtimeModelRefs, setRuntimeModelRefs] = useState<string[] | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
@@ -312,11 +318,16 @@ export function Chat() {
   useEffect(() => {
     if (!isGatewayRunning) {
       queueMicrotask(() => {
-        setRuntimeModelRefs([]);
+        setRuntimeModelRefs(null);
       });
       return;
     }
     let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setRuntimeModelRefs(null);
+      }
+    });
     hostApiFetch<{ models?: string[] }>('/api/runtime-model-refs')
       .then((response) => {
         if (cancelled) return;
@@ -331,16 +342,21 @@ export function Chat() {
     };
   }, [isGatewayRunning, providerAccounts, providerStatuses]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const eligibleAccounts = providerAccounts.filter((account) => account.enabled)
+  const eligibleAccounts = useMemo(
+    () => providerAccounts.filter((account) => account.enabled)
+      .filter((account) => !isLocalModelProviderAccount(account))
       .filter(
         (account) =>
           account.authMode === 'local'
           || account.authMode === 'oauth_device'
           || account.authMode === 'oauth_browser'
           || Boolean(providerStatusMap.get(account.id)?.hasKey),
-      );
+      ),
+    [providerAccounts, providerStatusMap]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
     const requestKeys = eligibleAccounts.map((account) => account.id);
 
     if (requestKeys.length === 0) {
@@ -382,7 +398,7 @@ export function Chat() {
     return () => {
       cancelled = true;
     };
-  }, [providerAccounts, providerStatusMap]);
+  }, [eligibleAccounts]);
 
   // Auto-scroll on new messages, streaming, or activity changes
   useEffect(() => {
@@ -429,18 +445,12 @@ export function Chat() {
     hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasStreamToolStatus;
 
   const isEmpty = messages.length === 0 && !loading && !sending;
-  const shouldShowWelcome =
-    isEmpty && (!currentSession || Boolean(pendingLocalSessionKeys[currentSessionKey]));
-  const modelOptions = useMemo<ChatToolbarModelOption[]>(() => {
-    const baseOptions = providerAccounts
-      .filter((account) => account.enabled)
-      .filter(
-        (account) =>
-          account.authMode === 'local' ||
-          account.authMode === 'oauth_device' ||
-          account.authMode === 'oauth_browser' ||
-          Boolean(providerStatusMap.get(account.id)?.hasKey)
-      )
+  const currentSessionIsPlaceholder =
+    Boolean(pendingLocalSessionKeys[currentSessionKey])
+    || (isEmpty && currentSessionKey === DEFAULT_SESSION_KEY);
+  const shouldShowWelcome = isEmpty && (!currentSession || currentSessionIsPlaceholder);
+  const configuredModelOptions = useMemo<ChatToolbarModelOption[]>(() => {
+    return eligibleAccounts
       .flatMap((account) => {
         const vendor = vendorMap.get(account.vendorId);
         const providerDisplayName = getProviderDisplayName(account, vendor);
@@ -464,14 +474,17 @@ export function Chat() {
         return explicitOptions;
       })
       .sort((left, right) => left.label.localeCompare(right.label));
+  }, [eligibleAccounts, providerCatalogMap, vendorMap]);
 
-    const deduped = dedupeModelOptions(baseOptions);
-    if (runtimeModelRefs.length === 0) {
+  const modelOptions = useMemo<ChatToolbarModelOption[]>(() => {
+    const deduped = dedupeModelOptions(configuredModelOptions);
+    if (runtimeModelRefs === null) {
       return deduped;
     }
     const runtimeSet = new Set(runtimeModelRefs);
-    return deduped.filter((option) => runtimeSet.has(option.value));
-  }, [providerAccounts, providerCatalogMap, providerStatusMap, runtimeModelRefs, vendorMap]);
+    const runtimeFiltered = deduped.filter((option) => runtimeSet.has(option.value));
+    return runtimeFiltered.length > 0 ? runtimeFiltered : deduped;
+  }, [configuredModelOptions, runtimeModelRefs]);
   const normalizedSelectedModel = useMemo(
     () => normalizeSessionModelValue(currentSession, modelOptions),
     [currentSession, modelOptions]
@@ -491,7 +504,6 @@ export function Chat() {
     const { modelName, modelRef } = resolveAccountModelLabel(
       defaultAccount,
       vendor,
-      providerDisplayName,
       defaultCatalog?.runtimeProviderId,
     );
     return {
@@ -518,7 +530,7 @@ export function Chat() {
       label: agent.name,
     }));
   }, [agents]);
-  const canSwitchAgent = Boolean(pendingLocalSessionKeys[currentSessionKey]);
+  const canSwitchAgent = currentSessionIsPlaceholder;
   const currentAgentLabel = useMemo(
     () =>
       agentOptions.find((option) => option.id === currentAgentId)?.label ||
@@ -532,29 +544,26 @@ export function Chat() {
     setModelGuard(allowed, normalizedDefaultModelValue);
   }, [modelOptions, normalizedDefaultModelValue, setModelGuard]);
 
-  useEffect(() => {
-    if (
-      !isGatewayRunning
-      || providerLoading
-      || modelOptions.length === 0
-      || !currentSession?.model
-      || normalizedSelectedModel
-    ) {
-      return;
-    }
-
-    void setSessionModel(undefined).catch((err) => {
-      console.warn('Failed to clear stale session model override:', err);
-    });
-  }, [
-    currentSession?.model,
-    isGatewayRunning,
-    modelOptions.length,
-    normalizedSelectedModel,
-    providerLoading,
-    setSessionModel,
-  ]);
-
+  const modelCatalogSyncing = isGatewayRunning
+    && eligibleAccounts.length > 0
+    && (
+      runtimeModelRefs === null
+      || eligibleAccounts.some((account) => !providerCatalogMap[account.id])
+    );
+  const hasAnyConfiguredModels = configuredModelOptions.length > 0;
+  const currentSessionHasModel = Boolean(currentSession?.model?.trim());
+  const currentModelInvalid = currentSessionHasModel && !normalizedSelectedModel && modelOptions.length > 0;
+  const modelState = !isGatewayRunning
+    ? 'disabled'
+    : modelCatalogSyncing && !hasAnyConfiguredModels
+      ? 'syncing'
+      : currentModelInvalid
+        ? 'invalid'
+        : modelOptions.length > 0
+          ? 'ready'
+          : eligibleAccounts.length > 0
+            ? 'syncing'
+            : 'unconfigured';
   return (
     <div
       className={cn(
@@ -569,7 +578,7 @@ export function Chat() {
           defaultModelValue={normalizedDefaultModelValue}
           defaultModelShortLabel={defaultModelMeta.shortLabel}
           currentAgentLabel={currentAgentLabel}
-          showAgentLabel={!canSwitchAgent}
+          showAgentLabel={!shouldShowWelcome && !canSwitchAgent}
           onModelChange={setSessionModel}
           onConfigureModels={() => navigate('/models')}
           modelDisabled={!isGatewayRunning}
@@ -679,6 +688,7 @@ export function Chat() {
         onModelChange={setSessionModel}
         onConfigureModels={() => navigate('/models')}
         modelDisabled={!isGatewayRunning}
+        modelState={modelState}
         disabled={!isGatewayRunning}
         sending={sending}
         isEmpty={shouldShowWelcome}

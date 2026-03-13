@@ -1,23 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  CheckCircle2,
   ChevronLeft,
-  Cpu,
   ChevronRight,
+  Cpu,
+  Eye,
+  EyeOff,
+  Star,
+  Trash2,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useGatewayStore } from '@/stores/gateway';
 import { useSettingsStore } from '@/stores/settings';
 import { useProviderStore } from '@/stores/providers';
-import { hostApiFetch } from '@/lib/host-api';
 import { trackUiEvent } from '@/lib/telemetry';
 import { ProvidersSettings } from '@/components/settings/ProvidersSettings';
 import { FeedbackState } from '@/components/common/FeedbackState';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { PageLoader } from '@/components/common/LoadingSpinner';
-import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { hostApiFetch } from '@/lib/host-api';
+import { type ProviderAccount } from '@/lib/providers';
 
 type UsageHistoryEntry = {
   timestamp: string;
@@ -36,15 +42,47 @@ type UsageHistoryEntry = {
 
 type UsageWindow = '7d' | '30d' | 'all';
 type UsageGroupBy = 'model' | 'day';
-type LocalModelPreset = {
+
+type ProviderModelOption = {
   id: string;
   name: string;
-  description?: string;
-  modelId: string;
-  baseUrl: string;
-  apiProtocol?: 'openai-completions' | 'openai-responses' | 'anthropic-messages';
-  capabilities?: string[];
 };
+
+type ResolvedProviderModelResponse = {
+  runtimeProviderId?: string;
+  models: ProviderModelOption[];
+  resolved?: boolean;
+  source?: string;
+  error?: string;
+};
+
+function isLocalModelAccount(account: { vendorId: string; metadata?: { localModel?: boolean; managedBy?: string } }): boolean {
+  return account.vendorId === 'local-model'
+    || (account.vendorId === 'custom' && (account.metadata?.localModel || account.metadata?.managedBy === 'preset-local-model'));
+}
+
+function isLocalModelProviderAccount(account: ProviderAccount): boolean {
+  return account.vendorId === 'local-model' && account.metadata?.localModelProvider === true;
+}
+
+async function resolveLocalProviderModels(payload: {
+  accountId: string;
+  baseUrl?: string;
+  apiProtocol?: ProviderAccount['apiProtocol'];
+  apiKey?: string | null;
+}): Promise<ResolvedProviderModelResponse> {
+  return hostApiFetch<ResolvedProviderModelResponse>('/api/provider-model-options/resolve', {
+    method: 'POST',
+    body: JSON.stringify({
+      vendorId: 'local-model',
+      authMode: 'api_key',
+      accountId: payload.accountId,
+      baseUrl: payload.baseUrl,
+      apiProtocol: payload.apiProtocol,
+      apiKey: payload.apiKey ?? undefined,
+    }),
+  });
+}
 
 export function Models() {
   const { t } = useTranslation(['dashboard', 'settings']);
@@ -55,6 +93,11 @@ export function Models() {
     defaultAccountId,
     loading: providerLoading,
     refreshProviderSnapshot,
+    createAccount,
+    updateAccount,
+    removeAccount,
+    setDefaultAccount,
+    getAccountApiKey,
   } = useProviderStore();
   const isGatewayRunning = gatewayStatus.state === 'running';
 
@@ -63,9 +106,8 @@ export function Models() {
   const [usageWindow, setUsageWindow] = useState<UsageWindow>('7d');
   const [usagePage, setUsagePage] = useState(1);
   const [selectedUsageEntry, setSelectedUsageEntry] = useState<UsageHistoryEntry | null>(null);
-  const [localModelPresets, setLocalModelPresets] = useState<LocalModelPreset[]>([]);
-  const [loadingLocalModelPresets, setLoadingLocalModelPresets] = useState(true);
-  const [switchingPresetId, setSwitchingPresetId] = useState<string | null>(null);
+  const [showLocalProviderDialog, setShowLocalProviderDialog] = useState(false);
+  const [showAddLocalModelDialog, setShowAddLocalModelDialog] = useState(false);
 
   useEffect(() => {
     trackUiEvent('models.page_viewed');
@@ -74,30 +116,6 @@ export function Models() {
   useEffect(() => {
     void refreshProviderSnapshot();
   }, [refreshProviderSnapshot]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoadingLocalModelPresets(true);
-    hostApiFetch<LocalModelPreset[]>('/api/local-model-presets')
-      .then((presets) => {
-        if (!cancelled) {
-          setLocalModelPresets(Array.isArray(presets) ? presets : []);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setLocalModelPresets([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoadingLocalModelPresets(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     if (isGatewayRunning) {
@@ -122,44 +140,120 @@ export function Models() {
   const usageLoading = isGatewayRunning && visibleUsageHistory.length === 0;
   const totalTokensInWindow = filteredUsageHistory.reduce((sum, entry) => sum + entry.totalTokens, 0);
   const totalCostInWindow = filteredUsageHistory.reduce((sum, entry) => sum + (entry.costUsd || 0), 0);
-  const presetLocalAccounts = useMemo(
-    () => accounts.filter((account) => account.vendorId === 'custom' && account.metadata?.managedBy === 'preset-local-model'),
+
+  const localProviderAccount = useMemo(
+    () => accounts.find((account) => isLocalModelProviderAccount(account)) ?? null,
     [accounts],
   );
-  const localModelCards = useMemo(
-    () => (localModelPresets ?? []).map((preset, index) => {
-      const account = presetLocalAccounts[0];
-      const currentPrimaryPresetId = account?.metadata?.primaryPresetId || account?.metadata?.presetId;
-      return {
-        preset,
-        account,
-        isDefault:
-          account?.id === defaultAccountId
-          && (
-            currentPrimaryPresetId
-              ? currentPrimaryPresetId === preset.id
-              : account?.model === preset.modelId
-          ),
-        isRecommended: index === 0,
-      };
-    }),
-    [defaultAccountId, localModelPresets, presetLocalAccounts],
+  const localModelAccounts = useMemo(
+    () => accounts.filter((account) => isLocalModelAccount(account) && !isLocalModelProviderAccount(account)),
+    [accounts],
+  );
+  const localProviderSeed = useMemo(
+    () => localProviderAccount ?? localModelAccounts[0] ?? null,
+    [localModelAccounts, localProviderAccount],
   );
   const otherModelAccounts = useMemo(
-    () => accounts.filter((account) => !(account.vendorId === 'custom' && account.metadata?.managedBy === 'preset-local-model')),
+    () => accounts.filter((account) => !isLocalModelAccount(account)),
     [accounts],
   );
-
-  const handleSetDefaultPreset = async (presetId: string) => {
-    setSwitchingPresetId(presetId);
+  const handleDeleteLocalModel = async (accountId: string) => {
     try {
-      await hostApiFetch(`/api/local-model-presets/${encodeURIComponent(presetId)}/activate`, {
-        method: 'POST',
-      });
-      await refreshProviderSnapshot();
-    } finally {
-      setSwitchingPresetId(null);
+      await removeAccount(accountId);
+      toast.success('已删除本地模型');
+    } catch (error) {
+      toast.error(`删除失败: ${String(error)}`);
     }
+  };
+
+  const handleSetDefaultLocalModel = async (accountId: string) => {
+    try {
+      await setDefaultAccount(accountId);
+      toast.success('已设为默认模型');
+    } catch (error) {
+      toast.error(`设置默认失败: ${String(error)}`);
+    }
+  };
+
+  const handleSaveLocalProvider = async (payload: {
+    accountId?: string;
+    apiKey?: string;
+    baseUrl: string;
+    apiProtocol: ProviderAccount['apiProtocol'];
+  }) => {
+    const now = new Date().toISOString();
+    const providerPatch = {
+      label: '本地模型',
+      authMode: 'api_key' as const,
+      baseUrl: payload.baseUrl.trim(),
+      apiProtocol: payload.apiProtocol,
+      enabled: true,
+      metadata: {
+        localModelProvider: true,
+      },
+      updatedAt: now,
+    };
+
+    if (payload.accountId) {
+      await updateAccount(payload.accountId, providerPatch, payload.apiKey?.trim() || undefined);
+      for (const modelAccount of localModelAccounts) {
+        await updateAccount(modelAccount.id, {
+          baseUrl: payload.baseUrl.trim(),
+          apiProtocol: payload.apiProtocol,
+          updatedAt: now,
+        }, payload.apiKey?.trim() || undefined);
+      }
+      return;
+    }
+
+    await createAccount({
+      id: `local-model-provider-${crypto.randomUUID()}`,
+      vendorId: 'local-model',
+      label: '本地模型',
+      authMode: 'api_key',
+      baseUrl: payload.baseUrl.trim(),
+      apiProtocol: payload.apiProtocol,
+      enabled: true,
+      isDefault: false,
+      metadata: {
+        localModelProvider: true,
+      },
+      createdAt: now,
+      updatedAt: now,
+    }, payload.apiKey?.trim() || undefined);
+  };
+
+  const handleAddLocalModel = async (payload: { modelId: string; label: string }) => {
+    if (!localProviderAccount) {
+      throw new Error('请先配置本地模型提供商');
+    }
+    const trimmedModelId = payload.modelId.trim();
+    const trimmedLabel = payload.label.trim();
+    if (!trimmedModelId || !trimmedLabel) {
+      throw new Error('请填写完整的模型信息');
+    }
+    const duplicate = localModelAccounts.find((account) => account.model?.trim() === trimmedModelId);
+    if (duplicate) {
+      throw new Error('该本地模型已经添加过了');
+    }
+    const apiKey = await getAccountApiKey(localProviderAccount.id);
+    const now = new Date().toISOString();
+    await createAccount({
+      id: `local-model-${crypto.randomUUID()}`,
+      vendorId: 'local-model',
+      label: trimmedLabel,
+      authMode: 'api_key',
+      baseUrl: localProviderAccount.baseUrl,
+      apiProtocol: localProviderAccount.apiProtocol || 'openai-completions',
+      model: trimmedModelId,
+      enabled: true,
+      isDefault: false,
+      metadata: {
+        localModel: true,
+      },
+      createdAt: now,
+      updatedAt: now,
+    }, apiKey || undefined);
   };
 
   return (
@@ -169,64 +263,73 @@ export function Models() {
           title={t('dashboard:models.title')}
           subtitle={t('dashboard:models.subtitle')}
           description={t('dashboard:models.description')}
-          actions={(
-            <div className="grid grid-cols-2 gap-2.5 lg:max-w-[410px] lg:grid-cols-3 xl:min-w-[410px]">
-              <div className="rounded-[10px] border border-black/8 bg-black/[0.03] px-4 py-3 dark:border-white/8 dark:bg-white/[0.04]">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('dashboard:models.stats.records')}</div>
-                <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">{filteredUsageHistory.length}</div>
-              </div>
-              <div className="rounded-[10px] border border-black/8 bg-black/[0.03] px-4 py-3 dark:border-white/8 dark:bg-white/[0.04]">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('dashboard:models.stats.tokens')}</div>
-                <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">{formatCompactTokenCount(totalTokensInWindow)}</div>
-              </div>
-              <div className="rounded-[10px] border border-black/8 bg-black/[0.03] px-4 py-3 dark:border-white/8 dark:bg-white/[0.04]">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('dashboard:models.stats.cost')}</div>
-                <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">${totalCostInWindow.toFixed(2)}</div>
-              </div>
-            </div>
-          )}
         />
 
-        {/* Content Area */}
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-1 pb-10">
-          {localModelPresets.length > 0 && (
-            <section className="rounded-[10px] border border-black/10 bg-[rgba(255,255,255,0.3)] p-4 dark:border-white/10 dark:bg-white/[0.03] sm:p-5">
-              <div className="mb-5">
-                <div>
-                  <h2 className="text-2xl font-semibold tracking-tight text-foreground">本地模型</h2>
-                  <p className="mt-1 text-[13px] text-muted-foreground">
-                    预装模型会在启动时自动写入 OpenClaw 并立即可用。若存在多个预装模型，第一个会自动设为默认模型。
-                  </p>
-                </div>
+          <section className="rounded-[10px] border border-black/10 bg-[rgba(255,255,255,0.3)] p-4 dark:border-white/10 dark:bg-white/[0.03] sm:p-5">
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-2xl font-semibold tracking-tight text-foreground">本地模型</h2>
+                <p className="mt-1 text-[13px] text-muted-foreground">
+                  先配置本地模型提供商，再添加具体模型。默认模型会直接标记在具体模型上。
+                </p>
               </div>
+              <div className="shrink-0 flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  className="h-9 rounded-xl border-black/10 bg-transparent px-4 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+                  onClick={() => setShowLocalProviderDialog(true)}
+                >
+                  配置
+                </Button>
+                {localProviderAccount ? (
+                  <Button
+                    className="h-9 rounded-xl px-4"
+                    onClick={() => setShowAddLocalModelDialog(true)}
+                  >
+                    添加模型
+                  </Button>
+                ) : null}
+              </div>
+            </div>
 
-              {loadingLocalModelPresets || providerLoading ? (
-                <div className="flex items-center justify-center rounded-[10px] border border-dashed border-border/80 bg-muted/35 py-12 text-muted-foreground">
-                  <PageLoader
-                    compact
-                    title="正在加载本地模型"
-                    description="正在同步预装模型和当前配置，请稍候。"
-                    className="w-full py-0"
-                  />
+            <div className="mb-4 rounded-[10px] border border-black/10 bg-black/[0.025] p-4 dark:border-white/10 dark:bg-white/[0.02]">
+              {localProviderAccount ? (
+                <div className="text-sm text-muted-foreground">
+                  已配置本地模型提供商。需要调整 API Key、Base URL 或协议时，使用右上角“配置”。
                 </div>
               ) : (
-                <div className="grid gap-4 xl:grid-cols-2">
-                  {localModelCards.map(({ preset, account, isDefault, isRecommended }) => (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      disabled={isDefault || !account || switchingPresetId === preset.id}
-                      onClick={() => {
-                        if (!isDefault && account) {
-                          void handleSetDefaultPreset(preset.id);
-                        }
-                      }}
-                      className={cn(
-                        'w-full rounded-[10px] border border-black/10 bg-black/[0.025] p-4 text-left transition-colors dark:border-white/10 dark:bg-white/[0.02]',
-                        !isDefault && account && 'hover:border-blue-300 hover:bg-blue-50/40 dark:hover:border-blue-500/30 dark:hover:bg-blue-500/5',
-                        (isDefault || !account) && 'cursor-default',
-                        switchingPresetId === preset.id && 'opacity-70',
-                      )}
+                <div className="text-sm text-muted-foreground">
+                  还没有配置本地模型提供商。先完成提供商配置，再添加模型。
+                </div>
+              )}
+            </div>
+
+            {providerLoading ? (
+              <div className="flex items-center justify-center rounded-[10px] border border-dashed border-border/80 bg-muted/35 py-12 text-muted-foreground">
+                <PageLoader
+                  compact
+                  title="正在加载本地模型"
+                  description="正在同步当前配置，请稍候。"
+                  className="w-full py-0"
+                />
+              </div>
+            ) : localModelAccounts.length === 0 && !localProviderAccount ? (
+              <div className="rounded-[10px] border border-dashed border-border/80 bg-muted/35 px-5 py-8 text-sm text-muted-foreground">
+                配置本地模型提供商后，这里会显示该提供商下的模型。
+              </div>
+            ) : localModelAccounts.length === 0 ? (
+              <div className="rounded-[10px] border border-dashed border-border/80 bg-muted/35 px-5 py-8 text-sm text-muted-foreground">
+                还没有添加本地模型。点击右上角“添加模型”。
+              </div>
+            ) : (
+              <div className="grid gap-4 xl:grid-cols-2">
+                {localModelAccounts.map((account) => {
+                  const isDefault = account.id === defaultAccountId;
+                  return (
+                    <div
+                      key={account.id}
+                      className="rounded-[10px] border border-black/10 bg-black/[0.025] p-4 text-left dark:border-white/10 dark:bg-white/[0.02]"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -234,45 +337,49 @@ export function Models() {
                             <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-blue-500/10 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300">
                               <Cpu className="h-5 w-5" />
                             </div>
-                            <div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <h3 className="text-[18px] font-semibold tracking-tight text-foreground">{preset.name}</h3>
-                                {isRecommended && (
-                                  <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">
-                                    推荐
-                                  </span>
-                                )}
-                                {isDefault && (
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <h3 className="truncate text-[18px] font-semibold tracking-tight text-foreground">{account.label}</h3>
+                                {isDefault ? (
                                   <span className="inline-flex items-center gap-1 rounded-full bg-green-500/12 px-2 py-0.5 text-[11px] font-medium text-green-700 dark:bg-green-400/10 dark:text-green-200">
-                                    <CheckCircle2 className="h-3 w-3" />
+                                    <Star className="h-3 w-3" />
                                     默认
                                   </span>
-                                )}
+                                ) : null}
                               </div>
-                              <p className="mt-0.5 text-[13px] text-muted-foreground">{preset.description}</p>
+                              <p className="mt-1 text-[13px] text-muted-foreground">{account.model || '未填写模型 ID'}</p>
                             </div>
                           </div>
                         </div>
-                      </div>
-
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {(preset.capabilities ?? []).map((capability) => (
-                          <span
-                            key={capability}
-                            className="rounded-full border border-black/8 bg-white/60 px-2.5 py-1 text-[11px] font-medium text-foreground/75 dark:border-white/8 dark:bg-white/[0.05]"
+                        <div className="flex shrink-0 items-center gap-2">
+                          {!isDefault ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 rounded-[10px] border-black/10 bg-transparent px-3 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+                              onClick={() => void handleSetDefaultLocalModel(account.id)}
+                            >
+                              设为默认
+                            </Button>
+                          ) : null}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-[10px] text-muted-foreground hover:bg-black/5 hover:text-red-500 dark:hover:bg-white/5"
+                            onClick={() => void handleDeleteLocalModel(account.id)}
+                            aria-label="删除本地模型"
                           >
-                            {capability}
-                          </span>
-                        ))}
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
-          
-          {/* AI Providers Section */}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
           <section className="rounded-[10px] border border-black/10 bg-[rgba(255,255,255,0.3)] p-4 dark:border-white/10 dark:bg-white/[0.03] sm:p-5">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -296,7 +403,6 @@ export function Models() {
             )}
           </section>
 
-          {/* Token Usage History Section */}
           <section className="rounded-[10px] border border-black/10 bg-[rgba(255,255,255,0.3)] p-4 dark:border-white/10 dark:bg-white/[0.03] sm:p-5">
             <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
@@ -306,6 +412,20 @@ export function Models() {
                 <p className="mt-1 text-[13px] text-muted-foreground">
                   {t('dashboard:recentTokenHistory.description')}
                 </p>
+              </div>
+            </div>
+            <div className="mb-5 grid grid-cols-2 gap-2.5 lg:max-w-[410px] lg:grid-cols-3">
+              <div className="rounded-[10px] border border-black/8 bg-black/[0.03] px-4 py-3 dark:border-white/8 dark:bg-white/[0.04]">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('dashboard:models.stats.records')}</div>
+                <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">{filteredUsageHistory.length}</div>
+              </div>
+              <div className="rounded-[10px] border border-black/8 bg-black/[0.03] px-4 py-3 dark:border-white/8 dark:bg-white/[0.04]">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('dashboard:models.stats.tokens')}</div>
+                <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">{formatCompactTokenCount(totalTokensInWindow)}</div>
+              </div>
+              <div className="rounded-[10px] border border-black/8 bg-black/[0.03] px-4 py-3 dark:border-white/8 dark:bg-white/[0.04]">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-foreground/45">{t('dashboard:models.stats.cost')}</div>
+                <div className="mt-1 text-[23px] font-semibold tracking-tight text-foreground">${totalCostInWindow.toFixed(2)}</div>
               </div>
             </div>
             <div>
@@ -331,61 +451,21 @@ export function Models() {
                   <div className="flex flex-col gap-3 rounded-[10px] border border-black/10 bg-black/[0.025] p-3 dark:border-white/10 dark:bg-white/[0.02] lg:flex-row lg:items-center lg:justify-between">
                     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                       <div className="flex rounded-[10px] bg-transparent p-1 border border-black/10 dark:border-white/10">
-                        <Button
-                          variant={usageGroupBy === 'model' ? 'secondary' : 'ghost'}
-                          size="sm"
-                          onClick={() => {
-                            setUsageGroupBy('model');
-                            setUsagePage(1);
-                          }}
-                          className={usageGroupBy === 'model' ? "rounded-[10px] bg-black/5 dark:bg-white/10 text-foreground" : "rounded-[10px] text-muted-foreground"}
-                        >
+                        <Button variant={usageGroupBy === 'model' ? 'secondary' : 'ghost'} size="sm" onClick={() => { setUsageGroupBy('model'); setUsagePage(1); }} className={usageGroupBy === 'model' ? 'rounded-[10px] bg-black/5 dark:bg-white/10 text-foreground' : 'rounded-[10px] text-muted-foreground'}>
                           {t('dashboard:recentTokenHistory.groupByModel')}
                         </Button>
-                        <Button
-                          variant={usageGroupBy === 'day' ? 'secondary' : 'ghost'}
-                          size="sm"
-                          onClick={() => {
-                            setUsageGroupBy('day');
-                            setUsagePage(1);
-                          }}
-                          className={usageGroupBy === 'day' ? "rounded-[10px] bg-black/5 dark:bg-white/10 text-foreground" : "rounded-[10px] text-muted-foreground"}
-                        >
+                        <Button variant={usageGroupBy === 'day' ? 'secondary' : 'ghost'} size="sm" onClick={() => { setUsageGroupBy('day'); setUsagePage(1); }} className={usageGroupBy === 'day' ? 'rounded-[10px] bg-black/5 dark:bg-white/10 text-foreground' : 'rounded-[10px] text-muted-foreground'}>
                           {t('dashboard:recentTokenHistory.groupByTime')}
                         </Button>
                       </div>
                       <div className="flex rounded-[10px] bg-transparent p-1 border border-black/10 dark:border-white/10">
-                        <Button
-                          variant={usageWindow === '7d' ? 'secondary' : 'ghost'}
-                          size="sm"
-                          onClick={() => {
-                            setUsageWindow('7d');
-                            setUsagePage(1);
-                          }}
-                          className={usageWindow === '7d' ? "rounded-[10px] bg-black/5 dark:bg-white/10 text-foreground" : "rounded-[10px] text-muted-foreground"}
-                        >
+                        <Button variant={usageWindow === '7d' ? 'secondary' : 'ghost'} size="sm" onClick={() => { setUsageWindow('7d'); setUsagePage(1); }} className={usageWindow === '7d' ? 'rounded-[10px] bg-black/5 dark:bg-white/10 text-foreground' : 'rounded-[10px] text-muted-foreground'}>
                           {t('dashboard:recentTokenHistory.last7Days')}
                         </Button>
-                        <Button
-                          variant={usageWindow === '30d' ? 'secondary' : 'ghost'}
-                          size="sm"
-                          onClick={() => {
-                            setUsageWindow('30d');
-                            setUsagePage(1);
-                          }}
-                          className={usageWindow === '30d' ? "rounded-[10px] bg-black/5 dark:bg-white/10 text-foreground" : "rounded-[10px] text-muted-foreground"}
-                        >
+                        <Button variant={usageWindow === '30d' ? 'secondary' : 'ghost'} size="sm" onClick={() => { setUsageWindow('30d'); setUsagePage(1); }} className={usageWindow === '30d' ? 'rounded-[10px] bg-black/5 dark:bg-white/10 text-foreground' : 'rounded-[10px] text-muted-foreground'}>
                           {t('dashboard:recentTokenHistory.last30Days')}
                         </Button>
-                        <Button
-                          variant={usageWindow === 'all' ? 'secondary' : 'ghost'}
-                          size="sm"
-                          onClick={() => {
-                            setUsageWindow('all');
-                            setUsagePage(1);
-                          }}
-                          className={usageWindow === 'all' ? "rounded-[10px] bg-black/5 dark:bg-white/10 text-foreground" : "rounded-[10px] text-muted-foreground"}
-                        >
+                        <Button variant={usageWindow === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => { setUsageWindow('all'); setUsagePage(1); }} className={usageWindow === 'all' ? 'rounded-[10px] bg-black/5 dark:bg-white/10 text-foreground' : 'rounded-[10px] text-muted-foreground'}>
                           {t('dashboard:recentTokenHistory.allTime')}
                         </Button>
                       </div>
@@ -427,24 +507,19 @@ export function Models() {
                           </div>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[12.5px] font-medium text-muted-foreground">
-                          <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-sky-500"></div>{t('dashboard:recentTokenHistory.input', { value: formatTokenCount(entry.inputTokens) })}</span>
-                          <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-violet-500"></div>{t('dashboard:recentTokenHistory.output', { value: formatTokenCount(entry.outputTokens) })}</span>
+                          <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-sky-500" />{t('dashboard:recentTokenHistory.input', { value: formatTokenCount(entry.inputTokens) })}</span>
+                          <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-violet-500" />{t('dashboard:recentTokenHistory.output', { value: formatTokenCount(entry.outputTokens) })}</span>
                           {entry.cacheReadTokens > 0 && (
-                            <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-500"></div>{t('dashboard:recentTokenHistory.cacheRead', { value: formatTokenCount(entry.cacheReadTokens) })}</span>
+                            <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-500" />{t('dashboard:recentTokenHistory.cacheRead', { value: formatTokenCount(entry.cacheReadTokens) })}</span>
                           )}
                           {entry.cacheWriteTokens > 0 && (
-                            <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-500"></div>{t('dashboard:recentTokenHistory.cacheWrite', { value: formatTokenCount(entry.cacheWriteTokens) })}</span>
+                            <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-500" />{t('dashboard:recentTokenHistory.cacheWrite', { value: formatTokenCount(entry.cacheWriteTokens) })}</span>
                           )}
                           {typeof entry.costUsd === 'number' && Number.isFinite(entry.costUsd) && (
                             <span className="ml-auto flex items-center gap-1.5 rounded-[10px] bg-black/5 px-2 py-0.5 text-foreground/80 dark:bg-white/5">{t('dashboard:recentTokenHistory.cost', { amount: entry.costUsd.toFixed(4) })}</span>
                           )}
                           {devModeUnlocked && entry.content && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-6 rounded-[10px] border-black/10 px-2.5 text-[11.5px] dark:border-white/10"
-                              onClick={() => setSelectedUsageEntry(entry)}
-                            >
+                            <Button variant="outline" size="sm" className="h-6 rounded-[10px] border-black/10 px-2.5 text-[11.5px] dark:border-white/10" onClick={() => setSelectedUsageEntry(entry)}>
                               {t('dashboard:recentTokenHistory.viewContent')}
                             </Button>
                           )}
@@ -458,23 +533,11 @@ export function Models() {
                       {t('dashboard:recentTokenHistory.page', { current: safeUsagePage, total: usageTotalPages })}
                     </p>
                     <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setUsagePage((page) => Math.max(1, page - 1))}
-                        disabled={safeUsagePage <= 1}
-                        className="h-9 rounded-[10px] border-black/10 bg-transparent px-4 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
-                      >
+                      <Button variant="outline" size="sm" onClick={() => setUsagePage((page) => Math.max(1, page - 1))} disabled={safeUsagePage <= 1} className="h-9 rounded-[10px] border-black/10 bg-transparent px-4 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5">
                         <ChevronLeft className="h-4 w-4 mr-1" />
                         {t('dashboard:recentTokenHistory.prev')}
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setUsagePage((page) => Math.min(usageTotalPages, page + 1))}
-                        disabled={safeUsagePage >= usageTotalPages}
-                        className="h-9 rounded-[10px] border-black/10 bg-transparent px-4 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
-                      >
+                      <Button variant="outline" size="sm" onClick={() => setUsagePage((page) => Math.min(usageTotalPages, page + 1))} disabled={safeUsagePage >= usageTotalPages} className="h-9 rounded-[10px] border-black/10 bg-transparent px-4 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5">
                         {t('dashboard:recentTokenHistory.next')}
                         <ChevronRight className="h-4 w-4 ml-1" />
                       </Button>
@@ -484,7 +547,6 @@ export function Models() {
               )}
             </div>
           </section>
-
         </div>
       </div>
       {devModeUnlocked && selectedUsageEntry && (
@@ -496,6 +558,30 @@ export function Models() {
           unknownModelLabel={t('dashboard:recentTokenHistory.unknownModel')}
         />
       )}
+      {showLocalProviderDialog ? (
+        <LocalProviderConfigDialog
+          account={localProviderSeed}
+          onClose={() => setShowLocalProviderDialog(false)}
+          onSave={async (payload) => {
+            await handleSaveLocalProvider(payload);
+            setShowLocalProviderDialog(false);
+            toast.success(localProviderAccount ? '本地模型提供商已更新' : '本地模型提供商已配置');
+          }}
+        />
+      ) : null}
+      {showAddLocalModelDialog && localProviderAccount ? (
+        <AddLocalModelDialog
+          providerAccount={localProviderAccount}
+          existingModels={localModelAccounts}
+          getAccountApiKey={getAccountApiKey}
+          onClose={() => setShowAddLocalModelDialog(false)}
+          onAdd={async (payload) => {
+            await handleAddLocalModel(payload);
+            setShowAddLocalModelDialog(false);
+            toast.success('本地模型已添加');
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -668,22 +754,13 @@ function UsageBarChart({
               }}
             >
               {group.inputTokens > 0 && (
-                <div
-                  className="h-full bg-sky-500"
-                  style={{ width: `${(group.inputTokens / group.totalTokens) * 100}%` }}
-                />
+                <div className="h-full bg-sky-500" style={{ width: `${(group.inputTokens / group.totalTokens) * 100}%` }} />
               )}
               {group.outputTokens > 0 && (
-                <div
-                  className="h-full bg-violet-500"
-                  style={{ width: `${(group.outputTokens / group.totalTokens) * 100}%` }}
-                />
+                <div className="h-full bg-violet-500" style={{ width: `${(group.outputTokens / group.totalTokens) * 100}%` }} />
               )}
               {group.cacheTokens > 0 && (
-                <div
-                  className="h-full bg-amber-500"
-                  style={{ width: `${(group.cacheTokens / group.totalTokens) * 100}%` }}
-                />
+                <div className="h-full bg-amber-500" style={{ width: `${(group.cacheTokens / group.totalTokens) * 100}%` }} />
               )}
             </div>
           </div>
@@ -694,6 +771,311 @@ function UsageBarChart({
 }
 
 export default Models;
+
+function LocalProviderConfigDialog({
+  account,
+  onClose,
+  onSave,
+}: {
+  account: ProviderAccount | null;
+  onClose: () => void;
+  onSave: (payload: { accountId?: string; apiKey?: string; baseUrl: string; apiProtocol: ProviderAccount['apiProtocol'] }) => Promise<void>;
+}) {
+  const [apiKey, setApiKey] = useState('');
+  const [baseUrl, setBaseUrl] = useState(account?.baseUrl || '');
+  const [apiProtocol, setApiProtocol] = useState<ProviderAccount['apiProtocol']>(account?.apiProtocol || 'openai-completions');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const isEditing = Boolean(account?.metadata?.localModelProvider);
+
+  const handleSubmit = async () => {
+    if (!baseUrl.trim()) {
+      toast.error('请填写 Base URL');
+      return;
+    }
+    if (!isEditing && !apiKey.trim()) {
+      toast.error('请填写 API Key');
+      return;
+    }
+    try {
+      setSaving(true);
+      await onSave({
+        accountId: account?.metadata?.localModelProvider ? account.id : undefined,
+        apiKey,
+        baseUrl,
+        apiProtocol,
+      });
+    } catch (error) {
+      toast.error(`保存失败: ${String(error)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" role="dialog" aria-modal="true">
+      <div className="w-full max-w-2xl rounded-2xl border border-black/10 bg-background shadow-xl dark:border-white/10">
+        <div className="flex items-start justify-between gap-3 border-b border-black/10 px-5 py-4 dark:border-white/10">
+          <div>
+            <p className="text-2xl font-semibold tracking-tight text-foreground">配置本地模型提供商</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              填写 API Key、Base URL 和接口协议。配置成功后，就可以在这个提供商下添加模型。
+            </p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose} className="h-9 w-9 rounded-xl">
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+        <div className="space-y-5 px-5 py-5">
+          <div className="space-y-2">
+            <Label htmlFor="local-provider-api-key">API Key</Label>
+            <div className="relative">
+              <Input
+                id="local-provider-api-key"
+                type={showApiKey ? 'text' : 'password'}
+                className="h-12 rounded-xl pr-12 font-mono"
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+                placeholder={isEditing ? '留空表示保留当前 API Key' : 'sk-...'}
+              />
+              <button
+                type="button"
+                className="absolute inset-y-0 right-3 inline-flex items-center text-muted-foreground"
+                onClick={() => setShowApiKey((value) => !value)}
+                aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}
+              >
+                {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="local-provider-base-url">Base URL</Label>
+            <Input
+              id="local-provider-base-url"
+              className="h-12 rounded-xl font-mono"
+              value={baseUrl}
+              onChange={(event) => setBaseUrl(event.target.value)}
+              placeholder="https://your-local-model-gateway/v1"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>接口协议</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                type="button"
+                variant={apiProtocol === 'openai-completions' ? 'default' : 'outline'}
+                className="h-11 rounded-xl"
+                onClick={() => setApiProtocol('openai-completions')}
+              >
+                OpenAI 兼容
+              </Button>
+              <Button
+                type="button"
+                variant={apiProtocol === 'anthropic-messages' ? 'default' : 'outline'}
+                className="h-11 rounded-xl"
+                onClick={() => setApiProtocol('anthropic-messages')}
+              >
+                Anthropic 兼容
+              </Button>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-3 border-t border-black/10 px-5 py-4 dark:border-white/10">
+          <Button variant="outline" onClick={onClose} className="h-10 rounded-xl px-5">
+            取消
+          </Button>
+          <Button onClick={() => void handleSubmit()} disabled={saving} className="h-10 rounded-xl px-5">
+            {saving ? '保存中...' : '保存配置'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddLocalModelDialog({
+  providerAccount,
+  existingModels,
+  getAccountApiKey,
+  onClose,
+  onAdd,
+}: {
+  providerAccount: ProviderAccount;
+  existingModels: ProviderAccount[];
+  getAccountApiKey: (accountId: string) => Promise<string | null>;
+  onClose: () => void;
+  onAdd: (payload: { modelId: string; label: string }) => Promise<void>;
+}) {
+  const [loadingModels, setLoadingModels] = useState(true);
+  const [modelOptions, setModelOptions] = useState<ProviderModelOption[]>([]);
+  const [resolveError, setResolveError] = useState<string | null>(null);
+  const [selectedModelId, setSelectedModelId] = useState('');
+  const [manualModelId, setManualModelId] = useState('');
+  const [label, setLabel] = useState('');
+  const [labelDirty, setLabelDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      try {
+        setLoadingModels(true);
+        setResolveError(null);
+        const apiKey = await getAccountApiKey(providerAccount.id);
+        const result = await resolveLocalProviderModels({
+          accountId: providerAccount.id,
+          baseUrl: providerAccount.baseUrl,
+          apiProtocol: providerAccount.apiProtocol,
+          apiKey,
+        });
+        if (cancelled) {
+          return;
+        }
+        const availableModels = Array.isArray(result.models) ? result.models : [];
+        const filteredModels = availableModels.filter((option) => (
+          !existingModels.some((account) => account.model?.trim() === option.id.trim())
+        ));
+        setModelOptions(filteredModels);
+        if (filteredModels[0]?.id) {
+          setSelectedModelId(filteredModels[0].id);
+          if (!labelDirty) {
+            setLabel(filteredModels[0].name || filteredModels[0].id);
+          }
+        }
+        if (result.error) {
+          setResolveError(result.error);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setResolveError(String(error));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingModels(false);
+        }
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [existingModels, getAccountApiKey, labelDirty, providerAccount.apiProtocol, providerAccount.baseUrl, providerAccount.id]);
+
+  const usingResolvedModels = modelOptions.length > 0;
+  const effectiveModelId = usingResolvedModels ? selectedModelId.trim() : manualModelId.trim();
+
+  const handleSubmit = async () => {
+    if (!label.trim()) {
+      toast.error('请填写模型名称');
+      return;
+    }
+    if (!effectiveModelId) {
+      toast.error('请填写模型 ID');
+      return;
+    }
+    try {
+      setSaving(true);
+      await onAdd({
+        label,
+        modelId: effectiveModelId,
+      });
+    } catch (error) {
+      toast.error(`添加失败: ${String(error)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" role="dialog" aria-modal="true">
+      <div className="w-full max-w-2xl rounded-2xl border border-black/10 bg-background shadow-xl dark:border-white/10">
+        <div className="flex items-start justify-between gap-3 border-b border-black/10 px-5 py-4 dark:border-white/10">
+          <div>
+            <p className="text-2xl font-semibold tracking-tight text-foreground">添加本地模型</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              优先从已配置的本地模型提供商拉取模型列表；如果服务不支持列出模型，再手动填写模型 ID。
+            </p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose} className="h-9 w-9 rounded-xl">
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+        <div className="space-y-5 px-5 py-5">
+          <div className="space-y-2">
+            <Label htmlFor="local-model-label">模型名称</Label>
+            <Input
+              id="local-model-label"
+              className="h-12 rounded-xl"
+              value={label}
+              onChange={(event) => {
+                setLabelDirty(true);
+                setLabel(event.target.value);
+              }}
+              placeholder="例如：Qwen3.5-27B"
+            />
+          </div>
+
+          {loadingModels ? (
+            <div className="rounded-[10px] border border-dashed border-border/80 bg-muted/35 px-5 py-8 text-sm text-muted-foreground">
+              正在获取模型列表...
+            </div>
+          ) : usingResolvedModels ? (
+            <div className="space-y-2">
+              <Label htmlFor="local-model-select">可用模型</Label>
+              <select
+                id="local-model-select"
+                className="h-12 w-full rounded-xl border border-input bg-background px-3 text-sm"
+                value={selectedModelId}
+                onChange={(event) => {
+                  const nextModelId = event.target.value;
+                  setSelectedModelId(nextModelId);
+                  if (!labelDirty) {
+                    const selected = modelOptions.find((option) => option.id === nextModelId);
+                    setLabel(selected?.name || nextModelId);
+                  }
+                }}
+              >
+                {modelOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name || option.id}
+                  </option>
+                ))}
+              </select>
+              <p className="text-sm text-muted-foreground">已从当前本地模型提供商读取到 {modelOptions.length} 个模型。</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="local-model-manual-id">模型 ID</Label>
+              <Input
+                id="local-model-manual-id"
+                className="h-12 rounded-xl font-mono"
+                value={manualModelId}
+                onChange={(event) => {
+                  setManualModelId(event.target.value);
+                  if (!labelDirty && !label.trim()) {
+                    setLabel(event.target.value);
+                  }
+                }}
+                placeholder="your-provider/model-id"
+              />
+              <p className="text-sm text-muted-foreground">
+                {resolveError ? `未能读取模型列表：${resolveError}` : '当前服务未返回模型列表，请手动填写模型 ID。'}
+              </p>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-3 border-t border-black/10 px-5 py-4 dark:border-white/10">
+          <Button variant="outline" onClick={onClose} className="h-10 rounded-xl px-5">
+            取消
+          </Button>
+          <Button onClick={() => void handleSubmit()} disabled={saving || !label.trim() || !effectiveModelId} className="h-10 rounded-xl px-5">
+            {saving ? '添加中...' : '添加模型'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function UsageContentPopup({
   entry,
@@ -718,25 +1100,14 @@ function UsageContentPopup({
               {(entry.model || unknownModelLabel)} • {formatUsageTimestamp(entry.timestamp)}
             </p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-full"
-            onClick={onClose}
-            aria-label={closeLabel}
-          >
-            <X className="h-4 w-4" />
+          <Button variant="outline" onClick={onClose}>
+            {closeLabel}
           </Button>
         </div>
         <div className="max-h-[65vh] overflow-y-auto px-5 py-4">
           <pre className="whitespace-pre-wrap break-words text-sm text-foreground font-mono">
             {entry.content}
           </pre>
-        </div>
-        <div className="flex justify-end border-t border-black/10 dark:border-white/10 px-5 py-3">
-          <Button variant="outline" onClick={onClose}>
-            {closeLabel}
-          </Button>
         </div>
       </div>
     </div>

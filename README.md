@@ -116,7 +116,7 @@ Extend your AI agents with pre-built skills. Browse, install, and manage skills 
 
 ### 🔐 Secure Provider Integration
 
-Connect to multiple AI providers (OpenAI, Anthropic, and more) with API keys or supported OAuth flows. OpenAI Codex sign-in follows OpenClaw's native browser OAuth flow and now chooses the model from OpenClaw's available Codex model list after sign-in. Other provider accounts can still set model IDs and fallback models, and credentials are stored securely in your system's native keychain.
+Connect to multiple AI providers (OpenAI, Anthropic, and more) with API keys or supported OAuth flows. OpenAI Codex sign-in follows OpenClaw's native browser OAuth flow and chooses the model from OpenClaw's available Codex model list after sign-in. Other provider accounts now prefer verified model lists resolved from the upstream endpoint when available, while still allowing manual model IDs if a provider cannot enumerate models. Credentials are stored securely in your system's native keychain.
 
 ### 🛡️ Granular Security Policy
 

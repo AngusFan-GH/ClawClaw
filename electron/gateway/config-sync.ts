@@ -12,6 +12,30 @@ import { buildProxyEnvAsync, resolveProxySettingsAsync } from '../utils/proxy';
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { logger } from '../utils/logger';
 
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string,
+  fallback: T,
+): Promise<T> {
+  let timeoutHandle: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race<T>([
+      promise,
+      new Promise<T>((resolve) => {
+        timeoutHandle = setTimeout(() => {
+          logger.warn(`${label} timed out after ${timeoutMs}ms; continuing with fallback`);
+          resolve(fallback);
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+}
+
 export interface GatewayLaunchContext {
   appSettings: Awaited<ReturnType<typeof getAllSettings>>;
   openclawDir: string;
@@ -28,22 +52,32 @@ export interface GatewayLaunchContext {
 export async function syncGatewayConfigBeforeLaunch(
   appSettings: Awaited<ReturnType<typeof getAllSettings>>,
 ): Promise<void> {
-  await syncProxyConfigToOpenClaw(appSettings);
+  await withTimeout(
+    syncProxyConfigToOpenClaw(appSettings),
+    5000,
+    'syncProxyConfigToOpenClaw',
+    undefined,
+  );
 
   try {
-    await sanitizeOpenClawConfig();
+    await withTimeout(sanitizeOpenClawConfig(), 5000, 'sanitizeOpenClawConfig', undefined);
   } catch (err) {
     logger.warn('Failed to sanitize openclaw.json:', err);
   }
 
   try {
-    await syncGatewayTokenToConfig(appSettings.gatewayToken);
+    await withTimeout(
+      syncGatewayTokenToConfig(appSettings.gatewayToken),
+      5000,
+      'syncGatewayTokenToConfig',
+      undefined,
+    );
   } catch (err) {
     logger.warn('Failed to sync gateway token to openclaw.json:', err);
   }
 
   try {
-    await syncBrowserConfigToOpenClaw();
+    await withTimeout(syncBrowserConfigToOpenClaw(), 5000, 'syncBrowserConfigToOpenClaw', undefined);
   } catch (err) {
     logger.warn('Failed to sync browser config to openclaw.json:', err);
   }
@@ -145,11 +179,29 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     ? `${binPath}${path.delimiter}${process.env.PATH || ''}`
     : process.env.PATH || '';
 
-  const { providerEnv, loadedProviderKeyCount } = await loadProviderEnv();
-  const { skipChannels, channelStartupSummary } = await resolveChannelStartupPolicy();
-  const uvEnv = await getUvMirrorEnv();
-  const proxyEnv = await buildProxyEnvAsync(appSettings);
-  const resolvedProxy = await resolveProxySettingsAsync(appSettings);
+  const { providerEnv, loadedProviderKeyCount } = await withTimeout(
+    loadProviderEnv(),
+    8000,
+    'loadProviderEnv',
+    { providerEnv: {}, loadedProviderKeyCount: 0 },
+  );
+  const { skipChannels, channelStartupSummary } = await withTimeout(
+    resolveChannelStartupPolicy(),
+    5000,
+    'resolveChannelStartupPolicy',
+    {
+      skipChannels: false,
+      channelStartupSummary: 'enabled(timeout-fallback)',
+    },
+  );
+  const uvEnv = await withTimeout(getUvMirrorEnv(), 5000, 'getUvMirrorEnv', {});
+  const proxyEnv = await withTimeout(buildProxyEnvAsync(appSettings), 5000, 'buildProxyEnvAsync', {});
+  const resolvedProxy = await withTimeout(
+    resolveProxySettingsAsync(appSettings),
+    5000,
+    'resolveProxySettingsAsync',
+    {},
+  );
   const hasResolvedProxy = Boolean(
     resolvedProxy.httpProxy || resolvedProxy.httpsProxy || resolvedProxy.allProxy
   );

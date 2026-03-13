@@ -70,6 +70,20 @@
     "add": "Add Provider",
     "custom": "Custom Model",
     "localModel": "Local Model",
+    "localModelDialog": {
+      "title": "Add Local Model",
+      "desc": "Add a local model entry. Enter the model name, API key, service URL, and protocol, and the app will sync it into OpenClaw.",
+      "displayName": "Model Name",
+      "displayNamePlaceholder": "For example: Qwen3.5-27B",
+      "displayNameHelp": "Used in the list and default-model summary. Enter a clear model name manually.",
+      "nameRequired": "Enter a model name",
+      "serviceUrl": "Service URL",
+      "serviceUrlHelp": "Enter the endpoint URL for this model service, such as a private deployment or internal gateway `/v1` URL.",
+      "protocol": "Protocol",
+      "apiKeyRequired": "Enter an API key",
+      "baseUrlRequired": "Enter the service URL",
+      "add": "Add Model"
+    },
     "notRequired": "Not required",
     "empty": {
       "title": "No providers configured",
@@ -89,6 +103,10 @@
       "baseUrl": "Base URL",
       "model": "Model",
       "modelId": "Model ID",
+      "verifiedModels": "Verified Models",
+      "verifiedModelsHelp": "Prefer selecting a real model returned by this source to avoid saving an invalid model ID.",
+      "loadingModels": "Loading models from this source...",
+      "noVerifiedModels": "No verified model list is available yet. You can still enter a model ID manually.",
       "protocol": "Protocol",
       "fallbackModels": "Fallback Models",
       "fallbackProviders": "Fallback Providers",
@@ -109,6 +127,10 @@
       "none": "None",
       "fallbacks_one": "Fallback: {{names}}",
       "fallbacks_other": "Fallbacks ({{count}}): {{names}}",
+      "runtimeProvider": "Runtime Provider",
+      "verifiedModelCount_one": "{{count}} verified model",
+      "verifiedModelCount_other": "{{count}} verified models",
+      "invalidCurrentModel": "current model unavailable",
       "setDefault": "Set as default",
       "editKey": "Edit API key",
       "delete": "Delete provider"
@@ -128,6 +150,7 @@
       "failedUpdate": "Failed to update provider",
       "invalidKey": "Invalid API key",
       "modelRequired": "Model ID is required",
+      "modelMustMatchVerified": "Select a model from the verified list for this source",
       "minimaxConflict": "Cannot add both MiniMax (Global) and MiniMax (CN) providers."
     },
     "oauth": {

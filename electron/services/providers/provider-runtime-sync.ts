@@ -1,10 +1,13 @@
 import type { GatewayManager } from '../../gateway/manager';
 import { getProviderAccount, listProviderAccounts } from './provider-store';
+import { providerAccountToConfig } from './provider-store';
 import { getProviderSecret } from '../secrets/secret-store';
 import type { ProviderConfig } from '../../utils/secure-storage';
 import { getAllProviders, getApiKey, getDefaultProvider, getProvider } from '../../utils/secure-storage';
 import { getProviderConfig, getProviderDefaultModel } from '../../utils/provider-registry';
 import {
+  readOpenClawJson,
+  getActiveOpenClawProviders,
   removeProviderFromOpenClaw,
   saveOAuthTokenToOpenClaw,
   saveProviderKeyToOpenClaw,
@@ -12,6 +15,7 @@ import {
   setOpenClawDefaultModelWithOverride,
   syncProviderConfigToOpenClaw,
   updateAgentModelProvider,
+  writeOpenClawJson,
 } from '../../utils/openclaw-auth';
 import { getOpenClawProviderKeyForType } from '../../utils/provider-keys';
 import { logger } from '../../utils/logger';
@@ -45,6 +49,21 @@ function normalizeOpenAIOAuthModel(model?: string): string | undefined {
     : normalized;
 }
 
+function isLocalModelProviderConfigAccount(account: {
+  vendorId: string;
+  metadata?: { localModelProvider?: boolean };
+}): boolean {
+  return account.vendorId === 'local-model' && account.metadata?.localModelProvider === true;
+}
+
+function shouldReconcileRuntimeProviderKey(providerKey: string): boolean {
+  return (
+    providerKey.startsWith('custom-')
+    || providerKey.startsWith('local-model-')
+    || providerKey.startsWith('ollama-')
+  );
+}
+
 type RuntimeProviderSyncContext = {
   runtimeProviderKey: string;
   meta: ReturnType<typeof getProviderConfig>;
@@ -72,7 +91,11 @@ export function getOpenClawProviderKey(type: string, providerId: string): string
 }
 
 function getLegacyOpenClawProviderKey(type: string, providerId: string): string {
-  if (type === 'custom' || type === 'ollama' || type === 'local-model') {
+  if (type === 'local-model') {
+    const normalizedId = providerId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'default';
+    return `local-model-${normalizedId}`;
+  }
+  if (type === 'custom' || type === 'ollama') {
     const suffix = providerId.replace(/-/g, '').slice(0, 8);
     return `${type}-${suffix}`;
   }
@@ -94,6 +117,114 @@ async function resolveRuntimeProviderKey(config: ProviderConfig): Promise<string
     return OPENAI_OAUTH_RUNTIME_PROVIDER;
   }
   return getOpenClawProviderKey(config.type, config.id);
+}
+
+async function removeLegacyLocalModelAliases(config: ProviderConfig): Promise<void> {
+  if (config.type !== 'local-model') {
+    return;
+  }
+
+  const normalizedId = config.id.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'default';
+  const legacyCustomAlias = `custom-${normalizedId}`;
+  const legacyLocalModelAlias = `local-model-${normalizedId}`;
+  await removeProviderFromOpenClaw(legacyCustomAlias);
+  await removeProviderFromOpenClaw(legacyLocalModelAlias);
+}
+
+async function buildAccountPrimaryModelRef(account: Awaited<ReturnType<typeof listProviderAccounts>>[number]): Promise<string | undefined> {
+  if (isLocalModelProviderConfigAccount(account) || !account.enabled) {
+    return undefined;
+  }
+
+  const runtimeProviderKey = await resolveRuntimeProviderKey({
+    ...providerAccountToConfig(account),
+    id: account.id,
+  });
+
+  const rawModel = account.vendorId === 'openai'
+    && (account.authMode === 'oauth_browser' || account.authMode === 'oauth_device')
+      ? normalizeOpenAIOAuthModel(account.model)
+      : (account.model?.trim() || getProviderDefaultModel(account.vendorId));
+
+  if (!rawModel) {
+    return undefined;
+  }
+
+  return rawModel.startsWith(`${runtimeProviderKey}/`)
+    ? rawModel
+    : `${runtimeProviderKey}/${rawModel}`;
+}
+
+async function rebuildOpenClawModelAllowlistFromAccounts(): Promise<void> {
+  const accounts = await listProviderAccounts();
+  const activeAccounts = accounts.filter((account) => account.enabled && !isLocalModelProviderConfigAccount(account));
+  const accountMap = new Map(activeAccounts.map((account) => [account.id, account]));
+  const allowlist: Record<string, Record<string, never>> = {};
+
+  for (const account of activeAccounts) {
+    const primaryRef = await buildAccountPrimaryModelRef(account);
+    if (primaryRef) {
+      allowlist[primaryRef] = {};
+    }
+
+    const runtimeProviderKey = await resolveRuntimeProviderKey({
+      ...providerAccountToConfig(account),
+      id: account.id,
+    });
+    for (const fallback of account.fallbackModels ?? []) {
+      const normalized = fallback.trim();
+      if (!normalized) continue;
+      const ref = normalized.startsWith(`${runtimeProviderKey}/`)
+        ? normalized
+        : `${runtimeProviderKey}/${normalized}`;
+      allowlist[ref] = {};
+    }
+
+    for (const fallbackAccountId of account.fallbackAccountIds ?? []) {
+      const fallbackAccount = accountMap.get(fallbackAccountId);
+      if (!fallbackAccount) continue;
+      const fallbackRef = await buildAccountPrimaryModelRef(fallbackAccount);
+      if (fallbackRef) {
+        allowlist[fallbackRef] = {};
+      }
+    }
+  }
+
+  const config = await readOpenClawJson();
+  const agents = (config.agents || {}) as Record<string, unknown>;
+  const defaults = (agents.defaults || {}) as Record<string, unknown>;
+  defaults.models = allowlist;
+  agents.defaults = defaults;
+  config.agents = agents;
+  await writeOpenClawJson(config);
+}
+
+async function reconcileRuntimeProvidersFromAccounts(): Promise<void> {
+  const accounts = await listProviderAccounts();
+  const desiredRuntimeKeys = new Set<string>();
+
+  for (const account of accounts) {
+    if (!account.enabled || isLocalModelProviderConfigAccount(account)) {
+      continue;
+    }
+    desiredRuntimeKeys.add(
+      await resolveRuntimeProviderKey({
+        ...providerAccountToConfig(account),
+        id: account.id,
+      }),
+    );
+  }
+
+  const activeProviders = await getActiveOpenClawProviders();
+  for (const activeKey of activeProviders) {
+    if (!shouldReconcileRuntimeProviderKey(activeKey)) {
+      continue;
+    }
+    if (desiredRuntimeKeys.has(activeKey)) {
+      continue;
+    }
+    await removeProviderFromOpenClaw(activeKey);
+  }
 }
 
 async function isGoogleBrowserOAuthProvider(config: ProviderConfig): Promise<boolean> {
@@ -251,11 +382,17 @@ export async function syncAllProviderAuthToRuntime(): Promise<void> {
 }
 
 export async function syncAllProvidersToRuntime(): Promise<void> {
-  const providers = await getAllProviders();
+  const accounts = await listProviderAccounts();
 
-  for (const provider of providers) {
-    await syncProviderToRuntime(provider, undefined);
+  for (const account of accounts) {
+    if (!account.enabled || isLocalModelProviderConfigAccount(account)) {
+      continue;
+    }
+    await syncProviderToRuntime(providerAccountToConfig(account), undefined);
   }
+
+  await reconcileRuntimeProvidersFromAccounts();
+  await rebuildOpenClawModelAllowlistFromAccounts();
 }
 
 async function syncProviderSecretToRuntime(
@@ -338,11 +475,18 @@ async function syncCustomProviderAgentModel(
     return;
   }
 
-  const modelId = config.model;
+  const modelIds = config.type === 'local-model'
+    ? Array.from(new Set(
+      (await listProviderAccounts())
+        .filter((account) => account.enabled && account.vendorId === 'local-model' && !isLocalModelProviderConfigAccount(account))
+        .map((account) => account.model?.trim())
+        .filter((value): value is string => Boolean(value)),
+    ))
+    : (config.model ? [config.model] : []);
   await updateAgentModelProvider(runtimeProviderKey, {
     baseUrl: config.baseUrl,
     api: config.apiProtocol || 'openai-completions',
-    models: modelId ? [{ id: modelId, name: modelId }] : [],
+    models: modelIds.map((id) => ({ id, name: id })),
     apiKey: resolvedKey || undefined,
   });
 }
@@ -364,6 +508,7 @@ async function syncProviderToRuntime(
   await syncProviderSecretToRuntime(config, context.runtimeProviderKey, apiKey);
   await syncRuntimeProviderConfig(config, context);
   await syncCustomProviderAgentModel(config, context.runtimeProviderKey, apiKey);
+  await removeLegacyLocalModelAliases(config);
   return context;
 }
 
@@ -376,6 +521,9 @@ export async function syncSavedProviderToRuntime(
   if (!context) {
     return;
   }
+
+  await rebuildOpenClawModelAllowlistFromAccounts();
+  await reconcileRuntimeProvidersFromAccounts();
 
   scheduleGatewayRestart(
     gatewayManager,
@@ -427,6 +575,9 @@ export async function syncUpdatedProviderToRuntime(
     }
   }
 
+  await rebuildOpenClawModelAllowlistFromAccounts();
+  await reconcileRuntimeProvidersFromAccounts();
+
   scheduleGatewayRestart(
     gatewayManager,
     `Scheduling Gateway restart after updating provider "${ock}" config`,
@@ -445,6 +596,13 @@ export async function syncDeletedProviderToRuntime(
 
   const ock = runtimeProviderKey ?? await resolveRuntimeProviderKey({ ...provider, id: providerId });
   await removeProviderFromOpenClaw(ock);
+  if (provider.type === 'local-model') {
+    const normalizedId = providerId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'default';
+    await removeProviderFromOpenClaw(`custom-${normalizedId}`);
+    await removeProviderFromOpenClaw(`local-model-${normalizedId}`);
+  }
+  await rebuildOpenClawModelAllowlistFromAccounts();
+  await reconcileRuntimeProvidersFromAccounts();
 
   scheduleGatewayRestart(
     gatewayManager,
@@ -612,6 +770,9 @@ export async function syncDefaultProviderToRuntime(
       apiKey: providerKey || undefined,
     });
   }
+
+  await rebuildOpenClawModelAllowlistFromAccounts();
+  await reconcileRuntimeProvidersFromAccounts();
 
   scheduleGatewayRestart(
     gatewayManager,

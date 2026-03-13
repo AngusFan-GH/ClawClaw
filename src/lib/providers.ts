@@ -106,6 +106,8 @@ export interface ProviderAccount {
     email?: string;
     resourceUrl?: string;
     customModels?: string[];
+    localModel?: boolean;
+    localModelProvider?: boolean;
     presetId?: string;
     primaryPresetId?: string;
     presetIds?: string[];
@@ -255,15 +257,15 @@ export const PROVIDER_TYPE_INFO: ProviderTypeInfo[] = [
   },
   {
     id: 'local-model',
-    name: 'Legacy Local Model',
+    name: 'Local Model',
     icon: '🖥️',
-    placeholder: 'Optional',
+    placeholder: 'sk-...',
     model: 'OpenAI-Compatible',
-    requiresApiKey: false,
+    requiresApiKey: true,
     defaultBaseUrl: '',
     showBaseUrl: true,
     showModelId: true,
-    modelIdPlaceholder: 'legacy-local-model-id',
+    modelIdPlaceholder: 'your-local-model-id',
   },
 ];
 

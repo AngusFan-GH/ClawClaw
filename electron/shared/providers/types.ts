@@ -127,6 +127,8 @@ export interface ProviderAccount {
     email?: string;
     resourceUrl?: string;
     customModels?: string[];
+    localModel?: boolean;
+    localModelProvider?: boolean;
     presetId?: string;
     primaryPresetId?: string;
     presetIds?: string[];

@@ -115,6 +115,11 @@ function classifyAuthResponse(status: number, data: unknown): { valid: boolean; 
   return { valid: false, error: msg };
 }
 
+function extractErrorMessage(status: number, data: unknown): string {
+  const obj = data as { error?: { message?: string }; message?: string; code?: string } | null;
+  return obj?.error?.message || obj?.message || obj?.code || `API error: ${status}`;
+}
+
 async function validateOpenAiCompatibleKey(
   providerType: string,
   apiKey: string,
@@ -142,6 +147,120 @@ async function validateOpenAiCompatibleKey(
   }
 
   return modelsResult;
+}
+
+function mapOpenAiModelList(data: unknown): Array<{ id: string; name: string }> {
+  const payload = data as { data?: Array<{ id?: string; name?: string }> } | null;
+  const raw = Array.isArray(payload?.data) ? payload.data : [];
+  return raw
+    .map((item) => ({
+      id: typeof item?.id === 'string' ? item.id.trim() : '',
+      name: typeof item?.name === 'string' && item.name.trim()
+        ? item.name.trim()
+        : (typeof item?.id === 'string' ? item.id.trim() : ''),
+    }))
+    .filter((item) => Boolean(item.id));
+}
+
+function mapGoogleModelList(data: unknown): Array<{ id: string; name: string }> {
+  const payload = data as { models?: Array<{ name?: string; displayName?: string }> } | null;
+  const raw = Array.isArray(payload?.models) ? payload.models : [];
+  return raw
+    .map((item) => {
+      const rawName = typeof item?.name === 'string' ? item.name.trim() : '';
+      const id = rawName.startsWith('models/') ? rawName.slice('models/'.length) : rawName;
+      return {
+        id,
+        name: typeof item?.displayName === 'string' && item.displayName.trim()
+          ? item.displayName.trim()
+          : id,
+      };
+    })
+    .filter((item) => Boolean(item.id));
+}
+
+async function fetchModelListRequest(
+  providerLabel: string,
+  url: string,
+  headers: Record<string, string>,
+): Promise<{ models: Array<{ id: string; name: string }>; error?: string }> {
+  try {
+    logValidationRequest(providerLabel, 'GET', url, headers);
+    const response = await proxyAwareFetch(url, { headers });
+    logValidationStatus(providerLabel, response.status);
+    const data = await response.json().catch(() => ({}));
+    if (response.status < 200 || response.status >= 300) {
+      return { models: [], error: extractErrorMessage(response.status, data) };
+    }
+    return { models: mapOpenAiModelList(data) };
+  } catch (error) {
+    return {
+      models: [],
+      error: `Connection error: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+async function listOpenAiCompatibleModels(
+  providerType: string,
+  apiKey: string | undefined,
+  baseUrl?: string,
+): Promise<{ models: Array<{ id: string; name: string }>; error?: string }> {
+  const trimmedBaseUrl = baseUrl?.trim();
+  if (!trimmedBaseUrl) {
+    return { models: [], error: `Base URL is required for provider "${providerType}"` };
+  }
+  const headers = apiKey?.trim() ? { Authorization: `Bearer ${apiKey.trim()}` } : {};
+  const modelsUrl = buildOpenAiModelsUrl(trimmedBaseUrl);
+  return await fetchModelListRequest(providerType, modelsUrl, headers);
+}
+
+async function listAnthropicCompatibleModels(
+  providerType: string,
+  apiKey: string | undefined,
+  baseUrl?: string,
+): Promise<{ models: Array<{ id: string; name: string }>; error?: string }> {
+  const trimmedKey = apiKey?.trim();
+  if (!trimmedKey) {
+    return { models: [], error: 'API key is required' };
+  }
+  const rawBase = normalizeBaseUrl(baseUrl || 'https://api.anthropic.com/v1');
+  const base = rawBase.endsWith('/v1') ? rawBase : `${rawBase}/v1`;
+  const url = `${base}/models?limit=200`;
+  const headers = {
+    'x-api-key': trimmedKey,
+    'anthropic-version': '2023-06-01',
+  };
+  const result = await fetchModelListRequest(providerType, url, headers);
+  return { ...result, models: result.models };
+}
+
+async function listGoogleModels(
+  providerType: string,
+  apiKey: string | undefined,
+  baseUrl?: string,
+): Promise<{ models: Array<{ id: string; name: string }>; error?: string }> {
+  const trimmedKey = apiKey?.trim();
+  if (!trimmedKey) {
+    return { models: [], error: 'API key is required' };
+  }
+  const base = normalizeBaseUrl(baseUrl || 'https://generativelanguage.googleapis.com/v1beta');
+  const url = `${base}/models?pageSize=200&key=${encodeURIComponent(trimmedKey)}`;
+  try {
+    logValidationRequest(providerType, 'GET', url, {});
+    const response = await proxyAwareFetch(url, { headers: {} });
+    logValidationStatus(providerType, response.status);
+    const data = await response.json().catch(() => ({}));
+    if (response.status < 200 || response.status >= 300) {
+      return { models: [], error: extractErrorMessage(response.status, data) };
+    }
+    return { models: mapGoogleModelList(data) };
+  } catch (error) {
+    return {
+      models: [],
+      error: `Connection error: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
 }
 
 async function performChatCompletionsProbe(
@@ -305,5 +424,32 @@ export async function validateApiKeyWithProvider(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return { valid: false, error: errorMessage };
+  }
+}
+
+export async function listModelsWithProvider(
+  providerType: string,
+  apiKey?: string,
+  options?: { baseUrl?: string; apiProtocol?: string },
+): Promise<{ models: Array<{ id: string; name: string }>; error?: string }> {
+  const profile = getValidationProfile(providerType, options);
+  const resolvedBaseUrl = options?.baseUrl || getProviderConfig(providerType)?.baseUrl;
+
+  switch (profile) {
+    case 'openai-compatible':
+      return await listOpenAiCompatibleModels(providerType, apiKey, resolvedBaseUrl);
+    case 'google-query-key':
+      return await listGoogleModels(providerType, apiKey, resolvedBaseUrl);
+    case 'anthropic-header':
+      return await listAnthropicCompatibleModels(providerType, apiKey, resolvedBaseUrl);
+    case 'openrouter':
+      return await listOpenAiCompatibleModels(providerType, apiKey, 'https://openrouter.ai/api/v1');
+    case 'none':
+      if (providerType === 'ollama') {
+        return await listOpenAiCompatibleModels(providerType, undefined, resolvedBaseUrl);
+      }
+      return { models: [] };
+    default:
+      return { models: [] };
   }
 }

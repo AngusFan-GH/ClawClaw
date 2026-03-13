@@ -116,7 +116,7 @@ ClawClaw 直接基于官方 **OpenClaw** 核心构建。无需单独安装，我
 
 ### 🔐 安全的供应商集成
 
-连接多个 AI 供应商（OpenAI、Anthropic 等），支持 API 密钥和已接入的 OAuth 登录方式。OpenAI Codex 登录现已对齐 OpenClaw 原生浏览器 OAuth 流程，并在登录完成后从 OpenClaw 当前可用的 Codex 模型列表中选择模型。其他供应商账户仍可单独配置模型 ID 和回退模型，凭证安全存储在系统原生密钥链中。
+连接多个 AI 供应商（OpenAI、Anthropic 等），支持 API 密钥和已接入的 OAuth 登录方式。OpenAI Codex 登录现已对齐 OpenClaw 原生浏览器 OAuth 流程，并在登录完成后从 OpenClaw 当前可用的 Codex 模型列表中选择模型。其他供应商账户在条件允许时会优先使用上游接口返回的已验证模型列表，只有在无法枚举模型时才继续允许手动填写模型 ID。凭证安全存储在系统原生密钥链中。
 
 ### 🛡️ 细粒度安全策略
 

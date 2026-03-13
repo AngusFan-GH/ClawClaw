@@ -70,6 +70,20 @@
     "add": "添加提供商",
     "custom": "自定义模型",
     "localModel": "本地模型",
+    "localModelDialog": {
+      "title": "添加本地模型",
+      "desc": "添加一个本地模型条目。填写模型名、API 密钥、服务地址和接口协议后，系统会把它同步到 OpenClaw。",
+      "displayName": "模型名称",
+      "displayNamePlaceholder": "例如：Qwen3.5-27B",
+      "displayNameHelp": "用于列表展示和默认模型摘要，请手动填写清晰的模型名称。",
+      "nameRequired": "请填写模型名",
+      "serviceUrl": "服务地址",
+      "serviceUrlHelp": "填写该模型服务的接口地址，例如企业内网网关或私有部署服务的 `/v1` 地址。",
+      "protocol": "接口协议",
+      "apiKeyRequired": "请填写 API 密钥",
+      "baseUrlRequired": "请填写服务地址",
+      "add": "添加模型"
+    },
     "notRequired": "非必填",
     "empty": {
       "title": "未配置提供商",
@@ -89,6 +103,10 @@
       "baseUrl": "基础 URL",
       "model": "模型",
       "modelId": "模型 ID",
+      "verifiedModels": "已验证模型",
+      "verifiedModelsHelp": "优先使用该来源返回的真实模型列表，避免写入无效模型 ID。",
+      "loadingModels": "正在拉取该来源的模型列表...",
+      "noVerifiedModels": "暂未拿到可验证模型列表，仍可手动填写模型 ID。",
       "protocol": "协议",
       "fallbackModels": "回退模型",
       "fallbackProviders": "跨 Provider 回退",
@@ -109,6 +127,10 @@
       "none": "无",
       "fallbacks_one": "回退：{{names}}",
       "fallbacks_other": "回退（{{count}} 个）：{{names}}",
+      "runtimeProvider": "运行时标识",
+      "verifiedModelCount_one": "已验证 {{count}} 个模型",
+      "verifiedModelCount_other": "已验证 {{count}} 个模型",
+      "invalidCurrentModel": "当前模型已失效",
       "setDefault": "设为默认",
       "editKey": "编辑 API 密钥",
       "delete": "删除提供商"
@@ -128,6 +150,7 @@
       "failedUpdate": "更新提供商失败",
       "invalidKey": "无效的 API 密钥",
       "modelRequired": "需要模型 ID",
+      "modelMustMatchVerified": "请选择该来源已验证通过的模型",
       "minimaxConflict": "不能同时添加 MiniMax 国际站和国内站的服务商。"
     },
     "oauth": {

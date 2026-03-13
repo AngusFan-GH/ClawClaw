@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
-import { useChatStore } from '@/stores/chat';
+import { DEFAULT_SESSION_KEY, useChatStore } from '@/stores/chat';
 import { useAgentsStore } from '@/stores/agents';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -131,6 +131,7 @@ export function Sidebar() {
     if (derivedLabel) return derivedLabel;
     if (displayName && displayName !== key) return displayName;
     if (pendingLocalSessionKeys[key]) return t('common:sidebar.newChat');
+    if (key === DEFAULT_SESSION_KEY) return t('common:sidebar.newChat');
     return key;
   };
 

@@ -130,7 +130,7 @@ const VALID_COMPACTION_MODES = new Set(['default', 'safeguard']);
 const VALID_MEMORY_SEARCH_PROVIDERS = new Set(['openai', 'local', 'gemini', 'voyage', 'mistral']);
 const VALID_MEMORY_SEARCH_FALLBACKS = new Set(['openai', 'gemini', 'local', 'voyage', 'mistral', 'none']);
 
-async function readOpenClawJson(): Promise<Record<string, unknown>> {
+export async function readOpenClawJson(): Promise<Record<string, unknown>> {
   return (await readJsonFile<Record<string, unknown>>(OPENCLAW_CONFIG_PATH)) ?? {};
 }
 
@@ -209,7 +209,7 @@ function sanitizeAgentsDefaultsMemorySearch(config: Record<string, unknown>): bo
   return modified;
 }
 
-async function writeOpenClawJson(config: Record<string, unknown>): Promise<void> {
+export async function writeOpenClawJson(config: Record<string, unknown>): Promise<void> {
   normalizeAgentsDefaultsCompactionMode(config);
 
   // Ensure SIGUSR1 graceful reload is authorized by OpenClaw config.

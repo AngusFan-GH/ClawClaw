@@ -50,7 +50,7 @@ function logLegacyProviderApiUsage(method: string, replacement: string): void {
   );
 }
 
-const UNIQUE_RUNTIME_PROVIDER_TYPES = new Set(['custom', 'ollama', 'local-model']);
+const UNIQUE_RUNTIME_PROVIDER_TYPES = new Set(['custom', 'ollama']);
 
 async function assertNoRuntimeProviderKeyConflict(account: ProviderAccount, ignoreAccountId?: string): Promise<void> {
   if (!UNIQUE_RUNTIME_PROVIDER_TYPES.has(account.vendorId)) {

@@ -128,6 +128,7 @@ interface ChatState {
   refresh: () => Promise<void>;
   clearError: () => void;
   setModelGuard: (allowedModelRefs: string[], defaultModelRef?: string) => void;
+  resolveSessionModelRef: (sessionKey?: string) => string | undefined;
 }
 
 // Module-level timestamp tracking the last chat event received.
@@ -168,7 +169,7 @@ function clearHistoryPoll(): void {
 }
 
 const DEFAULT_CANONICAL_PREFIX = 'agent:main';
-const DEFAULT_SESSION_KEY = `${DEFAULT_CANONICAL_PREFIX}:main`;
+export const DEFAULT_SESSION_KEY = `${DEFAULT_CANONICAL_PREFIX}:main`;
 
 function isCronSessionKey(key: string): boolean {
   return key.includes(':cron:');
@@ -218,6 +219,40 @@ function normalizeModelRefs(values: string[]): string[] {
     out.push(trimmed);
   }
   return out;
+}
+
+function resolveSessionModelRef(
+  session: Pick<ChatSession, 'model' | 'modelProvider'> | undefined,
+  allowedModelRefs: string[] = [],
+): string | undefined {
+  const rawModel = session?.model?.trim();
+  if (!rawModel) return undefined;
+
+  const exact = allowedModelRefs.find((ref) => ref === rawModel);
+  if (exact) return exact;
+
+  const provider = session?.modelProvider?.trim();
+  if (provider && !rawModel.includes('/')) {
+    const providerRef = `${provider}/${rawModel}`;
+    const providerExact = allowedModelRefs.find((ref) => ref === providerRef);
+    if (providerExact) return providerExact;
+
+    const providerSuffixMatches = allowedModelRefs.filter(
+      (ref) => ref.startsWith(`${provider}/`) && ref.split('/').pop() === rawModel,
+    );
+    if (providerSuffixMatches.length === 1) {
+      return providerSuffixMatches[0];
+    }
+
+    return providerRef;
+  }
+
+  const suffixMatches = allowedModelRefs.filter((ref) => ref.split('/').pop() === rawModel);
+  if (suffixMatches.length === 1) {
+    return suffixMatches[0];
+  }
+
+  return rawModel;
 }
 
 function getMostRecentSessionKey(
@@ -1052,11 +1087,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   lastUserMessageAt: null,
   pendingToolImages: [],
 
-  sessions: [],
+  sessions: [{ key: DEFAULT_SESSION_KEY, displayName: DEFAULT_SESSION_KEY }],
   currentSessionKey: DEFAULT_SESSION_KEY,
   currentAgentId: 'main',
   sessionLabels: {},
-  sessionLastActivity: {},
+  sessionLastActivity: { [DEFAULT_SESSION_KEY]: Date.now() },
   pendingLocalSessionKeys: {},
 
   showThinking: true,
@@ -1073,6 +1108,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       allowedModelRefs: normalizedAllowed,
       defaultModelRef: normalizedDefault,
     });
+  },
+
+  resolveSessionModelRef: (sessionKey) => {
+    const { sessions, currentSessionKey, allowedModelRefs } = get();
+    const targetKey = sessionKey || currentSessionKey;
+    const session = sessions.find((item) => item.key === targetKey);
+    return resolveSessionModelRef(session, allowedModelRefs);
   },
 
   loadSessions: async (preferMostRecent = false) => {
@@ -1406,16 +1448,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     try {
       const currentSession = sessions.find((session) => session.key === currentSessionKey);
+      const currentSessionRef = resolveSessionModelRef(currentSession, allowedModelRefs);
       const splitIndex = modelForPatch.indexOf('/');
       const targetProvider = splitIndex > 0 ? modelForPatch.slice(0, splitIndex) : undefined;
       const targetModelId = splitIndex > 0 ? modelForPatch.slice(splitIndex + 1) : modelForPatch;
-      const currentProvider = currentSession?.modelProvider
-        || (currentSession?.model?.includes('/')
-          ? currentSession.model.slice(0, currentSession.model.indexOf('/'))
-          : undefined);
+      const currentProvider = currentSessionRef?.includes('/')
+        ? currentSessionRef.slice(0, currentSessionRef.indexOf('/'))
+        : currentSession?.modelProvider;
       const isCrossProvider = Boolean(targetProvider && currentProvider && targetProvider !== currentProvider);
       const patchOnce = async (value: string) => {
-        await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.patch', {
+        return await useGatewayStore.getState().rpc<{
+          entry?: Record<string, unknown>;
+          resolved?: { modelProvider?: string; model?: string };
+        }>('sessions.patch', {
           key: currentSessionKey,
           model: value,
         });
@@ -1449,9 +1494,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       let lastError: unknown = null;
       let patched = false;
+      let resolvedSelection:
+        | { model?: string; modelProvider?: string }
+        | undefined;
       for (const candidate of attempts) {
         try {
-          await patchOnce(candidate);
+          const result = await patchOnce(candidate);
+          resolvedSelection = result?.resolved;
           patched = true;
           break;
         } catch (err) {
@@ -1471,10 +1520,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
           session.key === currentSessionKey
             ? {
               ...session,
-              model: (trimmedModel ?? modelForPatch).includes('/')
-                ? (trimmedModel ?? modelForPatch).split('/').slice(1).join('/')
-                : (trimmedModel ?? modelForPatch),
-              modelProvider: targetProvider ?? session.modelProvider,
+              model: resolvedSelection?.model
+                ?? ((trimmedModel ?? modelForPatch).includes('/')
+                  ? (trimmedModel ?? modelForPatch).split('/').slice(1).join('/')
+                  : (trimmedModel ?? modelForPatch)),
+              modelProvider: resolvedSelection?.modelProvider ?? targetProvider ?? session.modelProvider,
             }
             : session
         )),
@@ -1659,35 +1709,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const { currentSessionKey, sessions, allowedModelRefs, defaultModelRef } = get();
     const currentSession = sessions.find((session) => session.key === currentSessionKey);
-    const currentSessionModel = currentSession?.model?.trim() || undefined;
+    const currentSessionModel = resolveSessionModelRef(currentSession, allowedModelRefs);
     const hasGuard = allowedModelRefs.length > 0;
-    const sessionModelInvalid =
-      Boolean(currentSessionModel) && hasGuard && !allowedModelRefs.includes(currentSessionModel as string);
+    const sessionModelInvalid = hasGuard
+      && typeof currentSessionModel === 'string'
+      && !allowedModelRefs.includes(currentSessionModel);
 
     if (sessionModelInvalid) {
-      const fallbackModel = defaultModelRef || 'default';
-      try {
-        const splitIndex = fallbackModel.indexOf('/');
-        const providerOverride = splitIndex > 0 ? fallbackModel.slice(0, splitIndex) : undefined;
-        const modelOverride = splitIndex > 0 ? fallbackModel.slice(splitIndex + 1) : fallbackModel;
-        await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.patch', {
-          key: currentSessionKey,
-          model: fallbackModel,
+      const fallbackModel = defaultModelRef || allowedModelRefs[0];
+      if (fallbackModel) {
+        try {
+          await get().setSessionModel(fallbackModel);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          set({
+            error: `Current session model is unavailable, and switching to ${fallbackModel} failed: ${message}`,
+          });
+          return;
+        }
+      } else {
+        set({
+          error: 'Current session model is unavailable. Configure or choose another model before sending.',
         });
-        set((s) => ({
-          sessions: s.sessions.map((session) => (
-            session.key === currentSessionKey
-              ? {
-                ...session,
-                model: fallbackModel === 'default' ? undefined : modelOverride,
-                modelProvider: providerOverride ?? session.modelProvider,
-              }
-              : session
-          )),
-        }));
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        set({ error: message });
         return;
       }
     }
