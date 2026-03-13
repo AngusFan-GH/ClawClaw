@@ -558,8 +558,10 @@ export async function listConfiguredChannels(): Promise<string[]> {
     const config = await readOpenClawConfig();
     const channels = new Set<string>();
 
-    for (const channelType of await listConfiguredChannelsFromCli()) {
-        channels.add(channelType);
+    if (process.platform !== 'win32') {
+        for (const channelType of await listConfiguredChannelsFromCli()) {
+            channels.add(channelType);
+        }
     }
 
     if (config.channels) {

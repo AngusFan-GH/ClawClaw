@@ -1,6 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { spawn } from 'node:child_process';
 import { utilityProcess } from 'electron';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import {
   type ProviderConfig,
 } from '../../utils/secure-storage';
@@ -64,6 +67,31 @@ function isWindowsModelsJsonRenameError(error: unknown): boolean {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function readMainAgentModelsJsonEntries(): Promise<OpenClawModelEntry[]> {
+  const modelsPath = join(homedir(), '.openclaw', 'agents', 'main', 'agent', 'models.json');
+  try {
+    const raw = await readFile(modelsPath, 'utf8');
+    const parsed = JSON.parse(raw) as {
+      providers?: Record<string, { models?: Array<{ id?: string; name?: string }> }>;
+    };
+    const providers = parsed?.providers ?? {};
+    const entries: OpenClawModelEntry[] = [];
+    for (const [providerKey, provider] of Object.entries(providers)) {
+      for (const model of provider?.models ?? []) {
+        if (!model?.id) continue;
+        entries.push({
+          key: `${providerKey}/${model.id}`,
+          name: model.name || model.id,
+          available: true,
+        });
+      }
+    }
+    return entries;
+  } catch {
+    return [];
+  }
 }
 
 async function runSerializedOpenClawModelList<T>(task: () => Promise<T>): Promise<T> {
@@ -141,6 +169,10 @@ async function fetchOpenClawModelListOnce(scope: OpenClawModelScope): Promise<Op
 }
 
 async function fetchOpenClawModelList(scope: OpenClawModelScope): Promise<OpenClawModelEntry[]> {
+  if (process.platform === 'win32') {
+    return await readMainAgentModelsJsonEntries();
+  }
+
   let attempt = 0;
   for (;;) {
     try {
