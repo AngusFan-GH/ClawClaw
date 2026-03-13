@@ -2,8 +2,8 @@
  * Setup Wizard Page
  * First-time setup experience for new users
  */
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   AlertCircle,
@@ -23,6 +23,7 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { useGatewayStore } from '@/stores/gateway';
+import { useProviderStore } from '@/stores/providers';
 import { useSettingsStore } from '@/stores/settings';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -30,89 +31,69 @@ import { toast } from 'sonner';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { subscribeHostEvent } from '@/lib/host-events';
-interface SetupStep {
-  id: string;
-  title: string;
-  description: string;
-}
-
-type LocalModelPresetSummary = {
-  id: string;
-  name: string;
-  modelId: string;
-  baseUrl: string;
-};
 
 const STEP = {
-  WELCOME: 0,
-  RUNTIME: 1,
-  PROVIDER: 2,
-  INSTALLING: 3,
-  COMPLETE: 4,
+  RUNTIME: 0,
+  INSTALLING: 1,
+  MODEL_CONFIG: 2,
+  COMPLETE: 3,
 } as const;
 
-const getSteps = (t: TFunction): SetupStep[] => [
-  {
-    id: 'welcome',
-    title: t('steps.welcome.title'),
-    description: t('steps.welcome.description'),
-  },
-  {
-    id: 'runtime',
-    title: t('steps.runtime.title'),
-    description: t('steps.runtime.description'),
-  },
-  {
-    id: 'provider',
-    title: t('steps.provider.title'),
-    description: t('steps.provider.description'),
-  },
-  {
-    id: 'installing',
-    title: t('steps.installing.title'),
-    description: t('steps.installing.description'),
-  },
-  {
-    id: 'complete',
-    title: t('steps.complete.title'),
-    description: t('steps.complete.description'),
-  },
-];
-
-// Default skills to auto-install (no additional API keys required)
-interface DefaultSkill {
+// Actual runtime dependencies installed during setup
+interface SetupDependency {
   id: string;
   name: string;
   description: string;
 }
 
-const getDefaultSkills = (t: TFunction): DefaultSkill[] => [
+type SetupProviderModelOption = {
+  id: string;
+  name: string;
+};
+
+type ResolvedProviderModelResponse = {
+  runtimeProviderId?: string;
+  models: SetupProviderModelOption[];
+  resolved?: boolean;
+  source?: string;
+  error?: string;
+};
+
+const getSetupDependencies = (t: TFunction): SetupDependency[] => [
   {
-    id: 'opencode',
-    name: t('defaultSkills.opencode.name'),
-    description: t('defaultSkills.opencode.description'),
+    id: 'uv',
+    name: t('dependencies.uv.name'),
+    description: t('dependencies.uv.description'),
   },
   {
-    id: 'python-env',
-    name: t('defaultSkills.python-env.name'),
-    description: t('defaultSkills.python-env.description'),
-  },
-  {
-    id: 'code-assist',
-    name: t('defaultSkills.code-assist.name'),
-    description: t('defaultSkills.code-assist.description'),
-  },
-  {
-    id: 'file-tools',
-    name: t('defaultSkills.file-tools.name'),
-    description: t('defaultSkills.file-tools.description'),
-  },
-  {
-    id: 'terminal',
-    name: t('defaultSkills.terminal.name'),
-    description: t('defaultSkills.terminal.description'),
+    id: 'managed-python',
+    name: t('dependencies.managedPython.name'),
+    description: t('dependencies.managedPython.description'),
   },
 ];
+
+function isLocalModelProviderAccount(account: ProviderAccount): boolean {
+  return account.vendorId === 'local-model' && account.metadata?.localModelProvider === true;
+}
+
+async function resolveLocalProviderModels(payload: {
+  accountId: string;
+  baseUrl?: string;
+  apiProtocol?: ProviderAccount['apiProtocol'];
+  apiKey?: string | null;
+}): Promise<ResolvedProviderModelResponse> {
+  return hostApiFetch<ResolvedProviderModelResponse>('/api/provider-model-options/resolve', {
+    method: 'POST',
+    body: JSON.stringify({
+      vendorId: 'local-model',
+      authMode: 'api_key',
+      accountId: payload.accountId,
+      baseUrl: payload.baseUrl,
+      apiProtocol: payload.apiProtocol,
+      apiKey: payload.apiKey ?? undefined,
+    }),
+  });
+}
 
 import {
   SETUP_PROVIDERS,
@@ -130,10 +111,7 @@ import {
   hasConfiguredCredentials,
   pickPreferredAccount,
 } from '@/lib/provider-accounts';
-import clawclawIcon from '@/assets/logo.svg';
-
-// Use the shared provider registry for setup providers
-const providers = SETUP_PROVIDERS;
+import clawclawLogoFull from '@/assets/logo-full.svg';
 
 // NOTE: Channel types moved to Settings > Channels page
 // NOTE: Skill bundles moved to Settings > Skills page - auto-install essential skills during setup
@@ -141,30 +119,33 @@ const providers = SETUP_PROVIDERS;
 export function Setup() {
   const { t } = useTranslation(['setup', 'channels']);
   const navigate = useNavigate();
-  const [currentStep, setCurrentStep] = useState<number>(STEP.WELCOME);
+  const location = useLocation();
+  const [currentStep, setCurrentStep] = useState<number>(STEP.RUNTIME);
   // Runtime check status
   const [runtimeChecksPassed, setRuntimeChecksPassed] = useState(false);
+  const [hasConfiguredModels, setHasConfiguredModels] = useState(false);
 
   const safeStepIndex = Number.isInteger(currentStep)
-    ? Math.min(Math.max(currentStep, STEP.WELCOME), STEP.INSTALLING)
-    : STEP.WELCOME;
+    ? Math.min(Math.max(currentStep, STEP.RUNTIME), STEP.COMPLETE)
+    : STEP.RUNTIME;
   const markSetupComplete = useSettingsStore((state) => state.markSetupComplete);
+  const completingRef = useRef(false);
 
-  // Auto-proceed when installation is complete
-  const handleInstallationComplete = useCallback((_skills: string[]) => {
-    window.setTimeout(() => {
-      markSetupComplete();
-      navigate('/');
-    }, 700);
-  }, [markSetupComplete, navigate]);
-
-  useEffect(() => {
-    if (safeStepIndex !== STEP.WELCOME) return;
-    const timer = setTimeout(() => {
-      setCurrentStep(STEP.RUNTIME);
-    }, 1200);
-    return () => clearTimeout(timer);
-  }, [safeStepIndex]);
+  const refreshConfiguredModelStatus = useCallback(async () => {
+    try {
+      const snapshot = await fetchProviderSnapshot();
+      const nextHasConfiguredModels = snapshot.accounts.some((account) => (
+        account.enabled
+        && !account.metadata?.localModelProvider
+        && Boolean(account.model?.trim())
+      ));
+      setHasConfiguredModels(nextHasConfiguredModels);
+      return nextHasConfiguredModels;
+    } catch {
+      setHasConfiguredModels(false);
+      return false;
+    }
+  }, []);
 
   useEffect(() => {
     if (safeStepIndex !== STEP.RUNTIME || !runtimeChecksPassed) return;
@@ -174,37 +155,75 @@ export function Setup() {
     return () => clearTimeout(timer);
   }, [runtimeChecksPassed, safeStepIndex]);
 
+  useEffect(() => {
+    const search = new URLSearchParams(location.search);
+    if (search.get('step') === 'complete') {
+      queueMicrotask(() => {
+        setCurrentStep(STEP.COMPLETE);
+      });
+    }
+  }, [location.search]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void refreshConfiguredModelStatus();
+    });
+  }, [refreshConfiguredModelStatus, location.key]);
+
+  useEffect(() => {
+    if (safeStepIndex !== STEP.MODEL_CONFIG || !hasConfiguredModels) return;
+    queueMicrotask(() => {
+      setCurrentStep(STEP.COMPLETE);
+    });
+  }, [hasConfiguredModels, safeStepIndex]);
+
+  useEffect(() => {
+    if (safeStepIndex !== STEP.COMPLETE || completingRef.current) return;
+    completingRef.current = true;
+    const timer = window.setTimeout(() => {
+      markSetupComplete();
+      navigate('/');
+    }, 900);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [markSetupComplete, navigate, safeStepIndex]);
+
+  const handleInstallationComplete = useCallback((_skills: string[]) => {
+    setCurrentStep(STEP.MODEL_CONFIG);
+  }, []);
+
   const progressPercent =
-    safeStepIndex === STEP.WELCOME ? 12 :
-      safeStepIndex === STEP.RUNTIME ? 42 :
-        safeStepIndex === STEP.INSTALLING ? 82 : 100;
+    safeStepIndex === STEP.RUNTIME ? 28 :
+      safeStepIndex === STEP.INSTALLING ? 62 :
+        safeStepIndex === STEP.MODEL_CONFIG ? 86 : 100;
+
+  const currentStepTitle =
+    safeStepIndex === STEP.RUNTIME
+      ? t('steps.runtime.title')
+      : safeStepIndex === STEP.INSTALLING
+        ? t('steps.installing.title')
+        : safeStepIndex === STEP.MODEL_CONFIG
+          ? t('steps.modelConfig.title')
+          : t('steps.complete.title');
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       <TitleBar />
-      <div className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-2xl px-6 pb-10 pt-16 md:px-8 md:pt-20">
-          <div className="mb-10 text-center">
+      <div className="flex flex-1 items-center justify-center overflow-auto px-6 py-8 md:px-8 md:py-10">
+        <div className="flex w-full max-w-3xl flex-col justify-center">
+          <div className="mb-6 text-center">
             <div className="mb-6 flex justify-center">
-              <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-border/70 bg-muted/40 shadow-sm">
-                <img src={clawclawIcon} alt="ClawClaw" className="h-12 w-12" />
-              </div>
+              <img src={clawclawLogoFull} alt="ClawClaw" className="h-16 w-auto" />
             </div>
-            <h1 className="mb-3 text-4xl font-semibold tracking-tight">{t('welcome.title')}</h1>
-            <p className="mx-auto max-w-xl text-base text-muted-foreground">
-              {t('welcome.description')}
-            </p>
+            <h1 className="text-4xl font-semibold tracking-tight">{t('welcome.title')}</h1>
           </div>
 
-          <div className="mb-6 rounded-3xl border border-border/70 bg-card/90 p-8 text-card-foreground shadow-sm md:p-10">
-            <div className="mb-6">
+          <div className="rounded-3xl border border-border/70 bg-card/90 p-6 text-card-foreground shadow-sm md:p-8">
+            <div className="mb-5">
               <div className="mb-2 flex items-center justify-between text-sm">
                 <span className="font-medium text-foreground">
-                  {safeStepIndex === STEP.WELCOME
-                    ? t('steps.welcome.title')
-                    : safeStepIndex === STEP.RUNTIME
-                      ? t('steps.runtime.title')
-                      : t('steps.installing.title')}
+                  {currentStepTitle}
                 </span>
                 <span className="text-muted-foreground">{progressPercent}%</span>
               </div>
@@ -218,28 +237,31 @@ export function Setup() {
               </div>
             </div>
 
-            {safeStepIndex === STEP.WELCOME && <WelcomeContent />}
             {safeStepIndex === STEP.RUNTIME && (
               <RuntimeContent onStatusChange={setRuntimeChecksPassed} />
             )}
             {safeStepIndex === STEP.INSTALLING && (
               <InstallingContent
-                skills={getDefaultSkills(t)}
+                dependencies={getSetupDependencies(t)}
                 onComplete={handleInstallationComplete}
+              />
+            )}
+          {safeStepIndex === STEP.MODEL_CONFIG && (
+              <ModelSetupContent
+                hasConfiguredModels={hasConfiguredModels}
+                onRefreshConfigured={refreshConfiguredModelStatus}
+                onSkip={() => queueMicrotask(() => setCurrentStep(STEP.COMPLETE))}
+              />
+            )}
+            {safeStepIndex === STEP.COMPLETE && (
+              <CompleteContent
+                modelConfigured={hasConfiguredModels}
               />
             )}
           </div>
         </div>
       </div>
     </div>
-  );
-}
-
-// ==================== Step Content Components ====================
-
-function WelcomeContent() {
-  return (
-    <div className="h-2" />
   );
 }
 
@@ -308,7 +330,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
           },
         }));
       }
-    } catch (error) {
+    } catch {
       setChecks((prev) => ({
         ...prev,
         openclaw: { status: 'error', message: t('runtime.status.error') },
@@ -348,7 +370,9 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
   }, [t]);
 
   useEffect(() => {
-    runChecks();
+    queueMicrotask(() => {
+      void runChecks();
+    });
   }, [runChecks]);
 
   useEffect(() => {
@@ -362,10 +386,12 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
     }
 
     gatewayStartAttemptedRef.current = true;
-    setChecks((prev) => ({
-      ...prev,
-      gateway: { status: 'checking', message: t('runtime.status.checking') },
-    }));
+    queueMicrotask(() => {
+      setChecks((prev) => ({
+        ...prev,
+        gateway: { status: 'checking', message: t('runtime.status.checking') },
+      }));
+    });
     void startGateway();
   }, [checks.openclaw.status, gatewayStatus.state, startGateway, t]);
 
@@ -381,28 +407,36 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
   // Update gateway check when gateway status changes
   useEffect(() => {
     if (gatewayStatus.state === 'running') {
-      setChecks((prev) => ({
-        ...prev,
-        gateway: {
-          status: 'success',
-          message: t('runtime.status.gatewayRunning', { port: gatewayStatus.port || 18789 }),
-        },
-      }));
+      queueMicrotask(() => {
+        setChecks((prev) => ({
+          ...prev,
+          gateway: {
+            status: 'success',
+            message: t('runtime.status.gatewayRunning', { port: gatewayStatus.port || 18789 }),
+          },
+        }));
+      });
     } else if (gatewayStatus.state === 'error') {
-      setChecks((prev) => ({
-        ...prev,
-        gateway: { status: 'error', message: gatewayStatus.error || t('runtime.status.error') },
-      }));
+      queueMicrotask(() => {
+        setChecks((prev) => ({
+          ...prev,
+          gateway: { status: 'error', message: gatewayStatus.error || t('runtime.status.error') },
+        }));
+      });
     } else if (gatewayStatus.state === 'starting' || gatewayStatus.state === 'reconnecting') {
-      setChecks((prev) => ({
-        ...prev,
-        gateway: { status: 'checking', message: t('runtime.status.checking') },
-      }));
+      queueMicrotask(() => {
+        setChecks((prev) => ({
+          ...prev,
+          gateway: { status: 'checking', message: t('runtime.status.checking') },
+        }));
+      });
     } else if (gatewayStatus.state === 'stopped' && gatewayStartAttemptedRef.current) {
-      setChecks((prev) => ({
-        ...prev,
-        gateway: { status: 'error', message: gatewayStatus.error || t('runtime.status.error') },
-      }));
+      queueMicrotask(() => {
+        setChecks((prev) => ({
+          ...prev,
+          gateway: { status: 'error', message: gatewayStatus.error || t('runtime.status.error') },
+        }));
+      });
     }
   }, [gatewayStatus, t]);
 
@@ -521,7 +555,7 @@ interface ProviderContentProps {
   onConfiguredChange: (configured: boolean) => void;
 }
 
-function AutoConfiguredLocalModelContent({
+export function AutoConfiguredLocalModelContent({
   configured,
   modelNames,
 }: {
@@ -580,11 +614,6 @@ function AutoConfiguredLocalModelContent({
   );
 }
 
-type ProviderModelOption = {
-  id: string;
-  name: string;
-};
-
 const OPENAI_OAUTH_PREFERRED_MODEL_ID = 'gpt-5.4';
 
 function normalizeOAuthSelectedModel(vendorId: string, modelId?: string | null): string {
@@ -600,7 +629,7 @@ function normalizeOAuthSelectedModel(vendorId: string, modelId?: string | null):
 
 function pickOAuthModelSelection(
   vendorId: string,
-  options: ProviderModelOption[],
+  options: SetupProviderModelOption[],
   preferred?: string | null,
   fallback?: string | null,
 ): string {
@@ -621,7 +650,7 @@ function pickOAuthModelSelection(
   return options[0]?.id || normalizedFallback || normalizedPreferred || '';
 }
 
-function ProviderContent({
+export function ProviderContent({
   providers,
   selectedProvider,
   onSelectProvider,
@@ -657,8 +686,15 @@ function ProviderContent({
   const [oauthManualInput, setOauthManualInput] = useState('');
   const pendingOAuthRef = useRef<{ accountId: string; label: string } | null>(null);
   const [oauthAuthedAccountId, setOauthAuthedAccountId] = useState<string | null>(null);
-  const [oauthModelOptions, setOauthModelOptions] = useState<ProviderModelOption[]>([]);
+  const [oauthModelOptions, setOauthModelOptions] = useState<SetupProviderModelOption[]>([]);
   const [loadingOAuthModels, setLoadingOAuthModels] = useState(false);
+
+  const loadOAuthModelOptions = useCallback(async (vendorId: string, authModeValue: 'oauth_browser' | 'oauth_device') => {
+    const response = await hostApiFetch<{ models: SetupProviderModelOption[] }>(
+      `/api/provider-model-options?vendorId=${encodeURIComponent(vendorId)}&authMode=${encodeURIComponent(authModeValue)}`
+    );
+    return response.models ?? [];
+  }, []);
 
   // Manage OAuth events
   useEffect(() => {
@@ -732,7 +768,7 @@ function ProviderContent({
       offSuccess();
       offError();
     };
-  }, [onConfiguredChange, t]);
+  }, [loadOAuthModelOptions, modelId, onConfiguredChange, selectedProvider, t]);
 
   const handleStartOAuth = async () => {
     if (!selectedProvider) return;
@@ -936,7 +972,7 @@ function ProviderContent({
     setLoadingOAuthModels(false);
   }, [selectedProvider, authMode]);
 
-  const selectedProviderData = providers.find((p) => p.id === selectedProvider);
+  const selectedProviderData = SETUP_PROVIDERS.find((p) => p.id === selectedProvider);
   const selectedProviderIconUrl = selectedProviderData
     ? getProviderIconUrl(selectedProviderData.id)
     : undefined;
@@ -948,13 +984,6 @@ function ProviderContent({
   const useOAuthFlow = isOAuth && (!supportsApiKey || authMode === 'oauth');
   const useOpenAIOAuthModelPicker = selectedProvider === 'openai' && useOAuthFlow;
   const showEditableModelField = showModelIdField && !useOpenAIOAuthModelPicker;
-
-  const loadOAuthModelOptions = async (vendorId: string, authModeValue: 'oauth_browser' | 'oauth_device') => {
-    const response = await hostApiFetch<{ models: ProviderModelOption[] }>(
-      `/api/provider-model-options?vendorId=${encodeURIComponent(vendorId)}&authMode=${encodeURIComponent(authModeValue)}`
-    );
-    return response.models ?? [];
-  };
 
   const handleValidateAndSave = async () => {
     if (!selectedProvider) return;
@@ -1555,16 +1584,15 @@ interface SkillInstallState {
 }
 
 interface InstallingContentProps {
-  skills: DefaultSkill[];
+  dependencies: SetupDependency[];
   onComplete: (installedSkills: string[]) => void;
 }
 
-function InstallingContent({ skills, onComplete }: InstallingContentProps) {
+function InstallingContent({ dependencies, onComplete }: InstallingContentProps) {
   const { t } = useTranslation('setup');
   const [skillStates, setSkillStates] = useState<SkillInstallState[]>(
-    skills.map((s) => ({ ...s, status: 'pending' as InstallStatus }))
+    dependencies.map((dependency) => ({ ...dependency, status: 'pending' as InstallStatus }))
   );
-  const [overallProgress, setOverallProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const installStarted = useRef(false);
 
@@ -1577,7 +1605,6 @@ function InstallingContent({ skills, onComplete }: InstallingContentProps) {
       try {
         // Step 1: Initialize all skills to 'installing' state for UI
         setSkillStates((prev) => prev.map((s) => ({ ...s, status: 'installing' })));
-        setOverallProgress(10);
 
         // Step 2: Call the backend to install uv and setup Python
         const result = (await invokeIpc('uv:install-all')) as {
@@ -1587,10 +1614,9 @@ function InstallingContent({ skills, onComplete }: InstallingContentProps) {
 
         if (result.success) {
           setSkillStates((prev) => prev.map((s) => ({ ...s, status: 'completed' })));
-          setOverallProgress(100);
 
           await new Promise((resolve) => setTimeout(resolve, 800));
-          onComplete(skills.map((s) => s.id));
+          onComplete(dependencies.map((dependency) => dependency.id));
         } else {
           setSkillStates((prev) => prev.map((s) => ({ ...s, status: 'failed' })));
           setErrorMessage(result.error || 'Unknown error during installation');
@@ -1604,15 +1630,44 @@ function InstallingContent({ skills, onComplete }: InstallingContentProps) {
     };
 
     runRealInstall();
-  }, [skills, onComplete]);
+  }, [dependencies, onComplete]);
 
   return (
-    <div className="space-y-4 text-center">
-      <div className="text-center">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50">
-          <LoadingIcon className="h-8 w-8 text-blue-600" />
-        </div>
-        <p className="text-base text-muted-foreground">{t('installing.subtitle')}</p>
+    <div className="space-y-5">
+      <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-muted/30 px-4 py-3">
+        <LoadingIcon className="h-5 w-5 text-primary" />
+        <p className="text-sm text-muted-foreground">{t('installing.subtitle')}</p>
+      </div>
+
+      <div className="space-y-3">
+        {skillStates.map((skill) => (
+          <div key={skill.id} className="flex items-start justify-between gap-4 rounded-xl border border-border/70 bg-card/70 px-4 py-3">
+            <div>
+              <p className="font-medium text-foreground">{skill.name}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{skill.description}</p>
+            </div>
+            <div className="shrink-0 pt-0.5 text-sm">
+              {skill.status === 'completed' ? (
+                <span className="inline-flex items-center gap-2 text-green-600 dark:text-green-400">
+                  <CheckCircle2 className="h-4 w-4" />
+                  {t('installing.status.installed')}
+                </span>
+              ) : skill.status === 'failed' ? (
+                <span className="inline-flex items-center gap-2 text-red-600 dark:text-red-400">
+                  <XCircle className="h-4 w-4" />
+                  {t('installing.status.failed')}
+                </span>
+              ) : skill.status === 'installing' ? (
+                <span className="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                  <LoadingIcon className="h-4 w-4" />
+                  {t('installing.status.installing')}
+                </span>
+              ) : (
+                <span className="text-muted-foreground">{t('installing.status.pending')}</span>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
 
       {errorMessage ? (
@@ -1638,34 +1693,479 @@ function InstallingContent({ skills, onComplete }: InstallingContentProps) {
             </div>
           </div>
         </motion.div>
-      ) : (
-        <div className="text-sm text-slate-400">
-          {t('installing.wait')}
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }
-interface CompleteContentProps {
-  selectedProvider: string | null;
-  installedSkills: string[];
-}
 
-function CompleteContent({ selectedProvider, installedSkills }: CompleteContentProps) {
-  const { t } = useTranslation(['setup', 'settings']);
+function ModelSetupContent({
+  hasConfiguredModels,
+  onRefreshConfigured,
+  onSkip,
+}: {
+  hasConfiguredModels: boolean;
+  onRefreshConfigured: () => Promise<boolean>;
+  onSkip: () => void;
+}) {
+  const { t } = useTranslation('setup');
+  const {
+    accounts,
+    refreshProviderSnapshot,
+    createAccount,
+    updateAccount,
+    setDefaultAccount,
+    getAccountApiKey,
+  } = useProviderStore();
+  const [refreshing, setRefreshing] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
+  const [apiProtocol, setApiProtocol] = useState<ProviderAccount['apiProtocol']>('openai-completions');
+  const [modelName, setModelName] = useState('');
+  const [modelId, setModelId] = useState('');
+  const [modelOptions, setModelOptions] = useState<SetupProviderModelOption[]>([]);
+  const [providerReady, setProviderReady] = useState(false);
+  const [manualMode, setManualMode] = useState(false);
+  const [savingProvider, setSavingProvider] = useState(false);
+  const [savingModel, setSavingModel] = useState(false);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [editingProvider, setEditingProvider] = useState(true);
+
+  const localProviderAccount = useMemo(
+    () => accounts.find((account) => isLocalModelProviderAccount(account)) ?? null,
+    [accounts],
+  );
+  const localModelAccounts = useMemo(
+    () => accounts.filter((account) => account.vendorId === 'local-model' && !account.metadata?.localModelProvider),
+    [accounts],
+  );
+
+  useEffect(() => {
+    if (!localProviderAccount) {
+      setProviderReady(false);
+      setModelOptions([]);
+      setEditingProvider(true);
+      return;
+    }
+
+    setProviderReady(true);
+    setEditingProvider(false);
+    setBaseUrl((current) => current || localProviderAccount.baseUrl || '');
+    setApiProtocol((current) => current || localProviderAccount.apiProtocol || 'openai-completions');
+  }, [localProviderAccount]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadStoredApiKey = async () => {
+      if (!localProviderAccount) {
+        setApiKey('');
+        return;
+      }
+      const storedApiKey = await getAccountApiKey(localProviderAccount.id);
+      if (!cancelled) {
+        setApiKey(storedApiKey || '');
+      }
+    };
+
+    void loadStoredApiKey();
+    return () => {
+      cancelled = true;
+    };
+  }, [getAccountApiKey, localProviderAccount]);
+
+  const handleResolveModels = useCallback(async (accountId: string, nextApiKey: string, nextBaseUrl: string, nextProtocol: ProviderAccount['apiProtocol']) => {
+    setLoadingModels(true);
+    setFormError(null);
+    try {
+      const response = await resolveLocalProviderModels({
+        accountId,
+        apiKey: nextApiKey,
+        baseUrl: nextBaseUrl,
+        apiProtocol: nextProtocol,
+      });
+      const options = Array.isArray(response.models) ? response.models : [];
+      setModelOptions(options);
+      if (options.length > 0) {
+        setManualMode(false);
+        setModelId((current) => current || options[0].id);
+        setModelName((current) => current || options[0].name || options[0].id);
+      } else {
+        setManualMode(true);
+        setFormError(response.error || t('modelSetup.manualDescription'));
+      }
+      return options;
+    } finally {
+      setLoadingModels(false);
+    }
+  }, [t]);
+
+  const handleRefresh = async () => {
+    try {
+      setRefreshing(true);
+      await onRefreshConfigured();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleSaveProvider = async () => {
+    const trimmedApiKey = apiKey.trim();
+    const trimmedBaseUrl = baseUrl.trim();
+    if (!trimmedApiKey || !trimmedBaseUrl) {
+      setFormError(t('modelSetup.providerRequired'));
+      return;
+    }
+
+    setSavingProvider(true);
+    setFormError(null);
+
+    const now = new Date().toISOString();
+    const accountId = localProviderAccount?.id ?? `local-model-provider-${crypto.randomUUID()}`;
+
+    try {
+      if (localProviderAccount) {
+        await updateAccount(accountId, {
+          label: '本地模型',
+          authMode: 'api_key',
+          baseUrl: trimmedBaseUrl,
+          apiProtocol,
+          enabled: true,
+          metadata: {
+            localModelProvider: true,
+          },
+          updatedAt: now,
+        }, trimmedApiKey);
+
+        for (const modelAccount of localModelAccounts) {
+          await updateAccount(modelAccount.id, {
+            baseUrl: trimmedBaseUrl,
+            apiProtocol,
+            updatedAt: now,
+          }, trimmedApiKey);
+        }
+      } else {
+        await createAccount({
+          id: accountId,
+          vendorId: 'local-model',
+          label: '本地模型',
+          authMode: 'api_key',
+          baseUrl: trimmedBaseUrl,
+          apiProtocol,
+          enabled: true,
+          isDefault: false,
+          metadata: {
+            localModelProvider: true,
+          },
+          createdAt: now,
+          updatedAt: now,
+        }, trimmedApiKey);
+      }
+
+      await refreshProviderSnapshot();
+      setProviderReady(true);
+      setEditingProvider(false);
+      await handleResolveModels(accountId, trimmedApiKey, trimmedBaseUrl, apiProtocol);
+    } catch (error) {
+      setFormError(String(error));
+    } finally {
+      setSavingProvider(false);
+    }
+  };
+
+  const handleAddModel = async () => {
+    const trimmedModelId = modelId.trim();
+    const trimmedModelName = modelName.trim();
+    if (!providerReady || !localProviderAccount) {
+      setFormError(t('modelSetup.providerRequired'));
+      return;
+    }
+    if (!trimmedModelId || !trimmedModelName) {
+      setFormError(t('modelSetup.modelRequired'));
+      return;
+    }
+
+    setSavingModel(true);
+    setFormError(null);
+    try {
+      const existing = localModelAccounts.find((account) => account.model?.trim() === trimmedModelId);
+      if (existing) {
+        await setDefaultAccount(existing.id);
+      } else {
+        const now = new Date().toISOString();
+        const modelAccountId = `local-model-${crypto.randomUUID()}`;
+        await createAccount({
+          id: modelAccountId,
+          vendorId: 'local-model',
+          label: trimmedModelName,
+          authMode: 'api_key',
+          baseUrl: localProviderAccount.baseUrl,
+          apiProtocol: localProviderAccount.apiProtocol || 'openai-completions',
+          model: trimmedModelId,
+          enabled: true,
+          isDefault: false,
+          metadata: {
+            localModel: true,
+          },
+          createdAt: now,
+          updatedAt: now,
+        }, apiKey.trim() || undefined);
+        await setDefaultAccount(modelAccountId);
+      }
+
+      await onRefreshConfigured();
+    } catch (error) {
+      setFormError(String(error));
+    } finally {
+      setSavingModel(false);
+    }
+  };
+
+  if (hasConfiguredModels) {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-2xl border border-border/70 bg-muted/35 p-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-full bg-green-500/15 text-green-600 dark:text-green-400">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+            <div className="space-y-1">
+              <p className="font-medium text-foreground">{t('modelSetup.configuredTitle')}</p>
+              <p className="text-sm text-muted-foreground">{t('modelSetup.configuredDescription')}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-center">
+          <Button
+            variant="ghost"
+            onClick={() => void handleRefresh()}
+            disabled={refreshing}
+            className="h-11 rounded-xl px-6"
+          >
+            {refreshing ? <LoadingIcon className="mr-2 h-4 w-4" /> : null}
+            {t('modelSetup.refresh')}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-4 text-center">
+    <div className="space-y-3">
+      <div className="rounded-2xl border border-border/70 bg-muted/35 px-4 py-2.5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/12 text-blue-600 dark:text-blue-400">
+            <AlertCircle className="h-5 w-5" />
+          </div>
+          <p className="text-sm text-muted-foreground">{t('modelSetup.description')}</p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-border/70 bg-card/70 p-4">
+        <div className="mb-3 flex items-center gap-2 text-sm">
+          <div className={cn(
+            'inline-flex items-center gap-2 rounded-full px-3 py-1 font-medium',
+            !providerReady || editingProvider
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-green-500/12 text-green-700 dark:bg-green-400/12 dark:text-green-200'
+          )}>
+            <span className="text-xs">1</span>
+            <span>{t('modelSetup.stepProvider')}</span>
+          </div>
+          <div className="h-px flex-1 bg-border/70" />
+          <div className={cn(
+            'inline-flex items-center gap-2 rounded-full px-3 py-1 font-medium',
+            providerReady && !editingProvider
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted/50 text-muted-foreground'
+          )}>
+            <span className="text-xs">2</span>
+            <span>{t('modelSetup.stepModel')}</span>
+          </div>
+        </div>
+
+        {!providerReady || editingProvider ? (
+          <>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="min-w-0 space-y-2">
+                <Label htmlFor="setup-local-api-key">{t('modelSetup.apiKey')}</Label>
+                <Input
+                  id="setup-local-api-key"
+                  type="password"
+                  value={apiKey}
+                  onChange={(event) => setApiKey(event.target.value)}
+                  placeholder={t('modelSetup.apiKeyPlaceholder')}
+                  className="h-11 rounded-xl"
+                />
+              </div>
+              <div className="min-w-0 space-y-2">
+                <Label htmlFor="setup-local-base-url">{t('modelSetup.baseUrl')}</Label>
+                <Input
+                  id="setup-local-base-url"
+                  value={baseUrl}
+                  onChange={(event) => setBaseUrl(event.target.value)}
+                  placeholder={t('modelSetup.baseUrlPlaceholder')}
+                  className="h-11 rounded-xl"
+                />
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="inline-flex rounded-xl border border-border bg-muted/35 p-1">
+                  {([
+                    ['openai-completions', t('modelSetup.protocolOpenAI')],
+                    ['anthropic-messages', t('modelSetup.protocolAnthropic')],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={cn(
+                        'h-9 min-w-[132px] rounded-lg px-4 text-sm font-medium transition-colors',
+                        apiProtocol === value
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-foreground hover:bg-background'
+                      )}
+                      onClick={() => setApiProtocol(value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                <Button onClick={() => void handleSaveProvider()} disabled={savingProvider || loadingModels} className="h-10 rounded-xl px-5">
+                  {(savingProvider || loadingModels) ? <LoadingIcon className="mr-2 h-4 w-4" /> : null}
+                  {t('modelSetup.connectProvider')}
+                </Button>
+                <Button variant="outline" onClick={onSkip} className="h-10 rounded-xl px-5">
+                  {t('modelSetup.skip')}
+                </Button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-2.5">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{t('modelSetup.providerConnected')}</span>
+              <span className="truncate max-w-[360px]">{baseUrl}</span>
+              <span>·</span>
+              <span>{apiProtocol === 'anthropic-messages' ? t('modelSetup.protocolAnthropic') : t('modelSetup.protocolOpenAI')}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto h-7 rounded-lg px-2.5 text-xs"
+                onClick={() => setEditingProvider(true)}
+              >
+                {t('modelSetup.editProvider')}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 rounded-lg px-2.5 text-xs"
+                onClick={() => void handleRefresh()}
+                disabled={refreshing}
+              >
+                {refreshing ? <LoadingIcon className="mr-2 h-4 w-4" /> : null}
+                {t('modelSetup.refresh')}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {providerReady && !editingProvider ? (
+          <div className="mt-4 border-t border-border/60 pt-4">
+            <p className="mb-3 text-sm text-muted-foreground">
+              {modelOptions.length > 0 ? t('modelSetup.pickModelDescription') : t('modelSetup.manualDescription')}
+            </p>
+
+            <div className="grid gap-3 lg:grid-cols-12">
+              {modelOptions.length > 0 ? (
+                <div className="space-y-2 lg:col-span-6">
+                  <Label htmlFor="setup-local-model-option">{t('modelSetup.model')}</Label>
+                  <select
+                    id="setup-local-model-option"
+                    value={modelId}
+                    onChange={(event) => {
+                      const selectedId = event.target.value;
+                      const selected = modelOptions.find((option) => option.id === selectedId);
+                      setModelId(selectedId);
+                      setModelName(selected?.name || selectedId);
+                    }}
+                    className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-primary"
+                  >
+                    {modelOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.name || option.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+              <div className={cn('space-y-2', modelOptions.length > 0 ? 'lg:col-span-4' : 'lg:col-span-5')}>
+                <Label htmlFor="setup-local-model-name">{t('modelSetup.modelName')}</Label>
+                <Input
+                  id="setup-local-model-name"
+                  value={modelName}
+                  onChange={(event) => setModelName(event.target.value)}
+                  placeholder={t('modelSetup.modelNamePlaceholder')}
+                  className="h-11 rounded-xl"
+                />
+              </div>
+              {modelOptions.length === 0 ? (
+                <div className="space-y-2 lg:col-span-5">
+                  <Label htmlFor="setup-local-model-id">{t('modelSetup.modelId')}</Label>
+                  <Input
+                    id="setup-local-model-id"
+                    value={modelId}
+                    onChange={(event) => {
+                      setModelId(event.target.value);
+                      setManualMode(true);
+                    }}
+                    placeholder={t('modelSetup.modelIdPlaceholder')}
+                    className="h-11 rounded-xl"
+                  />
+                </div>
+              ) : null}
+              <div className={cn('flex items-end', modelOptions.length > 0 ? 'lg:col-span-2' : 'lg:col-span-2')}>
+                <Button onClick={() => void handleAddModel()} disabled={savingModel || loadingModels} className="h-11 w-full rounded-xl px-5">
+                  {savingModel ? <LoadingIcon className="mr-2 h-4 w-4" /> : null}
+                  {manualMode || modelOptions.length === 0 ? t('modelSetup.addManualModel') : t('modelSetup.addModel')}
+                </Button>
+              </div>
+            </div>
+
+            {formError ? (
+              <div className="mt-3 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300">
+                {formError}
+              </div>
+            ) : null}
+          </div>
+        ) : formError ? (
+          <div className="mt-3 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300">
+            {formError}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function CompleteContent({ modelConfigured }: { modelConfigured: boolean }) {
+  const { t } = useTranslation('setup');
+
+  return (
+    <div className="space-y-4 py-2 text-center">
       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
         <CheckCircle2 className="h-8 w-8 text-emerald-600" />
       </div>
-      <p className="text-muted-foreground">{t('complete.subtitle')}</p>
-      <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-        {t('complete.autoEnter')}
-      </div>
+      <p className="text-base text-muted-foreground">
+        {modelConfigured ? t('complete.modelConfigured') : t('complete.modelSkipped')}
+      </p>
     </div>
   );
 }
 
 export default Setup;
-

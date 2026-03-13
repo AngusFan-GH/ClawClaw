@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
@@ -86,6 +87,8 @@ async function resolveLocalProviderModels(payload: {
 
 export function Models() {
   const { t } = useTranslation(['dashboard', 'settings']);
+  const location = useLocation();
+  const navigate = useNavigate();
   const gatewayStatus = useGatewayStore((state) => state.status);
   const devModeUnlocked = useSettingsStore((state) => state.devModeUnlocked);
   const {
@@ -100,6 +103,10 @@ export function Models() {
     getAccountApiKey,
   } = useProviderStore();
   const isGatewayRunning = gatewayStatus.state === 'running';
+  const isSetupFlow = useMemo(
+    () => new URLSearchParams(location.search).get('fromSetup') === '1',
+    [location.search],
+  );
 
   const [usageHistory, setUsageHistory] = useState<UsageHistoryEntry[]>([]);
   const [usageGroupBy, setUsageGroupBy] = useState<UsageGroupBy>('model');
@@ -155,6 +162,10 @@ export function Models() {
   );
   const otherModelAccounts = useMemo(
     () => accounts.filter((account) => !isLocalModelAccount(account)),
+    [accounts],
+  );
+  const hasAnyConfiguredModels = useMemo(
+    () => accounts.some((account) => account.enabled && !account.metadata?.localModelProvider && Boolean(account.model?.trim())),
     [accounts],
   );
   const handleDeleteLocalModel = async (accountId: string) => {
@@ -266,6 +277,31 @@ export function Models() {
         />
 
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-1 pb-10">
+          {isSetupFlow ? (
+            <section className="rounded-[10px] border border-blue-500/15 bg-blue-500/[0.04] p-4 sm:p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold tracking-tight text-foreground">
+                    {hasAnyConfiguredModels ? '模型已配置完成' : '完成模型配置后即可继续'}
+                  </h2>
+                  <p className="mt-1 text-[13px] text-muted-foreground">
+                    {hasAnyConfiguredModels
+                      ? '当前已经检测到可用模型。继续后将完成安装并进入聊天主页。'
+                      : '请至少添加一个可用模型。你也可以稍后返回 Setup 跳过这一步。'}
+                  </p>
+                </div>
+                {hasAnyConfiguredModels ? (
+                  <Button
+                    className="h-9 rounded-xl px-4"
+                    onClick={() => navigate('/setup?step=complete')}
+                  >
+                    完成设置
+                  </Button>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
           <section className="rounded-[10px] border border-black/10 bg-[rgba(255,255,255,0.3)] p-4 dark:border-white/10 dark:bg-white/[0.03] sm:p-5">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>

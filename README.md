@@ -40,7 +40,7 @@
 
 Whether you're automating workflows, managing AI-powered channels, or scheduling intelligent tasks, ClawClaw provides the interface you need to harness AI agents effectively.
 
-ClawClaw supports preinstalled local model presets, mainstream cloud providers, and multi-language settings out of the box. Of course, you can also fine-tune advanced configurations via **Settings → Advanced → Developer Mode**.
+ClawClaw supports mainstream cloud providers, local model endpoints, and multi-language settings out of the box. Of course, you can also fine-tune advanced configurations via **Settings → Advanced → Developer Mode**.
 
 ---
 
@@ -78,7 +78,7 @@ Building AI agents shouldn't require mastering the command line. ClawClaw was de
 
 | Challenge                 | ClawClaw Solution                               |
 | ------------------------- | ----------------------------------------------- |
-| Complex CLI setup         | One-click installation with automatic startup flow |
+| Complex CLI setup         | Guided first-launch setup with automatic runtime checks |
 | Configuration files       | Visual settings with real-time validation       |
 | Process management        | Automatic gateway lifecycle management          |
 | Multiple AI providers     | Unified provider configuration panel            |
@@ -96,7 +96,7 @@ We are committed to maintaining strict alignment with the upstream OpenClaw proj
 
 ### 🎯 Zero Configuration Barrier
 
-Complete the entire setup—from installation to your first AI interaction—through an automatic startup flow. No terminal commands, no YAML files, no environment variable hunting.
+Complete the core setup through a guided first-launch flow. ClawClaw checks the runtime, starts the Gateway, installs the default skills, and then walks you to manual model configuration when you are ready.
 
 ### 💬 Intelligent Chat Interface
 
@@ -122,9 +122,9 @@ Connect to multiple AI providers (OpenAI, Anthropic, and more) with API keys or 
 
 Configure denied directories and capability-level runtime restrictions separately. Directory entries are synced into workspace policy docs as guidance, while behavior restrictions can block runtime commands, file access, browser automation, web search, web fetch, and gateway access at the OpenClaw tool layer.
 
-### 💻 Preinstalled Local Models
+### 💻 Flexible Model Setup
 
-If `config/local-model-presets.json` is present, ClawClaw writes every preset into OpenClaw as managed `custom` providers during startup. The first preset becomes the default model automatically, so users can chat immediately after installation without manually enabling a provider.
+ClawClaw no longer forces a bundled model during first launch. After the runtime is ready, you can open **Models** to add a local endpoint or a cloud provider, pick the model you want, or skip that step and finish it later.
 
 ### 🌙 Adaptive Theming
 
@@ -162,10 +162,14 @@ pnpm dev
 
 ### First Launch
 
-When you launch ClawClaw for the first time, the **startup flow** shows a welcome screen, automatically verifies the runtime environment, and finishes the remaining setup.
+When you launch ClawClaw for the first time, the **startup flow** keeps the welcome shell visible on every step and then runs:
 
-- If preinstalled local model presets exist, they are already written into OpenClaw before the wizard completes.
-- If no presets exist, you can add a provider manually later from **Models** or **Settings → AI Providers**.
+1. automatic runtime checks
+2. automatic Gateway startup
+3. automatic installation of the default skills
+4. an optional model-configuration step
+
+Model configuration is now manual. You can jump to **Models** from setup to add a local model or a cloud provider, or skip that step and finish it later.
 
 > Note for Moonshot (Kimi): ClawClaw keeps Kimi web search enabled by default.  
 > When Moonshot is configured, ClawClaw also syncs Kimi web search to the China endpoint (`https://api.moonshot.cn/v1`) in OpenClaw config.

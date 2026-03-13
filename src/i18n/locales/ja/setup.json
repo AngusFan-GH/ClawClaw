@@ -8,6 +8,10 @@
             "title": "環境チェック",
             "description": "システム要件を確認中"
         },
+        "modelConfig": {
+            "title": "モデルを設定",
+            "description": "少なくとも 1 つの利用可能なモデルを追加するか、いったんスキップします"
+        },
         "provider": {
             "title": "AIプロバイダー",
             "description": "AIサービスを構成"
@@ -30,8 +34,8 @@
         }
     },
     "welcome": {
-        "title": "ClawClawへようこそ",
-        "description": "ClawClawはOpenClawのグラフィカルインターフェースで、お気に入りのメッセージングプラットフォームでAIアシスタントを簡単に使用できます。",
+        "title": "ようこそ",
+        "description": "",
         "autoContinue": "初期化を自動で進めています。しばらくお待ちください。",
         "features": {
             "noCommand": "コマンドライン不要",
@@ -100,8 +104,8 @@
         "configureAnother": "別のチャンネルを構成"
     },
     "installing": {
-        "title": "必須コンポーネントをインストール中",
-        "subtitle": "AIアシスタントに必要なツールをセットアップしています",
+        "title": "ランタイム依存関係を準備中",
+        "subtitle": "OpenClaw の実行に必要な基本依存関係をインストールしています",
         "progress": "進捗",
         "status": {
             "pending": "待機中",
@@ -114,9 +118,47 @@
         "wait": "これには少し時間がかかる場合があります...",
         "skip": "この手順をスキップ"
     },
+    "modelSetup": {
+        "title": "モデルを設定",
+        "description": "既定モデルは同梱されなくなりました。すぐに会話を始めるには、少なくとも 1 つの利用可能なモデルを追加してください。",
+        "configuredTitle": "利用可能なモデルが見つかりました",
+        "configuredDescription": "少なくとも 1 つのモデルがすでに設定されています。このままセットアップを完了するか、モデルページで内容を確認できます。",
+        "pendingTitle": "まだモデルが設定されていません",
+        "pendingDescription": "まずローカルモデルプロバイダーに接続し、そのあと利用可能なモデルを 1 つ選んで設定を完了してください。",
+        "apiKey": "API キー",
+        "apiKeyPlaceholder": "API キーを入力してください",
+        "baseUrl": "Base URL",
+        "baseUrlPlaceholder": "https://api.example.com/v1",
+        "protocol": "プロトコル",
+        "protocolOpenAI": "OpenAI 互換",
+        "protocolAnthropic": "Anthropic 互換",
+        "stepProvider": "サービス接続",
+        "stepModel": "モデル追加",
+        "providerConnected": "接続済みサービス",
+        "editProvider": "変更",
+        "connectProvider": "接続してモデルを取得",
+        "refreshModels": "モデルを再取得",
+        "pickModelTitle": "モデルを選択",
+        "pickModelDescription": "ローカルプロバイダーに接続済みです。モデルを選んで表示名を設定してください。",
+        "manualTitle": "モデルを手動追加",
+        "manualDescription": "モデル一覧を取得できませんでした。モデル名とモデル ID を手動で入力してください。",
+        "model": "利用可能なモデル",
+        "modelName": "モデル名",
+        "modelNamePlaceholder": "例: ClawClaw",
+        "modelId": "モデル ID",
+        "modelIdPlaceholder": "例: Qwen3.5-35B-A3B",
+        "addModel": "続行",
+        "addManualModel": "続行",
+        "providerRequired": "まず API キーと Base URL を入力してください。",
+        "modelRequired": "モデル名とモデル ID の両方を入力してください。",
+        "skip": "今はスキップ",
+        "refresh": "再確認"
+    },
     "complete": {
         "title": "セットアップ完了！",
-        "subtitle": "ClawClawの構成が完了し、使用準備が整いました。AIアシスタントとのチャットを開始できます。",
+        "subtitle": "ClawClaw の準備が整いました。",
+        "modelConfigured": "モデル設定が完了しました。チャットへ移動します。",
+        "modelSkipped": "モデル設定はスキップされました。後でモデルページから続けられます。",
         "provider": "AI プロバイダー",
         "model": "ローカルモデル",
         "localModelReady": "自動設定済み",
@@ -132,26 +174,14 @@
         "skipSetup": "セットアップをスキップ",
         "getStarted": "始める"
     },
-    "defaultSkills": {
-        "opencode": {
-            "name": "OpenCode",
-            "description": "AI コーディングアシスタントのバックエンド"
+    "dependencies": {
+        "uv": {
+            "name": "uv",
+            "description": "Python 環境と依存関係を管理するためのランタイムツール"
         },
-        "python-env": {
-            "name": "Python 環境",
-            "description": "スキルのための Python ランタイム"
-        },
-        "code-assist": {
-            "name": "コードアシスト",
-            "description": "コードの分析と提案"
-        },
-        "file-tools": {
-            "name": "ファイルツール",
-            "description": "ファイルの操作と管理"
-        },
-        "terminal": {
-            "name": "ターミナル",
-            "description": "シェルコマンドの実行"
+        "managedPython": {
+            "name": "Python Runtime",
+            "description": "OpenClaw のツールとスキル向けに準備される管理対象 Python 環境"
         }
     }
 }

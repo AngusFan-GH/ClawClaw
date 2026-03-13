@@ -8,6 +8,10 @@
       "title": "Environment Check",
       "description": "Verifying system requirements"
     },
+    "modelConfig": {
+      "title": "Configure Models",
+      "description": "Add at least one usable model, or skip for now"
+    },
     "provider": {
       "title": "AI Provider",
       "description": "Configure your AI service"
@@ -30,8 +34,8 @@
     }
   },
   "welcome": {
-    "title": "Welcome to ClawClaw",
-    "description": "ClawClaw is a graphical interface for OpenClaw, making it easy to use AI assistants across your favorite messaging platforms.",
+    "title": "Welcome",
+    "description": "",
     "autoContinue": "Initialization is running automatically. Please wait.",
     "features": {
       "noCommand": "Zero command-line required",
@@ -100,8 +104,8 @@
     "configureAnother": "Configure another channel"
   },
   "installing": {
-    "title": "Installing Essential Components",
-    "subtitle": "Setting up the tools needed to power your AI assistant",
+    "title": "Preparing Runtime Dependencies",
+    "subtitle": "Installing the baseline dependencies required by OpenClaw",
     "progress": "Progress",
     "status": {
       "pending": "Pending",
@@ -114,9 +118,47 @@
     "wait": "This may take a few moments...",
     "skip": "Skip this step"
   },
+  "modelSetup": {
+    "title": "Configure Models",
+    "description": "No default model is bundled anymore. Add at least one usable model to start chatting immediately.",
+    "configuredTitle": "A usable model was detected",
+    "configuredDescription": "At least one model is already configured. You can finish setup now or open the Models page to review it.",
+    "pendingTitle": "No model configured yet",
+    "pendingDescription": "Connect your local model provider first, then pick one usable model to finish setup.",
+    "apiKey": "API Key",
+    "apiKeyPlaceholder": "Enter your API key",
+    "baseUrl": "Base URL",
+    "baseUrlPlaceholder": "https://api.example.com/v1",
+    "protocol": "Protocol",
+    "protocolOpenAI": "OpenAI Compatible",
+    "protocolAnthropic": "Anthropic Compatible",
+    "stepProvider": "Connect Service",
+    "stepModel": "Add Model",
+    "providerConnected": "Service Connected",
+    "editProvider": "Edit",
+    "connectProvider": "Connect and Load Models",
+    "refreshModels": "Refresh Models",
+    "pickModelTitle": "Choose a Model",
+    "pickModelDescription": "The local provider is connected. Choose a model and give it a display name.",
+    "manualTitle": "Add a Model Manually",
+    "manualDescription": "The model list could not be loaded. Enter the model name and model ID manually.",
+    "model": "Available Models",
+    "modelName": "Model Name",
+    "modelNamePlaceholder": "For example: ClawClaw",
+    "modelId": "Model ID",
+    "modelIdPlaceholder": "For example: Qwen3.5-35B-A3B",
+    "addModel": "Continue",
+    "addManualModel": "Continue",
+    "providerRequired": "Fill in the API key and base URL first.",
+    "modelRequired": "Enter both the model name and model ID.",
+    "skip": "Skip for now",
+    "refresh": "Refresh"
+  },
   "complete": {
     "title": "Setup Complete!",
-    "subtitle": "ClawClaw is configured and ready to use. You can now start chatting with your AI assistant.",
+    "subtitle": "ClawClaw is ready.",
+    "modelConfigured": "Model configuration is complete. Entering chat now.",
+    "modelSkipped": "Model configuration was skipped. You can finish it later from the Models page.",
     "provider": "AI Provider",
     "model": "Local Models",
     "localModelReady": "Auto-configured",
@@ -132,26 +174,14 @@
     "skipSetup": "Skip Setup",
     "getStarted": "Get Started"
   },
-  "defaultSkills": {
-    "opencode": {
-      "name": "OpenCode",
-      "description": "AI coding assistant backend"
+  "dependencies": {
+    "uv": {
+      "name": "uv",
+      "description": "Runtime tool used to manage Python environments and dependencies"
     },
-    "python-env": {
-      "name": "Python Environment",
-      "description": "Python runtime for skills"
-    },
-    "code-assist": {
-      "name": "Code Assist",
-      "description": "Code analysis and suggestions"
-    },
-    "file-tools": {
-      "name": "File Tools",
-      "description": "File operations and management"
-    },
-    "terminal": {
-      "name": "Terminal",
-      "description": "Shell command execution"
+    "managedPython": {
+      "name": "Python Runtime",
+      "description": "Managed Python environment prepared for OpenClaw tools and skills"
     }
   }
 }

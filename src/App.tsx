@@ -115,10 +115,11 @@ function App() {
 
   // Redirect to setup wizard if not complete
   useEffect(() => {
-    if (settingsInitialized && !setupComplete && !location.pathname.startsWith('/setup')) {
+    const allowSetupModelFlow = location.pathname === '/models' && location.search.includes('fromSetup=1');
+    if (settingsInitialized && !setupComplete && !location.pathname.startsWith('/setup') && !allowSetupModelFlow) {
       navigate('/setup');
     }
-  }, [settingsInitialized, setupComplete, location.pathname, navigate]);
+  }, [settingsInitialized, setupComplete, location.pathname, location.search, navigate]);
 
   // Listen for navigation events from main process
   useEffect(() => {
