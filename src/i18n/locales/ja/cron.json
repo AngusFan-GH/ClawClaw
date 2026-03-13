@@ -28,7 +28,9 @@
     "runNow": "今すぐ実行",
     "deleteConfirm": "このタスクを削除してもよろしいですか？",
     "last": "前回",
-    "next": "次回"
+    "next": "次回",
+    "expandError": "\u5c55\u958b",
+    "collapseError": "\u6298\u308a\u305f\u305f\u3080"
   },
   "advanced": {
     "badge": "高度な OpenClaw ジョブ",
@@ -48,9 +50,30 @@
     "message": "メッセージ / プロンプト",
     "messagePlaceholder": "AI に何をさせますか？ 例：今日のニュースと天気を要約して",
     "schedule": "スケジュール",
+    "scheduleHint": "繰り返し方法を選んでから、具体的な時間を調整します。",
+    "scheduleModes": {
+      "interval": "間隔",
+      "daily": "毎日",
+      "weekly": "毎週",
+      "monthly": "毎月",
+      "custom": "カスタム Cron"
+    },
+    "commonTemplates": "よく使うテンプレート",
+    "noTemplate": "現在の設定を維持",
+    "intervalValue": "間隔",
+    "intervalUnit": "単位",
+    "intervalUnits": {
+      "minutes": "分",
+      "hours": "時間"
+    },
+    "time": "時間",
+    "timePlaceholder": "HH:MM",
+    "weekday": "曜日",
+    "monthDay": "日付",
     "cronPlaceholder": "Cron 式（例：0 9 * * *）",
     "usePresets": "プリセットを使用",
     "useCustomCron": "カスタム Cron を使用",
+    "customCronHelp": "組み込みパターンで足りない場合は、標準の 5 フィールド Cron 式を使ってください。",
     "targetChannel": "対象チャンネル",
     "noChannels": "利用可能なチャンネルがありません。先にチャンネルを追加してください。",
     "discordChannelId": "Discord チャンネル ID",
@@ -85,7 +108,8 @@
     "channelRequired": "チャンネルを選択してください",
     "discordIdRequired": "Discord チャンネル ID を入力してください",
     "scheduleRequired": "スケジュールを選択または入力してください",
-    "invalidCron": "Cron 形式が無効です。例：0 9 * * * のように 5 フィールドで入力してください"
+    "invalidCron": "Cron 形式が無効です。例：0 9 * * * のように 5 フィールドで入力してください",
+    "invalidTime": "時刻形式が無効です。24 時間制の HH:MM 形式で入力してください。例：09:30"
   },
   "schedule": {
     "everySeconds": "{{count}}秒ごと",

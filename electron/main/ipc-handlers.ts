@@ -654,6 +654,10 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
               patch.payload = { kind: 'agentTurn', message: patch.message };
               delete patch.message;
             }
+            const current = await getCronJobById(gatewayManager, id);
+            if (current && isEditableUiJob(current)) {
+              patch.delivery = { mode: current.delivery?.mode ?? 'none' };
+            }
             data = await gatewayManager.rpc('cron.update', { id, patch });
             break;
           }
@@ -853,12 +857,18 @@ interface GatewayCronJob {
   };
 }
 
+const UI_CRON_DELIVERY_MODES = new Set(['announce', 'none']);
+
 function isUiManagedAgentTurn(job: GatewayCronJob): boolean {
   return (job.sessionTarget === 'isolated' || !job.sessionTarget) && job.payload?.kind === 'agentTurn';
 }
 
 function needsDeliveryRepair(job: GatewayCronJob): boolean {
   return isUiManagedAgentTurn(job) && (job.delivery?.mode ?? 'announce') !== 'none';
+}
+
+function isEditableUiJob(job: GatewayCronJob): boolean {
+  return isUiManagedAgentTurn(job) && UI_CRON_DELIVERY_MODES.has(job.delivery?.mode ?? 'announce');
 }
 
 function clearChannelRequiredError(job: GatewayCronJob): void {
@@ -891,6 +901,29 @@ async function repairCronDeliveryIfNeeded(
     clearChannelRequiredError(job);
   } catch (e) {
     console.warn(`Failed to auto-repair cron job ${job.id}:`, e);
+  }
+
+  return job;
+}
+
+async function ensureUiCronSilentDelivery(
+  gatewayManager: GatewayManager,
+  job: GatewayCronJob,
+): Promise<GatewayCronJob> {
+  if (!isUiManagedAgentTurn(job) || (job.delivery?.mode ?? 'none') === 'none') {
+    clearStaleUiDeliveryError(job);
+    return job;
+  }
+
+  try {
+    await gatewayManager.rpc('cron.update', {
+      id: job.id,
+      patch: { delivery: { mode: 'none' } },
+    });
+    job.delivery = { mode: 'none' };
+    clearChannelRequiredError(job);
+  } catch (e) {
+    console.warn(`Failed to force silent delivery for cron job ${job.id}:`, e);
   }
 
   return job;
@@ -961,9 +994,8 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
       const jobs = data?.jobs ?? [];
 
       // Auto-repair legacy UI-created jobs that were saved without
-      // delivery: { mode: 'none' }.  The Gateway auto-normalizes them
-      // to delivery: { mode: 'announce' } which then fails with
-      // "Channel is required" when no external channels are configured.
+      // delivery: { mode: 'none' }. The desktop UI has no channel target,
+      // so silent delivery is the only safe default.
       for (const job of jobs) {
         await repairCronDeliveryIfNeeded(gatewayManager, job);
       }
@@ -999,12 +1031,10 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
           enabled: input.enabled ?? true,
           wakeMode: 'next-heartbeat',
           sessionTarget: 'isolated',
-          // UI-created jobs deliver results via ClawClaw WebSocket chat events,
-          // not external messaging channels.  Setting mode='none' prevents
-          // the Gateway from attempting channel delivery (which would fail
-          // with "Channel is required" when no channels are configured).
-          delivery: { mode: 'none' },
-        };
+          // UI-created reminder jobs should stay isolated, but still announce
+          // back into the originating session so they are actually visible.
+              delivery: { mode: 'none' },
+            };
         const result = await gatewayManager.rpc('cron.add', gatewayInput);
         // Transform the returned job to frontend format
         if (result && typeof result === 'object') {
@@ -1032,8 +1062,8 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
         delete patch.message;
       }
       const current = await getCronJobById(gatewayManager, id);
-      if (current && isUiManagedAgentTurn(current)) {
-        patch.delivery = { mode: 'none' };
+      if (current && isEditableUiJob(current)) {
+        patch.delivery = { mode: current.delivery?.mode ?? 'none' };
       }
       const result = await gatewayManager.rpc('cron.update', { id, patch });
       return result;
@@ -1070,7 +1100,7 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
     try {
       const current = await getCronJobById(gatewayManager, id);
       if (current) {
-        await repairCronDeliveryIfNeeded(gatewayManager, current);
+        await ensureUiCronSilentDelivery(gatewayManager, current);
       }
       const result = await gatewayManager.rpc('cron.run', { id, mode: 'force' });
       return result;

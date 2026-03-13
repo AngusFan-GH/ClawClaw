@@ -38,6 +38,8 @@ export type CronSchedule =
  */
 export interface CronJob {
   id: string;
+  agentId?: string;
+  agentName?: string;
   name: string;
   message: string;
   schedule: string | CronSchedule;

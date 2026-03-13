@@ -28,7 +28,9 @@
     "runNow": "立即运行",
     "deleteConfirm": "确定要删除这个任务吗？",
     "last": "上次",
-    "next": "下次"
+    "next": "下次",
+    "expandError": "\u5c55\u5f00",
+    "collapseError": "\u6536\u8d77"
   },
   "advanced": {
     "badge": "高级 OpenClaw 任务",
@@ -48,9 +50,30 @@
     "message": "消息 / 提示词",
     "messagePlaceholder": "AI 需要做什么？例如：给我今天的新闻和天气摘要",
     "schedule": "执行计划",
+    "scheduleHint": "先选择重复方式，再调整具体时间。",
+    "scheduleModes": {
+      "interval": "间隔",
+      "daily": "每天",
+      "weekly": "每周",
+      "monthly": "每月",
+      "custom": "自定义 Cron"
+    },
+    "commonTemplates": "常用模板",
+    "noTemplate": "保持当前设置",
+    "intervalValue": "每隔",
+    "intervalUnit": "单位",
+    "intervalUnits": {
+      "minutes": "分钟",
+      "hours": "小时"
+    },
+    "time": "时间",
+    "timePlaceholder": "HH:MM",
+    "weekday": "星期",
+    "monthDay": "每月日期",
     "cronPlaceholder": "Cron 表达式（例如：0 9 * * *）",
     "usePresets": "使用预设",
     "useCustomCron": "使用自定义 Cron",
+    "customCronHelp": "如果内置模式不够用，请使用标准 5 段 Cron 表达式。",
     "targetChannel": "目标通道",
     "noChannels": "暂无可用通道，请先添加通道。",
     "discordChannelId": "Discord 频道 ID",
@@ -85,7 +108,8 @@
     "channelRequired": "请选择通道",
     "discordIdRequired": "请输入 Discord 频道 ID",
     "scheduleRequired": "请选择或输入执行计划",
-    "invalidCron": "Cron 格式无效，请使用 5 段格式，例如：0 9 * * *"
+    "invalidCron": "Cron 格式无效，请使用 5 段格式，例如：0 9 * * *",
+    "invalidTime": "时间格式无效，请使用 24 小时制 HH:MM，例如 09:30"
   },
   "schedule": {
     "everySeconds": "每 {{count}} 秒",
