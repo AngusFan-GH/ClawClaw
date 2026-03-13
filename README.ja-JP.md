@@ -171,6 +171,22 @@ ClawClaw を初めて起動すると、**ガイド付きの初回セットアッ
 
 モデル設定は手動に変わりました。セットアップ中に **モデル** 画面へ移動してローカルモデルやクラウドプロバイダーを追加することも、いったんスキップして後から設定することもできます。
 
+### プロジェクト同梱 Skills の事前インストール
+
+ClawClaw は `resources/skills/<slug>/SKILL.md` に置いたプロジェクトローカルの skill も自動で事前インストールします。
+起動時に `~/.openclaw/skills/<slug>/` がまだ存在しなければ、そのディレクトリを自動でコピーします。
+
+最小例:
+
+```text
+resources/
+  skills/
+    my-skill/
+      SKILL.md
+```
+
+ディレクトリ構成と `SKILL.md` のテンプレートは [resources/skills/README.md](resources/skills/README.md) を参照してください。
+
 ### プロキシ設定
 
 ClawClawには、Electron、OpenClaw Gateway、またはTelegramなどのチャネルがローカルプロキシクライアントを介してインターネットにアクセスする必要がある環境向けに、組み込みのプロキシ設定が含まれています。

@@ -171,6 +171,22 @@ pnpm dev
 
 模型配置现在改为手动完成。你可以在向导中跳转到 **模型** 页面添加本地模型或云端提供商，也可以先跳过，稍后再配置。
 
+### 项目内置 Skills 预装
+
+ClawClaw 也会自动预装放在 `resources/skills/<slug>/SKILL.md` 下的项目本地 skill。
+应用启动时，如果 `~/.openclaw/skills/<slug>/` 还不存在，就会自动把该目录复制过去。
+
+最小示例：
+
+```text
+resources/
+  skills/
+    my-skill/
+      SKILL.md
+```
+
+目录结构和 `SKILL.md` 模板请参考 [resources/skills/README.md](resources/skills/README.md)。
+
 > Moonshot（Kimi）说明：ClawClaw 默认保持开启 Kimi 的 web search。  
 > 当配置 Moonshot 后，ClawClaw 也会将 OpenClaw 配置中的 Kimi web search 同步到中国区端点（`https://api.moonshot.cn/v1`）。
 

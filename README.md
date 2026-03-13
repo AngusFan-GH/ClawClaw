@@ -171,6 +171,22 @@ When you launch ClawClaw for the first time, the **startup flow** keeps the welc
 
 Model configuration is now manual. You can jump to **Models** from setup to add a local model or a cloud provider, or skip that step and finish it later.
 
+### Bundled Project Skills
+
+ClawClaw also preinstalls any project-local skill placed under `resources/skills/<slug>/SKILL.md`.
+On startup, those directories are copied into `~/.openclaw/skills/<slug>/` if they are not already installed.
+
+Minimal example:
+
+```text
+resources/
+  skills/
+    my-skill/
+      SKILL.md
+```
+
+See [resources/skills/README.md](resources/skills/README.md) for the expected layout and a starter `SKILL.md` template.
+
 > Note for Moonshot (Kimi): ClawClaw keeps Kimi web search enabled by default.  
 > When Moonshot is configured, ClawClaw also syncs Kimi web search to the China endpoint (`https://api.moonshot.cn/v1`) in OpenClaw config.
 
