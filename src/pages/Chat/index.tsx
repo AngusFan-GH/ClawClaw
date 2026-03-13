@@ -141,7 +141,15 @@ type ProviderCatalogResponse = {
   runtimeProviderId?: string;
   models: ProviderCatalogModelOption[];
   resolved?: boolean;
+  source?: 'runtime' | 'models_json_fallback' | 'direct';
 };
+
+function isStrictRuntimeCatalogAccount(account: ProviderAccount): boolean {
+  return (
+    (account.vendorId === 'openai' && (account.authMode === 'oauth_browser' || account.authMode === 'oauth_device'))
+    || (account.vendorId === 'google' && account.authMode === 'oauth_browser')
+  );
+}
 
 function resolveAccountCatalogModelOptions(
   account: ProviderAccount,
@@ -455,6 +463,7 @@ export function Chat() {
         const vendor = vendorMap.get(account.vendorId);
         const providerDisplayName = getProviderDisplayName(account, vendor);
         const catalog = providerCatalogMap[account.id];
+        const strictRuntimeCatalog = isStrictRuntimeCatalogAccount(account);
         if (isMultiInstanceRuntimeVendor(account.vendorId)) {
           if (!catalog?.resolved || !catalog.runtimeProviderId) {
             return [];
@@ -462,6 +471,9 @@ export function Chat() {
           return resolveAccountCatalogModelOptions(account, providerDisplayName, catalog);
         }
         const catalogOptions = resolveAccountCatalogModelOptions(account, providerDisplayName, catalog);
+        if (strictRuntimeCatalog) {
+          return catalog?.source === 'runtime' ? catalogOptions : [];
+        }
         const explicitOptions = resolveAccountModelOptions(
           account,
           vendor,

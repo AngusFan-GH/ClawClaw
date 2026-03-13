@@ -67,7 +67,11 @@ export async function readLocalModelPresets(): Promise<LocalModelPreset[]> {
 export async function migrateLegacyLocalModelAccounts(gatewayManager?: GatewayManager): Promise<void> {
   const providerService = getProviderService();
   const accounts = await providerService.listAccounts();
-  const legacyAccounts = accounts.filter((account) => account.vendorId === 'local-model');
+  const legacyAccounts = accounts.filter((account) => (
+    account.vendorId === 'local-model'
+    && !account.metadata?.localModelProvider
+    && !account.metadata?.localModel
+  ));
 
   for (const account of legacyAccounts) {
     const previousConfig = providerAccountToConfig(account);
