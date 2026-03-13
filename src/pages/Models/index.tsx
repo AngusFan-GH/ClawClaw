@@ -127,7 +127,7 @@ export function Models() {
     [accounts],
   );
   const localModelCards = useMemo(
-    () => localModelPresets.map((preset, index) => {
+    () => (localModelPresets ?? []).map((preset, index) => {
       const account = presetLocalAccounts[0];
       const currentPrimaryPresetId = account?.metadata?.primaryPresetId || account?.metadata?.presetId;
       return {

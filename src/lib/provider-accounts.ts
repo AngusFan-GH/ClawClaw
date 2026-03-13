@@ -28,10 +28,10 @@ export async function fetchProviderSnapshot(): Promise<ProviderSnapshot> {
   ]);
 
   return {
-    accounts,
-    statuses,
-    vendors,
-    defaultAccountId: defaultInfo.accountId,
+    accounts: Array.isArray(accounts) ? accounts : [],
+    statuses: Array.isArray(statuses) ? statuses : [],
+    vendors: Array.isArray(vendors) ? vendors : [],
+    defaultAccountId: defaultInfo?.accountId ?? null,
   };
 }
 
@@ -97,11 +97,14 @@ export function buildProviderListItems(
   vendors: ProviderVendorInfo[],
   defaultAccountId: string | null,
 ): ProviderListItem[] {
-  const vendorMap = new Map(vendors.map((vendor) => [vendor.id, vendor]));
-  const statusMap = new Map(statuses.map((status) => [status.id, status]));
+  const safeAccounts = Array.isArray(accounts) ? accounts : [];
+  const safeStatuses = Array.isArray(statuses) ? statuses : [];
+  const safeVendors = Array.isArray(vendors) ? vendors : [];
+  const vendorMap = new Map(safeVendors.map((vendor) => [vendor.id, vendor]));
+  const statusMap = new Map(safeStatuses.map((status) => [status.id, status]));
 
-  if (accounts.length > 0) {
-    return accounts
+  if (safeAccounts.length > 0) {
+    return safeAccounts
       .map((account) => ({
         account,
         vendor: vendorMap.get(account.vendorId),
@@ -114,7 +117,7 @@ export function buildProviderListItems(
       });
   }
 
-  return statuses.map((status) => ({
+  return safeStatuses.map((status) => ({
     account: legacyProviderToAccount(status),
     vendor: vendorMap.get(status.type),
     status,

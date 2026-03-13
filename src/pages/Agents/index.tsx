@@ -432,7 +432,7 @@ function AgentSettingsModal({
   }, [agent.name]);
 
   const runtimeChannelsByType = useMemo(
-    () => Object.fromEntries(channels.map((channel) => [channel.type, channel])),
+    () => Object.fromEntries((channels ?? []).map((channel) => [channel.type, channel])),
     [channels],
   );
 

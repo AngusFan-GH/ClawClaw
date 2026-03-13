@@ -13,6 +13,8 @@ import {
   XCircle,
   ExternalLink,
   Copy,
+  Check,
+  ChevronDown,
 } from 'lucide-react';
 import { TitleBar } from '@/components/layout/TitleBar';
 import { Button } from '@/components/ui/button';
@@ -249,6 +251,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
   const { t } = useTranslation('setup');
   const gatewayStatus = useGatewayStore((state) => state.status);
   const startGateway = useGatewayStore((state) => state.start);
+  const gatewayStartAttemptedRef = useRef(false);
 
   const [checks, setChecks] = useState({
     nodejs: { status: 'checking' as 'checking' | 'success' | 'error', message: '' },
@@ -265,7 +268,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
       gateway: { status: 'checking', message: '' },
     });
 
-    // Check Node.js — always available in Electron
+    // Check Node.js - always available in Electron
     setChecks((prev) => ({
       ...prev,
       nodejs: { status: 'success', message: t('runtime.status.success') },
@@ -301,7 +304,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
           ...prev,
           openclaw: {
             status: 'success',
-            message: t('runtime.status.success'),
+            message: t('runtime.status.packageReady'),
           },
         }));
       }
@@ -312,13 +315,16 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
       }));
     }
 
-    // Check Gateway — read directly from store to avoid stale closure
+    // Check Gateway - read directly from store to avoid stale closure
     // Don't immediately report error; gateway may still be initializing
     const currentGateway = useGatewayStore.getState().status;
     if (currentGateway.state === 'running') {
       setChecks((prev) => ({
         ...prev,
-        gateway: { status: 'success', message: `Running on port ${currentGateway.port}` },
+        gateway: {
+          status: 'success',
+          message: t('runtime.status.gatewayRunning', { port: currentGateway.port }),
+        },
       }));
     } else if (currentGateway.state === 'error') {
       setChecks((prev) => ({
@@ -327,7 +333,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
       }));
     } else {
       // Gateway is 'stopped', 'starting', or 'reconnecting'
-      // Keep as 'checking' — the dedicated useEffect will update when status changes
+      // Keep as 'checking' - the dedicated effect will update when status changes
       setChecks((prev) => ({
         ...prev,
         gateway: {
@@ -345,6 +351,24 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
     runChecks();
   }, [runChecks]);
 
+  useEffect(() => {
+    if (checks.openclaw.status !== 'success') {
+      gatewayStartAttemptedRef.current = false;
+      return;
+    }
+
+    if (gatewayStatus.state !== 'stopped' || gatewayStartAttemptedRef.current) {
+      return;
+    }
+
+    gatewayStartAttemptedRef.current = true;
+    setChecks((prev) => ({
+      ...prev,
+      gateway: { status: 'checking', message: t('runtime.status.checking') },
+    }));
+    void startGateway();
+  }, [checks.openclaw.status, gatewayStatus.state, startGateway, t]);
+
   // Update canProceed when gateway status changes
   useEffect(() => {
     const allPassed =
@@ -361,24 +385,28 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
         ...prev,
         gateway: {
           status: 'success',
-          message: t('runtime.status.success'),
+          message: t('runtime.status.gatewayRunning', { port: gatewayStatus.port || 18789 }),
         },
       }));
     } else if (gatewayStatus.state === 'error') {
       setChecks((prev) => ({
         ...prev,
-        gateway: { status: 'error', message: t('runtime.status.error') },
+        gateway: { status: 'error', message: gatewayStatus.error || t('runtime.status.error') },
       }));
     } else if (gatewayStatus.state === 'starting' || gatewayStatus.state === 'reconnecting') {
       setChecks((prev) => ({
         ...prev,
         gateway: { status: 'checking', message: t('runtime.status.checking') },
       }));
+    } else if (gatewayStatus.state === 'stopped' && gatewayStartAttemptedRef.current) {
+      setChecks((prev) => ({
+        ...prev,
+        gateway: { status: 'error', message: gatewayStatus.error || t('runtime.status.error') },
+      }));
     }
-    // 'stopped' state: keep current check status (likely 'checking') to allow startup time
   }, [gatewayStatus, t]);
 
-  // Gateway startup timeout — show error only after giving enough time to initialize
+  // Gateway startup timeout - show error after a reasonable wait.
   useEffect(() => {
     if (gatewayTimeoutRef.current) {
       clearTimeout(gatewayTimeoutRef.current);
@@ -396,12 +424,15 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
         if (prev.gateway.status === 'checking') {
           return {
             ...prev,
-            gateway: { status: 'error', message: t('runtime.status.error') },
+            gateway: {
+              status: 'error',
+              message: gatewayStatus.error || t('runtime.status.error'),
+            },
           };
         }
         return prev;
       });
-    }, 600 * 1000); // 600 seconds — enough for gateway to fully initialize
+    }, 45 * 1000);
 
     return () => {
       if (gatewayTimeoutRef.current) {
@@ -409,9 +440,10 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
         gatewayTimeoutRef.current = null;
       }
     };
-  }, [gatewayStatus.state]);
+  }, [gatewayStatus.error, gatewayStatus.state, t]);
 
   const handleStartGateway = async () => {
+    gatewayStartAttemptedRef.current = true;
     setChecks((prev) => ({
       ...prev,
       gateway: { status: 'checking', message: t('runtime.status.checking') },
@@ -536,7 +568,7 @@ function AutoConfiguredLocalModelContent({
                 )}
               >
                 {name}
-                {index === 0 ? ` · ${t('localModel.defaultBadge')}` : ''}
+                {index === 0 ? ` * ${t('localModel.defaultBadge')}` : ''}
               </span>
             ))}
           </div>
@@ -1102,7 +1134,7 @@ function ProviderContent({
 
   return (
     <div className="space-y-6">
-      {/* Provider selector — dropdown */}
+      {/* Provider selector dropdown */}
       <div className="space-y-2">
         <Label>{t('provider.label')}</Label>
         <div className="relative" ref={providerMenuRef}>
@@ -1129,13 +1161,13 @@ function ProviderContent({
                   <span className="text-sm leading-none shrink-0">{selectedProviderData.icon}</span>
                 )
               ) : (
-                <span className="text-xs text-muted-foreground shrink-0">—</span>
+                <span className="text-xs text-muted-foreground shrink-0">-</span>
               )}
               <span
                 className={cn('truncate text-left', !selectedProvider && 'text-muted-foreground')}
               >
                 {selectedProviderData
-                  ? `${selectedProviderData.id === 'custom' ? t('settings:aiProviders.custom') : selectedProviderData.name}${selectedProviderData.model ? ` — ${selectedProviderData.model}` : ''}`
+                  ? `${selectedProviderData.id === 'custom' ? t('settings:aiProviders.custom') : selectedProviderData.name}${selectedProviderData.model ? ` - ${selectedProviderData.model}` : ''}`
                   : t('provider.selectPlaceholder')}
               </span>
             </div>
@@ -1181,7 +1213,7 @@ function ProviderContent({
                       )}
                       <span className="truncate">
                         {p.id === 'custom' ? t('settings:aiProviders.custom') : p.name}
-                        {p.model ? ` — ${p.model}` : ''}
+                        {p.model ? ` - ${p.model}` : ''}
                       </span>
                     </div>
                     {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
@@ -1499,7 +1531,7 @@ function ProviderContent({
 
           {keyValid !== null && (
             <p className={cn('text-sm text-center', keyValid ? 'text-green-400' : 'text-red-400')}>
-              {keyValid ? `✓ ${t('provider.valid')}` : `✗ ${t('provider.invalid')}`}
+              {keyValid ? `[OK] ${t('provider.valid')}` : `[X] ${t('provider.invalid')}`}
             </p>
           )}
 
@@ -1636,3 +1668,4 @@ function CompleteContent({ selectedProvider, installedSkills }: CompleteContentP
 }
 
 export default Setup;
+

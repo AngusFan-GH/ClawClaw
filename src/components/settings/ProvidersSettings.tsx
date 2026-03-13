@@ -190,8 +190,8 @@ export function ProvidersSettings({
   const [showAddDialog, setShowAddDialog] = useState(false);
   const autoOpenedRef = useRef(false);
   const [editingProvider, setEditingProvider] = useState<string | null>(null);
-  const vendorMap = new Map(vendors.map((vendor) => [vendor.id, vendor]));
-  const existingVendorIds = new Set(accounts.map((account) => account.vendorId));
+  const vendorMap = new Map((vendors ?? []).map((vendor) => [vendor.id, vendor]));
+  const existingVendorIds = new Set((accounts ?? []).map((account) => account.vendorId));
   const displayProviders = useMemo(
     () => buildProviderListItems(accounts, statuses, vendors, defaultAccountId)
       .filter((item) => item.account.vendorId !== 'local-model')
@@ -977,7 +977,7 @@ function AddProviderDialog({
   const showModelIdField = shouldShowProviderModelId(typeInfo, devModeUnlocked);
   const isOAuth = typeInfo?.isOAuth ?? false;
   const supportsApiKey = typeInfo?.supportsApiKey ?? false;
-  const vendorMap = new Map(vendors.map((vendor) => [vendor.id, vendor]));
+  const vendorMap = new Map((vendors ?? []).map((vendor) => [vendor.id, vendor]));
   const selectedVendor = selectedType ? vendorMap.get(selectedType) : undefined;
   const preferredOAuthMode = selectedVendor?.supportedAuthModes.includes('oauth_browser')
     ? 'oauth_browser'

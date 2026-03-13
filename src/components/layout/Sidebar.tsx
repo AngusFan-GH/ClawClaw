@@ -146,7 +146,7 @@ export function Sidebar() {
   }, [fetchAgents]);
 
   const agentNameMap = useMemo(
-    () => new Map(agents.map((agent) => [agent.id, agent.name])),
+    () => new Map((agents ?? []).map((agent) => [agent.id, agent.name])),
     [agents]
   );
 

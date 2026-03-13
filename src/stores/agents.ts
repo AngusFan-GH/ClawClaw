@@ -21,10 +21,15 @@ interface AgentsState {
 
 function applySnapshot(snapshot: AgentsSnapshot | undefined) {
   return snapshot ? {
-    agents: snapshot.agents,
-    defaultAgentId: snapshot.defaultAgentId,
-    configuredChannelTypes: snapshot.configuredChannelTypes,
-    channelOwners: snapshot.channelOwners,
+    agents: Array.isArray(snapshot.agents) ? snapshot.agents : [],
+    defaultAgentId: snapshot.defaultAgentId ?? 'main',
+    configuredChannelTypes: Array.isArray(snapshot.configuredChannelTypes)
+      ? snapshot.configuredChannelTypes
+      : [],
+    channelOwners:
+      snapshot.channelOwners && typeof snapshot.channelOwners === 'object'
+        ? snapshot.channelOwners
+        : {},
   } : {};
 }
 

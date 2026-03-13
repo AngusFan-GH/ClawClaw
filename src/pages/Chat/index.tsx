@@ -250,11 +250,11 @@ export function Chat() {
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
   const currentSession = sessions.find((session) => session.key === currentSessionKey);
   const providerStatusMap = useMemo(
-    () => new Map(providerStatuses.map((status) => [status.id, status])),
+    () => new Map((providerStatuses ?? []).map((status) => [status.id, status])),
     [providerStatuses]
   );
   const vendorMap = useMemo(
-    () => new Map(providerVendors.map((vendor) => [vendor.id, vendor])),
+    () => new Map((providerVendors ?? []).map((vendor) => [vendor.id, vendor])),
     [providerVendors]
   );
   const forceSessionKeyFromRoute = useMemo(() => {
