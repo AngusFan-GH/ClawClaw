@@ -1,101 +1,59 @@
 {
   "bundles": [
     {
-      "id": "productivity",
-      "name": "Productivity",
-      "nameZh": "效率办公",
-      "description": "Calendar, reminders, notes, email management",
-      "descriptionZh": "日历、提醒、笔记、邮件管理",
-      "icon": "📋",
+      "id": "documents",
+      "name": "Document Toolkit",
+      "nameZh": "\u6587\u6863\u5de5\u5177\u7bb1",
+      "description": "Create, edit, convert, and validate common office documents and PDFs.",
+      "descriptionZh": "\u5904\u7406\u5e38\u89c1\u529e\u516c\u6587\u6863\u4e0e PDF\uff0c\u5305\u62ec\u521b\u5efa\u3001\u7f16\u8f91\u3001\u8f6c\u6362\u548c\u6821\u9a8c\u3002",
+      "icon": "DOC",
       "skills": [
-        "apple-reminders",
-        "apple-notes",
-        "himalaya",
-        "notion",
-        "obsidian",
-        "trello"
+        "docx",
+        "pdf",
+        "pptx",
+        "xlsx"
       ],
       "recommended": true
     },
     {
-      "id": "developer",
-      "name": "Developer Tools",
-      "nameZh": "开发者工具",
-      "description": "GitHub, coding assistant, terminal management",
-      "descriptionZh": "GitHub、代码助手、终端管理",
-      "icon": "💻",
+      "id": "web-ops",
+      "name": "Web Research and Automation",
+      "nameZh": "\u7f51\u9875\u7814\u7a76\u4e0e\u81ea\u52a8\u5316",
+      "description": "Browse, automate, search, and scrape websites for research and data collection.",
+      "descriptionZh": "\u7528\u4e8e\u7f51\u9875\u6d4f\u89c8\u3001\u81ea\u52a8\u5316\u3001\u8054\u7f51\u68c0\u7d22\u548c\u6293\u53d6\uff0c\u9002\u5408\u7814\u7a76\u4e0e\u6570\u636e\u91c7\u96c6\u3002",
+      "icon": "WEB",
       "skills": [
-        "github",
-        "coding-agent",
-        "tmux"
+        "agent-reach",
+        "browser-use",
+        "scrapling-official"
       ],
       "recommended": true
     },
     {
-      "id": "smart-home",
-      "name": "Smart Home",
-      "nameZh": "智能家居",
-      "description": "Lights, music, device control",
-      "descriptionZh": "灯光、音乐、设备控制",
-      "icon": "🏠",
+      "id": "agent-evolution",
+      "name": "Agent Improvement",
+      "nameZh": "Agent \u81ea\u6211\u6539\u8fdb",
+      "description": "Make the agent more proactive and continuously improve from failures and feedback.",
+      "descriptionZh": "\u8ba9 Agent \u66f4\u4e3b\u52a8\uff0c\u5e76\u4ece\u5931\u8d25\u3001\u7ea0\u9519\u548c\u53cd\u9988\u4e2d\u6301\u7eed\u6539\u8fdb\u3002",
+      "icon": "AI",
       "skills": [
-        "openhue",
-        "sonoscli",
-        "spotify-player"
-      ]
+        "proactive-agent",
+        "self-improvement"
+      ],
+      "recommended": true
     },
     {
-      "id": "media",
-      "name": "Media & Creative",
-      "nameZh": "多媒体创作",
-      "description": "Image generation, video processing, audio transcription",
-      "descriptionZh": "图片生成、视频处理、音频转写",
-      "icon": "🎨",
+      "id": "skill-ops",
+      "name": "Skill Discovery and Safety",
+      "nameZh": "\u6280\u80fd\u53d1\u73b0\u4e0e\u5b89\u5168\u5ba1\u67e5",
+      "description": "Discover new skills and vet them before installation.",
+      "descriptionZh": "\u7528\u4e8e\u53d1\u73b0\u65b0\u6280\u80fd\uff0c\u5e76\u5728\u5b89\u88c5\u524d\u8fdb\u884c\u5b89\u5168\u5ba1\u67e5\u3002",
+      "icon": "OPS",
       "skills": [
-        "openai-image-gen",
-        "nano-banana-pro",
-        "video-frames",
-        "openai-whisper-api"
-      ]
-    },
-    {
-      "id": "communication",
-      "name": "Communication",
-      "nameZh": "通讯增强",
-      "description": "Messaging, voice calls, notifications",
-      "descriptionZh": "消息管理、语音通话、通知",
-      "icon": "💬",
-      "skills": [
-        "discord",
-        "slack",
-        "voice-call",
-        "imsg"
-      ]
-    },
-    {
-      "id": "security",
-      "name": "Security & Privacy",
-      "nameZh": "安全隐私",
-      "description": "Password management, secrets",
-      "descriptionZh": "密码管理、密钥存储",
-      "icon": "🔐",
-      "skills": [
-        "1password"
-      ]
-    },
-    {
-      "id": "information",
-      "name": "Information",
-      "nameZh": "信息获取",
-      "description": "Weather, news, web browsing",
-      "descriptionZh": "天气、新闻、网页浏览",
-      "icon": "🌐",
-      "skills": [
-        "weather",
-        "blogwatcher",
-        "web-browse",
-        "summarize"
-      ]
+        "find-skills",
+        "skill-vetter"
+      ],
+      "recommended": true
     }
   ]
 }
