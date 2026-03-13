@@ -14,6 +14,7 @@ import { app } from 'electron';
 import { getOpenClawEntryPath, getOpenClawResolvedDir, getOpenClawDir } from './paths';
 import * as logger from './logger';
 import { proxyAwareFetch } from './proxy-fetch';
+import { prepareWinSpawn } from './win-shell';
 
 const OPENCLAW_DIR = join(homedir(), '.openclaw');
 const CONFIG_FILE = join(OPENCLAW_DIR, 'openclaw.json');
@@ -132,10 +133,13 @@ async function listConfiguredChannelsFromCli(): Promise<string[]> {
     const { command, args, env, cwd } = getOpenClawCliSpawnConfig();
 
     return await new Promise((resolve) => {
-        const child = spawn(command, args, {
+        const prepared = prepareWinSpawn(command, args);
+        const child = spawn(prepared.command, prepared.args, {
             cwd,
             env,
             stdio: ['ignore', 'pipe', 'pipe'],
+            shell: prepared.shell,
+            windowsHide: true,
         });
 
         let stdout = '';
@@ -182,25 +186,9 @@ async function detectLegacyConfiguredChannels(): Promise<string[]> {
     const agentsDir = join(OPENCLAW_DIR, 'agents');
     const workspaceAgentsDir = join(OPENCLAW_DIR, 'workspace', 'agents');
 
-    let credentialEntries: string[] = [];
-    let agentEntries: string[] = [];
-    let workspaceAgentEntries: string[] = [];
-
-    try {
-        credentialEntries = await readdir(credentialsDir);
-    } catch {
-        credentialEntries = [];
-    }
-    try {
-        agentEntries = await readdir(agentsDir);
-    } catch {
-        agentEntries = [];
-    }
-    try {
-        workspaceAgentEntries = await readdir(workspaceAgentsDir);
-    } catch {
-        workspaceAgentEntries = [];
-    }
+    const credentialEntries = await readdir(credentialsDir).catch(() => [] as string[]);
+    const agentEntries = await readdir(agentsDir).catch(() => [] as string[]);
+    const workspaceAgentEntries = await readdir(workspaceAgentsDir).catch(() => [] as string[]);
 
     for (const channelId of SUPPORTED_CHANNEL_IDS) {
         const hasNamedDir = await fileExists(join(OPENCLAW_DIR, channelId));

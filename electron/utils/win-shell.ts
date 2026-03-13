@@ -36,6 +36,10 @@ export function quoteForCmd(value: string): string {
  */
 export function needsWinShell(bin: string): boolean {
   if (process.platform !== 'win32') return false;
+  const lower = bin.toLowerCase();
+  if (lower.endsWith('.cmd') || lower.endsWith('.bat') || lower.endsWith('.ps1')) {
+    return true;
+  }
   return !path.win32.isAbsolute(bin);
 }
 

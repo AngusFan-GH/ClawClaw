@@ -24,6 +24,7 @@ import { providerAccountToConfig } from '../../services/providers/provider-store
 import type { ProviderAccount } from '../../shared/providers/types';
 import { logger } from '../../utils/logger';
 import { getOpenClawCliSpawnConfig } from '../../utils/openclaw-cli';
+import { prepareWinSpawn } from '../../utils/win-shell';
 import { applyPresetLocalModelSelection, readLocalModelPresets } from '../../services/providers/local-model-presets';
 import { getOpenClawProviderKeyForType } from '../../utils/provider-keys';
 
@@ -94,11 +95,13 @@ async function fetchOpenClawModelListOnce(scope: OpenClawModelScope): Promise<Op
   const { command, args, env, cwd } = getOpenClawCliSpawnConfig(cliArgs);
 
   return await new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const prepared = prepareWinSpawn(command, args);
+    const child = spawn(prepared.command, prepared.args, {
       cwd,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
+      shell: prepared.shell,
     });
 
     let stdout = '';
