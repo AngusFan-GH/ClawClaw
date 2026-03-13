@@ -171,6 +171,10 @@ function clearHistoryPoll(): void {
 const DEFAULT_CANONICAL_PREFIX = 'agent:main';
 export const DEFAULT_SESSION_KEY = `${DEFAULT_CANONICAL_PREFIX}:main`;
 
+function isMainSessionKey(key: string): boolean {
+  return key.endsWith(':main');
+}
+
 function isCronSessionKey(key: string): boolean {
   return key.includes(':cron:');
 }
@@ -1328,6 +1332,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // newSession() design that avoids sessions.reset to preserve history.
 
   deleteSession: async (key: string) => {
+    if (isMainSessionKey(key)) {
+      set({ error: 'Main sessions cannot be deleted.' });
+      return;
+    }
+
     // Soft-delete the session's JSONL transcript on disk.
     // The main process renames <suffix>.jsonl → <suffix>.deleted.jsonl so that
     // sessions.list skips it automatically.
