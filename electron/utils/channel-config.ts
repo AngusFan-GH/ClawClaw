@@ -10,7 +10,7 @@ import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { dirname, join } from 'path';
 import { homedir } from 'os';
-import { app } from 'electron';
+import { app, utilityProcess } from 'electron';
 import { getOpenClawEntryPath, getOpenClawResolvedDir, getOpenClawDir } from './paths';
 import * as logger from './logger';
 import { proxyAwareFetch } from './proxy-fetch';
@@ -78,6 +78,21 @@ function extractTrailingJsonObject(raw: string): Record<string, unknown> | null 
 
 function getOpenClawCliSpawnConfig(): { command: string; args: string[]; env: NodeJS.ProcessEnv; cwd: string } {
     const cwd = getOpenClawResolvedDir();
+    const entryPath = getOpenClawEntryPath();
+
+    if (process.platform === 'win32') {
+        return {
+            command: process.execPath,
+            args: [entryPath, 'channels', 'list', '--json', '--no-usage'],
+            env: {
+                ...process.env,
+                ELECTRON_RUN_AS_NODE: '1',
+                OPENCLAW_NO_RESPAWN: '1',
+                OPENCLAW_EMBEDDED_IN: 'ClawClaw',
+            },
+            cwd,
+        };
+    }
 
     if (!app.isPackaged) {
         const openclawDir = getOpenClawDir();
@@ -97,7 +112,6 @@ function getOpenClawCliSpawnConfig(): { command: string; args: string[]; env: No
         }
     }
 
-    const entryPath = getOpenClawEntryPath();
     const packagedCli =
         process.platform === 'win32'
             ? join(process.resourcesPath, 'cli', 'openclaw.cmd')
@@ -133,14 +147,23 @@ async function listConfiguredChannelsFromCli(): Promise<string[]> {
     const { command, args, env, cwd } = getOpenClawCliSpawnConfig();
 
     return await new Promise((resolve) => {
-        const prepared = prepareWinSpawn(command, args);
-        const child = spawn(prepared.command, prepared.args, {
-            cwd,
-            env,
-            stdio: ['ignore', 'pipe', 'pipe'],
-            shell: prepared.shell,
-            windowsHide: true,
-        });
+        const child = process.platform === 'win32'
+            ? utilityProcess.fork(args[0] ?? '', args.slice(1), {
+                cwd,
+                env,
+                stdio: 'pipe',
+                serviceName: 'OpenClaw Channels List',
+            })
+            : (() => {
+                const prepared = prepareWinSpawn(command, args);
+                return spawn(prepared.command, prepared.args, {
+                    cwd,
+                    env,
+                    stdio: ['ignore', 'pipe', 'pipe'],
+                    shell: prepared.shell,
+                    windowsHide: true,
+                });
+            })();
 
         let stdout = '';
         let stderr = '';
@@ -158,7 +181,7 @@ async function listConfiguredChannelsFromCli(): Promise<string[]> {
             resolve([]);
         });
 
-        child.on('close', () => {
+        child.on(process.platform === 'win32' ? 'exit' : 'close', () => {
             const parsed = extractTrailingJsonObject(`${stdout}\n${stderr}`);
             if (!parsed) {
                 resolve([]);

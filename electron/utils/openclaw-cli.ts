@@ -97,6 +97,20 @@ export function getOpenClawCliSpawnConfig(args: string[]): {
   const platform = process.platform;
   const cwd = getOpenClawDir();
 
+  if (platform === 'win32') {
+    return {
+      command: process.execPath,
+      args: [entryPath, ...args],
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: '1',
+        OPENCLAW_NO_RESPAWN: '1',
+        OPENCLAW_EMBEDDED_IN: 'ClawClaw',
+      },
+      cwd,
+    };
+  }
+
   if (!app.isPackaged) {
     const openclawDir = getOpenClawDir();
     const nodeModulesDir = dirname(openclawDir);

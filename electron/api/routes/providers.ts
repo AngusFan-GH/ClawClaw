@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { spawn } from 'node:child_process';
+import { utilityProcess } from 'electron';
 import {
   type ProviderConfig,
 } from '../../utils/secure-storage';
@@ -95,14 +96,23 @@ async function fetchOpenClawModelListOnce(scope: OpenClawModelScope): Promise<Op
   const { command, args, env, cwd } = getOpenClawCliSpawnConfig(cliArgs);
 
   return await new Promise((resolve, reject) => {
-    const prepared = prepareWinSpawn(command, args);
-    const child = spawn(prepared.command, prepared.args, {
-      cwd,
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-      shell: prepared.shell,
-    });
+    const child = process.platform === 'win32'
+      ? utilityProcess.fork(args[0] ?? '', args.slice(1), {
+        cwd,
+        env,
+        stdio: 'pipe',
+        serviceName: 'OpenClaw Models List',
+      })
+      : (() => {
+        const prepared = prepareWinSpawn(command, args);
+        return spawn(prepared.command, prepared.args, {
+          cwd,
+          env,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          windowsHide: true,
+          shell: prepared.shell,
+        });
+      })();
 
     let stdout = '';
     let stderr = '';
@@ -115,7 +125,7 @@ async function fetchOpenClawModelListOnce(scope: OpenClawModelScope): Promise<Op
     });
 
     child.on('error', (error) => reject(error));
-    child.on('close', (code) => {
+    child.on(process.platform === 'win32' ? 'exit' : 'close', (code) => {
       if (code !== 0) {
         reject(new Error(stderr.trim() || `openclaw models list exited with code ${code}`));
         return;
