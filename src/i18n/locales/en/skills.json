@@ -28,6 +28,8 @@
   "filter": {
     "all": "All ({{count}})",
     "builtIn": "Built-in ({{count}})",
+    "preinstalled": "Pre-installed ({{count}})",
+    "installed": "User Installed ({{count}})",
     "marketplace": "Marketplace ({{count}})"
   },
   "search": "Search skills...",
@@ -49,6 +51,7 @@
     "source": "Source",
     "coreSystem": "Core System",
     "bundled": "Bundled",
+    "preinstalled": "Pre-installed",
     "userInstalled": "User Installed",
     "enabled": "Enabled",
     "disabled": "Disabled",

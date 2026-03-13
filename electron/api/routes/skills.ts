@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { getAllSkillConfigs, updateSkillConfig } from '../../utils/skill-config';
-import { getSkillMetadata } from '../../utils/skill-metadata';
+import { getManagedInstalledSkillSlugs, getSkillMetadata } from '../../utils/skill-metadata';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -36,6 +36,15 @@ export async function handleSkillRoutes(
     try {
       const body = await parseJsonBody<{ slugs?: string[] }>(req);
       sendJson(res, 200, { success: true, results: await getSkillMetadata(body.slugs) });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/skills/local-installed' && req.method === 'GET') {
+    try {
+      sendJson(res, 200, { success: true, results: await getManagedInstalledSkillSlugs() });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

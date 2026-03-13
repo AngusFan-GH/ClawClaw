@@ -33,6 +33,7 @@ export interface Skill {
   };
   isCore?: boolean;
   isBundled?: boolean;
+  isPreinstalled?: boolean;
   dependencies?: string[];
 }
 

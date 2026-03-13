@@ -2,7 +2,7 @@ import { existsSync } from 'fs';
 import { readFile, readdir } from 'fs/promises';
 import { join } from 'path';
 import { parse } from 'yaml';
-import { getOpenClawConfigDir, getOpenClawDir, getOpenClawSkillsDir } from './paths';
+import { getOpenClawConfigDir, getOpenClawDir, getOpenClawSkillsDir, getResourcesDir } from './paths';
 
 export interface SkillRequirements {
   env?: string[];
@@ -15,14 +15,17 @@ export interface SkillRequirements {
 export interface SkillMetadataInfo {
   slug: string;
   name?: string;
+  description?: string;
   skillKey?: string;
   emoji?: string;
   primaryEnv?: string;
+  isProjectBundled?: boolean;
   requires: SkillRequirements;
 }
 
 type ParsedFrontmatter = {
   name?: string;
+  description?: string;
   metadata?: {
     openclaw?: {
       skillKey?: string;
@@ -65,22 +68,20 @@ async function readMetadataFromFile(slug: string, filePath: string): Promise<Ski
 
     const parsed = parse(frontmatter) as ParsedFrontmatter | null;
     const openclaw = parsed?.metadata?.openclaw || parsed?.metadata?.clawdbot;
-    if (!openclaw) {
-      return null;
-    }
 
     return {
       slug,
       name: parsed?.name,
-      skillKey: openclaw.skillKey,
-      emoji: openclaw.emoji,
-      primaryEnv: openclaw.primaryEnv,
+      description: parsed?.description,
+      skillKey: openclaw?.skillKey,
+      emoji: openclaw?.emoji,
+      primaryEnv: openclaw?.primaryEnv,
       requires: {
-        env: normalizeStringList(openclaw.requires?.env),
-        bins: normalizeStringList(openclaw.requires?.bins),
-        anyBins: normalizeStringList(openclaw.requires?.anyBins),
-        config: normalizeStringList(openclaw.requires?.config),
-        os: normalizeStringList(openclaw.requires?.os),
+        env: normalizeStringList(openclaw?.requires?.env),
+        bins: normalizeStringList(openclaw?.requires?.bins),
+        anyBins: normalizeStringList(openclaw?.requires?.anyBins),
+        config: normalizeStringList(openclaw?.requires?.config),
+        os: normalizeStringList(openclaw?.requires?.os),
       },
     };
   } catch {
@@ -92,12 +93,22 @@ async function resolveSkillMetadata(slug: string): Promise<SkillMetadataInfo | n
   const managedPath = join(getOpenClawSkillsDir(), slug, 'SKILL.md');
   const workspacePath = join(getOpenClawConfigDir(), 'workspace', 'skills', slug, 'SKILL.md');
   const bundledPath = join(getOpenClawDir(), 'skills', slug, 'SKILL.md');
+  const projectBundledPath = join(getResourcesDir(), 'skills', slug, 'SKILL.md');
 
-  return (
+  const metadata =
     (await readMetadataFromFile(slug, workspacePath)) ||
     (await readMetadataFromFile(slug, managedPath)) ||
-    (await readMetadataFromFile(slug, bundledPath))
-  );
+    (await readMetadataFromFile(slug, bundledPath)) ||
+    (await readMetadataFromFile(slug, projectBundledPath));
+
+  if (!metadata) {
+    return null;
+  }
+
+  return {
+    ...metadata,
+    isProjectBundled: existsSync(projectBundledPath),
+  };
 }
 
 export async function getSkillMetadata(slugs?: string[]): Promise<Record<string, SkillMetadataInfo>> {
@@ -147,4 +158,16 @@ export async function getSkillMetadata(slugs?: string[]): Promise<Record<string,
   }
 
   return result;
+}
+
+export async function getManagedInstalledSkillSlugs(): Promise<string[]> {
+  const skillsDir = getOpenClawSkillsDir();
+  if (!existsSync(skillsDir)) {
+    return [];
+  }
+
+  const entries = await readdir(skillsDir, { withFileTypes: true }).catch(() => []);
+  return entries
+    .filter((entry) => entry.isDirectory() && existsSync(join(skillsDir, entry.name, 'SKILL.md')))
+    .map((entry) => entry.name);
 }

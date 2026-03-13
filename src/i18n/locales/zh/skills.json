@@ -28,6 +28,8 @@
   "filter": {
     "all": "全部 ({{count}})",
     "builtIn": "内置 ({{count}})",
+    "preinstalled": "\u9884\u88c5 ({{count}})",
+    "installed": "\u7528\u6237\u5b89\u88c5 ({{count}})",
     "marketplace": "市场 ({{count}})"
   },
   "search": "搜索技能...",
@@ -49,6 +51,7 @@
     "source": "来源",
     "coreSystem": "核心系统",
     "bundled": "内置",
+    "preinstalled": "\u9884\u88c5",
     "userInstalled": "用户安装",
     "enabled": "已启用",
     "disabled": "已禁用",

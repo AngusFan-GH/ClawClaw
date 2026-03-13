@@ -10,9 +10,12 @@ import type { Skill, MarketplaceSkill } from '../types/skill';
 
 type SkillMetadataResult = {
   slug: string;
+  name?: string;
+  description?: string;
   skillKey?: string;
   emoji?: string;
   primaryEnv?: string;
+  isProjectBundled?: boolean;
   requires?: {
     env?: string[];
     bins?: string[];
@@ -63,7 +66,7 @@ function normalizeSkillIcon(...candidates: Array<string | undefined>): string {
     if (!looksEmoji && icon.length > 2) continue;
     return icon;
   }
-  return '📦';
+  return '\uD83D\uDCE6';
 }
 
 function mapErrorCodeToSkillErrorKey(
@@ -129,7 +132,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
           '/api/skills/configs'
         ).catch(() => ({} as Record<string, { apiKey?: string; env?: Record<string, string> }>));
 
-      const [clawhubResult, configResult, gatewayData] = await Promise.all([
+      const [clawhubResult, configResult, gatewayData, localInstalledResult] = await Promise.all([
         hostApiFetch<{ success: boolean; results?: ClawHubListResult[]; error?: string }>(
           '/api/clawhub/list'
         ),
@@ -146,13 +149,17 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
                 return null;
               })
           : Promise.resolve(null),
+        hostApiFetch<{ success: boolean; results?: string[]; error?: string }>('/api/skills/local-installed')
+          .catch(() => ({ success: false as const })),
       ]);
 
       let combinedSkills: Skill[] = [];
       const currentSkills = get().skills;
+      const localInstalledSlugs = localInstalledResult.success ? (localInstalledResult.results ?? []) : [];
       const candidateSlugs = new Set<string>();
       clawhubResult.results?.forEach((skill) => candidateSlugs.add(skill.slug));
       gatewayData?.skills?.forEach((skill) => candidateSlugs.add(skill.slug || skill.skillKey));
+      localInstalledSlugs.forEach((slug) => candidateSlugs.add(slug));
 
       const metadataResult = await hostApiFetch<{
         success: boolean;
@@ -182,6 +189,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
             s.version ||
             installedVersionBySlug.get(skillSlug) ||
             previous?.version;
+          const isProjectBundled = Boolean(metadata?.isProjectBundled);
           const envConfig = directConfig.env || {};
           const hasEditableConfig = Boolean(
             metadata?.primaryEnv ||
@@ -212,7 +220,8 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
             requirements: metadata?.requires,
             configurable: hasEditableConfig,
             isCore: s.bundled && s.always,
-            isBundled: s.bundled,
+            isBundled: s.bundled && !isProjectBundled,
+            isPreinstalled: isProjectBundled,
           };
         });
       } else if (currentSkills.length > 0) {
@@ -234,6 +243,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
             const directConfig = configResult[cs.slug] || {};
             const previous = currentSkills.find((s) => s.id === cs.slug || s.slug === cs.slug);
             const metadata = metadataMap[cs.slug];
+            const isProjectBundled = Boolean(metadata?.isProjectBundled);
             const envConfig = directConfig.env || {};
             combinedSkills.push({
               id: cs.slug,
@@ -247,7 +257,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
               runtimeStatus: gatewayData ? 'not_loaded' : 'unknown',
               runtimeReason: gatewayData ? 'not_loaded' : 'gateway_offline',
               runtimeError: undefined,
-              icon: normalizeSkillIcon(previous?.icon, metadata?.emoji, '⌛'),
+              icon: normalizeSkillIcon(previous?.icon, metadata?.emoji),
               version: cs.version || previous?.version || '',
               author: previous?.author,
               config: directConfig,
@@ -261,8 +271,55 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
               ),
               isCore: false,
               isBundled: false,
+              isPreinstalled: isProjectBundled,
             });
           }
+        });
+      }
+
+      if (localInstalledSlugs.length > 0) {
+        localInstalledSlugs.forEach((slug) => {
+          const existing = combinedSkills.find((s) => s.id === slug || s.slug === slug);
+          if (existing) {
+            return;
+          }
+
+          const directConfig = configResult[slug] || {};
+          const previous = currentSkills.find((s) => s.id === slug || s.slug === slug);
+          const metadata = metadataMap[slug];
+          const envConfig = directConfig.env || {};
+
+          combinedSkills.push({
+            id: metadata?.skillKey || slug,
+            slug,
+            name: metadata?.name || previous?.name || slug,
+            description:
+              metadata?.description ||
+              previous?.description ||
+              'Installed locally and awaiting runtime discovery.',
+            enabled: previous?.enabled || false,
+            runtimeEnabled: false,
+            installedOnDisk: true,
+            loadedInGateway: false,
+            runtimeStatus: gatewayData ? 'not_loaded' : 'unknown',
+            runtimeReason: gatewayData ? 'not_loaded' : 'gateway_offline',
+            runtimeError: undefined,
+            icon: normalizeSkillIcon(previous?.icon, metadata?.emoji),
+            version: previous?.version || '',
+            author: previous?.author,
+            config: directConfig,
+            primaryEnv: metadata?.primaryEnv,
+            requirements: metadata?.requires,
+            configurable: Boolean(
+              metadata?.primaryEnv ||
+              metadata?.requires?.env?.length ||
+              directConfig.apiKey ||
+              Object.keys(envConfig).length,
+            ),
+            isCore: false,
+            isBundled: false,
+            isPreinstalled: Boolean(metadata?.isProjectBundled),
+          });
         });
       }
 

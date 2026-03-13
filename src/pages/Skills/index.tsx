@@ -2,7 +2,7 @@
  * Skills Page
  * Browse and manage AI skills
  */
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   Search,
   Puzzle,
@@ -49,6 +49,19 @@ function getRequiredEnvKeys(skill: Skill | null): string[] {
 
 function getPlaintextApiKey(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+function getSkillSourceLabel(t: ReturnType<typeof useTranslation>['t'], skill: Skill): string {
+  if (skill.isCore) {
+    return t('detail.coreSystem');
+  }
+  if (skill.isBundled) {
+    return t('detail.bundled');
+  }
+  if (skill.isPreinstalled) {
+    return t('detail.preinstalled');
+  }
+  return t('detail.userInstalled');
 }
 
 function resolveSkillIcon(...candidates: Array<string | undefined>): string {
@@ -230,9 +243,9 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, canToggle, onUnin
                   {skill.name}
                 </h2>
                 <Badge variant="secondary" className="rounded-[10px] border-0 bg-black/[0.05] px-2.5 py-1 text-[10px] font-medium text-foreground/70 dark:bg-white/[0.08]">
-                  {skill.isCore ? t('detail.coreSystem') : skill.isBundled ? t('detail.bundled') : t('detail.userInstalled')}
+                  {getSkillSourceLabel(t, skill)}
                 </Badge>
-                {skill.version && !skill.isBundled ? (
+                {skill.version && !skill.isBundled && !skill.isPreinstalled ? (
                   <span className="font-mono text-[11px] text-foreground/45">v{skill.version}</span>
                 ) : null}
               </div>
@@ -352,7 +365,7 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, canToggle, onUnin
             )}
 
             {/* External Links */}
-            {skill.slug && !skill.isBundled && !skill.isCore && (
+            {skill.slug && !skill.isBundled && !skill.isPreinstalled && !skill.isCore && (
               <div className="flex gap-2 pt-1">
                 <Button variant="outline" size="sm" className="h-8 rounded-[10px] border-black/10 bg-transparent px-3 text-[11px] font-medium text-foreground/70 shadow-none hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5" onClick={handleOpenClawhub}>
                   <Globe className="h-[12px] w-[12px]" />
@@ -394,7 +407,7 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, canToggle, onUnin
               </Button>
             )}
 
-            {!skill.isCore && !skill.isBundled && onUninstall && skill.slug && (
+            {!skill.isCore && !skill.isBundled && !skill.isPreinstalled && onUninstall && skill.slug && (
               <Button
                 variant="outline"
                 className="h-[42px] rounded-[10px] border-destructive/25 bg-transparent px-4 text-[13px] font-semibold text-destructive transition-colors hover:bg-destructive/10"
@@ -470,7 +483,7 @@ function SkillGridCard({ skill, isGatewayRunning, onClick, onToggle }: SkillGrid
                 variant="secondary"
                 className="h-6 rounded-[10px] border-0 bg-black/[0.05] px-2.5 py-0 text-[10px] font-medium text-foreground/70 dark:bg-white/[0.08]"
               >
-                {skill.isCore ? t('detail.coreSystem') : skill.isBundled ? t('detail.bundled') : t('detail.userInstalled')}
+                {getSkillSourceLabel(t, skill)}
               </Badge>
               <Badge
                 variant="secondary"
@@ -481,7 +494,7 @@ function SkillGridCard({ skill, isGatewayRunning, onClick, onToggle }: SkillGrid
               >
                 {runtimeLabel}
               </Badge>
-              {skill.version && !skill.isBundled ? (
+              {skill.version && !skill.isBundled && !skill.isPreinstalled ? (
                 <span className="font-mono text-[11px] text-foreground/45">
                   v{skill.version}
                 </span>
@@ -513,6 +526,7 @@ function SkillGridCard({ skill, isGatewayRunning, onClick, onToggle }: SkillGrid
 interface MarketplaceSkillCardProps {
   skill: MarketplaceSkill;
   isInstalled: boolean;
+  installedSkill?: Skill;
   isInstallLoading: boolean;
   onOpen: () => void;
   onInstall: () => void;
@@ -522,6 +536,7 @@ interface MarketplaceSkillCardProps {
 function MarketplaceSkillCard({
   skill,
   isInstalled,
+  installedSkill,
   isInstallLoading,
   onOpen,
   onInstall,
@@ -570,7 +585,7 @@ function MarketplaceSkillCard({
         onClick={(event) => event.stopPropagation()}
       >
         <span className="rounded-full bg-black/[0.04] px-2.5 py-1 text-[12px] font-medium text-foreground/65 dark:bg-white/[0.06]">
-          {isInstalled ? t('detail.userInstalled') : t('marketplace.source')}
+          {isInstalled && installedSkill ? getSkillSourceLabel(t, installedSkill) : t('marketplace.source')}
         </span>
         {isInstalled ? (
           <Button
@@ -636,9 +651,8 @@ export function Skills() {
   const [searchQuery, setSearchQuery] = useState('');
   const [marketplaceQuery, setMarketplaceQuery] = useState('');
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
-  const [activeTab, setActiveTab] = useState('all');
-  const [selectedSource, setSelectedSource] = useState<'all' | 'built-in' | 'marketplace'>('all');
-  const marketplaceDiscoveryAttemptedRef = useRef(false);
+  const [activeTab, setActiveTab] = useState<'all' | 'preinstalled' | 'installed' | 'marketplace'>('all');
+  const [marketplaceSearchPerformed, setMarketplaceSearchPerformed] = useState(false);
 
   const isGatewayRunning = gatewayStatus.state === 'running';
   const [showGatewayWarning, setShowGatewayWarning] = useState(false);
@@ -671,14 +685,14 @@ export function Skills() {
     const matchesSearch = skill.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       skill.description.toLowerCase().includes(searchQuery.toLowerCase());
 
-    let matchesSource = true;
-    if (selectedSource === 'built-in') {
-      matchesSource = !!skill.isBundled;
-    } else if (selectedSource === 'marketplace') {
-      matchesSource = !skill.isBundled;
+    let matchesTab = true;
+    if (activeTab === 'preinstalled') {
+      matchesTab = Boolean(skill.isPreinstalled && !skill.isCore);
+    } else if (activeTab === 'installed') {
+      matchesTab = Boolean(!skill.isBundled && !skill.isPreinstalled && !skill.isCore);
     }
 
-    return matchesSearch && matchesSource;
+    return matchesSearch && matchesTab;
   }).sort((a, b) => {
     // Enabled skills first
     const aRuntimeEnabled = a.runtimeEnabled ?? false;
@@ -694,7 +708,8 @@ export function Skills() {
 
   const sourceStats = {
     all: safeSkills.length,
-    builtIn: safeSkills.filter(s => s.isBundled).length,
+    preinstalled: safeSkills.filter((s) => s.isPreinstalled && !s.isCore).length,
+    installed: safeSkills.filter((s) => !s.isBundled && !s.isPreinstalled && !s.isCore).length,
     marketplace: searchResults.length,
   };
 
@@ -722,7 +737,7 @@ export function Skills() {
     }
   }, [disableSkill, enableSkill, isGatewayRunning, safeSkills, t]);
 
-  const hasInstalledSkills = safeSkills.some(s => !s.isBundled);
+  const hasManagedSkills = safeSkills.some((s) => !s.isCore);
 
   const handleOpenSkillsFolder = useCallback(async () => {
     try {
@@ -752,24 +767,13 @@ export function Skills() {
       .catch(console.error);
   }, []);
 
-
-  // Auto-reset when query is cleared
-  useEffect(() => {
-    if (activeTab === 'marketplace' && marketplaceQuery === '' && marketplaceDiscoveryAttemptedRef.current) {
-      void searchSkills('');
+  const handleMarketplaceSearch = useCallback(() => {
+    if (!marketplaceQuery.trim()) {
+      return;
     }
-  }, [marketplaceQuery, activeTab, searchSkills]);
-
-  useEffect(() => {
-    if (activeTab !== 'marketplace') return;
-    if (!marketplaceDiscoveryAttemptedRef.current && !marketplaceQuery.trim()) return;
-
-    const timer = window.setTimeout(() => {
-      void searchSkills(marketplaceQuery.trim());
-    }, 250);
-
-    return () => window.clearTimeout(timer);
-  }, [activeTab, marketplaceQuery, searchSkills]);
+    setMarketplaceSearchPerformed(true);
+    void searchSkills(marketplaceQuery.trim());
+  }, [marketplaceQuery, searchSkills]);
 
   // Handle install
   const handleInstall = useCallback(async (slug: string) => {
@@ -791,24 +795,6 @@ export function Skills() {
       }
     }
   }, [installSkill, enableSkill, t, skillsDirPath]);
-
-  // Initial marketplace load (Discovery)
-  useEffect(() => {
-    if (activeTab !== 'marketplace') {
-      return;
-    }
-    if (marketplaceQuery.trim()) {
-      return;
-    }
-    if (searching) {
-      return;
-    }
-    if (marketplaceDiscoveryAttemptedRef.current) {
-      return;
-    }
-    marketplaceDiscoveryAttemptedRef.current = true;
-    searchSkills('');
-  }, [activeTab, marketplaceQuery, searching, searchSkills]);
 
   // Handle uninstall
   const handleUninstall = useCallback(async (slug: string) => {
@@ -844,10 +830,10 @@ export function Skills() {
             <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <button
-                  onClick={() => { setActiveTab('all'); setSelectedSource('all'); }}
+                  onClick={() => setActiveTab('all')}
                   className={cn(
                     "rounded-[12px] px-4 py-2 text-[14px] font-medium transition-all",
-                    activeTab === 'all' && selectedSource === 'all'
+                    activeTab === 'all'
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
                   )}
@@ -855,15 +841,26 @@ export function Skills() {
                   {t('filter.all', { count: sourceStats.all })}
                 </button>
                 <button
-                  onClick={() => { setActiveTab('all'); setSelectedSource('built-in'); }}
+                  onClick={() => setActiveTab('preinstalled')}
                   className={cn(
                     "rounded-[12px] px-4 py-2 text-[14px] font-medium transition-all",
-                    activeTab === 'all' && selectedSource === 'built-in'
+                    activeTab === 'preinstalled'
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
                   )}
                 >
-                  {t('filter.builtIn', { count: sourceStats.builtIn })}
+                  {t('filter.preinstalled', { count: sourceStats.preinstalled })}
+                </button>
+                <button
+                  onClick={() => setActiveTab('installed')}
+                  className={cn(
+                    "rounded-[12px] px-4 py-2 text-[14px] font-medium transition-all",
+                    activeTab === 'installed'
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
+                  )}
+                >
+                  {t('filter.installed', { count: sourceStats.installed })}
                 </button>
                 <button
                   onClick={() => setActiveTab('marketplace')}
@@ -874,12 +871,12 @@ export function Skills() {
                       : "text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
                   )}
                 >
-                  {t('filter.marketplace', { count: sourceStats.marketplace })}
+                  {t('tabs.marketplace')}
                 </button>
               </div>
 
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
-                {hasInstalledSkills && (
+                {hasManagedSkills && (
                   <button
                     onClick={handleOpenSkillsFolder}
                     className="h-10 rounded-[12px] border border-border/70 px-4 text-[13px] font-medium text-foreground/80 transition-colors hover:bg-accent/70 hover:text-foreground"
@@ -901,22 +898,48 @@ export function Skills() {
               </div>
             </div>
 
-            <div className="relative group flex h-11 min-w-0 items-center rounded-[12px] border border-black/8 bg-black/[0.04] px-4 transition-colors focus-within:border-black/12 focus-within:bg-black/[0.06] dark:border-white/10 dark:bg-white/[0.04] dark:focus-within:border-white/15 dark:focus-within:bg-white/[0.06]">
-              <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <input
-                placeholder={activeTab === 'marketplace' ? t('searchMarketplace') : t('search')}
-                value={activeTab === 'marketplace' ? marketplaceQuery : searchQuery}
-                onChange={(e) => activeTab === 'marketplace' ? setMarketplaceQuery(e.target.value) : setSearchQuery(e.target.value)}
-                className="ml-2 w-full bg-transparent text-[14px] font-medium text-foreground outline-none placeholder:text-foreground/45"
-              />
-              {((activeTab === 'marketplace' && marketplaceQuery) || (activeTab === 'all' && searchQuery)) && (
-                <button
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="relative group flex h-11 min-w-0 flex-1 items-center rounded-[12px] border border-black/8 bg-black/[0.04] px-4 transition-colors focus-within:border-black/12 focus-within:bg-black/[0.06] dark:border-white/10 dark:bg-white/[0.04] dark:focus-within:border-white/15 dark:focus-within:bg-white/[0.06]">
+                <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <input
+                  placeholder={activeTab === 'marketplace' ? t('searchMarketplace') : t('search')}
+                  value={activeTab === 'marketplace' ? marketplaceQuery : searchQuery}
+                  onChange={(e) => activeTab === 'marketplace' ? setMarketplaceQuery(e.target.value) : setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (activeTab === 'marketplace' && e.key === 'Enter') {
+                      e.preventDefault();
+                      handleMarketplaceSearch();
+                    }
+                  }}
+                  className="ml-2 w-full bg-transparent text-[14px] font-medium text-foreground outline-none placeholder:text-foreground/45"
+                />
+                {((activeTab === 'marketplace' && marketplaceQuery) || (activeTab !== 'marketplace' && searchQuery)) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (activeTab === 'marketplace') {
+                        setMarketplaceQuery('');
+                        setMarketplaceSearchPerformed(false);
+                        return;
+                      }
+                      setSearchQuery('');
+                    }}
+                    className="ml-1 shrink-0 text-foreground/50 hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {activeTab === 'marketplace' && (
+                <Button
                   type="button"
-                  onClick={() => activeTab === 'marketplace' ? setMarketplaceQuery('') : setSearchQuery('')}
-                  className="ml-1 shrink-0 text-foreground/50 hover:text-foreground"
+                  onClick={handleMarketplaceSearch}
+                  disabled={!marketplaceQuery.trim() || searching}
+                  className="h-11 rounded-[12px] px-4 text-[13px] font-semibold"
                 >
-                  <X className="h-3.5 w-3.5" />
-                </button>
+                  {t('searchButton')}
+                </Button>
               )}
             </div>
           </div>
@@ -924,7 +947,7 @@ export function Skills() {
 
         {/* Content Area */}
         <div className="min-h-0 flex-1 overflow-y-auto px-0 pb-10 pt-1 sm:px-1 md:pt-2">
-          {error && activeTab === 'all' && (
+          {error && activeTab !== 'marketplace' && (
             <div className="mb-4 p-4 rounded-xl border border-destructive/50 bg-destructive/10 text-destructive text-sm font-medium flex items-center gap-2">
               <AlertCircle className="h-5 w-5 shrink-0" />
               <span>
@@ -936,7 +959,7 @@ export function Skills() {
           )}
 
           <div className="flex flex-col gap-4">
-            {activeTab === 'all' && (
+            {activeTab !== 'marketplace' && (
               loading && safeSkills.length === 0 ? (
                 <PageLoader
                   compact
@@ -998,7 +1021,8 @@ export function Skills() {
                 {searchResults.length > 0 ? (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
                     {searchResults.map((skill) => {
-                      const isInstalled = safeSkills.some(s => s.id === skill.slug || s.name === skill.name);
+                      const installedSkill = safeSkills.find((s) => s.id === skill.slug || s.slug === skill.slug || s.name === skill.name);
+                      const isInstalled = Boolean(installedSkill);
                       const isInstallLoading = !!installing[skill.slug];
 
                       return (
@@ -1006,6 +1030,7 @@ export function Skills() {
                           key={skill.slug}
                           skill={skill}
                           isInstalled={isInstalled}
+                          installedSkill={installedSkill}
                           isInstallLoading={isInstallLoading}
                           onOpen={() => invokeIpc('shell:openExternal', `https://clawhub.ai/s/${skill.slug}`)}
                           onInstall={() => handleInstall(skill.slug)}
@@ -1013,14 +1038,19 @@ export function Skills() {
                         />
                       );
                     })}
-                  </div>
-                ) : (
-                  !searching && marketplaceQuery && (
+                    </div>
+                ) : marketplaceSearchPerformed ? (
+                  !searching && (
                     <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
                       <Package className="h-10 w-10 mb-4 opacity-50" />
                       <p>{t('marketplace.noResults')}</p>
                     </div>
                   )
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                    <Package className="h-10 w-10 mb-4 opacity-50" />
+                    <p>{t('marketplace.emptyPrompt')}</p>
+                  </div>
                 )}
               </div>
             )}
