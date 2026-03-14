@@ -117,6 +117,75 @@ function invalidateOpenClawModelListCache(): void {
   openClawModelListCache.clear();
 }
 
+function extractJsonObjectFromMixedOutput(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < trimmed.length; index += 1) {
+    const char = trimmed[index];
+
+    if (start === -1) {
+      if (char === '{') {
+        start = index;
+        depth = 1;
+      }
+      continue;
+    }
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === '{') {
+      depth += 1;
+      continue;
+    }
+
+    if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return trimmed.slice(start, index + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
+function parseOpenClawModelListOutput(raw: string): OpenClawModelListResponse {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new Error('openclaw models list returned empty output');
+  }
+
+  try {
+    return JSON.parse(trimmed) as OpenClawModelListResponse;
+  } catch {
+    const jsonSlice = extractJsonObjectFromMixedOutput(trimmed);
+    if (!jsonSlice) {
+      throw new Error(`openclaw models list did not contain a JSON object. Output preview: ${trimmed.slice(0, 240)}`);
+    }
+    return JSON.parse(jsonSlice) as OpenClawModelListResponse;
+  }
+}
+
 async function fetchOpenClawModelListOnce(scope: OpenClawModelScope): Promise<OpenClawModelEntry[]> {
   const cliArgs = scope === 'runtime'
     ? ['models', 'list', '--json']
@@ -150,7 +219,7 @@ async function fetchOpenClawModelListOnce(scope: OpenClawModelScope): Promise<Op
         return;
       }
       try {
-        const parsed = JSON.parse(stdout) as OpenClawModelListResponse;
+        const parsed = parseOpenClawModelListOutput(stdout);
         resolve(parsed.models ?? []);
       } catch (error) {
         reject(error);

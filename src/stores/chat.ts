@@ -1307,6 +1307,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       currentSessionKey: key,
       currentAgentId: getAgentIdFromSessionKey(key),
       messages: [],
+      sending: false,
       streamingText: '',
       streamingMessage: null,
       streamingTools: [],
@@ -1360,6 +1361,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((s) => ({
         ...removeSessionArtifacts(s, key),
         messages: [],
+        sending: false,
         streamingText: '',
         streamingMessage: null,
         streamingTools: [],
@@ -1409,6 +1411,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         [newKey]: true,
       },
       messages: [],
+      sending: false,
       streamingText: '',
       streamingMessage: null,
       streamingTools: [],
