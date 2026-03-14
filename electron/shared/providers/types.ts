@@ -4,6 +4,7 @@ export const PROVIDER_TYPES = [
   'openai',
   'google',
   'openrouter',
+  'opencode-go',
   'ark',
   'moonshot',
   'siliconflow',
@@ -11,6 +12,8 @@ export const PROVIDER_TYPES = [
   'minimax-portal-cn',
   'qwen-portal',
   'ollama',
+  'vllm',
+  'sglang',
   'custom',
 ] as const;
 
@@ -20,6 +23,7 @@ export const BUILTIN_PROVIDER_TYPES = [
   'openai',
   'google',
   'openrouter',
+  'opencode-go',
   'ark',
   'moonshot',
   'siliconflow',
@@ -27,12 +31,30 @@ export const BUILTIN_PROVIDER_TYPES = [
   'minimax-portal-cn',
   'qwen-portal',
   'ollama',
+  'vllm',
+  'sglang',
 ] as const;
 
 export type ProviderType = (typeof PROVIDER_TYPES)[number];
 export type BuiltinProviderType = (typeof BUILTIN_PROVIDER_TYPES)[number];
 
 export const OLLAMA_PLACEHOLDER_API_KEY = 'ollama-local';
+export const SELF_HOSTED_PROVIDER_TYPES = [
+  'custom',
+  'local-model',
+  'ollama',
+  'vllm',
+  'sglang',
+] as const;
+export const MULTI_INSTANCE_PROVIDER_TYPES = [
+  'custom',
+  'ollama',
+  'vllm',
+  'sglang',
+] as const;
+
+const SELF_HOSTED_PROVIDER_TYPE_SET = new Set<string>(SELF_HOSTED_PROVIDER_TYPES);
+const MULTI_INSTANCE_PROVIDER_TYPE_SET = new Set<string>(MULTI_INSTANCE_PROVIDER_TYPES);
 
 export type ProviderProtocol =
   | 'openai-completions'
@@ -86,6 +108,14 @@ export interface ProviderTypeInfo {
   isOAuth?: boolean;
   supportsApiKey?: boolean;
   apiKeyUrl?: string;
+}
+
+export function isSelfHostedProviderType(type: string): boolean {
+  return SELF_HOSTED_PROVIDER_TYPE_SET.has(type);
+}
+
+export function isMultiInstanceProviderType(type: string): boolean {
+  return MULTI_INSTANCE_PROVIDER_TYPE_SET.has(type);
 }
 
 export interface ProviderModelEntry extends Record<string, unknown> {

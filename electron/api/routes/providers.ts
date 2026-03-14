@@ -343,6 +343,24 @@ async function listProviderModelOptions(
   };
 }
 
+async function listProviderModelOptionsWithRuntimeFallback(
+  runtimeProviderId: string,
+  scope: 'catalog' | 'runtime',
+  options?: { allowModelsJsonFallback?: boolean },
+): Promise<{
+  models: Array<{ id: string; name: string }>;
+  source: ProviderModelOptionsSource;
+}> {
+  const primary = await listProviderModelOptions(runtimeProviderId, scope, options);
+  if (scope !== 'catalog' || primary.models.length > 0) {
+    return primary;
+  }
+
+  return await listProviderModelOptions(runtimeProviderId, 'runtime', {
+    allowModelsJsonFallback: false,
+  });
+}
+
 function isRuntimeOnlyModelCatalog(vendorId: string, authMode?: string | null): boolean {
   return (
     (vendorId === 'openai' && (authMode === 'oauth_browser' || authMode === 'oauth_device'))
@@ -437,7 +455,7 @@ export async function handleProviderRoutes(
       const authMode = url.searchParams.get('authMode');
       const accountId = url.searchParams.get('accountId');
       const scopeParam = url.searchParams.get('scope');
-      const scope = scopeParam === 'runtime' ? 'runtime' : 'catalog';
+      let scope: 'catalog' | 'runtime' = scopeParam === 'runtime' ? 'runtime' : 'catalog';
       if (!vendorId) {
         sendJson(res, 400, { error: 'vendorId is required' });
         return true;
@@ -454,7 +472,7 @@ export async function handleProviderRoutes(
         authMode,
         accountId,
       );
-      const { models, source } = await listProviderModelOptions(runtimeProviderId, scope, {
+      const { models, source } = await listProviderModelOptionsWithRuntimeFallback(runtimeProviderId, scope, {
         allowModelsJsonFallback: !runtimeOnlyCatalog,
       });
       sendJson(res, 200, { runtimeProviderId, models, source });

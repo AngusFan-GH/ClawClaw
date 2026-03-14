@@ -18,7 +18,12 @@ import { ChatToolbar, type ChatToolbarModelOption } from './ChatToolbar';
 import { extractImages, extractText, extractThinking, extractToolUse } from './message-utils';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import { PROVIDER_TYPE_INFO, type ProviderAccount, type ProviderVendorInfo } from '@/lib/providers';
+import {
+  isMultiInstanceProviderType,
+  PROVIDER_TYPE_INFO,
+  type ProviderAccount,
+  type ProviderVendorInfo,
+} from '@/lib/providers';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { hostApiFetch } from '@/lib/host-api';
 import i18n from '@/i18n';
@@ -36,7 +41,7 @@ function getRuntimeProviderFallbackKey(account: ProviderAccount): string | undef
   if (account.vendorId === 'minimax-portal-cn') {
     return 'minimax-portal';
   }
-  if (account.vendorId === 'custom' || account.vendorId === 'ollama' || account.vendorId === 'local-model') {
+  if (isMultiInstanceProviderType(account.vendorId)) {
     return undefined;
   }
   return account.vendorId;
@@ -114,7 +119,7 @@ function resolveAccountModelOptions(
 }
 
 function isMultiInstanceRuntimeVendor(vendorId: ProviderAccount['vendorId']): boolean {
-  return vendorId === 'custom' || vendorId === 'ollama' || vendorId === 'local-model';
+  return isMultiInstanceProviderType(vendorId);
 }
 
 function isLocalModelProviderAccount(account: Pick<ProviderAccount, 'vendorId' | 'metadata'>): boolean {
@@ -471,15 +476,15 @@ export function Chat() {
           return resolveAccountCatalogModelOptions(account, providerDisplayName, catalog);
         }
         const catalogOptions = resolveAccountCatalogModelOptions(account, providerDisplayName, catalog);
-        if (strictRuntimeCatalog) {
-          return catalog?.source === 'runtime' ? catalogOptions : [];
-        }
         const explicitOptions = resolveAccountModelOptions(
           account,
           vendor,
           providerDisplayName,
           catalog?.runtimeProviderId,
         );
+        if (strictRuntimeCatalog) {
+          return catalogOptions.length > 0 ? catalogOptions : explicitOptions;
+        }
         if (catalog?.resolved) {
           return catalogOptions;
         }
@@ -495,7 +500,14 @@ export function Chat() {
     }
     const runtimeSet = new Set(runtimeModelRefs);
     const runtimeFiltered = deduped.filter((option) => runtimeSet.has(option.value));
-    return runtimeFiltered.length > 0 ? runtimeFiltered : deduped;
+    if (runtimeFiltered.length === 0) {
+      return deduped;
+    }
+    const merged = [
+      ...runtimeFiltered,
+      ...deduped.filter((option) => !runtimeSet.has(option.value)),
+    ];
+    return dedupeModelOptions(merged);
   }, [configuredModelOptions, runtimeModelRefs]);
   const normalizedSelectedModel = useMemo(
     () => normalizeSessionModelValue(currentSession, modelOptions),
@@ -585,15 +597,8 @@ export function Chat() {
       {/* Toolbar */}
       <div className="flex shrink-0 items-center justify-end px-4 py-2">
         <ChatToolbar
-          modelOptions={modelOptions}
-          selectedModel={normalizedSelectedModel}
-          defaultModelValue={normalizedDefaultModelValue}
-          defaultModelShortLabel={defaultModelMeta.shortLabel}
           currentAgentLabel={currentAgentLabel}
           showAgentLabel={!shouldShowWelcome && !canSwitchAgent}
-          onModelChange={setSessionModel}
-          onConfigureModels={() => navigate('/models')}
-          modelDisabled={!isGatewayRunning}
           isEmpty={isEmpty}
         />
       </div>

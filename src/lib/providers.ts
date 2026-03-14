@@ -11,6 +11,7 @@ export const PROVIDER_TYPES = [
   'openai',
   'google',
   'openrouter',
+  'opencode-go',
   'ark',
   'moonshot',
   'siliconflow',
@@ -18,6 +19,8 @@ export const PROVIDER_TYPES = [
   'minimax-portal-cn',
   'qwen-portal',
   'ollama',
+  'vllm',
+  'sglang',
   'custom',
   'local-model',
 ] as const;
@@ -28,6 +31,7 @@ export const BUILTIN_PROVIDER_TYPES = [
   'openai',
   'google',
   'openrouter',
+  'opencode-go',
   'ark',
   'moonshot',
   'siliconflow',
@@ -35,10 +39,28 @@ export const BUILTIN_PROVIDER_TYPES = [
   'minimax-portal-cn',
   'qwen-portal',
   'ollama',
+  'vllm',
+  'sglang',
   'local-model',
 ] as const;
 
 export const OLLAMA_PLACEHOLDER_API_KEY = 'ollama-local';
+export const SELF_HOSTED_PROVIDER_TYPES = [
+  'custom',
+  'local-model',
+  'ollama',
+  'vllm',
+  'sglang',
+] as const;
+export const MULTI_INSTANCE_PROVIDER_TYPES = [
+  'custom',
+  'ollama',
+  'vllm',
+  'sglang',
+] as const;
+
+const SELF_HOSTED_PROVIDER_TYPE_SET = new Set<string>(SELF_HOSTED_PROVIDER_TYPES);
+const MULTI_INSTANCE_PROVIDER_TYPE_SET = new Set<string>(MULTI_INSTANCE_PROVIDER_TYPES);
 
 export interface ProviderConfig {
   id: string;
@@ -166,6 +188,17 @@ export const PROVIDER_TYPE_INFO: ProviderTypeInfo[] = [
     defaultModelId: 'anthropic/claude-opus-4.6',
   },
   {
+    id: 'opencode-go',
+    name: 'OpenCode Go',
+    icon: 'OC',
+    placeholder: 'sk-...',
+    model: 'Kimi',
+    requiresApiKey: true,
+    showModelId: true,
+    modelIdPlaceholder: 'opencode-go/kimi-k2.5',
+    defaultModelId: 'opencode-go/kimi-k2.5',
+  },
+  {
     id: 'ark',
     name: 'ByteDance Ark',
     icon: 'A',
@@ -246,6 +279,32 @@ export const PROVIDER_TYPE_INFO: ProviderTypeInfo[] = [
     modelIdPlaceholder: 'qwen3:latest',
   },
   {
+    id: 'vllm',
+    name: 'vLLM',
+    icon: 'vL',
+    placeholder: 'Not required',
+    model: 'OpenAI-Compatible',
+    requiresApiKey: false,
+    defaultBaseUrl: 'http://127.0.0.1:8000/v1',
+    showBaseUrl: true,
+    showModelId: true,
+    modelIdPlaceholder: 'meta-llama/Meta-Llama-3-8B-Instruct',
+    defaultModelId: 'meta-llama/Meta-Llama-3-8B-Instruct',
+  },
+  {
+    id: 'sglang',
+    name: 'SGLang',
+    icon: 'SG',
+    placeholder: 'Not required',
+    model: 'OpenAI-Compatible',
+    requiresApiKey: false,
+    defaultBaseUrl: 'http://127.0.0.1:30000/v1',
+    showBaseUrl: true,
+    showModelId: true,
+    modelIdPlaceholder: 'Qwen/Qwen3-8B',
+    defaultModelId: 'Qwen/Qwen3-8B',
+  },
+  {
     id: 'custom',
     name: 'Custom',
     icon: '⚙️',
@@ -280,11 +339,25 @@ export function shouldInvertInDark(_type: ProviderType | string): boolean {
 }
 
 /** Provider list shown in the Setup wizard */
-export const SETUP_PROVIDERS = PROVIDER_TYPE_INFO;
+export const SETUP_PROVIDERS = PROVIDER_TYPE_INFO.filter((provider) => (
+  provider.id !== 'custom'
+  && provider.id !== 'local-model'
+  && provider.id !== 'ollama'
+  && provider.id !== 'vllm'
+  && provider.id !== 'sglang'
+));
 
 /** Get type info by provider type id */
 export function getProviderTypeInfo(type: ProviderType): ProviderTypeInfo | undefined {
   return PROVIDER_TYPE_INFO.find((t) => t.id === type);
+}
+
+export function isSelfHostedProviderType(type: ProviderType | string): boolean {
+  return SELF_HOSTED_PROVIDER_TYPE_SET.has(type);
+}
+
+export function isMultiInstanceProviderType(type: ProviderType | string): boolean {
+  return MULTI_INSTANCE_PROVIDER_TYPE_SET.has(type);
 }
 
 export function shouldShowProviderModelId(
@@ -317,7 +390,7 @@ export function resolveProviderApiKeyForSave(
   apiKey: string
 ): string | undefined {
   const trimmed = apiKey.trim();
-  if (type === 'ollama' || type === 'local-model' || type === 'custom') {
+  if (isSelfHostedProviderType(type)) {
     return trimmed || OLLAMA_PLACEHOLDER_API_KEY;
   }
   return trimmed || undefined;

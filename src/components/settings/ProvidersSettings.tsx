@@ -32,6 +32,8 @@ import {
   PROVIDER_TYPE_INFO,
   type ProviderType,
   getProviderIconUrl,
+  isMultiInstanceProviderType,
+  isSelfHostedProviderType,
   resolveProviderApiKeyForSave,
   resolveProviderModelForSave,
   shouldShowProviderModelId,
@@ -64,11 +66,7 @@ function getOpenClawRuntimeProviderKeyPreview(account: Pick<ProviderAccount, 'id
   ) {
     return 'openai-codex';
   }
-  if (
-    account.vendorId === 'custom'
-    || account.vendorId === 'ollama'
-    || account.vendorId === 'local-model'
-  ) {
+  if (isMultiInstanceProviderType(account.vendorId)) {
     const normalized = account.id.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'default';
     return `${account.vendorId}-${normalized}`;
   }
@@ -105,6 +103,10 @@ function isPresetManagedCustomAccount(account: Pick<ProviderAccount, 'vendorId' 
 function isLocalModelAccount(account: Pick<ProviderAccount, 'vendorId' | 'metadata'>): boolean {
   return account.vendorId === 'local-model'
     || (account.vendorId === 'custom' && (account.metadata?.localModel || account.metadata?.managedBy === 'preset-local-model'));
+}
+
+function supportsEditableProtocol(type: ProviderType | string): boolean {
+  return type === 'custom' || type === 'local-model';
 }
 
 type ProviderModelOption = {
@@ -186,6 +188,19 @@ async function resolveProviderModelOptions(payload: {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+async function syncOAuthRuntimeAccount(accountId: string): Promise<void> {
+  const result = await hostApiFetch<{ success: boolean; error?: string }>(
+    `/api/provider-accounts/${encodeURIComponent(accountId)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ updates: {} }),
+    },
+  );
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to sync OAuth runtime account');
+  }
 }
 
 function pickResolvedModelSelection(
@@ -286,7 +301,7 @@ export function ProvidersSettings({
         id,
         vendorId: type,
         label: name,
-        authMode: options?.authMode || vendor?.defaultAuthMode || ((type === 'ollama') ? 'local' : 'api_key'),
+        authMode: options?.authMode || vendor?.defaultAuthMode || (type === 'ollama' ? 'local' : 'api_key'),
         baseUrl: options?.baseUrl,
         apiProtocol: options?.apiProtocol,
         model: options?.model,
@@ -532,7 +547,7 @@ function ProviderCard({
     setLoadingModelOptions(true);
     setModelOptionsError(null);
     hostApiFetch<{ models: ProviderModelOption[] }>(
-      `/api/provider-model-options?vendorId=${encodeURIComponent(account.vendorId)}&authMode=${encodeURIComponent(account.authMode)}&accountId=${encodeURIComponent(account.id)}&scope=runtime`
+      `/api/provider-model-options?vendorId=${encodeURIComponent(account.vendorId)}&authMode=${encodeURIComponent(account.authMode)}&accountId=${encodeURIComponent(account.id)}`
     )
       .then((response) => {
         if (cancelled) return;
@@ -582,7 +597,7 @@ function ProviderCard({
         setValidating(true);
         const result = await onValidateKey(newKey, {
           baseUrl: baseUrl.trim() || undefined,
-          apiProtocol: (account.vendorId === 'custom' || account.vendorId === 'ollama' || account.vendorId === 'local-model') ? apiProtocol : undefined,
+          apiProtocol: isSelfHostedProviderType(account.vendorId) ? apiProtocol : undefined,
         });
         setValidating(false);
         if (!result.valid) {
@@ -609,7 +624,7 @@ function ProviderCard({
         if (typeInfo?.showBaseUrl && (baseUrl.trim() || undefined) !== (account.baseUrl || undefined)) {
           updates.baseUrl = baseUrl.trim() || undefined;
         }
-        if ((account.vendorId === 'custom' || account.vendorId === 'ollama' || account.vendorId === 'local-model') && apiProtocol !== account.apiProtocol) {
+        if (isSelfHostedProviderType(account.vendorId) && apiProtocol !== account.apiProtocol) {
           updates.apiProtocol = apiProtocol;
         }
         if (showModelIdField && (modelId.trim() || undefined) !== (account.model || undefined)) {
@@ -628,7 +643,7 @@ function ProviderCard({
 
       // Keep Ollama key optional in UI, but persist a placeholder when
       // editing legacy configs that have no stored key.
-      if ((account.vendorId === 'ollama' || account.vendorId === 'custom' || account.vendorId === 'local-model') && !status?.hasKey && !payload.newApiKey) {
+      if (isSelfHostedProviderType(account.vendorId) && !status?.hasKey && !payload.newApiKey) {
         payload.newApiKey = resolveProviderApiKeyForSave(account.vendorId, '') as string;
       }
 
@@ -715,7 +730,7 @@ function ProviderCard({
                   <span className="truncate max-w-[200px]">{account.model}</span>
                 </>
               )}
-              {(account.vendorId === 'custom' || account.vendorId === 'ollama' || account.vendorId === 'local-model') && (
+              {isMultiInstanceProviderType(account.vendorId) && (
                 <>
                   <span className="w-1 h-1 rounded-full bg-black/20 dark:bg-white/20" />
                   <span className="truncate max-w-[220px] font-mono text-[12px]" title={runtimeProviderKey}>
@@ -831,7 +846,7 @@ function ProviderCard({
                   </p>
                 </div>
               )}
-              {(account.vendorId === 'custom' || account.vendorId === 'local-model') && (
+              {supportsEditableProtocol(account.vendorId) && (
                 <div className="space-y-1.5 pt-2">
                   <Label className={currentLabelClasses}>{t('aiProviders.dialog.protocol', 'Protocol')}</Label>
                   <div className="flex gap-2 text-[13px]">
@@ -940,7 +955,11 @@ function ProviderCard({
                 <div className="relative flex-1">
                   <Input
                     type={showKey ? 'text' : 'password'}
-                    placeholder={typeInfo?.requiresApiKey ? typeInfo?.placeholder : ((typeInfo?.id === 'ollama' || typeInfo?.id === 'custom') ? t('aiProviders.notRequired') : t('aiProviders.card.editKey'))}
+                    placeholder={typeInfo?.requiresApiKey
+                      ? typeInfo?.placeholder
+                      : (typeInfo && isSelfHostedProviderType(typeInfo.id)
+                        ? t('aiProviders.notRequired')
+                        : t('aiProviders.card.editKey'))}
                     value={newKey}
                     onChange={(e) => setNewKey(e.target.value)}
                     className={cn(currentInputClasses, 'pr-10')}
@@ -1065,9 +1084,12 @@ function AddProviderDialog({
   const [loadingResolvedModels, setLoadingResolvedModels] = useState(false);
   const [resolvedModelsError, setResolvedModelsError] = useState<string | null>(null);
   const [resolvedRuntimeProviderId, setResolvedRuntimeProviderId] = useState<string | null>(null);
+  const existingAccounts = useProviderStore((state) => state.accounts);
+  const currentDefaultAccountId = useProviderStore((state) => state.defaultAccountId);
   // For providers that support both OAuth and API key, let the user choose.
   // Default to the vendor's declared auth mode instead of hard-coding OAuth.
   const [authMode, setAuthMode] = useState<'oauth' | 'apikey'>('apikey');
+  const authModeInitializedForTypeRef = React.useRef<ProviderType | null>(null);
 
   const typeInfo = PROVIDER_TYPE_INFO.find((t) => t.id === selectedType);
   const showModelIdField = shouldShowProviderModelId(typeInfo, devModeUnlocked);
@@ -1087,10 +1109,16 @@ function AddProviderDialog({
   const displayedResolvedOptions = resolvedModelOptions;
   const hasResolvedModelOptions = displayedResolvedOptions.length > 0;
   const selectedResolvedModelIsVerified = !modelId.trim() || resolvedModelOptions.some((option) => option.id === modelId.trim());
+  const showAuthMethodPicker = mode !== 'local-model' && isOAuth && supportsApiKey;
+  const isWaitingForOAuthModels = useOpenAIOAuthModelPicker && Boolean(oauthAuthedAccountId) && loadingOAuthModels;
 
-  const loadOAuthModelOptions = async (vendorId: string, authModeValue: 'oauth_browser' | 'oauth_device') => {
+  const loadOAuthModelOptions = async (
+    vendorId: string,
+    authModeValue: 'oauth_browser' | 'oauth_device',
+    accountId?: string,
+  ) => {
     const response = await hostApiFetch<{ models: ProviderModelOption[] }>(
-      `/api/provider-model-options?vendorId=${encodeURIComponent(vendorId)}&authMode=${encodeURIComponent(authModeValue)}`
+      `/api/provider-model-options?vendorId=${encodeURIComponent(vendorId)}&authMode=${encodeURIComponent(authModeValue)}${accountId ? `&accountId=${encodeURIComponent(accountId)}` : ''}`
     );
     return response.models ?? [];
   };
@@ -1107,8 +1135,12 @@ function AddProviderDialog({
     if (!selectedVendor || !isOAuth || !supportsApiKey) {
       return;
     }
+    if (authModeInitializedForTypeRef.current === selectedType) {
+      return;
+    }
     setAuthMode(selectedVendor.defaultAuthMode === 'api_key' ? 'apikey' : 'oauth');
-  }, [selectedVendor, isOAuth, supportsApiKey]);
+    authModeInitializedForTypeRef.current = selectedType;
+  }, [selectedType, selectedVendor, isOAuth, supportsApiKey]);
 
   useEffect(() => {
     setOauthAuthedAccountId(null);
@@ -1147,15 +1179,15 @@ function AddProviderDialog({
     const timeoutId = window.setTimeout(() => {
       setLoadingResolvedModels(true);
       setResolvedModelsError(null);
-      void resolveProviderModelOptions({
-        vendorId: selectedType,
-        authMode: (selectedType === 'ollama' || ((selectedType === 'custom' || selectedType === 'local-model') && !apiKey.trim()))
-          ? 'local'
-          : 'api_key',
-        baseUrl: baseUrl.trim() || undefined,
-        apiProtocol: (selectedType === 'custom' || selectedType === 'ollama' || selectedType === 'local-model') ? apiProtocol : undefined,
-        apiKey: apiKey.trim() || undefined,
-      })
+        void resolveProviderModelOptions({
+          vendorId: selectedType,
+          authMode: (selectedType === 'ollama' || ((selectedType === 'custom' || selectedType === 'local-model') && !apiKey.trim()))
+            ? 'local'
+            : 'api_key',
+          baseUrl: baseUrl.trim() || undefined,
+          apiProtocol: isSelfHostedProviderType(selectedType) ? apiProtocol : undefined,
+          apiKey: apiKey.trim() || undefined,
+        })
         .then((response) => {
           if (cancelled) return;
           const models = response.models ?? [];
@@ -1237,9 +1269,11 @@ function AddProviderDialog({
         }
 
         if (currentSelectedType === 'openai' && accountId) {
+          await syncOAuthRuntimeAccount(accountId);
+          setAuthMode('oauth');
           setOauthAuthedAccountId(accountId);
           setLoadingOAuthModels(true);
-          const options = await loadOAuthModelOptions('openai', 'oauth_browser');
+          const options = await loadOAuthModelOptions('openai', 'oauth_browser', accountId);
           setOauthModelOptions(options);
           const matchedAccount = store.accounts.find((account) => account.id === accountId);
           const resolvedModel = pickOAuthModelSelection(
@@ -1368,6 +1402,44 @@ function AddProviderDialog({
     return vendor.supportsMultipleAccounts || !existingVendorIds.has(type.id);
   });
 
+  const finalizeOpenAIOAuthSelection = async () => {
+    if (!selectedType || !oauthAuthedAccountId) {
+      return;
+    }
+
+    setSaving(true);
+    setValidationError(null);
+
+    try {
+      const accountLabel = name || typeInfo?.name || selectedType;
+      const store = useProviderStore.getState();
+      const configuredProviderIds = new Set(
+        existingAccounts
+          .filter((account) => account.vendorId !== 'local-model')
+          .map((account) => account.id),
+      );
+      configuredProviderIds.add(oauthAuthedAccountId);
+      const shouldAutoSetDefault = !currentDefaultAccountId && configuredProviderIds.size === 1;
+
+      await store.updateAccount(oauthAuthedAccountId, {
+        label: accountLabel,
+        model: modelId.trim(),
+      });
+      if (shouldAutoSetDefault) {
+        await store.setDefaultAccount(oauthAuthedAccountId);
+      }
+
+      onClose();
+      toast.success(t('aiProviders.toast.added'));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setValidationError(message);
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleAdd = async () => {
     if (!selectedType) return;
 
@@ -1385,7 +1457,7 @@ function AddProviderDialog({
 
     try {
       // Validate key first if the provider requires one and a key was entered
-      const requiresKey = mode === 'local-model' || (typeInfo?.requiresApiKey ?? false);
+      const requiresKey = !useOAuthFlow && (mode === 'local-model' || (typeInfo?.requiresApiKey ?? false));
       if (requiresKey && !apiKey.trim()) {
         setValidationError(mode === 'local-model' ? t('aiProviders.localModelDialog.apiKeyRequired') : t('aiProviders.toast.invalidKey'));
         setSaving(false);
@@ -1399,7 +1471,7 @@ function AddProviderDialog({
       if (requiresKey && apiKey) {
         const result = await onValidateKey(selectedType, apiKey, {
           baseUrl: baseUrl.trim() || undefined,
-          apiProtocol: (selectedType === 'custom' || selectedType === 'ollama' || selectedType === 'local-model') ? apiProtocol : undefined,
+          apiProtocol: isSelfHostedProviderType(selectedType) ? apiProtocol : undefined,
         });
         if (!result.valid) {
           setValidationError(result.error || t('aiProviders.toast.invalidKey'));
@@ -1426,41 +1498,13 @@ function AddProviderDialog({
         return;
       }
 
-      if (useOpenAIOAuthModelPicker && oauthAuthedAccountId) {
-        const accountLabel = name
-          || typeInfo?.name
-          || selectedType;
-        const result = await hostApiFetch<{ success: boolean; error?: string }>(
-          `/api/provider-accounts/${encodeURIComponent(oauthAuthedAccountId)}`,
-          {
-            method: 'PUT',
-            body: JSON.stringify({
-              updates: {
-                label: accountLabel,
-                model: modelId.trim(),
-              },
-            }),
-          }
-        );
-
-        if (!result.success) {
-          throw new Error(result.error || 'Failed to update OAuth provider');
-        }
-
-        const store = useProviderStore.getState();
-        await store.refreshProviderSnapshot();
-        onClose();
-        toast.success(t('aiProviders.toast.added'));
-        return;
-      }
-
       await onAdd(
         selectedType,
         name.trim() || ((typeInfo?.id === 'custom' ? t('aiProviders.custom') : typeInfo?.name) || selectedType),
         apiKey.trim(),
         {
           baseUrl: baseUrl.trim() || undefined,
-          apiProtocol: (selectedType === 'custom' || selectedType === 'ollama' || selectedType === 'local-model') ? apiProtocol : undefined,
+          apiProtocol: isSelfHostedProviderType(selectedType) ? apiProtocol : undefined,
           model: resolveProviderModelForSave(typeInfo, modelId, devModeUnlocked),
           metadata: mode === 'local-model' ? { localModel: true } : undefined,
           authMode: useOAuthFlow ? (preferredOAuthMode || 'oauth_device') : ((selectedType === 'ollama' || ((selectedType === 'custom' || selectedType === 'local-model') && !apiKey.trim())) && mode !== 'local-model')
@@ -1470,8 +1514,10 @@ function AddProviderDialog({
               : vendorMap.get(selectedType)?.defaultAuthMode || 'api_key',
         }
       );
-    } catch {
-      // error already handled via toast in parent
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setValidationError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -1503,6 +1549,7 @@ function AddProviderDialog({
                 <button
                   key={type.id}
                   onClick={() => {
+                    authModeInitializedForTypeRef.current = null;
                     setSelectedType(type.id);
                     setName(type.id === 'custom' ? t('aiProviders.custom') : type.name);
                     setBaseUrl(type.defaultBaseUrl || '');
@@ -1536,6 +1583,7 @@ function AddProviderDialog({
                     <p className="font-semibold text-[15px]">{typeInfo?.id === 'custom' ? t('aiProviders.custom') : typeInfo?.name}</p>
                     <button
                       onClick={() => {
+                        authModeInitializedForTypeRef.current = null;
                         setSelectedType(null);
                         setValidationError(null);
                         setBaseUrl('');
@@ -1570,27 +1618,47 @@ function AddProviderDialog({
                   ) : null}
                 </div>
 
-                {/* Auth mode toggle for providers supporting both */}
-                {isOAuth && supportsApiKey && (
-                  <div className="flex rounded-xl border border-black/10 dark:border-white/10 overflow-hidden text-[13px] font-medium shadow-sm bg-muted/70 dark:bg-muted/40 p-1 gap-1">
-                    <button
-                      onClick={() => setAuthMode('oauth')}
-                      className={cn(
-                        'flex-1 py-2 px-3 rounded-lg transition-colors',
-                        authMode === 'oauth' ? 'bg-black/5 dark:bg-white/10 text-foreground' : 'text-muted-foreground hover:bg-black/5 dark:hover:bg-white/5'
-                      )}
-                    >
-                      {t('aiProviders.oauth.loginMode')}
-                    </button>
-                    <button
-                      onClick={() => setAuthMode('apikey')}
-                      className={cn(
-                        'flex-1 py-2 px-3 rounded-lg transition-colors',
-                        authMode === 'apikey' ? 'bg-black/5 dark:bg-white/10 text-foreground' : 'text-muted-foreground hover:bg-black/5 dark:hover:bg-white/5'
-                      )}
-                    >
-                      {t('aiProviders.oauth.apikeyMode')}
-                    </button>
+                {showAuthMethodPicker && (
+                  <div className="space-y-2.5">
+                    <Label className={labelClasses}>
+                      {t('aiProviders.dialog.authMethod')}
+                    </Label>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode('oauth')}
+                        className={cn(
+                          'rounded-xl border px-4 py-3 text-left transition-colors',
+                          authMode === 'oauth'
+                            ? 'border-primary/35 bg-primary/5 text-foreground'
+                            : 'border-black/10 bg-white/70 text-muted-foreground hover:bg-black/[0.03] dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.05]'
+                        )}
+                      >
+                        <div className="text-[13px] font-semibold text-foreground">
+                          {t('aiProviders.oauth.loginMode')}
+                        </div>
+                        <p className="mt-1 text-[12px] leading-5">
+                          {t('aiProviders.dialog.authMethodOauthHint')}
+                        </p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode('apikey')}
+                        className={cn(
+                          'rounded-xl border px-4 py-3 text-left transition-colors',
+                          authMode === 'apikey'
+                            ? 'border-primary/35 bg-primary/5 text-foreground'
+                            : 'border-black/10 bg-white/70 text-muted-foreground hover:bg-black/[0.03] dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.05]'
+                        )}
+                      >
+                        <div className="text-[13px] font-semibold text-foreground">
+                          {t('aiProviders.oauth.apikeyMode')}
+                        </div>
+                        <p className="mt-1 text-[12px] leading-5">
+                          {t('aiProviders.dialog.authMethodApiKeyHint')}
+                        </p>
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -1617,7 +1685,7 @@ function AddProviderDialog({
                         type={showKey ? 'text' : 'password'}
                         placeholder={mode === 'local-model'
                           ? 'sk-...'
-                          : ((typeInfo?.id === 'ollama' || typeInfo?.id === 'custom') ? t('aiProviders.notRequired') : typeInfo?.placeholder)}
+                          : (typeInfo && isSelfHostedProviderType(typeInfo.id) ? t('aiProviders.notRequired') : typeInfo?.placeholder)}
                         value={apiKey}
                         onChange={(e) => {
                           setApiKey(e.target.value);
@@ -1718,7 +1786,10 @@ function AddProviderDialog({
                 )}
                 {useOpenAIOAuthModelPicker && oauthAuthedAccountId && (
                   <div className="space-y-2.5">
-                    <Label htmlFor="oauthModelId" className={labelClasses}>{t('aiProviders.dialog.model')}</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="oauthModelId" className={labelClasses}>{t('aiProviders.dialog.model')}</Label>
+                      {loadingOAuthModels ? <LoadingIcon className="h-4 w-4 text-muted-foreground" /> : null}
+                    </div>
                     <select
                       id="oauthModelId"
                       value={modelId}
@@ -1729,6 +1800,11 @@ function AddProviderDialog({
                       className={cn(inputClasses, 'font-sans')}
                       disabled={loadingOAuthModels}
                     >
+                      {loadingOAuthModels ? (
+                        <option value={modelId || ''}>
+                          {t('aiProviders.dialog.loadingModels')}
+                        </option>
+                      ) : null}
                       {oauthModelOptions.map((option) => (
                         <option key={option.id} value={option.id}>
                           {option.name}
@@ -1736,11 +1812,13 @@ function AddProviderDialog({
                       ))}
                     </select>
                     <p className="text-[12px] text-muted-foreground">
-                      {t('aiProviders.oauth.modelAfterLogin')}
+                      {loadingOAuthModels
+                        ? t('aiProviders.dialog.loadingModels')
+                        : t('aiProviders.oauth.modelAfterLogin')}
                     </p>
                   </div>
                 )}
-                {(selectedType === 'custom' || selectedType === 'local-model') && (
+                {supportsEditableProtocol(selectedType) && (
                   <div className="space-y-2.5">
                     <Label className={labelClasses}>
                       {mode === 'local-model' ? t('aiProviders.localModelDialog.protocol') : t('aiProviders.dialog.protocol', 'Protocol')}
@@ -1917,7 +1995,13 @@ function AddProviderDialog({
 
               <div className="flex justify-end gap-3">
                 <Button
-                  onClick={handleAdd}
+                  onClick={() => {
+                    if (useOpenAIOAuthModelPicker && oauthAuthedAccountId) {
+                      void finalizeOpenAIOAuthSelection();
+                      return;
+                    }
+                    void handleAdd();
+                  }}
                   className={cn(
                     "h-[42px] rounded-xl px-8 text-[13px] font-semibold bg-primary text-primary-foreground shadow-sm hover:bg-primary/90",
                     useOAuthFlow && !oauthAuthedAccountId && "hidden",
@@ -1925,6 +2009,7 @@ function AddProviderDialog({
                   disabled={
                     !selectedType
                     || saving
+                    || isWaitingForOAuthModels
                     || (mode === 'local-model' && name.trim().length === 0)
                     || (mode === 'local-model' && apiKey.trim().length === 0)
                     || (mode === 'local-model' && baseUrl.trim().length === 0)

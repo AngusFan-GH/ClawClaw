@@ -25,18 +25,16 @@ interface GatewayCronJob {
   };
 }
 
-const UI_CRON_DELIVERY_MODES = new Set(['announce', 'none']);
-
 function isUiManagedAgentTurn(job: GatewayCronJob): boolean {
-  return (job.sessionTarget === 'isolated' || !job.sessionTarget) && job.payload?.kind === 'agentTurn';
+  return (
+    (job.sessionTarget === 'isolated' || !job.sessionTarget)
+    && job.payload?.kind === 'agentTurn'
+    && (job.delivery?.mode ?? 'none') === 'none'
+  );
 }
 
 function isEditableUiJob(job: GatewayCronJob): boolean {
-  return isUiManagedAgentTurn(job) && UI_CRON_DELIVERY_MODES.has(job.delivery?.mode ?? 'announce');
-}
-
-function needsDeliveryRepair(job: GatewayCronJob): boolean {
-  return isUiManagedAgentTurn(job) && (job.delivery?.mode ?? 'announce') !== 'none';
+  return isUiManagedAgentTurn(job);
 }
 
 function clearChannelRequiredError(job: GatewayCronJob): void {
@@ -47,54 +45,9 @@ function clearChannelRequiredError(job: GatewayCronJob): void {
 }
 
 function clearStaleUiDeliveryError(job: GatewayCronJob): void {
-  if (isUiManagedAgentTurn(job) && job.delivery?.mode === 'none') {
+  if (isUiManagedAgentTurn(job)) {
     clearChannelRequiredError(job);
   }
-}
-
-async function repairCronDeliveryIfNeeded(
-  ctx: HostApiContext,
-  job: GatewayCronJob,
-): Promise<GatewayCronJob> {
-  if (!needsDeliveryRepair(job)) {
-    return job;
-  }
-
-  try {
-    await ctx.gatewayManager.rpc('cron.update', {
-      id: job.id,
-      patch: { delivery: { mode: 'none' } },
-    });
-    job.delivery = { mode: 'none' };
-    clearChannelRequiredError(job);
-  } catch {
-    // ignore per-job repair failure
-  }
-
-  return job;
-}
-
-async function ensureUiCronSilentDelivery(
-  ctx: HostApiContext,
-  job: GatewayCronJob,
-): Promise<GatewayCronJob> {
-  if (!isUiManagedAgentTurn(job) || (job.delivery?.mode ?? 'none') === 'none') {
-    clearStaleUiDeliveryError(job);
-    return job;
-  }
-
-  try {
-    await ctx.gatewayManager.rpc('cron.update', {
-      id: job.id,
-      patch: { delivery: { mode: 'none' } },
-    });
-    job.delivery = { mode: 'none' };
-    clearChannelRequiredError(job);
-  } catch {
-    // ignore per-job repair failure
-  }
-
-  return job;
 }
 
 async function getCronJobById(ctx: HostApiContext, id: string): Promise<GatewayCronJob | undefined> {
@@ -167,9 +120,6 @@ export async function handleCronRoutes(
       const jobs = data?.jobs ?? [];
       const agentSnapshot = await listAgentsSnapshot();
       const agentNameMap = new Map(agentSnapshot.agents.map((agent) => [agent.id, agent.name]));
-      for (const job of jobs) {
-        await repairCronDeliveryIfNeeded(ctx, job);
-      }
       sendJson(res, 200, jobs.map((job) => transformCronJob(job, agentNameMap)));
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -261,10 +211,6 @@ export async function handleCronRoutes(
   if (url.pathname === '/api/cron/trigger' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ id: string }>(req);
-      const current = await getCronJobById(ctx, body.id);
-      if (current) {
-        await ensureUiCronSilentDelivery(ctx, current);
-      }
       sendJson(res, 200, await ctx.gatewayManager.rpc('cron.run', { id: body.id, mode: 'force' }));
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

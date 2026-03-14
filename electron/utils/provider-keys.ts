@@ -1,4 +1,6 @@
-const MULTI_INSTANCE_PROVIDER_TYPES = new Set(['custom', 'ollama']);
+import {
+  MULTI_INSTANCE_PROVIDER_TYPES,
+} from '../shared/providers/types';
 
 export const OPENCLAW_PROVIDER_KEY_MINIMAX = 'minimax-portal';
 export const OPENCLAW_PROVIDER_KEY_QWEN = 'qwen-portal';
@@ -10,6 +12,7 @@ export const OPENCLAW_OAUTH_PLUGIN_PROVIDER_KEYS = [
 ] as const;
 
 const OAUTH_PROVIDER_TYPE_SET = new Set<string>(OAUTH_PROVIDER_TYPES);
+const MULTI_INSTANCE_PROVIDER_TYPE_SET = new Set<string>(MULTI_INSTANCE_PROVIDER_TYPES);
 const OPENCLAW_OAUTH_PLUGIN_PROVIDER_KEY_SET = new Set<string>(OPENCLAW_OAUTH_PLUGIN_PROVIDER_KEYS);
 
 const PROVIDER_KEY_ALIASES: Record<string, string> = {
@@ -25,7 +28,7 @@ export function getOpenClawProviderKeyForType(type: string, providerId: string):
   if (type === 'local-model') {
     return 'local-model';
   }
-  if (MULTI_INSTANCE_PROVIDER_TYPES.has(type)) {
+  if (MULTI_INSTANCE_PROVIDER_TYPE_SET.has(type)) {
     const suffix = getOpenClawProviderInstanceSuffix(providerId);
     return `${type}-${suffix}`;
   }

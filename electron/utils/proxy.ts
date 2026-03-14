@@ -129,27 +129,130 @@ function parseScutilProxyOutput(output: string): ResolvedProxySettings {
   };
 }
 
-async function resolveSystemProxySettings(): Promise<ResolvedProxySettings> {
-  if (process.platform !== 'darwin') {
+function parseWindowsRegistryQuery(output: string): Map<string, string> {
+  const values = new Map<string, string>();
+
+  for (const rawLine of output.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('HKEY_')) {
+      continue;
+    }
+
+    const match = line.match(/^([A-Za-z0-9_]+)\s+REG_\w+\s+(.+)$/);
+    if (match?.[1] && match[2]) {
+      values.set(match[1], match[2].trim());
+    }
+  }
+
+  return values;
+}
+
+function parseWindowsProxyServerValue(proxyServer: string): Pick<ResolvedProxySettings, 'httpProxy' | 'httpsProxy' | 'allProxy'> {
+  const value = trimValue(proxyServer);
+  if (!value) {
     return {
       httpProxy: '',
       httpsProxy: '',
       allProxy: '',
-      bypassRules: '',
     };
   }
 
-  try {
-    const { stdout } = await execFileAsync('scutil', ['--proxy']);
-    return parseScutilProxyOutput(stdout);
-  } catch {
+  // Windows can store a single endpoint ("host:port") or protocol-scoped
+  // mappings like "http=host:port;https=host:port;socks=host:port".
+  if (!value.includes('=')) {
+    const normalized = normalizeProxyServer(value);
     return {
-      httpProxy: '',
-      httpsProxy: '',
-      allProxy: '',
-      bypassRules: '',
+      httpProxy: normalized,
+      httpsProxy: normalized,
+      allProxy: normalized,
     };
   }
+
+  const entries = new Map<string, string>();
+  for (const part of value.split(';')) {
+    const [rawKey, ...rest] = part.split('=');
+    const key = rawKey?.trim().toLowerCase();
+    const target = rest.join('=').trim();
+    if (key && target) {
+      entries.set(key, target);
+    }
+  }
+
+  const httpProxy = normalizeProxyServer(entries.get('http') || '');
+  const httpsProxy = normalizeProxyServer(entries.get('https') || entries.get('http') || '');
+  const socksProxy = trimValue(entries.get('socks'));
+  const allProxy = socksProxy
+    ? (/^[a-z][a-z0-9+.-]*:\/\//i.test(socksProxy) ? socksProxy : `socks5://${socksProxy}`)
+    : (normalizeProxyServer(entries.get('all') || '') || httpsProxy || httpProxy);
+
+  return {
+    httpProxy,
+    httpsProxy,
+    allProxy,
+  };
+}
+
+function resolveProxyFromEnv(): ResolvedProxySettings {
+  const httpProxy = normalizeProxyServer(process.env.HTTP_PROXY || process.env.http_proxy || '');
+  const httpsProxy = normalizeProxyServer(process.env.HTTPS_PROXY || process.env.https_proxy || '');
+  const allProxy = trimValue(process.env.ALL_PROXY || process.env.all_proxy || '')
+    || httpsProxy
+    || httpProxy;
+  const noProxy = trimValue(process.env.NO_PROXY || process.env.no_proxy || '');
+
+  return {
+    httpProxy,
+    httpsProxy,
+    allProxy,
+    bypassRules: noProxy,
+  };
+}
+
+async function resolveSystemProxySettings(): Promise<ResolvedProxySettings> {
+  if (process.platform === 'win32') {
+    try {
+      const { stdout } = await execFileAsync('reg', [
+        'query',
+        'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings',
+      ]);
+      const values = parseWindowsRegistryQuery(stdout);
+      const proxyEnabledRaw = values.get('ProxyEnable');
+      const proxyEnabled = proxyEnabledRaw === '0x1' || proxyEnabledRaw === '1';
+      if (proxyEnabled) {
+        const parsed = parseWindowsProxyServerValue(values.get('ProxyServer') || '');
+        if (parsed.httpProxy || parsed.httpsProxy || parsed.allProxy) {
+          return {
+            ...parsed,
+            bypassRules: trimValue(values.get('ProxyOverride') || ''),
+          };
+        }
+      }
+    } catch {
+      // Fall through to env fallback below.
+    }
+  } else if (process.platform === 'darwin') {
+    try {
+      const { stdout } = await execFileAsync('scutil', ['--proxy']);
+      const parsed = parseScutilProxyOutput(stdout);
+      if (parsed.httpProxy || parsed.httpsProxy || parsed.allProxy) {
+        return parsed;
+      }
+    } catch {
+      // Fall through to env fallback below.
+    }
+  }
+
+  const envProxy = resolveProxyFromEnv();
+  if (envProxy.httpProxy || envProxy.httpsProxy || envProxy.allProxy) {
+    return envProxy;
+  }
+
+  return {
+    httpProxy: '',
+    httpsProxy: '',
+    allProxy: '',
+    bypassRules: '',
+  };
 }
 
 export async function resolveProxySettingsAsync(settings: ProxySettings): Promise<ResolvedProxySettings> {

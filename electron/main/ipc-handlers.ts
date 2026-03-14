@@ -857,18 +857,16 @@ interface GatewayCronJob {
   };
 }
 
-const UI_CRON_DELIVERY_MODES = new Set(['announce', 'none']);
-
 function isUiManagedAgentTurn(job: GatewayCronJob): boolean {
-  return (job.sessionTarget === 'isolated' || !job.sessionTarget) && job.payload?.kind === 'agentTurn';
-}
-
-function needsDeliveryRepair(job: GatewayCronJob): boolean {
-  return isUiManagedAgentTurn(job) && (job.delivery?.mode ?? 'announce') !== 'none';
+  return (
+    (job.sessionTarget === 'isolated' || !job.sessionTarget)
+    && job.payload?.kind === 'agentTurn'
+    && (job.delivery?.mode ?? 'none') === 'none'
+  );
 }
 
 function isEditableUiJob(job: GatewayCronJob): boolean {
-  return isUiManagedAgentTurn(job) && UI_CRON_DELIVERY_MODES.has(job.delivery?.mode ?? 'announce');
+  return isUiManagedAgentTurn(job);
 }
 
 function clearChannelRequiredError(job: GatewayCronJob): void {
@@ -879,54 +877,9 @@ function clearChannelRequiredError(job: GatewayCronJob): void {
 }
 
 function clearStaleUiDeliveryError(job: GatewayCronJob): void {
-  if (isUiManagedAgentTurn(job) && job.delivery?.mode === 'none') {
+  if (isUiManagedAgentTurn(job)) {
     clearChannelRequiredError(job);
   }
-}
-
-async function repairCronDeliveryIfNeeded(
-  gatewayManager: GatewayManager,
-  job: GatewayCronJob,
-): Promise<GatewayCronJob> {
-  if (!needsDeliveryRepair(job)) {
-    return job;
-  }
-
-  try {
-    await gatewayManager.rpc('cron.update', {
-      id: job.id,
-      patch: { delivery: { mode: 'none' } },
-    });
-    job.delivery = { mode: 'none' };
-    clearChannelRequiredError(job);
-  } catch (e) {
-    console.warn(`Failed to auto-repair cron job ${job.id}:`, e);
-  }
-
-  return job;
-}
-
-async function ensureUiCronSilentDelivery(
-  gatewayManager: GatewayManager,
-  job: GatewayCronJob,
-): Promise<GatewayCronJob> {
-  if (!isUiManagedAgentTurn(job) || (job.delivery?.mode ?? 'none') === 'none') {
-    clearStaleUiDeliveryError(job);
-    return job;
-  }
-
-  try {
-    await gatewayManager.rpc('cron.update', {
-      id: job.id,
-      patch: { delivery: { mode: 'none' } },
-    });
-    job.delivery = { mode: 'none' };
-    clearChannelRequiredError(job);
-  } catch (e) {
-    console.warn(`Failed to force silent delivery for cron job ${job.id}:`, e);
-  }
-
-  return job;
 }
 
 async function getCronJobById(gatewayManager: GatewayManager, id: string): Promise<GatewayCronJob | undefined> {
@@ -992,13 +945,6 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
       const result = await gatewayManager.rpc('cron.list', { includeDisabled: true });
       const data = result as { jobs?: GatewayCronJob[] };
       const jobs = data?.jobs ?? [];
-
-      // Auto-repair legacy UI-created jobs that were saved without
-      // delivery: { mode: 'none' }. The desktop UI has no channel target,
-      // so silent delivery is the only safe default.
-      for (const job of jobs) {
-        await repairCronDeliveryIfNeeded(gatewayManager, job);
-      }
 
       // Transform Gateway format to frontend format
       return jobs.map(transformCronJob);
@@ -1098,10 +1044,6 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
   // Trigger a cron job manually
   ipcMain.handle('cron:trigger', async (_, id: string) => {
     try {
-      const current = await getCronJobById(gatewayManager, id);
-      if (current) {
-        await ensureUiCronSilentDelivery(gatewayManager, current);
-      }
       const result = await gatewayManager.rpc('cron.run', { id, mode: 'force' });
       return result;
     } catch (error) {

@@ -55,6 +55,7 @@ export interface ProviderConfig {
     | 'openai'
     | 'google'
     | 'openrouter'
+    | 'opencode-go'
     | 'ark'
     | 'moonshot'
     | 'siliconflow'
@@ -62,6 +63,8 @@ export interface ProviderConfig {
     | 'minimax-portal-cn'
     | 'qwen-portal'
     | 'ollama'
+    | 'vllm'
+    | 'sglang'
     | 'custom';
   baseUrl?: string;
   apiProtocol?: 'openai-completions' | 'openai-responses' | 'anthropic-messages';

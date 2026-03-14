@@ -136,6 +136,21 @@ class DeviceOAuthManager extends EventEmitter {
     this.openAIManualPrompt = null;
   }
 
+  private awaitOpenAIManualInput(promptMessage: string, placeholder?: string): Promise<string> {
+    this.emitCode({
+      provider: 'openai',
+      verificationUri: '',
+      expiresIn: 900,
+      mode: 'browser',
+      manualInputRequired: true,
+      promptMessage,
+      placeholder,
+    });
+    return new Promise<string>((resolve, reject) => {
+      this.openAIManualPrompt = { resolve, reject };
+    });
+  }
+
   // ─────────────────────────────────────────────────────────
   // MiniMax flow
   // ─────────────────────────────────────────────────────────
@@ -266,24 +281,20 @@ class DeviceOAuthManager extends EventEmitter {
             verificationUri: url,
             expiresIn: 900,
             mode: 'browser',
+            manualInputRequired: true,
+            promptMessage: 'Paste the authorization code or full redirect URL if the browser callback does not complete automatically.',
+            placeholder: 'Authorization code or redirect URL',
           });
         },
         onProgress: (message) => {
           logger.info(`[DeviceOAuth] OpenAI progress: ${message}`);
         },
+        onManualCodeInput: async () => await this.awaitOpenAIManualInput(
+          'Paste the authorization code or full redirect URL if needed.',
+          'Authorization code or redirect URL',
+        ),
         onPrompt: async (prompt) => {
-          this.emitCode({
-            provider: 'openai',
-            verificationUri: '',
-            expiresIn: 900,
-            mode: 'browser',
-            manualInputRequired: true,
-            promptMessage: prompt.message,
-            placeholder: prompt.placeholder,
-          });
-          return await new Promise<string>((resolve, reject) => {
-            this.openAIManualPrompt = { resolve, reject };
-          });
+          return await this.awaitOpenAIManualInput(prompt.message, prompt.placeholder);
         },
       });
 

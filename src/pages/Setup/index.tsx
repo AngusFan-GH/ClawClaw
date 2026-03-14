@@ -95,12 +95,26 @@ async function resolveLocalProviderModels(payload: {
   });
 }
 
+async function syncOAuthRuntimeAccount(accountId: string): Promise<void> {
+  const result = await hostApiFetch<{ success: boolean; error?: string }>(
+    `/api/provider-accounts/${encodeURIComponent(accountId)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ updates: {} }),
+    },
+  );
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to sync OAuth runtime account');
+  }
+}
+
 import {
   SETUP_PROVIDERS,
   type ProviderAccount,
   type ProviderType,
   type ProviderTypeInfo,
   getProviderIconUrl,
+  isSelfHostedProviderType,
   resolveProviderApiKeyForSave,
   resolveProviderModelForSave,
   shouldShowProviderModelId,
@@ -689,9 +703,13 @@ export function ProviderContent({
   const [oauthModelOptions, setOauthModelOptions] = useState<SetupProviderModelOption[]>([]);
   const [loadingOAuthModels, setLoadingOAuthModels] = useState(false);
 
-  const loadOAuthModelOptions = useCallback(async (vendorId: string, authModeValue: 'oauth_browser' | 'oauth_device') => {
+  const loadOAuthModelOptions = useCallback(async (
+    vendorId: string,
+    authModeValue: 'oauth_browser' | 'oauth_device',
+    accountId?: string,
+  ) => {
     const response = await hostApiFetch<{ models: SetupProviderModelOption[] }>(
-      `/api/provider-model-options?vendorId=${encodeURIComponent(vendorId)}&authMode=${encodeURIComponent(authModeValue)}`
+      `/api/provider-model-options?vendorId=${encodeURIComponent(vendorId)}&authMode=${encodeURIComponent(authModeValue)}${accountId ? `&accountId=${encodeURIComponent(accountId)}` : ''}`
     );
     return response.models ?? [];
   }, []);
@@ -723,9 +741,10 @@ export function ProviderContent({
         try {
           setSelectedAccountId(accountId);
           if (selectedProvider === 'openai') {
+            await syncOAuthRuntimeAccount(accountId);
             setOauthAuthedAccountId(accountId);
             setLoadingOAuthModels(true);
-            const models = await loadOAuthModelOptions('openai', 'oauth_browser');
+            const models = await loadOAuthModelOptions('openai', 'oauth_browser', accountId);
             setOauthModelOptions(models);
             setModelId((current) => pickOAuthModelSelection('openai', models, current, modelId));
             setLoadingOAuthModels(false);
@@ -1050,7 +1069,10 @@ export function ProviderContent({
           'provider:validateKey',
           selectedAccountId || selectedProvider,
           apiKey,
-          { baseUrl: baseUrl.trim() || undefined }
+          {
+            baseUrl: baseUrl.trim() || undefined,
+            apiProtocol: isSelfHostedProviderType(selectedProvider) ? 'openai-completions' : undefined,
+          }
         )) as { valid: boolean; error?: string };
 
         setKeyValid(result.valid);
@@ -1086,6 +1108,7 @@ export function ProviderContent({
             : selectedProviderData?.name || selectedProvider,
         authMode: selectedProvider === 'ollama' ? 'local' : 'api_key',
         baseUrl: baseUrl.trim() || undefined,
+        apiProtocol: isSelfHostedProviderType(selectedProvider) ? 'openai-completions' : undefined,
         model: effectiveModelId,
         enabled: true,
         isDefault: false,

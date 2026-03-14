@@ -1,5 +1,6 @@
 import type { ProviderAccount, ProviderConfig, ProviderType } from '../../shared/providers/types';
 import { getProviderDefinition } from '../../shared/providers/registry';
+import { isSelfHostedProviderType } from '../../shared/providers/types';
 import { getClawXProviderStore } from './store-instance';
 
 const PROVIDER_STORE_SCHEMA_VERSION = 1;
@@ -27,7 +28,7 @@ export function providerConfigToAccount(
     label: config.name,
     authMode: inferAuthMode(config.type),
     baseUrl: config.baseUrl,
-    apiProtocol: config.apiProtocol || (config.type === 'custom' || config.type === 'ollama'
+    apiProtocol: config.apiProtocol || (isSelfHostedProviderType(config.type)
       ? 'openai-completions'
       : getProviderDefinition(config.type)?.providerConfig?.api),
     model: config.model,

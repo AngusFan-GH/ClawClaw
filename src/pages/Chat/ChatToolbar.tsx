@@ -3,7 +3,7 @@
  * Model selector, gateway status, refresh, and thinking toggle.
  * Rendered in the Header when on the Chat page.
  */
-import { RefreshCw, Brain, Check, ChevronsUpDown, Link2 } from 'lucide-react';
+import { RefreshCw, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -21,26 +21,12 @@ export interface ChatToolbarModelOption {
 }
 
 export function ChatToolbar({
-  modelOptions = [],
-  selectedModel,
-  defaultModelValue,
-  defaultModelShortLabel,
   currentAgentLabel,
   showAgentLabel = false,
-  onModelChange,
-  onConfigureModels,
-  modelDisabled = false,
   isEmpty = false,
 }: {
-  modelOptions?: ChatToolbarModelOption[];
-  selectedModel?: string;
-  defaultModelValue?: string;
-  defaultModelShortLabel?: string;
   currentAgentLabel?: string;
   showAgentLabel?: boolean;
-  onModelChange?: (model?: string) => void | Promise<void>;
-  onConfigureModels?: () => void;
-  modelDisabled?: boolean;
   isEmpty?: boolean;
 }) {
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
@@ -48,17 +34,8 @@ export function ChatToolbar({
 
   const refresh = useChatStore((s) => s.refresh);
   const loading = useChatStore((s) => s.loading);
-  const showThinking = useChatStore((s) => s.showThinking);
-  const toggleThinking = useChatStore((s) => s.toggleThinking);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const { t } = useTranslation(['chat', 'common']);
-  const hasModelOptions = modelOptions.length > 0;
-  const currentModelValue = selectedModel || defaultModelValue;
-  const selectedOption = modelOptions.find((option) => option.value === currentModelValue);
-  const currentModelShortLabel =
-    selectedOption?.shortLabel || defaultModelShortLabel || t('chat:composer.defaultModel');
-  void hasModelOptions;
-  void currentModelShortLabel;
 
   useEffect(() => {
     if (!modelMenuOpen) return;

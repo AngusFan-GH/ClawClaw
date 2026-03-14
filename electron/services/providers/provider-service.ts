@@ -7,6 +7,7 @@ import type {
   ProviderConfig,
   ProviderDefinition,
 } from '../../shared/providers/types';
+import { MULTI_INSTANCE_PROVIDER_TYPES } from '../../shared/providers/types';
 import { ensureProviderStoreMigrated } from './provider-migration';
 import {
   getDefaultProviderAccountId,
@@ -50,7 +51,7 @@ function logLegacyProviderApiUsage(method: string, replacement: string): void {
   );
 }
 
-const UNIQUE_RUNTIME_PROVIDER_TYPES = new Set(['custom', 'ollama']);
+const UNIQUE_RUNTIME_PROVIDER_TYPES = new Set(MULTI_INSTANCE_PROVIDER_TYPES);
 
 async function assertNoRuntimeProviderKeyConflict(account: ProviderAccount, ignoreAccountId?: string): Promise<void> {
   if (!UNIQUE_RUNTIME_PROVIDER_TYPES.has(account.vendorId)) {

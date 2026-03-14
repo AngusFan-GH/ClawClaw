@@ -1,6 +1,7 @@
 import { getProviderConfig } from '../utils/provider-registry';
 import { getOpenClawProviderKeyForType, isOAuthProviderType } from '../utils/provider-keys';
 import type { ProviderConfig } from '../utils/secure-storage';
+import { isSelfHostedProviderType } from '../shared/providers/types';
 
 export interface AgentProviderUpdatePayload {
   providerKey: string;
@@ -25,7 +26,7 @@ export function buildNonOAuthAgentProviderUpdate(
   providerId: string,
   modelRef: string | undefined
 ): AgentProviderUpdatePayload | null {
-  if (provider.type === 'custom' || provider.type === 'ollama' || isOAuthProviderType(provider.type)) {
+  if (isSelfHostedProviderType(provider.type) || isOAuthProviderType(provider.type)) {
     return null;
   }
 

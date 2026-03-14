@@ -19,6 +19,10 @@ import {
 } from '../../utils/openclaw-auth';
 import { getOpenClawProviderKeyForType } from '../../utils/provider-keys';
 import { logger } from '../../utils/logger';
+import {
+  isMultiInstanceProviderType,
+  isSelfHostedProviderType,
+} from '../../shared/providers/types';
 
 const GOOGLE_OAUTH_RUNTIME_PROVIDER = 'google-gemini-cli';
 const GOOGLE_OAUTH_DEFAULT_MODEL_REF = `${GOOGLE_OAUTH_RUNTIME_PROVIDER}/gemini-3-pro-preview`;
@@ -61,6 +65,8 @@ function shouldReconcileRuntimeProviderKey(providerKey: string): boolean {
     providerKey.startsWith('custom-')
     || providerKey.startsWith('local-model-')
     || providerKey.startsWith('ollama-')
+    || providerKey.startsWith('vllm-')
+    || providerKey.startsWith('sglang-')
   );
 }
 
@@ -95,8 +101,8 @@ function getLegacyOpenClawProviderKey(type: string, providerId: string): string 
     const normalizedId = providerId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'default';
     return `local-model-${normalizedId}`;
   }
-  if (type === 'custom' || type === 'ollama') {
-    const suffix = providerId.replace(/-/g, '').slice(0, 8);
+  if (isMultiInstanceProviderType(type)) {
+    const suffix = providerId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'default';
     return `${type}-${suffix}`;
   }
   if (type === 'minimax-portal-cn') {
@@ -433,7 +439,7 @@ async function syncProviderSecretToRuntime(
 async function resolveRuntimeSyncContext(config: ProviderConfig): Promise<RuntimeProviderSyncContext | null> {
   const runtimeProviderKey = await resolveRuntimeProviderKey(config);
   const meta = getProviderConfig(config.type);
-  const api = config.apiProtocol || (config.type === 'custom' || config.type === 'local-model' ? 'openai-completions' : meta?.api);
+  const api = config.apiProtocol || (isSelfHostedProviderType(config.type) ? 'openai-completions' : meta?.api);
   if (!api) {
     return null;
   }
@@ -466,7 +472,7 @@ async function syncCustomProviderAgentModel(
   runtimeProviderKey: string,
   apiKey: string | undefined,
 ): Promise<void> {
-  if (config.type !== 'custom' && config.type !== 'local-model') {
+  if (!isSelfHostedProviderType(config.type) || config.type === 'ollama') {
     return;
   }
 
@@ -556,7 +562,7 @@ export async function syncUpdatedProviderToRuntime(
           : OPENAI_OAUTH_DEFAULT_MODEL_REF,
         fallbackModels,
       );
-    } else if (config.type !== 'custom' && config.type !== 'local-model') {
+    } else if (!isSelfHostedProviderType(config.type)) {
       if (shouldUseExplicitDefaultOverride(config, ock)) {
         await setOpenClawDefaultModelWithOverride(ock, modelOverride, {
           baseUrl: normalizeProviderBaseUrl(config, config.baseUrl || context.meta?.baseUrl),
@@ -645,7 +651,7 @@ export async function syncDefaultProviderToRuntime(
       ? (provider.model.startsWith(`${ock}/`) ? provider.model : `${ock}/${provider.model}`)
       : undefined;
 
-    if (provider.type === 'custom' || provider.type === 'local-model') {
+    if (isSelfHostedProviderType(provider.type)) {
       await setOpenClawDefaultModelWithOverride(ock, modelOverride, {
         baseUrl: provider.baseUrl,
         api: provider.apiProtocol || 'openai-completions',
@@ -758,10 +764,7 @@ export async function syncDefaultProviderToRuntime(
     }
   }
 
-  if (
-    (provider.type === 'custom' || provider.type === 'local-model') &&
-    provider.baseUrl
-  ) {
+  if (isSelfHostedProviderType(provider.type) && provider.type !== 'ollama' && provider.baseUrl) {
     const modelId = provider.model;
     await updateAgentModelProvider(ock, {
       baseUrl: provider.baseUrl,
