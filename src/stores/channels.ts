@@ -28,9 +28,6 @@ interface ChannelsState {
   fetchChannels: () => Promise<void>;
   addChannel: (params: AddChannelParams) => Promise<Channel>;
   deleteChannel: (channelId: string) => Promise<void>;
-  connectChannel: (channelId: string) => Promise<void>;
-  disconnectChannel: (channelId: string) => Promise<void>;
-  requestQrCode: (channelType: ChannelType) => Promise<{ qrCode: string; sessionId: string }>;
   setChannels: (channels: Channel[]) => void;
   updateChannel: (channelId: string, updates: Partial<Channel>) => void;
   clearError: () => void;
@@ -148,17 +145,22 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
   addChannel: async (params) => {
     set({ error: null });
     try {
-      const result = await useGatewayStore.getState().rpc<Channel>('channels.add', params);
-      if (!result) {
-        throw new Error(`Gateway did not confirm channel creation for ${params.type}`);
-      }
       await get().fetchChannels();
-      return (
-        get().channels.find((channel) => (
-          channel.type === params.type
-          && (result.accountId == null || channel.accountId === result.accountId)
-        )) ?? result
-      );
+
+      const existing = get().channels.find((channel) => channel.type === params.type);
+      if (existing) {
+        return existing;
+      }
+
+      return {
+        id: `${params.type}-default`,
+        type: params.type,
+        name: params.name,
+        status: 'connecting',
+        configured: true,
+        runtimeLoaded: false,
+        runtimeStatus: 'unknown',
+      };
     } catch (error) {
       set({ error: String(error) });
       throw error;
@@ -178,44 +180,7 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
       method: 'DELETE',
     });
 
-    try {
-      await useGatewayStore.getState().rpc('channels.delete', { channelId: channelType });
-    } catch (error) {
-      console.error('Failed to delete channel from gateway:', error);
-    }
-
     await get().fetchChannels();
-  },
-
-  connectChannel: async (channelId) => {
-    const { updateChannel } = get();
-    updateChannel(channelId, { status: 'connecting', error: undefined });
-
-    try {
-      await useGatewayStore.getState().rpc('channels.connect', { channelId });
-      updateChannel(channelId, { status: 'connected' });
-    } catch (error) {
-      updateChannel(channelId, { status: 'error', error: String(error) });
-    }
-  },
-
-  disconnectChannel: async (channelId) => {
-    const { updateChannel } = get();
-
-    try {
-      await useGatewayStore.getState().rpc('channels.disconnect', { channelId });
-    } catch (error) {
-      console.error('Failed to disconnect channel:', error);
-    }
-
-    updateChannel(channelId, { status: 'disconnected', error: undefined });
-  },
-
-  requestQrCode: async (channelType) => {
-    return await useGatewayStore.getState().rpc<{ qrCode: string; sessionId: string }>(
-      'channels.requestQr',
-      { type: channelType },
-    );
   },
 
   setChannels: (channels) => set({ channels }),
