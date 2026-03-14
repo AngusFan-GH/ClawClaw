@@ -27,6 +27,37 @@ import feishuIcon from '@/assets/channels/feishu.svg';
 import wecomIcon from '@/assets/channels/wecom.svg';
 import qqIcon from '@/assets/channels/qq.svg';
 
+const CHANNEL_BRAND_STYLES: Partial<Record<ChannelType, { shell: string; icon: string }>> = {
+  telegram: {
+    shell: 'bg-[#27A7E7] border-[#1f8ec7] shadow-[0_10px_24px_rgba(39,167,231,0.22)]',
+    icon: 'brightness-0 invert',
+  },
+  discord: {
+    shell: 'bg-[#5865F2] border-[#4752c4] shadow-[0_10px_24px_rgba(88,101,242,0.22)]',
+    icon: 'brightness-0 invert',
+  },
+  whatsapp: {
+    shell: 'bg-[#25D366] border-[#1faf54] shadow-[0_10px_24px_rgba(37,211,102,0.2)]',
+    icon: 'brightness-0 invert',
+  },
+  feishu: {
+    shell: 'bg-[linear-gradient(135deg,#0F67FF,#00C2FF)] border-[#0f67ff] shadow-[0_10px_24px_rgba(15,103,255,0.22)]',
+    icon: 'brightness-0 invert',
+  },
+  dingtalk: {
+    shell: 'bg-[#1677FF] border-[#0f5fd1] shadow-[0_10px_24px_rgba(22,119,255,0.22)]',
+    icon: 'brightness-0 invert',
+  },
+  wecom: {
+    shell: 'bg-[linear-gradient(135deg,#07C160,#00A1EA)] border-[#07c160] shadow-[0_10px_24px_rgba(7,193,96,0.22)]',
+    icon: 'brightness-0 invert',
+  },
+  qqbot: {
+    shell: 'bg-[linear-gradient(135deg,#12B7F5,#4E8CFF)] border-[#12b7f5] shadow-[0_10px_24px_rgba(18,183,245,0.22)]',
+    icon: 'brightness-0 invert',
+  },
+};
+
 export function Agents() {
   const { t } = useTranslation('agents');
   const gatewayStatus = useGatewayStore((state) => state.status);
@@ -144,7 +175,7 @@ export function Agents() {
                 <p className="mt-1 text-sm text-muted-foreground">{t('empty.description')}</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
                 {agents.map((agent) => (
                   <AgentCard
                     key={agent.id}
@@ -211,6 +242,15 @@ function AgentStatCard({ label, value }: { label: string; value: number }) {
   );
 }
 
+function splitAgentModelDisplay(modelDisplay: string): { value: string; isDefaultModel: boolean } {
+  const trimmed = modelDisplay.trim();
+  const normalized = trimmed.replace(/\s*\((?:默认|default)\)\s*$/i, '').trim();
+  return {
+    value: normalized || trimmed,
+    isDefaultModel: normalized !== trimmed,
+  };
+}
+
 function AgentCard({
   agent,
   onOpenSettings,
@@ -221,25 +261,31 @@ function AgentCard({
   onDelete: () => void;
 }) {
   const { t } = useTranslation('agents');
-  const channelsText = agent.channelTypes.length > 0
-    ? agent.channelTypes.map((channelType) => CHANNEL_NAMES[channelType as ChannelType] || channelType).join(', ')
-    : t('none');
+  const channelLabels = agent.channelTypes
+    .map((channelType) => CHANNEL_NAMES[channelType as ChannelType] || channelType)
+    .filter(Boolean);
+  const modelMeta = splitAgentModelDisplay(agent.modelDisplay);
 
   return (
     <div
       className={cn(
-        'rounded-xl border bg-background/70 px-4 py-4 transition-colors hover:border-primary/35 hover:bg-background',
+        'h-full rounded-xl border bg-background/70 px-4 py-4 transition-colors hover:border-primary/35 hover:bg-background',
         agent.isDefault && 'border-primary/20 bg-primary/[0.04]'
       )}
     >
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border bg-primary/10 text-primary">
+      <div className="flex items-start gap-3.5">
+        <div className={cn(
+          'mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border text-primary',
+          agent.isDefault
+            ? 'border-primary/15 bg-primary/10'
+            : 'border-black/8 bg-black/[0.03] dark:border-white/10 dark:bg-white/[0.03]'
+        )}>
           <Bot className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex min-w-0 items-center gap-2">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-2.5">
                 <h2 className="truncate text-[17px] font-semibold text-foreground">{agent.name}</h2>
                 {agent.isDefault && (
                   <Badge
@@ -253,7 +299,7 @@ function AgentCard({
               <p className="mt-1 font-mono text-[12px] text-muted-foreground/85">{agent.id}</p>
             </div>
             <TooltipProvider delayDuration={120}>
-              <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -276,7 +322,7 @@ function AgentCard({
                         className="h-8 w-8 rounded-[10px]"
                         onClick={onDelete}
                       >
-                        <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>{t('deleteAgent')}</TooltipContent>
@@ -286,23 +332,43 @@ function AgentCard({
             </TooltipProvider>
           </div>
 
-          <div className="mt-4 grid gap-2.5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-            <div className="rounded-lg border bg-muted/25 px-3 py-3">
-              <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
+          <div className="mt-4 flex flex-wrap items-center gap-2.5 text-[13px]">
+            <div className="inline-flex min-w-0 items-center gap-2 rounded-lg border bg-muted/25 px-3 py-2">
+              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
                 {t('fieldLabels.model')}
-              </div>
-              <p className="mt-1 truncate text-[15px] font-medium text-foreground">
-                {agent.modelDisplay}
-                {agent.inheritedModel ? (
-                  <span className="text-muted-foreground"> ({t('inherited')})</span>
+              </span>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <p className="truncate font-medium text-foreground">{modelMeta.value}</p>
+                {modelMeta.isDefaultModel ? (
+                  <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                    {t('defaultBadge')}
+                  </span>
                 ) : null}
-              </p>
-            </div>
-            <div className="rounded-lg border bg-muted/25 px-3 py-3">
-              <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
-                {t('fieldLabels.channels')}
+                {agent.inheritedModel ? (
+                  <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {t('inherited')}
+                  </span>
+                ) : null}
               </div>
-              <p className="mt-1 line-clamp-2 text-[15px] text-foreground/80">{channelsText}</p>
+            </div>
+            <div className="inline-flex min-w-0 items-center gap-2 rounded-lg border bg-muted/25 px-3 py-2">
+              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
+                {t('fieldLabels.channels')}
+              </span>
+              {channelLabels.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {channelLabels.map((label) => (
+                    <span
+                      key={label}
+                      className="inline-flex items-center rounded-md bg-background px-2 py-0.5 text-[12px] font-medium text-foreground/80"
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-foreground/55">{t('none')}</p>
+              )}
             </div>
           </div>
         </div>
@@ -314,22 +380,34 @@ function AgentCard({
 const inputClasses = 'h-[44px] rounded-xl font-mono text-[13px] bg-muted/70 dark:bg-muted/40 border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40';
 const labelClasses = 'text-[14px] text-foreground/80 font-bold';
 
-function ChannelLogo({ type }: { type: ChannelType }) {
+function ChannelLogo({ type, branded = false }: { type: ChannelType; branded?: boolean }) {
+  const brand = CHANNEL_BRAND_STYLES[type];
+  const shellClass = branded
+    ? brand?.shell ?? 'bg-slate-900 border-slate-800 shadow-[0_10px_24px_rgba(15,23,42,0.16)]'
+    : 'bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/10 shadow-sm';
+  const iconClass = branded ? brand?.icon ?? 'brightness-0 invert' : '';
+
+  const wrap = (content: React.ReactNode) => (
+    <div className={cn('h-[40px] w-[40px] shrink-0 flex items-center justify-center rounded-full border', shellClass)}>
+      {content}
+    </div>
+  );
+
   switch (type) {
     case 'telegram':
-      return <img src={telegramIcon} alt="Telegram" className="w-[20px] h-[20px]" />;
+      return wrap(<img src={telegramIcon} alt="Telegram" className={cn('w-[20px] h-[20px]', iconClass)} />);
     case 'discord':
-      return <img src={discordIcon} alt="Discord" className="w-[20px] h-[20px]" />;
+      return wrap(<img src={discordIcon} alt="Discord" className={cn('w-[20px] h-[20px]', iconClass)} />);
     case 'whatsapp':
-      return <img src={whatsappIcon} alt="WhatsApp" className="w-[20px] h-[20px]" />;
+      return wrap(<img src={whatsappIcon} alt="WhatsApp" className={cn('w-[20px] h-[20px]', iconClass)} />);
     case 'dingtalk':
-      return <img src={dingtalkIcon} alt="DingTalk" className="w-[20px] h-[20px]" />;
+      return wrap(<img src={dingtalkIcon} alt="DingTalk" className={cn('w-[20px] h-[20px]', iconClass)} />);
     case 'feishu':
-      return <img src={feishuIcon} alt="Feishu" className="w-[20px] h-[20px]" />;
+      return wrap(<img src={feishuIcon} alt="Feishu" className={cn('w-[20px] h-[20px]', iconClass)} />);
     case 'wecom':
-      return <img src={wecomIcon} alt="WeCom" className="w-[20px] h-[20px]" />;
+      return wrap(<img src={wecomIcon} alt="WeCom" className={cn('w-[20px] h-[20px]', iconClass)} />);
     case 'qqbot':
-      return <img src={qqIcon} alt="QQ" className="w-[20px] h-[20px]" />;
+      return wrap(<img src={qqIcon} alt="QQ" className={cn('w-[20px] h-[20px]', iconClass)} />);
     default:
       return <span className="text-[20px] leading-none">{CHANNEL_ICONS[type] || '💬'}</span>;
   }
@@ -420,6 +498,7 @@ function AgentSettingsModal({
   onClose: () => void;
 }) {
   const { t } = useTranslation('agents');
+  const modelMeta = splitAgentModelDisplay(agent.modelDisplay);
   const { updateAgent, assignChannel, removeChannel } = useAgentsStore();
   const { fetchChannels } = useChannelsStore();
   const [name, setName] = useState(agent.name);
@@ -532,10 +611,19 @@ function AgentSettingsModal({
                 <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground/80 font-medium">
                   {t('settingsDialog.modelLabel')}
                 </p>
-                <p className="text-[13.5px] text-foreground">
-                  {agent.modelDisplay}
-                  {agent.inheritedModel ? ` (${t('inherited')})` : ''}
-                </p>
+                <div className="flex flex-wrap items-center gap-1.5 text-[13.5px] text-foreground">
+                  <span>{modelMeta.value}</span>
+                  {modelMeta.isDefaultModel ? (
+                    <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                      {t('defaultBadge')}
+                    </span>
+                  ) : null}
+                  {agent.inheritedModel ? (
+                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      {t('inherited')}
+                    </span>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
@@ -566,16 +654,7 @@ function AgentSettingsModal({
                 {assignedChannels.map((channel) => (
                   <div key={channel.channelType} className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/35 p-4">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className={cn(
-                          'h-[40px] w-[40px] shrink-0 flex items-center justify-center rounded-full border shadow-sm',
-                          channel.status === 'connected'
-                            ? 'bg-emerald-500/12 border-emerald-500/30'
-                            : 'bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/10'
-                        )}
-                      >
-                        <ChannelLogo type={channel.channelType} />
-                      </div>
+                      <ChannelLogo type={channel.channelType} branded />
                       <div className="min-w-0">
                         <p className="text-[15px] font-semibold text-foreground">{channel.name}</p>
                         <p className="text-[13.5px] text-muted-foreground">

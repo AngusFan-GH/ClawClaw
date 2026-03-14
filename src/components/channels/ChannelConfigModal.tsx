@@ -40,6 +40,37 @@ import feishuIcon from '@/assets/channels/feishu.svg';
 import wecomIcon from '@/assets/channels/wecom.svg';
 import qqIcon from '@/assets/channels/qq.svg';
 
+const CHANNEL_BRAND_STYLES: Partial<Record<ChannelType, { shell: string; icon: string }>> = {
+  telegram: {
+    shell: 'bg-[#27A7E7] border-[#1f8ec7] shadow-[0_10px_24px_rgba(39,167,231,0.22)]',
+    icon: 'brightness-0 invert',
+  },
+  discord: {
+    shell: 'bg-[#5865F2] border-[#4752c4] shadow-[0_10px_24px_rgba(88,101,242,0.22)]',
+    icon: 'brightness-0 invert',
+  },
+  whatsapp: {
+    shell: 'bg-[#25D366] border-[#1faf54] shadow-[0_10px_24px_rgba(37,211,102,0.2)]',
+    icon: 'brightness-0 invert',
+  },
+  feishu: {
+    shell: 'bg-[linear-gradient(135deg,#0F67FF,#00C2FF)] border-[#0f67ff] shadow-[0_10px_24px_rgba(15,103,255,0.22)]',
+    icon: 'brightness-0 invert',
+  },
+  dingtalk: {
+    shell: 'bg-[#1677FF] border-[#0f5fd1] shadow-[0_10px_24px_rgba(22,119,255,0.22)]',
+    icon: 'brightness-0 invert',
+  },
+  wecom: {
+    shell: 'bg-[linear-gradient(135deg,#07C160,#00A1EA)] border-[#07c160] shadow-[0_10px_24px_rgba(7,193,96,0.22)]',
+    icon: 'brightness-0 invert',
+  },
+  qqbot: {
+    shell: 'bg-[linear-gradient(135deg,#12B7F5,#4E8CFF)] border-[#12b7f5] shadow-[0_10px_24px_rgba(18,183,245,0.22)]',
+    icon: 'brightness-0 invert',
+  },
+};
+
 interface ChannelConfigModalProps {
   initialSelectedType?: ChannelType | null;
   configuredTypes?: string[];
@@ -399,9 +430,7 @@ export function ChannelConfigModal({
                         : 'border-black/5 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5'
                     )}
                   >
-                    <div className="h-[46px] w-[46px] shrink-0 flex items-center justify-center text-foreground bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl shadow-sm">
-                      <ChannelLogo type={type} />
-                    </div>
+                    <ChannelLogo type={type} branded />
                     <div className="flex flex-col flex-1 min-w-0 py-0.5 mt-1">
                       <div className="flex items-center gap-2 mb-1">
                         <p className="text-[16px] font-semibold text-foreground truncate">{channelMeta.name}</p>
@@ -625,22 +654,39 @@ interface ConfigFieldProps {
   onToggleSecret: () => void;
 }
 
-function ChannelLogo({ type }: { type: ChannelType }) {
+function ChannelLogo({ type, branded = false }: { type: ChannelType; branded?: boolean }) {
+  const brand = CHANNEL_BRAND_STYLES[type];
+  const shellClass = branded
+    ? brand?.shell ?? 'bg-slate-900 border-slate-800 shadow-[0_10px_24px_rgba(15,23,42,0.16)]'
+    : 'bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/10 shadow-sm';
+  const iconClass = branded ? brand?.icon ?? 'brightness-0 invert' : '';
+
+  const wrap = (content: React.ReactNode) => (
+    <div
+      className={cn(
+        'h-[46px] w-[46px] shrink-0 flex items-center justify-center rounded-xl border',
+        shellClass,
+      )}
+    >
+      {content}
+    </div>
+  );
+
   switch (type) {
     case 'telegram':
-      return <img src={telegramIcon} alt="Telegram" className="w-[22px] h-[22px]" />;
+      return wrap(<img src={telegramIcon} alt="Telegram" className={cn('w-[22px] h-[22px]', iconClass)} />);
     case 'discord':
-      return <img src={discordIcon} alt="Discord" className="w-[22px] h-[22px]" />;
+      return wrap(<img src={discordIcon} alt="Discord" className={cn('w-[22px] h-[22px]', iconClass)} />);
     case 'whatsapp':
-      return <img src={whatsappIcon} alt="WhatsApp" className="w-[22px] h-[22px]" />;
+      return wrap(<img src={whatsappIcon} alt="WhatsApp" className={cn('w-[22px] h-[22px]', iconClass)} />);
     case 'dingtalk':
-      return <img src={dingtalkIcon} alt="DingTalk" className="w-[22px] h-[22px]" />;
+      return wrap(<img src={dingtalkIcon} alt="DingTalk" className={cn('w-[22px] h-[22px]', iconClass)} />);
     case 'feishu':
-      return <img src={feishuIcon} alt="Feishu" className="w-[22px] h-[22px]" />;
+      return wrap(<img src={feishuIcon} alt="Feishu" className={cn('w-[22px] h-[22px]', iconClass)} />);
     case 'wecom':
-      return <img src={wecomIcon} alt="WeCom" className="w-[22px] h-[22px]" />;
+      return wrap(<img src={wecomIcon} alt="WeCom" className={cn('w-[22px] h-[22px]', iconClass)} />);
     case 'qqbot':
-      return <img src={qqIcon} alt="QQ" className="w-[22px] h-[22px]" />;
+      return wrap(<img src={qqIcon} alt="QQ" className={cn('w-[22px] h-[22px]', iconClass)} />);
     default:
       return <span className="text-[22px]">{CHANNEL_ICONS[type] || '馃挰'}</span>;
   }
