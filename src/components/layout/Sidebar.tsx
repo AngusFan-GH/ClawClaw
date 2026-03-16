@@ -111,6 +111,10 @@ function isMainSessionKey(key: string): boolean {
   return key.endsWith(':main');
 }
 
+function resolveAgentDisplayName(agent: { id: string; name?: string; identity?: { name?: string } }): string {
+  return agent.name?.trim() || agent.identity?.name?.trim() || agent.id;
+}
+
 export function Sidebar() {
   const sidebarCollapsed = useSettingsStore((state) => state.sidebarCollapsed);
   const setSidebarCollapsed = useSettingsStore((state) => state.setSidebarCollapsed);
@@ -152,7 +156,7 @@ export function Sidebar() {
   }, [fetchAgents]);
 
   const agentNameMap = useMemo(
-    () => new Map((agents ?? []).map((agent) => [agent.id, agent.name])),
+    () => new Map((agents ?? []).map((agent) => [agent.id, resolveAgentDisplayName(agent)])),
     [agents]
   );
 

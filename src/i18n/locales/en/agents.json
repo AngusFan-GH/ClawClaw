@@ -25,6 +25,13 @@
     "model": "Model",
     "channels": "Channels"
   },
+  "meta": {
+    "defaultAgent": "Default agent",
+    "mainKey": "Main key",
+    "scope": "Scope",
+    "identity": "Identity",
+    "workspace": "Workspace"
+  },
   "modelLine": "Model: {{model}}{{suffix}}",
   "channelsLine": "Channels: {{channels}}",
   "deleteAgent": "Delete Agent",
@@ -47,7 +54,7 @@
     "agentIdLabel": "Agent ID",
     "modelLabel": "Model",
     "channelsTitle": "Channels",
-    "channelsDescription": "Each channel type has a single ClawClaw configuration. Saving a configured channel here moves ownership to this agent.",
+    "channelsDescription": "Each channel type keeps a single global configuration in ClawClaw. Binding a configured channel here only switches that channel type's agent ownership; it does not duplicate the channel configuration.",
     "addChannel": "Add Channel",
     "noChannels": "No channels are assigned to this agent yet.",
     "assignedStatus": "Assigned"
@@ -62,6 +69,7 @@
     "agentDeleted": "Agent deleted",
     "agentUpdated": "Agent updated",
     "agentUpdateFailed": "Failed to update agent: {{error}}",
+    "openWorkspaceFailed": "Failed to open workspace: {{error}}",
     "channelAssigned": "{{channel}} assigned to agent",
     "channelAssignFailed": "Failed to assign channel: {{error}}",
     "channelRemoved": "{{channel}} removed",

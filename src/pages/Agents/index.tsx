@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Bot, PencilLine, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { AlertCircle, Bot, FolderOpen, PencilLine, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,6 +26,7 @@ import dingtalkIcon from '@/assets/channels/dingtalk.svg';
 import feishuIcon from '@/assets/channels/feishu.svg';
 import wecomIcon from '@/assets/channels/wecom.svg';
 import qqIcon from '@/assets/channels/qq.svg';
+import { invokeIpc } from '@/lib/api-client';
 
 const CHANNEL_BRAND_STYLES: Partial<Record<ChannelType, { shell: string; icon: string }>> = {
   telegram: {
@@ -251,6 +252,26 @@ function splitAgentModelDisplay(modelDisplay: string): { value: string; isDefaul
   };
 }
 
+function resolveAgentDisplayName(agent: AgentSummary): string {
+  return agent.name?.trim() || agent.identity?.name?.trim() || agent.id;
+}
+
+function resolveAgentAvatar(agent: AgentSummary): string | null {
+  return agent.identity?.emoji?.trim() || null;
+}
+
+async function openWorkspaceFolder(workspace?: string | null) {
+  if (!workspace || workspace === 'default') return;
+  const result = await invokeIpc<string>('shell:openPath', workspace);
+  if (typeof result === 'string' && result.trim()) {
+    const lower = result.toLowerCase();
+    if (lower.includes('no such file') || lower.includes('not found') || lower.includes('failed to open')) {
+      throw new Error('Workspace directory not found');
+    }
+    throw new Error(result);
+  }
+}
+
 function AgentCard({
   agent,
   onOpenSettings,
@@ -261,6 +282,10 @@ function AgentCard({
   onDelete: () => void;
 }) {
   const { t } = useTranslation('agents');
+  const displayName = resolveAgentDisplayName(agent);
+  const identityName = agent.identity?.name?.trim();
+  const avatarGlyph = resolveAgentAvatar(agent);
+  const workspacePath = agent.workspace?.trim() || '';
   const channelLabels = agent.channelTypes
     .map((channelType) => CHANNEL_NAMES[channelType as ChannelType] || channelType)
     .filter(Boolean);
@@ -275,18 +300,22 @@ function AgentCard({
     >
       <div className="flex items-start gap-3.5">
         <div className={cn(
-          'mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border text-primary',
+          'mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border text-lg',
           agent.isDefault
             ? 'border-primary/15 bg-primary/10'
             : 'border-black/8 bg-black/[0.03] dark:border-white/10 dark:bg-white/[0.03]'
         )}>
-          <Bot className="h-5 w-5" />
+          {avatarGlyph ? (
+            <span aria-hidden="true">{avatarGlyph}</span>
+          ) : (
+            <Bot className="h-5 w-5 text-foreground/75" strokeWidth={2} />
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2.5">
-                <h2 className="truncate text-[17px] font-semibold text-foreground">{agent.name}</h2>
+                <h2 className="truncate text-[17px] font-semibold text-foreground">{displayName}</h2>
                 {agent.isDefault && (
                   <Badge
                     variant="secondary"
@@ -297,6 +326,11 @@ function AgentCard({
                 )}
               </div>
               <p className="mt-1 font-mono text-[12px] text-muted-foreground/85">{agent.id}</p>
+              {identityName && identityName !== displayName ? (
+                <p className="mt-1 text-[12px] text-muted-foreground/75">
+                  {t('meta.identity', 'Identity')}: <span className="text-foreground/80">{identityName}</span>
+                </p>
+              ) : null}
             </div>
             <TooltipProvider delayDuration={120}>
               <div className="flex items-center gap-2 shrink-0">
@@ -368,6 +402,30 @@ function AgentCard({
                 </div>
               ) : (
                 <p className="text-foreground/55">{t('none')}</p>
+              )}
+            </div>
+            <div className="inline-flex min-w-0 items-center gap-2 rounded-lg border bg-muted/25 px-3 py-2">
+              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
+                {t('meta.workspace', 'Workspace')}
+              </span>
+              {workspacePath ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void openWorkspaceFolder(workspacePath).catch((error) => {
+                      toast.error(t('toast.openWorkspaceFailed', { error: String(error) }));
+                    });
+                  }}
+                  className="group inline-flex min-w-0 max-w-[240px] items-center gap-1.5 rounded-md bg-background px-2 py-1 font-mono text-[12px] text-foreground/80 transition-colors hover:bg-primary/8 hover:text-foreground"
+                  title={workspacePath}
+                >
+                  <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+                  <span className="truncate">{workspacePath}</span>
+                </button>
+              ) : (
+                <p className="max-w-[220px] truncate font-mono text-[12px] text-foreground/80">
+                  default
+                </p>
               )}
             </div>
           </div>
@@ -501,14 +559,15 @@ function AgentSettingsModal({
   const modelMeta = splitAgentModelDisplay(agent.modelDisplay);
   const { updateAgent, assignChannel, removeChannel } = useAgentsStore();
   const { fetchChannels } = useChannelsStore();
-  const [name, setName] = useState(agent.name);
+  const workspacePath = agent.workspace?.trim() || '';
+  const [name, setName] = useState(resolveAgentDisplayName(agent));
   const [savingName, setSavingName] = useState(false);
   const [showChannelModal, setShowChannelModal] = useState(false);
   const [channelToRemove, setChannelToRemove] = useState<ChannelType | null>(null);
 
   useEffect(() => {
-    setName(agent.name);
-  }, [agent.name]);
+    setName(resolveAgentDisplayName(agent));
+  }, [agent]);
 
   const runtimeChannelsByType = useMemo(
     () => Object.fromEntries((channels ?? []).map((channel) => [channel.type, channel])),
@@ -516,7 +575,7 @@ function AgentSettingsModal({
   );
 
   const handleSaveName = async () => {
-    if (!name.trim() || name.trim() === agent.name) return;
+    if (!name.trim() || name.trim() === resolveAgentDisplayName(agent)) return;
     setSavingName(true);
     try {
       await updateAgent(agent.id, name.trim());
@@ -556,7 +615,7 @@ function AgentSettingsModal({
         <CardHeader className="flex flex-row items-start justify-between pb-2 shrink-0">
           <div>
             <CardTitle className="text-2xl font-semibold tracking-tight">
-              {t('settingsDialog.title', { name: agent.name })}
+              {t('settingsDialog.title', { name: resolveAgentDisplayName(agent) })}
             </CardTitle>
             <CardDescription className="text-[15px] mt-1 text-foreground/70">
               {t('settingsDialog.description')}
@@ -580,23 +639,20 @@ function AgentSettingsModal({
                   id="agent-settings-name"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  readOnly={agent.isDefault}
                   className={inputClasses}
                 />
-                {!agent.isDefault && (
-                  <Button
-                    variant="outline"
-                    onClick={() => void handleSaveName()}
-                    disabled={savingName || !name.trim() || name.trim() === agent.name}
-                    className="h-[44px] text-[13px] font-medium rounded-xl px-4 border-black/10 dark:border-white/10 bg-muted/70 dark:bg-muted/40 hover:bg-black/5 dark:hover:bg-white/5 shadow-none text-foreground/80 hover:text-foreground"
-                  >
-                    {savingName ? (
-                      <LoadingIcon className="h-4 w-4" />
-                    ) : (
-                      t('common:actions.save')
-                    )}
-                  </Button>
-                )}
+                <Button
+                  variant="outline"
+                  onClick={() => void handleSaveName()}
+                  disabled={savingName || !name.trim() || name.trim() === resolveAgentDisplayName(agent)}
+                  className="h-[44px] text-[13px] font-medium rounded-xl px-4 border-black/10 dark:border-white/10 bg-muted/70 dark:bg-muted/40 hover:bg-black/5 dark:hover:bg-white/5 shadow-none text-foreground/80 hover:text-foreground"
+                >
+                  {savingName ? (
+                    <LoadingIcon className="h-4 w-4" />
+                  ) : (
+                    t('common:actions.save')
+                  )}
+                </Button>
               </div>
             </div>
 
@@ -625,6 +681,29 @@ function AgentSettingsModal({
                   ) : null}
                 </div>
               </div>
+            </div>
+
+            <div className="space-y-1 rounded-2xl border border-border/70 bg-muted/35 p-4">
+              <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground/80 font-medium">
+                {t('meta.workspace', 'Workspace')}
+              </p>
+              {workspacePath ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void openWorkspaceFolder(workspacePath).catch((error) => {
+                      toast.error(t('toast.openWorkspaceFailed', { error: String(error) }));
+                    });
+                  }}
+                  className="group inline-flex min-w-0 max-w-full items-center gap-2 rounded-xl bg-background px-3 py-2 font-mono text-[13px] text-foreground transition-colors hover:bg-primary/8 hover:text-foreground"
+                  title={workspacePath}
+                >
+                  <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+                  <span className="truncate">{workspacePath}</span>
+                </button>
+              ) : (
+                <p className="font-mono text-[13px] text-foreground">default</p>
+              )}
             </div>
           </div>
 

@@ -25,6 +25,13 @@
     "model": "Model",
     "channels": "Channels"
   },
+  "meta": {
+    "defaultAgent": "Default agent",
+    "mainKey": "Main key",
+    "scope": "Scope",
+    "identity": "Identity",
+    "workspace": "Workspace"
+  },
   "modelLine": "Model: {{model}}{{suffix}}",
   "channelsLine": "Channels: {{channels}}",
   "deleteAgent": "Agent を削除",
@@ -47,7 +54,7 @@
     "agentIdLabel": "Agent ID",
     "modelLabel": "Model",
     "channelsTitle": "Channels",
-    "channelsDescription": "各 Channel 種別は ClawClaw で 1 つだけ設定されます。ここで既存の Channel を保存すると、この Agent に所属が移動します。",
+    "channelsDescription": "各 Channel 種別の設定は ClawClaw 全体で 1 つだけ保持されます。ここで設定済みの Channel をバインドしても、切り替わるのはその Channel 種別の Agent 所属だけで、設定自体は複製されません。",
     "addChannel": "Channel を追加",
     "noChannels": "この Agent にはまだ Channel が割り当てられていません。",
     "assignedStatus": "割り当て済み"
@@ -62,6 +69,7 @@
     "agentDeleted": "Agent を削除しました",
     "agentUpdated": "Agent を更新しました",
     "agentUpdateFailed": "Agent の更新に失敗しました: {{error}}",
+    "openWorkspaceFailed": "ワークスペースを開けませんでした: {{error}}",
     "channelAssigned": "{{channel}} を Agent に割り当てました",
     "channelAssignFailed": "Channel の割り当てに失敗しました: {{error}}",
     "channelRemoved": "{{channel}} を削除しました",

@@ -25,6 +25,13 @@
     "model": "模型",
     "channels": "连接"
   },
+  "meta": {
+    "defaultAgent": "默认分身",
+    "mainKey": "主会话键",
+    "scope": "范围",
+    "identity": "身份",
+    "workspace": "工作区"
+  },
   "modelLine": "Model: {{model}}{{suffix}}",
   "channelsLine": "Channels: {{channels}}",
   "deleteAgent": "删除分身",
@@ -47,7 +54,7 @@
     "agentIdLabel": "分身 ID",
     "modelLabel": "Model",
     "channelsTitle": "连接",
-    "channelsDescription": "每种连接类型在 ClawClaw 中只保留一份配置。在这里保存已配置的连接会将归属切换到当前分身。",
+    "channelsDescription": "每种连接类型在 ClawClaw 中只保留一份全局配置。在这里绑定已配置的连接，只会切换该连接类型对应的分身归属，不会复制连接配置。",
     "addChannel": "添加连接",
     "noChannels": "这个分身还没有分配任何连接。",
     "assignedStatus": "已分配"
@@ -62,6 +69,7 @@
     "agentDeleted": "分身已删除",
     "agentUpdated": "分身已更新",
     "agentUpdateFailed": "更新分身失败：{{error}}",
+    "openWorkspaceFailed": "打开工作区失败：{{error}}",
     "channelAssigned": "{{channel}} 已分配给分身",
     "channelAssignFailed": "分配连接失败：{{error}}",
     "channelRemoved": "{{channel}} 已移除",

@@ -1,6 +1,15 @@
+export interface AgentIdentitySummary {
+  name?: string;
+  theme?: string;
+  emoji?: string;
+  avatar?: string;
+  avatarUrl?: string;
+}
+
 export interface AgentSummary {
   id: string;
   name: string;
+  identity?: AgentIdentitySummary;
   isDefault: boolean;
   modelDisplay: string;
   inheritedModel: boolean;
@@ -12,6 +21,8 @@ export interface AgentSummary {
 export interface AgentsSnapshot {
   agents: AgentSummary[];
   defaultAgentId: string;
+  mainKey?: string;
+  scope?: string;
   configuredChannelTypes: string[];
   channelOwners: Record<string, string>;
 }

@@ -387,20 +387,13 @@ async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<Age
   const { entries, defaultAgentId } = await getEffectiveAgentEntries(config);
   const configuredChannels = await listConfiguredChannels();
   const explicitOwners = getSimpleChannelBindingMap(config.bindings);
-  const defaultAgentIdNorm = normalizeAgentIdForBinding(defaultAgentId);
   const channelOwners: Record<string, string> = {};
 
   for (const channelType of configuredChannels) {
     const explicitOwner = explicitOwners.get(channelType);
     if (explicitOwner) {
       channelOwners[channelType] = explicitOwner;
-      continue;
     }
-
-    const inferredOwner = entries.find((entry) =>
-      entry.id.toLowerCase().includes(channelType.toLowerCase())
-    );
-    channelOwners[channelType] = normalizeAgentIdForBinding(inferredOwner?.id || defaultAgentIdNorm);
   }
 
   const defaultModelLabel = formatModelLabel((config.agents as AgentsConfig | undefined)?.defaults?.model);

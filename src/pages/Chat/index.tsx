@@ -232,6 +232,16 @@ function getAgentIdFromSessionKey(sessionKey: string | undefined): string | unde
   return parts[1]?.trim() || undefined;
 }
 
+function buildAgentMainSessionKey(agentId: string, mainKey = 'main'): string {
+  const normalizedAgentId = agentId?.trim() || 'main';
+  const normalizedMainKey = mainKey?.trim() || 'main';
+  return `agent:${normalizedAgentId}:${normalizedMainKey}`;
+}
+
+function resolveAgentDisplayName(agent: { id: string; name?: string; identity?: { name?: string } }): string {
+  return agent.name?.trim() || agent.identity?.name?.trim() || agent.id;
+}
+
 export function Chat() {
   const { t } = useTranslation('chat');
   const navigate = useNavigate();
@@ -260,11 +270,11 @@ export function Chat() {
   const clearError = useChatStore((s) => s.clearError);
   const setSessionModel = useChatStore((s) => s.setSessionModel);
   const setModelGuard = useChatStore((s) => s.setModelGuard);
-  const newSession = useChatStore((s) => s.newSession);
   const toggleThinking = useChatStore((s) => s.toggleThinking);
 
   const agents = useAgentsStore((s) => s.agents);
   const defaultAgentId = useAgentsStore((s) => s.defaultAgentId);
+  const agentsMainKey = useAgentsStore((s) => s.mainKey);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const providerAccounts = useProviderStore((s) => s.accounts);
   const providerStatuses = useProviderStore((s) => s.statuses);
@@ -580,7 +590,7 @@ export function Chat() {
     });
     return sorted.map((agent) => ({
       id: agent.id,
-      label: agent.name,
+      label: resolveAgentDisplayName(agent),
     }));
   }, [agents]);
   const canSwitchAgent = currentSessionIsPlaceholder;
@@ -678,7 +688,7 @@ export function Chat() {
               agentOptions={agentOptions}
               onAgentChange={(agentId) => {
                 if (agentId === currentAgentId) return;
-                newSession(agentId);
+                switchSession(buildAgentMainSessionKey(agentId, agentsMainKey));
               }}
             />
           ) : (
