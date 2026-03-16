@@ -81,6 +81,7 @@
 !macroend
 
 !macro customInstall
+  ShowInstDetails show
   DetailPrint "Configuring ${PRODUCT_NAME} for first launch..."
 
   ; Enable Windows long path support (Windows 10 1607+ / Windows 11).
@@ -109,6 +110,7 @@
 !macroend
 
 !macro customUnInstall
+  ShowUnInstDetails show
   ; Remove resources\cli from user PATH via PowerShell so long PATH values are handled safely
   InitPluginsDir
   ClearErrors
