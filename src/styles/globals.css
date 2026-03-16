@@ -908,6 +908,10 @@
   color: hsl(var(--muted-foreground));
 }
 
+.chat-tool-card__action {
+  cursor: pointer;
+}
+
 .chat-tool-card__detail,
 .chat-tool-card__preview,
 .chat-tool-card__inline {
@@ -923,10 +927,10 @@
   background: hsl(var(--secondary));
   border-radius: 8px;
   border: 1px solid hsl(var(--border));
-  max-height: 44px;
   line-height: 1.4;
   overflow: hidden;
 }
+
 
 .chat-tool-card__inline {
   padding: 6px 8px;

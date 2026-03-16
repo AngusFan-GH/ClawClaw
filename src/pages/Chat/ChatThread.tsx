@@ -675,7 +675,15 @@ function extractToolCards(message: RawMessage): ToolCard[] {
   return cards;
 }
 
-const ToolCards = memo(function ToolCards({ cards, labels }: { cards: ToolCard[]; labels: ChatThreadLabels }) {
+const ToolCards = memo(function ToolCards({
+  cards,
+  labels,
+  suppressResultPreview = false,
+}: {
+  cards: ToolCard[];
+  labels: ChatThreadLabels;
+  suppressResultPreview?: boolean;
+}) {
   if (cards.length === 0) return null;
   const calls = cards.filter((card) => card.kind === 'call');
   const results = cards.filter((card) => card.kind === 'result');
@@ -707,9 +715,9 @@ const ToolCards = memo(function ToolCards({ cards, labels }: { cards: ToolCard[]
                   </span>
                   <span>{display.label}</span>
                 </div>
-                {card.kind === 'result' ? <span className="chat-tool-card__action">{hasText ? labels.view : ''}</span> : null}
-                {card.kind === 'result' && !hasText ? <span className="chat-tool-card__status"><Check className="h-3.5 w-3.5" /></span> : null}
-              </div>
+              {card.kind === 'result' ? <span className="chat-tool-card__action">{hasText && !suppressResultPreview ? labels.view : ''}</span> : null}
+              {card.kind === 'result' && !hasText ? <span className="chat-tool-card__status"><Check className="h-3.5 w-3.5" /></span> : null}
+            </div>
               {display.detail ? <div className="chat-tool-card__detail">{display.detail}</div> : null}
               {card.kind === 'call' && !display.detail && card.args ? (
                 <div className="chat-tool-card__detail">{previewText(formatArgs(card.args))}</div>
@@ -717,10 +725,10 @@ const ToolCards = memo(function ToolCards({ cards, labels }: { cards: ToolCard[]
               {card.kind === 'result' && !hasText ? (
                 <div className="chat-tool-card__status-text muted">{labels.completed}</div>
               ) : null}
-              {card.kind === 'result' && hasText && !inline ? (
+              {card.kind === 'result' && hasText && !inline && !suppressResultPreview ? (
                 <div className="chat-tool-card__preview mono">{previewText(card.text!)}</div>
               ) : null}
-              {card.kind === 'result' && inline ? (
+              {card.kind === 'result' && inline && !suppressResultPreview ? (
                 <div className="chat-tool-card__inline mono">{card.text}</div>
               ) : null}
             </div>
@@ -828,7 +836,7 @@ const GroupedMessage = memo(function GroupedMessage({
                 <pre className="chat-json-content"><code>{jsonResult.pretty}</code></pre>
               </details>
             ) : markdown ? <MessageMarkdown text={markdown} labels={labels} /> : null}
-            {hasToolCards ? <ToolCards cards={toolCards} labels={labels} /> : null}
+            {hasToolCards ? <ToolCards cards={toolCards} labels={labels} suppressResultPreview /> : null}
           </div>
         </details>
       ) : (
