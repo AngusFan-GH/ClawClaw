@@ -16,6 +16,7 @@ const hasCommand = (name) => {
 
 const hasNsis = hasCommand('makensis');
 const target = hasNsis ? 'nsis' : 'portable';
+const args = process.argv.slice(2);
 
 if (hasNsis) {
   console.log('[package:win] Found NSIS (makensis), building NSIS installer.');
@@ -23,7 +24,7 @@ if (hasNsis) {
   console.log('[package:win] NSIS not found, fallback to portable build.');
 }
 
-const result = spawnSync('electron-builder', ['--win', target], {
+const result = spawnSync('electron-builder', ['--win', target, ...args], {
   stdio: 'inherit',
   shell: true,
 });
