@@ -1,8 +1,10 @@
-import { app, utilityProcess } from 'electron';
+import { app } from 'electron';
+import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'path';
 import { existsSync } from 'fs';
 import WebSocket from 'ws';
 import { getOpenClawDir, getOpenClawEntryPath } from '../utils/paths';
+import { getOpenClawCliSpawnConfig } from '../utils/openclaw-cli';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { isPythonReady, setupManagedPython } from '../utils/uv-setup';
 import { logger } from '../utils/logger';
@@ -20,7 +22,7 @@ export function warmupManagedPythonReadiness(): void {
   });
 }
 
-export async function terminateOwnedGatewayProcess(child: Electron.UtilityProcess): Promise<void> {
+export async function terminateOwnedGatewayProcess(child: ChildProcess): Promise<void> {
   let exited = false;
 
   await new Promise<void>((resolve) => {
@@ -287,10 +289,15 @@ export async function runOpenClawDoctorRepair(): Promise<boolean> {
       OPENCLAW_NO_RESPAWN: '1',
     };
 
-    const child = utilityProcess.fork(entryScript, doctorArgs, {
-      cwd: openclawDir,
-      stdio: 'pipe',
-      env: forkEnv as NodeJS.ProcessEnv,
+    const spawnConfig = getOpenClawCliSpawnConfig(doctorArgs);
+    const child = spawn(spawnConfig.command, spawnConfig.args, {
+      cwd: openclawDir || spawnConfig.cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...spawnConfig.env,
+        ...forkEnv,
+      } as NodeJS.ProcessEnv,
+      windowsHide: true,
     });
 
     let settled = false;

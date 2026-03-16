@@ -428,7 +428,7 @@ function patchBrokenModules(nodeModulesDir) {
     },
   ];
 
-  let count = 0;
+  let count = patchHttpsProxyAgentPackageMetadata(nodeModulesDir);
   for (const [rel, content] of Object.entries(rewritePatches)) {
     const target = path.join(nodeModulesDir, rel);
     if (fs.existsSync(target)) {
@@ -454,6 +454,31 @@ function patchBrokenModules(nodeModulesDir) {
   }
   if (count > 0) {
     echo`   🩹 Patched ${count} broken module(s) in node_modules`;
+  }
+}
+
+function patchHttpsProxyAgentPackageMetadata(nodeModulesDir) {
+  const httpsProxyAgentPkg = path.join(nodeModulesDir, 'https-proxy-agent', 'package.json');
+  if (!fs.existsSync(httpsProxyAgentPkg)) return 0;
+  try {
+    const pkg = JSON.parse(fs.readFileSync(httpsProxyAgentPkg, 'utf8'));
+    // Electron run-as-node in packaged builds resolves this package through
+    // a CommonJS path. The upstream package only publishes an "import"
+    // export, which breaks OpenClaw startup with ERR_PACKAGE_PATH_NOT_EXPORTED.
+    pkg.main = './dist/index.js';
+    pkg.exports = {
+      '.': {
+        types: './dist/index.d.ts',
+        import: './dist/index.js',
+        default: './dist/index.js',
+        require: './dist/index.js',
+      },
+    };
+    fs.writeFileSync(httpsProxyAgentPkg, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+    return 1;
+  } catch (err) {
+    echo`   ⚠️  Skipped patch for https-proxy-agent package metadata: ${err.message}`;
+    return 0;
   }
 }
 

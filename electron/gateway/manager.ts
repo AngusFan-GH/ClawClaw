@@ -5,6 +5,7 @@
 import { app } from 'electron';
 import path from 'path';
 import { EventEmitter } from 'events';
+import type { ChildProcess } from 'node:child_process';
 import WebSocket from 'ws';
 import { PORTS } from '../utils/config';
 import { JsonRpcNotification, isNotification, isResponse } from './protocol';
@@ -71,7 +72,7 @@ export interface GatewayManagerEvents {
  * Handles starting, stopping, and communicating with the OpenClaw Gateway
  */
 export class GatewayManager extends EventEmitter {
-  private process: Electron.UtilityProcess | null = null;
+  private process: ChildProcess | null = null;
   private processExitCode: number | null = null; // set by exit event, replaces exitCode/signalCode
   private ownsProcess = false;
   private ws: WebSocket | null = null;

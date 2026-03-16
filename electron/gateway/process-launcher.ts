@@ -1,8 +1,10 @@
-import { app, utilityProcess } from 'electron';
+import { app } from 'electron';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, writeFileSync } from 'fs';
 import path from 'path';
 import type { GatewayLaunchContext } from './config-sync';
 import type { GatewayLifecycleState } from './process-policy';
+import { getOpenClawCliSpawnConfig } from '../utils/openclaw-cli';
 import { logger } from '../utils/logger';
 import { appendNodeRequireToNodeOptions } from '../utils/paths';
 
@@ -96,9 +98,9 @@ export async function launchGatewayProcess(options: {
   getShouldReconnect: () => boolean;
   onStderrLine: (line: string) => void;
   onSpawn: (pid: number | undefined) => void;
-  onExit: (child: Electron.UtilityProcess, code: number | null) => void;
+  onExit: (child: ChildProcess, code: number | null) => void;
   onError: (error: Error) => void;
-}): Promise<{ child: Electron.UtilityProcess; lastSpawnSummary: string }> {
+}): Promise<{ child: ChildProcess; lastSpawnSummary: string }> {
   const {
     openclawDir,
     entryScript,
@@ -131,13 +133,17 @@ export async function launchGatewayProcess(options: {
     }
   }
 
-  return await new Promise<{ child: Electron.UtilityProcess; lastSpawnSummary: string }>(
+  return await new Promise<{ child: ChildProcess; lastSpawnSummary: string }>(
     (resolve, reject) => {
-      const child = utilityProcess.fork(entryScript, gatewayArgs, {
-        cwd: openclawDir,
-        stdio: 'pipe',
-        env: runtimeEnv as NodeJS.ProcessEnv,
-        serviceName: 'OpenClaw Gateway',
+      const spawnConfig = getOpenClawCliSpawnConfig(gatewayArgs);
+      const child = spawn(spawnConfig.command, spawnConfig.args, {
+        cwd: openclawDir || spawnConfig.cwd,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...spawnConfig.env,
+          ...runtimeEnv,
+        },
+        windowsHide: true,
       });
 
       let settled = false;
@@ -158,7 +164,7 @@ export async function launchGatewayProcess(options: {
         rejectOnce(error);
       });
 
-      child.on('exit', (code: number) => {
+      child.on('exit', (code: number | null) => {
         const expectedExit =
           !options.getShouldReconnect() || options.getCurrentState() === 'stopped';
         const level = expectedExit ? logger.info : logger.warn;
