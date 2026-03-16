@@ -909,33 +909,26 @@ function TypingIndicator() {
 
   return (
     <div className="flex items-center gap-3 px-1">
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] border border-slate-200/90 bg-slate-50 text-slate-700 shadow-[0_6px_20px_rgba(15,23,42,0.05)] dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-200">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border border-slate-200/80 bg-slate-50 text-slate-700 shadow-[0_4px_12px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.05] dark:text-slate-200">
         <Bot className="h-[18px] w-[18px]" />
       </div>
-      <div className="min-w-[280px] rounded-[18px] border border-sky-200/70 bg-[linear-gradient(180deg,#f8fcff_0%,#f8fafc_100%)] px-5 py-4 shadow-[0_12px_30px_rgba(14,116,144,0.08)] dark:border-sky-400/20 dark:bg-[linear-gradient(180deg,rgba(14,116,144,0.14)_0%,rgba(255,255,255,0.04)_100%)]">
-        <div className="flex items-center gap-3">
-          <div className="flex gap-1.5">
+      <div className="inline-flex min-w-0 items-center gap-3 rounded-[16px] border border-slate-200/80 bg-white px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
+        <div className="flex gap-1.5">
             <span
-              className="h-3 w-3 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
+              className="h-2.5 w-2.5 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
               style={{ animationDelay: '0ms' }}
             />
             <span
-              className="h-3 w-3 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
+              className="h-2.5 w-2.5 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
               style={{ animationDelay: '150ms' }}
             />
             <span
-              className="h-3 w-3 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
+              className="h-2.5 w-2.5 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
               style={{ animationDelay: '300ms' }}
             />
-          </div>
-          <div className="min-w-0">
-            <div className="text-sm font-medium text-foreground">
-              {t('status.generatingReply', '正在生成回复')}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {t('status.generatingReplyHint', '思考过程和工具记录会随着 transcript 同步补齐。')}
-            </div>
-          </div>
+        </div>
+        <div className="min-w-0 text-sm font-medium text-foreground">
+          {t('status.generatingReply', '正在生成回复')}
         </div>
       </div>
     </div>
