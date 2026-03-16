@@ -148,10 +148,36 @@ export class GatewayManager extends EventEmitter {
 
   private enrichStartupError(error: unknown): Error {
     const base = error instanceof Error ? error : new Error(String(error));
-    const lastStderr = this.recentStartupStderrLines.at(-1);
-    if (!lastStderr) return base;
-    if (base.message.includes(lastStderr)) return base;
-    return new Error(`${base.message}. Gateway stderr: ${lastStderr}`);
+    const stderrLines = this.recentStartupStderrLines
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (stderrLines.length === 0) return base;
+
+    const SIGNAL_PATTERNS = [
+      /ERR_MODULE_NOT_FOUND/i,
+      /Cannot find module/i,
+      /Cannot find package/i,
+      /MODULE_NOT_FOUND/i,
+      /SyntaxError/i,
+      /ReferenceError/i,
+      /TypeError/i,
+      /Error:/i,
+      /\.node\b/i,
+      /The specified module could not be found/i,
+      /A dynamic link library \(DLL\) initialization routine failed/i,
+      /Node\.js v\d+\.\d+\+ is required/i,
+    ];
+
+    const signalIndex = stderrLines.findIndex((line) =>
+      SIGNAL_PATTERNS.some((pattern) => pattern.test(line))
+    );
+    const excerptStart = signalIndex >= 0
+      ? signalIndex
+      : Math.max(0, stderrLines.length - 8);
+    const excerpt = stderrLines.slice(excerptStart, excerptStart + 8).join(' | ');
+
+    if (!excerpt || base.message.includes(excerpt)) return base;
+    return new Error(`${base.message}. Gateway stderr: ${excerpt}`);
   }
   /**
    * Get current Gateway status
