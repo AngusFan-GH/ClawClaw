@@ -8,98 +8,11 @@
 !endif
 !include "nsDialogs.nsh"
 
-Var /GLOBAL uninstDeleteClawData
-Var /GLOBAL uninstDeleteOpenClawData
-Var /GLOBAL uninstClawDataCheckbox
-Var /GLOBAL uninstOpenClawDataCheckbox
-Var /GLOBAL uninstCleanupGroup
+!define MUI_INSTFILESPAGE_SHOWDETAILS show
+!define MUI_UNINSTFILESPAGE_SHOWDETAILS show
 
-!macro customUninstallPage
-  Page custom un.UninstallDataSelectionPage un.UninstallDataSelectionPageLeave
-!macroend
-
-Function un.UninstallDataSelectionPage
-  !insertmacro MUI_HEADER_TEXT "Uninstall cleanup options" "Choose what to remove before uninstalling."
-
-  nsDialogs::Create 1018
-  Pop $R0
-  ${If} $R0 == error
-    Abort
-  ${EndIf}
-
-  ${NSD_CreateLabel} 0 0 100% 18u "Uninstall will always remove program files."
-  ${NSD_CreateLabel} 0 18u 100% 20u "Select optional user data to remove:"
-  ${NSD_CreateGroupBox} 8u 42u 100% 78u "Data cleanup options"
-  Pop $uninstCleanupGroup
-  ${NSD_CreateCheckbox} 16u 58u 260u 12u "ClawClaw app data (AppData\Local\clawclaw, AppData\Roaming\clawclaw)"
-  Pop $uninstClawDataCheckbox
-  ${NSD_CreateCheckbox} 16u 74u 220u 12u "OpenClaw data (~\openclaw)"
-  Pop $uninstOpenClawDataCheckbox
-  ${NSD_CreateLabel} 16u 94u 250u 18u "Tip: keep this unchecked to preserve your OpenClaw workspace for reinstall."
-
-  StrCpy $uninstDeleteClawData "0"
-  StrCpy $uninstDeleteOpenClawData "0"
-  ${NSD_SetState} $uninstClawDataCheckbox 0
-  ${NSD_SetState} $uninstOpenClawDataCheckbox 0
-
-  nsDialogs::Show
-FunctionEnd
-
-Function un.UninstallDataSelectionPageLeave
-  ${NSD_GetState} $uninstClawDataCheckbox $R0
-  ${If} $R0 == 1
-    StrCpy $uninstDeleteClawData "1"
-  ${EndIf}
-
-  ${NSD_GetState} $uninstOpenClawDataCheckbox $R0
-  ${If} $R0 == 1
-    StrCpy $uninstDeleteOpenClawData "1"
-  ${EndIf}
-
-  ${If} $uninstDeleteClawData == "1"
-    RMDir /r "$LOCALAPPDATA\clawclaw"
-    RMDir /r "$APPDATA\clawclaw"
-
-    StrCpy $R0 0
-
-  _cu_enumClawLoop:
-    EnumRegKey $R1 HKLM "SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList" $R0
-    StrCmp $R1 "" _cu_clawEnumDone
-
-    ReadRegStr $R2 HKLM "SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$R1" "ProfileImagePath"
-    StrCmp $R2 "" _cu_clawEnumNext
-    ExpandEnvStrings $R2 $R2
-    RMDir /r "$R2\AppData\Local\clawclaw"
-    RMDir /r "$R2\AppData\Roaming\clawclaw"
-
-  _cu_clawEnumNext:
-    IntOp $R0 $R0 + 1
-    Goto _cu_enumClawLoop
-
-  _cu_clawEnumDone:
-  ${EndIf}
-
-  ${If} $uninstDeleteOpenClawData == "1"
-    RMDir /r "$PROFILE\.openclaw"
-
-    StrCpy $R0 0
-
-  _cu_enumOpenClawLoop:
-    EnumRegKey $R1 HKLM "SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList" $R0
-    StrCmp $R1 "" _cu_openClawEnumDone
-
-    ReadRegStr $R2 HKLM "SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$R1" "ProfileImagePath"
-    StrCmp $R2 "" _cu_openClawEnumNext
-    ExpandEnvStrings $R2 $R2
-    RMDir /r "$R2\.openclaw"
-
-  _cu_openClawEnumNext:
-    IntOp $R0 $R0 + 1
-    Goto _cu_enumOpenClawLoop
-
-  _cu_openClawEnumDone:
-  ${EndIf}
-FunctionEnd
+ShowInstDetails show
+ShowUnInstDetails show
 
 !macro customWelcomePage
   ; customWelcomePage is expanded at compile-time in assistedInstaller.nsh.
@@ -175,8 +88,8 @@ FunctionEnd
 !macroend
 
 !macro customInstall
-  ShowInstDetails show
-  DetailPrint "Configuring ${PRODUCT_NAME} for first launch..."
+  SetDetailsPrint both
+  DetailPrint "正在完成安装后的系统配置..."
 
   ; Enable Windows long path support (Windows 10 1607+ / Windows 11).
   ; pnpm virtual store paths can exceed the default MAX_PATH limit of 260 chars.
@@ -186,6 +99,7 @@ FunctionEnd
 
   ; Use PowerShell to update the current user's PATH.
   ; This avoids NSIS string-buffer limits and preserves long PATH values.
+  DetailPrint "正在配置 OpenClaw CLI 命令行环境..."
   InitPluginsDir
   ClearErrors
   File "/oname=$PLUGINSDIR\update-user-path.ps1" "${PROJECT_DIR}\resources\cli\win32\update-user-path.ps1"
@@ -201,10 +115,12 @@ FunctionEnd
   DetailPrint "Warning: PowerShell PATH update exited with code $0."
 
   _ci_done:
+  DetailPrint "安装后的系统配置已完成。"
 !macroend
 
 !macro customUnInstall
-  ShowUnInstDetails show
+  SetDetailsPrint both
+  DetailPrint "正在清理 OpenClaw CLI 命令行环境..."
   ; Remove resources\cli from user PATH via PowerShell so long PATH values are handled safely
   InitPluginsDir
   ClearErrors
@@ -221,4 +137,5 @@ FunctionEnd
   DetailPrint "Warning: PowerShell PATH removal exited with code $0."
 
   _cu_pathDone:
+  DetailPrint "命令行环境清理已完成。"
 !macroend
