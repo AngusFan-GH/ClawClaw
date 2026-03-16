@@ -1802,17 +1802,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         }
 
-        if (isStale()) return;
-        const stateBeforeCommit = get();
-        const shouldResetLiveState = !stateBeforeCommit.sending;
-        set((s) => ({
-          messages: finalMessages,
-          thinkingLevel,
-          loading: false,
-          ...(shouldResetLiveState ? resetToolStreamState(s) : {}),
-          ...(shouldResetLiveState ? { streamingText: '', streamingMessage: null, streamingTools: [] as ToolStatus[] } : {}),
-        }));
-
         // Extract first user message text as a session label for display in the toolbar.
         // Skip main sessions (key ends with ":main") — they rely on the Gateway-provided
         // displayName (e.g. the configured agent name "ClawClaw") instead.
@@ -1855,7 +1844,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
             });
           }
         });
-        const { pendingFinal, lastUserMessageAt, sending: isSendingNow } = get();
+        const stateBeforeCommit = get();
+        const { pendingFinal, lastUserMessageAt, sending: isSendingNow } = stateBeforeCommit;
         if (isStale()) return;
 
         // If we're sending but haven't received streaming events, check
@@ -1866,12 +1856,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
           if (!userMsTs || !msg.timestamp) return true;
           return toMs(msg.timestamp) >= userMsTs;
         };
+        const hasRecentAssistantActivity = [...enrichedMessages].reverse().some((msg) => {
+          if (msg.role !== 'assistant' && msg.role !== 'toolresult') return false;
+          return isAfterUserMsg(msg);
+        });
+
+        const shouldResetLiveState = !stateBeforeCommit.sending;
+        set((s) => ({
+          messages: finalMessages,
+          thinkingLevel,
+          loading: false,
+          ...(shouldResetLiveState ? resetToolStreamState(s) : {}),
+          ...(shouldResetLiveState ? { streamingText: '', streamingMessage: null, streamingTools: [] as ToolStatus[] } : {}),
+        }));
 
         if (isSendingNow && !pendingFinal) {
-          const hasRecentAssistantActivity = [...enrichedMessages].reverse().some((msg) => {
-            if (msg.role !== 'assistant' && msg.role !== 'toolresult') return false;
-            return isAfterUserMsg(msg);
-          });
           if (hasRecentAssistantActivity) {
             set({ pendingFinal: true });
           }
@@ -2295,29 +2294,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               }
             }
             set((s) => {
-              // Snapshot the current streaming assistant message (thinking + tool_use) into
-              // messages[] before clearing it. The Gateway does NOT send separate 'final'
-              // events for intermediate tool-use turns — it only sends deltas and then the
-              // tool result. Without snapshotting here, the intermediate thinking+tool steps
-              // would be overwritten by the next turn's deltas and never appear in the UI.
-              const currentStream = s.streamingMessage as RawMessage | null;
-              const snapshotMsgs: RawMessage[] = [];
-              if (currentStream) {
-                const streamRole = currentStream.role;
-                if (streamRole === 'assistant' || streamRole === undefined) {
-                  // Use message's own id if available, otherwise derive a stable one from runId
-                  const snapId = currentStream.id || `${runId || 'run'}-turn-${s.messages.length}`;
-                  if (!s.messages.some((m) => m.id === snapId)) {
-                    snapshotMsgs.push({
-                      ...(currentStream as RawMessage),
-                      role: 'assistant',
-                      id: snapId,
-                    });
-                  }
-                }
-              }
               return {
-                messages: snapshotMsgs.length > 0 ? [...s.messages, ...snapshotMsgs] : s.messages,
                 streamingText: '',
                 streamingMessage: null,
                 pendingFinal: true,

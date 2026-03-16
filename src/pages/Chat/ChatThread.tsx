@@ -1,11 +1,11 @@
-import { memo, useEffect, useRef, useState, type ReactElement } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { Bot, Check, Copy, User, Zap } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import type { RawMessage, StreamSegment } from '@/stores/chat';
 import { extractImages, extractText, extractThinking } from './message-utils';
-import { useTranslation } from 'react-i18next';
 
 type ToolCard = {
   kind: 'call' | 'result';
@@ -23,11 +23,11 @@ type ChatThreadLabels = {
   codeCopy: string;
   codeCopied: string;
   json: string;
-  toolOutput: string;
   reasoning: string;
   you: string;
   assistant: string;
   tool: string;
+  toolOutput: string;
   tokenInputPrefix: string;
   tokenOutputPrefix: string;
   cacheReadPrefix: string;
@@ -50,8 +50,10 @@ type MessageGroup = {
   kind: 'group';
   key: string;
   role: string;
+  senderLabel?: string | null;
   messages: Array<{ key: string; message: RawMessage }>;
   timestamp: number;
+  isStreaming: boolean;
 };
 
 type GroupMeta = {
@@ -64,55 +66,146 @@ type GroupMeta = {
   contextPercent: number | null;
 };
 
+type NormalizedContentItem = {
+  type: string;
+  text?: string;
+  name?: string;
+  args?: unknown;
+  arguments?: unknown;
+};
+
+type NormalizedMessage = {
+  role: string;
+  content: NormalizedContentItem[];
+  timestamp: number;
+  id?: string;
+  senderLabel?: string | null;
+};
+
+function toDisplayTimestampMs(timestamp: number): number {
+  return timestamp < 1e12 ? timestamp * 1000 : timestamp;
+}
+
 function getMessageKey(message: RawMessage, index: number): string {
-  if (message.toolCallId) return `tool:${message.toolCallId}`;
-  if (message.id) return `msg:${message.id}`;
-  return `msg:${message.role}:${message.timestamp || 'na'}:${index}`;
+  const toolCallId = typeof message.toolCallId === 'string' ? message.toolCallId : '';
+  if (toolCallId) return `tool:${toolCallId}`;
+  const id = typeof message.id === 'string' ? message.id : '';
+  if (id) return `msg:${id}`;
+  const timestamp = typeof message.timestamp === 'number' ? message.timestamp : null;
+  const role = typeof message.role === 'string' ? message.role : 'unknown';
+  if (timestamp != null) return `msg:${role}:${timestamp}:${index}`;
+  return `msg:${role}:${index}`;
 }
 
 function makeStreamMessage(text: string, ts: number): RawMessage {
   return {
     role: 'assistant',
     content: [{ type: 'text', text }],
-    timestamp: ts / 1000,
+    timestamp: ts,
   };
 }
 
-function isHistoryToolOnlyMessage(message: RawMessage): boolean {
-  if (message.role === 'toolresult') return true;
-  if (!Array.isArray(message.content)) return false;
-  let hasTool = false;
-  let hasText = false;
-  for (const block of message.content) {
-    const type = String(block.type || '').toLowerCase();
-    if (type === 'tool_use' || type === 'toolcall' || type === 'tool_result' || type === 'toolresult') {
-      hasTool = true;
-      continue;
-    }
-    if (type === 'text' && typeof block.text === 'string' && block.text.trim()) {
-      hasText = true;
-    }
+function normalizeMessage(message: RawMessage): NormalizedMessage {
+  const m = message as unknown as Record<string, unknown>;
+  let role = typeof m.role === 'string' ? m.role : 'unknown';
+
+  const hasToolId = typeof m.toolCallId === 'string' || typeof m.tool_call_id === 'string';
+  const contentRaw = m.content;
+  const contentItems = Array.isArray(contentRaw) ? contentRaw : null;
+  const hasToolContent =
+    Array.isArray(contentItems)
+    && contentItems.some((item) => {
+      const x = item as Record<string, unknown>;
+      const t = (typeof x.type === 'string' ? x.type : '').toLowerCase();
+      return t === 'toolresult' || t === 'tool_result';
+    });
+  const hasToolName = typeof m.toolName === 'string' || typeof m.tool_name === 'string';
+
+  if (hasToolId || hasToolContent || hasToolName) {
+    role = 'toolResult';
   }
-  return hasTool && !hasText;
+
+  let content: NormalizedContentItem[] = [];
+  if (typeof m.content === 'string') {
+    content = [{ type: 'text', text: m.content }];
+  } else if (Array.isArray(m.content)) {
+    content = (m.content as Array<Record<string, unknown>>).map((item) => ({
+      type: (item.type as string) || 'text',
+      text: item.text as string | undefined,
+      name: item.name as string | undefined,
+      args: item.args,
+      arguments: item.arguments,
+    }));
+  } else if (typeof m.text === 'string') {
+    content = [{ type: 'text', text: m.text }];
+  }
+
+  return {
+    role,
+    content,
+    timestamp: typeof m.timestamp === 'number' ? toDisplayTimestampMs(m.timestamp) : Date.now(),
+    id: typeof m.id === 'string' ? m.id : undefined,
+    senderLabel:
+      typeof m.senderLabel === 'string' && m.senderLabel.trim() ? m.senderLabel.trim() : null,
+  };
 }
 
-function normalizeRoleForGrouping(message: RawMessage): string {
-  const role = String(message.role || 'unknown').toLowerCase();
-  if (role === 'user') return 'user';
-  if (role === 'assistant') {
-    if (message.toolCallId || message.toolName) return 'tool';
-    if (Array.isArray(message.content)) {
-      const hasToolResult = message.content.some((block) => {
-        const type = String(block.type || '').toLowerCase();
-        return type === 'toolresult' || type === 'tool_result';
-      });
-      if (hasToolResult) return 'tool';
-    }
-    return 'assistant';
-  }
-  if (role === 'toolresult' || role === 'tool_result' || role === 'tool') return 'tool';
+function normalizeRoleForGrouping(roleOrMessage: string | RawMessage): string {
+  const role =
+    typeof roleOrMessage === 'string'
+      ? roleOrMessage
+      : normalizeMessage(roleOrMessage).role;
+  const lower = role.toLowerCase();
+  if (role === 'user' || role === 'User') return 'user';
+  if (role === 'assistant') return 'assistant';
   if (role === 'system') return 'system';
+  if (lower === 'toolresult' || lower === 'tool_result' || lower === 'tool' || lower === 'function') {
+    return 'tool';
+  }
   return role;
+}
+
+function groupMessages(items: ChatItem[]): Array<ChatItem | MessageGroup> {
+  const result: Array<ChatItem | MessageGroup> = [];
+  let currentGroup: MessageGroup | null = null;
+
+  for (const item of items) {
+    if (item.kind !== 'message') {
+      if (currentGroup) {
+        result.push(currentGroup);
+        currentGroup = null;
+      }
+      result.push(item);
+      continue;
+    }
+
+    const normalized = normalizeMessage(item.message);
+    const role = normalizeRoleForGrouping(normalized.role);
+    const senderLabel = role.toLowerCase() === 'user' ? (normalized.senderLabel ?? null) : null;
+    const timestamp = normalized.timestamp || Date.now();
+
+    if (
+      !currentGroup
+      || currentGroup.role !== role
+      || (role.toLowerCase() === 'user' && currentGroup.senderLabel !== senderLabel)
+    ) {
+      if (currentGroup) result.push(currentGroup);
+      currentGroup = {
+        kind: 'group',
+        key: `group:${role}:${item.key}`,
+        role,
+        senderLabel,
+        messages: [{ key: item.key, message: item.message }],
+        timestamp,
+        isStreaming: false,
+      };
+    } else {
+      currentGroup.messages.push({ key: item.key, message: item.message });
+    }
+  }
+
+  if (currentGroup) result.push(currentGroup);
+  return result;
 }
 
 function buildChatItems(params: {
@@ -120,83 +213,68 @@ function buildChatItems(params: {
   toolMessages: RawMessage[];
   streamSegments: StreamSegment[];
   streamingMessage: RawMessage | null;
+  streamingStartedAt: number;
   sessionKey: string;
   sending: boolean;
   pendingFinal: boolean;
+  showThinking: boolean;
 }): Array<ChatItem | MessageGroup> {
-  const shouldSuppressHistoryToolFragments = params.sending && params.toolMessages.length > 0;
-  const items: ChatItem[] = params.messages.flatMap((message, index) => {
-    if (shouldSuppressHistoryToolFragments && isHistoryToolOnlyMessage(message)) {
-      return [];
-    }
-    return [{
-      kind: 'message' as const,
-      key: getMessageKey(message, index),
-      message,
-    }];
-  });
+  const items: ChatItem[] = [];
+  const history = Array.isArray(params.messages) ? params.messages : [];
+  const tools = params.showThinking && Array.isArray(params.toolMessages) ? params.toolMessages : [];
 
-  const maxLen = Math.max(params.streamSegments.length, params.toolMessages.length);
-  for (let index = 0; index < maxLen; index += 1) {
-    const segment = params.streamSegments[index];
-    if (segment?.text?.trim()) {
+  for (let i = 0; i < history.length; i += 1) {
+    const normalizedRole = normalizeRoleForGrouping(history[i]);
+    if (!params.showThinking && normalizedRole === 'tool') {
+      continue;
+    }
+    items.push({
+      kind: 'message',
+      key: getMessageKey(history[i], i),
+      message: history[i],
+    });
+  }
+
+  const maxLen = Math.max(params.streamSegments.length, tools.length);
+  for (let i = 0; i < maxLen; i += 1) {
+    if (i < params.streamSegments.length && params.streamSegments[i].text.trim().length > 0) {
       items.push({
         kind: 'stream',
-        key: `stream-seg:${params.sessionKey}:${index}`,
-        text: segment.text,
-        startedAt: segment.ts,
+        key: `stream-seg:${params.sessionKey}:${i}`,
+        text: params.streamSegments[i].text,
+        startedAt: params.streamSegments[i].ts,
       });
     }
-    const toolMessage = params.toolMessages[index];
-    if (toolMessage) {
+    if (i < tools.length) {
       items.push({
         kind: 'message',
-        key: `tool-stream:${params.sessionKey}:${toolMessage.toolCallId || index}`,
-        message: toolMessage,
+        key: getMessageKey(tools[i], i + history.length),
+        message: tools[i],
       });
     }
   }
 
   if (params.streamingMessage) {
-    items.push({
-      kind: 'stream',
-      key: `stream:${params.sessionKey}:${params.streamingMessage.timestamp || 'live'}`,
-      text: extractText(params.streamingMessage),
-      startedAt: params.streamingMessage.timestamp ? params.streamingMessage.timestamp * 1000 : Date.now(),
-    });
+    const text = extractText(params.streamingMessage);
+    const key = `stream:${params.sessionKey}`;
+    if (text.trim().length > 0) {
+      items.push({
+        kind: 'stream',
+        key,
+        text,
+        startedAt: params.streamingStartedAt
+          || (params.streamingMessage.timestamp
+            ? toDisplayTimestampMs(params.streamingMessage.timestamp)
+            : Date.now()),
+      });
+    } else {
+      items.push({ kind: 'reading-indicator', key });
+    }
   } else if (params.sending && params.pendingFinal) {
     items.push({ kind: 'reading-indicator', key: `reading:${params.sessionKey}` });
   }
 
-  const grouped: Array<ChatItem | MessageGroup> = [];
-  let currentGroup: MessageGroup | null = null;
-  for (const item of items) {
-    if (item.kind !== 'message') {
-      if (currentGroup) {
-        grouped.push(currentGroup);
-        currentGroup = null;
-      }
-      grouped.push(item);
-      continue;
-    }
-    const role = normalizeRoleForGrouping(item.message);
-    const timestamp = item.message.timestamp ? item.message.timestamp * 1000 : Date.now();
-    if (!currentGroup || currentGroup.role !== role) {
-      if (currentGroup) grouped.push(currentGroup);
-      currentGroup = {
-        kind: 'group',
-        key: `group:${role}:${item.key}`,
-        role,
-        messages: [{ key: item.key, message: item.message }],
-        timestamp,
-      };
-    } else {
-      currentGroup.messages.push({ key: item.key, message: item.message });
-      currentGroup.timestamp = timestamp;
-    }
-  }
-  if (currentGroup) grouped.push(currentGroup);
-  return grouped;
+  return groupMessages(items);
 }
 
 function extractGroupMeta(group: MessageGroup, contextWindow: number | null): GroupMeta | null {
@@ -240,7 +318,7 @@ function fmtTokens(n: number): string {
   return String(n);
 }
 
-function MessageMeta({ meta, labels }: { meta: GroupMeta | null; labels: ChatThreadLabels }) {
+const MessageMeta = memo(function MessageMeta({ meta, labels }: { meta: GroupMeta | null; labels: ChatThreadLabels }) {
   if (!meta) return null;
   const parts: ReactElement[] = [];
 
@@ -260,57 +338,14 @@ function MessageMeta({ meta, labels }: { meta: GroupMeta | null; labels: ChatThr
 
   if (parts.length === 0) return null;
   return <span className="msg-meta">{parts}</span>;
-}
+});
 
 function formatChatTime(timestamp: number, locale: string): string {
-  const prefers24h = locale.startsWith('zh') || locale.startsWith('ja');
   return new Date(timestamp).toLocaleTimeString(locale, {
     hour: 'numeric',
     minute: '2-digit',
-    hour12: !prefers24h,
+    hour12: false,
   });
-}
-
-function extractToolCards(message: RawMessage): ToolCard[] {
-  const cards: ToolCard[] = [];
-  const content = message.content;
-  if (Array.isArray(content)) {
-    for (const block of content) {
-      const type = String(block.type || '').toLowerCase();
-      if ((type === 'toolcall' || type === 'tool_use') && block.name) {
-        cards.push({
-          kind: 'call',
-          name: block.name,
-          args: block.arguments ?? block.input,
-        });
-      }
-    }
-    for (const block of content) {
-      const type = String(block.type || '').toLowerCase();
-      if ((type === 'toolresult' || type === 'tool_result') && (block.name || message.toolName || message.toolCallId)) {
-        const text = typeof block.text === 'string'
-          ? block.text
-          : Array.isArray(block.content)
-            ? extractText({ role: 'toolresult', content: block.content })
-            : typeof block.content === 'string'
-              ? block.content
-              : undefined;
-        cards.push({
-          kind: 'result',
-          name: block.name || message.toolName || message.toolCallId || 'tool',
-          text,
-        });
-      }
-    }
-  }
-  if ((String(message.role).toLowerCase() === 'toolresult' || String(message.role).toLowerCase() === 'tool_result') && !cards.some((card) => card.kind === 'result')) {
-    cards.push({
-      kind: 'result',
-      name: message.toolName || message.toolCallId || 'tool',
-      text: extractText(message),
-    });
-  }
-  return cards;
 }
 
 function formatArgs(value: unknown): string {
@@ -416,6 +451,17 @@ function previewText(text: string): string {
   return preview.length > 100 ? `${preview.slice(0, 100)}...` : (lines.length > 2 ? `${preview}...` : preview);
 }
 
+function formatReasoningMarkdown(text: string, labels: ChatThreadLabels): string {
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+  const lines = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => `_${line}_`);
+  return lines.length ? [`_${labels.reasoning}:_`, ...lines].join('\n') : '';
+}
+
 const allowedTags = [
   'a', 'b', 'blockquote', 'br', 'button', 'code', 'del', 'details', 'div', 'em', 'h1', 'h2', 'h3', 'h4',
   'hr', 'i', 'img', 'li', 'ol', 'p', 'pre', 'span', 'strong', 'summary', 'table', 'tbody', 'td', 'th',
@@ -428,7 +474,6 @@ const sanitizeOptions = {
   ADD_DATA_URI_TAGS: ['img'],
 };
 const INLINE_DATA_IMAGE_RE = /^data:image\/[a-z0-9.+-]+;base64,/i;
-
 let markdownHooksInstalled = false;
 
 function installMarkdownHooks() {
@@ -441,6 +486,19 @@ function installMarkdownHooks() {
     node.setAttribute('rel', 'noreferrer noopener');
     node.setAttribute('target', '_blank');
   });
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderEscapedPlainTextHtml(value: string): string {
+  return `<div class="markdown-plain-text-fallback">${escapeHtml(value.replace(/\r\n?/g, '\n'))}</div>`;
 }
 
 const htmlEscapeRenderer = new marked.Renderer();
@@ -467,19 +525,6 @@ htmlEscapeRenderer.code = ({ text, lang, escaped }) => {
   const header = `<div class="code-block-header">${langLabel}${copyBtn}</div>`;
   return `<div class="code-block-wrapper">${header}${codeBlock}</div>`;
 };
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function renderEscapedPlainTextHtml(value: string): string {
-  return `<div class="markdown-plain-text-fallback">${escapeHtml(value.replace(/\r\n?/g, '\n'))}</div>`;
-}
 
 function toSanitizedMarkdownHtml(markdown: string): string {
   const input = markdown.trim();
@@ -521,7 +566,7 @@ function jsonSummaryLabel(parsed: unknown): string {
   return 'JSON';
 }
 
-function MessageMarkdown({ text, labels }: { text: string; labels: ChatThreadLabels }) {
+const MessageMarkdown = memo(function MessageMarkdown({ text, labels }: { text: string; labels: ChatThreadLabels }) {
   const html = toSanitizedMarkdownHtml(text)
     .replaceAll('>Copy<', `>${labels.codeCopy}<`)
     .replaceAll('>Copied!<', `>${labels.codeCopied}<`);
@@ -539,9 +584,7 @@ function MessageMarkdown({ text, labels }: { text: string; labels: ChatThreadLab
         await navigator.clipboard.writeText(code);
         button.dataset.copied = 'true';
         window.setTimeout(() => {
-          if (button.dataset.copied === 'true') {
-            delete button.dataset.copied;
-          }
+          if (button.dataset.copied === 'true') delete button.dataset.copied;
         }, 1200);
       } catch {
         delete button.dataset.copied;
@@ -551,16 +594,10 @@ function MessageMarkdown({ text, labels }: { text: string; labels: ChatThreadLab
     return () => node.removeEventListener('click', onClick);
   }, []);
 
-  return (
-    <div
-      ref={containerRef}
-      className="chat-text"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
-}
+  return <div ref={containerRef} className="chat-text" dangerouslySetInnerHTML={{ __html: html }} />;
+});
 
-function CopyButton({ text }: { text: string }) {
+const CopyButton = memo(function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   if (!text.trim()) return null;
   return (
@@ -580,9 +617,65 @@ function CopyButton({ text }: { text: string }) {
       {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
     </button>
   );
+});
+
+function extractToolCards(message: RawMessage): ToolCard[] {
+  const m = message as unknown as Record<string, unknown>;
+  const content = Array.isArray(m.content) ? (m.content.filter(Boolean) as Array<Record<string, unknown>>) : [];
+  const cards: ToolCard[] = [];
+
+  for (const item of content) {
+    const kind = (typeof item.type === 'string' ? item.type : '').toLowerCase();
+    const isToolCall =
+      ['toolcall', 'tool_call', 'tooluse', 'tool_use'].includes(kind)
+      || (typeof item.name === 'string' && item.arguments != null);
+    if (isToolCall) {
+      let args: unknown = item.arguments ?? item.args;
+      if (typeof args === 'string') {
+        const trimmed = args.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+          try {
+            args = JSON.parse(trimmed);
+          } catch {
+            args = trimmed;
+          }
+        }
+      }
+      cards.push({
+        kind: 'call',
+        name: (item.name as string) ?? 'tool',
+        args,
+      });
+    }
+  }
+
+  for (const item of content) {
+    const kind = (typeof item.type === 'string' ? item.type : '').toLowerCase();
+    if (kind !== 'toolresult' && kind !== 'tool_result') continue;
+    const text =
+      typeof item.text === 'string'
+        ? item.text
+        : typeof item.content === 'string'
+          ? item.content
+          : undefined;
+    const name = typeof item.name === 'string' ? item.name : 'tool';
+    cards.push({ kind: 'result', name, text });
+  }
+
+  const lowerRole = typeof m.role === 'string' ? m.role.toLowerCase() : '';
+  if ((lowerRole === 'toolresult' || lowerRole === 'tool_result') && !cards.some((card) => card.kind === 'result')) {
+    const name =
+      (typeof m.toolName === 'string' && m.toolName)
+      || (typeof m.tool_name === 'string' && m.tool_name)
+      || 'tool';
+    const text = extractText(message) || undefined;
+    cards.push({ kind: 'result', name, text });
+  }
+
+  return cards;
 }
 
-function ToolCards({ cards, labels }: { cards: ToolCard[]; labels: ChatThreadLabels }) {
+const ToolCards = memo(function ToolCards({ cards, labels }: { cards: ToolCard[]; labels: ChatThreadLabels }) {
   if (cards.length === 0) return null;
   const calls = cards.filter((card) => card.kind === 'call');
   const results = cards.filter((card) => card.kind === 'result');
@@ -592,6 +685,7 @@ function ToolCards({ cards, labels }: { cards: ToolCard[]; labels: ChatThreadLab
     toolNames.length <= 3
       ? toolNames.join(', ')
       : `${toolNames.slice(0, 2).join(', ')} +${toolNames.length - 2} more`;
+
   return (
     <details className="chat-tools-collapse">
       <summary className="chat-tools-summary">
@@ -600,47 +694,44 @@ function ToolCards({ cards, labels }: { cards: ToolCard[]; labels: ChatThreadLab
         <span className="chat-tools-summary__names">{summaryLabel}</span>
       </summary>
       <div className="chat-tools-collapse__body">
-        <div className="chat-tool-stack">
-          {cards.map((card, index) => {
-            const hasText = Boolean(card.text?.trim());
-            const inline = hasText && card.text!.length <= 80;
-            const display = resolveToolDisplay(card.name, card.args, labels);
-            return (
-              <div className="chat-tool-card" key={`${card.kind}:${card.name}:${index}`}>
-                <div className="chat-tool-card__header">
-                  <div className="chat-tool-card__title">
-                    <span className="chat-tool-card__icon">
-                      {card.kind === 'call' ? <Zap className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
-                    </span>
-                    <span>{display.label}</span>
-                  </div>
-                  {card.kind === 'result' && <span className="chat-tool-card__action">{labels.view}</span>}
+        {cards.map((card, index) => {
+          const display = resolveToolDisplay(card.name, card.args, labels);
+          const hasText = Boolean(card.text?.trim());
+          const inline = hasText && (card.text?.length ?? 0) <= 80;
+          return (
+            <div className="chat-tool-card" key={`${card.kind}:${card.name}:${index}`}>
+              <div className="chat-tool-card__header">
+                <div className="chat-tool-card__title">
+                  <span className="chat-tool-card__icon">
+                    {card.kind === 'call' ? <Zap className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
+                  </span>
+                  <span>{display.label}</span>
                 </div>
-                {card.kind === 'call' && display.detail ? (
-                  <div className="chat-tool-card__detail">{display.detail}</div>
-                ) : null}
-                {card.kind === 'call' && !display.detail && card.args ? (
-                  <div className="chat-tool-card__detail">{previewText(formatArgs(card.args))}</div>
-                ) : null}
-                {card.kind === 'result' && !hasText ? (
-                  <div className="chat-tool-card__status-text muted">{labels.completed}</div>
-                ) : null}
-                {card.kind === 'result' && hasText && !inline ? (
-                  <div className="chat-tool-card__preview mono">{previewText(card.text!)}</div>
-                ) : null}
-                {card.kind === 'result' && inline ? (
-                  <div className="chat-tool-card__inline mono">{card.text}</div>
-                ) : null}
+                {card.kind === 'result' ? <span className="chat-tool-card__action">{hasText ? labels.view : ''}</span> : null}
+                {card.kind === 'result' && !hasText ? <span className="chat-tool-card__status"><Check className="h-3.5 w-3.5" /></span> : null}
               </div>
-            );
-          })}
-        </div>
+              {display.detail ? <div className="chat-tool-card__detail">{display.detail}</div> : null}
+              {card.kind === 'call' && !display.detail && card.args ? (
+                <div className="chat-tool-card__detail">{previewText(formatArgs(card.args))}</div>
+              ) : null}
+              {card.kind === 'result' && !hasText ? (
+                <div className="chat-tool-card__status-text muted">{labels.completed}</div>
+              ) : null}
+              {card.kind === 'result' && hasText && !inline ? (
+                <div className="chat-tool-card__preview mono">{previewText(card.text!)}</div>
+              ) : null}
+              {card.kind === 'result' && inline ? (
+                <div className="chat-tool-card__inline mono">{card.text}</div>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </details>
   );
-}
+});
 
-function MessageImages({ message }: { message: RawMessage }) {
+const MessageImages = memo(function MessageImages({ message }: { message: RawMessage }) {
   const contentImages = extractImages(message).map((image) => {
     const block = image as { url?: string; data?: string; mimeType: string };
     const src = block.url
@@ -658,41 +749,67 @@ function MessageImages({ message }: { message: RawMessage }) {
   return (
     <div className="chat-message-images">
       {images.map((image, index) => (
-        <img
-          key={`${image.src || 'img'}:${index}`}
-          className="chat-message-image"
-          src={image.src || ''}
-          alt={image.alt || 'image'}
-        />
+        <img key={`${image.src}:${index}`} className="chat-message-image" src={image.src} alt={image.alt || 'image'} />
       ))}
     </div>
   );
-}
+});
 
-function GroupedMessage({ message, isStreaming, showThinking, labels }: { message: RawMessage; isStreaming?: boolean; showThinking: boolean; labels: ChatThreadLabels }) {
-  const text = extractText(message);
-  const thinking = showThinking && normalizeRoleForGrouping(message) === 'assistant' ? extractThinking(message) : null;
-  const cards = extractToolCards(message);
-  const isToolMessage = normalizeRoleForGrouping(message) === 'tool';
-  const hasToolCards = cards.length > 0;
-  const hasText = Boolean(text.trim());
-  const jsonResult = hasText && !isStreaming ? detectJson(text) : null;
-  const toolNames = [...new Set(cards.map((card) => card.name))];
+const GroupedMessage = memo(function GroupedMessage({
+  message,
+  isStreaming,
+  showThinking,
+  labels,
+}: {
+  message: RawMessage;
+  isStreaming: boolean;
+  showThinking: boolean;
+  labels: ChatThreadLabels;
+}) {
+  const m = message as unknown as Record<string, unknown>;
+  const role = typeof m.role === 'string' ? m.role : 'unknown';
+  const normalizedRole = normalizeRoleForGrouping(role);
+  const isToolResult =
+    String(role).toLowerCase() === 'toolresult'
+    || String(role).toLowerCase() === 'tool_result'
+    || typeof m.toolCallId === 'string'
+    || typeof m.tool_call_id === 'string';
+
+  const toolCards = extractToolCards(message);
+  const hasToolCards = toolCards.length > 0;
+  const images = extractImages(message);
+  const hasImages = images.length > 0;
+  const markdown = extractText(message)?.trim() ? extractText(message) : '';
+  const extractedThinking = showThinking && role === 'assistant' ? extractThinking(message) : null;
+  const reasoningMarkdown = extractedThinking ? formatReasoningMarkdown(extractedThinking, labels) : null;
+  const canCopyMarkdown = role === 'assistant' && Boolean(markdown.trim());
+  const jsonResult = markdown && !isStreaming ? detectJson(markdown) : null;
+  const visibleToolCards = showThinking && hasToolCards;
+
+  if (!showThinking && (normalizedRole === 'tool' || isToolResult) && !markdown.trim()) {
+    return null;
+  }
+
+  if (!markdown && visibleToolCards && isToolResult) {
+    return <ToolCards cards={toolCards} labels={labels} />;
+  }
+  if (!markdown && !visibleToolCards && !hasImages) {
+    return null;
+  }
+
+  const isToolMessage = showThinking && (normalizedRole === 'tool' || isToolResult);
+  const toolNames = [...new Set(toolCards.map((card) => card.name))];
   const toolSummaryLabel =
     toolNames.length <= 3
       ? toolNames.join(', ')
       : `${toolNames.slice(0, 2).join(', ')} +${toolNames.length - 2} more`;
-  const toolPreview = hasText && !toolSummaryLabel ? text.trim().replace(/\s+/g, ' ').slice(0, 120) : '';
-
-  if (!hasText && hasToolCards && isToolMessage) {
-    return <ToolCards cards={cards} labels={labels} />;
-  }
+  const toolPreview = markdown && !toolSummaryLabel ? markdown.trim().replace(/\s+/g, ' ').slice(0, 120) : '';
 
   return (
-    <div className={cn('chat-bubble', isStreaming && 'streaming', 'fade-in')}>
-      {normalizeRoleForGrouping(message) === 'assistant' && hasText ? <div className="chat-bubble-actions"><CopyButton text={text} /></div> : null}
+    <div className={cn('chat-bubble', isStreaming && 'streaming', isStreaming && 'fade-in')}>
+      {canCopyMarkdown ? <div className="chat-bubble-actions"><CopyButton text={markdown} /></div> : null}
       {isToolMessage ? (
-        <details className="chat-tool-msg-collapse" open={isStreaming}>
+        <details className="chat-tool-msg-collapse">
           <summary className="chat-tool-msg-summary">
             <span className="chat-tool-msg-summary__icon"><Zap className="h-3.5 w-3.5" /></span>
             <span className="chat-tool-msg-summary__label">{labels.toolOutput}</span>
@@ -701,12 +818,7 @@ function GroupedMessage({ message, isStreaming, showThinking, labels }: { messag
           </summary>
           <div className="chat-tool-msg-body">
             <MessageImages message={message} />
-            {thinking ? (
-              <details className="chat-reasoning-collapse">
-                <summary className="chat-reasoning-summary">{labels.reasoning}</summary>
-                <div className="chat-thinking"><MessageMarkdown text={thinking} labels={labels} /></div>
-              </details>
-            ) : null}
+            {reasoningMarkdown ? <div className="chat-thinking"><MessageMarkdown text={reasoningMarkdown} labels={labels} /></div> : null}
             {jsonResult ? (
               <details className="chat-json-collapse">
                 <summary className="chat-json-summary">
@@ -715,19 +827,14 @@ function GroupedMessage({ message, isStreaming, showThinking, labels }: { messag
                 </summary>
                 <pre className="chat-json-content"><code>{jsonResult.pretty}</code></pre>
               </details>
-            ) : hasText ? <MessageMarkdown text={text} labels={labels} /> : null}
-            <ToolCards cards={cards} labels={labels} />
+            ) : markdown ? <MessageMarkdown text={markdown} labels={labels} /> : null}
+            {hasToolCards ? <ToolCards cards={toolCards} labels={labels} /> : null}
           </div>
         </details>
       ) : (
         <>
           <MessageImages message={message} />
-          {thinking ? (
-            <details className="chat-reasoning-collapse" open={isStreaming}>
-              <summary className="chat-reasoning-summary">{labels.reasoning}</summary>
-              <div className="chat-thinking"><MessageMarkdown text={thinking} labels={labels} /></div>
-            </details>
-          ) : null}
+          {reasoningMarkdown ? <div className="chat-thinking"><MessageMarkdown text={reasoningMarkdown} labels={labels} /></div> : null}
           {jsonResult ? (
             <details className="chat-json-collapse">
               <summary className="chat-json-summary">
@@ -736,32 +843,55 @@ function GroupedMessage({ message, isStreaming, showThinking, labels }: { messag
               </summary>
               <pre className="chat-json-content"><code>{jsonResult.pretty}</code></pre>
             </details>
-          ) : hasText ? <MessageMarkdown text={text} labels={labels} /> : null}
-          {hasToolCards ? <ToolCards cards={cards} labels={labels} /> : null}
+          ) : markdown ? <MessageMarkdown text={markdown} labels={labels} /> : null}
+          {hasToolCards ? <ToolCards cards={toolCards} labels={labels} /> : null}
         </>
       )}
     </div>
   );
-}
+});
 
-function Avatar({ role }: { role: string }) {
+const Avatar = memo(function Avatar({ role }: { role: string }) {
   return (
     <div className="chat-avatar">
       {role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
     </div>
   );
-}
+});
 
-function Group({ group, showThinking, labels, contextWindow, locale }: { group: MessageGroup; showThinking: boolean; labels: ChatThreadLabels; contextWindow: number | null; locale: string }) {
+const Group = memo(function Group({
+  group,
+  showThinking,
+  labels,
+  contextWindow,
+  locale,
+}: {
+  group: MessageGroup;
+  showThinking: boolean;
+  labels: ChatThreadLabels;
+  contextWindow: number | null;
+  locale: string;
+}) {
   const timestamp = formatChatTime(group.timestamp, locale);
-  const label = group.role === 'user' ? labels.you : group.role === 'assistant' ? labels.assistant : labels.tool;
+  const label = group.role === 'user'
+    ? (group.senderLabel?.trim() || labels.you)
+    : group.role === 'assistant'
+      ? labels.assistant
+      : labels.tool;
   const meta = extractGroupMeta(group, contextWindow);
+
   return (
     <div className={cn('chat-group', group.role)}>
       <Avatar role={group.role} />
       <div className="chat-group-messages">
-        {group.messages.map((item) => (
-          <GroupedMessage key={item.key} message={item.message} showThinking={showThinking} labels={labels} />
+        {group.messages.map((item, index) => (
+          <GroupedMessage
+            key={item.key}
+            message={item.message}
+            isStreaming={group.isStreaming && index === group.messages.length - 1}
+            showThinking={showThinking}
+            labels={labels}
+          />
         ))}
         <div className="chat-group-footer">
           <span className="chat-sender-name">{label}</span>
@@ -771,9 +901,9 @@ function Group({ group, showThinking, labels, contextWindow, locale }: { group: 
       </div>
     </div>
   );
-}
+});
 
-function StreamingGroup({ text, startedAt, labels, locale }: { text: string; startedAt: number; labels: ChatThreadLabels; locale: string }) {
+const StreamingGroup = memo(function StreamingGroup({ text, startedAt, labels, locale }: { text: string; startedAt: number; labels: ChatThreadLabels; locale: string }) {
   const timestamp = formatChatTime(startedAt, locale);
   return (
     <div className="chat-group assistant">
@@ -787,9 +917,9 @@ function StreamingGroup({ text, startedAt, labels, locale }: { text: string; sta
       </div>
     </div>
   );
-}
+});
 
-function ReadingIndicator() {
+const ReadingIndicator = memo(function ReadingIndicator() {
   return (
     <div className="chat-group assistant">
       <Avatar role="assistant" />
@@ -804,7 +934,7 @@ function ReadingIndicator() {
       </div>
     </div>
   );
-}
+});
 
 export const ChatThread = memo(function ChatThread({
   messages,
@@ -815,6 +945,7 @@ export const ChatThread = memo(function ChatThread({
   pendingFinal,
   showThinking,
   sessionKey,
+  streamingStartedAt,
   contextWindow,
   assistantName,
 }: {
@@ -826,21 +957,23 @@ export const ChatThread = memo(function ChatThread({
   pendingFinal: boolean;
   showThinking: boolean;
   sessionKey: string;
+  streamingStartedAt: number;
   contextWindow?: number | null;
   assistantName?: string;
 }) {
   const { t, i18n } = useTranslation('chat');
   const locale = i18n.language || 'en';
   const resolvedAssistantName = assistantName?.trim() || t('thread.assistant', 'Assistant');
-  const labels: ChatThreadLabels = {
+
+  const labels: ChatThreadLabels = useMemo(() => ({
     codeCopy: t('thread.codeCopy', 'Copy'),
     codeCopied: t('thread.codeCopied', 'Copied!'),
     json: t('thread.json', 'JSON'),
-    toolOutput: t('thread.toolOutput', 'Tool output'),
     reasoning: t('thread.reasoning', 'Reasoning'),
     you: t('thread.you', 'You'),
     assistant: resolvedAssistantName,
     tool: t('thread.tool', 'Tool'),
+    toolOutput: t('thread.toolOutput', 'Tool output'),
     tokenInputPrefix: t('thread.tokenInputPrefix', '↑'),
     tokenOutputPrefix: t('thread.tokenOutputPrefix', '↓'),
     cacheReadPrefix: t('thread.cacheReadPrefix', 'R'),
@@ -852,22 +985,34 @@ export const ChatThread = memo(function ChatThread({
     process: t('thread.process', 'Process'),
     read: t('thread.read', 'Read'),
     exec: t('thread.exec', 'Exec'),
-  };
-  const items = buildChatItems({
+  }), [resolvedAssistantName, t]);
+
+  const items = useMemo(() => buildChatItems({
     messages,
     toolMessages,
     streamSegments,
     streamingMessage,
+    streamingStartedAt,
     sessionKey,
     sending,
     pendingFinal,
-  });
+    showThinking,
+  }), [messages, toolMessages, streamSegments, streamingMessage, streamingStartedAt, sessionKey, sending, pendingFinal, showThinking]);
 
   return (
     <div className="openclaw-chat-thread">
       {items.map((item) => {
         if (item.kind === 'group') {
-          return <Group key={item.key} group={item} showThinking={showThinking} labels={labels} contextWindow={contextWindow ?? null} locale={locale} />;
+          return (
+            <Group
+              key={item.key}
+              group={item}
+              showThinking={showThinking}
+              labels={labels}
+              contextWindow={contextWindow ?? null}
+              locale={locale}
+            />
+          );
         }
         if (item.kind === 'stream') {
           return <StreamingGroup key={item.key} text={item.text} startedAt={item.startedAt} labels={labels} locale={locale} />;

@@ -428,7 +428,9 @@ export function Chat() {
 
   // Auto-scroll on new messages, streaming, or activity changes
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({
+      behavior: streamingMessage ? 'auto' : 'smooth',
+    });
   }, [messages, streamingMessage, sending, pendingFinal]);
 
   // Update timestamp when sending starts
@@ -686,6 +688,7 @@ export function Chat() {
                 toolMessages={chatToolMessages}
                 streamSegments={chatStreamSegments}
                 streamingMessage={liveStreamingMessage}
+                streamingStartedAt={streamingTimestamp}
                 sending={sending}
                 pendingFinal={pendingFinal}
                 showThinking={showThinking}
