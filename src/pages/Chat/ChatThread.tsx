@@ -35,6 +35,7 @@ type ChatThreadLabels = {
   contextSuffix: string;
   completed: string;
   view: string;
+  collapse: string;
   toolCount: (count: number) => string;
   process: string;
   read: string;
@@ -675,15 +676,7 @@ function extractToolCards(message: RawMessage): ToolCard[] {
   return cards;
 }
 
-const ToolCards = memo(function ToolCards({
-  cards,
-  labels,
-  suppressResultPreview = false,
-}: {
-  cards: ToolCard[];
-  labels: ChatThreadLabels;
-  suppressResultPreview?: boolean;
-}) {
+const ToolCards = memo(function ToolCards({ cards, labels }: { cards: ToolCard[]; labels: ChatThreadLabels }) {
   if (cards.length === 0) return null;
   const calls = cards.filter((card) => card.kind === 'call');
   const results = cards.filter((card) => card.kind === 'result');
@@ -702,40 +695,67 @@ const ToolCards = memo(function ToolCards({
         <span className="chat-tools-summary__names">{summaryLabel}</span>
       </summary>
       <div className="chat-tools-collapse__body">
-        {cards.map((card, index) => {
-          const display = resolveToolDisplay(card.name, card.args, labels);
-          const hasText = Boolean(card.text?.trim());
-          const inline = hasText && (card.text?.length ?? 0) <= 80;
-          return (
-            <div className="chat-tool-card" key={`${card.kind}:${card.name}:${index}`}>
-              <div className="chat-tool-card__header">
-                <div className="chat-tool-card__title">
-                  <span className="chat-tool-card__icon">
-                    {card.kind === 'call' ? <Zap className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
-                  </span>
-                  <span>{display.label}</span>
-                </div>
-              {card.kind === 'result' ? <span className="chat-tool-card__action">{hasText && !suppressResultPreview ? labels.view : ''}</span> : null}
-              {card.kind === 'result' && !hasText ? <span className="chat-tool-card__status"><Check className="h-3.5 w-3.5" /></span> : null}
-            </div>
-              {display.detail ? <div className="chat-tool-card__detail">{display.detail}</div> : null}
-              {card.kind === 'call' && !display.detail && card.args ? (
-                <div className="chat-tool-card__detail">{previewText(formatArgs(card.args))}</div>
-              ) : null}
-              {card.kind === 'result' && !hasText ? (
-                <div className="chat-tool-card__status-text muted">{labels.completed}</div>
-              ) : null}
-              {card.kind === 'result' && hasText && !inline && !suppressResultPreview ? (
-                <div className="chat-tool-card__preview mono">{previewText(card.text!)}</div>
-              ) : null}
-              {card.kind === 'result' && inline && !suppressResultPreview ? (
-                <div className="chat-tool-card__inline mono">{card.text}</div>
-              ) : null}
-            </div>
-          );
-        })}
+        {cards.map((card, index) => (
+          <ToolCardItem key={`${card.kind}:${card.name}:${index}`} card={card} labels={labels} />
+        ))}
       </div>
     </details>
+  );
+});
+
+const ToolCardItem = memo(function ToolCardItem({
+  card,
+  labels,
+}: {
+  card: ToolCard;
+  labels: ChatThreadLabels;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const display = resolveToolDisplay(card.name, card.args, labels);
+  const hasText = Boolean(card.text?.trim());
+  const inline = hasText && (card.text?.length ?? 0) <= 80;
+
+  return (
+    <div className={cn('chat-tool-card', expanded && 'chat-tool-card--expanded')}>
+      <div className="chat-tool-card__header">
+        <div className="chat-tool-card__title">
+          <span className="chat-tool-card__icon">
+            {card.kind === 'call' ? <Zap className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
+          </span>
+          <span>{display.label}</span>
+        </div>
+        {card.kind === 'result' && hasText ? (
+          <button
+            type="button"
+            className="chat-tool-card__action"
+            onClick={() => setExpanded((value) => !value)}
+          >
+            {expanded ? labels.collapse : labels.view}
+          </button>
+        ) : null}
+        {card.kind === 'result' && !hasText ? <span className="chat-tool-card__status"><Check className="h-3.5 w-3.5" /></span> : null}
+      </div>
+      {display.detail ? <div className="chat-tool-card__detail">{display.detail}</div> : null}
+      {card.kind === 'call' && !display.detail && card.args ? (
+        <div className="chat-tool-card__detail">{previewText(formatArgs(card.args))}</div>
+      ) : null}
+      {card.kind === 'result' && !hasText ? (
+        <div className="chat-tool-card__status-text muted">{labels.completed}</div>
+      ) : null}
+      {card.kind === 'result' && hasText && !inline ? (
+        <>
+          {!expanded ? (
+            <div className="chat-tool-card__preview mono">{previewText(card.text!)}</div>
+          ) : null}
+          {expanded ? (
+            <pre className="chat-tool-card__full mono"><code>{card.text}</code></pre>
+          ) : null}
+        </>
+      ) : null}
+      {card.kind === 'result' && inline ? (
+        <div className="chat-tool-card__inline mono">{card.text}</div>
+      ) : null}
+    </div>
   );
 });
 
@@ -790,7 +810,8 @@ const GroupedMessage = memo(function GroupedMessage({
   const markdown = extractText(message)?.trim() ? extractText(message) : '';
   const extractedThinking = showThinking && role === 'assistant' ? extractThinking(message) : null;
   const reasoningMarkdown = extractedThinking ? formatReasoningMarkdown(extractedThinking, labels) : null;
-  const canCopyMarkdown = role === 'assistant' && Boolean(markdown.trim());
+  const canCopyMarkdown =
+    (role === 'assistant' || role === 'user' || role === 'User') && Boolean(markdown.trim());
   const jsonResult = markdown && !isStreaming ? detectJson(markdown) : null;
   const visibleToolCards = showThinking && hasToolCards;
 
@@ -836,7 +857,7 @@ const GroupedMessage = memo(function GroupedMessage({
                 <pre className="chat-json-content"><code>{jsonResult.pretty}</code></pre>
               </details>
             ) : markdown ? <MessageMarkdown text={markdown} labels={labels} /> : null}
-            {hasToolCards ? <ToolCards cards={toolCards} labels={labels} suppressResultPreview /> : null}
+            {hasToolCards ? <ToolCards cards={toolCards} labels={labels} /> : null}
           </div>
         </details>
       ) : (
@@ -989,6 +1010,7 @@ export const ChatThread = memo(function ChatThread({
     contextSuffix: t('thread.contextSuffix', '% ctx'),
     completed: t('thread.completed', 'Completed'),
     view: t('thread.view', 'View'),
+    collapse: t('common:actions.collapse', 'Collapse'),
     toolCount: (count) => t('thread.toolCount', { count, defaultValue: `${count} tools` }),
     process: t('thread.process', 'Process'),
     read: t('thread.read', 'Read'),

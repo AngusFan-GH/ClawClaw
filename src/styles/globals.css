@@ -873,6 +873,11 @@
   overflow: hidden;
 }
 
+.chat-tool-card--expanded {
+  max-height: none;
+  overflow: visible;
+}
+
 .chat-tool-card:first-child {
   margin-top: 0;
 }
@@ -910,6 +915,9 @@
 
 .chat-tool-card__action {
   cursor: pointer;
+  border: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .chat-tool-card__detail,
@@ -929,6 +937,18 @@
   border: 1px solid hsl(var(--border));
   line-height: 1.4;
   overflow: hidden;
+}
+
+.chat-tool-card__full {
+  margin-top: 8px;
+  padding: 10px 12px;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: hsl(var(--secondary));
 }
 
 
@@ -994,11 +1014,6 @@
 .chat-group.user .chat-text,
 .chat-group.user .chat-group-footer {
   text-align: right;
-}
-
-.chat-group.user .chat-bubble-actions {
-  right: auto;
-  left: 10px;
 }
 
 .chat-group.user .chat-message-images {
