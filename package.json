@@ -51,6 +51,7 @@
   "dependencies": {
     "@wecom/wecom-openclaw-plugin": "^1.0.6",
     "clawhub": "^0.5.0",
+    "dompurify": "^3.3.3",
     "electron-store": "^11.0.2",
     "electron-updater": "^6.8.3",
     "ms": "^2.1.3",

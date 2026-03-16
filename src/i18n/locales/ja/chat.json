@@ -49,6 +49,27 @@
   "status": {
     "processingToolResults": "ツール結果を処理中..."
   },
+  "thread": {
+    "codeCopy": "コピー",
+    "codeCopied": "コピーしました！",
+    "json": "JSON",
+    "toolOutput": "ツール出力",
+    "reasoning": "思考過程",
+    "you": "あなた",
+    "assistant": "Assistant",
+    "tool": "ツール",
+    "tokenInputPrefix": "↑",
+    "tokenOutputPrefix": "↓",
+    "cacheReadPrefix": "R",
+    "cacheWritePrefix": "W",
+    "contextSuffix": "% ctx",
+    "completed": "完了",
+    "view": "表示",
+    "toolCount": "{{count}} 個のツール",
+    "process": "Process",
+    "read": "Read",
+    "exec": "Exec"
+  },
   "history": {
     "title": "最近の会話"
   },

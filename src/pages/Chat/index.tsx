@@ -11,8 +11,8 @@ import { DEFAULT_SESSION_KEY, useChatStore, type RawMessage } from '@/stores/cha
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { useAgentsStore } from '@/stores/agents';
-import { LoadingIcon, PageLoader } from '@/components/common/LoadingSpinner';
-import { ChatMessage } from './ChatMessage';
+import { PageLoader } from '@/components/common/LoadingSpinner';
+import { ChatThread } from './ChatThread';
 import { ChatInput, type ChatAgentOption, type FileAttachment } from './ChatInput';
 import { ChatToolbar, type ChatToolbarModelOption } from './ChatToolbar';
 import { extractImages, extractText, extractThinking, extractToolUse } from './message-utils';
@@ -225,6 +225,13 @@ function dedupeModelOptions(options: ChatToolbarModelOption[]): ChatToolbarModel
   });
 }
 
+function getAgentIdFromSessionKey(sessionKey: string | undefined): string | undefined {
+  const key = sessionKey?.trim();
+  if (!key || !key.startsWith('agent:')) return undefined;
+  const parts = key.split(':');
+  return parts[1]?.trim() || undefined;
+}
+
 export function Chat() {
   const { t } = useTranslation('chat');
   const navigate = useNavigate();
@@ -243,7 +250,8 @@ export function Chat() {
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const pendingLocalSessionKeys = useChatStore((s) => s.pendingLocalSessionKeys);
   const streamingMessage = useChatStore((s) => s.streamingMessage);
-  const streamingTools = useChatStore((s) => s.streamingTools);
+  const chatToolMessages = useChatStore((s) => s.chatToolMessages);
+  const chatStreamSegments = useChatStore((s) => s.chatStreamSegments);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
   const loadHistory = useChatStore((s) => s.loadHistory);
   const loadSessions = useChatStore((s) => s.loadSessions);
@@ -256,6 +264,7 @@ export function Chat() {
   const toggleThinking = useChatStore((s) => s.toggleThinking);
 
   const agents = useAgentsStore((s) => s.agents);
+  const defaultAgentId = useAgentsStore((s) => s.defaultAgentId);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const providerAccounts = useProviderStore((s) => s.accounts);
   const providerStatuses = useProviderStore((s) => s.statuses);
@@ -268,6 +277,10 @@ export function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
   const currentSession = sessions.find((session) => session.key === currentSessionKey);
+  const sessionAgentId = useMemo(
+    () => getAgentIdFromSessionKey(currentSessionKey) || getAgentIdFromSessionKey(currentSession?.key),
+    [currentSession?.key, currentSessionKey]
+  );
   const providerStatusMap = useMemo(
     () => new Map((providerStatuses ?? []).map((status) => [status.id, status])),
     [providerStatuses]
@@ -446,16 +459,30 @@ export function Chat() {
   const hasStreamTools = streamTools.length > 0;
   const streamImages = streamMsg ? extractImages(streamMsg) : [];
   const hasStreamImages = streamImages.length > 0;
-  const hasStreamToolStatus = streamingTools.length > 0;
   const shouldRenderStreaming =
     sending &&
     (hasStreamText ||
       hasStreamThinking ||
       hasStreamTools ||
-      hasStreamImages ||
-      hasStreamToolStatus);
+      hasStreamImages);
   const hasAnyStreamContent =
-    hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasStreamToolStatus;
+    hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages;
+  const liveStreamingMessage = shouldRenderStreaming
+    ? ((streamMsg
+        ? {
+            ...(streamMsg as Record<string, unknown>),
+            role: (typeof streamMsg.role === 'string'
+              ? streamMsg.role
+              : 'assistant') as RawMessage['role'],
+            content: streamMsg.content ?? streamText,
+            timestamp: streamMsg.timestamp ?? streamingTimestamp,
+          }
+        : {
+            role: 'assistant',
+            content: streamText,
+            timestamp: streamingTimestamp,
+          }) as RawMessage)
+    : null;
 
   const isEmpty = messages.length === 0 && !loading && !sending;
   const currentSessionIsPlaceholder =
@@ -556,12 +583,40 @@ export function Chat() {
   }, [agents]);
   const canSwitchAgent = currentSessionIsPlaceholder;
   const currentAgentLabel = useMemo(
-    () =>
-      agentOptions.find((option) => option.id === currentAgentId)?.label ||
-      agents.find((agent) => agent.id === currentAgentId)?.name ||
-      currentAgentId,
-    [agentOptions, agents, currentAgentId]
+    () => {
+      const resolveAgentName = (agentId?: string) => {
+        if (!agentId) return undefined;
+        const normalizedId = agentId === 'main' ? defaultAgentId : agentId;
+        return (
+          agentOptions.find((option) => option.id === normalizedId)?.label
+          || agents.find((agent) => agent.id === normalizedId)?.name
+        );
+      };
+
+      return (
+        resolveAgentName(sessionAgentId)
+        || resolveAgentName(currentAgentId)
+        || (sessionAgentId && sessionAgentId !== 'main' ? sessionAgentId : undefined)
+        || (currentAgentId && currentAgentId !== 'main' ? currentAgentId : undefined)
+        || resolveAgentName(defaultAgentId)
+        || 'Main'
+      );
+    },
+    [agentOptions, agents, currentAgentId, sessionAgentId, defaultAgentId]
   );
+
+  const resolvedAgentLabel = currentAgentLabel?.trim() || 'Main';
+  const resolvedAssistantName = useMemo(() => {
+    const sessionDisplayName = currentSession?.displayName?.trim();
+    if (
+      sessionDisplayName &&
+      sessionDisplayName !== currentSession?.key &&
+      sessionDisplayName.toLowerCase() !== 'main'
+    ) {
+      return sessionDisplayName;
+    }
+    return resolvedAgentLabel;
+  }, [currentSession?.displayName, currentSession?.key, resolvedAgentLabel]);
 
   useEffect(() => {
     const allowed = modelOptions.map((option) => option.value);
@@ -597,7 +652,7 @@ export function Chat() {
       {/* Toolbar */}
       <div className="flex shrink-0 items-center justify-end px-4 py-2">
         <ChatToolbar
-          currentAgentLabel={currentAgentLabel}
+          currentAgentLabel={resolvedAgentLabel}
           showAgentLabel={!shouldShowWelcome && !canSwitchAgent}
           isEmpty={isEmpty}
         />
@@ -626,46 +681,25 @@ export function Chat() {
             />
           ) : (
             <>
-              {messages.map((msg, idx) => (
-                <ChatMessage
-                  key={msg.id || `msg-${idx}`}
-                  message={msg}
-                  showThinking={showThinking}
-                />
-              ))}
+              <ChatThread
+                messages={messages}
+                toolMessages={chatToolMessages}
+                streamSegments={chatStreamSegments}
+                streamingMessage={liveStreamingMessage}
+                sending={sending}
+                pendingFinal={pendingFinal}
+                showThinking={showThinking}
+                sessionKey={currentSessionKey}
+                contextWindow={currentSession?.contextTokens ?? null}
+                assistantName={resolvedAssistantName}
+              />
 
-              {/* Streaming message */}
-              {shouldRenderStreaming && (
-                <ChatMessage
-                  message={
-                    (streamMsg
-                      ? {
-                          ...(streamMsg as Record<string, unknown>),
-                          role: (typeof streamMsg.role === 'string'
-                            ? streamMsg.role
-                            : 'assistant') as RawMessage['role'],
-                          content: streamMsg.content ?? streamText,
-                          timestamp: streamMsg.timestamp ?? streamingTimestamp,
-                        }
-                      : {
-                          role: 'assistant',
-                          content: streamText,
-                          timestamp: streamingTimestamp,
-                        }) as RawMessage
-                  }
-                  showThinking={showThinking}
-                  isStreaming
-                  streamingTools={streamingTools}
-                />
-              )}
-
-              {/* Activity indicator: waiting for next AI turn after tool execution */}
-              {sending && pendingFinal && !shouldRenderStreaming && (
-                <ActivityIndicator phase="tool_processing" />
-              )}
-
-              {/* Typing indicator when sending but no stream content yet */}
-              {sending && !pendingFinal && !hasAnyStreamContent && <TypingIndicator />}
+              {sending
+                && !pendingFinal
+                && !hasAnyStreamContent
+                && chatToolMessages.length === 0
+                && chatStreamSegments.length === 0
+                && <TypingIndicator />}
             </>
           )}
 
@@ -868,44 +902,37 @@ function WelcomeScreen({
 // ── Typing Indicator ────────────────────────────────────────────
 
 function TypingIndicator() {
+  const { t } = useTranslation('chat');
+
   return (
     <div className="flex items-center gap-3 px-1">
       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] border border-slate-200/90 bg-slate-50 text-slate-700 shadow-[0_6px_20px_rgba(15,23,42,0.05)] dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-200">
         <Bot className="h-[18px] w-[18px]" />
       </div>
-      <div className="rounded-[16px] border border-slate-200/80 bg-slate-50 px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
-        <div className="flex gap-1.5">
-          <span
-            className="h-3 w-3 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
-            style={{ animationDelay: '0ms' }}
-          />
-          <span
-            className="h-3 w-3 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
-            style={{ animationDelay: '150ms' }}
-          />
-          <span
-            className="h-3 w-3 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
-            style={{ animationDelay: '300ms' }}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Activity Indicator (shown between tool cycles) ─────────────
-
-function ActivityIndicator({ phase }: { phase: 'tool_processing' }) {
-  void phase;
-  return (
-    <div className="flex items-center gap-3 px-1">
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] border border-slate-200/90 bg-slate-50 text-slate-700 shadow-[0_6px_20px_rgba(15,23,42,0.05)] dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-200">
-        <Bot className="h-[18px] w-[18px]" />
-      </div>
-      <div className="rounded-[16px] border border-slate-200/80 bg-slate-50 px-5 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <LoadingIcon className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
-          <span>{i18n.t('chat:status.processingToolResults')}</span>
+      <div className="min-w-[280px] rounded-[18px] border border-sky-200/70 bg-[linear-gradient(180deg,#f8fcff_0%,#f8fafc_100%)] px-5 py-4 shadow-[0_12px_30px_rgba(14,116,144,0.08)] dark:border-sky-400/20 dark:bg-[linear-gradient(180deg,rgba(14,116,144,0.14)_0%,rgba(255,255,255,0.04)_100%)]">
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1.5">
+            <span
+              className="h-3 w-3 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
+              style={{ animationDelay: '0ms' }}
+            />
+            <span
+              className="h-3 w-3 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
+              style={{ animationDelay: '150ms' }}
+            />
+            <span
+              className="h-3 w-3 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
+              style={{ animationDelay: '300ms' }}
+            />
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-foreground">
+              {t('status.generatingReply', '正在生成回复')}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {t('status.generatingReplyHint', '思考过程和工具记录会随着 transcript 同步补齐。')}
+            </div>
+          </div>
         </div>
       </div>
     </div>

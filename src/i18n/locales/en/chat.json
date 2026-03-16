@@ -49,6 +49,28 @@
   "status": {
     "processingToolResults": "Processing tool results..."
   },
+  "thread": {
+    "codeCopy": "Copy",
+    "codeCopied": "Copied!",
+    "json": "JSON",
+    "toolOutput": "Tool output",
+    "reasoning": "Reasoning",
+    "you": "You",
+    "assistant": "Assistant",
+    "tool": "Tool",
+    "tokenInputPrefix": "↑",
+    "tokenOutputPrefix": "↓",
+    "cacheReadPrefix": "R",
+    "cacheWritePrefix": "W",
+    "contextSuffix": "% ctx",
+    "completed": "Completed",
+    "view": "View",
+    "toolCount_one": "{{count}} tool",
+    "toolCount_other": "{{count}} tools",
+    "process": "Process",
+    "read": "Read",
+    "exec": "Exec"
+  },
   "history": {
     "title": "Recent chats"
   },

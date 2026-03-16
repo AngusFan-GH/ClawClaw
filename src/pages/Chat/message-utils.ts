@@ -12,7 +12,7 @@ import i18n from '@/i18n';
  * and the timestamp prefix [Day Date Time Timezone].
  */
 function cleanUserText(text: string): string {
-  return text
+  const cleaned = text
     // Remove [media attached: path (mime) | path] references
     .replace(/\s*\[media attached:[^\]]*\]/g, '')
     // Remove [message_id: uuid]
@@ -21,17 +21,35 @@ function cleanUserText(text: string): string {
     .replace(/^Conversation info\s*\([^)]*\):\s*```[a-z]*\n[\s\S]*?```\s*/i, '')
     // Fallback: remove inline metadata object only when it is explicitly marked as untrusted metadata
     .replace(/^Conversation info\s*\(untrusted metadata[^)]*\):\s*\{[\s\S]*?\}\s*/i, '')
-    // Remove Gateway timestamp prefix like [Fri 2026-02-13 22:39 GMT+8]
-    .replace(/^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+[^\]]+\]\s*/i, '')
     .trim();
-}
 
-function prettifyRuntimeProviderText(text: string): string {
-  if (!/Providers:\s*/i.test(text)) return text;
-  const localProviderLabel = i18n.t('chat:composer.localModelProvider', '本地模型');
-  return text.replace(/(^|\n)(\s*)custom-[a-z0-9]+(?:\s*\(\d+\))?/gi, (_m, lead, indent) => {
-    return `${lead}${indent}${localProviderLabel}`;
-  });
+  // OpenClaw can persist internal system lifecycle notices into the same
+  // stored user turn. Strip only the well-known prefixed metadata lines from
+  // the start of the message so the actual user text remains visible.
+  const lines = cleaned.split('\n');
+  let start = 0;
+
+  while (start < lines.length) {
+    const line = lines[start]?.trim() || '';
+    if (!line) {
+      start += 1;
+      continue;
+    }
+    if (/^System:\s*\[[^\]]+\]\s*/i.test(line)) {
+      start += 1;
+      continue;
+    }
+    if (/^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?\s+[^\]]+\]\s*/i.test(line)) {
+      lines[start] = line.replace(/^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?\s+[^\]]+\]\s*/i, '');
+      if (!lines[start]?.trim()) {
+        start += 1;
+        continue;
+      }
+    }
+    break;
+  }
+
+  return lines.slice(start).join('\n').trim();
 }
 
 /**
@@ -46,8 +64,6 @@ export function extractText(message: RawMessage | unknown): string {
   const isUser = msg.role === 'user';
 
   let result = '';
-
-  const shouldCleanUserText = typeof content === 'string';
 
   if (typeof content === 'string') {
     result = content.trim().length > 0 ? content : '';
@@ -68,12 +84,8 @@ export function extractText(message: RawMessage | unknown): string {
   }
 
   // Strip Gateway metadata from user messages for clean display
-  if (isUser && result && shouldCleanUserText) {
+  if (isUser && result) {
     result = cleanUserText(result);
-  }
-
-  if (!isUser && result) {
-    result = prettifyRuntimeProviderText(result);
   }
 
   return result;
@@ -178,7 +190,7 @@ export function extractToolUse(message: RawMessage | unknown): Array<{ id: strin
   const content = msg.content;
   if (Array.isArray(content)) {
     for (const block of content as ContentBlock[]) {
-      if ((block.type === 'tool_use' || block.type === 'toolCall') && block.name) {
+      if ((block.type === 'tool_use' || block.type === 'toolCall' || block.type === 'toolcall') && block.name) {
         tools.push({
           id: block.id || '',
           name: block.name,

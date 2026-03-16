@@ -50,6 +50,27 @@
   "status": {
     "processingToolResults": "正在处理工具结果..."
   },
+  "thread": {
+    "codeCopy": "复制",
+    "codeCopied": "已复制！",
+    "json": "JSON",
+    "toolOutput": "工具输出",
+    "reasoning": "思考过程",
+    "you": "你",
+    "assistant": "助手",
+    "tool": "工具",
+    "tokenInputPrefix": "↑",
+    "tokenOutputPrefix": "↓",
+    "cacheReadPrefix": "R",
+    "cacheWritePrefix": "W",
+    "contextSuffix": "% 上下文",
+    "completed": "已完成",
+    "view": "查看",
+    "toolCount": "{{count}} 个工具",
+    "process": "进程",
+    "read": "读取",
+    "exec": "执行"
+  },
   "history": {
     "title": "最近对话"
   },

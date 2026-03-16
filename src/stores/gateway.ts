@@ -43,6 +43,19 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
   const phase = data.phase ?? p.phase;
   const hasChatData = (p.state ?? data.state) || (p.message ?? data.message);
 
+  import('./chat')
+    .then(({ useChatStore }) => {
+      useChatStore.getState().handleAgentEvent({
+        runId: typeof (p.runId ?? data.runId) === 'string' ? String(p.runId ?? data.runId) : undefined,
+        sessionKey: typeof (p.sessionKey ?? data.sessionKey) === 'string' ? String(p.sessionKey ?? data.sessionKey) : undefined,
+        stream: typeof (p.stream ?? data.stream) === 'string' ? String(p.stream ?? data.stream) : undefined,
+        seq: typeof (p.seq ?? data.seq) === 'number' ? Number(p.seq ?? data.seq) : undefined,
+        ts: typeof (p.ts ?? data.ts) === 'number' ? Number(p.ts ?? data.ts) : undefined,
+        data,
+      });
+    })
+    .catch(() => {});
+
   if (hasChatData) {
     const normalizedEvent: Record<string, unknown> = {
       ...data,
