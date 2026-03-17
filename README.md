@@ -117,7 +117,7 @@ Extend your AI agents with pre-built skills. Browse, install, and manage skills 
 
 ### 🔐 Secure Provider Integration
 
-Connect to multiple AI providers (OpenAI, Anthropic, OpenCode Go, and more) with API keys or supported OAuth flows. OpenAI Codex sign-in follows OpenClaw's native browser OAuth flow and chooses the model from OpenClaw's available Codex model list after sign-in. Other provider accounts now prefer verified model lists resolved from the upstream endpoint when available, while still allowing manual model IDs if a provider cannot enumerate models. Self-hosted OpenAI-compatible runtimes such as Ollama, vLLM, and SGLang remain available as first-class providers, while the dedicated local-model center continues to handle the project-specific local model workflow. Credentials are stored securely in your system's native keychain.
+Connect to multiple AI providers (OpenAI, Anthropic, OpenCode Go, and more) with API keys or supported OAuth flows. OpenAI Codex sign-in follows OpenClaw's native browser OAuth flow and chooses the model from OpenClaw's available Codex model list after sign-in. Other provider accounts now prefer verified model lists resolved from the upstream endpoint when available, while still allowing manual model IDs if a provider cannot enumerate models. Model-type filters are shown only when the upstream source explicitly returns category metadata; otherwise the picker falls back to search-only, with no heuristic guessing in the UI. Self-hosted OpenAI-compatible runtimes such as Ollama, vLLM, and SGLang remain available as first-class providers, while the dedicated local-model center continues to handle the project-specific local model workflow. Credentials are stored securely in your system's native keychain.
 
 ### 🛡️ Granular Security Policy
 
@@ -125,7 +125,7 @@ Configure denied directories and capability-level runtime restrictions separatel
 
 ### 💻 Flexible Model Setup
 
-ClawClaw no longer forces a bundled model during first launch. After the runtime is ready, you can open **Models** to add a local endpoint or a cloud provider, pick the model you want, or skip that step and finish it later. The cloud and self-hosted provider flows now stay closer to OpenClaw's provider-first onboarding, while the dedicated local-model center continues to preserve the existing local model workflow.
+ClawClaw no longer forces a bundled model during first launch. After the runtime is ready, you can open **Models** to add a local endpoint or a cloud provider, pick the model you want, or skip that step and finish it later. The cloud and self-hosted provider flows now stay closer to OpenClaw's provider-first onboarding, while the dedicated local-model center continues to preserve the existing local model workflow. Clearing the local-model provider now also removes any local models that depended on that provider, so stale local-model entries do not linger after the provider config is removed manually or from the UI.
 
 ### 🌙 Adaptive Theming
 

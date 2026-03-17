@@ -36,6 +36,11 @@ type OpenClawModelListResponse = {
   models?: Array<{
     key?: string;
     name?: string;
+    input?: string;
+    contextWindow?: number | null;
+    tags?: string[];
+    category?: string;
+    local?: boolean | null;
     available?: boolean;
   }>;
 };
@@ -111,6 +116,10 @@ async function runSerializedOpenClawModelList<T>(task: () => Promise<T>): Promis
 
 function isLocalModelProviderConfig(account: Pick<ProviderAccount, 'vendorId' | 'metadata'> | null | undefined): boolean {
   return account?.vendorId === 'local-model' && account.metadata?.localModelProvider === true;
+}
+
+function isLocalModelRuntimeAccount(account: Pick<ProviderAccount, 'vendorId' | 'metadata'> | null | undefined): boolean {
+  return account?.vendorId === 'local-model' && account.metadata?.localModelProvider !== true;
 }
 
 function invalidateOpenClawModelListCache(): void {
@@ -365,7 +374,14 @@ async function listProviderModelOptions(
   scope: 'catalog' | 'runtime' = 'catalog',
   options?: { allowModelsJsonFallback?: boolean },
 ): Promise<{
-  models: Array<{ id: string; name: string }>;
+  models: Array<{
+    id: string;
+    name: string;
+    input?: string;
+    contextWindow?: number | null;
+    tags?: string[];
+    category?: string;
+  }>;
   source: ProviderModelOptionsSource;
 }> {
   let parsedModels: OpenClawModelEntry[];
@@ -402,6 +418,14 @@ async function listProviderModelOptions(
           runtimeProviderId,
           model.name || String(model.key).slice(runtimeProviderId.length + 1),
         ),
+      input: typeof model.input === 'string' ? model.input : undefined,
+      contextWindow: typeof model.contextWindow === 'number' ? model.contextWindow : undefined,
+      tags: Array.isArray(model.tags)
+        ? model.tags.filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0)
+        : undefined,
+      category: typeof model.category === 'string' && model.category.trim().length > 0
+        ? model.category.trim()
+        : undefined,
     }));
 
   return {
@@ -417,7 +441,14 @@ async function listProviderModelOptionsWithRuntimeFallback(
   scope: 'catalog' | 'runtime',
   options?: { allowModelsJsonFallback?: boolean },
 ): Promise<{
-  models: Array<{ id: string; name: string }>;
+  models: Array<{
+    id: string;
+    name: string;
+    input?: string;
+    contextWindow?: number | null;
+    tags?: string[];
+    category?: string;
+  }>;
   source: ProviderModelOptionsSource;
 }> {
   const primary = await listProviderModelOptions(runtimeProviderId, scope, options);
@@ -738,6 +769,12 @@ export async function handleProviderRoutes(
     const accountId = decodeURIComponent(url.pathname.slice('/api/provider-accounts/'.length));
     try {
       const existing = await providerService.getAccount(accountId);
+      const orphanedLocalModelAccounts = isLocalModelProviderConfig(existing)
+        ? (await providerService.listAccounts()).filter((account) => (
+            account.id !== accountId
+            && isLocalModelRuntimeAccount(account)
+          ))
+        : [];
       const runtimeProviderKey = existing?.vendorId === 'google' && existing.authMode === 'oauth_browser'
         ? 'google-gemini-cli'
         : existing?.vendorId === 'openai'
@@ -754,6 +791,14 @@ export async function handleProviderRoutes(
         invalidateOpenClawModelListCache();
         sendJson(res, 200, { success: true });
         return true;
+      }
+      for (const localModelAccount of orphanedLocalModelAccounts) {
+        await providerService.deleteAccount(localModelAccount.id);
+        await syncDeletedProviderToRuntime(
+          providerAccountToConfig(localModelAccount),
+          localModelAccount.id,
+          ctx.gatewayManager,
+        );
       }
       await providerService.deleteAccount(accountId);
       await syncDeletedProviderToRuntime(

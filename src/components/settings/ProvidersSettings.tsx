@@ -16,6 +16,7 @@ import {
   Copy,
   XCircle,
   ChevronDown,
+  Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -112,7 +113,13 @@ function supportsEditableProtocol(type: ProviderType | string): boolean {
 type ProviderModelOption = {
   id: string;
   name: string;
+  category?: ProviderModelCategory;
+  input?: string;
+  contextWindow?: number | null;
+  tags?: string[];
 };
+
+type ProviderModelCategory = 'all' | 'chat' | 'reasoning' | 'code' | 'vision' | 'audio' | 'embedding' | 'other';
 
 type ResolvedProviderModelResponse = {
   runtimeProviderId?: string;
@@ -226,6 +233,131 @@ function buildModelOptionsForDisplay(
     return options;
   }
   return [{ id: trimmedCurrent, name: invalidLabel }, ...options];
+}
+
+function filterProviderModelOptions(
+  options: ProviderModelOption[],
+  query: string,
+  category: ProviderModelCategory,
+): ProviderModelOption[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  return options.filter((option) => {
+    if (category !== 'all' && option.category !== category) {
+      return false;
+    }
+    if (!normalizedQuery) {
+      return true;
+    }
+    return option.id.toLowerCase().includes(normalizedQuery) || option.name.toLowerCase().includes(normalizedQuery);
+  });
+}
+
+function VerifiedModelSelect({
+  id,
+  label,
+  helpText,
+  value,
+  options,
+  onChange,
+  disabled,
+  loading,
+  countLabel,
+}: {
+  id: string;
+  label: string;
+  helpText?: string;
+  value: string;
+  options: ProviderModelOption[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  loading?: boolean;
+  countLabel?: string;
+}) {
+  const { t } = useTranslation('settings');
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<ProviderModelCategory>('all');
+
+  const filteredOptions = useMemo(
+    () => filterProviderModelOptions(options, query, category),
+    [options, query, category],
+  );
+  const hasUpstreamCategories = useMemo(
+    () => options.some((option) => Boolean(option.category && option.category !== 'other')),
+    [options],
+  );
+
+  const categories: Array<{ id: ProviderModelCategory; label: string }> = [
+    { id: 'all', label: t('aiProviders.dialog.modelFilterAll', '全部') },
+    { id: 'chat', label: t('aiProviders.dialog.modelFilterChat', '对话') },
+    { id: 'reasoning', label: t('aiProviders.dialog.modelFilterReasoning', '推理') },
+    { id: 'code', label: t('aiProviders.dialog.modelFilterCode', '代码') },
+    { id: 'vision', label: t('aiProviders.dialog.modelFilterVision', '视觉') },
+    { id: 'audio', label: t('aiProviders.dialog.modelFilterAudio', '音频') },
+    { id: 'embedding', label: t('aiProviders.dialog.modelFilterEmbedding', 'Embedding') },
+  ];
+
+  return (
+    <div className="space-y-2.5">
+      <Label htmlFor={id} className={labelClasses}>{label}</Label>
+      <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-muted/35 p-3 space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('aiProviders.dialog.searchModels', '搜索模型 ID 或名称')}
+            className={cn(inputClasses, 'pl-9 bg-background/80')}
+            disabled={disabled}
+          />
+        </div>
+        {hasUpstreamCategories ? (
+          <div className="flex flex-wrap gap-2">
+            {categories.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setCategory(item.id)}
+                disabled={disabled}
+                className={cn(
+                  'rounded-full px-3 py-1 text-[12px] font-medium border transition-colors',
+                  category === item.id
+                    ? 'border-primary/30 bg-primary/10 text-primary'
+                    : 'border-black/8 bg-background/80 text-muted-foreground hover:bg-black/[0.03] dark:border-white/10 dark:hover:bg-white/[0.04]',
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <select
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={cn(inputClasses, 'font-sans bg-background/80')}
+          disabled={disabled || loading}
+        >
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.name}
+              </option>
+            ))
+          ) : (
+            <option value={value}>
+              {t('aiProviders.dialog.noFilteredModels', '没有匹配当前筛选条件的模型')}
+            </option>
+          )}
+        </select>
+        <div className="flex items-center justify-between gap-3 text-[12px] text-muted-foreground">
+          <span>{helpText}</span>
+          <span className="shrink-0">
+            {countLabel || t('aiProviders.dialog.filteredModelCount', { count: filteredOptions.length, defaultValue: `${filteredOptions.length} 个可选模型` })}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function ProvidersSettings({
@@ -811,23 +943,18 @@ function ProviderCard({
                 </div>
               )}
               {showModelIdField && hasVerifiedModelOptions && (
-                <div className="space-y-1.5 pt-2">
-                  <Label className={currentLabelClasses}>{t('aiProviders.dialog.verifiedModels')}</Label>
-                  <select
+                <div className="pt-2">
+                  <VerifiedModelSelect
+                    id={`verified-models-${account.id}`}
+                    label={t('aiProviders.dialog.verifiedModels')}
+                    helpText={t('aiProviders.dialog.verifiedModelsHelp')}
                     value={modelId}
-                    onChange={(e) => setModelId(normalizeOAuthSelectedModel(account.vendorId, e.target.value))}
-                    className={cn(currentInputClasses, 'font-sans')}
+                    options={displayedModelOptions}
+                    onChange={(value) => setModelId(normalizeOAuthSelectedModel(account.vendorId, value))}
                     disabled={loadingModelOptions}
-                  >
-                    {displayedModelOptions.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.name}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-[12px] text-muted-foreground">
-                    {t('aiProviders.dialog.verifiedModelsHelp')}
-                  </p>
+                    loading={loadingModelOptions}
+                    countLabel={t('aiProviders.card.verifiedModelCount', { count: displayedModelOptions.length })}
+                  />
                 </div>
               )}
               {showModelIdField && !hasVerifiedModelOptions && (
@@ -1740,28 +1867,20 @@ function AddProviderDialog({
                 ) : null}
 
                 {showEditableModelField && hasResolvedModelOptions && (
-                  <div className="space-y-2.5">
-                    <Label htmlFor="modelId" className={labelClasses}>{t('aiProviders.dialog.verifiedModels')}</Label>
-                    <select
-                      id="modelId"
-                      value={modelId}
-                      onChange={(e) => {
-                        setModelId(normalizeOAuthSelectedModel(selectedType, e.target.value));
-                        setValidationError(null);
-                      }}
-                      className={cn(inputClasses, 'font-sans')}
-                      disabled={loadingResolvedModels}
-                    >
-                      {displayedResolvedOptions.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.name}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-[12px] text-muted-foreground">
-                      {t('aiProviders.card.verifiedModelCount', { count: resolvedModelOptions.length })}
-                    </p>
-                  </div>
+                  <VerifiedModelSelect
+                    id="modelId"
+                    label={t('aiProviders.dialog.verifiedModels')}
+                    helpText={t('aiProviders.dialog.verifiedModelsHelp')}
+                    value={modelId}
+                    options={displayedResolvedOptions}
+                    onChange={(value) => {
+                      setModelId(normalizeOAuthSelectedModel(selectedType, value));
+                      setValidationError(null);
+                    }}
+                    disabled={loadingResolvedModels}
+                    loading={loadingResolvedModels}
+                    countLabel={t('aiProviders.card.verifiedModelCount', { count: resolvedModelOptions.length })}
+                  />
                 )}
 
                 {showEditableModelField && !hasResolvedModelOptions && (

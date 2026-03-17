@@ -77,10 +77,32 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
   
   refreshProviderSnapshot: async () => {
     set({ loading: true, error: null });
-    
+
+    const isLocalModelProviderAccount = (account: ProviderAccount) => (
+      account.vendorId === 'local-model' && account.metadata?.localModelProvider === true
+    );
+    const isLocalModelRuntimeAccount = (account: ProviderAccount) => (
+      account.vendorId === 'local-model' && account.metadata?.localModelProvider !== true
+    );
+
     try {
-      const snapshot = await fetchProviderSnapshot();
-      
+      let snapshot = await fetchProviderSnapshot();
+      const hasLocalModelProvider = snapshot.accounts.some(isLocalModelProviderAccount);
+      const orphanLocalModelAccounts = snapshot.accounts.filter(isLocalModelRuntimeAccount);
+
+      if (!hasLocalModelProvider && orphanLocalModelAccounts.length > 0) {
+        for (const orphanAccount of orphanLocalModelAccounts) {
+          const result = await hostApiFetch<{ success: boolean; error?: string }>(
+            `/api/provider-accounts/${encodeURIComponent(orphanAccount.id)}`,
+            { method: 'DELETE' },
+          );
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to delete orphan local model account');
+          }
+        }
+        snapshot = await fetchProviderSnapshot();
+      }
+
       set({ 
         statuses: Array.isArray(snapshot.statuses) ? snapshot.statuses : [],
         accounts: Array.isArray(snapshot.accounts) ? snapshot.accounts : [],

@@ -7,6 +7,7 @@ import {
   Cpu,
   Eye,
   EyeOff,
+  Search,
   Star,
   Trash2,
   X,
@@ -47,7 +48,13 @@ type UsageGroupBy = 'model' | 'day';
 type ProviderModelOption = {
   id: string;
   name: string;
+  category?: ProviderModelCategory;
+  input?: string;
+  contextWindow?: number | null;
+  tags?: string[];
 };
+
+type ProviderModelCategory = 'all' | 'chat' | 'reasoning' | 'code' | 'vision' | 'audio' | 'embedding' | 'other';
 
 type ResolvedProviderModelResponse = {
   runtimeProviderId?: string;
@@ -82,6 +89,23 @@ async function resolveLocalProviderModels(payload: {
       apiProtocol: payload.apiProtocol,
       apiKey: payload.apiKey ?? undefined,
     }),
+  });
+}
+
+function filterProviderModelOptions(
+  options: ProviderModelOption[],
+  query: string,
+  category: ProviderModelCategory,
+): ProviderModelOption[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  return options.filter((option) => {
+    if (category !== 'all' && option.category !== category) {
+      return false;
+    }
+    if (!normalizedQuery) {
+      return true;
+    }
+    return option.id.toLowerCase().includes(normalizedQuery) || option.name.toLowerCase().includes(normalizedQuery);
   });
 }
 
@@ -157,8 +181,8 @@ export function Models() {
     [accounts],
   );
   const localProviderSeed = useMemo(
-    () => localProviderAccount ?? localModelAccounts[0] ?? null,
-    [localModelAccounts, localProviderAccount],
+    () => localProviderAccount ?? null,
+    [localProviderAccount],
   );
   const otherModelAccounts = useMemo(
     () => accounts.filter((account) => !isLocalModelAccount(account)),
@@ -352,7 +376,7 @@ export function Models() {
                   onClick={() => void (async () => {
                     try {
                       await removeAccount(localProviderAccount.id);
-                      toast.success('本地模型提供商配置已清除');
+                      toast.success('本地模型提供商配置已清除，本地模型已同步清空');
                     } catch (error) {
                       toast.error(`清除失败: ${String(error)}`);
                     }
@@ -968,6 +992,7 @@ function AddLocalModelDialog({
   onClose: () => void;
   onAdd: (payload: { modelId: string; label: string }) => Promise<void>;
 }) {
+  const { t } = useTranslation('settings');
   const [loadingModels, setLoadingModels] = useState(true);
   const [modelOptions, setModelOptions] = useState<ProviderModelOption[]>([]);
   const [resolveError, setResolveError] = useState<string | null>(null);
@@ -976,6 +1001,8 @@ function AddLocalModelDialog({
   const [label, setLabel] = useState('');
   const [labelDirty, setLabelDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<ProviderModelCategory>('all');
 
   useEffect(() => {
     let cancelled = false;
@@ -1000,9 +1027,6 @@ function AddLocalModelDialog({
         setModelOptions(filteredModels);
         if (filteredModels[0]?.id) {
           setSelectedModelId(filteredModels[0].id);
-          if (!labelDirty) {
-            setLabel(filteredModels[0].name || filteredModels[0].id);
-          }
         }
         if (result.error) {
           setResolveError(result.error);
@@ -1024,21 +1048,61 @@ function AddLocalModelDialog({
   }, [existingModels, getAccountApiKey, labelDirty, providerAccount.apiProtocol, providerAccount.baseUrl, providerAccount.id]);
 
   const usingResolvedModels = modelOptions.length > 0;
-  const effectiveModelId = usingResolvedModels ? selectedModelId.trim() : manualModelId.trim();
+  const filteredModelOptions = useMemo(
+    () => filterProviderModelOptions(modelOptions, query, category),
+    [modelOptions, query, category],
+  );
+  const hasUpstreamCategories = useMemo(
+    () => modelOptions.some((option) => Boolean(option.category && option.category !== 'other')),
+    [modelOptions],
+  );
+  const hasSelectedFilteredModel = usingResolvedModels
+    ? filteredModelOptions.some((option) => option.id === selectedModelId)
+    : false;
+  const effectiveModelId = usingResolvedModels
+    ? (hasSelectedFilteredModel ? selectedModelId.trim() : '')
+    : manualModelId.trim();
+  const selectedModelOption = usingResolvedModels
+    ? modelOptions.find((option) => option.id === selectedModelId) ?? null
+    : null;
+  const effectiveLabel = label.trim()
+    || selectedModelOption?.name?.trim()
+    || effectiveModelId;
+  const categories: Array<{ id: ProviderModelCategory; label: string }> = [
+    { id: 'all', label: t('aiProviders.dialog.modelFilterAll', '全部') },
+    { id: 'chat', label: t('aiProviders.dialog.modelFilterChat', '对话') },
+    { id: 'reasoning', label: t('aiProviders.dialog.modelFilterReasoning', '推理') },
+    { id: 'code', label: t('aiProviders.dialog.modelFilterCode', '代码') },
+    { id: 'vision', label: t('aiProviders.dialog.modelFilterVision', '视觉') },
+    { id: 'audio', label: t('aiProviders.dialog.modelFilterAudio', '音频') },
+    { id: 'embedding', label: t('aiProviders.dialog.modelFilterEmbedding', 'Embedding') },
+  ];
 
-  const handleSubmit = async () => {
-    if (!label.trim()) {
-      toast.error('请填写模型名称');
+  useEffect(() => {
+    if (!usingResolvedModels) {
       return;
     }
+    if (filteredModelOptions.length === 0) {
+      return;
+    }
+    if (!hasSelectedFilteredModel) {
+      setSelectedModelId(filteredModelOptions[0].id);
+    }
+  }, [filteredModelOptions, hasSelectedFilteredModel, usingResolvedModels]);
+
+  const handleSubmit = async () => {
     if (!effectiveModelId) {
       toast.error('请填写模型 ID');
+      return;
+    }
+    if (!effectiveLabel) {
+      toast.error('请填写模型名称');
       return;
     }
     try {
       setSaving(true);
       await onAdd({
-        label,
+        label: effectiveLabel,
         modelId: effectiveModelId,
       });
     } catch (error) {
@@ -1063,74 +1127,128 @@ function AddLocalModelDialog({
           </Button>
         </div>
         <div className="space-y-5 px-5 py-5">
-          <div className="space-y-2">
-            <Label htmlFor="local-model-label">模型名称</Label>
-            <Input
-              id="local-model-label"
-              className="h-12 rounded-xl"
-              value={label}
-              onChange={(event) => {
-                setLabelDirty(true);
-                setLabel(event.target.value);
-              }}
-              placeholder="例如：Qwen3.5-27B"
-            />
-          </div>
-
           {loadingModels ? (
             <div className="rounded-[10px] border border-dashed border-border/80 bg-muted/35 px-5 py-8 text-sm text-muted-foreground">
               正在获取模型列表...
             </div>
           ) : usingResolvedModels ? (
-            <div className="space-y-2">
-              <Label htmlFor="local-model-select">可用模型</Label>
-              <select
-                id="local-model-select"
-                className="h-12 w-full rounded-xl border border-input bg-background px-3 text-sm"
-                value={selectedModelId}
-                onChange={(event) => {
-                  const nextModelId = event.target.value;
-                  setSelectedModelId(nextModelId);
-                  if (!labelDirty) {
-                    const selected = modelOptions.find((option) => option.id === nextModelId);
-                    setLabel(selected?.name || nextModelId);
-                  }
-                }}
-              >
-                {modelOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.name || option.id}
-                  </option>
-                ))}
-              </select>
-              <p className="text-sm text-muted-foreground">已从当前本地模型提供商读取到 {modelOptions.length} 个模型。</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Label htmlFor="local-model-manual-id">模型 ID</Label>
-              <Input
-                id="local-model-manual-id"
-                className="h-12 rounded-xl font-mono"
-                value={manualModelId}
-                onChange={(event) => {
-                  setManualModelId(event.target.value);
-                  if (!labelDirty && !label.trim()) {
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="local-model-select">可用模型</Label>
+                <div className="rounded-2xl border border-black/10 bg-muted/35 p-3 dark:border-white/10 dark:bg-white/[0.03] space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                      placeholder={t('aiProviders.dialog.searchModels', '搜索模型 ID 或名称')}
+                      className="h-12 rounded-xl border-black/10 bg-background/80 pl-9 dark:border-white/10"
+                    />
+                  </div>
+                  {hasUpstreamCategories ? (
+                    <div className="flex flex-wrap gap-2">
+                      {categories.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setCategory(item.id)}
+                          className={
+                            category === item.id
+                              ? 'rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[12px] font-medium text-primary'
+                              : 'rounded-full border border-black/8 bg-background/80 px-3 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-black/[0.03] dark:border-white/10 dark:hover:bg-white/[0.04]'
+                          }
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  <select
+                    id="local-model-select"
+                    className="h-12 w-full rounded-xl border border-input bg-background px-3 text-sm"
+                    value={selectedModelId}
+                    onChange={(event) => {
+                      setSelectedModelId(event.target.value);
+                    }}
+                  >
+                    {filteredModelOptions.length > 0 ? (
+                      filteredModelOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.name || option.id}
+                        </option>
+                      ))
+                    ) : (
+                      <option value={selectedModelId}>
+                        {t('aiProviders.dialog.noFilteredModels', '没有匹配当前筛选条件的模型')}
+                      </option>
+                    )}
+                  </select>
+                  <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+                    <span>已从当前本地模型提供商读取到 {modelOptions.length} 个模型。</span>
+                    <span className="shrink-0">
+                      {t('aiProviders.dialog.filteredModelCount', { count: filteredModelOptions.length, defaultValue: `${filteredModelOptions.length} 个可选模型` })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="local-model-label">显示名称（可选）</Label>
+                <Input
+                  id="local-model-label"
+                  className="h-12 rounded-xl"
+                  value={label}
+                  onChange={(event) => {
+                    setLabelDirty(true);
                     setLabel(event.target.value);
-                  }
-                }}
-                placeholder="your-provider/model-id"
-              />
-              <p className="text-sm text-muted-foreground">
-                {resolveError ? `未能读取模型列表：${resolveError}` : '当前服务未返回模型列表，请手动填写模型 ID。'}
-              </p>
-            </div>
+                  }}
+                  placeholder={selectedModelOption?.name || selectedModelOption?.id || '默认跟随所选模型名称'}
+                />
+                <p className="text-sm text-muted-foreground">
+                  留空时会直接使用所选模型名称。
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="local-model-manual-id">模型 ID</Label>
+                <Input
+                  id="local-model-manual-id"
+                  className="h-12 rounded-xl font-mono"
+                  value={manualModelId}
+                  onChange={(event) => {
+                    setManualModelId(event.target.value);
+                  }}
+                  placeholder="your-provider/model-id"
+                />
+                <p className="text-sm text-muted-foreground">
+                  {resolveError ? `未能读取模型列表：${resolveError}` : '当前服务未返回模型列表，请手动填写模型 ID。'}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="local-model-label">显示名称（可选）</Label>
+                <Input
+                  id="local-model-label"
+                  className="h-12 rounded-xl"
+                  value={label}
+                  onChange={(event) => {
+                    setLabelDirty(true);
+                    setLabel(event.target.value);
+                  }}
+                  placeholder={manualModelId.trim() || '默认跟随模型 ID'}
+                />
+                <p className="text-sm text-muted-foreground">
+                  留空时会直接使用模型 ID 作为显示名称。
+                </p>
+              </div>
+            </>
           )}
         </div>
         <div className="flex items-center justify-end gap-3 border-t border-black/10 px-5 py-4 dark:border-white/10">
           <Button variant="outline" onClick={onClose} className="h-10 rounded-xl px-5">
             取消
           </Button>
-          <Button onClick={() => void handleSubmit()} disabled={saving || !label.trim() || !effectiveModelId} className="h-10 rounded-xl px-5">
+          <Button onClick={() => void handleSubmit()} disabled={saving || !effectiveModelId} className="h-10 rounded-xl px-5">
             {saving ? '添加中...' : '添加模型'}
           </Button>
         </div>

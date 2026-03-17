@@ -50,6 +50,10 @@ interface SetupDependency {
 type SetupProviderModelOption = {
   id: string;
   name: string;
+  category?: string;
+  input?: string;
+  contextWindow?: number | null;
+  tags?: string[];
 };
 
 type ResolvedProviderModelResponse = {
