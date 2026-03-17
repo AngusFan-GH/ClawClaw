@@ -225,14 +225,14 @@ export function Sidebar() {
       label: t('sidebar.models'),
     },
     {
-      to: '/channels',
-      icon: <MessageCircleMore className="h-[18px] w-[18px]" strokeWidth={2} />,
-      label: t('sidebar.channels'),
-    },
-    {
       to: '/agents',
       icon: <Copy className="h-[18px] w-[18px]" strokeWidth={2} />,
       label: t('sidebar.agents'),
+    },
+    {
+      to: '/channels',
+      icon: <MessageCircleMore className="h-[18px] w-[18px]" strokeWidth={2} />,
+      label: t('sidebar.channels'),
     },
     {
       to: '/security',
