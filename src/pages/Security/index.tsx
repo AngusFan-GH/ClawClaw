@@ -1,9 +1,9 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FolderPlus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { LoadingIcon, PageLoader } from '@/components/common/LoadingSpinner';
+import { PageLoader } from '@/components/common/LoadingSpinner';
 import { GatewayLifecycleBanner } from '@/components/common/GatewayLifecycleBanner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { invokeIpc } from '@/lib/api-client';
@@ -12,87 +12,44 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { useGatewayStore } from '@/stores/gateway';
 import {
+  DEFAULT_SECURITY_POLICY,
   type SecurityPolicy,
+  type SecurityPolicySnapshot,
+  type SecurityRuntimeState,
   type SecurityRuleKey,
   SECURITY_RULE_DEFINITIONS,
+  compactSecurityPaths,
+  getManagedToolDenyForRules,
   normalizeSecurityRules,
 } from '@/shared/security-policy';
-
-const defaultPolicy: SecurityPolicy = {
-  prompt: {
-    enabled: false,
-    deniedPaths: [],
-    rules: [],
-  },
-};
-
-function normalizePath(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  if (/^[A-Za-z]:[\\/]+$/.test(trimmed)) {
-    return `${trimmed[0].toUpperCase()}:\\`;
-  }
-  if (trimmed === '/' || trimmed === '\\') {
-    return trimmed;
-  }
-  return trimmed.replace(/[\\/]+$/, '');
-}
-
-function compactPaths(paths: string[]): string[] {
-  const deduped = Array.from(new Set(paths.map((p) => normalizePath(p)).filter(Boolean))).sort(
-    (a, b) => a.length - b.length
-  );
-
-  const result: string[] = [];
-  for (const current of deduped) {
-    const currentLower = current.toLowerCase();
-    const covered = result.some((base) => {
-      const baseLower = base.toLowerCase();
-      return (
-        currentLower === baseLower ||
-        currentLower.startsWith(`${baseLower}\\`) ||
-        currentLower.startsWith(`${baseLower}/`)
-      );
-    });
-    if (!covered) {
-      result.push(current);
-    }
-  }
-  return result;
-}
-
-function getManagedToolDenyForRules(rules: SecurityRuleKey[]): string[] {
-  const selected = new Set(normalizeSecurityRules(rules));
-  return SECURITY_RULE_DEFINITIONS.flatMap((rule) =>
-    selected.has(rule.key) ? rule.managedDeny : []
-  );
-}
 
 export function Security() {
   const { t } = useTranslation('settings');
   const gatewayLifecycle = useGatewayStore((state) => state.lifecycle);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
-  const [policy, setPolicy] = useState<SecurityPolicy>(defaultPolicy);
-  const [savedPolicy, setSavedPolicy] = useState<SecurityPolicy>(defaultPolicy);
-  const [lastAppliedAt, setLastAppliedAt] = useState<string | null>(null);
-  const autoApplyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [policy, setPolicy] = useState<SecurityPolicy>(DEFAULT_SECURITY_POLICY);
+  const [savedPolicy, setSavedPolicy] = useState<SecurityPolicy>(DEFAULT_SECURITY_POLICY);
+  const [runtime, setRuntime] = useState<SecurityRuntimeState>({
+    toolDeny: [],
+    activeRules: [],
+    activeManagedDeny: [],
+    inSync: true,
+  });
 
   const loadPolicy = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await hostApiFetch<SecurityPolicy>('/api/security/policy');
-      const nextPolicy = {
-        prompt: {
-          enabled: !!data?.prompt?.enabled,
-          deniedPaths: compactPaths(data?.prompt?.deniedPaths || []),
-          rules: normalizeSecurityRules(
-            Array.isArray(data?.prompt?.rules) ? data.prompt.rules : []
-          ),
-        },
-      };
+      const data = await hostApiFetch<SecurityPolicySnapshot>('/api/security/policy');
+      const nextPolicy = data?.policy ?? DEFAULT_SECURITY_POLICY;
       setPolicy(nextPolicy);
       setSavedPolicy(nextPolicy);
+      setRuntime(data?.runtime ?? {
+        toolDeny: [],
+        activeRules: [],
+        activeManagedDeny: [],
+        inSync: true,
+      });
     } catch (error) {
       toast.error(`${t('security.toasts.loadFailed')}: ${String(error)}`);
     } finally {
@@ -120,7 +77,7 @@ export function Security() {
         ...prev,
         prompt: {
           ...prev.prompt,
-          deniedPaths: compactPaths([...prev.prompt.deniedPaths, ...selected]),
+          deniedPaths: compactSecurityPaths([...prev.prompt.deniedPaths, ...selected]),
         },
       }));
     } catch (error) {
@@ -161,7 +118,7 @@ export function Security() {
     const payload = {
       prompt: {
         enabled: policy.prompt.enabled,
-        deniedPaths: compactPaths(policy.prompt.deniedPaths),
+        deniedPaths: compactSecurityPaths(policy.prompt.deniedPaths),
         rules: policy.prompt.rules,
       },
     };
@@ -177,20 +134,46 @@ export function Security() {
 
     setApplying(true);
     try {
-      await hostApiFetch('/api/security/apply', {
+      const response = await hostApiFetch<{
+        snapshot?: SecurityPolicySnapshot;
+      }>('/api/security/apply', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      setSavedPolicy(payload);
-      setPolicy(payload);
-      setLastAppliedAt(new Date().toLocaleString());
-      toast.success(t('security.toasts.applySuccess'));
+      const nextSnapshot = response.snapshot;
+      setSavedPolicy(nextSnapshot?.policy ?? payload);
+      setPolicy(nextSnapshot?.policy ?? payload);
+      setRuntime(nextSnapshot?.runtime ?? runtime);
     } catch (error) {
       toast.error(`${t('security.toasts.applyFailed')}: ${String(error)}`);
     } finally {
       setApplying(false);
     }
-  }, [policy, t]);
+  }, [policy, runtime, t]);
+
+  const resetPolicy = useCallback(async () => {
+    setApplying(true);
+    try {
+      const response = await hostApiFetch<{
+        snapshot?: SecurityPolicySnapshot;
+      }>('/api/security/reset', {
+        method: 'POST',
+      });
+      const nextSnapshot = response.snapshot;
+      setPolicy(nextSnapshot?.policy ?? DEFAULT_SECURITY_POLICY);
+      setSavedPolicy(nextSnapshot?.policy ?? DEFAULT_SECURITY_POLICY);
+      setRuntime(nextSnapshot?.runtime ?? {
+        toolDeny: [],
+        activeRules: [],
+        activeManagedDeny: [],
+        inSync: true,
+      });
+    } catch (error) {
+      toast.error(`${t('security.toasts.resetFailed')}: ${String(error)}`);
+    } finally {
+      setApplying(false);
+    }
+  }, [t]);
 
   const summary = useMemo(() => {
     if (!policy.prompt.enabled) {
@@ -202,31 +185,16 @@ export function Security() {
     });
   }, [policy.prompt.deniedPaths.length, policy.prompt.enabled, policy.prompt.rules.length, t]);
 
-  const effectiveManagedDeny = useMemo(
+  const draftManagedDeny = useMemo(
     () => getManagedToolDenyForRules(policy.prompt.rules),
     [policy.prompt.rules]
   );
-
-  useEffect(() => {
-    if (loading || applying || !isDirty) {
-      return;
-    }
-
-    if (autoApplyTimerRef.current) {
-      clearTimeout(autoApplyTimerRef.current);
-    }
-
-    autoApplyTimerRef.current = setTimeout(() => {
-      void applyPolicy();
-    }, 350);
-
-    return () => {
-      if (autoApplyTimerRef.current) {
-        clearTimeout(autoApplyTimerRef.current);
-        autoApplyTimerRef.current = null;
-      }
-    };
-  }, [applyPolicy, applying, isDirty, loading]);
+  const runtimeManagedDeny = runtime.activeManagedDeny;
+  const runtimeStatusKey = isDirty
+    ? 'security.runtimePreview.unsaved'
+    : runtime.inSync
+      ? 'security.runtimePreview.inSync'
+      : 'security.runtimePreview.outOfSync';
 
   if (loading) {
     return (
@@ -242,11 +210,33 @@ export function Security() {
   return (
     <div className="-m-6 h-[calc(100vh-2.5rem)] overflow-hidden dark:bg-background">
       <div className="mx-auto flex h-full w-full max-w-4xl flex-col px-6 py-8 md:px-8 md:py-10">
-        <PageHeader
-          title={<span className="inline-flex items-center gap-2">{t('security.title')}</span>}
-          subtitle={summary}
-          className="mb-5"
-        />
+        <div className="mb-4 shrink-0">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <PageHeader
+              title={<span className="inline-flex items-center gap-2">{t('security.title')}</span>}
+              subtitle={summary}
+              className="mb-0"
+            />
+
+            <div className="flex flex-wrap items-center gap-2 md:justify-end">
+              <Button variant="outline" onClick={() => void loadPolicy()} disabled={applying}>
+                {t('security.actions.reload')}
+              </Button>
+              <Button variant="outline" onClick={() => void resetPolicy()} disabled={applying}>
+                {t('security.actions.reset')}
+              </Button>
+              <Button onClick={() => void applyPolicy()} disabled={applying || !isDirty}>
+                {applying ? t('security.applying') : t('security.apply')}
+              </Button>
+            </div>
+          </div>
+
+          {isDirty ? (
+            <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+              {t('security.pendingNotice')}
+            </div>
+          ) : null}
+        </div>
 
         <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2 pb-6">
           <GatewayLifecycleBanner lifecycle={gatewayLifecycle} />
@@ -339,14 +329,14 @@ export function Security() {
 
               <div className="mt-4 rounded-lg border bg-muted/30 px-3 py-3">
                 <div className="text-sm font-medium">{t('security.runtimePreview.title')}</div>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  {policy.prompt.enabled
-                    ? t('security.runtimePreview.enabledDesc')
-                    : t('security.runtimePreview.disabledDesc')}
+                <div className="mt-1 text-sm text-muted-foreground">{t(runtimeStatusKey)}</div>
+
+                <div className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {t('security.runtimePreview.draftTitle')}
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {effectiveManagedDeny.length > 0 ? (
-                    effectiveManagedDeny.map((entry) => (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {draftManagedDeny.length > 0 ? (
+                    draftManagedDeny.map((entry) => (
                       <code
                         key={entry}
                         className="rounded-md border bg-background px-2 py-1 text-xs text-foreground"
@@ -360,19 +350,28 @@ export function Security() {
                     </span>
                   )}
                 </div>
+
+                <div className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {t('security.runtimePreview.runtimeTitle')}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {runtimeManagedDeny.length > 0 ? (
+                    runtimeManagedDeny.map((entry) => (
+                      <code
+                        key={`runtime-${entry}`}
+                        className="rounded-md border bg-background px-2 py-1 text-xs text-foreground"
+                      >
+                        {entry}
+                      </code>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      {t('security.runtimePreview.none')}
+                    </span>
+                  )}
+                </div>
               </div>
             </section>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            {applying ? (
-              <>
-                <LoadingIcon className="h-3.5 w-3.5" />
-                <span>{t('security.applying')}</span>
-              </>
-            ) : lastAppliedAt ? (
-              <span>{t('security.lastApplied', { time: lastAppliedAt })}</span>
-            ) : null}
           </div>
         </div>
       </div>

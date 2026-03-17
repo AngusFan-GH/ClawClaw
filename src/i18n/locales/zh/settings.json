@@ -384,6 +384,7 @@
     },
     "apply": "应用",
     "applying": "正在应用...",
+    "pendingNotice": "当前修改尚未生效。请点击“应用”以同步配置并重启 Gateway。",
     "lastApplied": "上次应用时间：{{time}}",
     "summary": {
       "disabled": "安全策略未启用。",
@@ -397,8 +398,11 @@
     },
     "runtimePreview": {
       "title": "实际会拦截的操作",
-      "enabledDesc": "当前已启用。下面这些操作现在会被挡住。",
-      "disabledDesc": "当前还没启用。下面只是预览开启后会挡住什么。",
+      "draftTitle": "待应用的规则",
+      "runtimeTitle": "运行时实际生效",
+      "inSync": "运行时限制已与当前已保存设置同步。",
+      "outOfSync": "运行时限制与安全策略页面保存的设置不一致，可能被外部改动过。",
+      "unsaved": "当前有未应用修改。点击“应用”后会同步配置并重启 Gateway。",
       "none": "当前还没有选中需要拦截的操作。"
     },
     "toasts": {

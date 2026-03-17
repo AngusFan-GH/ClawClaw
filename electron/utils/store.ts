@@ -4,8 +4,11 @@
  */
 
 import { randomBytes } from 'crypto';
-import type { SecurityPolicy } from '../shared/security-policy';
-import { normalizeSecurityRules } from '../shared/security-policy';
+import {
+  type SecurityPolicy,
+  DEFAULT_SECURITY_POLICY,
+  normalizeSecurityPolicy,
+} from '../shared/security-policy';
 import type { ReminderItem } from '../shared/reminders';
 import { normalizeReminders } from '../shared/reminders';
 
@@ -102,35 +105,9 @@ const defaults: AppSettings = {
   disabledSkills: [],
 
   // Security
-  securityPolicy: {
-    prompt: {
-      enabled: false,
-      deniedPaths: [],
-      rules: [],
-    },
-  },
+  securityPolicy: DEFAULT_SECURITY_POLICY,
   reminders: [],
 };
-
-function normalizeSecurityPolicy(raw: unknown): SecurityPolicy {
-  const prompt =
-    raw && typeof raw === 'object' && 'prompt' in raw && raw.prompt && typeof raw.prompt === 'object'
-      ? raw.prompt as Record<string, unknown>
-      : {};
-
-  const deniedPaths = Array.isArray(prompt.deniedPaths)
-    ? prompt.deniedPaths.filter((item): item is string => typeof item === 'string')
-    : [];
-  const rules = normalizeSecurityRules(prompt.rules);
-
-  return {
-    prompt: {
-      enabled: Array.isArray(prompt.deniedPaths) || rules.length > 0 ? Boolean(prompt.enabled) : false,
-      deniedPaths,
-      rules,
-    },
-  };
-}
 
 /**
  * Get the settings store instance (lazy initialization)

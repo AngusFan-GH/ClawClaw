@@ -340,6 +340,7 @@
     },
     "apply": "Apply",
     "applying": "Applying...",
+    "pendingNotice": "These changes are not active yet. Apply them to sync the config and restart the Gateway.",
     "lastApplied": "Last applied: {{time}}",
     "summary": {
       "disabled": "Security policy is disabled.",
@@ -353,8 +354,11 @@
     },
     "runtimePreview": {
       "title": "Actions that will be blocked",
-      "enabledDesc": "The policy is on. The actions below are currently blocked.",
-      "disabledDesc": "The policy is off. This is only a preview of what will be blocked after you turn it on.",
+      "draftTitle": "Pending changes",
+      "runtimeTitle": "Runtime effective state",
+      "inSync": "The runtime restrictions are in sync with the saved settings.",
+      "outOfSync": "The runtime restrictions differ from the settings saved in this page and may have been changed externally.",
+      "unsaved": "There are unapplied changes. Apply them to sync the runtime config and restart the Gateway.",
       "none": "No blocked actions are selected right now."
     },
     "toasts": {

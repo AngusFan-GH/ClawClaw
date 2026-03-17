@@ -10,8 +10,14 @@ import { parseJsonBody, sendJson } from '../route-utils';
 import { emitGatewayLifecycleEvent } from '../gateway-lifecycle';
 import {
   type SecurityPolicy,
+  type SecurityPolicySnapshot,
+  DEFAULT_SECURITY_POLICY,
   SECURITY_RULE_DEFINITIONS,
+  compactSecurityPaths,
+  createSecurityPolicySnapshot,
   getManagedToolDenyForRules,
+  normalizeSecurityPath,
+  normalizeSecurityPolicy,
   normalizeSecurityRules,
 } from '../../shared/security-policy';
 import { normalizeReminders, type ReminderItem } from '../../shared/reminders';
@@ -37,34 +43,12 @@ interface SecuritySyncResult {
   failures: SyncFailure[];
 }
 
-const DEFAULT_POLICY: SecurityPolicy = {
-  prompt: {
-    enabled: false,
-    deniedPaths: [],
-    rules: [],
-  },
-};
-
-function normalizePath(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-
-  if (/^[A-Za-z]:[\\/]+$/.test(trimmed)) {
-    return `${trimmed[0].toUpperCase()}:\\`;
-  }
-  if (trimmed === '/' || trimmed === '\\') {
-    return trimmed;
-  }
-
-  return trimmed.replace(/[\\/]+$/, '');
-}
-
 function expandHomePath(value: string): string {
   return value.startsWith('~') ? value.replace(/^~/, homedir()) : value;
 }
 
 async function canonicalizeOrPreservePath(rawPath: string): Promise<string> {
-  const normalized = normalizePath(expandHomePath(rawPath));
+  const normalized = normalizeSecurityPath(expandHomePath(rawPath));
   if (!normalized) return '';
 
   try {
@@ -74,30 +58,13 @@ async function canonicalizeOrPreservePath(rawPath: string): Promise<string> {
   }
 }
 
-function dedupeAndCompactPaths(paths: string[]): string[] {
-  const normalized = Array.from(new Set(paths.map((item) => normalizePath(item)).filter(Boolean))).sort(
-    (a, b) => a.length - b.length,
-  );
-
-  const compacted: string[] = [];
-  for (const current of normalized) {
-    const lower = current.toLowerCase();
-    const covered = compacted.some((base) => {
-      const baseLower = base.toLowerCase();
-      return lower === baseLower || lower.startsWith(`${baseLower}\\`) || lower.startsWith(`${baseLower}/`);
-    });
-    if (!covered) compacted.push(current);
-  }
-  return compacted;
-}
-
 async function canonicalizeDeniedPaths(paths: string[]): Promise<string[]> {
   const out: string[] = [];
   for (const p of paths) {
     const resolved = await canonicalizeOrPreservePath(p);
     if (resolved) out.push(resolved);
   }
-  return dedupeAndCompactPaths(out);
+  return compactSecurityPaths(out);
 }
 
 function ensureObject(parent: Record<string, unknown>, key: string): Record<string, unknown> {
@@ -108,27 +75,6 @@ function ensureObject(parent: Record<string, unknown>, key: string): Record<stri
   const created: Record<string, unknown> = {};
   parent[key] = created;
   return created;
-}
-
-function normalizeStoredPolicy(raw: unknown): SecurityPolicy {
-  const prompt =
-    raw && typeof raw === 'object' && 'prompt' in raw && raw.prompt && typeof raw.prompt === 'object'
-      ? raw.prompt as Record<string, unknown>
-      : {};
-
-  const hasDeniedPaths = Array.isArray(prompt.deniedPaths);
-  const deniedPaths = hasDeniedPaths
-    ? prompt.deniedPaths.filter((item): item is string => typeof item === 'string')
-    : [];
-  const rules = normalizeSecurityRules(prompt.rules);
-
-  return {
-    prompt: {
-      enabled: hasDeniedPaths || rules.length > 0 ? Boolean(prompt.enabled) : false,
-      deniedPaths: dedupeAndCompactPaths(deniedPaths),
-      rules,
-    },
-  };
 }
 
 async function readOpenclawConfig(): Promise<Record<string, unknown>> {
@@ -267,7 +213,7 @@ async function syncSecurityPolicyArtifacts(
   };
 
   for (const workspace of workspaces) {
-    const targetWorkspace = normalizePath(expandHomePath(workspace));
+    const targetWorkspace = normalizeSecurityPath(expandHomePath(workspace));
     if (!targetWorkspace) {
       result.failures.push({ workspace, file: SECURITY_POLICY_FILE, error: 'Invalid workspace path' });
       continue;
@@ -306,6 +252,18 @@ async function syncSecurityPolicyArtifacts(
   }
 
   return result;
+}
+
+function buildPolicySnapshot(
+  policy: SecurityPolicy,
+  config: Record<string, unknown>,
+): SecurityPolicySnapshot {
+  const tools =
+    config.tools && typeof config.tools === 'object' && !Array.isArray(config.tools)
+      ? config.tools as Record<string, unknown>
+      : {};
+  const toolDeny = normalizeToolEntries(tools.deny);
+  return createSecurityPolicySnapshot(policy, toolDeny);
 }
 
 async function normalizePolicyInput(body: Partial<SecurityPolicy>): Promise<SecurityPolicy> {
@@ -393,8 +351,9 @@ export async function handleSecurityRoutes(
   ctx: HostApiContext,
 ): Promise<boolean> {
   if (url.pathname === '/api/security/policy' && req.method === 'GET') {
-    const current = normalizeStoredPolicy(await getSetting('securityPolicy'));
-    sendJson(res, 200, current);
+    const current = normalizeSecurityPolicy(await getSetting('securityPolicy'));
+    const config = await readOpenclawConfig();
+    sendJson(res, 200, buildPolicySnapshot(current, config));
     return true;
   }
 
@@ -427,7 +386,7 @@ export async function handleSecurityRoutes(
         return true;
       }
 
-      const current = normalizeStoredPolicy(await getSetting('securityPolicy'));
+      const current = normalizeSecurityPolicy(await getSetting('securityPolicy'));
       const config = await readOpenclawConfig();
       const verify = await applyPolicyRuntimeConfig(config, current, policy);
       await setSetting('securityPolicy', policy);
@@ -447,7 +406,7 @@ export async function handleSecurityRoutes(
 
       sendJson(res, 200, {
         success: true,
-        applied: policy,
+        snapshot: buildPolicySnapshot(policy, config),
         verify,
         sync: syncResult,
         gatewayRestarted,
@@ -468,11 +427,11 @@ export async function handleSecurityRoutes(
   if (url.pathname === '/api/security/reset' && req.method === 'POST') {
     try {
       const config = await readOpenclawConfig();
-      const current = normalizeStoredPolicy(await getSetting('securityPolicy'));
-      const verify = await applyPolicyRuntimeConfig(config, current, DEFAULT_POLICY);
-      await setSetting('securityPolicy', DEFAULT_POLICY);
+      const current = normalizeSecurityPolicy(await getSetting('securityPolicy'));
+      const verify = await applyPolicyRuntimeConfig(config, current, DEFAULT_SECURITY_POLICY);
+      await setSetting('securityPolicy', DEFAULT_SECURITY_POLICY);
       const reminders = normalizeReminders(await getSetting('reminders'));
-      const syncResult = await syncSecurityPolicyArtifacts(config, DEFAULT_POLICY, reminders);
+      const syncResult = await syncSecurityPolicyArtifacts(config, DEFAULT_SECURITY_POLICY, reminders);
       let gatewayRestarted = false;
       if (ctx.gatewayManager.getStatus().state === 'running') {
         emitGatewayLifecycleEvent(ctx, {
@@ -485,7 +444,13 @@ export async function handleSecurityRoutes(
         gatewayRestarted = true;
       }
 
-      sendJson(res, 200, { success: true, verify, sync: syncResult, gatewayRestarted });
+      sendJson(res, 200, {
+        success: true,
+        snapshot: buildPolicySnapshot(DEFAULT_SECURITY_POLICY, config),
+        verify,
+        sync: syncResult,
+        gatewayRestarted,
+      });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }
@@ -495,7 +460,7 @@ export async function handleSecurityRoutes(
   if (url.pathname === '/api/security/reminders/sync' && req.method === 'POST') {
     try {
       const config = await readOpenclawConfig();
-      const policy = normalizeStoredPolicy(await getSetting('securityPolicy'));
+      const policy = normalizeSecurityPolicy(await getSetting('securityPolicy'));
       const reminders = normalizeReminders(await getSetting('reminders'));
       const syncResult = await syncSecurityPolicyArtifacts(config, policy, reminders);
       sendJson(res, 200, { success: true, sync: syncResult });
