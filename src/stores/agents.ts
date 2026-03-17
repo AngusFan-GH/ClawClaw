@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import { hostApiFetch } from '@/lib/host-api';
+import type {
+  AgentSummary,
+  AgentsSnapshot,
+  GatewayAgentSummary,
+  LocalAgentExtras,
+  LocalAgentSnapshot,
+} from '@/types/agent';
 import type { ChannelType } from '@/types/channel';
-import type { AgentSummary, AgentsSnapshot } from '@/types/agent';
 import { useGatewayStore } from './gateway';
 
 type GatewayAgentIdentity = {
@@ -52,56 +58,85 @@ function humanizeAgentId(agentId: string): string {
     .join(' ');
 }
 
-function buildDefaultSummary(agentId: string, defaultAgentId: string): AgentSummary {
+function buildDefaultLocalExtras(): LocalAgentExtras {
   return {
-    id: agentId,
-    name: humanizeAgentId(agentId),
-    isDefault: agentId === defaultAgentId,
-    modelDisplay: 'Not configured',
-    inheritedModel: false,
     workspace: '',
     agentDir: '',
-    channelTypes: [],
+    modelDisplay: 'Not configured',
+    inheritedModel: false,
+    boundChannels: [],
   };
+}
+
+function buildGatewaySummary(
+  gatewayAgent: GatewayAgentRow,
+  defaultAgentId: string,
+  fallbackName?: string,
+): GatewayAgentSummary {
+  const identityName = gatewayAgent.identity?.name?.trim();
+  const configuredName = gatewayAgent.name?.trim();
+  return {
+    id: gatewayAgent.id,
+    name: configuredName || identityName || fallbackName || humanizeAgentId(gatewayAgent.id),
+    identity: gatewayAgent.identity,
+    isDefault: gatewayAgent.id === defaultAgentId,
+  };
+}
+
+function buildLocalExtras(localAgent?: LocalAgentSnapshot): LocalAgentExtras {
+  return localAgent
+    ? {
+        workspace: localAgent.workspace,
+        agentDir: localAgent.agentDir,
+        modelDisplay: localAgent.modelDisplay,
+        inheritedModel: localAgent.inheritedModel,
+        boundChannels: localAgent.channelTypes,
+      }
+    : buildDefaultLocalExtras();
 }
 
 function mergeAgentSnapshots(
   gatewaySnapshot: GatewayAgentsListResult | undefined,
   localSnapshot: AgentsSnapshot | undefined,
-): AgentsSnapshot {
-  const gatewayAgents = Array.isArray(gatewaySnapshot?.agents) ? gatewaySnapshot!.agents : [];
-  const hasGatewayAgents = gatewayAgents.length > 0;
+): {
+  agents: AgentSummary[];
+  defaultAgentId: string;
+  mainKey: string;
+  scope: string | null;
+  configuredChannelTypes: string[];
+  channelOwners: Record<string, string>;
+} {
   const defaultAgentId = gatewaySnapshot?.defaultId ?? localSnapshot?.defaultAgentId ?? 'main';
   const localById = new Map((localSnapshot?.agents ?? []).map((agent) => [agent.id, agent]));
+  const mergedAgents: AgentSummary[] = [];
+  const seen = new Set<string>();
 
-  const mergedAgents: AgentSummary[] = gatewayAgents.map((gatewayAgent) => {
-    const local = localById.get(gatewayAgent.id);
-    const identityName = gatewayAgent.identity?.name?.trim();
-    const configuredName = gatewayAgent.name?.trim();
-    return {
-      ...(local ?? buildDefaultSummary(gatewayAgent.id, defaultAgentId)),
-      id: gatewayAgent.id,
-      name: configuredName || identityName || local?.name || humanizeAgentId(gatewayAgent.id),
-      identity: gatewayAgent.identity,
-      isDefault: gatewayAgent.id === defaultAgentId,
-    };
-  });
+  for (const gatewayAgent of gatewaySnapshot?.agents ?? []) {
+    const localAgent = localById.get(gatewayAgent.id);
+    mergedAgents.push({
+      gateway: buildGatewaySummary(gatewayAgent, defaultAgentId, localAgent?.name),
+      local: buildLocalExtras(localAgent),
+    });
+    seen.add(gatewayAgent.id);
+  }
 
-  if (!hasGatewayAgents) {
-    for (const localAgent of localSnapshot?.agents ?? []) {
-      if (mergedAgents.some((agent) => agent.id === localAgent.id)) continue;
-      mergedAgents.push({
-        ...localAgent,
+  for (const localAgent of localSnapshot?.agents ?? []) {
+    if (seen.has(localAgent.id)) continue;
+    mergedAgents.push({
+      gateway: {
+        id: localAgent.id,
+        name: localAgent.name || humanizeAgentId(localAgent.id),
         isDefault: localAgent.id === defaultAgentId,
-      });
-    }
+      },
+      local: buildLocalExtras(localAgent),
+    });
   }
 
   return {
     agents: mergedAgents,
     defaultAgentId,
     mainKey: gatewaySnapshot?.mainKey ?? localSnapshot?.mainKey ?? 'main',
-    scope: gatewaySnapshot?.scope ?? localSnapshot?.scope,
+    scope: gatewaySnapshot?.scope ?? localSnapshot?.scope ?? null,
     configuredChannelTypes: Array.isArray(localSnapshot?.configuredChannelTypes)
       ? localSnapshot!.configuredChannelTypes
       : [],
@@ -110,22 +145,6 @@ function mergeAgentSnapshots(
         ? localSnapshot.channelOwners
         : {},
   };
-}
-
-function applySnapshot(snapshot: AgentsSnapshot | undefined) {
-  return snapshot ? {
-    agents: Array.isArray(snapshot.agents) ? snapshot.agents : [],
-    defaultAgentId: snapshot.defaultAgentId ?? 'main',
-    mainKey: snapshot.mainKey ?? 'main',
-    scope: typeof snapshot.scope === 'string' ? snapshot.scope : null,
-    configuredChannelTypes: Array.isArray(snapshot.configuredChannelTypes)
-      ? snapshot.configuredChannelTypes
-      : [],
-    channelOwners:
-      snapshot.channelOwners && typeof snapshot.channelOwners === 'object'
-        ? snapshot.channelOwners
-        : {},
-  } : {};
 }
 
 export const useAgentsStore = create<AgentsState>((set) => ({
@@ -145,11 +164,12 @@ export const useAgentsStore = create<AgentsState>((set) => ({
         useGatewayStore.getState().rpc<GatewayAgentsListResult>('agents.list', {}),
         hostApiFetch<AgentsSnapshot & { success?: boolean }>('/api/agents'),
       ]);
-      const gatewaySnapshot = gatewayResult.status === 'fulfilled' ? gatewayResult.value : undefined;
-      const localSnapshot = localResult.status === 'fulfilled' ? localResult.value : undefined;
-      const snapshot = mergeAgentSnapshots(gatewaySnapshot, localSnapshot);
+      const merged = mergeAgentSnapshots(
+        gatewayResult.status === 'fulfilled' ? gatewayResult.value : undefined,
+        localResult.status === 'fulfilled' ? localResult.value : undefined,
+      );
       set({
-        ...applySnapshot(snapshot),
+        ...merged,
         loading: false,
       });
     } catch (error) {
@@ -160,7 +180,7 @@ export const useAgentsStore = create<AgentsState>((set) => ({
   createAgent: async (name: string) => {
     set({ error: null });
     try {
-      await hostApiFetch<AgentsSnapshot & { success?: boolean }>('/api/agents', {
+      await hostApiFetch('/api/agents', {
         method: 'POST',
         body: JSON.stringify({ name }),
       });
@@ -174,13 +194,10 @@ export const useAgentsStore = create<AgentsState>((set) => ({
   updateAgent: async (agentId: string, name: string) => {
     set({ error: null });
     try {
-      await hostApiFetch<AgentsSnapshot & { success?: boolean }>(
-        `/api/agents/${encodeURIComponent(agentId)}`,
-        {
-          method: 'PUT',
-          body: JSON.stringify({ name }),
-        }
-      );
+      await hostApiFetch(`/api/agents/${encodeURIComponent(agentId)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name }),
+      });
       await useAgentsStore.getState().fetchAgents();
     } catch (error) {
       set({ error: String(error) });
@@ -191,10 +208,7 @@ export const useAgentsStore = create<AgentsState>((set) => ({
   deleteAgent: async (agentId: string) => {
     set({ error: null });
     try {
-      await hostApiFetch<AgentsSnapshot & { success?: boolean }>(
-        `/api/agents/${encodeURIComponent(agentId)}`,
-        { method: 'DELETE' }
-      );
+      await hostApiFetch(`/api/agents/${encodeURIComponent(agentId)}`, { method: 'DELETE' });
       await useAgentsStore.getState().fetchAgents();
     } catch (error) {
       set({ error: String(error) });
@@ -205,9 +219,9 @@ export const useAgentsStore = create<AgentsState>((set) => ({
   assignChannel: async (agentId: string, channelType: ChannelType) => {
     set({ error: null });
     try {
-      await hostApiFetch<AgentsSnapshot & { success?: boolean }>(
+      await hostApiFetch(
         `/api/agents/${encodeURIComponent(agentId)}/channels/${encodeURIComponent(channelType)}`,
-        { method: 'PUT' }
+        { method: 'PUT' },
       );
       await useAgentsStore.getState().fetchAgents();
     } catch (error) {
@@ -219,9 +233,9 @@ export const useAgentsStore = create<AgentsState>((set) => ({
   removeChannel: async (agentId: string, channelType: ChannelType) => {
     set({ error: null });
     try {
-      await hostApiFetch<AgentsSnapshot & { success?: boolean }>(
+      await hostApiFetch(
         `/api/agents/${encodeURIComponent(agentId)}/channels/${encodeURIComponent(channelType)}`,
-        { method: 'DELETE' }
+        { method: 'DELETE' },
       );
       await useAgentsStore.getState().fetchAgents();
     } catch (error) {

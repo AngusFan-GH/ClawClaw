@@ -4,7 +4,7 @@
  *
  * All file I/O uses async fs/promises to avoid blocking the main thread.
  */
-import { access, mkdir, readFile, writeFile, readdir, rm } from 'fs/promises';
+import { access, mkdir, readFile, writeFile, rm } from 'fs/promises';
 import { constants } from 'fs';
 import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -43,15 +43,6 @@ const PLUGIN_CHANNELS = ['whatsapp'];
 
 async function fileExists(p: string): Promise<boolean> {
     try { await access(p, constants.F_OK); return true; } catch { return false; }
-}
-
-async function hasChildEntries(dir: string): Promise<boolean> {
-    try {
-        const entries = await readdir(dir);
-        return entries.length > 0;
-    } catch {
-        return false;
-    }
 }
 
 function extractTrailingJsonObject(raw: string): Record<string, unknown> | null {
@@ -201,31 +192,6 @@ async function listConfiguredChannelsFromCli(): Promise<string[]> {
             resolve(Array.from(configured));
         });
     });
-}
-
-async function detectLegacyConfiguredChannels(): Promise<string[]> {
-    const detected = new Set<string>();
-    const credentialsDir = join(OPENCLAW_DIR, 'credentials');
-    const agentsDir = join(OPENCLAW_DIR, 'agents');
-    const workspaceAgentsDir = join(OPENCLAW_DIR, 'workspace', 'agents');
-
-    const credentialEntries = await readdir(credentialsDir).catch(() => [] as string[]);
-    const agentEntries = await readdir(agentsDir).catch(() => [] as string[]);
-    const workspaceAgentEntries = await readdir(workspaceAgentsDir).catch(() => [] as string[]);
-
-    for (const channelId of SUPPORTED_CHANNEL_IDS) {
-        const hasNamedDir = await fileExists(join(OPENCLAW_DIR, channelId));
-        const hasCredentialFiles = credentialEntries.some((entry) => entry.startsWith(`${channelId}-`));
-        const hasAgentDir = agentEntries.some((entry) => entry === `${channelId}-agent` || entry.startsWith(`${channelId}-agent-`));
-        const hasWorkspaceAgentDir = workspaceAgentEntries.some((entry) => entry === `${channelId}-agent` || entry.startsWith(`${channelId}-agent-`));
-        const hasSessionDir = await hasChildEntries(join(OPENCLAW_DIR, channelId, 'sessions'));
-
-        if (hasNamedDir || hasCredentialFiles || hasAgentDir || hasWorkspaceAgentDir || hasSessionDir) {
-            detected.add(channelId);
-        }
-    }
-
-    return Array.from(detected);
 }
 
 // ── Types ────────────────────────────────────────────────────────
@@ -778,6 +744,7 @@ export async function deleteChannelConfig(
     preferredAccountId?: string | null
 ): Promise<void> {
     const currentConfig = await readOpenClawConfig();
+    let configChanged = false;
 
     if (currentConfig.channels?.[channelType]) {
         const section = currentConfig.channels[channelType] as AccountScopedChannelSection | undefined;
@@ -814,9 +781,11 @@ export async function deleteChannelConfig(
                 delete currentConfig.channels[channelType];
             }
         }
-        await writeOpenClawConfig(currentConfig);
+        configChanged = true;
         console.log(`Deleted channel config for ${channelType}`);
-    } else if (PLUGIN_CHANNELS.includes(channelType)) {
+    }
+
+    if (PLUGIN_CHANNELS.includes(channelType)) {
         if (currentConfig.plugins?.entries?.[channelType]) {
             delete currentConfig.plugins.entries[channelType];
             if (Object.keys(currentConfig.plugins.entries).length === 0) {
@@ -825,9 +794,22 @@ export async function deleteChannelConfig(
             if (currentConfig.plugins && Object.keys(currentConfig.plugins).length === 0) {
                 delete currentConfig.plugins;
             }
-            await writeOpenClawConfig(currentConfig);
+            configChanged = true;
             console.log(`Deleted plugin channel config for ${channelType}`);
         }
+    } else if (currentConfig.plugins?.entries?.[channelType]) {
+        delete currentConfig.plugins.entries[channelType];
+        if (Object.keys(currentConfig.plugins.entries).length === 0) {
+            delete currentConfig.plugins.entries;
+        }
+        if (currentConfig.plugins && Object.keys(currentConfig.plugins).length === 0) {
+            delete currentConfig.plugins;
+        }
+        configChanged = true;
+    }
+
+    if (configChanged) {
+        await writeOpenClawConfig(currentConfig);
     }
 
     // Special handling for WhatsApp credentials
@@ -855,24 +837,26 @@ export async function listConfiguredChannels(): Promise<string[]> {
     }
 
     if (config.channels) {
-        for (const channelType of Object.keys(config.channels).filter(
-            (item) => config.channels![item]?.enabled !== false
-        )) {
-            channels.add(channelType);
+        for (const [channelType, rawSection] of Object.entries(config.channels)) {
+            const section = rawSection as AccountScopedChannelSection | undefined;
+            if (!section || section.enabled === false) continue;
+            const hasTopLevelConfig = hasMeaningfulSectionConfig(section);
+            const hasConfiguredAccounts = resolveConfiguredAccounts(section).some(
+                ({ config: accountConfig }) => hasMeaningfulSectionConfig(accountConfig)
+            );
+            if (hasTopLevelConfig || hasConfiguredAccounts) {
+                channels.add(channelType);
+            }
         }
     }
 
     if (config.plugins?.entries) {
         for (const [pluginId, pluginConfig] of Object.entries(config.plugins.entries)) {
             if (pluginConfig?.enabled === false) continue;
-            if (pluginId === 'qqbot' || pluginId === 'whatsapp' || pluginId === 'feishu') {
+            if (PLUGIN_CHANNELS.includes(pluginId as typeof PLUGIN_CHANNELS[number])) {
                 channels.add(pluginId);
             }
         }
-    }
-
-    for (const channelType of await detectLegacyConfiguredChannels()) {
-        channels.add(channelType);
     }
 
     return Array.from(channels);
@@ -907,6 +891,78 @@ export async function listConfiguredChannelAccounts(): Promise<Record<string, st
     }
 
     return result;
+}
+
+export interface ConfiguredChannelGroupSnapshot {
+    type: string;
+    defaultAccountId?: string;
+    configured: boolean;
+    accounts: Array<{
+        accountId: string;
+        isDefaultAccount: boolean;
+        configured: boolean;
+    }>;
+}
+
+export async function listConfiguredChannelGroups(): Promise<ConfiguredChannelGroupSnapshot[]> {
+    const config = await readOpenClawConfig();
+    const groups: ConfiguredChannelGroupSnapshot[] = [];
+
+    for (const channelType of await listConfiguredChannels()) {
+        const section = config.channels?.[channelType] as AccountScopedChannelSection | undefined;
+        const accounts = new Map<string, ConfiguredChannelGroupSnapshot['accounts'][number]>();
+        const explicitDefaultAccountId =
+            typeof section?.defaultAccount === 'string' && section.defaultAccount.trim()
+                ? section.defaultAccount.trim()
+                : undefined;
+
+        if (section && section.enabled !== false && getAccountScopedTopLevelKeys(channelType, section).length > 0) {
+            accounts.set('default', {
+                accountId: 'default',
+                isDefaultAccount: explicitDefaultAccountId ? explicitDefaultAccountId === 'default' : true,
+                configured: true,
+            });
+        }
+
+        if (section && section.enabled !== false) {
+            for (const { accountId, config: accountConfig } of resolveConfiguredAccounts(section)) {
+                if (!hasMeaningfulSectionConfig(accountConfig)) continue;
+                accounts.set(accountId, {
+                    accountId,
+                    isDefaultAccount: explicitDefaultAccountId
+                        ? explicitDefaultAccountId === accountId
+                        : accountId === 'default',
+                    configured: true,
+                });
+            }
+        }
+
+        if (PLUGIN_CHANNELS.includes(channelType) && accounts.size === 0) {
+            accounts.set('default', {
+                accountId: 'default',
+                isDefaultAccount: true,
+                configured: true,
+            });
+        }
+
+        const sortedAccounts = Array.from(accounts.values()).sort((left, right) => {
+            if (left.isDefaultAccount !== right.isDefaultAccount) {
+                return left.isDefaultAccount ? -1 : 1;
+            }
+            return left.accountId.localeCompare(right.accountId);
+        });
+
+        groups.push({
+            type: channelType,
+            defaultAccountId:
+                explicitDefaultAccountId ||
+                sortedAccounts.find((account) => account.isDefaultAccount)?.accountId,
+            configured: sortedAccounts.length > 0,
+            accounts: sortedAccounts,
+        });
+    }
+
+    return groups;
 }
 
 export async function setChannelEnabled(

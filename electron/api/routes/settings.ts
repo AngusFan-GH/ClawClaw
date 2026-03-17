@@ -2,12 +2,19 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { applyProxySettings } from '../../main/proxy';
 import { getAllSettings, getSetting, resetSettings, setSetting, type AppSettings } from '../../utils/store';
 import type { HostApiContext } from '../context';
+import { emitGatewayLifecycleEvent } from '../gateway-lifecycle';
 import { parseJsonBody, sendJson } from '../route-utils';
 
 async function handleProxySettingsChange(ctx: HostApiContext): Promise<void> {
   const settings = await getAllSettings();
   await applyProxySettings(settings);
   if (ctx.gatewayManager.getStatus().state === 'running') {
+    emitGatewayLifecycleEvent(ctx, {
+      phase: 'scheduled',
+      action: 'restart',
+      source: 'settings.proxy',
+      reason: 'settings.proxy',
+    });
     await ctx.gatewayManager.restart();
   }
 }
@@ -36,8 +43,9 @@ export async function handleSettingsRoutes(
   }
 
   if (url.pathname === '/api/settings' && req.method === 'PUT') {
+    let patch: Partial<AppSettings> = {};
     try {
-      const patch = await parseJsonBody<Partial<AppSettings>>(req);
+      patch = await parseJsonBody<Partial<AppSettings>>(req);
       const entries = Object.entries(patch) as Array<[keyof AppSettings, AppSettings[keyof AppSettings]]>;
       for (const [key, value] of entries) {
         await setSetting(key, value);
@@ -47,6 +55,15 @@ export async function handleSettingsRoutes(
       }
       sendJson(res, 200, { success: true });
     } catch (error) {
+      if (patchTouchesProxy(patch)) {
+        emitGatewayLifecycleEvent(ctx, {
+          phase: 'failed',
+          action: 'restart',
+          source: 'settings.proxy',
+          reason: 'settings.proxy',
+          error: String(error),
+        });
+      }
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;
@@ -80,6 +97,23 @@ export async function handleSettingsRoutes(
       }
       sendJson(res, 200, { success: true });
     } catch (error) {
+      if (
+        key === 'proxyEnabled' ||
+        key === 'proxyMode' ||
+        key === 'proxyServer' ||
+        key === 'proxyHttpServer' ||
+        key === 'proxyHttpsServer' ||
+        key === 'proxyAllServer' ||
+        key === 'proxyBypassRules'
+      ) {
+        emitGatewayLifecycleEvent(ctx, {
+          phase: 'failed',
+          action: 'restart',
+          source: 'settings.proxy',
+          reason: 'settings.proxy',
+          error: String(error),
+        });
+      }
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;
@@ -91,6 +125,13 @@ export async function handleSettingsRoutes(
       await handleProxySettingsChange(ctx);
       sendJson(res, 200, { success: true, settings: await getAllSettings() });
     } catch (error) {
+      emitGatewayLifecycleEvent(ctx, {
+        phase: 'failed',
+        action: 'restart',
+        source: 'settings.proxy',
+        reason: 'settings.proxy',
+        error: String(error),
+      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;

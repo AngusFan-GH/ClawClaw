@@ -17,6 +17,16 @@ export interface GatewayStatus {
   reconnectAttempts?: number;
 }
 
+export interface GatewayLifecycle {
+  state: 'idle' | 'scheduled' | 'applying' | 'completed' | 'failed';
+  action?: 'restart' | 'reload';
+  source?: string;
+  reason?: string;
+  delayMs?: number;
+  at?: number;
+  error?: string;
+}
+
 /**
  * Gateway RPC response
  */

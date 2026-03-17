@@ -74,6 +74,7 @@ const CHANNEL_BRAND_STYLES: Partial<Record<ChannelType, { shell: string; icon: s
 interface ChannelConfigModalProps {
   initialSelectedType?: ChannelType | null;
   initialAccountId?: string | null;
+  initialCreateNewAccount?: boolean;
   configuredTypes?: string[];
   showChannelName?: boolean;
   allowExistingConfig?: boolean;
@@ -89,6 +90,7 @@ const primaryButtonClasses = 'h-9 text-[13px] font-medium rounded-xl px-4 shadow
 export function ChannelConfigModal({
   initialSelectedType = null,
   initialAccountId = null,
+  initialCreateNewAccount = false,
   configuredTypes = [],
   showChannelName = true,
   allowExistingConfig = true,
@@ -99,6 +101,10 @@ export function ChannelConfigModal({
   const { channels, addChannel, fetchChannels } = useChannelsStore();
   const [selectedType, setSelectedType] = useState<ChannelType | null>(initialSelectedType);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(initialAccountId);
+  const [createNewAccount, setCreateNewAccount] = useState(initialCreateNewAccount);
+  const [accountIdInput, setAccountIdInput] = useState(
+    initialCreateNewAccount ? '' : (initialAccountId && initialAccountId !== 'default' ? initialAccountId : 'default'),
+  );
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
   const [channelName, setChannelName] = useState('');
   const [connecting, setConnecting] = useState(false);
@@ -115,11 +121,21 @@ export function ChannelConfigModal({
   } | null>(null);
 
   const meta: ChannelMeta | null = selectedType ? CHANNEL_META[selectedType] : null;
+  const supportsMultipleAccounts = !!selectedType && selectedType !== 'whatsapp';
+  const normalizedAccountIdInput = accountIdInput.trim();
+  const isEditingDefaultAccount = !createNewAccount && (!selectedAccountId || selectedAccountId === 'default');
+  const requiresNamedAccountId = !!selectedType && supportsMultipleAccounts && createNewAccount;
 
   useEffect(() => {
     setSelectedType(initialSelectedType);
     setSelectedAccountId(initialAccountId);
-  }, [initialAccountId, initialSelectedType]);
+    setCreateNewAccount(initialCreateNewAccount);
+    setAccountIdInput(
+      initialCreateNewAccount
+        ? ''
+        : (initialAccountId && initialAccountId !== 'default' ? initialAccountId : 'default'),
+    );
+  }, [initialAccountId, initialCreateNewAccount, initialSelectedType]);
 
   useEffect(() => {
     if (!selectedType) {
@@ -133,9 +149,12 @@ export function ChannelConfigModal({
       return;
     }
 
-    const shouldLoadExistingConfig = allowExistingConfig && configuredTypes.includes(selectedType);
+    const shouldLoadExistingConfig =
+      allowExistingConfig && configuredTypes.includes(selectedType) && !createNewAccount;
     if (!shouldLoadExistingConfig) {
-      setConfigValues(selectedAccountId ? { __accountId: selectedAccountId } : {});
+      setConfigValues(
+        selectedAccountId && selectedAccountId !== 'default' ? { __accountId: selectedAccountId } : {},
+      );
       setIsExistingConfig(false);
       setLoadingConfig(false);
       setChannelName(showChannelName ? CHANNEL_NAMES[selectedType] : '');
@@ -156,14 +175,19 @@ export function ChannelConfigModal({
         if (result.success && result.values && Object.keys(result.values).length > 0) {
           setConfigValues(result.values);
           setSelectedAccountId(result.values.__accountId || selectedAccountId);
+          setAccountIdInput(result.values.__accountId || selectedAccountId || 'default');
           setIsExistingConfig(true);
         } else {
-          setConfigValues(selectedAccountId ? { __accountId: selectedAccountId } : {});
+          setConfigValues(
+            selectedAccountId && selectedAccountId !== 'default' ? { __accountId: selectedAccountId } : {},
+          );
           setIsExistingConfig(false);
         }
       } catch {
         if (!cancelled) {
-          setConfigValues(selectedAccountId ? { __accountId: selectedAccountId } : {});
+          setConfigValues(
+            selectedAccountId && selectedAccountId !== 'default' ? { __accountId: selectedAccountId } : {},
+          );
           setIsExistingConfig(false);
         }
       } finally {
@@ -174,7 +198,7 @@ export function ChannelConfigModal({
     return () => {
       cancelled = true;
     };
-  }, [allowExistingConfig, configuredTypes, selectedAccountId, selectedType, showChannelName]);
+  }, [allowExistingConfig, configuredTypes, createNewAccount, selectedAccountId, selectedType, showChannelName]);
 
   useEffect(() => {
     if (selectedType && !loadingConfig && showChannelName && firstInputRef.current) {
@@ -295,6 +319,14 @@ export function ChannelConfigModal({
 
   const handleConnect = async () => {
     if (!selectedType || !meta) return;
+    if (requiresNamedAccountId && !normalizedAccountIdInput) {
+      toast.error(t('dialog.accountIdRequired', '请先填写账户 ID'));
+      return;
+    }
+    if (requiresNamedAccountId && normalizedAccountIdInput === 'default') {
+      toast.error(t('dialog.accountIdReserved', 'default 已保留给默认账户，请使用其他账户 ID'));
+      return;
+    }
 
     setConnecting(true);
     setValidationResult(null);
@@ -346,6 +378,11 @@ export function ChannelConfigModal({
       }
 
       const config: Record<string, unknown> = { ...configValues };
+      if (supportsMultipleAccounts && normalizedAccountIdInput && normalizedAccountIdInput !== 'default') {
+        config.__accountId = normalizedAccountIdInput;
+      } else {
+        delete config.__accountId;
+      }
       const saveResult = await hostApiFetch<{
         success?: boolean;
         error?: string;
@@ -375,9 +412,14 @@ export function ChannelConfigModal({
 
   const isFormValid = () => {
     if (!meta) return false;
-    return meta.configFields
+    const fieldsValid = meta.configFields
       .filter((field) => field.required)
       .every((field) => configValues[field.key]?.trim());
+    if (!fieldsValid) return false;
+    if (requiresNamedAccountId) {
+      return normalizedAccountIdInput.length > 0 && normalizedAccountIdInput !== 'default';
+    }
+    return true;
   };
 
   const updateConfigValue = (key: string, value: string) => {
@@ -508,10 +550,49 @@ export function ChannelConfigModal({
                 </div>
               )}
 
-              {selectedAccountId && (
+              {(selectedAccountId || createNewAccount) && (
                 <div className="bg-muted/70 text-foreground/75 p-4 rounded-2xl text-[13.5px] flex items-center gap-2 border border-border/70">
                   <ShieldCheck className="h-4 w-4 shrink-0" />
-                  <span>{t('dialog.accountHint', { accountId: selectedAccountId, defaultValue: `当前编辑账户：${selectedAccountId}` })}</span>
+                  <span>
+                    {createNewAccount
+                      ? t('dialog.newAccountHint', '正在创建一个新的命名账户')
+                      : t('dialog.accountHint', {
+                          accountId: selectedAccountId,
+                          defaultValue: `当前编辑账户：${selectedAccountId}`,
+                        })}
+                  </span>
+                </div>
+              )}
+
+              {supportsMultipleAccounts && (
+                <div className="space-y-2.5">
+                  <Label htmlFor="accountId" className={labelClasses}>
+                    {t('dialog.accountIdLabel', '账户 ID')}
+                  </Label>
+                  <Input
+                    id="accountId"
+                    placeholder={t('dialog.accountIdPlaceholder', '例如 default、work、bot2')}
+                    value={accountIdInput}
+                    readOnly={!createNewAccount}
+                    onChange={(event) => setAccountIdInput(event.target.value)}
+                    className={inputClasses}
+                  />
+                  <p className="text-[12px] leading-[1.5] text-muted-foreground">
+                    {createNewAccount
+                      ? t(
+                          'dialog.accountIdDescriptionCreate',
+                          'OpenClaw 会把该账户保存到此连接类型的 accounts.<id> 下。default 保留给默认账户。',
+                        )
+                      : isEditingDefaultAccount
+                        ? t(
+                            'dialog.accountIdDescriptionDefault',
+                            '默认账户使用顶层配置，账户 ID 固定为 default。',
+                          )
+                        : t(
+                            'dialog.accountIdDescriptionEdit',
+                            '已存在账户的账户 ID 不能直接修改；如需更换，请新建账户后删除旧账户。',
+                          )}
+                  </p>
                 </div>
               )}
 

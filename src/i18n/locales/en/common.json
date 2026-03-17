@@ -56,6 +56,28 @@
     "gateway": {
         "notRunning": "Gateway Not Running",
         "notRunningDesc": "The OpenClaw Gateway needs to be running to use this feature. It will start automatically, or you can start it from Settings.",
-        "warning": "Gateway is not running."
+        "warning": "Gateway is not running.",
+        "lifecycle": {
+            "scheduledRestartTitle": "Changes saved. Gateway will restart shortly",
+            "scheduledReloadTitle": "Changes saved. Gateway will reload shortly",
+            "applyingRestartTitle": "Restarting Gateway",
+            "applyingReloadTitle": "Applying Gateway configuration",
+            "completedRestartTitle": "Changes applied",
+            "completedReloadTitle": "Changes synchronized",
+            "scheduledDescription": "{{source}} has been saved and will be applied shortly.",
+            "applyingDescription": "Applying changes from {{source}}. Some features may pause briefly.",
+            "completedDescription": "Changes from {{source}} have been applied.",
+            "failedTitle": "Failed to apply Gateway changes",
+            "failedDescription": "Try again later or inspect the Gateway logs.",
+            "overlayBlockedHint": "Applying configuration now. UI actions are temporarily blocked to avoid inconsistent state.",
+            "sources": {
+                "channels": "channel settings",
+                "agents": "agent settings",
+                "proxy": "proxy settings",
+                "security": "security settings",
+                "manual": "manual restart",
+                "config": "configuration"
+            }
+        }
     }
 }

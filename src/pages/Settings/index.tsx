@@ -45,6 +45,7 @@ import {
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
+import { GatewayLifecycleBanner } from '@/components/common/GatewayLifecycleBanner';
 import type { ReminderItem } from '@/shared/reminders';
 
 type ControlUiInfo = {
@@ -159,7 +160,12 @@ export function Settings() {
     initialized,
   } = useSettingsStore();
 
-  const { status: gatewayStatus, restart: restartGateway, init: initGateway } = useGatewayStore();
+  const {
+    status: gatewayStatus,
+    lifecycle: gatewayLifecycle,
+    restart: restartGateway,
+    init: initGateway,
+  } = useGatewayStore();
 
   const [showLogs, setShowLogs] = useState(false);
   const [logContent, setLogContent] = useState('');
@@ -694,6 +700,8 @@ export function Settings() {
         />
 
         <div className="-mr-2 min-h-0 flex-1 space-y-6 overflow-y-auto pr-2 pb-8">
+          <GatewayLifecycleBanner lifecycle={gatewayLifecycle} />
+
           <SectionCard title={t('appearance.title')} description={t('appearance.description')}>
             <div className="grid gap-4 lg:grid-cols-2">
               <SubCard title={t('appearance.theme')}>

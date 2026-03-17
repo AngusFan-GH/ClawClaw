@@ -7,6 +7,7 @@ import { getSetting, setSetting } from '../../utils/store';
 import { logger } from '../../utils/logger';
 import { getOpenClawConfigDir } from '../../utils/paths';
 import { parseJsonBody, sendJson } from '../route-utils';
+import { emitGatewayLifecycleEvent } from '../gateway-lifecycle';
 import {
   type SecurityPolicy,
   SECURITY_RULE_DEFINITIONS,
@@ -404,6 +405,13 @@ export async function handleSecurityRoutes(
       await setSetting('securityPolicy', policy);
       sendJson(res, 200, { success: true, policy });
     } catch (error) {
+      emitGatewayLifecycleEvent(ctx, {
+        phase: 'failed',
+        action: 'restart',
+        source: 'security.apply',
+        reason: 'security.apply',
+        error: String(error),
+      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;
@@ -427,6 +435,12 @@ export async function handleSecurityRoutes(
       const syncResult = await syncSecurityPolicyArtifacts(config, policy, reminders);
       let gatewayRestarted = false;
       if (ctx.gatewayManager.getStatus().state === 'running') {
+        emitGatewayLifecycleEvent(ctx, {
+          phase: 'scheduled',
+          action: 'restart',
+          source: 'security.apply',
+          reason: 'security.apply',
+        });
         await ctx.gatewayManager.restart();
         gatewayRestarted = true;
       }
@@ -439,6 +453,13 @@ export async function handleSecurityRoutes(
         gatewayRestarted,
       });
     } catch (error) {
+      emitGatewayLifecycleEvent(ctx, {
+        phase: 'failed',
+        action: 'restart',
+        source: 'security.reset',
+        reason: 'security.reset',
+        error: String(error),
+      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;
@@ -454,6 +475,12 @@ export async function handleSecurityRoutes(
       const syncResult = await syncSecurityPolicyArtifacts(config, DEFAULT_POLICY, reminders);
       let gatewayRestarted = false;
       if (ctx.gatewayManager.getStatus().state === 'running') {
+        emitGatewayLifecycleEvent(ctx, {
+          phase: 'scheduled',
+          action: 'restart',
+          source: 'security.reset',
+          reason: 'security.reset',
+        });
         await ctx.gatewayManager.restart();
         gatewayRestarted = true;
       }

@@ -8,14 +8,21 @@ import {
   updateAgentName,
 } from '../../utils/agent-config';
 import type { HostApiContext } from '../context';
+import { emitGatewayLifecycleEvent } from '../gateway-lifecycle';
 import { parseJsonBody, sendJson } from '../route-utils';
 
 function scheduleGatewayReload(ctx: HostApiContext, reason: string): void {
   if (ctx.gatewayManager.getStatus().state !== 'stopped') {
+    emitGatewayLifecycleEvent(ctx, {
+      phase: 'scheduled',
+      action: 'reload',
+      source: reason,
+      reason,
+      delayMs: 1200,
+    });
     ctx.gatewayManager.debouncedReload();
     return;
   }
-  void reason;
 }
 
 export async function handleAgentRoutes(
@@ -36,6 +43,13 @@ export async function handleAgentRoutes(
       scheduleGatewayReload(ctx, 'create-agent');
       sendJson(res, 200, { success: true, ...snapshot });
     } catch (error) {
+      emitGatewayLifecycleEvent(ctx, {
+        phase: 'failed',
+        action: 'reload',
+        source: 'create-agent',
+        reason: 'create-agent',
+        error: String(error),
+      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;
@@ -53,6 +67,13 @@ export async function handleAgentRoutes(
         scheduleGatewayReload(ctx, 'update-agent');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {
+        emitGatewayLifecycleEvent(ctx, {
+          phase: 'failed',
+          action: 'reload',
+          source: 'update-agent',
+          reason: 'update-agent',
+          error: String(error),
+        });
         sendJson(res, 500, { success: false, error: String(error) });
       }
       return true;
@@ -66,6 +87,13 @@ export async function handleAgentRoutes(
         scheduleGatewayReload(ctx, 'assign-channel');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {
+        emitGatewayLifecycleEvent(ctx, {
+          phase: 'failed',
+          action: 'reload',
+          source: 'assign-channel',
+          reason: 'assign-channel',
+          error: String(error),
+        });
         sendJson(res, 500, { success: false, error: String(error) });
       }
       return true;
@@ -83,6 +111,13 @@ export async function handleAgentRoutes(
         scheduleGatewayReload(ctx, 'delete-agent');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {
+        emitGatewayLifecycleEvent(ctx, {
+          phase: 'failed',
+          action: 'reload',
+          source: 'delete-agent',
+          reason: 'delete-agent',
+          error: String(error),
+        });
         sendJson(res, 500, { success: false, error: String(error) });
       }
       return true;
@@ -96,6 +131,13 @@ export async function handleAgentRoutes(
         scheduleGatewayReload(ctx, 'remove-agent-channel');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {
+        emitGatewayLifecycleEvent(ctx, {
+          phase: 'failed',
+          action: 'reload',
+          source: 'remove-agent-channel',
+          reason: 'remove-agent-channel',
+          error: String(error),
+        });
         sendJson(res, 500, { success: false, error: String(error) });
       }
       return true;

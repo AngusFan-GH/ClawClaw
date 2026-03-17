@@ -56,6 +56,28 @@
     "gateway": {
         "notRunning": "ゲートウェイが停止中",
         "notRunningDesc": "この機能を使用するには OpenClaw ゲートウェイが実行されている必要があります。自動的に起動するか、設定から起動できます。",
-        "warning": "ゲートウェイが停止中です。"
+        "warning": "ゲートウェイが停止中です。",
+        "lifecycle": {
+            "scheduledRestartTitle": "変更を保存しました。まもなくゲートウェイを再起動します",
+            "scheduledReloadTitle": "変更を保存しました。まもなくゲートウェイ設定を再読み込みします",
+            "applyingRestartTitle": "ゲートウェイを再起動しています",
+            "applyingReloadTitle": "ゲートウェイ設定を適用しています",
+            "completedRestartTitle": "変更が適用されました",
+            "completedReloadTitle": "変更が同期されました",
+            "scheduledDescription": "{{source}} の変更を保存しました。まもなく適用します。",
+            "applyingDescription": "{{source}} の変更を適用中です。一時的に機能が中断する場合があります。",
+            "completedDescription": "{{source}} の変更が適用されました。",
+            "failedTitle": "ゲートウェイ変更の適用に失敗しました",
+            "failedDescription": "後でもう一度試すか、ゲートウェイログを確認してください。",
+            "overlayBlockedHint": "設定を適用中です。状態不整合を避けるため、一時的に UI 操作を無効化しています。",
+            "sources": {
+                "channels": "チャンネル設定",
+                "agents": "Agents 設定",
+                "proxy": "プロキシ設定",
+                "security": "セキュリティ設定",
+                "manual": "手動再起動",
+                "config": "設定"
+            }
+        }
     }
 }

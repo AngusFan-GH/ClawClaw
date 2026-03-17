@@ -6,10 +6,29 @@ export interface AgentIdentitySummary {
   avatarUrl?: string;
 }
 
-export interface AgentSummary {
+export interface GatewayAgentSummary {
   id: string;
   name: string;
   identity?: AgentIdentitySummary;
+  isDefault: boolean;
+}
+
+export interface LocalAgentExtras {
+  workspace: string;
+  agentDir: string;
+  modelDisplay: string;
+  inheritedModel: boolean;
+  boundChannels: string[];
+}
+
+export interface AgentSummary {
+  gateway: GatewayAgentSummary;
+  local: LocalAgentExtras;
+}
+
+export interface LocalAgentSnapshot {
+  id: string;
+  name: string;
   isDefault: boolean;
   modelDisplay: string;
   inheritedModel: boolean;
@@ -19,7 +38,7 @@ export interface AgentSummary {
 }
 
 export interface AgentsSnapshot {
-  agents: AgentSummary[];
+  agents: LocalAgentSnapshot[];
   defaultAgentId: string;
   mainKey?: string;
   scope?: string;

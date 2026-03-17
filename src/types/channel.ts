@@ -25,7 +25,7 @@ export type ChannelType =
 /**
  * Channel connection status
  */
-export type ChannelStatus = 'connected' | 'disconnected' | 'connecting' | 'error';
+export type ChannelStatus = 'connected' | 'disconnected' | 'connecting' | 'error' | 'configured';
 
 /**
  * Channel connection type
@@ -48,6 +48,35 @@ export interface Channel {
   error?: string;
   avatar?: string;
   metadata?: Record<string, unknown>;
+}
+
+export interface ChannelAccount {
+  id: string;
+  type: ChannelType;
+  name: string;
+  status: ChannelStatus;
+  configured: boolean;
+  runtimeLoaded: boolean;
+  runtimeStatus: ChannelStatus | 'unknown';
+  accountId: string;
+  isDefaultAccount: boolean;
+  error?: string;
+  lastActivity?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ChannelGroup {
+  type: ChannelType;
+  name: string;
+  status: ChannelStatus | 'unknown';
+  configured: boolean;
+  runtimeLoaded: boolean;
+  runtimeStatus: ChannelStatus | 'unknown';
+  pluginLoaded: boolean;
+  defaultAccountId?: string;
+  configuredAccounts: string[];
+  accounts: ChannelAccount[];
+  error?: string;
 }
 
 /**

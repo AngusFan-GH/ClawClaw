@@ -111,8 +111,8 @@ function isMainSessionKey(key: string): boolean {
   return key.endsWith(':main');
 }
 
-function resolveAgentDisplayName(agent: { id: string; name?: string; identity?: { name?: string } }): string {
-  return agent.name?.trim() || agent.identity?.name?.trim() || agent.id;
+function resolveAgentDisplayName(agent: { gateway: { id: string; name?: string; identity?: { name?: string } } }): string {
+  return agent.gateway.name?.trim() || agent.gateway.identity?.name?.trim() || agent.gateway.id;
 }
 
 export function Sidebar() {
@@ -120,6 +120,8 @@ export function Sidebar() {
   const setSidebarCollapsed = useSettingsStore((state) => state.setSidebarCollapsed);
 
   const sessions = useChatStore((s) => s.sessions);
+  const sessionsLoading = useChatStore((s) => s.sessionsLoading);
+  const sessionsHydrated = useChatStore((s) => s.sessionsHydrated);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const messages = useChatStore((s) => s.messages);
   const sessionLabels = useChatStore((s) => s.sessionLabels);
@@ -156,7 +158,7 @@ export function Sidebar() {
   }, [fetchAgents]);
 
   const agentNameMap = useMemo(
-    () => new Map((agents ?? []).map((agent) => [agent.id, resolveAgentDisplayName(agent)])),
+    () => new Map((agents ?? []).map((agent) => [agent.gateway.id, resolveAgentDisplayName(agent)])),
     [agents]
   );
 
@@ -185,6 +187,19 @@ export function Sidebar() {
     }, 60 * 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  const visibleSessions = useMemo(() => {
+    return sessions.filter((session) => {
+      const isDefaultPlaceholder =
+        session.key === DEFAULT_SESSION_KEY
+        && !sessionLabels[session.key]
+        && (!session.displayName || session.displayName === DEFAULT_SESSION_KEY)
+        && !pendingLocalSessionKeys[session.key];
+
+      return !isDefaultPlaceholder;
+    });
+  }, [pendingLocalSessionKeys, sessionLabels, sessions]);
+
   const sessionBuckets: Array<{ key: SessionBucketKey; label: string; sessions: typeof sessions }> =
     [
       { key: 'today', label: t('chat:historyBuckets.today'), sessions: [] },
@@ -198,7 +213,7 @@ export function Sidebar() {
     sessionBuckets.map((bucket) => [bucket.key, bucket])
   ) as Record<SessionBucketKey, (typeof sessionBuckets)[number]>;
 
-  for (const session of [...sessions].sort(
+  for (const session of [...visibleSessions].sort(
     (a, b) => (sessionLastActivity[b.key] ?? 0) - (sessionLastActivity[a.key] ?? 0)
   )) {
     const bucketKey = getSessionBucket(sessionLastActivity[session.key] ?? 0, nowMs);
@@ -306,80 +321,88 @@ export function Sidebar() {
       </nav>
 
       {/* Session list 鈥?below Settings, only when expanded */}
-      {!sidebarCollapsed && sessions.length > 0 && (
+      {!sidebarCollapsed && (sessionsLoading || !sessionsHydrated || visibleSessions.length > 0) && (
         <div className="mt-5 mb-20 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-3 pr-1">
           <div className="px-2.5 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/55">
             {t('chat:history.title')}
           </div>
-          {sessionBuckets.map((bucket) =>
-            bucket.sessions.length > 0 ? (
-              <div key={bucket.key} className="pt-3 first:pt-1">
-                <div className="flex items-center gap-2 px-2.5 pb-2">
-                  <span className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground/70">
-                    {bucket.label}
-                  </span>
-                  <div className="h-px flex-1 bg-black/6 dark:bg-white/10" />
-                </div>
-                <div className="space-y-1">
-                  {bucket.sessions.map((s) => {
-                    const canDeleteSession = !isMainSessionKey(s.key);
-                    return (
-                      <div key={s.key} className="group relative flex items-center">
-                        <button
-                          onClick={() => {
-                            switchSession(s.key);
-                            navigate('/');
-                          }}
-                          className={cn(
-                            'w-full text-left rounded-[14px] border px-3 py-2.5 pr-8 transition-all',
-                            'hover:border-black/6 hover:bg-white/55 dark:hover:border-white/10 dark:hover:bg-white/[0.06]',
-                            isOnChat && currentSessionKey === s.key
-                              ? 'border-black/8 bg-white/90 text-foreground font-semibold shadow-[0_8px_18px_rgba(15,23,42,0.06)] dark:border-white/12 dark:bg-white/[0.08]'
-                              : 'border-transparent bg-black/[0.025] text-foreground/78 dark:bg-white/[0.02]'
-                          )}
-                        >
-                          <div className="flex min-w-0 items-center gap-2.5">
-                            <span className="min-w-0 flex-1 truncate text-[13px] leading-5">
-                              {getSessionLabel(s.key, s.displayName, s.label)}
-                            </span>
-                            <span
-                              title={getSessionAgentLabel(s.key)}
-                              className={cn(
-                                'ml-auto max-w-[104px] shrink-0 truncate rounded-[10px] px-2 py-0.5 text-[10px] font-medium',
-                                isOnChat && currentSessionKey === s.key
-                                  ? 'bg-slate-100 text-foreground/72 dark:bg-white/10 dark:text-foreground/80'
-                                  : 'bg-black/[0.035] text-muted-foreground dark:bg-white/8'
-                              )}
-                            >
-                              {getSessionAgentLabel(s.key)}
-                            </span>
-                          </div>
-                        </button>
-                        {canDeleteSession && (
+          {sessionsLoading || !sessionsHydrated ? (
+            <div className="px-2.5 pt-2">
+              <div className="rounded-[14px] border border-black/6 bg-white/55 px-3 py-3 text-[13px] text-muted-foreground shadow-[0_6px_16px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
+                {t('chat:history.loading', '正在恢复最近对话…')}
+              </div>
+            </div>
+          ) : (
+            sessionBuckets.map((bucket) =>
+              bucket.sessions.length > 0 ? (
+                <div key={bucket.key} className="pt-3 first:pt-1">
+                  <div className="flex items-center gap-2 px-2.5 pb-2">
+                    <span className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground/70">
+                      {bucket.label}
+                    </span>
+                    <div className="h-px flex-1 bg-black/6 dark:bg-white/10" />
+                  </div>
+                  <div className="space-y-1">
+                    {bucket.sessions.map((s) => {
+                      const canDeleteSession = !isMainSessionKey(s.key);
+                      return (
+                        <div key={s.key} className="group relative flex items-center">
                           <button
-                            aria-label={t('common:actions.delete')}
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              await handleDeleteSessionClick(
-                                s.key,
-                                getSessionLabel(s.key, s.displayName, s.label)
-                              );
+                            onClick={() => {
+                              switchSession(s.key);
+                              navigate('/');
                             }}
                             className={cn(
-                              'absolute right-1.5 flex h-7 w-7 items-center justify-center rounded-[10px] border border-transparent transition-opacity',
-                              'opacity-0 group-hover:opacity-100',
-                              'text-muted-foreground hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive'
+                              'w-full text-left rounded-[14px] border px-3 py-2.5 pr-8 transition-all',
+                              'hover:border-black/6 hover:bg-white/55 dark:hover:border-white/10 dark:hover:bg-white/[0.06]',
+                              isOnChat && currentSessionKey === s.key
+                                ? 'border-black/8 bg-white/90 text-foreground font-semibold shadow-[0_8px_18px_rgba(15,23,42,0.06)] dark:border-white/12 dark:bg-white/[0.08]'
+                                : 'border-transparent bg-black/[0.025] text-foreground/78 dark:bg-white/[0.02]'
                             )}
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              <span className="min-w-0 flex-1 truncate text-[13px] leading-5">
+                                {getSessionLabel(s.key, s.displayName, s.label)}
+                              </span>
+                              <span
+                                title={getSessionAgentLabel(s.key)}
+                                className={cn(
+                                  'ml-auto max-w-[104px] shrink-0 truncate rounded-[10px] px-2 py-0.5 text-[10px] font-medium',
+                                  isOnChat && currentSessionKey === s.key
+                                    ? 'bg-slate-100 text-foreground/72 dark:bg-white/10 dark:text-foreground/80'
+                                    : 'bg-black/[0.035] text-muted-foreground dark:bg-white/8'
+                                )}
+                              >
+                                {getSessionAgentLabel(s.key)}
+                              </span>
+                            </div>
                           </button>
-                        )}
-                      </div>
-                    );
-                  })}
+                          {canDeleteSession && (
+                            <button
+                              aria-label={t('common:actions.delete')}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                await handleDeleteSessionClick(
+                                  s.key,
+                                  getSessionLabel(s.key, s.displayName, s.label)
+                                );
+                              }}
+                              className={cn(
+                                'absolute right-1.5 flex h-7 w-7 items-center justify-center rounded-[10px] border border-transparent transition-opacity',
+                                'opacity-0 group-hover:opacity-100',
+                                'text-muted-foreground hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive'
+                              )}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ) : null
+              ) : null
+            )
           )}
         </div>
       )}

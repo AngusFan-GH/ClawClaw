@@ -4,11 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { LoadingIcon, PageLoader } from '@/components/common/LoadingSpinner';
+import { GatewayLifecycleBanner } from '@/components/common/GatewayLifecycleBanner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
+import { useGatewayStore } from '@/stores/gateway';
 import {
   type SecurityPolicy,
   type SecurityRuleKey,
@@ -68,6 +70,7 @@ function getManagedToolDenyForRules(rules: SecurityRuleKey[]): string[] {
 
 export function Security() {
   const { t } = useTranslation('settings');
+  const gatewayLifecycle = useGatewayStore((state) => state.lifecycle);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [policy, setPolicy] = useState<SecurityPolicy>(defaultPolicy);
@@ -246,6 +249,8 @@ export function Security() {
         />
 
         <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2 pb-6">
+          <GatewayLifecycleBanner lifecycle={gatewayLifecycle} />
+
           <div className="space-y-4">
             <section className="rounded-xl border bg-card px-4 py-4 md:px-5">
               <div className="flex items-start justify-between gap-4">

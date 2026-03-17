@@ -105,6 +105,7 @@ Communicate with AI agents through a modern chat experience. Support for multipl
 ### 📡 Multi-Channel Management
 
 Configure and monitor multiple AI channels simultaneously. Each channel operates independently, allowing you to run specialized agents for different tasks.
+Channels now follow OpenClaw's type-first model: each channel type is shown as a single card with nested accounts, while account-level configuration, deletion, and status inspection stay aligned with the upstream runtime snapshot.
 
 ### ⏰ Cron-Based Automation
 

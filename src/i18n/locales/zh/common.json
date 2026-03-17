@@ -56,6 +56,28 @@
   "gateway": {
     "notRunning": "网关未运行",
     "notRunningDesc": "OpenClaw 网关需要运行才能使用此功能。它将自动启动，或者您可以从设置中启动。",
-    "warning": "网关未运行。"
+    "warning": "网关未运行。",
+    "lifecycle": {
+      "scheduledRestartTitle": "已保存更改，网关即将重启",
+      "scheduledReloadTitle": "已保存更改，网关即将重新加载",
+      "applyingRestartTitle": "正在重启网关",
+      "applyingReloadTitle": "正在应用网关配置",
+      "completedRestartTitle": "更改已应用",
+      "completedReloadTitle": "更改已同步",
+      "scheduledDescription": "{{source}}已保存，正在准备应用，请稍候。",
+      "applyingDescription": "正在应用{{source}}的更改，功能可能会短暂中断。",
+      "completedDescription": "{{source}}的更改已经完成应用。",
+      "failedTitle": "网关应用更改失败",
+      "failedDescription": "请稍后重试，或手动检查网关日志。",
+      "overlayBlockedHint": "正在应用配置，期间会暂时禁用界面操作以避免状态冲突。",
+      "sources": {
+        "channels": "连接配置",
+        "agents": "分身配置",
+        "proxy": "代理设置",
+        "security": "安全策略",
+        "manual": "手动重启",
+        "config": "配置"
+      }
+    }
   }
 }

@@ -72,7 +72,8 @@
     "exec": "Exec"
   },
   "history": {
-    "title": "Recent chats"
+    "title": "Recent chats",
+    "loading": "Restoring recent chats..."
   },
   "historyBuckets": {
     "today": "Today",

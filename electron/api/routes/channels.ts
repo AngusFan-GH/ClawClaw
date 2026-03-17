@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import {
   deleteChannelConfig,
   getChannelFormValues,
+  listConfiguredChannelGroups,
   listConfiguredChannelAccounts,
   listConfiguredChannels,
   saveChannelConfig,
@@ -15,14 +16,21 @@ import {
 } from '../../utils/channel-config';
 import { whatsAppLoginManager } from '../../utils/whatsapp-login';
 import type { HostApiContext } from '../context';
+import { emitGatewayLifecycleEvent } from '../gateway-lifecycle';
 import { parseJsonBody, sendJson } from '../route-utils';
 
 function scheduleGatewayChannelRestart(ctx: HostApiContext, reason: string): void {
   if (ctx.gatewayManager.getStatus().state === 'stopped') {
     return;
   }
+  emitGatewayLifecycleEvent(ctx, {
+    phase: 'scheduled',
+    action: 'restart',
+    source: reason,
+    reason,
+    delayMs: 2000,
+  });
   ctx.gatewayManager.debouncedRestart();
-  void reason;
 }
 
 async function ensureDingTalkPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
@@ -159,6 +167,7 @@ export async function handleChannelRoutes(
       success: true,
       channels: await listConfiguredChannels(),
       accountsByType: await listConfiguredChannelAccounts(),
+      groups: await listConfiguredChannelGroups(),
     });
     return true;
   }
@@ -189,6 +198,13 @@ export async function handleChannelRoutes(
       await whatsAppLoginManager.start(body.accountId);
       sendJson(res, 200, { success: true });
     } catch (error) {
+      emitGatewayLifecycleEvent(ctx, {
+        phase: 'failed',
+        action: 'restart',
+        source: 'channel:config',
+        reason: 'channel:config',
+        error: String(error),
+      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;
@@ -199,6 +215,13 @@ export async function handleChannelRoutes(
       await whatsAppLoginManager.stop();
       sendJson(res, 200, { success: true });
     } catch (error) {
+      emitGatewayLifecycleEvent(ctx, {
+        phase: 'failed',
+        action: 'restart',
+        source: 'channel:setEnabled',
+        reason: 'channel:setEnabled',
+        error: String(error),
+      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;
@@ -232,6 +255,13 @@ export async function handleChannelRoutes(
       scheduleGatewayChannelRestart(ctx, `channel:saveConfig:${body.channelType}`);
       sendJson(res, 200, { success: true });
     } catch (error) {
+      emitGatewayLifecycleEvent(ctx, {
+        phase: 'failed',
+        action: 'restart',
+        source: 'channel:delete',
+        reason: 'channel:delete',
+        error: String(error),
+      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;

@@ -9,14 +9,15 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { LoadingIcon, PageLoader } from '@/components/common/LoadingSpinner';
-import { ChannelConfigModal } from '@/components/channels/ChannelConfigModal';
+import { GatewayLifecycleBanner } from '@/components/common/GatewayLifecycleBanner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAgentsStore } from '@/stores/agents';
 import { useChannelsStore } from '@/stores/channels';
 import { useGatewayStore } from '@/stores/gateway';
-import { CHANNEL_ICONS, CHANNEL_NAMES, type ChannelType } from '@/types/channel';
+import { CHANNEL_ICONS, CHANNEL_NAMES, type ChannelGroup, type ChannelType } from '@/types/channel';
 import type { AgentSummary } from '@/types/agent';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import telegramIcon from '@/assets/channels/telegram.svg';
@@ -62,7 +63,9 @@ const CHANNEL_BRAND_STYLES: Partial<Record<ChannelType, { shell: string; icon: s
 
 export function Agents() {
   const { t } = useTranslation('agents');
+  const navigate = useNavigate();
   const gatewayStatus = useGatewayStore((state) => state.status);
+  const gatewayLifecycle = useGatewayStore((state) => state.lifecycle);
   const {
     agents,
     loading,
@@ -71,7 +74,7 @@ export function Agents() {
     createAgent,
     deleteAgent,
   } = useAgentsStore();
-  const { channels, fetchChannels } = useChannelsStore();
+  const { channelGroups, fetchChannels } = useChannelsStore();
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
@@ -98,15 +101,15 @@ export function Agents() {
     };
   }, [fetchAgents, fetchChannels]);
   const activeAgent = useMemo(
-    () => agents.find((agent) => agent.id === activeAgentId) ?? null,
+    () => agents.find((agent) => agent.gateway.id === activeAgentId) ?? null,
     [activeAgentId, agents],
   );
   const stats = useMemo(
     () => ({
       total: agents.length,
-      defaults: agents.filter((agent) => agent.isDefault).length,
-      custom: agents.filter((agent) => !agent.isDefault).length,
-      connected: agents.filter((agent) => agent.channelTypes.length > 0).length,
+      defaults: agents.filter((agent) => agent.gateway.isDefault).length,
+      custom: agents.filter((agent) => !agent.gateway.isDefault).length,
+      connected: agents.filter((agent) => agent.local.boundChannels.length > 0).length,
     }),
     [agents],
   );
@@ -153,7 +156,9 @@ export function Agents() {
         />
 
         <div className="flex-1 overflow-y-auto pr-2 pb-10 min-h-0 -mr-2">
-          {gatewayStatus.state !== 'running' && (
+          <GatewayLifecycleBanner lifecycle={gatewayLifecycle} />
+
+          {gatewayStatus.state !== 'running' && gatewayLifecycle.state === 'idle' && (
             <div className="mb-8 p-4 rounded-xl border border-yellow-500/50 bg-yellow-500/10 flex items-center gap-3">
               <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
               <span className="text-yellow-700 dark:text-yellow-400 text-sm font-medium">
@@ -197,9 +202,9 @@ export function Agents() {
               <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
                 {agents.map((agent) => (
                   <AgentCard
-                    key={agent.id}
+                    key={agent.gateway.id}
                     agent={agent}
-                    onOpenSettings={() => setActiveAgentId(agent.id)}
+                    onOpenSettings={() => setActiveAgentId(agent.gateway.id)}
                     onDelete={() => setAgentToDelete(agent)}
                   />
                 ))}
@@ -223,7 +228,10 @@ export function Agents() {
       {activeAgent && (
         <AgentSettingsModal
           agent={activeAgent}
-          channels={channels}
+          channelGroups={channelGroups}
+          allAgents={agents}
+          channelOwners={useAgentsStore.getState().channelOwners}
+          onOpenChannels={() => navigate('/channels')}
           onClose={() => setActiveAgentId(null)}
         />
       )}
@@ -231,15 +239,15 @@ export function Agents() {
       <ConfirmDialog
         open={!!agentToDelete}
         title={t('deleteDialog.title')}
-        message={agentToDelete ? t('deleteDialog.message', { name: agentToDelete.name }) : ''}
+        message={agentToDelete ? t('deleteDialog.message', { name: resolveAgentDisplayName(agentToDelete) }) : ''}
         confirmLabel={t('common:actions.delete')}
         cancelLabel={t('common:actions.cancel')}
         variant="destructive"
         onConfirm={async () => {
           if (!agentToDelete) return;
-          await deleteAgent(agentToDelete.id);
+          await deleteAgent(agentToDelete.gateway.id);
           setAgentToDelete(null);
-          if (activeAgentId === agentToDelete.id) {
+          if (activeAgentId === agentToDelete.gateway.id) {
             setActiveAgentId(null);
           }
           toast.success(t('toast.agentDeleted'));
@@ -271,11 +279,11 @@ function splitAgentModelDisplay(modelDisplay: string): { value: string; isDefaul
 }
 
 function resolveAgentDisplayName(agent: AgentSummary): string {
-  return agent.name?.trim() || agent.identity?.name?.trim() || agent.id;
+  return agent.gateway.name?.trim() || agent.gateway.identity?.name?.trim() || agent.gateway.id;
 }
 
 function resolveAgentAvatar(agent: AgentSummary): string | null {
-  return agent.identity?.emoji?.trim() || null;
+  return agent.gateway.identity?.emoji?.trim() || null;
 }
 
 async function openWorkspaceFolder(workspace?: string | null) {
@@ -301,26 +309,26 @@ function AgentCard({
 }) {
   const { t } = useTranslation('agents');
   const displayName = resolveAgentDisplayName(agent);
-  const identityName = agent.identity?.name?.trim();
+  const identityName = agent.gateway.identity?.name?.trim();
   const avatarGlyph = resolveAgentAvatar(agent);
-  const workspacePath = agent.workspace?.trim() || '';
-  const channelLabels = agent.channelTypes
+  const workspacePath = agent.local.workspace?.trim() || '';
+  const channelLabels = agent.local.boundChannels
     .map((channelType) => CHANNEL_NAMES[channelType as ChannelType] || channelType)
     .filter(Boolean);
-  const modelMeta = splitAgentModelDisplay(agent.modelDisplay);
+  const modelMeta = splitAgentModelDisplay(agent.local.modelDisplay);
 
   return (
     <div
       className={cn(
         'h-full rounded-2xl border bg-background/90 p-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_16px_32px_rgba(15,23,42,0.07)]',
-        agent.isDefault && 'border-primary/25 bg-[linear-gradient(180deg,rgba(59,130,246,0.06),rgba(59,130,246,0.02))]'
+        agent.gateway.isDefault && 'border-primary/25 bg-[linear-gradient(180deg,rgba(59,130,246,0.06),rgba(59,130,246,0.02))]'
       )}
     >
       <div className="flex h-full flex-col">
       <div className="flex items-start gap-4">
         <div className={cn(
           'mt-0.5 flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border text-xl shadow-sm',
-          agent.isDefault
+          agent.gateway.isDefault
             ? 'border-primary/20 bg-primary/12'
             : 'border-black/8 bg-black/[0.03] dark:border-white/10 dark:bg-white/[0.03]'
         )}>
@@ -335,7 +343,7 @@ function AgentCard({
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2.5">
                 <h2 className="truncate text-[18px] font-semibold tracking-tight text-foreground">{displayName}</h2>
-                {agent.isDefault && (
+                {agent.gateway.isDefault && (
                   <Badge
                     variant="secondary"
                     className="rounded-full border-0 bg-primary/12 px-2.5 py-1 text-[11px] font-medium text-primary shadow-none"
@@ -344,7 +352,7 @@ function AgentCard({
                   </Badge>
                 )}
               </div>
-              <p className="mt-1 font-mono text-[12px] text-muted-foreground/80">{agent.id}</p>
+              <p className="mt-1 font-mono text-[12px] text-muted-foreground/80">{agent.gateway.id}</p>
               {identityName && identityName !== displayName ? (
                 <p className="mt-1 text-[12px] text-muted-foreground/75">
                   {t('meta.identity', 'Identity')}: <span className="text-foreground/80">{identityName}</span>
@@ -366,7 +374,7 @@ function AgentCard({
                   </TooltipTrigger>
                   <TooltipContent>{t('settings')}</TooltipContent>
                 </Tooltip>
-                {!agent.isDefault && (
+                {!agent.gateway.isDefault && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
@@ -398,7 +406,7 @@ function AgentCard({
                 {t('defaultBadge')}
               </span>
             ) : null}
-            {agent.inheritedModel ? (
+            {agent.local.inheritedModel ? (
               <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                 {t('inherited')}
               </span>
@@ -566,37 +574,39 @@ function AddAgentDialog({
 
 function AgentSettingsModal({
   agent,
-  channels,
+  channelGroups,
+  allAgents,
+  channelOwners,
+  onOpenChannels,
   onClose,
 }: {
   agent: AgentSummary;
-  channels: Array<{ type: string; name: string; status: 'connected' | 'connecting' | 'disconnected' | 'error'; error?: string }>;
+  channelGroups: ChannelGroup[];
+  allAgents: AgentSummary[];
+  channelOwners: Record<string, string>;
+  onOpenChannels: () => void;
   onClose: () => void;
 }) {
   const { t } = useTranslation('agents');
-  const modelMeta = splitAgentModelDisplay(agent.modelDisplay);
+  const modelMeta = splitAgentModelDisplay(agent.local.modelDisplay);
   const { updateAgent, assignChannel, removeChannel } = useAgentsStore();
   const { fetchChannels } = useChannelsStore();
-  const workspacePath = agent.workspace?.trim() || '';
+  const workspacePath = agent.local.workspace?.trim() || '';
   const [name, setName] = useState(resolveAgentDisplayName(agent));
   const [savingName, setSavingName] = useState(false);
-  const [showChannelModal, setShowChannelModal] = useState(false);
+  const [showBindingModal, setShowBindingModal] = useState(false);
   const [channelToRemove, setChannelToRemove] = useState<ChannelType | null>(null);
+  const [bindingType, setBindingType] = useState<ChannelType | null>(null);
 
   useEffect(() => {
     setName(resolveAgentDisplayName(agent));
   }, [agent]);
 
-  const runtimeChannelsByType = useMemo(
-    () => Object.fromEntries((channels ?? []).map((channel) => [channel.type, channel])),
-    [channels],
-  );
-
   const handleSaveName = async () => {
     if (!name.trim() || name.trim() === resolveAgentDisplayName(agent)) return;
     setSavingName(true);
     try {
-      await updateAgent(agent.id, name.trim());
+      await updateAgent(agent.gateway.id, name.trim());
       toast.success(t('toast.agentUpdated'));
     } catch (error) {
       toast.error(t('toast.agentUpdateFailed', { error: String(error) }));
@@ -607,7 +617,7 @@ function AgentSettingsModal({
 
   const handleChannelSaved = async (channelType: ChannelType) => {
     try {
-      await assignChannel(agent.id, channelType);
+      await assignChannel(agent.gateway.id, channelType);
       await fetchChannels();
       toast.success(t('toast.channelAssigned', { channel: CHANNEL_NAMES[channelType] || channelType }));
     } catch (error) {
@@ -616,16 +626,55 @@ function AgentSettingsModal({
     }
   };
 
-  const assignedChannels = agent.channelTypes.map((channelType) => {
+  const runtimeChannelsByType = useMemo(
+    () => Object.fromEntries((channelGroups ?? []).map((group) => [group.type, group])),
+    [channelGroups],
+  );
+  const agentNamesById = useMemo(
+    () =>
+      Object.fromEntries(
+        allAgents.map((item) => [
+          item.gateway.id,
+          item.gateway.name?.trim() || item.gateway.identity?.name?.trim() || item.gateway.id,
+        ]),
+      ) as Record<string, string>,
+    [allAgents],
+  );
+
+  const assignedChannels = agent.local.boundChannels.map((channelType) => {
     const runtimeChannel = runtimeChannelsByType[channelType];
     return {
       channelType: channelType as ChannelType,
-      name: runtimeChannel?.name || CHANNEL_NAMES[channelType as ChannelType] || channelType,
-      status: runtimeChannel?.status || 'disconnected',
-      statusLabel: runtimeChannel ? undefined : t('settingsDialog.assignedStatus'),
+      name: CHANNEL_NAMES[channelType as ChannelType] || channelType,
+      status:
+        runtimeChannel?.status === 'configured'
+          ? 'disconnected'
+          : runtimeChannel?.status === 'unknown'
+            ? 'disconnected'
+          : runtimeChannel?.status || 'disconnected',
+      statusLabel:
+        runtimeChannel?.status === 'configured'
+          ? t('runtime.configuredOnly', '已配置')
+          : runtimeChannel?.status === 'unknown'
+            ? t('runtime.unknown', '未知')
+          : runtimeChannel
+            ? undefined
+            : t('settingsDialog.assignedStatus'),
       error: runtimeChannel?.error,
+      accountsSummary:
+        runtimeChannel?.accounts.map((account) => account.accountId).join(', ') || t('settingsDialog.defaultAccountOnly', '默认账户'),
     };
   });
+  const availableBindings = useMemo(
+    () =>
+      channelGroups.map((group) => ({
+        ...group,
+        ownerId: channelOwners[group.type],
+        ownerName: channelOwners[group.type] ? agentNamesById[channelOwners[group.type]] : undefined,
+        isAssignedHere: channelOwners[group.type] === agent.gateway.id,
+      })),
+    [agent.gateway.id, agentNamesById, channelGroups, channelOwners],
+  );
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
@@ -656,7 +705,7 @@ function AgentSettingsModal({
               <div className="mb-4 flex items-start gap-4">
                 <div className={cn(
                   'flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border text-xl shadow-sm',
-                  agent.isDefault
+                  agent.gateway.isDefault
                     ? 'border-primary/20 bg-primary/12'
                     : 'border-black/8 bg-background dark:border-white/10'
                 )}>
@@ -671,7 +720,7 @@ function AgentSettingsModal({
                     <h3 className="truncate text-[20px] font-semibold tracking-tight text-foreground">
                       {resolveAgentDisplayName(agent)}
                     </h3>
-                    {agent.isDefault ? (
+                    {agent.gateway.isDefault ? (
                       <Badge
                         variant="secondary"
                         className="rounded-full border-0 bg-primary/12 px-2.5 py-1 text-[11px] font-medium text-primary shadow-none"
@@ -680,7 +729,7 @@ function AgentSettingsModal({
                       </Badge>
                     ) : null}
                   </div>
-                  <p className="mt-1 font-mono text-[12px] text-muted-foreground/80">{agent.id}</p>
+                  <p className="mt-1 font-mono text-[12px] text-muted-foreground/80">{agent.gateway.id}</p>
                 </div>
               </div>
 
@@ -714,7 +763,7 @@ function AgentSettingsModal({
                 <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground/75 font-medium">
                   {t('settingsDialog.agentIdLabel')}
                 </p>
-                <p className="mt-2 font-mono text-[13px] text-foreground">{agent.id}</p>
+                <p className="mt-2 font-mono text-[13px] text-foreground">{agent.gateway.id}</p>
               </div>
               <div className="rounded-3xl border border-border/70 bg-muted/[0.18] p-5">
                 <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground/75 font-medium">
@@ -727,7 +776,7 @@ function AgentSettingsModal({
                       {t('defaultBadge')}
                     </span>
                   ) : null}
-                  {agent.inheritedModel ? (
+                  {agent.local.inheritedModel ? (
                     <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                       {t('inherited')}
                     </span>
@@ -765,20 +814,31 @@ function AgentSettingsModal({
                 <h3 className="text-[20px] font-semibold tracking-tight text-foreground">
                   {t('settingsDialog.channelsTitle')}
                 </h3>
-                <p className="mt-1 max-w-2xl text-[14px] leading-6 text-foreground/70">{t('settingsDialog.channelsDescription')}</p>
+                <p className="mt-1 max-w-2xl text-[14px] leading-6 text-foreground/70">
+                  {t('settingsDialog.channelsDescription', '先在连接页配置账户，再在这里绑定到当前分身。这里显示的是绑定摘要，不直接编辑连接凭据。')}
+                </p>
               </div>
-              <Button
-                onClick={() => setShowChannelModal(true)}
-                className="h-9 rounded-xl px-4 text-[13px] font-medium shadow-none"
-              >
-                <Plus className="h-3.5 w-3.5 mr-2" />
-                {t('settingsDialog.addChannel')}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={onOpenChannels}
+                  className="h-9 rounded-xl border-black/10 bg-transparent px-4 text-[13px] font-medium text-foreground/80 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
+                >
+                  {t('settingsDialog.openChannels', '去配置连接')}
+                </Button>
+                <Button
+                  onClick={() => setShowBindingModal(true)}
+                  className="h-9 rounded-xl px-4 text-[13px] font-medium shadow-none"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-2" />
+                  {t('settingsDialog.addChannel', '绑定已有连接')}
+                </Button>
+              </div>
             </div>
 
             {assignedChannels.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border/80 bg-muted/35 p-4 text-[13.5px] text-muted-foreground">
-                {t('settingsDialog.noChannels')}
+                {t('settingsDialog.noChannels', '当前没有绑定任何连接。请先在连接页配置账户，再回来绑定。')}
               </div>
             ) : (
               <div className="space-y-3">
@@ -790,6 +850,12 @@ function AgentSettingsModal({
                         <p className="text-[15px] font-semibold text-foreground">{channel.name}</p>
                         <p className="text-[13.5px] text-muted-foreground">
                           {CHANNEL_NAMES[channel.channelType]}
+                        </p>
+                        <p className="mt-1 text-[12px] text-muted-foreground/80">
+                          {t('settingsDialog.boundAccounts', {
+                            accounts: channel.accountsSummary,
+                            defaultValue: `账户：${channel.accountsSummary}`,
+                          })}
                         </p>
                         {channel.error && (
                           <p className="text-xs text-destructive mt-1">{channel.error}</p>
@@ -816,15 +882,21 @@ function AgentSettingsModal({
         </CardContent>
       </Card>
 
-      {showChannelModal && (
-        <ChannelConfigModal
-          configuredTypes={agent.channelTypes}
-          showChannelName={false}
-          allowExistingConfig
-          onClose={() => setShowChannelModal(false)}
-          onChannelSaved={async (channelType) => {
-            await handleChannelSaved(channelType);
-            setShowChannelModal(false);
+      {showBindingModal && (
+        <BindingPickerModal
+          groups={availableBindings}
+          currentAgentId={agent.gateway.id}
+          bindingType={bindingType}
+          onClose={() => setShowBindingModal(false)}
+          onOpenChannels={onOpenChannels}
+          onBind={async (channelType) => {
+            setBindingType(channelType);
+            try {
+              await handleChannelSaved(channelType);
+              setShowBindingModal(false);
+            } finally {
+              setBindingType(null);
+            }
           }}
         />
       )}
@@ -839,7 +911,7 @@ function AgentSettingsModal({
         onConfirm={async () => {
           if (!channelToRemove) return;
           try {
-            await removeChannel(agent.id, channelToRemove);
+            await removeChannel(agent.gateway.id, channelToRemove);
             await fetchChannels();
             toast.success(t('toast.channelRemoved', { channel: CHANNEL_NAMES[channelToRemove] || channelToRemove }));
           } catch (error) {
@@ -850,6 +922,109 @@ function AgentSettingsModal({
         }}
         onCancel={() => setChannelToRemove(null)}
       />
+    </div>
+  );
+}
+
+function BindingPickerModal({
+  groups,
+  currentAgentId,
+  bindingType,
+  onClose,
+  onOpenChannels,
+  onBind,
+}: {
+  groups: Array<ChannelGroup & { ownerId?: string; ownerName?: string; isAssignedHere: boolean }>;
+  currentAgentId: string;
+  bindingType: ChannelType | null;
+  onClose: () => void;
+  onOpenChannels: () => void;
+  onBind: (channelType: ChannelType) => Promise<void>;
+}) {
+  const { t } = useTranslation('agents');
+  const availableGroups = groups.filter((group) => group.accounts.length > 0 || group.configured);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+      <Card className="w-full max-w-2xl rounded-2xl bg-card overflow-hidden">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-2xl font-semibold tracking-tight">
+            {t('bindingDialog.title', '绑定已有连接')}
+          </CardTitle>
+          <CardDescription className="text-[15px] mt-1 text-foreground/70">
+            {t('bindingDialog.description', '当前实现按连接类型绑定。也就是同一类型下的所有账户，共享同一个分身归属。')}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 pt-4 p-6">
+          {availableGroups.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border/80 bg-muted/35 p-5 text-sm text-muted-foreground">
+              <p>{t('bindingDialog.empty', '还没有可绑定的连接。请先去连接页配置账户。')}</p>
+              <Button
+                variant="outline"
+                onClick={onOpenChannels}
+                className="mt-4 h-9 rounded-xl border-black/10 bg-transparent px-4 text-[13px] font-medium text-foreground/80 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
+              >
+                {t('settingsDialog.openChannels', '去配置连接')}
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {availableGroups.map((group) => {
+                const ownerLabel = group.ownerId
+                  ? group.ownerId === currentAgentId
+                    ? t('bindingDialog.currentOwner', '当前分身')
+                    : t('bindingDialog.otherOwner', {
+                        name: group.ownerName || group.ownerId,
+                        defaultValue: `当前归属：${group.ownerName || group.ownerId}`,
+                      })
+                  : t('bindingDialog.unassigned', '未绑定分身');
+                const accountsSummary = group.accounts.map((account) => account.accountId).join(', ') || 'default';
+                return (
+                  <div key={group.type} className="rounded-2xl border border-border/70 bg-muted/25 p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-3">
+                          <ChannelLogo type={group.type} branded />
+                          <div className="min-w-0">
+                            <p className="text-[15px] font-semibold text-foreground">{group.name}</p>
+                            <p className="text-[13px] text-muted-foreground">{ownerLabel}</p>
+                          </div>
+                        </div>
+                        <p className="mt-3 text-[12px] text-muted-foreground/80">
+                          {t('bindingDialog.accountsSummary', {
+                            accounts: accountsSummary,
+                            defaultValue: `已配置账户：${accountsSummary}`,
+                          })}
+                        </p>
+                      </div>
+                      <Button
+                        onClick={() => void onBind(group.type)}
+                        disabled={bindingType === group.type || group.isAssignedHere}
+                        className="h-9 rounded-xl px-4 text-[13px] font-medium shadow-none"
+                      >
+                        {bindingType === group.type
+                          ? t('bindingDialog.binding', '绑定中...')
+                          : group.isAssignedHere
+                            ? t('bindingDialog.boundHere', '已绑定')
+                            : t('bindingDialog.bindAction', '绑定到当前分身')}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={onClose}
+              className="h-9 rounded-xl border-black/10 bg-transparent px-4 text-[13px] font-medium text-foreground/80 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
+            >
+              {t('common:actions.cancel')}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

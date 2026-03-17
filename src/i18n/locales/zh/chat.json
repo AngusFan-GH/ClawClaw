@@ -72,7 +72,8 @@
     "exec": "执行"
   },
   "history": {
-    "title": "最近对话"
+    "title": "最近对话",
+    "loading": "正在恢复最近对话…"
   },
   "historyBuckets": {
     "today": "今天",

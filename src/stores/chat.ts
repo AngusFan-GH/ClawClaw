@@ -104,6 +104,12 @@ interface AgentStreamEvent {
   data?: Record<string, unknown>;
 }
 
+interface LoadSessionsOptions {
+  preferMostRecent?: boolean;
+  preserveCurrent?: boolean;
+  warmLabels?: boolean;
+}
+
 interface ChatState {
   // Messages
   messages: RawMessage[];
@@ -127,6 +133,8 @@ interface ChatState {
 
   // Sessions
   sessions: ChatSession[];
+  sessionsLoading: boolean;
+  sessionsHydrated: boolean;
   currentSessionKey: string;
   currentAgentId: string;
   /** First user message text per session key, used as display label */
@@ -143,7 +151,8 @@ interface ChatState {
   defaultModelRef?: string;
 
   // Actions
-  loadSessions: (preferMostRecent?: boolean) => Promise<void>;
+  loadSessions: (options?: boolean | LoadSessionsOptions) => Promise<void>;
+  restoreSessionsAfterGatewayReady: () => Promise<void>;
   switchSession: (key: string) => void;
   newSession: (agentId?: string) => void;
   deleteSession: (key: string) => Promise<void>;
@@ -187,6 +196,7 @@ function toMs(ts: number): number {
 // poll chat.history to surface intermediate tool-call turns.
 let _historyPollTimer: ReturnType<typeof setTimeout> | null = null;
 let _historyLoadSeq = 0;
+let _sessionRestorePromise: Promise<void> | null = null;
 
 // Timer for delayed error finalization. When the Gateway reports a mid-stream
 // error (e.g. "terminated"), it may retry internally and recover. We wait
@@ -220,6 +230,28 @@ function isCronSessionKey(key: string): boolean {
 
 function isChatSidebarSessionKey(key: string): boolean {
   return key.startsWith('agent:') && !isCronSessionKey(key);
+}
+
+function buildAgentMainSessionKey(agentId: string, mainKey = 'main'): string {
+  return `agent:${agentId}:${mainKey || 'main'}`;
+}
+
+function normalizeLoadSessionsOptions(
+  options?: boolean | LoadSessionsOptions,
+): Required<LoadSessionsOptions> {
+  if (typeof options === 'boolean') {
+    return {
+      preferMostRecent: options,
+      preserveCurrent: false,
+      warmLabels: true,
+    };
+  }
+
+  return {
+    preferMostRecent: Boolean(options?.preferMostRecent),
+    preserveCurrent: Boolean(options?.preserveCurrent),
+    warmLabels: options?.warmLabels ?? true,
+  };
 }
 
 function omitSessionKey<T>(record: Record<string, T>, key: string): Record<string, T> {
@@ -1275,6 +1307,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   toolStreamOrder: [],
 
   sessions: [{ key: DEFAULT_SESSION_KEY, displayName: DEFAULT_SESSION_KEY }],
+  sessionsLoading: false,
+  sessionsHydrated: false,
   currentSessionKey: DEFAULT_SESSION_KEY,
   currentAgentId: 'main',
   sessionLabels: {},
@@ -1304,7 +1338,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return resolveSessionModelRef(session, allowedModelRefs);
   },
 
-  loadSessions: async (preferMostRecent = false) => {
+  loadSessions: async (options) => {
+    const { preferMostRecent, preserveCurrent, warmLabels } = normalizeLoadSessionsOptions(options);
+    set({ sessionsLoading: true });
     try {
       const data = await useGatewayStore
         .getState()
@@ -1396,14 +1432,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
         );
         const currentSessionMissing = !dedupedSessions.some((session) => session.key === nextSessionKey);
         const shouldAutoChooseLatest =
-          !hasLocalPendingSession && (preferMostRecent || currentSessionMissing);
+          !preserveCurrent && !hasLocalPendingSession && (preferMostRecent || currentSessionMissing);
 
         if (!dedupedSessions.find((s) => s.key === nextSessionKey) && dedupedSessions.length > 0) {
           // Preserve locally-created synthetic sessions until they materialize
           // in Gateway. Otherwise background refresh can snap the UI back to an
           // older real session right after the user clicks "New chat".
           if (!hasLocalPendingSession) {
-            nextSessionKey = preferredSessionKey || dedupedSessions[0].key;
+            if (preserveCurrent) {
+              const agentsState = useAgentsStore.getState();
+              const fallbackAgentId =
+                getAgentIdFromSessionKey(nextSessionKey)
+                || get().currentAgentId
+                || agentsState.defaultAgentId
+                || 'main';
+              const fallbackMainSessionKey = buildAgentMainSessionKey(
+                fallbackAgentId,
+                agentsState.mainKey,
+              );
+              nextSessionKey = dedupedSessions.find((session) => session.key === fallbackMainSessionKey)?.key
+                || preferredSessionKey
+                || dedupedSessions[0].key;
+            } else {
+              nextSessionKey = preferredSessionKey || dedupedSessions[0].key;
+            }
           }
         } else if (shouldAutoChooseLatest && preferredSessionKey) {
           nextSessionKey = preferredSessionKey;
@@ -1423,6 +1475,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         set({
           sessions: sessionsWithCurrent,
+          sessionsLoading: false,
+          sessionsHydrated: true,
           currentSessionKey: nextSessionKey,
           currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
           pendingLocalSessionKeys: nextPendingLocalSessionKeys,
@@ -1436,7 +1490,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // Background: fetch first user message for every non-main session to populate labels upfront.
         // Uses a small limit so it's cheap; runs in parallel and doesn't block anything.
         const sessionsToLabel = sessionsWithCurrent.filter((s) => !s.key.endsWith(':main'));
-        if (sessionsToLabel.length > 0) {
+        if (warmLabels && sessionsToLabel.length > 0) {
           void Promise.all(
             sessionsToLabel.map(async (session) => {
               if (!realSessionKeys.has(session.key)) {
@@ -1486,7 +1540,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     } catch (err) {
       console.warn('Failed to load sessions:', err);
+      set({ sessionsLoading: false, sessionsHydrated: true });
     }
+  },
+
+  restoreSessionsAfterGatewayReady: async () => {
+    if (_sessionRestorePromise) {
+      await _sessionRestorePromise;
+      return;
+    }
+
+    _sessionRestorePromise = (async () => {
+      try {
+        await get().loadSessions({ preserveCurrent: true, warmLabels: false });
+        await get().loadHistory(false);
+      } finally {
+        _sessionRestorePromise = null;
+      }
+    })();
+
+    await _sessionRestorePromise;
   },
 
   // ── Switch session ──
@@ -2606,7 +2679,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   refresh: async () => {
     const { loadHistory, loadSessions } = get();
-    await loadSessions();
+    await loadSessions({ preserveCurrent: true });
     await loadHistory();
   },
 

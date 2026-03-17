@@ -6,10 +6,11 @@ import { create } from 'zustand';
 import { hostApiFetch } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
 import { subscribeHostEvent } from '@/lib/host-events';
-import type { GatewayStatus } from '../types/gateway';
+import type { GatewayLifecycle, GatewayStatus } from '../types/gateway';
 
 let gatewayInitPromise: Promise<void> | null = null;
 let gatewayEventUnsubscribers: Array<() => void> | null = null;
+let lifecycleClearTimer: ReturnType<typeof setTimeout> | null = null;
 
 interface GatewayHealth {
   ok: boolean;
@@ -19,6 +20,7 @@ interface GatewayHealth {
 
 interface GatewayState {
   status: GatewayStatus;
+  lifecycle: GatewayLifecycle;
   health: GatewayHealth | null;
   isInitialized: boolean;
   lastError: string | null;
@@ -125,26 +127,23 @@ function handleGatewayChatMessage(data: unknown): void {
   }).catch(() => {});
 }
 
-function mapChannelStatus(status: string): 'connected' | 'connecting' | 'disconnected' | 'error' {
-  switch (status) {
-    case 'connected':
-    case 'running':
-      return 'connected';
-    case 'connecting':
-    case 'starting':
-      return 'connecting';
-    case 'error':
-    case 'failed':
-      return 'error';
-    default:
-      return 'disconnected';
+function scheduleLifecycleClear(set: (partial: Partial<GatewayState>) => void, delayMs = 2200): void {
+  if (lifecycleClearTimer) {
+    clearTimeout(lifecycleClearTimer);
   }
+  lifecycleClearTimer = setTimeout(() => {
+    lifecycleClearTimer = null;
+    set({ lifecycle: { state: 'idle' } });
+  }, delayMs);
 }
 
 export const useGatewayStore = create<GatewayState>((set, get) => ({
   status: {
     state: 'stopped',
     port: 18789,
+  },
+  lifecycle: {
+    state: 'idle',
   },
   health: null,
   isInitialized: false,
@@ -165,8 +164,70 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
         if (!gatewayEventUnsubscribers) {
           const unsubscribers: Array<() => void> = [];
           unsubscribers.push(subscribeHostEvent<GatewayStatus>('gateway:status', (payload) => {
-            set({ status: payload });
+            set((state) => {
+              if (
+                payload.state === 'running' &&
+                (state.lifecycle.state === 'scheduled' || state.lifecycle.state === 'applying')
+              ) {
+                scheduleLifecycleClear(set);
+                return {
+                  status: payload,
+                  lifecycle: {
+                    ...state.lifecycle,
+                    state: 'completed' as const,
+                    error: undefined,
+                    at: Date.now(),
+                  },
+                };
+              }
+
+              if (
+                payload.state === 'error' &&
+                (state.lifecycle.state === 'scheduled' || state.lifecycle.state === 'applying')
+              ) {
+                return {
+                  status: payload,
+                  lifecycle: {
+                    ...state.lifecycle,
+                    state: 'failed' as const,
+                    error: payload.error,
+                  },
+                };
+              }
+
+              if (
+                (payload.state === 'starting' || payload.state === 'reconnecting') &&
+                state.lifecycle.state === 'scheduled'
+              ) {
+                return {
+                  status: payload,
+                  lifecycle: {
+                    ...state.lifecycle,
+                    state: 'applying' as const,
+                  },
+                };
+              }
+
+              return { status: payload };
+            });
           }));
+          unsubscribers.push(subscribeHostEvent<Omit<GatewayLifecycle, 'state'> & { phase?: 'scheduled' | 'failed' }>(
+            'gateway:lifecycle',
+            (payload) => {
+              if (lifecycleClearTimer) {
+                clearTimeout(lifecycleClearTimer);
+                lifecycleClearTimer = null;
+              }
+              set((state) => ({
+                lifecycle: {
+                  ...state.lifecycle,
+                  ...payload,
+                  state: payload.phase === 'failed' ? 'failed' : 'scheduled',
+                  error: payload.phase === 'failed' ? payload.error : undefined,
+                },
+              }));
+            }
+          ));
           unsubscribers.push(subscribeHostEvent<{ message?: string }>('gateway:error', (payload) => {
             set({ lastError: payload.message || 'Gateway error' });
           }));
@@ -181,15 +242,10 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
           }));
           unsubscribers.push(subscribeHostEvent<{ channelId?: string; status?: string }>(
             'gateway:channel-status',
-            (update) => {
+            () => {
               import('./channels')
                 .then(({ useChannelsStore }) => {
-                  if (!update.channelId || !update.status) return;
-                  const state = useChannelsStore.getState();
-                  const channel = state.channels.find((item) => item.type === update.channelId);
-                  if (channel) {
-                    state.updateChannel(channel.id, { status: mapChannelStatus(update.status) });
-                  }
+                  void useChannelsStore.getState().fetchChannels(false);
                 })
                 .catch(() => {});
             },

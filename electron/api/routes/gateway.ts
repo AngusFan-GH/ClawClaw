@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { PORTS } from '../../utils/config';
 import { getSetting } from '../../utils/store';
 import type { HostApiContext } from '../context';
+import { emitGatewayLifecycleEvent } from '../gateway-lifecycle';
 import { parseJsonBody, sendJson } from '../route-utils';
 
 export async function handleGatewayRoutes(
@@ -55,9 +56,22 @@ export async function handleGatewayRoutes(
 
   if (url.pathname === '/api/gateway/restart' && req.method === 'POST') {
     try {
+      emitGatewayLifecycleEvent(ctx, {
+        phase: 'scheduled',
+        action: 'restart',
+        source: 'gateway.manualRestart',
+        reason: 'gateway.manualRestart',
+      });
       await ctx.gatewayManager.restart();
       sendJson(res, 200, { success: true });
     } catch (error) {
+      emitGatewayLifecycleEvent(ctx, {
+        phase: 'failed',
+        action: 'restart',
+        source: 'gateway.manualRestart',
+        reason: 'gateway.manualRestart',
+        error: String(error),
+      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;

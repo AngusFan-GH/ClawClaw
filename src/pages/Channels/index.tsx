@@ -1,16 +1,13 @@
-/**
- * Channels Page
- * Manage messaging channel connections with configuration UI
- */
-import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Trash2, AlertCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, PencilLine, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { LoadingIcon, PageLoader } from '@/components/common/LoadingSpinner';
+import { GatewayLifecycleBanner } from '@/components/common/GatewayLifecycleBanner';
 import { useChannelsStore } from '@/stores/channels';
+import { useAgentsStore } from '@/stores/agents';
 import { useGatewayStore } from '@/stores/gateway';
-import { hostApiFetch } from '@/lib/host-api';
 import { subscribeHostEvent } from '@/lib/host-events';
 import { ChannelConfigModal } from '@/components/channels/ChannelConfigModal';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -19,12 +16,13 @@ import {
   CHANNEL_ICONS,
   CHANNEL_NAMES,
   CHANNEL_META,
-  getAllChannels,
   getPrimaryChannels,
+  type ChannelAccount,
+  type ChannelGroup,
   type ChannelType,
-  type Channel,
 } from '@/types/channel';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import telegramIcon from '@/assets/channels/telegram.svg';
@@ -34,22 +32,6 @@ import dingtalkIcon from '@/assets/channels/dingtalk.svg';
 import feishuIcon from '@/assets/channels/feishu.svg';
 import wecomIcon from '@/assets/channels/wecom.svg';
 import qqIcon from '@/assets/channels/qq.svg';
-
-type DisplayChannel = Channel & {
-  configured: boolean;
-  runtimeLoaded: boolean;
-  runtimeStatus: Channel['status'] | 'unknown';
-};
-
-type DisplayChannelGroup = {
-  type: ChannelType;
-  name: string;
-  runtimeStatus: Channel['status'] | 'unknown' | 'configured';
-  runtimeLoaded: boolean;
-  configured: boolean;
-  accounts: DisplayChannel[];
-  error?: string;
-};
 
 const CHANNEL_BRAND_STYLES: Partial<Record<ChannelType, { shell: string; icon: string }>> = {
   telegram: {
@@ -84,197 +66,76 @@ const CHANNEL_BRAND_STYLES: Partial<Record<ChannelType, { shell: string; icon: s
 
 export function Channels() {
   const { t } = useTranslation('channels');
-  const { channels, loading, error, fetchChannels, deleteChannel } = useChannelsStore();
+  const { channelGroups, loading, error, fetchChannels, deleteChannel } = useChannelsStore();
+  const agents = useAgentsStore((state) => state.agents);
+  const channelOwners = useAgentsStore((state) => state.channelOwners);
   const gatewayStatus = useGatewayStore((state) => state.status);
+  const gatewayLifecycle = useGatewayStore((state) => state.lifecycle);
+  const navigate = useNavigate();
 
-  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showConfigDialog, setShowConfigDialog] = useState(false);
   const [selectedChannelType, setSelectedChannelType] = useState<ChannelType | null>(null);
-  const [selectedChannelAccountId, setSelectedChannelAccountId] = useState<string | null>(null);
-  const [configuredTypes, setConfiguredTypes] = useState<string[]>([]);
-  const [configuredAccountsByType, setConfiguredAccountsByType] = useState<Record<string, string[]>>({});
-  const [configuredTypesReady, setConfiguredTypesReady] = useState(false);
-  const [channelToDelete, setChannelToDelete] = useState<{ id: string; accountId?: string } | null>(null);
-
-  const fetchConfiguredTypesWithTimeout = useCallback(async () => {
-    return await Promise.race([
-      hostApiFetch<{
-        success: boolean;
-        channels?: string[];
-        accountsByType?: Record<string, string[]>;
-      }>('/api/channels/configured'),
-      new Promise<null>((resolve) => {
-        window.setTimeout(() => resolve(null), 3500);
-      }),
-    ]);
-  }, []);
-
-  const fetchConfiguredTypes = useCallback(async () => {
-    try {
-      const result = await fetchConfiguredTypesWithTimeout();
-      if (result && result.success && result.channels) {
-        setConfiguredTypes(result.channels);
-        setConfiguredAccountsByType(result.accountsByType || {});
-      }
-    } catch {
-      // Ignore refresh errors here and keep the last known state.
-    } finally {
-      setConfiguredTypesReady(true);
-    }
-  }, [fetchConfiguredTypesWithTimeout]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [createNewAccount, setCreateNewAccount] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{
+    type: ChannelType;
+    accountId: string;
+    isDefaultAccount: boolean;
+    groupName: string;
+  } | null>(null);
 
   useEffect(() => {
-    void fetchConfiguredTypes();
     void fetchChannels(false);
-  }, [fetchChannels, fetchConfiguredTypes]);
+  }, [fetchChannels]);
 
   useEffect(() => {
-    if (gatewayStatus.state === 'running') {
+    const unsubscribeGateway = subscribeHostEvent('gateway:status', () => {
       void fetchChannels(false);
-      void fetchConfiguredTypes();
-    }
-  }, [fetchChannels, fetchConfiguredTypes, gatewayStatus.state]);
-
-  useEffect(() => {
-    const unsubscribe = subscribeHostEvent('gateway:channel-status', () => {
+    });
+    const unsubscribeChannels = subscribeHostEvent('gateway:channel-status', () => {
       void fetchChannels(false);
-      void fetchConfiguredTypes();
     });
     return () => {
-      if (typeof unsubscribe === 'function') {
-        unsubscribe();
-      }
+      unsubscribeGateway();
+      unsubscribeChannels();
     };
-  }, [fetchChannels, fetchConfiguredTypes]);
+  }, [fetchChannels]);
 
   useEffect(() => {
-    const unsubscribe = subscribeHostEvent('gateway:status', () => {
+    if (gatewayLifecycle.state === 'completed') {
       void fetchChannels(false);
-      void fetchConfiguredTypes();
-    });
-    return () => {
-      if (typeof unsubscribe === 'function') {
-        unsubscribe();
-      }
-    };
-  }, [fetchChannels, fetchConfiguredTypes]);
-
-  const safeChannels = Array.isArray(channels) ? channels : [];
-  const displayedChannelTypes = getPrimaryChannels();
-  const allChannelTypes = getAllChannels();
-  const configuredChannelTypeSet = new Set<ChannelType>();
-  const configuredDisplayChannels: DisplayChannel[] = [];
-
-  for (const channel of safeChannels) {
-    configuredChannelTypeSet.add(channel.type);
-    configuredDisplayChannels.push({
-      ...channel,
-      configured: channel.configured ?? true,
-      runtimeLoaded: channel.runtimeLoaded ?? true,
-      runtimeStatus: channel.runtimeStatus ?? channel.status,
-    });
-  }
-
-  for (const type of configuredTypes) {
-    if (!(type in CHANNEL_META)) continue;
-    const typedType = type as ChannelType;
-    const fallbackAccounts = configuredAccountsByType[typedType] || ['default'];
-
-    for (const accountId of fallbackAccounts) {
-      const fallbackId = `${typedType}:${accountId}`;
-      if (configuredDisplayChannels.some((channel) => channel.id === fallbackId)) {
-        configuredChannelTypeSet.add(typedType);
-        continue;
-      }
-      configuredChannelTypeSet.add(typedType);
-      configuredDisplayChannels.push({
-        id: fallbackId,
-        type: typedType,
-        name: CHANNEL_NAMES[typedType],
-        status: 'disconnected',
-        configured: true,
-        runtimeLoaded: false,
-        runtimeStatus: gatewayStatus.state === 'running' ? 'unknown' : 'disconnected',
-        accountId,
-        metadata: {
-          isDefaultAccount: accountId === 'default',
-        },
-      });
     }
-  }
+  }, [fetchChannels, gatewayLifecycle.state]);
 
-  configuredDisplayChannels.sort((a, b) => {
-    return allChannelTypes.indexOf(a.type) - allChannelTypes.indexOf(b.type);
-  });
+  const configuredGroups = useMemo(
+    () => [...channelGroups].sort((left, right) => getPrimaryChannels().indexOf(left.type) - getPrimaryChannels().indexOf(right.type)),
+    [channelGroups],
+  );
 
-  const configuredDisplayGroups: DisplayChannelGroup[] = Array.from(
-    configuredDisplayChannels.reduce((map, channel) => {
-      const existing = map.get(channel.type);
-      if (existing) {
-        existing.accounts.push(channel);
-        return map;
-      }
-      map.set(channel.type, {
-        type: channel.type,
-        name: CHANNEL_NAMES[channel.type],
-        runtimeStatus: channel.runtimeStatus,
-        runtimeLoaded: channel.runtimeLoaded,
-        configured: channel.configured,
-        accounts: [channel],
-        error: channel.error,
-      });
-      return map;
-    }, new Map<ChannelType, DisplayChannelGroup>())
-  ).map(([, group]) => {
-    group.accounts.sort((left, right) => {
-      const leftDefault = Boolean(left.metadata && (left.metadata as { isDefaultAccount?: boolean }).isDefaultAccount);
-      const rightDefault = Boolean(right.metadata && (right.metadata as { isDefaultAccount?: boolean }).isDefaultAccount);
-      if (leftDefault !== rightDefault) {
-        return leftDefault ? -1 : 1;
-      }
-      return (left.accountId || '').localeCompare(right.accountId || '');
-    });
+  const configuredTypes = useMemo(
+    () => configuredGroups.map((group) => group.type),
+    [configuredGroups],
+  );
+  const agentNamesById = useMemo(
+    () =>
+      Object.fromEntries(
+        agents.map((agent) => [
+          agent.gateway.id,
+          agent.gateway.name?.trim() || agent.gateway.identity?.name?.trim() || agent.gateway.id,
+        ]),
+      ) as Record<string, string>,
+    [agents],
+  );
 
-    const anyConnected = group.accounts.some((account) => account.runtimeStatus === 'connected');
-    const anyConnecting = group.accounts.some((account) => account.runtimeStatus === 'connecting');
-    const anyError = group.accounts.some((account) => account.runtimeStatus === 'error' || Boolean(account.error));
-    const anyConfigured = group.accounts.some((account) => account.configured);
-    const runtimeLoaded = group.accounts.some((account) => account.runtimeLoaded);
+  const supportedUnconfiguredTypes = getPrimaryChannels().filter((type) => !configuredTypes.includes(type));
+  const showPageLoader = loading && configuredGroups.length === 0;
 
-    const nextRuntimeStatus: DisplayChannelGroup['runtimeStatus'] = anyConnected
-      ? 'connected'
-      : anyConnecting
-        ? 'connecting'
-        : anyError
-          ? 'error'
-          : anyConfigured
-            ? 'configured'
-            : runtimeLoaded
-              ? 'unknown'
-              : 'disconnected';
-
-    return {
-      ...group,
-      runtimeLoaded,
-      configured: anyConfigured,
-      error: group.accounts.find((account) => account.error)?.error,
-      runtimeStatus: nextRuntimeStatus,
-    };
-  }).sort((a, b) => allChannelTypes.indexOf(a.type) - allChannelTypes.indexOf(b.type));
-
-  const handleRefresh = () => {
-    void Promise.all([fetchChannels(true), fetchConfiguredTypes()]);
+  const openConfig = (type: ChannelType, accountId?: string | null, options?: { createNewAccount?: boolean }) => {
+    setSelectedChannelType(type);
+    setSelectedAccountId(accountId ?? null);
+    setCreateNewAccount(!!options?.createNewAccount);
+    setShowConfigDialog(true);
   };
-
-  const isLoadingConfiguredTypes = !configuredTypesReady;
-  const showRefreshingHint = loading && configuredTypesReady;
-  const statusText = isLoadingConfiguredTypes
-    ? t('loadingConfiguredStatus', '正在加载连接配置...')
-    : showRefreshingHint
-      ? t('refreshingStatus', '正在刷新连接状态...')
-      : null;
-
-  const showPageLoader =
-    (loading || isLoadingConfiguredTypes) && configuredDisplayGroups.length === 0;
 
   return (
     <div className="flex flex-col -m-6 bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
@@ -283,20 +144,20 @@ export function Channels() {
           title={t('title')}
           subtitle={t('subtitle')}
           actions={(
-            <div className="flex flex-wrap items-center gap-2.5">
-              {statusText && (
+            <div className="flex items-center gap-2.5">
+              {loading && configuredGroups.length > 0 && (
                 <div className="inline-flex h-9 items-center gap-2 rounded-[12px] border border-border/70 bg-card/85 px-3 text-[13px] font-medium text-muted-foreground">
                   <LoadingIcon className="h-3.5 w-3.5" />
-                  <span>{statusText}</span>
+                  <span>{t('refreshingStatus', '正在同步连接状态...')}</span>
                 </div>
               )}
               <Button
                 variant="outline"
-                onClick={handleRefresh}
-                disabled={gatewayStatus.state !== 'running'}
+                onClick={() => void fetchChannels(true)}
+                disabled={loading}
                 className="h-9 rounded-[12px] border-black/10 bg-transparent px-4 text-[13px] font-medium text-foreground/80 shadow-none transition-colors hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
               >
-                {loading ? <LoadingIcon className="h-3.5 w-3.5 mr-2" /> : <RefreshCw className="h-3.5 w-3.5 mr-2" />}
+                <RefreshCw className="mr-2 h-3.5 w-3.5" />
                 {t('refresh')}
               </Button>
             </div>
@@ -307,169 +168,368 @@ export function Channels() {
           {showPageLoader ? (
             <PageLoader
               title={t('loadingTitle', '正在加载连接')}
-              description={t('loadingDescription', '正在同步已配置渠道和运行状态，请稍候。')}
+              description={t('loadingDescription', '正在同步连接配置和运行状态，请稍候。')}
             />
           ) : (
             <>
-          {gatewayStatus.state !== 'running' && (
-            <div className="mb-8 p-4 rounded-xl border border-yellow-500/50 bg-yellow-500/10 flex items-center gap-3">
-              <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-              <span className="text-yellow-700 dark:text-yellow-400 text-sm font-medium">
-                {t('gatewayWarning')}
-              </span>
-            </div>
-          )}
+              <GatewayLifecycleBanner lifecycle={gatewayLifecycle} />
 
-          {error && (
-            <div className="mb-8 p-4 rounded-xl border border-destructive/50 bg-destructive/10 flex items-center gap-3">
-              <AlertCircle className="h-5 w-5 text-destructive" />
-              <span className="text-destructive text-sm font-medium">
-                {error}
-              </span>
-            </div>
-          )}
-
-          {configuredDisplayGroups.length > 0 && (
-            <section className="mb-8 rounded-[18px] border border-border/70 bg-card/78 p-4 md:p-5">
-              <div className="mb-5 flex items-end justify-between gap-3">
-                <div>
-                  <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-                    {t('configured')}
-                  </h2>
-                  <p className="mt-1 text-[13px] text-muted-foreground">
-                    {t('configuredDesc')}
-                  </p>
+              {gatewayStatus.state !== 'running' && gatewayLifecycle.state === 'idle' && (
+                <div className="mb-8 flex items-center gap-3 rounded-xl border border-yellow-500/50 bg-yellow-500/10 p-4">
+                  <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                  <span className="text-sm font-medium text-yellow-700 dark:text-yellow-400">
+                    {t('gatewayWarning')}
+                  </span>
                 </div>
-              </div>
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                {configuredDisplayGroups.map((group) => (
-                  <ChannelGroupCard
-                    key={group.type}
-                    group={group}
-                    onEditAccount={(channel) => {
-                      setSelectedChannelType(channel.type);
-                      setSelectedChannelAccountId(channel.accountId ?? null);
-                      setShowAddDialog(true);
-                    }}
-                    onDeleteAccount={(channel) =>
-                      setChannelToDelete({ id: channel.id, accountId: channel.accountId })
-                    }
-                  />
-                ))}
-              </div>
-            </section>
-          )}
+              )}
 
-          <section className="mb-8 rounded-[18px] border border-border/70 bg-card/78 p-4 md:p-5">
-            <div className="mb-5 flex items-end justify-between gap-3">
-              <div>
-                <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-                  {t('supportedChannels')}
-                </h2>
-                <p className="mt-1 text-[13px] text-muted-foreground">
-                  {t('availableDesc')}
-                </p>
-              </div>
-            </div>
+              {error && (
+                <div className="mb-8 flex items-center gap-3 rounded-xl border border-destructive/50 bg-destructive/10 p-4">
+                  <AlertCircle className="h-5 w-5 text-destructive" />
+                  <span className="text-sm font-medium text-destructive">{error}</span>
+                </div>
+              )}
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {displayedChannelTypes.map((type) => {
-                const meta = CHANNEL_META[type];
-                const isConfigured = configuredChannelTypeSet.has(type);
-                if (isConfigured) return null;
+              {configuredGroups.length > 0 && (
+                <section className="mb-8 rounded-[18px] border border-border/70 bg-card/78 p-4 md:p-5">
+                  <div className="mb-5">
+                    <h2 className="text-2xl font-semibold tracking-tight text-foreground">{t('configured')}</h2>
+                    <p className="mt-1 text-[13px] text-muted-foreground">{t('configuredDesc')}</p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                    {configuredGroups.map((group) => (
+                      <ChannelTypeCard
+                        key={group.type}
+                        group={group}
+                        boundAgentName={channelOwners[group.type] ? agentNamesById[channelOwners[group.type]] : undefined}
+                        onEditGroup={() => openConfig(group.type, group.defaultAccountId || 'default')}
+                        onEditAccount={(account) => openConfig(group.type, account.accountId)}
+                        onAddAccount={() => openConfig(group.type, null, { createNewAccount: true })}
+                        onManageBinding={() => navigate('/agents')}
+                        onDeleteAccount={(account) =>
+                          setPendingDelete({
+                            type: group.type,
+                            accountId: account.accountId,
+                            isDefaultAccount: account.isDefaultAccount,
+                            groupName: group.name,
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
 
-                return (
-                  <button
-                    key={type}
-                    onClick={() => {
-                      setSelectedChannelType(type);
-                      setSelectedChannelAccountId(null);
-                      setShowAddDialog(true);
-                    }}
-                    className={cn(
-                      'group relative flex items-start gap-4 overflow-hidden rounded-[16px] border border-border/60 bg-card/84 p-4 text-left transition-colors hover:border-black/10 hover:bg-accent/45 dark:hover:border-white/10'
-                    )}
-                  >
-                    <div className="mt-0.5 shrink-0">
-                      <ChannelLogo type={type} branded />
-                    </div>
-                    <div className="mt-0.5 flex min-w-0 flex-1 flex-col">
-                      <div className="mb-2 flex items-center gap-2">
-                        <h3 className="truncate text-[17px] font-semibold tracking-[-0.02em] text-foreground">{meta.name}</h3>
-                        {meta.isPlugin && (
-                          <Badge variant="secondary" className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[10px] font-medium text-foreground/70 shadow-none dark:border-white/10 dark:bg-white/[0.04]">
-                            {t('pluginBadge')}
-                          </Badge>
-                        )}
+              <section className="mb-8 rounded-[18px] border border-border/70 bg-card/78 p-4 md:p-5">
+                <div className="mb-5">
+                  <h2 className="text-2xl font-semibold tracking-tight text-foreground">{t('supportedChannels')}</h2>
+                  <p className="mt-1 text-[13px] text-muted-foreground">{t('availableDesc')}</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  {supportedUnconfiguredTypes.map((type) => {
+                    const meta = CHANNEL_META[type];
+                    return (
+                      <div
+                        key={type}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => openConfig(type)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            openConfig(type);
+                          }
+                        }}
+                        className="group relative flex cursor-pointer items-start gap-4 overflow-hidden rounded-[16px] border border-border/60 bg-card/84 p-4 text-left transition-colors hover:border-black/10 hover:bg-accent/45 focus:outline-none focus:ring-2 focus:ring-primary/35 dark:hover:border-white/10"
+                      >
+                        <div className="mt-0.5 shrink-0">
+                          <ChannelLogo type={type} branded />
+                        </div>
+                        <div className="mt-0.5 flex min-w-0 flex-1 flex-col">
+                          <div className="mb-2 flex items-center gap-2">
+                            <h3 className="truncate text-[17px] font-semibold tracking-[-0.02em] text-foreground">{meta.name}</h3>
+                            {meta.isPlugin && (
+                              <Badge
+                                variant="secondary"
+                                className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[10px] font-medium text-foreground/70 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
+                              >
+                                {t('pluginBadge')}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="line-clamp-2 text-[14px] leading-[1.55] text-muted-foreground">
+                            {t(meta.description.replace('channels:', ''))}
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-[14px] text-muted-foreground line-clamp-2 leading-[1.55]">
-                        {t(meta.description.replace('channels:', ''))}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-          </>
+                    );
+                  })}
+                </div>
+              </section>
+            </>
           )}
         </div>
       </div>
 
-      {showAddDialog && (
+      {showConfigDialog && (
         <ChannelConfigModal
           initialSelectedType={selectedChannelType}
-          initialAccountId={selectedChannelAccountId}
+          initialAccountId={selectedAccountId}
+          initialCreateNewAccount={createNewAccount}
           configuredTypes={configuredTypes}
           onClose={() => {
-            setShowAddDialog(false);
+            setShowConfigDialog(false);
             setSelectedChannelType(null);
-            setSelectedChannelAccountId(null);
+            setSelectedAccountId(null);
+            setCreateNewAccount(false);
           }}
           onChannelSaved={async () => {
-            await Promise.all([fetchChannels(), fetchConfiguredTypes()]);
-            setShowAddDialog(false);
+            await fetchChannels(false, { includeRuntime: false });
+            setShowConfigDialog(false);
             setSelectedChannelType(null);
-            setSelectedChannelAccountId(null);
+            setSelectedAccountId(null);
+            setCreateNewAccount(false);
           }}
         />
       )}
 
       <ConfirmDialog
-        open={!!channelToDelete}
+        open={!!pendingDelete}
         title={t('confirmTitle', '确认删除')}
         message={
-          channelToDelete?.accountId
-            ? t('deleteConfirmAccount', {
-                accountId: channelToDelete.accountId,
-                defaultValue: `确定要删除账户 ${channelToDelete.accountId} 吗？`,
-              })
-            : t('deleteConfirm')
+          pendingDelete
+            ? pendingDelete.isDefaultAccount
+              ? t('deleteConfirmDefaultAccount', {
+                  name: pendingDelete.groupName,
+                  defaultValue: `确定要删除 ${pendingDelete.groupName} 的默认账户配置吗？`,
+                })
+              : t('deleteConfirmAccount', {
+                  accountId: pendingDelete.accountId,
+                  defaultValue: `确定要删除账户 ${pendingDelete.accountId} 吗？`,
+                })
+            : ''
         }
         confirmLabel={t('deleteAction', '删除')}
         cancelLabel={t('cancelAction', '取消')}
         variant="destructive"
         onConfirm={() => {
-          if (!channelToDelete) return;
-          const pendingDelete = channelToDelete;
-          setChannelToDelete(null);
+          if (!pendingDelete) return;
+          const deleting = pendingDelete;
+          setPendingDelete(null);
           void (async () => {
             try {
-              await deleteChannel(pendingDelete.id, pendingDelete.accountId);
-              await fetchConfiguredTypes();
-              await fetchChannels(false);
+              await deleteChannel(`${deleting.type}:${deleting.accountId}`, deleting.accountId);
+              await fetchChannels(false, { includeRuntime: false });
             } catch (error) {
               toast.error(
                 t('toast.deleteFailed', {
                   error: error instanceof Error ? error.message : String(error),
                   defaultValue: `删除失败: ${String(error)}`,
-                })
+                }),
               );
             }
           })();
         }}
-        onCancel={() => setChannelToDelete(null)}
+        onCancel={() => setPendingDelete(null)}
       />
+    </div>
+  );
+}
+
+function ChannelTypeCard({
+  group,
+  boundAgentName,
+  onEditGroup,
+  onEditAccount,
+  onAddAccount,
+  onManageBinding,
+  onDeleteAccount,
+}: {
+  group: ChannelGroup;
+  boundAgentName?: string;
+  onEditGroup: () => void;
+  onEditAccount: (account: ChannelAccount) => void;
+  onAddAccount: () => void;
+  onManageBinding: () => void;
+  onDeleteAccount: (account: ChannelAccount) => void;
+}) {
+  const { t } = useTranslation('channels');
+  const meta = CHANNEL_META[group.type];
+  const runtimeLabel =
+    group.status === 'connected'
+      ? t('runtime.connected')
+      : group.status === 'connecting'
+        ? t('runtime.connecting')
+        : group.status === 'error'
+          ? t('runtime.error')
+          : group.status === 'configured'
+            ? t('runtime.configuredOnly', '已配置')
+            : group.status === 'disconnected'
+              ? t('runtime.stopped')
+              : t('runtime.unknown');
+
+  return (
+    <div className="rounded-[16px] border border-border/60 bg-card/84 p-4 transition-colors hover:border-black/10 dark:hover:border-white/10">
+      <div className="flex items-start gap-4">
+        <div className="mt-0.5 shrink-0">
+          <ChannelLogo type={group.type} branded />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <h3 className="truncate text-[18px] font-semibold tracking-[-0.02em] text-foreground">{group.name}</h3>
+                <span
+                  className={cn(
+                    'h-2.5 w-2.5 rounded-full shrink-0',
+                    group.status === 'connected'
+                      ? 'bg-emerald-500'
+                      : group.status === 'connecting'
+                        ? 'bg-amber-500 animate-pulse'
+                        : group.status === 'error'
+                          ? 'bg-destructive'
+                          : group.status === 'configured'
+                            ? 'bg-sky-500'
+                            : 'bg-muted-foreground',
+                  )}
+                />
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Badge
+                  variant="secondary"
+                  className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[10px] font-semibold text-foreground/70 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
+                >
+                  {runtimeLabel}
+                </Badge>
+                {meta?.isPlugin && (
+                  <Badge
+                    variant="secondary"
+                    className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[10px] font-semibold text-foreground/70 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
+                  >
+                    {t('pluginBadge', 'Plugin')}
+                  </Badge>
+                )}
+                <Badge
+                  variant="secondary"
+                  className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[10px] font-semibold text-foreground/70 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
+                >
+                  {t('accountCount', { count: group.accounts.length, defaultValue: `${group.accounts.length} 个账户` })}
+                </Badge>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {group.type !== 'whatsapp' && (
+                <Button
+                  variant="outline"
+                  className="h-9 rounded-xl border-black/10 bg-transparent px-3 text-[12px] font-medium text-foreground/75 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
+                  onClick={onAddAccount}
+                >
+                  {t('addAccount', '新增账户')}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                className="h-9 rounded-xl border-black/10 bg-transparent px-3 text-[12px] font-medium text-foreground/75 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
+                onClick={onManageBinding}
+              >
+                {t('manageBinding', '管理归属')}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-xl text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
+                onClick={onEditGroup}
+              >
+                <PencilLine className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <p className="mt-3 text-[14px] leading-[1.55] text-muted-foreground">
+            {group.error || (meta ? t(meta.description.replace('channels:', '')) : CHANNEL_NAMES[group.type])}
+          </p>
+
+          <div className="mt-4 flex items-center justify-between rounded-[14px] border border-border/60 bg-muted/[0.22] px-3 py-2.5">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
+                {t('boundAgentLabel', '当前分身')}
+              </p>
+              <p className="mt-1 text-[13px] font-semibold text-foreground">
+                {boundAgentName || t('unassignedAgent', '未绑定')}
+              </p>
+            </div>
+            <p className="max-w-[220px] text-right text-[12px] leading-[1.5] text-muted-foreground">
+              {t('bindingHint', '连接配置在这里维护，分身归属请到分身页调整。')}
+            </p>
+          </div>
+
+          {group.accounts.length > 0 ? (
+            <div className="mt-4 space-y-2">
+              {group.accounts.map((account) => (
+                <div
+                  key={account.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onEditAccount(account)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      onEditAccount(account);
+                    }
+                  }}
+                  className="flex w-full items-center justify-between rounded-[14px] border border-border/60 bg-background/70 px-3 py-2 text-left transition-colors hover:border-black/10 hover:bg-black/[0.02] focus:outline-none focus:ring-2 focus:ring-primary/35 dark:hover:border-white/10 dark:hover:bg-white/[0.03]"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] font-semibold text-foreground">{account.accountId}</span>
+                      {account.isDefaultAccount && (
+                        <Badge
+                          variant="secondary"
+                          className="rounded-[10px] border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 shadow-none dark:text-emerald-300"
+                        >
+                          {t('defaultAccount', '默认账户')}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[12px] text-foreground/60 dark:text-foreground/65">
+                      {account.status === 'connected'
+                        ? t('runtime.connected')
+                        : account.status === 'connecting'
+                          ? t('runtime.connecting')
+                          : account.status === 'error'
+                            ? t('runtime.error')
+                            : account.configured
+                              ? t('runtime.configuredOnly', '已配置')
+                              : t('runtime.stopped')}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {account.error && (
+                      <span className="max-w-[200px] truncate text-[12px] text-destructive">{account.error}</span>
+                    )}
+                    <Button
+                      variant="dangerGhost"
+                      size="icon"
+                      className="h-8 w-8 rounded-[10px] shrink-0"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onDeleteAccount(account);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-4 rounded-2xl border border-dashed border-border/70 bg-muted/30 px-3 py-4 text-[13px] text-muted-foreground">
+              {t('emptyConfiguredAccounts', '已配置该连接类型，但尚未发现可展示的账户。')}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -482,12 +542,7 @@ function ChannelLogo({ type, branded = false }: { type: ChannelType; branded?: b
   const iconClass = branded ? brand?.icon ?? 'brightness-0 invert' : '';
 
   const wrap = (content: React.ReactNode) => (
-    <div
-      className={cn(
-        'flex h-[50px] w-[50px] items-center justify-center rounded-[16px] border',
-        shellClass
-      )}
-    >
+    <div className={cn('flex h-[50px] w-[50px] items-center justify-center rounded-[16px] border', shellClass)}>
       {content}
     </div>
   );
@@ -511,175 +566,9 @@ function ChannelLogo({ type, branded = false }: { type: ChannelType; branded?: b
       return wrap(
         <span className={cn('text-[22px]', branded ? 'brightness-0 invert' : '')}>
           {CHANNEL_ICONS[type] || '💬'}
-        </span>
+        </span>,
       );
   }
-}
-
-interface ChannelGroupCardProps {
-  group: DisplayChannelGroup;
-  onEditAccount: (channel: DisplayChannel) => void;
-  onDeleteAccount: (channel: DisplayChannel) => void;
-}
-
-function ChannelGroupCard({ group, onEditAccount, onDeleteAccount }: ChannelGroupCardProps) {
-  const { t } = useTranslation('channels');
-  const meta = CHANNEL_META[group.type];
-  const runtimeStatus = group.runtimeStatus;
-  const runtimeLabel =
-    runtimeStatus === 'connected'
-      ? t('runtime.connected')
-      : runtimeStatus === 'connecting'
-        ? t('runtime.connecting')
-        : runtimeStatus === 'error'
-          ? t('runtime.error')
-          : runtimeStatus === 'configured'
-            ? t('runtime.configuredOnly', '已配置')
-            :
-        runtimeStatus === 'disconnected'
-            ? t('runtime.stopped')
-            : t('runtime.unknown');
-
-  return (
-    <div className="group relative overflow-hidden rounded-[16px] border border-border/60 bg-card/84 p-4 text-left transition-colors hover:border-black/10 hover:bg-accent/45 dark:hover:border-white/10">
-      <div className="flex items-start gap-4">
-        <div className="mt-0.5 shrink-0">
-          <ChannelLogo type={group.type} branded />
-        </div>
-        <div className="mt-0.5 flex min-w-0 flex-1 flex-col">
-          <div className="mb-2 flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <h3 className="truncate text-[17px] font-semibold tracking-[-0.02em] text-foreground">{group.name}</h3>
-                <span
-                  className={cn(
-                    'h-2.5 w-2.5 rounded-full shrink-0',
-                    runtimeStatus === 'connected'
-                      ? 'bg-emerald-500'
-                      : runtimeStatus === 'connecting'
-                        ? 'bg-amber-500 animate-pulse'
-                        : runtimeStatus === 'error'
-                          ? 'bg-destructive'
-                          : runtimeStatus === 'configured'
-                            ? 'bg-sky-500'
-                            : 'bg-muted-foreground'
-                  )}
-                  title={runtimeLabel}
-                />
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Badge
-                  variant="secondary"
-                  className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[10px] font-semibold text-foreground/70 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
-                >
-                  {t('configuredBadge')}
-                </Badge>
-                {meta?.isPlugin && (
-                  <Badge
-                    variant="secondary"
-                    className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[10px] font-semibold text-foreground/70 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
-                  >
-                    {t('pluginBadge', 'Plugin')}
-                  </Badge>
-                )}
-                {group.accounts.length > 1 && (
-                  <Badge
-                    variant="secondary"
-                    className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[10px] font-semibold text-foreground/70 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
-                  >
-                    {t('accountCount', { count: group.accounts.length, defaultValue: `${group.accounts.length} 个账户` })}
-                  </Badge>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <p
-              className={cn(
-                'text-[12px] font-medium',
-                runtimeStatus === 'connected'
-                  ? 'text-emerald-700 dark:text-emerald-300'
-                  : runtimeStatus === 'connecting'
-                    ? 'text-amber-700 dark:text-amber-300'
-                    : runtimeStatus === 'error'
-                      ? 'text-destructive'
-                      : runtimeStatus === 'configured'
-                        ? 'text-sky-700 dark:text-sky-300'
-                        : 'text-foreground/62 dark:text-foreground/70'
-              )}
-            >
-              {runtimeLabel}
-            </p>
-            {group.error ? (
-              <p className="text-[14px] leading-[1.55] text-destructive">
-                {group.error}
-              </p>
-            ) : (
-              <p className="text-[14px] text-muted-foreground line-clamp-2 leading-[1.55]">
-                {meta ? t(meta.description.replace('channels:', '')) : CHANNEL_NAMES[group.type]}
-              </p>
-            )}
-          </div>
-
-          <div className="mt-4 space-y-2">
-            {group.accounts.map((channel) => (
-              <button
-                key={channel.id}
-                onClick={() => onEditAccount(channel)}
-                className="flex w-full items-center justify-between rounded-[14px] border border-border/60 bg-background/70 px-3 py-2 text-left transition-colors hover:border-black/10 hover:bg-black/[0.02] dark:hover:border-white/10 dark:hover:bg-white/[0.03]"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[13px] font-semibold text-foreground">
-                      {channel.accountId || 'default'}
-                    </span>
-                    {channel.metadata?.isDefaultAccount === true && (
-                      <Badge
-                        variant="secondary"
-                        className="rounded-[10px] border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 shadow-none dark:text-emerald-300"
-                      >
-                        {t('defaultAccount', '默认账户')}
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="mt-1 text-[12px] text-foreground/60 dark:text-foreground/65">
-                    {channel.runtimeStatus === 'connected'
-                      ? t('runtime.connected')
-                      : channel.runtimeStatus === 'connecting'
-                        ? t('runtime.connecting')
-                        : channel.runtimeStatus === 'error'
-                          ? t('runtime.error')
-                          : channel.configured
-                            ? t('runtime.configuredOnly', '已配置')
-                            : t('runtime.stopped')}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {channel.error && (
-                    <span className="max-w-[240px] truncate text-[12px] text-destructive">
-                      {channel.error}
-                    </span>
-                  )}
-                  <Button
-                    variant="dangerGhost"
-                    size="icon"
-                    className="h-8 w-8 rounded-[10px] shrink-0"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onDeleteAccount(channel);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 export default Channels;

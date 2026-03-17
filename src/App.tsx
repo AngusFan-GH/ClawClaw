@@ -3,7 +3,7 @@
  * Handles routing and global providers
  */
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { Component, useEffect } from 'react';
+import { Component, useEffect, useRef } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { Toaster } from 'sonner';
 import i18n from './i18n';
@@ -20,7 +20,9 @@ import { Security } from './pages/Security';
 import { Setup } from './pages/Setup';
 import { useSettingsStore } from './stores/settings';
 import { useGatewayStore } from './stores/gateway';
+import { useChatStore } from './stores/chat';
 import { applyGatewayTransportPreference } from './lib/api-client';
+import { GatewayLifecycleOverlay } from './components/common/GatewayLifecycleOverlay';
 
 
 /**
@@ -96,6 +98,11 @@ function App() {
   const settingsInitialized = useSettingsStore((state) => state.initialized);
   const setupComplete = useSettingsStore((state) => state.setupComplete);
   const initGateway = useGatewayStore((state) => state.init);
+  const gatewayStatus = useGatewayStore((state) => state.status);
+  const gatewayLifecycle = useGatewayStore((state) => state.lifecycle);
+  const sessionsHydrated = useChatStore((state) => state.sessionsHydrated);
+  const restoreSessionsAfterGatewayReady = useChatStore((state) => state.restoreSessionsAfterGatewayReady);
+  const lastRestoredLifecycleAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     initSettings();
@@ -112,6 +119,24 @@ function App() {
   useEffect(() => {
     initGateway();
   }, [initGateway]);
+
+  useEffect(() => {
+    if (gatewayStatus.state !== 'running' || sessionsHydrated) return;
+    void restoreSessionsAfterGatewayReady();
+  }, [gatewayStatus.state, restoreSessionsAfterGatewayReady, sessionsHydrated]);
+
+  useEffect(() => {
+    if (gatewayStatus.state !== 'running' || gatewayLifecycle.state !== 'completed') return;
+    const completedAt = gatewayLifecycle.at ?? Date.now();
+    if (lastRestoredLifecycleAtRef.current === completedAt) return;
+    lastRestoredLifecycleAtRef.current = completedAt;
+    void restoreSessionsAfterGatewayReady();
+  }, [
+    gatewayLifecycle.at,
+    gatewayLifecycle.state,
+    gatewayStatus.state,
+    restoreSessionsAfterGatewayReady,
+  ]);
 
   // Redirect to setup wizard if not complete
   useEffect(() => {
@@ -177,6 +202,8 @@ function App() {
             <Route path="/settings/*" element={<Settings />} />
           </Route>
         </Routes>
+
+        <GatewayLifecycleOverlay lifecycle={gatewayLifecycle} />
 
         {/* Global toast notifications */}
         <Toaster

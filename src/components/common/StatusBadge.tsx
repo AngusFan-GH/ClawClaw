@@ -5,7 +5,7 @@
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 
-export type Status = 'connected' | 'disconnected' | 'connecting' | 'error' | 'running' | 'stopped' | 'starting' | 'reconnecting';
+export type Status = 'connected' | 'disconnected' | 'connecting' | 'configured' | 'error' | 'running' | 'stopped' | 'starting' | 'reconnecting';
 
 interface StatusBadgeProps {
   status: Status;
@@ -17,6 +17,7 @@ const statusConfig: Record<Status, { label: string; variant: 'success' | 'second
   connected: { label: 'Connected', variant: 'success' },
   running: { label: 'Running', variant: 'success' },
   disconnected: { label: 'Disconnected', variant: 'secondary' },
+  configured: { label: 'Configured', variant: 'secondary' },
   stopped: { label: 'Stopped', variant: 'secondary' },
   connecting: { label: 'Connecting', variant: 'warning' },
   starting: { label: 'Starting', variant: 'warning' },

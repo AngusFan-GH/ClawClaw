@@ -238,8 +238,8 @@ function buildAgentMainSessionKey(agentId: string, mainKey = 'main'): string {
   return `agent:${normalizedAgentId}:${normalizedMainKey}`;
 }
 
-function resolveAgentDisplayName(agent: { id: string; name?: string; identity?: { name?: string } }): string {
-  return agent.name?.trim() || agent.identity?.name?.trim() || agent.id;
+function resolveAgentDisplayName(agent: { gateway: { id: string; name?: string; identity?: { name?: string } } }): string {
+  return agent.gateway.name?.trim() || agent.gateway.identity?.name?.trim() || agent.gateway.id;
 }
 
 export function Chat() {
@@ -255,6 +255,8 @@ export function Chat() {
   const error = useChatStore((s) => s.error);
   const showThinking = useChatStore((s) => s.showThinking);
   const sessions = useChatStore((s) => s.sessions);
+  const sessionsLoading = useChatStore((s) => s.sessionsLoading);
+  const sessionsHydrated = useChatStore((s) => s.sessionsHydrated);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const switchSession = useChatStore((s) => s.switchSession);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
@@ -265,6 +267,7 @@ export function Chat() {
   const pendingFinal = useChatStore((s) => s.pendingFinal);
   const loadHistory = useChatStore((s) => s.loadHistory);
   const loadSessions = useChatStore((s) => s.loadSessions);
+  const restoreSessionsAfterGatewayReady = useChatStore((s) => s.restoreSessionsAfterGatewayReady);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
@@ -321,14 +324,16 @@ export function Chat() {
         navigate(location.pathname, { replace: true, state: null });
         await loadHistory(false);
         if (!cancelled) {
-          void loadSessions(false);
+          void loadSessions({ preserveCurrent: true });
         }
         return;
       }
 
-      await loadSessions(true);
-      if (cancelled) return;
-      await loadHistory(false);
+      if (!sessionsHydrated) {
+        await restoreSessionsAfterGatewayReady();
+      } else {
+        await loadHistory(false);
+      }
     })();
     return () => {
       cancelled = true;
@@ -337,6 +342,8 @@ export function Chat() {
     isGatewayRunning,
     loadHistory,
     loadSessions,
+    restoreSessionsAfterGatewayReady,
+    sessionsHydrated,
     forceSessionKeyFromRoute,
     switchSession,
     navigate,
@@ -496,7 +503,8 @@ export function Chat() {
           }) as RawMessage)
     : null;
 
-  const isEmpty = messages.length === 0 && !loading && !sending;
+  const isRestoringSessions = isGatewayRunning && (sessionsLoading || !sessionsHydrated);
+  const isEmpty = messages.length === 0 && !loading && !sending && !isRestoringSessions;
   const currentSessionIsPlaceholder =
     Boolean(pendingLocalSessionKeys[currentSessionKey])
     || (isEmpty && currentSessionKey === DEFAULT_SESSION_KEY);
@@ -584,12 +592,12 @@ export function Chat() {
   );
   const agentOptions = useMemo<ChatAgentOption[]>(() => {
     const sorted = [...agents].sort((left, right) => {
-      if (left.isDefault) return -1;
-      if (right.isDefault) return 1;
-      return left.name.localeCompare(right.name);
+      if (left.gateway.isDefault) return -1;
+      if (right.gateway.isDefault) return 1;
+      return resolveAgentDisplayName(left).localeCompare(resolveAgentDisplayName(right));
     });
     return sorted.map((agent) => ({
-      id: agent.id,
+      id: agent.gateway.id,
       label: resolveAgentDisplayName(agent),
     }));
   }, [agents]);
@@ -601,7 +609,7 @@ export function Chat() {
         const normalizedId = agentId === 'main' ? defaultAgentId : agentId;
         return (
           agentOptions.find((option) => option.id === normalizedId)?.label
-          || agents.find((agent) => agent.id === normalizedId)?.name
+          || agents.find((agent) => agent.gateway.id === normalizedId)?.gateway.name
         );
       };
 
@@ -663,11 +671,11 @@ export function Chat() {
       {/* Messages Area */}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         <div className="max-w-4xl mx-auto space-y-4">
-          {loading && !sending ? (
+          {(loading && !sending) || isRestoringSessions ? (
             <PageLoader
               compact
               title={t('loading.title', '正在加载对话')}
-              description={t('loading.description', '正在同步当前会话内容，请稍候。')}
+              description={t('history.loading', '正在恢复最近对话…')}
               className="h-[60vh]"
             />
           ) : shouldShowWelcome ? (

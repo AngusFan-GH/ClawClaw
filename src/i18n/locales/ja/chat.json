@@ -71,7 +71,8 @@
     "exec": "Exec"
   },
   "history": {
-    "title": "最近の会話"
+    "title": "最近の会話",
+    "loading": "最近の会話を復元しています…"
   },
   "historyBuckets": {
     "today": "今日",
