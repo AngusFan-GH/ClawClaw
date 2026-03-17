@@ -69,9 +69,10 @@ function mergeAgentSnapshots(
   gatewaySnapshot: GatewayAgentsListResult | undefined,
   localSnapshot: AgentsSnapshot | undefined,
 ): AgentsSnapshot {
+  const gatewayAgents = Array.isArray(gatewaySnapshot?.agents) ? gatewaySnapshot!.agents : [];
+  const hasGatewayAgents = gatewayAgents.length > 0;
   const defaultAgentId = gatewaySnapshot?.defaultId ?? localSnapshot?.defaultAgentId ?? 'main';
   const localById = new Map((localSnapshot?.agents ?? []).map((agent) => [agent.id, agent]));
-  const gatewayAgents = Array.isArray(gatewaySnapshot?.agents) ? gatewaySnapshot!.agents : [];
 
   const mergedAgents: AgentSummary[] = gatewayAgents.map((gatewayAgent) => {
     const local = localById.get(gatewayAgent.id);
@@ -86,12 +87,14 @@ function mergeAgentSnapshots(
     };
   });
 
-  for (const localAgent of localSnapshot?.agents ?? []) {
-    if (mergedAgents.some((agent) => agent.id === localAgent.id)) continue;
-    mergedAgents.push({
-      ...localAgent,
-      isDefault: localAgent.id === defaultAgentId,
-    });
+  if (!hasGatewayAgents) {
+    for (const localAgent of localSnapshot?.agents ?? []) {
+      if (mergedAgents.some((agent) => agent.id === localAgent.id)) continue;
+      mergedAgents.push({
+        ...localAgent,
+        isDefault: localAgent.id === defaultAgentId,
+      });
+    }
   }
 
   return {

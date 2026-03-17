@@ -543,15 +543,24 @@ export async function assignChannelToAgent(agentId: string, channelType: string)
   return buildSnapshotFromConfig(config);
 }
 
-export async function clearChannelBinding(channelType: string): Promise<AgentsSnapshot> {
+export async function clearChannelBinding(channelType: string, agentId?: string): Promise<AgentsSnapshot> {
   const config = await readOpenClawConfig() as AgentConfigDocument;
   const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
+  const currentOwners = getSimpleChannelBindingMap(config.bindings);
+  const boundAgentId = currentOwners.get(channelType);
+  const normalizedRequestedAgentId =
+    typeof agentId === 'string' && agentId.trim() ? normalizeAgentIdForBinding(agentId) : '';
+
+  if (normalizedRequestedAgentId && boundAgentId && boundAgentId !== normalizedRequestedAgentId) {
+    throw new Error(`Channel "${channelType}" is not bound to agent "${agentId}"`);
+  }
+
   config.agents = {
     ...agentsConfig,
     list: entries,
   };
   config.bindings = upsertBindingsForChannel(config.bindings, channelType, null);
   await writeOpenClawConfig(config);
-  logger.info('Cleared simplified channel binding', { channelType });
+  logger.info('Cleared simplified channel binding', { channelType, agentId: normalizedRequestedAgentId || boundAgentId });
   return buildSnapshotFromConfig(config);
 }

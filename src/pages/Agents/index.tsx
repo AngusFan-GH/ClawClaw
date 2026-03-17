@@ -27,6 +27,7 @@ import feishuIcon from '@/assets/channels/feishu.svg';
 import wecomIcon from '@/assets/channels/wecom.svg';
 import qqIcon from '@/assets/channels/qq.svg';
 import { invokeIpc } from '@/lib/api-client';
+import { subscribeHostEvent } from '@/lib/host-events';
 
 const CHANNEL_BRAND_STYLES: Partial<Record<ChannelType, { shell: string; icon: string }>> = {
   telegram: {
@@ -78,6 +79,23 @@ export function Agents() {
 
   useEffect(() => {
     void Promise.all([fetchAgents(), fetchChannels()]);
+  }, [fetchAgents, fetchChannels]);
+
+  useEffect(() => {
+    const unsubscribeGateway = subscribeHostEvent('gateway:status', () => {
+      void Promise.all([fetchAgents(), fetchChannels()]);
+    });
+    const unsubscribeChannels = subscribeHostEvent('gateway:channel-status', () => {
+      void Promise.all([fetchAgents(), fetchChannels()]);
+    });
+    return () => {
+      if (typeof unsubscribeGateway === 'function') {
+        unsubscribeGateway();
+      }
+      if (typeof unsubscribeChannels === 'function') {
+        unsubscribeChannels();
+      }
+    };
   }, [fetchAgents, fetchChannels]);
   const activeAgent = useMemo(
     () => agents.find((agent) => agent.id === activeAgentId) ?? null,
@@ -294,15 +312,16 @@ function AgentCard({
   return (
     <div
       className={cn(
-        'h-full rounded-xl border bg-background/70 px-4 py-4 transition-colors hover:border-primary/35 hover:bg-background',
-        agent.isDefault && 'border-primary/20 bg-primary/[0.04]'
+        'h-full rounded-2xl border bg-background/90 p-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_16px_32px_rgba(15,23,42,0.07)]',
+        agent.isDefault && 'border-primary/25 bg-[linear-gradient(180deg,rgba(59,130,246,0.06),rgba(59,130,246,0.02))]'
       )}
     >
-      <div className="flex items-start gap-3.5">
+      <div className="flex h-full flex-col">
+      <div className="flex items-start gap-4">
         <div className={cn(
-          'mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border text-lg',
+          'mt-0.5 flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border text-xl shadow-sm',
           agent.isDefault
-            ? 'border-primary/15 bg-primary/10'
+            ? 'border-primary/20 bg-primary/12'
             : 'border-black/8 bg-black/[0.03] dark:border-white/10 dark:bg-white/[0.03]'
         )}>
           {avatarGlyph ? (
@@ -315,17 +334,17 @@ function AgentCard({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2.5">
-                <h2 className="truncate text-[17px] font-semibold text-foreground">{displayName}</h2>
+                <h2 className="truncate text-[18px] font-semibold tracking-tight text-foreground">{displayName}</h2>
                 {agent.isDefault && (
                   <Badge
                     variant="secondary"
-                    className="rounded-full border-0 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary shadow-none"
+                    className="rounded-full border-0 bg-primary/12 px-2.5 py-1 text-[11px] font-medium text-primary shadow-none"
                   >
                     {t('defaultBadge')}
                   </Badge>
                 )}
               </div>
-              <p className="mt-1 font-mono text-[12px] text-muted-foreground/85">{agent.id}</p>
+              <p className="mt-1 font-mono text-[12px] text-muted-foreground/80">{agent.id}</p>
               {identityName && identityName !== displayName ? (
                 <p className="mt-1 text-[12px] text-muted-foreground/75">
                   {t('meta.identity', 'Identity')}: <span className="text-foreground/80">{identityName}</span>
@@ -333,13 +352,13 @@ function AgentCard({
               ) : null}
             </div>
             <TooltipProvider delayDuration={120}>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
+                      className="h-9 w-9 rounded-xl text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
                       onClick={onOpenSettings}
                     >
                       <PencilLine className="h-4 w-4" />
@@ -353,7 +372,7 @@ function AgentCard({
                       <Button
                         variant="dangerGhost"
                         size="icon"
-                        className="h-8 w-8 rounded-[10px]"
+                        className="h-9 w-9 rounded-xl"
                         onClick={onDelete}
                       >
                       <Trash2 className="h-4 w-4" />
@@ -365,71 +384,70 @@ function AgentCard({
               </div>
             </TooltipProvider>
           </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2.5 text-[13px]">
-            <div className="inline-flex min-w-0 items-center gap-2 rounded-lg border bg-muted/25 px-3 py-2">
-              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
-                {t('fieldLabels.model')}
+        </div>
+      </div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl border border-border/70 bg-muted/[0.22] px-4 py-3.5">
+          <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
+            {t('fieldLabels.model')}
+          </div>
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
+            <p className="truncate text-[15px] font-semibold text-foreground">{modelMeta.value}</p>
+            {modelMeta.isDefaultModel ? (
+              <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                {t('defaultBadge')}
               </span>
-              <div className="flex min-w-0 items-center gap-1.5">
-                <p className="truncate font-medium text-foreground">{modelMeta.value}</p>
-                {modelMeta.isDefaultModel ? (
-                  <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                    {t('defaultBadge')}
-                  </span>
-                ) : null}
-                {agent.inheritedModel ? (
-                  <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                    {t('inherited')}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-            <div className="inline-flex min-w-0 items-center gap-2 rounded-lg border bg-muted/25 px-3 py-2">
-              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
-                {t('fieldLabels.channels')}
+            ) : null}
+            {agent.inheritedModel ? (
+              <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                {t('inherited')}
               </span>
-              {channelLabels.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {channelLabels.map((label) => (
-                    <span
-                      key={label}
-                      className="inline-flex items-center rounded-md bg-background px-2 py-0.5 text-[12px] font-medium text-foreground/80"
-                    >
-                      {label}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-foreground/55">{t('none')}</p>
-              )}
-            </div>
-            <div className="inline-flex min-w-0 items-center gap-2 rounded-lg border bg-muted/25 px-3 py-2">
-              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
-                {t('meta.workspace', 'Workspace')}
-              </span>
-              {workspacePath ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void openWorkspaceFolder(workspacePath).catch((error) => {
-                      toast.error(t('toast.openWorkspaceFailed', { error: String(error) }));
-                    });
-                  }}
-                  className="group inline-flex min-w-0 max-w-[240px] items-center gap-1.5 rounded-md bg-background px-2 py-1 font-mono text-[12px] text-foreground/80 transition-colors hover:bg-primary/8 hover:text-foreground"
-                  title={workspacePath}
-                >
-                  <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
-                  <span className="truncate">{workspacePath}</span>
-                </button>
-              ) : (
-                <p className="max-w-[220px] truncate font-mono text-[12px] text-foreground/80">
-                  default
-                </p>
-              )}
-            </div>
+            ) : null}
           </div>
         </div>
+        <div className="rounded-2xl border border-border/70 bg-muted/[0.22] px-4 py-3.5">
+          <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
+            {t('fieldLabels.channels')}
+          </div>
+          <div className="mt-2 flex min-h-[34px] flex-wrap items-center gap-1.5">
+            {channelLabels.length > 0 ? (
+              channelLabels.map((label) => (
+                <span
+                  key={label}
+                  className="inline-flex items-center rounded-full border border-border/80 bg-background px-2.5 py-1 text-[12px] font-medium text-foreground/80 shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
+                >
+                  {label}
+                </span>
+              ))
+            ) : (
+              <p className="text-[13px] text-muted-foreground">{t('none')}</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-2xl border border-border/70 bg-muted/[0.22] px-4 py-3.5">
+        <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
+          {t('meta.workspace', 'Workspace')}
+        </div>
+        {workspacePath ? (
+          <button
+            type="button"
+            onClick={() => {
+              void openWorkspaceFolder(workspacePath).catch((error) => {
+                toast.error(t('toast.openWorkspaceFailed', { error: String(error) }));
+              });
+            }}
+            className="group mt-2 inline-flex max-w-full items-center gap-2 rounded-xl bg-background px-3 py-2.5 font-mono text-[12px] text-foreground/80 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-colors hover:bg-primary/8 hover:text-foreground"
+            title={workspacePath}
+          >
+            <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+            <span className="truncate">{workspacePath}</span>
+          </button>
+        ) : (
+          <p className="mt-2 truncate font-mono text-[12px] text-foreground/80">default</p>
+        )}
+      </div>
       </div>
     </div>
   );
@@ -611,13 +629,14 @@ function AgentSettingsModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl bg-card overflow-hidden">
-        <CardHeader className="flex flex-row items-start justify-between pb-2 shrink-0">
+      <Card className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border bg-card shadow-[0_26px_80px_rgba(15,23,42,0.22)]">
+        <CardHeader className="shrink-0 border-b border-border/60 pb-4">
+          <div className="flex items-start justify-between gap-4">
           <div>
-            <CardTitle className="text-2xl font-semibold tracking-tight">
+            <CardTitle className="text-[30px] font-semibold tracking-tight">
               {t('settingsDialog.title', { name: resolveAgentDisplayName(agent) })}
             </CardTitle>
-            <CardDescription className="text-[15px] mt-1 text-foreground/70">
+            <CardDescription className="mt-2 max-w-2xl text-[15px] leading-6 text-foreground/70">
               {t('settingsDialog.description')}
             </CardDescription>
           </div>
@@ -629,10 +648,43 @@ function AgentSettingsModal({
           >
             <X className="h-4 w-4" />
           </Button>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-6 pt-4 overflow-y-auto flex-1 p-6">
-          <div className="space-y-4">
-            <div className="space-y-2.5">
+        <CardContent className="flex-1 overflow-y-auto p-6 pt-6">
+          <div className="space-y-6">
+            <section className="rounded-3xl border border-border/70 bg-muted/[0.18] p-5">
+              <div className="mb-4 flex items-start gap-4">
+                <div className={cn(
+                  'flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border text-xl shadow-sm',
+                  agent.isDefault
+                    ? 'border-primary/20 bg-primary/12'
+                    : 'border-black/8 bg-background dark:border-white/10'
+                )}>
+                  {resolveAgentAvatar(agent) ? (
+                    <span aria-hidden="true">{resolveAgentAvatar(agent)}</span>
+                  ) : (
+                    <Bot className="h-5 w-5 text-foreground/75" strokeWidth={2} />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <h3 className="truncate text-[20px] font-semibold tracking-tight text-foreground">
+                      {resolveAgentDisplayName(agent)}
+                    </h3>
+                    {agent.isDefault ? (
+                      <Badge
+                        variant="secondary"
+                        className="rounded-full border-0 bg-primary/12 px-2.5 py-1 text-[11px] font-medium text-primary shadow-none"
+                      >
+                        {t('defaultBadge')}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 font-mono text-[12px] text-muted-foreground/80">{agent.id}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
               <Label htmlFor="agent-settings-name" className={labelClasses}>{t('settingsDialog.nameLabel')}</Label>
               <div className="flex gap-2">
                 <Input
@@ -654,20 +706,21 @@ function AgentSettingsModal({
                   )}
                 </Button>
               </div>
-            </div>
+              </div>
+            </section>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-1 rounded-2xl border border-border/70 bg-muted/35 p-4">
-                <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground/80 font-medium">
+            <section className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-3xl border border-border/70 bg-muted/[0.18] p-5">
+                <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground/75 font-medium">
                   {t('settingsDialog.agentIdLabel')}
                 </p>
-                <p className="font-mono text-[13px] text-foreground">{agent.id}</p>
+                <p className="mt-2 font-mono text-[13px] text-foreground">{agent.id}</p>
               </div>
-              <div className="space-y-1 rounded-2xl border border-border/70 bg-muted/35 p-4">
-                <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground/80 font-medium">
+              <div className="rounded-3xl border border-border/70 bg-muted/[0.18] p-5">
+                <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground/75 font-medium">
                   {t('settingsDialog.modelLabel')}
                 </p>
-                <div className="flex flex-wrap items-center gap-1.5 text-[13.5px] text-foreground">
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[13.5px] text-foreground">
                   <span>{modelMeta.value}</span>
                   {modelMeta.isDefaultModel ? (
                     <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
@@ -681,10 +734,10 @@ function AgentSettingsModal({
                   ) : null}
                 </div>
               </div>
-            </div>
+            </section>
 
-            <div className="space-y-1 rounded-2xl border border-border/70 bg-muted/35 p-4">
-              <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground/80 font-medium">
+            <section className="rounded-3xl border border-border/70 bg-muted/[0.18] p-5">
+              <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground/75 font-medium">
                 {t('meta.workspace', 'Workspace')}
               </p>
               {workspacePath ? (
@@ -695,25 +748,24 @@ function AgentSettingsModal({
                       toast.error(t('toast.openWorkspaceFailed', { error: String(error) }));
                     });
                   }}
-                  className="group inline-flex min-w-0 max-w-full items-center gap-2 rounded-xl bg-background px-3 py-2 font-mono text-[13px] text-foreground transition-colors hover:bg-primary/8 hover:text-foreground"
+                  className="group mt-2 inline-flex min-w-0 max-w-full items-center gap-2 rounded-2xl bg-background px-3.5 py-3 font-mono text-[13px] text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-colors hover:bg-primary/8 hover:text-foreground"
                   title={workspacePath}
                 >
                   <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
                   <span className="truncate">{workspacePath}</span>
                 </button>
               ) : (
-                <p className="font-mono text-[13px] text-foreground">default</p>
+                <p className="mt-2 font-mono text-[13px] text-foreground">default</p>
               )}
-            </div>
-          </div>
+            </section>
 
-          <div className="space-y-4">
+            <section className="rounded-3xl border border-border/70 bg-muted/[0.18] p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-xl font-semibold text-foreground tracking-tight">
+                <h3 className="text-[20px] font-semibold tracking-tight text-foreground">
                   {t('settingsDialog.channelsTitle')}
                 </h3>
-                <p className="text-[14px] text-foreground/70 mt-1">{t('settingsDialog.channelsDescription')}</p>
+                <p className="mt-1 max-w-2xl text-[14px] leading-6 text-foreground/70">{t('settingsDialog.channelsDescription')}</p>
               </div>
               <Button
                 onClick={() => setShowChannelModal(true)}
@@ -759,6 +811,7 @@ function AgentSettingsModal({
                 ))}
               </div>
             )}
+            </section>
           </div>
         </CardContent>
       </Card>

@@ -90,8 +90,9 @@ export async function handleAgentRoutes(
 
     if (parts.length === 3 && parts[1] === 'channels') {
       try {
+        const agentId = decodeURIComponent(parts[0]);
         const channelType = decodeURIComponent(parts[2]);
-        const snapshot = await clearChannelBinding(channelType);
+        const snapshot = await clearChannelBinding(channelType, agentId);
         scheduleGatewayReload(ctx, 'remove-agent-channel');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {
