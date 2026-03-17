@@ -91,11 +91,12 @@ const ensureBundledUvForWin = (archs, env) => {
 
   console.log(`[package:win] Missing bundled uv for ${missingArchs.join(', ')}. Downloading Windows uv binaries...`);
 
-  const pnpmCmd = findCommandPath('pnpm') || (platform() === 'win32' ? 'pnpm.cmd' : 'pnpm');
+  const isWin = platform() === 'win32';
+  const pnpmCmd = isWin ? 'pnpm.cmd' : 'pnpm';
   const result = spawnSync(pnpmCmd, ['run', 'uv:download:win'], {
     stdio: 'inherit',
     env,
-    shell: false,
+    shell: isWin,
   });
 
   if (result.error) {
