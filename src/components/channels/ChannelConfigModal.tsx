@@ -73,6 +73,7 @@ const CHANNEL_BRAND_STYLES: Partial<Record<ChannelType, { shell: string; icon: s
 
 interface ChannelConfigModalProps {
   initialSelectedType?: ChannelType | null;
+  initialAccountId?: string | null;
   configuredTypes?: string[];
   showChannelName?: boolean;
   allowExistingConfig?: boolean;
@@ -87,6 +88,7 @@ const primaryButtonClasses = 'h-9 text-[13px] font-medium rounded-xl px-4 shadow
 
 export function ChannelConfigModal({
   initialSelectedType = null,
+  initialAccountId = null,
   configuredTypes = [],
   showChannelName = true,
   allowExistingConfig = true,
@@ -96,6 +98,7 @@ export function ChannelConfigModal({
   const { t } = useTranslation('channels');
   const { channels, addChannel, fetchChannels } = useChannelsStore();
   const [selectedType, setSelectedType] = useState<ChannelType | null>(initialSelectedType);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(initialAccountId);
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
   const [channelName, setChannelName] = useState('');
   const [connecting, setConnecting] = useState(false);
@@ -115,7 +118,8 @@ export function ChannelConfigModal({
 
   useEffect(() => {
     setSelectedType(initialSelectedType);
-  }, [initialSelectedType]);
+    setSelectedAccountId(initialAccountId);
+  }, [initialAccountId, initialSelectedType]);
 
   useEffect(() => {
     if (!selectedType) {
@@ -131,7 +135,7 @@ export function ChannelConfigModal({
 
     const shouldLoadExistingConfig = allowExistingConfig && configuredTypes.includes(selectedType);
     if (!shouldLoadExistingConfig) {
-      setConfigValues({});
+      setConfigValues(selectedAccountId ? { __accountId: selectedAccountId } : {});
       setIsExistingConfig(false);
       setLoadingConfig(false);
       setChannelName(showChannelName ? CHANNEL_NAMES[selectedType] : '');
@@ -145,20 +149,21 @@ export function ChannelConfigModal({
     (async () => {
       try {
         const result = await hostApiFetch<{ success: boolean; values?: Record<string, string> }>(
-          `/api/channels/config/${encodeURIComponent(selectedType)}`
+          `/api/channels/config/${encodeURIComponent(selectedType)}${selectedAccountId ? `?accountId=${encodeURIComponent(selectedAccountId)}` : ''}`
         );
         if (cancelled) return;
 
         if (result.success && result.values && Object.keys(result.values).length > 0) {
           setConfigValues(result.values);
+          setSelectedAccountId(result.values.__accountId || selectedAccountId);
           setIsExistingConfig(true);
         } else {
-          setConfigValues({});
+          setConfigValues(selectedAccountId ? { __accountId: selectedAccountId } : {});
           setIsExistingConfig(false);
         }
       } catch {
         if (!cancelled) {
-          setConfigValues({});
+          setConfigValues(selectedAccountId ? { __accountId: selectedAccountId } : {});
           setIsExistingConfig(false);
         }
       } finally {
@@ -169,7 +174,7 @@ export function ChannelConfigModal({
     return () => {
       cancelled = true;
     };
-  }, [allowExistingConfig, configuredTypes, selectedType, showChannelName]);
+  }, [allowExistingConfig, configuredTypes, selectedAccountId, selectedType, showChannelName]);
 
   useEffect(() => {
     if (selectedType && !loadingConfig && showChannelName && firstInputRef.current) {
@@ -422,7 +427,10 @@ export function ChannelConfigModal({
                 return (
                   <button
                     key={type}
-                    onClick={() => setSelectedType(type)}
+                    onClick={() => {
+                      setSelectedType(type);
+                      setSelectedAccountId(null);
+                    }}
                     className={cn(
                       'group flex items-start gap-4 p-4 rounded-2xl transition-all text-left border relative overflow-hidden bg-muted/70 dark:bg-muted/40 shadow-sm',
                       isConfigured
@@ -497,6 +505,13 @@ export function ChannelConfigModal({
                 <div className="bg-blue-500/10 text-blue-600 dark:text-blue-400 p-4 rounded-2xl text-[13.5px] flex items-center gap-2 border border-blue-500/20">
                   <CheckCircle className="h-4 w-4 shrink-0" />
                   <span>{t('dialog.existingHint')}</span>
+                </div>
+              )}
+
+              {selectedAccountId && (
+                <div className="bg-muted/70 text-foreground/75 p-4 rounded-2xl text-[13.5px] flex items-center gap-2 border border-border/70">
+                  <ShieldCheck className="h-4 w-4 shrink-0" />
+                  <span>{t('dialog.accountHint', { accountId: selectedAccountId, defaultValue: `当前编辑账户：${selectedAccountId}` })}</span>
                 </div>
               )}
 

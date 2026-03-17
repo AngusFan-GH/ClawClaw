@@ -2,6 +2,9 @@
   "title": "连接",
   "subtitle": "连接到消息平台。",
   "refresh": "刷新",
+  "confirmTitle": "确认删除",
+  "deleteAction": "删除",
+  "cancelAction": "取消",
   "addChannel": "添加连接",
   "stats": {
     "total": "连接总数",
@@ -17,16 +20,21 @@
   "configured": "已配置连接",
   "configuredDesc": "管理已完成配置的连接",
   "configuredBadge": "已配置",
+  "accountCount": "{{count}} 个账户",
+  "defaultAccount": "默认账户",
+  "editingAccount": "账户: {{accountId}}",
   "runtime": {
     "label": "运行态",
     "connected": "已连接",
     "connecting": "连接中",
     "error": "错误",
+    "configuredOnly": "已配置",
     "stopped": "已停止",
     "unknown": "未知",
     "notLoaded": "网关未加载"
   },
   "deleteConfirm": "确定要删除此连接吗？",
+  "deleteConfirmAccount": "确定要删除账户 {{accountId}} 吗？",
   "showAll": "显示全部",
   "toast": {
     "whatsappConnected": "WhatsApp 连接成功",
@@ -34,7 +42,8 @@
     "channelSaved": "连接 {{name}} 已保存",
     "channelConnecting": "正在连接 {{name}}...",
     "restartManual": "请手动重启网关",
-    "configFailed": "配置失败: {{error}}"
+    "configFailed": "配置失败: {{error}}",
+    "deleteFailed": "删除失败: {{error}}"
   },
   "dialog": {
     "updateTitle": "更新 {{name}}",
@@ -48,6 +57,7 @@
     "refreshCode": "刷新代码",
     "loadingConfig": "正在加载配置...",
     "existingHint": "您已配置过此连接",
+    "accountHint": "当前编辑账户：{{accountId}}",
     "howToConnect": "如何连接",
     "viewDocs": "查看文档",
     "channelName": "连接名称",

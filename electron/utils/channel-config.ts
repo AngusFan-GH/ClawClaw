@@ -249,6 +249,189 @@ export interface OpenClawConfig {
     [key: string]: unknown;
 }
 
+interface AccountScopedChannelSection extends ChannelConfigData {
+    accounts?: Record<string, ChannelConfigData>;
+}
+
+function resolveConfiguredAccounts(
+    section: AccountScopedChannelSection | undefined
+): Array<{ accountId: string; config: ChannelConfigData }> {
+    if (!section?.accounts || typeof section.accounts !== 'object') {
+        return [];
+    }
+    return Object.entries(section.accounts)
+        .filter(([, value]) => value && typeof value === 'object')
+        .map(([accountId, config]) => ({ accountId, config }));
+}
+
+function stripChannelSectionScaffolding(
+    value: ChannelConfigData | undefined
+): Record<string, unknown> {
+    if (!value || typeof value !== 'object') {
+        return {};
+    }
+    return Object.fromEntries(
+        Object.entries(value).filter(([key]) => !['enabled', 'name', 'accounts'].includes(key))
+    );
+}
+
+function hasMeaningfulSectionConfig(value: ChannelConfigData | undefined): boolean {
+    return Object.keys(stripChannelSectionScaffolding(value)).length > 0;
+}
+
+function configsShareComparableValues(
+    left: ChannelConfigData | undefined,
+    right: ChannelConfigData | undefined
+): boolean {
+    const lhs = stripChannelSectionScaffolding(left);
+    const rhs = stripChannelSectionScaffolding(right);
+    const sharedKeys = Object.keys(lhs).filter((key) => key in rhs);
+    return sharedKeys.some((key) => {
+        try {
+            return JSON.stringify(lhs[key]) === JSON.stringify(rhs[key]);
+        } catch {
+            return lhs[key] === rhs[key];
+        }
+    });
+}
+
+function resolveEditableChannelSource(
+    config: OpenClawConfig,
+    channelType: string,
+    preferredAccountId?: string | null
+): { kind: 'top-level' } | { kind: 'account'; accountId: string } {
+    const section = config.channels?.[channelType] as AccountScopedChannelSection | undefined;
+    const configuredAccounts = resolveConfiguredAccounts(section);
+    const normalizedPreferredAccountId =
+        typeof preferredAccountId === 'string' && preferredAccountId.trim()
+            ? preferredAccountId.trim()
+            : '';
+
+    if (
+        normalizedPreferredAccountId === 'default' &&
+        hasMeaningfulSectionConfig(section)
+    ) {
+        return { kind: 'top-level' };
+    }
+
+    if (normalizedPreferredAccountId && section?.accounts?.[normalizedPreferredAccountId]) {
+        return { kind: 'account', accountId: normalizedPreferredAccountId };
+    }
+
+    if (configuredAccounts.length === 1) {
+        const [{ accountId, config: accountConfig }] = configuredAccounts;
+        if (!hasMeaningfulSectionConfig(section)) {
+            return { kind: 'account', accountId };
+        }
+        if (configsShareComparableValues(section, accountConfig)) {
+            // Legacy/buggy duplicated config shape: both top-level and one named
+            // account carry the same credentials. Prefer the named account so we
+            // do not keep shadowing the plugin's resolved default account.
+            return { kind: 'account', accountId };
+        }
+    }
+
+    return { kind: 'top-level' };
+}
+
+function removeTopLevelCredentialFields(
+    section: AccountScopedChannelSection
+): AccountScopedChannelSection {
+    const nextSection = { ...section };
+    for (const key of Object.keys(stripChannelSectionScaffolding(section))) {
+        delete nextSection[key];
+    }
+    return nextSection;
+}
+
+const BASE_SHARED_CHANNEL_SECTION_KEYS = new Set([
+    'enabled',
+    'accounts',
+    'defaultAccount',
+]);
+
+const SHARED_CHANNEL_SECTION_KEYS_BY_TYPE: Record<string, readonly string[]> = {
+    feishu: ['connectionMode', 'groupSessionScope', 'renderMode', 'replyInThread', 'groups'],
+    qqbot: ['stt', 'tts'],
+    telegram: ['historyLimit'],
+    discord: ['historyLimit'],
+    signal: ['historyLimit'],
+    mattermost: ['historyLimit'],
+    matrix: ['historyLimit'],
+    line: ['historyLimit'],
+    msteams: ['historyLimit'],
+    googlechat: ['historyLimit'],
+    imessage: ['historyLimit'],
+    dingtalk: ['historyLimit'],
+    wecom: ['historyLimit'],
+};
+
+function isSharedChannelSectionKey(channelType: string, key: string): boolean {
+    if (BASE_SHARED_CHANNEL_SECTION_KEYS.has(key)) {
+        return true;
+    }
+    return SHARED_CHANNEL_SECTION_KEYS_BY_TYPE[channelType]?.includes(key) ?? false;
+}
+
+function cloneIfObject<T>(value: T): T {
+    if (value && typeof value === 'object') {
+        return structuredClone(value);
+    }
+    return value;
+}
+
+function getAccountScopedTopLevelKeys(
+    channelType: string,
+    section: AccountScopedChannelSection
+): string[] {
+    return Object.entries(section)
+        .filter(([key, value]) => key !== 'accounts' && value !== undefined)
+        .filter(([key]) => !isSharedChannelSectionKey(channelType, key))
+        .map(([key]) => key);
+}
+
+function moveSingleAccountSectionToDefaultAccount(
+    channelType: string,
+    section: AccountScopedChannelSection
+): AccountScopedChannelSection {
+    const accounts = section.accounts && typeof section.accounts === 'object'
+        ? { ...section.accounts }
+        : {};
+    if (Object.keys(accounts).length > 0) {
+        return section;
+    }
+
+    const keysToMove = getAccountScopedTopLevelKeys(channelType, section);
+    if (keysToMove.length === 0) {
+        return section;
+    }
+
+    const defaultAccount = { ...((accounts.default as ChannelConfigData | undefined) || {}) };
+    const nextSection: AccountScopedChannelSection = { ...section };
+
+    for (const key of keysToMove) {
+        defaultAccount[key] = cloneIfObject((section as Record<string, unknown>)[key]);
+        delete (nextSection as Record<string, unknown>)[key];
+    }
+
+    nextSection.accounts = {
+        ...accounts,
+        default: defaultAccount,
+    };
+    return nextSection;
+}
+
+function clearTopLevelAccountFields(
+    channelType: string,
+    section: AccountScopedChannelSection
+): AccountScopedChannelSection {
+    const nextSection = { ...section };
+    for (const key of getAccountScopedTopLevelKeys(channelType, section)) {
+        delete (nextSection as Record<string, unknown>)[key];
+    }
+    return nextSection;
+}
+
 // ── Config I/O ───────────────────────────────────────────────────
 
 async function ensureConfigDir(): Promise<void> {
@@ -301,6 +484,10 @@ export async function saveChannelConfig(
     config: ChannelConfigData
 ): Promise<void> {
     const currentConfig = await readOpenClawConfig();
+    const preferredAccountId =
+        typeof config.__accountId === 'string' && config.__accountId.trim()
+            ? config.__accountId.trim()
+            : undefined;
 
     // DingTalk is a channel plugin; make sure it's explicitly allowed.
     // Newer OpenClaw versions may not load non-bundled plugins when allowlist is empty.
@@ -380,6 +567,7 @@ export async function saveChannelConfig(
 
     // Transform config to match OpenClaw expected format
     let transformedConfig: ChannelConfigData = { ...config };
+    delete transformedConfig.__accountId;
 
     // Special handling for Discord: convert guildId/channelId to complete structure
     if (channelType === 'discord') {
@@ -451,12 +639,58 @@ export async function saveChannelConfig(
         transformedConfig.allowFrom = allowFrom;
     }
 
-    // Merge with existing config
-    currentConfig.channels[channelType] = {
-        ...currentConfig.channels[channelType],
-        ...transformedConfig,
-        enabled: transformedConfig.enabled ?? true,
-    };
+    {
+        let existingSection = (currentConfig.channels[channelType] as AccountScopedChannelSection | undefined) || {};
+
+        const normalizedPreferredAccountId =
+            typeof preferredAccountId === 'string' && preferredAccountId.trim()
+                ? preferredAccountId.trim()
+                : '';
+
+        if (
+            normalizedPreferredAccountId &&
+            normalizedPreferredAccountId !== 'default' &&
+            hasMeaningfulSectionConfig(existingSection) &&
+            (!existingSection.accounts || Object.keys(existingSection.accounts).length === 0)
+        ) {
+            existingSection = moveSingleAccountSectionToDefaultAccount(channelType, existingSection);
+            currentConfig.channels[channelType] = existingSection;
+        }
+
+        const editableSource =
+            normalizedPreferredAccountId && normalizedPreferredAccountId !== 'default'
+                ? { kind: 'account' as const, accountId: normalizedPreferredAccountId }
+                : resolveEditableChannelSource(currentConfig, channelType, preferredAccountId);
+
+        if (editableSource.kind === 'account') {
+            const accounts = { ...(existingSection.accounts || {}) };
+            const existingAccount = (accounts[editableSource.accountId] as ChannelConfigData | undefined) || {};
+            accounts[editableSource.accountId] = {
+                ...existingAccount,
+                ...transformedConfig,
+                enabled: transformedConfig.enabled ?? true,
+            };
+
+            let nextSection: AccountScopedChannelSection = {
+                ...existingSection,
+                accounts,
+            };
+
+            // If ClawX previously created a conflicting duplicated default account,
+            // remove top-level credentials so the plugin resolves the named account.
+            if (configsShareComparableValues(existingSection, existingAccount)) {
+                nextSection = removeTopLevelCredentialFields(nextSection);
+            }
+
+            currentConfig.channels[channelType] = nextSection;
+        } else {
+            currentConfig.channels[channelType] = {
+                ...existingSection,
+                ...transformedConfig,
+                enabled: transformedConfig.enabled ?? true,
+            };
+        }
+    }
 
     await writeOpenClawConfig(currentConfig);
     logger.info('Channel config saved', {
@@ -469,13 +703,29 @@ export async function saveChannelConfig(
     console.log(`Saved channel config for ${channelType}`);
 }
 
-export async function getChannelConfig(channelType: string): Promise<ChannelConfigData | undefined> {
+export async function getChannelConfig(
+    channelType: string,
+    preferredAccountId?: string | null
+): Promise<ChannelConfigData | undefined> {
     const config = await readOpenClawConfig();
+    if (config.channels?.[channelType]) {
+        const section = config.channels[channelType] as AccountScopedChannelSection | undefined;
+        if (!section) return undefined;
+        const source = resolveEditableChannelSource(config, channelType, preferredAccountId);
+        if (source.kind === 'account') {
+            return section.accounts?.[source.accountId];
+        }
+    }
     return config.channels?.[channelType];
 }
 
-export async function getChannelFormValues(channelType: string): Promise<Record<string, string> | undefined> {
-    const saved = await getChannelConfig(channelType);
+export async function getChannelFormValues(
+    channelType: string,
+    preferredAccountId?: string | null
+): Promise<Record<string, string> | undefined> {
+    const config = await readOpenClawConfig();
+    const source = resolveEditableChannelSource(config, channelType, preferredAccountId);
+    const saved = await getChannelConfig(channelType, preferredAccountId);
     if (!saved) return undefined;
 
     const values: Record<string, string> = {};
@@ -516,14 +766,54 @@ export async function getChannelFormValues(channelType: string): Promise<Record<
         }
     }
 
+    if (source.kind === 'account') {
+        values.__accountId = source.accountId;
+    }
+
     return Object.keys(values).length > 0 ? values : undefined;
 }
 
-export async function deleteChannelConfig(channelType: string): Promise<void> {
+export async function deleteChannelConfig(
+    channelType: string,
+    preferredAccountId?: string | null
+): Promise<void> {
     const currentConfig = await readOpenClawConfig();
 
     if (currentConfig.channels?.[channelType]) {
-        delete currentConfig.channels[channelType];
+        const section = currentConfig.channels[channelType] as AccountScopedChannelSection | undefined;
+        const source = resolveEditableChannelSource(currentConfig, channelType, preferredAccountId);
+        if (section && source.kind === 'account' && section.accounts?.[source.accountId]) {
+            const accounts = { ...section.accounts };
+            const accountConfig = accounts[source.accountId] as ChannelConfigData | undefined;
+            delete accounts[source.accountId];
+            const remainingAccounts = Object.keys(accounts);
+            let nextSection: AccountScopedChannelSection = {
+                ...section,
+                ...(remainingAccounts.length > 0 ? { accounts } : {}),
+            };
+            if (remainingAccounts.length === 0) {
+                delete nextSection.accounts;
+            }
+            if (configsShareComparableValues(section, accountConfig)) {
+                nextSection = removeTopLevelCredentialFields(nextSection);
+            }
+            if (remainingAccounts.length === 0 && !hasMeaningfulSectionConfig(nextSection)) {
+                delete currentConfig.channels[channelType];
+            } else {
+                currentConfig.channels[channelType] = nextSection;
+            }
+        } else {
+            if (section?.accounts && Object.keys(section.accounts).length > 0) {
+                const nextSection = clearTopLevelAccountFields(channelType, section);
+                if (!nextSection.accounts || Object.keys(nextSection.accounts).length === 0) {
+                    delete currentConfig.channels[channelType];
+                } else {
+                    currentConfig.channels[channelType] = nextSection;
+                }
+            } else {
+                delete currentConfig.channels[channelType];
+            }
+        }
         await writeOpenClawConfig(currentConfig);
         console.log(`Deleted channel config for ${channelType}`);
     } else if (PLUGIN_CHANNELS.includes(channelType)) {
@@ -588,7 +878,42 @@ export async function listConfiguredChannels(): Promise<string[]> {
     return Array.from(channels);
 }
 
-export async function setChannelEnabled(channelType: string, enabled: boolean): Promise<void> {
+export async function listConfiguredChannelAccounts(): Promise<Record<string, string[]>> {
+    const config = await readOpenClawConfig();
+    const result: Record<string, string[]> = {};
+
+    for (const channelType of await listConfiguredChannels()) {
+        const section = config.channels?.[channelType] as AccountScopedChannelSection | undefined;
+        const accountIds = new Set<string>();
+
+        if (section && section.enabled !== false) {
+            if (getAccountScopedTopLevelKeys(channelType, section).length > 0) {
+                accountIds.add('default');
+            }
+            for (const { accountId, config: accountConfig } of resolveConfiguredAccounts(section)) {
+                if (hasMeaningfulSectionConfig(accountConfig)) {
+                    accountIds.add(accountId);
+                }
+            }
+        }
+
+        if (PLUGIN_CHANNELS.includes(channelType) && accountIds.size === 0) {
+            accountIds.add('default');
+        }
+
+        if (accountIds.size > 0) {
+            result[channelType] = Array.from(accountIds);
+        }
+    }
+
+    return result;
+}
+
+export async function setChannelEnabled(
+    channelType: string,
+    enabled: boolean,
+    preferredAccountId?: string | null
+): Promise<void> {
     const currentConfig = await readOpenClawConfig();
 
     if (PLUGIN_CHANNELS.includes(channelType)) {
@@ -603,7 +928,21 @@ export async function setChannelEnabled(channelType: string, enabled: boolean): 
 
     if (!currentConfig.channels) currentConfig.channels = {};
     if (!currentConfig.channels[channelType]) currentConfig.channels[channelType] = {};
-    currentConfig.channels[channelType].enabled = enabled;
+    const section = currentConfig.channels[channelType] as AccountScopedChannelSection;
+    const source = resolveEditableChannelSource(currentConfig, channelType, preferredAccountId);
+    if (source.kind === 'account') {
+        const accounts = { ...(section.accounts || {}) };
+        const accountSection = { ...((accounts[source.accountId] as ChannelConfigData | undefined) || {}) };
+        accountSection.enabled = enabled;
+        accounts[source.accountId] = accountSection;
+        currentConfig.channels[channelType] = {
+            ...section,
+            enabled,
+            accounts,
+        };
+    } else {
+        currentConfig.channels[channelType].enabled = enabled;
+    }
     await writeOpenClawConfig(currentConfig);
     console.log(`Set channel ${channelType} enabled: ${enabled}`);
 }

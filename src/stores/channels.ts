@@ -16,7 +16,12 @@ interface AddChannelParams {
 
 function resolveChannelTypeFromId(channelId: string): ChannelType | undefined {
   const channelTypes = Object.keys(CHANNEL_NAMES) as ChannelType[];
-  return channelTypes.find((type) => channelId === type || channelId.startsWith(`${type}-`));
+  return channelTypes.find(
+    (type) =>
+      channelId === type ||
+      channelId.startsWith(`${type}-`) ||
+      channelId.startsWith(`${type}:`)
+  );
 }
 
 interface ChannelsState {
@@ -25,9 +30,9 @@ interface ChannelsState {
   error: string | null;
 
   // Actions
-  fetchChannels: () => Promise<void>;
+  fetchChannels: (probe?: boolean) => Promise<void>;
   addChannel: (params: AddChannelParams) => Promise<Channel>;
-  deleteChannel: (channelId: string) => Promise<void>;
+  deleteChannel: (channelId: string, accountId?: string) => Promise<void>;
   setChannels: (channels: Channel[]) => void;
   updateChannel: (channelId: string, updates: Partial<Channel>) => void;
   clearError: () => void;
@@ -38,12 +43,12 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
   loading: false,
   error: null,
 
-  fetchChannels: async () => {
+  fetchChannels: async (probe = false) => {
     set({ loading: true, error: null });
     const gatewayStatus = useGatewayStore.getState().status;
 
     if (gatewayStatus.state !== 'running') {
-      set({ channels: [], loading: false });
+      set({ loading: false });
       return;
     }
 
@@ -64,7 +69,7 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
             lastOutboundAt?: number | null;
           }>>;
           channelDefaultAccountId?: Record<string, string>;
-      }>('channels.status', { probe: true }, 2500);
+      }>('channels.status', { probe, timeoutMs: 8000 }, 9000);
       if (data) {
         const channels: Channel[] = [];
 
@@ -72,73 +77,103 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
         const channelOrder = data.channelOrder || Object.keys(data.channels || {});
         for (const channelId of channelOrder) {
           const summary = (data.channels as Record<string, unknown> | undefined)?.[channelId] as Record<string, unknown> | undefined;
+          const accounts = data.channelAccounts?.[channelId] || [];
+          const accountActive = accounts.some((account) =>
+            account.configured === true || account.running === true || account.connected === true
+          );
           const configured =
             typeof summary?.configured === 'boolean'
               ? summary.configured
               : typeof (summary as { running?: boolean })?.running === 'boolean'
                 ? true
                 : false;
-          if (!configured) continue;
-
-          const accounts = data.channelAccounts?.[channelId] || [];
+          const enabled =
+            configured ||
+            (typeof (summary as { connected?: boolean })?.connected === 'boolean' &&
+              (summary as { connected?: boolean }).connected === true) ||
+            accountActive;
+          if (!enabled) continue;
           const defaultAccountId = data.channelDefaultAccountId?.[channelId];
-          const primaryAccount =
-            (defaultAccountId ? accounts.find((a) => a.accountId === defaultAccountId) : undefined) ||
-            accounts.find((a) => a.connected === true || a.linked === true) ||
-            accounts[0];
-
-          // Map gateway status to our status format
-          let status: Channel['status'] = 'disconnected';
           const now = Date.now();
           const RECENT_MS = 10 * 60 * 1000;
           const hasRecentActivity = (a: { lastInboundAt?: number | null; lastOutboundAt?: number | null; lastConnectedAt?: number | null }) =>
             (typeof a.lastInboundAt === 'number' && now - a.lastInboundAt < RECENT_MS) ||
             (typeof a.lastOutboundAt === 'number' && now - a.lastOutboundAt < RECENT_MS) ||
             (typeof a.lastConnectedAt === 'number' && now - a.lastConnectedAt < RECENT_MS);
-          const anyConnected = accounts.some((a) => a.connected === true || a.linked === true || hasRecentActivity(a));
-          const anyRunning = accounts.some((a) => a.running === true);
           const summaryError =
             typeof (summary as { error?: string })?.error === 'string'
               ? (summary as { error?: string }).error
               : typeof (summary as { lastError?: string })?.lastError === 'string'
                 ? (summary as { lastError?: string }).lastError
                 : undefined;
-          const anyError =
-            accounts.some((a) => typeof a.lastError === 'string' && a.lastError) || Boolean(summaryError);
+          const mapAccountStatus = (account: {
+            connected?: boolean;
+            linked?: boolean;
+            running?: boolean;
+            lastError?: string;
+            lastInboundAt?: number | null;
+            lastOutboundAt?: number | null;
+            lastConnectedAt?: number | null;
+          }): Channel['status'] => {
+            if (account.connected === true || account.linked === true || hasRecentActivity(account)) {
+              return 'connected';
+            }
+            if (typeof account.lastError === 'string' && account.lastError) {
+              return 'error';
+            }
+            if (account.running === true || hasRecentActivity(account)) {
+              return 'connecting';
+            }
+            return 'disconnected';
+          };
 
-          if (anyConnected) {
-            status = 'connected';
-          } else if (anyRunning && !anyError) {
-            status = 'connected';
-          } else if (anyError) {
-            status = 'error';
-          } else if (anyRunning) {
-            status = 'connecting';
+          if (accounts.length > 0) {
+            for (const account of accounts) {
+              const status = mapAccountStatus(account);
+              channels.push({
+                id: `${channelId}:${account.accountId || 'default'}`,
+                type: channelId as ChannelType,
+                name: account.name || CHANNEL_NAMES[channelId as ChannelType] || channelId,
+                status,
+                configured: account.configured ?? true,
+                runtimeLoaded: true,
+                runtimeStatus: status,
+                accountId: account.accountId,
+                error:
+                  (typeof account.lastError === 'string' ? account.lastError : undefined) ||
+                  (typeof summaryError === 'string' ? summaryError : undefined),
+                metadata: {
+                  defaultAccountId,
+                  isDefaultAccount: account.accountId === defaultAccountId,
+                },
+              });
+            }
+            continue;
           }
 
           channels.push({
-            id: `${channelId}-${primaryAccount?.accountId || 'default'}`,
+            id: `${channelId}:default`,
             type: channelId as ChannelType,
-            name: primaryAccount?.name || CHANNEL_NAMES[channelId as ChannelType] || channelId,
-            status,
+            name: CHANNEL_NAMES[channelId as ChannelType] || channelId,
+            status: summaryError ? 'error' : 'disconnected',
             configured: true,
             runtimeLoaded: true,
-            runtimeStatus: status,
-            accountId: primaryAccount?.accountId,
-            error:
-              (typeof primaryAccount?.lastError === 'string' ? primaryAccount.lastError : undefined) ||
-              (typeof summaryError === 'string' ? summaryError : undefined),
+            runtimeStatus: summaryError ? 'error' : 'unknown',
+            accountId: defaultAccountId,
+            error: typeof summaryError === 'string' ? summaryError : undefined,
+            metadata: {
+              defaultAccountId,
+              isDefaultAccount: true,
+            },
           });
         }
 
         set({ channels, loading: false });
       } else {
-        // Gateway not available - try to show channels from local config
-        set({ channels: [], loading: false });
+        set({ loading: false, error: 'No channel status snapshot returned' });
       }
-    } catch {
-      // Gateway not connected, show empty
-      set({ channels: [], loading: false });
+    } catch (error) {
+      set({ loading: false, error: String(error) });
     }
   },
 
@@ -167,7 +202,7 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
     }
   },
 
-  deleteChannel: async (channelId) => {
+  deleteChannel: async (channelId, accountId) => {
     set({ error: null });
     const channelType = resolveChannelTypeFromId(channelId);
     if (!channelType) {
@@ -176,7 +211,8 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
 
     // Configuration deletion is the authoritative operation. If it fails,
     // keep local UI state unchanged.
-    await hostApiFetch(`/api/channels/config/${encodeURIComponent(channelType)}`, {
+    const query = accountId ? `?accountId=${encodeURIComponent(accountId)}` : '';
+    await hostApiFetch(`/api/channels/config/${encodeURIComponent(channelType)}${query}`, {
       method: 'DELETE',
     });
 

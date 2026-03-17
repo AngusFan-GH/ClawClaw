@@ -2,6 +2,9 @@
   "title": "メッセージングチャンネル",
   "subtitle": "メッセージングチャンネルと接続を管理",
   "refresh": "更新",
+  "confirmTitle": "削除の確認",
+  "deleteAction": "削除",
+  "cancelAction": "キャンセル",
   "addChannel": "チャンネルを追加",
   "stats": {
     "total": "全チャンネル",
@@ -16,16 +19,21 @@
   "configured": "設定済みチャンネル",
   "configuredDesc": "すでに設定済みのチャンネルを管理",
   "configuredBadge": "設定済み",
+  "accountCount": "{{count}} アカウント",
+  "defaultAccount": "既定アカウント",
+  "editingAccount": "アカウント: {{accountId}}",
   "runtime": {
     "label": "ランタイム",
     "connected": "接続済み",
     "connecting": "接続中",
     "error": "エラー",
+    "configuredOnly": "設定済み",
     "stopped": "停止中",
     "unknown": "不明",
     "notLoaded": "Gateway に未ロード"
   },
   "deleteConfirm": "このチャンネルを削除してもよろしいですか？",
+  "deleteConfirmAccount": "アカウント {{accountId}} を削除してもよろしいですか？",
   "showAll": "すべて表示",
   "pluginBadge": "プラグイン",
   "toast": {
@@ -34,7 +42,8 @@
     "channelSaved": "チャンネル {{name}} が保存されました",
     "channelConnecting": "{{name}} に接続中...",
     "restartManual": "ゲートウェイを手動で再起動してください",
-    "configFailed": "設定に失敗しました: {{error}}"
+    "configFailed": "設定に失敗しました: {{error}}",
+    "deleteFailed": "削除に失敗しました: {{error}}"
   },
   "dialog": {
     "updateTitle": "{{name}} を更新",
@@ -48,6 +57,7 @@
     "refreshCode": "コードを更新",
     "loadingConfig": "設定を読み込み中...",
     "existingHint": "このチャンネルの設定はすでに存在します",
+    "accountHint": "編集中のアカウント: {{accountId}}",
     "howToConnect": "接続方法",
     "viewDocs": "ドキュメントを表示",
     "channelName": "チャンネル名",

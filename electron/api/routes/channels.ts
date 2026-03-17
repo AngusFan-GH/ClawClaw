@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import {
   deleteChannelConfig,
   getChannelFormValues,
+  listConfiguredChannelAccounts,
   listConfiguredChannels,
   saveChannelConfig,
   setChannelEnabled,
@@ -154,7 +155,11 @@ export async function handleChannelRoutes(
   ctx: HostApiContext,
 ): Promise<boolean> {
   if (url.pathname === '/api/channels/configured' && req.method === 'GET') {
-    sendJson(res, 200, { success: true, channels: await listConfiguredChannels() });
+    sendJson(res, 200, {
+      success: true,
+      channels: await listConfiguredChannels(),
+      accountsByType: await listConfiguredChannelAccounts(),
+    });
     return true;
   }
 
@@ -234,8 +239,8 @@ export async function handleChannelRoutes(
 
   if (url.pathname === '/api/channels/config/enabled' && req.method === 'PUT') {
     try {
-      const body = await parseJsonBody<{ channelType: string; enabled: boolean }>(req);
-      await setChannelEnabled(body.channelType, body.enabled);
+      const body = await parseJsonBody<{ channelType: string; enabled: boolean; accountId?: string }>(req);
+      await setChannelEnabled(body.channelType, body.enabled, body.accountId);
       scheduleGatewayChannelRestart(ctx, `channel:setEnabled:${body.channelType}`);
       sendJson(res, 200, { success: true });
     } catch (error) {
@@ -247,9 +252,10 @@ export async function handleChannelRoutes(
   if (url.pathname.startsWith('/api/channels/config/') && req.method === 'GET') {
     try {
       const channelType = decodeURIComponent(url.pathname.slice('/api/channels/config/'.length));
+      const accountId = url.searchParams.get('accountId');
       sendJson(res, 200, {
         success: true,
-        values: await getChannelFormValues(channelType),
+        values: await getChannelFormValues(channelType, accountId),
       });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -260,7 +266,8 @@ export async function handleChannelRoutes(
   if (url.pathname.startsWith('/api/channels/config/') && req.method === 'DELETE') {
     try {
       const channelType = decodeURIComponent(url.pathname.slice('/api/channels/config/'.length));
-      await deleteChannelConfig(channelType);
+      const accountId = url.searchParams.get('accountId');
+      await deleteChannelConfig(channelType, accountId);
       scheduleGatewayChannelRestart(ctx, `channel:deleteConfig:${channelType}`);
       sendJson(res, 200, { success: true });
     } catch (error) {
