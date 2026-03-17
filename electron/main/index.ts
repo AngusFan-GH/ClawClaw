@@ -188,7 +188,7 @@ async function initialize(): Promise<void> {
   mainWindow = createWindow();
 
   // Create system tray
-  createTray(mainWindow);
+  createTray(mainWindow, gatewayManager);
 
   // Override security headers ONLY for the OpenClaw Gateway Control UI.
   // The URL filter ensures this callback only fires for gateway requests,

@@ -149,9 +149,19 @@ function App() {
   // Listen for navigation events from main process
   useEffect(() => {
     const handleNavigate = (...args: unknown[]) => {
-      const path = args[0];
-      if (typeof path === 'string') {
-        navigate(path);
+      const target = args[0];
+      if (typeof target === 'string') {
+        navigate(target);
+        return;
+      }
+      if (
+        target
+        && typeof target === 'object'
+        && 'path' in target
+        && typeof (target as { path?: unknown }).path === 'string'
+      ) {
+        const payload = target as { path: string; state?: unknown };
+        navigate(payload.path, payload.state === undefined ? undefined : { state: payload.state });
       }
     };
 

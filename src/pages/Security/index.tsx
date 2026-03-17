@@ -3,14 +3,12 @@ import { FolderPlus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { PageLoader } from '@/components/common/LoadingSpinner';
-import { GatewayLifecycleBanner } from '@/components/common/GatewayLifecycleBanner';
+import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import { useGatewayStore } from '@/stores/gateway';
 import {
   DEFAULT_SECURITY_POLICY,
   type SecurityPolicy,
@@ -25,7 +23,6 @@ import {
 
 export function Security() {
   const { t } = useTranslation('settings');
-  const gatewayLifecycle = useGatewayStore((state) => state.lifecycle);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [policy, setPolicy] = useState<SecurityPolicy>(DEFAULT_SECURITY_POLICY);
@@ -203,22 +200,6 @@ export function Security() {
     : hasRuntimeDrift
       ? 'security.runtimePreview.outOfSync'
       : 'security.runtimePreview.inSync';
-  const bannerLifecycle =
-    gatewayLifecycle.state === 'completed'
-    && (gatewayLifecycle.source === 'security.apply' || gatewayLifecycle.source === 'security.reset')
-      ? { state: 'idle' as const }
-      : gatewayLifecycle;
-
-  if (loading) {
-    return (
-      <div className="-m-6 h-[calc(100vh-2.5rem)] overflow-hidden dark:bg-background">
-        <PageLoader
-          title={t('security.loadingTitle', '正在加载安全设置')}
-          description={t('security.loadingDescription', '正在同步当前安全策略，请稍候。')}
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="-m-6 h-[calc(100vh-2.5rem)] overflow-hidden dark:bg-background">
@@ -232,6 +213,12 @@ export function Security() {
             />
 
             <div className="flex flex-wrap items-center gap-2 md:justify-end">
+              {loading ? (
+                <div className="inline-flex h-9 items-center gap-2 rounded-xl border border-border/70 bg-card/85 px-3.5 text-[12px] font-medium text-muted-foreground">
+                  <LoadingIcon className="h-3.5 w-3.5" />
+                  <span>{t('security.loadingDescription')}</span>
+                </div>
+              ) : null}
               <Button variant="outline" onClick={() => void loadPolicy()} disabled={applying}>
                 {t('security.actions.reload')}
               </Button>
@@ -252,9 +239,50 @@ export function Security() {
         </div>
 
         <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2 pb-6">
-          <GatewayLifecycleBanner lifecycle={bannerLifecycle} />
-
           <div className="space-y-4">
+            {loading ? (
+              <>
+                <section className="rounded-xl border bg-card px-4 py-4 md:px-5 animate-pulse">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-2">
+                      <div className="h-5 w-28 rounded bg-muted" />
+                      <div className="h-4 w-80 max-w-[70vw] rounded bg-muted" />
+                    </div>
+                    <div className="h-6 w-11 rounded-full bg-muted" />
+                  </div>
+                </section>
+
+                <section className="rounded-xl border bg-card px-4 py-4 md:px-5 animate-pulse">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-2">
+                      <div className="h-5 w-24 rounded bg-muted" />
+                      <div className="h-4 w-96 max-w-[75vw] rounded bg-muted" />
+                    </div>
+                    <div className="h-9 w-32 rounded-xl bg-muted" />
+                  </div>
+                  <div className="mt-4 h-12 rounded-lg bg-muted/80" />
+                </section>
+
+                <section className="rounded-xl border bg-card px-4 py-4 md:px-5 animate-pulse">
+                  <div className="space-y-2">
+                    <div className="h-5 w-24 rounded bg-muted" />
+                    <div className="h-4 w-96 max-w-[75vw] rounded bg-muted" />
+                  </div>
+                  <div className="mt-4 grid gap-3">
+                    {Array.from({ length: SECURITY_RULE_DEFINITIONS.length }).map((_, index) => (
+                      <div key={`security-rule-skeleton-${index}`} className="flex items-start justify-between gap-4 rounded-lg border px-4 py-3">
+                        <div className="space-y-2">
+                          <div className="h-4 w-32 rounded bg-muted" />
+                          <div className="h-4 w-72 max-w-[60vw] rounded bg-muted" />
+                        </div>
+                        <div className="h-6 w-11 rounded-full bg-muted" />
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </>
+            ) : (
+              <>
             <section className="rounded-xl border bg-card px-4 py-4 md:px-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
@@ -431,6 +459,8 @@ export function Security() {
                 )}
               </div>
             </section>
+              </>
+            )}
           </div>
         </div>
       </div>

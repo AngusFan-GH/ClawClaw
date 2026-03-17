@@ -45,7 +45,6 @@ import {
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
-import { GatewayLifecycleBanner } from '@/components/common/GatewayLifecycleBanner';
 import type { ReminderItem } from '@/shared/reminders';
 
 type ControlUiInfo = {
@@ -162,7 +161,6 @@ export function Settings() {
 
   const {
     status: gatewayStatus,
-    lifecycle: gatewayLifecycle,
     restart: restartGateway,
     init: initGateway,
   } = useGatewayStore();
@@ -697,11 +695,17 @@ export function Settings() {
         <PageHeader
           title={t('title')}
           subtitle={t('subtitle')}
+          actions={
+            !initialized ? (
+              <div className="inline-flex h-9 items-center gap-2 rounded-xl border border-border/70 bg-card/85 px-3.5 text-[12px] font-medium text-muted-foreground">
+                <LoadingIcon className="h-3.5 w-3.5" />
+                <span>{t('common:status.loading')}</span>
+              </div>
+            ) : undefined
+          }
         />
 
         <div className="-mr-2 min-h-0 flex-1 space-y-6 overflow-y-auto pr-2 pb-8">
-          <GatewayLifecycleBanner lifecycle={gatewayLifecycle} />
-
           <SectionCard title={t('appearance.title')} description={t('appearance.description')}>
             <div className="grid gap-4 lg:grid-cols-2">
               <SubCard title={t('appearance.theme')}>

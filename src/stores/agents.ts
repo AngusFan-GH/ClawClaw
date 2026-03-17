@@ -50,6 +50,8 @@ interface AgentsState {
   clearError: () => void;
 }
 
+const AGENTS_LIST_RPC_TIMEOUT_MS = 3000;
+
 function humanizeAgentId(agentId: string): string {
   if (agentId === 'main') return 'Main';
   return agentId
@@ -168,21 +170,42 @@ export const useAgentsStore = create<AgentsState>((set) => ({
 
   fetchAgents: async () => {
     set({ loading: true, error: null });
+    let localSnapshot: (AgentsSnapshot & { success?: boolean }) | undefined;
     try {
-      const [gatewayResult, localResult] = await Promise.allSettled([
-        useGatewayStore.getState().rpc<GatewayAgentsListResult>('agents.list', {}),
-        hostApiFetch<AgentsSnapshot & { success?: boolean }>('/api/agents'),
-      ]);
-      const merged = mergeAgentSnapshots(
-        gatewayResult.status === 'fulfilled' ? gatewayResult.value : undefined,
-        localResult.status === 'fulfilled' ? localResult.value : undefined,
-      );
+      localSnapshot = await hostApiFetch<AgentsSnapshot & { success?: boolean }>('/api/agents');
+      const mergedLocal = mergeAgentSnapshots(undefined, localSnapshot);
       set({
-        ...merged,
+        ...mergedLocal,
         loading: false,
       });
     } catch (error) {
       set({ loading: false, error: String(error) });
+      return;
+    }
+
+    try {
+      const gatewayState = useGatewayStore.getState();
+      const shouldIncludeRuntime =
+        gatewayState.status.state === 'running' &&
+        gatewayState.lifecycle.state !== 'scheduled' &&
+        gatewayState.lifecycle.state !== 'applying';
+
+      if (!shouldIncludeRuntime) {
+        return;
+      }
+
+      const gatewaySnapshot = await gatewayState.rpc<GatewayAgentsListResult>(
+        'agents.list',
+        {},
+        AGENTS_LIST_RPC_TIMEOUT_MS,
+      );
+      const merged = mergeAgentSnapshots(gatewaySnapshot, localSnapshot);
+      set({
+        ...merged,
+        loading: false,
+      });
+    } catch {
+      // Local snapshot is already rendered; ignore runtime enrichment failures.
     }
   },
 

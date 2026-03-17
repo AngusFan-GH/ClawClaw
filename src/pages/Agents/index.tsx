@@ -8,8 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { StatusBadge, type Status } from '@/components/common/StatusBadge';
-import { LoadingIcon, PageLoader } from '@/components/common/LoadingSpinner';
-import { GatewayLifecycleBanner } from '@/components/common/GatewayLifecycleBanner';
+import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAgentsStore } from '@/stores/agents';
 import { useChannelsStore } from '@/stores/channels';
@@ -81,15 +80,18 @@ export function Agents() {
   const [agentToDelete, setAgentToDelete] = useState<AgentSummary | null>(null);
 
   useEffect(() => {
-    void Promise.all([fetchAgents(), fetchChannels()]);
+    void fetchAgents();
+    void fetchChannels(false, { includeRuntime: false });
   }, [fetchAgents, fetchChannels]);
 
   useEffect(() => {
     const unsubscribeGateway = subscribeHostEvent('gateway:status', () => {
-      void Promise.all([fetchAgents(), fetchChannels()]);
+      void fetchAgents();
+      void fetchChannels(false);
     });
     const unsubscribeChannels = subscribeHostEvent('gateway:channel-status', () => {
-      void Promise.all([fetchAgents(), fetchChannels()]);
+      void fetchAgents();
+      void fetchChannels(false);
     });
     return () => {
       if (typeof unsubscribeGateway === 'function') {
@@ -114,19 +116,9 @@ export function Agents() {
     [agents],
   );
   const handleRefresh = () => {
-    void Promise.all([fetchAgents(), fetchChannels()]);
+    void fetchAgents();
+    void fetchChannels(false);
   };
-
-  if (loading) {
-    return (
-      <div className="flex flex-col -m-6 dark:bg-background min-h-[calc(100vh-2.5rem)]">
-        <PageLoader
-          title={t('loadingTitle', '正在加载分身')}
-          description={t('loadingDescription', '正在同步分身配置和绑定关系，请稍候。')}
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
@@ -136,6 +128,12 @@ export function Agents() {
           subtitle={t('subtitle')}
           actions={(
             <div className="flex items-center gap-3">
+              {loading && (
+                <div className="inline-flex h-9 items-center gap-2 rounded-xl border border-border/70 bg-card/85 px-3.5 text-[12px] font-medium text-muted-foreground">
+                  <LoadingIcon className="h-3.5 w-3.5" />
+                  <span>{t('loadingDescription', '正在同步分身配置和绑定关系，请稍候。')}</span>
+                </div>
+              )}
               <Button
                 variant="outline"
                 onClick={handleRefresh}
@@ -156,8 +154,6 @@ export function Agents() {
         />
 
         <div className="flex-1 overflow-y-auto pr-2 pb-10 min-h-0 -mr-2">
-          <GatewayLifecycleBanner lifecycle={gatewayLifecycle} />
-
           {gatewayStatus.state !== 'running' && gatewayLifecycle.state === 'idle' && (
             <div className="mb-8 p-4 rounded-xl border border-yellow-500/50 bg-yellow-500/10 flex items-center gap-3">
               <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
@@ -177,10 +173,21 @@ export function Agents() {
           )}
 
           <div className="grid gap-3 mb-5 md:grid-cols-2 xl:grid-cols-4">
-            <AgentStatCard label={t('stats.total')} value={stats.total} />
-            <AgentStatCard label={t('stats.defaults')} value={stats.defaults} />
-            <AgentStatCard label={t('stats.custom')} value={stats.custom} />
-            <AgentStatCard label={t('stats.connected')} value={stats.connected} />
+            {loading && agents.length === 0 ? (
+              Array.from({ length: 4 }).map((_, index) => (
+                <div key={`agent-stat-skeleton-${index}`} className="rounded-xl border bg-card px-4 py-4 animate-pulse">
+                  <div className="h-3 w-20 rounded bg-muted" />
+                  <div className="mt-3 h-8 w-12 rounded bg-muted" />
+                </div>
+              ))
+            ) : (
+              <>
+                <AgentStatCard label={t('stats.total')} value={stats.total} />
+                <AgentStatCard label={t('stats.defaults')} value={stats.defaults} />
+                <AgentStatCard label={t('stats.custom')} value={stats.custom} />
+                <AgentStatCard label={t('stats.connected')} value={stats.connected} />
+              </>
+            )}
           </div>
 
           <section className="rounded-xl border bg-card p-4">
@@ -193,7 +200,35 @@ export function Agents() {
               </p>
             </div>
 
-            {agents.length === 0 ? (
+            {loading && agents.length === 0 ? (
+              <div className="grid gap-3 grid-cols-1">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div
+                    key={`agent-card-skeleton-${index}`}
+                    className="rounded-xl border bg-card px-4 py-4 animate-pulse"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex min-w-0 flex-1 items-start gap-3">
+                        <div className="h-11 w-11 rounded-xl bg-muted" />
+                        <div className="min-w-0 flex-1">
+                          <div className="h-5 w-40 rounded bg-muted" />
+                          <div className="mt-2 h-3 w-24 rounded bg-muted" />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <div className="h-9 w-9 rounded-[10px] bg-muted" />
+                        <div className="h-9 w-9 rounded-[10px] bg-muted" />
+                      </div>
+                    </div>
+                    <div className="mt-4 grid gap-3 md:grid-cols-3">
+                      <div className="h-16 rounded-xl bg-muted/80" />
+                      <div className="h-16 rounded-xl bg-muted/80" />
+                      <div className="h-16 rounded-xl bg-muted/80" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : agents.length === 0 ? (
               <div className="rounded-xl border border-dashed px-4 py-8 text-center">
                 <p className="text-sm font-medium text-foreground">{t('empty.title')}</p>
                 <p className="mt-1 text-sm text-muted-foreground">{t('empty.description')}</p>
@@ -323,132 +358,141 @@ function AgentCard({
   return (
     <div
       className={cn(
-        'h-full rounded-2xl border bg-background/90 p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_16px_32px_rgba(15,23,42,0.07)]',
-        agent.gateway.isDefault && 'border-primary/25 bg-[linear-gradient(180deg,rgba(59,130,246,0.06),rgba(59,130,246,0.02))]'
+        'h-full rounded-[28px] border border-border/80 bg-background/96 p-5 shadow-[0_10px_30px_rgba(15,23,42,0.045)] transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_18px_44px_rgba(15,23,42,0.08)]',
+        agent.gateway.isDefault && 'border-sky-200/80 bg-[linear-gradient(180deg,rgba(56,189,248,0.08),rgba(255,255,255,0.96))]'
       )}
     >
       <div className="flex h-full flex-col">
-      <div className="flex items-start gap-3.5">
-        <div className={cn(
-          'mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border text-xl shadow-sm',
-          agent.gateway.isDefault
-            ? 'border-primary/20 bg-primary/12'
-            : 'border-black/8 bg-black/[0.03] dark:border-white/10 dark:bg-white/[0.03]'
-        )}>
-          {avatarGlyph ? (
-            <span aria-hidden="true">{avatarGlyph}</span>
-          ) : (
-            <Bot className="h-5 w-5 text-foreground/75" strokeWidth={2} />
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <h2 className="truncate text-[18px] font-semibold tracking-tight text-foreground">{displayName}</h2>
-                {agent.gateway.isDefault && (
-                  <Badge
-                    variant="secondary"
-                    className="rounded-full border-0 bg-primary/12 px-2.5 py-1 text-[11px] font-medium text-primary shadow-none"
-                  >
-                    {t('defaultBadge')}
-                  </Badge>
-                )}
+        <div className="flex items-start gap-4">
+          <div
+            className={cn(
+              'mt-0.5 flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border text-[24px] shadow-[0_8px_20px_rgba(15,23,42,0.08)]',
+              agent.gateway.isDefault
+                ? 'border-sky-200 bg-sky-50 text-sky-600'
+                : 'border-border/70 bg-muted/[0.5] text-foreground/78'
+            )}
+          >
+            {avatarGlyph ? (
+              <span aria-hidden="true">{avatarGlyph}</span>
+            ) : (
+              <Bot className="h-6 w-6" strokeWidth={2} />
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+                  <h2 className="truncate text-[22px] font-semibold tracking-[-0.02em] text-foreground">{displayName}</h2>
+                  {agent.gateway.isDefault && (
+                    <Badge className="rounded-full border border-sky-200/80 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-sky-700 shadow-none">
+                      {t('defaultBadge')}
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
+                  <span className="font-mono text-muted-foreground/85">{agent.gateway.id}</span>
+                  {identityName && identityName !== displayName ? (
+                    <span className="text-muted-foreground/80">
+                      {t('meta.identity', 'Identity')}
+                      <span className="mx-1 text-muted-foreground/45">·</span>
+                      <span className="text-foreground/80">{identityName}</span>
+                    </span>
+                  ) : null}
+                </div>
               </div>
-              <p className="mt-1 font-mono text-[12px] text-muted-foreground/80">{agent.gateway.id}</p>
-              {identityName && identityName !== displayName ? (
-                <p className="mt-1 text-[12px] text-muted-foreground/75">
-                  {t('meta.identity', 'Identity')}: <span className="text-foreground/80">{identityName}</span>
-                </p>
-              ) : null}
-            </div>
-            <TooltipProvider delayDuration={120}>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 rounded-xl text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
-                      onClick={onOpenSettings}
-                    >
-                      <PencilLine className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>{t('settings')}</TooltipContent>
-                </Tooltip>
-                {!agent.gateway.isDefault && (
+
+              <TooltipProvider delayDuration={120}>
+                <div className="flex shrink-0 items-center gap-2">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
-                        variant="dangerGhost"
+                        variant="ghost"
                         size="icon"
-                        className="h-8 w-8 rounded-xl"
-                        onClick={onDelete}
+                        className="h-9 w-9 rounded-2xl border border-border/70 bg-background/80 text-muted-foreground shadow-sm hover:bg-accent hover:text-foreground"
+                        onClick={onOpenSettings}
                       >
-                      <Trash2 className="h-4 w-4" />
+                        <PencilLine className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>{t('deleteAgent')}</TooltipContent>
+                    <TooltipContent>{t('settings')}</TooltipContent>
                   </Tooltip>
-                )}
-              </div>
-            </TooltipProvider>
-          </div>
-        </div>
-      </div>
-      <div className="mt-4 space-y-2 rounded-2xl border border-border/70 bg-muted/[0.22] px-4 py-3">
-        <div className="flex items-start gap-3 text-[14px]">
-          <span className="w-14 shrink-0 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
-            {t('fieldLabels.model')}
-          </span>
-          <div className="min-w-0 flex flex-1 flex-wrap items-center gap-2">
-            <span className="truncate font-semibold text-foreground">{modelMeta.value}</span>
-            {modelMeta.isDefaultModel ? (
-              <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                {t('defaultBadge')}
-              </span>
-            ) : null}
-            {agent.local.inheritedModel ? (
-              <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                {t('inherited')}
-              </span>
-            ) : null}
+                  {!agent.gateway.isDefault && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="dangerGhost"
+                          size="icon"
+                          className="h-9 w-9 rounded-2xl border border-red-200/80 bg-red-50/80 shadow-sm hover:bg-red-100"
+                          onClick={onDelete}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{t('deleteAgent')}</TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+              </TooltipProvider>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-start gap-3 text-[14px]">
-          <span className="w-14 shrink-0 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
-            {t('fieldLabels.channels')}
-          </span>
-          <span className="min-w-0 flex-1 truncate text-foreground/80" title={connectionSummary}>
-            {connectionSummary}
-          </span>
-        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,0.85fr)_minmax(0,1.35fr)]">
+          <div className="rounded-[22px] border border-border/70 bg-white/72 px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/75">
+              {t('fieldLabels.model')}
+            </div>
+            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
+              <span className="truncate text-[18px] font-semibold tracking-[-0.01em] text-foreground">{modelMeta.value}</span>
+              {modelMeta.isDefaultModel ? (
+                <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                  {t('defaultBadge')}
+                </span>
+              ) : null}
+              {agent.local.inheritedModel ? (
+                <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  {t('inherited')}
+                </span>
+              ) : null}
+            </div>
+          </div>
 
-        <div className="flex items-start gap-3 text-[14px]">
-          <span className="w-14 shrink-0 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
-            {t('meta.workspace', 'Workspace')}
-          </span>
-          {workspacePath ? (
-            <button
-              type="button"
-              onClick={() => {
-                void openWorkspaceFolder(workspacePath).catch((error) => {
-                  toast.error(t('toast.openWorkspaceFailed', { error: String(error) }));
-                });
-              }}
-              className="group inline-flex min-w-0 max-w-full items-center gap-2 rounded-xl bg-background px-3 py-1.5 font-mono text-[12px] text-foreground/80 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-colors hover:bg-primary/8 hover:text-foreground"
-              title={workspacePath}
-            >
-              <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
-              <span className="truncate">{workspacePath}</span>
-            </button>
-          ) : (
-            <span className="truncate font-mono text-[12px] text-foreground/80">default</span>
-          )}
+          <div className="rounded-[22px] border border-border/70 bg-white/72 px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/75">
+              {t('fieldLabels.channels')}
+            </div>
+            <div className="mt-2 text-[17px] font-medium text-foreground/82" title={connectionSummary}>
+              <span className="block truncate">{connectionSummary}</span>
+            </div>
+          </div>
+
+          <div className="rounded-[22px] border border-border/70 bg-white/72 px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/75">
+              {t('meta.workspace', 'Workspace')}
+            </div>
+            <div className="mt-2">
+              {workspacePath ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void openWorkspaceFolder(workspacePath).catch((error) => {
+                      toast.error(t('toast.openWorkspaceFailed', { error: String(error) }));
+                    });
+                  }}
+                  className="group inline-flex min-w-0 max-w-full items-center gap-2 rounded-2xl border border-border/70 bg-background px-3 py-2 font-mono text-[12px] text-foreground/82 transition-colors hover:border-primary/25 hover:bg-primary/5 hover:text-foreground"
+                  title={workspacePath}
+                >
+                  <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+                  <span className="truncate">{workspacePath}</span>
+                </button>
+              ) : (
+                <span className="truncate font-mono text-[12px] text-foreground/80">default</span>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
       </div>
     </div>
   );
@@ -938,17 +982,17 @@ function AgentSettingsModal({
         variant="destructive"
         onConfirm={async () => {
           if (!channelToRemove) return;
+          const removing = channelToRemove;
+          setChannelToRemove(null);
           try {
-            await removeChannel(agent.gateway.id, channelToRemove.channelType, channelToRemove.accountId);
+            await removeChannel(agent.gateway.id, removing.channelType, removing.accountId);
             await fetchChannels();
             toast.success(t('toast.channelRemoved', {
-              channel: channelToRemove.name,
-              defaultValue: `${channelToRemove.name} 已解绑`,
+              channel: removing.name,
+              defaultValue: `${removing.name} 已解绑`,
             }));
           } catch (error) {
             toast.error(t('toast.channelRemoveFailed', { error: String(error) }));
-          } finally {
-            setChannelToRemove(null);
           }
         }}
         onCancel={() => setChannelToRemove(null)}

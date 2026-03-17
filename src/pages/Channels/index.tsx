@@ -3,8 +3,7 @@ import { AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { LoadingIcon, PageLoader } from '@/components/common/LoadingSpinner';
-import { GatewayLifecycleBanner } from '@/components/common/GatewayLifecycleBanner';
+import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { useChannelsStore } from '@/stores/channels';
 import { useAgentsStore } from '@/stores/agents';
 import { useGatewayStore } from '@/stores/gateway';
@@ -25,13 +24,13 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
-import telegramIcon from '@/assets/channels/telegram.svg';
-import discordIcon from '@/assets/channels/discord.svg';
-import whatsappIcon from '@/assets/channels/whatsapp.svg';
-import dingtalkIcon from '@/assets/channels/dingtalk.svg';
-import feishuIcon from '@/assets/channels/feishu.svg';
-import wecomIcon from '@/assets/channels/wecom.svg';
-import qqIcon from '@/assets/channels/qq.svg';
+import telegramIcon from '@/assets/channels/telegram.svg?raw';
+import discordIcon from '@/assets/channels/discord.svg?raw';
+import whatsappIcon from '@/assets/channels/whatsapp.svg?raw';
+import dingtalkIcon from '@/assets/channels/dingtalk.svg?raw';
+import feishuIcon from '@/assets/channels/feishu.svg?raw';
+import wecomIcon from '@/assets/channels/wecom.svg?raw';
+import qqIcon from '@/assets/channels/qq.svg?raw';
 
 const CHANNEL_BRAND_STYLES: Partial<Record<ChannelType, { shell: string; icon: string }>> = {
   telegram: {
@@ -64,6 +63,25 @@ const CHANNEL_BRAND_STYLES: Partial<Record<ChannelType, { shell: string; icon: s
   },
 };
 
+function normalizeChannelSvg(raw: string): string {
+  return raw
+    .replace(/<\?xml[\s\S]*?\?>/gi, '')
+    .replace(/<!DOCTYPE[\s\S]*?>/gi, '')
+    .replace(/fill="(?!none)[^"]*"/gi, 'fill="currentColor"')
+    .replace(/width="[^"]*"/gi, '')
+    .replace(/height="[^"]*"/gi, '');
+}
+
+const CHANNEL_SVG_MARKUP: Partial<Record<ChannelType, string>> = {
+  telegram: normalizeChannelSvg(telegramIcon),
+  discord: normalizeChannelSvg(discordIcon),
+  whatsapp: normalizeChannelSvg(whatsappIcon),
+  dingtalk: normalizeChannelSvg(dingtalkIcon),
+  feishu: normalizeChannelSvg(feishuIcon),
+  wecom: normalizeChannelSvg(wecomIcon),
+  qqbot: normalizeChannelSvg(qqIcon),
+};
+
 export function Channels() {
   const { t } = useTranslation('channels');
   const { channelGroups, loading, error, fetchChannels, deleteChannel } = useChannelsStore();
@@ -85,8 +103,17 @@ export function Channels() {
   } | null>(null);
 
   useEffect(() => {
-    void fetchChannels(false);
-  }, [fetchChannels]);
+    let cancelled = false;
+    void fetchChannels(false, { includeRuntime: false }).then(() => {
+      if (cancelled) return;
+      if (gatewayStatus.state === 'running') {
+        void fetchChannels(false, { includeRuntime: true });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchChannels, gatewayStatus.state]);
 
   useEffect(() => {
     const unsubscribeGateway = subscribeHostEvent('gateway:status', () => {
@@ -128,8 +155,6 @@ export function Channels() {
   );
 
   const supportedUnconfiguredTypes = getPrimaryChannels().filter((type) => !configuredTypes.includes(type));
-  const showPageLoader = loading && configuredGroups.length === 0;
-
   const openConfig = (type: ChannelType, accountId?: string | null, options?: { createNewAccount?: boolean }) => {
     setSelectedChannelType(type);
     setSelectedAccountId(accountId ?? null);
@@ -145,7 +170,7 @@ export function Channels() {
           subtitle={t('subtitle')}
           actions={(
             <div className="flex items-center gap-2.5">
-              {loading && configuredGroups.length > 0 && (
+              {loading && (
                 <div className="inline-flex h-8 items-center gap-2 rounded-[12px] border border-border/70 bg-card/85 px-3 text-[12px] font-medium text-muted-foreground">
                   <LoadingIcon className="h-3.5 w-3.5" />
                   <span>{t('refreshingStatus', '正在同步连接状态...')}</span>
@@ -165,71 +190,80 @@ export function Channels() {
         />
 
         <div className="flex-1 overflow-y-auto pr-2 pb-10 min-h-0 -mr-2">
-          {showPageLoader ? (
-            <PageLoader
-              title={t('loadingTitle', '正在加载连接')}
-              description={t('loadingDescription', '正在同步连接配置和运行状态，请稍候。')}
-            />
-          ) : (
-            <>
-              <GatewayLifecycleBanner lifecycle={gatewayLifecycle} />
+          <>
+            {gatewayStatus.state !== 'running' && gatewayLifecycle.state === 'idle' && (
+              <div className="mb-8 flex items-center gap-3 rounded-xl border border-yellow-500/50 bg-yellow-500/10 p-4">
+                <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                <span className="text-sm font-medium text-yellow-700 dark:text-yellow-400">
+                  {t('gatewayWarning')}
+                </span>
+              </div>
+            )}
 
-              {gatewayStatus.state !== 'running' && gatewayLifecycle.state === 'idle' && (
-                <div className="mb-8 flex items-center gap-3 rounded-xl border border-yellow-500/50 bg-yellow-500/10 p-4">
-                  <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-                  <span className="text-sm font-medium text-yellow-700 dark:text-yellow-400">
-                    {t('gatewayWarning')}
-                  </span>
+            {error && (
+              <div className="mb-8 flex items-center gap-3 rounded-xl border border-destructive/50 bg-destructive/10 p-4">
+                <AlertCircle className="h-5 w-5 text-destructive" />
+                <span className="text-sm font-medium text-destructive">{error}</span>
+              </div>
+            )}
+
+            <section className="mb-8 rounded-[18px] border border-border/70 bg-card/78 p-4">
+              <div className="mb-4">
+                <h2 className="text-2xl font-semibold tracking-tight text-foreground">{t('configured')}</h2>
+                <p className="mt-1 text-[13px] text-muted-foreground">{t('configuredDesc')}</p>
+              </div>
+              {loading && configuredGroups.length === 0 ? (
+                <div className="grid grid-cols-1 gap-4">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <ChannelTypeCardSkeleton key={`configured-channel-skeleton-${index}`} />
+                  ))}
+                </div>
+              ) : configuredGroups.length > 0 ? (
+                <div className="grid grid-cols-1 gap-4">
+                  {configuredGroups.map((group) => (
+                    <ChannelTypeCard
+                      key={group.type}
+                      group={group}
+                      accountOwnerNames={Object.fromEntries(
+                        group.accounts.map((account) => {
+                          const ownerId = channelAccountOwners[`${group.type}:${account.accountId}`];
+                          return [account.accountId, ownerId ? agentNamesById[ownerId] : undefined];
+                        }),
+                      )}
+                      onEditAccount={(account) => openConfig(group.type, account.accountId)}
+                      onAddAccount={() => openConfig(group.type, null, { createNewAccount: true })}
+                      onManageBinding={() => navigate('/agents')}
+                      onDeleteAccount={(account) =>
+                        setPendingDelete({
+                          type: group.type,
+                          accountId: account.accountId,
+                          isDefaultAccount: account.isDefaultAccount,
+                          groupName: group.name,
+                        })
+                      }
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border/70 bg-muted/30 px-3 py-4 text-[13px] text-muted-foreground">
+                  {t('noConfiguredChannels', '还没有已配置连接。')}
                 </div>
               )}
+            </section>
 
-              {error && (
-                <div className="mb-8 flex items-center gap-3 rounded-xl border border-destructive/50 bg-destructive/10 p-4">
-                  <AlertCircle className="h-5 w-5 text-destructive" />
-                  <span className="text-sm font-medium text-destructive">{error}</span>
+            <section className="mb-8 rounded-[18px] border border-border/70 bg-card/78 p-4">
+              <div className="mb-4">
+                <h2 className="text-2xl font-semibold tracking-tight text-foreground">{t('supportedChannels')}</h2>
+                <p className="mt-1 text-[13px] text-muted-foreground">{t('availableDesc')}</p>
+              </div>
+
+              {loading && configuredGroups.length === 0 ? (
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <SupportedChannelCardSkeleton key={`supported-channel-skeleton-${index}`} />
+                  ))}
                 </div>
-              )}
-
-              {configuredGroups.length > 0 && (
-                <section className="mb-8 rounded-[18px] border border-border/70 bg-card/78 p-4">
-                  <div className="mb-4">
-                    <h2 className="text-2xl font-semibold tracking-tight text-foreground">{t('configured')}</h2>
-                    <p className="mt-1 text-[13px] text-muted-foreground">{t('configuredDesc')}</p>
-                  </div>
-                  <div className="grid grid-cols-1 gap-4">
-                    {configuredGroups.map((group) => (
-                      <ChannelTypeCard
-                        key={group.type}
-                        group={group}
-                        accountOwnerNames={Object.fromEntries(
-                          group.accounts.map((account) => {
-                            const ownerId = channelAccountOwners[`${group.type}:${account.accountId}`];
-                            return [account.accountId, ownerId ? agentNamesById[ownerId] : undefined];
-                          }),
-                        )}
-                        onEditAccount={(account) => openConfig(group.type, account.accountId)}
-                        onAddAccount={() => openConfig(group.type, null, { createNewAccount: true })}
-                        onManageBinding={() => navigate('/agents')}
-                        onDeleteAccount={(account) =>
-                          setPendingDelete({
-                            type: group.type,
-                            accountId: account.accountId,
-                            isDefaultAccount: account.isDefaultAccount,
-                            groupName: group.name,
-                          })
-                        }
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              <section className="mb-8 rounded-[18px] border border-border/70 bg-card/78 p-4">
-                <div className="mb-4">
-                  <h2 className="text-2xl font-semibold tracking-tight text-foreground">{t('supportedChannels')}</h2>
-                  <p className="mt-1 text-[13px] text-muted-foreground">{t('availableDesc')}</p>
-                </div>
-
+              ) : (
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                   {supportedUnconfiguredTypes.map((type) => {
                     const meta = CHANNEL_META[type];
@@ -270,9 +304,9 @@ export function Channels() {
                     );
                   })}
                 </div>
-              </section>
-            </>
-          )}
+              )}
+            </section>
+          </>
         </div>
       </div>
 
@@ -512,6 +546,8 @@ function ChannelLogo({ type, branded = false }: { type: ChannelType; branded?: b
     ? brand?.shell ?? 'bg-slate-900 border-slate-800 shadow-[0_10px_24px_rgba(15,23,42,0.16)]'
     : 'border-border/70 bg-card shadow-sm';
   const iconClass = branded ? brand?.icon ?? 'brightness-0 invert' : '';
+  const inlineSvg = CHANNEL_SVG_MARKUP[type];
+  const iconToneClass = branded ? 'text-white/95' : 'text-foreground';
 
   const wrap = (content: React.ReactNode) => (
     <div className={cn('flex h-[50px] w-[50px] items-center justify-center rounded-[16px] border', shellClass)}>
@@ -519,28 +555,68 @@ function ChannelLogo({ type, branded = false }: { type: ChannelType; branded?: b
     </div>
   );
 
+  if (inlineSvg) {
+    return wrap(
+      <span
+        aria-hidden="true"
+        className={cn(
+          'inline-flex h-[22px] w-[22px] items-center justify-center [&_svg]:h-full [&_svg]:w-full',
+          iconToneClass,
+          iconClass,
+        )}
+        dangerouslySetInnerHTML={{ __html: inlineSvg }}
+      />,
+    );
+  }
+
   switch (type) {
-    case 'telegram':
-      return wrap(<img src={telegramIcon} alt="Telegram" className={cn('h-[22px] w-[22px]', iconClass)} />);
-    case 'discord':
-      return wrap(<img src={discordIcon} alt="Discord" className={cn('h-[22px] w-[22px]', iconClass)} />);
-    case 'whatsapp':
-      return wrap(<img src={whatsappIcon} alt="WhatsApp" className={cn('h-[22px] w-[22px]', iconClass)} />);
-    case 'dingtalk':
-      return wrap(<img src={dingtalkIcon} alt="DingTalk" className={cn('h-[22px] w-[22px]', iconClass)} />);
-    case 'feishu':
-      return wrap(<img src={feishuIcon} alt="Feishu" className={cn('h-[22px] w-[22px]', iconClass)} />);
-    case 'wecom':
-      return wrap(<img src={wecomIcon} alt="WeCom" className={cn('h-[22px] w-[22px]', iconClass)} />);
-    case 'qqbot':
-      return wrap(<img src={qqIcon} alt="QQ" className={cn('h-[22px] w-[22px]', iconClass)} />);
     default:
       return wrap(
-        <span className={cn('text-[22px]', branded ? 'brightness-0 invert' : '')}>
+        <span className={cn('text-[22px]', iconToneClass)}>
           {CHANNEL_ICONS[type] || '💬'}
         </span>,
       );
   }
+}
+
+function ChannelTypeCardSkeleton() {
+  return (
+    <div className="rounded-[16px] border border-border/60 bg-card/84 p-4 animate-pulse">
+      <div className="flex items-start gap-3.5">
+        <div className="mt-0.5 h-[50px] w-[50px] shrink-0 rounded-[16px] bg-muted" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="h-7 w-48 rounded bg-muted" />
+              <div className="mt-2 h-5 w-16 rounded-full bg-muted" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="h-8 w-24 rounded-xl bg-muted" />
+              <div className="h-8 w-24 rounded-xl bg-muted" />
+            </div>
+          </div>
+          <div className="mt-3 space-y-2">
+            <div className="h-14 rounded-[14px] bg-muted/80" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SupportedChannelCardSkeleton() {
+  return (
+    <div className="rounded-[16px] border border-border/60 bg-card/84 p-4 animate-pulse">
+      <div className="flex items-start gap-4">
+        <div className="mt-0.5 h-[50px] w-[50px] shrink-0 rounded-[16px] bg-muted" />
+        <div className="mt-0.5 min-w-0 flex-1">
+          <div className="h-6 w-36 rounded bg-muted" />
+          <div className="mt-3 h-4 w-full rounded bg-muted" />
+          <div className="mt-2 h-4 w-3/4 rounded bg-muted" />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default Channels;

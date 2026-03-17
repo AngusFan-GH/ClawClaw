@@ -259,6 +259,7 @@ export function Chat() {
   const sessionsHydrated = useChatStore((s) => s.sessionsHydrated);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const switchSession = useChatStore((s) => s.switchSession);
+  const newSession = useChatStore((s) => s.newSession);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const pendingLocalSessionKeys = useChatStore((s) => s.pendingLocalSessionKeys);
   const streamingMessage = useChatStore((s) => s.streamingMessage);
@@ -307,6 +308,10 @@ export function Chat() {
     const candidate = state?.forceSessionKey;
     return typeof candidate === 'string' && candidate.trim() ? candidate : undefined;
   }, [location.state]);
+  const createNewSessionFromRoute = useMemo(() => {
+    const state = location.state as { createNewSession?: boolean } | null;
+    return state?.createNewSession === true;
+  }, [location.state]);
 
   // Load data when gateway is running.
   // When the store already holds messages for this session (i.e. the user
@@ -317,6 +322,15 @@ export function Chat() {
     if (!isGatewayRunning) return;
     let cancelled = false;
     (async () => {
+      if (createNewSessionFromRoute) {
+        newSession();
+        navigate(location.pathname, { replace: true, state: null });
+        if (!cancelled) {
+          void loadSessions({ preserveCurrent: true });
+        }
+        return;
+      }
+
       if (forceSessionKeyFromRoute) {
         if (forceSessionKeyFromRoute !== useChatStore.getState().currentSessionKey) {
           switchSession(forceSessionKeyFromRoute);
@@ -342,8 +356,10 @@ export function Chat() {
     isGatewayRunning,
     loadHistory,
     loadSessions,
+    newSession,
     restoreSessionsAfterGatewayReady,
     sessionsHydrated,
+    createNewSessionFromRoute,
     forceSessionKeyFromRoute,
     switchSession,
     navigate,

@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import type { GatewayLifecycle } from '@/types/gateway';
 import { cn } from '@/lib/utils';
 import { LoadingIcon } from './LoadingSpinner';
-import { CheckCircle2 } from 'lucide-react';
 
 function getSourceLabel(t: (key: string) => string, source?: string): string {
   if (source?.startsWith('channel:saveConfig:') || source?.startsWith('channel:setEnabled') || source?.startsWith('channel:delete')) {
@@ -29,17 +28,13 @@ function getSourceLabel(t: (key: string) => string, source?: string): string {
 export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecycle }) {
   const { t } = useTranslation('common');
 
-  if (lifecycle.state === 'idle') return null;
+  if (lifecycle.state === 'idle' || lifecycle.state === 'completed') return null;
 
   const sourceLabel = getSourceLabel(t, lifecycle.source);
   const isReload = lifecycle.action === 'reload';
   const title =
     lifecycle.state === 'failed'
       ? t('gateway.lifecycle.failedTitle')
-      : lifecycle.state === 'completed'
-        ? isReload
-          ? t('gateway.lifecycle.completedReloadTitle')
-          : t('gateway.lifecycle.completedRestartTitle')
       : lifecycle.state === 'scheduled'
         ? isReload
           ? t('gateway.lifecycle.scheduledReloadTitle')
@@ -50,8 +45,6 @@ export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecy
   const description =
     lifecycle.state === 'failed'
       ? lifecycle.error || t('gateway.lifecycle.failedDescription')
-      : lifecycle.state === 'completed'
-        ? t('gateway.lifecycle.completedDescription', { source: sourceLabel })
       : lifecycle.state === 'scheduled'
         ? t('gateway.lifecycle.scheduledDescription', { source: sourceLabel })
         : t('gateway.lifecycle.applyingDescription', { source: sourceLabel });
@@ -62,16 +55,12 @@ export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecy
         'mb-6 flex items-start gap-3 rounded-xl border px-4 py-3 transition-colors',
         lifecycle.state === 'failed'
           ? 'border-destructive/30 bg-destructive/10'
-          : lifecycle.state === 'completed'
-            ? 'border-emerald-500/20 bg-emerald-500/[0.08]'
-            : 'border-sky-500/20 bg-sky-500/[0.06]'
+          : 'border-sky-500/20 bg-sky-500/[0.06]'
       )}
     >
       <div className="mt-0.5 shrink-0">
         {lifecycle.state === 'failed' ? (
           <AlertCircle className="h-4.5 w-4.5 text-destructive" />
-        ) : lifecycle.state === 'completed' ? (
-          <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 dark:text-emerald-400" />
         ) : lifecycle.state === 'scheduled' ? (
           <RefreshCw className="h-4.5 w-4.5 text-sky-600 dark:text-sky-400" />
         ) : (
@@ -86,9 +75,7 @@ export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecy
               'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
               lifecycle.state === 'failed'
                 ? 'bg-destructive/12 text-destructive'
-                : lifecycle.state === 'completed'
-                  ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
-                  : 'bg-sky-500/12 text-sky-700 dark:text-sky-300'
+                : 'bg-sky-500/12 text-sky-700 dark:text-sky-300'
             )}
           >
             {sourceLabel}

@@ -4,6 +4,7 @@
  */
 import { Tray, Menu, BrowserWindow, app, nativeImage } from 'electron';
 import { join } from 'path';
+import type { GatewayManager } from '../gateway/manager';
 
 let tray: Tray | null = null;
 
@@ -20,7 +21,7 @@ function getIconsDir(): string {
 /**
  * Create system tray icon and menu
  */
-export function createTray(mainWindow: BrowserWindow): Tray {
+export function createTray(mainWindow: BrowserWindow, gatewayManager: GatewayManager): Tray {
   // Use platform-appropriate icon for system tray
   const iconsDir = getIconsDir();
   let iconPath: string;
@@ -91,11 +92,11 @@ export function createTray(mainWindow: BrowserWindow): Tray {
       label: 'Quick Actions',
       submenu: [
         {
-          label: 'Open Chat',
-          click: () => {
+          label: 'Restart Gateway',
+          click: async () => {
             if (mainWindow.isDestroyed()) return;
             showWindow();
-            mainWindow.webContents.send('navigate', '/chat');
+            await gatewayManager.restart();
           },
         },
         {
