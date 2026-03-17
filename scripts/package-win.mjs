@@ -55,6 +55,66 @@ const cleanBuildDirs = () => {
   removeDirIfExists(resolve(process.cwd(), 'release', 'win-ia32-unpacked'));
 };
 
+const resolveWinArchTargets = (argv) => {
+  const hasExplicitArch = argv.some(
+    (arg) => arg === '--x64' || arg === '--arm64' || arg === '--ia32' || arg.startsWith('--arch')
+  );
+
+  if (!hasExplicitArch) {
+    return ['x64', 'arm64'];
+  }
+
+  const targets = new Set();
+  for (const arg of argv) {
+    if (arg === '--x64') targets.add('x64');
+    else if (arg === '--arm64') targets.add('arm64');
+    else if (arg === '--ia32') targets.add('ia32');
+    else if (arg.startsWith('--arch=')) {
+      const value = arg.slice('--arch='.length).trim();
+      if (value) targets.add(value);
+    }
+  }
+  return [...targets];
+};
+
+const hasBundledUvForArch = (arch) => {
+  if (arch === 'ia32') return true;
+  const uvPath = resolve(process.cwd(), 'resources', 'bin', `win32-${arch}`, 'uv.exe');
+  return existsSync(uvPath);
+};
+
+const ensureBundledUvForWin = (archs, env) => {
+  const missingArchs = archs.filter((arch) => !hasBundledUvForArch(arch));
+  if (missingArchs.length === 0) {
+    return;
+  }
+
+  console.log(`[package:win] Missing bundled uv for ${missingArchs.join(', ')}. Downloading Windows uv binaries...`);
+
+  const pnpmCmd = findCommandPath('pnpm') || (platform() === 'win32' ? 'pnpm.cmd' : 'pnpm');
+  const result = spawnSync(pnpmCmd, ['run', 'uv:download:win'], {
+    stdio: 'inherit',
+    env,
+    shell: false,
+  });
+
+  if (result.error) {
+    console.error('[package:win] Failed to start uv download:', result.error.message);
+    process.exit(1);
+  }
+
+  if ((result.status ?? 1) !== 0) {
+    console.error('[package:win] uv:download:win failed.');
+    process.exit(result.status ?? 1);
+  }
+
+  const stillMissing = missingArchs.filter((arch) => !hasBundledUvForArch(arch));
+  if (stillMissing.length > 0) {
+    console.error(`[package:win] Bundled uv is still missing after download for: ${stillMissing.join(', ')}`);
+    process.exit(1);
+  }
+};
+
 const killPackagingProcesses = () => {
   tryExec('taskkill /IM ClawClaw.exe /F /T');
   tryExec('taskkill /IM electron.exe /F /T');
@@ -89,6 +149,9 @@ const pnpmPath = findCommandPath('pnpm');
 if (pnpmPath) {
   prependPath(builderEnv, dirname(pnpmPath));
 }
+
+const winArchTargets = resolveWinArchTargets(args);
+ensureBundledUvForWin(winArchTargets, builderEnv);
 
 const electronBuilderCli = resolve(process.cwd(), 'node_modules', 'electron-builder', 'cli.js');
 const electronBuilderBin = resolve(process.cwd(), 'node_modules', '.bin', platform() === 'win32' ? 'electron-builder.cmd' : 'electron-builder');
