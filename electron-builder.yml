@@ -138,6 +138,7 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   license: resources/legal/EULA.rtf
+  script: scripts/installer.nsi
   include: scripts/installer.nsh
   installerIcon: resources/icons/icon.ico
   uninstallerIcon: resources/icons/icon.ico

@@ -13,12 +13,54 @@
 ShowInstDetails show
 ShowUnInstDetails show
 
+; Installer and uninstaller copy uses English by default and Simplified Chinese
+; when the OS installer language is Chinese.
+LangString welcomeTitle ${LANG_ENGLISH} "Welcome to ${PRODUCT_NAME}"
+LangString welcomeTitle ${LANG_SIMPCHINESE} "欢迎安装 ${PRODUCT_NAME}"
+LangString welcomeText ${LANG_ENGLISH} "Install ${PRODUCT_NAME}, configure the bundled OpenClaw CLI, and create the standard Windows shortcuts."
+LangString welcomeText ${LANG_SIMPCHINESE} "安装 ${PRODUCT_NAME}，配置内置 OpenClaw CLI，并创建标准 Windows 快捷方式。"
+
+LangString uninstallWelcomeTitle ${LANG_ENGLISH} "Uninstall ${PRODUCT_NAME}"
+LangString uninstallWelcomeTitle ${LANG_SIMPCHINESE} "卸载 ${PRODUCT_NAME}"
+LangString uninstallWelcomeText ${LANG_ENGLISH} "The uninstaller always removes the app, shortcuts, and the PATH entry for the bundled CLI. On the next page you can also choose whether to delete local settings, logs, and OpenClaw user data."
+LangString uninstallWelcomeText ${LANG_SIMPCHINESE} "卸载程序会始终移除应用本体、快捷方式，以及内置 CLI 的 PATH 项。下一页可额外选择是否删除本地设置、日志和 OpenClaw 用户数据。"
+
+LangString installPhasePrepare ${LANG_ENGLISH} "Preparing installation environment..."
+LangString installPhasePrepare ${LANG_SIMPCHINESE} "正在准备安装环境..."
+LangString installPhaseRemovePrevious ${LANG_ENGLISH} "Checking and removing previous installation..."
+LangString installPhaseRemovePrevious ${LANG_SIMPCHINESE} "正在检查并清理旧版本安装..."
+LangString installPhaseCopyFiles ${LANG_ENGLISH} "Copying application files..."
+LangString installPhaseCopyFiles ${LANG_SIMPCHINESE} "正在复制应用文件..."
+LangString installPhaseRegister ${LANG_ENGLISH} "Registering application with Windows..."
+LangString installPhaseRegister ${LANG_SIMPCHINESE} "正在向 Windows 注册应用信息..."
+LangString installPhaseShortcuts ${LANG_ENGLISH} "Creating shortcuts..."
+LangString installPhaseShortcuts ${LANG_SIMPCHINESE} "正在创建快捷方式..."
+LangString installPhaseAssociations ${LANG_ENGLISH} "Registering file associations..."
+LangString installPhaseAssociations ${LANG_SIMPCHINESE} "正在注册文件关联..."
+LangString installPhaseFinalize ${LANG_ENGLISH} "Applying post-install system configuration..."
+LangString installPhaseFinalize ${LANG_SIMPCHINESE} "正在执行安装后的系统配置..."
+
+LangString uninstallOptionAppDataTitle ${LANG_ENGLISH} "Also delete ClawClaw settings, cache, and logs"
+LangString uninstallOptionAppDataTitle ${LANG_SIMPCHINESE} "同时删除 ClawClaw 设置、缓存和日志"
+LangString uninstallOptionAppDataDesc ${LANG_ENGLISH} "Removes local preferences, window state, cached data, and application logs under AppData and LocalAppData."
+LangString uninstallOptionAppDataDesc ${LANG_SIMPCHINESE} "删除 AppData 和 LocalAppData 下的本地偏好、窗口状态、缓存数据以及应用日志。"
+LangString uninstallOptionOpenClawTitle ${LANG_ENGLISH} "Also delete OpenClaw user data (~/.openclaw)"
+LangString uninstallOptionOpenClawTitle ${LANG_SIMPCHINESE} "同时删除 OpenClaw 用户数据（~/.openclaw）"
+LangString uninstallOptionOpenClawDesc ${LANG_ENGLISH} "Removes OpenClaw sessions, installed skills, provider settings, and other user data stored in ~/.openclaw."
+LangString uninstallOptionOpenClawDesc ${LANG_SIMPCHINESE} "删除 ~/.openclaw 下的 OpenClaw 会话、已安装技能、提供商设置及其他用户数据。"
+
 !macro customWelcomePage
   ; customWelcomePage is expanded at compile-time in assistedInstaller.nsh.
   ; Use MUI welcome-page defines/macros here, not runtime UI commands.
-  !define MUI_WELCOMEPAGE_TITLE "Welcome to ${PRODUCT_NAME}"
-  !define MUI_WELCOMEPAGE_TEXT "Your desktop AI copilot by xzinfra"
+  !define MUI_WELCOMEPAGE_TITLE "$(welcomeTitle)"
+  !define MUI_WELCOMEPAGE_TEXT "$(welcomeText)"
   !insertmacro MUI_PAGE_WELCOME
+!macroend
+
+!macro customUnWelcomePage
+  !define MUI_UNWELCOMEPAGE_TITLE "$(uninstallWelcomeTitle)"
+  !define MUI_UNWELCOMEPAGE_TEXT "$(uninstallWelcomeText)"
+  !insertmacro MUI_UNPAGE_WELCOME
 !macroend
 
 !macro customCheckAppRunning
@@ -147,7 +189,7 @@ ShowUnInstDetails show
 !macroend
 
 !macro customUnInstallSection
-Section /o "删除 ClawClaw 本地设置和日志" un.RemoveClawClawData
+Section /o "$(uninstallOptionAppDataTitle)" un.RemoveClawClawData
   DetailPrint "正在删除 ClawClaw 本地数据..."
   RMDir /r "$APPDATA\${APP_FILENAME}"
   !ifdef APP_PRODUCT_FILENAME
@@ -165,8 +207,13 @@ Section /o "删除 ClawClaw 本地设置和日志" un.RemoveClawClawData
   !endif
 SectionEnd
 
-Section /o "删除 OpenClaw 用户数据（~/.openclaw）" un.RemoveOpenClawData
+Section /o "$(uninstallOptionOpenClawTitle)" un.RemoveOpenClawData
   DetailPrint "正在删除 OpenClaw 用户数据..."
   RMDir /r "$PROFILE\.openclaw"
 SectionEnd
+
+!insertmacro MUI_UNFUNCTION_DESCRIPTION_BEGIN
+  !insertmacro MUI_DESCRIPTION_TEXT ${un.RemoveClawClawData} "$(uninstallOptionAppDataDesc)"
+  !insertmacro MUI_DESCRIPTION_TEXT ${un.RemoveOpenClawData} "$(uninstallOptionOpenClawDesc)"
+!insertmacro MUI_UNFUNCTION_DESCRIPTION_END
 !macroend
