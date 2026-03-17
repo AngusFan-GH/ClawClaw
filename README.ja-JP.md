@@ -350,7 +350,8 @@ pnpm run build:vite       # フロントエンドのみビルド
 pnpm build                # フルプロダクションビルド（パッケージアセット含む）
 pnpm package              # 現在のプラットフォーム向けにパッケージ化
 pnpm package:mac          # macOS向けにパッケージ化
-pnpm package:win          # Windows向けにパッケージ化
+pnpm package:win          # Windowsホスト / VM 上で Windows 向けにパッケージ化
+pnpm package:win:cross    # macOS/Linux から Windows NSIS をクロスビルド
 pnpm package:linux        # Linux向けにパッケージ化
 ```
 

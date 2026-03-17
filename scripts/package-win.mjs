@@ -2,8 +2,11 @@
 
 import { execSync, spawnSync } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { delimiter, dirname, resolve } from 'node:path';
 import { platform } from 'node:os';
+
+const hostPlatform = platform();
+const isWindowsHost = hostPlatform === 'win32';
 
 const sleep = (ms) => {
   const start = Date.now();
@@ -22,7 +25,7 @@ const tryExec = (command) => {
 };
 
 const findCommandPath = (name) => {
-  const command = platform() === 'win32' ? `where.exe ${name}` : `command -v ${name}`;
+  const command = isWindowsHost ? `where.exe ${name}` : `command -v ${name}`;
 
   try {
     const output = execSync(command, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -36,7 +39,7 @@ const findCommandPath = (name) => {
 const prependPath = (env, pathEntry) => {
   if (!pathEntry) return;
   const currentPath = env.PATH || env.Path || '';
-  const nextPath = `${pathEntry};${currentPath}`;
+  const nextPath = currentPath ? `${pathEntry}${delimiter}${currentPath}` : pathEntry;
   env.PATH = nextPath;
   env.Path = nextPath;
 };
@@ -91,12 +94,11 @@ const ensureBundledUvForWin = (archs, env) => {
 
   console.log(`[package:win] Missing bundled uv for ${missingArchs.join(', ')}. Downloading Windows uv binaries...`);
 
-  const isWin = platform() === 'win32';
-  const pnpmCmd = isWin ? 'pnpm.cmd' : 'pnpm';
+  const pnpmCmd = isWindowsHost ? 'pnpm.cmd' : 'pnpm';
   const result = spawnSync(pnpmCmd, ['run', 'uv:download:win'], {
     stdio: 'inherit',
     env,
-    shell: isWin,
+    shell: isWindowsHost,
   });
 
   if (result.error) {
@@ -117,6 +119,7 @@ const ensureBundledUvForWin = (archs, env) => {
 };
 
 const killPackagingProcesses = () => {
+  if (!isWindowsHost) return;
   tryExec('taskkill /IM ClawClaw.exe /F /T');
   tryExec('taskkill /IM electron.exe /F /T');
   tryExec('taskkill /IM app-builder.exe /F /T');
@@ -124,16 +127,18 @@ const killPackagingProcesses = () => {
   tryExec('taskkill /IM signtool.exe /F /T');
 };
 
-const nsisPath = [
-  findCommandPath('makensis'),
-  process.env['ProgramFiles'] ? `${process.env['ProgramFiles']}\\NSIS\\makensis.exe` : null,
-  process.env['ProgramFiles(x86)'] ? `${process.env['ProgramFiles(x86)']}\\NSIS\\makensis.exe` : null,
-  process.env['ProgramFiles(x86)'] ? `${process.env['ProgramFiles(x86)']}\\NSIS\\Bin\\makensis.exe` : null,
-  process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}\\electron-builder\\Cache\\nsis\\nsis-3.0.4.1-nsis-3.0.4.1\\makensis.exe` : null,
-  process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}\\electron-builder\\Cache\\nsis\\nsis-3.0.4.1-nsis-3.0.4.1\\Bin\\makensis.exe` : null,
-].find((candidate) => candidate && existsSync(candidate));
+const nsisPath = isWindowsHost
+  ? [
+      findCommandPath('makensis'),
+      process.env['ProgramFiles'] ? `${process.env['ProgramFiles']}\\NSIS\\makensis.exe` : null,
+      process.env['ProgramFiles(x86)'] ? `${process.env['ProgramFiles(x86)']}\\NSIS\\makensis.exe` : null,
+      process.env['ProgramFiles(x86)'] ? `${process.env['ProgramFiles(x86)']}\\NSIS\\Bin\\makensis.exe` : null,
+      process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}\\electron-builder\\Cache\\nsis\\nsis-3.0.4.1-nsis-3.0.4.1\\makensis.exe` : null,
+      process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}\\electron-builder\\Cache\\nsis\\nsis-3.0.4.1-nsis-3.0.4.1\\Bin\\makensis.exe` : null,
+    ].find((candidate) => candidate && existsSync(candidate))
+  : null;
 
-if (!nsisPath) {
+if (isWindowsHost && !nsisPath) {
   console.error('[package:win] NSIS is required for Windows packaging. Please install makensis first.');
   process.exit(1);
 }
@@ -144,7 +149,9 @@ const archArgs = hasArchArg ? [] : ['--x64', '--arm64'];
 const builderArgs = ['--win', 'nsis', ...archArgs, ...args];
 
 const builderEnv = { ...process.env };
-prependPath(builderEnv, dirname(nsisPath));
+if (nsisPath) {
+  prependPath(builderEnv, dirname(nsisPath));
+}
 
 const pnpmPath = findCommandPath('pnpm');
 if (pnpmPath) {
@@ -155,7 +162,7 @@ const winArchTargets = resolveWinArchTargets(args);
 ensureBundledUvForWin(winArchTargets, builderEnv);
 
 const electronBuilderCli = resolve(process.cwd(), 'node_modules', 'electron-builder', 'cli.js');
-const electronBuilderBin = resolve(process.cwd(), 'node_modules', '.bin', platform() === 'win32' ? 'electron-builder.cmd' : 'electron-builder');
+const electronBuilderBin = resolve(process.cwd(), 'node_modules', '.bin', isWindowsHost ? 'electron-builder.cmd' : 'electron-builder');
 
 let command = 'electron-builder';
 let commandArgs = builderArgs;
@@ -180,7 +187,11 @@ const runBuild = () => {
   return result;
 };
 
-console.log(`[package:win] Found NSIS at ${nsisPath}.`);
+if (isWindowsHost) {
+  console.log(`[package:win] Found NSIS at ${nsisPath}.`);
+} else {
+  console.log('[package:win] Running cross-platform Windows NSIS build.');
+}
 console.log(`[package:win] Building NSIS for ${archArgs.length > 0 ? 'x64 and arm64' : 'specified'} architectures.`);
 
 killPackagingProcesses();

@@ -6,7 +6,6 @@
 !ifndef nsProcess::FindProcess
   !include "nsProcess.nsh"
 !endif
-!include "nsDialogs.nsh"
 
 !define MUI_INSTFILESPAGE_SHOWDETAILS show
 !define MUI_UNINSTFILESPAGE_SHOWDETAILS show
@@ -115,6 +114,12 @@ ShowUnInstDetails show
   DetailPrint "Warning: PowerShell PATH update exited with code $0."
 
   _ci_done:
+  ; Add an explicit Start Menu uninstall shortcut so users have a visible
+  ; uninstall entry even when Windows doesn't surface one prominently.
+  DetailPrint "正在创建卸载快捷方式..."
+  CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
+  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\卸载 ${PRODUCT_NAME}.lnk" "$INSTDIR\${UNINSTALL_FILENAME}"
+
   DetailPrint "安装后的系统配置已完成。"
 !macroend
 
@@ -137,5 +142,31 @@ ShowUnInstDetails show
   DetailPrint "Warning: PowerShell PATH removal exited with code $0."
 
   _cu_pathDone:
+  Delete "$SMPROGRAMS\${PRODUCT_NAME}\卸载 ${PRODUCT_NAME}.lnk"
   DetailPrint "命令行环境清理已完成。"
+!macroend
+
+!macro customUnInstallSection
+Section /o "删除 ClawClaw 本地设置和日志" un.RemoveClawClawData
+  DetailPrint "正在删除 ClawClaw 本地数据..."
+  RMDir /r "$APPDATA\${APP_FILENAME}"
+  !ifdef APP_PRODUCT_FILENAME
+    RMDir /r "$APPDATA\${APP_PRODUCT_FILENAME}"
+  !endif
+  !ifdef APP_PACKAGE_NAME
+    RMDir /r "$APPDATA\${APP_PACKAGE_NAME}"
+  !endif
+  RMDir /r "$LOCALAPPDATA\${APP_FILENAME}"
+  !ifdef APP_PRODUCT_FILENAME
+    RMDir /r "$LOCALAPPDATA\${APP_PRODUCT_FILENAME}"
+  !endif
+  !ifdef APP_PACKAGE_NAME
+    RMDir /r "$LOCALAPPDATA\${APP_PACKAGE_NAME}"
+  !endif
+SectionEnd
+
+Section /o "删除 OpenClaw 用户数据（~/.openclaw）" un.RemoveOpenClawData
+  DetailPrint "正在删除 OpenClaw 用户数据..."
+  RMDir /r "$PROFILE\.openclaw"
+SectionEnd
 !macroend

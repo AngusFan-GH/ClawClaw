@@ -353,7 +353,8 @@ pnpm run build:vite       # Build frontend only
 pnpm build                # Full production build (with packaging assets)
 pnpm package              # Package for current platform
 pnpm package:mac          # Package for macOS
-pnpm package:win          # Package for Windows (auto uses NSIS if installed, otherwise portable)
+pnpm package:win          # Package for Windows on a Windows host / VM
+pnpm package:win:cross    # Cross-build Windows NSIS from macOS/Linux
 pnpm package:linux        # Package for Linux
 ```
 
