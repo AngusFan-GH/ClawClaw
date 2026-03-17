@@ -356,7 +356,9 @@
       "title": "Actions that will be blocked",
       "draftTitle": "Pending changes",
       "runtimeTitle": "Runtime effective state",
+      "extraTitle": "Runtime extra restrictions",
       "inSync": "The runtime restrictions are in sync with the saved settings.",
+      "extraRestrictions": "The restrictions managed by this page are in sync, but the runtime still has extra deny rules.",
       "outOfSync": "The runtime restrictions differ from the settings saved in this page and may have been changed externally.",
       "unsaved": "There are unapplied changes. Apply them to sync the runtime config and restart the Gateway.",
       "none": "No blocked actions are selected right now."

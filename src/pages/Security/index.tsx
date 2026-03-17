@@ -34,7 +34,9 @@ export function Security() {
     toolDeny: [],
     activeRules: [],
     activeManagedDeny: [],
-    inSync: true,
+    expectedManagedDeny: [],
+    extraToolDeny: [],
+    managedInSync: true,
   });
 
   const loadPolicy = useCallback(async () => {
@@ -48,7 +50,9 @@ export function Security() {
         toolDeny: [],
         activeRules: [],
         activeManagedDeny: [],
-        inSync: true,
+        expectedManagedDeny: [],
+        extraToolDeny: [],
+        managedInSync: true,
       });
     } catch (error) {
       toast.error(`${t('security.toasts.loadFailed')}: ${String(error)}`);
@@ -166,7 +170,9 @@ export function Security() {
         toolDeny: [],
         activeRules: [],
         activeManagedDeny: [],
-        inSync: true,
+        expectedManagedDeny: [],
+        extraToolDeny: [],
+        managedInSync: true,
       });
     } catch (error) {
       toast.error(`${t('security.toasts.resetFailed')}: ${String(error)}`);
@@ -190,11 +196,18 @@ export function Security() {
     [policy.prompt.rules]
   );
   const runtimeManagedDeny = runtime.activeManagedDeny;
+  const runtimeExtraDeny = runtime.extraToolDeny;
+  const hasRuntimeDrift = !isDirty && (!runtime.managedInSync || runtimeExtraDeny.length > 0);
   const runtimeStatusKey = isDirty
     ? 'security.runtimePreview.unsaved'
-    : runtime.inSync
-      ? 'security.runtimePreview.inSync'
-      : 'security.runtimePreview.outOfSync';
+    : hasRuntimeDrift
+      ? 'security.runtimePreview.outOfSync'
+      : 'security.runtimePreview.inSync';
+  const bannerLifecycle =
+    gatewayLifecycle.state === 'completed'
+    && (gatewayLifecycle.source === 'security.apply' || gatewayLifecycle.source === 'security.reset')
+      ? { state: 'idle' as const }
+      : gatewayLifecycle;
 
   if (loading) {
     return (
@@ -239,7 +252,7 @@ export function Security() {
         </div>
 
         <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2 pb-6">
-          <GatewayLifecycleBanner lifecycle={gatewayLifecycle} />
+          <GatewayLifecycleBanner lifecycle={bannerLifecycle} />
 
           <div className="space-y-4">
             <section className="rounded-xl border bg-card px-4 py-4 md:px-5">
@@ -331,45 +344,91 @@ export function Security() {
                 <div className="text-sm font-medium">{t('security.runtimePreview.title')}</div>
                 <div className="mt-1 text-sm text-muted-foreground">{t(runtimeStatusKey)}</div>
 
-                <div className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {t('security.runtimePreview.draftTitle')}
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {draftManagedDeny.length > 0 ? (
-                    draftManagedDeny.map((entry) => (
-                      <code
-                        key={entry}
-                        className="rounded-md border bg-background px-2 py-1 text-xs text-foreground"
-                      >
-                        {entry}
-                      </code>
-                    ))
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      {t('security.runtimePreview.none')}
-                    </span>
-                  )}
-                </div>
+                {isDirty ? (
+                  <>
+                    <div className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      {t('security.runtimePreview.draftTitle')}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {draftManagedDeny.length > 0 ? (
+                        draftManagedDeny.map((entry) => (
+                          <code
+                            key={entry}
+                            className="rounded-md border bg-background px-2 py-1 text-xs text-foreground"
+                          >
+                            {entry}
+                          </code>
+                        ))
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {t('security.runtimePreview.none')}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                ) : hasRuntimeDrift ? (
+                  <>
+                    <div className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      {t('security.runtimePreview.runtimeTitle')}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {runtimeManagedDeny.length > 0 ? (
+                        runtimeManagedDeny.map((entry) => (
+                          <code
+                            key={`runtime-${entry}`}
+                            className="rounded-md border bg-background px-2 py-1 text-xs text-foreground"
+                          >
+                            {entry}
+                          </code>
+                        ))
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {t('security.runtimePreview.none')}
+                        </span>
+                      )}
+                    </div>
 
-                <div className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {t('security.runtimePreview.runtimeTitle')}
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {runtimeManagedDeny.length > 0 ? (
-                    runtimeManagedDeny.map((entry) => (
-                      <code
-                        key={`runtime-${entry}`}
-                        className="rounded-md border bg-background px-2 py-1 text-xs text-foreground"
-                      >
-                        {entry}
-                      </code>
-                    ))
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      {t('security.runtimePreview.none')}
-                    </span>
-                  )}
-                </div>
+                    {runtimeExtraDeny.length > 0 ? (
+                      <>
+                        <div className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          {t('security.runtimePreview.extraTitle')}
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {runtimeExtraDeny.map((entry) => (
+                            <code
+                              key={`extra-${entry}`}
+                              className="rounded-md border bg-background px-2 py-1 text-xs text-foreground"
+                            >
+                              {entry}
+                            </code>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <div className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      {t('security.runtimePreview.runtimeTitle')}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {runtimeManagedDeny.length > 0 ? (
+                        runtimeManagedDeny.map((entry) => (
+                          <code
+                            key={`runtime-${entry}`}
+                            className="rounded-md border bg-background px-2 py-1 text-xs text-foreground"
+                          >
+                            {entry}
+                          </code>
+                        ))
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {t('security.runtimePreview.none')}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </section>
           </div>

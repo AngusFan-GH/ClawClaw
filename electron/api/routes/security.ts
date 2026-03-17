@@ -296,35 +296,17 @@ function normalizeToolEntries(values: unknown): string[] {
   return out;
 }
 
-function mergeManagedToolDeny(existing: string[], previousManaged: string[], nextManaged: string[]): string[] {
-  const previousSet = new Set(previousManaged.map((item) => item.toLowerCase()));
-  const merged = existing.filter((item) => !previousSet.has(item.toLowerCase()));
-
-  const seen = new Set(merged.map((item) => item.toLowerCase()));
-  for (const item of nextManaged) {
-    const key = item.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    merged.push(item);
-  }
-  return merged;
-}
-
 async function applyPolicyRuntimeConfig(
   config: Record<string, unknown>,
-  previousPolicy: SecurityPolicy,
+  _previousPolicy: SecurityPolicy,
   nextPolicy: SecurityPolicy,
 ): Promise<{ managedToolDeny: string[]; totalToolDeny: string[] }> {
-  const previousManaged = previousPolicy.prompt.enabled
-    ? getManagedToolDenyForRules(previousPolicy.prompt.rules)
-    : [];
   const nextManaged = nextPolicy.prompt.enabled
     ? getManagedToolDenyForRules(nextPolicy.prompt.rules)
     : [];
 
   const tools = ensureObject(config, 'tools');
-  const existingDeny = normalizeToolEntries(tools.deny);
-  const mergedDeny = mergeManagedToolDeny(existingDeny, previousManaged, nextManaged);
+  const mergedDeny = normalizeToolEntries(nextManaged);
 
   if (mergedDeny.length > 0) {
     tools.deny = mergedDeny;

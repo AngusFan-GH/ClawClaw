@@ -21,7 +21,9 @@ export interface SecurityRuntimeState {
   toolDeny: string[];
   activeRules: SecurityRuleKey[];
   activeManagedDeny: string[];
-  inSync: boolean;
+  expectedManagedDeny: string[];
+  extraToolDeny: string[];
+  managedInSync: boolean;
 }
 
 export interface SecurityPolicySnapshot {
@@ -236,9 +238,14 @@ export function createSecurityRuntimeState(
   const normalizedToolDeny = Array.from(new Set(toolDeny.map((entry) => entry.trim()).filter(Boolean)));
   const activeRules = inferSecurityRulesFromToolDeny(normalizedToolDeny);
   const expectedRules = policy.prompt.enabled ? normalizeSecurityRules(policy.prompt.rules) : [];
+  const expectedManagedDeny = getManagedToolDenyForRules(expectedRules);
   const expectedSet = new Set(expectedRules);
   const activeSet = new Set(activeRules);
-  const inSync =
+  const expectedManagedSet = new Set(expectedManagedDeny.map((entry) => normalizeToolPolicyEntry(entry)));
+  const extraToolDeny = normalizedToolDeny.filter(
+    (entry) => !expectedManagedSet.has(normalizeToolPolicyEntry(entry)),
+  );
+  const managedInSync =
     expectedRules.length === activeRules.length
     && expectedRules.every((rule) => activeSet.has(rule))
     && activeRules.every((rule) => expectedSet.has(rule));
@@ -247,7 +254,9 @@ export function createSecurityRuntimeState(
     toolDeny: normalizedToolDeny,
     activeRules,
     activeManagedDeny: getManagedToolDenyForRules(activeRules),
-    inSync,
+    expectedManagedDeny,
+    extraToolDeny,
+    managedInSync,
   };
 }
 
