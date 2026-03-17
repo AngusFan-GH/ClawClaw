@@ -183,8 +183,8 @@ export function Agents() {
             <AgentStatCard label={t('stats.connected')} value={stats.connected} />
           </div>
 
-          <section className="rounded-xl border bg-card p-4 md:p-5">
-            <div className="mb-4">
+          <section className="rounded-xl border bg-card p-4">
+            <div className="mb-3">
               <h2 className="text-lg font-semibold tracking-tight text-foreground">
                 {t('list.title')}
               </h2>
@@ -199,7 +199,7 @@ export function Agents() {
                 <p className="mt-1 text-sm text-muted-foreground">{t('empty.description')}</p>
               </div>
             ) : (
-              <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+              <div className="grid gap-3 grid-cols-1">
                 {agents.map((agent) => (
                   <AgentCard
                     key={agent.gateway.id}
@@ -316,18 +316,21 @@ function AgentCard({
     .map((channelType) => CHANNEL_NAMES[channelType as ChannelType] || channelType)
     .filter(Boolean);
   const modelMeta = splitAgentModelDisplay(agent.local.modelDisplay);
+  const connectionSummary = channelLabels.length > 0
+    ? channelLabels.join(' / ')
+    : t('none');
 
   return (
     <div
       className={cn(
-        'h-full rounded-2xl border bg-background/90 p-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_16px_32px_rgba(15,23,42,0.07)]',
+        'h-full rounded-2xl border bg-background/90 p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_16px_32px_rgba(15,23,42,0.07)]',
         agent.gateway.isDefault && 'border-primary/25 bg-[linear-gradient(180deg,rgba(59,130,246,0.06),rgba(59,130,246,0.02))]'
       )}
     >
       <div className="flex h-full flex-col">
-      <div className="flex items-start gap-4">
+      <div className="flex items-start gap-3.5">
         <div className={cn(
-          'mt-0.5 flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border text-xl shadow-sm',
+          'mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border text-xl shadow-sm',
           agent.gateway.isDefault
             ? 'border-primary/20 bg-primary/12'
             : 'border-black/8 bg-black/[0.03] dark:border-white/10 dark:bg-white/[0.03]'
@@ -366,7 +369,7 @@ function AgentCard({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-9 w-9 rounded-xl text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
+                      className="h-8 w-8 rounded-xl text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
                       onClick={onOpenSettings}
                     >
                       <PencilLine className="h-4 w-4" />
@@ -380,7 +383,7 @@ function AgentCard({
                       <Button
                         variant="dangerGhost"
                         size="icon"
-                        className="h-9 w-9 rounded-xl"
+                        className="h-8 w-8 rounded-xl"
                         onClick={onDelete}
                       >
                       <Trash2 className="h-4 w-4" />
@@ -394,13 +397,13 @@ function AgentCard({
           </div>
         </div>
       </div>
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-border/70 bg-muted/[0.22] px-4 py-3.5">
-          <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
+      <div className="mt-4 space-y-2 rounded-2xl border border-border/70 bg-muted/[0.22] px-4 py-3">
+        <div className="flex items-start gap-3 text-[14px]">
+          <span className="w-14 shrink-0 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
             {t('fieldLabels.model')}
-          </div>
-          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
-            <p className="truncate text-[15px] font-semibold text-foreground">{modelMeta.value}</p>
+          </span>
+          <div className="min-w-0 flex flex-1 flex-wrap items-center gap-2">
+            <span className="truncate font-semibold text-foreground">{modelMeta.value}</span>
             {modelMeta.isDefaultModel ? (
               <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
                 {t('defaultBadge')}
@@ -413,48 +416,38 @@ function AgentCard({
             ) : null}
           </div>
         </div>
-        <div className="rounded-2xl border border-border/70 bg-muted/[0.22] px-4 py-3.5">
-          <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
-            {t('fieldLabels.channels')}
-          </div>
-          <div className="mt-2 flex min-h-[34px] flex-wrap items-center gap-1.5">
-            {channelLabels.length > 0 ? (
-              channelLabels.map((label) => (
-                <span
-                  key={label}
-                  className="inline-flex items-center rounded-full border border-border/80 bg-background px-2.5 py-1 text-[12px] font-medium text-foreground/80 shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
-                >
-                  {label}
-                </span>
-              ))
-            ) : (
-              <p className="text-[13px] text-muted-foreground">{t('none')}</p>
-            )}
-          </div>
-        </div>
-      </div>
 
-      <div className="mt-3 rounded-2xl border border-border/70 bg-muted/[0.22] px-4 py-3.5">
-        <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
-          {t('meta.workspace', 'Workspace')}
+        <div className="flex items-start gap-3 text-[14px]">
+          <span className="w-14 shrink-0 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
+            {t('fieldLabels.channels')}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-foreground/80" title={connectionSummary}>
+            {connectionSummary}
+          </span>
         </div>
-        {workspacePath ? (
-          <button
-            type="button"
-            onClick={() => {
-              void openWorkspaceFolder(workspacePath).catch((error) => {
-                toast.error(t('toast.openWorkspaceFailed', { error: String(error) }));
-              });
-            }}
-            className="group mt-2 inline-flex max-w-full items-center gap-2 rounded-xl bg-background px-3 py-2.5 font-mono text-[12px] text-foreground/80 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-colors hover:bg-primary/8 hover:text-foreground"
-            title={workspacePath}
-          >
-            <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
-            <span className="truncate">{workspacePath}</span>
-          </button>
-        ) : (
-          <p className="mt-2 truncate font-mono text-[12px] text-foreground/80">default</p>
-        )}
+
+        <div className="flex items-start gap-3 text-[14px]">
+          <span className="w-14 shrink-0 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
+            {t('meta.workspace', 'Workspace')}
+          </span>
+          {workspacePath ? (
+            <button
+              type="button"
+              onClick={() => {
+                void openWorkspaceFolder(workspacePath).catch((error) => {
+                  toast.error(t('toast.openWorkspaceFailed', { error: String(error) }));
+                });
+              }}
+              className="group inline-flex min-w-0 max-w-full items-center gap-2 rounded-xl bg-background px-3 py-1.5 font-mono text-[12px] text-foreground/80 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-colors hover:bg-primary/8 hover:text-foreground"
+              title={workspacePath}
+            >
+              <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+              <span className="truncate">{workspacePath}</span>
+            </button>
+          ) : (
+            <span className="truncate font-mono text-[12px] text-foreground/80">default</span>
+          )}
+        </div>
       </div>
       </div>
     </div>

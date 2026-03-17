@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, PencilLine, RefreshCw, Trash2 } from 'lucide-react';
+import { AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -146,7 +146,7 @@ export function Channels() {
           actions={(
             <div className="flex items-center gap-2.5">
               {loading && configuredGroups.length > 0 && (
-                <div className="inline-flex h-9 items-center gap-2 rounded-[12px] border border-border/70 bg-card/85 px-3 text-[13px] font-medium text-muted-foreground">
+                <div className="inline-flex h-8 items-center gap-2 rounded-[12px] border border-border/70 bg-card/85 px-3 text-[12px] font-medium text-muted-foreground">
                   <LoadingIcon className="h-3.5 w-3.5" />
                   <span>{t('refreshingStatus', '正在同步连接状态...')}</span>
                 </div>
@@ -155,7 +155,7 @@ export function Channels() {
                 variant="outline"
                 onClick={() => void fetchChannels(true)}
                 disabled={loading}
-                className="h-9 rounded-[12px] border-black/10 bg-transparent px-4 text-[13px] font-medium text-foreground/80 shadow-none transition-colors hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
+                className="h-8 rounded-[12px] border-black/10 bg-transparent px-3.5 text-[12px] font-medium text-foreground/80 shadow-none transition-colors hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
               >
                 <RefreshCw className="mr-2 h-3.5 w-3.5" />
                 {t('refresh')}
@@ -191,12 +191,12 @@ export function Channels() {
               )}
 
               {configuredGroups.length > 0 && (
-                <section className="mb-8 rounded-[18px] border border-border/70 bg-card/78 p-4 md:p-5">
-                  <div className="mb-5">
+                <section className="mb-8 rounded-[18px] border border-border/70 bg-card/78 p-4">
+                  <div className="mb-4">
                     <h2 className="text-2xl font-semibold tracking-tight text-foreground">{t('configured')}</h2>
                     <p className="mt-1 text-[13px] text-muted-foreground">{t('configuredDesc')}</p>
                   </div>
-                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-4">
                     {configuredGroups.map((group) => (
                       <ChannelTypeCard
                         key={group.type}
@@ -207,7 +207,6 @@ export function Channels() {
                             return [account.accountId, ownerId ? agentNamesById[ownerId] : undefined];
                           }),
                         )}
-                        onEditGroup={() => openConfig(group.type, group.defaultAccountId || 'default')}
                         onEditAccount={(account) => openConfig(group.type, account.accountId)}
                         onAddAccount={() => openConfig(group.type, null, { createNewAccount: true })}
                         onManageBinding={() => navigate('/agents')}
@@ -225,8 +224,8 @@ export function Channels() {
                 </section>
               )}
 
-              <section className="mb-8 rounded-[18px] border border-border/70 bg-card/78 p-4 md:p-5">
-                <div className="mb-5">
+              <section className="mb-8 rounded-[18px] border border-border/70 bg-card/78 p-4">
+                <div className="mb-4">
                   <h2 className="text-2xl font-semibold tracking-tight text-foreground">{t('supportedChannels')}</h2>
                   <p className="mt-1 text-[13px] text-muted-foreground">{t('availableDesc')}</p>
                 </div>
@@ -345,7 +344,6 @@ export function Channels() {
 function ChannelTypeCard({
   group,
   accountOwnerNames,
-  onEditGroup,
   onEditAccount,
   onAddAccount,
   onManageBinding,
@@ -353,7 +351,6 @@ function ChannelTypeCard({
 }: {
   group: ChannelGroup;
   accountOwnerNames: Record<string, string | undefined>;
-  onEditGroup: () => void;
   onEditAccount: (account: ChannelAccount) => void;
   onAddAccount: () => void;
   onManageBinding: () => void;
@@ -361,7 +358,6 @@ function ChannelTypeCard({
 }) {
   const { t } = useTranslation('channels');
   const meta = CHANNEL_META[group.type];
-  const uniqueOwners = Array.from(new Set(Object.values(accountOwnerNames).filter(Boolean)));
   const runtimeLabel =
     group.status === 'connected'
       ? t('runtime.connected')
@@ -373,11 +369,10 @@ function ChannelTypeCard({
             ? t('runtime.configuredOnly', '已配置')
             : group.status === 'disconnected'
               ? t('runtime.stopped')
-              : t('runtime.unknown');
-
+      : t('runtime.unknown');
   return (
     <div className="rounded-[16px] border border-border/60 bg-card/84 p-4 transition-colors hover:border-black/10 dark:hover:border-white/10">
-      <div className="flex items-start gap-4">
+      <div className="flex items-start gap-3.5">
         <div className="mt-0.5 shrink-0">
           <ChannelLogo type={group.type} branded />
         </div>
@@ -386,28 +381,16 @@ function ChannelTypeCard({
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
                 <h3 className="truncate text-[18px] font-semibold tracking-[-0.02em] text-foreground">{group.name}</h3>
-                <span
-                  className={cn(
-                    'h-2.5 w-2.5 rounded-full shrink-0',
-                    group.status === 'connected'
-                      ? 'bg-emerald-500'
-                      : group.status === 'connecting'
-                        ? 'bg-amber-500 animate-pulse'
-                        : group.status === 'error'
-                          ? 'bg-destructive'
-                          : group.status === 'configured'
-                            ? 'bg-sky-500'
-                            : 'bg-muted-foreground',
-                  )}
-                />
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Badge
-                  variant="secondary"
-                  className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[10px] font-semibold text-foreground/70 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
-                >
-                  {runtimeLabel}
-                </Badge>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {group.accounts.length > 1 ? (
+                  <Badge
+                    variant="secondary"
+                    className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[10px] font-semibold text-foreground/70 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
+                  >
+                    {runtimeLabel}
+                  </Badge>
+                ) : null}
                 {meta?.isPlugin && (
                   <Badge
                     variant="secondary"
@@ -426,11 +409,11 @@ function ChannelTypeCard({
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {channelSupportsMultipleAccounts(group.type) && (
                 <Button
                   variant="outline"
-                  className="h-9 rounded-xl border-black/10 bg-transparent px-3 text-[12px] font-medium text-foreground/75 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
+                  className="h-8 rounded-xl border-black/10 bg-transparent px-3 text-[12px] font-medium text-foreground/75 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
                   onClick={onAddAccount}
                 >
                   {t('addAccount', '新增账户')}
@@ -438,59 +421,18 @@ function ChannelTypeCard({
               )}
               <Button
                 variant="outline"
-                className="h-9 rounded-xl border-black/10 bg-transparent px-3 text-[12px] font-medium text-foreground/75 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
+                className="h-8 rounded-xl border-black/10 bg-transparent px-3 text-[12px] font-medium text-foreground/75 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
                 onClick={onManageBinding}
               >
                 {channelSupportsMultipleAccounts(group.type)
                   ? t('manageBindingAccounts', '按账户绑定')
                   : t('manageBinding', '管理归属')}
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 rounded-xl text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
-                onClick={onEditGroup}
-              >
-                <PencilLine className="h-4 w-4" />
-              </Button>
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
-            <span className="font-medium text-foreground/70">
-              {channelSupportsMultipleAccounts(group.type)
-                ? t('boundAccountSummaryLabel', '账户归属')
-                : t('boundAgentLabel', '归属')}
-            </span>
-            {uniqueOwners.length === 0 ? (
-              <Badge
-                variant="secondary"
-                className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[11px] font-semibold text-foreground/80 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
-              >
-                {t('unassignedAgent', '未绑定')}
-              </Badge>
-            ) : uniqueOwners.length === 1 ? (
-              <Badge
-                variant="secondary"
-                className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[11px] font-semibold text-foreground/80 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
-              >
-                {uniqueOwners[0]}
-              </Badge>
-            ) : (
-              <Badge
-                variant="secondary"
-                className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[11px] font-semibold text-foreground/80 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
-              >
-                {t('boundAgentByAccount', '按账户分别绑定')}
-              </Badge>
-            )}
-            {group.error && (
-              <span className="truncate text-[12px] text-destructive">{group.error}</span>
-            )}
-          </div>
-
           {group.accounts.length > 0 ? (
-            <div className="mt-4 space-y-2">
+            <div className="mt-3 space-y-2">
               {group.accounts.map((account) => (
                 <div
                   key={account.id}
@@ -505,8 +447,8 @@ function ChannelTypeCard({
                   }}
                   className="flex w-full items-center justify-between rounded-[14px] border border-border/60 bg-background/70 px-3 py-2 text-left transition-colors hover:border-black/10 hover:bg-black/[0.02] focus:outline-none focus:ring-2 focus:ring-primary/35 dark:hover:border-white/10 dark:hover:bg-white/[0.03]"
                 >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center gap-2">
                       <span className="text-[13px] font-semibold text-foreground">{account.accountId}</span>
                       {account.isDefaultAccount && (
                         <Badge
@@ -516,52 +458,40 @@ function ChannelTypeCard({
                           {t('defaultAccount', '默认账户')}
                         </Badge>
                       )}
-                      <span
-                        className={cn(
-                          'h-2 w-2 rounded-full shrink-0',
-                          account.status === 'connected'
-                            ? 'bg-emerald-500'
-                            : account.status === 'connecting'
-                              ? 'bg-amber-500 animate-pulse'
-                              : account.status === 'error'
-                                ? 'bg-destructive'
-                                : account.configured
-                                  ? 'bg-sky-500'
-                                  : 'bg-muted-foreground',
-                        )}
-                      />
+                      <span className="shrink-0 text-[12px] text-foreground/60 dark:text-foreground/65">
+                        {account.status === 'connected'
+                          ? t('runtime.connected')
+                          : account.status === 'connecting'
+                            ? t('runtime.connecting')
+                            : account.status === 'error'
+                              ? t('runtime.error')
+                              : account.configured
+                                ? t('runtime.configuredOnly', '已配置')
+                                : t('runtime.stopped')}
+                      </span>
+                      <span className="shrink-0 text-muted-foreground/50">·</span>
+                      <span className="truncate text-[12px] text-muted-foreground/80">
+                        {t('boundAgentLabel', '归属')}：{accountOwnerNames[account.accountId] || t('unassignedAgent', '未绑定')}
+                      </span>
+                      {account.error ? (
+                        <>
+                          <span className="shrink-0 text-muted-foreground/50">·</span>
+                          <span className="truncate text-[12px] text-destructive">{account.error}</span>
+                        </>
+                      ) : null}
                     </div>
-                    <p className="mt-1 text-[12px] text-foreground/60 dark:text-foreground/65">
-                      {account.status === 'connected'
-                        ? t('runtime.connected')
-                        : account.status === 'connecting'
-                          ? t('runtime.connecting')
-                          : account.status === 'error'
-                            ? t('runtime.error')
-                            : account.configured
-                              ? t('runtime.configuredOnly', '已配置')
-                              : t('runtime.stopped')}
-                    </p>
-                    <p className="mt-1 text-[12px] text-muted-foreground/80">
-                      {t('boundAgentLabel', '归属')}：{accountOwnerNames[account.accountId] || t('unassignedAgent', '未绑定')}
-                    </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {account.error && (
-                      <span className="max-w-[200px] truncate text-[12px] text-destructive">{account.error}</span>
-                    )}
-                    <Button
-                      variant="dangerGhost"
-                      size="icon"
-                      className="h-8 w-8 rounded-[10px] shrink-0"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onDeleteAccount(account);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  <Button
+                    variant="dangerGhost"
+                    size="icon"
+                    className="ml-3 h-7 w-7 rounded-[10px] shrink-0"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDeleteAccount(account);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               ))}
             </div>
