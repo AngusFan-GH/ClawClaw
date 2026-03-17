@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { DEFAULT_SESSION_KEY, useChatStore } from '@/stores/chat';
 import { useAgentsStore } from '@/stores/agents';
+import { useGatewayStore } from '@/stores/gateway';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -132,6 +133,7 @@ export function Sidebar() {
   const deleteSession = useChatStore((s) => s.deleteSession);
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
+  const gatewayStatus = useGatewayStore((s) => s.status);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -257,6 +259,14 @@ export function Sidebar() {
   ];
 
   const settingsActive = location.pathname.startsWith('/settings');
+  const gatewayBadgeLabel = gatewayStatus.state === 'running'
+    ? t('chat:toolbar.gatewayRunning')
+    : gatewayStatus.state === 'error'
+      ? t('chat:toolbar.gatewayError')
+      : gatewayStatus.state === 'starting'
+        ? t('chat:toolbar.gatewayStarting')
+        : t('chat:toolbar.gatewayStopped');
+  const canRestartGateway = gatewayStatus.state === 'stopped' || gatewayStatus.state === 'error';
 
   return (
     <aside
@@ -557,6 +567,44 @@ export function Sidebar() {
                 <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">
                   {t('sidebar.settings')}
                 </span>
+                <button
+                  type="button"
+                  disabled={!canRestartGateway}
+                  onClick={(event) => {
+                    if (!canRestartGateway) return;
+                    event.stopPropagation();
+                    void useGatewayStore.getState().restart();
+                  }}
+                  title={gatewayBadgeLabel}
+                  className={cn(
+                    'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors',
+                    gatewayStatus.state === 'running'
+                      ? 'border-emerald-500/25 bg-emerald-500/12 text-emerald-700 dark:text-emerald-400'
+                      : gatewayStatus.state === 'error'
+                        ? 'border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-400'
+                        : gatewayStatus.state === 'starting'
+                          ? 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-400'
+                          : 'border-black/8 bg-black/[0.03] text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]'
+                    ,
+                    canRestartGateway && 'cursor-pointer hover:border-primary/25 hover:bg-primary/8 hover:text-foreground'
+                    ,
+                    !canRestartGateway && 'cursor-default'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'h-2 w-2 rounded-full',
+                      gatewayStatus.state === 'running'
+                        ? 'bg-emerald-500'
+                        : gatewayStatus.state === 'error'
+                          ? 'bg-red-500'
+                          : gatewayStatus.state === 'starting'
+                            ? 'bg-sky-500 animate-pulse'
+                            : 'bg-muted-foreground/55'
+                    )}
+                  />
+                  <span className="max-w-[72px] truncate">{gatewayBadgeLabel}</span>
+                </button>
                 <ChevronUp
                   className={cn(
                     'h-4 w-4 shrink-0 text-muted-foreground transition-transform',

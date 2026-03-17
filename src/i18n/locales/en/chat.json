@@ -19,6 +19,10 @@
   "noLogs": "(No logs available yet)",
   "toolbar": {
     "refresh": "Refresh chat",
+    "gatewayRunning": "Gateway connected",
+    "gatewayStarting": "Gateway starting",
+    "gatewayStopped": "Gateway offline",
+    "gatewayError": "Gateway error",
     "showThinking": "Show thinking",
     "hideThinking": "Hide thinking"
   },

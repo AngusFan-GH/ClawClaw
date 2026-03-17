@@ -680,7 +680,6 @@ export function Chat() {
         <ChatToolbar
           currentAgentLabel={resolvedAgentLabel}
           showAgentLabel={!shouldShowWelcome && !canSwitchAgent}
-          isEmpty={isEmpty}
         />
       </div>
 

@@ -19,6 +19,10 @@
   "noLogs": "（ログはまだありません）",
   "toolbar": {
     "refresh": "チャットを更新",
+    "gatewayRunning": "ゲートウェイ接続済み",
+    "gatewayStarting": "ゲートウェイ起動中",
+    "gatewayStopped": "ゲートウェイ未接続",
+    "gatewayError": "ゲートウェイエラー",
     "showThinking": "思考を表示",
     "hideThinking": "思考を非表示"
   },

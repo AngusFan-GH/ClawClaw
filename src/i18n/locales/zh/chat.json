@@ -19,6 +19,10 @@
   "noLogs": "（暂无日志）",
   "toolbar": {
     "refresh": "刷新对话",
+    "gatewayRunning": "网关已连接",
+    "gatewayStarting": "网关启动中",
+    "gatewayStopped": "网关未连接",
+    "gatewayError": "网关异常",
     "showThinking": "显示思考过程",
     "hideThinking": "隐藏思考过程"
   },
