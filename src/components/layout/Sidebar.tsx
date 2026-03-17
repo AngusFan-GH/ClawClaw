@@ -567,13 +567,21 @@ export function Sidebar() {
                 <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">
                   {t('sidebar.settings')}
                 </span>
-                <button
-                  type="button"
-                  disabled={!canRestartGateway}
+                <span
+                  role={canRestartGateway ? 'button' : undefined}
+                  tabIndex={canRestartGateway ? 0 : undefined}
                   onClick={(event) => {
                     if (!canRestartGateway) return;
                     event.stopPropagation();
                     void useGatewayStore.getState().restart();
+                  }}
+                  onKeyDown={(event) => {
+                    if (!canRestartGateway) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void useGatewayStore.getState().restart();
+                    }
                   }}
                   title={gatewayBadgeLabel}
                   className={cn(
@@ -604,7 +612,7 @@ export function Sidebar() {
                     )}
                   />
                   <span className="max-w-[72px] truncate">{gatewayBadgeLabel}</span>
-                </button>
+                </span>
                 <ChevronUp
                   className={cn(
                     'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
