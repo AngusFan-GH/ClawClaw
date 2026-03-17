@@ -102,16 +102,8 @@ export function createMenu(): void {
       label: 'Navigate',
       submenu: [
         {
-          label: 'Dashboard',
-          accelerator: 'CmdOrCtrl+1',
-          click: () => {
-            const win = BrowserWindow.getFocusedWindow();
-            win?.webContents.send('navigate', '/');
-          },
-        },
-        {
           label: 'Chat',
-          accelerator: 'CmdOrCtrl+2',
+          accelerator: 'CmdOrCtrl+1',
           click: () => {
             const win = BrowserWindow.getFocusedWindow();
             win?.webContents.send('navigate', '/chat');
@@ -119,7 +111,7 @@ export function createMenu(): void {
         },
         {
           label: 'Channels',
-          accelerator: 'CmdOrCtrl+3',
+          accelerator: 'CmdOrCtrl+2',
           click: () => {
             const win = BrowserWindow.getFocusedWindow();
             win?.webContents.send('navigate', '/channels');
@@ -127,7 +119,7 @@ export function createMenu(): void {
         },
         {
           label: 'Skills',
-          accelerator: 'CmdOrCtrl+4',
+          accelerator: 'CmdOrCtrl+3',
           click: () => {
             const win = BrowserWindow.getFocusedWindow();
             win?.webContents.send('navigate', '/skills');
@@ -135,7 +127,7 @@ export function createMenu(): void {
         },
         {
           label: 'Cron Tasks',
-          accelerator: 'CmdOrCtrl+5',
+          accelerator: 'CmdOrCtrl+4',
           click: () => {
             const win = BrowserWindow.getFocusedWindow();
             win?.webContents.send('navigate', '/cron');

@@ -21,8 +21,10 @@
   "configuredBadge": "Configured",
   "accountCount": "{{count}} accounts",
   "addAccount": "Add account",
+  "manageBindingAccounts": "Bind by account",
   "defaultAccount": "Default account",
   "editingAccount": "Account: {{accountId}}",
+  "boundAccountSummaryLabel": "Account ownership",
   "runtime": {
     "label": "Runtime",
     "connected": "Connected",
@@ -44,6 +46,9 @@
     "whatsappFailed": "WhatsApp connection failed: {{error}}",
     "channelSaved": "Channel {{name}} saved",
     "channelConnecting": "Connecting to {{name}}...",
+    "channelSavedRefreshPending": "{{name}} saved. The list will sync shortly.",
+    "validateTimedOut": "Validation request timed out. Please try again.",
+    "saveTimedOut": "Save request timed out. Please try again shortly.",
     "restartManual": "Please restart the gateway manually",
     "configFailed": "Configuration failed: {{error}}",
     "deleteFailed": "Delete failed: {{error}}"

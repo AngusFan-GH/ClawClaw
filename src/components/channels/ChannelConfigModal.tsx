@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   X,
   QrCode,
@@ -26,6 +26,7 @@ import {
   CHANNEL_NAMES,
   CHANNEL_META,
   getPrimaryChannels,
+  channelSupportsMultipleAccounts,
   type ChannelType,
   type ChannelMeta,
   type ChannelConfigField,
@@ -82,6 +83,15 @@ interface ChannelConfigModalProps {
   onChannelSaved?: (channelType: ChannelType) => void | Promise<void>;
 }
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return await Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(message)), timeoutMs);
+    }),
+  ]);
+}
+
 const inputClasses = 'h-[44px] rounded-xl font-mono text-[13px] bg-muted/70 dark:bg-muted/40 border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40';
 const labelClasses = 'text-[14px] text-foreground/80 font-bold';
 const outlineButtonClasses = 'h-9 text-[13px] font-medium rounded-xl px-4 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none text-foreground/80 hover:text-foreground';
@@ -119,12 +129,22 @@ export function ChannelConfigModal({
     errors: string[];
     warnings: string[];
   } | null>(null);
+  const [validatedSignature, setValidatedSignature] = useState<string | null>(null);
 
   const meta: ChannelMeta | null = selectedType ? CHANNEL_META[selectedType] : null;
-  const supportsMultipleAccounts = !!selectedType && selectedType !== 'whatsapp';
+  const supportsMultipleAccounts = !!selectedType && channelSupportsMultipleAccounts(selectedType);
   const normalizedAccountIdInput = accountIdInput.trim();
   const isEditingDefaultAccount = !createNewAccount && (!selectedAccountId || selectedAccountId === 'default');
   const requiresNamedAccountId = !!selectedType && supportsMultipleAccounts && createNewAccount;
+  const configSignature = useMemo(
+    () => JSON.stringify({
+      selectedType,
+      createNewAccount,
+      accountId: requiresNamedAccountId ? normalizedAccountIdInput : (selectedAccountId || 'default'),
+      values: configValues,
+    }),
+    [configValues, createNewAccount, normalizedAccountIdInput, requiresNamedAccountId, selectedAccountId, selectedType],
+  );
 
   useEffect(() => {
     setSelectedType(initialSelectedType);
@@ -143,6 +163,7 @@ export function ChannelConfigModal({
       setChannelName('');
       setIsExistingConfig(false);
       setValidationResult(null);
+      setValidatedSignature(null);
       setQrCode(null);
       setConnecting(false);
       hostApiFetch('/api/channels/whatsapp/cancel', { method: 'POST' }).catch(() => {});
@@ -158,6 +179,8 @@ export function ChannelConfigModal({
       setIsExistingConfig(false);
       setLoadingConfig(false);
       setChannelName(showChannelName ? CHANNEL_NAMES[selectedType] : '');
+      setValidationResult(null);
+      setValidatedSignature(null);
       return;
     }
 
@@ -201,29 +224,48 @@ export function ChannelConfigModal({
   }, [allowExistingConfig, configuredTypes, createNewAccount, selectedAccountId, selectedType, showChannelName]);
 
   useEffect(() => {
+    setValidationResult((current) => (validatedSignature && current ? current : null));
+  }, [validatedSignature]);
+
+  useEffect(() => {
+    if (validatedSignature && validatedSignature !== configSignature) {
+      setValidatedSignature(null);
+      setValidationResult(null);
+    }
+  }, [configSignature, validatedSignature]);
+
+  useEffect(() => {
     if (selectedType && !loadingConfig && showChannelName && firstInputRef.current) {
       firstInputRef.current.focus();
     }
   }, [selectedType, loadingConfig, showChannelName]);
 
   const finishSave = useCallback(async (channelType: ChannelType) => {
-    const displayName = showChannelName && channelName.trim()
-      ? channelName.trim()
-      : CHANNEL_NAMES[channelType];
-    const existingChannel = channels.find((channel) => channel.type === channelType);
+    try {
+      const displayName = showChannelName && channelName.trim()
+        ? channelName.trim()
+        : CHANNEL_NAMES[channelType];
+      const existingChannel = channels.find((channel) => channel.type === channelType);
 
-    if (!existingChannel) {
-      await addChannel({
-        type: channelType,
-        name: displayName,
-        token: meta?.configFields[0]?.key ? configValues[meta.configFields[0].key] : undefined,
-      });
-    } else {
-      await fetchChannels();
+      if (!existingChannel) {
+        await addChannel({
+          type: channelType,
+          name: displayName,
+          token: meta?.configFields[0]?.key ? configValues[meta.configFields[0].key] : undefined,
+        });
+      } else {
+        await fetchChannels();
+      }
+
+      await onChannelSaved?.(channelType);
+    } catch (error) {
+      console.error('post-save channel refresh failed', error);
+      toast.warning(t('toast.channelSavedRefreshPending', {
+        name: CHANNEL_NAMES[channelType],
+        defaultValue: `${CHANNEL_NAMES[channelType]} 已保存，列表会在稍后自动同步`,
+      }));
     }
-
-    await onChannelSaved?.(channelType);
-  }, [addChannel, channelName, channels, configValues, fetchChannels, meta?.configFields, onChannelSaved, showChannelName]);
+  }, [addChannel, channelName, channels, configValues, fetchChannels, meta?.configFields, onChannelSaved, showChannelName, t]);
 
   useEffect(() => {
     if (selectedType !== 'whatsapp') return;
@@ -247,7 +289,7 @@ export function ChannelConfigModal({
           throw new Error(saveResult?.error || 'Failed to save WhatsApp config');
         }
 
-        await finishSave('whatsapp');
+        void finishSave('whatsapp');
         useGatewayStore.getState().restart().catch(console.error);
         onClose();
       } catch (error) {
@@ -282,7 +324,7 @@ export function ChannelConfigModal({
     setValidationResult(null);
 
     try {
-      const result = await hostApiFetch<{
+      const result = await withTimeout(hostApiFetch<{
         success: boolean;
         valid?: boolean;
         errors?: string[];
@@ -291,7 +333,7 @@ export function ChannelConfigModal({
       }>('/api/channels/credentials/validate', {
         method: 'POST',
         body: JSON.stringify({ channelType: selectedType, config: configValues }),
-      });
+      }), 10000, t('toast.validateTimedOut', '验证请求超时，请重试'));
 
       const warnings = result.warnings || [];
       if (result.valid && result.details) {
@@ -306,12 +348,14 @@ export function ChannelConfigModal({
         errors: result.errors || [],
         warnings,
       });
+      setValidatedSignature(result.valid ? configSignature : null);
     } catch (error) {
       setValidationResult({
         valid: false,
         errors: [String(error)],
         warnings: [],
       });
+      setValidatedSignature(null);
     } finally {
       setValidating(false);
     }
@@ -340,8 +384,8 @@ export function ChannelConfigModal({
         return;
       }
 
-      if (meta.connectionType === 'token') {
-        const validationResponse = await hostApiFetch<{
+      if (meta.connectionType === 'token' && validatedSignature !== configSignature) {
+        const validationResponse = await withTimeout(hostApiFetch<{
           success: boolean;
           valid?: boolean;
           errors?: string[];
@@ -350,7 +394,7 @@ export function ChannelConfigModal({
         }>('/api/channels/credentials/validate', {
           method: 'POST',
           body: JSON.stringify({ channelType: selectedType, config: configValues }),
-        });
+        }), 10000, t('toast.validateTimedOut', '验证请求超时，请重试'));
 
         if (!validationResponse.valid) {
           setValidationResult({
@@ -358,6 +402,7 @@ export function ChannelConfigModal({
             errors: validationResponse.errors || ['Validation failed'],
             warnings: validationResponse.warnings || [],
           });
+          setValidatedSignature(null);
           setConnecting(false);
           return;
         }
@@ -375,6 +420,7 @@ export function ChannelConfigModal({
           errors: [],
           warnings,
         });
+        setValidatedSignature(configSignature);
       }
 
       const config: Record<string, unknown> = { ...configValues };
@@ -383,14 +429,14 @@ export function ChannelConfigModal({
       } else {
         delete config.__accountId;
       }
-      const saveResult = await hostApiFetch<{
+      const saveResult = await withTimeout(hostApiFetch<{
         success?: boolean;
         error?: string;
         warning?: string;
       }>('/api/channels/config', {
         method: 'POST',
         body: JSON.stringify({ channelType: selectedType, config }),
-      });
+      }), 15000, t('toast.saveTimedOut', '保存请求超时，请稍后重试'));
       if (!saveResult?.success) {
         throw new Error(saveResult?.error || 'Failed to save channel config');
       }
@@ -398,11 +444,9 @@ export function ChannelConfigModal({
         toast.warning(saveResult.warning);
       }
 
-      await finishSave(selectedType);
-
       toast.success(t('toast.channelSaved', { name: meta.name }));
       toast.success(t('toast.channelConnecting', { name: meta.name }));
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      void finishSave(selectedType);
       onClose();
     } catch (error) {
       toast.error(t('toast.configFailed', { error: String(error) }));

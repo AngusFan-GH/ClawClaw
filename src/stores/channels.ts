@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from './gateway';
 import type { Channel, ChannelAccount, ChannelGroup, ChannelType } from '../types/channel';
-import { CHANNEL_NAMES } from '../types/channel';
+import { CHANNEL_NAMES, channelSupportsMultipleAccounts } from '../types/channel';
 
 interface AddChannelParams {
   type: ChannelType;
@@ -163,7 +163,10 @@ function buildInitialGroups(configuredGroups: ConfiguredChannelGroupSnapshot[]):
   for (const group of configuredGroups) {
     if (!(group.type in CHANNEL_NAMES)) continue;
     const type = group.type as ChannelType;
-    const accounts = group.accounts.map<ChannelAccount>((account) => ({
+    const visibleAccounts = group.accounts.filter((account) =>
+      channelSupportsMultipleAccounts(type) ? true : (account.isDefaultAccount || account.accountId === 'default')
+    );
+    const accounts = visibleAccounts.map<ChannelAccount>((account) => ({
       id: `${type}:${account.accountId}`,
       type,
       name: CHANNEL_NAMES[type] || type,
@@ -187,7 +190,7 @@ function buildInitialGroups(configuredGroups: ConfiguredChannelGroupSnapshot[]):
       runtimeStatus: accounts.length > 0 ? 'configured' : 'unknown',
       pluginLoaded: false,
       defaultAccountId: group.defaultAccountId,
-      configuredAccounts: group.accounts.map((account) => account.accountId),
+      configuredAccounts: visibleAccounts.map((account) => account.accountId),
       accounts,
     });
   }
@@ -234,6 +237,9 @@ function mergeRuntimeSnapshot(
         continue;
       }
       const accountId = runtimeAccount.accountId || 'default';
+      if (!channelSupportsMultipleAccounts(type) && accountId !== (defaultAccountId || 'default')) {
+        continue;
+      }
       const status = mapAccountStatus(runtimeAccount);
       const prior = accountMap.get(accountId);
       accountMap.set(accountId, {

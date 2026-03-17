@@ -21,8 +21,10 @@
   "configuredBadge": "設定済み",
   "accountCount": "{{count}} アカウント",
   "addAccount": "アカウント追加",
+  "manageBindingAccounts": "アカウント単位でバインド",
   "defaultAccount": "既定アカウント",
   "editingAccount": "アカウント: {{accountId}}",
+  "boundAccountSummaryLabel": "アカウントの所属",
   "runtime": {
     "label": "ランタイム",
     "connected": "接続済み",
@@ -44,6 +46,9 @@
     "whatsappFailed": "WhatsApp 接続に失敗しました: {{error}}",
     "channelSaved": "チャンネル {{name}} が保存されました",
     "channelConnecting": "{{name}} に接続中...",
+    "channelSavedRefreshPending": "{{name}} は保存されました。リストはまもなく同期されます。",
+    "validateTimedOut": "検証リクエストがタイムアウトしました。もう一度お試しください。",
+    "saveTimedOut": "保存リクエストがタイムアウトしました。しばらくしてからもう一度お試しください。",
     "restartManual": "ゲートウェイを手動で再起動してください",
     "configFailed": "設定に失敗しました: {{error}}",
     "deleteFailed": "削除に失敗しました: {{error}}"

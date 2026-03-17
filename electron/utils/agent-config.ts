@@ -1,7 +1,7 @@
 import { access, copyFile, mkdir, readdir, rm } from 'fs/promises';
 import { constants } from 'fs';
 import { join, normalize } from 'path';
-import { listConfiguredChannels, readOpenClawConfig, writeOpenClawConfig } from './channel-config';
+import { listConfiguredChannelGroups, listConfiguredChannels, readOpenClawConfig, writeOpenClawConfig } from './channel-config';
 import { expandPath, getOpenClawConfigDir } from './paths';
 import * as logger from './logger';
 
@@ -49,6 +49,7 @@ interface AgentsConfig extends Record<string, unknown> {
 
 interface BindingMatch extends Record<string, unknown> {
   channel?: string;
+  accountId?: string;
 }
 
 interface BindingConfig extends Record<string, unknown> {
@@ -70,6 +71,11 @@ export interface AgentSummary {
   workspace: string;
   agentDir: string;
   channelTypes: string[];
+  channelBindings: Array<{
+    channelType: string;
+    accountId: string;
+    isDefaultAccount: boolean;
+  }>;
 }
 
 export interface AgentsSnapshot {
@@ -77,6 +83,7 @@ export interface AgentsSnapshot {
   defaultAgentId: string;
   configuredChannelTypes: string[];
   channelOwners: Record<string, string>;
+  channelAccountOwners: Record<string, string>;
 }
 
 function formatModelLabel(model: unknown): string | null {
@@ -202,7 +209,14 @@ function isSimpleChannelBinding(binding: unknown): binding is BindingConfig {
   if (typeof candidate.agentId !== 'string' || !candidate.agentId) return false;
   if (!candidate.match || typeof candidate.match !== 'object' || Array.isArray(candidate.match)) return false;
   const keys = Object.keys(candidate.match);
-  return keys.length === 1 && typeof candidate.match.channel === 'string' && Boolean(candidate.match.channel);
+  const allowedKeys = keys.every((key) => key === 'channel' || key === 'accountId');
+  return allowedKeys
+    && typeof candidate.match.channel === 'string'
+    && Boolean(candidate.match.channel)
+    && (
+      candidate.match.accountId === undefined
+      || (typeof candidate.match.accountId === 'string' && Boolean(candidate.match.accountId))
+    );
 }
 
 /** Normalize agent ID for consistent comparison (bindings vs entries). */
@@ -210,35 +224,67 @@ function normalizeAgentIdForBinding(id: string): string {
   return (id ?? '').trim().toLowerCase() || '';
 }
 
-function getSimpleChannelBindingMap(bindings: unknown): Map<string, string> {
-  const owners = new Map<string, string>();
-  if (!Array.isArray(bindings)) return owners;
+function normalizeBindingAccountId(accountId?: string | null): string {
+  const normalized = typeof accountId === 'string' ? accountId.trim() : '';
+  return normalized || 'default';
+}
+
+function makeChannelAccountBindingKey(channelType: string, accountId?: string | null): string {
+  return `${channelType}:${normalizeBindingAccountId(accountId)}`;
+}
+
+function getSimpleChannelBindingMaps(bindings: unknown): {
+  typeOwners: Map<string, string>;
+  accountOwners: Map<string, string>;
+} {
+  const typeOwners = new Map<string, string>();
+  const accountOwners = new Map<string, string>();
+  if (!Array.isArray(bindings)) {
+    return { typeOwners, accountOwners };
+  }
 
   for (const binding of bindings) {
     if (!isSimpleChannelBinding(binding)) continue;
     const agentId = normalizeAgentIdForBinding(binding.agentId!);
     const channel = binding.match?.channel;
-    if (agentId && channel) owners.set(channel, agentId);
+    const accountId = binding.match?.accountId;
+    if (!agentId || !channel) continue;
+    if (typeof accountId === 'string' && accountId.trim()) {
+      accountOwners.set(makeChannelAccountBindingKey(channel, accountId), agentId);
+    } else {
+      typeOwners.set(channel, agentId);
+    }
   }
 
-  return owners;
+  return { typeOwners, accountOwners };
 }
 
 function upsertBindingsForChannel(
   bindings: unknown,
   channelType: string,
   agentId: string | null,
+  accountId?: string | null,
 ): BindingConfig[] | undefined {
   const nextBindings = Array.isArray(bindings)
-    ? [...bindings as BindingConfig[]].filter((binding) => !(
-      isSimpleChannelBinding(binding) && binding.match?.channel === channelType
-    ))
+    ? [...bindings as BindingConfig[]].filter((binding) => {
+      if (!isSimpleChannelBinding(binding) || binding.match?.channel !== channelType) {
+        return true;
+      }
+      const bindingAccountId = normalizeBindingAccountId(binding.match?.accountId);
+      if (accountId) {
+        return bindingAccountId !== normalizeBindingAccountId(accountId);
+      }
+      return typeof binding.match?.accountId === 'string' && binding.match.accountId.trim().length > 0;
+    })
     : [];
 
   if (agentId) {
     nextBindings.push({
       agentId,
-      match: { channel: channelType },
+      match: {
+        channel: channelType,
+        ...(accountId ? { accountId: normalizeBindingAccountId(accountId) } : {}),
+      },
     });
   }
 
@@ -385,14 +431,30 @@ async function provisionAgentFilesystem(config: AgentConfigDocument, agent: Agen
 
 async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<AgentsSnapshot> {
   const { entries, defaultAgentId } = await getEffectiveAgentEntries(config);
-  const configuredChannels = await listConfiguredChannels();
-  const explicitOwners = getSimpleChannelBindingMap(config.bindings);
+  const configuredGroups = await listConfiguredChannelGroups();
+  const configuredChannels = configuredGroups.map((group) => group.type);
+  const { typeOwners, accountOwners } = getSimpleChannelBindingMaps(config.bindings);
   const channelOwners: Record<string, string> = {};
+  const channelAccountOwners: Record<string, string> = {};
 
-  for (const channelType of configuredChannels) {
-    const explicitOwner = explicitOwners.get(channelType);
-    if (explicitOwner) {
-      channelOwners[channelType] = explicitOwner;
+  for (const group of configuredGroups) {
+    const ownerIds = new Set<string>();
+    for (const account of group.accounts) {
+      const bindingKey = makeChannelAccountBindingKey(group.type, account.accountId);
+      const explicitOwner = accountOwners.get(bindingKey) ?? typeOwners.get(group.type);
+      if (explicitOwner) {
+        channelAccountOwners[bindingKey] = explicitOwner;
+        ownerIds.add(explicitOwner);
+      }
+    }
+
+    if (ownerIds.size === 1) {
+      channelOwners[group.type] = Array.from(ownerIds)[0];
+    } else {
+      const typeOwner = typeOwners.get(group.type);
+      if (typeOwner) {
+        channelOwners[group.type] = typeOwner;
+      }
     }
   }
 
@@ -401,6 +463,16 @@ async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<Age
     const modelLabel = formatModelLabel(entry.model) || defaultModelLabel || 'Not configured';
     const inheritedModel = !formatModelLabel(entry.model) && Boolean(defaultModelLabel);
     const entryIdNorm = normalizeAgentIdForBinding(entry.id);
+    const channelBindings = configuredGroups.flatMap((group) =>
+      group.accounts
+        .filter((account) => channelAccountOwners[makeChannelAccountBindingKey(group.type, account.accountId)] === entryIdNorm)
+        .map((account) => ({
+          channelType: group.type,
+          accountId: account.accountId,
+          isDefaultAccount: account.isDefaultAccount,
+        }))
+    );
+
     return {
       id: entry.id,
       name: entry.name || humanizeAgentId(entry.id),
@@ -409,7 +481,8 @@ async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<Age
       inheritedModel,
       workspace: entry.workspace || (entry.id === MAIN_AGENT_ID ? getDefaultWorkspacePath(config) : `~/.openclaw/workspace-${entry.id}`),
       agentDir: entry.agentDir || getDefaultAgentDirPath(entry.id),
-      channelTypes: configuredChannels.filter((channelType) => channelOwners[channelType] === entryIdNorm),
+      channelTypes: Array.from(new Set(channelBindings.map((binding) => binding.channelType))),
+      channelBindings,
     };
   });
 
@@ -418,6 +491,7 @@ async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<Age
     defaultAgentId,
     configuredChannelTypes: configuredChannels,
     channelOwners,
+    channelAccountOwners,
   };
 }
 
@@ -526,7 +600,7 @@ export async function deleteAgentConfig(agentId: string): Promise<AgentsSnapshot
   return buildSnapshotFromConfig(config);
 }
 
-export async function assignChannelToAgent(agentId: string, channelType: string): Promise<AgentsSnapshot> {
+export async function assignChannelToAgent(agentId: string, channelType: string, accountId?: string): Promise<AgentsSnapshot> {
   const config = await readOpenClawConfig() as AgentConfigDocument;
   const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
   if (!entries.some((entry) => entry.id === agentId)) {
@@ -537,17 +611,19 @@ export async function assignChannelToAgent(agentId: string, channelType: string)
     ...agentsConfig,
     list: entries,
   };
-  config.bindings = upsertBindingsForChannel(config.bindings, channelType, agentId);
+  config.bindings = upsertBindingsForChannel(config.bindings, channelType, agentId, accountId);
   await writeOpenClawConfig(config);
-  logger.info('Assigned channel to agent', { agentId, channelType });
+  logger.info('Assigned channel to agent', { agentId, channelType, accountId: normalizeBindingAccountId(accountId) });
   return buildSnapshotFromConfig(config);
 }
 
-export async function clearChannelBinding(channelType: string, agentId?: string): Promise<AgentsSnapshot> {
+export async function clearChannelBinding(channelType: string, agentId?: string, accountId?: string): Promise<AgentsSnapshot> {
   const config = await readOpenClawConfig() as AgentConfigDocument;
   const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
-  const currentOwners = getSimpleChannelBindingMap(config.bindings);
-  const boundAgentId = currentOwners.get(channelType);
+  const { typeOwners, accountOwners } = getSimpleChannelBindingMaps(config.bindings);
+  const boundAgentId = accountId
+    ? accountOwners.get(makeChannelAccountBindingKey(channelType, accountId)) ?? typeOwners.get(channelType)
+    : typeOwners.get(channelType);
   const normalizedRequestedAgentId =
     typeof agentId === 'string' && agentId.trim() ? normalizeAgentIdForBinding(agentId) : '';
 
@@ -559,8 +635,12 @@ export async function clearChannelBinding(channelType: string, agentId?: string)
     ...agentsConfig,
     list: entries,
   };
-  config.bindings = upsertBindingsForChannel(config.bindings, channelType, null);
+  config.bindings = upsertBindingsForChannel(config.bindings, channelType, null, accountId);
   await writeOpenClawConfig(config);
-  logger.info('Cleared simplified channel binding', { channelType, agentId: normalizedRequestedAgentId || boundAgentId });
+  logger.info('Cleared simplified channel binding', {
+    channelType,
+    accountId: accountId ? normalizeBindingAccountId(accountId) : undefined,
+    agentId: normalizedRequestedAgentId || boundAgentId,
+  });
   return buildSnapshotFromConfig(config);
 }

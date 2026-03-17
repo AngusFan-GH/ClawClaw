@@ -54,14 +54,15 @@
     "agentIdLabel": "Agent ID",
     "modelLabel": "Model",
     "channelsTitle": "Channels",
-    "channelsDescription": "Each channel type keeps a single global configuration in ClawClaw. Binding a configured channel here only switches that channel type's agent ownership; it does not duplicate the channel configuration.",
-    "addChannel": "Add Channel",
+    "channelsDescription": "Configure accounts on the Connections page first, then bind specific accounts to this agent here. Multi-account connections can belong to different agents.",
+    "addChannel": "Bind Connection Account",
     "noChannels": "No channels are assigned to this agent yet.",
-    "assignedStatus": "Assigned"
+    "assignedStatus": "Assigned",
+    "boundAccount": "Account: {{accountId}}"
   },
   "removeChannelDialog": {
     "title": "Remove Channel",
-    "message": "Remove {{name}} from ClawClaw? This deletes the current channel configuration."
+    "message": "Unbind {{name}} from this agent? This keeps the connection config and only removes its ownership from the current agent."
   },
   "toast": {
     "agentCreated": "Agent created",
@@ -72,8 +73,21 @@
     "openWorkspaceFailed": "Failed to open workspace: {{error}}",
     "channelAssigned": "{{channel}} assigned to agent",
     "channelAssignFailed": "Failed to assign channel: {{error}}",
-    "channelRemoved": "{{channel}} removed",
+    "channelRemoved": "{{channel}} unbound",
     "channelRemoveFailed": "Failed to remove channel: {{error}}"
+  },
+  "bindingDialog": {
+    "title": "Bind Existing Connections",
+    "description": "Bind configured connections by account. Multi-account connections can belong to different agents.",
+    "empty": "There are no configured connections to bind yet. Configure accounts on the Connections page first.",
+    "otherOwner": "Currently assigned to: {{name}}",
+    "unassigned": "Unassigned",
+    "account": "Account: {{accountId}}",
+    "accountConfigured": "This account is configured and ready to bind.",
+    "accountNotConfigured": "This account is not fully configured yet. Finish it on the Connections page first.",
+    "binding": "Binding...",
+    "boundHere": "Bound",
+    "bindAction": "Bind to Current Agent"
   },
   "loadingTitle": "Loading agents",
   "loadingDescription": "Syncing agent configuration and channel bindings. Please wait."

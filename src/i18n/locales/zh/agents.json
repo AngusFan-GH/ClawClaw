@@ -54,14 +54,15 @@
     "agentIdLabel": "分身 ID",
     "modelLabel": "Model",
     "channelsTitle": "连接",
-    "channelsDescription": "每种连接类型在 ClawClaw 中只保留一份全局配置。在这里绑定已配置的连接，只会切换该连接类型对应的分身归属，不会复制连接配置。",
-    "addChannel": "添加连接",
+    "channelsDescription": "先在连接页配置账户，再在这里把具体账户绑定到当前分身。多账户连接会分别归属到不同分身。",
+    "addChannel": "绑定连接账户",
     "noChannels": "这个分身还没有分配任何连接。",
-    "assignedStatus": "已分配"
+    "assignedStatus": "已分配",
+    "boundAccount": "账户：{{accountId}}"
   },
   "removeChannelDialog": {
     "title": "移除连接",
-    "message": "确认移除 {{name}}？这会删除当前的连接配置。"
+    "message": "确认解绑 {{name}}？这不会删除连接配置，只会移除它与当前分身的归属关系。"
   },
   "toast": {
     "agentCreated": "分身已创建",
@@ -72,8 +73,21 @@
     "openWorkspaceFailed": "打开工作区失败：{{error}}",
     "channelAssigned": "{{channel}} 已分配给分身",
     "channelAssignFailed": "分配连接失败：{{error}}",
-    "channelRemoved": "{{channel}} 已移除",
+    "channelRemoved": "{{channel}} 已解绑",
     "channelRemoveFailed": "移除连接失败：{{error}}"
+  },
+  "bindingDialog": {
+    "title": "绑定已有连接",
+    "description": "按账户绑定已配置连接。多账户连接会分别归属到不同分身。",
+    "empty": "还没有可绑定的连接。请先去连接页配置账户。",
+    "otherOwner": "当前归属：{{name}}",
+    "unassigned": "未绑定分身",
+    "account": "账户：{{accountId}}",
+    "accountConfigured": "该账户已完成配置，可直接绑定。",
+    "accountNotConfigured": "该账户尚未完成配置，建议先回到连接页补全配置。",
+    "binding": "绑定中...",
+    "boundHere": "已绑定",
+    "bindAction": "绑定到当前分身"
   },
   "loadingTitle": "正在加载分身",
   "loadingDescription": "正在同步分身配置和绑定关系，请稍候。"

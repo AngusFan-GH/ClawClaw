@@ -83,7 +83,8 @@ export async function handleAgentRoutes(
       try {
         const agentId = decodeURIComponent(parts[0]);
         const channelType = decodeURIComponent(parts[2]);
-        const snapshot = await assignChannelToAgent(agentId, channelType);
+        const accountId = url.searchParams.get('accountId') || undefined;
+        const snapshot = await assignChannelToAgent(agentId, channelType, accountId);
         scheduleGatewayReload(ctx, 'assign-channel');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {
@@ -127,7 +128,8 @@ export async function handleAgentRoutes(
       try {
         const agentId = decodeURIComponent(parts[0]);
         const channelType = decodeURIComponent(parts[2]);
-        const snapshot = await clearChannelBinding(channelType, agentId);
+        const accountId = url.searchParams.get('accountId') || undefined;
+        const snapshot = await clearChannelBinding(channelType, agentId, accountId);
         scheduleGatewayReload(ctx, 'remove-agent-channel');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {

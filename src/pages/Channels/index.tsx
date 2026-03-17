@@ -14,8 +14,8 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { cn } from '@/lib/utils';
 import {
   CHANNEL_ICONS,
-  CHANNEL_NAMES,
   CHANNEL_META,
+  channelSupportsMultipleAccounts,
   getPrimaryChannels,
   type ChannelAccount,
   type ChannelGroup,
@@ -68,7 +68,7 @@ export function Channels() {
   const { t } = useTranslation('channels');
   const { channelGroups, loading, error, fetchChannels, deleteChannel } = useChannelsStore();
   const agents = useAgentsStore((state) => state.agents);
-  const channelOwners = useAgentsStore((state) => state.channelOwners);
+  const channelAccountOwners = useAgentsStore((state) => state.channelAccountOwners);
   const gatewayStatus = useGatewayStore((state) => state.status);
   const gatewayLifecycle = useGatewayStore((state) => state.lifecycle);
   const navigate = useNavigate();
@@ -201,7 +201,12 @@ export function Channels() {
                       <ChannelTypeCard
                         key={group.type}
                         group={group}
-                        boundAgentName={channelOwners[group.type] ? agentNamesById[channelOwners[group.type]] : undefined}
+                        accountOwnerNames={Object.fromEntries(
+                          group.accounts.map((account) => {
+                            const ownerId = channelAccountOwners[`${group.type}:${account.accountId}`];
+                            return [account.accountId, ownerId ? agentNamesById[ownerId] : undefined];
+                          }),
+                        )}
                         onEditGroup={() => openConfig(group.type, group.defaultAccountId || 'default')}
                         onEditAccount={(account) => openConfig(group.type, account.accountId)}
                         onAddAccount={() => openConfig(group.type, null, { createNewAccount: true })}
@@ -339,7 +344,7 @@ export function Channels() {
 
 function ChannelTypeCard({
   group,
-  boundAgentName,
+  accountOwnerNames,
   onEditGroup,
   onEditAccount,
   onAddAccount,
@@ -347,7 +352,7 @@ function ChannelTypeCard({
   onDeleteAccount,
 }: {
   group: ChannelGroup;
-  boundAgentName?: string;
+  accountOwnerNames: Record<string, string | undefined>;
   onEditGroup: () => void;
   onEditAccount: (account: ChannelAccount) => void;
   onAddAccount: () => void;
@@ -356,6 +361,7 @@ function ChannelTypeCard({
 }) {
   const { t } = useTranslation('channels');
   const meta = CHANNEL_META[group.type];
+  const uniqueOwners = Array.from(new Set(Object.values(accountOwnerNames).filter(Boolean)));
   const runtimeLabel =
     group.status === 'connected'
       ? t('runtime.connected')
@@ -410,16 +416,18 @@ function ChannelTypeCard({
                     {t('pluginBadge', 'Plugin')}
                   </Badge>
                 )}
-                <Badge
-                  variant="secondary"
-                  className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[10px] font-semibold text-foreground/70 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
-                >
-                  {t('accountCount', { count: group.accounts.length, defaultValue: `${group.accounts.length} 个账户` })}
-                </Badge>
+                {group.accounts.length > 1 && (
+                  <Badge
+                    variant="secondary"
+                    className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[10px] font-semibold text-foreground/70 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
+                  >
+                    {t('accountCount', { count: group.accounts.length, defaultValue: `${group.accounts.length} 个账户` })}
+                  </Badge>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {group.type !== 'whatsapp' && (
+              {channelSupportsMultipleAccounts(group.type) && (
                 <Button
                   variant="outline"
                   className="h-9 rounded-xl border-black/10 bg-transparent px-3 text-[12px] font-medium text-foreground/75 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
@@ -433,7 +441,9 @@ function ChannelTypeCard({
                 className="h-9 rounded-xl border-black/10 bg-transparent px-3 text-[12px] font-medium text-foreground/75 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
                 onClick={onManageBinding}
               >
-                {t('manageBinding', '管理归属')}
+                {channelSupportsMultipleAccounts(group.type)
+                  ? t('manageBindingAccounts', '按账户绑定')
+                  : t('manageBinding', '管理归属')}
               </Button>
               <Button
                 variant="ghost"
@@ -446,22 +456,37 @@ function ChannelTypeCard({
             </div>
           </div>
 
-          <p className="mt-3 text-[14px] leading-[1.55] text-muted-foreground">
-            {group.error || (meta ? t(meta.description.replace('channels:', '')) : CHANNEL_NAMES[group.type])}
-          </p>
-
-          <div className="mt-4 flex items-center justify-between rounded-[14px] border border-border/60 bg-muted/[0.22] px-3 py-2.5">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
-                {t('boundAgentLabel', '当前分身')}
-              </p>
-              <p className="mt-1 text-[13px] font-semibold text-foreground">
-                {boundAgentName || t('unassignedAgent', '未绑定')}
-              </p>
-            </div>
-            <p className="max-w-[220px] text-right text-[12px] leading-[1.5] text-muted-foreground">
-              {t('bindingHint', '连接配置在这里维护，分身归属请到分身页调整。')}
-            </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
+            <span className="font-medium text-foreground/70">
+              {channelSupportsMultipleAccounts(group.type)
+                ? t('boundAccountSummaryLabel', '账户归属')
+                : t('boundAgentLabel', '归属')}
+            </span>
+            {uniqueOwners.length === 0 ? (
+              <Badge
+                variant="secondary"
+                className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[11px] font-semibold text-foreground/80 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
+              >
+                {t('unassignedAgent', '未绑定')}
+              </Badge>
+            ) : uniqueOwners.length === 1 ? (
+              <Badge
+                variant="secondary"
+                className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[11px] font-semibold text-foreground/80 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
+              >
+                {uniqueOwners[0]}
+              </Badge>
+            ) : (
+              <Badge
+                variant="secondary"
+                className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[11px] font-semibold text-foreground/80 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
+              >
+                {t('boundAgentByAccount', '按账户分别绑定')}
+              </Badge>
+            )}
+            {group.error && (
+              <span className="truncate text-[12px] text-destructive">{group.error}</span>
+            )}
           </div>
 
           {group.accounts.length > 0 ? (
@@ -491,6 +516,20 @@ function ChannelTypeCard({
                           {t('defaultAccount', '默认账户')}
                         </Badge>
                       )}
+                      <span
+                        className={cn(
+                          'h-2 w-2 rounded-full shrink-0',
+                          account.status === 'connected'
+                            ? 'bg-emerald-500'
+                            : account.status === 'connecting'
+                              ? 'bg-amber-500 animate-pulse'
+                              : account.status === 'error'
+                                ? 'bg-destructive'
+                                : account.configured
+                                  ? 'bg-sky-500'
+                                  : 'bg-muted-foreground',
+                        )}
+                      />
                     </div>
                     <p className="mt-1 text-[12px] text-foreground/60 dark:text-foreground/65">
                       {account.status === 'connected'
@@ -502,6 +541,9 @@ function ChannelTypeCard({
                             : account.configured
                               ? t('runtime.configuredOnly', '已配置')
                               : t('runtime.stopped')}
+                    </p>
+                    <p className="mt-1 text-[12px] text-muted-foreground/80">
+                      {t('boundAgentLabel', '归属')}：{accountOwnerNames[account.accountId] || t('unassignedAgent', '未绑定')}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

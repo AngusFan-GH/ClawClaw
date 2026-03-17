@@ -22,8 +22,10 @@
   "configuredBadge": "已配置",
   "accountCount": "{{count}} 个账户",
   "addAccount": "新增账户",
+  "manageBindingAccounts": "按账户绑定",
   "defaultAccount": "默认账户",
   "editingAccount": "账户: {{accountId}}",
+  "boundAccountSummaryLabel": "账户归属",
   "runtime": {
     "label": "运行态",
     "connected": "已连接",
@@ -44,6 +46,9 @@
     "whatsappFailed": "WhatsApp 连接失败: {{error}}",
     "channelSaved": "连接 {{name}} 已保存",
     "channelConnecting": "正在连接 {{name}}...",
+    "channelSavedRefreshPending": "{{name}} 已保存，列表会在稍后自动同步",
+    "validateTimedOut": "验证请求超时，请重试",
+    "saveTimedOut": "保存请求超时，请稍后重试",
     "restartManual": "请手动重启网关",
     "configFailed": "配置失败: {{error}}",
     "deleteFailed": "删除失败: {{error}}"

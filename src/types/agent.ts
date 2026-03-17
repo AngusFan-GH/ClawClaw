@@ -13,12 +13,19 @@ export interface GatewayAgentSummary {
   isDefault: boolean;
 }
 
+export interface BoundChannelAccountSummary {
+  channelType: string;
+  accountId: string;
+  isDefaultAccount: boolean;
+}
+
 export interface LocalAgentExtras {
   workspace: string;
   agentDir: string;
   modelDisplay: string;
   inheritedModel: boolean;
   boundChannels: string[];
+  boundChannelAccounts: BoundChannelAccountSummary[];
 }
 
 export interface AgentSummary {
@@ -35,6 +42,7 @@ export interface LocalAgentSnapshot {
   workspace: string;
   agentDir: string;
   channelTypes: string[];
+  channelBindings: BoundChannelAccountSummary[];
 }
 
 export interface AgentsSnapshot {
@@ -44,4 +52,5 @@ export interface AgentsSnapshot {
   scope?: string;
   configuredChannelTypes: string[];
   channelOwners: Record<string, string>;
+  channelAccountOwners: Record<string, string>;
 }

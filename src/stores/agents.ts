@@ -38,14 +38,15 @@ interface AgentsState {
   scope: string | null;
   configuredChannelTypes: string[];
   channelOwners: Record<string, string>;
+  channelAccountOwners: Record<string, string>;
   loading: boolean;
   error: string | null;
   fetchAgents: () => Promise<void>;
   createAgent: (name: string) => Promise<void>;
   updateAgent: (agentId: string, name: string) => Promise<void>;
   deleteAgent: (agentId: string) => Promise<void>;
-  assignChannel: (agentId: string, channelType: ChannelType) => Promise<void>;
-  removeChannel: (agentId: string, channelType: ChannelType) => Promise<void>;
+  assignChannel: (agentId: string, channelType: ChannelType, accountId?: string) => Promise<void>;
+  removeChannel: (agentId: string, channelType: ChannelType, accountId?: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -65,6 +66,7 @@ function buildDefaultLocalExtras(): LocalAgentExtras {
     modelDisplay: 'Not configured',
     inheritedModel: false,
     boundChannels: [],
+    boundChannelAccounts: [],
   };
 }
 
@@ -91,6 +93,7 @@ function buildLocalExtras(localAgent?: LocalAgentSnapshot): LocalAgentExtras {
         modelDisplay: localAgent.modelDisplay,
         inheritedModel: localAgent.inheritedModel,
         boundChannels: localAgent.channelTypes,
+        boundChannelAccounts: localAgent.channelBindings,
       }
     : buildDefaultLocalExtras();
 }
@@ -105,6 +108,7 @@ function mergeAgentSnapshots(
   scope: string | null;
   configuredChannelTypes: string[];
   channelOwners: Record<string, string>;
+  channelAccountOwners: Record<string, string>;
 } {
   const defaultAgentId = gatewaySnapshot?.defaultId ?? localSnapshot?.defaultAgentId ?? 'main';
   const localById = new Map((localSnapshot?.agents ?? []).map((agent) => [agent.id, agent]));
@@ -144,6 +148,10 @@ function mergeAgentSnapshots(
       localSnapshot?.channelOwners && typeof localSnapshot.channelOwners === 'object'
         ? localSnapshot.channelOwners
         : {},
+    channelAccountOwners:
+      localSnapshot?.channelAccountOwners && typeof localSnapshot.channelAccountOwners === 'object'
+        ? localSnapshot.channelAccountOwners
+        : {},
   };
 }
 
@@ -154,6 +162,7 @@ export const useAgentsStore = create<AgentsState>((set) => ({
   scope: null,
   configuredChannelTypes: [],
   channelOwners: {},
+  channelAccountOwners: {},
   loading: false,
   error: null,
 
@@ -216,11 +225,12 @@ export const useAgentsStore = create<AgentsState>((set) => ({
     }
   },
 
-  assignChannel: async (agentId: string, channelType: ChannelType) => {
+  assignChannel: async (agentId: string, channelType: ChannelType, accountId?: string) => {
     set({ error: null });
     try {
+      const query = accountId ? `?accountId=${encodeURIComponent(accountId)}` : '';
       await hostApiFetch(
-        `/api/agents/${encodeURIComponent(agentId)}/channels/${encodeURIComponent(channelType)}`,
+        `/api/agents/${encodeURIComponent(agentId)}/channels/${encodeURIComponent(channelType)}${query}`,
         { method: 'PUT' },
       );
       await useAgentsStore.getState().fetchAgents();
@@ -230,11 +240,12 @@ export const useAgentsStore = create<AgentsState>((set) => ({
     }
   },
 
-  removeChannel: async (agentId: string, channelType: ChannelType) => {
+  removeChannel: async (agentId: string, channelType: ChannelType, accountId?: string) => {
     set({ error: null });
     try {
+      const query = accountId ? `?accountId=${encodeURIComponent(accountId)}` : '';
       await hostApiFetch(
-        `/api/agents/${encodeURIComponent(agentId)}/channels/${encodeURIComponent(channelType)}`,
+        `/api/agents/${encodeURIComponent(agentId)}/channels/${encodeURIComponent(channelType)}${query}`,
         { method: 'DELETE' },
       );
       await useAgentsStore.getState().fetchAgents();

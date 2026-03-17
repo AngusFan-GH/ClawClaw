@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { StatusBadge } from '@/components/common/StatusBadge';
+import { StatusBadge, type Status } from '@/components/common/StatusBadge';
 import { LoadingIcon, PageLoader } from '@/components/common/LoadingSpinner';
 import { GatewayLifecycleBanner } from '@/components/common/GatewayLifecycleBanner';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -109,7 +109,7 @@ export function Agents() {
       total: agents.length,
       defaults: agents.filter((agent) => agent.gateway.isDefault).length,
       custom: agents.filter((agent) => !agent.gateway.isDefault).length,
-      connected: agents.filter((agent) => agent.local.boundChannels.length > 0).length,
+      connected: agents.filter((agent) => agent.local.boundChannelAccounts.length > 0).length,
     }),
     [agents],
   );
@@ -230,7 +230,7 @@ export function Agents() {
           agent={activeAgent}
           channelGroups={channelGroups}
           allAgents={agents}
-          channelOwners={useAgentsStore.getState().channelOwners}
+          channelAccountOwners={useAgentsStore.getState().channelAccountOwners}
           onOpenChannels={() => navigate('/channels')}
           onClose={() => setActiveAgentId(null)}
         />
@@ -312,7 +312,7 @@ function AgentCard({
   const identityName = agent.gateway.identity?.name?.trim();
   const avatarGlyph = resolveAgentAvatar(agent);
   const workspacePath = agent.local.workspace?.trim() || '';
-  const channelLabels = agent.local.boundChannels
+  const channelLabels = Array.from(new Set(agent.local.boundChannelAccounts.map((binding) => binding.channelType)))
     .map((channelType) => CHANNEL_NAMES[channelType as ChannelType] || channelType)
     .filter(Boolean);
   const modelMeta = splitAgentModelDisplay(agent.local.modelDisplay);
@@ -576,14 +576,14 @@ function AgentSettingsModal({
   agent,
   channelGroups,
   allAgents,
-  channelOwners,
+  channelAccountOwners,
   onOpenChannels,
   onClose,
 }: {
   agent: AgentSummary;
   channelGroups: ChannelGroup[];
   allAgents: AgentSummary[];
-  channelOwners: Record<string, string>;
+  channelAccountOwners: Record<string, string>;
   onOpenChannels: () => void;
   onClose: () => void;
 }) {
@@ -595,8 +595,12 @@ function AgentSettingsModal({
   const [name, setName] = useState(resolveAgentDisplayName(agent));
   const [savingName, setSavingName] = useState(false);
   const [showBindingModal, setShowBindingModal] = useState(false);
-  const [channelToRemove, setChannelToRemove] = useState<ChannelType | null>(null);
-  const [bindingType, setBindingType] = useState<ChannelType | null>(null);
+  const [channelToRemove, setChannelToRemove] = useState<{
+    channelType: ChannelType;
+    accountId: string;
+    name: string;
+  } | null>(null);
+  const [bindingKey, setBindingKey] = useState<string | null>(null);
 
   useEffect(() => {
     setName(resolveAgentDisplayName(agent));
@@ -615,11 +619,16 @@ function AgentSettingsModal({
     }
   };
 
-  const handleChannelSaved = async (channelType: ChannelType) => {
+  const handleChannelSaved = async (channelType: ChannelType, accountId: string) => {
     try {
-      await assignChannel(agent.gateway.id, channelType);
+      await assignChannel(agent.gateway.id, channelType, accountId);
       await fetchChannels();
-      toast.success(t('toast.channelAssigned', { channel: CHANNEL_NAMES[channelType] || channelType }));
+      toast.success(
+        t('toast.channelAssigned', {
+          channel: `${CHANNEL_NAMES[channelType] || channelType} / ${accountId}`,
+          defaultValue: `${CHANNEL_NAMES[channelType] || channelType} / ${accountId} 已分配给分身`,
+        }),
+      );
     } catch (error) {
       toast.error(t('toast.channelAssignFailed', { error: String(error) }));
       throw error;
@@ -641,39 +650,52 @@ function AgentSettingsModal({
     [allAgents],
   );
 
-  const assignedChannels = agent.local.boundChannels.map((channelType) => {
-    const runtimeChannel = runtimeChannelsByType[channelType];
+  const assignedChannels = agent.local.boundChannelAccounts.map((binding) => {
+    const runtimeChannel = runtimeChannelsByType[binding.channelType];
+    const runtimeAccount = runtimeChannel?.accounts.find((account) => account.accountId === binding.accountId);
+    const effectiveStatus = runtimeAccount?.status || runtimeChannel?.status || 'disconnected';
+    const displayStatus: Status =
+      effectiveStatus === 'unknown'
+        ? 'disconnected'
+        : effectiveStatus === 'configured'
+          ? 'configured'
+          : effectiveStatus;
     return {
-      channelType: channelType as ChannelType,
-      name: CHANNEL_NAMES[channelType as ChannelType] || channelType,
-      status:
-        runtimeChannel?.status === 'configured'
-          ? 'disconnected'
-          : runtimeChannel?.status === 'unknown'
-            ? 'disconnected'
-          : runtimeChannel?.status || 'disconnected',
-      statusLabel:
-        runtimeChannel?.status === 'configured'
-          ? t('runtime.configuredOnly', '已配置')
-          : runtimeChannel?.status === 'unknown'
-            ? t('runtime.unknown', '未知')
-          : runtimeChannel
+      channelType: binding.channelType as ChannelType,
+      accountId: binding.accountId,
+      isDefaultAccount: binding.isDefaultAccount,
+      name: CHANNEL_NAMES[binding.channelType as ChannelType] || binding.channelType,
+      status: displayStatus,
+      statusLabel: effectiveStatus === 'configured'
+        ? t('runtime.configuredOnly', '已配置')
+        : effectiveStatus === 'unknown'
+          ? t('runtime.unknown', '未知')
+          : runtimeAccount || runtimeChannel
             ? undefined
             : t('settingsDialog.assignedStatus'),
-      error: runtimeChannel?.error,
-      accountsSummary:
-        runtimeChannel?.accounts.map((account) => account.accountId).join(', ') || t('settingsDialog.defaultAccountOnly', '默认账户'),
+      error: runtimeAccount?.error || runtimeChannel?.error,
     };
   });
   const availableBindings = useMemo(
     () =>
-      channelGroups.map((group) => ({
-        ...group,
-        ownerId: channelOwners[group.type],
-        ownerName: channelOwners[group.type] ? agentNamesById[channelOwners[group.type]] : undefined,
-        isAssignedHere: channelOwners[group.type] === agent.gateway.id,
-      })),
-    [agent.gateway.id, agentNamesById, channelGroups, channelOwners],
+      channelGroups.flatMap((group) =>
+        group.accounts.map((account) => {
+          const ownerId = channelAccountOwners[`${group.type}:${account.accountId}`];
+          return {
+            channelType: group.type,
+            channelName: group.name,
+            accountId: account.accountId,
+            isDefaultAccount: account.isDefaultAccount,
+            status: account.status,
+            configured: account.configured,
+            error: account.error,
+            ownerId,
+            ownerName: ownerId ? agentNamesById[ownerId] : undefined,
+            isAssignedHere: ownerId === agent.gateway.id,
+          };
+        }),
+      ),
+    [agent.gateway.id, agentNamesById, channelAccountOwners, channelGroups],
   );
 
   return (
@@ -815,7 +837,7 @@ function AgentSettingsModal({
                   {t('settingsDialog.channelsTitle')}
                 </h3>
                 <p className="mt-1 max-w-2xl text-[14px] leading-6 text-foreground/70">
-                  {t('settingsDialog.channelsDescription', '先在连接页配置账户，再在这里绑定到当前分身。这里显示的是绑定摘要，不直接编辑连接凭据。')}
+                  {t('settingsDialog.channelsDescription', '先在连接页配置账户，再在这里把具体账户绑定到当前分身。这里显示的是绑定摘要，不直接编辑连接凭据。')}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -843,20 +865,25 @@ function AgentSettingsModal({
             ) : (
               <div className="space-y-3">
                 {assignedChannels.map((channel) => (
-                  <div key={channel.channelType} className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/35 p-4">
+                  <div key={`${channel.channelType}:${channel.accountId}`} className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/35 p-4">
                     <div className="flex items-center gap-3 min-w-0">
                       <ChannelLogo type={channel.channelType} branded />
                       <div className="min-w-0">
                         <p className="text-[15px] font-semibold text-foreground">{channel.name}</p>
                         <p className="text-[13.5px] text-muted-foreground">
-                          {CHANNEL_NAMES[channel.channelType]}
-                        </p>
-                        <p className="mt-1 text-[12px] text-muted-foreground/80">
-                          {t('settingsDialog.boundAccounts', {
-                            accounts: channel.accountsSummary,
-                            defaultValue: `账户：${channel.accountsSummary}`,
+                          {t('settingsDialog.boundAccount', {
+                            accountId: channel.accountId,
+                            defaultValue: `账户：${channel.accountId}`,
                           })}
                         </p>
+                        {channel.isDefaultAccount ? (
+                          <Badge
+                            variant="secondary"
+                            className="mt-1 rounded-full border-0 bg-primary/12 px-2 py-0.5 text-[10px] font-medium text-primary shadow-none"
+                          >
+                            {t('defaultAccount', '默认账户')}
+                          </Badge>
+                        ) : null}
                         {channel.error && (
                           <p className="text-xs text-destructive mt-1">{channel.error}</p>
                         )}
@@ -868,7 +895,13 @@ function AgentSettingsModal({
                         variant="dangerGhost"
                         size="icon"
                         className="h-8 w-8 rounded-[10px]"
-                        onClick={() => setChannelToRemove(channel.channelType)}
+                        onClick={() =>
+                          setChannelToRemove({
+                            channelType: channel.channelType,
+                            accountId: channel.accountId,
+                            name: `${channel.name} / ${channel.accountId}`,
+                          })
+                        }
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -884,36 +917,41 @@ function AgentSettingsModal({
 
       {showBindingModal && (
         <BindingPickerModal
-          groups={availableBindings}
-          currentAgentId={agent.gateway.id}
-          bindingType={bindingType}
+          bindings={availableBindings}
           onClose={() => setShowBindingModal(false)}
           onOpenChannels={onOpenChannels}
-          onBind={async (channelType) => {
-            setBindingType(channelType);
+          onBind={async (channelType, accountId) => {
+            setBindingKey(`${channelType}:${accountId}`);
             try {
-              await handleChannelSaved(channelType);
+              await handleChannelSaved(channelType, accountId);
               setShowBindingModal(false);
             } finally {
-              setBindingType(null);
+              setBindingKey(null);
             }
           }}
+          bindingKey={bindingKey}
         />
       )}
 
       <ConfirmDialog
         open={!!channelToRemove}
         title={t('removeChannelDialog.title')}
-        message={channelToRemove ? t('removeChannelDialog.message', { name: CHANNEL_NAMES[channelToRemove] || channelToRemove }) : ''}
+        message={channelToRemove ? t('removeChannelDialog.message', {
+          name: channelToRemove.name,
+          defaultValue: `确认解绑 ${channelToRemove.name}？`,
+        }) : ''}
         confirmLabel={t('common:actions.delete')}
         cancelLabel={t('common:actions.cancel')}
         variant="destructive"
         onConfirm={async () => {
           if (!channelToRemove) return;
           try {
-            await removeChannel(agent.gateway.id, channelToRemove);
+            await removeChannel(agent.gateway.id, channelToRemove.channelType, channelToRemove.accountId);
             await fetchChannels();
-            toast.success(t('toast.channelRemoved', { channel: CHANNEL_NAMES[channelToRemove] || channelToRemove }));
+            toast.success(t('toast.channelRemoved', {
+              channel: channelToRemove.name,
+              defaultValue: `${channelToRemove.name} 已解绑`,
+            }));
           } catch (error) {
             toast.error(t('toast.channelRemoveFailed', { error: String(error) }));
           } finally {
@@ -927,22 +965,31 @@ function AgentSettingsModal({
 }
 
 function BindingPickerModal({
-  groups,
-  currentAgentId,
-  bindingType,
+  bindings,
+  bindingKey,
   onClose,
   onOpenChannels,
   onBind,
 }: {
-  groups: Array<ChannelGroup & { ownerId?: string; ownerName?: string; isAssignedHere: boolean }>;
-  currentAgentId: string;
-  bindingType: ChannelType | null;
+  bindings: Array<{
+    channelType: ChannelType;
+    channelName: string;
+    accountId: string;
+    isDefaultAccount: boolean;
+    status: string;
+    configured: boolean;
+    error?: string;
+    ownerId?: string;
+    ownerName?: string;
+    isAssignedHere: boolean;
+  }>;
+  bindingKey: string | null;
   onClose: () => void;
   onOpenChannels: () => void;
-  onBind: (channelType: ChannelType) => Promise<void>;
+  onBind: (channelType: ChannelType, accountId: string) => Promise<void>;
 }) {
   const { t } = useTranslation('agents');
-  const availableGroups = groups.filter((group) => group.accounts.length > 0 || group.configured);
+  const availableBindings = bindings.filter((binding) => binding.configured || binding.status !== 'disconnected' || binding.error);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
@@ -952,11 +999,11 @@ function BindingPickerModal({
             {t('bindingDialog.title', '绑定已有连接')}
           </CardTitle>
           <CardDescription className="text-[15px] mt-1 text-foreground/70">
-            {t('bindingDialog.description', '当前实现按连接类型绑定。也就是同一类型下的所有账户，共享同一个分身归属。')}
+            {t('bindingDialog.description', '按账户绑定已配置连接。多账户连接会分别归属到不同分身。')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 pt-4 p-6">
-          {availableGroups.length === 0 ? (
+          {availableBindings.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border/80 bg-muted/35 p-5 text-sm text-muted-foreground">
               <p>{t('bindingDialog.empty', '还没有可绑定的连接。请先去连接页配置账户。')}</p>
               <Button
@@ -969,42 +1016,56 @@ function BindingPickerModal({
             </div>
           ) : (
             <div className="space-y-3">
-              {availableGroups.map((group) => {
-                const ownerLabel = group.ownerId
-                  ? group.ownerId === currentAgentId
-                    ? t('bindingDialog.currentOwner', '当前分身')
-                    : t('bindingDialog.otherOwner', {
-                        name: group.ownerName || group.ownerId,
-                        defaultValue: `当前归属：${group.ownerName || group.ownerId}`,
-                      })
+              {availableBindings.map((binding) => {
+                const ownerLabel = binding.ownerId
+                  ? t('bindingDialog.otherOwner', {
+                      name: binding.ownerName || binding.ownerId,
+                      defaultValue: `当前归属：${binding.ownerName || binding.ownerId}`,
+                    })
                   : t('bindingDialog.unassigned', '未绑定分身');
-                const accountsSummary = group.accounts.map((account) => account.accountId).join(', ') || 'default';
+                const currentBindingKey = `${binding.channelType}:${binding.accountId}`;
                 return (
-                  <div key={group.type} className="rounded-2xl border border-border/70 bg-muted/25 p-4">
+                  <div key={currentBindingKey} className="rounded-2xl border border-border/70 bg-muted/25 p-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <div className="flex items-center gap-3">
-                          <ChannelLogo type={group.type} branded />
+                          <ChannelLogo type={binding.channelType} branded />
                           <div className="min-w-0">
-                            <p className="text-[15px] font-semibold text-foreground">{group.name}</p>
+                            <p className="text-[15px] font-semibold text-foreground">{binding.channelName}</p>
                             <p className="text-[13px] text-muted-foreground">{ownerLabel}</p>
                           </div>
                         </div>
                         <p className="mt-3 text-[12px] text-muted-foreground/80">
-                          {t('bindingDialog.accountsSummary', {
-                            accounts: accountsSummary,
-                            defaultValue: `已配置账户：${accountsSummary}`,
+                          {t('bindingDialog.account', {
+                            accountId: binding.accountId,
+                            defaultValue: `账户：${binding.accountId}`,
                           })}
                         </p>
+                        <p className="mt-1 text-[12px] text-muted-foreground/70">
+                          {binding.configured
+                            ? t('bindingDialog.accountConfigured', '该账户已完成配置，可直接绑定。')
+                            : t('bindingDialog.accountNotConfigured', '该账户尚未完成配置，建议先回到连接页补全配置。')}
+                        </p>
+                        {binding.isDefaultAccount ? (
+                          <Badge
+                            variant="secondary"
+                            className="mt-2 rounded-full border-0 bg-primary/12 px-2 py-0.5 text-[10px] font-medium text-primary shadow-none"
+                          >
+                            {t('defaultAccount', '默认账户')}
+                          </Badge>
+                        ) : null}
+                        {binding.error ? (
+                          <p className="mt-2 text-[12px] text-destructive">{binding.error}</p>
+                        ) : null}
                       </div>
                       <Button
-                        onClick={() => void onBind(group.type)}
-                        disabled={bindingType === group.type || group.isAssignedHere}
+                        onClick={() => void onBind(binding.channelType, binding.accountId)}
+                        disabled={bindingKey === currentBindingKey || binding.isAssignedHere}
                         className="h-9 rounded-xl px-4 text-[13px] font-medium shadow-none"
                       >
-                        {bindingType === group.type
+                        {bindingKey === currentBindingKey
                           ? t('bindingDialog.binding', '绑定中...')
-                          : group.isAssignedHere
+                          : binding.isAssignedHere
                             ? t('bindingDialog.boundHere', '已绑定')
                             : t('bindingDialog.bindAction', '绑定到当前分身')}
                       </Button>

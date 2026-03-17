@@ -106,6 +106,24 @@ export interface ChannelMeta {
   configFields: ChannelConfigField[];
   instructions: string[];
   isPlugin?: boolean;
+  supportsMultipleAccounts?: boolean;
+}
+
+export const MULTI_ACCOUNT_CHANNEL_TYPES: ChannelType[] = [
+  'dingtalk',
+  'wecom',
+  'qqbot',
+  'telegram',
+  'discord',
+  'signal',
+  'googlechat',
+  'matrix',
+  'imessage',
+  'line',
+];
+
+export function channelSupportsMultipleAccounts(type: ChannelType): boolean {
+  return MULTI_ACCOUNT_CHANNEL_TYPES.includes(type);
 }
 
 /**
@@ -181,6 +199,7 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
       'channels:meta.qqbot.instructions.2',
     ],
     isPlugin: true,
+    supportsMultipleAccounts: true,
   },
   dingtalk: {
     id: 'dingtalk',
@@ -233,6 +252,7 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
       'channels:meta.dingtalk.instructions.3',
     ],
     isPlugin: true,
+    supportsMultipleAccounts: true,
   },
   wecom: {
     id: 'wecom',
@@ -263,6 +283,7 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
       'channels:meta.wecom.instructions.2',
     ],
     isPlugin: true,
+    supportsMultipleAccounts: true,
   },
   telegram: {
     id: 'telegram',
