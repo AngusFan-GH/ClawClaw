@@ -618,17 +618,7 @@ export function Chat() {
   );
 
   const resolvedAgentLabel = currentAgentLabel?.trim() || 'Main';
-  const resolvedAssistantName = useMemo(() => {
-    const sessionDisplayName = currentSession?.displayName?.trim();
-    if (
-      sessionDisplayName &&
-      sessionDisplayName !== currentSession?.key &&
-      sessionDisplayName.toLowerCase() !== 'main'
-    ) {
-      return sessionDisplayName;
-    }
-    return resolvedAgentLabel;
-  }, [currentSession?.displayName, currentSession?.key, resolvedAgentLabel]);
+  const resolvedAssistantName = resolvedAgentLabel;
 
   useEffect(() => {
     const allowed = modelOptions.map((option) => option.value);
