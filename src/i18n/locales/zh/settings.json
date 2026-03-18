@@ -333,6 +333,56 @@
     "docs": "官网",
     "github": "GitHub"
   },
+  "dataTools": {
+    "title": "数据与卸载",
+    "description": "在卸载前先导出配置，再按白名单清理本地数据。",
+    "export": {
+      "title": "导出配置",
+      "description": "把当前设置导出为 JSON 备份。建议在执行清理或系统卸载前先保存一份。",
+      "button": "导出配置",
+      "saved": "配置已导出",
+      "saveFailed": "导出配置失败",
+      "reveal": "在文件夹中显示",
+      "lastPath": "最近导出文件"
+    },
+    "cleanup": {
+      "title": "清理数据",
+      "description": "执行前会先停止 Gateway，并仅删除应用明确托管的目录。",
+      "selected": "项清理范围已选中",
+      "removeClawClawData": "清理 ClawClaw 设置与缓存",
+      "removeClawClawDataDesc": "清空当前应用的本地设置、窗口状态和缓存数据。",
+      "removeLogs": "清理日志",
+      "removeLogsDesc": "删除 ClawClaw 运行日志。",
+      "removeOpenClawData": "清理 OpenClaw 数据",
+      "removeOpenClawDataDesc": "删除 ~/.openclaw 下的会话、技能、provider 配置等数据。",
+      "removeWorkspace": "清理托管 workspace",
+      "removeWorkspaceDesc": "仅删除 ~/.openclaw/workspace* 下的托管工作区，不会删除自定义外部目录。",
+      "removeGatewayService": "卸载 Gateway 服务",
+      "removeGatewayServiceDesc": "尝试执行 openclaw gateway uninstall，移除系统中的 Gateway service 或 task。",
+      "button": "执行清理",
+      "confirmTitle": "确认清理数据",
+      "confirmMessage": "这会停止 Gateway，并按所选范围删除本地数据。建议先导出配置。此操作不可撤销。",
+      "nothingSelected": "至少选择一项清理范围",
+      "success": "数据清理完成",
+      "partial": "数据清理已完成，但仍有部分项目未删除",
+      "failed": "数据清理失败",
+      "resultRemoved": "已删除",
+      "resultMissing": "不存在",
+      "resultSkipped": "已跳过",
+      "resultFailed": "失败",
+      "noResult": "尚未执行清理。"
+    },
+    "fullUninstall": {
+      "title": "完全卸载准备",
+      "description": "先执行最彻底的数据清理，再到系统卸载器中移除 ClawClaw 本体。",
+      "warning": "建议先导出配置。该操作会停止 Gateway、卸载 Gateway 服务，并删除 ClawClaw 本地数据、日志、OpenClaw 数据和托管 workspace。",
+      "button": "执行完全清理",
+      "confirmTitle": "确认完全清理",
+      "confirmMessage": "这会执行最重的数据清理，并为系统卸载做准备。应用本体仍需在系统卸载器中移除。是否继续？",
+      "success": "完全清理已完成，请继续在系统卸载器中移除 ClawClaw",
+      "after": "完成后，请在系统的应用卸载入口中移除 ClawClaw 本体。"
+    }
+  },
   "security": {
     "title": "安全策略",
     "loading": "正在加载安全策略...",

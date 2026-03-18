@@ -1,9 +1,299 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { app, dialog } from 'electron';
+import { spawn } from 'node:child_process';
+import { access, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { homedir } from 'node:os';
+import { join, normalize } from 'node:path';
 import { applyProxySettings } from '../../main/proxy';
-import { getAllSettings, getSetting, resetSettings, setSetting, type AppSettings } from '../../utils/store';
+import { listAgentsSnapshot } from '../../utils/agent-config';
+import { getOpenClawCliSpawnConfig } from '../../utils/openclaw-cli';
+import { getDataDir, getLogsDir, getOpenClawConfigDir, expandPath } from '../../utils/paths';
+import {
+  exportSettings,
+  getAllSettings,
+  getSetting,
+  resetSettings,
+  setSetting,
+  type AppSettings,
+} from '../../utils/store';
 import type { HostApiContext } from '../context';
 import { emitGatewayLifecycleEvent } from '../gateway-lifecycle';
 import { parseJsonBody, sendJson } from '../route-utils';
+
+type CleanupDataRequest = {
+  removeClawClawData?: boolean;
+  removeLogs?: boolean;
+  removeOpenClawData?: boolean;
+  removeWorkspace?: boolean;
+  removeGatewayService?: boolean;
+};
+
+type CleanupFailure = {
+  path: string;
+  error: string;
+};
+
+type CleanupSkip = {
+  path: string;
+  reason: string;
+};
+
+type CleanupDataResult = {
+  success: boolean;
+  stoppedGateway: boolean;
+  gatewayActions: string[];
+  removed: string[];
+  missing: string[];
+  skipped: CleanupSkip[];
+  failed: CleanupFailure[];
+};
+
+const OPENCLAW_CONFIG_DIR = getOpenClawConfigDir();
+
+function pathExists(path: string): Promise<boolean> {
+  return access(path, constants.F_OK).then(() => true).catch(() => false);
+}
+
+function normalizePathForCompare(path: string): string {
+  const normalized = normalize(path).replace(/[\\/]+$/, '');
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function isPathWithin(root: string, target: string): boolean {
+  const normalizedRoot = normalizePathForCompare(root);
+  const normalizedTarget = normalizePathForCompare(target);
+  return normalizedTarget === normalizedRoot || normalizedTarget.startsWith(`${normalizedRoot}${process.platform === 'win32' ? '\\' : '/'}`);
+}
+
+async function removePath(
+  targetPath: string,
+  result: CleanupDataResult,
+): Promise<void> {
+  if (!(await pathExists(targetPath))) {
+    result.missing.push(targetPath);
+    return;
+  }
+
+  try {
+    await rm(targetPath, { recursive: true, force: true });
+    result.removed.push(targetPath);
+  } catch (error) {
+    result.failed.push({ path: targetPath, error: String(error) });
+  }
+}
+
+async function clearDirectoryContents(
+  directoryPath: string,
+  result: CleanupDataResult,
+  options?: { excludeBasenames?: Set<string> },
+): Promise<void> {
+  if (!(await pathExists(directoryPath))) {
+    result.missing.push(directoryPath);
+    return;
+  }
+
+  try {
+    const entries = await readdir(directoryPath, { withFileTypes: true });
+    if (entries.length === 0) {
+      result.missing.push(directoryPath);
+      return;
+    }
+
+    for (const entry of entries) {
+      const targetPath = join(directoryPath, entry.name);
+      if (options?.excludeBasenames?.has(entry.name)) {
+        result.skipped.push({ path: targetPath, reason: 'excluded-from-cleanup' });
+        continue;
+      }
+      await removePath(targetPath, result);
+    }
+  } catch (error) {
+    result.failed.push({ path: directoryPath, error: String(error) });
+  }
+}
+
+async function runOpenClawCli(args: string[]): Promise<{
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  error?: string;
+}> {
+  const spawnConfig = getOpenClawCliSpawnConfig(args);
+
+  return await new Promise((resolve) => {
+    const child = spawn(spawnConfig.command, spawnConfig.args, {
+      cwd: spawnConfig.cwd,
+      env: spawnConfig.env,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', (error) => {
+      resolve({
+        success: false,
+        stdout,
+        stderr,
+        error: String(error),
+      });
+    });
+
+    child.on('close', (code) => {
+      resolve({
+        success: code === 0,
+        stdout,
+        stderr,
+        error: code === 0 ? undefined : stderr.trim() || `openclaw exited with code ${code}`,
+      });
+    });
+  });
+}
+
+async function collectManagedWorkspaceDirs(result: CleanupDataResult): Promise<string[]> {
+  const managedDirs = new Set<string>();
+
+  try {
+    const snapshot = await listAgentsSnapshot();
+    for (const agent of snapshot.agents) {
+      const expanded = expandPath(agent.workspace);
+      const normalizedExpanded = normalizePathForCompare(expanded);
+      const basename = normalizedExpanded.split(/[\\/]/).pop() || '';
+
+      if (isPathWithin(OPENCLAW_CONFIG_DIR, expanded) && basename.startsWith('workspace')) {
+        managedDirs.add(expanded);
+      } else {
+        result.skipped.push({
+          path: expanded,
+          reason: 'external-workspace-not-managed',
+        });
+      }
+    }
+  } catch (error) {
+    result.failed.push({
+      path: OPENCLAW_CONFIG_DIR,
+      error: `Failed to inspect configured workspaces: ${String(error)}`,
+    });
+  }
+
+  try {
+    const entries = await readdir(OPENCLAW_CONFIG_DIR, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory() && entry.name.startsWith('workspace')) {
+        managedDirs.add(join(OPENCLAW_CONFIG_DIR, entry.name));
+      }
+    }
+  } catch {
+    // ignore missing ~/.openclaw during discovery
+  }
+
+  return [...managedDirs];
+}
+
+async function performCleanup(
+  request: CleanupDataRequest,
+  ctx: HostApiContext,
+): Promise<CleanupDataResult> {
+  const result: CleanupDataResult = {
+    success: true,
+    stoppedGateway: false,
+    gatewayActions: [],
+    removed: [],
+    missing: [],
+    skipped: [],
+    failed: [],
+  };
+
+  const needsGatewayStop = Boolean(
+    request.removeClawClawData ||
+    request.removeLogs ||
+    request.removeOpenClawData ||
+    request.removeWorkspace ||
+    request.removeGatewayService
+  );
+
+  if (needsGatewayStop) {
+    try {
+      await ctx.gatewayManager.stop();
+      result.stoppedGateway = true;
+      result.gatewayActions.push('gateway-manager-stop');
+    } catch (error) {
+      result.failed.push({
+        path: 'gateway-manager-stop',
+        error: String(error),
+      });
+    }
+  }
+
+  if (request.removeGatewayService) {
+    const stopResult = await runOpenClawCli(['gateway', 'stop']);
+    if (stopResult.success) {
+      result.gatewayActions.push('openclaw gateway stop');
+    } else {
+      result.failed.push({
+        path: 'openclaw gateway stop',
+        error: stopResult.error || 'unknown-error',
+      });
+    }
+
+    const uninstallResult = await runOpenClawCli(['gateway', 'uninstall']);
+    if (uninstallResult.success) {
+      result.gatewayActions.push('openclaw gateway uninstall');
+    } else {
+      result.failed.push({
+        path: 'openclaw gateway uninstall',
+        error: uninstallResult.error || 'unknown-error',
+      });
+    }
+  }
+
+  if (request.removeClawClawData) {
+    try {
+      await resetSettings();
+    } catch (error) {
+      result.failed.push({
+        path: join(getDataDir(), 'settings.json'),
+        error: `Failed to reset settings: ${String(error)}`,
+      });
+    }
+
+    const excluded = new Set<string>();
+    if (!request.removeLogs) {
+      excluded.add('logs');
+    }
+    await mkdir(getDataDir(), { recursive: true });
+    await clearDirectoryContents(getDataDir(), result, { excludeBasenames: excluded });
+  }
+
+  if (request.removeLogs && !request.removeClawClawData) {
+    await removePath(getLogsDir(), result);
+  }
+
+  if (request.removeOpenClawData) {
+    await removePath(OPENCLAW_CONFIG_DIR, result);
+  } else if (request.removeWorkspace) {
+    const workspaceDirs = await collectManagedWorkspaceDirs(result);
+    if (workspaceDirs.length === 0) {
+      result.missing.push(join(OPENCLAW_CONFIG_DIR, 'workspace*'));
+    }
+    for (const workspaceDir of workspaceDirs) {
+      await removePath(workspaceDir, result);
+    }
+  }
+
+  result.success = result.failed.length === 0;
+  return result;
+}
 
 async function handleProxySettingsChange(ctx: HostApiContext): Promise<void> {
   const settings = await getAllSettings();
@@ -132,6 +422,66 @@ export async function handleSettingsRoutes(
         reason: 'settings.proxy',
         error: String(error),
       });
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/settings/export-config' && req.method === 'POST') {
+    try {
+      const exportedAt = new Date().toISOString();
+      const rawSettings = JSON.parse(await exportSettings()) as Record<string, unknown>;
+      const payload = {
+        metadata: {
+          appVersion: app.getVersion(),
+          platform: process.platform,
+          exportedAt,
+        },
+        settings: rawSettings,
+      };
+      const defaultFileName = `clawclaw-settings-${exportedAt.slice(0, 10)}.json`;
+      const result = await dialog.showSaveDialog({
+        title: 'Export ClawClaw settings',
+        defaultPath: join(homedir(), 'Downloads', defaultFileName),
+        filters: [
+          { name: 'JSON', extensions: ['json'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      });
+
+      if (result.canceled || !result.filePath) {
+        sendJson(res, 200, { success: false, cancelled: true });
+        return true;
+      }
+
+      await writeFile(result.filePath, JSON.stringify(payload, null, 2), 'utf-8');
+      sendJson(res, 200, {
+        success: true,
+        savedPath: result.filePath,
+      });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/settings/cleanup-data' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<CleanupDataRequest>(req);
+      if (
+        !body.removeClawClawData &&
+        !body.removeLogs &&
+        !body.removeOpenClawData &&
+        !body.removeWorkspace &&
+        !body.removeGatewayService
+      ) {
+        sendJson(res, 400, { success: false, error: 'No cleanup scope selected' });
+        return true;
+      }
+
+      const cleanup = await performCleanup(body, ctx);
+      sendJson(res, 200, cleanup);
+    } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;

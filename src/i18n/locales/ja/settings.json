@@ -333,6 +333,56 @@
     "docs": "公式サイト",
     "github": "GitHub"
   },
+  "dataTools": {
+    "title": "データとアンインストール",
+    "description": "アンインストール前に設定をエクスポートし、許可されたローカルデータだけを安全に削除します。",
+    "export": {
+      "title": "設定をエクスポート",
+      "description": "クリーンアップやシステムアンインストールの前に、現在の設定を JSON バックアップとして保存します。",
+      "button": "設定をエクスポート",
+      "saved": "設定をエクスポートしました",
+      "saveFailed": "エクスポートに失敗しました",
+      "reveal": "フォルダで表示",
+      "lastPath": "直近のエクスポート先"
+    },
+    "cleanup": {
+      "title": "データをクリーンアップ",
+      "description": "実行前に Gateway を停止し、管理対象ディレクトリだけを削除します。",
+      "selected": "件のクリーンアップ範囲を選択中",
+      "removeClawClawData": "ClawClaw の設定とキャッシュを削除",
+      "removeClawClawDataDesc": "ローカル設定、ウィンドウ状態、キャッシュ済みアプリデータを消去します。",
+      "removeLogs": "ログを削除",
+      "removeLogsDesc": "ClawClaw の実行ログを削除します。",
+      "removeOpenClawData": "OpenClaw データを削除",
+      "removeOpenClawDataDesc": "~/.openclaw 配下のセッション、スキル、provider 設定などを削除します。",
+      "removeWorkspace": "管理対象 workspace を削除",
+      "removeWorkspaceDesc": "~/.openclaw/workspace* の管理対象ディレクトリだけを削除し、外部のカスタムフォルダは削除しません。",
+      "removeGatewayService": "Gateway サービスをアンインストール",
+      "removeGatewayServiceDesc": "openclaw gateway uninstall を実行し、システム上の Gateway service / task の削除を試みます。",
+      "button": "クリーンアップを実行",
+      "confirmTitle": "クリーンアップの確認",
+      "confirmMessage": "Gateway を停止し、選択したローカルデータを削除します。先にバックアップをエクスポートしてください。この操作は元に戻せません。",
+      "nothingSelected": "少なくとも 1 つのクリーンアップ範囲を選択してください",
+      "success": "クリーンアップが完了しました",
+      "partial": "クリーンアップは完了しましたが、一部削除できなかった項目があります",
+      "failed": "クリーンアップに失敗しました",
+      "resultRemoved": "削除済み",
+      "resultMissing": "存在しない",
+      "resultSkipped": "スキップ",
+      "resultFailed": "失敗",
+      "noResult": "まだクリーンアップは実行されていません。"
+    },
+    "fullUninstall": {
+      "title": "完全アンインストール準備",
+      "description": "最も重いクリーンアップを先に実行し、その後システムのアンインストーラで ClawClaw 本体を削除します。",
+      "warning": "先にバックアップをエクスポートしてください。Gateway を停止し、Gateway サービスをアンインストールし、ClawClaw のローカルデータ、ログ、OpenClaw データ、管理対象 workspace を削除します。",
+      "button": "完全クリーンアップを実行",
+      "confirmTitle": "完全クリーンアップの確認",
+      "confirmMessage": "最も重いデータクリーンアップを実行し、アンインストール準備を行います。アプリ本体は OS のアンインストーラから削除する必要があります。続行しますか？",
+      "success": "完全クリーンアップが完了しました。続いて OS のアンインストーラから ClawClaw を削除してください。",
+      "after": "この後、システムのアンインストール画面から ClawClaw 本体を削除してください。"
+    }
+  },
   "security": {
     "title": "セキュリティポリシー",
     "loading": "セキュリティポリシーを読み込み中...",

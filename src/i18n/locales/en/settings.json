@@ -413,6 +413,56 @@
     "installMessage": "Install the \"openclaw\" command?",
     "installDetail": "This will create ~/.local/bin/openclaw. Ensure ~/.local/bin is on your PATH if you want to run it globally."
   },
+  "dataTools": {
+    "title": "Data & Uninstall",
+    "description": "Export a backup first, then clean local data from a fixed allowlist before uninstalling.",
+    "export": {
+      "title": "Export config",
+      "description": "Export the current settings as a JSON backup before cleanup or system uninstall.",
+      "button": "Export config",
+      "saved": "Configuration exported",
+      "saveFailed": "Export failed",
+      "reveal": "Show in folder",
+      "lastPath": "Last exported file"
+    },
+    "cleanup": {
+      "title": "Clean up data",
+      "description": "Gateway will be stopped first, and only managed directories are deleted.",
+      "selected": "cleanup scopes selected",
+      "removeClawClawData": "Remove ClawClaw settings and cache",
+      "removeClawClawDataDesc": "Clears local settings, window state, and cached application data.",
+      "removeLogs": "Remove logs",
+      "removeLogsDesc": "Deletes ClawClaw runtime logs.",
+      "removeOpenClawData": "Remove OpenClaw data",
+      "removeOpenClawDataDesc": "Deletes sessions, skills, provider config, and other data under ~/.openclaw.",
+      "removeWorkspace": "Remove managed workspaces",
+      "removeWorkspaceDesc": "Only deletes managed ~/.openclaw/workspace* directories and never touches external custom folders.",
+      "removeGatewayService": "Uninstall Gateway service",
+      "removeGatewayServiceDesc": "Attempts to run openclaw gateway uninstall to remove the system gateway service or task.",
+      "button": "Run cleanup",
+      "confirmTitle": "Confirm cleanup",
+      "confirmMessage": "This will stop the Gateway and delete the selected local data. Export a backup first. This action cannot be undone.",
+      "nothingSelected": "Select at least one cleanup scope",
+      "success": "Cleanup completed",
+      "partial": "Cleanup finished with partial failures",
+      "failed": "Cleanup failed",
+      "resultRemoved": "Removed",
+      "resultMissing": "Missing",
+      "resultSkipped": "Skipped",
+      "resultFailed": "Failed",
+      "noResult": "No cleanup has been run yet."
+    },
+    "fullUninstall": {
+      "title": "Full uninstall prep",
+      "description": "Run the heaviest cleanup first, then remove the ClawClaw app from the system uninstaller.",
+      "warning": "Export a backup first. This stops the Gateway, uninstalls the Gateway service, and removes ClawClaw local data, logs, OpenClaw data, and managed workspaces.",
+      "button": "Run full cleanup",
+      "confirmTitle": "Confirm full cleanup",
+      "confirmMessage": "This performs the heaviest cleanup and prepares the machine for uninstall. The app binary still needs to be removed from the OS uninstaller. Continue?",
+      "success": "Full cleanup finished. Remove ClawClaw from the OS uninstaller next.",
+      "after": "After this step, remove the ClawClaw application from your system's uninstall entry."
+    }
+  },
   "about": {
     "title": "About",
     "appName": "ClawClaw",

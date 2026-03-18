@@ -9,6 +9,9 @@ Var oldMenuDirectory
 !include "MUI2.nsh"
 !include "multiUser.nsh"
 !include "allowOnlyOneInstallerInstance.nsh"
+!ifdef BUILD_UNINSTALLER
+  !include "${PROJECT_DIR}\scripts\uninstaller.nsh"
+!endif
 
 !ifdef BUILD_UNINSTALLER
   !ifmacrodef customUnInstallSection
@@ -252,7 +255,3 @@ SectionEnd
 Function setInstallSectionSpaceRequired
   !insertmacro setSpaceRequired ${INSTALL_SECTION_ID}
 FunctionEnd
-
-!ifdef BUILD_UNINSTALLER
-  !include "uninstaller.nsh"
-!endif
