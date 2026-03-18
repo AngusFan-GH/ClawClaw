@@ -981,6 +981,19 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
   const config = await readOpenClawJson();
   let modified = false;
 
+  // ── acp section ────────────────────────────────────────────────
+  // OpenClaw's ACP schema is strict and does not accept "mcpServers".
+  // If this key is present, Gateway startup fails before the app can recover.
+  const acp = config.acp;
+  if (acp && typeof acp === 'object' && !Array.isArray(acp)) {
+    const acpObj = acp as Record<string, unknown>;
+    if ('mcpServers' in acpObj) {
+      console.log('[sanitize] Removing invalid key "acp.mcpServers" from openclaw.json');
+      delete acpObj.mcpServers;
+      modified = true;
+    }
+  }
+
   // ── skills section ──────────────────────────────────────────────
   // OpenClaw's Zod schema uses .strict() on the skills object, accepting
   // only: allowBundled, load, install, limits, entries.

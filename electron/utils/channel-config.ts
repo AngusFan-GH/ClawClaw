@@ -1023,12 +1023,87 @@ export async function validateChannelCredentials(
     config: Record<string, string>
 ): Promise<CredentialValidationResult> {
     switch (channelType) {
+        case 'wecom':
+            return validateWeComCredentials(config);
         case 'discord':
             return validateDiscordCredentials(config);
         case 'telegram':
             return validateTelegramCredentials(config);
         default:
             return { valid: true, errors: [], warnings: ['No online validation available for this channel type.'] };
+    }
+}
+
+async function validateWeComCredentials(
+    config: Record<string, string>
+): Promise<CredentialValidationResult> {
+    const botId = config.botId?.trim();
+    const secret = config.secret?.trim();
+
+    if (!botId) {
+        return { valid: false, errors: ['Bot ID is required'], warnings: [] };
+    }
+
+    if (!secret) {
+        return { valid: false, errors: ['App Secret is required'], warnings: [] };
+    }
+
+    try {
+        const url = new URL('https://qyapi.weixin.qq.com/cgi-bin/gettoken');
+        url.searchParams.set('corpid', botId);
+        url.searchParams.set('corpsecret', secret);
+
+        const response = await proxyAwareFetch(url.toString());
+        const data = (await response.json().catch(() => ({}))) as {
+            errcode?: number;
+            errmsg?: string;
+            access_token?: string;
+            expires_in?: number;
+        };
+        const errcode = typeof data.errcode === 'number' ? data.errcode : undefined;
+        const errmsg = typeof data.errmsg === 'string' ? data.errmsg : '';
+
+        if (response.ok && errcode === 0 && data.access_token) {
+            return {
+                valid: true,
+                errors: [],
+                warnings: [],
+                details: {
+                    corpId: botId,
+                    tokenTtlSeconds: String(data.expires_in ?? ''),
+                },
+            };
+        }
+
+        // The incident log shows this exact failure mode. Block saves when
+        // WeCom explicitly says the secret is invalid.
+        if (errcode === 600041 || /invalid secret/i.test(errmsg)) {
+            return {
+                valid: false,
+                errors: ['Invalid WeCom App Secret. Please verify the Secret and try again.'],
+                warnings: [],
+            };
+        }
+
+        // The UI currently allows either Corp ID or a bot-specific ID.
+        // The gettoken API only definitively validates the Corp ID form, so
+        // treat other API errors as advisory instead of hard-blocking saves.
+        const advisory = errmsg || `WeCom API returned errcode ${String(errcode ?? response.status)}`;
+        return {
+            valid: true,
+            errors: [],
+            warnings: [
+                `Unable to fully verify this WeCom Bot ID online (${advisory}). The Gateway will perform the final runtime check after save.`,
+            ],
+        };
+    } catch (error) {
+        return {
+            valid: true,
+            errors: [],
+            warnings: [
+                `Unable to validate WeCom credentials online: ${error instanceof Error ? error.message : String(error)}`,
+            ],
+        };
     }
 }
 

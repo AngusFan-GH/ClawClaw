@@ -42,6 +42,15 @@ async function sanitizeConfig(filePath: string): Promise<boolean> {
   const VALID_MEMORY_SEARCH_PROVIDERS = new Set(['openai', 'local', 'gemini', 'voyage', 'mistral']);
   const VALID_MEMORY_SEARCH_FALLBACKS = new Set(['openai', 'gemini', 'local', 'voyage', 'mistral', 'none']);
 
+  const acp = config.acp;
+  if (acp && typeof acp === 'object' && !Array.isArray(acp)) {
+    const acpObj = acp as Record<string, unknown>;
+    if ('mcpServers' in acpObj) {
+      delete acpObj.mcpServers;
+      modified = true;
+    }
+  }
+
   // Mirror of the production blocklist logic
   const skills = config.skills;
   if (skills && typeof skills === 'object' && !Array.isArray(skills)) {
@@ -242,6 +251,28 @@ describe('sanitizeOpenClawConfig (blocklist approach)', () => {
 
     const modified = await sanitizeConfig(configPath);
     expect(modified).toBe(false);
+  });
+
+  it('removes invalid acp.mcpServers without touching valid acp keys', async () => {
+    await writeConfig({
+      acp: {
+        enabled: true,
+        mcpServers: {
+          bad: { command: 'node', args: ['server.js'] },
+        },
+        timeoutMs: 10000,
+      },
+    });
+
+    const modified = await sanitizeConfig(configPath);
+    expect(modified).toBe(true);
+
+    const result = await readConfig();
+    expect(result.acp).not.toHaveProperty('mcpServers');
+    expect(result.acp).toMatchObject({
+      enabled: true,
+      timeoutMs: 10000,
+    });
   });
 
   it('returns false for missing config file', async () => {
