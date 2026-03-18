@@ -2,6 +2,7 @@
  * Zustand Stores Tests
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { useChatStore } from '@/stores/chat';
 import { useSettingsStore } from '@/stores/settings';
 import { useGatewayStore } from '@/stores/gateway';
 
@@ -81,5 +82,82 @@ describe('Gateway Store', () => {
 
     expect(result.ok).toBe(true);
     expect(invoke).toHaveBeenCalledWith('gateway:rpc', 'chat.history', { limit: 10 }, 5000);
+  });
+});
+
+describe('Chat Store', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+    useChatStore.setState({
+      loading: false,
+      messages: [],
+      currentSessionKey: 'agent:main:main',
+      pendingLocalSessionKeys: {},
+      sending: false,
+      lastUserMessageAt: null,
+      error: null,
+      pendingFinal: false,
+      sessions: [{ key: 'agent:main:main', displayName: 'Main' }],
+      sessionLabels: {},
+      sessionLastActivity: {},
+    });
+  });
+
+  it('should clear loading when a stale history request is no longer current', async () => {
+    let resolveFirst: ((value: { messages: never[] }) => void) | undefined;
+    const rpcMock = vi
+      .spyOn(useGatewayStore.getState(), 'rpc')
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve as (value: { messages: never[] }) => void;
+          }),
+      )
+      .mockResolvedValueOnce({ messages: [] });
+
+    const firstLoad = useChatStore.getState().loadHistory(false);
+    useChatStore.setState({ currentSessionKey: 'agent:main:other' });
+    const secondLoad = useChatStore.getState().loadHistory(false);
+
+    resolveFirst?.({ messages: [] });
+
+    await Promise.all([firstLoad, secondLoad]);
+
+    expect(rpcMock).toHaveBeenCalledTimes(2);
+    expect(useChatStore.getState().loading).toBe(false);
+
+    rpcMock.mockRestore();
+  });
+
+  it('should start history polling when an external agent run begins on the current session', async () => {
+    vi.useFakeTimers();
+
+    const loadHistoryMock = vi.fn().mockResolvedValue(undefined);
+    useChatStore.setState({
+      loadHistory: loadHistoryMock,
+      sessions: [{ key: 'agent:main:main', displayName: 'Main' }],
+      currentSessionKey: 'agent:main:main',
+      sending: false,
+      activeRunId: null,
+    });
+
+    useChatStore.getState().handleAgentEvent({
+      runId: 'run-ext-1',
+      sessionKey: 'agent:main:main',
+      stream: 'tool',
+      data: {
+        phase: 'start',
+      },
+    });
+
+    expect(useChatStore.getState().sending).toBe(true);
+    expect(useChatStore.getState().activeRunId).toBe('run-ext-1');
+
+    await vi.advanceTimersByTimeAsync(3000);
+
+    expect(loadHistoryMock).toHaveBeenCalledWith(true);
+
+    useChatStore.setState({ sending: false });
+    await vi.runOnlyPendingTimersAsync();
   });
 });

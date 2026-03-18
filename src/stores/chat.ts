@@ -197,6 +197,8 @@ function toMs(ts: number): number {
 let _historyPollTimer: ReturnType<typeof setTimeout> | null = null;
 let _historyLoadSeq = 0;
 let _sessionRestorePromise: Promise<void> | null = null;
+const HISTORY_POLL_START_DELAY_MS = 3000;
+const HISTORY_POLL_INTERVAL_MS = 4000;
 
 // Timer for delayed error finalization. When the Gateway reports a mid-stream
 // error (e.g. "terminated"), it may retry internally and recover. We wait
@@ -215,6 +217,22 @@ function clearHistoryPoll(): void {
     clearTimeout(_historyPollTimer);
     _historyPollTimer = null;
   }
+}
+
+function ensureHistoryPollRunning(getState: () => ChatState): void {
+  if (_historyPollTimer) return;
+
+  const pollHistory = () => {
+    const state = getState();
+    if (!state.sending) {
+      clearHistoryPoll();
+      return;
+    }
+    void state.loadHistory(true);
+    _historyPollTimer = setTimeout(pollHistory, HISTORY_POLL_INTERVAL_MS);
+  };
+
+  _historyPollTimer = setTimeout(pollHistory, HISTORY_POLL_START_DELAY_MS);
 }
 
 const DEFAULT_CANONICAL_PREFIX = 'agent:main';
@@ -1821,6 +1839,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const requestSeq = ++_historyLoadSeq;
     const isStale = () =>
       get().currentSessionKey !== requestSessionKey || requestSeq !== _historyLoadSeq;
+    const clearLoadingIfLatest = () => {
+      if (!quiet && requestSeq === _historyLoadSeq) {
+        set({ loading: false });
+      }
+    };
     if (!quiet) set({ loading: true, error: null });
 
     // Brand-new local sessions do not exist in Gateway yet. Querying chat.history
@@ -1842,7 +1865,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         .rpc<
           Record<string, unknown>
         >('chat.history', { sessionKey: requestSessionKey, limit: 200 });
-      if (isStale()) return;
+      if (isStale()) {
+        clearLoadingIfLatest();
+        return;
+      }
       if (data) {
         const rawMessages = Array.isArray(data.messages) ? (data.messages as RawMessage[]) : [];
 
@@ -1919,7 +1945,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         });
         const stateBeforeCommit = get();
         const { pendingFinal, lastUserMessageAt, sending: isSendingNow } = stateBeforeCommit;
-        if (isStale()) return;
+        if (isStale()) {
+          clearLoadingIfLatest();
+          return;
+        }
 
         // If we're sending but haven't received streaming events, check
         // whether the loaded history reveals intermediate tool-call activity.
@@ -1970,11 +1999,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         }
       } else {
-        if (isStale()) return;
+        if (isStale()) {
+          clearLoadingIfLatest();
+          return;
+        }
         set({ messages: [], loading: false });
       }
     } catch (err) {
-      if (isStale()) return;
+      if (isStale()) {
+        clearLoadingIfLatest();
+        return;
+      }
       console.warn('Failed to load chat history:', err);
       set({ messages: [], loading: false });
     }
@@ -2076,18 +2111,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     clearHistoryPoll();
     clearErrorRecoveryTimer();
 
-    const POLL_START_DELAY = 3_000;
-    const POLL_INTERVAL = 4_000;
-    const pollHistory = () => {
-      const state = get();
-      if (!state.sending) {
-        clearHistoryPoll();
-        return;
-      }
-      state.loadHistory(true);
-      _historyPollTimer = setTimeout(pollHistory, POLL_INTERVAL);
-    };
-    _historyPollTimer = setTimeout(pollHistory, POLL_START_DELAY);
+    ensureHistoryPollRunning(get);
 
     const SAFETY_TIMEOUT_MS = 90_000;
     const checkStuck = () => {
@@ -2306,6 +2330,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (!currentSending && runId) {
           set({ sending: true, activeRunId: runId, error: null });
         }
+        ensureHistoryPollRunning(get);
         break;
       }
       case 'delta': {
@@ -2581,6 +2606,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const incomingRunId = typeof event.runId === 'string' ? event.runId : '';
     if (activeRunId && incomingRunId && incomingRunId !== activeRunId) return;
+
+    if (incomingRunId) {
+      set((s) => ({
+        sending: true,
+        activeRunId: s.activeRunId || incomingRunId,
+        error: null,
+      }));
+      ensureHistoryPollRunning(get);
+    }
 
     const data = event.data && typeof event.data === 'object' ? event.data : {};
     const toolCallId = typeof data.toolCallId === 'string' ? data.toolCallId : '';
