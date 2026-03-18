@@ -3,7 +3,7 @@
  * Navigation sidebar with menu items.
  * No longer fixed - sits inside the flex layout below the title bar.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   MessageCircleMore,
@@ -18,6 +18,7 @@ import {
   Bot,
   ChevronUp,
   Copy,
+  Menu,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
@@ -154,6 +155,7 @@ export function Sidebar() {
   );
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+  const settingsMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     void fetchAgents();
@@ -189,6 +191,30 @@ export function Sidebar() {
     }, 60 * 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!settingsMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!settingsMenuRef.current?.contains(event.target as Node)) {
+        setSettingsMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSettingsMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [settingsMenuOpen]);
 
   const visibleSessions = useMemo(() => {
     return sessions.filter((session) => {
@@ -256,9 +282,14 @@ export function Sidebar() {
       icon: <Shield className="h-[18px] w-[18px]" strokeWidth={2} />,
       label: t('sidebar.security'),
     },
+    {
+      to: '/settings',
+      icon: <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />,
+      label: t('sidebar.settings'),
+    },
   ];
 
-  const settingsActive = location.pathname.startsWith('/settings');
+  const settingsActive = settingsItems.some((item) => location.pathname.startsWith(item.to));
   const gatewayBadgeLabel = gatewayStatus.state === 'running'
     ? t('chat:toolbar.gatewayRunning')
     : gatewayStatus.state === 'error'
@@ -425,201 +456,151 @@ export function Sidebar() {
         )}
       >
         <div
+          ref={settingsMenuRef}
           className={cn(
             'relative',
             sidebarCollapsed ? '' : 'pointer-events-auto'
           )}
-          onMouseEnter={() => setSettingsMenuOpen(true)}
-          onMouseLeave={() => setSettingsMenuOpen(false)}
-          onFocus={() => setSettingsMenuOpen(true)}
-          onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-              setSettingsMenuOpen(false);
-            }
-          }}
         >
-          {sidebarCollapsed ? (
-            <>
-              {settingsMenuOpen && (
-                <div className="absolute bottom-[calc(100%-4px)] left-0 z-20 w-56 overflow-hidden rounded-2xl border border-border/70 bg-card/95 p-1.5 shadow-[0_14px_34px_rgba(0,0,0,0.14)] backdrop-blur-xl">
-                  <div className="space-y-1">
-                    {settingsItems.map((item) => (
-                      <NavLink
-                        key={item.to}
-                        to={item.to}
-                        onClick={() => setSettingsMenuOpen(false)}
-                        className={({ isActive }) =>
-                          cn(
-                            'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors',
-                            'hover:bg-black/5 dark:hover:bg-white/10 text-foreground/80',
-                            isActive && 'bg-accent/70 text-foreground shadow-sm'
-                          )
-                        }
-                      >
-                        {({ isActive }) => (
-                          <>
-                            <div
-                              className={cn(
-                                'flex shrink-0 items-center justify-center',
-                                isActive ? 'text-foreground' : 'text-muted-foreground'
-                              )}
-                            >
-                              {item.icon}
-                            </div>
-                            <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                              {item.label}
-                            </span>
-                          </>
-                        )}
-                      </NavLink>
-                    ))}
-                  </div>
-                </div>
+          {settingsMenuOpen && (
+            <div
+              className={cn(
+                'absolute bottom-[calc(100%+8px)] z-30 overflow-hidden rounded-2xl border border-border/70 bg-card/95 p-1.5 shadow-[0_14px_34px_rgba(0,0,0,0.14)] backdrop-blur-xl',
+                sidebarCollapsed ? 'left-0 w-56' : 'inset-x-0'
               )}
-              <button
-                type="button"
-                className={cn(
-                  'flex w-full items-center justify-center rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors',
-                  'hover:bg-black/5 dark:hover:bg-white/10 text-foreground/80',
-                  settingsActive && 'bg-accent/70 text-foreground shadow-sm'
-                )}
-                aria-haspopup="menu"
-                aria-expanded={settingsMenuOpen}
-                onClick={() => {
-                  setSettingsMenuOpen(false);
-                  navigate('/settings');
-                }}
-              >
+            >
+              <div className="space-y-1">
+                {settingsItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => setSettingsMenuOpen(false)}
+                    className={({ isActive }) =>
+                      cn(
+                        'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors',
+                        'hover:bg-black/5 dark:hover:bg-white/10 text-foreground/80',
+                        isActive && 'bg-accent/70 text-foreground shadow-sm'
+                      )
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        <div
+                          className={cn(
+                            'flex shrink-0 items-center justify-center',
+                            isActive ? 'text-foreground' : 'text-muted-foreground'
+                          )}
+                        >
+                          {item.icon}
+                        </div>
+                        <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+                          {item.label}
+                        </span>
+                      </>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          )}
+          {sidebarCollapsed ? (
+            <button
+              type="button"
+              className={cn(
+                'flex w-full items-center justify-center rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors',
+                'hover:bg-black/5 dark:hover:bg-white/10 text-foreground/80',
+                settingsActive && 'bg-accent/70 text-foreground shadow-sm'
+              )}
+              aria-haspopup="menu"
+              aria-expanded={settingsMenuOpen}
+              onClick={() => setSettingsMenuOpen((open) => !open)}
+            >
                 <div
                   className={cn(
                     'flex shrink-0 items-center justify-center',
                     settingsActive ? 'text-foreground' : 'text-muted-foreground'
                   )}
                 >
-                  <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />
-                </div>
-              </button>
-            </>
+                <Menu className="h-[18px] w-[18px]" strokeWidth={2} />
+              </div>
+            </button>
           ) : (
             <div className="overflow-hidden rounded-[16px] border border-black/6 bg-white/72 p-1.5 shadow-[0_8px_20px_rgba(15,23,42,0.06)] backdrop-blur-md transition-[box-shadow] duration-300 dark:border-white/10 dark:bg-white/[0.05]">
-              <div
-                className={cn(
-                  'overflow-hidden transition-[max-height,opacity,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
-                  settingsMenuOpen ? 'mb-1 max-h-56 opacity-100' : 'mb-0 max-h-0 opacity-0'
-                )}
-              >
-                <div className="space-y-1 pb-1">
-                  {settingsItems.map((item) => (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      onClick={() => setSettingsMenuOpen(false)}
-                      className={({ isActive }) =>
-                        cn(
-                          'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors',
-                          'hover:bg-black/5 dark:hover:bg-white/10 text-foreground/80',
-                          isActive && 'bg-accent/70 text-foreground shadow-sm'
-                        )
-                      }
-                    >
-                      {({ isActive }) => (
-                        <>
-                          <div
-                            className={cn(
-                              'flex shrink-0 items-center justify-center',
-                              isActive ? 'text-foreground' : 'text-muted-foreground'
-                            )}
-                          >
-                            {item.icon}
-                          </div>
-                          <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                            {item.label}
-                          </span>
-                        </>
-                      )}
-                    </NavLink>
-                  ))}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                className={cn(
-                  'flex w-full items-center gap-2.5 rounded-[12px] px-3 py-2.5 text-[14px] font-medium transition-colors',
-                  'hover:bg-black/[0.04] dark:hover:bg-white/8 text-foreground/78',
-                  settingsActive && 'bg-white/70 text-foreground shadow-[inset_0_0_0_1px_rgba(15,23,42,0.04)] dark:bg-white/[0.07]'
-                )}
-                aria-haspopup="menu"
-                aria-expanded={settingsMenuOpen}
-                onClick={() => {
-                  setSettingsMenuOpen(false);
-                  navigate('/settings');
-                }}
-              >
-                <div
+              <div className="space-y-1 pb-1">
+                <button
+                  type="button"
                   className={cn(
-                    'flex shrink-0 items-center justify-center',
-                    settingsActive ? 'text-foreground' : 'text-muted-foreground'
+                    'flex w-full items-center gap-2.5 rounded-[12px] px-3 py-2.5 text-[14px] font-medium transition-colors',
+                    'hover:bg-black/[0.04] dark:hover:bg-white/8 text-foreground/78',
+                    settingsActive && 'bg-white/70 text-foreground shadow-[inset_0_0_0_1px_rgba(15,23,42,0.04)] dark:bg-white/[0.07]'
                   )}
+                  aria-haspopup="menu"
+                  aria-expanded={settingsMenuOpen}
+                  onClick={() => setSettingsMenuOpen((open) => !open)}
                 >
-                  <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />
-                </div>
-                <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">
-                  {t('sidebar.settings')}
-                </span>
-                <span
-                  role={canRestartGateway ? 'button' : undefined}
-                  tabIndex={canRestartGateway ? 0 : undefined}
-                  onClick={(event) => {
-                    if (!canRestartGateway) return;
-                    event.stopPropagation();
-                    void useGatewayStore.getState().restart();
-                  }}
-                  onKeyDown={(event) => {
-                    if (!canRestartGateway) return;
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
+                  <div
+                    className={cn(
+                      'flex shrink-0 items-center justify-center',
+                      settingsActive ? 'text-foreground' : 'text-muted-foreground'
+                    )}
+                  >
+                    <Menu className="h-[18px] w-[18px]" strokeWidth={2} />
+                  </div>
+                  <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">
+                    {t('sidebar.menu')}
+                  </span>
+                  <span
+                    role={canRestartGateway ? 'button' : undefined}
+                    tabIndex={canRestartGateway ? 0 : undefined}
+                    onClick={(event) => {
+                      if (!canRestartGateway) return;
                       event.stopPropagation();
                       void useGatewayStore.getState().restart();
-                    }
-                  }}
-                  title={gatewayBadgeLabel}
-                  className={cn(
-                    'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors',
-                    gatewayStatus.state === 'running'
-                      ? 'border-emerald-500/25 bg-emerald-500/12 text-emerald-700 dark:text-emerald-400'
-                      : gatewayStatus.state === 'error'
-                        ? 'border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-400'
-                        : gatewayStatus.state === 'starting'
-                          ? 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-400'
-                          : 'border-black/8 bg-black/[0.03] text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]'
-                    ,
-                    canRestartGateway && 'cursor-pointer hover:border-primary/25 hover:bg-primary/8 hover:text-foreground'
-                    ,
-                    !canRestartGateway && 'cursor-default'
-                  )}
-                >
-                  <span
+                    }}
+                    onKeyDown={(event) => {
+                      if (!canRestartGateway) return;
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        void useGatewayStore.getState().restart();
+                      }
+                    }}
+                    title={gatewayBadgeLabel}
                     className={cn(
-                      'h-2 w-2 rounded-full',
+                      'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors',
                       gatewayStatus.state === 'running'
-                        ? 'bg-emerald-500'
+                        ? 'border-emerald-500/25 bg-emerald-500/12 text-emerald-700 dark:text-emerald-400'
                         : gatewayStatus.state === 'error'
-                          ? 'bg-red-500'
+                          ? 'border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-400'
                           : gatewayStatus.state === 'starting'
-                            ? 'bg-sky-500 animate-pulse'
-                            : 'bg-muted-foreground/55'
+                            ? 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-400'
+                            : 'border-black/8 bg-black/[0.03] text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]',
+                      canRestartGateway && 'cursor-pointer hover:border-primary/25 hover:bg-primary/8 hover:text-foreground',
+                      !canRestartGateway && 'cursor-default'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'h-2 w-2 rounded-full',
+                        gatewayStatus.state === 'running'
+                          ? 'bg-emerald-500'
+                          : gatewayStatus.state === 'error'
+                            ? 'bg-red-500'
+                            : gatewayStatus.state === 'starting'
+                              ? 'bg-sky-500 animate-pulse'
+                              : 'bg-muted-foreground/55'
+                      )}
+                    />
+                    <span className="max-w-[72px] truncate">{gatewayBadgeLabel}</span>
+                  </span>
+                  <ChevronUp
+                    className={cn(
+                      'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+                      !settingsMenuOpen && 'rotate-180'
                     )}
                   />
-                  <span className="max-w-[72px] truncate">{gatewayBadgeLabel}</span>
-                </span>
-                <ChevronUp
-                  className={cn(
-                    'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
-                    !settingsMenuOpen && 'rotate-180'
-                  )}
-                />
-              </button>
+                </button>
+              </div>
             </div>
           )}
         </div>
