@@ -236,10 +236,16 @@
   "updates": {
     "title": "更新",
     "description": "保持 ClawClaw 最新",
+    "channelFixedTitle": "更新通道",
+    "channelFixedDesc": "当前仅提供稳定版更新，应用会始终从稳定版发布源检查新版本。",
+    "channel": "更新通道",
+    "channelDesc": "选择接收稳定版、测试版或开发版更新。",
     "autoCheck": "自动检查更新",
     "autoCheckDesc": "启动时检查更新",
     "autoDownload": "自动更新",
     "autoDownloadDesc": "自动下载并安装更新",
+    "unsupported": "当前环境不支持自动更新，请使用安装包手动升级。",
+    "actionsDisabled": "当前不可用",
     "status": {
       "checking": "正在检查更新...",
       "downloading": "正在下载更新...",
@@ -249,6 +255,20 @@
       "failed": "检查更新失败",
       "latest": "您已拥有最新版本",
       "check": "检查更新以获取最新功能"
+    },
+    "channels": {
+      "stable": {
+        "label": "稳定版",
+        "description": "仅接收正式发布版本，适合大多数用户。"
+      },
+      "beta": {
+        "label": "测试版",
+        "description": "提前获取即将发布的功能，可能包含未完全验证的改动。"
+      },
+      "dev": {
+        "label": "开发版",
+        "description": "接收最新实验版本，仅适合愿意承担更高风险的测试用户。"
+      }
     },
     "action": {
       "checking": "检查中...",
@@ -348,6 +368,7 @@
     "cleanup": {
       "title": "清理数据",
       "description": "执行前会先停止 Gateway，并仅删除应用明确托管的目录。",
+      "runtimeNotice": "Windows 下，ClawClaw 自身的设置、缓存和日志会在应用退出后继续清理，以避免文件锁导致失败。",
       "selected": "项清理范围已选中",
       "removeClawClawData": "清理 ClawClaw 设置与缓存",
       "removeClawClawDataDesc": "清空当前应用的本地设置、窗口状态和缓存数据。",
@@ -366,6 +387,12 @@
       "success": "数据清理完成",
       "partial": "数据清理已完成，但仍有部分项目未删除",
       "failed": "数据清理失败",
+      "quitRequired": "已安排退出后清理。ClawClaw 即将退出以完成剩余删除。",
+      "deferredTitle": "退出后清理",
+      "deferredQueued": "已排队",
+      "deferredRunning": "正在执行",
+      "deferredCompleted": "已完成",
+      "deferredFailed": "执行失败",
       "resultRemoved": "已删除",
       "resultMissing": "不存在",
       "resultSkipped": "已跳过",

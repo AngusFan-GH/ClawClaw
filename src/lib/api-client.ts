@@ -64,6 +64,7 @@ const UNIFIED_CHANNELS = new Set<string>([
   'provider:setDefault',
   'update:status',
   'update:version',
+  'update:isSupported',
   'update:check',
   'update:download',
   'update:install',

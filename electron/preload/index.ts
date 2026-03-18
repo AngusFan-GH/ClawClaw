@@ -59,6 +59,7 @@ const electronAPI = {
         // Update
         'update:status',
         'update:version',
+        'update:isSupported',
         'update:check',
         'update:download',
         'update:install',

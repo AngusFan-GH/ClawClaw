@@ -4,13 +4,10 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  AlertTriangle,
   Check,
   Copy,
-  Download,
   ExternalLink,
   FileText,
-  FolderOpen,
   Monitor,
   Moon,
   PencilLine,
@@ -48,31 +45,13 @@ import {
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { UpdateSettings } from '@/components/settings/UpdateSettings';
 import type { ReminderItem } from '@/shared/reminders';
 
 type ControlUiInfo = {
   url: string;
   token: string;
   port: number;
-};
-
-type CleanupOptions = {
-  removeClawClawData: boolean;
-  removeLogs: boolean;
-  removeOpenClawData: boolean;
-  removeWorkspace: boolean;
-  removeGatewayService: boolean;
-};
-
-type CleanupResult = {
-  success: boolean;
-  stoppedGateway: boolean;
-  gatewayActions: string[];
-  removed: string[];
-  missing: string[];
-  skipped: Array<{ path: string; reason: string }>;
-  failed: Array<{ path: string; error: string }>;
 };
 
 type ProxyMode = 'system' | 'custom' | 'direct';
@@ -151,14 +130,6 @@ function SettingRow({
   );
 }
 
-const defaultCleanupOptions: CleanupOptions = {
-  removeClawClawData: false,
-  removeLogs: true,
-  removeOpenClawData: false,
-  removeWorkspace: false,
-  removeGatewayService: false,
-};
-
 export function Settings() {
   const { t } = useTranslation(['settings', 'common']);
   const {
@@ -211,14 +182,6 @@ export function Settings() {
   const [newReminderText, setNewReminderText] = useState('');
   const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
   const [editingReminderText, setEditingReminderText] = useState('');
-  const [exportingConfig, setExportingConfig] = useState(false);
-  const [lastExportPath, setLastExportPath] = useState<string | null>(null);
-  const [cleanupOptions, setCleanupOptions] = useState<CleanupOptions>(defaultCleanupOptions);
-  const [cleanupRunning, setCleanupRunning] = useState(false);
-  const [cleanupResult, setCleanupResult] = useState<CleanupResult | null>(null);
-  const [cleanupDialogOpen, setCleanupDialogOpen] = useState(false);
-  const [fullCleanupDialogOpen, setFullCleanupDialogOpen] = useState(false);
-
   const [proxyModeDraft, setProxyModeDraft] = useState<ProxyMode>('system');
   const [proxyServerDraft, setProxyServerDraft] = useState('');
   const [proxyHttpServerDraft, setProxyHttpServerDraft] = useState('');
@@ -496,21 +459,6 @@ export function Settings() {
     return draftProxyState !== persistedProxyState;
   }, [draftProxyState, persistedProxyState, proxyModeDraft]);
 
-  const selectedCleanupCount = useMemo(
-    () => Object.values(cleanupOptions).filter(Boolean).length,
-    [cleanupOptions]
-  );
-
-  const cleanupSummary = useMemo(() => {
-    if (!cleanupResult) return null;
-    return {
-      removed: cleanupResult.removed.length,
-      missing: cleanupResult.missing.length,
-      skipped: cleanupResult.skipped.length,
-      failed: cleanupResult.failed.length,
-    };
-  }, [cleanupResult]);
-
   const refreshControlUiInfo = async () => {
     try {
       const result = await hostApiFetch<{
@@ -740,112 +688,6 @@ export function Settings() {
     setEditingReminderId(null);
     setEditingReminderText('');
   };
-
-  const setCleanupOption = (key: keyof CleanupOptions, value: boolean) => {
-    setCleanupOptions((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleExportConfig = async () => {
-    setExportingConfig(true);
-    try {
-      const response = await hostApiFetch<{
-        success: boolean;
-        cancelled?: boolean;
-        savedPath?: string;
-      }>('/api/settings/export-config', {
-        method: 'POST',
-      });
-
-      if (!response.success) {
-        return;
-      }
-
-      if (response.savedPath) {
-        setLastExportPath(response.savedPath);
-      }
-      toast.success(t('dataTools.export.saved'));
-    } catch (error) {
-      toast.error(`${t('dataTools.export.saveFailed')}: ${toUserMessage(error)}`);
-    } finally {
-      setExportingConfig(false);
-    }
-  };
-
-  const handleRevealExportPath = async () => {
-    if (!lastExportPath) return;
-    try {
-      await invokeIpc('shell:showItemInFolder', lastExportPath);
-    } catch (error) {
-      toast.error(toUserMessage(error));
-    }
-  };
-
-  const executeCleanup = async (request: CleanupOptions, successMessage: string) => {
-    setCleanupRunning(true);
-    try {
-      const result = await hostApiFetch<CleanupResult>('/api/settings/cleanup-data', {
-        method: 'POST',
-        body: JSON.stringify(request),
-      });
-      setCleanupResult(result);
-
-      if (result.success) {
-        toast.success(successMessage);
-      } else {
-        toast.error(t('dataTools.cleanup.partial'));
-      }
-    } catch (error) {
-      toast.error(`${t('dataTools.cleanup.failed')}: ${toUserMessage(error)}`);
-    } finally {
-      setCleanupRunning(false);
-    }
-  };
-
-  const handleCleanupRequest = () => {
-    if (selectedCleanupCount === 0) {
-      toast.message(t('dataTools.cleanup.nothingSelected'));
-      return;
-    }
-    setCleanupDialogOpen(true);
-  };
-
-  const handleConfirmCleanup = async () => {
-    setCleanupDialogOpen(false);
-    await executeCleanup(cleanupOptions, t('dataTools.cleanup.success'));
-  };
-
-  const handleConfirmFullCleanup = async () => {
-    setFullCleanupDialogOpen(false);
-    await executeCleanup(
-      {
-        removeClawClawData: true,
-        removeLogs: true,
-        removeOpenClawData: true,
-        removeWorkspace: true,
-        removeGatewayService: true,
-      },
-      t('dataTools.fullUninstall.success')
-    );
-  };
-
-  const renderPathList = (items: string[]) => (
-    <div className="mt-2 flex flex-wrap gap-2">
-      {items.slice(0, 8).map((item) => (
-        <span
-          key={item}
-          className="rounded-full border border-black/10 bg-white/80 px-3 py-1 font-mono text-[11px] text-muted-foreground dark:border-white/10 dark:bg-white/[0.06]"
-          title={item}
-        >
-          {item}
-        </span>
-      ))}
-      {items.length > 8 ? (
-        <span className="rounded-full border border-black/10 bg-white/80 px-3 py-1 text-[11px] text-muted-foreground dark:border-white/10 dark:bg-white/[0.06]">
-          +{items.length - 8}
-        </span>
-      ) : null}
-    </div>
-  );
 
   return (
     <div className="-m-6 flex h-[calc(100vh-2.5rem)] flex-col overflow-hidden dark:bg-background">
@@ -1420,217 +1262,8 @@ export function Settings() {
             </div>
           </SectionCard>
 
-          <SectionCard title={t('dataTools.title')} description={t('dataTools.description')}>
-            <div className="space-y-4">
-              <SubCard
-                title={t('dataTools.export.title')}
-                description={t('dataTools.export.description')}
-                action={
-                  <Button
-                    type="button"
-                    className="rounded-[10px] px-4"
-                    onClick={handleExportConfig}
-                    disabled={exportingConfig}
-                  >
-                    {exportingConfig ? <LoadingIcon className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />}
-                    {t('dataTools.export.button')}
-                  </Button>
-                }
-              >
-                <div className="rounded-[10px] border border-black/10 bg-white/75 p-4 dark:border-white/10 dark:bg-white/[0.04]">
-                  <p className="text-[13px] text-muted-foreground">
-                    {t('dataTools.export.description')}
-                  </p>
-                  {lastExportPath ? (
-                    <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                      <div className="min-w-0">
-                        <p className="text-[12px] text-muted-foreground">
-                          {t('dataTools.export.lastPath')}
-                        </p>
-                        <p className="truncate font-mono text-[12px] text-foreground" title={lastExportPath}>
-                          {lastExportPath}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-9 rounded-[10px] border-black/10 bg-transparent px-4 dark:border-white/10 dark:hover:bg-white/5"
-                        onClick={handleRevealExportPath}
-                      >
-                        <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
-                        {t('dataTools.export.reveal')}
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-              </SubCard>
-
-              <SubCard
-                title={t('dataTools.cleanup.title')}
-                description={t('dataTools.cleanup.description')}
-                action={
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-[10px] border-black/10 bg-transparent px-4 dark:border-white/10 dark:hover:bg-white/5"
-                    onClick={handleCleanupRequest}
-                    disabled={cleanupRunning}
-                  >
-                    {cleanupRunning ? <LoadingIcon className="mr-2 h-4 w-4" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                    {t('dataTools.cleanup.button')}
-                  </Button>
-                }
-              >
-                <div className="space-y-3">
-                  <SettingRow
-                    label={t('dataTools.cleanup.removeClawClawData')}
-                    description={t('dataTools.cleanup.removeClawClawDataDesc')}
-                    control={
-                      <Switch
-                        checked={cleanupOptions.removeClawClawData}
-                        onCheckedChange={(checked) => setCleanupOption('removeClawClawData', checked)}
-                      />
-                    }
-                  />
-                  <SettingRow
-                    label={t('dataTools.cleanup.removeLogs')}
-                    description={t('dataTools.cleanup.removeLogsDesc')}
-                    control={
-                      <Switch
-                        checked={cleanupOptions.removeLogs}
-                        onCheckedChange={(checked) => setCleanupOption('removeLogs', checked)}
-                      />
-                    }
-                  />
-                  <SettingRow
-                    label={t('dataTools.cleanup.removeOpenClawData')}
-                    description={t('dataTools.cleanup.removeOpenClawDataDesc')}
-                    control={
-                      <Switch
-                        checked={cleanupOptions.removeOpenClawData}
-                        onCheckedChange={(checked) => setCleanupOption('removeOpenClawData', checked)}
-                      />
-                    }
-                  />
-                  <SettingRow
-                    label={t('dataTools.cleanup.removeWorkspace')}
-                    description={t('dataTools.cleanup.removeWorkspaceDesc')}
-                    control={
-                      <Switch
-                        checked={cleanupOptions.removeWorkspace}
-                        onCheckedChange={(checked) => setCleanupOption('removeWorkspace', checked)}
-                      />
-                    }
-                  />
-                  <SettingRow
-                    label={t('dataTools.cleanup.removeGatewayService')}
-                    description={t('dataTools.cleanup.removeGatewayServiceDesc')}
-                    control={
-                      <Switch
-                        checked={cleanupOptions.removeGatewayService}
-                        onCheckedChange={(checked) => setCleanupOption('removeGatewayService', checked)}
-                      />
-                    }
-                  />
-
-                  <div className="rounded-[10px] border border-black/10 bg-black/[0.03] px-4 py-3 text-[12px] text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]">
-                    {t('dataTools.cleanup.description')}
-                  </div>
-
-                  <div className="rounded-[10px] border border-black/10 bg-white/75 p-4 dark:border-white/10 dark:bg-white/[0.04]">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="secondary" className="rounded-[10px] px-3 py-1 text-[12px]">
-                        {selectedCleanupCount}
-                      </Badge>
-                      <span className="text-[12px] text-muted-foreground">{t('dataTools.cleanup.selected')}</span>
-                    </div>
-
-                    {cleanupResult ? (
-                      <div className="mt-4 space-y-3">
-                        <div className="flex flex-wrap gap-2">
-                          <Badge variant="secondary" className="rounded-[10px] px-3 py-1 text-[12px]">
-                            {t('dataTools.cleanup.resultRemoved')}: {cleanupSummary?.removed ?? 0}
-                          </Badge>
-                          <Badge variant="secondary" className="rounded-[10px] px-3 py-1 text-[12px]">
-                            {t('dataTools.cleanup.resultMissing')}: {cleanupSummary?.missing ?? 0}
-                          </Badge>
-                          <Badge variant="secondary" className="rounded-[10px] px-3 py-1 text-[12px]">
-                            {t('dataTools.cleanup.resultSkipped')}: {cleanupSummary?.skipped ?? 0}
-                          </Badge>
-                          <Badge variant="secondary" className="rounded-[10px] px-3 py-1 text-[12px]">
-                            {t('dataTools.cleanup.resultFailed')}: {cleanupSummary?.failed ?? 0}
-                          </Badge>
-                        </div>
-
-                        {cleanupResult.gatewayActions.length > 0 ? (
-                          <div>
-                            <p className="text-[12px] font-medium text-foreground">
-                              Gateway
-                            </p>
-                            {renderPathList(cleanupResult.gatewayActions)}
-                          </div>
-                        ) : null}
-                        {cleanupResult.removed.length > 0 ? (
-                          <div>
-                            <p className="text-[12px] font-medium text-foreground">
-                              {t('dataTools.cleanup.resultRemoved')}
-                            </p>
-                            {renderPathList(cleanupResult.removed)}
-                          </div>
-                        ) : null}
-                        {cleanupResult.failed.length > 0 ? (
-                          <div className="space-y-2">
-                            <p className="text-[12px] font-medium text-red-500">
-                              {t('dataTools.cleanup.resultFailed')}
-                            </p>
-                            {cleanupResult.failed.slice(0, 6).map((item) => (
-                              <div
-                                key={`${item.path}-${item.error}`}
-                                className="rounded-[10px] border border-red-500/20 bg-red-500/10 px-3 py-2 text-[12px] text-red-500"
-                              >
-                                <div className="font-mono">{item.path}</div>
-                                <div className="mt-1">{item.error}</div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <p className="mt-3 text-[12px] text-muted-foreground">
-                        {t('dataTools.cleanup.noResult')}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </SubCard>
-
-              <SubCard
-                title={t('dataTools.fullUninstall.title')}
-                description={t('dataTools.fullUninstall.description')}
-                action={
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    className="rounded-[10px] px-4"
-                    onClick={() => setFullCleanupDialogOpen(true)}
-                    disabled={cleanupRunning}
-                  >
-                    <AlertTriangle className="mr-2 h-4 w-4" />
-                    {t('dataTools.fullUninstall.button')}
-                  </Button>
-                }
-              >
-                <div className="rounded-[14px] border border-red-500/20 bg-red-500/10 p-4">
-                  <p className="text-[13px] leading-6 text-red-500">
-                    {t('dataTools.fullUninstall.warning')}
-                  </p>
-                  <p className="mt-3 text-[12px] text-red-500/90">
-                    {t('dataTools.fullUninstall.after')}
-                  </p>
-                </div>
-              </SubCard>
-            </div>
+          <SectionCard title={t('updates.title')} description={t('updates.description')}>
+            <UpdateSettings />
           </SectionCard>
 
           <SectionCard title={t('advanced.title')} description={t('advanced.description')}>
@@ -1872,32 +1505,6 @@ export function Settings() {
 
         </div>
       </div>
-
-      <ConfirmDialog
-        open={cleanupDialogOpen}
-        title={t('dataTools.cleanup.confirmTitle')}
-        message={t('dataTools.cleanup.confirmMessage')}
-        confirmLabel={t('dataTools.cleanup.button')}
-        cancelLabel={t('common:actions.cancel')}
-        variant="destructive"
-        onCancel={() => setCleanupDialogOpen(false)}
-        onConfirm={() => {
-          void handleConfirmCleanup();
-        }}
-      />
-
-      <ConfirmDialog
-        open={fullCleanupDialogOpen}
-        title={t('dataTools.fullUninstall.confirmTitle')}
-        message={t('dataTools.fullUninstall.confirmMessage')}
-        confirmLabel={t('dataTools.fullUninstall.button')}
-        cancelLabel={t('common:actions.cancel')}
-        variant="destructive"
-        onCancel={() => setFullCleanupDialogOpen(false)}
-        onConfirm={() => {
-          void handleConfirmFullCleanup();
-        }}
-      />
     </div>
   );
 }

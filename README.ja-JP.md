@@ -217,7 +217,9 @@ ClawClawには、Electron、OpenClaw Gateway、またはTelegramなどのチャ�
 
 ### 設定のバックアップとデータクリーンアップ
 
-**設定 → データとアンインストール** を開くと、データ削除やアンインストールの前に現在の設定を JSON バックアップとしてエクスポートできます。同じ画面で Gateway を停止し、管理対象の ClawClaw / OpenClaw ローカルデータを許可リスト方式でクリーンアップし、その後 OS のアンインストーラからアプリ本体を削除するための完全アンインストール準備も行えます。
+**設定 → データとアンインストール** を開くと、データ削除やアンインストールの前に現在の設定を JSON バックアップとしてエクスポートできます。同じ画面で Gateway を停止し、管理対象の ClawClaw / OpenClaw ローカルデータを許可リスト方式でクリーンアップし、その後 OS のアンインストーラからアプリ本体を削除するための完全アンインストール準備も行えます。Windows では、ClawClaw 自身のキャッシュ、ストレージ、ログはアプリ終了後に続けて削除され、Chromium のファイルロックが残っていても安全にクリーンアップできます。
+
+**設定 → アップデート** では、自動確認 / 自動ダウンロードの制御と、パッケージ版アプリでの手動更新確認が行えます。ClawClaw は現在、安定版フィードのみを利用します。
 
 ---
 
@@ -358,6 +360,7 @@ pnpm package:mac          # macOS向けにパッケージ化
 pnpm package:win          # Windowsホスト / VM 上で Windows 向けにパッケージ化
 pnpm package:win:cross    # macOS/Linux から Windows NSIS をクロスビルド
 pnpm package:linux        # Linux向けにパッケージ化
+pnpm run upload:update    # release/latest.yml と参照される Windows 更新ファイルをアップロード
 ```
 
 ### 技術スタック

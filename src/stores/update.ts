@@ -35,6 +35,8 @@ interface UpdateState {
   progress: ProgressInfo | null;
   error: string | null;
   isInitialized: boolean;
+  isSupported: boolean;
+  hasCheckedOnce: boolean;
   /** Seconds remaining before auto-install, or null if inactive. */
   autoInstallCountdown: number | null;
 
@@ -56,6 +58,8 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   progress: null,
   error: null,
   isInitialized: false,
+  isSupported: false,
+  hasCheckedOnce: false,
   autoInstallCountdown: null,
 
   init: async () => {
@@ -67,6 +71,13 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
       set({ currentVersion: version as string });
     } catch (error) {
       console.error('Failed to get version:', error);
+    }
+
+    try {
+      const supported = await invokeIpc<boolean>('update:isSupported');
+      set({ isSupported: Boolean(supported) });
+    } catch (error) {
+      console.error('Failed to get update support state:', error);
     }
 
     // Get current status
@@ -82,6 +93,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         updateInfo: status.info || null,
         progress: status.progress || null,
         error: status.error || null,
+        hasCheckedOnce: status.status !== 'idle',
       });
     } catch (error) {
       console.error('Failed to get update status:', error);
@@ -102,6 +114,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         updateInfo: status.info || null,
         progress: status.progress || null,
         error: status.error || null,
+        hasCheckedOnce: status.status !== 'idle' && status.status !== 'checking',
       });
     });
 
@@ -140,18 +153,23 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
           updateInfo: result.status.info || null,
           progress: result.status.progress || null,
           error: result.status.error || null,
+          hasCheckedOnce: true,
         });
       } else if (!result.success) {
-        set({ status: 'error', error: result.error || 'Failed to check for updates' });
+        set({ status: 'error', error: result.error || 'Failed to check for updates', hasCheckedOnce: true });
       }
     } catch (error) {
-      set({ status: 'error', error: String(error) });
+      set({ status: 'error', error: String(error), hasCheckedOnce: true });
     } finally {
       // In dev mode autoUpdater skips without emitting events, so the
       // status may still be 'checking' or even 'idle'. Catch both.
       const currentStatus = get().status;
       if (currentStatus === 'checking' || currentStatus === 'idle') {
-        set({ status: 'error', error: 'Update check completed without a result. This usually means the app is running in dev mode.' });
+        set({
+          status: 'error',
+          error: 'Update check completed without a result. This usually means the app is running in dev mode.',
+          hasCheckedOnce: true,
+        });
       }
     }
   },

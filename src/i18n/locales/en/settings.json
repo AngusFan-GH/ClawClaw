@@ -236,10 +236,16 @@
   "updates": {
     "title": "Updates",
     "description": "Keep ClawClaw up to date",
+    "channelFixedTitle": "Release channel",
+    "channelFixedDesc": "Only the stable release channel is available right now. The app always checks the stable feed.",
+    "channel": "Update channel",
+    "channelDesc": "Choose whether this app follows stable, beta, or dev releases.",
     "autoCheck": "Auto-check for updates",
     "autoCheckDesc": "Check for updates on startup",
     "autoDownload": "Auto-update",
     "autoDownloadDesc": "Automatically download and install updates",
+    "unsupported": "Automatic updates are not available in the current environment. Install a packaged build to use them.",
+    "actionsDisabled": "Unavailable",
     "status": {
       "checking": "Checking for updates...",
       "downloading": "Downloading update...",
@@ -249,6 +255,20 @@
       "failed": "Update check failed",
       "latest": "You have the latest version",
       "check": "Check for updates to get the latest features"
+    },
+    "channels": {
+      "stable": {
+        "label": "Stable",
+        "description": "Only receive production releases. Best for most users."
+      },
+      "beta": {
+        "label": "Beta",
+        "description": "Get upcoming features earlier, with some additional risk."
+      },
+      "dev": {
+        "label": "Dev",
+        "description": "Track the newest experimental builds. Intended for internal testing."
+      }
     },
     "action": {
       "checking": "Checking...",
@@ -428,6 +448,7 @@
     "cleanup": {
       "title": "Clean up data",
       "description": "Gateway will be stopped first, and only managed directories are deleted.",
+      "runtimeNotice": "On Windows, ClawClaw settings, cache, and logs continue cleaning after the app exits so file locks do not block deletion.",
       "selected": "cleanup scopes selected",
       "removeClawClawData": "Remove ClawClaw settings and cache",
       "removeClawClawDataDesc": "Clears local settings, window state, and cached application data.",
@@ -446,6 +467,12 @@
       "success": "Cleanup completed",
       "partial": "Cleanup finished with partial failures",
       "failed": "Cleanup failed",
+      "quitRequired": "Exit cleanup has been queued. ClawClaw will quit shortly to finish the remaining deletion.",
+      "deferredTitle": "Post-exit cleanup",
+      "deferredQueued": "Queued",
+      "deferredRunning": "Running",
+      "deferredCompleted": "Completed",
+      "deferredFailed": "Failed",
       "resultRemoved": "Removed",
       "resultMissing": "Missing",
       "resultSkipped": "Skipped",

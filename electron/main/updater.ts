@@ -1,19 +1,41 @@
 /**
  * Auto-Updater Module
  * Handles automatic application updates using electron-updater
- *
- * Update providers are configured in electron-builder.yml (OSS primary, GitHub fallback).
- * For prerelease channels (alpha, beta), the feed URL is overridden at runtime
- * to point at the channel-specific OSS directory (e.g. /alpha/, /beta/).
  */
 import { autoUpdater, UpdateInfo, ProgressInfo, UpdateDownloadedEvent } from 'electron-updater';
 import { BrowserWindow, app, ipcMain } from 'electron';
-import { logger } from '../utils/logger';
 import { EventEmitter } from 'events';
+import { logger } from '../utils/logger';
 import { setQuitting } from './app-state';
+import type { AppSettings } from '../utils/store';
+import { UPDATE_FEEDS, type UpdateChannel } from '../shared/update-feed';
 
-/** Base CDN URL (without trailing channel path) */
-const OSS_BASE_URL = 'https://oss.intelli-spectrum.com';
+type FeedConfig = {
+  channel: UpdateChannel;
+  provider: 'generic';
+  url: string;
+  allowPrerelease: boolean;
+};
+
+const FEED_CONFIGS: Record<UpdateChannel, FeedConfig> = Object.fromEntries(
+  Object.entries(UPDATE_FEEDS).map(([channel, config]) => [
+    channel,
+    {
+      channel: channel as UpdateChannel,
+      provider: 'generic',
+      url: config.url,
+      allowPrerelease: config.allowPrerelease,
+    },
+  ]),
+) as Record<UpdateChannel, FeedConfig>;
+
+function detectVersionChannel(version: string): UpdateChannel {
+  return 'stable';
+}
+
+function normalizeChannel(_channel?: string | null): UpdateChannel {
+  return 'stable';
+}
 
 export interface UpdateStatus {
   status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
@@ -32,30 +54,20 @@ export interface UpdaterEvents {
   'error': (error: Error) => void;
 }
 
-/**
- * Detect the update channel from a semver version string.
- * e.g. "0.1.8-alpha.0" → "alpha", "1.0.0-beta.1" → "beta", "1.0.0" → "latest"
- */
-function detectChannel(version: string): string {
-  const match = version.match(/-([a-zA-Z]+)/);
-  return match ? match[1] : 'latest';
-}
-
 export class AppUpdater extends EventEmitter {
   private mainWindow: BrowserWindow | null = null;
   private status: UpdateStatus = { status: 'idle' };
   private autoInstallTimer: NodeJS.Timeout | null = null;
   private autoInstallCountdown = 0;
+  private configuredChannel: UpdateChannel = detectVersionChannel(app.getVersion());
 
-  /** Delay (in seconds) before auto-installing a downloaded update. */
   private static readonly AUTO_INSTALL_DELAY_SECONDS = 5;
 
   constructor() {
     super();
-    
+
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
-    
     autoUpdater.logger = {
       info: (msg: string) => logger.info('[Updater]', msg),
       warn: (msg: string) => logger.warn('[Updater]', msg),
@@ -63,67 +75,82 @@ export class AppUpdater extends EventEmitter {
       debug: (msg: string) => logger.debug('[Updater]', msg),
     };
 
-    // Override feed URL for prerelease channels so that
-    // alpha -> /alpha/alpha-mac.yml, beta -> /beta/beta-mac.yml, etc.
-    const version = app.getVersion();
-    const channel = detectChannel(version);
-    const feedUrl = `${OSS_BASE_URL}/${channel}`;
-
-    logger.info(`[Updater] Version: ${version}, channel: ${channel}, feedUrl: ${feedUrl}`);
-
-    // Set channel so electron-updater requests the correct yml filename.
-    // e.g. channel "alpha" → requests alpha-mac.yml, channel "latest" → requests latest-mac.yml
-    autoUpdater.channel = channel;
-
-    autoUpdater.setFeedURL({
-      provider: 'generic',
-      url: feedUrl,
-      useMultipleRangeRequest: false,
-    });
-
+    this.applyFeedConfig(FEED_CONFIGS[this.configuredChannel]);
     this.setupListeners();
   }
 
-  /**
-   * Set the main window for sending update events
-   */
+  async initializeFromSettings(
+    settings: Pick<AppSettings, 'updateChannel' | 'autoDownloadUpdate'>,
+  ): Promise<void> {
+    const preferredChannel = normalizeChannel(settings.updateChannel);
+    this.setChannel(preferredChannel);
+    this.setAutoDownload(Boolean(settings.autoDownloadUpdate));
+  }
+
+  private applyFeedConfig(config: FeedConfig): void {
+    autoUpdater.allowPrerelease = config.allowPrerelease;
+
+    // Keep generic provider filenames stable as latest.yml across directories.
+    autoUpdater.channel = 'latest';
+
+    autoUpdater.setFeedURL({
+      provider: 'generic',
+      url: config.url,
+      useMultipleRangeRequest: false,
+    });
+    logger.info(
+      `[Updater] feed configured channel=${config.channel} url=${config.url} allowPrerelease=${config.allowPrerelease}`,
+    );
+  }
+
+  private configureFeed(channel: UpdateChannel): void {
+    this.configuredChannel = channel;
+    this.applyFeedConfig(FEED_CONFIGS[channel]);
+  }
+
   setMainWindow(window: BrowserWindow): void {
     this.mainWindow = window;
   }
 
-  /**
-   * Get current update status
-   */
   getStatus(): UpdateStatus {
     return this.status;
   }
 
-  /**
-   * Setup auto-updater event listeners
-   */
+  getCurrentVersion(): string {
+    return app.getVersion();
+  }
+
+  getChannel(): UpdateChannel {
+    return this.configuredChannel;
+  }
+
+  isSupported(): boolean {
+    return app.isPackaged;
+  }
+
   private setupListeners(): void {
     autoUpdater.on('checking-for-update', () => {
-      this.updateStatus({ status: 'checking' });
+      this.updateStatus({ status: 'checking', error: undefined });
       this.emit('checking-for-update');
     });
 
     autoUpdater.on('update-available', (info: UpdateInfo) => {
-      this.updateStatus({ status: 'available', info });
+      this.updateStatus({ status: 'available', info, error: undefined });
       this.emit('update-available', info);
     });
 
     autoUpdater.on('update-not-available', (info: UpdateInfo) => {
-      this.updateStatus({ status: 'not-available', info });
+      this.updateStatus({ status: 'not-available', info, error: undefined });
       this.emit('update-not-available', info);
     });
 
     autoUpdater.on('download-progress', (progress: ProgressInfo) => {
-      this.updateStatus({ status: 'downloading', progress });
+      this.updateStatus({ status: 'downloading', progress, error: undefined });
       this.emit('download-progress', progress);
     });
 
     autoUpdater.on('update-downloaded', (event: UpdateDownloadedEvent) => {
-      this.updateStatus({ status: 'downloaded', info: event });
+      this.updateStatus({ status: 'downloaded', info: event, error: undefined });
       this.emit('update-downloaded', event);
 
       if (autoUpdater.autoDownload) {
@@ -137,9 +164,6 @@ export class AppUpdater extends EventEmitter {
     });
   }
 
-  /**
-   * Update status and notify renderer
-   */
   private updateStatus(newStatus: Partial<UpdateStatus>): void {
     this.status = {
       status: newStatus.status ?? this.status.status,
@@ -150,54 +174,51 @@ export class AppUpdater extends EventEmitter {
     this.sendToRenderer('update:status-changed', this.status);
   }
 
-  /**
-   * Send event to renderer process
-   */
   private sendToRenderer(channel: string, data: unknown): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(channel, data);
     }
   }
 
-  /**
-   * Check for updates.
-   * electron-updater automatically tries providers defined in electron-builder.yml in order.
-   *
-   * In dev mode (not packed), autoUpdater.checkForUpdates() silently returns
-   * null without emitting any events, so we must detect this and force a
-   * final status so the UI never gets stuck in 'checking'.
-   */
   async checkForUpdates(): Promise<UpdateInfo | null> {
+    if (!app.isPackaged) {
+      this.updateStatus({
+        status: 'error',
+        error: 'Update check skipped (dev mode – app is not packaged)',
+      });
+      return null;
+    }
+
     try {
-      const result = await autoUpdater.checkForUpdates();
-
-      // In dev mode (app not packaged), autoUpdater silently returns null
-      // without emitting ANY events (not even checking-for-update).
-      // Detect this and force an error so the UI never stays silent.
-      if (result == null) {
-        this.updateStatus({
-          status: 'error',
-          error: 'Update check skipped (dev mode – app is not packaged)',
-        });
-        return null;
-      }
-
-      // Safety net: if events somehow didn't fire, force a final state.
-      if (this.status.status === 'checking' || this.status.status === 'idle') {
-        this.updateStatus({ status: 'not-available' });
-      }
-
-      return result.updateInfo || null;
+      this.configureFeed(this.configuredChannel);
+      return await this.checkWithCurrentFeed();
     } catch (error) {
-      logger.error('[Updater] Check for updates failed:', error);
-      this.updateStatus({ status: 'error', error: (error as Error).message || String(error) });
+      logger.error('[Updater] Update check failed:', error);
+      this.updateStatus({
+        status: 'error',
+        error: (error as Error).message || String(error),
+      });
       throw error;
     }
   }
 
-  /**
-   * Download available update
-   */
+  private async checkWithCurrentFeed(): Promise<UpdateInfo | null> {
+    const result = await autoUpdater.checkForUpdates();
+    if (result == null) {
+      this.updateStatus({
+        status: 'error',
+        error: 'Update check returned no result',
+      });
+      return null;
+    }
+
+    if (this.status.status === 'checking' || this.status.status === 'idle') {
+      this.updateStatus({ status: 'not-available', error: undefined });
+    }
+
+    return result.updateInfo || null;
+  }
+
   async downloadUpdate(): Promise<void> {
     try {
       await autoUpdater.downloadUpdate();
@@ -207,27 +228,12 @@ export class AppUpdater extends EventEmitter {
     }
   }
 
-  /**
-   * Install update and restart.
-   *
-   * On macOS, electron-updater delegates to Squirrel.Mac (ShipIt). The
-   * native quitAndInstall() spawns ShipIt then internally calls app.quit().
-   * However, the tray close handler in index.ts intercepts window close
-   * and hides to tray unless isQuitting is true. Squirrel's internal quit
-   * sometimes fails to trigger before-quit in time, so we set isQuitting
-   * BEFORE calling quitAndInstall(). This lets the native quit flow close
-   * the window cleanly while ShipIt runs independently to replace the app.
-   */
   quitAndInstall(): void {
     logger.info('[Updater] quitAndInstall called');
     setQuitting();
     autoUpdater.quitAndInstall();
   }
 
-  /**
-   * Start a countdown that auto-installs the downloaded update.
-   * Sends `update:auto-install-countdown` events to the renderer each second.
-   */
   private startAutoInstallCountdown(): void {
     this.clearAutoInstallTimer();
     this.autoInstallCountdown = AppUpdater.AUTO_INSTALL_DELAY_SECONDS;
@@ -256,49 +262,25 @@ export class AppUpdater extends EventEmitter {
     }
   }
 
-  /**
-   * Set update channel (stable, beta, dev)
-   */
-  setChannel(channel: 'stable' | 'beta' | 'dev'): void {
-    autoUpdater.channel = channel;
+  setChannel(channel: UpdateChannel): void {
+    this.configureFeed(normalizeChannel(channel));
   }
 
-  /**
-   * Set auto-download preference
-   */
   setAutoDownload(enable: boolean): void {
     autoUpdater.autoDownload = enable;
   }
-
-  /**
-   * Get current version
-   */
-  getCurrentVersion(): string {
-    return app.getVersion();
-  }
 }
 
-/**
- * Register IPC handlers for update operations
- */
 export function registerUpdateHandlers(
   updater: AppUpdater,
-  mainWindow: BrowserWindow
+  mainWindow: BrowserWindow,
 ): void {
   updater.setMainWindow(mainWindow);
 
-  // Get current update status
-  ipcMain.handle('update:status', () => {
-    return updater.getStatus();
-  });
+  ipcMain.handle('update:status', () => updater.getStatus());
+  ipcMain.handle('update:version', () => updater.getCurrentVersion());
+  ipcMain.handle('update:isSupported', () => updater.isSupported());
 
-  // Get current version
-  ipcMain.handle('update:version', () => {
-    return updater.getCurrentVersion();
-  });
-
-  // Check for updates – always return final status so the renderer
-  // never gets stuck in 'checking' waiting for a push event.
   ipcMain.handle('update:check', async () => {
     try {
       await updater.checkForUpdates();
@@ -308,7 +290,6 @@ export function registerUpdateHandlers(
     }
   });
 
-  // Download update
   ipcMain.handle('update:download', async () => {
     try {
       await updater.downloadUpdate();
@@ -318,31 +299,25 @@ export function registerUpdateHandlers(
     }
   });
 
-  // Install update and restart
   ipcMain.handle('update:install', () => {
     updater.quitAndInstall();
     return { success: true };
   });
 
-  // Set update channel
-  ipcMain.handle('update:setChannel', (_, channel: 'stable' | 'beta' | 'dev') => {
+  ipcMain.handle('update:setChannel', (_, channel: UpdateChannel) => {
     updater.setChannel(channel);
     return { success: true };
   });
 
-  // Set auto-download preference
   ipcMain.handle('update:setAutoDownload', (_, enable: boolean) => {
     updater.setAutoDownload(enable);
     return { success: true };
   });
 
-  // Cancel pending auto-install countdown
   ipcMain.handle('update:cancelAutoInstall', () => {
     updater.cancelAutoInstall();
     return { success: true };
   });
-
 }
 
-// Export singleton instance
 export const appUpdater = new AppUpdater();

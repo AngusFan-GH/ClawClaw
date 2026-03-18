@@ -5,7 +5,7 @@
 import { ipcMain, BrowserWindow, shell, dialog, app, nativeImage } from 'electron';
 import { existsSync, cpSync, mkdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, extname, basename } from 'node:path';
+import { join, extname, basename, resolve } from 'node:path';
 import crypto from 'node:crypto';
 import { GatewayManager } from '../gateway/manager';
 import {
@@ -1603,12 +1603,17 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
     return getOpenClawConfigDir();
   });
 
-  // Get the OpenClaw skills directory (~/.openclaw/skills)
-  ipcMain.handle('openclaw:getSkillsDir', () => {
-    const dir = getOpenClawSkillsDir();
+  // Get the OpenClaw managed skills directory (~/.openclaw/skills) or a workspace skills directory.
+  ipcMain.handle('openclaw:getSkillsDir', (_event, params?: { workspaceDir?: string }) => {
+    const workspaceDir =
+      typeof params?.workspaceDir === 'string' && params.workspaceDir.trim().length > 0
+        ? params.workspaceDir.trim()
+        : null;
+    const dir = workspaceDir ? resolve(workspaceDir, 'skills') : getOpenClawSkillsDir();
     ensureDir(dir);
     return dir;
   });
+
 
   // Get a shell command to run OpenClaw CLI without modifying PATH
   ipcMain.handle('openclaw:getCliCommand', () => {

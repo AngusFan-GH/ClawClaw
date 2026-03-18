@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { app, dialog } from 'electron';
 import { spawn } from 'node:child_process';
-import { access, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, normalize } from 'node:path';
@@ -47,9 +47,32 @@ type CleanupDataResult = {
   missing: string[];
   skipped: CleanupSkip[];
   failed: CleanupFailure[];
+  deferred?: DeferredCleanupStatus;
 };
 
 const OPENCLAW_CONFIG_DIR = getOpenClawConfigDir();
+const CLEANUP_JOBS_DIR = join(app.getPath('temp'), 'clawclaw-cleanup-jobs');
+
+type DeferredCleanupJobPayload = {
+  jobId: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  createdAt: string;
+  updatedAt: string;
+  pidToWait: number;
+  paths: string[];
+  removed: string[];
+  failed: CleanupFailure[];
+};
+
+type DeferredCleanupStatus = {
+  jobId: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  createdAt: string;
+  updatedAt: string;
+  paths: string[];
+  removed: string[];
+  failed: CleanupFailure[];
+};
 
 function pathExists(path: string): Promise<boolean> {
   return access(path, constants.F_OK).then(() => true).catch(() => false);
@@ -111,6 +134,130 @@ async function clearDirectoryContents(
   } catch (error) {
     result.failed.push({ path: directoryPath, error: String(error) });
   }
+}
+
+function getCleanupHelperScriptPath(): string {
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'resources', 'scripts', 'cleanup-after-exit.ps1');
+  }
+  return join(app.getAppPath(), 'resources', 'scripts', 'cleanup-after-exit.ps1');
+}
+
+async function ensureCleanupJobsDir(): Promise<void> {
+  await mkdir(CLEANUP_JOBS_DIR, { recursive: true });
+}
+
+function toDeferredCleanupStatus(payload: DeferredCleanupJobPayload): DeferredCleanupStatus {
+  return {
+    jobId: payload.jobId,
+    status: payload.status,
+    createdAt: payload.createdAt,
+    updatedAt: payload.updatedAt,
+    paths: payload.paths,
+    removed: payload.removed,
+    failed: payload.failed,
+  };
+}
+
+async function writeCleanupJob(jobFile: string, payload: DeferredCleanupJobPayload): Promise<void> {
+  await writeFile(jobFile, JSON.stringify(payload, null, 2), 'utf-8');
+}
+
+async function readCleanupJob(jobFile: string): Promise<DeferredCleanupJobPayload | null> {
+  try {
+    const content = await readFile(jobFile, 'utf-8');
+    return JSON.parse(content) as DeferredCleanupJobPayload;
+  } catch {
+    return null;
+  }
+}
+
+async function getLatestDeferredCleanupStatus(): Promise<DeferredCleanupStatus | null> {
+  try {
+    await ensureCleanupJobsDir();
+    const entries = await readdir(CLEANUP_JOBS_DIR);
+    const jobFiles = entries.filter((entry) => entry.endsWith('.json'));
+    if (jobFiles.length === 0) return null;
+
+    const withStats = await Promise.all(
+      jobFiles.map(async (entry) => ({
+        file: join(CLEANUP_JOBS_DIR, entry),
+        stat: await stat(join(CLEANUP_JOBS_DIR, entry)),
+      })),
+    );
+
+    withStats.sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs);
+    const latest = await readCleanupJob(withStats[0].file);
+    return latest ? toDeferredCleanupStatus(latest) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function collectDeferredClawClawPaths(request: CleanupDataRequest): Promise<string[]> {
+  const paths = new Set<string>();
+  const dataDir = getDataDir();
+  const logsDir = getLogsDir();
+
+  if (request.removeClawClawData) {
+    await mkdir(dataDir, { recursive: true });
+    try {
+      const entries = await readdir(dataDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!request.removeLogs && entry.name === 'logs') {
+          continue;
+        }
+        paths.add(join(dataDir, entry.name));
+      }
+    } catch {
+      // ignore enumeration failure; helper will surface missing paths if needed
+    }
+  } else if (request.removeLogs) {
+    paths.add(logsDir);
+  }
+
+  return [...paths];
+}
+
+async function queueDeferredWindowsCleanup(paths: string[]): Promise<DeferredCleanupStatus> {
+  await ensureCleanupJobsDir();
+  const jobId = `cleanup-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const jobFile = join(CLEANUP_JOBS_DIR, `${jobId}.json`);
+  const now = new Date().toISOString();
+  const payload: DeferredCleanupJobPayload = {
+    jobId,
+    status: 'queued',
+    createdAt: now,
+    updatedAt: now,
+    pidToWait: process.pid,
+    paths,
+    removed: [],
+    failed: [],
+  };
+
+  await writeCleanupJob(jobFile, payload);
+
+  const helperScript = getCleanupHelperScriptPath();
+  const child = spawn(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      helperScript,
+      '-JobFile',
+      jobFile,
+    ],
+    {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    },
+  );
+  child.unref();
+
+  return toDeferredCleanupStatus(payload);
 }
 
 async function runOpenClawCli(args: string[]): Promise<{
@@ -214,6 +361,10 @@ async function performCleanup(
     failed: [],
   };
 
+  let deferredPaths: string[] = [];
+  const shouldQueueDeferredCleanup = process.platform === 'win32'
+    && (request.removeClawClawData || request.removeLogs);
+
   const needsGatewayStop = Boolean(
     request.removeClawClawData ||
     request.removeLogs ||
@@ -257,7 +408,12 @@ async function performCleanup(
     }
   }
 
-  if (request.removeClawClawData) {
+  if (shouldQueueDeferredCleanup) {
+    deferredPaths = await collectDeferredClawClawPaths(request);
+    if (deferredPaths.length === 0) {
+      result.missing.push(request.removeClawClawData ? getDataDir() : getLogsDir());
+    }
+  } else if (request.removeClawClawData) {
     try {
       await resetSettings();
     } catch (error) {
@@ -288,6 +444,17 @@ async function performCleanup(
     }
     for (const workspaceDir of workspaceDirs) {
       await removePath(workspaceDir, result);
+    }
+  }
+
+  if (shouldQueueDeferredCleanup && deferredPaths.length > 0) {
+    try {
+      result.deferred = await queueDeferredWindowsCleanup(deferredPaths);
+    } catch (error) {
+      result.failed.push({
+        path: 'deferred-cleanup',
+        error: `Failed to queue deferred cleanup: ${String(error)}`,
+      });
     }
   }
 
@@ -481,6 +648,19 @@ export async function handleSettingsRoutes(
 
       const cleanup = await performCleanup(body, ctx);
       sendJson(res, 200, cleanup);
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/settings/cleanup-status' && req.method === 'GET') {
+    try {
+      const status = await getLatestDeferredCleanupStatus();
+      sendJson(res, 200, {
+        success: true,
+        status,
+      });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

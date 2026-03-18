@@ -220,7 +220,9 @@ ClawClaw 内置了代理设置，适用于需要通过本地代理客户端访�
 
 ### 配置备份与数据清理
 
-打开 **设置 → 数据与卸载**，可以在清理数据或卸载前先导出当前配置的 JSON 备份。同一处也能先停止 Gateway，再按白名单清理受管的 ClawClaw / OpenClaw 本地数据，并在真正从系统卸载器移除应用本体之前完成“完全卸载准备”。
+打开 **设置 → 数据与卸载**，可以在清理数据或卸载前先导出当前配置的 JSON 备份。同一处也能先停止 Gateway，再按白名单清理受管的 ClawClaw / OpenClaw 本地数据，并在真正从系统卸载器移除应用本体之前完成“完全卸载准备”。在 Windows 上，ClawClaw 自身的缓存、存储和日志会排队到应用退出后继续清理，避免被 Chromium 文件锁占用而删除失败。
+
+打开 **设置 → 更新**，可以控制自动检查 / 自动下载，并在打包版应用里手动触发更新检查。ClawClaw 当前只跟随稳定版发布源。
 
 ---
 
@@ -361,6 +363,7 @@ pnpm package:mac          # 为 macOS 打包
 pnpm package:win          # 在 Windows 主机 / 虚拟机中为 Windows 打包
 pnpm package:win:cross    # 在 macOS/Linux 上交叉打包 Windows NSIS
 pnpm package:linux        # 为 Linux 打包
+pnpm run upload:update    # 上传 release/latest.yml 及其引用的 Windows 更新文件
 ```
 
 ### 技术栈

@@ -23,7 +23,7 @@ import {
 } from '../utils/openclaw-cli';
 import { isQuitting, setQuitting } from './app-state';
 import { applyProxySettings } from './proxy';
-import { getSetting } from '../utils/store';
+import { getAllSettings, getSetting } from '../utils/store';
 import { ensureBuiltinSkillsInstalled } from '../utils/skill-config';
 import { startHostApiServer } from '../api/server';
 import { HostEventBus } from '../api/event-bus';
@@ -248,11 +248,18 @@ async function initialize(): Promise<void> {
     mainWindow,
   });
 
+  const currentSettings = await getAllSettings();
+  await appUpdater.initializeFromSettings(currentSettings);
+
   // Register update handlers
   registerUpdateHandlers(appUpdater, mainWindow);
 
-  // Note: Auto-check for updates is driven by the renderer (update store init)
-  // so it respects the user's "Auto-check for updates" setting.
+  const { autoCheckUpdate } = currentSettings;
+  if (autoCheckUpdate && appUpdater.isSupported()) {
+    void appUpdater.checkForUpdates().catch((error) => {
+      logger.warn('Startup auto-update check failed:', error);
+    });
+  }
 
   // Minimize to tray on close instead of quitting (macOS & Windows)
   mainWindow.on('close', (event) => {

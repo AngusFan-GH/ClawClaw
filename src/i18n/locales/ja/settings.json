@@ -236,10 +236,16 @@
   "updates": {
     "title": "アップデート",
     "description": "ClawClaw を最新に保つ",
+    "channelFixedTitle": "更新チャネル",
+    "channelFixedDesc": "現在は安定版のみ提供しています。アプリは常に安定版フィードを確認します。",
+    "channel": "更新チャネル",
+    "channelDesc": "安定版、ベータ版、開発版のどれを受け取るか選択します。",
     "autoCheck": "自動更新チェック",
     "autoCheckDesc": "起動時に更新を確認",
     "autoDownload": "自動アップデート",
     "autoDownloadDesc": "更新を自動的にダウンロードしてインストール",
+    "unsupported": "現在の環境では自動更新を利用できません。パッケージ版をインストールしてください。",
+    "actionsDisabled": "利用不可",
     "status": {
       "checking": "更新を確認中...",
       "downloading": "更新をダウンロード中...",
@@ -249,6 +255,20 @@
       "failed": "更新の確認に失敗しました",
       "latest": "最新バージョンです",
       "check": "更新を確認して最新の機能を入手"
+    },
+    "channels": {
+      "stable": {
+        "label": "安定版",
+        "description": "正式リリースのみ受け取ります。通常利用に推奨されます。"
+      },
+      "beta": {
+        "label": "ベータ版",
+        "description": "今後の機能を早めに受け取れますが、追加のリスクがあります。"
+      },
+      "dev": {
+        "label": "開発版",
+        "description": "最新の実験的ビルドを受け取ります。内部検証向けです。"
+      }
     },
     "action": {
       "checking": "確認中...",
@@ -348,6 +368,7 @@
     "cleanup": {
       "title": "データをクリーンアップ",
       "description": "実行前に Gateway を停止し、管理対象ディレクトリだけを削除します。",
+      "runtimeNotice": "Windows では、ClawClaw 自身の設定・キャッシュ・ログはアプリ終了後に続けて削除し、ファイルロックによる失敗を避けます。",
       "selected": "件のクリーンアップ範囲を選択中",
       "removeClawClawData": "ClawClaw の設定とキャッシュを削除",
       "removeClawClawDataDesc": "ローカル設定、ウィンドウ状態、キャッシュ済みアプリデータを消去します。",
@@ -366,6 +387,12 @@
       "success": "クリーンアップが完了しました",
       "partial": "クリーンアップは完了しましたが、一部削除できなかった項目があります",
       "failed": "クリーンアップに失敗しました",
+      "quitRequired": "終了後クリーンアップを登録しました。残りの削除を完了するため、ClawClaw はまもなく終了します。",
+      "deferredTitle": "終了後クリーンアップ",
+      "deferredQueued": "待機中",
+      "deferredRunning": "実行中",
+      "deferredCompleted": "完了",
+      "deferredFailed": "失敗",
       "resultRemoved": "削除済み",
       "resultMissing": "存在しない",
       "resultSkipped": "スキップ",

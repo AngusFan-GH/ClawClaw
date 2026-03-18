@@ -220,7 +220,9 @@ Notes:
 
 ### Settings Backup and Cleanup
 
-Open **Settings → Data & Uninstall** to export a JSON backup of your current configuration before removing data or uninstalling the app. The same section can stop the Gateway, clean managed ClawClaw/OpenClaw data from a fixed allowlist, and prepare a full uninstall flow before you remove the app itself from the OS uninstaller.
+Open **Settings → Data & Uninstall** to export a JSON backup of your current configuration before removing data or uninstalling the app. The same section can stop the Gateway, clean managed ClawClaw/OpenClaw data from a fixed allowlist, and prepare a full uninstall flow before you remove the app itself from the OS uninstaller. On Windows, ClawClaw's own cache, storage, and logs are queued for post-exit cleanup so locked Chromium files can be removed safely after the app quits.
+
+Open **Settings → Updates** to control auto-check / auto-download behavior and manually trigger update checks from the packaged app. ClawClaw currently follows the stable release feed only.
 
 ---
 
@@ -361,6 +363,7 @@ pnpm package:mac          # Package for macOS
 pnpm package:win          # Package for Windows on a Windows host / VM
 pnpm package:win:cross    # Cross-build Windows NSIS from macOS/Linux
 pnpm package:linux        # Package for Linux
+pnpm run upload:update    # Upload release/latest.yml and referenced Windows update artifacts
 ```
 
 ### Tech Stack

@@ -1,6 +1,6 @@
 {
   "name": "clawclaw",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "pnpm": {
     "onlyBuiltDependencies": [
       "@discordjs/opus",
@@ -42,6 +42,7 @@
     "package:win:cross": "vite build && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && node scripts/clean-builder-output.mjs && node scripts/package-win.mjs",
     "package:win:nsis": "vite build && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && node scripts/clean-builder-output.mjs && node scripts/package-win.mjs",
     "package:win:portable": "vite build && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && node scripts/clean-builder-output.mjs && electron-builder --win portable",
+    "upload:update": "node scripts/upload-update.mjs",
     "package:linux": "vite build && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && node scripts/clean-builder-output.mjs && electron-builder --linux",
     "release": "pnpm run uv:download && vite build && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && node scripts/clean-builder-output.mjs && electron-builder --publish always",
     "version:patch": "pnpm version patch",

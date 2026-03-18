@@ -52,15 +52,12 @@ toolsets:
   winCodeSign: '1.1.0'
 
 # Auto-update configuration
-# Primary: Alibaba Cloud OSS (fast for Chinese users, used for auto-update)
-# Fallback: GitHub Releases (backup, used when OSS is unavailable)
+# Published metadata points at the stable generic feed. Runtime channel
+# switching is handled in electron/main/updater.ts.
 publish:
   - provider: generic
-    url: https://oss.intelli-spectrum.com/latest
+    url: https://clawclaw.xzinfra.com/updates/stable
     useMultipleRangeRequest: false
-  - provider: github
-    owner: Xzinfra
-    repo: ClawClaw
 
 # macOS Configuration
 mac:
