@@ -6,7 +6,7 @@ import { create } from 'zustand';
 import { hostApiFetch } from '@/lib/host-api';
 import { AppError, normalizeAppError } from '@/lib/error-model';
 import { useGatewayStore } from './gateway';
-import type { Skill, MarketplaceSkill } from '../types/skill';
+import type { Skill, MarketplaceSkill, SkillSourceDir, SkillSourceStat } from '../types/skill';
 
 function hasLikelyEmoji(value: string): boolean {
   return Array.from(value).some((char) => {
@@ -52,6 +52,9 @@ function mapErrorCodeToSkillErrorKey(
 
 interface SkillsState {
   skills: Skill[];
+  currentAgentId: string | null;
+  sourceStats: SkillSourceStat[];
+  sourceDirs: SkillSourceDir[];
   searchResults: MarketplaceSkill[];
   loading: boolean;
   searching: boolean;
@@ -60,7 +63,7 @@ interface SkillsState {
   error: string | null;
 
   // Actions
-  fetchSkills: () => Promise<void>;
+  fetchSkills: (agentId?: string) => Promise<void>;
   searchSkills: (query: string) => Promise<void>;
   installSkill: (slug: string, version?: string) => Promise<void>;
   uninstallSkill: (slug: string) => Promise<void>;
@@ -72,6 +75,9 @@ interface SkillsState {
 
 export const useSkillsStore = create<SkillsState>((set, get) => ({
   skills: [],
+  currentAgentId: null,
+  sourceStats: [],
+  sourceDirs: [],
   searchResults: [],
   loading: false,
   searching: false,
@@ -79,19 +85,35 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
   installing: {},
   error: null,
 
-  fetchSkills: async () => {
+  fetchSkills: async (agentId) => {
     // Only show loading state if we have no skills yet (initial load)
     if (get().skills.length === 0) {
       set({ loading: true, error: null });
     }
     try {
-      const result = await hostApiFetch<{ success: boolean; results?: Skill[]; error?: string }>(
-        '/api/skills/list'
+      const resolvedAgentId = agentId ?? get().currentAgentId ?? undefined;
+      const requestPath = resolvedAgentId
+        ? `/api/skills/list?agentId=${encodeURIComponent(resolvedAgentId)}`
+        : '/api/skills/list';
+      const result = await hostApiFetch<{
+        success: boolean;
+        results?: Skill[];
+        sourceStats?: SkillSourceStat[];
+        sourceDirs?: SkillSourceDir[];
+        error?: string;
+      }>(
+        requestPath
       );
       if (!result.success) {
         throw new Error(result.error || 'Failed to load skills');
       }
-      set({ skills: result.results || [], loading: false });
+      set({
+        skills: result.results || [],
+        currentAgentId: resolvedAgentId ?? null,
+        sourceStats: result.sourceStats || [],
+        sourceDirs: result.sourceDirs || [],
+        loading: false,
+      });
     } catch (error) {
       console.error('Failed to fetch skills:', error);
       const appError = normalizeAppError(error, { module: 'skills', operation: 'fetch' });

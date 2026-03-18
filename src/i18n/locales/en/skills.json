@@ -2,7 +2,21 @@
   "title": "Skills",
   "subtitle": "Browse and manage AI capabilities",
   "refresh": "Refresh",
-  "openFolder": "Open Skills Folder",
+  "openFolder": "Open Skill Sources",
+  "agentLabel": "Agent",
+  "folderMenu": {
+    "title": "Skill source directories",
+    "workspace": "Workspace skills",
+    "managed": "Managed skills",
+    "personal_agents": "Personal .agents/skills",
+    "project_agents": "Project .agents/skills",
+    "bundled": "Bundled skills",
+    "extra": "Extra / plugin skills",
+    "hint": "This page merges skills from multiple sources, so open the source directory you want to inspect."
+  },
+  "sourceSummary": {
+    "title": "Current view aggregates"
+  },
   "stats": {
     "all": "All",
     "enabled": "Enabled",
@@ -49,6 +63,9 @@
     "version": "Version",
     "author": "Author",
     "source": "Source",
+    "location": "Location",
+    "skillDirectory": "Skill directory",
+    "openSkillDirectory": "Click to open skill directory",
     "coreSystem": "Core System",
     "bundled": "Bundled",
     "preinstalled": "Pre-installed",

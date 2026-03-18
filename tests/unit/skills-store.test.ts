@@ -27,6 +27,8 @@ describe('skills store identity merge', () => {
           runtimeStatus: 'loaded',
         },
       ],
+      sourceStats: [{ key: 'managed', label: 'Managed skills', count: 1 }],
+      sourceDirs: [{ key: 'managed', label: 'Managed skills', path: '/tmp/skills', count: 1 }],
     });
 
     const { useSkillsStore } = await import('@/stores/skills');
@@ -42,5 +44,40 @@ describe('skills store identity merge', () => {
       loadedInGateway: true,
       installedOnDisk: true,
     });
+    expect(useSkillsStore.getState().sourceStats).toEqual([
+      { key: 'managed', label: 'Managed skills', count: 1 },
+    ]);
+  });
+
+  it('fetches skills for a specific agent and remembers that scope for refreshes', async () => {
+    hostApiFetchMock
+      .mockResolvedValueOnce({
+        success: true,
+        results: [],
+      })
+      .mockResolvedValueOnce({
+        success: true,
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        results: [],
+      });
+
+    const { useSkillsStore } = await import('@/stores/skills');
+
+    await useSkillsStore.getState().fetchSkills('agent-sales');
+    await useSkillsStore.getState().installSkill('offline-reader');
+
+    expect(hostApiFetchMock).toHaveBeenNthCalledWith(1, '/api/skills/list?agentId=agent-sales');
+    expect(hostApiFetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/clawhub/install',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ slug: 'offline-reader', version: undefined }),
+      }),
+    );
+    expect(hostApiFetchMock).toHaveBeenNthCalledWith(3, '/api/skills/list?agentId=agent-sales');
+    expect(useSkillsStore.getState().currentAgentId).toBe('agent-sales');
   });
 });

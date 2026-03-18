@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { getAllSkillConfigs, updateSkillConfig } from '../../utils/skill-config';
 import { getManagedInstalledSkillSlugs, getSkillMetadata } from '../../utils/skill-metadata';
-import { buildUnifiedSkillList } from '../../utils/skill-list';
+import { buildUnifiedSkillList, summarizeGatewaySkillSources } from '../../utils/skill-list';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -54,6 +54,7 @@ export async function handleSkillRoutes(
 
   if (url.pathname === '/api/skills/list' && req.method === 'GET') {
     try {
+      const agentId = url.searchParams.get('agentId')?.trim() || undefined;
       const gatewayStatus = ctx.gatewayManager.getStatus();
       const configsPromise = getAllSkillConfigs();
       const clawhubPromise = ctx.clawHubService.listInstalled().catch(() => []);
@@ -61,21 +62,30 @@ export async function handleSkillRoutes(
       const gatewaySkillsPromise =
         gatewayStatus.state === 'running'
           ? ctx.gatewayManager
-              .rpc<{ skills?: import('../../utils/skill-list').GatewaySkillStatus[] }>(
+              .rpc<{
+                skills?: import('../../utils/skill-list').GatewaySkillStatus[];
+                workspaceDir?: string;
+                managedSkillsDir?: string;
+              }>(
                 'skills.status',
-                undefined,
+                agentId ? { agentId } : {},
                 3000,
               )
-              .then((result) => result.skills || null)
-              .catch(() => null)
-          : Promise.resolve(null);
+              .then((result) => ({
+                skills: result.skills || null,
+                workspaceDir: result.workspaceDir || null,
+                managedSkillsDir: result.managedSkillsDir || null,
+              }))
+              .catch(() => ({ skills: null, workspaceDir: null, managedSkillsDir: null }))
+          : Promise.resolve({ skills: null, workspaceDir: null, managedSkillsDir: null });
 
-      const [configs, clawhubSkills, localInstalledSlugs, gatewaySkills] = await Promise.all([
+      const [configs, clawhubSkills, localInstalledSlugs, gatewayStatusReport] = await Promise.all([
         configsPromise,
         clawhubPromise,
         localInstalledPromise,
         gatewaySkillsPromise,
       ]);
+      const gatewaySkills = gatewayStatusReport.skills;
 
       const candidateSlugs = new Set<string>();
       for (const slug of localInstalledSlugs) candidateSlugs.add(slug);
@@ -95,8 +105,18 @@ export async function handleSkillRoutes(
         metadataMap,
         gatewayRunning: gatewayStatus.state === 'running',
       });
+      const sourceSummary = summarizeGatewaySkillSources({
+        gatewaySkills,
+        workspaceDir: gatewayStatusReport.workspaceDir,
+        managedSkillsDir: gatewayStatusReport.managedSkillsDir,
+      });
 
-      sendJson(res, 200, { success: true, results: skills });
+      sendJson(res, 200, {
+        success: true,
+        results: skills,
+        sourceStats: sourceSummary.stats,
+        sourceDirs: sourceSummary.dirs,
+      });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

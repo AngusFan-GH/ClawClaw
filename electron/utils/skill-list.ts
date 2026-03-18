@@ -1,4 +1,6 @@
-import type { Skill } from '../../src/types/skill';
+import { homedir } from 'node:os';
+import { dirname, resolve } from 'node:path';
+import type { Skill, SkillSourceDir, SkillSourceStat } from '../../src/types/skill';
 import type { SkillMetadataInfo } from './skill-metadata';
 
 export type SkillMetadataMap = Record<string, SkillMetadataInfo>;
@@ -16,6 +18,9 @@ export type GatewaySkillStatus = {
   config?: Record<string, unknown>;
   bundled?: boolean;
   always?: boolean;
+  source?: string;
+  filePath?: string;
+  baseDir?: string;
 };
 
 export type ClawHubListResult = {
@@ -131,7 +136,127 @@ function mergeSkill(target: Skill, patch: Partial<Skill>): Skill {
     ...patch,
     config: patch.config ? { ...(target.config || {}), ...patch.config } : target.config,
     requirements: patch.requirements || target.requirements,
+    sourceKinds: patch.sourceKinds
+      ? [...new Set([...(target.sourceKinds || []), ...patch.sourceKinds])]
+      : target.sourceKinds,
   };
+}
+
+export function normalizeSourceKey(source?: string): string {
+  switch ((source || '').trim()) {
+    case 'openclaw-workspace':
+      return 'workspace';
+    case 'openclaw-managed':
+      return 'managed';
+    case 'agents-skills-personal':
+      return 'personal_agents';
+    case 'agents-skills-project':
+      return 'project_agents';
+    case 'openclaw-bundled':
+      return 'bundled';
+    default:
+      return 'extra';
+  }
+}
+
+export function getSourceLabel(key: string): string {
+  switch (key) {
+    case 'workspace':
+      return 'Workspace skills';
+    case 'managed':
+      return 'Managed skills';
+    case 'personal_agents':
+      return 'Personal .agents/skills';
+    case 'project_agents':
+      return 'Project .agents/skills';
+    case 'bundled':
+      return 'Bundled skills';
+    default:
+      return 'Extra / plugin skills';
+  }
+}
+
+export function summarizeGatewaySkillSources(input: {
+  gatewaySkills?: GatewaySkillStatus[] | null;
+  workspaceDir?: string | null;
+  managedSkillsDir?: string | null;
+}): {
+  stats: SkillSourceStat[];
+  dirs: SkillSourceDir[];
+} {
+  const statCounts = new Map<string, number>();
+  const dirMap = new Map<string, SkillSourceDir>();
+
+  for (const skill of input.gatewaySkills || []) {
+    const key = normalizeSourceKey(skill.source);
+    statCounts.set(key, (statCounts.get(key) || 0) + 1);
+  }
+
+  const workspaceDir = input.workspaceDir?.trim();
+  const managedSkillsDir = input.managedSkillsDir?.trim();
+  if (workspaceDir) {
+    dirMap.set('workspace', {
+      key: 'workspace',
+      label: getSourceLabel('workspace'),
+      path: resolve(workspaceDir, 'skills'),
+      count: statCounts.get('workspace') || 0,
+    });
+    dirMap.set('project_agents', {
+      key: 'project_agents',
+      label: getSourceLabel('project_agents'),
+      path: resolve(workspaceDir, '.agents', 'skills'),
+      count: statCounts.get('project_agents') || 0,
+    });
+  }
+  if (managedSkillsDir) {
+    dirMap.set('managed', {
+      key: 'managed',
+      label: getSourceLabel('managed'),
+      path: managedSkillsDir,
+      count: statCounts.get('managed') || 0,
+    });
+  }
+  dirMap.set('personal_agents', {
+    key: 'personal_agents',
+    label: getSourceLabel('personal_agents'),
+    path: resolve(homedir(), '.agents', 'skills'),
+    count: statCounts.get('personal_agents') || 0,
+  });
+
+  const extraRoots = new Map<string, SkillSourceDir>();
+  for (const skill of input.gatewaySkills || []) {
+    const key = normalizeSourceKey(skill.source);
+    if (key !== 'bundled' && key !== 'extra') continue;
+    const baseDir = skill.baseDir?.trim();
+    if (!baseDir) continue;
+    const rootPath = dirname(baseDir);
+    const rootKey = `${key}:${rootPath}`;
+    const existing = extraRoots.get(rootKey);
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+    extraRoots.set(rootKey, {
+      key,
+      label: getSourceLabel(key),
+      path: rootPath,
+      count: 1,
+    });
+  }
+  for (const [key, dir] of extraRoots.entries()) {
+    dirMap.set(key, dir);
+  }
+
+  const preferredOrder = ['workspace', 'managed', 'personal_agents', 'project_agents', 'bundled', 'extra'];
+  const stats = [...statCounts.entries()]
+    .map(([key, count]) => ({ key, count, label: getSourceLabel(key) }))
+    .sort((left, right) => preferredOrder.indexOf(left.key) - preferredOrder.indexOf(right.key));
+  const dirs = [...dirMap.values()].sort((left, right) => {
+    const orderDiff = preferredOrder.indexOf(left.key) - preferredOrder.indexOf(right.key);
+    return orderDiff !== 0 ? orderDiff : left.path.localeCompare(right.path);
+  });
+
+  return { stats, dirs };
 }
 
 export function buildUnifiedSkillList(input: {
@@ -232,6 +357,10 @@ export function buildUnifiedSkillList(input: {
       config: { ...(gatewaySkill.config || {}), ...directConfig },
       isCore: Boolean(gatewaySkill.bundled && gatewaySkill.always),
       isBundled: Boolean(gatewaySkill.bundled && !identity.metadata?.isProjectBundled),
+      sourceKinds: [normalizeSourceKey(gatewaySkill.source)],
+      sourceKey: normalizeSourceKey(gatewaySkill.source),
+      sourcePath: gatewaySkill.baseDir,
+      sourceFilePath: gatewaySkill.filePath,
     }));
   }
 

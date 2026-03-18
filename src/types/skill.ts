@@ -35,6 +35,23 @@ export interface Skill {
   isBundled?: boolean;
   isPreinstalled?: boolean;
   dependencies?: string[];
+  sourceKinds?: string[];
+  sourceKey?: string;
+  sourcePath?: string;
+  sourceFilePath?: string;
+}
+
+export interface SkillSourceStat {
+  key: string;
+  label: string;
+  count: number;
+}
+
+export interface SkillSourceDir {
+  key: string;
+  label: string;
+  path: string;
+  count: number;
 }
 
 /**
