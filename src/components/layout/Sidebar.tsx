@@ -135,6 +135,8 @@ export function Sidebar() {
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const gatewayStatus = useGatewayStore((s) => s.status);
+  const isGatewayRunning = gatewayStatus.state === 'running';
+  const { t } = useTranslation(['common', 'chat']);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -149,7 +151,6 @@ export function Sidebar() {
     return key;
   };
 
-  const { t } = useTranslation(['common', 'chat']);
   const [sessionToDelete, setSessionToDelete] = useState<{ key: string; label: string } | null>(
     null
   );
@@ -370,7 +371,9 @@ export function Sidebar() {
           {sessionsLoading || !sessionsHydrated ? (
             <div className="px-2.5 pt-2">
               <div className="rounded-[14px] border border-black/6 bg-white/55 px-3 py-3 text-[13px] text-muted-foreground shadow-[0_6px_16px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
-                {t('chat:history.loading', '正在恢复最近对话…')}
+                {isGatewayRunning
+                  ? t('chat:history.loading', '正在恢复最近对话…')
+                  : t('chat:history.waitingForGateway', '网关未连接，最近对话暂不可用')}
               </div>
             </div>
           ) : (

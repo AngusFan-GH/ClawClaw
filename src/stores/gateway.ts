@@ -34,6 +34,20 @@ interface GatewayState {
   clearError: () => void;
 }
 
+function extractExpectedRestartDelayMs(
+  notification: { method?: string; params?: Record<string, unknown> } | undefined,
+): number | null {
+  if (!notification || notification.method !== 'shutdown') {
+    return null;
+  }
+  const params = notification.params;
+  const restartExpectedMs = params?.restartExpectedMs;
+  if (typeof restartExpectedMs !== 'number' || !Number.isFinite(restartExpectedMs) || restartExpectedMs < 0) {
+    return null;
+  }
+  return Math.max(0, Math.floor(restartExpectedMs));
+}
+
 function handleGatewayNotification(notification: { method?: string; params?: Record<string, unknown> } | undefined): void {
   const payload = notification;
   if (!payload || payload.method !== 'agent' || !payload.params || typeof payload.params !== 'object') {
@@ -197,7 +211,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
 
               if (
                 (payload.state === 'starting' || payload.state === 'reconnecting') &&
-                state.lifecycle.state === 'scheduled'
+                (state.lifecycle.state === 'scheduled' || state.lifecycle.state === 'applying')
               ) {
                 return {
                   status: payload,
@@ -234,6 +248,22 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
           unsubscribers.push(subscribeHostEvent<{ method?: string; params?: Record<string, unknown> }>(
             'gateway:notification',
             (payload) => {
+              const expectedRestartDelayMs = extractExpectedRestartDelayMs(payload);
+              if (expectedRestartDelayMs !== null) {
+                if (lifecycleClearTimer) {
+                  clearTimeout(lifecycleClearTimer);
+                  lifecycleClearTimer = null;
+                }
+                set((state) => ({
+                  lifecycle: {
+                    ...state.lifecycle,
+                    action: 'restart',
+                    state: 'applying',
+                    delayMs: expectedRestartDelayMs,
+                    at: Date.now(),
+                  },
+                }));
+              }
               handleGatewayNotification(payload);
             },
           ));

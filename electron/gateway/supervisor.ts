@@ -22,7 +22,10 @@ export function warmupManagedPythonReadiness(): void {
   });
 }
 
-export async function terminateOwnedGatewayProcess(child: ChildProcess): Promise<void> {
+export async function terminateOwnedGatewayProcess(
+  child: ChildProcess,
+  gracefulTimeoutMs = 2000,
+): Promise<void> {
   let exited = false;
 
   await new Promise<void>((resolve) => {
@@ -51,7 +54,7 @@ export async function terminateOwnedGatewayProcess(child: ChildProcess): Promise
         }
       }
       resolve();
-    }, 5000);
+    }, gracefulTimeoutMs);
 
     child.once('exit', () => {
       clearTimeout(timeout);
@@ -107,7 +110,7 @@ export async function unloadLaunchctlGatewayService(): Promise<void> {
   }
 }
 
-export async function waitForPortFree(port: number, timeoutMs = 30000): Promise<void> {
+export async function waitForPortFree(port: number, timeoutMs = 8000): Promise<void> {
   const net = await import('net');
   const start = Date.now();
   const pollInterval = 500;

@@ -1,6 +1,6 @@
 import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { HostApiContext } from '../context';
 import { getSetting, setSetting } from '../../utils/store';
@@ -21,9 +21,11 @@ import {
   normalizeSecurityRules,
 } from '../../shared/security-policy';
 import { normalizeReminders, type ReminderItem } from '../../shared/reminders';
+import {
+  readOpenClawConfigRecord,
+  updateOpenClawConfigRecord,
+} from '../../utils/openclaw-config';
 
-const OPENCLAW_CONFIG_DIR = getOpenClawConfigDir();
-const OPENCLAW_CONFIG_PATH = join(OPENCLAW_CONFIG_DIR, 'openclaw.json');
 const SECURITY_POLICY_FILE = 'SECURITY_POLICY.md';
 const AGENTS_FILE = 'AGENTS.md';
 const POLICY_BEGIN = '<!-- clawclaw-security:begin -->';
@@ -79,16 +81,19 @@ function ensureObject(parent: Record<string, unknown>, key: string): Record<stri
 
 async function readOpenclawConfig(): Promise<Record<string, unknown>> {
   try {
-    const raw = await readFile(OPENCLAW_CONFIG_PATH, 'utf8');
-    return JSON.parse(raw) as Record<string, unknown>;
+    return await readOpenClawConfigRecord();
   } catch {
     return {};
   }
 }
 
 async function writeOpenclawConfig(config: Record<string, unknown>): Promise<void> {
-  await mkdir(dirname(OPENCLAW_CONFIG_PATH), { recursive: true });
-  await writeFile(OPENCLAW_CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  await updateOpenClawConfigRecord((current) => {
+    Object.keys(current).forEach((key) => {
+      delete current[key];
+    });
+    Object.assign(current, config);
+  });
 }
 
 async function collectSecurityWorkspaces(config: Record<string, unknown>): Promise<string[]> {

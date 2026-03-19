@@ -669,6 +669,12 @@ export function Chat() {
           : eligibleAccounts.length > 0
             ? 'syncing'
             : 'unconfigured';
+  const loadingDescription = isGatewayRunning
+    ? t('history.loading', '正在恢复最近对话…')
+    : t('history.waitingForGateway', '网关未连接，最近对话暂不可用');
+  const loadingTitle = isGatewayRunning
+    ? t('loading.title', '正在加载对话')
+    : t('toolbar.gatewayStopped', '网关未连接');
   return (
     <div
       className={cn(
@@ -689,8 +695,8 @@ export function Chat() {
           {(loading && !sending) || isRestoringSessions ? (
             <PageLoader
               compact
-              title={t('loading.title', '正在加载对话')}
-              description={t('history.loading', '正在恢复最近对话…')}
+              title={loadingTitle}
+              description={loadingDescription}
               className="h-[60vh]"
             />
           ) : shouldShowWelcome ? (

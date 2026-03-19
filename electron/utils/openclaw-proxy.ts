@@ -1,4 +1,4 @@
-import { readOpenClawConfig, writeOpenClawConfig } from './channel-config';
+import { updateOpenClawConfig } from './channel-config';
 import { resolveProxySettingsAsync, type ProxySettings } from './proxy';
 import { logger } from './logger';
 
@@ -7,39 +7,38 @@ import { logger } from './logger';
  * upstream runtime expects an explicit per-channel proxy knob.
  */
 export async function syncProxyConfigToOpenClaw(settings: ProxySettings): Promise<void> {
-  const config = await readOpenClawConfig();
-  const telegramConfig = config.channels?.telegram;
-
-  if (!telegramConfig) {
-    return;
-  }
-
   const resolved = await resolveProxySettingsAsync(settings);
   const proxyMode = settings.proxyMode || (settings.proxyEnabled ? 'custom' : 'system');
   const nextProxy =
     proxyMode === 'direct'
       ? ''
       : resolved.allProxy || resolved.httpsProxy || resolved.httpProxy;
-  const currentProxy = typeof telegramConfig.proxy === 'string' ? telegramConfig.proxy : '';
+  await updateOpenClawConfig((config) => {
+    const telegramConfig = config.channels?.telegram;
+    if (!telegramConfig) {
+      return false;
+    }
 
-  if (!nextProxy && !currentProxy) {
-    return;
-  }
+    const currentProxy = typeof telegramConfig.proxy === 'string' ? telegramConfig.proxy : '';
+    if (!nextProxy && !currentProxy) {
+      return false;
+    }
 
-  if (!config.channels) {
-    config.channels = {};
-  }
+    if (!config.channels) {
+      config.channels = {};
+    }
 
-  config.channels.telegram = {
-    ...telegramConfig,
-  };
+    config.channels.telegram = {
+      ...telegramConfig,
+    };
 
-  if (nextProxy) {
-    config.channels.telegram.proxy = nextProxy;
-  } else {
-    delete config.channels.telegram.proxy;
-  }
+    if (nextProxy) {
+      config.channels.telegram.proxy = nextProxy;
+    } else {
+      delete config.channels.telegram.proxy;
+    }
 
-  await writeOpenClawConfig(config);
+    return true;
+  });
   logger.info(`Synced Telegram proxy to OpenClaw config (${nextProxy || 'disabled'})`);
 }

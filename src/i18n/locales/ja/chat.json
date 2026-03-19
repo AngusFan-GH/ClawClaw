@@ -76,7 +76,8 @@
   },
   "history": {
     "title": "最近の会話",
-    "loading": "最近の会話を復元しています…"
+    "loading": "最近の会話を復元しています…",
+    "waitingForGateway": "ゲートウェイ未接続のため、最近の会話は一時的に利用できません"
   },
   "historyBuckets": {
     "today": "今日",

@@ -29,7 +29,7 @@ const FEED_CONFIGS: Record<UpdateChannel, FeedConfig> = Object.fromEntries(
   ]),
 ) as Record<UpdateChannel, FeedConfig>;
 
-function detectVersionChannel(version: string): UpdateChannel {
+function detectVersionChannel(_version: string): UpdateChannel {
   return 'stable';
 }
 

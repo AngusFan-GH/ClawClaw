@@ -54,6 +54,10 @@ export interface GatewayStatus {
   reconnectAttempts?: number;
 }
 
+export interface GatewayRestartOptions {
+  strategy?: 'auto' | 'stop-start';
+}
+
 /**
  * Gateway Manager Events
  */
@@ -93,6 +97,7 @@ export class GatewayManager extends EventEmitter {
   private readonly restartController = new GatewayRestartController();
   private reloadDebounceTimer: NodeJS.Timeout | null = null;
   private externalShutdownSupported: boolean | null = null;
+  private pendingExpectedReconnectDelayMs: number | null = null;
 
   constructor(config?: Partial<ReconnectConfig>) {
     super();
@@ -145,6 +150,61 @@ export class GatewayManager extends EventEmitter {
   private isUnsupportedShutdownError(error: unknown): boolean {
     const message = error instanceof Error ? error.message : String(error);
     return /unknown method:\s*shutdown/i.test(message);
+  }
+
+  private waitForRunningStateAfterDisconnect(timeoutMs: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let sawDisconnect = false;
+
+      const cleanup = () => {
+        clearTimeout(timeout);
+        this.off('status', onStatus);
+      };
+
+      const onStatus = (status: GatewayStatus) => {
+        if (
+          status.state === 'stopped' ||
+          status.state === 'starting' ||
+          status.state === 'reconnecting'
+        ) {
+          sawDisconnect = true;
+          return;
+        }
+
+        if (status.state === 'running' && sawDisconnect) {
+          cleanup();
+          resolve();
+          return;
+        }
+
+        if (status.state === 'error') {
+          cleanup();
+          reject(new Error(status.error || 'Gateway failed while waiting for restart'));
+        }
+      };
+
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error(`Timed out waiting for Gateway restart after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      this.on('status', onStatus);
+    });
+  }
+
+  private async restartOwnedGatewayInPlace(): Promise<void> {
+    const child = this.process;
+    if (!child?.pid) {
+      throw new Error('Cannot restart Gateway in-place without an owned process pid');
+    }
+
+    const expectedDelayMs = this.pendingExpectedReconnectDelayMs ?? 1500;
+    const waitTimeoutMs = Math.max(8000, expectedDelayMs + 8000);
+    const waitForReconnect = this.waitForRunningStateAfterDisconnect(waitTimeoutMs);
+
+    logger.info(`Requesting in-process Gateway restart via SIGUSR1 (pid=${child.pid})`);
+    process.kill(child.pid, 'SIGUSR1');
+    await waitForReconnect;
   }
 
   private enrichStartupError(error: unknown): Error {
@@ -231,6 +291,20 @@ export class GatewayManager extends EventEmitter {
     // Check if Python environment is ready (self-healing) asynchronously.
     // Fire-and-forget: only needs to run once, not on every retry.
     warmupManagedPythonReadiness();
+
+    if (this.process && this.ownsProcess && this.processExitCode === null) {
+      const lingeringProcess = this.process;
+      logger.info(
+        `Terminating lingering owned Gateway process before startup (pid=${lingeringProcess.pid ?? 'unknown'})`
+      );
+      await terminateOwnedGatewayProcess(lingeringProcess);
+      if (this.process === lingeringProcess) {
+        this.process = null;
+      }
+      this.ownsProcess = false;
+      this.processExitCode = null;
+      this.setStatus({ pid: undefined });
+    }
 
     try {
       await runGatewayStartupSequence({
@@ -375,7 +449,7 @@ export class GatewayManager extends EventEmitter {
   /**
    * Restart Gateway process
    */
-  async restart(): Promise<void> {
+  async restart(options?: GatewayRestartOptions): Promise<void> {
     if (
       this.restartController.isRestartDeferred({
         state: this.status.state,
@@ -397,6 +471,23 @@ export class GatewayManager extends EventEmitter {
 
     logger.debug('Gateway restart requested');
     this.restartInFlight = (async () => {
+      const strategy = options?.strategy ?? 'auto';
+      const canUseInPlaceRestart =
+        strategy === 'auto' &&
+        process.platform !== 'win32' &&
+        this.ownsProcess &&
+        this.process?.pid != null &&
+        this.status.state === 'running';
+
+      if (canUseInPlaceRestart) {
+        try {
+          await this.restartOwnedGatewayInPlace();
+          return;
+        } catch (error) {
+          logger.warn('In-process Gateway restart failed, falling back to stop/start:', error);
+        }
+      }
+
       await this.stop();
       await this.start();
     })();
@@ -720,6 +811,21 @@ export class GatewayManager extends EventEmitter {
 
     // Handle OpenClaw protocol event format: { type: "event", event: "...", payload: {...} }
     if (msg.type === 'event' && typeof msg.event === 'string') {
+      if (msg.event === 'shutdown' && typeof msg.payload === 'object' && msg.payload !== null) {
+        const payload = msg.payload as { restartExpectedMs?: unknown };
+        if (
+          typeof payload.restartExpectedMs === 'number' &&
+          Number.isFinite(payload.restartExpectedMs) &&
+          payload.restartExpectedMs >= 0
+        ) {
+          this.pendingExpectedReconnectDelayMs = Math.max(0, Math.floor(payload.restartExpectedMs));
+          logger.info(
+            `Gateway announced restart window (${this.pendingExpectedReconnectDelayMs}ms); preparing fast reconnect`
+          );
+        } else {
+          this.pendingExpectedReconnectDelayMs = null;
+        }
+      }
       dispatchProtocolEvent(this, msg.event, msg.payload);
       return;
     }
@@ -762,6 +868,44 @@ export class GatewayManager extends EventEmitter {
    * Schedule reconnection attempt with exponential backoff
    */
   private scheduleReconnect(): void {
+    if (this.pendingExpectedReconnectDelayMs !== null) {
+      const delay = this.pendingExpectedReconnectDelayMs;
+      this.pendingExpectedReconnectDelayMs = null;
+
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
+
+      logger.info(`Scheduling fast Gateway reconnect in ${delay}ms (server-announced restart)`);
+      this.setStatus({
+        state: 'reconnecting',
+        reconnectAttempts: this.reconnectAttempts,
+      });
+      const scheduledEpoch = this.lifecycleController.getCurrentEpoch();
+
+      this.reconnectTimer = setTimeout(async () => {
+        this.reconnectTimer = null;
+        const skipReason = getReconnectSkipReason({
+          scheduledEpoch,
+          currentEpoch: this.lifecycleController.getCurrentEpoch(),
+          shouldReconnect: this.shouldReconnect,
+        });
+        if (skipReason) {
+          logger.debug(`Skipping fast reconnect attempt: ${skipReason}`);
+          return;
+        }
+        try {
+          await this.start();
+          this.reconnectAttempts = 0;
+        } catch (error) {
+          logger.error('Fast Gateway reconnection attempt failed:', error);
+          this.scheduleReconnect();
+        }
+      }, delay);
+      return;
+    }
+
     const decision = getReconnectScheduleDecision({
       shouldReconnect: this.shouldReconnect,
       hasReconnectTimer: this.reconnectTimer !== null,

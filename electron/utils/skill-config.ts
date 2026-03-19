@@ -5,15 +5,17 @@
  *
  * All file I/O uses async fs/promises to avoid blocking the main thread.
  */
-import { readFile, writeFile, access, cp, mkdir, readdir } from 'fs/promises';
+import { access, cp, mkdir, readdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { constants } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { getOpenClawDir, getResourcesDir } from './paths';
 import { logger } from './logger';
-
-const OPENCLAW_CONFIG_PATH = join(homedir(), '.openclaw', 'openclaw.json');
+import {
+  readOpenClawConfigRecord,
+  updateOpenClawConfigRecord,
+} from './openclaw-config';
 
 interface SkillEntry {
   enabled?: boolean;
@@ -42,24 +44,12 @@ async function fileExists(p: string): Promise<boolean> {
  * Read the current OpenClaw config
  */
 async function readConfig(): Promise<OpenClawConfig> {
-  if (!(await fileExists(OPENCLAW_CONFIG_PATH))) {
-    return {};
-  }
   try {
-    const raw = await readFile(OPENCLAW_CONFIG_PATH, 'utf-8');
-    return JSON.parse(raw);
+    return await readOpenClawConfigRecord<OpenClawConfig>();
   } catch (err) {
     console.error('Failed to read openclaw config:', err);
     return {};
   }
-}
-
-/**
- * Write the OpenClaw config
- */
-async function writeConfig(config: OpenClawConfig): Promise<void> {
-  const json = JSON.stringify(config, null, 2);
-  await writeFile(OPENCLAW_CONFIG_PATH, json, 'utf-8');
 }
 
 /**
@@ -78,54 +68,49 @@ export async function updateSkillConfig(
   updates: { apiKey?: string; env?: Record<string, string> }
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const config = await readConfig();
+    await updateOpenClawConfigRecord((config) => {
+      const typedConfig = config as OpenClawConfig;
 
-    // Ensure skills.entries exists
-    if (!config.skills) {
-      config.skills = {};
-    }
-    if (!config.skills.entries) {
-      config.skills.entries = {};
-    }
-
-    // Get or create skill entry
-    const entry = config.skills.entries[skillKey] || {};
-
-    // Update apiKey
-    if (updates.apiKey !== undefined) {
-      const trimmed = updates.apiKey.trim();
-      if (trimmed) {
-        entry.apiKey = trimmed;
-      } else {
-        delete entry.apiKey;
+      if (!typedConfig.skills) {
+        typedConfig.skills = {};
       }
-    }
+      if (!typedConfig.skills.entries) {
+        typedConfig.skills.entries = {};
+      }
 
-    // Update env
-    if (updates.env !== undefined) {
-      const newEnv: Record<string, string> = {};
+      const entry = typedConfig.skills.entries[skillKey] || {};
 
-      for (const [key, value] of Object.entries(updates.env)) {
-        const trimmedKey = key.trim();
-        if (!trimmedKey) continue;
-
-        const trimmedVal = value.trim();
-        if (trimmedVal) {
-          newEnv[trimmedKey] = trimmedVal;
+      if (updates.apiKey !== undefined) {
+        const trimmed = updates.apiKey.trim();
+        if (trimmed) {
+          entry.apiKey = trimmed;
+        } else {
+          delete entry.apiKey;
         }
       }
 
-      if (Object.keys(newEnv).length > 0) {
-        entry.env = newEnv;
-      } else {
-        delete entry.env;
+      if (updates.env !== undefined) {
+        const newEnv: Record<string, string> = {};
+
+        for (const [key, value] of Object.entries(updates.env)) {
+          const trimmedKey = key.trim();
+          if (!trimmedKey) continue;
+
+          const trimmedVal = value.trim();
+          if (trimmedVal) {
+            newEnv[trimmedKey] = trimmedVal;
+          }
+        }
+
+        if (Object.keys(newEnv).length > 0) {
+          entry.env = newEnv;
+        } else {
+          delete entry.env;
+        }
       }
-    }
 
-    // Save entry back
-    config.skills.entries[skillKey] = entry;
-
-    await writeConfig(config);
+      typedConfig.skills.entries![skillKey] = entry;
+    });
     return { success: true };
   } catch (err) {
     console.error('Failed to update skill config:', err);

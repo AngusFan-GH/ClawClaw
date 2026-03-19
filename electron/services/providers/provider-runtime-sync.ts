@@ -6,7 +6,6 @@ import type { ProviderConfig } from '../../utils/secure-storage';
 import { getAllProviders, getApiKey, getDefaultProvider, getProvider } from '../../utils/secure-storage';
 import { getProviderConfig, getProviderDefaultModel } from '../../utils/provider-registry';
 import {
-  readOpenClawJson,
   getActiveOpenClawProviders,
   removeProviderFromOpenClaw,
   saveOAuthTokenToOpenClaw,
@@ -15,8 +14,8 @@ import {
   setOpenClawDefaultModelWithOverride,
   syncProviderConfigToOpenClaw,
   updateAgentModelProvider,
-  writeOpenClawJson,
 } from '../../utils/openclaw-auth';
+import { updateOpenClawConfigRecord } from '../../utils/openclaw-config';
 import { getOpenClawProviderKeyForType } from '../../utils/provider-keys';
 import { logger } from '../../utils/logger';
 import {
@@ -196,13 +195,13 @@ async function rebuildOpenClawModelAllowlistFromAccounts(): Promise<void> {
     }
   }
 
-  const config = await readOpenClawJson();
-  const agents = (config.agents || {}) as Record<string, unknown>;
-  const defaults = (agents.defaults || {}) as Record<string, unknown>;
-  defaults.models = allowlist;
-  agents.defaults = defaults;
-  config.agents = agents;
-  await writeOpenClawJson(config);
+  await updateOpenClawConfigRecord((config) => {
+    const agents = (config.agents || {}) as Record<string, unknown>;
+    const defaults = (agents.defaults || {}) as Record<string, unknown>;
+    defaults.models = allowlist;
+    agents.defaults = defaults;
+    config.agents = agents;
+  });
 }
 
 async function reconcileRuntimeProvidersFromAccounts(): Promise<void> {

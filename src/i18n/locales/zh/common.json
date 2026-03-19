@@ -68,6 +68,7 @@
       "scheduledDescription": "{{source}}已保存，正在准备应用，请稍候。",
       "applyingDescription": "正在应用{{source}}的更改，功能可能会短暂中断。",
       "completedDescription": "{{source}}的更改已经完成应用。",
+      "expectedReconnectHint": "预计约 {{seconds}} 秒后恢复连接。",
       "failedTitle": "网关应用更改失败",
       "failedDescription": "请稍后重试，或手动检查网关日志。",
       "overlayBlockedHint": "正在应用配置，期间会暂时禁用界面操作以避免状态冲突。",

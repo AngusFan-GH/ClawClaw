@@ -68,6 +68,7 @@
             "scheduledDescription": "{{source}} の変更を保存しました。まもなく適用します。",
             "applyingDescription": "{{source}} の変更を適用中です。一時的に機能が中断する場合があります。",
             "completedDescription": "{{source}} の変更が適用されました。",
+            "expectedReconnectHint": "約 {{seconds}} 秒後に再接続する見込みです。",
             "failedTitle": "ゲートウェイ変更の適用に失敗しました",
             "failedDescription": "後でもう一度試すか、ゲートウェイログを確認してください。",
             "overlayBlockedHint": "設定を適用中です。状態不整合を避けるため、一時的に UI 操作を無効化しています。",

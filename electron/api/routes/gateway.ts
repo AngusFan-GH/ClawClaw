@@ -62,8 +62,16 @@ export async function handleGatewayRoutes(
         source: 'gateway.manualRestart',
         reason: 'gateway.manualRestart',
       });
-      await ctx.gatewayManager.restart();
-      sendJson(res, 200, { success: true });
+      void ctx.gatewayManager.restart({ strategy: 'stop-start' }).catch((error) => {
+        emitGatewayLifecycleEvent(ctx, {
+          phase: 'failed',
+          action: 'restart',
+          source: 'gateway.manualRestart',
+          reason: 'gateway.manualRestart',
+          error: String(error),
+        });
+      });
+      sendJson(res, 200, { success: true, accepted: true });
     } catch (error) {
       emitGatewayLifecycleEvent(ctx, {
         phase: 'failed',

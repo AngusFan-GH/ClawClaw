@@ -1,7 +1,7 @@
 import { access, copyFile, mkdir, readdir, rm } from 'fs/promises';
 import { constants } from 'fs';
 import { join, normalize } from 'path';
-import { listConfiguredChannelGroups, listConfiguredChannels, readOpenClawConfig, writeOpenClawConfig } from './channel-config';
+import { listConfiguredChannelGroups, readOpenClawConfig, updateOpenClawConfig } from './channel-config';
 import { expandPath, getOpenClawConfigDir } from './paths';
 import * as logger from './logger';
 
@@ -508,61 +508,68 @@ export async function listConfiguredAgentIds(): Promise<string[]> {
 }
 
 export async function createAgent(name: string): Promise<AgentsSnapshot> {
-  const config = await readOpenClawConfig() as AgentConfigDocument;
-  const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
   const normalizedName = normalizeAgentName(name);
-  const existingIds = new Set(entries.map((entry) => entry.id));
   const diskIds = await listExistingAgentIdsOnDisk();
-  let nextId = slugifyAgentId(normalizedName);
-  let suffix = 2;
+  const result = await updateOpenClawConfig(async (rawConfig) => {
+    const config = rawConfig as AgentConfigDocument;
+    const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
+    const existingIds = new Set(entries.map((entry) => entry.id));
+    let nextId = slugifyAgentId(normalizedName);
+    let suffix = 2;
 
-  while (existingIds.has(nextId) || diskIds.has(nextId)) {
-    nextId = `${slugifyAgentId(normalizedName)}-${suffix}`;
-    suffix += 1;
-  }
+    while (existingIds.has(nextId) || diskIds.has(nextId)) {
+      nextId = `${slugifyAgentId(normalizedName)}-${suffix}`;
+      suffix += 1;
+    }
 
-  const nextEntries = [...entries];
-  const newAgent: AgentListEntry = {
-    id: nextId,
-    name: normalizedName,
-    workspace: `~/.openclaw/workspace-${nextId}`,
-    agentDir: getDefaultAgentDirPath(nextId),
-  };
-  nextEntries.push(newAgent);
+    const nextEntries = [...entries];
+    const newAgent: AgentListEntry = {
+      id: nextId,
+      name: normalizedName,
+      workspace: `~/.openclaw/workspace-${nextId}`,
+      agentDir: getDefaultAgentDirPath(nextId),
+    };
+    nextEntries.push(newAgent);
 
-  config.agents = {
-    ...agentsConfig,
-    list: nextEntries,
-  };
+    config.agents = {
+      ...agentsConfig,
+      list: nextEntries,
+    };
 
-  await provisionAgentFilesystem(config, newAgent);
-  await writeOpenClawConfig(config);
-  logger.info('Created agent config entry', { agentId: nextId });
-  return buildSnapshotFromConfig(config);
+    await provisionAgentFilesystem(config, newAgent);
+    return {
+      snapshot: buildSnapshotFromConfig(config),
+      agentId: nextId,
+    };
+  });
+  logger.info('Created agent config entry', { agentId: result.agentId });
+  return result.snapshot;
 }
 
 export async function updateAgentName(agentId: string, name: string): Promise<AgentsSnapshot> {
-  const config = await readOpenClawConfig() as AgentConfigDocument;
-  const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
   const normalizedName = normalizeAgentName(name);
-  const index = entries.findIndex((entry) => entry.id === agentId);
-  if (index === -1) {
-    throw new Error(`Agent "${agentId}" not found`);
-  }
+  const snapshot = await updateOpenClawConfig(async (rawConfig) => {
+    const config = rawConfig as AgentConfigDocument;
+    const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
+    const index = entries.findIndex((entry) => entry.id === agentId);
+    if (index === -1) {
+      throw new Error(`Agent "${agentId}" not found`);
+    }
 
-  entries[index] = {
-    ...entries[index],
-    name: normalizedName,
-  };
+    entries[index] = {
+      ...entries[index],
+      name: normalizedName,
+    };
 
-  config.agents = {
-    ...agentsConfig,
-    list: entries,
-  };
+    config.agents = {
+      ...agentsConfig,
+      list: entries,
+    };
 
-  await writeOpenClawConfig(config);
+    return buildSnapshotFromConfig(config);
+  });
   logger.info('Updated agent name', { agentId, name: normalizedName });
-  return buildSnapshotFromConfig(config);
+  return snapshot;
 }
 
 export async function deleteAgentConfig(agentId: string): Promise<AgentsSnapshot> {
@@ -570,77 +577,89 @@ export async function deleteAgentConfig(agentId: string): Promise<AgentsSnapshot
     throw new Error('The main agent cannot be deleted');
   }
 
-  const config = await readOpenClawConfig() as AgentConfigDocument;
-  const { agentsConfig, entries, defaultAgentId } = await getEffectiveAgentEntries(config);
-  const removedEntry = entries.find((entry) => entry.id === agentId);
-  const nextEntries = entries.filter((entry) => entry.id !== agentId);
-  if (!removedEntry || nextEntries.length === entries.length) {
-    throw new Error(`Agent "${agentId}" not found`);
-  }
+  const result = await updateOpenClawConfig(async (rawConfig) => {
+    const config = rawConfig as AgentConfigDocument;
+    const { agentsConfig, entries, defaultAgentId } = await getEffectiveAgentEntries(config);
+    const removedEntry = entries.find((entry) => entry.id === agentId);
+    const nextEntries = entries.filter((entry) => entry.id !== agentId);
+    if (!removedEntry || nextEntries.length === entries.length) {
+      throw new Error(`Agent "${agentId}" not found`);
+    }
 
-  config.agents = {
-    ...agentsConfig,
-    list: nextEntries,
-  };
-  config.bindings = Array.isArray(config.bindings)
-    ? config.bindings.filter((binding) => !(isSimpleChannelBinding(binding) && binding.agentId === agentId))
-    : undefined;
-
-  if (defaultAgentId === agentId && nextEntries.length > 0) {
-    nextEntries[0] = {
-      ...nextEntries[0],
-      default: true,
+    config.agents = {
+      ...agentsConfig,
+      list: nextEntries,
     };
-  }
+    config.bindings = Array.isArray(config.bindings)
+      ? config.bindings.filter((binding) => !(isSimpleChannelBinding(binding) && binding.agentId === agentId))
+      : undefined;
 
-  await writeOpenClawConfig(config);
+    if (defaultAgentId === agentId && nextEntries.length > 0) {
+      nextEntries[0] = {
+        ...nextEntries[0],
+        default: true,
+      };
+    }
+
+    return {
+      snapshot: buildSnapshotFromConfig(config),
+      removedEntry,
+    };
+  });
   await removeAgentRuntimeDirectory(agentId);
-  await removeAgentWorkspaceDirectory(removedEntry);
+  await removeAgentWorkspaceDirectory(result.removedEntry);
   logger.info('Deleted agent config entry', { agentId });
-  return buildSnapshotFromConfig(config);
+  return result.snapshot;
 }
 
 export async function assignChannelToAgent(agentId: string, channelType: string, accountId?: string): Promise<AgentsSnapshot> {
-  const config = await readOpenClawConfig() as AgentConfigDocument;
-  const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
-  if (!entries.some((entry) => entry.id === agentId)) {
-    throw new Error(`Agent "${agentId}" not found`);
-  }
+  const snapshot = await updateOpenClawConfig(async (rawConfig) => {
+    const config = rawConfig as AgentConfigDocument;
+    const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
+    if (!entries.some((entry) => entry.id === agentId)) {
+      throw new Error(`Agent "${agentId}" not found`);
+    }
 
-  config.agents = {
-    ...agentsConfig,
-    list: entries,
-  };
-  config.bindings = upsertBindingsForChannel(config.bindings, channelType, agentId, accountId);
-  await writeOpenClawConfig(config);
+    config.agents = {
+      ...agentsConfig,
+      list: entries,
+    };
+    config.bindings = upsertBindingsForChannel(config.bindings, channelType, agentId, accountId);
+    return buildSnapshotFromConfig(config);
+  });
   logger.info('Assigned channel to agent', { agentId, channelType, accountId: normalizeBindingAccountId(accountId) });
-  return buildSnapshotFromConfig(config);
+  return snapshot;
 }
 
 export async function clearChannelBinding(channelType: string, agentId?: string, accountId?: string): Promise<AgentsSnapshot> {
-  const config = await readOpenClawConfig() as AgentConfigDocument;
-  const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
-  const { typeOwners, accountOwners } = getSimpleChannelBindingMaps(config.bindings);
-  const boundAgentId = accountId
-    ? accountOwners.get(makeChannelAccountBindingKey(channelType, accountId)) ?? typeOwners.get(channelType)
-    : typeOwners.get(channelType);
   const normalizedRequestedAgentId =
     typeof agentId === 'string' && agentId.trim() ? normalizeAgentIdForBinding(agentId) : '';
+  const result = await updateOpenClawConfig(async (rawConfig) => {
+    const config = rawConfig as AgentConfigDocument;
+    const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
+    const { typeOwners, accountOwners } = getSimpleChannelBindingMaps(config.bindings);
+    const boundAgentId = accountId
+      ? accountOwners.get(makeChannelAccountBindingKey(channelType, accountId)) ?? typeOwners.get(channelType)
+      : typeOwners.get(channelType);
 
-  if (normalizedRequestedAgentId && boundAgentId && boundAgentId !== normalizedRequestedAgentId) {
-    throw new Error(`Channel "${channelType}" is not bound to agent "${agentId}"`);
-  }
+    if (normalizedRequestedAgentId && boundAgentId && boundAgentId !== normalizedRequestedAgentId) {
+      throw new Error(`Channel "${channelType}" is not bound to agent "${agentId}"`);
+    }
 
-  config.agents = {
-    ...agentsConfig,
-    list: entries,
-  };
-  config.bindings = upsertBindingsForChannel(config.bindings, channelType, null, accountId);
-  await writeOpenClawConfig(config);
+    config.agents = {
+      ...agentsConfig,
+      list: entries,
+    };
+    config.bindings = upsertBindingsForChannel(config.bindings, channelType, null, accountId);
+    return {
+      snapshot: buildSnapshotFromConfig(config),
+      boundAgentId,
+    };
+  });
   logger.info('Cleared simplified channel binding', {
     channelType,
     accountId: accountId ? normalizeBindingAccountId(accountId) : undefined,
-    agentId: normalizedRequestedAgentId || boundAgentId,
+    agentId: normalizedRequestedAgentId || result.boundAgentId,
   });
-  return buildSnapshotFromConfig(config);
+  return result.snapshot;
 }

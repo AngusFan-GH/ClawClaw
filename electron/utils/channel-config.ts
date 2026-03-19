@@ -4,7 +4,7 @@
  *
  * All file I/O uses async fs/promises to avoid blocking the main thread.
  */
-import { access, mkdir, readFile, writeFile, rm } from 'fs/promises';
+import { access, rm } from 'fs/promises';
 import { constants } from 'fs';
 import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -13,6 +13,12 @@ import { homedir } from 'os';
 import { app, utilityProcess } from 'electron';
 import { getOpenClawEntryPath, getOpenClawResolvedDir, getOpenClawDir } from './paths';
 import * as logger from './logger';
+import {
+    readOpenClawConfigRecord,
+    sanitizeKnownInvalidOpenClawKeys,
+    updateOpenClawConfigRecord,
+    writeOpenClawConfigRecord,
+} from './openclaw-config';
 import { proxyAwareFetch } from './proxy-fetch';
 import { prepareWinSpawn } from './win-shell';
 
@@ -400,22 +406,9 @@ function clearTopLevelAccountFields(
 
 // ── Config I/O ───────────────────────────────────────────────────
 
-async function ensureConfigDir(): Promise<void> {
-    if (!(await fileExists(OPENCLAW_DIR))) {
-        await mkdir(OPENCLAW_DIR, { recursive: true });
-    }
-}
-
 export async function readOpenClawConfig(): Promise<OpenClawConfig> {
-    await ensureConfigDir();
-
-    if (!(await fileExists(CONFIG_FILE))) {
-        return {};
-    }
-
     try {
-        const content = await readFile(CONFIG_FILE, 'utf-8');
-        return JSON.parse(content) as OpenClawConfig;
+        return await readOpenClawConfigRecord<OpenClawConfig>();
     } catch (error) {
         logger.error('Failed to read OpenClaw config', error);
         console.error('Failed to read OpenClaw config:', error);
@@ -424,9 +417,9 @@ export async function readOpenClawConfig(): Promise<OpenClawConfig> {
 }
 
 export async function writeOpenClawConfig(config: OpenClawConfig): Promise<void> {
-    await ensureConfigDir();
-
     try {
+        sanitizeKnownInvalidOpenClawKeys(config as unknown as Record<string, unknown>);
+
         // Enable graceful in-process reload authorization for SIGUSR1 flows.
         const commands =
             config.commands && typeof config.commands === 'object'
@@ -435,12 +428,31 @@ export async function writeOpenClawConfig(config: OpenClawConfig): Promise<void>
         commands.restart = true;
         config.commands = commands;
 
-        await writeFile(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
+        await writeOpenClawConfigRecord(config as unknown as Record<string, unknown>);
     } catch (error) {
         logger.error('Failed to write OpenClaw config', error);
         console.error('Failed to write OpenClaw config:', error);
         throw error;
     }
+}
+
+export async function updateOpenClawConfig<T>(
+    updater: (config: OpenClawConfig) => Promise<T> | T
+): Promise<T> {
+    return await updateOpenClawConfigRecord(async (config) => {
+        const typedConfig = config as OpenClawConfig;
+        const result = await updater(typedConfig);
+
+        sanitizeKnownInvalidOpenClawKeys(typedConfig as unknown as Record<string, unknown>);
+        const commands =
+            typedConfig.commands && typeof typedConfig.commands === 'object'
+                ? { ...(typedConfig.commands as Record<string, unknown>) }
+                : {};
+        commands.restart = true;
+        typedConfig.commands = commands;
+
+        return result;
+    });
 }
 
 // ── Channel operations ───────────────────────────────────────────
@@ -449,11 +461,12 @@ export async function saveChannelConfig(
     channelType: string,
     config: ChannelConfigData
 ): Promise<void> {
-    const currentConfig = await readOpenClawConfig();
     const preferredAccountId =
         typeof config.__accountId === 'string' && config.__accountId.trim()
             ? config.__accountId.trim()
             : undefined;
+
+    await updateOpenClawConfig(async (currentConfig) => {
 
     // DingTalk is a channel plugin; make sure it's explicitly allowed.
     // Newer OpenClaw versions may not load non-bundled plugins when allowlist is empty.
@@ -517,7 +530,6 @@ export async function saveChannelConfig(
             ...currentConfig.plugins.entries[channelType],
             enabled: config.enabled ?? true,
         };
-        await writeOpenClawConfig(currentConfig);
         logger.info('Plugin channel config saved', {
             channelType,
             configFile: CONFIG_FILE,
@@ -658,7 +670,6 @@ export async function saveChannelConfig(
         }
     }
 
-    await writeOpenClawConfig(currentConfig);
     logger.info('Channel config saved', {
         channelType,
         configFile: CONFIG_FILE,
@@ -667,6 +678,7 @@ export async function saveChannelConfig(
         enabled: currentConfig.channels[channelType]?.enabled,
     });
     console.log(`Saved channel config for ${channelType}`);
+    });
 }
 
 export async function getChannelConfig(
@@ -743,8 +755,8 @@ export async function deleteChannelConfig(
     channelType: string,
     preferredAccountId?: string | null
 ): Promise<void> {
-    const currentConfig = await readOpenClawConfig();
-    let configChanged = false;
+    const configChanged = await updateOpenClawConfig(async (currentConfig) => {
+    let changed = false;
 
     if (currentConfig.channels?.[channelType]) {
         const section = currentConfig.channels[channelType] as AccountScopedChannelSection | undefined;
@@ -781,7 +793,7 @@ export async function deleteChannelConfig(
                 delete currentConfig.channels[channelType];
             }
         }
-        configChanged = true;
+        changed = true;
         console.log(`Deleted channel config for ${channelType}`);
     }
 
@@ -794,7 +806,7 @@ export async function deleteChannelConfig(
             if (currentConfig.plugins && Object.keys(currentConfig.plugins).length === 0) {
                 delete currentConfig.plugins;
             }
-            configChanged = true;
+            changed = true;
             console.log(`Deleted plugin channel config for ${channelType}`);
         }
     } else if (currentConfig.plugins?.entries?.[channelType]) {
@@ -805,15 +817,14 @@ export async function deleteChannelConfig(
         if (currentConfig.plugins && Object.keys(currentConfig.plugins).length === 0) {
             delete currentConfig.plugins;
         }
-        configChanged = true;
+        changed = true;
     }
 
-    if (configChanged) {
-        await writeOpenClawConfig(currentConfig);
-    }
+    return changed;
+    });
 
     // Special handling for WhatsApp credentials
-    if (channelType === 'whatsapp') {
+    if (configChanged && channelType === 'whatsapp') {
         try {
             const whatsappDir = join(homedir(), '.openclaw', 'credentials', 'whatsapp');
             if (await fileExists(whatsappDir)) {
@@ -970,36 +981,33 @@ export async function setChannelEnabled(
     enabled: boolean,
     preferredAccountId?: string | null
 ): Promise<void> {
-    const currentConfig = await readOpenClawConfig();
+    await updateOpenClawConfig(async (currentConfig) => {
+        if (PLUGIN_CHANNELS.includes(channelType)) {
+            if (!currentConfig.plugins) currentConfig.plugins = {};
+            if (!currentConfig.plugins.entries) currentConfig.plugins.entries = {};
+            if (!currentConfig.plugins.entries[channelType]) currentConfig.plugins.entries[channelType] = {};
+            currentConfig.plugins.entries[channelType].enabled = enabled;
+            return;
+        }
 
-    if (PLUGIN_CHANNELS.includes(channelType)) {
-        if (!currentConfig.plugins) currentConfig.plugins = {};
-        if (!currentConfig.plugins.entries) currentConfig.plugins.entries = {};
-        if (!currentConfig.plugins.entries[channelType]) currentConfig.plugins.entries[channelType] = {};
-        currentConfig.plugins.entries[channelType].enabled = enabled;
-        await writeOpenClawConfig(currentConfig);
-        console.log(`Set plugin channel ${channelType} enabled: ${enabled}`);
-        return;
-    }
-
-    if (!currentConfig.channels) currentConfig.channels = {};
-    if (!currentConfig.channels[channelType]) currentConfig.channels[channelType] = {};
-    const section = currentConfig.channels[channelType] as AccountScopedChannelSection;
-    const source = resolveEditableChannelSource(currentConfig, channelType, preferredAccountId);
-    if (source.kind === 'account') {
-        const accounts = { ...(section.accounts || {}) };
-        const accountSection = { ...((accounts[source.accountId] as ChannelConfigData | undefined) || {}) };
-        accountSection.enabled = enabled;
-        accounts[source.accountId] = accountSection;
-        currentConfig.channels[channelType] = {
-            ...section,
-            enabled,
-            accounts,
-        };
-    } else {
-        currentConfig.channels[channelType].enabled = enabled;
-    }
-    await writeOpenClawConfig(currentConfig);
+        if (!currentConfig.channels) currentConfig.channels = {};
+        if (!currentConfig.channels[channelType]) currentConfig.channels[channelType] = {};
+        const section = currentConfig.channels[channelType] as AccountScopedChannelSection;
+        const source = resolveEditableChannelSource(currentConfig, channelType, preferredAccountId);
+        if (source.kind === 'account') {
+            const accounts = { ...(section.accounts || {}) };
+            const accountSection = { ...((accounts[source.accountId] as ChannelConfigData | undefined) || {}) };
+            accountSection.enabled = enabled;
+            accounts[source.accountId] = accountSection;
+            currentConfig.channels[channelType] = {
+                ...section,
+                enabled,
+                accounts,
+            };
+        } else {
+            currentConfig.channels[channelType].enabled = enabled;
+        }
+    });
     console.log(`Set channel ${channelType} enabled: ${enabled}`);
 }
 

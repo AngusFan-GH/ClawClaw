@@ -15,6 +15,11 @@ import { homedir } from 'os';
 import { listConfiguredAgentIds } from './agent-config';
 import { getProviderEnvVar, getProviderDefaultModel, getProviderConfig } from './provider-registry';
 import {
+  readOpenClawConfigRecord,
+  sanitizeKnownInvalidOpenClawKeys,
+  writeOpenClawConfigRecord,
+} from './openclaw-config';
+import {
   OPENCLAW_PROVIDER_KEY_MOONSHOT,
   isOAuthProviderType,
   isOpenClawOAuthPluginProviderKey,
@@ -125,13 +130,12 @@ async function discoverAgentIds(): Promise<string[]> {
 
 // ── OpenClaw Config Helpers ──────────────────────────────────────
 
-const OPENCLAW_CONFIG_PATH = join(homedir(), '.openclaw', 'openclaw.json');
 const VALID_COMPACTION_MODES = new Set(['default', 'safeguard']);
 const VALID_MEMORY_SEARCH_PROVIDERS = new Set(['openai', 'local', 'gemini', 'voyage', 'mistral']);
 const VALID_MEMORY_SEARCH_FALLBACKS = new Set(['openai', 'gemini', 'local', 'voyage', 'mistral', 'none']);
 
 export async function readOpenClawJson(): Promise<Record<string, unknown>> {
-  return (await readJsonFile<Record<string, unknown>>(OPENCLAW_CONFIG_PATH)) ?? {};
+  return await readOpenClawConfigRecord();
 }
 
 function normalizeAgentsDefaultsCompactionMode(config: Record<string, unknown>): void {
@@ -210,6 +214,7 @@ function sanitizeAgentsDefaultsMemorySearch(config: Record<string, unknown>): bo
 }
 
 export async function writeOpenClawJson(config: Record<string, unknown>): Promise<void> {
+  sanitizeKnownInvalidOpenClawKeys(config);
   normalizeAgentsDefaultsCompactionMode(config);
 
   // Ensure SIGUSR1 graceful reload is authorized by OpenClaw config.
@@ -221,7 +226,7 @@ export async function writeOpenClawJson(config: Record<string, unknown>): Promis
   commands.restart = true;
   config.commands = commands;
 
-  await writeJsonFile(OPENCLAW_CONFIG_PATH, config);
+  await writeOpenClawConfigRecord(config);
 }
 
 // ── Exported Functions (all async) ───────────────────────────────
@@ -979,19 +984,13 @@ export async function updateAgentModelProvider(
  */
 export async function sanitizeOpenClawConfig(): Promise<void> {
   const config = await readOpenClawJson();
-  let modified = false;
+  let modified = sanitizeKnownInvalidOpenClawKeys(config);
 
   // ── acp section ────────────────────────────────────────────────
   // OpenClaw's ACP schema is strict and does not accept "mcpServers".
   // If this key is present, Gateway startup fails before the app can recover.
-  const acp = config.acp;
-  if (acp && typeof acp === 'object' && !Array.isArray(acp)) {
-    const acpObj = acp as Record<string, unknown>;
-    if ('mcpServers' in acpObj) {
-      console.log('[sanitize] Removing invalid key "acp.mcpServers" from openclaw.json');
-      delete acpObj.mcpServers;
-      modified = true;
-    }
+  if (modified) {
+    console.log('[sanitize] Removed known-invalid strict-schema keys from openclaw.json');
   }
 
   // ── skills section ──────────────────────────────────────────────
@@ -999,20 +998,6 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
   // only: allowBundled, load, install, limits, entries.
   // The key "enabled" belongs inside skills.entries[key].enabled, NOT at
   // the skills root level.  Older versions may have placed it there.
-  const skills = config.skills;
-  if (skills && typeof skills === 'object' && !Array.isArray(skills)) {
-    const skillsObj = skills as Record<string, unknown>;
-    // Keys that are known to be invalid at the skills root level.
-    const KNOWN_INVALID_SKILLS_ROOT_KEYS = ['enabled', 'disabled'];
-    for (const key of KNOWN_INVALID_SKILLS_ROOT_KEYS) {
-      if (key in skillsObj) {
-        console.log(`[sanitize] Removing misplaced key "skills.${key}" from openclaw.json`);
-        delete skillsObj[key];
-        modified = true;
-      }
-    }
-  }
-
   // ── plugins section ──────────────────────────────────────────────
   // Remove absolute paths in plugins that no longer exist or are bundled (preventing hardlink validation errors)
   const plugins = config.plugins;
