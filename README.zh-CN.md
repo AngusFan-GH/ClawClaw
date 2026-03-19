@@ -119,6 +119,8 @@ ClawClaw 直接基于官方 **OpenClaw** 核心构建。无需单独安装，我
 
 连接多个 AI 供应商（OpenAI、Anthropic、OpenCode Go 等），支持 API 密钥和已接入的 OAuth 登录方式。OpenAI Codex 登录现已对齐 OpenClaw 原生浏览器 OAuth 流程，并在登录完成后从 OpenClaw 当前可用的 Codex 模型列表中选择模型。其他供应商账户在条件允许时会优先使用上游接口返回的已验证模型列表，只有在无法枚举模型时才继续允许手动填写模型 ID。模型类型筛选只会在上游明确返回分类字段时显示；如果上游没有提供这类元数据，界面只保留搜索，不再做启发式猜测。对于 Ollama、vLLM、SGLang 这类自托管 OpenAI 兼容运行时，仍然作为一等 Provider 提供；而项目现有的本地模型工作流继续由独立的本地模型中心承载。凭证安全存储在系统原生密钥链中。
 
+> vLLM 说明：ClawClaw 现在会默认把 vLLM 模型标记为 `supportsTools: false`，避免常见的 `400 "auto" tool choice` 报错。现在你也可以在 provider 设置里显式开启 vLLM 工具调用，但前提是 vLLM 服务端已经使用 `--enable-auto-tool-choice` 和 `--tool-call-parser` 启动。
+
 ### 🛡️ 细粒度安全策略
 
 可分别配置禁止目录和按能力拆分的运行时限制。禁止目录会同步到工作区安全文档，作为 agent 的规避提示；行为限制则会直接写入 OpenClaw 工具 deny 层，可阻止运行命令、文件读写、浏览器自动化、联网搜索、网页抓取和 gateway 访问。

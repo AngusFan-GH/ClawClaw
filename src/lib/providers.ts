@@ -128,6 +128,7 @@ export interface ProviderAccount {
     email?: string;
     resourceUrl?: string;
     customModels?: string[];
+    vllmEnableTools?: boolean;
     localModel?: boolean;
     localModelProvider?: boolean;
     presetId?: string;

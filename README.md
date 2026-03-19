@@ -119,6 +119,8 @@ Extend your AI agents with pre-built skills. Browse, install, and manage skills 
 
 Connect to multiple AI providers (OpenAI, Anthropic, OpenCode Go, and more) with API keys or supported OAuth flows. OpenAI Codex sign-in follows OpenClaw's native browser OAuth flow and chooses the model from OpenClaw's available Codex model list after sign-in. Other provider accounts now prefer verified model lists resolved from the upstream endpoint when available, while still allowing manual model IDs if a provider cannot enumerate models. Model-type filters are shown only when the upstream source explicitly returns category metadata; otherwise the picker falls back to search-only, with no heuristic guessing in the UI. Self-hosted OpenAI-compatible runtimes such as Ollama, vLLM, and SGLang remain available as first-class providers, while the dedicated local-model center continues to handle the project-specific local model workflow. Credentials are stored securely in your system's native keychain.
 
+> vLLM note: ClawClaw defaults vLLM models to `supportsTools: false` to avoid the common `400 "auto" tool choice` server error. You can now enable vLLM tool calling explicitly in provider settings, but your vLLM server must be started with `--enable-auto-tool-choice` and `--tool-call-parser`.
+
 ### 🛡️ Granular Security Policy
 
 Configure denied directories and capability-level runtime restrictions separately. Directory entries are synced into workspace policy docs as guidance, while behavior restrictions can block runtime commands, file access, browser automation, web search, web fetch, and gateway access at the OpenClaw tool layer.

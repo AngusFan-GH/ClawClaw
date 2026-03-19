@@ -501,6 +501,7 @@ export async function setOpenClawDefaultModel(
       api: providerCfg.api,
       apiKeyEnv: providerCfg.apiKeyEnv,
       headers: providerCfg.headers,
+      providerId: provider,
       modelIds: [modelId, ...fallbackModelIds],
       includeRegistryModels: true,
       mergeExistingModels: true,
@@ -535,6 +536,7 @@ interface RuntimeProviderConfigOverride {
   apiKeyEnv?: string;
   headers?: Record<string, string>;
   authHeader?: boolean;
+  disableTools?: boolean;
 }
 
 type ProviderEntryBuildOptions = {
@@ -543,6 +545,8 @@ type ProviderEntryBuildOptions = {
   apiKeyEnv?: string;
   headers?: Record<string, string>;
   authHeader?: boolean;
+  disableTools?: boolean;
+  providerId?: string;
   modelIds?: string[];
   includeRegistryModels?: boolean;
   mergeExistingModels?: boolean;
@@ -562,6 +566,24 @@ function extractFallbackModelIds(provider: string, fallbackModels: string[]): st
   return fallbackModels
     .filter((fallback) => fallback.startsWith(`${provider}/`))
     .map((fallback) => fallback.slice(provider.length + 1));
+}
+
+function buildRuntimeProviderModels(
+  providerId: string,
+  modelIds: string[],
+  disableTools = false,
+): Array<Record<string, unknown>> {
+  return modelIds.map((id) => ({
+    id,
+    name: id,
+    ...(providerId === 'vllm' && disableTools
+      ? {
+        compat: {
+          supportsTools: false,
+        },
+      }
+      : {}),
+  }));
 }
 
 function mergeProviderModels(
@@ -603,7 +625,11 @@ function upsertOpenClawProviderEntry(
         Record<string, unknown>
       >)
     : [];
-  const runtimeModels = (options.modelIds ?? []).map((id) => ({ id, name: id }));
+  const runtimeModels = buildRuntimeProviderModels(
+    options.providerId || provider,
+    options.modelIds ?? [],
+    options.disableTools,
+  );
 
   const nextProvider: Record<string, unknown> = {
     ...existingProvider,
@@ -704,6 +730,8 @@ export async function syncProviderConfigToOpenClaw(
       api: override.api,
       apiKeyEnv: override.apiKeyEnv,
       headers: override.headers,
+      disableTools: override.disableTools,
+      providerId: provider,
       modelIds: modelId ? [modelId] : [],
     });
   }
@@ -764,6 +792,8 @@ export async function setOpenClawDefaultModelWithOverride(
       apiKeyEnv: override.apiKeyEnv,
       headers: override.headers,
       authHeader: override.authHeader,
+      disableTools: override.disableTools,
+      providerId: provider,
       modelIds: [modelId, ...fallbackModelIds],
     });
   }
@@ -912,7 +942,7 @@ export async function updateAgentModelProvider(
   entry: {
     baseUrl?: string;
     api?: string;
-    models?: Array<{ id: string; name: string }>;
+    models?: Array<Record<string, unknown> & { id: string; name: string }>;
     apiKey?: string;
     /** When true, pi-ai sends Authorization: Bearer instead of x-api-key */
     authHeader?: boolean;

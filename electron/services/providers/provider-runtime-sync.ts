@@ -73,7 +73,26 @@ type RuntimeProviderSyncContext = {
   runtimeProviderKey: string;
   meta: ReturnType<typeof getProviderConfig>;
   api: string;
+  disableTools: boolean;
 };
+
+function buildAgentProviderModels(
+  providerType: string,
+  modelIds: string[],
+  disableTools = false,
+): Array<Record<string, unknown> & { id: string; name: string }> {
+  return modelIds.map((id) => ({
+    id,
+    name: id,
+    ...(providerType === 'vllm' && disableTools
+      ? {
+        compat: {
+          supportsTools: false,
+        },
+      }
+      : {}),
+  }));
+}
 
 function normalizeProviderBaseUrl(config: ProviderConfig, baseUrl?: string): string | undefined {
   if (!baseUrl) {
@@ -437,6 +456,7 @@ async function syncProviderSecretToRuntime(
 
 async function resolveRuntimeSyncContext(config: ProviderConfig): Promise<RuntimeProviderSyncContext | null> {
   const runtimeProviderKey = await resolveRuntimeProviderKey(config);
+  const account = await getProviderAccount(config.id);
   const meta = getProviderConfig(config.type);
   const api = config.apiProtocol || (isSelfHostedProviderType(config.type) ? 'openai-completions' : meta?.api);
   if (!api) {
@@ -447,6 +467,7 @@ async function resolveRuntimeSyncContext(config: ProviderConfig): Promise<Runtim
     runtimeProviderKey,
     meta,
     api,
+    disableTools: config.type === 'vllm' && account?.metadata?.vllmEnableTools !== true,
   };
 }
 
@@ -463,6 +484,7 @@ async function syncRuntimeProviderConfig(
     api: context.api,
     apiKeyEnv: context.meta?.apiKeyEnv,
     headers: context.meta?.headers,
+    disableTools: context.disableTools,
   });
 }
 
@@ -470,6 +492,7 @@ async function syncCustomProviderAgentModel(
   config: ProviderConfig,
   runtimeProviderKey: string,
   apiKey: string | undefined,
+  disableTools: boolean,
 ): Promise<void> {
   if (!isSelfHostedProviderType(config.type) || config.type === 'ollama') {
     return;
@@ -491,7 +514,7 @@ async function syncCustomProviderAgentModel(
   await updateAgentModelProvider(runtimeProviderKey, {
     baseUrl: config.baseUrl,
     api: config.apiProtocol || 'openai-completions',
-    models: modelIds.map((id) => ({ id, name: id })),
+    models: buildAgentProviderModels(config.type, modelIds, disableTools),
     apiKey: resolvedKey || undefined,
   });
 }
@@ -512,7 +535,7 @@ async function syncProviderToRuntime(
 
   await syncProviderSecretToRuntime(config, context.runtimeProviderKey, apiKey);
   await syncRuntimeProviderConfig(config, context);
-  await syncCustomProviderAgentModel(config, context.runtimeProviderKey, apiKey);
+  await syncCustomProviderAgentModel(config, context.runtimeProviderKey, apiKey, context.disableTools);
   await removeLegacyLocalModelAliases(config);
   return context;
 }
@@ -576,6 +599,7 @@ export async function syncUpdatedProviderToRuntime(
       await setOpenClawDefaultModelWithOverride(ock, modelOverride, {
         baseUrl: config.baseUrl,
         api: config.apiProtocol || 'openai-completions',
+        disableTools: context.disableTools,
       }, fallbackModels);
     }
   }
@@ -636,6 +660,7 @@ export async function syncDefaultProviderToRuntime(
   if (!provider) {
     return;
   }
+  const account = await getProviderAccount(providerId);
 
   const ock = await resolveRuntimeProviderKey(provider);
   const providerKey = await getApiKey(providerId);
@@ -654,6 +679,7 @@ export async function syncDefaultProviderToRuntime(
       await setOpenClawDefaultModelWithOverride(ock, modelOverride, {
         baseUrl: provider.baseUrl,
         api: provider.apiProtocol || 'openai-completions',
+        disableTools: provider.type === 'vllm' && account?.metadata?.vllmEnableTools !== true,
       }, fallbackModels);
     } else if (shouldUseExplicitDefaultOverride(provider, ock)) {
       await setOpenClawDefaultModelWithOverride(ock, modelOverride, {
@@ -756,7 +782,7 @@ export async function syncDefaultProviderToRuntime(
         api,
         authHeader: targetProviderKey === 'minimax-portal' ? true : undefined,
         apiKey: targetProviderKey === 'minimax-portal' ? 'minimax-oauth' : 'qwen-oauth',
-        models: defaultModelId ? [{ id: defaultModelId, name: defaultModelId }] : [],
+        models: defaultModelId ? buildAgentProviderModels(provider.type, [defaultModelId], false) : [],
       });
     } catch (err) {
       logger.warn(`Failed to update models.json for OAuth provider "${targetProviderKey}":`, err);
@@ -768,7 +794,13 @@ export async function syncDefaultProviderToRuntime(
     await updateAgentModelProvider(ock, {
       baseUrl: provider.baseUrl,
       api: provider.apiProtocol || 'openai-completions',
-      models: modelId ? [{ id: modelId, name: modelId }] : [],
+      models: modelId
+        ? buildAgentProviderModels(
+          provider.type,
+          [modelId],
+          provider.type === 'vllm' && account?.metadata?.vllmEnableTools !== true,
+        )
+        : [],
       apiKey: providerKey || undefined,
     });
   }
