@@ -162,6 +162,7 @@ export function Settings() {
 
   const {
     status: gatewayStatus,
+    isInitialized: gatewayInitialized,
     restart: restartGateway,
     init: initGateway,
   } = useGatewayStore();
@@ -434,12 +435,13 @@ export function Settings() {
   }, [telemetryEntries]);
 
   const gatewayStateLabel = useMemo(() => {
+    if (!gatewayInitialized) return t('common:status.loading');
     if (gatewayStatus.state === 'running') return t('common:status.running');
     if (gatewayStatus.state === 'stopped') return t('common:status.stopped');
     if (gatewayStatus.state === 'error') return t('common:status.error');
     if (gatewayStatus.state === 'starting') return t('common:status.loading');
     return gatewayStatus.state;
-  }, [gatewayStatus.state, t]);
+  }, [gatewayInitialized, gatewayStatus.state, t]);
 
   const enabledReminderCount = useMemo(
     () => reminders.filter((item) => item.enabled).length,

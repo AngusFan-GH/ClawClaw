@@ -247,7 +247,9 @@ export function Chat() {
   const navigate = useNavigate();
   const location = useLocation();
   const gatewayStatus = useGatewayStore((s) => s.status);
-  const isGatewayRunning = gatewayStatus.state === 'running';
+  const gatewayInitialized = useGatewayStore((s) => s.isInitialized);
+  const displayGatewayState = gatewayInitialized ? gatewayStatus.state : 'starting';
+  const isGatewayRunning = displayGatewayState === 'running';
 
   const messages = useChatStore((s) => s.messages);
   const loading = useChatStore((s) => s.loading);
@@ -671,10 +673,14 @@ export function Chat() {
             : 'unconfigured';
   const loadingDescription = isGatewayRunning
     ? t('history.loading', '正在恢复最近对话…')
-    : t('history.waitingForGateway', '网关未连接，最近对话暂不可用');
+    : displayGatewayState === 'starting'
+      ? t('toolbar.gatewayStarting', '正在连接网关')
+      : t('history.waitingForGateway', '网关未连接，最近对话暂不可用');
   const loadingTitle = isGatewayRunning
     ? t('loading.title', '正在加载对话')
-    : t('toolbar.gatewayStopped', '网关未连接');
+    : displayGatewayState === 'starting'
+      ? t('toolbar.gatewayStarting', '正在连接网关')
+      : t('toolbar.gatewayStopped', '网关未连接');
   return (
     <div
       className={cn(

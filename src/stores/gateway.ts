@@ -3,7 +3,6 @@
  * Uses Host API + SSE for lifecycle/status and a direct renderer WebSocket for runtime RPC.
  */
 import { create } from 'zustand';
-import { hostApiFetch } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
 import { subscribeHostEvent } from '@/lib/host-events';
 import type { GatewayLifecycle, GatewayStatus } from '../types/gateway';
@@ -11,6 +10,8 @@ import type { GatewayLifecycle, GatewayStatus } from '../types/gateway';
 let gatewayInitPromise: Promise<void> | null = null;
 let gatewayEventUnsubscribers: Array<() => void> | null = null;
 let lifecycleClearTimer: ReturnType<typeof setTimeout> | null = null;
+let gatewayStatusPollTimer: ReturnType<typeof setInterval> | null = null;
+let gatewayVisibilityCleanup: (() => void) | null = null;
 
 interface GatewayHealth {
   ok: boolean;
@@ -25,6 +26,7 @@ interface GatewayState {
   isInitialized: boolean;
   lastError: string | null;
   init: () => Promise<void>;
+  refreshStatus: () => Promise<GatewayStatus | null>;
   start: () => Promise<void>;
   stop: () => Promise<void>;
   restart: () => Promise<void>;
@@ -151,6 +153,74 @@ function scheduleLifecycleClear(set: (partial: Partial<GatewayState>) => void, d
   }, delayMs);
 }
 
+async function fetchGatewayStatusSnapshot(): Promise<GatewayStatus> {
+  return invokeIpc<GatewayStatus>('gateway:status');
+}
+
+function shouldPromoteLifecycleToCompleted(
+  lifecycle: GatewayLifecycle,
+  status: GatewayStatus,
+): boolean {
+  return status.state === 'running' && (lifecycle.state === 'scheduled' || lifecycle.state === 'applying');
+}
+
+async function reconcileGatewayStatus(
+  set: (partial: Partial<GatewayState> | ((state: GatewayState) => Partial<GatewayState>)) => void,
+  target: 'running' | 'stopped',
+  timeoutMs = 15000,
+): Promise<void> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const status = await fetchGatewayStatusSnapshot();
+      if (status.state === target) {
+        set((state) => ({
+          status,
+          lifecycle:
+            target === 'running' &&
+            (state.lifecycle.state === 'scheduled' || state.lifecycle.state === 'applying')
+              ? {
+                  ...state.lifecycle,
+                  state: 'completed',
+                  error: undefined,
+                  at: Date.now(),
+                }
+              : state.lifecycle,
+        }));
+        if (target === 'running') {
+          scheduleLifecycleClear((partial) => set(partial));
+        }
+        return;
+      }
+
+      if (status.state === 'error') {
+        set((state) => ({
+          status,
+          lifecycle:
+            state.lifecycle.state === 'scheduled' || state.lifecycle.state === 'applying'
+              ? {
+                  ...state.lifecycle,
+                  state: 'failed',
+                  error: status.error,
+                  at: Date.now(),
+                }
+              : state.lifecycle,
+          lastError: status.error || 'Gateway error',
+        }));
+        return;
+      }
+
+      set({ status });
+    } catch {
+      // Ignore transient host API read failures during restart; the next poll
+      // usually succeeds once the main process finishes reconnecting.
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  }
+}
+
 export const useGatewayStore = create<GatewayState>((set, get) => ({
   status: {
     state: 'stopped',
@@ -163,6 +233,31 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
   isInitialized: false,
   lastError: null,
 
+  refreshStatus: async () => {
+    try {
+      const status = await fetchGatewayStatusSnapshot();
+      set((state) => ({
+        status,
+        isInitialized: true,
+        lifecycle: shouldPromoteLifecycleToCompleted(state.lifecycle, status)
+          ? {
+              ...state.lifecycle,
+              state: 'completed',
+              error: undefined,
+              at: Date.now(),
+            }
+          : state.lifecycle,
+      }));
+      if (status.state === 'running') {
+        scheduleLifecycleClear((partial) => set(partial));
+      }
+      return status;
+    } catch (error) {
+      set({ lastError: String(error), isInitialized: true });
+      return null;
+    }
+  },
+
   init: async () => {
     if (get().isInitialized) return;
     if (gatewayInitPromise) {
@@ -172,9 +267,6 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
 
     gatewayInitPromise = (async () => {
       try {
-        const status = await hostApiFetch<GatewayStatus>('/api/gateway/status');
-        set({ status, isInitialized: true });
-
         if (!gatewayEventUnsubscribers) {
           const unsubscribers: Array<() => void> = [];
           unsubscribers.push(subscribeHostEvent<GatewayStatus>('gateway:status', (payload) => {
@@ -282,9 +374,36 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
           ));
           gatewayEventUnsubscribers = unsubscribers;
         }
+
+        const status = await fetchGatewayStatusSnapshot();
+        set({ status, isInitialized: true });
+
+        if (!gatewayStatusPollTimer) {
+          gatewayStatusPollTimer = setInterval(() => {
+            const isDocumentVisible = typeof document === 'undefined' || document.visibilityState === 'visible';
+            const lifecycle = get().lifecycle.state;
+            const shouldPollAggressively = lifecycle === 'scheduled' || lifecycle === 'applying';
+            const statusState = get().status.state;
+            if (!isDocumentVisible && !shouldPollAggressively) return;
+            if (statusState === 'running' && !shouldPollAggressively && isDocumentVisible) return;
+            void get().refreshStatus();
+          }, 2000);
+        }
+
+        if (!gatewayVisibilityCleanup && typeof window !== 'undefined') {
+          const refreshFromVisibility = () => {
+            void get().refreshStatus();
+          };
+          window.addEventListener('focus', refreshFromVisibility);
+          document.addEventListener('visibilitychange', refreshFromVisibility);
+          gatewayVisibilityCleanup = () => {
+            window.removeEventListener('focus', refreshFromVisibility);
+            document.removeEventListener('visibilitychange', refreshFromVisibility);
+          };
+        }
       } catch (error) {
         console.error('Failed to initialize Gateway:', error);
-        set({ lastError: String(error) });
+        set({ lastError: String(error), isInitialized: true });
       } finally {
         gatewayInitPromise = null;
       }
@@ -295,16 +414,17 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
 
   start: async () => {
     try {
+      await get().init();
       set({ status: { ...get().status, state: 'starting' }, lastError: null });
-      const result = await hostApiFetch<{ success: boolean; error?: string }>('/api/gateway/start', {
-        method: 'POST',
-      });
+      const result = await invokeIpc<{ success: boolean; error?: string }>('gateway:start');
       if (!result.success) {
         set({
           status: { ...get().status, state: 'error', error: result.error },
           lastError: result.error || 'Failed to start Gateway',
         });
+        return;
       }
+      void reconcileGatewayStatus(set, 'running');
     } catch (error) {
       set({
         status: { ...get().status, state: 'error', error: String(error) },
@@ -315,8 +435,10 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
 
   stop: async () => {
     try {
-      await hostApiFetch('/api/gateway/stop', { method: 'POST' });
-      set({ status: { ...get().status, state: 'stopped' }, lastError: null });
+      await get().init();
+      await invokeIpc<{ success: boolean; error?: string }>('gateway:stop');
+      set({ status: { ...get().status, state: 'stopped' }, lastError: null, lifecycle: { state: 'idle' } });
+      void reconcileGatewayStatus(set, 'stopped', 5000);
     } catch (error) {
       console.error('Failed to stop Gateway:', error);
       set({ lastError: String(error) });
@@ -325,16 +447,36 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
 
   restart: async () => {
     try {
-      set({ status: { ...get().status, state: 'starting' }, lastError: null });
-      const result = await hostApiFetch<{ success: boolean; error?: string }>('/api/gateway/restart', {
-        method: 'POST',
-      });
+      await get().init();
+      set((state) => ({
+        status: { ...state.status, state: 'starting' },
+        lifecycle: {
+          state: 'scheduled',
+          action: 'restart',
+          source: 'gateway.manualRestart',
+          reason: 'gateway.manualRestart',
+          at: Date.now(),
+        },
+        lastError: null,
+      }));
+      const result = await invokeIpc<{ success: boolean; error?: string; accepted?: boolean }>('gateway:restart');
       if (!result.success) {
         set({
           status: { ...get().status, state: 'error', error: result.error },
           lastError: result.error || 'Failed to restart Gateway',
         });
+        return;
       }
+      set((state) => ({
+        lifecycle:
+          state.lifecycle.state === 'scheduled'
+            ? {
+                ...state.lifecycle,
+                state: 'applying',
+              }
+            : state.lifecycle,
+      }));
+      void reconcileGatewayStatus(set, 'running');
     } catch (error) {
       set({
         status: { ...get().status, state: 'error', error: String(error) },
@@ -345,9 +487,15 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
 
   checkHealth: async () => {
     try {
-      const result = await hostApiFetch<GatewayHealth>('/api/gateway/health');
+      const result = await invokeIpc<{ success: boolean; ok: boolean; error?: string; uptime?: number; version?: string }>('gateway:health');
+      if (!result.success) {
+        const health: GatewayHealth = { ok: false, error: result.error || 'Gateway health check failed' };
+        set({ health });
+        return health;
+      }
+      const health: GatewayHealth = { ok: result.ok, error: result.error, uptime: result.uptime };
       set({ health: result });
-      return result;
+      return health;
     } catch (error) {
       const health: GatewayHealth = { ok: false, error: String(error) };
       set({ health });

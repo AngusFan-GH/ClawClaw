@@ -463,6 +463,9 @@ async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<Age
     const modelLabel = formatModelLabel(entry.model) || defaultModelLabel || 'Not configured';
     const inheritedModel = !formatModelLabel(entry.model) && Boolean(defaultModelLabel);
     const entryIdNorm = normalizeAgentIdForBinding(entry.id);
+    const configuredWorkspace =
+      entry.workspace || (entry.id === MAIN_AGENT_ID ? getDefaultWorkspacePath(config) : `~/.openclaw/workspace-${entry.id}`);
+    const configuredAgentDir = entry.agentDir || getDefaultAgentDirPath(entry.id);
     const channelBindings = configuredGroups.flatMap((group) =>
       group.accounts
         .filter((account) => channelAccountOwners[makeChannelAccountBindingKey(group.type, account.accountId)] === entryIdNorm)
@@ -479,8 +482,8 @@ async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<Age
       isDefault: entry.id === defaultAgentId,
       modelDisplay: modelLabel,
       inheritedModel,
-      workspace: entry.workspace || (entry.id === MAIN_AGENT_ID ? getDefaultWorkspacePath(config) : `~/.openclaw/workspace-${entry.id}`),
-      agentDir: entry.agentDir || getDefaultAgentDirPath(entry.id),
+      workspace: expandPath(configuredWorkspace),
+      agentDir: expandPath(configuredAgentDir),
       channelTypes: Array.from(new Set(channelBindings.map((binding) => binding.channelType))),
       channelBindings,
     };

@@ -17,7 +17,7 @@
   },
   "refresh": "更新",
   "addAgent": "Agent を追加",
-  "gatewayWarning": "Gateway サービスが停止しています。Agent または Channel の変更が反映されるまで少し時間がかかる場合があります。",
+  "gatewayWarning": "ゲートウェイは未接続です。接続が復旧すると、Agent と Channel の割り当て同期を再開します。",
   "defaultBadge": "default",
   "inherited": "デフォルト",
   "none": "なし",

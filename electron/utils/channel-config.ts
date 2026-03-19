@@ -837,11 +837,12 @@ export async function deleteChannelConfig(
     }
 }
 
-export async function listConfiguredChannels(): Promise<string[]> {
+export async function listConfiguredChannels(options?: { includeCli?: boolean }): Promise<string[]> {
     const config = await readOpenClawConfig();
     const channels = new Set<string>();
+    const includeCli = options?.includeCli ?? process.platform !== 'win32';
 
-    if (process.platform !== 'win32') {
+    if (includeCli) {
         for (const channelType of await listConfiguredChannelsFromCli()) {
             channels.add(channelType);
         }

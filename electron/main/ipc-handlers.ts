@@ -1114,6 +1114,23 @@ function registerLogHandlers(): void {
  * Gateway-related IPC handlers
  */
 function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: BrowserWindow): void {
+  const emitGatewayLifecycle = (payload: {
+    phase: 'scheduled' | 'failed';
+    action: 'restart' | 'reload';
+    source: string;
+    reason: string;
+    error?: string;
+    delayMs?: number;
+  }) => {
+    const event = {
+      ...payload,
+      at: Date.now(),
+    };
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('gateway:lifecycle-changed', event);
+    }
+  };
+
   type GatewayHttpProxyRequest = {
     path?: string;
     method?: string;
@@ -1155,9 +1172,30 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
   // Restart Gateway
   ipcMain.handle('gateway:restart', async () => {
     try {
-      await gatewayManager.restart();
-      return { success: true };
+      emitGatewayLifecycle({
+        phase: 'scheduled',
+        action: 'restart',
+        source: 'gateway.manualRestart',
+        reason: 'gateway.manualRestart',
+      });
+      void gatewayManager.restart({ strategy: 'stop-start' }).catch((error) => {
+        emitGatewayLifecycle({
+          phase: 'failed',
+          action: 'restart',
+          source: 'gateway.manualRestart',
+          reason: 'gateway.manualRestart',
+          error: String(error),
+        });
+      });
+      return { success: true, accepted: true };
     } catch (error) {
+      emitGatewayLifecycle({
+        phase: 'failed',
+        action: 'restart',
+        source: 'gateway.manualRestart',
+        reason: 'gateway.manualRestart',
+        error: String(error),
+      });
       return { success: false, error: String(error) };
     }
   });

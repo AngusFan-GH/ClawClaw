@@ -17,7 +17,7 @@
   },
   "refresh": "刷新",
   "addAgent": "添加分身",
-  "gatewayWarning": "Gateway 服务未运行。分身或连接变更可能需要一点时间生效。",
+  "gatewayWarning": "网关未连接。分身和连接归属会在恢复连接后继续同步。",
   "defaultBadge": "默认",
   "inherited": "默认",
   "none": "无",

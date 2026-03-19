@@ -358,9 +358,19 @@ async function initialize(): Promise<void> {
     hostEventBus.emit('channel:whatsapp-error', error);
   });
 
+  // Re-attach to an already running Gateway first. This keeps the UI in sync
+  // after Electron reloads/restarts without forcing an auto-start.
+  logger.debug('Gateway startup decision: probing for existing Gateway attachment...');
+  const attachedExistingGateway = await gatewayManager.attachIfRunning();
+
   // Start Gateway automatically (this seeds missing bootstrap files with full templates)
   const gatewayAutoStart = await getSetting('gatewayAutoStart');
-  if (gatewayAutoStart) {
+  logger.info(
+    `Gateway startup decision: attachExisting=${attachedExistingGateway ? 'connected' : 'none'} autoStart=${gatewayAutoStart ? 'enabled' : 'disabled'}`
+  );
+  if (attachedExistingGateway) {
+    logger.info('Attached to existing Gateway during app startup');
+  } else if (gatewayAutoStart) {
     try {
       await syncAllProvidersToRuntime();
       await syncAllProviderAuthToRuntime();

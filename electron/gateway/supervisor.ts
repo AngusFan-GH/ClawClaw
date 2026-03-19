@@ -222,13 +222,14 @@ async function terminateOrphanedProcessIds(port: number, pids: string[]): Promis
 export async function findExistingGatewayProcess(options: {
   port: number;
   ownedPid?: number;
+  terminateUnexpected?: boolean;
 }): Promise<{ port: number; externalToken?: string } | null> {
-  const { port, ownedPid } = options;
+  const { port, ownedPid, terminateUnexpected = true } = options;
 
   try {
     try {
       const pids = await getListeningProcessIds(port);
-      if (pids.length > 0 && (!ownedPid || !pids.includes(String(ownedPid)))) {
+      if (terminateUnexpected && pids.length > 0 && (!ownedPid || !pids.includes(String(ownedPid)))) {
         await terminateOrphanedProcessIds(port, pids);
         return null;
       }

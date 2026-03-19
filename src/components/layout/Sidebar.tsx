@@ -135,7 +135,9 @@ export function Sidebar() {
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const gatewayStatus = useGatewayStore((s) => s.status);
-  const isGatewayRunning = gatewayStatus.state === 'running';
+  const gatewayInitialized = useGatewayStore((s) => s.isInitialized);
+  const displayGatewayState = gatewayInitialized ? gatewayStatus.state : 'starting';
+  const isGatewayRunning = displayGatewayState === 'running';
   const { t } = useTranslation(['common', 'chat']);
 
   const navigate = useNavigate();
@@ -291,14 +293,14 @@ export function Sidebar() {
   ];
 
   const settingsActive = settingsItems.some((item) => location.pathname.startsWith(item.to));
-  const gatewayBadgeLabel = gatewayStatus.state === 'running'
+  const gatewayBadgeLabel = displayGatewayState === 'running'
     ? t('chat:toolbar.gatewayRunning')
-    : gatewayStatus.state === 'error'
+    : displayGatewayState === 'error'
       ? t('chat:toolbar.gatewayError')
-      : gatewayStatus.state === 'starting'
+      : displayGatewayState === 'starting'
         ? t('chat:toolbar.gatewayStarting')
         : t('chat:toolbar.gatewayStopped');
-  const canRestartGateway = gatewayStatus.state === 'stopped' || gatewayStatus.state === 'error';
+  const canRestartGateway = gatewayInitialized && (displayGatewayState === 'stopped' || displayGatewayState === 'error');
 
   return (
     <aside
@@ -571,11 +573,11 @@ export function Sidebar() {
                     title={gatewayBadgeLabel}
                     className={cn(
                       'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors',
-                      gatewayStatus.state === 'running'
+                      displayGatewayState === 'running'
                         ? 'border-emerald-500/25 bg-emerald-500/12 text-emerald-700 dark:text-emerald-400'
-                        : gatewayStatus.state === 'error'
+                        : displayGatewayState === 'error'
                           ? 'border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-400'
-                          : gatewayStatus.state === 'starting'
+                          : displayGatewayState === 'starting'
                             ? 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-400'
                             : 'border-black/8 bg-black/[0.03] text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]',
                       canRestartGateway && 'cursor-pointer hover:border-primary/25 hover:bg-primary/8 hover:text-foreground',
@@ -585,11 +587,11 @@ export function Sidebar() {
                     <span
                       className={cn(
                         'h-2 w-2 rounded-full',
-                        gatewayStatus.state === 'running'
+                        displayGatewayState === 'running'
                           ? 'bg-emerald-500'
-                          : gatewayStatus.state === 'error'
+                          : displayGatewayState === 'error'
                             ? 'bg-red-500'
-                            : gatewayStatus.state === 'starting'
+                            : displayGatewayState === 'starting'
                               ? 'bg-sky-500 animate-pulse'
                               : 'bg-muted-foreground/55'
                       )}

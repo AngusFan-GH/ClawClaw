@@ -384,6 +384,59 @@ export class GatewayManager extends EventEmitter {
   }
 
   /**
+   * Attach to an already running Gateway without starting a new process.
+   * This is used when the Electron host restarts or reloads while OpenClaw
+   * is still alive, so the UI can recover its real connection state.
+   */
+  async attachIfRunning(): Promise<boolean> {
+    if (this.startLock) {
+      logger.debug('Gateway attach skipped because a start flow is already in progress');
+      return false;
+    }
+
+    if (this.status.state === 'running' && this.ws?.readyState === WebSocket.OPEN) {
+      return true;
+    }
+
+    await this.initDeviceIdentity();
+
+    try {
+      logger.debug(`Checking for attachable existing Gateway on port ${this.status.port}...`);
+      const existing = await findExistingGatewayProcess({
+        port: this.status.port,
+        ownedPid: this.process?.pid,
+        terminateUnexpected: false,
+      });
+      if (!existing) {
+        logger.info(`Gateway attach decision: no existing Gateway available on port ${this.status.port}`);
+        return false;
+      }
+
+      logger.info(`Attaching to existing Gateway on port ${existing.port}`);
+      this.shouldReconnect = true;
+      this.reconnectAttempts = 0;
+      this.setStatus({ state: 'starting', error: undefined, reconnectAttempts: 0, pid: undefined });
+      await this.connect(existing.port, existing.token);
+      this.ownsProcess = false;
+      this.process = null;
+      this.processExitCode = null;
+      this.startHealthCheck();
+      logger.info(`Gateway attach decision: connected to existing Gateway on port ${existing.port}`);
+      return true;
+    } catch (error) {
+      logger.warn(`Gateway attach decision: failed on port ${this.status.port}:`, error);
+      this.setStatus({
+        state: 'stopped',
+        error: undefined,
+        pid: undefined,
+        connectedAt: undefined,
+        uptime: undefined,
+      });
+      return false;
+    }
+  }
+
+  /**
    * Stop Gateway process
    */
   async stop(): Promise<void> {

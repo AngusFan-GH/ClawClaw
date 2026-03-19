@@ -52,35 +52,37 @@ export interface GatewayLaunchContext {
 export async function syncGatewayConfigBeforeLaunch(
   appSettings: Awaited<ReturnType<typeof getAllSettings>>,
 ): Promise<void> {
-  await withTimeout(
-    syncProxyConfigToOpenClaw(appSettings),
-    5000,
-    'syncProxyConfigToOpenClaw',
-    undefined,
-  );
-
   try {
-    await withTimeout(sanitizeOpenClawConfig(), 5000, 'sanitizeOpenClawConfig', undefined);
+    await withTimeout(sanitizeOpenClawConfig(), 2000, 'sanitizeOpenClawConfig', undefined);
   } catch (err) {
     logger.warn('Failed to sanitize openclaw.json:', err);
   }
 
-  try {
-    await withTimeout(
-      syncGatewayTokenToConfig(appSettings.gatewayToken),
-      5000,
-      'syncGatewayTokenToConfig',
-      undefined,
-    );
-  } catch (err) {
-    logger.warn('Failed to sync gateway token to openclaw.json:', err);
-  }
+  // These sync tasks improve eventual config consistency, but they are not
+  // required to block process launch because the gateway receives token/proxy
+  // data via argv/env for immediate startup. Run them in the background so
+  // one slow filesystem or keychain operation doesn't add 15-25s to startup.
+  void withTimeout(
+    syncProxyConfigToOpenClaw(appSettings),
+    2000,
+    'syncProxyConfigToOpenClaw',
+    undefined,
+  ).catch((err) => {
+    logger.warn('Failed to sync proxy config to openclaw.json:', err);
+  });
 
-  try {
-    await withTimeout(syncBrowserConfigToOpenClaw(), 5000, 'syncBrowserConfigToOpenClaw', undefined);
-  } catch (err) {
+  void withTimeout(
+    syncGatewayTokenToConfig(appSettings.gatewayToken),
+    2000,
+    'syncGatewayTokenToConfig',
+    undefined,
+  ).catch((err) => {
+    logger.warn('Failed to sync gateway token to openclaw.json:', err);
+  });
+
+  void withTimeout(syncBrowserConfigToOpenClaw(), 2000, 'syncBrowserConfigToOpenClaw', undefined).catch((err) => {
     logger.warn('Failed to sync browser config to openclaw.json:', err);
-  }
+  });
 }
 
 async function loadProviderEnv(): Promise<{ providerEnv: Record<string, string>; loadedProviderKeyCount: number }> {
@@ -129,7 +131,7 @@ async function resolveChannelStartupPolicy(): Promise<{
   channelStartupSummary: string;
 }> {
   try {
-    const configuredChannels = await listConfiguredChannels();
+    const configuredChannels = await listConfiguredChannels({ includeCli: false });
     if (configuredChannels.length === 0) {
       return {
         skipChannels: true,
@@ -187,7 +189,7 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
   );
   const { skipChannels, channelStartupSummary } = await withTimeout(
     resolveChannelStartupPolicy(),
-    5000,
+    1500,
     'resolveChannelStartupPolicy',
     {
       skipChannels: false,

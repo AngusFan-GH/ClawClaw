@@ -17,7 +17,7 @@
   },
   "refresh": "Refresh",
   "addAgent": "Add Agent",
-  "gatewayWarning": "Gateway service is not running. Agent/channel changes may take a moment to apply.",
+  "gatewayWarning": "Gateway is offline. Agent and channel ownership will resume syncing once the connection is restored.",
   "defaultBadge": "default",
   "inherited": "default",
   "none": "none",

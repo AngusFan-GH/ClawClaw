@@ -33,7 +33,9 @@ export function ChatToolbar({
   const refresh = useChatStore((s) => s.refresh);
   const loading = useChatStore((s) => s.loading);
   const gatewayStatus = useGatewayStore((s) => s.status);
+  const gatewayInitialized = useGatewayStore((s) => s.isInitialized);
   const { t } = useTranslation(['chat', 'common']);
+  const displayGatewayState = gatewayInitialized ? gatewayStatus.state : 'starting';
 
   useEffect(() => {
     if (!modelMenuOpen) return;
@@ -58,11 +60,11 @@ export function ChatToolbar({
   }, [modelMenuOpen]);
 
   const gatewayStatusLabel =
-    gatewayStatus.state === 'running'
+    displayGatewayState === 'running'
       ? t('toolbar.gatewayRunning')
-      : gatewayStatus.state === 'error'
+      : displayGatewayState === 'error'
         ? t('toolbar.gatewayError')
-        : gatewayStatus.state === 'starting'
+        : displayGatewayState === 'starting'
           ? t('toolbar.gatewayStarting')
           : t('toolbar.gatewayStopped');
 
@@ -84,11 +86,11 @@ export function ChatToolbar({
           variant="secondary"
           className={cn(
             'h-8 rounded-[10px] border px-3 text-[12px]',
-            gatewayStatus.state === 'running'
+            displayGatewayState === 'running'
               ? 'border-emerald-500/30 bg-emerald-500/12 text-emerald-700 dark:text-emerald-400'
-              : gatewayStatus.state === 'error'
+              : displayGatewayState === 'error'
                 ? 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
-                : gatewayStatus.state === 'starting'
+                : displayGatewayState === 'starting'
                   ? 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400'
                   : 'border-black/10 bg-white/80 text-muted-foreground dark:border-white/10 dark:bg-white/[0.06]'
           )}
@@ -97,11 +99,11 @@ export function ChatToolbar({
             <span
               className={cn(
                 'h-2 w-2 rounded-full',
-                gatewayStatus.state === 'running'
+                displayGatewayState === 'running'
                   ? 'bg-emerald-500'
-                  : gatewayStatus.state === 'error'
+                  : displayGatewayState === 'error'
                     ? 'bg-red-500'
-                    : gatewayStatus.state === 'starting'
+                    : displayGatewayState === 'starting'
                       ? 'bg-sky-500 animate-pulse'
                       : 'bg-muted-foreground/60'
               )}
