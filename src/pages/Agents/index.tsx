@@ -322,8 +322,9 @@ function resolveAgentAvatar(agent: AgentSummary): string | null {
 }
 
 async function openWorkspaceFolder(workspace?: string | null) {
-  if (!workspace || workspace === 'default') return;
-  const result = await invokeIpc<string>('shell:openPath', workspace);
+  const normalizedWorkspace = workspace?.trim();
+  if (!normalizedWorkspace || normalizedWorkspace === 'default') return;
+  const result = await invokeIpc<string>('shell:openPath', normalizedWorkspace);
   if (typeof result === 'string' && result.trim()) {
     const lower = result.toLowerCase();
     if (lower.includes('no such file') || lower.includes('not found') || lower.includes('failed to open')) {

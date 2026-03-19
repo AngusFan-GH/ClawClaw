@@ -2,6 +2,7 @@ import { access, mkdir, readFile, writeFile } from 'fs/promises';
 import { constants } from 'fs';
 import { homedir } from 'os';
 import { dirname, join } from 'path';
+import JSON5 from 'json5';
 
 const OPENCLAW_CONFIG_PATH = join(homedir(), '.openclaw', 'openclaw.json');
 
@@ -46,19 +47,32 @@ export function sanitizeKnownInvalidOpenClawKeys(config: Record<string, unknown>
   return modified;
 }
 
-export async function readOpenClawConfigRecord<T extends Record<string, unknown> = Record<string, unknown>>(): Promise<T> {
-  await configWriteChain.catch(() => undefined);
-
+async function readOpenClawConfigRecordRaw<T extends Record<string, unknown> = Record<string, unknown>>(): Promise<T> {
   if (!(await fileExists(OPENCLAW_CONFIG_PATH))) {
     return {} as T;
   }
 
+  const raw = await readFile(OPENCLAW_CONFIG_PATH, 'utf-8');
+
+  let parsed: unknown;
   try {
-    const raw = await readFile(OPENCLAW_CONFIG_PATH, 'utf-8');
-    return JSON.parse(raw) as T;
-  } catch {
-    return {} as T;
+    parsed = JSON5.parse(raw);
+  } catch (error) {
+    throw new Error(`Failed to parse OpenClaw config at ${OPENCLAW_CONFIG_PATH}: ${String(error)}`, {
+      cause: error,
+    });
   }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`Invalid OpenClaw config root at ${OPENCLAW_CONFIG_PATH}: expected an object`);
+  }
+
+  return parsed as T;
+}
+
+export async function readOpenClawConfigRecord<T extends Record<string, unknown> = Record<string, unknown>>(): Promise<T> {
+  await configWriteChain.catch(() => undefined);
+  return readOpenClawConfigRecordRaw<T>();
 }
 
 export async function writeOpenClawConfigRecord(config: Record<string, unknown>): Promise<void> {
@@ -71,7 +85,9 @@ export async function updateOpenClawConfigRecord<T>(
   updater: (config: Record<string, unknown>) => Promise<T> | T,
 ): Promise<T> {
   const run = async (): Promise<T> => {
-    const config = await readOpenClawConfigRecord();
+    // Read the file directly inside the serialized writer to avoid waiting on
+    // the very promise chain entry we are currently executing.
+    const config = await readOpenClawConfigRecordRaw();
     const result = await updater(config);
     await writeOpenClawConfigRecord(config);
     return result;

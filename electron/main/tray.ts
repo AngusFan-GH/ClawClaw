@@ -96,7 +96,7 @@ export function createTray(mainWindow: BrowserWindow, gatewayManager: GatewayMan
           click: async () => {
             if (mainWindow.isDestroyed()) return;
             showWindow();
-            await gatewayManager.restart({ strategy: 'stop-start' });
+            await gatewayManager.restart({ strategy: 'auto' });
           },
         },
         {

@@ -299,7 +299,9 @@ export function Sidebar() {
       ? t('chat:toolbar.gatewayError')
       : displayGatewayState === 'starting'
         ? t('chat:toolbar.gatewayStarting')
-        : t('chat:toolbar.gatewayStopped');
+        : displayGatewayState === 'reconnecting'
+          ? t('chat:toolbar.gatewayReconnecting')
+          : t('chat:toolbar.gatewayStopped');
   const canRestartGateway = gatewayInitialized && (displayGatewayState === 'stopped' || displayGatewayState === 'error');
 
   return (
@@ -375,7 +377,9 @@ export function Sidebar() {
               <div className="rounded-[14px] border border-black/6 bg-white/55 px-3 py-3 text-[13px] text-muted-foreground shadow-[0_6px_16px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
                 {isGatewayRunning
                   ? t('chat:history.loading', '正在恢复最近对话…')
-                  : t('chat:history.waitingForGateway', '网关未连接，最近对话暂不可用')}
+                  : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
+                    ? t('chat:history.connectingGateway', '网关正在恢复连接，最近对话稍后可用')
+                    : t('chat:history.waitingForGateway', '网关未连接，请启动或重启网关后再试')}
               </div>
             </div>
           ) : (
@@ -577,7 +581,7 @@ export function Sidebar() {
                         ? 'border-emerald-500/25 bg-emerald-500/12 text-emerald-700 dark:text-emerald-400'
                         : displayGatewayState === 'error'
                           ? 'border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-400'
-                          : displayGatewayState === 'starting'
+                          : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
                             ? 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-400'
                             : 'border-black/8 bg-black/[0.03] text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]',
                       canRestartGateway && 'cursor-pointer hover:border-primary/25 hover:bg-primary/8 hover:text-foreground',
@@ -591,7 +595,7 @@ export function Sidebar() {
                           ? 'bg-emerald-500'
                           : displayGatewayState === 'error'
                             ? 'bg-red-500'
-                            : displayGatewayState === 'starting'
+                            : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
                               ? 'bg-sky-500 animate-pulse'
                               : 'bg-muted-foreground/55'
                       )}

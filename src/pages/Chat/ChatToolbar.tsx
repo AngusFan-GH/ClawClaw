@@ -66,7 +66,9 @@ export function ChatToolbar({
         ? t('toolbar.gatewayError')
         : displayGatewayState === 'starting'
           ? t('toolbar.gatewayStarting')
-          : t('toolbar.gatewayStopped');
+          : displayGatewayState === 'reconnecting'
+            ? t('toolbar.gatewayReconnecting')
+            : t('toolbar.gatewayStopped');
 
   return (
     <div className="flex w-full items-center justify-between gap-3">
@@ -90,7 +92,7 @@ export function ChatToolbar({
               ? 'border-emerald-500/30 bg-emerald-500/12 text-emerald-700 dark:text-emerald-400'
               : displayGatewayState === 'error'
                 ? 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
-                : displayGatewayState === 'starting'
+                : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
                   ? 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400'
                   : 'border-black/10 bg-white/80 text-muted-foreground dark:border-white/10 dark:bg-white/[0.06]'
           )}
@@ -103,7 +105,7 @@ export function ChatToolbar({
                   ? 'bg-emerald-500'
                   : displayGatewayState === 'error'
                     ? 'bg-red-500'
-                    : displayGatewayState === 'starting'
+                    : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
                       ? 'bg-sky-500 animate-pulse'
                       : 'bg-muted-foreground/60'
               )}

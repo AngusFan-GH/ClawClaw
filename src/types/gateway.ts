@@ -15,6 +15,7 @@ export interface GatewayStatus {
   connectedAt?: number;
   version?: string;
   reconnectAttempts?: number;
+  restartExpectedMs?: number;
 }
 
 export interface GatewayLifecycle {

@@ -157,11 +157,56 @@ async function fetchGatewayStatusSnapshot(): Promise<GatewayStatus> {
   return invokeIpc<GatewayStatus>('gateway:status');
 }
 
+function isLifecyclePending(lifecycle: GatewayLifecycle): boolean {
+  return lifecycle.state === 'scheduled' || lifecycle.state === 'applying';
+}
+
 function shouldPromoteLifecycleToCompleted(
   lifecycle: GatewayLifecycle,
   status: GatewayStatus,
 ): boolean {
-  return status.state === 'running' && (lifecycle.state === 'scheduled' || lifecycle.state === 'applying');
+  return status.state === 'running' && isLifecyclePending(lifecycle);
+}
+
+function reconcileLifecycleWithStatus(
+  lifecycle: GatewayLifecycle,
+  status: GatewayStatus,
+): GatewayLifecycle {
+  if (shouldPromoteLifecycleToCompleted(lifecycle, status)) {
+    return {
+      ...lifecycle,
+      state: 'completed',
+      error: undefined,
+      delayMs: undefined,
+      at: Date.now(),
+    };
+  }
+
+  if (status.state === 'error' && isLifecyclePending(lifecycle)) {
+    return {
+      ...lifecycle,
+      state: 'failed',
+      error: status.error,
+      delayMs: undefined,
+      at: Date.now(),
+    };
+  }
+
+  if (
+    (status.state === 'reconnecting' && (typeof status.restartExpectedMs === 'number' || isLifecyclePending(lifecycle))) ||
+    (status.state === 'starting' && isLifecyclePending(lifecycle))
+  ) {
+    return {
+      ...lifecycle,
+      state: 'applying',
+      action: lifecycle.action ?? (status.state === 'reconnecting' ? 'restart' : undefined),
+      delayMs: status.restartExpectedMs ?? lifecycle.delayMs,
+      error: undefined,
+      at: lifecycle.at ?? Date.now(),
+    };
+  }
+
+  return lifecycle;
 }
 
 async function reconcileGatewayStatus(
@@ -177,16 +222,9 @@ async function reconcileGatewayStatus(
       if (status.state === target) {
         set((state) => ({
           status,
-          lifecycle:
-            target === 'running' &&
-            (state.lifecycle.state === 'scheduled' || state.lifecycle.state === 'applying')
-              ? {
-                  ...state.lifecycle,
-                  state: 'completed',
-                  error: undefined,
-                  at: Date.now(),
-                }
-              : state.lifecycle,
+          lifecycle: target === 'running'
+            ? reconcileLifecycleWithStatus(state.lifecycle, status)
+            : state.lifecycle,
         }));
         if (target === 'running') {
           scheduleLifecycleClear((partial) => set(partial));
@@ -211,7 +249,10 @@ async function reconcileGatewayStatus(
         return;
       }
 
-      set({ status });
+      set((state) => ({
+        status,
+        lifecycle: reconcileLifecycleWithStatus(state.lifecycle, status),
+      }));
     } catch {
       // Ignore transient host API read failures during restart; the next poll
       // usually succeeds once the main process finishes reconnecting.
@@ -236,19 +277,13 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
   refreshStatus: async () => {
     try {
       const status = await fetchGatewayStatusSnapshot();
+      const shouldClearLifecycle = shouldPromoteLifecycleToCompleted(get().lifecycle, status);
       set((state) => ({
         status,
         isInitialized: true,
-        lifecycle: shouldPromoteLifecycleToCompleted(state.lifecycle, status)
-          ? {
-              ...state.lifecycle,
-              state: 'completed',
-              error: undefined,
-              at: Date.now(),
-            }
-          : state.lifecycle,
+        lifecycle: reconcileLifecycleWithStatus(state.lifecycle, status),
       }));
-      if (status.state === 'running') {
+      if (status.state === 'running' && shouldClearLifecycle) {
         scheduleLifecycleClear((partial) => set(partial));
       }
       return status;
@@ -273,44 +308,32 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
             set((state) => {
               if (
                 payload.state === 'running' &&
-                (state.lifecycle.state === 'scheduled' || state.lifecycle.state === 'applying')
+                isLifecyclePending(state.lifecycle)
               ) {
                 scheduleLifecycleClear(set);
                 return {
                   status: payload,
-                  lifecycle: {
-                    ...state.lifecycle,
-                    state: 'completed' as const,
-                    error: undefined,
-                    at: Date.now(),
-                  },
+                  lifecycle: reconcileLifecycleWithStatus(state.lifecycle, payload),
                 };
               }
 
               if (
                 payload.state === 'error' &&
-                (state.lifecycle.state === 'scheduled' || state.lifecycle.state === 'applying')
+                isLifecyclePending(state.lifecycle)
               ) {
                 return {
                   status: payload,
-                  lifecycle: {
-                    ...state.lifecycle,
-                    state: 'failed' as const,
-                    error: payload.error,
-                  },
+                  lifecycle: reconcileLifecycleWithStatus(state.lifecycle, payload),
                 };
               }
 
               if (
-                (payload.state === 'starting' || payload.state === 'reconnecting') &&
-                (state.lifecycle.state === 'scheduled' || state.lifecycle.state === 'applying')
+                payload.state === 'starting' ||
+                payload.state === 'reconnecting'
               ) {
                 return {
                   status: payload,
-                  lifecycle: {
-                    ...state.lifecycle,
-                    state: 'applying' as const,
-                  },
+                  lifecycle: reconcileLifecycleWithStatus(state.lifecycle, payload),
                 };
               }
 
@@ -376,7 +399,15 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
         }
 
         const status = await fetchGatewayStatusSnapshot();
-        set({ status, isInitialized: true });
+        const shouldClearLifecycle = shouldPromoteLifecycleToCompleted(get().lifecycle, status);
+        set((state) => ({
+          status,
+          isInitialized: true,
+          lifecycle: reconcileLifecycleWithStatus(state.lifecycle, status),
+        }));
+        if (status.state === 'running' && shouldClearLifecycle) {
+          scheduleLifecycleClear((partial) => set(partial));
+        }
 
         if (!gatewayStatusPollTimer) {
           gatewayStatusPollTimer = setInterval(() => {
@@ -415,7 +446,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
   start: async () => {
     try {
       await get().init();
-      set({ status: { ...get().status, state: 'starting' }, lastError: null });
+      set({ status: { ...get().status, state: 'starting', restartExpectedMs: undefined }, lastError: null });
       const result = await invokeIpc<{ success: boolean; error?: string }>('gateway:start');
       if (!result.success) {
         set({
@@ -437,7 +468,11 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
     try {
       await get().init();
       await invokeIpc<{ success: boolean; error?: string }>('gateway:stop');
-      set({ status: { ...get().status, state: 'stopped' }, lastError: null, lifecycle: { state: 'idle' } });
+      set({
+        status: { ...get().status, state: 'stopped', restartExpectedMs: undefined },
+        lastError: null,
+        lifecycle: { state: 'idle' },
+      });
       void reconcileGatewayStatus(set, 'stopped', 5000);
     } catch (error) {
       console.error('Failed to stop Gateway:', error);

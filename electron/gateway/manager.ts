@@ -52,6 +52,7 @@ export interface GatewayStatus {
   connectedAt?: number;
   version?: string;
   reconnectAttempts?: number;
+  restartExpectedMs?: number;
 }
 
 export interface GatewayRestartOptions {
@@ -286,7 +287,7 @@ export class GatewayManager extends EventEmitter {
     }
 
     this.reconnectAttempts = 0;
-    this.setStatus({ state: 'starting', reconnectAttempts: 0 });
+    this.setStatus({ state: 'starting', reconnectAttempts: 0, restartExpectedMs: undefined });
 
     // Check if Python environment is ready (self-healing) asynchronously.
     // Fire-and-forget: only needs to run once, not on every retry.
@@ -347,7 +348,7 @@ export class GatewayManager extends EventEmitter {
         },
         runDoctorRepair: async () => await runOpenClawDoctorRepair(),
         onDoctorRepairSuccess: () => {
-          this.setStatus({ state: 'starting', error: undefined, reconnectAttempts: 0 });
+          this.setStatus({ state: 'starting', error: undefined, reconnectAttempts: 0, restartExpectedMs: undefined });
         },
         delay: async (ms) => {
           await new Promise((resolve) => setTimeout(resolve, ms));
@@ -363,7 +364,7 @@ export class GatewayManager extends EventEmitter {
         `Gateway start failed (port=${this.status.port}, reconnectAttempts=${this.reconnectAttempts}, spawn=${this.lastSpawnSummary ?? 'n/a'})`,
         enrichedError
       );
-      this.setStatus({ state: 'error', error: String(enrichedError) });
+      this.setStatus({ state: 'error', error: String(enrichedError), restartExpectedMs: undefined });
       throw enrichedError;
     } finally {
       this.startLock = false;
@@ -415,7 +416,13 @@ export class GatewayManager extends EventEmitter {
       logger.info(`Attaching to existing Gateway on port ${existing.port}`);
       this.shouldReconnect = true;
       this.reconnectAttempts = 0;
-      this.setStatus({ state: 'starting', error: undefined, reconnectAttempts: 0, pid: undefined });
+      this.setStatus({
+        state: 'starting',
+        error: undefined,
+        reconnectAttempts: 0,
+        pid: undefined,
+        restartExpectedMs: undefined,
+      });
       await this.connect(existing.port, existing.token);
       this.ownsProcess = false;
       this.process = null;
@@ -431,6 +438,7 @@ export class GatewayManager extends EventEmitter {
         pid: undefined,
         connectedAt: undefined,
         uptime: undefined,
+        restartExpectedMs: undefined,
       });
       return false;
     }
@@ -496,6 +504,7 @@ export class GatewayManager extends EventEmitter {
       pid: undefined,
       connectedAt: undefined,
       uptime: undefined,
+      restartExpectedMs: undefined,
     });
   }
 
@@ -789,7 +798,7 @@ export class GatewayManager extends EventEmitter {
         this.emit('exit', code);
 
         if (this.status.state === 'running') {
-          this.setStatus({ state: 'stopped' });
+          this.setStatus({ state: 'stopped', restartExpectedMs: undefined });
           this.scheduleReconnect();
         }
       },
@@ -823,6 +832,7 @@ export class GatewayManager extends EventEmitter {
           state: 'running',
           port,
           connectedAt: Date.now(),
+          restartExpectedMs: undefined,
         });
         this.startPing();
       },
@@ -831,7 +841,7 @@ export class GatewayManager extends EventEmitter {
       },
       onCloseAfterHandshake: () => {
         if (this.status.state === 'running') {
-          this.setStatus({ state: 'stopped' });
+          this.setStatus({ state: 'stopped', restartExpectedMs: undefined });
           this.scheduleReconnect();
         }
       },
@@ -934,6 +944,7 @@ export class GatewayManager extends EventEmitter {
       this.setStatus({
         state: 'reconnecting',
         reconnectAttempts: this.reconnectAttempts,
+        restartExpectedMs: delay,
       });
       const scheduledEpoch = this.lifecycleController.getCurrentEpoch();
 
@@ -983,6 +994,7 @@ export class GatewayManager extends EventEmitter {
         state: 'error',
         error: 'Failed to reconnect after maximum attempts',
         reconnectAttempts: this.reconnectAttempts,
+        restartExpectedMs: undefined,
       });
       return;
     }
@@ -994,6 +1006,7 @@ export class GatewayManager extends EventEmitter {
     this.setStatus({
       state: 'reconnecting',
       reconnectAttempts: this.reconnectAttempts,
+      restartExpectedMs: undefined,
     });
     const scheduledEpoch = this.lifecycleController.getCurrentEpoch();
 

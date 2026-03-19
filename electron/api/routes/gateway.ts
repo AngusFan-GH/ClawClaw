@@ -11,8 +11,23 @@ export async function handleGatewayRoutes(
   url: URL,
   ctx: HostApiContext,
 ): Promise<boolean> {
-  if (url.pathname === '/api/app/gateway-info' && req.method === 'GET') {
+  const resolveGatewayStatus = async () => {
     const status = ctx.gatewayManager.getStatus();
+    if (
+      (status.state === 'stopped' || status.state === 'error') &&
+      !ctx.gatewayManager.isConnected()
+    ) {
+      try {
+        await ctx.gatewayManager.attachIfRunning();
+      } catch {
+        // Ignore attach probe failures and return the last known status.
+      }
+    }
+    return ctx.gatewayManager.getStatus();
+  };
+
+  if (url.pathname === '/api/app/gateway-info' && req.method === 'GET') {
+    const status = await resolveGatewayStatus();
     const token = await getSetting('gatewayToken');
     const port = status.port || PORTS.OPENCLAW_GATEWAY;
     sendJson(res, 200, {
@@ -24,7 +39,7 @@ export async function handleGatewayRoutes(
   }
 
   if (url.pathname === '/api/gateway/status' && req.method === 'GET') {
-    sendJson(res, 200, ctx.gatewayManager.getStatus());
+    sendJson(res, 200, await resolveGatewayStatus());
     return true;
   }
 
@@ -62,7 +77,7 @@ export async function handleGatewayRoutes(
         source: 'gateway.manualRestart',
         reason: 'gateway.manualRestart',
       });
-      void ctx.gatewayManager.restart({ strategy: 'stop-start' }).catch((error) => {
+      void ctx.gatewayManager.restart({ strategy: 'auto' }).catch((error) => {
         emitGatewayLifecycleEvent(ctx, {
           phase: 'failed',
           action: 'restart',

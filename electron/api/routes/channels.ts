@@ -7,8 +7,6 @@ import {
   deleteChannelConfig,
   getChannelFormValues,
   listConfiguredChannelGroups,
-  listConfiguredChannelAccounts,
-  listConfiguredChannels,
   saveChannelConfig,
   setChannelEnabled,
   validateChannelConfig,
@@ -163,11 +161,16 @@ export async function handleChannelRoutes(
   ctx: HostApiContext,
 ): Promise<boolean> {
   if (url.pathname === '/api/channels/configured' && req.method === 'GET') {
+    const groups = await listConfiguredChannelGroups();
     sendJson(res, 200, {
       success: true,
-      channels: await listConfiguredChannels(),
-      accountsByType: await listConfiguredChannelAccounts(),
-      groups: await listConfiguredChannelGroups(),
+      channels: groups.map((group) => group.type),
+      accountsByType: Object.fromEntries(
+        groups
+          .filter((group) => group.accounts.length > 0)
+          .map((group) => [group.type, group.accounts.map((account) => account.accountId)]),
+      ),
+      groups,
     });
     return true;
   }

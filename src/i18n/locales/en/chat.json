@@ -21,6 +21,7 @@
     "refresh": "Refresh chat",
     "gatewayRunning": "Gateway connected",
     "gatewayStarting": "Gateway starting",
+    "gatewayReconnecting": "Gateway reconnecting",
     "gatewayStopped": "Gateway offline",
     "gatewayError": "Gateway error",
     "showThinking": "Show thinking",
@@ -38,7 +39,7 @@
     "openModelSettings": "Open model settings",
     "attachFiles": "Attach files",
     "emptyPlaceholder": "Ask ClawClaw",
-    "gatewayNotConnected": "Gateway not connected...",
+    "gatewayNotConnected": "Gateway offline. Start or restart the Gateway first.",
     "send": "Send",
     "stop": "Stop",
     "retryFailedAttachments": "Retry failed attachments",
@@ -78,7 +79,8 @@
   "history": {
     "title": "Recent chats",
     "loading": "Restoring recent chats...",
-    "waitingForGateway": "Gateway offline. Recent chats are temporarily unavailable."
+    "connectingGateway": "Gateway is reconnecting. Recent chats will be available shortly.",
+    "waitingForGateway": "Gateway offline. Start or restart the Gateway to continue."
   },
   "historyBuckets": {
     "today": "Today",

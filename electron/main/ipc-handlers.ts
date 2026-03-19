@@ -21,6 +21,7 @@ import {
   getOpenClawConfigDir,
   getOpenClawSkillsDir,
   ensureDir,
+  expandPath,
 } from '../utils/paths';
 import { getOpenClawCliCommand } from '../utils/openclaw-cli';
 import {
@@ -1131,6 +1132,18 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
     }
   };
 
+  const resolveGatewayStatus = async () => {
+    const status = gatewayManager.getStatus();
+    if ((status.state === 'stopped' || status.state === 'error') && !gatewayManager.isConnected()) {
+      try {
+        await gatewayManager.attachIfRunning();
+      } catch {
+        // Ignore attach probe failures and fall back to the last known status.
+      }
+    }
+    return gatewayManager.getStatus();
+  };
+
   type GatewayHttpProxyRequest = {
     path?: string;
     method?: string;
@@ -1140,8 +1153,8 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
   };
 
   // Get Gateway status
-  ipcMain.handle('gateway:status', () => {
-    return gatewayManager.getStatus();
+  ipcMain.handle('gateway:status', async () => {
+    return await resolveGatewayStatus();
   });
 
   // Check if Gateway is connected
@@ -1178,7 +1191,7 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
         source: 'gateway.manualRestart',
         reason: 'gateway.manualRestart',
       });
-      void gatewayManager.restart({ strategy: 'stop-start' }).catch((error) => {
+      void gatewayManager.restart({ strategy: 'auto' }).catch((error) => {
         emitGatewayLifecycle({
           phase: 'failed',
           action: 'restart',
@@ -2224,7 +2237,17 @@ function registerShellHandlers(): void {
 
   // Open path
   ipcMain.handle('shell:openPath', async (_, path: string) => {
-    return await shell.openPath(path);
+    const rawPath = typeof path === 'string' ? path.trim() : '';
+    if (!rawPath) {
+      return 'Path is empty';
+    }
+
+    const normalizedPath = resolve(expandPath(rawPath));
+    if (!existsSync(normalizedPath)) {
+      return `Path not found: ${normalizedPath}`;
+    }
+
+    return await shell.openPath(normalizedPath);
   });
 }
 

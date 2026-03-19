@@ -21,6 +21,7 @@
     "refresh": "刷新对话",
     "gatewayRunning": "网关已连接",
     "gatewayStarting": "网关启动中",
+    "gatewayReconnecting": "网关重连中",
     "gatewayStopped": "网关未连接",
     "gatewayError": "网关异常",
     "showThinking": "显示思考过程",
@@ -38,7 +39,7 @@
     "openModelSettings": "打开模型设置",
     "attachFiles": "添加文件",
     "emptyPlaceholder": "询问 ClawClaw",
-    "gatewayNotConnected": "网关未连接...",
+    "gatewayNotConnected": "网关未连接，请先启动或重启网关",
     "send": "发送",
     "stop": "停止",
     "retryFailedAttachments": "重试失败附件"
@@ -78,7 +79,8 @@
   "history": {
     "title": "最近对话",
     "loading": "正在恢复最近对话…",
-    "waitingForGateway": "网关未连接，最近对话暂不可用"
+    "connectingGateway": "网关正在恢复连接，最近对话稍后可用",
+    "waitingForGateway": "网关未连接，请启动或重启网关后再试"
   },
   "historyBuckets": {
     "today": "今天",

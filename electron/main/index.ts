@@ -358,6 +358,25 @@ async function initialize(): Promise<void> {
     hostEventBus.emit('channel:whatsapp-error', error);
   });
 
+  const syncProviderRuntimeAfterGatewayReady = async () => {
+    try {
+      logger.debug('Starting background provider runtime sync after Gateway availability');
+      await syncAllProvidersToRuntime();
+      logger.debug('Background provider config sync completed');
+      await syncAllProviderAuthToRuntime();
+      logger.debug('Background provider auth sync completed');
+      const defaultProviderAccountId = await getProviderService().getDefaultAccountId();
+      if (defaultProviderAccountId) {
+        await syncDefaultProviderToRuntime(defaultProviderAccountId);
+        logger.debug(`Background default provider sync completed (${defaultProviderAccountId})`);
+      } else {
+        logger.debug('Background default provider sync skipped (no default account)');
+      }
+    } catch (error) {
+      logger.warn('Background provider runtime sync failed:', error);
+    }
+  };
+
   // Re-attach to an already running Gateway first. This keeps the UI in sync
   // after Electron reloads/restarts without forcing an auto-start.
   logger.debug('Gateway startup decision: probing for existing Gateway attachment...');
@@ -370,17 +389,13 @@ async function initialize(): Promise<void> {
   );
   if (attachedExistingGateway) {
     logger.info('Attached to existing Gateway during app startup');
+    void syncProviderRuntimeAfterGatewayReady();
   } else if (gatewayAutoStart) {
     try {
-      await syncAllProvidersToRuntime();
-      await syncAllProviderAuthToRuntime();
-      const defaultProviderAccountId = await getProviderService().getDefaultAccountId();
-      if (defaultProviderAccountId) {
-        await syncDefaultProviderToRuntime(defaultProviderAccountId);
-      }
       logger.debug('Auto-starting Gateway...');
       await gatewayManager.start();
       logger.info('Gateway auto-start succeeded');
+      void syncProviderRuntimeAfterGatewayReady();
     } catch (error) {
       logger.error('Gateway auto-start failed:', error);
       mainWindow?.webContents.send('gateway:error', String(error));

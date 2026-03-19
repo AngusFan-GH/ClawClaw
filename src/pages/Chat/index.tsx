@@ -673,14 +673,16 @@ export function Chat() {
             : 'unconfigured';
   const loadingDescription = isGatewayRunning
     ? t('history.loading', '正在恢复最近对话…')
-    : displayGatewayState === 'starting'
-      ? t('toolbar.gatewayStarting', '正在连接网关')
-      : t('history.waitingForGateway', '网关未连接，最近对话暂不可用');
+    : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
+      ? t('history.connectingGateway', '网关正在恢复连接，最近对话稍后可用')
+      : t('history.waitingForGateway', '网关未连接，请启动或重启网关后再试');
   const loadingTitle = isGatewayRunning
     ? t('loading.title', '正在加载对话')
     : displayGatewayState === 'starting'
       ? t('toolbar.gatewayStarting', '正在连接网关')
-      : t('toolbar.gatewayStopped', '网关未连接');
+      : displayGatewayState === 'reconnecting'
+        ? t('toolbar.gatewayReconnecting', '网关重连中')
+        : t('toolbar.gatewayStopped', '网关未连接');
   return (
     <div
       className={cn(
