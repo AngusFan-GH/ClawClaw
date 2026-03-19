@@ -20,6 +20,7 @@ import {
   autoInstallCliIfNeeded,
   generateCompletionCache,
   installCompletionToProfile,
+  verifyWindowsBundledCliRuntime,
 } from '../utils/openclaw-cli';
 import { isQuitting, setQuitting } from './app-state';
 import { applyProxySettings } from './proxy';
@@ -410,6 +411,8 @@ async function initialize(): Promise<void> {
   void ensureClawXContext().catch((error) => {
     logger.warn('Failed to merge ClawClaw context into workspace:', error);
   });
+
+  verifyWindowsBundledCliRuntime();
 
   // Auto-install openclaw CLI and shell completions (non-blocking).
   void autoInstallCliIfNeeded((installedPath) => {

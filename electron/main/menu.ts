@@ -174,7 +174,7 @@ export function createMenu(): void {
         {
           label: 'Documentation',
           click: async () => {
-            await shell.openExternal('https://claw-x.com');
+            await shell.openExternal('https://xzinfra.com');
           },
         },
         {

@@ -86,6 +86,12 @@ const hasBundledUvForArch = (arch) => {
   return existsSync(uvPath);
 };
 
+const hasBundledNodeForArch = (arch) => {
+  if (arch === 'ia32') return true;
+  const nodePath = resolve(process.cwd(), 'resources', 'bin', `win32-${arch}`, 'node.exe');
+  return existsSync(nodePath);
+};
+
 const ensureBundledUvForWin = (archs, env) => {
   const missingArchs = archs.filter((arch) => !hasBundledUvForArch(arch));
   if (missingArchs.length === 0) {
@@ -114,6 +120,42 @@ const ensureBundledUvForWin = (archs, env) => {
   const stillMissing = missingArchs.filter((arch) => !hasBundledUvForArch(arch));
   if (stillMissing.length > 0) {
     console.error(`[package:win] Bundled uv is still missing after download for: ${stillMissing.join(', ')}`);
+    process.exit(1);
+  }
+};
+
+const ensureBundledNodeForWin = (archs, env) => {
+  const missingArchs = archs.filter((arch) => !hasBundledNodeForArch(arch));
+  if (missingArchs.length === 0) {
+    return;
+  }
+
+  console.log(
+    `[package:win] Missing bundled node.exe for ${missingArchs.join(', ')}. Downloading Windows Node.js binaries...`
+  );
+
+  const pnpmCmd = isWindowsHost ? 'pnpm.cmd' : 'pnpm';
+  const result = spawnSync(pnpmCmd, ['run', 'node:download:win'], {
+    stdio: 'inherit',
+    env,
+    shell: isWindowsHost,
+  });
+
+  if (result.error) {
+    console.error('[package:win] Failed to start node download:', result.error.message);
+    process.exit(1);
+  }
+
+  if ((result.status ?? 1) !== 0) {
+    console.error('[package:win] node:download:win failed.');
+    process.exit(result.status ?? 1);
+  }
+
+  const stillMissing = missingArchs.filter((arch) => !hasBundledNodeForArch(arch));
+  if (stillMissing.length > 0) {
+    console.error(
+      `[package:win] Bundled node.exe is still missing after download for: ${stillMissing.join(', ')}`
+    );
     process.exit(1);
   }
 };
@@ -160,6 +202,7 @@ if (pnpmPath) {
 
 const winArchTargets = resolveWinArchTargets(args);
 ensureBundledUvForWin(winArchTargets, builderEnv);
+ensureBundledNodeForWin(winArchTargets, builderEnv);
 
 const electronBuilderCli = resolve(process.cwd(), 'node_modules', 'electron-builder', 'cli.js');
 const electronBuilderBin = resolve(process.cwd(), 'node_modules', '.bin', isWindowsHost ? 'electron-builder.cmd' : 'electron-builder');

@@ -359,8 +359,8 @@ pnpm run build:vite       # フロントエンドのみビルド
 pnpm build                # フルプロダクションビルド（パッケージアセット含む）
 pnpm package              # 現在のプラットフォーム向けにパッケージ化
 pnpm package:mac          # macOS向けにパッケージ化
-pnpm package:win          # Windowsホスト / VM 上で Windows 向けにパッケージ化
-pnpm package:win:cross    # macOS/Linux から Windows NSIS をクロスビルド
+pnpm package:win          # Windowsホスト / VM 上で Windows 向けにパッケージ化（openclaw CLI 用の node.exe も同梱）
+pnpm package:win:cross    # macOS/Linux から Windows NSIS をクロスビルド（openclaw CLI 用の node.exe も同梱）
 pnpm package:linux        # Linux向けにパッケージ化
 pnpm run upload:update    # release/latest.yml と参照される Windows 更新ファイルをアップロード
 ```

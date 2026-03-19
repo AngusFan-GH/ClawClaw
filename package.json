@@ -34,6 +34,8 @@
     "uv:download:win": "zx scripts/download-bundled-uv.mjs --platform=win",
     "uv:download:linux": "zx scripts/download-bundled-uv.mjs --platform=linux",
     "uv:download:all": "zx scripts/download-bundled-uv.mjs --all",
+    "node:download:win": "zx scripts/download-bundled-node.mjs --platform=win",
+    "node:download:all": "zx scripts/download-bundled-node.mjs --all",
     "icons": "zx scripts/generate-icons.mjs",
     "branding:apply": "node scripts/apply-branding.mjs",
     "package": "vite build && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && node scripts/clean-builder-output.mjs && electron-builder",

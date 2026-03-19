@@ -373,4 +373,24 @@ exports.default = async function afterPack(context) {
   if (nativeRemoved > 0) {
     console.log(`[after-pack] ✅ Removed ${nativeRemoved} non-target native platform packages.`);
   }
+
+  // 5. Windows CLI runtime validation
+  if (platform === 'win32') {
+    const bundledNode = join(resourcesDir, 'bin', 'node.exe');
+    const cliWrapper = join(resourcesDir, 'cli', 'openclaw.cmd');
+    const cliEntry = join(resourcesDir, 'openclaw', 'openclaw.mjs');
+
+    const missing = [];
+    if (!existsSync(bundledNode)) missing.push(bundledNode);
+    if (!existsSync(cliWrapper)) missing.push(cliWrapper);
+    if (!existsSync(cliEntry)) missing.push(cliEntry);
+
+    if (missing.length > 0) {
+      throw new Error(
+        `[after-pack] Windows CLI runtime is incomplete. Missing: ${missing.join(', ')}`
+      );
+    }
+
+    console.log('[after-pack] ✅ Windows CLI runtime validated (node.exe + wrapper + entry script).');
+  }
 };

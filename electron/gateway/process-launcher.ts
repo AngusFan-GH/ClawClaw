@@ -34,7 +34,7 @@ const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
       delete flat['HTTP-Referer'];
       delete flat['x-title'];
       delete flat['X-Title'];
-      flat['HTTP-Referer'] = 'https://claw-x.com';
+      flat['HTTP-Referer'] = 'https://clawclaw.xzinfra.com';
       flat['X-Title'] = 'ClawClaw';
       init.headers = flat;
     }

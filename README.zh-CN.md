@@ -362,8 +362,8 @@ pnpm run build:vite       # 仅构建前端
 pnpm build                # 完整生产构建（含打包资源）
 pnpm package              # 为当前平台打包
 pnpm package:mac          # 为 macOS 打包
-pnpm package:win          # 在 Windows 主机 / 虚拟机中为 Windows 打包
-pnpm package:win:cross    # 在 macOS/Linux 上交叉打包 Windows NSIS
+pnpm package:win          # 在 Windows 主机 / 虚拟机中为 Windows 打包（同时内置 openclaw CLI 所需的 node.exe）
+pnpm package:win:cross    # 在 macOS/Linux 上交叉打包 Windows NSIS（同时内置 openclaw CLI 所需的 node.exe）
 pnpm package:linux        # 为 Linux 打包
 pnpm run upload:update    # 上传 release/latest.yml 及其引用的 Windows 更新文件
 ```

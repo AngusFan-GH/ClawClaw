@@ -27,22 +27,17 @@ function Quote-WindowsArgument {
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $installDir = Split-Path -Parent (Split-Path -Parent $scriptDir)
-$appExe = Join-Path $installDir 'ClawClaw.exe'
 $entryScript = Join-Path $installDir 'resources\openclaw\openclaw.mjs'
 $openclawCwd = Join-Path $installDir 'resources\openclaw'
+$bundledNode = Join-Path $installDir 'resources\bin\node.exe'
 
 if ($CliArgs.Count -gt 0 -and $CliArgs[0] -ieq 'update') {
   Write-Output 'openclaw is managed by ClawClaw (bundled version).'
   Write-Output ''
   Write-Output 'To update openclaw, update ClawClaw:'
   Write-Output '  Open ClawClaw > Settings > Check for Updates'
-  Write-Output '  Or download the latest version from https://claw-x.com'
+  Write-Output '  Or download the latest version from https://clawclaw.xzinfra.com'
   exit 0
-}
-
-if (-not (Test-Path -LiteralPath $appExe)) {
-  Write-Error "ClawClaw executable not found at $appExe"
-  exit 1
 }
 
 if (-not (Test-Path -LiteralPath $entryScript)) {
@@ -50,64 +45,30 @@ if (-not (Test-Path -LiteralPath $entryScript)) {
   exit 1
 }
 
-$allArgs = @($entryScript) + $CliArgs
-$argumentLine = ($allArgs | ForEach-Object { Quote-WindowsArgument $_ }) -join ' '
-
-$psi = New-Object System.Diagnostics.ProcessStartInfo
-$psi.FileName = $appExe
-$psi.Arguments = $argumentLine
-$psi.WorkingDirectory = $openclawCwd
-$psi.UseShellExecute = $false
-$psi.RedirectStandardOutput = $true
-$psi.RedirectStandardError = $true
-$psi.CreateNoWindow = $true
-$psi.Environment['ELECTRON_RUN_AS_NODE'] = '1'
-$psi.Environment['OPENCLAW_EMBEDDED_IN'] = 'ClawClaw'
-$psi.Environment['OPENCLAW_NO_RESPAWN'] = '1'
-
-$process = New-Object System.Diagnostics.Process
-$process.StartInfo = $psi
-
-$stdoutDone = New-Object System.Threading.ManualResetEvent($false)
-$stderrDone = New-Object System.Threading.ManualResetEvent($false)
-
-$stdoutHandler = [System.Diagnostics.DataReceivedEventHandler]{
-  param($sender, $eventArgs)
-  if ($null -eq $eventArgs.Data) {
-    $stdoutDone.Set() | Out-Null
-  } else {
-    [Console]::Out.WriteLine($eventArgs.Data)
+$nodeExe = $bundledNode
+if (-not (Test-Path -LiteralPath $nodeExe)) {
+  $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+  if ($null -ne $nodeCommand) {
+    $nodeExe = $nodeCommand.Source
   }
 }
 
-$stderrHandler = [System.Diagnostics.DataReceivedEventHandler]{
-  param($sender, $eventArgs)
-  if ($null -eq $eventArgs.Data) {
-    $stderrDone.Set() | Out-Null
-  } else {
-    [Console]::Error.WriteLine($eventArgs.Data)
-  }
+if ([string]::IsNullOrWhiteSpace($nodeExe)) {
+  Write-Error 'No bundled node.exe was found and "node" is not available on PATH. Reinstall ClawClaw with the Windows CLI runtime included.'
+  exit 1
 }
 
-$process.add_OutputDataReceived($stdoutHandler)
-$process.add_ErrorDataReceived($stderrHandler)
+$previousEmbeddedIn = [Environment]::GetEnvironmentVariable('OPENCLAW_EMBEDDED_IN', 'Process')
 
 try {
-  if (-not $process.Start()) {
-    Write-Error 'Failed to start ClawClaw CLI process.'
-    exit 1
+  [Environment]::SetEnvironmentVariable('OPENCLAW_EMBEDDED_IN', 'ClawClaw', 'Process')
+  Push-Location $openclawCwd
+  try {
+    & $nodeExe '--disable-warning=ExperimentalWarning' $entryScript @CliArgs
+    exit $LASTEXITCODE
+  } finally {
+    Pop-Location
   }
-
-  $process.BeginOutputReadLine()
-  $process.BeginErrorReadLine()
-  $process.WaitForExit()
-  $stdoutDone.WaitOne() | Out-Null
-  $stderrDone.WaitOne() | Out-Null
-  exit $process.ExitCode
 } finally {
-  $process.remove_OutputDataReceived($stdoutHandler)
-  $process.remove_ErrorDataReceived($stderrHandler)
-  $process.Dispose()
-  $stdoutDone.Dispose()
-  $stderrDone.Dispose()
+  [Environment]::SetEnvironmentVariable('OPENCLAW_EMBEDDED_IN', $previousEmbeddedIn, 'Process')
 }

@@ -37,7 +37,7 @@ case "$1" in
     echo ""
     echo "To update openclaw, update ClawClaw:"
     echo "  Open ClawClaw > Settings > Check for Updates"
-    echo "  Or download the latest version from https://claw-x.com"
+    echo "  Or download the latest version from https://clawclaw.xzinfra.com"
     echo ""
     ELECTRON_RUN_AS_NODE=1 "$ELECTRON" "$CLI" --version 2>/dev/null || true
     exit 0

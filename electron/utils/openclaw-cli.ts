@@ -36,6 +36,7 @@ function quoteForPowerShell(value: string): string {
 export function getOpenClawCliCommand(): string {
   const entryPath = getOpenClawEntryPath();
   const platform = process.platform;
+  const nodeExec = getNodeExecForCli();
 
   if (platform === 'darwin' || platform === 'linux') {
     const localBinPath = join(homedir(), '.local', 'bin', 'openclaw');
@@ -73,11 +74,13 @@ export function getOpenClawCliCommand(): string {
       }
     }
 
-    const execPath = process.execPath;
     if (platform === 'win32') {
-      return `$env:ELECTRON_RUN_AS_NODE=1; & ${quoteForPowerShell(execPath)} ${quoteForPowerShell(entryPath)}`;
+      if (nodeExec !== process.execPath) {
+        return `& ${quoteForPowerShell(nodeExec)} --disable-warning=ExperimentalWarning ${quoteForPowerShell(entryPath)}`;
+      }
+      return `$env:ELECTRON_RUN_AS_NODE=1; & ${quoteForPowerShell(process.execPath)} ${quoteForPowerShell(entryPath)}`;
     }
-    return `ELECTRON_RUN_AS_NODE=1 ${quoteForPosix(execPath)} ${quoteForPosix(entryPath)}`;
+    return `ELECTRON_RUN_AS_NODE=1 ${quoteForPosix(nodeExec)} ${quoteForPosix(entryPath)}`;
   }
 
   if (platform === 'win32') {
@@ -98,14 +101,22 @@ export function getOpenClawCliSpawnConfig(args: string[]): {
   const cwd = getOpenClawDir();
 
   if (platform === 'win32') {
+    const execPath = getNodeExecForCli();
+    const isBundledNode = execPath.toLowerCase().endsWith('\\node.exe');
     return {
-      command: process.execPath,
-      args: [entryPath, ...args],
+      command: execPath,
+      args: isBundledNode
+        ? ['--disable-warning=ExperimentalWarning', entryPath, ...args]
+        : [entryPath, ...args],
       env: {
         ...process.env,
-        ELECTRON_RUN_AS_NODE: '1',
-        OPENCLAW_NO_RESPAWN: '1',
         OPENCLAW_EMBEDDED_IN: 'ClawClaw',
+        ...(isBundledNode
+          ? {}
+          : {
+              ELECTRON_RUN_AS_NODE: '1',
+              OPENCLAW_NO_RESPAWN: '1',
+            }),
       },
       cwd,
     };
@@ -388,6 +399,10 @@ export async function autoInstallCliIfNeeded(notify?: (path: string) => void): P
 // ── Completion helpers ───────────────────────────────────────────────────────
 
 function getNodeExecForCli(): string {
+  if (process.platform === 'win32' && app.isPackaged) {
+    const bundledNodePath = join(process.resourcesPath, 'bin', 'node.exe');
+    if (existsSync(bundledNodePath)) return bundledNodePath;
+  }
   if (process.platform === 'darwin' && app.isPackaged) {
     const appName = app.getName();
     const helperName = `${appName} Helper`;
@@ -434,6 +449,18 @@ export function generateCompletionCache(): void {
   child.on('error', (err) => {
     logger.warn('Failed to generate completion cache:', err);
   });
+}
+
+export function verifyWindowsBundledCliRuntime(): void {
+  if (!app.isPackaged) return;
+  if (process.platform !== 'win32') return;
+
+  const bundledNodePath = join(process.resourcesPath, 'bin', 'node.exe');
+  if (!existsSync(bundledNodePath)) {
+    logger.warn(
+      `Windows CLI runtime is incomplete: missing bundled node.exe at ${bundledNodePath}. openclaw terminal commands will fall back to PATH node or fail.`
+    );
+  }
 }
 
 export function installCompletionToProfile(): void {
