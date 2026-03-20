@@ -15,6 +15,7 @@ import {
 } from '../utils/openclaw-auth';
 import { buildProxyEnvAsync, resolveProxySettingsAsync } from '../utils/proxy';
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
+import { resetMalformedOpenClawConfig } from '../utils/openclaw-config';
 import { logger } from '../utils/logger';
 
 async function withTimeout<T>(
@@ -61,6 +62,17 @@ export async function syncGatewayConfigBeforeLaunch(
     await withTimeout(sanitizeOpenClawConfig(), 2000, 'sanitizeOpenClawConfig', undefined);
   } catch (err) {
     logger.warn('Failed to sanitize openclaw.json:', err);
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes('Failed to parse OpenClaw config')) {
+      try {
+        const backupPath = await resetMalformedOpenClawConfig();
+        logger.warn(
+          `Recovered malformed openclaw.json by recreating it${backupPath ? ` (backup: ${backupPath})` : ''}`
+        );
+      } catch (recoveryErr) {
+        logger.error('Failed to recover malformed openclaw.json:', recoveryErr);
+      }
+    }
   }
 
   // These sync tasks improve eventual config consistency, but they are not

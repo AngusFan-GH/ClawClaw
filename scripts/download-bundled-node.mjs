@@ -6,6 +6,7 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const NODE_VERSION = process.env.BUNDLED_NODE_VERSION || process.versions.node;
 const BASE_URL = `https://nodejs.org/dist/v${NODE_VERSION}`;
 const OUTPUT_BASE = path.join(ROOT_DIR, 'resources', 'bin');
+const MAX_DOWNLOAD_ATTEMPTS = 3;
 
 const TARGETS = {
   'win32-x64': {
@@ -32,20 +33,13 @@ async function setupTarget(id) {
 
   echo(chalk.blue`\n📦 Setting up bundled Node.js for ${id}...`);
 
-  await fs.remove(targetDir);
   await fs.remove(tempDir);
   await fs.ensureDir(targetDir);
   await fs.ensureDir(tempDir);
 
   try {
     echo`⬇️ Downloading: ${downloadUrl}`;
-    const response = await fetch(downloadUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
-    }
-
-    const buffer = await response.arrayBuffer();
-    await fs.writeFile(archivePath, Buffer.from(buffer));
+    await downloadWithRetry(downloadUrl, archivePath);
 
     echo`📂 Extracting...`;
     if (os.platform() === 'win32') {
@@ -68,6 +62,26 @@ async function setupTarget(id) {
     await fs.remove(archivePath);
     await fs.remove(tempDir);
   }
+}
+
+async function downloadWithRetry(downloadUrl, outputPath) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= MAX_DOWNLOAD_ATTEMPTS; attempt += 1) {
+    try {
+      await $`curl --fail --location --silent --show-error ${downloadUrl} --output ${outputPath}`;
+      return;
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (attempt < MAX_DOWNLOAD_ATTEMPTS) {
+        echo(chalk.yellow(`⚠️ Download attempt ${attempt}/${MAX_DOWNLOAD_ATTEMPTS} failed: ${message}`));
+        echo(chalk.yellow('↻ Retrying download...'));
+      }
+    }
+  }
+
+  throw lastError ?? new Error(`Failed to download ${downloadUrl}`);
 }
 
 const downloadAll = argv.all;

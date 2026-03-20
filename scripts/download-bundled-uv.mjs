@@ -6,57 +6,7 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const UV_VERSION = '0.10.0';
 const BASE_URL = `https://github.com/astral-sh/uv/releases/download/${UV_VERSION}`;
 const OUTPUT_BASE = path.join(ROOT_DIR, 'resources', 'bin');
-const PROXY_ENV_KEYS = [
-  'HTTPS_PROXY',
-  'https_proxy',
-  'HTTP_PROXY',
-  'http_proxy',
-  'ALL_PROXY',
-  'all_proxy',
-  'NO_PROXY',
-  'no_proxy',
-];
-
-function getEnvValue(key) {
-  const value = process.env[key];
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function getProxyEnvSnapshot() {
-  return PROXY_ENV_KEYS.reduce((acc, key) => {
-    const value = getEnvValue(key);
-    if (value) acc[key] = value;
-    return acc;
-  }, {});
-}
-
-function hasProxyServerEnv(envSnapshot) {
-  return Boolean(
-    envSnapshot.HTTPS_PROXY ||
-      envSnapshot.https_proxy ||
-      envSnapshot.HTTP_PROXY ||
-      envSnapshot.http_proxy ||
-      envSnapshot.ALL_PROXY ||
-      envSnapshot.all_proxy
-  );
-}
-
-async function createFetchDispatcherFromEnv() {
-  const envSnapshot = getProxyEnvSnapshot();
-  if (!hasProxyServerEnv(envSnapshot)) {
-    return null;
-  }
-
-  const { EnvHttpProxyAgent } = await import('undici');
-  const activeKeys = Object.keys(envSnapshot)
-    .filter(Boolean)
-    .sort()
-    .join(', ');
-  echo(chalk.cyan(`🌍 Using proxy env for downloads: ${activeKeys}`));
-  return new EnvHttpProxyAgent();
-}
-
-const fetchDispatcher = await createFetchDispatcherFromEnv();
+const MAX_DOWNLOAD_ATTEMPTS = 3;
 
 // Mapping Node platforms/archs to uv release naming
 const TARGETS = {
@@ -108,7 +58,6 @@ async function setupTarget(id) {
   echo(chalk.blue`\n📦 Setting up uv for ${id}...`);
 
   // Cleanup & Prep
-  await fs.remove(targetDir);
   await fs.remove(tempDir);
   await fs.ensureDir(targetDir);
   await fs.ensureDir(tempDir);
@@ -116,13 +65,7 @@ async function setupTarget(id) {
   try {
     // Download
     echo`⬇️ Downloading: ${downloadUrl}`;
-    const response = await fetch(
-      downloadUrl,
-      fetchDispatcher ? { dispatcher: fetchDispatcher } : undefined
-    );
-    if (!response.ok) throw new Error(`Failed to download: ${response.statusText}`);
-    const buffer = await response.arrayBuffer();
-    await fs.writeFile(archivePath, Buffer.from(buffer));
+    await downloadWithRetry(downloadUrl, archivePath);
 
     // Extract
     echo`📂 Extracting...`;
@@ -169,7 +112,31 @@ async function setupTarget(id) {
   }
 }
 
-try {
+async function downloadWithRetry(downloadUrl, outputPath) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= MAX_DOWNLOAD_ATTEMPTS; attempt += 1) {
+    try {
+      await downloadViaCurl(downloadUrl, outputPath);
+      return;
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (attempt < MAX_DOWNLOAD_ATTEMPTS) {
+        echo(chalk.yellow(`⚠️ Download attempt ${attempt}/${MAX_DOWNLOAD_ATTEMPTS} failed: ${message}`));
+        echo(chalk.yellow('↻ Retrying download...'));
+      }
+    }
+  }
+
+  throw lastError ?? new Error(`Failed to download ${downloadUrl}`);
+}
+
+async function downloadViaCurl(downloadUrl, outputPath) {
+  await $`curl --fail --location --silent --show-error ${downloadUrl} --output ${outputPath}`;
+}
+
+{
   // Main logic
   const downloadAll = argv.all;
   const platform = argv.platform;
@@ -211,8 +178,4 @@ try {
   }
 
   echo(chalk.green`\n🎉 Done!`);
-} finally {
-  if (fetchDispatcher && typeof fetchDispatcher.close === 'function') {
-    await fetchDispatcher.close();
-  }
 }

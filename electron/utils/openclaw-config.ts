@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, writeFile } from 'fs/promises';
+import { access, mkdir, readFile, rename, writeFile } from 'fs/promises';
 import { constants } from 'fs';
 import { homedir } from 'os';
 import { dirname, join } from 'path';
@@ -79,6 +79,18 @@ export async function writeOpenClawConfigRecord(config: Record<string, unknown>)
   sanitizeKnownInvalidOpenClawKeys(config);
   await ensureConfigDir();
   await writeFile(OPENCLAW_CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`, 'utf-8');
+}
+
+export async function resetMalformedOpenClawConfig(): Promise<string | null> {
+  if (!(await fileExists(OPENCLAW_CONFIG_PATH))) {
+    await writeOpenClawConfigRecord({});
+    return null;
+  }
+
+  const backupPath = `${OPENCLAW_CONFIG_PATH}.broken-${Date.now()}.bak`;
+  await rename(OPENCLAW_CONFIG_PATH, backupPath);
+  await writeOpenClawConfigRecord({});
+  return backupPath;
 }
 
 export async function updateOpenClawConfigRecord<T>(
