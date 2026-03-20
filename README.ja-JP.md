@@ -217,6 +217,18 @@ ClawClawには、Electron、OpenClaw Gateway、またはTelegramなどのチャ�
 - `システム設定を使用` モードでは、ClawClaw は OS のプロキシも解決し、自動起動された OpenClaw Gateway 子プロセスへ渡します。
 - ClawClawはTelegramが有効な場合、プロキシをOpenClawのTelegramチャネル設定にも同期します。
 
+### メモリ設定
+
+**設定 → メモリ** では、ClawClaw / OpenClaw がセッションをまたいで情報を保存・再利用する方法を制御できます。
+
+- **会話メモリを自動保存**: OpenClaw 組み込みの `session-memory` hook を有効にします。`/new` または `/reset` 実行時に、終了した会話の要約が workspace の `memory/` フォルダへ保存されます。
+- **メモリ検索を有効化**: OpenClaw の `memorySearch` ランタイム設定を有効にし、後続の会話で `MEMORY.md` や `memory/*.md` を上流の `memory_search` / `memory_get` ツール経由で参照できるようにします。
+
+注意:
+
+- 現在の会話の継続コンテキストは、引き続き OpenClaw の session transcript に依存します。`session-memory` は追加のクロスセッションアーカイブであり、現在の会話コンテキストの主ソースではありません。
+- どちらかのメモリ設定を変更すると、ClawClaw は `~/.openclaw/openclaw.json` を更新し、新しい設定を上流ランタイムへ反映させるために Gateway を自動再起動します。
+
 ### 設定のバックアップとデータクリーンアップ
 
 **設定 → データとアンインストール** を開くと、データ削除やアンインストールの前に現在の設定を JSON バックアップとしてエクスポートできます。同じ画面で Gateway を停止し、管理対象の ClawClaw / OpenClaw ローカルデータを許可リスト方式でクリーンアップし、その後 OS のアンインストーラからアプリ本体を削除するための完全アンインストール準備も行えます。Windows では、ClawClaw 自身のキャッシュ、ストレージ、ログはアプリ終了後に続けて削除され、Chromium のファイルロックが残っていても安全にクリーンアップできます。

@@ -33,6 +33,7 @@ import {
 } from '../utils/store';
 import { saveProviderKeyToOpenClaw, removeProviderFromOpenClaw } from '../utils/openclaw-auth';
 import { logger } from '../utils/logger';
+import { syncMemorySettingsToOpenClaw } from '../utils/openclaw-auth';
 import {
   saveChannelConfig,
   getChannelConfig,
@@ -604,36 +605,21 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             break;
           }
           if (request.action === 'create') {
-            type CronCreateInput = {
-              name: string;
-              message: string;
-              schedule: string;
-              enabled?: boolean;
-            };
             const payload = request.payload as
-              | { input?: CronCreateInput }
-              | [CronCreateInput]
-              | CronCreateInput
+              | { input?: Record<string, unknown> }
+              | [Record<string, unknown>]
+              | Record<string, unknown>
               | undefined;
-            let input: CronCreateInput | undefined;
+            let input: Record<string, unknown> | undefined;
             if (Array.isArray(payload)) {
               input = payload[0];
             } else if (payload && typeof payload === 'object' && 'input' in payload) {
-              input = payload.input;
+              input = payload.input as Record<string, unknown> | undefined;
             } else {
-              input = payload as CronCreateInput | undefined;
+              input = payload as Record<string, unknown> | undefined;
             }
             if (!input) throw new Error('Invalid cron.create payload');
-            const gatewayInput = {
-              name: input.name,
-              schedule: { kind: 'cron', expr: input.schedule },
-              payload: { kind: 'agentTurn', message: input.message },
-              enabled: input.enabled ?? true,
-              wakeMode: 'next-heartbeat',
-              sessionTarget: 'isolated',
-              delivery: { mode: 'none' },
-            };
-            const created = await gatewayManager.rpc('cron.add', gatewayInput);
+            const created = await gatewayManager.rpc('cron.add', normalizeIncomingCronJob(input));
             data =
               created && typeof created === 'object'
                 ? transformCronJob(created as GatewayCronJob)
@@ -648,17 +634,7 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             const id = Array.isArray(payload) ? payload[0] : payload?.id;
             const input = Array.isArray(payload) ? payload[1] : payload?.input;
             if (!id || !input) throw new Error('Invalid cron.update payload');
-            const patch = { ...input };
-            if (typeof patch.schedule === 'string')
-              patch.schedule = { kind: 'cron', expr: patch.schedule };
-            if (typeof patch.message === 'string') {
-              patch.payload = { kind: 'agentTurn', message: patch.message };
-              delete patch.message;
-            }
-            const current = await getCronJobById(gatewayManager, id);
-            if (current && isEditableUiJob(current)) {
-              patch.delivery = { mode: current.delivery?.mode ?? 'none' };
-            }
+            const patch = normalizeIncomingCronJob(input);
             data = await gatewayManager.rpc('cron.update', { id, patch });
             break;
           }
@@ -840,14 +816,19 @@ function registerSkillConfigHandlers(): void {
  */
 interface GatewayCronJob {
   id: string;
+  agentId?: string | null;
+  sessionKey?: string | null;
   name: string;
   description?: string;
   enabled: boolean;
+  deleteAfterRun?: boolean;
   createdAtMs: number;
   updatedAtMs: number;
   schedule: { kind: string; expr?: string; everyMs?: number; at?: string; tz?: string };
-  payload: { kind: string; message?: string; text?: string };
-  delivery?: { mode: string; channel?: string; to?: string };
+  wakeMode?: 'now' | 'next-heartbeat';
+  payload: Record<string, unknown> & { kind: string; message?: string; text?: string };
+  delivery?: Record<string, unknown> & { mode: string; channel?: string; to?: string };
+  failureAlert?: unknown;
   sessionTarget?: string;
   state: {
     nextRunAtMs?: number;
@@ -866,44 +847,28 @@ function isUiManagedAgentTurn(job: GatewayCronJob): boolean {
   );
 }
 
-function isEditableUiJob(job: GatewayCronJob): boolean {
-  return isUiManagedAgentTurn(job);
-}
-
-function clearChannelRequiredError(job: GatewayCronJob): void {
-  if (job.state?.lastError?.includes('Channel is required')) {
-    job.state.lastError = undefined;
-    job.state.lastStatus = 'ok';
-  }
-}
-
-function clearStaleUiDeliveryError(job: GatewayCronJob): void {
-  if (isUiManagedAgentTurn(job)) {
-    clearChannelRequiredError(job);
-  }
-}
-
 async function getCronJobById(gatewayManager: GatewayManager, id: string): Promise<GatewayCronJob | undefined> {
   const result = await gatewayManager.rpc('cron.list', { includeDisabled: true });
   const data = result as { jobs?: GatewayCronJob[] };
   return (data?.jobs ?? []).find((job) => job.id === id);
 }
 
+function normalizeIncomingCronJob(input: Record<string, unknown>) {
+  const patch = { ...input };
+  if (typeof patch.schedule === 'string') {
+    patch.schedule = { kind: 'cron', expr: patch.schedule };
+  }
+  if (typeof patch.message === 'string') {
+    patch.payload = { kind: 'agentTurn', message: patch.message };
+    delete patch.message;
+  }
+  return patch;
+}
+
 /**
  * Transform a Gateway CronJob to the frontend CronJob format
  */
 function transformCronJob(job: GatewayCronJob) {
-  // Extract message from payload
-  const message = job.payload?.message || job.payload?.text || '';
-  clearStaleUiDeliveryError(job);
-
-  // Build target from delivery info — only if a delivery channel is specified
-  const channelType = job.delivery?.mode === 'announce' ? job.delivery?.channel : undefined;
-  const target = channelType
-    ? { channelType, channelId: channelType, channelName: channelType }
-    : undefined;
-
-  // Build lastRun from state
   const lastRun = job.state?.lastRunAtMs
     ? {
         time: new Date(job.state.lastRunAtMs).toISOString(),
@@ -920,15 +885,24 @@ function transformCronJob(job: GatewayCronJob) {
 
   return {
     id: job.id,
+    agentId: job.agentId,
+    sessionKey: job.sessionKey ?? null,
     name: job.name,
-    message,
-    schedule: job.schedule, // Pass the object through; frontend parseCronSchedule handles it
-    target,
+    description: job.description,
+    deleteAfterRun: job.deleteAfterRun ?? false,
+    schedule: job.schedule,
     enabled: job.enabled,
     createdAt: new Date(job.createdAtMs).toISOString(),
     updatedAt: new Date(job.updatedAtMs).toISOString(),
+    wakeMode: job.wakeMode ?? 'now',
+    payload: job.payload,
+    delivery: job.delivery,
+    failureAlert: job.failureAlert,
+    state: job.state,
     lastRun,
     nextRun,
+    uiManaged: isUiManagedAgentTurn(job),
+    sessionTarget: job.sessionTarget ?? 'isolated',
   };
 }
 
@@ -2374,6 +2348,21 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
     }
   };
 
+  const patchTouchesMemorySettings = (patch: Partial<AppSettings>): boolean =>
+    Object.prototype.hasOwnProperty.call(patch, 'sessionMemoryEnabled')
+    || Object.prototype.hasOwnProperty.call(patch, 'memorySearchEnabled');
+
+  const handleMemorySettingsChange = async () => {
+    const settings = await getAllSettings();
+    await syncMemorySettingsToOpenClaw({
+      sessionMemoryEnabled: settings.sessionMemoryEnabled,
+      memorySearchEnabled: settings.memorySearchEnabled,
+    });
+    if (gatewayManager.getStatus().state === 'running') {
+      await gatewayManager.restart();
+    }
+  };
+
   ipcMain.handle('settings:get', async (_, key: keyof AppSettings) => {
     return await getSetting(key);
   });
@@ -2397,6 +2386,9 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
         key === 'proxyBypassRules'
       ) {
         await handleProxySettingsChange();
+      }
+      if (key === 'sessionMemoryEnabled' || key === 'memorySearchEnabled') {
+        await handleMemorySettingsChange();
       }
 
       return { success: true };
@@ -2425,6 +2417,9 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
     ) {
       await handleProxySettingsChange();
     }
+    if (patchTouchesMemorySettings(patch)) {
+      await handleMemorySettingsChange();
+    }
 
     return { success: true };
   });
@@ -2433,6 +2428,7 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
     await resetSettings();
     const settings = await getAllSettings();
     await handleProxySettingsChange();
+    await handleMemorySettingsChange();
     return { success: true, settings };
   });
 }

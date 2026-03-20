@@ -62,10 +62,6 @@ export function GatewayLifecycleOverlay({ lifecycle }: { lifecycle: GatewayLifec
     lifecycle.state === 'scheduled'
       ? t('gateway.lifecycle.scheduledDescription', { source: sourceLabel })
       : t('gateway.lifecycle.applyingDescription', { source: sourceLabel });
-  const expectedReconnectSeconds =
-    lifecycle.action === 'restart' && lifecycle.state === 'applying' && typeof lifecycle.delayMs === 'number'
-      ? Math.max(1, Math.ceil(lifecycle.delayMs / 1000))
-      : null;
 
   return (
     <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-background/72 backdrop-blur-[3px]">
@@ -81,11 +77,6 @@ export function GatewayLifecycleOverlay({ lifecycle }: { lifecycle: GatewayLifec
           <div className="min-w-0 flex-1">
             <div className="text-[16px] font-semibold tracking-tight text-foreground">{title}</div>
             <div className="mt-2 text-[13px] leading-[1.7] text-muted-foreground">{description}</div>
-            {expectedReconnectSeconds !== null && (
-              <div className="mt-2 text-[12px] leading-[1.6] text-sky-700 dark:text-sky-300">
-                {t('gateway.lifecycle.expectedReconnectHint', { seconds: expectedReconnectSeconds })}
-              </div>
-            )}
             <div className="mt-3 inline-flex items-center rounded-full bg-sky-500/[0.10] px-2.5 py-1 text-[11px] font-medium text-sky-700 dark:text-sky-300">
               {sourceLabel}
             </div>

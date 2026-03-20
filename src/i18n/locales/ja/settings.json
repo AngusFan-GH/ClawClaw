@@ -237,6 +237,14 @@
     "proxySaved": "プロキシ設定を保存しました",
     "proxySaveFailed": "プロキシ設定の保存に失敗しました"
   },
+  "memory": {
+    "title": "メモリ",
+    "description": "会話の保存と、セッションをまたいだ記憶検索を設定します。",
+    "sessionMemory": "会話メモリを自動保存",
+    "sessionMemoryDesc": "有効にすると、新しい会話を始めるときや会話をリセットするときに、これまでの会話内容を自動で保存します。",
+    "search": "メモリ検索を有効化",
+    "searchDesc": "有効にすると、後の会話で以前に保存した内容を思い出して使えるようになります。変更後は Gateway が自動再起動されます。"
+  },
   "updates": {
     "title": "アップデート",
     "description": "ClawClaw を最新に保つ",

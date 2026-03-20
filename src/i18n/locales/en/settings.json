@@ -237,6 +237,14 @@
     "proxySaved": "Proxy settings saved",
     "proxySaveFailed": "Failed to save proxy settings"
   },
+  "memory": {
+    "title": "Memory",
+    "description": "Configure session archival and cross-session memory recall.",
+    "sessionMemory": "Auto-archive session memory",
+    "sessionMemoryDesc": "When enabled, finished conversations are automatically saved when you reset or start a new chat, so they can be referenced later.",
+    "search": "Enable memory search",
+    "searchDesc": "When enabled, later chats can recall previously saved notes and conversation memories. Changing this restarts the Gateway automatically."
+  },
   "updates": {
     "title": "Updates",
     "description": "Keep ClawClaw up to date",

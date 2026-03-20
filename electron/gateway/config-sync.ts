@@ -7,7 +7,12 @@ import { getProviderEnvVar, getKeyableProviderTypes } from '../utils/provider-re
 import { getOpenClawDir, getOpenClawEntryPath, isOpenClawPresent } from '../utils/paths';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { listConfiguredChannels } from '../utils/channel-config';
-import { syncGatewayTokenToConfig, syncBrowserConfigToOpenClaw, sanitizeOpenClawConfig } from '../utils/openclaw-auth';
+import {
+  syncBrowserConfigToOpenClaw,
+  syncGatewayTokenToConfig,
+  syncMemorySettingsToOpenClaw,
+  sanitizeOpenClawConfig,
+} from '../utils/openclaw-auth';
 import { buildProxyEnvAsync, resolveProxySettingsAsync } from '../utils/proxy';
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { logger } from '../utils/logger';
@@ -82,6 +87,18 @@ export async function syncGatewayConfigBeforeLaunch(
 
   void withTimeout(syncBrowserConfigToOpenClaw(), 2000, 'syncBrowserConfigToOpenClaw', undefined).catch((err) => {
     logger.warn('Failed to sync browser config to openclaw.json:', err);
+  });
+
+  void withTimeout(
+    syncMemorySettingsToOpenClaw({
+      sessionMemoryEnabled: appSettings.sessionMemoryEnabled,
+      memorySearchEnabled: appSettings.memorySearchEnabled,
+    }),
+    2000,
+    'syncMemorySettingsToOpenClaw',
+    undefined,
+  ).catch((err) => {
+    logger.warn('Failed to sync memory settings to openclaw.json:', err);
   });
 }
 

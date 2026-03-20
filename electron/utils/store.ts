@@ -64,6 +64,10 @@ export interface AppSettings {
   // Security
   securityPolicy: SecurityPolicy;
   reminders: ReminderItem[];
+
+  // Memory
+  sessionMemoryEnabled: boolean;
+  memorySearchEnabled: boolean;
 }
 
 /**
@@ -107,6 +111,10 @@ const defaults: AppSettings = {
   // Security
   securityPolicy: DEFAULT_SECURITY_POLICY,
   reminders: [],
+
+  // Memory
+  sessionMemoryEnabled: true,
+  memorySearchEnabled: true,
 };
 
 /**

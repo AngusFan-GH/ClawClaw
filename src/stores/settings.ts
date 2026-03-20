@@ -41,6 +41,10 @@ interface SettingsState {
   devModeUnlocked: boolean;
   reminders: ReminderItem[];
 
+  // Memory
+  sessionMemoryEnabled: boolean;
+  memorySearchEnabled: boolean;
+
   // Setup
   initialized: boolean;
   setupComplete: boolean;
@@ -66,6 +70,8 @@ interface SettingsState {
   setSidebarCollapsed: (value: boolean) => void;
   setDevModeUnlocked: (value: boolean) => void;
   setReminders: (value: ReminderItem[]) => void;
+  setSessionMemoryEnabled: (value: boolean) => void;
+  setMemorySearchEnabled: (value: boolean) => void;
   markSetupComplete: () => void;
   resetSettings: () => void;
 }
@@ -90,6 +96,8 @@ const defaultSettings = {
   sidebarCollapsed: false,
   devModeUnlocked: false,
   reminders: [] as ReminderItem[],
+  sessionMemoryEnabled: true,
+  memorySearchEnabled: true,
   setupComplete: false,
   initialized: false,
 };
@@ -224,6 +232,18 @@ export const useSettingsStore = create<SettingsState>()(
           void syncFromMain().catch(() => {});
         });
         void syncReminderDocs().catch(() => {});
+      },
+      setSessionMemoryEnabled: (sessionMemoryEnabled) => {
+        set({ sessionMemoryEnabled });
+        void persistMainSettings({ sessionMemoryEnabled }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
+      },
+      setMemorySearchEnabled: (memorySearchEnabled) => {
+        set({ memorySearchEnabled });
+        void persistMainSettings({ memorySearchEnabled }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
       },
       markSetupComplete: () => {
         set({ setupComplete: true });

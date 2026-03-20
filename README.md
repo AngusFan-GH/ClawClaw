@@ -220,6 +220,18 @@ Notes:
 - In `Follow System` mode, ClawClaw also resolves the OS proxy and passes it to the auto-started OpenClaw Gateway process.
 - ClawClaw also syncs the proxy to OpenClaw's Telegram channel config when Telegram is enabled.
 
+### Memory Settings
+
+Open **Settings → Memory** to control how ClawClaw and OpenClaw preserve and recall information across sessions:
+
+- **Auto-archive session memory** enables OpenClaw's bundled `session-memory` hook. On `/new` or `/reset`, OpenClaw writes a memory summary for the finished conversation into the workspace `memory/` folder.
+- **Enable memory search** enables OpenClaw's `memorySearch` runtime configuration so later conversations can recall `MEMORY.md` and `memory/*.md` through the upstream `memory_search` and `memory_get` tools.
+
+Notes:
+
+- The current conversation still relies on the normal OpenClaw session transcript. `session-memory` is an additional cross-session archive, not the primary source of in-session context.
+- Changing either memory toggle updates `~/.openclaw/openclaw.json` and restarts the Gateway automatically so the upstream runtime picks up the new setting.
+
 ### Settings Backup and Cleanup
 
 Open **Settings → Data & Uninstall** to export a JSON backup of your current configuration before removing data or uninstalling the app. The same section can stop the Gateway, clean managed ClawClaw/OpenClaw data from a fixed allowlist, and prepare a full uninstall flow before you remove the app itself from the OS uninstaller. On Windows, ClawClaw's own cache, storage, and logs are queued for post-exit cleanup so locked Chromium files can be removed safely after the app quits.

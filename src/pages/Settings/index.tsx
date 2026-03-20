@@ -157,6 +157,10 @@ export function Settings() {
     setDevModeUnlocked,
     reminders,
     setReminders,
+    sessionMemoryEnabled,
+    setSessionMemoryEnabled,
+    memorySearchEnabled,
+    setMemorySearchEnabled,
     initialized,
   } = useSettingsStore();
 
@@ -1261,6 +1265,31 @@ export function Settings() {
                   </div>
                 </div>
               </SubCard>
+            </div>
+          </SectionCard>
+
+          <SectionCard title={t('memory.title')} description={t('memory.description')}>
+            <div className="space-y-4">
+              <SettingRow
+                label={t('memory.sessionMemory')}
+                description={t('memory.sessionMemoryDesc')}
+                control={
+                  <Switch
+                    checked={sessionMemoryEnabled}
+                    onCheckedChange={setSessionMemoryEnabled}
+                  />
+                }
+              />
+              <SettingRow
+                label={t('memory.search')}
+                description={t('memory.searchDesc')}
+                control={
+                  <Switch
+                    checked={memorySearchEnabled}
+                    onCheckedChange={setMemorySearchEnabled}
+                  />
+                }
+              />
             </div>
           </SectionCard>
 

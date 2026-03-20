@@ -70,7 +70,6 @@
             "scheduledDescription": "{{source}} has been saved and will be applied shortly.",
             "applyingDescription": "Applying changes from {{source}}. Some features may pause briefly.",
             "completedDescription": "Changes from {{source}} have been applied.",
-            "expectedReconnectHint": "Expected to reconnect in about {{seconds}} seconds.",
             "failedTitle": "Failed to apply Gateway changes",
             "failedDescription": "Try again later or inspect the Gateway logs.",
             "overlayBlockedHint": "Applying configuration now. UI actions are temporarily blocked to avoid inconsistent state.",

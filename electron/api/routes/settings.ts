@@ -17,6 +17,7 @@ import {
   setSetting,
   type AppSettings,
 } from '../../utils/store';
+import { syncMemorySettingsToOpenClaw } from '../../utils/openclaw-auth';
 import type { HostApiContext } from '../context';
 import { emitGatewayLifecycleEvent } from '../gateway-lifecycle';
 import { parseJsonBody, sendJson } from '../route-utils';
@@ -81,6 +82,22 @@ function pathExists(path: string): Promise<boolean> {
 function normalizePathForCompare(path: string): string {
   const normalized = normalize(path).replace(/[\\/]+$/, '');
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function patchTouchesMemory(patch: Partial<AppSettings>): boolean {
+  return Object.prototype.hasOwnProperty.call(patch, 'sessionMemoryEnabled')
+    || Object.prototype.hasOwnProperty.call(patch, 'memorySearchEnabled');
+}
+
+async function handleMemorySettingsChange(ctx: HostApiContext): Promise<void> {
+  const settings = await getAllSettings();
+  await syncMemorySettingsToOpenClaw({
+    sessionMemoryEnabled: settings.sessionMemoryEnabled,
+    memorySearchEnabled: settings.memorySearchEnabled,
+  });
+  if (ctx.gatewayManager.getStatus().state === 'running') {
+    await ctx.gatewayManager.restart();
+  }
 }
 
 function isPathWithin(root: string, target: string): boolean {
@@ -510,6 +527,9 @@ export async function handleSettingsRoutes(
       if (patchTouchesProxy(patch)) {
         await handleProxySettingsChange(ctx);
       }
+      if (patchTouchesMemory(patch)) {
+        await handleMemorySettingsChange(ctx);
+      }
       sendJson(res, 200, { success: true });
     } catch (error) {
       if (patchTouchesProxy(patch)) {
@@ -552,6 +572,9 @@ export async function handleSettingsRoutes(
       ) {
         await handleProxySettingsChange(ctx);
       }
+      if (key === 'sessionMemoryEnabled' || key === 'memorySearchEnabled') {
+        await handleMemorySettingsChange(ctx);
+      }
       sendJson(res, 200, { success: true });
     } catch (error) {
       if (
@@ -580,6 +603,7 @@ export async function handleSettingsRoutes(
     try {
       await resetSettings();
       await handleProxySettingsChange(ctx);
+      await handleMemorySettingsChange(ctx);
       sendJson(res, 200, { success: true, settings: await getAllSettings() });
     } catch (error) {
       emitGatewayLifecycleEvent(ctx, {

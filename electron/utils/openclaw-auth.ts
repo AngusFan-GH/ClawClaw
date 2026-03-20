@@ -934,6 +934,70 @@ export async function syncBrowserConfigToOpenClaw(): Promise<void> {
   console.log('Synced browser config to openclaw.json');
 }
 
+export async function syncMemorySettingsToOpenClaw(params: {
+  sessionMemoryEnabled: boolean;
+  memorySearchEnabled: boolean;
+}): Promise<void> {
+  const config = await readOpenClawJson();
+
+  const hooks = (
+    config.hooks && typeof config.hooks === 'object'
+      ? { ...(config.hooks as Record<string, unknown>) }
+      : {}
+  ) as Record<string, unknown>;
+
+  const internal = (
+    hooks.internal && typeof hooks.internal === 'object'
+      ? { ...(hooks.internal as Record<string, unknown>) }
+      : {}
+  ) as Record<string, unknown>;
+
+  const entries = (
+    internal.entries && typeof internal.entries === 'object'
+      ? { ...(internal.entries as Record<string, unknown>) }
+      : {}
+  ) as Record<string, unknown>;
+
+  const sessionMemoryEntry = (
+    entries['session-memory'] && typeof entries['session-memory'] === 'object'
+      ? { ...(entries['session-memory'] as Record<string, unknown>) }
+      : {}
+  ) as Record<string, unknown>;
+  sessionMemoryEntry.enabled = params.sessionMemoryEnabled;
+  entries['session-memory'] = sessionMemoryEntry;
+  internal.entries = entries;
+  if (params.sessionMemoryEnabled) {
+    internal.enabled = true;
+  }
+  hooks.internal = internal;
+  config.hooks = hooks;
+
+  const agents = (
+    config.agents && typeof config.agents === 'object'
+      ? { ...(config.agents as Record<string, unknown>) }
+      : {}
+  ) as Record<string, unknown>;
+
+  const defaults = (
+    agents.defaults && typeof agents.defaults === 'object'
+      ? { ...(agents.defaults as Record<string, unknown>) }
+      : {}
+  ) as Record<string, unknown>;
+
+  const memorySearch = (
+    defaults.memorySearch && typeof defaults.memorySearch === 'object'
+      ? { ...(defaults.memorySearch as Record<string, unknown>) }
+      : {}
+  ) as Record<string, unknown>;
+  memorySearch.enabled = params.memorySearchEnabled;
+  defaults.memorySearch = memorySearch;
+  agents.defaults = defaults;
+  config.agents = agents;
+
+  await writeOpenClawJson(config);
+  console.log('Synced memory settings to openclaw.json');
+}
+
 /**
  * Update a provider entry in every discovered agent's models.json.
  */

@@ -220,6 +220,18 @@ ClawClaw 内置了代理设置，适用于需要通过本地代理客户端访�
 - 在“跟随系统”模式下，ClawClaw 也会解析系统代理，并传给自动启动的 OpenClaw Gateway 子进程。
 - 如果启用了 Telegram，ClawClaw 还会把代理同步到 OpenClaw 的 Telegram 频道配置中。
 
+### 记忆设置
+
+打开 **设置 → 记忆**，可以控制 ClawClaw / OpenClaw 如何沉淀和检索跨会话信息：
+
+- **自动归档会话记忆**：开启 OpenClaw 内置的 `session-memory` hook。在执行 `/new` 或 `/reset` 时，OpenClaw 会把刚结束的会话摘要写入工作区的 `memory/` 目录。
+- **启用记忆检索**：开启 OpenClaw 的 `memorySearch` 运行时配置，让后续问答可以通过上游 `memory_search` 和 `memory_get` 工具检索 `MEMORY.md` 与 `memory/*.md`。
+
+说明：
+
+- 当前会话的连续上下文仍然主要依赖 OpenClaw 的 session transcript。`session-memory` 是额外的跨会话归档，不是当前会话上下文的主来源。
+- 修改任一记忆开关后，ClawClaw 会同步更新 `~/.openclaw/openclaw.json`，并自动重启 Gateway，让上游运行时立即加载新配置。
+
 ### 配置备份与数据清理
 
 打开 **设置 → 数据与卸载**，可以在清理数据或卸载前先导出当前配置的 JSON 备份。同一处也能先停止 Gateway，再按白名单清理受管的 ClawClaw / OpenClaw 本地数据，并在真正从系统卸载器移除应用本体之前完成“完全卸载准备”。在 Windows 上，ClawClaw 自身的缓存、存储和日志会排队到应用退出后继续清理，避免被 Chromium 文件锁占用而删除失败。
