@@ -1570,7 +1570,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     _sessionRestorePromise = (async () => {
       try {
-        await get().loadSessions({ preserveCurrent: true, warmLabels: false });
+        // Cold start should eagerly hydrate sidebar labels so recent conversations
+        // do not temporarily fall back to the agent displayName ("ClawClaw")
+        // until the user clicks into each session.
+        await get().loadSessions({ preserveCurrent: true, warmLabels: true });
         await get().loadHistory(false);
       } finally {
         _sessionRestorePromise = null;

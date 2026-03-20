@@ -78,7 +78,7 @@
   "history": {
     "title": "最近の会話",
     "loading": "最近の会話を復元しています…",
-    "connectingGateway": "ゲートウェイ再接続中です。最近の会話はまもなく利用可能になります",
+    "connectingGateway": "ゲートウェイ再接続中です",
     "waitingForGateway": "ゲートウェイ未接続です。起動または再起動してから再試行してください"
   },
   "historyBuckets": {

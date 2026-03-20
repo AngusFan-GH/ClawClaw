@@ -378,7 +378,7 @@ export function Sidebar() {
                 {isGatewayRunning
                   ? t('chat:history.loading', '正在恢复最近对话…')
                   : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
-                    ? t('chat:history.connectingGateway', '网关正在恢复连接，最近对话稍后可用')
+                    ? t('chat:history.connectingGateway', '网关正在恢复连接')
                     : t('chat:history.waitingForGateway', '网关未连接，请启动或重启网关后再试')}
               </div>
             </div>

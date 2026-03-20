@@ -20,7 +20,7 @@ export interface GatewayStatus {
 
 export interface GatewayLifecycle {
   state: 'idle' | 'scheduled' | 'applying' | 'completed' | 'failed';
-  action?: 'restart' | 'reload';
+  action?: 'start' | 'restart' | 'reload';
   source?: string;
   reason?: string;
   delayMs?: number;

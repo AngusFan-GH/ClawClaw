@@ -79,7 +79,7 @@
   "history": {
     "title": "最近对话",
     "loading": "正在恢复最近对话…",
-    "connectingGateway": "网关正在恢复连接，最近对话稍后可用",
+    "connectingGateway": "网关正在恢复连接",
     "waitingForGateway": "网关未连接，请启动或重启网关后再试"
   },
   "historyBuckets": {

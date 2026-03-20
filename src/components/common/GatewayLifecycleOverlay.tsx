@@ -29,6 +29,8 @@ function getSourceLabel(t: (key: string) => string, source?: string): string {
       return t('gateway.lifecycle.sources.security');
     case 'gateway.manualRestart':
       return t('gateway.lifecycle.sources.manual');
+    case 'gateway.autoStart':
+      return t('gateway.lifecycle.sources.startup');
     default:
       return t('gateway.lifecycle.sources.config');
   }
@@ -42,13 +44,18 @@ export function GatewayLifecycleOverlay({ lifecycle }: { lifecycle: GatewayLifec
   }
 
   const sourceLabel = getSourceLabel(t, lifecycle.source);
+  const isStart = lifecycle.action === 'start';
   const isReload = lifecycle.action === 'reload';
   const title =
     lifecycle.state === 'scheduled'
-      ? isReload
+      ? isStart
+        ? t('gateway.lifecycle.scheduledStartTitle')
+        : isReload
         ? t('gateway.lifecycle.scheduledReloadTitle')
         : t('gateway.lifecycle.scheduledRestartTitle')
-      : isReload
+      : isStart
+        ? t('gateway.lifecycle.applyingStartTitle')
+        : isReload
         ? t('gateway.lifecycle.applyingReloadTitle')
         : t('gateway.lifecycle.applyingRestartTitle');
   const description =

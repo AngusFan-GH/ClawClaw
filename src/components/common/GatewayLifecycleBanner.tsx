@@ -19,6 +19,8 @@ function getSourceLabel(t: (key: string) => string, source?: string): string {
       return t('gateway.lifecycle.sources.security');
     case 'gateway.manualRestart':
       return t('gateway.lifecycle.sources.manual');
+    case 'gateway.autoStart':
+      return t('gateway.lifecycle.sources.startup');
     default:
       return t('gateway.lifecycle.sources.config');
   }

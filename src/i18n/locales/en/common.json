@@ -61,8 +61,10 @@
         "lifecycle": {
             "scheduledRestartTitle": "Changes saved. Gateway will restart shortly",
             "scheduledReloadTitle": "Changes saved. Gateway will reload shortly",
+            "scheduledStartTitle": "Gateway will start shortly",
             "applyingRestartTitle": "Restarting Gateway",
             "applyingReloadTitle": "Applying Gateway configuration",
+            "applyingStartTitle": "Starting Gateway",
             "completedRestartTitle": "Changes applied",
             "completedReloadTitle": "Changes synchronized",
             "scheduledDescription": "{{source}} has been saved and will be applied shortly.",
@@ -78,6 +80,7 @@
                 "proxy": "proxy settings",
                 "security": "security settings",
                 "manual": "manual restart",
+                "startup": "startup",
                 "config": "configuration"
             }
         }

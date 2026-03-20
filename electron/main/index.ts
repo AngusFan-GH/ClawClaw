@@ -394,11 +394,34 @@ async function initialize(): Promise<void> {
   } else if (gatewayAutoStart) {
     try {
       logger.debug('Auto-starting Gateway...');
+      const startupLifecycleEvent = {
+        phase: 'scheduled' as const,
+        action: 'start' as const,
+        source: 'gateway.autoStart',
+        reason: 'gateway.autoStart',
+        at: Date.now(),
+      };
+      hostEventBus.emit('gateway:lifecycle', startupLifecycleEvent);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('gateway:lifecycle-changed', startupLifecycleEvent);
+      }
       await gatewayManager.start();
       logger.info('Gateway auto-start succeeded');
       void syncProviderRuntimeAfterGatewayReady();
     } catch (error) {
       logger.error('Gateway auto-start failed:', error);
+      const failedStartupLifecycleEvent = {
+        phase: 'failed' as const,
+        action: 'start' as const,
+        source: 'gateway.autoStart',
+        reason: 'gateway.autoStart',
+        error: String(error),
+        at: Date.now(),
+      };
+      hostEventBus.emit('gateway:lifecycle', failedStartupLifecycleEvent);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('gateway:lifecycle-changed', failedStartupLifecycleEvent);
+      }
       mainWindow?.webContents.send('gateway:error', String(error));
     }
   } else {

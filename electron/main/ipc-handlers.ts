@@ -1117,7 +1117,7 @@ function registerLogHandlers(): void {
 function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: BrowserWindow): void {
   const emitGatewayLifecycle = (payload: {
     phase: 'scheduled' | 'failed';
-    action: 'restart' | 'reload';
+    action: 'start' | 'restart' | 'reload';
     source: string;
     reason: string;
     error?: string;

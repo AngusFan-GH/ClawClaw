@@ -1,6 +1,6 @@
 import type { HostApiContext } from './context';
 
-export type GatewayLifecycleAction = 'restart' | 'reload';
+export type GatewayLifecycleAction = 'start' | 'restart' | 'reload';
 
 export interface GatewayLifecycleEventPayload {
   phase: 'scheduled' | 'failed';

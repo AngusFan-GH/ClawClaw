@@ -61,8 +61,10 @@
         "lifecycle": {
             "scheduledRestartTitle": "変更を保存しました。まもなくゲートウェイを再起動します",
             "scheduledReloadTitle": "変更を保存しました。まもなくゲートウェイ設定を再読み込みします",
+            "scheduledStartTitle": "まもなくゲートウェイを起動します",
             "applyingRestartTitle": "ゲートウェイを再起動しています",
             "applyingReloadTitle": "ゲートウェイ設定を適用しています",
+            "applyingStartTitle": "ゲートウェイを起動しています",
             "completedRestartTitle": "変更が適用されました",
             "completedReloadTitle": "変更が同期されました",
             "scheduledDescription": "{{source}} の変更を保存しました。まもなく適用します。",
@@ -78,6 +80,7 @@
                 "proxy": "プロキシ設定",
                 "security": "セキュリティ設定",
                 "manual": "手動再起動",
+                "startup": "起動処理",
                 "config": "設定"
             }
         }

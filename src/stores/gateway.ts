@@ -172,6 +172,18 @@ function reconcileLifecycleWithStatus(
   lifecycle: GatewayLifecycle,
   status: GatewayStatus,
 ): GatewayLifecycle {
+  if (status.state === 'starting' && lifecycle.state === 'idle') {
+    return {
+      ...lifecycle,
+      state: 'applying',
+      action: lifecycle.action ?? 'start',
+      source: lifecycle.source ?? 'gateway.autoStart',
+      reason: lifecycle.reason ?? 'gateway.autoStart',
+      error: undefined,
+      at: lifecycle.at ?? Date.now(),
+    };
+  }
+
   if (shouldPromoteLifecycleToCompleted(lifecycle, status)) {
     return {
       ...lifecycle,

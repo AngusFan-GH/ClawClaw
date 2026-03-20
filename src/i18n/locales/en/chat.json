@@ -79,7 +79,7 @@
   "history": {
     "title": "Recent chats",
     "loading": "Restoring recent chats...",
-    "connectingGateway": "Gateway is reconnecting. Recent chats will be available shortly.",
+    "connectingGateway": "Gateway is reconnecting.",
     "waitingForGateway": "Gateway offline. Start or restart the Gateway to continue."
   },
   "historyBuckets": {
