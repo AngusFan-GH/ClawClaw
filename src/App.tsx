@@ -103,6 +103,7 @@ function App() {
   const sessionsHydrated = useChatStore((state) => state.sessionsHydrated);
   const restoreSessionsAfterGatewayReady = useChatStore((state) => state.restoreSessionsAfterGatewayReady);
   const lastRestoredLifecycleAtRef = useRef<number | null>(null);
+  const suppressGlobalGatewayLifecycle = location.pathname.startsWith('/setup');
 
   useEffect(() => {
     initSettings();
@@ -213,7 +214,9 @@ function App() {
           </Route>
         </Routes>
 
-        <GatewayLifecycleOverlay lifecycle={gatewayLifecycle} />
+        {!suppressGlobalGatewayLifecycle && (
+          <GatewayLifecycleOverlay lifecycle={gatewayLifecycle} />
+        )}
 
         {/* Global toast notifications */}
         <Toaster

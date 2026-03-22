@@ -22,7 +22,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
-import { GatewayLifecycleBanner } from '@/components/common/GatewayLifecycleBanner';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { useSettingsStore } from '@/stores/settings';
@@ -291,7 +290,6 @@ interface RuntimeContentProps {
 function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
   const { t } = useTranslation('setup');
   const gatewayStatus = useGatewayStore((state) => state.status);
-  const gatewayLifecycle = useGatewayStore((state) => state.lifecycle);
   const startGateway = useGatewayStore((state) => state.start);
   const gatewayStartAttemptedRef = useRef(false);
 
@@ -533,8 +531,6 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
 
   return (
     <div className="space-y-4">
-      <GatewayLifecycleBanner lifecycle={gatewayLifecycle} />
-
       <div className="space-y-3">
         <div className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 rounded-lg bg-muted/50">
           <span className="text-left">{t('runtime.nodejs')}</span>

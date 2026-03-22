@@ -78,7 +78,10 @@ export async function readOpenClawConfigRecord<T extends Record<string, unknown>
 export async function writeOpenClawConfigRecord(config: Record<string, unknown>): Promise<void> {
   sanitizeKnownInvalidOpenClawKeys(config);
   await ensureConfigDir();
-  await writeFile(OPENCLAW_CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`, 'utf-8');
+  const nextContent = `${JSON.stringify(config, null, 2)}\n`;
+  const tempPath = `${OPENCLAW_CONFIG_PATH}.tmp-${process.pid}-${Date.now()}`;
+  await writeFile(tempPath, nextContent, 'utf-8');
+  await rename(tempPath, OPENCLAW_CONFIG_PATH);
 }
 
 export async function resetMalformedOpenClawConfig(): Promise<string | null> {
