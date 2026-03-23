@@ -31,6 +31,7 @@ import { HostEventBus } from '../api/event-bus';
 import { deviceOAuthManager } from '../utils/device-oauth';
 import { browserOAuthManager } from '../utils/browser-oauth';
 import { whatsAppLoginManager } from '../utils/whatsapp-login';
+import { weChatInstallerManager } from '../utils/wechat-installer';
 import {
   syncAllProviderAuthToRuntime,
   syncAllProvidersToRuntime,
@@ -357,6 +358,18 @@ async function initialize(): Promise<void> {
 
   whatsAppLoginManager.on('error', (error) => {
     hostEventBus.emit('channel:whatsapp-error', error);
+  });
+
+  weChatInstallerManager.on('output', (data) => {
+    hostEventBus.emit('channel:wechat-output', data);
+  });
+
+  weChatInstallerManager.on('success', (data) => {
+    hostEventBus.emit('channel:wechat-success', data);
+  });
+
+  weChatInstallerManager.on('error', (error) => {
+    hostEventBus.emit('channel:wechat-error', error);
   });
 
   const syncProviderRuntimeAfterGatewayReady = async () => {

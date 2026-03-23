@@ -86,6 +86,7 @@ export function Channels() {
   const { t } = useTranslation('channels');
   const { channelGroups, loading, error, fetchChannels, deleteChannel } = useChannelsStore();
   const agents = useAgentsStore((state) => state.agents);
+  const fetchAgents = useAgentsStore((state) => state.fetchAgents);
   const channelAccountOwners = useAgentsStore((state) => state.channelAccountOwners);
   const gatewayStatus = useGatewayStore((state) => state.status);
   const gatewayLifecycle = useGatewayStore((state) => state.lifecycle);
@@ -104,6 +105,7 @@ export function Channels() {
 
   useEffect(() => {
     let cancelled = false;
+    void fetchAgents();
     void fetchChannels(false, { includeRuntime: false }).then(() => {
       if (cancelled) return;
       if (gatewayStatus.state === 'running') {
@@ -113,26 +115,29 @@ export function Channels() {
     return () => {
       cancelled = true;
     };
-  }, [fetchChannels, gatewayStatus.state]);
+  }, [fetchAgents, fetchChannels, gatewayStatus.state]);
 
   useEffect(() => {
     const unsubscribeGateway = subscribeHostEvent('gateway:status', () => {
+      void fetchAgents();
       void fetchChannels(false);
     });
     const unsubscribeChannels = subscribeHostEvent('gateway:channel-status', () => {
+      void fetchAgents();
       void fetchChannels(false);
     });
     return () => {
       unsubscribeGateway();
       unsubscribeChannels();
     };
-  }, [fetchChannels]);
+  }, [fetchAgents, fetchChannels]);
 
   useEffect(() => {
     if (gatewayLifecycle.state === 'completed') {
+      void fetchAgents();
       void fetchChannels(false);
     }
-  }, [fetchChannels, gatewayLifecycle.state]);
+  }, [fetchAgents, fetchChannels, gatewayLifecycle.state]);
 
   const configuredGroups = useMemo(
     () => [...channelGroups].sort((left, right) => getPrimaryChannels().indexOf(left.type) - getPrimaryChannels().indexOf(right.type)),

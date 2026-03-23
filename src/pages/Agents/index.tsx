@@ -80,9 +80,18 @@ export function Agents() {
   const [agentToDelete, setAgentToDelete] = useState<AgentSummary | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     void fetchAgents();
-    void fetchChannels(false, { includeRuntime: false });
-  }, [fetchAgents, fetchChannels]);
+    void fetchChannels(false, { includeRuntime: false }).then(() => {
+      if (cancelled) return;
+      if (gatewayStatus.state === 'running') {
+        void fetchChannels(false, { includeRuntime: true });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchAgents, fetchChannels, gatewayStatus.state]);
 
   useEffect(() => {
     const unsubscribeGateway = subscribeHostEvent('gateway:status', () => {
@@ -102,6 +111,13 @@ export function Agents() {
       }
     };
   }, [fetchAgents, fetchChannels]);
+
+  useEffect(() => {
+    if (gatewayLifecycle.state === 'completed') {
+      void fetchAgents();
+      void fetchChannels(false);
+    }
+  }, [fetchAgents, fetchChannels, gatewayLifecycle.state]);
   const activeAgent = useMemo(
     () => agents.find((agent) => agent.gateway.id === activeAgentId) ?? null,
     [activeAgentId, agents],
@@ -660,7 +676,9 @@ function AgentSettingsModal({
   const handleChannelSaved = async (channelType: ChannelType, accountId: string) => {
     try {
       await assignChannel(agent.gateway.id, channelType, accountId);
-      await fetchChannels();
+      // Binding only changes local ownership metadata. Avoid blocking the modal on
+      // a runtime channel-status probe while Gateway is reloading.
+      await fetchChannels(false, { includeRuntime: false });
       toast.success(
         t('toast.channelAssigned', {
           channel: `${CHANNEL_NAMES[channelType] || channelType} / ${accountId}`,
@@ -987,7 +1005,7 @@ function AgentSettingsModal({
           setChannelToRemove(null);
           try {
             await removeChannel(agent.gateway.id, removing.channelType, removing.accountId);
-            await fetchChannels();
+            await fetchChannels(false, { includeRuntime: false });
             toast.success(t('toast.channelRemoved', {
               channel: removing.name,
               defaultValue: `${removing.name} 已解绑`,
@@ -1105,7 +1123,9 @@ function BindingPickerModal({
                           ? t('bindingDialog.binding', '绑定中...')
                           : binding.isAssignedHere
                             ? t('bindingDialog.boundHere', '已绑定')
-                            : t('bindingDialog.bindAction', '绑定到当前分身')}
+                            : binding.ownerId
+                              ? t('bindingDialog.reassignAction', '转移到当前分身')
+                              : t('bindingDialog.bindAction', '绑定到当前分身')}
                       </Button>
                     </div>
                   </div>

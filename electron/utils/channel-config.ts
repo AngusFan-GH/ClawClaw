@@ -25,6 +25,8 @@ import { prepareWinSpawn } from './win-shell';
 const OPENCLAW_DIR = join(homedir(), '.openclaw');
 const CONFIG_FILE = join(OPENCLAW_DIR, 'openclaw.json');
 const WECOM_PLUGIN_ID = 'wecom-openclaw-plugin';
+const WECHAT_RUNTIME_CHANNEL_ID = 'openclaw-weixin';
+const WECHAT_UI_CHANNEL_ID = 'wechat';
 const SUPPORTED_CHANNEL_IDS = [
     'whatsapp',
     'dingtalk',
@@ -40,10 +42,41 @@ const SUPPORTED_CHANNEL_IDS = [
     'googlechat',
     'mattermost',
     'qqbot',
+    WECHAT_RUNTIME_CHANNEL_ID,
 ] as const;
 
 // Channels that are managed as plugins (config goes under plugins.entries, not channels)
 const PLUGIN_CHANNELS = ['whatsapp'];
+
+function toRuntimeChannelType(channelType: string): string {
+    return channelType === WECHAT_UI_CHANNEL_ID ? WECHAT_RUNTIME_CHANNEL_ID : channelType;
+}
+
+function toUiChannelType(channelType: string): string {
+    return channelType === WECHAT_RUNTIME_CHANNEL_ID ? WECHAT_UI_CHANNEL_ID : channelType;
+}
+
+function migrateLegacyWechatSection(currentConfig: OpenClawConfig): void {
+    if (!currentConfig.channels?.[WECHAT_UI_CHANNEL_ID]) {
+        return;
+    }
+
+    if (!currentConfig.channels) {
+        return;
+    }
+
+    const legacySection = currentConfig.channels[WECHAT_UI_CHANNEL_ID] as ChannelConfigData | undefined;
+    if (!legacySection) {
+        delete currentConfig.channels[WECHAT_UI_CHANNEL_ID];
+        return;
+    }
+
+    if (!currentConfig.channels[WECHAT_RUNTIME_CHANNEL_ID]) {
+        currentConfig.channels[WECHAT_RUNTIME_CHANNEL_ID] = legacySection;
+    }
+
+    delete currentConfig.channels[WECHAT_UI_CHANNEL_ID];
+}
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -461,16 +494,18 @@ export async function saveChannelConfig(
     channelType: string,
     config: ChannelConfigData
 ): Promise<void> {
+    const runtimeChannelType = toRuntimeChannelType(channelType);
     const preferredAccountId =
         typeof config.__accountId === 'string' && config.__accountId.trim()
             ? config.__accountId.trim()
             : undefined;
 
     await updateOpenClawConfig(async (currentConfig) => {
+    migrateLegacyWechatSection(currentConfig);
 
     // DingTalk is a channel plugin; make sure it's explicitly allowed.
     // Newer OpenClaw versions may not load non-bundled plugins when allowlist is empty.
-    if (channelType === 'dingtalk') {
+    if (runtimeChannelType === 'dingtalk') {
         const defaultDingtalkAllow = ['dingtalk'];
         if (!currentConfig.plugins) {
             currentConfig.plugins = { allow: defaultDingtalkAllow, enabled: true };
@@ -485,7 +520,7 @@ export async function saveChannelConfig(
         }
     }
 
-    if (channelType === 'wecom') {
+    if (runtimeChannelType === 'wecom') {
         const defaultWecomAllow = [WECOM_PLUGIN_ID];
         if (!currentConfig.plugins) {
             currentConfig.plugins = { allow: defaultWecomAllow, enabled: true };
@@ -505,7 +540,7 @@ export async function saveChannelConfig(
 
     // QQ Bot is a channel plugin; make sure it's explicitly allowed.
     // Newer OpenClaw versions may not load non-bundled plugins when allowlist is empty.
-    if (channelType === 'qqbot') {
+    if (runtimeChannelType === 'qqbot') {
         if (!currentConfig.plugins) {
             currentConfig.plugins = {};
         }
@@ -519,23 +554,23 @@ export async function saveChannelConfig(
     }
 
     // Plugin-based channels (e.g. WhatsApp) go under plugins.entries, not channels
-    if (PLUGIN_CHANNELS.includes(channelType)) {
+    if (PLUGIN_CHANNELS.includes(runtimeChannelType)) {
         if (!currentConfig.plugins) {
             currentConfig.plugins = {};
         }
         if (!currentConfig.plugins.entries) {
             currentConfig.plugins.entries = {};
         }
-        currentConfig.plugins.entries[channelType] = {
-            ...currentConfig.plugins.entries[channelType],
+        currentConfig.plugins.entries[runtimeChannelType] = {
+            ...currentConfig.plugins.entries[runtimeChannelType],
             enabled: config.enabled ?? true,
         };
         logger.info('Plugin channel config saved', {
-            channelType,
+            channelType: runtimeChannelType,
             configFile: CONFIG_FILE,
-            path: `plugins.entries.${channelType}`,
+            path: `plugins.entries.${runtimeChannelType}`,
         });
-        console.log(`Saved plugin channel config for ${channelType}`);
+        console.log(`Saved plugin channel config for ${runtimeChannelType}`);
         return;
     }
 
@@ -548,7 +583,7 @@ export async function saveChannelConfig(
     delete transformedConfig.__accountId;
 
     // Special handling for Discord: convert guildId/channelId to complete structure
-    if (channelType === 'discord') {
+    if (runtimeChannelType === 'discord') {
         const { guildId, channelId, ...restConfig } = config;
         transformedConfig = { ...restConfig };
 
@@ -584,7 +619,7 @@ export async function saveChannelConfig(
     }
 
     // Special handling for Telegram: convert allowedUsers string to allowlist array
-    if (channelType === 'telegram') {
+    if (runtimeChannelType === 'telegram') {
         const { allowedUsers, ...restConfig } = config;
         transformedConfig = { ...restConfig };
 
@@ -600,8 +635,8 @@ export async function saveChannelConfig(
     }
 
     // Special handling for Feishu / WeCom: default to open DM policy with wildcard allowlist
-    if (channelType === 'feishu' || channelType === 'wecom') {
-        const existingConfig = currentConfig.channels[channelType] || {};
+    if (runtimeChannelType === 'feishu' || runtimeChannelType === 'wecom') {
+        const existingConfig = currentConfig.channels[runtimeChannelType] || {};
         const existingDmPolicy = existingConfig.dmPolicy === 'pairing' ? 'open' : existingConfig.dmPolicy;
         transformedConfig.dmPolicy = transformedConfig.dmPolicy ?? existingDmPolicy ?? 'open';
 
@@ -618,7 +653,7 @@ export async function saveChannelConfig(
     }
 
     {
-        let existingSection = (currentConfig.channels[channelType] as AccountScopedChannelSection | undefined) || {};
+        let existingSection = (currentConfig.channels[runtimeChannelType] as AccountScopedChannelSection | undefined) || {};
 
         const normalizedPreferredAccountId =
             typeof preferredAccountId === 'string' && preferredAccountId.trim()
@@ -631,14 +666,14 @@ export async function saveChannelConfig(
             hasMeaningfulSectionConfig(existingSection) &&
             (!existingSection.accounts || Object.keys(existingSection.accounts).length === 0)
         ) {
-            existingSection = moveSingleAccountSectionToDefaultAccount(channelType, existingSection);
-            currentConfig.channels[channelType] = existingSection;
+            existingSection = moveSingleAccountSectionToDefaultAccount(runtimeChannelType, existingSection);
+            currentConfig.channels[runtimeChannelType] = existingSection;
         }
 
         const editableSource =
             normalizedPreferredAccountId && normalizedPreferredAccountId !== 'default'
                 ? { kind: 'account' as const, accountId: normalizedPreferredAccountId }
-                : resolveEditableChannelSource(currentConfig, channelType, preferredAccountId);
+                : resolveEditableChannelSource(currentConfig, runtimeChannelType, preferredAccountId);
 
         if (editableSource.kind === 'account') {
             const accounts = { ...(existingSection.accounts || {}) };
@@ -660,9 +695,9 @@ export async function saveChannelConfig(
                 nextSection = removeTopLevelCredentialFields(nextSection);
             }
 
-            currentConfig.channels[channelType] = nextSection;
+            currentConfig.channels[runtimeChannelType] = nextSection;
         } else {
-            currentConfig.channels[channelType] = {
+            currentConfig.channels[runtimeChannelType] = {
                 ...existingSection,
                 ...transformedConfig,
                 enabled: transformedConfig.enabled ?? true,
@@ -670,14 +705,14 @@ export async function saveChannelConfig(
         }
     }
 
-    logger.info('Channel config saved', {
-        channelType,
+        logger.info('Channel config saved', {
+        channelType: runtimeChannelType,
         configFile: CONFIG_FILE,
         rawKeys: Object.keys(config),
         transformedKeys: Object.keys(transformedConfig),
-        enabled: currentConfig.channels[channelType]?.enabled,
+        enabled: currentConfig.channels[runtimeChannelType]?.enabled,
     });
-    console.log(`Saved channel config for ${channelType}`);
+    console.log(`Saved channel config for ${runtimeChannelType}`);
     });
 }
 
@@ -685,30 +720,34 @@ export async function getChannelConfig(
     channelType: string,
     preferredAccountId?: string | null
 ): Promise<ChannelConfigData | undefined> {
+    const runtimeChannelType = toRuntimeChannelType(channelType);
     const config = await readOpenClawConfig();
-    if (config.channels?.[channelType]) {
-        const section = config.channels[channelType] as AccountScopedChannelSection | undefined;
+    migrateLegacyWechatSection(config);
+    if (config.channels?.[runtimeChannelType]) {
+        const section = config.channels[runtimeChannelType] as AccountScopedChannelSection | undefined;
         if (!section) return undefined;
-        const source = resolveEditableChannelSource(config, channelType, preferredAccountId);
+        const source = resolveEditableChannelSource(config, runtimeChannelType, preferredAccountId);
         if (source.kind === 'account') {
             return section.accounts?.[source.accountId];
         }
     }
-    return config.channels?.[channelType];
+    return config.channels?.[runtimeChannelType];
 }
 
 export async function getChannelFormValues(
     channelType: string,
     preferredAccountId?: string | null
 ): Promise<Record<string, string> | undefined> {
+    const runtimeChannelType = toRuntimeChannelType(channelType);
     const config = await readOpenClawConfig();
-    const source = resolveEditableChannelSource(config, channelType, preferredAccountId);
+    migrateLegacyWechatSection(config);
+    const source = resolveEditableChannelSource(config, runtimeChannelType, preferredAccountId);
     const saved = await getChannelConfig(channelType, preferredAccountId);
     if (!saved) return undefined;
 
     const values: Record<string, string> = {};
 
-    if (channelType === 'discord') {
+    if (runtimeChannelType === 'discord') {
         if (saved.token && typeof saved.token === 'string') {
             values.token = saved.token;
         }
@@ -727,7 +766,7 @@ export async function getChannelFormValues(
                 }
             }
         }
-    } else if (channelType === 'telegram') {
+    } else if (runtimeChannelType === 'telegram') {
         if (Array.isArray(saved.allowFrom)) {
             values.allowedUsers = saved.allowFrom.join(', ');
         }
@@ -755,12 +794,14 @@ export async function deleteChannelConfig(
     channelType: string,
     preferredAccountId?: string | null
 ): Promise<void> {
+    const runtimeChannelType = toRuntimeChannelType(channelType);
     const configChanged = await updateOpenClawConfig(async (currentConfig) => {
+    migrateLegacyWechatSection(currentConfig);
     let changed = false;
 
-    if (currentConfig.channels?.[channelType]) {
-        const section = currentConfig.channels[channelType] as AccountScopedChannelSection | undefined;
-        const source = resolveEditableChannelSource(currentConfig, channelType, preferredAccountId);
+    if (currentConfig.channels?.[runtimeChannelType]) {
+        const section = currentConfig.channels[runtimeChannelType] as AccountScopedChannelSection | undefined;
+        const source = resolveEditableChannelSource(currentConfig, runtimeChannelType, preferredAccountId);
         if (section && source.kind === 'account' && section.accounts?.[source.accountId]) {
             const accounts = { ...section.accounts };
             const accountConfig = accounts[source.accountId] as ChannelConfigData | undefined;
@@ -777,29 +818,29 @@ export async function deleteChannelConfig(
                 nextSection = removeTopLevelCredentialFields(nextSection);
             }
             if (remainingAccounts.length === 0 && !hasMeaningfulSectionConfig(nextSection)) {
-                delete currentConfig.channels[channelType];
+                delete currentConfig.channels[runtimeChannelType];
             } else {
-                currentConfig.channels[channelType] = nextSection;
+                currentConfig.channels[runtimeChannelType] = nextSection;
             }
         } else {
             if (section?.accounts && Object.keys(section.accounts).length > 0) {
-                const nextSection = clearTopLevelAccountFields(channelType, section);
+                const nextSection = clearTopLevelAccountFields(runtimeChannelType, section);
                 if (!nextSection.accounts || Object.keys(nextSection.accounts).length === 0) {
-                    delete currentConfig.channels[channelType];
+                    delete currentConfig.channels[runtimeChannelType];
                 } else {
-                    currentConfig.channels[channelType] = nextSection;
+                    currentConfig.channels[runtimeChannelType] = nextSection;
                 }
             } else {
-                delete currentConfig.channels[channelType];
+                delete currentConfig.channels[runtimeChannelType];
             }
         }
         changed = true;
-        console.log(`Deleted channel config for ${channelType}`);
+        console.log(`Deleted channel config for ${runtimeChannelType}`);
     }
 
-    if (PLUGIN_CHANNELS.includes(channelType)) {
-        if (currentConfig.plugins?.entries?.[channelType]) {
-            delete currentConfig.plugins.entries[channelType];
+    if (PLUGIN_CHANNELS.includes(runtimeChannelType)) {
+        if (currentConfig.plugins?.entries?.[runtimeChannelType]) {
+            delete currentConfig.plugins.entries[runtimeChannelType];
             if (Object.keys(currentConfig.plugins.entries).length === 0) {
                 delete currentConfig.plugins.entries;
             }
@@ -807,10 +848,10 @@ export async function deleteChannelConfig(
                 delete currentConfig.plugins;
             }
             changed = true;
-            console.log(`Deleted plugin channel config for ${channelType}`);
+            console.log(`Deleted plugin channel config for ${runtimeChannelType}`);
         }
-    } else if (currentConfig.plugins?.entries?.[channelType]) {
-        delete currentConfig.plugins.entries[channelType];
+    } else if (currentConfig.plugins?.entries?.[runtimeChannelType]) {
+        delete currentConfig.plugins.entries[runtimeChannelType];
         if (Object.keys(currentConfig.plugins.entries).length === 0) {
             delete currentConfig.plugins.entries;
         }
@@ -824,7 +865,7 @@ export async function deleteChannelConfig(
     });
 
     // Special handling for WhatsApp credentials
-    if (configChanged && channelType === 'whatsapp') {
+    if (configChanged && runtimeChannelType === 'whatsapp') {
         try {
             const whatsappDir = join(homedir(), '.openclaw', 'credentials', 'whatsapp');
             if (await fileExists(whatsappDir)) {
@@ -839,12 +880,13 @@ export async function deleteChannelConfig(
 
 export async function listConfiguredChannels(options?: { includeCli?: boolean }): Promise<string[]> {
     const config = await readOpenClawConfig();
+    migrateLegacyWechatSection(config);
     const channels = new Set<string>();
     const includeCli = options?.includeCli ?? process.platform !== 'win32';
 
     if (includeCli) {
         for (const channelType of await listConfiguredChannelsFromCli()) {
-            channels.add(channelType);
+            channels.add(toUiChannelType(channelType));
         }
     }
 
@@ -857,7 +899,7 @@ export async function listConfiguredChannels(options?: { includeCli?: boolean })
                 ({ config: accountConfig }) => hasMeaningfulSectionConfig(accountConfig)
             );
             if (hasTopLevelConfig || hasConfiguredAccounts) {
-                channels.add(channelType);
+                channels.add(toUiChannelType(channelType));
             }
         }
     }
@@ -866,7 +908,7 @@ export async function listConfiguredChannels(options?: { includeCli?: boolean })
         for (const [pluginId, pluginConfig] of Object.entries(config.plugins.entries)) {
             if (pluginConfig?.enabled === false) continue;
             if (PLUGIN_CHANNELS.includes(pluginId as typeof PLUGIN_CHANNELS[number])) {
-                channels.add(pluginId);
+                channels.add(toUiChannelType(pluginId));
             }
         }
     }
@@ -876,14 +918,16 @@ export async function listConfiguredChannels(options?: { includeCli?: boolean })
 
 export async function listConfiguredChannelAccounts(): Promise<Record<string, string[]>> {
     const config = await readOpenClawConfig();
+    migrateLegacyWechatSection(config);
     const result: Record<string, string[]> = {};
 
     for (const channelType of await listConfiguredChannels()) {
-        const section = config.channels?.[channelType] as AccountScopedChannelSection | undefined;
+        const runtimeChannelType = toRuntimeChannelType(channelType);
+        const section = config.channels?.[runtimeChannelType] as AccountScopedChannelSection | undefined;
         const accountIds = new Set<string>();
 
         if (section && section.enabled !== false) {
-            if (getAccountScopedTopLevelKeys(channelType, section).length > 0) {
+            if (getAccountScopedTopLevelKeys(runtimeChannelType, section).length > 0) {
                 accountIds.add('default');
             }
             for (const { accountId, config: accountConfig } of resolveConfiguredAccounts(section)) {
@@ -893,7 +937,7 @@ export async function listConfiguredChannelAccounts(): Promise<Record<string, st
             }
         }
 
-        if (PLUGIN_CHANNELS.includes(channelType) && accountIds.size === 0) {
+        if (PLUGIN_CHANNELS.includes(runtimeChannelType) && accountIds.size === 0) {
             accountIds.add('default');
         }
 
@@ -918,17 +962,19 @@ export interface ConfiguredChannelGroupSnapshot {
 
 export async function listConfiguredChannelGroups(): Promise<ConfiguredChannelGroupSnapshot[]> {
     const config = await readOpenClawConfig();
+    migrateLegacyWechatSection(config);
     const groups: ConfiguredChannelGroupSnapshot[] = [];
 
     for (const channelType of await listConfiguredChannels()) {
-        const section = config.channels?.[channelType] as AccountScopedChannelSection | undefined;
+        const runtimeChannelType = toRuntimeChannelType(channelType);
+        const section = config.channels?.[runtimeChannelType] as AccountScopedChannelSection | undefined;
         const accounts = new Map<string, ConfiguredChannelGroupSnapshot['accounts'][number]>();
         const explicitDefaultAccountId =
             typeof section?.defaultAccount === 'string' && section.defaultAccount.trim()
                 ? section.defaultAccount.trim()
                 : undefined;
 
-        if (section && section.enabled !== false && getAccountScopedTopLevelKeys(channelType, section).length > 0) {
+        if (section && section.enabled !== false && getAccountScopedTopLevelKeys(runtimeChannelType, section).length > 0) {
             accounts.set('default', {
                 accountId: 'default',
                 isDefaultAccount: explicitDefaultAccountId ? explicitDefaultAccountId === 'default' : true,
@@ -949,7 +995,7 @@ export async function listConfiguredChannelGroups(): Promise<ConfiguredChannelGr
             }
         }
 
-        if (PLUGIN_CHANNELS.includes(channelType) && accounts.size === 0) {
+        if (PLUGIN_CHANNELS.includes(runtimeChannelType) && accounts.size === 0) {
             accounts.set('default', {
                 accountId: 'default',
                 isDefaultAccount: true,
@@ -982,34 +1028,36 @@ export async function setChannelEnabled(
     enabled: boolean,
     preferredAccountId?: string | null
 ): Promise<void> {
+    const runtimeChannelType = toRuntimeChannelType(channelType);
     await updateOpenClawConfig(async (currentConfig) => {
-        if (PLUGIN_CHANNELS.includes(channelType)) {
+        migrateLegacyWechatSection(currentConfig);
+        if (PLUGIN_CHANNELS.includes(runtimeChannelType)) {
             if (!currentConfig.plugins) currentConfig.plugins = {};
             if (!currentConfig.plugins.entries) currentConfig.plugins.entries = {};
-            if (!currentConfig.plugins.entries[channelType]) currentConfig.plugins.entries[channelType] = {};
-            currentConfig.plugins.entries[channelType].enabled = enabled;
+            if (!currentConfig.plugins.entries[runtimeChannelType]) currentConfig.plugins.entries[runtimeChannelType] = {};
+            currentConfig.plugins.entries[runtimeChannelType].enabled = enabled;
             return;
         }
 
         if (!currentConfig.channels) currentConfig.channels = {};
-        if (!currentConfig.channels[channelType]) currentConfig.channels[channelType] = {};
-        const section = currentConfig.channels[channelType] as AccountScopedChannelSection;
-        const source = resolveEditableChannelSource(currentConfig, channelType, preferredAccountId);
+        if (!currentConfig.channels[runtimeChannelType]) currentConfig.channels[runtimeChannelType] = {};
+        const section = currentConfig.channels[runtimeChannelType] as AccountScopedChannelSection;
+        const source = resolveEditableChannelSource(currentConfig, runtimeChannelType, preferredAccountId);
         if (source.kind === 'account') {
             const accounts = { ...(section.accounts || {}) };
             const accountSection = { ...((accounts[source.accountId] as ChannelConfigData | undefined) || {}) };
             accountSection.enabled = enabled;
             accounts[source.accountId] = accountSection;
-            currentConfig.channels[channelType] = {
+            currentConfig.channels[runtimeChannelType] = {
                 ...section,
                 enabled,
                 accounts,
             };
         } else {
-            currentConfig.channels[channelType].enabled = enabled;
+            currentConfig.channels[runtimeChannelType].enabled = enabled;
         }
     });
-    console.log(`Set channel ${channelType} enabled: ${enabled}`);
+    console.log(`Set channel ${runtimeChannelType} enabled: ${enabled}`);
 }
 
 // ── Validation ───────────────────────────────────────────────────

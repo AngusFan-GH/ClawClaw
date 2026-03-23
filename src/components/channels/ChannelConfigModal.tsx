@@ -97,6 +97,46 @@ const labelClasses = 'text-[14px] text-foreground/80 font-bold';
 const outlineButtonClasses = 'h-9 text-[13px] font-medium rounded-xl px-4 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none text-foreground/80 hover:text-foreground';
 const primaryButtonClasses = 'h-9 text-[13px] font-medium rounded-xl px-4 shadow-none';
 
+function stripAnsi(value: string): string {
+  return value.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '');
+}
+
+function isQrLine(line: string): boolean {
+  if (!line) return false;
+  return /^[ \t\u2580-\u259f]+$/.test(line) && /[\u2580-\u259f]/.test(line);
+}
+
+function extractTerminalQrBlock(output: string): string | null {
+  const lines = stripAnsi(output).replace(/\r\n/g, '\n').split('\n');
+  let bestBlock: string[] = [];
+  let currentBlock: string[] = [];
+
+  const commit = () => {
+    if (currentBlock.length >= 12) {
+      const meaningful = currentBlock.filter((line) => line.trim().length > 0);
+      if (meaningful.length >= 12 && currentBlock.join('\n').length > bestBlock.join('\n').length) {
+        bestBlock = [...currentBlock];
+      }
+    }
+    currentBlock = [];
+  };
+
+  for (const line of lines) {
+    if (isQrLine(line)) {
+      currentBlock.push(line.replace(/\s+$/g, ''));
+      continue;
+    }
+    if (currentBlock.length > 0 && line.trim() === '') {
+      currentBlock.push('');
+      continue;
+    }
+    commit();
+  }
+  commit();
+
+  return bestBlock.length > 0 ? bestBlock.join('\n').trimEnd() : null;
+}
+
 export function ChannelConfigModal({
   initialSelectedType = null,
   initialAccountId = null,
@@ -130,8 +170,11 @@ export function ChannelConfigModal({
     warnings: string[];
   } | null>(null);
   const [validatedSignature, setValidatedSignature] = useState<string | null>(null);
+  const [wechatOutput, setWechatOutput] = useState('');
+  const [wechatAwaitingRestart, setWechatAwaitingRestart] = useState(false);
 
   const meta: ChannelMeta | null = selectedType ? CHANNEL_META[selectedType] : null;
+  const wechatQrBlock = useMemo(() => extractTerminalQrBlock(wechatOutput), [wechatOutput]);
   const supportsMultipleAccounts = !!selectedType && channelSupportsMultipleAccounts(selectedType);
   const normalizedAccountIdInput = accountIdInput.trim();
   const isEditingDefaultAccount = !createNewAccount && (!selectedAccountId || selectedAccountId === 'default');
@@ -165,6 +208,8 @@ export function ChannelConfigModal({
       setValidationResult(null);
       setValidatedSignature(null);
       setQrCode(null);
+      setWechatOutput('');
+      setWechatAwaitingRestart(false);
       setConnecting(false);
       hostApiFetch('/api/channels/whatsapp/cancel', { method: 'POST' }).catch(() => {});
       return;
@@ -315,7 +360,78 @@ export function ChannelConfigModal({
       removeErrorListener();
       hostApiFetch('/api/channels/whatsapp/cancel', { method: 'POST' }).catch(() => {});
     };
-  }, [selectedType, finishSave, onClose, t]);
+  }, [selectedType, t]);
+
+  useEffect(() => {
+    if (selectedType !== 'wechat') return;
+
+    setWechatOutput('');
+    setWechatAwaitingRestart(false);
+
+    const onOutput = (...args: unknown[]) => {
+      const data = args[0] as { text?: string } | undefined;
+      if (!data?.text) return;
+      setWechatOutput((current) => {
+        const next = current + data.text;
+        return next.length > 16000 ? next.slice(next.length - 16000) : next;
+      });
+    };
+
+    const onSuccess = () => {
+      toast.success(t('toast.wechatConnected'));
+      setConnecting(false);
+      setWechatAwaitingRestart(true);
+    };
+
+    const onError = (...args: unknown[]) => {
+      const err = args[0] as string;
+      toast.error(t('toast.wechatFailed', { error: err }));
+      setConnecting(false);
+      setWechatAwaitingRestart(false);
+    };
+
+    const removeOutputListener = subscribeHostEvent('channel:wechat-output', onOutput);
+    const removeSuccessListener = subscribeHostEvent('channel:wechat-success', onSuccess);
+    const removeErrorListener = subscribeHostEvent('channel:wechat-error', onError);
+
+    return () => {
+      removeOutputListener();
+      removeSuccessListener();
+      removeErrorListener();
+      hostApiFetch('/api/channels/wechat/cancel', { method: 'POST' }).catch(() => {});
+    };
+  }, [selectedType, t]);
+
+  const handleWechatRestart = async () => {
+    setConnecting(true);
+    try {
+      const saveResult = await withTimeout(hostApiFetch<{
+        success?: boolean;
+        error?: string;
+        warning?: string;
+      }>('/api/channels/config', {
+        method: 'POST',
+        body: JSON.stringify({
+          channelType: 'wechat',
+          config: { enabled: true },
+          skipRestart: true,
+        }),
+      }), 15000, t('toast.saveTimedOut', '保存请求超时，请稍后重试'));
+      if (!saveResult?.success) {
+        throw new Error(saveResult?.error || 'Failed to save WeChat config');
+      }
+      if (typeof saveResult.warning === 'string' && saveResult.warning) {
+        toast.warning(saveResult.warning);
+      }
+
+      await finishSave('wechat');
+      await useGatewayStore.getState().restart();
+      onClose();
+    } catch (error) {
+      toast.error(t('toast.configFailed', { error: String(error) }));
+      setConnecting(false);
+    }
+  };
 
   const handleValidate = async () => {
     if (!selectedType) return;
@@ -376,6 +492,15 @@ export function ChannelConfigModal({
     setValidationResult(null);
 
     try {
+      if (selectedType === 'wechat') {
+        setWechatOutput('');
+        setWechatAwaitingRestart(false);
+        await hostApiFetch('/api/channels/wechat/install', {
+          method: 'POST',
+        });
+        return;
+      }
+
       if (meta.connectionType === 'qr') {
         await hostApiFetch('/api/channels/whatsapp/start', {
           method: 'POST',
@@ -580,6 +705,81 @@ export function ChannelConfigModal({
                 </Button>
               </div>
             </div>
+          ) : selectedType === 'wechat' && (connecting || wechatOutput || wechatAwaitingRestart) ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-border/70 bg-card/85 p-4 shadow-sm">
+                <p className="text-[14px] font-semibold text-foreground">
+                  {wechatQrBlock ? t('dialog.wechatQrTitle') : t('dialog.wechatTerminalTitle')}
+                </p>
+                <p className="mt-1 text-[13px] text-muted-foreground">
+                  {wechatAwaitingRestart
+                    ? t('dialog.wechatReadyDesc')
+                    : wechatQrBlock
+                      ? t('dialog.wechatQrDesc')
+                      : t('dialog.wechatTerminalDesc')}
+                </p>
+              </div>
+              {wechatQrBlock ? (
+                <div className="rounded-2xl border border-border/70 bg-white p-6 shadow-sm">
+                  <pre className="overflow-auto text-center font-mono text-[10px] leading-[0.78] text-black sm:text-[12px]">
+                    {wechatQrBlock}
+                  </pre>
+                </div>
+              ) : (
+                <div className="flex min-h-[220px] items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/30 p-6 shadow-sm">
+                  <div className="flex flex-col items-center gap-3 text-center">
+                    <LoadingIcon className="h-6 w-6 text-muted-foreground" />
+                    <p className="text-[14px] font-medium text-foreground">
+                      {t('dialog.wechatPreparing')}
+                    </p>
+                    <p className="max-w-[420px] text-[12px] leading-5 text-muted-foreground">
+                      {t('dialog.wechatTerminalDesc')}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {wechatOutput && (
+                <details className="rounded-2xl border border-border/70 bg-card/70 p-4 text-[12px] text-muted-foreground shadow-sm">
+                  <summary className="cursor-pointer select-none font-medium text-foreground/80">
+                    {t('dialog.wechatShowLogs')}
+                  </summary>
+                  <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-muted-foreground">
+                    {stripAnsi(wechatOutput)}
+                  </pre>
+                </details>
+              )}
+              <div className="flex justify-center gap-2">
+                {wechatAwaitingRestart ? (
+                  <Button
+                    onClick={() => {
+                      void handleWechatRestart();
+                    }}
+                    disabled={connecting}
+                    className={primaryButtonClasses}
+                  >
+                    {connecting ? (
+                      <>
+                        <LoadingIcon className="h-4 w-4 mr-2" />
+                        {t('dialog.restartingGateway')}
+                      </>
+                    ) : (
+                      t('dialog.confirmWechatRestart')
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className={outlineButtonClasses}
+                    onClick={() => {
+                      void hostApiFetch('/api/channels/wechat/cancel', { method: 'POST' });
+                      setConnecting(false);
+                    }}
+                  >
+                    {t('dialog.cancelInstall')}
+                  </Button>
+                )}
+              </div>
+            </div>
           ) : loadingConfig ? (
             <div className="flex items-center justify-center rounded-2xl border border-border/70 bg-card/85 py-10">
               <LoadingIcon className="h-6 w-6 text-muted-foreground" />
@@ -767,6 +967,8 @@ export function ChannelConfigModal({
                         <LoadingIcon className="h-4 w-4 mr-2" />
                         {meta?.connectionType === 'qr' ? t('dialog.generatingQR') : t('dialog.validatingAndSaving')}
                       </>
+                    ) : selectedType === 'wechat' ? (
+                      t('dialog.startWechatInstall')
                     ) : meta?.connectionType === 'qr' ? (
                       t('dialog.generateQRCode')
                     ) : (

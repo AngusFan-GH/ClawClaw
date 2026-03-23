@@ -8,6 +8,7 @@
  */
 export type ChannelType =
   | 'whatsapp'
+  | 'wechat'
   | 'dingtalk'
   | 'telegram'
   | 'discord'
@@ -131,6 +132,7 @@ export function channelSupportsMultipleAccounts(type: ChannelType): boolean {
  */
 export const CHANNEL_ICONS: Record<ChannelType, string> = {
   whatsapp: '📱',
+  wechat: '🟩',
   dingtalk: '💬',
   telegram: '✈️',
   discord: '🎮',
@@ -151,6 +153,7 @@ export const CHANNEL_ICONS: Record<ChannelType, string> = {
  */
 export const CHANNEL_NAMES: Record<ChannelType, string> = {
   whatsapp: 'WhatsApp',
+  wechat: 'WeChat',
   dingtalk: 'DingTalk',
   telegram: 'Telegram',
   discord: 'Discord',
@@ -374,6 +377,20 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
       'channels:meta.whatsapp.instructions.1',
       'channels:meta.whatsapp.instructions.2',
       'channels:meta.whatsapp.instructions.3',
+    ],
+  },
+  wechat: {
+    id: 'wechat',
+    name: 'WeChat',
+    icon: '🟩',
+    description: 'channels:meta.wechat.description',
+    connectionType: 'qr',
+    docsUrl: 'channels:meta.wechat.docsUrl',
+    configFields: [],
+    instructions: [
+      'channels:meta.wechat.instructions.0',
+      'channels:meta.wechat.instructions.1',
+      'channels:meta.wechat.instructions.2',
     ],
   },
   signal: {
@@ -615,7 +632,7 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
  * Get primary supported channels (non-plugin, commonly used)
  */
 export function getPrimaryChannels(): ChannelType[] {
-  return ['feishu', 'wecom', 'qqbot', 'dingtalk', 'telegram', 'discord', 'whatsapp'];
+  return ['feishu', 'wecom', 'qqbot', 'dingtalk', 'telegram', 'discord', 'whatsapp', 'wechat'];
 }
 
 /**
@@ -630,6 +647,7 @@ export function getAllChannels(): ChannelType[] {
     'telegram',
     'discord',
     'whatsapp',
+    'wechat',
     'signal',
     'imessage',
     'matrix',

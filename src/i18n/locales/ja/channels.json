@@ -44,6 +44,8 @@
   "toast": {
     "whatsappConnected": "WhatsApp が正常に接続されました",
     "whatsappFailed": "WhatsApp 接続に失敗しました: {{error}}",
+    "wechatConnected": "WeChat のセットアップが完了しました。WeChat 側でスキャンを確認してから Gateway を再起動してください。",
+    "wechatFailed": "WeChat のセットアップに失敗しました: {{error}}",
     "channelSaved": "チャンネル {{name}} が保存されました",
     "channelConnecting": "{{name}} に接続中...",
     "channelSavedRefreshPending": "{{name}} は保存されました。リストはまもなく同期されます。",
@@ -87,6 +89,17 @@
     "validating": "検証中...",
     "validateConfig": "設定を検証",
     "generatingQR": "QRコードを生成中...",
+    "startWechatInstall": "WeChat セットアップを開始",
+    "wechatTerminalTitle": "WeChat QR コードを準備中",
+    "wechatTerminalDesc": "WeChat ログインフローが QR コードを出力するのを待っています。検出できたら下に直接表示し、生ログは折りたたみます。",
+    "wechatQrTitle": "WeChat でスキャン",
+    "wechatQrDesc": "下に表示された QR コードを WeChat で直接スキャンしてください。調査が必要な場合だけ生ログを展開してください。",
+    "wechatReadyDesc": "WeChat ログインフローは完了しました。WeChat 側で QR スキャンを確認したあと、接続を反映するために Gateway を再起動してください。",
+    "wechatPreparing": "WeChat ログインフローを準備中...",
+    "wechatShowLogs": "インストールログを表示",
+    "cancelInstall": "セットアップを中止",
+    "confirmWechatRestart": "スキャン完了、Gateway を再起動",
+    "restartingGateway": "Gateway を再起動中...",
     "validatingAndSaving": "検証して保存中...",
     "generateQRCode": "QRコードを生成",
     "updateAndReconnect": "更新して再接続",
@@ -152,6 +165,15 @@
         "設定 > リンクされたデバイス > デバイスをリンク に移動します",
         "以下に表示されるQRコードをスキャンします",
         "システムが自動的に電話番号を識別します"
+      ]
+    },
+    "wechat": {
+      "description": "OpenClaw 公式の WeChat プラグインログインフローで QR コードをスキャンして WeChat に接続します",
+      "docsUrl": "https://mp.weixin.qq.com/s/Vm2Azji9QZm73fyQf1eOmg",
+      "instructions": [
+        "ClawClaw から WeChat プラグインのインストールとログインフローを起動します",
+        "セットアップ画面に直接表示される QR コードを WeChat でスキャンします",
+        "WeChat 側でスキャン完了を確認したあとに Gateway を再起動します"
       ]
     },
     "dingtalk": {

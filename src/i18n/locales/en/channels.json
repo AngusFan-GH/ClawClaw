@@ -44,6 +44,8 @@
   "toast": {
     "whatsappConnected": "WhatsApp connected successfully",
     "whatsappFailed": "WhatsApp connection failed: {{error}}",
+    "wechatConnected": "WeChat setup completed. Restart the Gateway after you confirm the scan in WeChat.",
+    "wechatFailed": "WeChat setup failed: {{error}}",
     "channelSaved": "Channel {{name}} saved",
     "channelConnecting": "Connecting to {{name}}...",
     "channelSavedRefreshPending": "{{name}} saved. The list will sync shortly.",
@@ -87,6 +89,17 @@
     "validating": "Validating...",
     "validateConfig": "Validate Configuration",
     "generatingQR": "Generating QR...",
+    "startWechatInstall": "Start WeChat Setup",
+    "wechatTerminalTitle": "Preparing the WeChat QR code",
+    "wechatTerminalDesc": "Waiting for the WeChat login flow to print the QR code. Once detected, it will be shown directly below and the raw logs stay collapsed.",
+    "wechatQrTitle": "Scan with WeChat",
+    "wechatQrDesc": "Scan the QR code shown below with WeChat. Expand the raw installer logs only if you need to debug the setup.",
+    "wechatReadyDesc": "The WeChat login flow has finished. After you confirm the QR scan in WeChat, restart the Gateway to apply the new WeChat connection.",
+    "wechatPreparing": "Preparing WeChat login flow...",
+    "wechatShowLogs": "Show installer logs",
+    "cancelInstall": "Cancel setup",
+    "confirmWechatRestart": "I have scanned it, restart Gateway",
+    "restartingGateway": "Restarting Gateway...",
     "validatingAndSaving": "Validating & Saving...",
     "generateQRCode": "Generate QR Code",
     "updateAndReconnect": "Update & Reconnect",
@@ -152,6 +165,15 @@
         "Go to Settings > Linked Devices > Link a Device",
         "Scan the QR code shown below",
         "The system will automatically identify your phone number"
+      ]
+    },
+    "wechat": {
+      "description": "Connect WeChat through the official OpenClaw plugin login flow and scan its QR code",
+      "docsUrl": "https://mp.weixin.qq.com/s/Vm2Azji9QZm73fyQf1eOmg",
+      "instructions": [
+        "Start the WeChat plugin install and login flow from ClawClaw",
+        "Scan the QR code shown directly in the setup dialog with WeChat",
+        "After you confirm the scan in WeChat, restart the Gateway to load the new connection"
       ]
     },
     "dingtalk": {

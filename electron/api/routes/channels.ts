@@ -13,6 +13,7 @@ import {
   validateChannelCredentials,
 } from '../../utils/channel-config';
 import { whatsAppLoginManager } from '../../utils/whatsapp-login';
+import { weChatInstallerManager } from '../../utils/wechat-installer';
 import type { HostApiContext } from '../context';
 import { emitGatewayLifecycleEvent } from '../gateway-lifecycle';
 import { parseJsonBody, sendJson } from '../route-utils';
@@ -230,9 +231,33 @@ export async function handleChannelRoutes(
     return true;
   }
 
+  if (url.pathname === '/api/channels/wechat/install' && req.method === 'POST') {
+    try {
+      await weChatInstallerManager.start();
+      sendJson(res, 200, { success: true });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/channels/wechat/cancel' && req.method === 'POST') {
+    try {
+      await weChatInstallerManager.stop();
+      sendJson(res, 200, { success: true });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/channels/config' && req.method === 'POST') {
     try {
-      const body = await parseJsonBody<{ channelType: string; config: Record<string, unknown> }>(req);
+      const body = await parseJsonBody<{
+        channelType: string;
+        config: Record<string, unknown>;
+        skipRestart?: boolean;
+      }>(req);
       if (body.channelType === 'dingtalk') {
         const installResult = await ensureDingTalkPluginInstalled();
         if (!installResult.installed) {
@@ -255,7 +280,9 @@ export async function handleChannelRoutes(
         }
       }
       await saveChannelConfig(body.channelType, body.config);
-      scheduleGatewayChannelRestart(ctx, `channel:saveConfig:${body.channelType}`);
+      if (!body.skipRestart) {
+        scheduleGatewayChannelRestart(ctx, `channel:saveConfig:${body.channelType}`);
+      }
       sendJson(res, 200, { success: true });
     } catch (error) {
       emitGatewayLifecycleEvent(ctx, {

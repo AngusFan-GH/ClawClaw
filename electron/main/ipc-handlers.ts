@@ -47,6 +47,7 @@ import {
 import { checkUvInstalled, installUv, setupManagedPython } from '../utils/uv-setup';
 import { updateSkillConfig, getSkillConfig, getAllSkillConfigs } from '../utils/skill-config';
 import { whatsAppLoginManager } from '../utils/whatsapp-login';
+import { weChatInstallerManager } from '../utils/wechat-installer';
 import { getProviderConfig } from '../utils/provider-registry';
 import { deviceOAuthManager, OAuthProviderType } from '../utils/device-oauth';
 import { browserOAuthManager, type BrowserOAuthProviderType } from '../utils/browser-oauth';
@@ -1860,6 +1861,26 @@ function registerWhatsAppHandlers(mainWindow: BrowserWindow): void {
     if (!mainWindow.isDestroyed()) {
       logger.error('whatsapp:login-error', error);
       mainWindow.webContents.send('channel:whatsapp-error', error);
+    }
+  });
+
+  weChatInstallerManager.on('output', (data) => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('channel:wechat-output', data);
+    }
+  });
+
+  weChatInstallerManager.on('success', (data) => {
+    if (!mainWindow.isDestroyed()) {
+      logger.info('wechat:install-success', data);
+      mainWindow.webContents.send('channel:wechat-success', data);
+    }
+  });
+
+  weChatInstallerManager.on('error', (error) => {
+    if (!mainWindow.isDestroyed()) {
+      logger.error('wechat:install-error', error);
+      mainWindow.webContents.send('channel:wechat-error', error);
     }
   });
 }

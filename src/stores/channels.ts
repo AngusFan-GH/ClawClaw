@@ -51,13 +51,18 @@ interface ChannelsState {
   clearError: () => void;
 }
 
+function normalizeChannelId(channelId: string): string {
+  return channelId === 'openclaw-weixin' ? 'wechat' : channelId;
+}
+
 function resolveChannelTypeFromId(channelId: string): ChannelType | undefined {
+  const normalizedId = normalizeChannelId(channelId);
   const channelTypes = Object.keys(CHANNEL_NAMES) as ChannelType[];
   return channelTypes.find(
     (type) =>
-      channelId === type ||
-      channelId.startsWith(`${type}-`) ||
-      channelId.startsWith(`${type}:`)
+      normalizedId === type ||
+      normalizedId.startsWith(`${type}-`) ||
+      normalizedId.startsWith(`${type}:`)
   );
 }
 
@@ -205,18 +210,19 @@ function mergeRuntimeSnapshot(
   if (!snapshot) return;
 
   const channelOrder = snapshot.channelOrder || Object.keys(snapshot.channels || {});
-  for (const channelId of channelOrder) {
+  for (const rawChannelId of channelOrder) {
+    const channelId = normalizeChannelId(rawChannelId);
     if (!(channelId in CHANNEL_NAMES)) continue;
     const type = channelId as ChannelType;
-    const summary = (snapshot.channels as Record<string, unknown> | undefined)?.[channelId] as Record<string, unknown> | undefined;
+    const summary = (snapshot.channels as Record<string, unknown> | undefined)?.[rawChannelId] as Record<string, unknown> | undefined;
     const summaryError =
       typeof (summary as { error?: string })?.error === 'string'
         ? (summary as { error?: string }).error
         : typeof (summary as { lastError?: string })?.lastError === 'string'
           ? (summary as { lastError?: string }).lastError
           : undefined;
-    const defaultAccountId = snapshot.channelDefaultAccountId?.[channelId];
-    const runtimeAccounts = snapshot.channelAccounts?.[channelId] || [];
+    const defaultAccountId = snapshot.channelDefaultAccountId?.[rawChannelId];
+    const runtimeAccounts = snapshot.channelAccounts?.[rawChannelId] || [];
 
     const existing = groups.get(type) || {
       type,
