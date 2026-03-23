@@ -21,6 +21,8 @@ const AGENT_RUNTIME_FILES = [
   'auth-profiles.json',
   'models.json',
 ];
+const WECHAT_RUNTIME_CHANNEL_ID = 'openclaw-weixin';
+const WECHAT_UI_CHANNEL_ID = 'wechat';
 
 interface AgentModelConfig {
   primary?: string;
@@ -229,6 +231,14 @@ function normalizeBindingAccountId(accountId?: string | null): string {
   return normalized || 'default';
 }
 
+function toRuntimeChannelType(channelType: string): string {
+  return channelType === WECHAT_UI_CHANNEL_ID ? WECHAT_RUNTIME_CHANNEL_ID : channelType;
+}
+
+function toUiChannelType(channelType: string): string {
+  return channelType === WECHAT_RUNTIME_CHANNEL_ID ? WECHAT_UI_CHANNEL_ID : channelType;
+}
+
 function makeChannelAccountBindingKey(channelType: string, accountId?: string | null): string {
   return `${channelType}:${normalizeBindingAccountId(accountId)}`;
 }
@@ -246,7 +256,9 @@ function getSimpleChannelBindingMaps(bindings: unknown): {
   for (const binding of bindings) {
     if (!isSimpleChannelBinding(binding)) continue;
     const agentId = normalizeAgentIdForBinding(binding.agentId!);
-    const channel = binding.match?.channel;
+    const channel = typeof binding.match?.channel === 'string'
+      ? toRuntimeChannelType(binding.match.channel)
+      : binding.match?.channel;
     const accountId = binding.match?.accountId;
     if (!agentId || !channel) continue;
     if (typeof accountId === 'string' && accountId.trim()) {
@@ -282,7 +294,7 @@ function upsertBindingsForChannel(
     nextBindings.push({
       agentId,
       match: {
-        channel: channelType,
+        channel: toRuntimeChannelType(channelType),
         ...(accountId ? { accountId: normalizeBindingAccountId(accountId) } : {}),
       },
     });
@@ -470,7 +482,7 @@ async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<Age
       group.accounts
         .filter((account) => channelAccountOwners[makeChannelAccountBindingKey(group.type, account.accountId)] === entryIdNorm)
         .map((account) => ({
-          channelType: group.type,
+          channelType: toUiChannelType(group.type),
           accountId: account.accountId,
           isDefaultAccount: account.isDefaultAccount,
         }))
@@ -616,6 +628,7 @@ export async function deleteAgentConfig(agentId: string): Promise<AgentsSnapshot
 }
 
 export async function assignChannelToAgent(agentId: string, channelType: string, accountId?: string): Promise<AgentsSnapshot> {
+  const runtimeChannelType = toRuntimeChannelType(channelType);
   const snapshot = await updateOpenClawConfig(async (rawConfig) => {
     const config = rawConfig as AgentConfigDocument;
     const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
@@ -627,14 +640,15 @@ export async function assignChannelToAgent(agentId: string, channelType: string,
       ...agentsConfig,
       list: entries,
     };
-    config.bindings = upsertBindingsForChannel(config.bindings, channelType, agentId, accountId);
+    config.bindings = upsertBindingsForChannel(config.bindings, runtimeChannelType, agentId, accountId);
     return buildSnapshotFromConfig(config);
   });
-  logger.info('Assigned channel to agent', { agentId, channelType, accountId: normalizeBindingAccountId(accountId) });
+  logger.info('Assigned channel to agent', { agentId, channelType: runtimeChannelType, accountId: normalizeBindingAccountId(accountId) });
   return snapshot;
 }
 
 export async function clearChannelBinding(channelType: string, agentId?: string, accountId?: string): Promise<AgentsSnapshot> {
+  const runtimeChannelType = toRuntimeChannelType(channelType);
   const normalizedRequestedAgentId =
     typeof agentId === 'string' && agentId.trim() ? normalizeAgentIdForBinding(agentId) : '';
   const result = await updateOpenClawConfig(async (rawConfig) => {
@@ -642,25 +656,25 @@ export async function clearChannelBinding(channelType: string, agentId?: string,
     const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
     const { typeOwners, accountOwners } = getSimpleChannelBindingMaps(config.bindings);
     const boundAgentId = accountId
-      ? accountOwners.get(makeChannelAccountBindingKey(channelType, accountId)) ?? typeOwners.get(channelType)
-      : typeOwners.get(channelType);
+      ? accountOwners.get(makeChannelAccountBindingKey(runtimeChannelType, accountId)) ?? typeOwners.get(runtimeChannelType)
+      : typeOwners.get(runtimeChannelType);
 
     if (normalizedRequestedAgentId && boundAgentId && boundAgentId !== normalizedRequestedAgentId) {
-      throw new Error(`Channel "${channelType}" is not bound to agent "${agentId}"`);
+      throw new Error(`Channel "${runtimeChannelType}" is not bound to agent "${agentId}"`);
     }
 
     config.agents = {
       ...agentsConfig,
       list: entries,
     };
-    config.bindings = upsertBindingsForChannel(config.bindings, channelType, null, accountId);
+    config.bindings = upsertBindingsForChannel(config.bindings, runtimeChannelType, null, accountId);
     return {
       snapshot: buildSnapshotFromConfig(config),
       boundAgentId,
     };
   });
   logger.info('Cleared simplified channel binding', {
-    channelType,
+    channelType: runtimeChannelType,
     accountId: accountId ? normalizeBindingAccountId(accountId) : undefined,
     agentId: normalizedRequestedAgentId || result.boundAgentId,
   });

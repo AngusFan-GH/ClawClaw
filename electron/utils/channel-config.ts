@@ -284,6 +284,13 @@ function hasMeaningfulSectionConfig(value: ChannelConfigData | undefined): boole
     return Object.keys(stripChannelSectionScaffolding(value)).length > 0;
 }
 
+function isImplicitlyConfiguredChannel(
+    channelType: string,
+    section: AccountScopedChannelSection | undefined
+): boolean {
+    return channelType === WECHAT_RUNTIME_CHANNEL_ID && section?.enabled !== false;
+}
+
 function configsShareComparableValues(
     left: ChannelConfigData | undefined,
     right: ChannelConfigData | undefined
@@ -898,7 +905,7 @@ export async function listConfiguredChannels(options?: { includeCli?: boolean })
             const hasConfiguredAccounts = resolveConfiguredAccounts(section).some(
                 ({ config: accountConfig }) => hasMeaningfulSectionConfig(accountConfig)
             );
-            if (hasTopLevelConfig || hasConfiguredAccounts) {
+            if (hasTopLevelConfig || hasConfiguredAccounts || isImplicitlyConfiguredChannel(channelType, section)) {
                 channels.add(toUiChannelType(channelType));
             }
         }
@@ -934,6 +941,9 @@ export async function listConfiguredChannelAccounts(): Promise<Record<string, st
                 if (hasMeaningfulSectionConfig(accountConfig)) {
                     accountIds.add(accountId);
                 }
+            }
+            if (isImplicitlyConfiguredChannel(runtimeChannelType, section) && accountIds.size === 0) {
+                accountIds.add('default');
             }
         }
 
@@ -990,6 +1000,13 @@ export async function listConfiguredChannelGroups(): Promise<ConfiguredChannelGr
                     isDefaultAccount: explicitDefaultAccountId
                         ? explicitDefaultAccountId === accountId
                         : accountId === 'default',
+                    configured: true,
+                });
+            }
+            if (isImplicitlyConfiguredChannel(runtimeChannelType, section) && accounts.size === 0) {
+                accounts.set('default', {
+                    accountId: 'default',
+                    isDefaultAccount: explicitDefaultAccountId ? explicitDefaultAccountId === 'default' : true,
                     configured: true,
                 });
             }
