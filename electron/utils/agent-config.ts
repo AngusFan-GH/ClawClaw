@@ -446,10 +446,10 @@ async function provisionAgentFilesystem(config: AgentConfigDocument, agent: Agen
 
 async function buildSnapshotFromConfig(
   config: AgentConfigDocument,
-  options?: { includeDisk?: boolean },
+  options?: { includeDisk?: boolean; includeCli?: boolean },
 ): Promise<AgentsSnapshot> {
   const { entries, defaultAgentId } = await getEffectiveAgentEntries(config, options);
-  const configuredGroups = await listConfiguredChannelGroups();
+  const configuredGroups = await listConfiguredChannelGroups({ includeCli: options?.includeCli ?? false });
   const configuredChannels = configuredGroups.map((group) => group.type);
   const { typeOwners, accountOwners } = getSimpleChannelBindingMaps(config.bindings);
   const channelOwners: Record<string, string> = {};
@@ -518,7 +518,7 @@ async function buildSnapshotFromConfig(
 
 export async function listAgentsSnapshot(): Promise<AgentsSnapshot> {
   const config = await readOpenClawConfig() as AgentConfigDocument;
-  return buildSnapshotFromConfig(config);
+  return buildSnapshotFromConfig(config, { includeCli: false });
 }
 
 export async function listConfiguredAgentIds(): Promise<string[]> {
@@ -559,7 +559,7 @@ export async function createAgent(name: string): Promise<AgentsSnapshot> {
 
     await provisionAgentFilesystem(config, newAgent);
     return {
-      snapshot: buildSnapshotFromConfig(config),
+      snapshot: buildSnapshotFromConfig(config, { includeCli: false }),
       agentId: nextId,
     };
   });
@@ -587,7 +587,7 @@ export async function updateAgentName(agentId: string, name: string): Promise<Ag
       list: entries,
     };
 
-    return buildSnapshotFromConfig(config);
+    return buildSnapshotFromConfig(config, { includeCli: false });
   });
   logger.info('Updated agent name', { agentId, name: normalizedName });
   return snapshot;
@@ -623,7 +623,7 @@ export async function deleteAgentConfig(agentId: string): Promise<AgentsSnapshot
     }
 
     return {
-      snapshot: buildSnapshotFromConfig(config, { includeDisk: false }),
+      snapshot: buildSnapshotFromConfig(config, { includeDisk: false, includeCli: false }),
       removedEntry,
     };
   });
@@ -647,7 +647,7 @@ export async function assignChannelToAgent(agentId: string, channelType: string,
       list: entries,
     };
     config.bindings = upsertBindingsForChannel(config.bindings, runtimeChannelType, agentId, accountId);
-    return buildSnapshotFromConfig(config);
+    return buildSnapshotFromConfig(config, { includeCli: false });
   });
   logger.info('Assigned channel to agent', { agentId, channelType: runtimeChannelType, accountId: normalizeBindingAccountId(accountId) });
   return snapshot;
@@ -675,7 +675,7 @@ export async function clearChannelBinding(channelType: string, agentId?: string,
     };
     config.bindings = upsertBindingsForChannel(config.bindings, runtimeChannelType, null, accountId);
     return {
-      snapshot: buildSnapshotFromConfig(config),
+      snapshot: buildSnapshotFromConfig(config, { includeCli: false }),
       boundAgentId,
     };
   });

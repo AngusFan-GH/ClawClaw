@@ -58,7 +58,9 @@
     "addChannel": "Bind Connection Account",
     "noChannels": "No channels are assigned to this agent yet.",
     "assignedStatus": "Assigned",
-    "boundAccount": "Account: {{accountId}}"
+    "boundAccount": "Account: {{accountId}}",
+    "defaultFallbackStatus": "Default fallback",
+    "defaultFallbackBadge": "Default fallback"
   },
   "removeChannelDialog": {
     "title": "Remove Channel",
@@ -81,13 +83,15 @@
     "description": "Bind configured connections by account. Multi-account connections can belong to different agents.",
     "empty": "There are no configured connections to bind yet. Configure accounts on the Connections page first.",
     "otherOwner": "Currently assigned to: {{name}}",
+    "fallbackOwner": "Not explicitly bound. Defaults to: {{name}}",
     "unassigned": "Unassigned",
     "account": "Account: {{accountId}}",
     "accountConfigured": "This account is configured and ready to bind.",
     "accountNotConfigured": "This account is not fully configured yet. Finish it on the Connections page first.",
     "binding": "Binding...",
     "boundHere": "Bound",
-    "bindAction": "Bind to Current Agent"
+    "bindAction": "Bind to Current Agent",
+    "defaultFallbackHere": "Default fallback here"
   },
   "loadingTitle": "Loading agents",
   "loadingDescription": "Syncing agent configuration and channel bindings. Please wait."

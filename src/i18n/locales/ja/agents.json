@@ -58,7 +58,9 @@
     "addChannel": "接続アカウントをバインド",
     "noChannels": "この Agent にはまだ Channel が割り当てられていません。",
     "assignedStatus": "割り当て済み",
-    "boundAccount": "アカウント: {{accountId}}"
+    "boundAccount": "アカウント: {{accountId}}",
+    "defaultFallbackStatus": "デフォルトで接管",
+    "defaultFallbackBadge": "デフォルトで接管"
   },
   "removeChannelDialog": {
     "title": "Channel を削除",
@@ -81,13 +83,15 @@
     "description": "設定済みの接続をアカウント単位でバインドします。複数アカウントの接続は別々の Agent に割り当てられます。",
     "empty": "まだバインドできる接続がありません。先に Connections ページでアカウントを設定してください。",
     "otherOwner": "現在の割り当て: {{name}}",
+    "fallbackOwner": "明示的なバインドはありません。既定では {{name}} にルーティングされます",
     "unassigned": "未割り当て",
     "account": "アカウント: {{accountId}}",
     "accountConfigured": "このアカウントは設定済みなので、そのままバインドできます。",
     "accountNotConfigured": "このアカウントはまだ設定が完了していません。先に Connections ページで設定してください。",
     "binding": "バインド中...",
     "boundHere": "割り当て済み",
-    "bindAction": "この Agent にバインド"
+    "bindAction": "この Agent にバインド",
+    "defaultFallbackHere": "既定で接管中"
   },
   "loadingTitle": "Agent を読み込み中",
   "loadingDescription": "Agent 設定と Channel バインドを同期しています。しばらくお待ちください。"

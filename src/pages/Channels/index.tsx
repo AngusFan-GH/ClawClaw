@@ -92,6 +92,7 @@ export function Channels() {
   const { t } = useTranslation('channels');
   const { channelGroups, loading, error, fetchChannels, deleteChannel } = useChannelsStore();
   const agents = useAgentsStore((state) => state.agents);
+  const defaultAgentId = useAgentsStore((state) => state.defaultAgentId);
   const fetchAgents = useAgentsStore((state) => state.fetchAgents);
   const channelAccountOwners = useAgentsStore((state) => state.channelAccountOwners);
   const gatewayStatus = useGatewayStore((state) => state.status);
@@ -164,6 +165,7 @@ export function Channels() {
       ) as Record<string, string>,
     [agents],
   );
+  const defaultAgentName = defaultAgentId ? agentNamesById[defaultAgentId] : undefined;
 
   const supportedUnconfiguredTypes = getPrimaryChannels().filter((type) => !configuredTypes.includes(type));
   const openConfig = (type: ChannelType, accountId?: string | null, options?: { createNewAccount?: boolean }) => {
@@ -235,10 +237,23 @@ export function Channels() {
                     <ChannelTypeCard
                       key={group.type}
                       group={group}
-                      accountOwnerNames={Object.fromEntries(
+                      accountOwnerships={Object.fromEntries(
                         group.accounts.map((account) => {
                           const ownerId = channelAccountOwners[`${group.type}:${account.accountId}`];
-                          return [account.accountId, ownerId ? agentNamesById[ownerId] : undefined];
+                          return [
+                            account.accountId,
+                            ownerId
+                              ? {
+                                  label: agentNamesById[ownerId] || ownerId,
+                                  mode: 'explicit' as const,
+                                }
+                              : defaultAgentName
+                                ? {
+                                    label: defaultAgentName,
+                                    mode: 'fallback' as const,
+                                  }
+                                : undefined,
+                          ];
                         }),
                       )}
                       onEditAccount={(account) => openConfig(group.type, account.accountId)}
@@ -388,14 +403,14 @@ export function Channels() {
 
 function ChannelTypeCard({
   group,
-  accountOwnerNames,
+  accountOwnerships,
   onEditAccount,
   onAddAccount,
   onManageBinding,
   onDeleteAccount,
 }: {
   group: ChannelGroup;
-  accountOwnerNames: Record<string, string | undefined>;
+  accountOwnerships: Record<string, { label: string; mode: 'explicit' | 'fallback' } | undefined>;
   onEditAccount: (account: ChannelAccount) => void;
   onAddAccount: () => void;
   onManageBinding: () => void;
@@ -492,8 +507,17 @@ function ChannelTypeCard({
                   }}
                   className="flex w-full items-center justify-between rounded-[14px] border border-border/60 bg-background/70 px-3 py-2 text-left transition-colors hover:border-black/10 hover:bg-black/[0.02] focus:outline-none focus:ring-2 focus:ring-primary/35 dark:hover:border-white/10 dark:hover:bg-white/[0.03]"
                 >
+                  {(() => {
+                    const ownership = accountOwnerships[account.accountId];
+                    const ownershipLabel =
+                      ownership?.mode === 'explicit'
+                        ? ownership.label
+                        : ownership?.mode === 'fallback'
+                          ? ownership.label
+                          : t('unassignedAgent', '未绑定');
+                    return (
                   <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 items-center gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <span className="text-[13px] font-semibold text-foreground">{account.accountId}</span>
                       {account.isDefaultAccount && (
                         <Badge
@@ -514,9 +538,31 @@ function ChannelTypeCard({
                                 ? t('runtime.configuredOnly', '已配置')
                                 : t('runtime.stopped')}
                       </span>
-                      <span className="shrink-0 text-muted-foreground/50">·</span>
-                      <span className="truncate text-[12px] text-muted-foreground/80">
-                        {t('boundAgentLabel', '归属')}：{accountOwnerNames[account.accountId] || t('unassignedAgent', '未绑定')}
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          'rounded-[10px] px-2 py-0.5 text-[10px] font-semibold shadow-none',
+                          ownership?.mode === 'explicit'
+                            ? 'border border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300'
+                            : ownership?.mode === 'fallback'
+                              ? 'border border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                              : 'border border-black/6 bg-black/[0.03] text-foreground/70 dark:border-white/10 dark:bg-white/[0.04]',
+                        )}
+                      >
+                        {ownership?.mode === 'explicit'
+                          ? t('ownershipBadge.explicit', '已绑定')
+                          : ownership?.mode === 'fallback'
+                            ? t('ownershipBadge.fallback', '默认接管')
+                            : t('ownershipBadge.unassigned', '未绑定')}
+                      </Badge>
+                      <span className="text-muted-foreground/50">·</span>
+                      <span
+                        className={cn(
+                          'min-w-0 truncate text-[12px]',
+                          ownership?.mode === 'fallback' ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground/80',
+                        )}
+                      >
+                        {t('boundAgentLabel', '归属')}：{ownershipLabel}
                       </span>
                       {account.error ? (
                         <>
@@ -526,6 +572,8 @@ function ChannelTypeCard({
                       ) : null}
                     </div>
                   </div>
+                    );
+                  })()}
                   <Button
                     variant="dangerGhost"
                     size="icon"

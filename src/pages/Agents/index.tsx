@@ -72,6 +72,7 @@ export function Agents() {
   const gatewayLifecycle = useGatewayStore((state) => state.lifecycle);
   const {
     agents,
+    defaultAgentId,
     loading,
     error,
     fetchAgents,
@@ -286,6 +287,7 @@ export function Agents() {
           agent={activeAgent}
           channelGroups={channelGroups}
           allAgents={agents}
+          defaultAgentId={defaultAgentId}
           channelAccountOwners={useAgentsStore.getState().channelAccountOwners}
           onOpenChannels={() => navigate('/channels')}
           onClose={() => setActiveAgentId(null)}
@@ -637,6 +639,7 @@ function AgentSettingsModal({
   agent,
   channelGroups,
   allAgents,
+  defaultAgentId,
   channelAccountOwners,
   onOpenChannels,
   onClose,
@@ -644,6 +647,7 @@ function AgentSettingsModal({
   agent: AgentSummary;
   channelGroups: ChannelGroup[];
   allAgents: AgentSummary[];
+  defaultAgentId: string;
   channelAccountOwners: Record<string, string>;
   onOpenChannels: () => void;
   onClose: () => void;
@@ -739,11 +743,53 @@ function AgentSettingsModal({
       error: runtimeAccount?.error || runtimeChannel?.error,
     };
   });
+  const implicitDefaultChannels = useMemo(() => {
+    if (agent.gateway.id !== defaultAgentId) {
+      return [];
+    }
+    return channelGroups.flatMap((group) =>
+      group.accounts
+        .filter((account) => !channelAccountOwners[`${group.type}:${account.accountId}`])
+        .map((account) => {
+          const displayStatus: 'configured' | 'connected' | 'connecting' | 'error' | 'disconnected' =
+            account.status === 'configured'
+              ? 'configured'
+              : account.status === 'connected'
+                ? 'connected'
+                : account.status === 'connecting'
+                  ? 'connecting'
+                  : account.status === 'error'
+                    ? 'error'
+                    : 'disconnected';
+          return {
+            channelType: group.type,
+            accountId: account.accountId,
+            isDefaultAccount: account.isDefaultAccount,
+            name: group.name,
+            status: displayStatus,
+            statusLabel: t('settingsDialog.defaultFallbackStatus', '默认接管'),
+            error: account.error,
+            implicitDefault: true,
+          };
+        }),
+    );
+  }, [agent.gateway.id, channelAccountOwners, channelGroups, defaultAgentId, t]);
+  const visibleAssignedChannels = useMemo(() => {
+    const merged = [...assignedChannels];
+    for (const channel of implicitDefaultChannels) {
+      if (merged.some((item) => item.channelType === channel.channelType && item.accountId === channel.accountId)) {
+        continue;
+      }
+      merged.push(channel);
+    }
+    return merged;
+  }, [assignedChannels, implicitDefaultChannels]);
   const availableBindings = useMemo(
     () =>
       channelGroups.flatMap((group) =>
         group.accounts.map((account) => {
           const ownerId = channelAccountOwners[`${group.type}:${account.accountId}`];
+          const implicitAssignedHere = !ownerId && defaultAgentId === agent.gateway.id;
           return {
             channelType: group.type,
             channelName: group.name,
@@ -755,10 +801,12 @@ function AgentSettingsModal({
             ownerId,
             ownerName: ownerId ? agentNamesById[ownerId] : undefined,
             isAssignedHere: ownerId === agent.gateway.id,
+            implicitAssignedHere,
+            fallbackOwnerName: !ownerId && defaultAgentId ? agentNamesById[defaultAgentId] : undefined,
           };
         }),
       ),
-    [agent.gateway.id, agentNamesById, channelAccountOwners, channelGroups],
+    [agent.gateway.id, agentNamesById, channelAccountOwners, channelGroups, defaultAgentId],
   );
 
   return (
@@ -921,13 +969,13 @@ function AgentSettingsModal({
               </div>
             </div>
 
-            {assignedChannels.length === 0 ? (
+            {visibleAssignedChannels.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border/80 bg-muted/35 p-4 text-[13.5px] text-muted-foreground">
                 {t('settingsDialog.noChannels', '当前没有绑定任何连接。请先在连接页配置账户，再回来绑定。')}
               </div>
             ) : (
               <div className="space-y-3">
-                {assignedChannels.map((channel) => (
+                {visibleAssignedChannels.map((channel) => (
                   <div key={`${channel.channelType}:${channel.accountId}`} className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/35 p-4">
                     <div className="flex items-center gap-3 min-w-0">
                       <ChannelLogo type={channel.channelType} branded />
@@ -945,6 +993,14 @@ function AgentSettingsModal({
                             className="mt-1 rounded-full border-0 bg-primary/12 px-2 py-0.5 text-[10px] font-medium text-primary shadow-none"
                           >
                             {t('defaultAccount', '默认账户')}
+                          </Badge>
+                        ) : null}
+                        {'implicitDefault' in channel && channel.implicitDefault ? (
+                          <Badge
+                            variant="secondary"
+                            className="mt-1 ml-2 rounded-full border-0 bg-amber-500/12 px-2 py-0.5 text-[10px] font-medium text-amber-700 shadow-none dark:text-amber-300"
+                          >
+                            {t('settingsDialog.defaultFallbackBadge', '默认接管')}
                           </Badge>
                         ) : null}
                         {channel.error && (
@@ -981,6 +1037,7 @@ function AgentSettingsModal({
       {showBindingModal && (
         <BindingPickerModal
           bindings={availableBindings}
+          defaultAgentName={defaultAgentId ? agentNamesById[defaultAgentId] : undefined}
           onClose={() => setShowBindingModal(false)}
           onOpenChannels={onOpenChannels}
           onBind={async (channelType, accountId) => {
@@ -1030,6 +1087,7 @@ function AgentSettingsModal({
 function BindingPickerModal({
   bindings,
   bindingKey,
+  defaultAgentName,
   onClose,
   onOpenChannels,
   onBind,
@@ -1044,9 +1102,12 @@ function BindingPickerModal({
     error?: string;
     ownerId?: string;
     ownerName?: string;
+    fallbackOwnerName?: string;
     isAssignedHere: boolean;
+    implicitAssignedHere: boolean;
   }>;
   bindingKey: string | null;
+  defaultAgentName?: string;
   onClose: () => void;
   onOpenChannels: () => void;
   onBind: (channelType: ChannelType, accountId: string) => Promise<void>;
@@ -1056,7 +1117,7 @@ function BindingPickerModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl rounded-2xl bg-card overflow-hidden">
+      <Card className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-card">
         <CardHeader className="pb-2">
           <CardTitle className="text-2xl font-semibold tracking-tight">
             {t('bindingDialog.title', '绑定已有连接')}
@@ -1065,7 +1126,7 @@ function BindingPickerModal({
             {t('bindingDialog.description', '按账户绑定已配置连接。多账户连接会分别归属到不同分身。')}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4 pt-4 p-6">
+        <CardContent className="min-h-0 flex-1 overflow-y-auto space-y-4 p-6 pt-4">
           {availableBindings.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border/80 bg-muted/35 p-5 text-sm text-muted-foreground">
               <p>{t('bindingDialog.empty', '还没有可绑定的连接。请先去连接页配置账户。')}</p>
@@ -1085,7 +1146,12 @@ function BindingPickerModal({
                       name: binding.ownerName || binding.ownerId,
                       defaultValue: `当前归属：${binding.ownerName || binding.ownerId}`,
                     })
-                  : t('bindingDialog.unassigned', '未绑定分身');
+                  : binding.fallbackOwnerName || defaultAgentName
+                    ? t('bindingDialog.fallbackOwner', {
+                        name: binding.fallbackOwnerName || defaultAgentName,
+                        defaultValue: `未显式绑定，默认回退到：${binding.fallbackOwnerName || defaultAgentName}`,
+                      })
+                    : t('bindingDialog.unassigned', '未绑定分身');
                 const currentBindingKey = `${binding.channelType}:${binding.accountId}`;
                 return (
                   <div key={currentBindingKey} className="rounded-2xl border border-border/70 bg-muted/25 p-4">
@@ -1123,13 +1189,15 @@ function BindingPickerModal({
                       </div>
                       <Button
                         onClick={() => void onBind(binding.channelType, binding.accountId)}
-                        disabled={bindingKey === currentBindingKey || binding.isAssignedHere}
+                        disabled={bindingKey === currentBindingKey || binding.isAssignedHere || binding.implicitAssignedHere}
                         className="h-9 rounded-xl px-4 text-[13px] font-medium shadow-none"
                       >
                         {bindingKey === currentBindingKey
                           ? t('bindingDialog.binding', '绑定中...')
                           : binding.isAssignedHere
                             ? t('bindingDialog.boundHere', '已绑定')
+                            : binding.implicitAssignedHere
+                              ? t('bindingDialog.defaultFallbackHere', '默认接管中')
                             : binding.ownerId
                               ? t('bindingDialog.reassignAction', '转移到当前分身')
                               : t('bindingDialog.bindAction', '绑定到当前分身')}
@@ -1140,16 +1208,16 @@ function BindingPickerModal({
               })}
             </div>
           )}
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={onClose}
-              className="h-9 rounded-xl border-black/10 bg-transparent px-4 text-[13px] font-medium text-foreground/80 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
-            >
-              {t('common:actions.cancel')}
-            </Button>
-          </div>
         </CardContent>
+        <div className="flex justify-end gap-2 border-t border-border/60 bg-card px-6 py-4">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="h-9 rounded-xl border-black/10 bg-transparent px-4 text-[13px] font-medium text-foreground/80 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
+          >
+            {t('common:actions.cancel')}
+          </Button>
+        </div>
       </Card>
     </div>
   );

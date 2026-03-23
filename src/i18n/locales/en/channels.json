@@ -25,6 +25,14 @@
   "defaultAccount": "Default account",
   "editingAccount": "Account: {{accountId}}",
   "boundAccountSummaryLabel": "Account ownership",
+  "boundAgentLabel": "Owner",
+  "unassignedAgent": "Unassigned",
+  "fallbackOwnerLabel": "Default fallback: {{name}}",
+  "ownershipBadge": {
+    "explicit": "Bound",
+    "fallback": "Default fallback",
+    "unassigned": "Unassigned"
+  },
   "runtime": {
     "label": "Runtime",
     "connected": "Connected",

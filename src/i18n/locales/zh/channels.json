@@ -26,6 +26,14 @@
   "defaultAccount": "默认账户",
   "editingAccount": "账户: {{accountId}}",
   "boundAccountSummaryLabel": "账户归属",
+  "boundAgentLabel": "归属",
+  "unassignedAgent": "未绑定",
+  "fallbackOwnerLabel": "默认接管：{{name}}",
+  "ownershipBadge": {
+    "explicit": "已绑定",
+    "fallback": "默认接管",
+    "unassigned": "未绑定"
+  },
   "runtime": {
     "label": "运行态",
     "connected": "已连接",

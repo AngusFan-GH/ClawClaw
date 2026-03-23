@@ -25,6 +25,14 @@
   "defaultAccount": "既定アカウント",
   "editingAccount": "アカウント: {{accountId}}",
   "boundAccountSummaryLabel": "アカウントの所属",
+  "boundAgentLabel": "所属",
+  "unassignedAgent": "未バインド",
+  "fallbackOwnerLabel": "既定フォールバック: {{name}}",
+  "ownershipBadge": {
+    "explicit": "バインド済み",
+    "fallback": "既定フォールバック",
+    "unassigned": "未バインド"
+  },
   "runtime": {
     "label": "ランタイム",
     "connected": "接続済み",

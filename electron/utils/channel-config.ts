@@ -995,12 +995,12 @@ export async function listConfiguredChannels(options?: { includeCli?: boolean })
     return Array.from(channels);
 }
 
-export async function listConfiguredChannelAccounts(): Promise<Record<string, string[]>> {
+export async function listConfiguredChannelAccounts(options?: { includeCli?: boolean }): Promise<Record<string, string[]>> {
     const config = await readOpenClawConfig();
     migrateLegacyWechatSection(config);
     const result: Record<string, string[]> = {};
 
-    for (const channelType of await listConfiguredChannels()) {
+    for (const channelType of await listConfiguredChannels(options)) {
         const runtimeChannelType = toRuntimeChannelType(channelType);
         const section = config.channels?.[runtimeChannelType] as AccountScopedChannelSection | undefined;
         const accountIds = new Set<string>();
@@ -1042,12 +1042,12 @@ export interface ConfiguredChannelGroupSnapshot {
     }>;
 }
 
-export async function listConfiguredChannelGroups(): Promise<ConfiguredChannelGroupSnapshot[]> {
+export async function listConfiguredChannelGroups(options?: { includeCli?: boolean }): Promise<ConfiguredChannelGroupSnapshot[]> {
     const config = await readOpenClawConfig();
     migrateLegacyWechatSection(config);
     const groups: ConfiguredChannelGroupSnapshot[] = [];
 
-    for (const channelType of await listConfiguredChannels()) {
+    for (const channelType of await listConfiguredChannels(options)) {
         const runtimeChannelType = toRuntimeChannelType(channelType);
         const section = config.channels?.[runtimeChannelType] as AccountScopedChannelSection | undefined;
         const accounts = new Map<string, ConfiguredChannelGroupSnapshot['accounts'][number]>();
