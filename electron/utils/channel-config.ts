@@ -4,7 +4,7 @@
  *
  * All file I/O uses async fs/promises to avoid blocking the main thread.
  */
-import { access, readdir, rm } from 'fs/promises';
+import { access, readFile, readdir, rm, writeFile } from 'fs/promises';
 import { constants } from 'fs';
 import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -17,11 +17,11 @@ import {
     readOpenClawConfigRecord,
     sanitizeKnownInvalidOpenClawKeys,
     updateOpenClawConfigRecord,
-    writeOpenClawConfigRecord,
 } from './openclaw-config';
 import { proxyAwareFetch } from './proxy-fetch';
 import { prepareWinSpawn } from './win-shell';
 import {
+    normalizeOpenClawAccountId,
     WECHAT_RUNTIME_CHANNEL_ID,
     WECHAT_UI_CHANNEL_ID,
     isWeChatRuntimeChannel,
@@ -79,6 +79,114 @@ function migrateLegacyWechatSection(currentConfig: OpenClawConfig): void {
 
 async function fileExists(p: string): Promise<boolean> {
     try { await access(p, constants.F_OK); return true; } catch { return false; }
+}
+
+async function removeWeChatAccountState(accountId: string): Promise<void> {
+    const normalizedAccountId = normalizeOpenClawAccountId(accountId);
+    const weChatStateDir = join(homedir(), '.openclaw', WECHAT_RUNTIME_CHANNEL_ID);
+    const weChatAccountsDir = join(weChatStateDir, 'accounts');
+    const accountFilePrefixes = [
+        `${normalizedAccountId}.json`,
+        `${normalizedAccountId}.sync.json`,
+        `${normalizedAccountId}.context-tokens.json`,
+    ];
+
+    try {
+        if (await fileExists(weChatAccountsDir)) {
+            await Promise.all(
+                accountFilePrefixes.map(async (fileName) => {
+                    const filePath = join(weChatAccountsDir, fileName);
+                    try {
+                        await rm(filePath, { force: true });
+                    } catch (error) {
+                        console.error(`Failed to delete WeChat account state ${filePath}:`, error);
+                    }
+                }),
+            );
+        }
+    } catch (error) {
+        console.error('Failed to delete WeChat account files:', error);
+    }
+
+    try {
+        const accountIndexPath = join(weChatStateDir, 'accounts.json');
+        if (await fileExists(accountIndexPath)) {
+            const raw = await readFile(accountIndexPath, 'utf-8').catch(() => '');
+            const parsed = raw ? JSON.parse(raw) : [];
+            const accountIds = Array.isArray(parsed)
+                ? parsed.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+                : [];
+            const nextAccountIds = accountIds.filter((entry) => normalizeOpenClawAccountId(entry) !== normalizedAccountId);
+            if (nextAccountIds.length > 0) {
+                await writeFile(accountIndexPath, `${JSON.stringify(nextAccountIds, null, 2)}\n`, 'utf-8');
+            } else {
+                await rm(accountIndexPath, { force: true });
+            }
+        }
+    } catch (error) {
+        console.error('Failed to update WeChat account index:', error);
+    }
+
+    try {
+        const credentialsDir = join(homedir(), '.openclaw', 'credentials');
+        if (await fileExists(credentialsDir)) {
+            const candidates = await readdir(credentialsDir);
+            await Promise.all(
+                candidates
+                    .filter((name) =>
+                        name.startsWith('openclaw-weixin-') &&
+                        name.endsWith('-allowFrom.json') &&
+                        name.includes(normalizedAccountId),
+                    )
+                    .map(async (name) => {
+                        try {
+                            await rm(join(credentialsDir, name), { force: true });
+                        } catch (error) {
+                            console.error(`Failed to delete scoped WeChat allowFrom file ${name}:`, error);
+                        }
+                    }),
+            );
+        }
+    } catch (error) {
+        console.error('Failed to delete scoped WeChat allowFrom files:', error);
+    }
+
+    try {
+        const scopedCredentialsDir = join(homedir(), '.openclaw', 'credentials', WECHAT_RUNTIME_CHANNEL_ID);
+        if (await fileExists(scopedCredentialsDir)) {
+            const candidates = await readdir(scopedCredentialsDir);
+            await Promise.all(
+                candidates
+                    .filter((name) => name.includes(normalizedAccountId))
+                    .map(async (name) => {
+                        try {
+                            await rm(join(scopedCredentialsDir, name), { recursive: true, force: true });
+                        } catch (error) {
+                            console.error(`Failed to delete scoped WeChat credential ${name}:`, error);
+                        }
+                    }),
+            );
+        }
+    } catch (error) {
+        console.error('Failed to delete scoped WeChat credentials:', error);
+    }
+
+    try {
+        if (await fileExists(weChatAccountsDir)) {
+            const remainingAccountFiles = await readdir(weChatAccountsDir);
+            if (remainingAccountFiles.length === 0) {
+                await rm(weChatAccountsDir, { recursive: true, force: true });
+            }
+        }
+        if (await fileExists(weChatStateDir)) {
+            const remainingEntries = await readdir(weChatStateDir);
+            if (remainingEntries.length === 0) {
+                await rm(weChatStateDir, { recursive: true, force: true });
+            }
+        }
+    } catch (error) {
+        console.error('Failed to compact WeChat state directories:', error);
+    }
 }
 
 function extractTrailingJsonObject(raw: string): Record<string, unknown> | null {
@@ -812,22 +920,21 @@ export async function deleteChannelConfig(
     preferredAccountId?: string | null
 ): Promise<void> {
     const runtimeChannelType = toRuntimeChannelType(channelType);
+    let deletedWeChatAccountId: string | undefined;
+    let clearAllWeChatState = false;
     const configChanged = await updateOpenClawConfig(async (currentConfig) => {
     migrateLegacyWechatSection(currentConfig);
     let changed = false;
+    let removedScopedAccountId: string | undefined;
 
     if (currentConfig.channels?.[runtimeChannelType]) {
         const section = currentConfig.channels[runtimeChannelType] as AccountScopedChannelSection | undefined;
-        if (isWeChatRuntimeChannel(runtimeChannelType)) {
-            delete currentConfig.channels[runtimeChannelType];
-            changed = true;
-            console.log(`Deleted channel config for ${runtimeChannelType} (full reset)`);
-        } else {
         const source = resolveEditableChannelSource(currentConfig, runtimeChannelType, preferredAccountId);
         if (section && source.kind === 'account' && section.accounts?.[source.accountId]) {
             const accounts = { ...section.accounts };
             const accountConfig = accounts[source.accountId] as ChannelConfigData | undefined;
             delete accounts[source.accountId];
+            removedScopedAccountId = source.accountId;
             const remainingAccounts = Object.keys(accounts);
             let nextSection: AccountScopedChannelSection = {
                 ...section,
@@ -858,7 +965,11 @@ export async function deleteChannelConfig(
         }
         changed = true;
         console.log(`Deleted channel config for ${runtimeChannelType}`);
-        }
+    }
+
+    if (isWeChatRuntimeChannel(runtimeChannelType)) {
+        deletedWeChatAccountId = removedScopedAccountId;
+        clearAllWeChatState = !currentConfig.channels?.[runtimeChannelType];
     }
 
     if (PLUGIN_CHANNELS.includes(runtimeChannelType)) {
@@ -884,7 +995,7 @@ export async function deleteChannelConfig(
         changed = true;
     }
 
-    if (isWeChatRuntimeChannel(runtimeChannelType) && currentConfig.plugins?.allow) {
+    if (isWeChatRuntimeChannel(runtimeChannelType) && clearAllWeChatState && currentConfig.plugins?.allow) {
         const nextAllow = (currentConfig.plugins.allow as string[]).filter((pluginId) => pluginId !== WECHAT_RUNTIME_CHANNEL_ID);
         if (nextAllow.length > 0) {
             currentConfig.plugins.allow = nextAllow;
@@ -916,7 +1027,7 @@ export async function deleteChannelConfig(
     // WeChat login state is stored outside openclaw.json. Clearing only the
     // channel config causes the plugin runtime to rediscover existing account
     // files and the connection appears to "come back" after refresh/restart.
-    if (isWeChatRuntimeChannel(runtimeChannelType)) {
+    if (isWeChatRuntimeChannel(runtimeChannelType) && clearAllWeChatState) {
         const cleanupTargets = [
             join(homedir(), '.openclaw', 'openclaw-weixin'),
             join(homedir(), '.openclaw', 'credentials', 'openclaw-weixin'),
@@ -954,6 +1065,8 @@ export async function deleteChannelConfig(
         } catch (error) {
             console.error('Failed to delete WeChat allowFrom files:', error);
         }
+    } else if (isWeChatRuntimeChannel(runtimeChannelType) && deletedWeChatAccountId) {
+        await removeWeChatAccountState(deletedWeChatAccountId);
     }
 }
 

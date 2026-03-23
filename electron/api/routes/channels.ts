@@ -30,6 +30,7 @@ import { emitGatewayLifecycleEvent } from '../gateway-lifecycle';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { ensureBundledPluginInstalled } from '../../utils/bundled-plugin-installer';
 import { getOpenClawCliSpawnConfig } from '../../utils/openclaw-cli';
+import { clearChannelBinding } from '../../utils/agent-config';
 
 const WECHAT_QR_TIMEOUT_MS = 8 * 60 * 1000;
 const activeQrLogins = new Map<string, string>();
@@ -431,6 +432,7 @@ export async function handleChannelRoutes(
       const channelType = decodeURIComponent(url.pathname.slice('/api/channels/config/'.length));
       const accountId = url.searchParams.get('accountId');
       await deleteChannelConfig(channelType, accountId);
+      await clearChannelBinding(channelType, undefined, accountId || undefined).catch(() => undefined);
       scheduleGatewayChannelRestart(ctx, `channel:deleteConfig:${channelType}`);
       sendJson(res, 200, { success: true });
     } catch (error) {
