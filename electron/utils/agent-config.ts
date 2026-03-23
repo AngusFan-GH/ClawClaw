@@ -4,6 +4,10 @@ import { join, normalize } from 'path';
 import { listConfiguredChannelGroups, readOpenClawConfig, updateOpenClawConfig } from './channel-config';
 import { expandPath, getOpenClawConfigDir } from './paths';
 import * as logger from './logger';
+import {
+  toRuntimeChannelType,
+  toUiChannelType,
+} from './channel-alias';
 
 const MAIN_AGENT_ID = 'main';
 const MAIN_AGENT_NAME = 'Main';
@@ -21,9 +25,6 @@ const AGENT_RUNTIME_FILES = [
   'auth-profiles.json',
   'models.json',
 ];
-const WECHAT_RUNTIME_CHANNEL_ID = 'openclaw-weixin';
-const WECHAT_UI_CHANNEL_ID = 'wechat';
-
 interface AgentModelConfig {
   primary?: string;
   [key: string]: unknown;
@@ -231,14 +232,6 @@ function normalizeBindingAccountId(accountId?: string | null): string {
   return normalized || 'default';
 }
 
-function toRuntimeChannelType(channelType: string): string {
-  return channelType === WECHAT_UI_CHANNEL_ID ? WECHAT_RUNTIME_CHANNEL_ID : channelType;
-}
-
-function toUiChannelType(channelType: string): string {
-  return channelType === WECHAT_RUNTIME_CHANNEL_ID ? WECHAT_UI_CHANNEL_ID : channelType;
-}
-
 function makeChannelAccountBindingKey(channelType: string, accountId?: string | null): string {
   return `${channelType}:${normalizeBindingAccountId(accountId)}`;
 }
@@ -320,12 +313,22 @@ async function listExistingAgentIdsOnDisk(): Promise<Set<string>> {
   return ids;
 }
 
-async function getEffectiveAgentEntries(config: AgentConfigDocument): Promise<{
+async function getEffectiveAgentEntries(
+  config: AgentConfigDocument,
+  options?: { includeDisk?: boolean },
+): Promise<{
   agentsConfig: AgentsConfig;
   entries: AgentListEntry[];
   defaultAgentId: string;
 }> {
   const { agentsConfig, entries, defaultAgentId } = normalizeAgentsConfig(config);
+  if (options?.includeDisk === false) {
+    return {
+      agentsConfig,
+      entries,
+      defaultAgentId,
+    };
+  }
   const diskIds = await listExistingAgentIdsOnDisk();
   const existingIds = new Set(entries.map((entry) => entry.id));
   const mergedEntries = [...entries];
@@ -441,8 +444,11 @@ async function provisionAgentFilesystem(config: AgentConfigDocument, agent: Agen
   }
 }
 
-async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<AgentsSnapshot> {
-  const { entries, defaultAgentId } = await getEffectiveAgentEntries(config);
+async function buildSnapshotFromConfig(
+  config: AgentConfigDocument,
+  options?: { includeDisk?: boolean },
+): Promise<AgentsSnapshot> {
+  const { entries, defaultAgentId } = await getEffectiveAgentEntries(config, options);
   const configuredGroups = await listConfiguredChannelGroups();
   const configuredChannels = configuredGroups.map((group) => group.type);
   const { typeOwners, accountOwners } = getSimpleChannelBindingMaps(config.bindings);
@@ -517,7 +523,7 @@ export async function listAgentsSnapshot(): Promise<AgentsSnapshot> {
 
 export async function listConfiguredAgentIds(): Promise<string[]> {
   const config = await readOpenClawConfig() as AgentConfigDocument;
-  const { entries } = await getEffectiveAgentEntries(config);
+  const { entries } = await getEffectiveAgentEntries(config, { includeDisk: false });
   const ids = [...new Set(entries.map((entry) => entry.id.trim()).filter(Boolean))];
   return ids.length > 0 ? ids : [MAIN_AGENT_ID];
 }
@@ -617,7 +623,7 @@ export async function deleteAgentConfig(agentId: string): Promise<AgentsSnapshot
     }
 
     return {
-      snapshot: buildSnapshotFromConfig(config),
+      snapshot: buildSnapshotFromConfig(config, { includeDisk: false }),
       removedEntry,
     };
   });

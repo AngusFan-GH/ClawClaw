@@ -41,6 +41,10 @@ async function sanitizeConfig(filePath: string): Promise<boolean> {
   let modified = false;
   const VALID_MEMORY_SEARCH_PROVIDERS = new Set(['openai', 'local', 'gemini', 'voyage', 'mistral']);
   const VALID_MEMORY_SEARCH_FALLBACKS = new Set(['openai', 'gemini', 'local', 'voyage', 'mistral', 'none']);
+  const isAbsolutePluginPath = (value: string): boolean =>
+    value.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(value) || value.startsWith('\\\\');
+  const isBundledPluginPath = (value: string): boolean =>
+    value.replace(/\\/g, '/').includes('node_modules/openclaw/extensions');
 
   const acp = config.acp;
   if (acp && typeof acp === 'object' && !Array.isArray(acp)) {
@@ -81,6 +85,26 @@ async function sanitizeConfig(filePath: string): Promise<boolean> {
       tools.web = web;
       config.tools = tools;
       modified = true;
+    }
+  }
+
+  const plugins = config.plugins;
+  if (plugins && typeof plugins === 'object' && !Array.isArray(plugins)) {
+    const pluginsObj = plugins as Record<string, unknown>;
+    const load = pluginsObj.load;
+    if (load && typeof load === 'object' && !Array.isArray(load)) {
+      const loadObj = load as Record<string, unknown>;
+      if (Array.isArray(loadObj.paths)) {
+        const nextPaths = loadObj.paths.filter((entry) => {
+          if (typeof entry !== 'string' || !isAbsolutePluginPath(entry)) return true;
+          return !isBundledPluginPath(entry) && entry !== '/missing/plugin';
+        });
+        if (nextPaths.length !== loadObj.paths.length) {
+          loadObj.paths = nextPaths;
+          pluginsObj.load = loadObj;
+          modified = true;
+        }
+      }
     }
   }
 
@@ -251,6 +275,28 @@ describe('sanitizeOpenClawConfig (blocklist approach)', () => {
 
     const modified = await sanitizeConfig(configPath);
     expect(modified).toBe(false);
+  });
+
+  it('removes stale nested plugin paths from plugins.load.paths and preserves sibling keys', async () => {
+    await writeConfig({
+      plugins: {
+        load: {
+          watch: true,
+          paths: ['/valid/plugin', '/missing/plugin', '/app/node_modules/openclaw/extensions/demo'],
+        },
+      },
+    });
+
+    const modified = await sanitizeConfig(configPath);
+    expect(modified).toBe(true);
+
+    const result = await readConfig();
+    expect(result.plugins).toEqual({
+      load: {
+        watch: true,
+        paths: ['/valid/plugin'],
+      },
+    });
   });
 
   it('removes invalid acp.mcpServers without touching valid acp keys', async () => {

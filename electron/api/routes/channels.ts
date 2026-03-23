@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { app } from 'electron';
-import { existsSync, cpSync, mkdirSync, rmSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -13,10 +13,27 @@ import {
   validateChannelCredentials,
 } from '../../utils/channel-config';
 import { whatsAppLoginManager } from '../../utils/whatsapp-login';
-import { weChatInstallerManager } from '../../utils/wechat-installer';
+import {
+  buildQrChannelEventName,
+  toRuntimeChannelType,
+  WECHAT_RUNTIME_CHANNEL_ID,
+  WECHAT_UI_CHANNEL_ID,
+} from '../../utils/channel-alias';
+import {
+  cancelWeChatLoginSession,
+  saveWeChatAccountState,
+  startWeChatLoginSession,
+  waitForWeChatLoginSession,
+} from '../../utils/wechat-login';
 import type { HostApiContext } from '../context';
 import { emitGatewayLifecycleEvent } from '../gateway-lifecycle';
 import { parseJsonBody, sendJson } from '../route-utils';
+import { ensureBundledPluginInstalled } from '../../utils/bundled-plugin-installer';
+import { getOpenClawCliSpawnConfig } from '../../utils/openclaw-cli';
+
+const WECHAT_QR_TIMEOUT_MS = 8 * 60 * 1000;
+const activeQrLogins = new Map<string, string>();
+const WECHAT_PLUGIN_SPEC = '@tencent-weixin/openclaw-weixin';
 
 function scheduleGatewayChannelRestart(ctx: HostApiContext, reason: string): void {
   if (ctx.gatewayManager.getStatus().state === 'stopped') {
@@ -33,125 +50,172 @@ function scheduleGatewayChannelRestart(ctx: HostApiContext, reason: string): voi
 }
 
 async function ensureDingTalkPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  const targetDir = join(homedir(), '.openclaw', 'extensions', 'dingtalk');
-  const targetManifest = join(targetDir, 'openclaw.plugin.json');
-
-  if (existsSync(targetManifest)) {
-    return { installed: true };
-  }
-
-  const candidateSources = app.isPackaged
-    ? [
-      join(process.resourcesPath, 'openclaw-plugins', 'dingtalk'),
-      join(process.resourcesPath, 'app.asar.unpacked', 'build', 'openclaw-plugins', 'dingtalk'),
-      join(process.resourcesPath, 'app.asar.unpacked', 'openclaw-plugins', 'dingtalk'),
-    ]
-    : [
-      join(app.getAppPath(), 'build', 'openclaw-plugins', 'dingtalk'),
-      join(process.cwd(), 'build', 'openclaw-plugins', 'dingtalk'),
-      join(__dirname, '../../../build/openclaw-plugins/dingtalk'),
-    ];
-
-  const sourceDir = candidateSources.find((dir) => existsSync(join(dir, 'openclaw.plugin.json')));
-  if (!sourceDir) {
-    return {
-      installed: false,
-      warning: `Bundled DingTalk plugin mirror not found. Checked: ${candidateSources.join(' | ')}`,
-    };
-  }
-
-  try {
-    mkdirSync(join(homedir(), '.openclaw', 'extensions'), { recursive: true });
-    rmSync(targetDir, { recursive: true, force: true });
-    cpSync(sourceDir, targetDir, { recursive: true, dereference: true });
-    if (!existsSync(targetManifest)) {
-      return { installed: false, warning: 'Failed to install DingTalk plugin mirror (manifest missing).' };
-    }
-    return { installed: true };
-  } catch {
-    return { installed: false, warning: 'Failed to install bundled DingTalk plugin mirror' };
-  }
+  return ensureBundledPluginInstalled('dingtalk', 'DingTalk');
 }
 
 async function ensureWeComPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  const targetDir = join(homedir(), '.openclaw', 'extensions', 'wecom');
-  const targetManifest = join(targetDir, 'openclaw.plugin.json');
-
-  if (existsSync(targetManifest)) {
-    return { installed: true };
-  }
-
-  const candidateSources = app.isPackaged
-    ? [
-        join(process.resourcesPath, 'openclaw-plugins', 'wecom'),
-        join(process.resourcesPath, 'app.asar.unpacked', 'build', 'openclaw-plugins', 'wecom'),
-        join(process.resourcesPath, 'app.asar.unpacked', 'openclaw-plugins', 'wecom'),
-      ]
-    : [
-        join(app.getAppPath(), 'build', 'openclaw-plugins', 'wecom'),
-        join(process.cwd(), 'build', 'openclaw-plugins', 'wecom'),
-        join(__dirname, '../../../build/openclaw-plugins/wecom'),
-      ];
-
-  const sourceDir = candidateSources.find((dir) => existsSync(join(dir, 'openclaw.plugin.json')));
-  if (!sourceDir) {
-    return {
-      installed: false,
-      warning: `Bundled WeCom plugin mirror not found. Checked: ${candidateSources.join(' | ')}`,
-    };
-  }
-
-  try {
-    mkdirSync(join(homedir(), '.openclaw', 'extensions'), { recursive: true });
-    rmSync(targetDir, { recursive: true, force: true });
-    cpSync(sourceDir, targetDir, { recursive: true, dereference: true });
-    if (!existsSync(targetManifest)) {
-      return { installed: false, warning: 'Failed to install WeCom plugin mirror (manifest missing).' };
-    }
-    return { installed: true };
-  } catch {
-    return { installed: false, warning: 'Failed to install bundled WeCom plugin mirror' };
-  }
+  return ensureBundledPluginInstalled('wecom', 'WeCom');
 }
 
 async function ensureQQBotPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  const targetDir = join(homedir(), '.openclaw', 'extensions', 'qqbot');
-  const targetManifest = join(targetDir, 'openclaw.plugin.json');
+  return ensureBundledPluginInstalled('qqbot', 'QQ Bot');
+}
 
-  if (existsSync(targetManifest)) {
-    return { installed: true };
+async function ensureWeChatPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
+  const bundledResult = ensureBundledPluginInstalled('openclaw-weixin', 'WeChat');
+  if (bundledResult.installed) {
+    return bundledResult;
   }
 
-  const candidateSources = app.isPackaged
-    ? [
-        join(process.resourcesPath, 'openclaw-plugins', 'qqbot'),
-        join(process.resourcesPath, 'app.asar.unpacked', 'build', 'openclaw-plugins', 'qqbot'),
-        join(process.resourcesPath, 'app.asar.unpacked', 'openclaw-plugins', 'qqbot'),
-      ]
-    : [
-        join(app.getAppPath(), 'build', 'openclaw-plugins', 'qqbot'),
-        join(process.cwd(), 'build', 'openclaw-plugins', 'qqbot'),
-        join(__dirname, '../../../build/openclaw-plugins/qqbot'),
-      ];
-
-  const sourceDir = candidateSources.find((dir) => existsSync(join(dir, 'openclaw.plugin.json')));
-  if (!sourceDir) {
-    return {
-      installed: false,
-      warning: `Bundled QQ Bot plugin mirror not found. Checked: ${candidateSources.join(' | ')}`,
-    };
-  }
+  const pluginManifest = join(homedir(), '.openclaw', 'extensions', 'openclaw-weixin', 'openclaw.plugin.json');
+  const cliArgs = existsSync(pluginManifest)
+    ? ['plugins', 'update', 'openclaw-weixin']
+    : ['plugins', 'install', WECHAT_PLUGIN_SPEC];
+  const spawnConfig = getOpenClawCliSpawnConfig(cliArgs);
 
   try {
-    mkdirSync(join(homedir(), '.openclaw', 'extensions'), { recursive: true });
-    rmSync(targetDir, { recursive: true, force: true });
-    cpSync(sourceDir, targetDir, { recursive: true, dereference: true });
-    if (!existsSync(targetManifest)) {
-      return { installed: false, warning: 'Failed to install QQ Bot plugin mirror (manifest missing).' };
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(spawnConfig.command, spawnConfig.args, {
+        cwd: spawnConfig.cwd,
+        env: spawnConfig.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+      });
+
+      let stderr = '';
+      child.stderr.on('data', (chunk: Buffer | string) => {
+        stderr += String(chunk);
+      });
+
+      child.once('error', reject);
+      child.once('close', (code, signal) => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+        reject(new Error(
+          stderr.trim()
+            || `WeChat plugin install failed with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`,
+        ));
+      });
+    });
+
+    if (existsSync(pluginManifest)) {
+      return {
+        installed: true,
+        warning: bundledResult.warning,
+      };
     }
-    return { installed: true };
-  } catch {
-    return { installed: false, warning: 'Failed to install bundled QQ Bot plugin mirror' };
+
+    return {
+      installed: false,
+      warning: 'WeChat plugin install completed, but manifest was not found afterwards.',
+    };
+  } catch (error) {
+    return {
+      installed: false,
+      warning: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function buildQrLoginKey(channelType: string, accountId?: string): string {
+  return `${channelType}:${accountId?.trim() || '__new__'}`;
+}
+
+function setActiveQrLogin(channelType: string, sessionKey: string, accountId?: string): string {
+  const loginKey = buildQrLoginKey(channelType, accountId);
+  activeQrLogins.set(loginKey, sessionKey);
+  return loginKey;
+}
+
+function isActiveQrLogin(loginKey: string, sessionKey: string): boolean {
+  return activeQrLogins.get(loginKey) === sessionKey;
+}
+
+function clearActiveQrLogin(channelType: string, accountId?: string): void {
+  activeQrLogins.delete(buildQrLoginKey(channelType, accountId));
+}
+
+function emitChannelEvent(
+  ctx: HostApiContext,
+  channelType: string,
+  event: 'qr' | 'success' | 'error',
+  payload: unknown,
+): void {
+  const eventName = buildQrChannelEventName(channelType, event);
+  ctx.eventBus.emit(eventName, payload);
+  if (ctx.mainWindow && !ctx.mainWindow.isDestroyed()) {
+    ctx.mainWindow.webContents.send(eventName, payload);
+  }
+}
+
+async function awaitWeChatQrLogin(
+  ctx: HostApiContext,
+  sessionKey: string,
+  loginKey: string,
+  accountId?: string,
+): Promise<void> {
+  try {
+    const result = await waitForWeChatLoginSession({
+      sessionKey,
+      accountId,
+      timeoutMs: WECHAT_QR_TIMEOUT_MS,
+      onQrRefresh: async ({ qrcodeUrl }) => {
+        if (!isActiveQrLogin(loginKey, sessionKey)) return;
+        emitChannelEvent(ctx, WECHAT_UI_CHANNEL_ID, 'qr', {
+          qr: qrcodeUrl,
+          raw: qrcodeUrl,
+          sessionKey,
+        });
+      },
+    });
+
+    if (!isActiveQrLogin(loginKey, sessionKey)) {
+      return;
+    }
+
+    if (!result.connected || !result.accountId || !result.botToken) {
+      emitChannelEvent(
+        ctx,
+        WECHAT_UI_CHANNEL_ID,
+        'error',
+        result.message || 'WeChat login did not complete',
+      );
+      return;
+    }
+
+    const normalizedAccountId = await saveWeChatAccountState(result.accountId, {
+      token: result.botToken,
+      baseUrl: result.baseUrl,
+      userId: result.userId,
+    });
+
+    await saveChannelConfig(WECHAT_UI_CHANNEL_ID, {
+      enabled: true,
+      __accountId: normalizedAccountId,
+    });
+    scheduleGatewayChannelRestart(ctx, `channel:saveConfig:${WECHAT_RUNTIME_CHANNEL_ID}`);
+
+    if (!isActiveQrLogin(loginKey, sessionKey)) {
+      return;
+    }
+
+    emitChannelEvent(ctx, WECHAT_UI_CHANNEL_ID, 'success', {
+      accountId: normalizedAccountId,
+      rawAccountId: result.accountId,
+      message: result.message,
+    });
+  } catch (error) {
+    if (!isActiveQrLogin(loginKey, sessionKey)) {
+      return;
+    }
+    emitChannelEvent(ctx, WECHAT_UI_CHANNEL_ID, 'error', String(error));
+  } finally {
+    if (isActiveQrLogin(loginKey, sessionKey)) {
+      activeQrLogins.delete(loginKey);
+    }
+    await cancelWeChatLoginSession(sessionKey);
   }
 }
 
@@ -231,9 +295,33 @@ export async function handleChannelRoutes(
     return true;
   }
 
-  if (url.pathname === '/api/channels/wechat/install' && req.method === 'POST') {
+  if ((url.pathname === '/api/channels/wechat/start' || url.pathname === '/api/channels/wechat/install') && req.method === 'POST') {
     try {
-      await weChatInstallerManager.start();
+      const body = await parseJsonBody<{ accountId?: string }>(req);
+      const requestedAccountId = body.accountId?.trim() || undefined;
+
+      const installResult = await ensureWeChatPluginInstalled();
+      if (!installResult.installed) {
+        sendJson(res, 500, { success: false, error: installResult.warning || 'WeChat plugin install failed' });
+        return true;
+      }
+
+      const startResult = await startWeChatLoginSession({
+        ...(requestedAccountId ? { accountId: requestedAccountId } : {}),
+        force: true,
+      });
+
+      if (!startResult.qrcodeUrl || !startResult.sessionKey) {
+        throw new Error(startResult.message || 'Failed to generate WeChat QR code');
+      }
+
+      const loginKey = setActiveQrLogin(WECHAT_UI_CHANNEL_ID, startResult.sessionKey, requestedAccountId);
+      emitChannelEvent(ctx, WECHAT_UI_CHANNEL_ID, 'qr', {
+        qr: startResult.qrcodeUrl,
+        raw: startResult.qrcodeUrl,
+        sessionKey: startResult.sessionKey,
+      });
+      void awaitWeChatQrLogin(ctx, startResult.sessionKey, loginKey, requestedAccountId);
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -243,7 +331,14 @@ export async function handleChannelRoutes(
 
   if (url.pathname === '/api/channels/wechat/cancel' && req.method === 'POST') {
     try {
-      await weChatInstallerManager.stop();
+      const body = await parseJsonBody<{ accountId?: string }>(req);
+      const accountId = body.accountId?.trim() || undefined;
+      const loginKey = buildQrLoginKey(WECHAT_UI_CHANNEL_ID, accountId);
+      const sessionKey = activeQrLogins.get(loginKey);
+      clearActiveQrLogin(WECHAT_UI_CHANNEL_ID, accountId);
+      if (sessionKey) {
+        await cancelWeChatLoginSession(sessionKey);
+      }
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -258,30 +353,38 @@ export async function handleChannelRoutes(
         config: Record<string, unknown>;
         skipRestart?: boolean;
       }>(req);
-      if (body.channelType === 'dingtalk') {
+      const runtimeChannelType = toRuntimeChannelType(body.channelType);
+      if (runtimeChannelType === 'dingtalk') {
         const installResult = await ensureDingTalkPluginInstalled();
         if (!installResult.installed) {
           sendJson(res, 500, { success: false, error: installResult.warning || 'DingTalk plugin install failed' });
           return true;
         }
       }
-      if (body.channelType === 'wecom') {
+      if (runtimeChannelType === 'wecom') {
         const installResult = await ensureWeComPluginInstalled();
         if (!installResult.installed) {
           sendJson(res, 500, { success: false, error: installResult.warning || 'WeCom plugin install failed' });
           return true;
         }
       }
-      if (body.channelType === 'qqbot') {
+      if (runtimeChannelType === 'qqbot') {
         const installResult = await ensureQQBotPluginInstalled();
         if (!installResult.installed) {
           sendJson(res, 500, { success: false, error: installResult.warning || 'QQ Bot plugin install failed' });
           return true;
         }
       }
+      if (runtimeChannelType === WECHAT_RUNTIME_CHANNEL_ID) {
+        const installResult = await ensureWeChatPluginInstalled();
+        if (!installResult.installed) {
+          sendJson(res, 500, { success: false, error: installResult.warning || 'WeChat plugin install failed' });
+          return true;
+        }
+      }
       await saveChannelConfig(body.channelType, body.config);
       if (!body.skipRestart) {
-        scheduleGatewayChannelRestart(ctx, `channel:saveConfig:${body.channelType}`);
+        scheduleGatewayChannelRestart(ctx, `channel:saveConfig:${runtimeChannelType}`);
       }
       sendJson(res, 200, { success: true });
     } catch (error) {

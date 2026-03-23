@@ -10,16 +10,9 @@ const { testHome, testUserData } = vi.hoisted(() => {
   };
 });
 
-vi.mock('os', async () => {
-  const actual = await vi.importActual<typeof import('os')>('os');
-  const mocked = {
-    ...actual,
-    homedir: () => testHome,
-  };
-  return {
-    ...mocked,
-    default: mocked,
-  };
+vi.mock('os', () => {
+  const mocked = { homedir: () => testHome };
+  return { ...mocked, default: mocked };
 });
 
 vi.mock('electron', () => ({
@@ -27,6 +20,9 @@ vi.mock('electron', () => ({
     isPackaged: false,
     getPath: () => testUserData,
     getVersion: () => '0.0.0-test',
+  },
+  utilityProcess: {
+    fork: vi.fn(),
   },
 }));
 
@@ -136,7 +132,7 @@ describe('agent config lifecycle', () => {
     const snapshot = await deleteAgentConfig('test2');
 
     expect(snapshot.agents.map((agent) => agent.id)).toEqual(['main', 'test3']);
-    expect(snapshot.channelOwners.feishu).toBe('main');
+    expect(snapshot.channelOwners.feishu).toBeUndefined();
 
     const config = await readOpenClawJson();
     expect(

@@ -44,7 +44,7 @@
   "toast": {
     "whatsappConnected": "WhatsApp connected successfully",
     "whatsappFailed": "WhatsApp connection failed: {{error}}",
-    "wechatConnected": "WeChat setup completed. Restart the Gateway after you confirm the scan in WeChat.",
+    "wechatConnected": "WeChat connected. Your account has been saved and the Gateway is refreshing.",
     "wechatFailed": "WeChat setup failed: {{error}}",
     "channelSaved": "Channel {{name}} saved",
     "channelConnecting": "Connecting to {{name}}...",
@@ -64,7 +64,7 @@
     "qrCode": "QRCode",
     "token": "Token",
     "scanQR": "Scan this QR code with {{name}}",
-    "refreshCode": "Refresh Code",
+    "refreshCode": "Refresh QR Code",
     "loadingConfig": "Loading configuration...",
     "existingHint": "You have an existing configuration for this channel",
     "accountHint": "Editing account: {{accountId}}",
@@ -89,16 +89,16 @@
     "validating": "Validating...",
     "validateConfig": "Validate Configuration",
     "generatingQR": "Generating QR...",
-    "startWechatInstall": "Start WeChat Setup",
-    "wechatTerminalTitle": "Preparing the WeChat QR code",
-    "wechatTerminalDesc": "Waiting for the WeChat login flow to print the QR code. Once detected, it will be shown directly below and the raw logs stay collapsed.",
+    "startWechatInstall": "Start WeChat Access",
+    "wechatTerminalTitle": "Preparing WeChat QR Code",
+    "wechatTerminalDesc": "Preparing the WeChat access flow and generating a QR code.",
     "wechatQrTitle": "Scan with WeChat",
-    "wechatQrDesc": "Scan the QR code shown below with WeChat. Expand the raw installer logs only if you need to debug the setup.",
-    "wechatReadyDesc": "The WeChat login flow has finished. After you confirm the QR scan in WeChat, restart the Gateway to apply the new WeChat connection.",
-    "wechatPreparing": "Preparing WeChat login flow...",
-    "wechatShowLogs": "Show installer logs",
+    "wechatQrDesc": "Scan the QR code shown below with WeChat and confirm login on your phone.",
+    "wechatReadyDesc": "WeChat login is complete. ClawClaw will save the account and refresh the Gateway automatically.",
+    "wechatPreparing": "Preparing WeChat access flow...",
+    "wechatShowLogs": "Show setup logs",
     "cancelInstall": "Cancel setup",
-    "confirmWechatRestart": "I have scanned it, restart Gateway",
+    "confirmWechatRestart": "Continue",
     "restartingGateway": "Restarting Gateway...",
     "validatingAndSaving": "Validating & Saving...",
     "generateQRCode": "Generate QR Code",
@@ -168,12 +168,12 @@
       ]
     },
     "wechat": {
-      "description": "Connect WeChat through the official OpenClaw plugin login flow and scan its QR code",
+      "description": "Connect WeChat through the official OpenClaw plugin and complete login by scanning a QR code in-app",
       "docsUrl": "https://mp.weixin.qq.com/s/Vm2Azji9QZm73fyQf1eOmg",
       "instructions": [
-        "Start the WeChat plugin install and login flow from ClawClaw",
-        "Scan the QR code shown directly in the setup dialog with WeChat",
-        "After you confirm the scan in WeChat, restart the Gateway to load the new connection"
+        "Start the WeChat access flow from ClawClaw",
+        "Scan the QR code shown in the dialog with WeChat and confirm login on your phone",
+        "After login succeeds, ClawClaw saves the account and refreshes the Gateway automatically"
       ]
     },
     "dingtalk": {

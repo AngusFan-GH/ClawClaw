@@ -3,7 +3,7 @@
  * Registers all IPC handlers for main-renderer communication
  */
 import { ipcMain, BrowserWindow, shell, dialog, app, nativeImage } from 'electron';
-import { existsSync, cpSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, extname, basename, resolve } from 'node:path';
 import crypto from 'node:crypto';
@@ -47,7 +47,6 @@ import {
 import { checkUvInstalled, installUv, setupManagedPython } from '../utils/uv-setup';
 import { updateSkillConfig, getSkillConfig, getAllSkillConfigs } from '../utils/skill-config';
 import { whatsAppLoginManager } from '../utils/whatsapp-login';
-import { weChatInstallerManager } from '../utils/wechat-installer';
 import { getProviderConfig } from '../utils/provider-registry';
 import { deviceOAuthManager, OAuthProviderType } from '../utils/device-oauth';
 import { browserOAuthManager, type BrowserOAuthProviderType } from '../utils/browser-oauth';
@@ -67,6 +66,7 @@ import {
 import { validateApiKeyWithProvider } from '../services/providers/provider-validation';
 import { appUpdater } from './updater';
 import { PORTS } from '../utils/config';
+import { ensureBundledPluginInstalled } from '../utils/bundled-plugin-installer';
 
 type AppRequest = {
   id?: string;
@@ -1440,170 +1440,46 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
     }
   };
 
-  async function ensureDingTalkPluginInstalled(): Promise<{
-    installed: boolean;
-    warning?: string;
-  }> {
-    const targetDir = join(homedir(), '.openclaw', 'extensions', 'dingtalk');
-    const targetManifest = join(targetDir, 'openclaw.plugin.json');
-
-    if (existsSync(targetManifest)) {
-      logger.info('DingTalk plugin already installed from local mirror');
-      return { installed: true };
+  async function ensureDingTalkPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
+    const result = ensureBundledPluginInstalled('dingtalk', 'DingTalk');
+    if (result.installed) {
+      logger.info(
+        result.sourceDir
+          ? `Installed DingTalk plugin from bundled mirror: ${result.sourceDir}`
+          : 'DingTalk plugin already installed from local mirror'
+      );
+    } else if (result.warning) {
+      logger.warn(result.warning);
     }
-
-    const candidateSources = app.isPackaged
-      ? [
-          join(process.resourcesPath, 'openclaw-plugins', 'dingtalk'),
-          join(process.resourcesPath, 'app.asar.unpacked', 'build', 'openclaw-plugins', 'dingtalk'),
-          join(process.resourcesPath, 'app.asar.unpacked', 'openclaw-plugins', 'dingtalk'),
-        ]
-      : [
-          join(app.getAppPath(), 'build', 'openclaw-plugins', 'dingtalk'),
-          join(process.cwd(), 'build', 'openclaw-plugins', 'dingtalk'),
-          join(__dirname, '../../build/openclaw-plugins/dingtalk'),
-        ];
-
-    const sourceDir = candidateSources.find((dir) => existsSync(join(dir, 'openclaw.plugin.json')));
-    if (!sourceDir) {
-      logger.warn('Bundled DingTalk plugin mirror not found in candidate paths', {
-        candidateSources,
-      });
-      return {
-        installed: false,
-        warning: `Bundled DingTalk plugin mirror not found. Checked: ${candidateSources.join(' | ')}`,
-      };
-    }
-
-    try {
-      mkdirSync(join(homedir(), '.openclaw', 'extensions'), { recursive: true });
-      rmSync(targetDir, { recursive: true, force: true });
-      cpSync(sourceDir, targetDir, { recursive: true, dereference: true });
-
-      if (!existsSync(targetManifest)) {
-        return {
-          installed: false,
-          warning: 'Failed to install DingTalk plugin mirror (manifest missing).',
-        };
-      }
-
-      logger.info(`Installed DingTalk plugin from bundled mirror: ${sourceDir}`);
-      return { installed: true };
-    } catch (error) {
-      logger.warn('Failed to install DingTalk plugin from bundled mirror:', error);
-      return {
-        installed: false,
-        warning: 'Failed to install bundled DingTalk plugin mirror',
-      };
-    }
+    return result;
   }
 
   async function ensureWeComPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-    const targetDir = join(homedir(), '.openclaw', 'extensions', 'wecom');
-    const targetManifest = join(targetDir, 'openclaw.plugin.json');
-
-    if (existsSync(targetManifest)) {
-      logger.info('WeCom plugin already installed from local mirror');
-      return { installed: true };
+    const result = ensureBundledPluginInstalled('wecom', 'WeCom');
+    if (result.installed) {
+      logger.info(
+        result.sourceDir
+          ? `Installed WeCom plugin from bundled mirror: ${result.sourceDir}`
+          : 'WeCom plugin already installed from local mirror'
+      );
+    } else if (result.warning) {
+      logger.warn(result.warning);
     }
-
-    const candidateSources = app.isPackaged
-      ? [
-          join(process.resourcesPath, 'openclaw-plugins', 'wecom'),
-          join(process.resourcesPath, 'app.asar.unpacked', 'build', 'openclaw-plugins', 'wecom'),
-          join(process.resourcesPath, 'app.asar.unpacked', 'openclaw-plugins', 'wecom'),
-        ]
-      : [
-          join(app.getAppPath(), 'build', 'openclaw-plugins', 'wecom'),
-          join(process.cwd(), 'build', 'openclaw-plugins', 'wecom'),
-          join(__dirname, '../../build/openclaw-plugins/wecom'),
-        ];
-
-    const sourceDir = candidateSources.find((dir) => existsSync(join(dir, 'openclaw.plugin.json')));
-    if (!sourceDir) {
-      logger.warn('Bundled WeCom plugin mirror not found in candidate paths', { candidateSources });
-      return {
-        installed: false,
-        warning: `Bundled WeCom plugin mirror not found. Checked: ${candidateSources.join(' | ')}`,
-      };
-    }
-
-    try {
-      mkdirSync(join(homedir(), '.openclaw', 'extensions'), { recursive: true });
-      rmSync(targetDir, { recursive: true, force: true });
-      cpSync(sourceDir, targetDir, { recursive: true, dereference: true });
-
-      if (!existsSync(targetManifest)) {
-        return {
-          installed: false,
-          warning: 'Failed to install WeCom plugin mirror (manifest missing).',
-        };
-      }
-
-      logger.info(`Installed WeCom plugin from bundled mirror: ${sourceDir}`);
-      return { installed: true };
-    } catch (error) {
-      logger.warn('Failed to install WeCom plugin from bundled mirror:', error);
-      return {
-        installed: false,
-        warning: 'Failed to install bundled WeCom plugin mirror',
-      };
-    }
+    return result;
   }
 
   async function ensureQQBotPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-    const targetDir = join(homedir(), '.openclaw', 'extensions', 'qqbot');
-    const targetManifest = join(targetDir, 'openclaw.plugin.json');
-
-    if (existsSync(targetManifest)) {
-      logger.info('QQ Bot plugin already installed from local mirror');
-      return { installed: true };
+    const result = ensureBundledPluginInstalled('qqbot', 'QQ Bot');
+    if (result.installed) {
+      logger.info(
+        result.sourceDir
+          ? `Installed QQ Bot plugin from bundled mirror: ${result.sourceDir}`
+          : 'QQ Bot plugin already installed from local mirror'
+      );
+    } else if (result.warning) {
+      logger.warn(result.warning);
     }
-
-    const candidateSources = app.isPackaged
-      ? [
-          join(process.resourcesPath, 'openclaw-plugins', 'qqbot'),
-          join(process.resourcesPath, 'app.asar.unpacked', 'build', 'openclaw-plugins', 'qqbot'),
-          join(process.resourcesPath, 'app.asar.unpacked', 'openclaw-plugins', 'qqbot'),
-        ]
-      : [
-          join(app.getAppPath(), 'build', 'openclaw-plugins', 'qqbot'),
-          join(process.cwd(), 'build', 'openclaw-plugins', 'qqbot'),
-          join(__dirname, '../../build/openclaw-plugins/qqbot'),
-        ];
-
-    const sourceDir = candidateSources.find((dir) => existsSync(join(dir, 'openclaw.plugin.json')));
-    if (!sourceDir) {
-      logger.warn('Bundled QQ Bot plugin mirror not found in candidate paths', {
-        candidateSources,
-      });
-      return {
-        installed: false,
-        warning: `Bundled QQ Bot plugin mirror not found. Checked: ${candidateSources.join(' | ')}`,
-      };
-    }
-
-    try {
-      mkdirSync(join(homedir(), '.openclaw', 'extensions'), { recursive: true });
-      rmSync(targetDir, { recursive: true, force: true });
-      cpSync(sourceDir, targetDir, { recursive: true, dereference: true });
-
-      if (!existsSync(targetManifest)) {
-        return {
-          installed: false,
-          warning: 'Failed to install QQ Bot plugin mirror (manifest missing).',
-        };
-      }
-
-      logger.info(`Installed QQ Bot plugin from bundled mirror: ${sourceDir}`);
-      return { installed: true };
-    } catch (error) {
-      logger.warn('Failed to install QQ Bot plugin from bundled mirror:', error);
-      return {
-        installed: false,
-        warning: 'Failed to install bundled QQ Bot plugin mirror',
-      };
-    }
+    return result;
   }
 
   // Get OpenClaw package status
@@ -1864,25 +1740,6 @@ function registerWhatsAppHandlers(mainWindow: BrowserWindow): void {
     }
   });
 
-  weChatInstallerManager.on('output', (data) => {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('channel:wechat-output', data);
-    }
-  });
-
-  weChatInstallerManager.on('success', (data) => {
-    if (!mainWindow.isDestroyed()) {
-      logger.info('wechat:install-success', data);
-      mainWindow.webContents.send('channel:wechat-success', data);
-    }
-  });
-
-  weChatInstallerManager.on('error', (error) => {
-    if (!mainWindow.isDestroyed()) {
-      logger.error('wechat:install-error', error);
-      mainWindow.webContents.send('channel:wechat-error', error);
-    }
-  });
 }
 
 /**

@@ -44,7 +44,7 @@
   "toast": {
     "whatsappConnected": "WhatsApp 连接成功",
     "whatsappFailed": "WhatsApp 连接失败: {{error}}",
-    "wechatConnected": "微信接入完成。请在微信里确认扫码后，再重启 Gateway。",
+    "wechatConnected": "微信接入完成，账号已保存并正在刷新 Gateway。",
     "wechatFailed": "微信接入失败: {{error}}",
     "channelSaved": "连接 {{name}} 已保存",
     "channelConnecting": "正在连接 {{name}}...",
@@ -64,7 +64,7 @@
     "qrCode": "二维码",
     "token": "令牌",
     "scanQR": "使用 {{name}} 扫描此二维码",
-    "refreshCode": "刷新代码",
+    "refreshCode": "刷新二维码",
     "loadingConfig": "正在加载配置...",
     "existingHint": "您已配置过此连接",
     "accountHint": "当前编辑账户：{{accountId}}",
@@ -91,14 +91,14 @@
     "generatingQR": "正在生成二维码...",
     "startWechatInstall": "开始微信接入",
     "wechatTerminalTitle": "正在准备微信二维码",
-    "wechatTerminalDesc": "正在等待微信登录流程输出二维码。二维码出现后会直接展示在下方，原始日志已折叠。",
+    "wechatTerminalDesc": "正在准备微信接入流程并生成二维码。",
     "wechatQrTitle": "请使用微信扫码",
-    "wechatQrDesc": "请直接使用微信扫描下方二维码。若需要排查问题，可展开查看原始安装日志。",
-    "wechatReadyDesc": "微信登录流程已经完成。请先在微信里确认扫码完成，然后再重启 Gateway 以应用新的微信连接。",
-    "wechatPreparing": "正在准备微信登录流程...",
-    "wechatShowLogs": "查看安装日志",
+    "wechatQrDesc": "请使用微信扫描下方二维码，并在手机上确认登录。",
+    "wechatReadyDesc": "微信登录已完成，ClawClaw 会自动保存账号并刷新 Gateway。",
+    "wechatPreparing": "正在准备微信接入流程...",
+    "wechatShowLogs": "查看接入日志",
     "cancelInstall": "取消接入",
-    "confirmWechatRestart": "我已完成扫码，重启 Gateway",
+    "confirmWechatRestart": "继续",
     "restartingGateway": "正在重启 Gateway...",
     "validatingAndSaving": "正在验证并保存...",
     "generateQRCode": "生成二维码",
@@ -168,12 +168,12 @@
       ]
     },
     "wechat": {
-      "description": "通过 OpenClaw 官方微信插件流程接入微信，并扫码完成登录",
+      "description": "通过 OpenClaw 官方微信插件接入微信，在应用内扫码完成登录",
       "docsUrl": "https://mp.weixin.qq.com/s/Vm2Azji9QZm73fyQf1eOmg",
       "instructions": [
-        "在 ClawClaw 中启动微信插件安装与登录流程",
-        "使用微信扫描界面中直接展示的二维码",
-        "确认扫码完成后，再手动重启 Gateway"
+        "在 ClawClaw 中启动微信接入流程",
+        "使用微信扫描界面中显示的二维码，并在手机上确认登录",
+        "登录成功后，ClawClaw 会自动保存账号并刷新 Gateway"
       ]
     },
     "dingtalk": {

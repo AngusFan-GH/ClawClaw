@@ -55,6 +55,10 @@ function normalizeChannelId(channelId: string): string {
   return channelId === 'openclaw-weixin' ? 'wechat' : channelId;
 }
 
+function usesPluginManagedQrAccounts(type: ChannelType): boolean {
+  return type === 'wechat';
+}
+
 function resolveChannelTypeFromId(channelId: string): ChannelType | undefined {
   const normalizedId = normalizeChannelId(channelId);
   const channelTypes = Object.keys(CHANNEL_NAMES) as ChannelType[];
@@ -266,17 +270,44 @@ function mergeRuntimeSnapshot(
       });
     }
 
+    const runtimeConfiguredAccountIds = runtimeAccounts
+      .filter((account) => account.configured === true)
+      .map((account) => account.accountId || 'default');
+    const inferredDefaultAccountId =
+      defaultAccountId
+      || existing.defaultAccountId
+      || (usesPluginManagedQrAccounts(type)
+        ? runtimeConfiguredAccountIds.find((accountId) => accountId !== 'default')
+        : undefined);
+
+    let mergedAccounts = Array.from(accountMap.values());
+    if (usesPluginManagedQrAccounts(type)) {
+      const hasResolvedRuntimeAccount = mergedAccounts.some((account) => account.accountId !== 'default');
+      if (hasResolvedRuntimeAccount) {
+        mergedAccounts = mergedAccounts.filter((account) => account.accountId !== 'default');
+      }
+    }
+
+    mergedAccounts = mergedAccounts.map((account) => ({
+      ...account,
+      isDefaultAccount: account.accountId === (inferredDefaultAccountId || 'default'),
+      metadata: {
+        ...account.metadata,
+        isDefaultAccount: account.accountId === (inferredDefaultAccountId || 'default'),
+      },
+    }));
+
     const nextGroup: ChannelGroup = {
       ...existing,
       configured: existing.configured || runtimeAccounts.some((account) => account.configured === true),
       runtimeLoaded: true,
       pluginLoaded: true,
-      defaultAccountId: defaultAccountId || existing.defaultAccountId,
+      defaultAccountId: inferredDefaultAccountId,
       configuredAccounts: Array.from(new Set([
         ...existing.configuredAccounts,
-        ...runtimeAccounts.filter((account) => account.configured === true).map((account) => account.accountId || 'default'),
+        ...runtimeConfiguredAccountIds,
       ])),
-      accounts: Array.from(accountMap.values()).sort((left, right) => {
+      accounts: mergedAccounts.sort((left, right) => {
         if (left.isDefaultAccount !== right.isDefaultAccount) {
           return left.isDefaultAccount ? -1 : 1;
         }

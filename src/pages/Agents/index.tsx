@@ -24,6 +24,7 @@ import discordIcon from '@/assets/channels/discord.svg';
 import whatsappIcon from '@/assets/channels/whatsapp.svg';
 import dingtalkIcon from '@/assets/channels/dingtalk.svg';
 import feishuIcon from '@/assets/channels/feishu.svg';
+import wechatIcon from '@/assets/channels/wechat.svg';
 import wecomIcon from '@/assets/channels/wecom.svg';
 import qqIcon from '@/assets/channels/qq.svg';
 import { invokeIpc } from '@/lib/api-client';
@@ -41,6 +42,10 @@ const CHANNEL_BRAND_STYLES: Partial<Record<ChannelType, { shell: string; icon: s
   whatsapp: {
     shell: 'bg-[#25D366] border-[#1faf54] shadow-[0_10px_24px_rgba(37,211,102,0.2)]',
     icon: 'brightness-0 invert',
+  },
+  wechat: {
+    shell: 'bg-[#07C160] border-[#059c4e] shadow-[0_10px_24px_rgba(7,193,96,0.22)]',
+    icon: '',
   },
   feishu: {
     shell: 'bg-[linear-gradient(135deg,#0F67FF,#00C2FF)] border-[#0f67ff] shadow-[0_10px_24px_rgba(15,103,255,0.22)]',
@@ -538,6 +543,8 @@ function ChannelLogo({ type, branded = false }: { type: ChannelType; branded?: b
       return wrap(<img src={discordIcon} alt="Discord" className={cn('w-[20px] h-[20px]', iconClass)} />);
     case 'whatsapp':
       return wrap(<img src={whatsappIcon} alt="WhatsApp" className={cn('w-[20px] h-[20px]', iconClass)} />);
+    case 'wechat':
+      return wrap(<img src={wechatIcon} alt="WeChat" className={cn('w-[20px] h-[20px]', iconClass)} />);
     case 'dingtalk':
       return wrap(<img src={dingtalkIcon} alt="DingTalk" className={cn('w-[20px] h-[20px]', iconClass)} />);
     case 'feishu':

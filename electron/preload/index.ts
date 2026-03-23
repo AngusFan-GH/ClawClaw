@@ -161,6 +161,7 @@ const electronAPI = {
         'channel:whatsapp-qr',
         'channel:whatsapp-success',
         'channel:whatsapp-error',
+        'channel:wechat-qr',
         'channel:wechat-output',
         'channel:wechat-success',
         'channel:wechat-error',

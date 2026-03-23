@@ -111,6 +111,7 @@ export interface ChannelMeta {
 }
 
 export const MULTI_ACCOUNT_CHANNEL_TYPES: ChannelType[] = [
+  'wechat',
   'dingtalk',
   'wecom',
   'qqbot',
@@ -392,6 +393,8 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
       'channels:meta.wechat.instructions.1',
       'channels:meta.wechat.instructions.2',
     ],
+    isPlugin: true,
+    supportsMultipleAccounts: true,
   },
   signal: {
     id: 'signal',
@@ -632,7 +635,7 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
  * Get primary supported channels (non-plugin, commonly used)
  */
 export function getPrimaryChannels(): ChannelType[] {
-  return ['feishu', 'wecom', 'qqbot', 'dingtalk', 'telegram', 'discord', 'whatsapp', 'wechat'];
+  return ['wechat', 'feishu', 'wecom', 'qqbot', 'dingtalk', 'telegram', 'discord', 'whatsapp'];
 }
 
 /**
@@ -640,6 +643,7 @@ export function getPrimaryChannels(): ChannelType[] {
  */
 export function getAllChannels(): ChannelType[] {
   return [
+    'wechat',
     'feishu',
     'wecom',
     'qqbot',
@@ -647,7 +651,6 @@ export function getAllChannels(): ChannelType[] {
     'telegram',
     'discord',
     'whatsapp',
-    'wechat',
     'signal',
     'imessage',
     'matrix',

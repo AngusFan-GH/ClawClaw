@@ -100,6 +100,7 @@ function App() {
   const initGateway = useGatewayStore((state) => state.init);
   const gatewayStatus = useGatewayStore((state) => state.status);
   const gatewayLifecycle = useGatewayStore((state) => state.lifecycle);
+  const gatewayOverlaySuppressed = useGatewayStore((state) => state.overlaySuppressed);
   const sessionsHydrated = useChatStore((state) => state.sessionsHydrated);
   const restoreSessionsAfterGatewayReady = useChatStore((state) => state.restoreSessionsAfterGatewayReady);
   const lastRestoredLifecycleAtRef = useRef<number | null>(null);
@@ -214,7 +215,7 @@ function App() {
           </Route>
         </Routes>
 
-        {!suppressGlobalGatewayLifecycle && (
+        {!suppressGlobalGatewayLifecycle && !gatewayOverlaySuppressed && (
           <GatewayLifecycleOverlay lifecycle={gatewayLifecycle} />
         )}
 

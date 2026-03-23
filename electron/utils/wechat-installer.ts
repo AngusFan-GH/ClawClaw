@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { getOpenClawCliSpawnConfig } from './openclaw-cli';
+import { ensureBundledPluginInstalled } from './bundled-plugin-installer';
 
 type WeChatInstallerEvents = {
   output: [{ stream: 'stdout' | 'stderr'; text: string }];
@@ -13,6 +14,10 @@ type WeChatInstallerEvents = {
 
 const WECHAT_PLUGIN_SPEC = '@tencent-weixin/openclaw-weixin';
 const WECHAT_CHANNEL_ID = 'openclaw-weixin';
+
+function installBundledWeChatPlugin(): boolean {
+  return ensureBundledPluginInstalled(WECHAT_CHANNEL_ID, 'WeChat').installed;
+}
 
 type SpawnedStep = {
   child: ChildProcessWithoutNullStreams;
@@ -104,7 +109,12 @@ export class WeChatInstallerManager extends EventEmitter {
       this.emit('output', { stream: 'stdout', text: 'Preparing WeChat plugin setup...\n' });
 
       const pluginManifest = join(homedir(), '.openclaw', 'extensions', WECHAT_CHANNEL_ID, 'openclaw.plugin.json');
-      if (existsSync(pluginManifest)) {
+      if (installBundledWeChatPlugin()) {
+        this.emit('output', {
+          stream: 'stdout',
+          text: `Installed bundled WeChat plugin mirror: ${WECHAT_CHANNEL_ID}\n`,
+        });
+      } else if (existsSync(pluginManifest)) {
         await this.runStep(
           ['plugins', 'update', WECHAT_CHANNEL_ID],
           `WeChat plugin already exists, updating: ${WECHAT_CHANNEL_ID}`,

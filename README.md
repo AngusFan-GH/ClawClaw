@@ -106,7 +106,7 @@ Communicate with AI agents through a modern chat experience. Support for multipl
 
 Configure and monitor multiple AI channels simultaneously. Each channel operates independently, allowing you to run specialized agents for different tasks.
 Channels now follow OpenClaw's type-first model: each channel type is shown as a single card with nested accounts, while account-level configuration, deletion, and status inspection stay aligned with the upstream runtime snapshot. Whether a channel exposes “Add account” depends on the upstream plugin's real multi-account capability, not on a blanket UI rule across all channel types. The intended flow is now explicit: create or edit concrete channel accounts on the Connections page first, then bind those accounts to agents on the Agents page so multi-account channels do not have to share one owner.
-For WeChat, ClawClaw now runs the official OpenClaw plugin install-and-login flow directly from the Connections page, extracts and displays the QR code in-app, keeps the raw logs collapsed behind a details panel, and lets the user restart the Gateway after confirming the scan.
+For WeChat, ClawClaw now treats login as a plugin-managed QR session: it prefers the bundled OpenClaw plugin mirror from the Connections page, falls back to the official install flow only when needed, requests a QR code directly in-app, refreshes expired sessions, saves the returned account automatically, and refreshes the Gateway after login succeeds.
 
 ### ⏰ Cron-Based Automation
 

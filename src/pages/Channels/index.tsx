@@ -29,6 +29,7 @@ import discordIcon from '@/assets/channels/discord.svg?raw';
 import whatsappIcon from '@/assets/channels/whatsapp.svg?raw';
 import dingtalkIcon from '@/assets/channels/dingtalk.svg?raw';
 import feishuIcon from '@/assets/channels/feishu.svg?raw';
+import wechatIcon from '@/assets/channels/wechat.svg?raw';
 import wecomIcon from '@/assets/channels/wecom.svg?raw';
 import qqIcon from '@/assets/channels/qq.svg?raw';
 
@@ -44,6 +45,10 @@ const CHANNEL_BRAND_STYLES: Partial<Record<ChannelType, { shell: string; icon: s
   whatsapp: {
     shell: 'bg-[#25D366] border-[#1faf54] shadow-[0_10px_24px_rgba(37,211,102,0.2)]',
     icon: 'brightness-0 invert',
+  },
+  wechat: {
+    shell: 'bg-[#07C160] border-[#059c4e] shadow-[0_10px_24px_rgba(7,193,96,0.22)]',
+    icon: '',
   },
   feishu: {
     shell: 'bg-[linear-gradient(135deg,#0F67FF,#00C2FF)] border-[#0f67ff] shadow-[0_10px_24px_rgba(15,103,255,0.22)]',
@@ -76,6 +81,7 @@ const CHANNEL_SVG_MARKUP: Partial<Record<ChannelType, string>> = {
   telegram: normalizeChannelSvg(telegramIcon),
   discord: normalizeChannelSvg(discordIcon),
   whatsapp: normalizeChannelSvg(whatsappIcon),
+  wechat: normalizeChannelSvg(wechatIcon),
   dingtalk: normalizeChannelSvg(dingtalkIcon),
   feishu: normalizeChannelSvg(feishuIcon),
   wecom: normalizeChannelSvg(wecomIcon),

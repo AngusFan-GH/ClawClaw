@@ -13,6 +13,7 @@ import { constants } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { listConfiguredAgentIds } from './agent-config';
+import { toFsPath } from './fs-path';
 import { getProviderEnvVar, getProviderDefaultModel, getProviderConfig } from './provider-registry';
 import {
   readOpenClawConfigRecord,
@@ -1099,8 +1100,8 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
     if (Array.isArray(plugins)) {
       const validPlugins: unknown[] = [];
       for (const p of plugins) {
-        if (typeof p === 'string' && p.startsWith('/')) {
-          if (p.includes('node_modules/openclaw/extensions') || !(await fileExists(p))) {
+        if (typeof p === 'string' && isAbsolutePluginPath(p)) {
+          if (isBundledPluginPath(p) || !(await fileExists(toFsPath(p)))) {
             console.log(`[sanitize] Removing stale/bundled plugin path "${p}" from openclaw.json`);
             modified = true;
           } else {
@@ -1116,8 +1117,8 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
       if (Array.isArray(pluginsObj.load)) {
         const validLoad: unknown[] = [];
         for (const p of pluginsObj.load) {
-          if (typeof p === 'string' && p.startsWith('/')) {
-            if (p.includes('node_modules/openclaw/extensions') || !(await fileExists(p))) {
+          if (typeof p === 'string' && isAbsolutePluginPath(p)) {
+            if (isBundledPluginPath(p) || !(await fileExists(toFsPath(p)))) {
               console.log(
                 `[sanitize] Removing stale/bundled plugin path "${p}" from openclaw.json`
               );
@@ -1130,6 +1131,35 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
           }
         }
         if (modified) pluginsObj.load = validLoad;
+      } else if (
+        pluginsObj.load
+        && typeof pluginsObj.load === 'object'
+        && !Array.isArray(pluginsObj.load)
+      ) {
+        const loadObj = pluginsObj.load as Record<string, unknown>;
+        if (Array.isArray(loadObj.paths)) {
+          const validPaths: unknown[] = [];
+          let loadModified = false;
+          for (const p of loadObj.paths) {
+            if (typeof p === 'string' && isAbsolutePluginPath(p)) {
+              if (isBundledPluginPath(p) || !(await fileExists(toFsPath(p)))) {
+                console.log(
+                  `[sanitize] Removing stale/bundled plugin path "${p}" from openclaw.json`
+                );
+                modified = true;
+                loadModified = true;
+              } else {
+                validPaths.push(p);
+              }
+            } else {
+              validPaths.push(p);
+            }
+          }
+          if (loadModified) {
+            loadObj.paths = validPaths;
+            pluginsObj.load = loadObj;
+          }
+        }
       }
     }
   }
@@ -1187,6 +1217,15 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
     await writeOpenClawJson(config);
     console.log('[sanitize] openclaw.json sanitized successfully');
   }
+}
+
+function isAbsolutePluginPath(filePath: string): boolean {
+  return filePath.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(filePath) || filePath.startsWith('\\\\');
+}
+
+function isBundledPluginPath(filePath: string): boolean {
+  const normalized = filePath.replace(/\\/g, '/');
+  return normalized.includes('node_modules/openclaw/extensions');
 }
 
 export { getProviderEnvVar } from './provider-registry';

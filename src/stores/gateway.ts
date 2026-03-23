@@ -25,6 +25,7 @@ interface GatewayState {
   health: GatewayHealth | null;
   isInitialized: boolean;
   lastError: string | null;
+  overlaySuppressed: boolean;
   init: () => Promise<void>;
   refreshStatus: () => Promise<GatewayStatus | null>;
   start: () => Promise<void>;
@@ -33,6 +34,7 @@ interface GatewayState {
   checkHealth: () => Promise<GatewayHealth>;
   rpc: <T>(method: string, params?: unknown, timeoutMs?: number) => Promise<T>;
   setStatus: (status: GatewayStatus) => void;
+  setOverlaySuppressed: (suppressed: boolean) => void;
   clearError: () => void;
 }
 
@@ -285,6 +287,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
   health: null,
   isInitialized: false,
   lastError: null,
+  overlaySuppressed: false,
 
   refreshStatus: async () => {
     try {
@@ -563,5 +566,6 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
   },
 
   setStatus: (status) => set({ status }),
+  setOverlaySuppressed: (overlaySuppressed) => set({ overlaySuppressed }),
   clearError: () => set({ lastError: null }),
 }));
