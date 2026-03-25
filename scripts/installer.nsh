@@ -114,6 +114,18 @@ LangString installPhaseFinalize 2052 "正在执行安装后的系统配置..."
   SetDetailsPrint both
   DetailPrint "正在完成安装后的系统配置..."
 
+  ; Re-create shortcuts when upgrading.  electron-builder's
+  ; createDesktopShortcut/createStartMenuShortcut only fire on fresh
+  ; installs; differential (incremental) updates skip shortcut creation.
+  ; We deleted these files in customCheckAppRunning to prevent Windows'
+  ; "broken shortcut" dialog, so we must recreate them here.
+  ${if} ${isUpdated}
+    DetailPrint "正在重建快捷方式..."
+    CreateShortCut "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+    CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
+    CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+  ${endIf}
+
   ; Enable Windows long path support (Windows 10 1607+ / Windows 11).
   ; pnpm virtual store paths can exceed the default MAX_PATH limit of 260 chars.
   ; Writing to HKLM requires admin privileges; on per-user installs without
