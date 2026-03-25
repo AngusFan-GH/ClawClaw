@@ -13,6 +13,22 @@
 ShowInstDetails show
 ShowUnInstDetails show
 
+; Override MUI_PAGE_INSTFILES to force-detail-print when the InstFiles page
+; is active.  electron-builder's assistedInstaller.nsh sets
+; "SetDetailsPrint none" at the section level, which would suppress all
+; DetailPrint output (including NSIS built-in file-copy logs).  Redefining
+; this macro inserts a page-leave callback that re-enables detail output
+; before the install section body runs, so the user sees what is being done.
+!macro MUI_PAGE_INSTFILES
+  !define MUI_INSTFILES_SHOWDETAILS "${MUI_INSTFILESPAGE_SHOWDETAILS}"
+  PageEx instfiles
+    ${MIFUNCS_PREPARE}
+    Function ".onInstFilesLeave"
+      SetDetailsPrint listonly
+    FunctionEnd
+  PageExEnd
+!macroend
+
 !include "${PROJECT_DIR}\scripts\uninstaller.nsh"
 
 ; Installer and uninstaller copy uses English by default and Simplified Chinese
