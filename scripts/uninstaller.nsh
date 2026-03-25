@@ -18,6 +18,7 @@ LangString uninstallOptionOpenClawTitle 2052 "同时删除 OpenClaw 用户数据
 LangString uninstallOptionOpenClawDesc 1033 "Removes OpenClaw sessions, managed workspaces, installed skills, provider settings, and other user data stored in ~/.openclaw."
 LangString uninstallOptionOpenClawDesc 2052 "删除 ~/.openclaw 下的 OpenClaw 会话、托管工作区、已安装技能、提供商设置及其他用户数据。"
 
+; Replace the default MUI uninstall welcome page with our localised text.
 !macro customUnWelcomePage
   !define MUI_UNWELCOMEPAGE_TITLE "$(uninstallWelcomeTitle)"
   !define MUI_UNWELCOMEPAGE_TEXT "$(uninstallWelcomeText)"
@@ -30,6 +31,8 @@ LangString uninstallOptionOpenClawDesc 2052 "删除 ~/.openclaw 下的 OpenClaw 
   Pop $1
 !macroend
 
+; Core uninstaller cleanup: stop gateway, remove PATH entry, remove shortcuts.
+; File/registry cleanup is handled by electron-builder's built-in uninstaller section.
 !macro customUnInstall
   SetDetailsPrint both
   DetailPrint "正在停止并清理 OpenClaw Gateway 服务..."
@@ -67,32 +70,26 @@ LangString uninstallOptionOpenClawDesc 2052 "删除 ~/.openclaw 下的 OpenClaw 
   DetailPrint "命令行环境清理已完成。"
 !macroend
 
-!macro customUnInstallSection
-Section /o "$(uninstallOptionAppDataTitle)" un.RemoveClawClawData
-  DetailPrint "正在删除 ClawClaw 本地数据..."
-  RMDir /r "$APPDATA\${APP_FILENAME}"
-  !ifdef APP_PRODUCT_FILENAME
-    RMDir /r "$APPDATA\${APP_PRODUCT_FILENAME}"
-  !endif
-  !ifdef APP_PACKAGE_NAME
-    RMDir /r "$APPDATA\${APP_PACKAGE_NAME}"
-  !endif
-  RMDir /r "$LOCALAPPDATA\${APP_FILENAME}"
-  !ifdef APP_PRODUCT_FILENAME
-    RMDir /r "$LOCALAPPDATA\${APP_PRODUCT_FILENAME}"
-  !endif
-  !ifdef APP_PACKAGE_NAME
-    RMDir /r "$LOCALAPPDATA\${APP_PACKAGE_NAME}"
-  !endif
-SectionEnd
+; Optional section checkboxes for the uninstaller UI.
+; electron-builder's template checks !ifmacrodef customUnInstallSection to decide
+; whether to call MUI_UNPAGE_COMPONENTS.  This macro is expanded in the uninstaller
+; section; the Section declarations inside assign checkbox IDs
+; (un.RemoveClawClawData, un.RemoveOpenClawData).
+;
+; IMPORTANT: MUI_UNFUNCTION_DESCRIPTION_BEGIN/END must be at the same compile level
+; as the Section declarations it annotates.  Both are guarded by !ifdef BUILD_UNINSTALLER
+; because they are only meaningful in the uninstaller script.
+!ifdef BUILD_UNINSTALLER
+  !macro customUnInstallSection
+    Section /o "$(uninstallOptionAppDataTitle)" un.RemoveClawClawData
+    SectionEnd
 
-Section /o "$(uninstallOptionOpenClawTitle)" un.RemoveOpenClawData
-  DetailPrint "正在删除 OpenClaw 用户数据..."
-  RMDir /r "$PROFILE\.openclaw"
-SectionEnd
+    Section /o "$(uninstallOptionOpenClawTitle)" un.RemoveOpenClawData
+    SectionEnd
+  !macroend
 
-!insertmacro MUI_UNFUNCTION_DESCRIPTION_BEGIN
-  !insertmacro MUI_DESCRIPTION_TEXT ${un.RemoveClawClawData} "$(uninstallOptionAppDataDesc)"
-  !insertmacro MUI_DESCRIPTION_TEXT ${un.RemoveOpenClawData} "$(uninstallOptionOpenClawDesc)"
-!insertmacro MUI_UNFUNCTION_DESCRIPTION_END
-!macroend
+  !insertmacro MUI_UNFUNCTION_DESCRIPTION_BEGIN
+    !insertmacro MUI_DESCRIPTION_TEXT ${un.RemoveClawClawData} "$(uninstallOptionAppDataDesc)"
+    !insertmacro MUI_DESCRIPTION_TEXT ${un.RemoveOpenClawData} "$(uninstallOptionOpenClawDesc)"
+  !insertmacro MUI_UNFUNCTION_DESCRIPTION_END
+!endif
