@@ -1202,7 +1202,7 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
     const configuredFeishuId =
       FEISHU_PLUGIN_ID_CANDIDATES.find((id) => allowArr.includes(id))
       || FEISHU_PLUGIN_ID_CANDIDATES.find((id) => Boolean(pEntries[id]));
-    const canonicalFeishuId = installedFeishuId || configuredFeishuId || FEISHU_PLUGIN_ID_CANDIDATES[1];
+    const canonicalFeishuId = installedFeishuId || configuredFeishuId || FEISHU_PLUGIN_ID_CANDIDATES[0];
     const existingFeishuEntry =
       FEISHU_PLUGIN_ID_CANDIDATES.map((id) => pEntries[id]).find(Boolean) || pEntries.feishu;
     const hasFeishuChannelConfig = Boolean(
@@ -1247,29 +1247,6 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
       }
     }
 
-    const legacyWecomId = 'wecom-openclaw-plugin';
-    const newWecomId = 'wecom';
-    if (Array.isArray(pluginsObj.allow)) {
-      const allowValues = pluginsObj.allow as string[];
-      const legacyIdx = allowValues.indexOf(legacyWecomId);
-      if (legacyIdx !== -1) {
-        if (!allowValues.includes(newWecomId)) {
-          allowValues[legacyIdx] = newWecomId;
-        } else {
-          allowValues.splice(legacyIdx, 1);
-        }
-        modified = true;
-        console.log(`[sanitize] Migrated plugins.allow: ${legacyWecomId} -> ${newWecomId}`);
-      }
-    }
-    if (pEntries[legacyWecomId]) {
-      if (!pEntries[newWecomId]) {
-        pEntries[newWecomId] = pEntries[legacyWecomId];
-      }
-      delete pEntries[legacyWecomId];
-      modified = true;
-      console.log(`[sanitize] Migrated plugins.entries: ${legacyWecomId} -> ${newWecomId}`);
-    }
   }
 
   // ── commands section ───────────────────────────────────────────

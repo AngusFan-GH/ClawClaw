@@ -74,6 +74,18 @@ describe('Gateway Store', () => {
     expect(state.status.pid).toBe(12345);
   });
 
+  it('should normalize gateway connect errors when updating status', () => {
+    const { setStatus } = useGatewayStore.getState();
+    setStatus({
+      state: 'error',
+      port: 18789,
+      error: 'fetch failed',
+    });
+
+    const state = useGatewayStore.getState();
+    expect(state.status.error).toBe('Gateway connection failed');
+  });
+
   it('should proxy gateway rpc through ipc', async () => {
     const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
     invoke.mockResolvedValueOnce({ success: true, result: { ok: true } });

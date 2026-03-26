@@ -31,7 +31,7 @@ import {
 
 const OPENCLAW_DIR = join(homedir(), '.openclaw');
 const CONFIG_FILE = join(OPENCLAW_DIR, 'openclaw.json');
-const WECOM_PLUGIN_ID = 'wecom';
+const WECOM_PLUGIN_ID = 'wecom-openclaw-plugin';
 const FEISHU_PLUGIN_ID_CANDIDATES = ['openclaw-lark', 'feishu-openclaw-plugin'] as const;
 const CHANNEL_PLUGIN_ALLOWLIST_IDS: Partial<Record<string, string>> = {
     dingtalk: 'dingtalk',
@@ -149,6 +149,16 @@ async function fileExists(p: string): Promise<boolean> {
     try { await access(p, constants.F_OK); return true; } catch { return false; }
 }
 
+function getChannelPluginAllowIds(channelType: string): string[] {
+    if (channelType === 'feishu') {
+        return ['feishu', ...FEISHU_PLUGIN_ID_CANDIDATES];
+    }
+    if (channelType === 'wecom') {
+        return [WECOM_PLUGIN_ID, 'wecom'];
+    }
+    return [CHANNEL_PLUGIN_ALLOWLIST_IDS[channelType]].filter((value): value is string => Boolean(value));
+}
+
 async function resolveFeishuPluginId(): Promise<string> {
     const extensionRoot = join(homedir(), '.openclaw', 'extensions');
     for (const dirName of FEISHU_PLUGIN_ID_CANDIDATES) {
@@ -163,7 +173,7 @@ async function resolveFeishuPluginId(): Promise<string> {
             // ignore and try next candidate
         }
     }
-    return FEISHU_PLUGIN_ID_CANDIDATES[1];
+    return FEISHU_PLUGIN_ID_CANDIDATES[0];
 }
 
 async function removeWeChatAccountState(accountId: string): Promise<void> {
@@ -1229,10 +1239,7 @@ export async function deleteChannelConfig(
             ? clearAllWeChatState
             : !currentConfig.channels?.[runtimeChannelType];
     if (shouldRemovePluginAllowlist && currentConfig.plugins?.allow) {
-        const pluginAllowIds =
-            runtimeChannelType === 'feishu'
-                ? ['feishu', ...FEISHU_PLUGIN_ID_CANDIDATES]
-                : [CHANNEL_PLUGIN_ALLOWLIST_IDS[runtimeChannelType]].filter((value): value is string => Boolean(value));
+        const pluginAllowIds = getChannelPluginAllowIds(runtimeChannelType);
         if (pluginAllowIds.length > 0) {
             const nextAllow = (currentConfig.plugins.allow as string[]).filter((pluginId) => !pluginAllowIds.includes(pluginId));
             if (nextAllow.length !== currentConfig.plugins.allow.length) {
@@ -1459,13 +1466,12 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
             Object.entries(CHANNEL_PLUGIN_ALLOWLIST_IDS)
                 .filter(([, pluginId]) => typeof pluginId === 'string' && pluginId.length > 0)
                 .filter(([channelType]) => !hasConfiguredChannelState(channelType, currentConfig.channels?.[channelType] as AccountScopedChannelSection | undefined))
-                .map(([, pluginId]) => pluginId as string),
+                .flatMap(([channelType]) => getChannelPluginAllowIds(channelType)),
         );
 
         if (!hasConfiguredChannelState('feishu', currentConfig.channels?.feishu as AccountScopedChannelSection | undefined)) {
-            staleAllowIds.add('feishu');
-            for (const candidateId of FEISHU_PLUGIN_ID_CANDIDATES) {
-                staleAllowIds.add(candidateId);
+            for (const pluginId of getChannelPluginAllowIds('feishu')) {
+                staleAllowIds.add(pluginId);
             }
         }
 

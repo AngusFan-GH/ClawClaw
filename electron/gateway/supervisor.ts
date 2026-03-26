@@ -227,34 +227,65 @@ export async function findExistingGatewayProcess(options: {
   const { port, ownedPid, terminateUnexpected = true } = options;
 
   try {
+    const probeExistingGateway = async (): Promise<{ port: number; externalToken?: string } | null> => {
+      return await new Promise<{ port: number; externalToken?: string } | null>((resolve) => {
+        const testWs = new WebSocket(`ws://localhost:${port}/ws`);
+        const timeout = setTimeout(() => {
+          try {
+            testWs.close();
+          } catch {
+            // ignore
+          }
+          resolve(null);
+        }, 2000);
+
+        testWs.on('message', (data) => {
+          try {
+            const message = JSON.parse(data.toString()) as { type?: string; event?: string };
+            if (message.type === 'event' && message.event === 'connect.challenge') {
+              clearTimeout(timeout);
+              try {
+                testWs.close();
+              } catch {
+                // ignore
+              }
+              resolve({ port });
+            }
+          } catch {
+            // ignore malformed probe payloads
+          }
+        });
+
+        testWs.on('error', () => {
+          clearTimeout(timeout);
+          resolve(null);
+        });
+
+        testWs.on('close', () => {
+          clearTimeout(timeout);
+          resolve(null);
+        });
+      });
+    };
+
     try {
       const pids = await getListeningProcessIds(port);
-      if (terminateUnexpected && pids.length > 0 && (!ownedPid || !pids.includes(String(ownedPid)))) {
-        await terminateOrphanedProcessIds(port, pids);
-        return null;
+      if (pids.length > 0) {
+        const existingGateway = await probeExistingGateway();
+        if (existingGateway) {
+          return existingGateway;
+        }
+
+        if (terminateUnexpected && (!ownedPid || !pids.includes(String(ownedPid)))) {
+          await terminateOrphanedProcessIds(port, pids);
+          return null;
+        }
       }
     } catch (err) {
       logger.warn('Error checking for existing process on port:', err);
     }
 
-    return await new Promise<{ port: number; externalToken?: string } | null>((resolve) => {
-      const testWs = new WebSocket(`ws://localhost:${port}/ws`);
-      const timeout = setTimeout(() => {
-        testWs.close();
-        resolve(null);
-      }, 2000);
-
-      testWs.on('open', () => {
-        clearTimeout(timeout);
-        testWs.close();
-        resolve({ port });
-      });
-
-      testWs.on('error', () => {
-        clearTimeout(timeout);
-        resolve(null);
-      });
-    });
+    return await probeExistingGateway();
   } catch {
     return null;
   }

@@ -1044,7 +1044,11 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
 
   const resolveGatewayStatus = async () => {
     const status = gatewayManager.getStatus();
-    if ((status.state === 'stopped' || status.state === 'error') && !gatewayManager.isConnected()) {
+    if (
+      (status.state === 'stopped' || status.state === 'error')
+      && !gatewayManager.isConnected()
+      && !gatewayManager.isStartInProgress()
+    ) {
       try {
         await gatewayManager.attachIfRunning();
       } catch {

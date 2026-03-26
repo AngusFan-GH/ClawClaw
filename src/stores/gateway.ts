@@ -4,6 +4,7 @@
  */
 import { create } from 'zustand';
 import { invokeIpc } from '@/lib/api-client';
+import { formatGatewayConnectError } from '@/lib/gateway-connect-error';
 import { subscribeHostEvent } from '@/lib/host-events';
 import type { GatewayLifecycle, GatewayStatus } from '../types/gateway';
 
@@ -12,6 +13,10 @@ let gatewayEventUnsubscribers: Array<() => void> | null = null;
 let lifecycleClearTimer: ReturnType<typeof setTimeout> | null = null;
 let gatewayStatusPollTimer: ReturnType<typeof setInterval> | null = null;
 let gatewayVisibilityCleanup: (() => void) | null = null;
+let lastPassiveGatewayStatusRefreshAt = 0;
+
+const GATEWAY_ACTIVE_POLL_MS = 2000;
+const GATEWAY_IDLE_POLL_MS = 10000;
 
 interface GatewayHealth {
   ok: boolean;
@@ -170,6 +175,16 @@ function shouldPromoteLifecycleToCompleted(
   return status.state === 'running' && isLifecyclePending(lifecycle);
 }
 
+function normalizeGatewayStatus(status: GatewayStatus): GatewayStatus {
+  if (!status.error) {
+    return status;
+  }
+  return {
+    ...status,
+    error: formatGatewayConnectError({ message: status.error }),
+  };
+}
+
 function reconcileLifecycleWithStatus(
   lifecycle: GatewayLifecycle,
   status: GatewayStatus,
@@ -232,7 +247,7 @@ async function reconcileGatewayStatus(
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      const status = await fetchGatewayStatusSnapshot();
+      const status = normalizeGatewayStatus(await fetchGatewayStatusSnapshot());
       if (status.state === target) {
         set((state) => ({
           status,
@@ -291,7 +306,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
 
   refreshStatus: async () => {
     try {
-      const status = await fetchGatewayStatusSnapshot();
+      const status = normalizeGatewayStatus(await fetchGatewayStatusSnapshot());
       const shouldClearLifecycle = shouldPromoteLifecycleToCompleted(get().lifecycle, status);
       set((state) => ({
         status,
@@ -303,7 +318,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
       }
       return status;
     } catch (error) {
-      set({ lastError: String(error), isInitialized: true });
+      set({ lastError: formatGatewayConnectError(error), isInitialized: true });
       return null;
     }
   },
@@ -321,38 +336,39 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
           const unsubscribers: Array<() => void> = [];
           unsubscribers.push(subscribeHostEvent<GatewayStatus>('gateway:status', (payload) => {
             set((state) => {
+              const normalizedPayload = normalizeGatewayStatus(payload);
               if (
-                payload.state === 'running' &&
+                normalizedPayload.state === 'running' &&
                 isLifecyclePending(state.lifecycle)
               ) {
                 scheduleLifecycleClear(set);
                 return {
-                  status: payload,
-                  lifecycle: reconcileLifecycleWithStatus(state.lifecycle, payload),
+                  status: normalizedPayload,
+                  lifecycle: reconcileLifecycleWithStatus(state.lifecycle, normalizedPayload),
                 };
               }
 
               if (
-                payload.state === 'error' &&
+                normalizedPayload.state === 'error' &&
                 isLifecyclePending(state.lifecycle)
               ) {
                 return {
-                  status: payload,
-                  lifecycle: reconcileLifecycleWithStatus(state.lifecycle, payload),
+                  status: normalizedPayload,
+                  lifecycle: reconcileLifecycleWithStatus(state.lifecycle, normalizedPayload),
                 };
               }
 
               if (
-                payload.state === 'starting' ||
-                payload.state === 'reconnecting'
+                normalizedPayload.state === 'starting' ||
+                normalizedPayload.state === 'reconnecting'
               ) {
                 return {
-                  status: payload,
-                  lifecycle: reconcileLifecycleWithStatus(state.lifecycle, payload),
+                  status: normalizedPayload,
+                  lifecycle: reconcileLifecycleWithStatus(state.lifecycle, normalizedPayload),
                 };
               }
 
-              return { status: payload };
+              return { status: normalizedPayload };
             });
           }));
           unsubscribers.push(subscribeHostEvent<Omit<GatewayLifecycle, 'state'> & { phase?: 'scheduled' | 'failed' }>(
@@ -373,7 +389,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
             }
           ));
           unsubscribers.push(subscribeHostEvent<{ message?: string }>('gateway:error', (payload) => {
-            set({ lastError: payload.message || 'Gateway error' });
+            set({ lastError: formatGatewayConnectError(payload.message || 'Gateway error') });
           }));
           unsubscribers.push(subscribeHostEvent<{ method?: string; params?: Record<string, unknown> }>(
             'gateway:notification',
@@ -403,7 +419,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
           gatewayEventUnsubscribers = unsubscribers;
         }
 
-        const status = await fetchGatewayStatusSnapshot();
+        const status = normalizeGatewayStatus(await fetchGatewayStatusSnapshot());
         const shouldClearLifecycle = shouldPromoteLifecycleToCompleted(get().lifecycle, status);
         set((state) => ({
           status,
@@ -422,8 +438,12 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
             const statusState = get().status.state;
             if (!isDocumentVisible && !shouldPollAggressively) return;
             if (statusState === 'running' && !shouldPollAggressively && isDocumentVisible) return;
+            const now = Date.now();
+            const minIntervalMs = shouldPollAggressively ? GATEWAY_ACTIVE_POLL_MS : GATEWAY_IDLE_POLL_MS;
+            if ((now - lastPassiveGatewayStatusRefreshAt) < minIntervalMs) return;
+            lastPassiveGatewayStatusRefreshAt = now;
             void get().refreshStatus();
-          }, 2000);
+          }, GATEWAY_ACTIVE_POLL_MS);
         }
 
         if (!gatewayVisibilityCleanup && typeof window !== 'undefined') {
@@ -439,7 +459,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
         }
       } catch (error) {
         console.error('Failed to initialize Gateway:', error);
-        set({ lastError: String(error), isInitialized: true });
+        set({ lastError: formatGatewayConnectError(error), isInitialized: true });
       } finally {
         gatewayInitPromise = null;
       }
@@ -454,17 +474,19 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
       set({ status: { ...get().status, state: 'starting', restartExpectedMs: undefined }, lastError: null });
       const result = await invokeIpc<{ success: boolean; error?: string }>('gateway:start');
       if (!result.success) {
+        const message = formatGatewayConnectError(result.error || 'Failed to start Gateway');
         set({
-          status: { ...get().status, state: 'error', error: result.error },
-          lastError: result.error || 'Failed to start Gateway',
+          status: { ...get().status, state: 'error', error: message },
+          lastError: message,
         });
         return;
       }
       void reconcileGatewayStatus(set, 'running');
     } catch (error) {
+      const message = formatGatewayConnectError(error);
       set({
-        status: { ...get().status, state: 'error', error: String(error) },
-        lastError: String(error),
+        status: { ...get().status, state: 'error', error: message },
+        lastError: message,
       });
     }
   },
@@ -481,7 +503,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
       void reconcileGatewayStatus(set, 'stopped', 5000);
     } catch (error) {
       console.error('Failed to stop Gateway:', error);
-      set({ lastError: String(error) });
+      set({ lastError: formatGatewayConnectError(error) });
     }
   },
 
@@ -501,9 +523,10 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
       }));
       const result = await invokeIpc<{ success: boolean; error?: string; accepted?: boolean }>('gateway:restart');
       if (!result.success) {
+        const message = formatGatewayConnectError(result.error || 'Failed to restart Gateway');
         set({
-          status: { ...get().status, state: 'error', error: result.error },
-          lastError: result.error || 'Failed to restart Gateway',
+          status: { ...get().status, state: 'error', error: message },
+          lastError: message,
         });
         return;
       }
@@ -518,9 +541,10 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
       }));
       void reconcileGatewayStatus(set, 'running');
     } catch (error) {
+      const message = formatGatewayConnectError(error);
       set({
-        status: { ...get().status, state: 'error', error: String(error) },
-        lastError: String(error),
+        status: { ...get().status, state: 'error', error: message },
+        lastError: message,
       });
     }
   },
@@ -555,7 +579,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
     return response.result as T;
   },
 
-  setStatus: (status) => set({ status }),
+  setStatus: (status) => set({ status: normalizeGatewayStatus(status) }),
   setOverlaySuppressed: (overlaySuppressed) => set({ overlaySuppressed }),
   clearError: () => set({ lastError: null }),
 }));

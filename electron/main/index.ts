@@ -382,7 +382,7 @@ async function initialize(): Promise<void> {
   // Re-attach to an already running Gateway first. This keeps the UI in sync
   // after Electron reloads/restarts without forcing an auto-start.
   logger.debug('Gateway startup decision: probing for existing Gateway attachment...');
-  const attachedExistingGateway = await gatewayManager.attachIfRunning();
+  const attachedExistingGateway = await gatewayManager.attachIfRunning({ force: true });
 
   // Start Gateway automatically (this seeds missing bootstrap files with full templates)
   const gatewayAutoStart = await getSetting('gatewayAutoStart');

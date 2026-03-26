@@ -35,6 +35,7 @@ import {
   toUserMessage,
 } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
+import { formatGatewayConnectError } from '@/lib/gateway-connect-error';
 import {
   clearUiTelemetry,
   getUiTelemetrySnapshot,
@@ -47,11 +48,15 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { UpdateSettings } from '@/components/settings/UpdateSettings';
 import type { ReminderItem } from '@/shared/reminders';
+import type { GatewayStatus } from '@/types/gateway';
 
 type ControlUiInfo = {
   url: string;
   token: string;
   port: number;
+  ready: boolean;
+  state?: GatewayStatus['state'];
+  error?: string;
 };
 
 type ProxyMode = 'system' | 'custom' | 'direct';
@@ -292,6 +297,9 @@ export function Settings() {
       url?: string;
       token?: string;
       port?: number;
+      ready?: boolean;
+      state?: GatewayStatus['state'];
+      error?: string;
     }>('/api/gateway/control-ui')
       .then((result) => {
         if (
@@ -303,7 +311,14 @@ export function Settings() {
         ) {
           return;
         }
-        setControlUiInfo({ url: result.url, token: result.token, port: result.port });
+        setControlUiInfo({
+          url: result.url,
+          token: result.token,
+          port: result.port,
+          ready: result.ready === true,
+          state: result.state,
+          error: result.error,
+        });
       })
       .catch(() => {});
     return () => {
@@ -472,9 +487,19 @@ export function Settings() {
         url?: string;
         token?: string;
         port?: number;
+        ready?: boolean;
+        state?: GatewayStatus['state'];
+        error?: string;
       }>('/api/gateway/control-ui');
       if (result.success && result.url && result.token && typeof result.port === 'number') {
-        setControlUiInfo({ url: result.url, token: result.token, port: result.port });
+        setControlUiInfo({
+          url: result.url,
+          token: result.token,
+          port: result.port,
+          ready: result.ready === true,
+          state: result.state,
+          error: result.error,
+        });
       }
     } catch {
       // ignore
@@ -511,6 +536,19 @@ export function Settings() {
     } catch (error) {
       toast.error(toUserMessage(error));
     }
+  };
+
+  const handleOpenControlUi = () => {
+    if (!controlUiInfo?.url) return;
+    if (!controlUiInfo.ready) {
+      const stateLabel = controlUiInfo.state || gatewayStatus.state;
+      const detail = controlUiInfo.error
+        ? `: ${formatGatewayConnectError({ message: controlUiInfo.error })}`
+        : '';
+      toast.error(`Gateway not ready (${stateLabel})${detail}`);
+      return;
+    }
+    void invokeIpc('shell:openExternal', controlUiInfo.url);
   };
 
   const handleCopyCliCommand = async () => {
@@ -1362,11 +1400,7 @@ export function Settings() {
                             size="sm"
                             disabled={!controlUiInfo?.url}
                             className="h-10 rounded-[10px] border-black/10 bg-transparent px-4 dark:border-white/10 dark:hover:bg-white/5"
-                            onClick={() => {
-                              if (controlUiInfo?.url) {
-                                void invokeIpc('shell:openExternal', controlUiInfo.url);
-                              }
-                            }}
+                            onClick={handleOpenControlUi}
                           >
                             <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
                             {t('developer.openConsole')}

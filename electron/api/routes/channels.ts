@@ -318,7 +318,7 @@ async function ensureDingTalkPluginInstalled(): Promise<{ installed: boolean; wa
 }
 
 async function ensureFeishuPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  return ensureBundledPluginInstalled('feishu-openclaw-plugin', 'Feishu / Lark');
+  return ensureBundledPluginInstalled('openclaw-lark', 'Feishu / Lark');
 }
 
 async function ensureWeComPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {

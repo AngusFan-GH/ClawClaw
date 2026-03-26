@@ -78,6 +78,7 @@ export interface GatewayManagerEvents {
  * Handles starting, stopping, and communicating with the OpenClaw Gateway
  */
 export class GatewayManager extends EventEmitter {
+  private static readonly ATTACH_PROBE_COOLDOWN_MS = 8000;
   private process: ChildProcess | null = null;
   private processExitCode: number | null = null; // set by exit event, replaces exitCode/signalCode
   private ownsProcess = false;
@@ -101,6 +102,9 @@ export class GatewayManager extends EventEmitter {
   private reloadDebounceTimer: NodeJS.Timeout | null = null;
   private externalShutdownSupported: boolean | null = null;
   private pendingExpectedReconnectDelayMs: number | null = null;
+  private attachProbeInFlight: Promise<boolean> | null = null;
+  private lastAttachProbeAt = 0;
+  private lastAttachProbeFoundGateway = false;
 
   constructor(config?: Partial<ReconnectConfig>) {
     super();
@@ -246,6 +250,12 @@ export class GatewayManager extends EventEmitter {
     if (!excerpt || base.message.includes(excerpt)) return base;
     return new Error(`${base.message}. Gateway stderr: ${excerpt}`);
   }
+
+  private resetAttachProbeState(): void {
+    this.attachProbeInFlight = null;
+    this.lastAttachProbeAt = 0;
+    this.lastAttachProbeFoundGateway = false;
+  }
   /**
    * Get current Gateway status
    */
@@ -258,6 +268,10 @@ export class GatewayManager extends EventEmitter {
    */
   isConnected(): boolean {
     return this.stateController.isConnected(this.ws?.readyState === WebSocket.OPEN);
+  }
+
+  isStartInProgress(): boolean {
+    return this.startLock || this.status.state === 'starting' || this.status.state === 'reconnecting';
   }
 
   /**
@@ -275,6 +289,7 @@ export class GatewayManager extends EventEmitter {
     }
 
     this.startLock = true;
+    this.resetAttachProbeState();
     const startEpoch = this.lifecycleController.bump('start');
     logger.info(`Gateway start requested (port=${this.status.port})`);
     this.lastSpawnSummary = null;
@@ -394,7 +409,9 @@ export class GatewayManager extends EventEmitter {
    * This is used when the Electron host restarts or reloads while OpenClaw
    * is still alive, so the UI can recover its real connection state.
    */
-  async attachIfRunning(): Promise<boolean> {
+  async attachIfRunning(options?: { force?: boolean }): Promise<boolean> {
+    const force = options?.force === true;
+
     if (this.startLock) {
       logger.debug('Gateway attach skipped because a start flow is already in progress');
       return false;
@@ -404,9 +421,24 @@ export class GatewayManager extends EventEmitter {
       return true;
     }
 
+    if (this.attachProbeInFlight) {
+      return await this.attachProbeInFlight;
+    }
+
+    if (
+      !force &&
+      !this.lastAttachProbeFoundGateway &&
+      this.lastAttachProbeAt > 0 &&
+      (Date.now() - this.lastAttachProbeAt) < GatewayManager.ATTACH_PROBE_COOLDOWN_MS
+    ) {
+      return false;
+    }
+
     await this.initDeviceIdentity();
 
-    try {
+    this.attachProbeInFlight = (async () => {
+      this.lastAttachProbeAt = Date.now();
+      try {
       logger.debug(`Checking for attachable existing Gateway on port ${this.status.port}...`);
       const existing = await findExistingGatewayProcess({
         port: this.status.port,
@@ -414,6 +446,7 @@ export class GatewayManager extends EventEmitter {
         terminateUnexpected: false,
       });
       if (!existing) {
+        this.lastAttachProbeFoundGateway = false;
         logger.info(`Gateway attach decision: no existing Gateway available on port ${this.status.port}`);
         return false;
       }
@@ -432,10 +465,12 @@ export class GatewayManager extends EventEmitter {
       this.ownsProcess = false;
       this.process = null;
       this.processExitCode = null;
+      this.lastAttachProbeFoundGateway = true;
       this.startHealthCheck();
       logger.info(`Gateway attach decision: connected to existing Gateway on port ${existing.port}`);
       return true;
     } catch (error) {
+      this.lastAttachProbeFoundGateway = false;
       logger.warn(`Gateway attach decision: failed on port ${this.status.port}:`, error);
       this.setStatus({
         state: 'stopped',
@@ -446,7 +481,12 @@ export class GatewayManager extends EventEmitter {
         restartExpectedMs: undefined,
       });
       return false;
-    }
+      } finally {
+        this.attachProbeInFlight = null;
+      }
+    })();
+
+    return await this.attachProbeInFlight;
   }
 
   /**
@@ -454,6 +494,7 @@ export class GatewayManager extends EventEmitter {
    */
   async stop(): Promise<void> {
     logger.info('Gateway stop requested');
+    this.resetAttachProbeState();
     this.lifecycleController.bump('stop');
     // Disable auto-reconnect
     this.shouldReconnect = false;
@@ -828,6 +869,7 @@ export class GatewayManager extends EventEmitter {
     this.process = child;
     this.ownsProcess = true;
     this.lastSpawnSummary = lastSpawnSummary;
+    this.lastAttachProbeFoundGateway = false;
   }
 
   /**
@@ -838,7 +880,6 @@ export class GatewayManager extends EventEmitter {
       port,
       deviceIdentity: this.deviceIdentity,
       platform: process.platform,
-      pendingRequests: this.pendingRequests,
       getToken: async () =>
         await import('../utils/store').then(({ getSetting }) => getSetting('gatewayToken')),
       onHandshakeComplete: (ws) => {
@@ -855,6 +896,7 @@ export class GatewayManager extends EventEmitter {
         this.handleMessage(message);
       },
       onCloseAfterHandshake: () => {
+        this.lastAttachProbeFoundGateway = false;
         if (this.status.state === 'running') {
           this.setStatus({ state: 'stopped', restartExpectedMs: undefined });
           this.scheduleReconnect();

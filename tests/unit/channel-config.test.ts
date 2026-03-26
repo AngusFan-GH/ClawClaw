@@ -420,10 +420,10 @@ describe('channel config lifecycle', () => {
 
     const config = await readOpenClawJson();
     expect(config.plugins).toEqual({
-      allow: ['feishu-openclaw-plugin'],
+      allow: ['openclaw-lark'],
       enabled: true,
       entries: {
-        'feishu-openclaw-plugin': { enabled: true },
+        'openclaw-lark': { enabled: true },
       },
     });
   });

@@ -7,7 +7,7 @@
  * Current plugins:
  *   - @soimy/dingtalk -> build/openclaw-plugins/dingtalk
  *   - @wecom/wecom-openclaw-plugin -> build/openclaw-plugins/wecom
- *   - @larksuite/openclaw-lark -> build/openclaw-plugins/feishu-openclaw-plugin
+ *   - @larksuite/openclaw-lark -> build/openclaw-plugins/openclaw-lark
  *
  * The output plugin directory contains:
  *   - plugin source files (index.ts, openclaw.plugin.json, package.json, ...)
@@ -36,7 +36,7 @@ function normWin(p) {
 }
 
 const PLUGINS = [
-  { npmName: '@larksuite/openclaw-lark', pluginId: 'feishu-openclaw-plugin' },
+  { npmName: '@larksuite/openclaw-lark', pluginId: 'openclaw-lark' },
   { npmName: '@soimy/dingtalk', pluginId: 'dingtalk' },
   { npmName: '@wecom/wecom-openclaw-plugin', pluginId: 'wecom' },
   { npmName: '@tencent-weixin/openclaw-weixin', pluginId: 'openclaw-weixin' },

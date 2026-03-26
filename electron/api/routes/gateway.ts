@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { PORTS } from '../../utils/config';
+import { buildOpenClawControlUiUrl } from '../../utils/openclaw-control-ui';
 import { getSetting } from '../../utils/store';
 import type { HostApiContext } from '../context';
 import { runGatewayRefresh } from '../gateway-refresh';
@@ -15,7 +16,8 @@ export async function handleGatewayRoutes(
     const status = ctx.gatewayManager.getStatus();
     if (
       (status.state === 'stopped' || status.state === 'error') &&
-      !ctx.gatewayManager.isConnected()
+      !ctx.gatewayManager.isConnected() &&
+      !ctx.gatewayManager.isStartInProgress()
     ) {
       try {
         await ctx.gatewayManager.attachIfRunning();
@@ -87,11 +89,19 @@ export async function handleGatewayRoutes(
 
   if (url.pathname === '/api/gateway/control-ui' && req.method === 'GET') {
     try {
-      const status = ctx.gatewayManager.getStatus();
+      const status = await resolveGatewayStatus();
       const token = await getSetting('gatewayToken');
       const port = status.port || PORTS.OPENCLAW_GATEWAY;
-      const urlValue = `http://127.0.0.1:${port}/?token=${encodeURIComponent(token)}`;
-      sendJson(res, 200, { success: true, url: urlValue, token, port });
+      const urlValue = buildOpenClawControlUiUrl(port, token);
+      sendJson(res, 200, {
+        success: true,
+        url: urlValue,
+        token,
+        port,
+        ready: status.state === 'running',
+        state: status.state,
+        error: status.error,
+      });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

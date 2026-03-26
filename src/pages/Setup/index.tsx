@@ -369,7 +369,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
     } else if (currentGateway.state === 'error') {
       setChecks((prev) => ({
         ...prev,
-        gateway: { status: 'error', message: currentGateway.error || t('runtime.status.error') },
+        gateway: { status: 'error', message: currentGateway.error ?? t('runtime.status.error') },
       }));
     } else {
       // Gateway is 'stopped', 'starting', or 'reconnecting'
@@ -438,7 +438,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
       queueMicrotask(() => {
         setChecks((prev) => ({
           ...prev,
-          gateway: { status: 'error', message: gatewayStatus.error || t('runtime.status.error') },
+          gateway: { status: 'error', message: gatewayStatus.error ?? t('runtime.status.error') },
         }));
       });
     } else if (gatewayStatus.state === 'starting' || gatewayStatus.state === 'reconnecting') {
@@ -452,7 +452,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
       queueMicrotask(() => {
         setChecks((prev) => ({
           ...prev,
-          gateway: { status: 'error', message: gatewayStatus.error || t('runtime.status.error') },
+          gateway: { status: 'error', message: gatewayStatus.error ?? t('runtime.status.error') },
         }));
       });
     }
@@ -478,7 +478,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
             ...prev,
             gateway: {
               status: 'error',
-              message: gatewayStatus.error || t('runtime.status.error'),
+              message: gatewayStatus.error ?? t('runtime.status.error'),
             },
           };
         }

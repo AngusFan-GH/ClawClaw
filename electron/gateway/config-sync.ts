@@ -20,7 +20,7 @@ import { logger } from '../utils/logger';
 import { ensureBundledPluginInstalled } from '../utils/bundled-plugin-installer';
 
 const CHANNEL_PLUGIN_INSTALL_MAP: Partial<Record<string, { pluginId: string; displayName: string }>> = {
-  feishu: { pluginId: 'feishu-openclaw-plugin', displayName: 'Feishu / Lark' },
+  feishu: { pluginId: 'openclaw-lark', displayName: 'Feishu / Lark' },
   dingtalk: { pluginId: 'dingtalk', displayName: 'DingTalk' },
   wecom: { pluginId: 'wecom', displayName: 'WeCom' },
   qqbot: { pluginId: 'qqbot', displayName: 'QQ Bot' },
