@@ -1,42 +1,12 @@
 import { create } from 'zustand';
 import { hostApiFetch } from '@/lib/host-api';
-import { useGatewayStore } from './gateway';
-import type { Channel, ChannelAccount, ChannelGroup, ChannelType } from '../types/channel';
-import { CHANNEL_NAMES, channelSupportsMultipleAccounts } from '../types/channel';
+import type { Channel, ChannelGroup, ChannelType } from '../types/channel';
+import { CHANNEL_NAMES } from '../types/channel';
 
 interface AddChannelParams {
   type: ChannelType;
   name: string;
   token?: string;
-}
-
-interface ConfiguredChannelGroupSnapshot {
-  type: string;
-  defaultAccountId?: string;
-  configured: boolean;
-  accounts: Array<{
-    accountId: string;
-    isDefaultAccount: boolean;
-    configured: boolean;
-  }>;
-}
-
-interface ChannelsStatusSnapshot {
-  channelOrder?: string[];
-  channels?: Record<string, unknown>;
-  channelAccounts?: Record<string, Array<{
-    accountId?: string;
-    configured?: boolean;
-    connected?: boolean;
-    running?: boolean;
-    lastError?: string;
-    name?: string;
-    linked?: boolean;
-    lastConnectedAt?: number | null;
-    lastInboundAt?: number | null;
-    lastOutboundAt?: number | null;
-  }>>;
-  channelDefaultAccountId?: Record<string, string>;
 }
 
 interface ChannelsState {
@@ -55,10 +25,6 @@ function normalizeChannelId(channelId: string): string {
   return channelId === 'openclaw-weixin' ? 'wechat' : channelId;
 }
 
-function usesPluginManagedQrAccounts(type: ChannelType): boolean {
-  return type === 'wechat';
-}
-
 function resolveChannelTypeFromId(channelId: string): ChannelType | undefined {
   const normalizedId = normalizeChannelId(channelId);
   const channelTypes = Object.keys(CHANNEL_NAMES) as ChannelType[];
@@ -66,7 +32,7 @@ function resolveChannelTypeFromId(channelId: string): ChannelType | undefined {
     (type) =>
       normalizedId === type ||
       normalizedId.startsWith(`${type}-`) ||
-      normalizedId.startsWith(`${type}:`)
+      normalizedId.startsWith(`${type}:`),
   );
 }
 
@@ -88,248 +54,40 @@ function flattenGroups(groups: ChannelGroup[]): Channel[] {
         defaultAccountId: group.defaultAccountId,
         isDefaultAccount: account.isDefaultAccount,
       },
-    }))
+    })),
   );
 }
 
-function mapAccountStatus(account: {
-  connected?: boolean;
-  linked?: boolean;
-  running?: boolean;
-  lastError?: string;
-  lastInboundAt?: number | null;
-  lastOutboundAt?: number | null;
-  lastConnectedAt?: number | null;
-}): ChannelAccount['status'] {
-  const now = Date.now();
-  const recentMs = 10 * 60 * 1000;
-  const hasRecentActivity =
-    (typeof account.lastInboundAt === 'number' && now - account.lastInboundAt < recentMs) ||
-    (typeof account.lastOutboundAt === 'number' && now - account.lastOutboundAt < recentMs) ||
-    (typeof account.lastConnectedAt === 'number' && now - account.lastConnectedAt < recentMs);
-
-  if (typeof account.lastError === 'string' && account.lastError) {
-    return 'error';
-  }
-  if (account.connected === true || account.linked === true || hasRecentActivity) {
-    return 'connected';
-  }
-  if (account.running === true) {
-    return 'connecting';
-  }
-  return 'disconnected';
+function sortGroups(groups: ChannelGroup[]): ChannelGroup[] {
+  return [...groups].sort((left, right) => left.name.localeCompare(right.name));
 }
 
-function shouldKeepRuntimeAccount(account: {
-  configured?: boolean;
-  connected?: boolean;
-  linked?: boolean;
-  running?: boolean;
-  lastError?: string;
-  lastInboundAt?: number | null;
-  lastOutboundAt?: number | null;
-  lastConnectedAt?: number | null;
-}): boolean {
-  const status = mapAccountStatus(account);
-  return Boolean(account.configured) || status === 'connected' || status === 'connecting' || Boolean(account.lastError);
-}
-
-function isGroupVisible(group: ChannelGroup): boolean {
-  if (group.configured) {
-    return true;
-  }
-  return group.accounts.some((account) =>
-    account.configured ||
-    account.status === 'connected' ||
-    account.status === 'connecting' ||
-    Boolean(account.error)
-  );
-}
-
-function resolveGroupStatus(group: ChannelGroup): ChannelGroup['status'] {
-  const accounts = group.accounts;
-  if (accounts.some((account) => account.status === 'error' || Boolean(account.error)) || group.error) {
-    return 'error';
-  }
-  if (accounts.some((account) => account.status === 'connected')) {
-    return 'connected';
-  }
-  if (accounts.some((account) => account.status === 'connecting')) {
-    return 'connecting';
-  }
-  if (group.configured || accounts.some((account) => account.configured)) {
-    return 'configured';
-  }
-  if (group.runtimeLoaded) {
-    return 'disconnected';
-  }
-  return 'unknown';
-}
-
-function buildInitialGroups(configuredGroups: ConfiguredChannelGroupSnapshot[]): Map<ChannelType, ChannelGroup> {
-  const map = new Map<ChannelType, ChannelGroup>();
-
-  for (const group of configuredGroups) {
-    if (!(group.type in CHANNEL_NAMES)) continue;
-    const type = group.type as ChannelType;
-    const visibleAccounts = group.accounts.filter((account) =>
-      channelSupportsMultipleAccounts(type) ? true : (account.isDefaultAccount || account.accountId === 'default')
-    );
-    const accounts = visibleAccounts.map<ChannelAccount>((account) => ({
-      id: `${type}:${account.accountId}`,
-      type,
-      name: CHANNEL_NAMES[type] || type,
-      status: 'configured',
-      configured: account.configured,
-      runtimeLoaded: false,
-      runtimeStatus: 'unknown',
-      accountId: account.accountId,
-      isDefaultAccount: account.isDefaultAccount,
-      metadata: {
-        isDefaultAccount: account.isDefaultAccount,
-      },
-    }));
-
-    map.set(type, {
-      type,
-      name: CHANNEL_NAMES[type] || type,
-      status: accounts.length > 0 ? 'configured' : 'unknown',
-      configured: group.configured,
-      runtimeLoaded: false,
-      runtimeStatus: accounts.length > 0 ? 'configured' : 'unknown',
-      pluginLoaded: false,
-      defaultAccountId: group.defaultAccountId,
-      configuredAccounts: visibleAccounts.map((account) => account.accountId),
-      accounts,
-    });
-  }
-
-  return map;
-}
-
-function mergeRuntimeSnapshot(
-  groups: Map<ChannelType, ChannelGroup>,
-  snapshot: ChannelsStatusSnapshot | undefined,
-): void {
-  if (!snapshot) return;
-
-  const channelOrder = snapshot.channelOrder || Object.keys(snapshot.channels || {});
-  for (const rawChannelId of channelOrder) {
-    const channelId = normalizeChannelId(rawChannelId);
-    if (!(channelId in CHANNEL_NAMES)) continue;
-    const type = channelId as ChannelType;
-    const summary = (snapshot.channels as Record<string, unknown> | undefined)?.[rawChannelId] as Record<string, unknown> | undefined;
-    const summaryError =
-      typeof (summary as { error?: string })?.error === 'string'
-        ? (summary as { error?: string }).error
-        : typeof (summary as { lastError?: string })?.lastError === 'string'
-          ? (summary as { lastError?: string }).lastError
-          : undefined;
-    const defaultAccountId = snapshot.channelDefaultAccountId?.[rawChannelId];
-    const runtimeAccounts = snapshot.channelAccounts?.[rawChannelId] || [];
-
-    const existing = groups.get(type) || {
-      type,
-      name: CHANNEL_NAMES[type] || type,
-      status: 'unknown' as const,
-      configured: false,
-      runtimeLoaded: false,
-      runtimeStatus: 'unknown' as const,
-      pluginLoaded: false,
-      defaultAccountId,
-      configuredAccounts: [],
-      accounts: [],
-    };
-
-    const accountMap = new Map(existing.accounts.map((account) => [account.accountId, account]));
-    for (const runtimeAccount of runtimeAccounts) {
-      if (!shouldKeepRuntimeAccount(runtimeAccount)) {
-        continue;
-      }
-      const accountId = runtimeAccount.accountId || 'default';
-      if (!channelSupportsMultipleAccounts(type) && accountId !== (defaultAccountId || 'default')) {
-        continue;
-      }
-      const status = mapAccountStatus(runtimeAccount);
-      const prior = accountMap.get(accountId);
-      accountMap.set(accountId, {
-        id: `${type}:${accountId}`,
-        type,
-        name: runtimeAccount.name || prior?.name || CHANNEL_NAMES[type] || type,
-        status,
-        configured: runtimeAccount.configured ?? prior?.configured ?? true,
-        runtimeLoaded: true,
-        runtimeStatus: status,
-        accountId,
-        isDefaultAccount: accountId === (defaultAccountId || 'default'),
-        error: runtimeAccount.lastError || summaryError || prior?.error,
-        metadata: {
-          ...prior?.metadata,
-          isDefaultAccount: accountId === (defaultAccountId || 'default'),
-        },
-      });
-    }
-
-    const runtimeConfiguredAccountIds = runtimeAccounts
-      .filter((account) => account.configured === true)
-      .map((account) => account.accountId || 'default');
-    const inferredDefaultAccountId =
-      defaultAccountId
-      || existing.defaultAccountId
-      || (usesPluginManagedQrAccounts(type)
-        ? runtimeConfiguredAccountIds.find((accountId) => accountId !== 'default')
-        : undefined);
-
-    let mergedAccounts = Array.from(accountMap.values());
-    if (usesPluginManagedQrAccounts(type)) {
-      const hasResolvedRuntimeAccount = mergedAccounts.some((account) => account.accountId !== 'default');
-      if (hasResolvedRuntimeAccount) {
-        mergedAccounts = mergedAccounts.filter((account) => account.accountId !== 'default');
-      }
-    }
-
-    mergedAccounts = mergedAccounts.map((account) => ({
+function normalizeGroups(groups: ChannelGroup[]): ChannelGroup[] {
+  return groups.map((group) => ({
+    ...group,
+    name: group.name?.trim() || CHANNEL_NAMES[group.type] || group.type,
+    accounts: group.accounts.map((account) => ({
       ...account,
-      isDefaultAccount: account.accountId === (inferredDefaultAccountId || 'default'),
-      metadata: {
-        ...account.metadata,
-        isDefaultAccount: account.accountId === (inferredDefaultAccountId || 'default'),
-      },
-    }));
-
-    const nextGroup: ChannelGroup = {
-      ...existing,
-      configured: existing.configured || runtimeAccounts.some((account) => account.configured === true),
-      runtimeLoaded: true,
-      pluginLoaded: true,
-      defaultAccountId: inferredDefaultAccountId,
-      configuredAccounts: Array.from(new Set([
-        ...existing.configuredAccounts,
-        ...runtimeConfiguredAccountIds,
-      ])),
-      accounts: mergedAccounts.sort((left, right) => {
-        if (left.isDefaultAccount !== right.isDefaultAccount) {
-          return left.isDefaultAccount ? -1 : 1;
-        }
-        return left.accountId.localeCompare(right.accountId);
-      }),
-      error: summaryError || existing.error,
-      runtimeStatus: 'unknown',
-      status: 'unknown',
-    };
-
-    nextGroup.runtimeStatus = resolveGroupStatus(nextGroup);
-    nextGroup.status = nextGroup.runtimeStatus;
-    groups.set(type, nextGroup);
-  }
+      name: account.name?.trim() || CHANNEL_NAMES[group.type] || group.type,
+    })),
+  }));
 }
 
-async function fetchConfiguredChannelGroups(): Promise<ConfiguredChannelGroupSnapshot[]> {
+async function fetchChannelGroups(probe = false, options?: { includeRuntime?: boolean }): Promise<ChannelGroup[]> {
+  const search = new URLSearchParams();
+  if (probe) {
+    search.set('probe', 'true');
+  }
+  if (options?.includeRuntime === false) {
+    search.set('includeRuntime', 'false');
+  }
+  const query = search.toString();
+  const path = query ? `/api/channels/accounts?${query}` : '/api/channels/accounts';
   const result = await hostApiFetch<{
     success: boolean;
-    groups?: ConfiguredChannelGroupSnapshot[];
-  }>('/api/channels/configured');
-  return result.success && Array.isArray(result.groups) ? result.groups : [];
+    channels?: ChannelGroup[];
+  }>(path);
+  return result.success && Array.isArray(result.channels) ? normalizeGroups(result.channels) : [];
 }
 
 export const useChannelsStore = create<ChannelsState>((set, get) => ({
@@ -341,37 +99,7 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
   fetchChannels: async (probe = false, options) => {
     set({ loading: true, error: null });
     try {
-      const configuredGroups = await fetchConfiguredChannelGroups();
-      const groups = buildInitialGroups(configuredGroups);
-      const gatewayStatus = useGatewayStore.getState().status;
-      const gatewayLifecycle = useGatewayStore.getState().lifecycle;
-      const includeRuntime = options?.includeRuntime ?? (
-        gatewayStatus.state === 'running' &&
-        gatewayLifecycle.state !== 'scheduled' &&
-        gatewayLifecycle.state !== 'applying'
-      );
-
-      if (includeRuntime) {
-        const runtimeSnapshot = await useGatewayStore.getState().rpc<ChannelsStatusSnapshot>(
-          'channels.status',
-          { probe, timeoutMs: 8000 },
-          9000,
-        );
-        mergeRuntimeSnapshot(groups, runtimeSnapshot);
-      }
-
-      const finalGroups = Array.from(groups.values())
-        .map((group) => {
-          const status = resolveGroupStatus(group);
-          return {
-            ...group,
-            status,
-            runtimeStatus: group.runtimeLoaded ? status : group.runtimeStatus,
-          };
-        })
-        .filter(isGroupVisible)
-        .sort((left, right) => left.name.localeCompare(right.name));
-
+      const finalGroups = sortGroups(await fetchChannelGroups(probe, options));
       set({
         channelGroups: finalGroups,
         channels: flattenGroups(finalGroups),

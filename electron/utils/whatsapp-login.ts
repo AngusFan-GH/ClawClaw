@@ -2,7 +2,7 @@ import { dirname, join } from 'path';
 import { homedir } from 'os';
 import { createRequire } from 'module';
 import { EventEmitter } from 'events';
-import { existsSync, mkdirSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, rmSync } from 'fs';
 import { deflateSync } from 'zlib';
 import { getOpenClawDir, getOpenClawResolvedDir } from './paths';
 
@@ -184,6 +184,7 @@ export class WhatsAppLoginManager extends EventEmitter {
   private qr: string | null = null;
   private accountId: string | null = null;
   private active: boolean = false;
+  private loginSucceeded: boolean = false;
   private retryCount: number = 0;
   private maxRetries: number = 5;
 
@@ -196,6 +197,7 @@ export class WhatsAppLoginManager extends EventEmitter {
    */
   private async finishLogin(accountId: string): Promise<void> {
     if (!this.active) return;
+    this.loginSucceeded = true;
     console.log('[WhatsAppLogin] Finishing login, closing socket to hand over to Gateway...');
     await this.stop();
     // Allow enough time for WhatsApp server to fully release the session
@@ -223,6 +225,7 @@ export class WhatsAppLoginManager extends EventEmitter {
 
     this.accountId = accountId;
     this.active = true;
+    this.loginSucceeded = false;
     this.qr = null;
     this.retryCount = 0;
 
@@ -399,6 +402,8 @@ export class WhatsAppLoginManager extends EventEmitter {
    * Stop current login process
    */
   async stop(): Promise<void> {
+    const shouldCleanup = !this.loginSucceeded && this.accountId;
+    const cleanupAccountId = this.accountId;
     this.active = false;
     this.qr = null;
     if (this.socket) {
@@ -418,6 +423,24 @@ export class WhatsAppLoginManager extends EventEmitter {
         // Ignore error if socket already closed
       }
       this.socket = null;
+    }
+
+    if (shouldCleanup && cleanupAccountId) {
+      try {
+        const authDir = join(homedir(), '.openclaw', 'credentials', 'whatsapp', cleanupAccountId);
+        if (existsSync(authDir)) {
+          rmSync(authDir, { recursive: true, force: true });
+          const parentDir = join(homedir(), '.openclaw', 'credentials', 'whatsapp');
+          if (existsSync(parentDir)) {
+            const remaining = readdirSync(parentDir);
+            if (remaining.length === 0) {
+              rmSync(parentDir, { recursive: true, force: true });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[WhatsAppLogin] Failed to clean up auth dir after cancel:', err);
+      }
     }
   }
 }

@@ -400,16 +400,6 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
           unsubscribers.push(subscribeHostEvent('gateway:chat-message', (payload) => {
             handleGatewayChatMessage(payload);
           }));
-          unsubscribers.push(subscribeHostEvent<{ channelId?: string; status?: string }>(
-            'gateway:channel-status',
-            () => {
-              import('./channels')
-                .then(({ useChannelsStore }) => {
-                  void useChannelsStore.getState().fetchChannels(false);
-                })
-                .catch(() => {});
-            },
-          ));
           gatewayEventUnsubscribers = unsubscribers;
         }
 

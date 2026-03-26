@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { PORTS } from '../../utils/config';
 import { getSetting } from '../../utils/store';
 import type { HostApiContext } from '../context';
-import { emitGatewayLifecycleEvent } from '../gateway-lifecycle';
+import { runGatewayRefresh } from '../gateway-refresh';
 import { parseJsonBody, sendJson } from '../route-utils';
 
 export async function handleGatewayRoutes(
@@ -71,30 +71,15 @@ export async function handleGatewayRoutes(
 
   if (url.pathname === '/api/gateway/restart' && req.method === 'POST') {
     try {
-      emitGatewayLifecycleEvent(ctx, {
-        phase: 'scheduled',
+      const result = await runGatewayRefresh(ctx, {
         action: 'restart',
         source: 'gateway.manualRestart',
         reason: 'gateway.manualRestart',
+        mode: 'immediate',
+        awaitCompletion: false,
       });
-      void ctx.gatewayManager.restart({ strategy: 'auto' }).catch((error) => {
-        emitGatewayLifecycleEvent(ctx, {
-          phase: 'failed',
-          action: 'restart',
-          source: 'gateway.manualRestart',
-          reason: 'gateway.manualRestart',
-          error: String(error),
-        });
-      });
-      sendJson(res, 200, { success: true, accepted: true });
+      sendJson(res, 200, { success: true, accepted: result.accepted });
     } catch (error) {
-      emitGatewayLifecycleEvent(ctx, {
-        phase: 'failed',
-        action: 'restart',
-        source: 'gateway.manualRestart',
-        reason: 'gateway.manualRestart',
-        error: String(error),
-      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;

@@ -3,11 +3,11 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { HostApiContext } from '../context';
+import { runGatewayRefresh } from '../gateway-refresh';
 import { getSetting, setSetting } from '../../utils/store';
 import { logger } from '../../utils/logger';
 import { getOpenClawConfigDir } from '../../utils/paths';
 import { parseJsonBody, sendJson } from '../route-utils';
-import { emitGatewayLifecycleEvent } from '../gateway-lifecycle';
 import {
   type SecurityPolicy,
   type SecurityPolicySnapshot,
@@ -351,13 +351,6 @@ export async function handleSecurityRoutes(
       await setSetting('securityPolicy', policy);
       sendJson(res, 200, { success: true, policy });
     } catch (error) {
-      emitGatewayLifecycleEvent(ctx, {
-        phase: 'failed',
-        action: 'restart',
-        source: 'security.apply',
-        reason: 'security.apply',
-        error: String(error),
-      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;
@@ -379,33 +372,22 @@ export async function handleSecurityRoutes(
       await setSetting('securityPolicy', policy);
       const reminders = normalizeReminders(await getSetting('reminders'));
       const syncResult = await syncSecurityPolicyArtifacts(config, policy, reminders);
-      let gatewayRestarted = false;
-      if (ctx.gatewayManager.getStatus().state === 'running') {
-        emitGatewayLifecycleEvent(ctx, {
-          phase: 'scheduled',
-          action: 'restart',
-          source: 'security.apply',
-          reason: 'security.apply',
-        });
-        await ctx.gatewayManager.restart();
-        gatewayRestarted = true;
-      }
+      const gatewayRestartResult = await runGatewayRefresh(ctx, {
+        action: 'restart',
+        source: 'security.apply',
+        reason: 'security.apply',
+        mode: 'immediate',
+        awaitCompletion: true,
+      });
 
       sendJson(res, 200, {
         success: true,
         snapshot: buildPolicySnapshot(policy, config),
         verify,
         sync: syncResult,
-        gatewayRestarted,
+        gatewayRestarted: gatewayRestartResult.triggered,
       });
     } catch (error) {
-      emitGatewayLifecycleEvent(ctx, {
-        phase: 'failed',
-        action: 'restart',
-        source: 'security.reset',
-        reason: 'security.reset',
-        error: String(error),
-      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;
@@ -419,24 +401,20 @@ export async function handleSecurityRoutes(
       await setSetting('securityPolicy', DEFAULT_SECURITY_POLICY);
       const reminders = normalizeReminders(await getSetting('reminders'));
       const syncResult = await syncSecurityPolicyArtifacts(config, DEFAULT_SECURITY_POLICY, reminders);
-      let gatewayRestarted = false;
-      if (ctx.gatewayManager.getStatus().state === 'running') {
-        emitGatewayLifecycleEvent(ctx, {
-          phase: 'scheduled',
-          action: 'restart',
-          source: 'security.reset',
-          reason: 'security.reset',
-        });
-        await ctx.gatewayManager.restart();
-        gatewayRestarted = true;
-      }
+      const gatewayRestartResult = await runGatewayRefresh(ctx, {
+        action: 'restart',
+        source: 'security.reset',
+        reason: 'security.reset',
+        mode: 'immediate',
+        awaitCompletion: true,
+      });
 
       sendJson(res, 200, {
         success: true,
         snapshot: buildPolicySnapshot(DEFAULT_SECURITY_POLICY, config),
         verify,
         sync: syncResult,
-        gatewayRestarted,
+        gatewayRestarted: gatewayRestartResult.triggered,
       });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

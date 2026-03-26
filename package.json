@@ -1,6 +1,6 @@
 {
   "name": "clawclaw",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "pnpm": {
     "onlyBuiltDependencies": [
       "@discordjs/opus",
@@ -53,7 +53,8 @@
     "postversion": "git push && git push --tags"
   },
   "dependencies": {
-    "@wecom/wecom-openclaw-plugin": "^1.0.6",
+    "@larksuite/openclaw-lark": "2026.3.17",
+    "@wecom/wecom-openclaw-plugin": "2026.3.20",
     "clawhub": "^0.5.0",
     "dompurify": "^3.3.3",
     "electron-store": "^11.0.2",
@@ -75,8 +76,8 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toast": "^1.2.15",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@sliverp/qqbot": "^1.5.4",
-    "@soimy/dingtalk": "^3.1.4",
+    "@sliverp/qqbot": "1.6.1",
+    "@soimy/dingtalk": "3.3.0",
     "@tencent-weixin/openclaw-weixin": "^1.0.3",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

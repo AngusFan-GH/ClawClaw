@@ -25,6 +25,20 @@ export type LocalModelPreset = {
 const PRESET_MANAGED_BY = 'preset-local-model' as const;
 const LOCAL_PROVIDER_PLACEHOLDER_API_KEY = 'ollama-local';
 
+function schedulePresetGatewayRefresh(
+  gatewayManager: GatewayManager | undefined,
+  mode: 'reload' | 'restart',
+): void {
+  if (!gatewayManager || gatewayManager.getStatus().state === 'stopped') {
+    return;
+  }
+  if (mode === 'restart') {
+    gatewayManager.debouncedRestart();
+    return;
+  }
+  gatewayManager.debouncedReload();
+}
+
 function buildRuntimeProviderAccountId(
   vendorId: string,
   existingAccountId: string | null,
@@ -84,8 +98,12 @@ export async function migrateLegacyLocalModelAccounts(gatewayManager?: GatewayMa
       },
       resolveProviderApiKeyForSave('custom', '') as string,
     );
-    await syncDeletedProviderToRuntime(previousConfig, account.id, gatewayManager);
-    await syncUpdatedProviderToRuntime(providerAccountToConfig(nextAccount), undefined, gatewayManager);
+    await syncDeletedProviderToRuntime(previousConfig, account.id, undefined);
+    await syncUpdatedProviderToRuntime(providerAccountToConfig(nextAccount), undefined, undefined);
+  }
+
+  if (legacyAccounts.length > 0) {
+    schedulePresetGatewayRefresh(gatewayManager, 'restart');
   }
 }
 
@@ -120,6 +138,7 @@ export async function applyPresetLocalModelSelection(
   const preferredAccount = presetAccounts.find((account) => account.metadata?.presetId === primaryPreset.id);
   const targetAccount = preferredAccount ?? presetAccounts[0];
   const now = new Date().toISOString();
+  let requiresRestart = false;
 
   const updatePatch = {
     label: primaryPreset.name,
@@ -170,19 +189,21 @@ export async function applyPresetLocalModelSelection(
     );
 
   if (targetAccount) {
-    await syncUpdatedProviderToRuntime(providerAccountToConfig(account), undefined, gatewayManager);
+    await syncUpdatedProviderToRuntime(providerAccountToConfig(account), undefined, undefined);
   } else {
-    await syncSavedProviderToRuntime(providerAccountToConfig(account), undefined, gatewayManager);
+    await syncSavedProviderToRuntime(providerAccountToConfig(account), undefined, undefined);
   }
 
   for (const staleAccount of presetAccounts) {
     if (staleAccount.id === account.id) continue;
     await providerService.deleteAccount(staleAccount.id);
-    await syncDeletedProviderToRuntime(providerAccountToConfig(staleAccount), staleAccount.id, gatewayManager);
+    await syncDeletedProviderToRuntime(providerAccountToConfig(staleAccount), staleAccount.id, undefined);
+    requiresRestart = true;
   }
 
   await providerService.setDefaultAccount(account.id);
-  await syncDefaultProviderToRuntime(account.id, gatewayManager);
+  await syncDefaultProviderToRuntime(account.id, undefined);
+  schedulePresetGatewayRefresh(gatewayManager, requiresRestart ? 'restart' : 'reload');
 
   return { accountId: account.id, primaryPresetId: primaryPreset.id };
 }

@@ -686,3 +686,31 @@ export async function clearChannelBinding(channelType: string, agentId?: string,
   });
   return result.snapshot;
 }
+
+export async function clearAllChannelBindings(channelType: string): Promise<AgentsSnapshot> {
+  const runtimeChannelType = toRuntimeChannelType(channelType);
+  const result = await updateOpenClawConfig(async (rawConfig) => {
+    const config = rawConfig as AgentConfigDocument;
+    const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
+
+    config.agents = {
+      ...agentsConfig,
+      list: entries,
+    };
+    config.bindings = Array.isArray(config.bindings)
+      ? config.bindings.filter((binding) => (
+        !isSimpleChannelBinding(binding)
+        || toRuntimeChannelType(binding.match?.channel || '') !== runtimeChannelType
+      ))
+      : undefined;
+
+    return {
+      snapshot: buildSnapshotFromConfig(config, { includeCli: false }),
+    };
+  });
+
+  logger.info('Cleared all simplified channel bindings', {
+    channelType: runtimeChannelType,
+  });
+  return result.snapshot;
+}

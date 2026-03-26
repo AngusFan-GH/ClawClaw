@@ -562,14 +562,17 @@ export function Settings() {
       const normalizedAllServer = proxyAllServerDraft.trim();
       const normalizedBypassRules = proxyBypassRulesDraft.trim();
 
-      await invokeIpc('settings:setMany', {
-        proxyMode: normalizedProxyMode,
-        proxyEnabled: normalizedProxyMode === 'custom',
-        proxyServer: normalizedProxyServer,
-        proxyHttpServer: normalizedHttpServer,
-        proxyHttpsServer: normalizedHttpsServer,
-        proxyAllServer: normalizedAllServer,
-        proxyBypassRules: normalizedBypassRules,
+      await hostApiFetch<{ success: boolean }>('/api/settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          proxyMode: normalizedProxyMode,
+          proxyEnabled: normalizedProxyMode === 'custom',
+          proxyServer: normalizedProxyServer,
+          proxyHttpServer: normalizedHttpServer,
+          proxyHttpsServer: normalizedHttpsServer,
+          proxyAllServer: normalizedAllServer,
+          proxyBypassRules: normalizedBypassRules,
+        }),
       });
 
       setProxyMode(normalizedProxyMode);

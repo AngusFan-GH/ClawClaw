@@ -9,61 +9,19 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { StatusBadge, type Status } from '@/components/common/StatusBadge';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
+import { ChannelLogo as SharedChannelLogo } from '@/components/channels/ChannelLogo';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAgentsStore } from '@/stores/agents';
 import { useChannelsStore } from '@/stores/channels';
 import { useGatewayStore } from '@/stores/gateway';
-import { CHANNEL_ICONS, CHANNEL_NAMES, type ChannelGroup, type ChannelType } from '@/types/channel';
+import { CHANNEL_NAMES, type ChannelGroup, type ChannelType } from '@/types/channel';
 import type { AgentSummary } from '@/types/agent';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import telegramIcon from '@/assets/channels/telegram.svg';
-import discordIcon from '@/assets/channels/discord.svg';
-import whatsappIcon from '@/assets/channels/whatsapp.svg';
-import dingtalkIcon from '@/assets/channels/dingtalk.svg';
-import feishuIcon from '@/assets/channels/feishu.svg';
-import wechatIcon from '@/assets/channels/wechat.svg';
-import wecomIcon from '@/assets/channels/wecom.svg';
-import qqIcon from '@/assets/channels/qq.svg';
 import { invokeIpc } from '@/lib/api-client';
-import { subscribeHostEvent } from '@/lib/host-events';
-
-const CHANNEL_BRAND_STYLES: Partial<Record<ChannelType, { shell: string; icon: string }>> = {
-  telegram: {
-    shell: 'bg-[#27A7E7] border-[#1f8ec7] shadow-[0_10px_24px_rgba(39,167,231,0.22)]',
-    icon: 'brightness-0 invert',
-  },
-  discord: {
-    shell: 'bg-[#5865F2] border-[#4752c4] shadow-[0_10px_24px_rgba(88,101,242,0.22)]',
-    icon: 'brightness-0 invert',
-  },
-  whatsapp: {
-    shell: 'bg-[#25D366] border-[#1faf54] shadow-[0_10px_24px_rgba(37,211,102,0.2)]',
-    icon: 'brightness-0 invert',
-  },
-  wechat: {
-    shell: 'bg-[#07C160] border-[#059c4e] shadow-[0_10px_24px_rgba(7,193,96,0.22)]',
-    icon: '',
-  },
-  feishu: {
-    shell: 'bg-[linear-gradient(135deg,#0F67FF,#00C2FF)] border-[#0f67ff] shadow-[0_10px_24px_rgba(15,103,255,0.22)]',
-    icon: 'brightness-0 invert',
-  },
-  dingtalk: {
-    shell: 'bg-[#1677FF] border-[#0f5fd1] shadow-[0_10px_24px_rgba(22,119,255,0.22)]',
-    icon: 'brightness-0 invert',
-  },
-  wecom: {
-    shell: 'bg-[linear-gradient(135deg,#07C160,#00A1EA)] border-[#07c160] shadow-[0_10px_24px_rgba(7,193,96,0.22)]',
-    icon: 'brightness-0 invert',
-  },
-  qqbot: {
-    shell: 'bg-[linear-gradient(135deg,#12B7F5,#4E8CFF)] border-[#12b7f5] shadow-[0_10px_24px_rgba(18,183,245,0.22)]',
-    icon: 'brightness-0 invert',
-  },
-};
+import { useGatewayPageRefresh } from '@/lib/use-gateway-page-refresh';
 
 export function Agents() {
   const { t } = useTranslation('agents');
@@ -85,45 +43,12 @@ export function Agents() {
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [agentToDelete, setAgentToDelete] = useState<AgentSummary | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    void fetchAgents();
-    void fetchChannels(false, { includeRuntime: false }).then(() => {
-      if (cancelled) return;
-      if (gatewayStatus.state === 'running') {
-        void fetchChannels(false, { includeRuntime: true });
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchAgents, fetchChannels, gatewayStatus.state]);
-
-  useEffect(() => {
-    const unsubscribeGateway = subscribeHostEvent('gateway:status', () => {
-      void fetchAgents();
-      void fetchChannels(false);
-    });
-    const unsubscribeChannels = subscribeHostEvent('gateway:channel-status', () => {
-      void fetchAgents();
-      void fetchChannels(false);
-    });
-    return () => {
-      if (typeof unsubscribeGateway === 'function') {
-        unsubscribeGateway();
-      }
-      if (typeof unsubscribeChannels === 'function') {
-        unsubscribeChannels();
-      }
-    };
-  }, [fetchAgents, fetchChannels]);
-
-  useEffect(() => {
-    if (gatewayLifecycle.state === 'completed') {
-      void fetchAgents();
-      void fetchChannels(false);
-    }
-  }, [fetchAgents, fetchChannels, gatewayLifecycle.state]);
+  const { refresh: handleRefresh } = useGatewayPageRefresh({
+    fetchAgents,
+    fetchChannels,
+    gatewayState: gatewayStatus.state,
+    gatewayLifecycleState: gatewayLifecycle.state,
+  });
   const activeAgent = useMemo(
     () => agents.find((agent) => agent.gateway.id === activeAgentId) ?? null,
     [activeAgentId, agents],
@@ -137,11 +62,6 @@ export function Agents() {
     }),
     [agents],
   );
-  const handleRefresh = () => {
-    void fetchAgents();
-    void fetchChannels(false);
-  };
-
   return (
     <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
       <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-6 pb-8 pt-10 md:px-8">
@@ -525,39 +445,18 @@ function AgentCard({
 const inputClasses = 'h-[44px] rounded-xl font-mono text-[13px] bg-muted/70 dark:bg-muted/40 border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40';
 const labelClasses = 'text-[14px] text-foreground/80 font-bold';
 
-function ChannelLogo({ type, branded = false }: { type: ChannelType; branded?: boolean }) {
-  const brand = CHANNEL_BRAND_STYLES[type];
-  const shellClass = branded
-    ? brand?.shell ?? 'bg-slate-900 border-slate-800 shadow-[0_10px_24px_rgba(15,23,42,0.16)]'
-    : 'bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/10 shadow-sm';
-  const iconClass = branded ? brand?.icon ?? 'brightness-0 invert' : '';
-
-  const wrap = (content: React.ReactNode) => (
-    <div className={cn('h-[40px] w-[40px] shrink-0 flex items-center justify-center rounded-full border', shellClass)}>
-      {content}
-    </div>
+function PageChannelLogo({ type, branded = false }: { type: ChannelType; branded?: boolean }) {
+  return (
+    <SharedChannelLogo
+      type={type}
+      branded={branded}
+      sizeClassName="h-[40px] w-[40px]"
+      iconClassName="h-[20px] w-[20px]"
+      shapeClassName="rounded-full"
+      shellClassName="bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/10 shadow-sm"
+      fallbackClassName="text-[20px] leading-none"
+    />
   );
-
-  switch (type) {
-    case 'telegram':
-      return wrap(<img src={telegramIcon} alt="Telegram" className={cn('w-[20px] h-[20px]', iconClass)} />);
-    case 'discord':
-      return wrap(<img src={discordIcon} alt="Discord" className={cn('w-[20px] h-[20px]', iconClass)} />);
-    case 'whatsapp':
-      return wrap(<img src={whatsappIcon} alt="WhatsApp" className={cn('w-[20px] h-[20px]', iconClass)} />);
-    case 'wechat':
-      return wrap(<img src={wechatIcon} alt="WeChat" className={cn('w-[20px] h-[20px]', iconClass)} />);
-    case 'dingtalk':
-      return wrap(<img src={dingtalkIcon} alt="DingTalk" className={cn('w-[20px] h-[20px]', iconClass)} />);
-    case 'feishu':
-      return wrap(<img src={feishuIcon} alt="Feishu" className={cn('w-[20px] h-[20px]', iconClass)} />);
-    case 'wecom':
-      return wrap(<img src={wecomIcon} alt="WeCom" className={cn('w-[20px] h-[20px]', iconClass)} />);
-    case 'qqbot':
-      return wrap(<img src={qqIcon} alt="QQ" className={cn('w-[20px] h-[20px]', iconClass)} />);
-    default:
-      return <span className="text-[20px] leading-none">{CHANNEL_ICONS[type] || '💬'}</span>;
-  }
 }
 
 function AddAgentDialog({
@@ -978,7 +877,7 @@ function AgentSettingsModal({
                 {visibleAssignedChannels.map((channel) => (
                   <div key={`${channel.channelType}:${channel.accountId}`} className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/35 p-4">
                     <div className="flex items-center gap-3 min-w-0">
-                      <ChannelLogo type={channel.channelType} branded />
+                      <PageChannelLogo type={channel.channelType} branded />
                       <div className="min-w-0">
                         <p className="text-[15px] font-semibold text-foreground">{channel.name}</p>
                         <p className="text-[13.5px] text-muted-foreground">
@@ -1158,7 +1057,7 @@ function BindingPickerModal({
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <div className="flex items-center gap-3">
-                          <ChannelLogo type={binding.channelType} branded />
+                          <PageChannelLogo type={binding.channelType} branded />
                           <div className="min-w-0">
                             <p className="text-[15px] font-semibold text-foreground">{binding.channelName}</p>
                             <p className="text-[13px] text-muted-foreground">{ownerLabel}</p>

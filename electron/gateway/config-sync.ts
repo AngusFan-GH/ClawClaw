@@ -6,7 +6,7 @@ import { getApiKey, getDefaultProvider, getProvider } from '../utils/secure-stor
 import { getProviderEnvVar, getKeyableProviderTypes } from '../utils/provider-registry';
 import { getOpenClawDir, getOpenClawEntryPath, isOpenClawPresent } from '../utils/paths';
 import { getUvMirrorEnv } from '../utils/uv-env';
-import { listConfiguredChannels } from '../utils/channel-config';
+import { cleanupDanglingWeChatPluginState, listConfiguredChannels, repairChannelConfigConsistency } from '../utils/channel-config';
 import {
   syncBrowserConfigToOpenClaw,
   syncGatewayTokenToConfig,
@@ -17,6 +17,26 @@ import { buildProxyEnvAsync, resolveProxySettingsAsync } from '../utils/proxy';
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { resetMalformedOpenClawConfig } from '../utils/openclaw-config';
 import { logger } from '../utils/logger';
+import { ensureBundledPluginInstalled } from '../utils/bundled-plugin-installer';
+
+const CHANNEL_PLUGIN_INSTALL_MAP: Partial<Record<string, { pluginId: string; displayName: string }>> = {
+  feishu: { pluginId: 'feishu-openclaw-plugin', displayName: 'Feishu / Lark' },
+  dingtalk: { pluginId: 'dingtalk', displayName: 'DingTalk' },
+  wecom: { pluginId: 'wecom', displayName: 'WeCom' },
+  qqbot: { pluginId: 'qqbot', displayName: 'QQ Bot' },
+  wechat: { pluginId: 'openclaw-weixin', displayName: 'WeChat' },
+};
+
+function ensureConfiguredPluginsInstalled(configuredChannels: string[]): void {
+  for (const channelType of configuredChannels) {
+    const plugin = CHANNEL_PLUGIN_INSTALL_MAP[channelType];
+    if (!plugin) continue;
+    const result = ensureBundledPluginInstalled(plugin.pluginId, plugin.displayName);
+    if (!result.installed && result.warning) {
+      logger.warn(result.warning);
+    }
+  }
+}
 
 async function withTimeout<T>(
   promise: Promise<T>,
@@ -73,6 +93,40 @@ export async function syncGatewayConfigBeforeLaunch(
         logger.error('Failed to recover malformed openclaw.json:', recoveryErr);
       }
     }
+  }
+
+  try {
+    await withTimeout(
+      repairChannelConfigConsistency(),
+      2000,
+      'repairChannelConfigConsistency',
+      { repaired: false },
+    );
+  } catch (err) {
+    logger.warn('Failed to repair channel config consistency:', err);
+  }
+
+  try {
+    await withTimeout(
+      cleanupDanglingWeChatPluginState(),
+      2000,
+      'cleanupDanglingWeChatPluginState',
+      { cleanedDanglingState: false },
+    );
+  } catch (err) {
+    logger.warn('Failed to clean dangling WeChat plugin state:', err);
+  }
+
+  try {
+    const configuredChannels = await withTimeout(
+      listConfiguredChannels({ includeCli: false }),
+      1500,
+      'listConfiguredChannelsForPluginInstall',
+      [],
+    );
+    ensureConfiguredPluginsInstalled(configuredChannels);
+  } catch (err) {
+    logger.warn('Failed to ensure configured channel plugins are installed:', err);
   }
 
   // These sync tasks improve eventual config consistency, but they are not

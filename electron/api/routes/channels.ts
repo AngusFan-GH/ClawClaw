@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import {
   deleteChannelConfig,
   getChannelFormValues,
+  listConfiguredChannelAccounts,
   listConfiguredChannelGroups,
   saveChannelConfig,
   setChannelEnabled,
@@ -26,32 +27,298 @@ import {
   waitForWeChatLoginSession,
 } from '../../utils/wechat-login';
 import type { HostApiContext } from '../context';
-import { emitGatewayLifecycleEvent } from '../gateway-lifecycle';
+import { runGatewayRefresh } from '../gateway-refresh';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { ensureBundledPluginInstalled } from '../../utils/bundled-plugin-installer';
 import { getOpenClawCliSpawnConfig } from '../../utils/openclaw-cli';
-import { clearChannelBinding } from '../../utils/agent-config';
+import { clearAllChannelBindings, clearChannelBinding } from '../../utils/agent-config';
+import type { ChannelType } from '../../../src/types/channel';
 
 const WECHAT_QR_TIMEOUT_MS = 8 * 60 * 1000;
 const activeQrLogins = new Map<string, string>();
 const WECHAT_PLUGIN_SPEC = '@tencent-weixin/openclaw-weixin';
+const FORCE_RESTART_CHANNELS = new Set([
+  'feishu',
+  'dingtalk',
+  'wecom',
+  'whatsapp',
+  'qqbot',
+  WECHAT_RUNTIME_CHANNEL_ID,
+]);
 
-function scheduleGatewayChannelRestart(ctx: HostApiContext, reason: string): void {
-  if (ctx.gatewayManager.getStatus().state === 'stopped') {
-    return;
+type ChannelsStatusSnapshot = {
+  channelOrder?: string[];
+  channels?: Record<string, unknown>;
+  channelAccounts?: Record<string, Array<{
+    accountId?: string;
+    configured?: boolean;
+    connected?: boolean;
+    running?: boolean;
+    lastError?: string;
+    name?: string;
+    linked?: boolean;
+    lastConnectedAt?: number | null;
+    lastInboundAt?: number | null;
+    lastOutboundAt?: number | null;
+  }>>;
+  channelDefaultAccountId?: Record<string, string>;
+};
+
+type ChannelAccountView = {
+  id: string;
+  type: ChannelType;
+  name: string;
+  status: 'connected' | 'disconnected' | 'connecting' | 'error' | 'configured';
+  configured: boolean;
+  runtimeLoaded: boolean;
+  runtimeStatus: 'connected' | 'disconnected' | 'connecting' | 'error' | 'configured' | 'unknown';
+  accountId: string;
+  isDefaultAccount: boolean;
+  error?: string;
+  metadata?: Record<string, unknown>;
+};
+
+type ChannelGroupView = {
+  type: ChannelType;
+  name: string;
+  status: 'connected' | 'disconnected' | 'connecting' | 'error' | 'configured' | 'unknown';
+  configured: boolean;
+  runtimeLoaded: boolean;
+  runtimeStatus: 'connected' | 'disconnected' | 'connecting' | 'error' | 'configured' | 'unknown';
+  pluginLoaded: boolean;
+  defaultAccountId?: string;
+  configuredAccounts: string[];
+  accounts: ChannelAccountView[];
+  error?: string;
+};
+
+function mapAccountStatus(account: {
+  connected?: boolean;
+  linked?: boolean;
+  running?: boolean;
+  lastError?: string;
+  lastInboundAt?: number | null;
+  lastOutboundAt?: number | null;
+  lastConnectedAt?: number | null;
+}): ChannelAccountView['status'] {
+  const now = Date.now();
+  const recentMs = 10 * 60 * 1000;
+  const hasRecentActivity =
+    (typeof account.lastInboundAt === 'number' && now - account.lastInboundAt < recentMs) ||
+    (typeof account.lastOutboundAt === 'number' && now - account.lastOutboundAt < recentMs) ||
+    (typeof account.lastConnectedAt === 'number' && now - account.lastConnectedAt < recentMs);
+
+  if (typeof account.lastError === 'string' && account.lastError) {
+    return 'error';
   }
-  emitGatewayLifecycleEvent(ctx, {
-    phase: 'scheduled',
-    action: 'restart',
+  if (account.connected === true || account.linked === true || hasRecentActivity) {
+    return 'connected';
+  }
+  if (account.running === true) {
+    return 'connecting';
+  }
+  return 'disconnected';
+}
+
+function shouldKeepRuntimeAccount(account: {
+  configured?: boolean;
+  connected?: boolean;
+  linked?: boolean;
+  running?: boolean;
+  lastError?: string;
+  lastInboundAt?: number | null;
+  lastOutboundAt?: number | null;
+  lastConnectedAt?: number | null;
+}): boolean {
+  const status = mapAccountStatus(account);
+  return Boolean(account.configured) || status === 'connected' || status === 'connecting';
+}
+
+function resolveGroupStatus(group: ChannelGroupView): ChannelGroupView['status'] {
+  if (group.accounts.some((account) => account.status === 'error' || Boolean(account.error)) || group.error) {
+    return 'error';
+  }
+  if (group.accounts.some((account) => account.status === 'connected')) {
+    return 'connected';
+  }
+  if (group.accounts.some((account) => account.status === 'connecting')) {
+    return 'connecting';
+  }
+  if (group.configured || group.accounts.some((account) => account.configured)) {
+    return 'configured';
+  }
+  if (group.runtimeLoaded) {
+    return 'disconnected';
+  }
+  return 'unknown';
+}
+
+async function buildChannelAccountsView(
+  ctx: HostApiContext,
+  options?: { includeRuntime?: boolean; probe?: boolean },
+): Promise<ChannelGroupView[]> {
+  const [configuredGroups, configuredAccountsByType] = await Promise.all([
+    listConfiguredChannelGroups({ includeCli: false }),
+    listConfiguredChannelAccounts({ includeCli: false }),
+  ]);
+
+  let runtimeSnapshot: ChannelsStatusSnapshot | undefined;
+  if (options?.includeRuntime !== false && ctx.gatewayManager.getStatus().state === 'running') {
+    try {
+      runtimeSnapshot = await ctx.gatewayManager.rpc<ChannelsStatusSnapshot>(
+        'channels.status',
+        { probe: options?.probe ?? false, timeoutMs: 8000 },
+        9000,
+      );
+    } catch {
+      runtimeSnapshot = undefined;
+    }
+  }
+
+  const groups = new Map<ChannelType, ChannelGroupView>();
+  for (const group of configuredGroups) {
+    const type = group.type as ChannelType;
+    const configuredAccountIds = configuredAccountsByType[group.type] ?? group.accounts.map((account) => account.accountId);
+    groups.set(type, {
+      type,
+      name: type,
+      status: 'configured',
+      configured: group.configured,
+      runtimeLoaded: false,
+      runtimeStatus: 'unknown',
+      pluginLoaded: false,
+      defaultAccountId: group.defaultAccountId,
+      configuredAccounts: configuredAccountIds,
+      accounts: group.accounts.map((account) => ({
+        id: `${type}:${account.accountId}`,
+        type,
+        name: type,
+        status: 'configured',
+        configured: account.configured,
+        runtimeLoaded: false,
+        runtimeStatus: 'unknown',
+        accountId: account.accountId,
+        isDefaultAccount: account.isDefaultAccount,
+        metadata: {
+          isDefaultAccount: account.isDefaultAccount,
+        },
+      })),
+    });
+  }
+
+  if (runtimeSnapshot) {
+    const channelOrder = runtimeSnapshot.channelOrder || Object.keys(runtimeSnapshot.channels || {});
+    for (const rawChannelId of channelOrder) {
+      const channelId = rawChannelId === 'openclaw-weixin' ? 'wechat' : rawChannelId;
+      const type = channelId as ChannelType;
+      const summary = (runtimeSnapshot.channels as Record<string, unknown> | undefined)?.[rawChannelId] as Record<string, unknown> | undefined;
+      const summaryError =
+        typeof (summary as { error?: string })?.error === 'string'
+          ? (summary as { error?: string }).error
+          : typeof (summary as { lastError?: string })?.lastError === 'string'
+            ? (summary as { lastError?: string }).lastError
+            : undefined;
+      const defaultAccountId = runtimeSnapshot.channelDefaultAccountId?.[rawChannelId];
+      const runtimeAccounts = runtimeSnapshot.channelAccounts?.[rawChannelId] || [];
+      const existing = groups.get(type) || {
+        type,
+        name: type,
+        status: 'unknown' as const,
+        configured: false,
+        runtimeLoaded: false,
+        runtimeStatus: 'unknown' as const,
+        pluginLoaded: false,
+        defaultAccountId,
+        configuredAccounts: [],
+        accounts: [],
+      };
+
+      const accountMap = new Map(existing.accounts.map((account) => [account.accountId, account]));
+      for (const runtimeAccount of runtimeAccounts) {
+        if (!shouldKeepRuntimeAccount(runtimeAccount)) continue;
+        const accountId = runtimeAccount.accountId || 'default';
+        const status = mapAccountStatus(runtimeAccount);
+        const prior = accountMap.get(accountId);
+        accountMap.set(accountId, {
+          id: `${type}:${accountId}`,
+          type,
+          name: runtimeAccount.name || prior?.name || type,
+          status,
+          configured: runtimeAccount.configured ?? prior?.configured ?? true,
+          runtimeLoaded: true,
+          runtimeStatus: status,
+          accountId,
+          isDefaultAccount: accountId === (defaultAccountId || existing.defaultAccountId || 'default'),
+          error: runtimeAccount.lastError || summaryError || prior?.error,
+          metadata: {
+            ...prior?.metadata,
+            isDefaultAccount: accountId === (defaultAccountId || existing.defaultAccountId || 'default'),
+          },
+        });
+      }
+
+      const nextGroup: ChannelGroupView = {
+        ...existing,
+        configured: existing.configured || runtimeAccounts.some((account) => account.configured === true),
+        runtimeLoaded: true,
+        pluginLoaded: true,
+        defaultAccountId: defaultAccountId || existing.defaultAccountId,
+        configuredAccounts: Array.from(new Set([
+          ...existing.configuredAccounts,
+          ...runtimeAccounts
+            .filter((account) => account.configured === true)
+            .map((account) => account.accountId || 'default'),
+        ])),
+        accounts: Array.from(accountMap.values()).sort((left, right) => {
+          if (left.isDefaultAccount !== right.isDefaultAccount) {
+            return left.isDefaultAccount ? -1 : 1;
+          }
+          return left.accountId.localeCompare(right.accountId);
+        }),
+        error: summaryError || existing.error,
+        runtimeStatus: 'unknown',
+        status: 'unknown',
+      };
+      nextGroup.runtimeStatus = resolveGroupStatus(nextGroup);
+      nextGroup.status = nextGroup.runtimeStatus;
+      groups.set(type, nextGroup);
+    }
+  }
+
+  return Array.from(groups.values())
+    .map((group) => {
+      const status = resolveGroupStatus(group);
+      return {
+        ...group,
+        name: group.name === group.type ? group.type : group.name,
+        status,
+        runtimeStatus: group.runtimeLoaded ? status : group.runtimeStatus,
+      };
+    })
+    .filter((group) =>
+      group.configured
+      || group.accounts.some((account) => account.configured || account.status === 'connected' || account.status === 'connecting' || Boolean(account.error)),
+    );
+}
+
+function scheduleGatewayChannelRefresh(ctx: HostApiContext, channelType: string, reason: string): void {
+  const action = FORCE_RESTART_CHANNELS.has(channelType) ? 'restart' : 'reload';
+  void runGatewayRefresh(ctx, {
+    action,
     source: reason,
     reason,
-    delayMs: 2000,
+    delayMs: action === 'restart' ? 2000 : 1200,
+    mode: 'debounced',
+    awaitCompletion: false,
   });
-  ctx.gatewayManager.debouncedRestart();
 }
 
 async function ensureDingTalkPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
   return ensureBundledPluginInstalled('dingtalk', 'DingTalk');
+}
+
+async function ensureFeishuPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
+  return ensureBundledPluginInstalled('feishu-openclaw-plugin', 'Feishu / Lark');
 }
 
 async function ensureWeComPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
@@ -196,7 +463,7 @@ async function awaitWeChatQrLogin(
       enabled: true,
       __accountId: normalizedAccountId,
     });
-    scheduleGatewayChannelRestart(ctx, `channel:saveConfig:${WECHAT_RUNTIME_CHANNEL_ID}`);
+    scheduleGatewayChannelRefresh(ctx, WECHAT_RUNTIME_CHANNEL_ID, `channel:saveConfig:${WECHAT_RUNTIME_CHANNEL_ID}`);
 
     if (!isActiveQrLogin(loginKey, sessionKey)) {
       return;
@@ -226,18 +493,15 @@ export async function handleChannelRoutes(
   url: URL,
   ctx: HostApiContext,
 ): Promise<boolean> {
-  if (url.pathname === '/api/channels/configured' && req.method === 'GET') {
-    const groups = await listConfiguredChannelGroups();
-    sendJson(res, 200, {
-      success: true,
-      channels: groups.map((group) => group.type),
-      accountsByType: Object.fromEntries(
-        groups
-          .filter((group) => group.accounts.length > 0)
-          .map((group) => [group.type, group.accounts.map((account) => account.accountId)]),
-      ),
-      groups,
-    });
+  if (url.pathname === '/api/channels/accounts' && req.method === 'GET') {
+    try {
+      const includeRuntime = url.searchParams.get('includeRuntime') !== 'false';
+      const probe = url.searchParams.get('probe') === 'true';
+      const channels = await buildChannelAccountsView(ctx, { includeRuntime, probe });
+      sendJson(res, 200, { success: true, channels });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
     return true;
   }
 
@@ -362,6 +626,13 @@ export async function handleChannelRoutes(
           return true;
         }
       }
+      if (runtimeChannelType === 'feishu') {
+        const installResult = await ensureFeishuPluginInstalled();
+        if (!installResult.installed) {
+          sendJson(res, 500, { success: false, error: installResult.warning || 'Feishu plugin install failed' });
+          return true;
+        }
+      }
       if (runtimeChannelType === 'wecom') {
         const installResult = await ensureWeComPluginInstalled();
         if (!installResult.installed) {
@@ -385,7 +656,7 @@ export async function handleChannelRoutes(
       }
       await saveChannelConfig(body.channelType, body.config);
       if (!body.skipRestart) {
-        scheduleGatewayChannelRestart(ctx, `channel:saveConfig:${runtimeChannelType}`);
+        scheduleGatewayChannelRefresh(ctx, runtimeChannelType, `channel:saveConfig:${runtimeChannelType}`);
       }
       sendJson(res, 200, { success: true });
     } catch (error) {
@@ -405,7 +676,7 @@ export async function handleChannelRoutes(
     try {
       const body = await parseJsonBody<{ channelType: string; enabled: boolean; accountId?: string }>(req);
       await setChannelEnabled(body.channelType, body.enabled, body.accountId);
-      scheduleGatewayChannelRestart(ctx, `channel:setEnabled:${body.channelType}`);
+      scheduleGatewayChannelRefresh(ctx, toRuntimeChannelType(body.channelType), `channel:setEnabled:${body.channelType}`);
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -432,8 +703,12 @@ export async function handleChannelRoutes(
       const channelType = decodeURIComponent(url.pathname.slice('/api/channels/config/'.length));
       const accountId = url.searchParams.get('accountId');
       await deleteChannelConfig(channelType, accountId);
-      await clearChannelBinding(channelType, undefined, accountId || undefined).catch(() => undefined);
-      scheduleGatewayChannelRestart(ctx, `channel:deleteConfig:${channelType}`);
+      if (accountId) {
+        await clearChannelBinding(channelType, undefined, accountId).catch(() => undefined);
+      } else {
+        await clearAllChannelBindings(channelType).catch(() => undefined);
+      }
+      scheduleGatewayChannelRefresh(ctx, toRuntimeChannelType(channelType), `channel:deleteConfig:${channelType}`);
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

@@ -19,7 +19,7 @@ import {
 } from '../../utils/store';
 import { syncMemorySettingsToOpenClaw } from '../../utils/openclaw-auth';
 import type { HostApiContext } from '../context';
-import { emitGatewayLifecycleEvent } from '../gateway-lifecycle';
+import { runGatewayRefresh } from '../gateway-refresh';
 import { parseJsonBody, sendJson } from '../route-utils';
 
 type CleanupDataRequest = {
@@ -89,15 +89,40 @@ function patchTouchesMemory(patch: Partial<AppSettings>): boolean {
     || Object.prototype.hasOwnProperty.call(patch, 'memorySearchEnabled');
 }
 
-async function handleMemorySettingsChange(ctx: HostApiContext): Promise<void> {
-  const settings = await getAllSettings();
-  await syncMemorySettingsToOpenClaw({
-    sessionMemoryEnabled: settings.sessionMemoryEnabled,
-    memorySearchEnabled: settings.memorySearchEnabled,
-  });
-  if (ctx.gatewayManager.getStatus().state === 'running') {
-    await ctx.gatewayManager.restart();
+async function applyRuntimeSettingsSideEffects(
+  ctx: HostApiContext,
+  options: {
+    source: string;
+    proxyChanged?: boolean;
+    memoryChanged?: boolean;
+  },
+): Promise<void> {
+  const proxyChanged = options.proxyChanged === true;
+  const memoryChanged = options.memoryChanged === true;
+  if (!proxyChanged && !memoryChanged) {
+    return;
   }
+
+  const settings = await getAllSettings();
+
+  if (proxyChanged) {
+    await applyProxySettings(settings);
+  }
+
+  if (memoryChanged) {
+    await syncMemorySettingsToOpenClaw({
+      sessionMemoryEnabled: settings.sessionMemoryEnabled,
+      memorySearchEnabled: settings.memorySearchEnabled,
+    });
+  }
+
+  await runGatewayRefresh(ctx, {
+    action: 'restart',
+    source: options.source,
+    reason: options.source,
+    mode: 'immediate',
+    awaitCompletion: true,
+  });
 }
 
 function isPathWithin(root: string, target: string): boolean {
@@ -479,20 +504,6 @@ async function performCleanup(
   return result;
 }
 
-async function handleProxySettingsChange(ctx: HostApiContext): Promise<void> {
-  const settings = await getAllSettings();
-  await applyProxySettings(settings);
-  if (ctx.gatewayManager.getStatus().state === 'running') {
-    emitGatewayLifecycleEvent(ctx, {
-      phase: 'scheduled',
-      action: 'restart',
-      source: 'settings.proxy',
-      reason: 'settings.proxy',
-    });
-    await ctx.gatewayManager.restart();
-  }
-}
-
 function patchTouchesProxy(patch: Partial<AppSettings>): boolean {
   return Object.keys(patch).some((key) => (
     key === 'proxyMode' ||
@@ -524,23 +535,19 @@ export async function handleSettingsRoutes(
       for (const [key, value] of entries) {
         await setSetting(key, value);
       }
-      if (patchTouchesProxy(patch)) {
-        await handleProxySettingsChange(ctx);
-      }
-      if (patchTouchesMemory(patch)) {
-        await handleMemorySettingsChange(ctx);
-      }
+      const proxyChanged = patchTouchesProxy(patch);
+      const memoryChanged = patchTouchesMemory(patch);
+      await applyRuntimeSettingsSideEffects(ctx, {
+        source: proxyChanged && memoryChanged
+          ? 'settings.update'
+          : proxyChanged
+            ? 'settings.proxy'
+            : 'settings.memory',
+        proxyChanged,
+        memoryChanged,
+      });
       sendJson(res, 200, { success: true });
     } catch (error) {
-      if (patchTouchesProxy(patch)) {
-        emitGatewayLifecycleEvent(ctx, {
-          phase: 'failed',
-          action: 'restart',
-          source: 'settings.proxy',
-          reason: 'settings.proxy',
-          error: String(error),
-        });
-      }
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;
@@ -561,39 +568,26 @@ export async function handleSettingsRoutes(
     try {
       const body = await parseJsonBody<{ value: AppSettings[keyof AppSettings] }>(req);
       await setSetting(key, body.value);
-      if (
+      const proxyChanged =
         key === 'proxyEnabled' ||
         key === 'proxyMode' ||
         key === 'proxyServer' ||
         key === 'proxyHttpServer' ||
         key === 'proxyHttpsServer' ||
         key === 'proxyAllServer' ||
-        key === 'proxyBypassRules'
-      ) {
-        await handleProxySettingsChange(ctx);
-      }
-      if (key === 'sessionMemoryEnabled' || key === 'memorySearchEnabled') {
-        await handleMemorySettingsChange(ctx);
-      }
+        key === 'proxyBypassRules';
+      const memoryChanged = key === 'sessionMemoryEnabled' || key === 'memorySearchEnabled';
+      await applyRuntimeSettingsSideEffects(ctx, {
+        source: proxyChanged
+          ? 'settings.proxy'
+          : memoryChanged
+            ? 'settings.memory'
+            : 'settings.update',
+        proxyChanged,
+        memoryChanged,
+      });
       sendJson(res, 200, { success: true });
     } catch (error) {
-      if (
-        key === 'proxyEnabled' ||
-        key === 'proxyMode' ||
-        key === 'proxyServer' ||
-        key === 'proxyHttpServer' ||
-        key === 'proxyHttpsServer' ||
-        key === 'proxyAllServer' ||
-        key === 'proxyBypassRules'
-      ) {
-        emitGatewayLifecycleEvent(ctx, {
-          phase: 'failed',
-          action: 'restart',
-          source: 'settings.proxy',
-          reason: 'settings.proxy',
-          error: String(error),
-        });
-      }
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;
@@ -602,17 +596,13 @@ export async function handleSettingsRoutes(
   if (url.pathname === '/api/settings/reset' && req.method === 'POST') {
     try {
       await resetSettings();
-      await handleProxySettingsChange(ctx);
-      await handleMemorySettingsChange(ctx);
+      await applyRuntimeSettingsSideEffects(ctx, {
+        source: 'settings.reset',
+        proxyChanged: true,
+        memoryChanged: true,
+      });
       sendJson(res, 200, { success: true, settings: await getAllSettings() });
     } catch (error) {
-      emitGatewayLifecycleEvent(ctx, {
-        phase: 'failed',
-        action: 'restart',
-        source: 'settings.proxy',
-        reason: 'settings.proxy',
-        error: String(error),
-      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;

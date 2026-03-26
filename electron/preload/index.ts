@@ -51,10 +51,7 @@ const electronAPI = {
         'window:isMaximized',
         // Settings
         'settings:get',
-        'settings:set',
-        'settings:setMany',
         'settings:getAll',
-        'settings:reset',
         'usage:recentTokenHistory',
         // Update
         'update:status',
@@ -92,16 +89,6 @@ const electronAPI = {
         'cron:delete',
         'cron:toggle',
         'cron:trigger',
-        // Channel Config
-        'channel:saveConfig',
-        'channel:getConfig',
-        'channel:getFormValues',
-        'channel:deleteConfig',
-        'channel:listConfigured',
-        'channel:setEnabled',
-        'channel:validate',
-        'channel:validate',
-        'channel:validateCredentials',
         // WhatsApp
         'channel:requestWhatsAppQr',
         'channel:cancelWhatsAppQr',

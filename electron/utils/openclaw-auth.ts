@@ -28,6 +28,7 @@ import {
 
 const AUTH_STORE_VERSION = 1;
 const AUTH_PROFILE_FILENAME = 'auth-profiles.json';
+const FEISHU_PLUGIN_ID_CANDIDATES = ['openclaw-lark', 'feishu-openclaw-plugin'] as const;
 
 function getOAuthPluginId(provider: string): string {
   return `${provider}-auth`;
@@ -50,6 +51,23 @@ async function ensureDir(dir: string): Promise<void> {
   if (!(await fileExists(dir))) {
     await mkdir(dir, { recursive: true });
   }
+}
+
+async function resolveInstalledFeishuPluginId(): Promise<string | null> {
+  const extensionRoot = join(homedir(), '.openclaw', 'extensions');
+  for (const dirName of FEISHU_PLUGIN_ID_CANDIDATES) {
+    const manifestPath = join(extensionRoot, dirName, 'openclaw.plugin.json');
+    try {
+      const raw = await readFile(manifestPath, 'utf-8');
+      const parsed = JSON.parse(raw) as { id?: unknown };
+      if (typeof parsed.id === 'string' && parsed.id.trim()) {
+        return parsed.id.trim();
+      }
+    } catch {
+      // ignore and try next candidate
+    }
+  }
+  return null;
 }
 
 /** Read a JSON file, returning `null` on any error. */
@@ -1161,6 +1179,96 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
           }
         }
       }
+    }
+  }
+
+  if (plugins && typeof plugins === 'object' && !Array.isArray(plugins)) {
+    const pluginsObj = plugins as Record<string, unknown>;
+    const pEntries = (
+      pluginsObj.entries && typeof pluginsObj.entries === 'object' && !Array.isArray(pluginsObj.entries)
+        ? pluginsObj.entries
+        : {}
+    ) as Record<string, Record<string, unknown>>;
+    if (!pluginsObj.entries || typeof pluginsObj.entries !== 'object' || Array.isArray(pluginsObj.entries)) {
+      pluginsObj.entries = pEntries;
+    }
+
+    const allowArr = Array.isArray(pluginsObj.allow) ? (pluginsObj.allow as string[]) : [];
+    if (!Array.isArray(pluginsObj.allow)) {
+      pluginsObj.allow = allowArr;
+    }
+
+    const installedFeishuId = await resolveInstalledFeishuPluginId();
+    const configuredFeishuId =
+      FEISHU_PLUGIN_ID_CANDIDATES.find((id) => allowArr.includes(id))
+      || FEISHU_PLUGIN_ID_CANDIDATES.find((id) => Boolean(pEntries[id]));
+    const canonicalFeishuId = installedFeishuId || configuredFeishuId || FEISHU_PLUGIN_ID_CANDIDATES[1];
+    const existingFeishuEntry =
+      FEISHU_PLUGIN_ID_CANDIDATES.map((id) => pEntries[id]).find(Boolean) || pEntries.feishu;
+    const hasFeishuChannelConfig = Boolean(
+      config.channels
+      && typeof config.channels === 'object'
+      && (config.channels as Record<string, unknown>).feishu,
+    );
+
+    if (hasFeishuChannelConfig || existingFeishuEntry || configuredFeishuId || installedFeishuId) {
+      const normalizedAllow = allowArr.filter(
+        (id) =>
+          id !== 'feishu'
+          && !FEISHU_PLUGIN_ID_CANDIDATES.includes(id as typeof FEISHU_PLUGIN_ID_CANDIDATES[number]),
+      );
+      normalizedAllow.push(canonicalFeishuId);
+      if (JSON.stringify(normalizedAllow) !== JSON.stringify(allowArr)) {
+        pluginsObj.allow = normalizedAllow;
+        modified = true;
+        console.log(`[sanitize] Normalized plugins.allow for feishu -> ${canonicalFeishuId}`);
+      }
+
+      if (existingFeishuEntry || !pEntries[canonicalFeishuId]) {
+        pEntries[canonicalFeishuId] = {
+          ...(existingFeishuEntry || {}),
+          ...(pEntries[canonicalFeishuId] || {}),
+          enabled: true,
+        };
+        modified = true;
+      }
+      for (const id of FEISHU_PLUGIN_ID_CANDIDATES) {
+        if (id !== canonicalFeishuId && pEntries[id]) {
+          delete pEntries[id];
+          modified = true;
+        }
+      }
+      if (pEntries.feishu?.enabled !== false) {
+        if (pEntries.feishu) {
+          pEntries.feishu.enabled = false;
+          modified = true;
+          console.log('[sanitize] Disabled bare plugins.entries.feishu (canonical plugin is configured)');
+        }
+      }
+    }
+
+    const legacyWecomId = 'wecom-openclaw-plugin';
+    const newWecomId = 'wecom';
+    if (Array.isArray(pluginsObj.allow)) {
+      const allowValues = pluginsObj.allow as string[];
+      const legacyIdx = allowValues.indexOf(legacyWecomId);
+      if (legacyIdx !== -1) {
+        if (!allowValues.includes(newWecomId)) {
+          allowValues[legacyIdx] = newWecomId;
+        } else {
+          allowValues.splice(legacyIdx, 1);
+        }
+        modified = true;
+        console.log(`[sanitize] Migrated plugins.allow: ${legacyWecomId} -> ${newWecomId}`);
+      }
+    }
+    if (pEntries[legacyWecomId]) {
+      if (!pEntries[newWecomId]) {
+        pEntries[newWecomId] = pEntries[legacyWecomId];
+      }
+      delete pEntries[legacyWecomId];
+      modified = true;
+      console.log(`[sanitize] Migrated plugins.entries: ${legacyWecomId} -> ${newWecomId}`);
     }
   }
 

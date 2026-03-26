@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,12 +7,12 @@ import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { useChannelsStore } from '@/stores/channels';
 import { useAgentsStore } from '@/stores/agents';
 import { useGatewayStore } from '@/stores/gateway';
-import { subscribeHostEvent } from '@/lib/host-events';
 import { ChannelConfigModal } from '@/components/channels/ChannelConfigModal';
+import { ChannelLogo as SharedChannelLogo } from '@/components/channels/ChannelLogo';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { cn } from '@/lib/utils';
+import { useGatewayPageRefresh } from '@/lib/use-gateway-page-refresh';
 import {
-  CHANNEL_ICONS,
   CHANNEL_META,
   channelSupportsMultipleAccounts,
   getPrimaryChannels,
@@ -23,70 +23,6 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-
-import telegramIcon from '@/assets/channels/telegram.svg?raw';
-import discordIcon from '@/assets/channels/discord.svg?raw';
-import whatsappIcon from '@/assets/channels/whatsapp.svg?raw';
-import dingtalkIcon from '@/assets/channels/dingtalk.svg?raw';
-import feishuIcon from '@/assets/channels/feishu.svg?raw';
-import wechatIcon from '@/assets/channels/wechat.svg?raw';
-import wecomIcon from '@/assets/channels/wecom.svg?raw';
-import qqIcon from '@/assets/channels/qq.svg?raw';
-
-const CHANNEL_BRAND_STYLES: Partial<Record<ChannelType, { shell: string; icon: string }>> = {
-  telegram: {
-    shell: 'bg-[#27A7E7] border-[#1f8ec7] shadow-[0_10px_24px_rgba(39,167,231,0.22)]',
-    icon: 'brightness-0 invert',
-  },
-  discord: {
-    shell: 'bg-[#5865F2] border-[#4752c4] shadow-[0_10px_24px_rgba(88,101,242,0.22)]',
-    icon: 'brightness-0 invert',
-  },
-  whatsapp: {
-    shell: 'bg-[#25D366] border-[#1faf54] shadow-[0_10px_24px_rgba(37,211,102,0.2)]',
-    icon: 'brightness-0 invert',
-  },
-  wechat: {
-    shell: 'bg-[#07C160] border-[#059c4e] shadow-[0_10px_24px_rgba(7,193,96,0.22)]',
-    icon: '',
-  },
-  feishu: {
-    shell: 'bg-[linear-gradient(135deg,#0F67FF,#00C2FF)] border-[#0f67ff] shadow-[0_10px_24px_rgba(15,103,255,0.22)]',
-    icon: 'brightness-0 invert',
-  },
-  dingtalk: {
-    shell: 'bg-[#1677FF] border-[#0f5fd1] shadow-[0_10px_24px_rgba(22,119,255,0.22)]',
-    icon: 'brightness-0 invert',
-  },
-  wecom: {
-    shell: 'bg-[linear-gradient(135deg,#07C160,#00A1EA)] border-[#07c160] shadow-[0_10px_24px_rgba(7,193,96,0.22)]',
-    icon: 'brightness-0 invert',
-  },
-  qqbot: {
-    shell: 'bg-[linear-gradient(135deg,#12B7F5,#4E8CFF)] border-[#12b7f5] shadow-[0_10px_24px_rgba(18,183,245,0.22)]',
-    icon: 'brightness-0 invert',
-  },
-};
-
-function normalizeChannelSvg(raw: string): string {
-  return raw
-    .replace(/<\?xml[\s\S]*?\?>/gi, '')
-    .replace(/<!DOCTYPE[\s\S]*?>/gi, '')
-    .replace(/fill="(?!none)[^"]*"/gi, 'fill="currentColor"')
-    .replace(/width="[^"]*"/gi, '')
-    .replace(/height="[^"]*"/gi, '');
-}
-
-const CHANNEL_SVG_MARKUP: Partial<Record<ChannelType, string>> = {
-  telegram: normalizeChannelSvg(telegramIcon),
-  discord: normalizeChannelSvg(discordIcon),
-  whatsapp: normalizeChannelSvg(whatsappIcon),
-  wechat: normalizeChannelSvg(wechatIcon),
-  dingtalk: normalizeChannelSvg(dingtalkIcon),
-  feishu: normalizeChannelSvg(feishuIcon),
-  wecom: normalizeChannelSvg(wecomIcon),
-  qqbot: normalizeChannelSvg(qqIcon),
-};
 
 export function Channels() {
   const { t } = useTranslation('channels');
@@ -110,41 +46,12 @@ export function Channels() {
     groupName: string;
   } | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    void fetchAgents();
-    void fetchChannels(false, { includeRuntime: false }).then(() => {
-      if (cancelled) return;
-      if (gatewayStatus.state === 'running') {
-        void fetchChannels(false, { includeRuntime: true });
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchAgents, fetchChannels, gatewayStatus.state]);
-
-  useEffect(() => {
-    const unsubscribeGateway = subscribeHostEvent('gateway:status', () => {
-      void fetchAgents();
-      void fetchChannels(false);
-    });
-    const unsubscribeChannels = subscribeHostEvent('gateway:channel-status', () => {
-      void fetchAgents();
-      void fetchChannels(false);
-    });
-    return () => {
-      unsubscribeGateway();
-      unsubscribeChannels();
-    };
-  }, [fetchAgents, fetchChannels]);
-
-  useEffect(() => {
-    if (gatewayLifecycle.state === 'completed') {
-      void fetchAgents();
-      void fetchChannels(false);
-    }
-  }, [fetchAgents, fetchChannels, gatewayLifecycle.state]);
+  useGatewayPageRefresh({
+    fetchAgents,
+    fetchChannels,
+    gatewayState: gatewayStatus.state,
+    gatewayLifecycleState: gatewayLifecycle.state,
+  });
 
   const configuredGroups = useMemo(
     () => [...channelGroups].sort((left, right) => getPrimaryChannels().indexOf(left.type) - getPrimaryChannels().indexOf(right.type)),
@@ -308,7 +215,7 @@ export function Channels() {
                         className="group relative flex cursor-pointer items-start gap-4 overflow-hidden rounded-[16px] border border-border/60 bg-card/84 p-4 text-left transition-colors hover:border-black/10 hover:bg-accent/45 focus:outline-none focus:ring-2 focus:ring-primary/35 dark:hover:border-white/10"
                       >
                         <div className="mt-0.5 shrink-0">
-                          <ChannelLogo type={type} branded />
+                          <PageChannelLogo type={type} branded />
                         </div>
                         <div className="mt-0.5 flex min-w-0 flex-1 flex-col">
                           <div className="mb-2 flex items-center gap-2">
@@ -434,7 +341,7 @@ function ChannelTypeCard({
     <div className="rounded-[16px] border border-border/60 bg-card/84 p-4 transition-colors hover:border-black/10 dark:hover:border-white/10">
       <div className="flex items-start gap-3.5">
         <div className="mt-0.5 shrink-0">
-          <ChannelLogo type={group.type} branded />
+          <PageChannelLogo type={group.type} branded />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
@@ -574,17 +481,19 @@ function ChannelTypeCard({
                   </div>
                     );
                   })()}
-                  <Button
-                    variant="dangerGhost"
-                    size="icon"
-                    className="ml-3 h-7 w-7 rounded-[10px] shrink-0"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onDeleteAccount(account);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {account.configured ? (
+                    <Button
+                      variant="dangerGhost"
+                      size="icon"
+                      className="ml-3 h-7 w-7 rounded-[10px] shrink-0"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onDeleteAccount(account);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -599,43 +508,18 @@ function ChannelTypeCard({
   );
 }
 
-function ChannelLogo({ type, branded = false }: { type: ChannelType; branded?: boolean }) {
-  const brand = CHANNEL_BRAND_STYLES[type];
-  const shellClass = branded
-    ? brand?.shell ?? 'bg-slate-900 border-slate-800 shadow-[0_10px_24px_rgba(15,23,42,0.16)]'
-    : 'border-border/70 bg-card shadow-sm';
-  const iconClass = branded ? brand?.icon ?? 'brightness-0 invert' : '';
-  const inlineSvg = CHANNEL_SVG_MARKUP[type];
-  const iconToneClass = branded ? 'text-white/95' : 'text-foreground';
-
-  const wrap = (content: React.ReactNode) => (
-    <div className={cn('flex h-[50px] w-[50px] items-center justify-center rounded-[16px] border', shellClass)}>
-      {content}
-    </div>
+function PageChannelLogo({ type, branded = false }: { type: ChannelType; branded?: boolean }) {
+  return (
+    <SharedChannelLogo
+      type={type}
+      branded={branded}
+      sizeClassName="h-[50px] w-[50px]"
+      iconClassName="h-[22px] w-[22px]"
+      shapeClassName="rounded-[16px]"
+      shellClassName="border-border/70 bg-card shadow-sm"
+      fallbackClassName={cn('text-[22px]', branded ? 'text-white/95' : 'text-foreground')}
+    />
   );
-
-  if (inlineSvg) {
-    return wrap(
-      <span
-        aria-hidden="true"
-        className={cn(
-          'inline-flex h-[22px] w-[22px] items-center justify-center [&_svg]:h-full [&_svg]:w-full',
-          iconToneClass,
-          iconClass,
-        )}
-        dangerouslySetInnerHTML={{ __html: inlineSvg }}
-      />,
-    );
-  }
-
-  switch (type) {
-    default:
-      return wrap(
-        <span className={cn('text-[22px]', iconToneClass)}>
-          {CHANNEL_ICONS[type] || '💬'}
-        </span>,
-      );
-  }
 }
 
 function ChannelTypeCardSkeleton() {

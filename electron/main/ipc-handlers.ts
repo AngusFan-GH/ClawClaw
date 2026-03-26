@@ -34,16 +34,6 @@ import {
 import { saveProviderKeyToOpenClaw, removeProviderFromOpenClaw } from '../utils/openclaw-auth';
 import { logger } from '../utils/logger';
 import { syncMemorySettingsToOpenClaw } from '../utils/openclaw-auth';
-import {
-  saveChannelConfig,
-  getChannelConfig,
-  getChannelFormValues,
-  deleteChannelConfig,
-  listConfiguredChannels,
-  setChannelEnabled,
-  validateChannelConfig,
-  validateChannelCredentials,
-} from '../utils/channel-config';
 import { checkUvInstalled, installUv, setupManagedPython } from '../utils/uv-setup';
 import { updateSkillConfig, getSkillConfig, getAllSkillConfigs } from '../utils/skill-config';
 import { whatsAppLoginManager } from '../utils/whatsapp-login';
@@ -66,7 +56,6 @@ import {
 import { validateApiKeyWithProvider } from '../services/providers/provider-validation';
 import { appUpdater } from './updater';
 import { PORTS } from '../utils/config';
-import { ensureBundledPluginInstalled } from '../utils/bundled-plugin-installer';
 
 type AppRequest = {
   id?: string;
@@ -115,7 +104,7 @@ export function registerIpcHandlers(
   registerClawHubHandlers(clawHubService);
 
   // OpenClaw handlers
-  registerOpenClawHandlers(gatewayManager);
+  registerOpenClawHandlers();
 
   // Provider handlers
   registerProviderHandlers(gatewayManager);
@@ -235,26 +224,8 @@ function mapAppErrorCode(error: unknown): AppErrorCode {
   return 'INTERNAL';
 }
 
-function isProxyKey(key: keyof AppSettings): boolean {
-  return (
-    key === 'proxyEnabled' ||
-    key === 'proxyServer' ||
-    key === 'proxyHttpServer' ||
-    key === 'proxyHttpsServer' ||
-    key === 'proxyAllServer' ||
-    key === 'proxyBypassRules'
-  );
-}
-
 function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
   const providerService = getProviderService();
-  const handleProxySettingsChange = async () => {
-    const settings = await getAllSettings();
-    await applyProxySettings(settings);
-    if (gatewayManager.getStatus().state === 'running') {
-      await gatewayManager.restart();
-    }
-  };
 
   ipcMain.handle('app:request', async (_, request: AppRequest): Promise<AppResponse> => {
     if (!request || typeof request.module !== 'string' || typeof request.action !== 'string') {
@@ -706,42 +677,6 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             const key = Array.isArray(payload) ? payload[0] : payload?.key;
             if (!key) throw new Error('Invalid settings.get payload');
             data = await getSetting(key);
-            break;
-          }
-          if (request.action === 'set') {
-            const payload = request.payload as
-              | { key?: keyof AppSettings; value?: AppSettings[keyof AppSettings] }
-              | [keyof AppSettings, AppSettings[keyof AppSettings]]
-              | undefined;
-            const key = Array.isArray(payload) ? payload[0] : payload?.key;
-            const value = Array.isArray(payload) ? payload[1] : payload?.value;
-            if (!key) throw new Error('Invalid settings.set payload');
-            await setSetting(key, value as never);
-            if (isProxyKey(key)) {
-              await handleProxySettingsChange();
-            }
-            data = { success: true };
-            break;
-          }
-          if (request.action === 'setMany') {
-            const patch = (request.payload ?? {}) as Partial<AppSettings>;
-            const entries = Object.entries(patch) as Array<
-              [keyof AppSettings, AppSettings[keyof AppSettings]]
-            >;
-            for (const [key, value] of entries) {
-              await setSetting(key, value as never);
-            }
-            if (entries.some(([key]) => isProxyKey(key))) {
-              await handleProxySettingsChange();
-            }
-            data = { success: true };
-            break;
-          }
-          if (request.action === 'reset') {
-            await resetSettings();
-            const settings = await getAllSettings();
-            await handleProxySettingsChange();
-            data = { success: true, settings };
             break;
           }
           return {
@@ -1428,60 +1363,9 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
 
 /**
  * OpenClaw-related IPC handlers
- * For checking package status and channel configuration
+ * For checking package status and local OpenClaw paths
  */
-function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
-  const scheduleGatewayChannelRestart = (reason: string): void => {
-    if (gatewayManager.getStatus().state !== 'stopped') {
-      logger.info(`Scheduling Gateway restart after ${reason}`);
-      gatewayManager.debouncedRestart();
-    } else {
-      logger.info(`Gateway is stopped; skip immediate restart after ${reason}`);
-    }
-  };
-
-  async function ensureDingTalkPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-    const result = ensureBundledPluginInstalled('dingtalk', 'DingTalk');
-    if (result.installed) {
-      logger.info(
-        result.sourceDir
-          ? `Installed DingTalk plugin from bundled mirror: ${result.sourceDir}`
-          : 'DingTalk plugin already installed from local mirror'
-      );
-    } else if (result.warning) {
-      logger.warn(result.warning);
-    }
-    return result;
-  }
-
-  async function ensureWeComPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-    const result = ensureBundledPluginInstalled('wecom', 'WeCom');
-    if (result.installed) {
-      logger.info(
-        result.sourceDir
-          ? `Installed WeCom plugin from bundled mirror: ${result.sourceDir}`
-          : 'WeCom plugin already installed from local mirror'
-      );
-    } else if (result.warning) {
-      logger.warn(result.warning);
-    }
-    return result;
-  }
-
-  async function ensureQQBotPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-    const result = ensureBundledPluginInstalled('qqbot', 'QQ Bot');
-    if (result.installed) {
-      logger.info(
-        result.sourceDir
-          ? `Installed QQ Bot plugin from bundled mirror: ${result.sourceDir}`
-          : 'QQ Bot plugin already installed from local mirror'
-      );
-    } else if (result.warning) {
-      logger.warn(result.warning);
-    }
-    return result;
-  }
-
+function registerOpenClawHandlers(): void {
   // Get OpenClaw package status
   ipcMain.handle('openclaw:status', () => {
     const status = getOpenClawStatus();
@@ -1532,161 +1416,6 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
       return { success: false, error: String(error) };
     }
   });
-
-  // ==================== Channel Configuration Handlers ====================
-
-  // Save channel configuration
-  ipcMain.handle(
-    'channel:saveConfig',
-    async (_, channelType: string, config: Record<string, unknown>) => {
-      try {
-        logger.info('channel:saveConfig', { channelType, keys: Object.keys(config || {}) });
-        if (channelType === 'dingtalk') {
-          const installResult = await ensureDingTalkPluginInstalled();
-          if (!installResult.installed) {
-            return {
-              success: false,
-              error: installResult.warning || 'DingTalk plugin install failed',
-            };
-          }
-          await saveChannelConfig(channelType, config);
-          scheduleGatewayChannelRestart(`channel:saveConfig (${channelType})`);
-          return {
-            success: true,
-            pluginInstalled: installResult.installed,
-            warning: installResult.warning,
-          };
-        }
-        if (channelType === 'wecom') {
-          const installResult = await ensureWeComPluginInstalled();
-          if (!installResult.installed) {
-            return {
-              success: false,
-              error: installResult.warning || 'WeCom plugin install failed',
-            };
-          }
-          await saveChannelConfig(channelType, config);
-          scheduleGatewayChannelRestart(`channel:saveConfig (${channelType})`);
-          return {
-            success: true,
-            pluginInstalled: installResult.installed,
-            warning: installResult.warning,
-          };
-        }
-        if (channelType === 'qqbot') {
-          const installResult = await ensureQQBotPluginInstalled();
-          if (!installResult.installed) {
-            return {
-              success: false,
-              error: installResult.warning || 'QQ Bot plugin install failed',
-            };
-          }
-          await saveChannelConfig(channelType, config);
-          if (gatewayManager.getStatus().state !== 'stopped') {
-            logger.info(`Scheduling Gateway reload after channel:saveConfig (${channelType})`);
-            gatewayManager.debouncedReload();
-          } else {
-            logger.info(
-              `Gateway is stopped; skip immediate reload after channel:saveConfig (${channelType})`
-            );
-          }
-          return {
-            success: true,
-            pluginInstalled: installResult.installed,
-            warning: installResult.warning,
-          };
-        }
-        await saveChannelConfig(channelType, config);
-        scheduleGatewayChannelRestart(`channel:saveConfig (${channelType})`);
-        return { success: true };
-      } catch (error) {
-        console.error('Failed to save channel config:', error);
-        return { success: false, error: String(error) };
-      }
-    }
-  );
-
-  // Get channel configuration
-  ipcMain.handle('channel:getConfig', async (_, channelType: string) => {
-    try {
-      const config = await getChannelConfig(channelType);
-      return { success: true, config };
-    } catch (error) {
-      console.error('Failed to get channel config:', error);
-      return { success: false, error: String(error) };
-    }
-  });
-
-  // Get channel form values (reverse-transformed for UI pre-fill)
-  ipcMain.handle('channel:getFormValues', async (_, channelType: string) => {
-    try {
-      const values = await getChannelFormValues(channelType);
-      return { success: true, values };
-    } catch (error) {
-      console.error('Failed to get channel form values:', error);
-      return { success: false, error: String(error) };
-    }
-  });
-
-  // Delete channel configuration
-  ipcMain.handle('channel:deleteConfig', async (_, channelType: string) => {
-    try {
-      await deleteChannelConfig(channelType);
-      scheduleGatewayChannelRestart(`channel:deleteConfig (${channelType})`);
-      return { success: true };
-    } catch (error) {
-      console.error('Failed to delete channel config:', error);
-      return { success: false, error: String(error) };
-    }
-  });
-
-  // List configured channels
-  ipcMain.handle('channel:listConfigured', async () => {
-    try {
-      const channels = await listConfiguredChannels();
-      return { success: true, channels };
-    } catch (error) {
-      console.error('Failed to list channels:', error);
-      return { success: false, error: String(error) };
-    }
-  });
-
-  // Enable or disable a channel
-  ipcMain.handle('channel:setEnabled', async (_, channelType: string, enabled: boolean) => {
-    try {
-      await setChannelEnabled(channelType, enabled);
-      scheduleGatewayChannelRestart(`channel:setEnabled (${channelType}, enabled=${enabled})`);
-      return { success: true };
-    } catch (error) {
-      console.error('Failed to set channel enabled:', error);
-      return { success: false, error: String(error) };
-    }
-  });
-
-  // Validate channel configuration
-  ipcMain.handle('channel:validate', async (_, channelType: string) => {
-    try {
-      const result = await validateChannelConfig(channelType);
-      return { success: true, ...result };
-    } catch (error) {
-      console.error('Failed to validate channel:', error);
-      return { success: false, valid: false, errors: [String(error)], warnings: [] };
-    }
-  });
-
-  // Validate channel credentials by calling actual service APIs (before saving)
-  ipcMain.handle(
-    'channel:validateCredentials',
-    async (_, channelType: string, config: Record<string, string>) => {
-      try {
-        const result = await validateChannelCredentials(channelType, config);
-        return { success: true, ...result };
-      } catch (error) {
-        console.error('Failed to validate channel credentials:', error);
-        return { success: false, valid: false, errors: [String(error)], warnings: [] };
-      }
-    }
-  );
 }
 
 /**
@@ -2218,28 +1947,7 @@ function registerAppHandlers(): void {
 }
 
 function registerSettingsHandlers(gatewayManager: GatewayManager): void {
-  const handleProxySettingsChange = async () => {
-    const settings = await getAllSettings();
-    await applyProxySettings(settings);
-    if (gatewayManager.getStatus().state === 'running') {
-      await gatewayManager.restart();
-    }
-  };
-
-  const patchTouchesMemorySettings = (patch: Partial<AppSettings>): boolean =>
-    Object.prototype.hasOwnProperty.call(patch, 'sessionMemoryEnabled')
-    || Object.prototype.hasOwnProperty.call(patch, 'memorySearchEnabled');
-
-  const handleMemorySettingsChange = async () => {
-    const settings = await getAllSettings();
-    await syncMemorySettingsToOpenClaw({
-      sessionMemoryEnabled: settings.sessionMemoryEnabled,
-      memorySearchEnabled: settings.memorySearchEnabled,
-    });
-    if (gatewayManager.getStatus().state === 'running') {
-      await gatewayManager.restart();
-    }
-  };
+  void gatewayManager;
 
   ipcMain.handle('settings:get', async (_, key: keyof AppSettings) => {
     return await getSetting(key);
@@ -2249,66 +1957,6 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
     return await getAllSettings();
   });
 
-  ipcMain.handle(
-    'settings:set',
-    async (_, key: keyof AppSettings, value: AppSettings[keyof AppSettings]) => {
-      await setSetting(key, value as never);
-
-      if (
-        key === 'proxyEnabled' ||
-        key === 'proxyMode' ||
-        key === 'proxyServer' ||
-        key === 'proxyHttpServer' ||
-        key === 'proxyHttpsServer' ||
-        key === 'proxyAllServer' ||
-        key === 'proxyBypassRules'
-      ) {
-        await handleProxySettingsChange();
-      }
-      if (key === 'sessionMemoryEnabled' || key === 'memorySearchEnabled') {
-        await handleMemorySettingsChange();
-      }
-
-      return { success: true };
-    }
-  );
-
-  ipcMain.handle('settings:setMany', async (_, patch: Partial<AppSettings>) => {
-    const entries = Object.entries(patch) as Array<
-      [keyof AppSettings, AppSettings[keyof AppSettings]]
-    >;
-    for (const [key, value] of entries) {
-      await setSetting(key, value as never);
-    }
-
-    if (
-      entries.some(
-        ([key]) =>
-          key === 'proxyEnabled' ||
-          key === 'proxyMode' ||
-          key === 'proxyServer' ||
-          key === 'proxyHttpServer' ||
-          key === 'proxyHttpsServer' ||
-          key === 'proxyAllServer' ||
-          key === 'proxyBypassRules'
-      )
-    ) {
-      await handleProxySettingsChange();
-    }
-    if (patchTouchesMemorySettings(patch)) {
-      await handleMemorySettingsChange();
-    }
-
-    return { success: true };
-  });
-
-  ipcMain.handle('settings:reset', async () => {
-    await resetSettings();
-    const settings = await getAllSettings();
-    await handleProxySettingsChange();
-    await handleMemorySettingsChange();
-    return { success: true, settings };
-  });
 }
 function registerUsageHandlers(): void {
   ipcMain.handle('usage:recentTokenHistory', async (_, limit?: number) => {

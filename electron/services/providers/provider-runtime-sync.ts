@@ -84,13 +84,7 @@ function buildAgentProviderModels(
   return modelIds.map((id) => ({
     id,
     name: id,
-    ...(providerType === 'vllm' && disableTools
-      ? {
-        compat: {
-          supportsTools: false,
-        },
-      }
-      : {}),
+    ...(providerType === 'vllm' && disableTools ? { compat: { supportsTools: false } } : {}),
   }));
 }
 
@@ -335,10 +329,12 @@ export async function getProviderFallbackModelRefs(config: ProviderConfig): Prom
   return results;
 }
 
-function scheduleGatewayRestart(
+type GatewayRefreshMode = 'reload' | 'restart';
+
+function scheduleGatewayRefresh(
   gatewayManager: GatewayManager | undefined,
   message: string,
-  options?: { delayMs?: number; onlyIfRunning?: boolean },
+  options?: { delayMs?: number; onlyIfRunning?: boolean; mode?: GatewayRefreshMode },
 ): void {
   if (!gatewayManager) {
     return;
@@ -349,7 +345,11 @@ function scheduleGatewayRestart(
   }
 
   logger.info(message);
-  gatewayManager.debouncedRestart(options?.delayMs);
+  if (options?.mode === 'restart') {
+    gatewayManager.debouncedRestart(options?.delayMs);
+    return;
+  }
+  gatewayManager.debouncedReload(options?.delayMs);
 }
 
 export async function syncProviderApiKeyToRuntime(
@@ -467,7 +467,7 @@ async function resolveRuntimeSyncContext(config: ProviderConfig): Promise<Runtim
     runtimeProviderKey,
     meta,
     api,
-    disableTools: config.type === 'vllm' && account?.metadata?.vllmEnableTools !== true,
+    disableTools: config.type === 'vllm',
   };
 }
 
@@ -553,7 +553,7 @@ export async function syncSavedProviderToRuntime(
   await rebuildOpenClawModelAllowlistFromAccounts();
   await reconcileRuntimeProvidersFromAccounts();
 
-  scheduleGatewayRestart(
+  scheduleGatewayRefresh(
     gatewayManager,
     `Scheduling Gateway restart after saving provider "${context.runtimeProviderKey}" config`,
   );
@@ -607,7 +607,7 @@ export async function syncUpdatedProviderToRuntime(
   await rebuildOpenClawModelAllowlistFromAccounts();
   await reconcileRuntimeProvidersFromAccounts();
 
-  scheduleGatewayRestart(
+  scheduleGatewayRefresh(
     gatewayManager,
     `Scheduling Gateway restart after updating provider "${ock}" config`,
   );
@@ -633,7 +633,7 @@ export async function syncDeletedProviderToRuntime(
   await rebuildOpenClawModelAllowlistFromAccounts();
   await reconcileRuntimeProvidersFromAccounts();
 
-  scheduleGatewayRestart(
+  scheduleGatewayRefresh(
     gatewayManager,
     `Scheduling Gateway restart after deleting provider "${ock}"`,
   );
@@ -679,7 +679,7 @@ export async function syncDefaultProviderToRuntime(
       await setOpenClawDefaultModelWithOverride(ock, modelOverride, {
         baseUrl: provider.baseUrl,
         api: provider.apiProtocol || 'openai-completions',
-        disableTools: provider.type === 'vllm' && account?.metadata?.vllmEnableTools !== true,
+        disableTools: provider.type === 'vllm',
       }, fallbackModels);
     } else if (shouldUseExplicitDefaultOverride(provider, ock)) {
       await setOpenClawDefaultModelWithOverride(ock, modelOverride, {
@@ -716,9 +716,10 @@ export async function syncDefaultProviderToRuntime(
 
       await setOpenClawDefaultModel(GOOGLE_OAUTH_RUNTIME_PROVIDER, modelOverride, fallbackModels);
       logger.info(`Configured openclaw.json for Google browser OAuth provider "${provider.id}"`);
-      scheduleGatewayRestart(
+      scheduleGatewayRefresh(
         gatewayManager,
         `Scheduling Gateway restart after provider switch to "${GOOGLE_OAUTH_RUNTIME_PROVIDER}"`,
+        { mode: 'restart' },
       );
       return;
     }
@@ -742,9 +743,10 @@ export async function syncDefaultProviderToRuntime(
 
       await setOpenClawDefaultModel(OPENAI_OAUTH_RUNTIME_PROVIDER, modelOverride, fallbackModels);
       logger.info(`Configured openclaw.json for OpenAI OAuth provider "${provider.id}"`);
-      scheduleGatewayRestart(
+      scheduleGatewayRefresh(
         gatewayManager,
         `Scheduling Gateway restart after provider switch to "${OPENAI_OAUTH_RUNTIME_PROVIDER}"`,
+        { mode: 'restart' },
       );
       return;
     }
@@ -798,7 +800,7 @@ export async function syncDefaultProviderToRuntime(
         ? buildAgentProviderModels(
           provider.type,
           [modelId],
-          provider.type === 'vllm' && account?.metadata?.vllmEnableTools !== true,
+          provider.type === 'vllm',
         )
         : [],
       apiKey: providerKey || undefined,
@@ -808,7 +810,7 @@ export async function syncDefaultProviderToRuntime(
   await rebuildOpenClawModelAllowlistFromAccounts();
   await reconcileRuntimeProvidersFromAccounts();
 
-  scheduleGatewayRestart(
+  scheduleGatewayRefresh(
     gatewayManager,
     `Scheduling Gateway restart after provider switch to "${ock}"`,
     { onlyIfRunning: true },

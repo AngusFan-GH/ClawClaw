@@ -21,7 +21,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -111,13 +110,6 @@ function supportsEditableProtocol(type: ProviderType | string): boolean {
   return type === 'custom' || type === 'local-model';
 }
 
-function shouldDisableToolsForProvider(
-  providerType: ProviderType | string | null | undefined,
-  metadata?: ProviderAccount['metadata'],
-): boolean {
-  return providerType === 'vllm' && metadata?.vllmEnableTools !== true;
-}
-
 type ProviderModelOption = {
   id: string;
   name: string;
@@ -189,49 +181,6 @@ function getAuthModeLabel(
     default:
       return authMode;
   }
-}
-
-function renderProviderCompatibilityNote(
-  providerType: ProviderType | string | null | undefined,
-  t: (key: string) => string,
-): React.ReactNode {
-  if (providerType !== 'vllm') {
-    return null;
-  }
-
-  return (
-    <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-[12px] text-amber-950 dark:text-amber-100">
-      <p className="font-semibold">{t('aiProviders.dialog.compatibilityTitle')}</p>
-      <p className="mt-1 leading-5">{t('aiProviders.dialog.vllmToolWarning')}</p>
-    </div>
-  );
-}
-
-function renderVllmToolCallingToggle(
-  providerType: ProviderType | string | null | undefined,
-  enabled: boolean,
-  onCheckedChange: (checked: boolean) => void,
-  t: (key: string) => string,
-): React.ReactNode {
-  if (providerType !== 'vllm') {
-    return null;
-  }
-
-  return (
-    <div className="rounded-xl border border-black/10 bg-muted/35 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <p className="text-[13px] font-semibold text-foreground">
-            {t('aiProviders.dialog.vllmEnableToolsLabel')}
-          </p>
-          <p className="text-[12px] leading-5 text-muted-foreground">
-            {t('aiProviders.dialog.vllmEnableToolsHelp')}
-          </p>
-        </div>
-        <Switch checked={enabled} onCheckedChange={onCheckedChange} />
-      </div>
-    </div>
-  );
 }
 
 async function resolveProviderModelOptions(payload: {
@@ -678,9 +627,6 @@ function ProviderCard({
   const [baseUrl, setBaseUrl] = useState(account.baseUrl || '');
   const [apiProtocol, setApiProtocol] = useState<ProviderAccount['apiProtocol']>(account.apiProtocol || 'openai-completions');
   const [modelId, setModelId] = useState(account.model || '');
-  const [vllmEnableTools, setVllmEnableTools] = useState(
-    !shouldDisableToolsForProvider(account.vendorId, account.metadata),
-  );
   const [fallbackModelsText, setFallbackModelsText] = useState(
     normalizeFallbackModels(account.fallbackModels).join('\n')
   );
@@ -717,7 +663,6 @@ function ProviderCard({
       setBaseUrl(account.baseUrl || '');
       setApiProtocol(account.apiProtocol || 'openai-completions');
       setModelId(normalizeOAuthSelectedModel(account.vendorId, account.model));
-      setVllmEnableTools(!shouldDisableToolsForProvider(account.vendorId, account.metadata));
       setFallbackModelsText(normalizeFallbackModels(account.fallbackModels).join('\n'));
       setFallbackProviderIds(normalizeFallbackProviderIds(account.fallbackAccountIds));
     }
@@ -823,18 +768,6 @@ function ProviderCard({
         }
         if (!fallbackProviderIdsEqual(fallbackProviderIds, account.fallbackAccountIds)) {
           updates.fallbackProviderIds = normalizeFallbackProviderIds(fallbackProviderIds);
-        }
-        if (account.vendorId === 'vllm') {
-          const nextMetadata: ProviderAccount['metadata'] = {
-            ...(account.metadata || {}),
-            vllmEnableTools,
-          };
-          if (nextMetadata.vllmEnableTools !== account.metadata?.vllmEnableTools) {
-            payload.updates = {
-              ...(payload.updates || updates),
-              metadata: nextMetadata,
-            };
-          }
         }
         if (Object.keys(updates).length > 0) {
           payload.updates = {
@@ -1013,13 +946,6 @@ function ProviderCard({
                   />
                 </div>
               )}
-              {renderProviderCompatibilityNote(account.vendorId, t)}
-              {renderVllmToolCallingToggle(
-                account.vendorId,
-                vllmEnableTools,
-                setVllmEnableTools,
-                t,
-              )}
               {showModelIdField && hasVerifiedModelOptions && (
                 <div className="pt-2">
                   <VerifiedModelSelect
@@ -1194,7 +1120,6 @@ function ProviderCard({
                       && (baseUrl.trim() || undefined) === (account.baseUrl || undefined)
                       && apiProtocol === (account.apiProtocol || 'openai-completions')
                       && (modelId.trim() || undefined) === (account.model || undefined)
-                      && vllmEnableTools === !shouldDisableToolsForProvider(account.vendorId, account.metadata)
                       && fallbackModelsEqual(normalizeFallbackModels(fallbackModelsText.split('\n')), account.fallbackModels)
                       && fallbackProviderIdsEqual(fallbackProviderIds, account.fallbackAccountIds)
                     )
@@ -1266,7 +1191,6 @@ function AddProviderDialog({
   const [baseUrl, setBaseUrl] = useState('');
   const [modelId, setModelId] = useState('');
   const [apiProtocol, setApiProtocol] = useState<ProviderAccount['apiProtocol']>('openai-completions');
-  const [vllmEnableTools, setVllmEnableTools] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -1358,10 +1282,6 @@ function AddProviderDialog({
     setResolvedModelsError(null);
     setResolvedRuntimeProviderId(null);
   }, [selectedType, authMode]);
-
-  useEffect(() => {
-    setVllmEnableTools(false);
-  }, [selectedType]);
 
   useEffect(() => {
     if (!selectedType || !showEditableModelField || useOAuthFlow) {
@@ -1719,7 +1639,6 @@ function AddProviderDialog({
           model: resolveProviderModelForSave(typeInfo, modelId, devModeUnlocked),
           metadata: {
             ...(mode === 'local-model' ? { localModel: true } : {}),
-            ...(selectedType === 'vllm' ? { vllmEnableTools } : {}),
           },
           authMode: useOAuthFlow ? (preferredOAuthMode || 'oauth_device') : ((selectedType === 'ollama' || ((selectedType === 'custom' || selectedType === 'local-model') && !apiKey.trim())) && mode !== 'local-model')
             ? 'local'
@@ -1948,14 +1867,6 @@ function AddProviderDialog({
                     ) : null}
                   </div>
                 )}
-                {renderProviderCompatibilityNote(selectedType, t)}
-                {renderVllmToolCallingToggle(
-                  selectedType,
-                  vllmEnableTools,
-                  setVllmEnableTools,
-                  t,
-                )}
-
                 {resolvedRuntimeProviderId ? (
                   <div className="rounded-xl border border-black/10 bg-muted/35 px-4 py-3 text-[13px] dark:border-white/10 dark:bg-white/[0.04]">
                     <div className="text-muted-foreground">{t('aiProviders.card.runtimeProvider')}</div>

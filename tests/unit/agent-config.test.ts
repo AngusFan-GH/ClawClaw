@@ -183,4 +183,53 @@ describe('agent config lifecycle', () => {
     warnSpy.mockRestore();
     infoSpy.mockRestore();
   });
+
+  it('clears all bindings for a deleted channel type', async () => {
+    await writeOpenClawJson({
+      agents: {
+        list: [
+          { id: 'main', name: 'Main', default: true },
+          { id: 'alpha', name: 'Alpha' },
+          { id: 'beta', name: 'Beta' },
+        ],
+      },
+      bindings: [
+        {
+          agentId: 'alpha',
+          match: {
+            channel: 'wecom',
+          },
+        },
+        {
+          agentId: 'beta',
+          match: {
+            channel: 'wecom',
+            accountId: 'corp-b',
+          },
+        },
+        {
+          agentId: 'beta',
+          match: {
+            channel: 'telegram',
+          },
+        },
+      ],
+    });
+
+    const { clearAllChannelBindings } = await import('@electron/utils/agent-config');
+    const snapshot = await clearAllChannelBindings('wecom');
+
+    expect(snapshot.channelOwners.wecom).toBeUndefined();
+    expect(snapshot.channelAccountOwners['wecom:corp-b']).toBeUndefined();
+
+    const config = await readOpenClawJson();
+    expect(config.bindings).toEqual([
+      {
+        agentId: 'beta',
+        match: {
+          channel: 'telegram',
+        },
+      },
+    ]);
+  });
 });

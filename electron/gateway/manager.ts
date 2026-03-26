@@ -40,6 +40,7 @@ import { GatewayConnectionMonitor } from './connection-monitor';
 import { GatewayLifecycleController, LifecycleSupersededError } from './lifecycle-controller';
 import { launchGatewayProcess } from './process-launcher';
 import { GatewayRestartController } from './restart-controller';
+import { GatewayRestartGovernor } from './restart-governor';
 import { classifyGatewayStderrMessage, recordGatewayStartupStderrLine } from './startup-stderr';
 import { runGatewayStartupSequence } from './startup-orchestrator';
 
@@ -96,6 +97,7 @@ export class GatewayManager extends EventEmitter {
   private readonly connectionMonitor = new GatewayConnectionMonitor();
   private readonly lifecycleController = new GatewayLifecycleController();
   private readonly restartController = new GatewayRestartController();
+  private readonly restartGovernor = new GatewayRestartGovernor();
   private reloadDebounceTimer: NodeJS.Timeout | null = null;
   private externalShutdownSupported: boolean | null = null;
   private pendingExpectedReconnectDelayMs: number | null = null;
@@ -108,6 +110,9 @@ export class GatewayManager extends EventEmitter {
         this.emit('status', status);
       },
       onTransition: (previousState, nextState) => {
+        if (nextState === 'running') {
+          this.restartGovernor.onRunning();
+        }
         this.restartController.flushDeferredRestart(
           `status:${previousState}->${nextState}`,
           {
@@ -533,6 +538,16 @@ export class GatewayManager extends EventEmitter {
 
     logger.debug('Gateway restart requested');
     this.restartInFlight = (async () => {
+      const decision = this.restartGovernor.decide();
+      if (!decision.allow) {
+        logger.warn(
+          `Gateway restart suppressed (${decision.reason}); retrying in ${decision.retryAfterMs}ms`,
+        );
+        this.debouncedRestart(Math.max(250, decision.retryAfterMs));
+        return;
+      }
+      this.restartGovernor.recordExecuted();
+
       const strategy = options?.strategy ?? 'auto';
       const canUseInPlaceRestart =
         strategy === 'auto' &&

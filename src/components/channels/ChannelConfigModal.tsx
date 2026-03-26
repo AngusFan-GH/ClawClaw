@@ -310,7 +310,6 @@ export function ChannelConfigModal({
           if (!saveResult?.success) {
             throw new Error(saveResult?.error || 'Failed to save WhatsApp config');
           }
-          useGatewayStore.getState().restart().catch(console.error);
         }
         await finishSave(channelType);
         onClose();
