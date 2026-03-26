@@ -1671,16 +1671,23 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
 export async function listConfiguredChannels(options?: { includeCli?: boolean }): Promise<string[]> {
     const config = await readOpenClawConfig();
     migrateLegacyWechatSection(config);
+    return listConfiguredChannelsFromConfig(config, options);
+}
+
+export function listConfiguredChannelsFromConfig(
+    config: Record<string, unknown>,
+    options?: { includeCli?: boolean },
+): string[] {
     const channels = new Set<string>();
     const includeCli = options?.includeCli ?? process.platform !== 'win32';
 
     if (includeCli) {
-        for (const channelType of await listConfiguredChannelsFromCli()) {
-            channels.add(toUiChannelType(channelType));
-        }
+        // Note: CLI discovery must be done before calling this function.
+        // When called from inside an updater callback, pass includeCli=false
+        // to avoid awaiting a pending CLI call while holding the config write chain.
     }
 
-    if (config.channels) {
+    if (config.channels && typeof config.channels === 'object') {
         for (const [channelType, rawSection] of Object.entries(config.channels)) {
             const section = rawSection as AccountScopedChannelSection | undefined;
             if (!section || section.enabled === false) continue;
@@ -1694,11 +1701,14 @@ export async function listConfiguredChannels(options?: { includeCli?: boolean })
         }
     }
 
-    if (config.plugins?.entries) {
-        for (const [pluginId, pluginConfig] of Object.entries(config.plugins.entries)) {
-            if (pluginConfig?.enabled === false) continue;
-            if (PLUGIN_CHANNELS.includes(pluginId as typeof PLUGIN_CHANNELS[number])) {
-                channels.add(toUiChannelType(pluginId));
+    if (config.plugins && typeof config.plugins === 'object') {
+        const plugins = config.plugins as Record<string, unknown>;
+        if (plugins.entries && typeof plugins.entries === 'object') {
+            for (const [pluginId, pluginConfig] of Object.entries(plugins.entries)) {
+                if (pluginConfig && typeof pluginConfig === 'object' && (pluginConfig as Record<string, unknown>).enabled === false) continue;
+                if (PLUGIN_CHANNELS.includes(pluginId as typeof PLUGIN_CHANNELS[number])) {
+                    channels.add(toUiChannelType(pluginId));
+                }
             }
         }
     }
@@ -1762,13 +1772,21 @@ export interface ConfiguredChannelGroupSnapshot {
 export async function listConfiguredChannelGroups(options?: { includeCli?: boolean }): Promise<ConfiguredChannelGroupSnapshot[]> {
     const config = await readOpenClawConfig();
     migrateLegacyWechatSection(config);
-    const groups: ConfiguredChannelGroupSnapshot[] = [];
+    return listConfiguredChannelGroupsFromConfig(config, options);
+}
 
-    for (const channelType of await listConfiguredChannels(options)) {
+export function listConfiguredChannelGroupsFromConfig(
+    config: Record<string, unknown>,
+    options?: { includeCli?: boolean },
+): ConfiguredChannelGroupSnapshot[] {
+    const groups: ConfiguredChannelGroupSnapshot[] = [];
+    const channelTypes = listConfiguredChannelsFromConfig(config, options);
+
+    for (const channelType of channelTypes) {
         const runtimeChannelType = toRuntimeChannelType(channelType);
         const section = normalizeChannelSectionForRuntime(
             runtimeChannelType,
-            config.channels?.[runtimeChannelType] as AccountScopedChannelSection | undefined,
+            (config.channels as Record<string, AccountScopedChannelSection | undefined> | undefined)?.[runtimeChannelType],
         );
         const accounts = new Map<string, ConfiguredChannelGroupSnapshot['accounts'][number]>();
         const explicitDefaultAccountId =

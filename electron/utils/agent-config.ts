@@ -1,7 +1,7 @@
 import { access, copyFile, mkdir, readdir, rm } from 'fs/promises';
 import { constants } from 'fs';
 import { join, normalize } from 'path';
-import { listConfiguredChannelGroups, readOpenClawConfig, updateOpenClawConfig } from './channel-config';
+import { listConfiguredChannelGroupsFromConfig, readOpenClawConfig, updateOpenClawConfig } from './channel-config';
 import { expandPath, getOpenClawConfigDir } from './paths';
 import * as logger from './logger';
 import {
@@ -444,12 +444,12 @@ async function provisionAgentFilesystem(config: AgentConfigDocument, agent: Agen
   }
 }
 
-async function buildSnapshotFromConfig(
+async function buildSnapshotFromConfigWith(
   config: AgentConfigDocument,
   options?: { includeDisk?: boolean; includeCli?: boolean },
 ): Promise<AgentsSnapshot> {
   const { entries, defaultAgentId } = await getEffectiveAgentEntries(config, options);
-  const configuredGroups = await listConfiguredChannelGroups({ includeCli: options?.includeCli ?? false });
+  const configuredGroups = listConfiguredChannelGroupsFromConfig(config, { includeCli: options?.includeCli ?? false });
   const configuredChannels = configuredGroups.map((group) => group.type);
   const { typeOwners, accountOwners } = getSimpleChannelBindingMaps(config.bindings);
   const channelOwners: Record<string, string> = {};
@@ -514,6 +514,13 @@ async function buildSnapshotFromConfig(
     channelOwners,
     channelAccountOwners,
   };
+}
+
+async function buildSnapshotFromConfig(
+  config: AgentConfigDocument,
+  options?: { includeDisk?: boolean; includeCli?: boolean },
+): Promise<AgentsSnapshot> {
+  return buildSnapshotFromConfigWith(config, options);
 }
 
 export async function listAgentsSnapshot(): Promise<AgentsSnapshot> {
@@ -647,7 +654,10 @@ export async function assignChannelToAgent(agentId: string, channelType: string,
       list: entries,
     };
     config.bindings = upsertBindingsForChannel(config.bindings, runtimeChannelType, agentId, accountId);
-    return buildSnapshotFromConfig(config, { includeCli: false });
+    // Use the already-modified config directly to avoid deadlock:
+    // buildSnapshotFromConfig would call readOpenClawConfig(), which awaits
+    // configWriteChain — but we are already holding it inside this callback.
+    return buildSnapshotFromConfigWith(config, { includeCli: false });
   });
   logger.info('Assigned channel to agent', { agentId, channelType: runtimeChannelType, accountId: normalizeBindingAccountId(accountId) });
   return snapshot;
