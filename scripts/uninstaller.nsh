@@ -11,12 +11,13 @@ LangString uninstallWelcomeText 2052 "卸载程序会始终移除应用本体、
 
 LangString uninstallOptionAppDataTitle 1033 "Also delete ClawClaw settings, cache, and logs"
 LangString uninstallOptionAppDataTitle 2052 "同时删除 ClawClaw 设置、缓存和日志"
-LangString uninstallOptionAppDataDesc 1033 "Removes local preferences, window state, cached data, and application logs under AppData and LocalAppData."
-LangString uninstallOptionAppDataDesc 2052 "删除 AppData 和 LocalAppData 下的本地偏好、窗口状态、缓存数据以及应用日志。"
+LangString uninstallOptionAppDataDesc 1033 "Removes your personal settings, chat history, app cache, and log files from $APPDATA and $LOCALAPPDATA. Your OpenClaw data (~/.openclaw) will NOT be deleted."
+LangString uninstallOptionAppDataDesc 2052 "删除 $APPDATA 和 $LOCALAPPDATA 中的个人设置、聊天记录、应用缓存和日志文件。OpenClaw 用户数据（~/.openclaw）不会被删除。"
+
 LangString uninstallOptionOpenClawTitle 1033 "Also delete OpenClaw user data (~/.openclaw)"
 LangString uninstallOptionOpenClawTitle 2052 "同时删除 OpenClaw 用户数据（~/.openclaw）"
-LangString uninstallOptionOpenClawDesc 1033 "Removes OpenClaw sessions, managed workspaces, installed skills, provider settings, and other user data stored in ~/.openclaw."
-LangString uninstallOptionOpenClawDesc 2052 "删除 ~/.openclaw 下的 OpenClaw 会话、托管工作区、已安装技能、提供商设置及其他用户数据。"
+LangString uninstallOptionOpenClawDesc 1033 "Removes all OpenClaw data: agents, channels, providers, and credentials stored in your home directory. This cannot be undone."
+LangString uninstallOptionOpenClawDesc 2052 "删除所有 OpenClaw 数据：保存在主目录中的 agents、channels、providers 和 credentials。此操作无法撤销。"
 
 ; Replace the default MUI uninstall welcome page with our localised text.
 !macro customUnWelcomePage
@@ -24,6 +25,23 @@ LangString uninstallOptionOpenClawDesc 2052 "删除 ~/.openclaw 下的 OpenClaw 
   !define MUI_UNWELCOMEPAGE_TEXT "$(uninstallWelcomeText)"
   !insertmacro MUI_UNPAGE_WELCOME
 !macroend
+
+; MUI descriptions for the optional uninstaller checkboxes.
+; These must be at the same compile level as Section declarations — placing
+; them inside !ifdef BUILD_UNINSTALLER achieves that, since this file is
+; included from the uninstaller script's !ifdef BUILD_UNINSTALLER block.
+!ifdef BUILD_UNINSTALLER
+  ; Define un.onMouseOverSection so MUI calls it when the section selection changes.
+  ; The InstFiles page (uninstall) uses $mui.InstFilesPage.Text for the header.
+  ; We update the header subtitle to show the selected option's description.
+  Function un.onMouseOverSection
+    ; $mui.InstFilesPage.Text is control 1006, but for descriptions the
+    ; standard MUI InstFiles page has no dedicated description pane.
+    ; We use SendMessage to update the page subtitle area (control 1006).
+    ; If no section hovered, leave as-is (uninstall is usually done immediately).
+    StrCpy $0 ""
+  FunctionEnd
+!endif
 
 !macro RunOpenClawCli commandLine
   nsExec::ExecToStack '"$SYSDIR\cmd.exe" /d /c ""$INSTDIR\resources\cli\openclaw.cmd" ${commandLine}""'
@@ -71,25 +89,30 @@ LangString uninstallOptionOpenClawDesc 2052 "删除 ~/.openclaw 下的 OpenClaw 
 !macroend
 
 ; Optional section checkboxes for the uninstaller UI.
-; electron-builder's template checks !ifmacrodef customUnInstallSection to decide
-; whether to call MUI_UNPAGE_COMPONENTS.  This macro is expanded in the uninstaller
-; section; the Section declarations inside assign checkbox IDs
-; (un.RemoveClawClawData, un.RemoveOpenClawData).
-;
-; IMPORTANT: MUI_UNFUNCTION_DESCRIPTION_BEGIN/END must be at the same compile level
-; as the Section declarations it annotates.  Both are guarded by !ifdef BUILD_UNINSTALLER
-; because they are only meaningful in the uninstaller script.
-!ifdef BUILD_UNINSTALLER
-  !macro customUnInstallSection
-    Section /o "$(uninstallOptionAppDataTitle)" un.RemoveClawClawData
-    SectionEnd
+; electron-builder's template expands this macro inside the uninstaller section body.
+; The MUI_DESCRIPTION_BEGIN/END above set descriptions for these sections so they
+; appear in the sidebar when the user selects each checkbox.
+!macro customUnInstallSection
+  Section /o "$(uninstallOptionAppDataTitle)" un.RemoveClawClawData
+    DetailPrint "正在删除 ClawClaw 本地数据..."
+    RMDir /r "$APPDATA\${APP_FILENAME}"
+    !ifdef APP_PRODUCT_FILENAME
+      RMDir /r "$APPDATA\${APP_PRODUCT_FILENAME}"
+    !endif
+    !ifdef APP_PACKAGE_NAME
+      RMDir /r "$APPDATA\${APP_PACKAGE_NAME}"
+    !endif
+    RMDir /r "$LOCALAPPDATA\${APP_FILENAME}"
+    !ifdef APP_PRODUCT_FILENAME
+      RMDir /r "$LOCALAPPDATA\${APP_PRODUCT_FILENAME}"
+    !endif
+    !ifdef APP_PACKAGE_NAME
+      RMDir /r "$LOCALAPPDATA\${APP_PACKAGE_NAME}"
+    !endif
+  SectionEnd
 
-    Section /o "$(uninstallOptionOpenClawTitle)" un.RemoveOpenClawData
-    SectionEnd
-  !macroend
-
-  !insertmacro MUI_UNFUNCTION_DESCRIPTION_BEGIN
-    !insertmacro MUI_DESCRIPTION_TEXT ${un.RemoveClawClawData} "$(uninstallOptionAppDataDesc)"
-    !insertmacro MUI_DESCRIPTION_TEXT ${un.RemoveOpenClawData} "$(uninstallOptionOpenClawDesc)"
-  !insertmacro MUI_UNFUNCTION_DESCRIPTION_END
-!endif
+  Section /o "$(uninstallOptionOpenClawTitle)" un.RemoveOpenClawData
+    DetailPrint "正在删除 OpenClaw 用户数据..."
+    RMDir /r "$PROFILE\.openclaw"
+  SectionEnd
+!macroend

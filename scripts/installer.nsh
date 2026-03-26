@@ -13,20 +13,30 @@
 ShowInstDetails show
 ShowUnInstDetails show
 
-; Override MUI_PAGE_INSTFILES to force-detail-print when the InstFiles page
-; is active.  electron-builder's assistedInstaller.nsh sets
-; "SetDetailsPrint none" at the section level, which would suppress all
-; DetailPrint output (including NSIS built-in file-copy logs).  Redefining
-; this macro inserts a page-leave callback that re-enables detail output
-; before the install section body runs, so the user sees what is being done.
-!macro MUI_PAGE_INSTFILES
-  !define MUI_INSTFILES_SHOWDETAILS "${MUI_INSTFILESPAGE_SHOWDETAILS}"
-  PageEx instfiles
-    ${MIFUNCS_PREPARE}
-    Function ".onInstFilesLeave"
-      SetDetailsPrint listonly
-    FunctionEnd
-  PageExEnd
+; assistedInstaller.nsh calls MUI_PAGE_DIRECTORY (when allowToChangeInstallationDirectory
+; is true), which sets MUI_PAGE_CUSTOMFUNCTION_PRE="instFilesPre".  MUI_PAGE_INSTFILES
+; then reuses that value.  Override it here via customPageAfterChangeDir, which
+; electron-builder inserts AFTER MUI_PAGE_DIRECTORY but BEFORE MUI_PAGE_INSTFILES.
+; We set both MUI_PAGE_CUSTOMFUNCTION_PRE (runs in pre-function) and
+; MUI_PAGE_CUSTOMFUNCTION_LEAVE (runs in leave function, before section body).
+; MUI's MUI_FUNCTION_INSTFILESPAGE undefs MUI_PAGE_CUSTOMFUNCTION_* after calling
+; them, so each is independent.
+!macro customPageAfterChangeDir
+  ; MUI_PAGE_DIRECTORY (called before this macro) sets MUI_PAGE_CUSTOMFUNCTION_PRE
+  ; to "instFilesPre".  MUI_PAGE_INSTFILES reuses that value, so we must undefine
+  ; and redefine it to inject our function.
+  !undef MUI_PAGE_CUSTOMFUNCTION_PRE
+  !undef MUI_PAGE_CUSTOMFUNCTION_LEAVE
+  !define MUI_PAGE_CUSTOMFUNCTION_PRE "customInstFilesPre-custom"
+  !define MUI_PAGE_CUSTOMFUNCTION_LEAVE "customInstFilesLeave-custom"
+
+  Function customInstFilesPre-custom
+    SetDetailsPrint both
+  FunctionEnd
+
+  Function customInstFilesLeave-custom
+    SetDetailsPrint both
+  FunctionEnd
 !macroend
 
 !include "${PROJECT_DIR}\scripts\uninstaller.nsh"
@@ -86,7 +96,7 @@ LangString installPhaseFinalize 2052 "正在执行安装后的系统配置..."
 
     # Silently kill the process using nsProcess instead of taskkill / cmd.exe
     ${nsProcess::KillProcess} "${APP_EXECUTABLE_FILENAME}" $R0
-    
+
     # to ensure that files are not "in-use"
     Sleep 300
 
@@ -101,7 +111,7 @@ LangString installPhaseFinalize 2052 "正在执行安装后的系统配置..."
         # wait to give a chance to exit gracefully
         Sleep 1000
         ${nsProcess::KillProcess} "${APP_EXECUTABLE_FILENAME}" $R0
-        
+
         ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
         ${If} $R0 == 0
           DetailPrint `Waiting for "${PRODUCT_NAME}" to close.`
@@ -127,7 +137,8 @@ LangString installPhaseFinalize 2052 "正在执行安装后的系统配置..."
 !macroend
 
 !macro customInstall
-  SetDetailsPrint both
+  ; Restore listonly mode for post-install steps (show summary text, not every file)
+  SetDetailsPrint listonly
   DetailPrint "正在完成安装后的系统配置..."
 
   ; Re-create shortcuts when upgrading.  electron-builder's
@@ -158,7 +169,7 @@ LangString installPhaseFinalize 2052 "正在执行安装后的系统配置..."
   Pop $0
   Pop $1
   StrCmp $0 "error" 0 +2
-    DetailPrint "Warning: Failed to launch PowerShell while updating PATH."
+    DetailPrint "Warning: Failed to launch PowerShell while removing PATH entry."
   StrCmp $0 "timeout" 0 +2
     DetailPrint "Warning: PowerShell PATH update timed out."
   StrCmp $0 "0" 0 +2
