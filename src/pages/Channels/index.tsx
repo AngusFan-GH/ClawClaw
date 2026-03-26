@@ -12,6 +12,7 @@ import { ChannelLogo as SharedChannelLogo } from '@/components/channels/ChannelL
 import { PageHeader } from '@/components/layout/PageHeader';
 import { cn } from '@/lib/utils';
 import { useGatewayPageRefresh } from '@/lib/use-gateway-page-refresh';
+import { resolveChannelRuntimeStatusMeta, type ChannelRuntimeState } from '@/lib/channel-runtime-status';
 import {
   CHANNEL_META,
   channelSupportsMultipleAccounts,
@@ -325,18 +326,7 @@ function ChannelTypeCard({
 }) {
   const { t } = useTranslation('channels');
   const meta = CHANNEL_META[group.type];
-  const runtimeLabel =
-    group.status === 'connected'
-      ? t('runtime.connected')
-      : group.status === 'connecting'
-        ? t('runtime.connecting')
-        : group.status === 'error'
-          ? t('runtime.error')
-          : group.status === 'configured'
-            ? t('runtime.configuredOnly', '已配置')
-            : group.status === 'disconnected'
-              ? t('runtime.stopped')
-      : t('runtime.unknown');
+  const groupRuntimeStatus = resolveChannelRuntimeStatusMeta(group.status as ChannelRuntimeState, t);
   return (
     <div className="rounded-[16px] border border-border/60 bg-card/84 p-4 transition-colors hover:border-black/10 dark:hover:border-white/10">
       <div className="flex items-start gap-3.5">
@@ -355,7 +345,7 @@ function ChannelTypeCard({
                     variant="secondary"
                     className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[10px] font-semibold text-foreground/70 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
                   >
-                    {runtimeLabel}
+                    {groupRuntimeStatus.label}
                   </Badge>
                 ) : null}
                 {meta?.isPlugin && (
@@ -425,6 +415,23 @@ function ChannelTypeCard({
                     return (
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      {(() => {
+                        const accountRuntimeStatus = resolveChannelRuntimeStatusMeta(
+                          account.status === 'configured'
+                            ? 'configured'
+                            : account.status === 'connected'
+                              ? 'connected'
+                              : account.status === 'connecting'
+                                ? 'connecting'
+                                : account.status === 'error'
+                                  ? 'error'
+                                  : account.configured
+                                    ? 'configured'
+                                    : 'disconnected',
+                          t,
+                        );
+                        return (
+                          <>
                       <span className="text-[13px] font-semibold text-foreground">{account.accountId}</span>
                       {account.isDefaultAccount && (
                         <Badge
@@ -435,15 +442,7 @@ function ChannelTypeCard({
                         </Badge>
                       )}
                       <span className="shrink-0 text-[12px] text-foreground/60 dark:text-foreground/65">
-                        {account.status === 'connected'
-                          ? t('runtime.connected')
-                          : account.status === 'connecting'
-                            ? t('runtime.connecting')
-                            : account.status === 'error'
-                              ? t('runtime.error')
-                              : account.configured
-                                ? t('runtime.configuredOnly', '已配置')
-                                : t('runtime.stopped')}
+                        {accountRuntimeStatus.label}
                       </span>
                       <Badge
                         variant="secondary"
@@ -477,6 +476,9 @@ function ChannelTypeCard({
                           <span className="truncate text-[12px] text-destructive">{account.error}</span>
                         </>
                       ) : null}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                     );

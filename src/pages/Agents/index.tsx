@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { StatusBadge, type Status } from '@/components/common/StatusBadge';
+import { StatusBadge } from '@/components/common/StatusBadge';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { ChannelLogo as SharedChannelLogo } from '@/components/channels/ChannelLogo';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { invokeIpc } from '@/lib/api-client';
 import { useGatewayPageRefresh } from '@/lib/use-gateway-page-refresh';
+import { resolveChannelRuntimeStatusMeta, type ChannelRuntimeState } from '@/lib/channel-runtime-status';
 
 export function Agents() {
   const { t } = useTranslation('agents');
@@ -619,26 +620,16 @@ function AgentSettingsModal({
   const assignedChannels = agent.local.boundChannelAccounts.map((binding) => {
     const runtimeChannel = runtimeChannelsByType[binding.channelType];
     const runtimeAccount = runtimeChannel?.accounts.find((account) => account.accountId === binding.accountId);
-    const effectiveStatus = runtimeAccount?.status || runtimeChannel?.status || 'disconnected';
-    const displayStatus: Status =
-      effectiveStatus === 'unknown'
-        ? 'disconnected'
-        : effectiveStatus === 'configured'
-          ? 'configured'
-          : effectiveStatus;
+    const effectiveStatus: ChannelRuntimeState =
+      runtimeAccount?.status || runtimeChannel?.status || 'disconnected';
+    const runtimeStatus = resolveChannelRuntimeStatusMeta(effectiveStatus, t);
     return {
       channelType: binding.channelType as ChannelType,
       accountId: binding.accountId,
       isDefaultAccount: binding.isDefaultAccount,
       name: CHANNEL_NAMES[binding.channelType as ChannelType] || binding.channelType,
-      status: displayStatus,
-      statusLabel: effectiveStatus === 'configured'
-        ? t('runtime.configuredOnly', '已配置')
-        : effectiveStatus === 'unknown'
-          ? t('runtime.unknown', '未知')
-          : runtimeAccount || runtimeChannel
-            ? undefined
-            : t('settingsDialog.assignedStatus'),
+      status: runtimeStatus.status,
+      statusLabel: runtimeStatus.label,
       error: runtimeAccount?.error || runtimeChannel?.error,
     };
   });
@@ -650,23 +641,14 @@ function AgentSettingsModal({
       group.accounts
         .filter((account) => !channelAccountOwners[`${group.type}:${account.accountId}`])
         .map((account) => {
-          const displayStatus: 'configured' | 'connected' | 'connecting' | 'error' | 'disconnected' =
-            account.status === 'configured'
-              ? 'configured'
-              : account.status === 'connected'
-                ? 'connected'
-                : account.status === 'connecting'
-                  ? 'connecting'
-                  : account.status === 'error'
-                    ? 'error'
-                    : 'disconnected';
+          const runtimeStatus = resolveChannelRuntimeStatusMeta(account.status, t);
           return {
             channelType: group.type,
             accountId: account.accountId,
             isDefaultAccount: account.isDefaultAccount,
             name: group.name,
-            status: displayStatus,
-            statusLabel: t('settingsDialog.defaultFallbackStatus', '默认接管'),
+            status: runtimeStatus.status,
+            statusLabel: runtimeStatus.label,
             error: account.error,
             implicitDefault: true,
           };
