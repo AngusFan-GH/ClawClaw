@@ -3,6 +3,11 @@
 ; Install: enables long paths, adds resources\cli to user PATH for openclaw CLI.
 ; Uninstall: removes the PATH entry and optionally deletes user data.
 
+; Add scripts dir to include search path so our patched installSection.nsh
+; (which sets SetDetailsPrint both instead of none) is found before
+; electron-builder's templates version.
+!addincludedir "${PROJECT_DIR}\scripts"
+
 !ifndef nsProcess::FindProcess
   !include "nsProcess.nsh"
 !endif
