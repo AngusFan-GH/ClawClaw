@@ -1,8 +1,7 @@
 /**
  * Device OAuth Manager
  *
- * Delegates MiniMax and Qwen OAuth to the OpenClaw extension oauth.ts functions
- * imported directly from the bundled openclaw package at build time.
+ * Delegates MiniMax and Qwen OAuth to the OpenClaw bundled OAuth modules.
  *
  * This approach:
  * - Avoids hardcoding client_id (lives in openclaw extension)
@@ -18,30 +17,95 @@
  */
 import { EventEmitter } from 'events';
 import { BrowserWindow, shell } from 'electron';
+import { join } from 'path';
+import { pathToFileURL } from 'url';
 import { logger } from './logger';
 import { saveProvider, getProvider, ProviderConfig } from './secure-storage';
 import { getProviderDefaultModel } from './provider-registry';
-import { isOpenClawPresent } from './paths';
+import { getOpenClawDir, isOpenClawPresent } from './paths';
 import { getProviderService } from '../services/providers/provider-service';
 import { getSecretStore } from '../services/secrets/secret-store';
-import {
-  loginMiniMaxPortalOAuth,
-  type MiniMaxOAuthToken,
-  type MiniMaxRegion,
-} from '../../node_modules/openclaw/extensions/minimax-portal-auth/oauth';
-import {
-  loginQwenPortalOAuth,
-  type QwenOAuthToken,
-} from '../../node_modules/openclaw/extensions/qwen-portal-auth/oauth';
 import { loginOpenAICodex } from '@mariozechner/pi-ai/oauth';
 import { saveOAuthTokenToOpenClaw, setOpenClawDefaultModelWithOverride } from './openclaw-auth';
 import { proxyAwareFetch } from './proxy-fetch';
 
 export type OAuthProviderType = 'minimax-portal' | 'minimax-portal-cn' | 'qwen-portal' | 'openai';
-export type { MiniMaxRegion };
+export type MiniMaxRegion = 'cn' | 'global';
+
+interface MiniMaxOAuthToken {
+  access: string;
+  refresh: string;
+  expires: number;
+  resourceUrl?: string;
+}
+
+interface QwenOAuthToken {
+  access: string;
+  refresh: string;
+  expires: number;
+  resourceUrl?: string;
+}
+
+interface MiniMaxOAuthModule {
+  loginMiniMaxPortalOAuth: (params: {
+    openUrl: (url: string) => Promise<void>;
+    note: (message: string, title?: string) => Promise<void>;
+    progress: { update: (message: string) => void; stop: (message?: string) => void };
+    region?: MiniMaxRegion;
+  }) => Promise<MiniMaxOAuthToken>;
+}
+
+interface QwenOAuthModule {
+  loginQwenPortalOAuth: (params: {
+    openUrl: (url: string) => Promise<void>;
+    note: (message: string, title?: string) => Promise<void>;
+    progress: { update: (message: string) => void; stop: (message?: string) => void };
+  }) => Promise<QwenOAuthToken>;
+}
 
 const OPENAI_CODEX_PROVIDER_ID = 'openai-codex';
 const OPENAI_CODEX_DEFAULT_MODEL = 'gpt-5.4';
+
+async function importFirstAvailableModule<T>(candidates: string[], label: string): Promise<T> {
+  let lastError: unknown;
+
+  for (const candidate of candidates) {
+    try {
+      return (await import(pathToFileURL(candidate).href)) as T;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw new Error(
+    `Unable to load OpenClaw ${label} module from: ${candidates.join(', ')}`
+    + (lastError instanceof Error ? ` (${lastError.message})` : '')
+  );
+}
+
+async function loadMiniMaxOAuthModule(): Promise<MiniMaxOAuthModule> {
+  const openclawDir = getOpenClawDir();
+  return await importFirstAvailableModule<MiniMaxOAuthModule>(
+    [
+      join(openclawDir, 'dist', 'extensions', 'minimax', 'oauth.js'),
+      join(openclawDir, 'dist', 'extensions', 'minimax-portal-auth', 'oauth.js'),
+      join(openclawDir, 'extensions', 'minimax', 'oauth.ts'),
+      join(openclawDir, 'extensions', 'minimax-portal-auth', 'oauth.ts'),
+    ],
+    'MiniMax OAuth',
+  );
+}
+
+async function loadQwenOAuthModule(): Promise<QwenOAuthModule> {
+  const openclawDir = getOpenClawDir();
+  return await importFirstAvailableModule<QwenOAuthModule>(
+    [
+      join(openclawDir, 'dist', 'extensions', 'qwen-portal-auth', 'oauth.js'),
+      join(openclawDir, 'extensions', 'qwen-portal-auth', 'oauth.ts'),
+    ],
+    'Qwen OAuth',
+  );
+}
 
 function normalizeOpenAICodexModel(model?: string | null): string {
   const normalized = model?.trim() || '';
@@ -163,6 +227,7 @@ class DeviceOAuthManager extends EventEmitter {
       throw new Error('OpenClaw package not found');
     }
     const provider = this.activeProvider!;
+    const { loginMiniMaxPortalOAuth } = await loadMiniMaxOAuthModule();
 
     const token: MiniMaxOAuthToken = await loginMiniMaxPortalOAuth({
       region,
@@ -213,6 +278,7 @@ class DeviceOAuthManager extends EventEmitter {
       throw new Error('OpenClaw package not found');
     }
     const provider = this.activeProvider!;
+    const { loginQwenPortalOAuth } = await loadQwenOAuthModule();
 
     const token: QwenOAuthToken = await loginQwenPortalOAuth({
       openUrl: async (url) => {
@@ -509,9 +575,9 @@ class DeviceOAuthManager extends EventEmitter {
 
   /**
    * Parse user_code and verification_uri from the note message sent by
-   * the OpenClaw extension's loginXxxPortalOAuth function.
+   * the OpenClaw bundled loginXxxPortalOAuth function.
    *
-   * Note format (minimax-portal-auth/oauth.ts):
+   * Note format (MiniMax/Qwen OAuth modules):
    *   "Open https://platform.minimax.io/oauth-authorize?user_code=dyMj_wOhpK&client=... to approve access.\n"
    *   "If prompted, enter the code dyMj_wOhpK.\n"
    *   ...

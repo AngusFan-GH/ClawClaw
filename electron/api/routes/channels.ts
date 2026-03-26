@@ -92,7 +92,7 @@ type ChannelGroupView = {
   error?: string;
 };
 
-function mapAccountStatus(account: {
+export function mapAccountStatus(account: {
   connected?: boolean;
   linked?: boolean;
   running?: boolean;
@@ -108,14 +108,14 @@ function mapAccountStatus(account: {
     (typeof account.lastOutboundAt === 'number' && now - account.lastOutboundAt < recentMs) ||
     (typeof account.lastConnectedAt === 'number' && now - account.lastConnectedAt < recentMs);
 
-  if (typeof account.lastError === 'string' && account.lastError) {
-    return 'error';
-  }
   if (account.connected === true || account.linked === true || hasRecentActivity) {
     return 'connected';
   }
   if (account.running === true) {
     return 'connecting';
+  }
+  if (typeof account.lastError === 'string' && account.lastError) {
+    return 'error';
   }
   return 'disconnected';
 }
@@ -134,7 +134,7 @@ function shouldKeepRuntimeAccount(account: {
   return Boolean(account.configured) || status === 'connected' || status === 'connecting';
 }
 
-function resolveGroupStatus(group: ChannelGroupView): ChannelGroupView['status'] {
+export function resolveGroupStatus(group: ChannelGroupView): ChannelGroupView['status'] {
   if (group.accounts.some((account) => account.status === 'error' || Boolean(account.error)) || group.error) {
     return 'error';
   }
@@ -249,7 +249,7 @@ async function buildChannelAccountsView(
           runtimeStatus: status,
           accountId,
           isDefaultAccount: accountId === (defaultAccountId || existing.defaultAccountId || 'default'),
-          error: runtimeAccount.lastError || summaryError || prior?.error,
+          error: status === 'error' ? (runtimeAccount.lastError || summaryError || prior?.error) : undefined,
           metadata: {
             ...prior?.metadata,
             isDefaultAccount: accountId === (defaultAccountId || existing.defaultAccountId || 'default'),
@@ -275,7 +275,25 @@ async function buildChannelAccountsView(
           }
           return left.accountId.localeCompare(right.accountId);
         }),
-        error: summaryError || existing.error,
+        error: resolveGroupStatus({
+          ...existing,
+          accounts: Array.from(accountMap.values()),
+          configured: existing.configured || runtimeAccounts.some((account) => account.configured === true),
+          runtimeLoaded: true,
+          pluginLoaded: true,
+          defaultAccountId: defaultAccountId || existing.defaultAccountId,
+          configuredAccounts: Array.from(new Set([
+            ...existing.configuredAccounts,
+            ...runtimeAccounts
+              .filter((account) => account.configured === true)
+              .map((account) => account.accountId || 'default'),
+          ])),
+          error: undefined,
+          runtimeStatus: 'unknown',
+          status: 'unknown',
+          name: existing.name,
+          type,
+        }) === 'error' ? (summaryError || existing.error) : undefined,
         runtimeStatus: 'unknown',
         status: 'unknown',
       };
@@ -314,19 +332,15 @@ function scheduleGatewayChannelRefresh(ctx: HostApiContext, channelType: string,
 }
 
 async function ensureDingTalkPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  return ensureBundledPluginInstalled('dingtalk', 'DingTalk');
+  return ensureBundledPluginInstalled('channels', 'China Channels');
 }
 
 async function ensureFeishuPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  return ensureBundledPluginInstalled('openclaw-lark', 'Feishu / Lark');
-}
-
-async function ensureWeComPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  return ensureBundledPluginInstalled('wecom', 'WeCom');
+  return ensureBundledPluginInstalled('feishu', 'Feishu / Lark');
 }
 
 async function ensureQQBotPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  return ensureBundledPluginInstalled('qqbot', 'QQ Bot');
+  return ensureBundledPluginInstalled('channels', 'China Channels');
 }
 
 async function ensureWeChatPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
@@ -630,13 +644,6 @@ export async function handleChannelRoutes(
         const installResult = await ensureFeishuPluginInstalled();
         if (!installResult.installed) {
           sendJson(res, 500, { success: false, error: installResult.warning || 'Feishu plugin install failed' });
-          return true;
-        }
-      }
-      if (runtimeChannelType === 'wecom') {
-        const installResult = await ensureWeComPluginInstalled();
-        if (!installResult.installed) {
-          sendJson(res, 500, { success: false, error: installResult.warning || 'WeCom plugin install failed' });
           return true;
         }
       }

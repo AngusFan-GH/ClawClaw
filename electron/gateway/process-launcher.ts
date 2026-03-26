@@ -98,7 +98,7 @@ export async function launchGatewayProcess(options: {
   getShouldReconnect: () => boolean;
   onStderrLine: (line: string) => void;
   onSpawn: (pid: number | undefined) => void;
-  onExit: (child: ChildProcess, code: number | null) => void;
+  onExit: (child: ChildProcess, code: number | null, signal: NodeJS.Signals | null) => void;
   onError: (error: Error) => void;
 }): Promise<{ child: ChildProcess; lastSpawnSummary: string }> {
   const {
@@ -164,12 +164,13 @@ export async function launchGatewayProcess(options: {
         rejectOnce(error);
       });
 
-      child.on('exit', (code: number | null) => {
+      child.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
         const expectedExit =
           !options.getShouldReconnect() || options.getCurrentState() === 'stopped';
         const level = expectedExit ? logger.info : logger.warn;
-        level(`Gateway process exited (code=${code}, expected=${expectedExit ? 'yes' : 'no'})`);
-        options.onExit(child, code);
+        const exitStatus = code ?? signal ?? 'unknown';
+        level(`Gateway process exited (status=${exitStatus}, expected=${expectedExit ? 'yes' : 'no'})`);
+        options.onExit(child, code, signal);
       });
 
       child.stderr?.on('data', (data) => {

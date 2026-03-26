@@ -384,7 +384,7 @@
       ]
     },
     "qqbot": {
-      "description": "Connect QQ Bot via @sliverp/qqbot plugin",
+      "description": "Connect QQ Bot via the OpenClaw China Channels plugin",
       "docsUrl": "https://github.com/sliverp/qqbot/blob/main/README.zh.md",
       "fields": {
         "appId": {

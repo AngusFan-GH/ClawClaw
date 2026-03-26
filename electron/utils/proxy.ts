@@ -45,6 +45,30 @@ function trimValue(value: string | undefined | null): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function splitBypassRules(value: string | undefined | null): string[] {
+  return trimValue(value)
+    .split(/[,\n;]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+export function mergeProxyBypassRules(
+  current: string | undefined | null,
+  extras: Iterable<string>,
+): string {
+  const merged = new Set<string>();
+  for (const entry of splitBypassRules(current)) {
+    merged.add(entry);
+  }
+  for (const extra of extras) {
+    const value = trimValue(extra);
+    if (value) {
+      merged.add(value);
+    }
+  }
+  return Array.from(merged).join(',');
+}
+
 /**
  * Accept bare host:port values from users and normalize them to a valid URL.
  * Electron accepts scheme-less proxy rules in some cases, but child-process
@@ -314,11 +338,7 @@ export function buildProxyEnv(settings: ProxySettings): Record<string, string> {
   }
 
   const resolved = resolveProxySettings(settings);
-  const noProxy = resolved.bypassRules
-    .split(/[,\n;]/)
-    .map((rule) => rule.trim())
-    .filter(Boolean)
-    .join(',');
+  const noProxy = mergeProxyBypassRules(resolved.bypassRules, []);
 
   return {
     HTTP_PROXY: resolved.httpProxy,
@@ -339,11 +359,7 @@ export async function buildProxyEnvAsync(settings: ProxySettings): Promise<Recor
   }
 
   const resolved = await resolveProxySettingsAsync(settings);
-  const noProxy = resolved.bypassRules
-    .split(/[,\n;]/)
-    .map((rule) => rule.trim())
-    .filter(Boolean)
-    .join(',');
+  const noProxy = mergeProxyBypassRules(resolved.bypassRules, []);
 
   if (!resolved.httpProxy && !resolved.httpsProxy && !resolved.allProxy) {
     return {

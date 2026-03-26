@@ -28,9 +28,15 @@ import {
 
 const AUTH_STORE_VERSION = 1;
 const AUTH_PROFILE_FILENAME = 'auth-profiles.json';
-const FEISHU_PLUGIN_ID_CANDIDATES = ['openclaw-lark', 'feishu-openclaw-plugin'] as const;
+const FEISHU_PLUGIN_ID_CANDIDATES = ['feishu', 'openclaw-lark', 'feishu-openclaw-plugin'] as const;
 
 function getOAuthPluginId(provider: string): string {
+  if (provider === 'minimax-portal' || provider === 'minimax-portal-cn') {
+    return 'minimax';
+  }
+  if (provider === 'qwen-portal') {
+    return 'qwen-portal-auth';
+  }
   return `${provider}-auth`;
 }
 
@@ -436,10 +442,10 @@ export async function removeProviderFromOpenClaw(provider: string): Promise<void
     const config = await readOpenClawJson();
     let modified = false;
 
-    // Disable plugin (for OAuth like qwen-portal-auth)
+    // Disable the owning OAuth plugin if one is active for this provider.
     const plugins = config.plugins as Record<string, unknown> | undefined;
     const entries = (plugins?.entries ?? {}) as Record<string, Record<string, unknown>>;
-    const pluginName = `${provider}-auth`;
+    const pluginName = getOAuthPluginId(provider);
     if (entries[pluginName]) {
       entries[pluginName].enabled = false;
       modified = true;
@@ -1203,8 +1209,7 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
       FEISHU_PLUGIN_ID_CANDIDATES.find((id) => allowArr.includes(id))
       || FEISHU_PLUGIN_ID_CANDIDATES.find((id) => Boolean(pEntries[id]));
     const canonicalFeishuId = installedFeishuId || configuredFeishuId || FEISHU_PLUGIN_ID_CANDIDATES[0];
-    const existingFeishuEntry =
-      FEISHU_PLUGIN_ID_CANDIDATES.map((id) => pEntries[id]).find(Boolean) || pEntries.feishu;
+    const existingFeishuEntry = FEISHU_PLUGIN_ID_CANDIDATES.map((id) => pEntries[id]).find(Boolean);
     const hasFeishuChannelConfig = Boolean(
       config.channels
       && typeof config.channels === 'object'
@@ -1213,9 +1218,7 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
 
     if (hasFeishuChannelConfig || existingFeishuEntry || configuredFeishuId || installedFeishuId) {
       const normalizedAllow = allowArr.filter(
-        (id) =>
-          id !== 'feishu'
-          && !FEISHU_PLUGIN_ID_CANDIDATES.includes(id as typeof FEISHU_PLUGIN_ID_CANDIDATES[number]),
+        (id) => !FEISHU_PLUGIN_ID_CANDIDATES.includes(id as typeof FEISHU_PLUGIN_ID_CANDIDATES[number]),
       );
       normalizedAllow.push(canonicalFeishuId);
       if (JSON.stringify(normalizedAllow) !== JSON.stringify(allowArr)) {
@@ -1238,7 +1241,7 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
           modified = true;
         }
       }
-      if (pEntries.feishu?.enabled !== false) {
+      if (canonicalFeishuId !== 'feishu' && pEntries.feishu?.enabled !== false) {
         if (pEntries.feishu) {
           pEntries.feishu.enabled = false;
           modified = true;
@@ -1310,7 +1313,8 @@ function isAbsolutePluginPath(filePath: string): boolean {
 
 function isBundledPluginPath(filePath: string): boolean {
   const normalized = filePath.replace(/\\/g, '/');
-  return normalized.includes('node_modules/openclaw/extensions');
+  return normalized.includes('node_modules/openclaw/extensions')
+    || normalized.includes('node_modules/openclaw/dist/extensions');
 }
 
 export { getProviderEnvVar } from './provider-registry';

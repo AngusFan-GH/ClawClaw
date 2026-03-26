@@ -30,13 +30,17 @@ import {
 } from './channel-alias';
 
 const OPENCLAW_DIR = join(homedir(), '.openclaw');
+const EXTENSIONS_DIR = join(OPENCLAW_DIR, 'extensions');
 const CONFIG_FILE = join(OPENCLAW_DIR, 'openclaw.json');
-const WECOM_PLUGIN_ID = 'wecom-openclaw-plugin';
-const FEISHU_PLUGIN_ID_CANDIDATES = ['openclaw-lark', 'feishu-openclaw-plugin'] as const;
+const FEISHU_PLUGIN_ID_CANDIDATES = ['feishu', 'openclaw-lark', 'feishu-openclaw-plugin'] as const;
+const CHINA_CHANNEL_PLUGIN_ID = 'channels';
+const CHINA_CHANNEL_TYPES = ['dingtalk', 'wecom', 'qqbot'] as const;
+const CHINA_CHANNEL_LEGACY_PLUGIN_IDS: Record<(typeof CHINA_CHANNEL_TYPES)[number], string[]> = {
+    dingtalk: ['dingtalk'],
+    wecom: ['wecom', 'wecom-openclaw-plugin'],
+    qqbot: ['qqbot'],
+};
 const CHANNEL_PLUGIN_ALLOWLIST_IDS: Partial<Record<string, string>> = {
-    dingtalk: 'dingtalk',
-    wecom: WECOM_PLUGIN_ID,
-    qqbot: 'qqbot',
     [WECHAT_RUNTIME_CHANNEL_ID]: WECHAT_RUNTIME_CHANNEL_ID,
 };
 const SUPPORTED_CHANNEL_IDS = [
@@ -59,6 +63,15 @@ const SUPPORTED_CHANNEL_IDS = [
 
 // Channels that are managed as plugins (config goes under plugins.entries, not channels)
 const PLUGIN_CHANNELS = ['whatsapp'];
+const LEGACY_CHANNEL_PLUGIN_IDS = [
+    'openclaw-lark',
+    'feishu-openclaw-plugin',
+    'wecom-openclaw-plugin',
+    'wecom',
+    'qqbot',
+    'dingtalk',
+] as const;
+const OFFICIAL_BUNDLED_PLUGIN_MIRROR_IDS = ['feishu'] as const;
 
 function collapseShadowDefaultAccount(
     section: AccountScopedChannelSection | undefined
@@ -111,6 +124,9 @@ function normalizeAccountScopedChannelSections(currentConfig: OpenClawConfig): v
     }
 
     for (const [channelType, rawSection] of Object.entries(currentConfig.channels)) {
+        if (channelType === 'feishu') {
+            continue;
+        }
         const section = rawSection as AccountScopedChannelSection | undefined;
         const normalized = collapseShadowDefaultAccount(section);
         if (normalized) {
@@ -149,14 +165,102 @@ async function fileExists(p: string): Promise<boolean> {
     try { await access(p, constants.F_OK); return true; } catch { return false; }
 }
 
-function getChannelPluginAllowIds(channelType: string): string[] {
+function isChinaChannelsManagedChannel(channelType: string): channelType is (typeof CHINA_CHANNEL_TYPES)[number] {
+    return CHINA_CHANNEL_TYPES.includes(channelType as (typeof CHINA_CHANNEL_TYPES)[number]);
+}
+
+function getLegacyChannelPluginIds(channelType: string): string[] {
     if (channelType === 'feishu') {
         return ['feishu', ...FEISHU_PLUGIN_ID_CANDIDATES];
     }
-    if (channelType === 'wecom') {
-        return [WECOM_PLUGIN_ID, 'wecom'];
+    if (isChinaChannelsManagedChannel(channelType)) {
+        return CHINA_CHANNEL_LEGACY_PLUGIN_IDS[channelType];
     }
     return [CHANNEL_PLUGIN_ALLOWLIST_IDS[channelType]].filter((value): value is string => Boolean(value));
+}
+
+function getChannelPluginAllowIds(channelType: string): string[] {
+    if (isChinaChannelsManagedChannel(channelType)) {
+        return [CHINA_CHANNEL_PLUGIN_ID];
+    }
+    return getLegacyChannelPluginIds(channelType);
+}
+
+function ensurePluginEnabled(
+    currentConfig: OpenClawConfig,
+    pluginId: string,
+    options?: { createEntry?: boolean }
+): void {
+    if (!currentConfig.plugins) {
+        currentConfig.plugins = {};
+    }
+    currentConfig.plugins.enabled = true;
+    const allow = Array.isArray(currentConfig.plugins.allow)
+        ? currentConfig.plugins.allow as string[]
+        : [];
+    if (!allow.includes(pluginId)) {
+        currentConfig.plugins.allow = [...allow, pluginId];
+    } else if (!Array.isArray(currentConfig.plugins.allow)) {
+        currentConfig.plugins.allow = allow;
+    }
+
+    if (!options?.createEntry) {
+        return;
+    }
+
+    if (!currentConfig.plugins.entries) {
+        currentConfig.plugins.entries = {};
+    }
+    if (!currentConfig.plugins.entries[pluginId]) {
+        currentConfig.plugins.entries[pluginId] = {};
+    }
+    currentConfig.plugins.entries[pluginId].enabled = true;
+}
+
+function removePluginIds(
+    currentConfig: OpenClawConfig,
+    pluginIds: readonly string[],
+): boolean {
+    if (pluginIds.length === 0 || !currentConfig.plugins) {
+        return false;
+    }
+
+    let changed = false;
+    if (Array.isArray(currentConfig.plugins.allow)) {
+        const nextAllow = (currentConfig.plugins.allow as string[]).filter((pluginId) => !pluginIds.includes(pluginId));
+        if (nextAllow.length !== currentConfig.plugins.allow.length) {
+            if (nextAllow.length > 0) {
+                currentConfig.plugins.allow = nextAllow;
+            } else {
+                delete currentConfig.plugins.allow;
+            }
+            changed = true;
+        }
+    }
+
+    if (currentConfig.plugins.entries) {
+        for (const pluginId of pluginIds) {
+            if (currentConfig.plugins.entries[pluginId]) {
+                delete currentConfig.plugins.entries[pluginId];
+                changed = true;
+            }
+        }
+        if (Object.keys(currentConfig.plugins.entries).length === 0) {
+            delete currentConfig.plugins.entries;
+        }
+    }
+
+    if (Object.keys(currentConfig.plugins).length === 0) {
+        delete currentConfig.plugins;
+    }
+
+    return changed;
+}
+
+function hasConfiguredChinaManagedChannel(currentConfig: OpenClawConfig): boolean {
+    return CHINA_CHANNEL_TYPES.some((channelType) =>
+        hasConfiguredChannelState(channelType, currentConfig.channels?.[channelType] as AccountScopedChannelSection | undefined),
+    );
 }
 
 async function resolveFeishuPluginId(): Promise<string> {
@@ -641,13 +745,6 @@ function isSharedChannelSectionKey(channelType: string, key: string): boolean {
     return SHARED_CHANNEL_SECTION_KEYS_BY_TYPE[channelType]?.includes(key) ?? false;
 }
 
-function cloneIfObject<T>(value: T): T {
-    if (value && typeof value === 'object') {
-        return structuredClone(value);
-    }
-    return value;
-}
-
 function getAccountScopedTopLevelKeys(
     channelType: string,
     section: AccountScopedChannelSection
@@ -656,6 +753,59 @@ function getAccountScopedTopLevelKeys(
         .filter(([key, value]) => key !== 'accounts' && value !== undefined)
         .filter(([key]) => !isSharedChannelSectionKey(channelType, key))
         .map(([key]) => key);
+}
+
+function extractAccountScopedTopLevelConfig(
+    channelType: string,
+    section: AccountScopedChannelSection
+): ChannelConfigData {
+    return Object.fromEntries(
+        getAccountScopedTopLevelKeys(channelType, section)
+            .map((key) => [key, section[key]])
+            .filter(([, value]) => value !== undefined),
+    );
+}
+
+function normalizeFeishuSection(
+    section: AccountScopedChannelSection | undefined
+): AccountScopedChannelSection | undefined {
+    if (!section || typeof section !== 'object') {
+        return section;
+    }
+
+    const hasNamedAccounts = resolveConfiguredAccounts(section).some(
+        ({ accountId, config }) => accountId !== 'default' && hasConfiguredAccountConfig('feishu', config),
+    );
+    if (!hasNamedAccounts) {
+        return section;
+    }
+
+    const topLevelAccountConfig = extractAccountScopedTopLevelConfig('feishu', section);
+    if (Object.keys(topLevelAccountConfig).length === 0) {
+        return section;
+    }
+
+    const nextAccounts = { ...(section.accounts || {}) };
+    nextAccounts.default = {
+        ...(nextAccounts.default || {}),
+        ...topLevelAccountConfig,
+        enabled: (nextAccounts.default as ChannelConfigData | undefined)?.enabled ?? section.enabled ?? true,
+    };
+
+    const nextSection = clearTopLevelAccountFields('feishu', {
+        ...section,
+        accounts: nextAccounts,
+        defaultAccount:
+            typeof section.defaultAccount === 'string' && section.defaultAccount.trim()
+                ? section.defaultAccount
+                : 'default',
+    });
+
+    if (!nextSection.defaultAccount) {
+        nextSection.defaultAccount = 'default';
+    }
+
+    return nextSection;
 }
 
 function getConfiguredAccountIds(
@@ -667,10 +817,13 @@ function getConfiguredAccountIds(
     }
 
     const accountIds = resolveConfiguredAccounts(section)
+        .filter(({ accountId }) => accountId !== 'default')
         .filter(({ config }) => hasConfiguredAccountConfig(channelType, config))
         .map(({ accountId }) => accountId);
 
     if (
+        hasConfiguredAccountConfig(channelType, section.accounts?.default as ChannelConfigData | undefined)
+        ||
         getAccountScopedTopLevelKeys(channelType, section).length > 0
         || isImplicitlyConfiguredChannel(channelType, section)
     ) {
@@ -680,43 +833,21 @@ function getConfiguredAccountIds(
     return Array.from(new Set(accountIds));
 }
 
+function normalizeChannelSectionForRuntime(
+    channelType: string,
+    section: AccountScopedChannelSection | undefined
+): AccountScopedChannelSection | undefined {
+    if (channelType === 'feishu') {
+        return normalizeFeishuSection(section);
+    }
+    return section;
+}
+
 function hasConfiguredChannelState(
     channelType: string,
     section: AccountScopedChannelSection | undefined
 ): boolean {
     return getConfiguredAccountIds(channelType, section).length > 0;
-}
-
-function moveSingleAccountSectionToAccount(
-    channelType: string,
-    section: AccountScopedChannelSection,
-    targetAccountId = 'default'
-): AccountScopedChannelSection {
-    const accounts = section.accounts && typeof section.accounts === 'object'
-        ? { ...section.accounts }
-        : {};
-    if (Object.keys(accounts).length > 0) {
-        return section;
-    }
-
-    const keysToMove = getAccountScopedTopLevelKeys(channelType, section);
-    if (keysToMove.length === 0) {
-        return section;
-    }
-
-    const targetAccount = { ...((accounts[targetAccountId] as ChannelConfigData | undefined) || {}) };
-    const nextSection: AccountScopedChannelSection = { ...section };
-
-    for (const key of keysToMove) {
-        targetAccount[key] = cloneIfObject((section as Record<string, unknown>)[key]);
-        delete (nextSection as Record<string, unknown>)[key];
-    }
-
-    nextSection.accounts = {
-        ...accounts,
-        [targetAccountId]: targetAccount,
-    };
-    return nextSection;
 }
 
 function clearTopLevelAccountFields(
@@ -796,112 +927,23 @@ export async function saveChannelConfig(
     await updateOpenClawConfig(async (currentConfig) => {
     migrateLegacyWechatSection(currentConfig);
 
-    // DingTalk is a channel plugin; make sure it's explicitly allowed.
-    // Newer OpenClaw versions may not load non-bundled plugins when allowlist is empty.
-    if (runtimeChannelType === 'dingtalk') {
-        const defaultDingtalkAllow = ['dingtalk'];
-        if (!currentConfig.plugins) {
-            currentConfig.plugins = { allow: defaultDingtalkAllow, enabled: true };
-        } else {
-            currentConfig.plugins.enabled = true;
-            const allow: string[] = Array.isArray(currentConfig.plugins.allow)
-                ? (currentConfig.plugins.allow as string[])
-                : [];
-            if (!allow.includes('dingtalk')) {
-                currentConfig.plugins.allow = [...allow, 'dingtalk'];
-            }
-        }
+    if (isChinaChannelsManagedChannel(runtimeChannelType)) {
+        ensurePluginEnabled(currentConfig, CHINA_CHANNEL_PLUGIN_ID, { createEntry: true });
+        removePluginIds(currentConfig, getLegacyChannelPluginIds(runtimeChannelType));
     }
-
-      if (runtimeChannelType === 'wecom') {
-          const defaultWecomAllow = [WECOM_PLUGIN_ID];
-          if (!currentConfig.plugins) {
-              currentConfig.plugins = { allow: defaultWecomAllow, enabled: true };
-        } else {
-            currentConfig.plugins.enabled = true;
-            const allow: string[] = Array.isArray(currentConfig.plugins.allow)
-                ? (currentConfig.plugins.allow as string[])
-                : [];
-            const normalizedAllow = allow.filter((pluginId) => pluginId !== 'wecom');
-            if (!normalizedAllow.includes(WECOM_PLUGIN_ID)) {
-                currentConfig.plugins.allow = [...normalizedAllow, WECOM_PLUGIN_ID];
-            } else if (normalizedAllow.length !== allow.length) {
-                currentConfig.plugins.allow = normalizedAllow;
-            }
-          }
-      }
 
       if (runtimeChannelType === 'feishu') {
           const feishuPluginId = await resolveFeishuPluginId();
-          if (!currentConfig.plugins) {
-              currentConfig.plugins = {
-                  allow: [feishuPluginId],
-                  enabled: true,
-                  entries: {
-                      [feishuPluginId]: { enabled: true },
-                  },
-              };
-          } else {
-              currentConfig.plugins.enabled = true;
-              const allow: string[] = Array.isArray(currentConfig.plugins.allow)
-                  ? (currentConfig.plugins.allow as string[])
-                  : [];
-              const normalizedAllow = allow.filter(
-                  (pluginId) =>
-                      pluginId !== 'feishu'
-                      && !FEISHU_PLUGIN_ID_CANDIDATES.includes(
-                          pluginId as typeof FEISHU_PLUGIN_ID_CANDIDATES[number],
-                      ),
-              );
-              if (!normalizedAllow.includes(feishuPluginId)) {
-                  currentConfig.plugins.allow = [...normalizedAllow, feishuPluginId];
-              } else if (normalizedAllow.length !== allow.length) {
-                  currentConfig.plugins.allow = normalizedAllow;
-              }
-
-              if (!currentConfig.plugins.entries) {
-                  currentConfig.plugins.entries = {};
-              }
-              delete currentConfig.plugins.entries.feishu;
-              for (const candidateId of FEISHU_PLUGIN_ID_CANDIDATES) {
-                  if (candidateId !== feishuPluginId) {
-                      delete currentConfig.plugins.entries[candidateId];
-                  }
-              }
-              if (!currentConfig.plugins.entries[feishuPluginId]) {
-                  currentConfig.plugins.entries[feishuPluginId] = {};
-              }
-              currentConfig.plugins.entries[feishuPluginId].enabled = true;
-          }
+          removePluginIds(
+              currentConfig,
+              FEISHU_PLUGIN_ID_CANDIDATES.filter((pluginId) => pluginId !== feishuPluginId),
+          );
+          ensurePluginEnabled(currentConfig, feishuPluginId, { createEntry: true });
       }
 
       if (runtimeChannelType === WECHAT_RUNTIME_CHANNEL_ID) {
-          if (!currentConfig.plugins) {
-              currentConfig.plugins = {};
-          }
-          currentConfig.plugins.enabled = true;
-          const allow = Array.isArray(currentConfig.plugins.allow)
-              ? currentConfig.plugins.allow as string[]
-              : [];
-          if (!allow.includes(WECHAT_RUNTIME_CHANNEL_ID)) {
-              currentConfig.plugins.allow = [...allow, WECHAT_RUNTIME_CHANNEL_ID];
-          }
+          ensurePluginEnabled(currentConfig, WECHAT_RUNTIME_CHANNEL_ID);
       }
-
-      // QQ Bot is a channel plugin; make sure it's explicitly allowed.
-    // Newer OpenClaw versions may not load non-bundled plugins when allowlist is empty.
-    if (runtimeChannelType === 'qqbot') {
-        if (!currentConfig.plugins) {
-            currentConfig.plugins = {};
-        }
-        currentConfig.plugins.enabled = true;
-        const allow = Array.isArray(currentConfig.plugins.allow)
-            ? currentConfig.plugins.allow as string[]
-            : [];
-        if (!allow.includes('qqbot')) {
-            currentConfig.plugins.allow = [...allow, 'qqbot'];
-        }
-    }
 
     // Plugin-based channels (e.g. WhatsApp) go under plugins.entries, not channels
     if (PLUGIN_CHANNELS.includes(runtimeChannelType)) {
@@ -1003,26 +1045,15 @@ export async function saveChannelConfig(
     }
 
     {
-        let existingSection = (currentConfig.channels[runtimeChannelType] as AccountScopedChannelSection | undefined) || {};
+        let existingSection = normalizeChannelSectionForRuntime(
+            runtimeChannelType,
+            currentConfig.channels[runtimeChannelType] as AccountScopedChannelSection | undefined,
+        ) || {};
 
         const normalizedPreferredAccountId =
             typeof preferredAccountId === 'string' && preferredAccountId.trim()
                 ? preferredAccountId.trim()
                 : '';
-
-        if (
-            normalizedPreferredAccountId &&
-            normalizedPreferredAccountId !== 'default' &&
-            hasMeaningfulSectionConfig(existingSection) &&
-            (!existingSection.accounts || Object.keys(existingSection.accounts).length === 0)
-        ) {
-            existingSection = moveSingleAccountSectionToAccount(
-                runtimeChannelType,
-                existingSection,
-                normalizedPreferredAccountId,
-            );
-            currentConfig.channels[runtimeChannelType] = existingSection;
-        }
 
         const editableSource =
             normalizedPreferredAccountId && normalizedPreferredAccountId !== 'default'
@@ -1032,30 +1063,47 @@ export async function saveChannelConfig(
         if (editableSource.kind === 'account') {
             const accounts = { ...(existingSection.accounts || {}) };
             const existingAccount = (accounts[editableSource.accountId] as ChannelConfigData | undefined) || {};
-            accounts[editableSource.accountId] = {
+            const nextAccountConfig: ChannelConfigData = {
                 ...existingAccount,
                 ...transformedConfig,
                 enabled: transformedConfig.enabled ?? true,
             };
+            accounts[editableSource.accountId] = nextAccountConfig;
 
             let nextSection: AccountScopedChannelSection = {
                 ...existingSection,
+                enabled: transformedConfig.enabled ?? true,
                 accounts,
             };
 
             // If ClawX previously created a conflicting duplicated default account,
             // remove top-level credentials so the plugin resolves the named account.
-            if (configsShareComparableValues(existingSection, existingAccount)) {
+            if (
+                runtimeChannelType !== 'feishu'
+                && hasMeaningfulSectionConfig(existingSection)
+                && configsShareComparableValues(existingSection, nextAccountConfig)
+            ) {
                 nextSection = removeTopLevelCredentialFields(nextSection);
+                if (!nextSection.defaultAccount && Object.keys(accounts).length === 1) {
+                    nextSection.defaultAccount = editableSource.accountId;
+                }
             }
 
-            if (!nextSection.defaultAccount && Object.keys(accounts).length === 1) {
+            if (
+                !nextSection.defaultAccount
+                && !hasMeaningfulSectionConfig(existingSection)
+                && Object.keys(accounts).length === 1
+            ) {
                 nextSection.defaultAccount = editableSource.accountId;
             }
 
-            currentConfig.channels[runtimeChannelType] = nextSection;
+            currentConfig.channels[runtimeChannelType] = normalizeChannelSectionForRuntime(runtimeChannelType, nextSection) || nextSection;
         } else {
-            currentConfig.channels[runtimeChannelType] = {
+            currentConfig.channels[runtimeChannelType] = normalizeChannelSectionForRuntime(runtimeChannelType, {
+                ...existingSection,
+                ...transformedConfig,
+                enabled: transformedConfig.enabled ?? true,
+            }) || {
                 ...existingSection,
                 ...transformedConfig,
                 enabled: transformedConfig.enabled ?? true,
@@ -1082,8 +1130,12 @@ export async function getChannelConfig(
     const config = await readOpenClawConfig();
     migrateLegacyWechatSection(config);
     if (config.channels?.[runtimeChannelType]) {
-        const section = config.channels[runtimeChannelType] as AccountScopedChannelSection | undefined;
+        const section = normalizeChannelSectionForRuntime(
+            runtimeChannelType,
+            config.channels[runtimeChannelType] as AccountScopedChannelSection | undefined,
+        );
         if (!section) return undefined;
+        config.channels[runtimeChannelType] = section;
         const source = resolveEditableChannelSource(config, runtimeChannelType, preferredAccountId);
         if (source.kind === 'account') {
             return section.accounts?.[source.accountId];
@@ -1099,6 +1151,12 @@ export async function getChannelFormValues(
     const runtimeChannelType = toRuntimeChannelType(channelType);
     const config = await readOpenClawConfig();
     migrateLegacyWechatSection(config);
+    if (config.channels?.[runtimeChannelType]) {
+        config.channels[runtimeChannelType] = normalizeChannelSectionForRuntime(
+            runtimeChannelType,
+            config.channels[runtimeChannelType] as AccountScopedChannelSection | undefined,
+        ) as ChannelConfigData;
+    }
     const source = resolveEditableChannelSource(config, runtimeChannelType, preferredAccountId);
     const saved = await getChannelConfig(channelType, preferredAccountId);
     if (!saved) return undefined;
@@ -1161,7 +1219,13 @@ export async function deleteChannelConfig(
     let removedScopedAccountId: string | undefined;
 
     if (currentConfig.channels?.[runtimeChannelType]) {
-        const section = currentConfig.channels[runtimeChannelType] as AccountScopedChannelSection | undefined;
+        const section = normalizeChannelSectionForRuntime(
+            runtimeChannelType,
+            currentConfig.channels[runtimeChannelType] as AccountScopedChannelSection | undefined,
+        );
+        if (section) {
+            currentConfig.channels[runtimeChannelType] = section;
+        }
         const source = resolveEditableChannelSource(currentConfig, runtimeChannelType, preferredAccountId);
         if (section && source.kind === 'account' && section.accounts?.[source.accountId]) {
             const accounts = { ...section.accounts };
@@ -1185,7 +1249,8 @@ export async function deleteChannelConfig(
             if (remainingAccounts.length === 0 && !hasMeaningfulSectionConfig(nextSection)) {
                 delete currentConfig.channels[runtimeChannelType];
             } else {
-                currentConfig.channels[runtimeChannelType] = nextSection;
+                currentConfig.channels[runtimeChannelType] =
+                    normalizeChannelSectionForRuntime(runtimeChannelType, nextSection) || nextSection;
             }
         } else {
             if (section?.accounts && Object.keys(section.accounts).length > 0) {
@@ -1196,7 +1261,8 @@ export async function deleteChannelConfig(
                 if (!nextSection.accounts || Object.keys(nextSection.accounts).length === 0) {
                     delete currentConfig.channels[runtimeChannelType];
                 } else {
-                    currentConfig.channels[runtimeChannelType] = nextSection;
+                    currentConfig.channels[runtimeChannelType] =
+                        normalizeChannelSectionForRuntime(runtimeChannelType, nextSection) || nextSection;
                 }
             } else {
                 delete currentConfig.channels[runtimeChannelType];
@@ -1223,52 +1289,42 @@ export async function deleteChannelConfig(
             changed = true;
             console.log(`Deleted plugin channel config for ${runtimeChannelType}`);
         }
-    } else if (currentConfig.plugins?.entries?.[runtimeChannelType]) {
-        delete currentConfig.plugins.entries[runtimeChannelType];
-        if (Object.keys(currentConfig.plugins.entries).length === 0) {
-            delete currentConfig.plugins.entries;
-        }
-        if (currentConfig.plugins && Object.keys(currentConfig.plugins).length === 0) {
-            delete currentConfig.plugins;
-        }
-        changed = true;
     }
+
+    const hasRemainingChannelConfig =
+        runtimeChannelType === 'feishu'
+            ? hasConfiguredChannelState(
+                runtimeChannelType,
+                currentConfig.channels?.[runtimeChannelType] as AccountScopedChannelSection | undefined,
+            )
+            : Boolean(currentConfig.channels?.[runtimeChannelType]);
 
     const shouldRemovePluginAllowlist =
         isWeChatRuntimeChannel(runtimeChannelType)
             ? clearAllWeChatState
-            : !currentConfig.channels?.[runtimeChannelType];
-    if (shouldRemovePluginAllowlist && currentConfig.plugins?.allow) {
-        const pluginAllowIds = getChannelPluginAllowIds(runtimeChannelType);
-        if (pluginAllowIds.length > 0) {
-            const nextAllow = (currentConfig.plugins.allow as string[]).filter((pluginId) => !pluginAllowIds.includes(pluginId));
-            if (nextAllow.length !== currentConfig.plugins.allow.length) {
-                if (nextAllow.length > 0) {
-                    currentConfig.plugins.allow = nextAllow;
-                } else {
-                    delete currentConfig.plugins.allow;
-                }
-                changed = true;
-            }
+            : isChinaChannelsManagedChannel(runtimeChannelType)
+                ? !hasConfiguredChinaManagedChannel(currentConfig)
+                : !hasRemainingChannelConfig;
+    if (shouldRemovePluginAllowlist) {
+        const pluginAllowIds = [
+            ...getChannelPluginAllowIds(runtimeChannelType),
+            ...getLegacyChannelPluginIds(runtimeChannelType),
+        ];
+        if (removePluginIds(currentConfig, pluginAllowIds)) {
+            changed = true;
         }
     }
 
-    if (runtimeChannelType === 'feishu' && currentConfig.plugins?.entries) {
-        let removedFeishuEntry = false;
-        if (currentConfig.plugins.entries.feishu) {
-            delete currentConfig.plugins.entries.feishu;
-            removedFeishuEntry = true;
+    if (runtimeChannelType === 'feishu') {
+        const feishuPluginId = await resolveFeishuPluginId();
+        const staleFeishuPluginIds = FEISHU_PLUGIN_ID_CANDIDATES.filter((pluginId) => pluginId !== feishuPluginId);
+        if (removePluginIds(currentConfig, staleFeishuPluginIds)) {
+            changed = true;
         }
-        for (const candidateId of FEISHU_PLUGIN_ID_CANDIDATES) {
-            if (currentConfig.plugins.entries[candidateId]) {
-                delete currentConfig.plugins.entries[candidateId];
-                removedFeishuEntry = true;
-            }
-        }
-        if (removedFeishuEntry) {
-            if (Object.keys(currentConfig.plugins.entries).length === 0) {
-                delete currentConfig.plugins.entries;
-            }
+    }
+
+    if (isChinaChannelsManagedChannel(runtimeChannelType)) {
+        if (removePluginIds(currentConfig, getLegacyChannelPluginIds(runtimeChannelType))) {
             changed = true;
         }
     }
@@ -1362,27 +1418,39 @@ export async function cleanupDanglingWeChatPluginState(): Promise<{ cleanedDangl
             return false;
         }
 
-        const allow = Array.isArray(currentConfig.plugins?.allow)
-            ? currentConfig.plugins.allow as string[]
-            : [];
-        const nextAllow = allow.filter((pluginId) => pluginId !== WECHAT_RUNTIME_CHANNEL_ID);
-        if (nextAllow.length !== allow.length) {
-            if (!currentConfig.plugins) {
-                currentConfig.plugins = {};
-            }
-            if (nextAllow.length > 0) {
-                currentConfig.plugins.allow = nextAllow;
-            } else if (currentConfig.plugins) {
-                delete currentConfig.plugins.allow;
-            }
-            if (currentConfig.plugins && Object.keys(currentConfig.plugins).length === 0) {
-                delete currentConfig.plugins;
-            }
+        if (removePluginIds(currentConfig, [WECHAT_RUNTIME_CHANNEL_ID])) {
             cleanedDanglingState = true;
-            return true;
         }
 
-        return false;
+        const installs =
+            currentConfig.plugins?.installs && typeof currentConfig.plugins.installs === 'object'
+                ? currentConfig.plugins.installs as Record<string, unknown>
+                : undefined;
+        if (installs && WECHAT_RUNTIME_CHANNEL_ID in installs) {
+            delete installs[WECHAT_RUNTIME_CHANNEL_ID];
+            cleanedDanglingState = true;
+            if (Object.keys(installs).length === 0) {
+                if (currentConfig.plugins) {
+                    delete currentConfig.plugins.installs;
+                }
+            } else if (currentConfig.plugins) {
+                currentConfig.plugins.installs = installs;
+            }
+        }
+
+        if (section && !hasConfiguredWeChatAccounts) {
+            delete currentConfig.channels?.[WECHAT_RUNTIME_CHANNEL_ID];
+            cleanedDanglingState = true;
+            if (currentConfig.channels && Object.keys(currentConfig.channels).length === 0) {
+                delete currentConfig.channels;
+            }
+        }
+
+        if (currentConfig.plugins && Object.keys(currentConfig.plugins).length === 0) {
+            delete currentConfig.plugins;
+        }
+
+        return cleanedDanglingState;
     });
 
     if (cleanedDanglingState) {
@@ -1390,6 +1458,7 @@ export async function cleanupDanglingWeChatPluginState(): Promise<{ cleanedDangl
             join(homedir(), '.openclaw', 'openclaw-weixin'),
             join(homedir(), '.openclaw', 'credentials', 'openclaw-weixin'),
             join(homedir(), '.openclaw', 'agents', 'default', 'sessions', '.openclaw-weixin-sync'),
+            join(homedir(), '.openclaw', 'extensions', 'openclaw-weixin'),
         ];
 
         for (const target of cleanupTargets) {
@@ -1404,6 +1473,70 @@ export async function cleanupDanglingWeChatPluginState(): Promise<{ cleanedDangl
     }
 
     return { cleanedDanglingState };
+}
+
+export async function cleanupLegacyChannelPlugins(): Promise<{ cleaned: boolean }> {
+    let cleaned = false;
+
+    await updateOpenClawConfig(async (currentConfig) => {
+        if (removePluginIds(currentConfig, LEGACY_CHANNEL_PLUGIN_IDS)) {
+            cleaned = true;
+        }
+
+        const installs =
+            currentConfig.plugins?.installs && typeof currentConfig.plugins.installs === 'object'
+                ? currentConfig.plugins.installs as Record<string, unknown>
+                : undefined;
+
+        if (installs) {
+            for (const pluginId of LEGACY_CHANNEL_PLUGIN_IDS) {
+                if (pluginId in installs) {
+                    delete installs[pluginId];
+                    cleaned = true;
+                }
+            }
+
+            if (Object.keys(installs).length === 0) {
+                if (currentConfig.plugins) {
+                    delete currentConfig.plugins.installs;
+                }
+            } else if (currentConfig.plugins) {
+                currentConfig.plugins.installs = installs;
+            }
+        }
+
+        if (currentConfig.plugins && Object.keys(currentConfig.plugins).length === 0) {
+            delete currentConfig.plugins;
+        }
+
+        return cleaned;
+    });
+
+    for (const pluginId of LEGACY_CHANNEL_PLUGIN_IDS) {
+        const pluginDir = join(EXTENSIONS_DIR, pluginId);
+        try {
+            if (await fileExists(pluginDir)) {
+                await rm(pluginDir, { recursive: true, force: true });
+                cleaned = true;
+            }
+        } catch (error) {
+            console.error(`Failed to delete legacy channel plugin at ${pluginDir}:`, error);
+        }
+    }
+
+    for (const pluginId of OFFICIAL_BUNDLED_PLUGIN_MIRROR_IDS) {
+        const pluginDir = join(EXTENSIONS_DIR, pluginId);
+        try {
+            if (await fileExists(pluginDir)) {
+                await rm(pluginDir, { recursive: true, force: true });
+                cleaned = true;
+            }
+        } catch (error) {
+            console.error(`Failed to delete bundled plugin mirror at ${pluginDir}:`, error);
+        }
+    }
+
+    return { cleaned };
 }
 
 export async function repairChannelConfigConsistency(): Promise<{ repaired: boolean }> {
@@ -1421,6 +1554,12 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
 
                 let nextSection: AccountScopedChannelSection = { ...section };
                 let sectionChanged = false;
+
+                const normalizedSection = normalizeChannelSectionForRuntime(channelType, nextSection);
+                if (normalizedSection && normalizedSection !== nextSection) {
+                    nextSection = normalizedSection;
+                    sectionChanged = true;
+                }
 
                 if (nextSection.accounts && typeof nextSection.accounts === 'object' && Object.keys(nextSection.accounts).length === 0) {
                     delete nextSection.accounts;
@@ -1455,6 +1594,11 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
                     sectionChanged = true;
                 }
 
+                if (nextSection.enabled === false && configuredAccountIds.length > 0) {
+                    nextSection.enabled = true;
+                    sectionChanged = true;
+                }
+
                 if (sectionChanged) {
                     currentConfig.channels[channelType] = nextSection;
                     repaired = true;
@@ -1463,15 +1607,26 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
         }
 
         const staleAllowIds = new Set(
-            Object.entries(CHANNEL_PLUGIN_ALLOWLIST_IDS)
-                .filter(([, pluginId]) => typeof pluginId === 'string' && pluginId.length > 0)
-                .filter(([channelType]) => !hasConfiguredChannelState(channelType, currentConfig.channels?.[channelType] as AccountScopedChannelSection | undefined))
-                .flatMap(([channelType]) => getChannelPluginAllowIds(channelType)),
+            Object.keys(CHANNEL_PLUGIN_ALLOWLIST_IDS)
+                .filter((channelType) => !hasConfiguredChannelState(channelType, currentConfig.channels?.[channelType] as AccountScopedChannelSection | undefined))
+                .flatMap((channelType) => getChannelPluginAllowIds(channelType)),
         );
 
         if (!hasConfiguredChannelState('feishu', currentConfig.channels?.feishu as AccountScopedChannelSection | undefined)) {
             for (const pluginId of getChannelPluginAllowIds('feishu')) {
                 staleAllowIds.add(pluginId);
+            }
+        }
+
+        if (!hasConfiguredChinaManagedChannel(currentConfig)) {
+            staleAllowIds.add(CHINA_CHANNEL_PLUGIN_ID);
+        }
+
+        for (const channelType of CHINA_CHANNEL_TYPES) {
+            if (!hasConfiguredChannelState(channelType, currentConfig.channels?.[channelType] as AccountScopedChannelSection | undefined)) {
+                for (const pluginId of getLegacyChannelPluginIds(channelType)) {
+                    staleAllowIds.add(pluginId);
+                }
             }
         }
 
@@ -1490,27 +1645,21 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
             }
         }
 
-        if (!hasConfiguredChannelState('feishu', currentConfig.channels?.feishu as AccountScopedChannelSection | undefined) && currentConfig.plugins?.entries) {
-            let removedFeishuEntries = false;
-            if (currentConfig.plugins.entries.feishu) {
-                delete currentConfig.plugins.entries.feishu;
-                removedFeishuEntries = true;
-            }
-            for (const candidateId of FEISHU_PLUGIN_ID_CANDIDATES) {
-                if (currentConfig.plugins.entries[candidateId]) {
-                    delete currentConfig.plugins.entries[candidateId];
-                    removedFeishuEntries = true;
-                }
-            }
-            if (removedFeishuEntries) {
-                if (Object.keys(currentConfig.plugins.entries).length === 0) {
-                    delete currentConfig.plugins.entries;
-                }
-                if (currentConfig.plugins && Object.keys(currentConfig.plugins).length === 0) {
-                    delete currentConfig.plugins;
-                }
+        if (!hasConfiguredChannelState('feishu', currentConfig.channels?.feishu as AccountScopedChannelSection | undefined)) {
+            if (removePluginIds(currentConfig, FEISHU_PLUGIN_ID_CANDIDATES)) {
                 repaired = true;
             }
+        }
+
+        if (hasConfiguredChinaManagedChannel(currentConfig)) {
+            ensurePluginEnabled(currentConfig, CHINA_CHANNEL_PLUGIN_ID, { createEntry: true });
+            for (const channelType of CHINA_CHANNEL_TYPES) {
+                if (removePluginIds(currentConfig, getLegacyChannelPluginIds(channelType))) {
+                    repaired = true;
+                }
+            }
+        } else if (removePluginIds(currentConfig, [CHINA_CHANNEL_PLUGIN_ID, ...CHINA_CHANNEL_TYPES.flatMap((channelType) => getLegacyChannelPluginIds(channelType))])) {
+            repaired = true;
         }
 
         return repaired;
@@ -1565,18 +1714,24 @@ export async function listConfiguredChannelAccounts(options?: { includeCli?: boo
     for (const channelType of await listConfiguredChannels(options)) {
         const runtimeChannelType = toRuntimeChannelType(channelType);
         const section = config.channels?.[runtimeChannelType] as AccountScopedChannelSection | undefined;
+        const normalizedSection = normalizeChannelSectionForRuntime(runtimeChannelType, section);
+        const effectiveSection = normalizedSection || section;
         const accountIds = new Set<string>();
 
-        if (section && section.enabled !== false) {
-            if (getAccountScopedTopLevelKeys(runtimeChannelType, section).length > 0) {
+        if (effectiveSection && effectiveSection.enabled !== false) {
+            if (hasConfiguredAccountConfig(runtimeChannelType, effectiveSection.accounts?.default as ChannelConfigData | undefined)) {
                 accountIds.add('default');
             }
-            for (const { accountId, config: accountConfig } of resolveConfiguredAccounts(section)) {
+            if (getAccountScopedTopLevelKeys(runtimeChannelType, effectiveSection).length > 0) {
+                accountIds.add('default');
+            }
+            for (const { accountId, config: accountConfig } of resolveConfiguredAccounts(effectiveSection)) {
+                if (accountId === 'default') continue;
                 if (hasConfiguredAccountConfig(runtimeChannelType, accountConfig)) {
                     accountIds.add(accountId);
                 }
             }
-            if (isImplicitlyConfiguredChannel(runtimeChannelType, section) && accountIds.size === 0) {
+            if (isImplicitlyConfiguredChannel(runtimeChannelType, effectiveSection) && accountIds.size === 0) {
                 accountIds.add('default');
             }
         }
@@ -1611,7 +1766,10 @@ export async function listConfiguredChannelGroups(options?: { includeCli?: boole
 
     for (const channelType of await listConfiguredChannels(options)) {
         const runtimeChannelType = toRuntimeChannelType(channelType);
-        const section = config.channels?.[runtimeChannelType] as AccountScopedChannelSection | undefined;
+        const section = normalizeChannelSectionForRuntime(
+            runtimeChannelType,
+            config.channels?.[runtimeChannelType] as AccountScopedChannelSection | undefined,
+        );
         const accounts = new Map<string, ConfiguredChannelGroupSnapshot['accounts'][number]>();
         const explicitDefaultAccountId =
             typeof section?.defaultAccount === 'string' && section.defaultAccount.trim()
@@ -1627,7 +1785,15 @@ export async function listConfiguredChannelGroups(options?: { includeCli?: boole
         }
 
         if (section && section.enabled !== false) {
+            if (hasConfiguredAccountConfig(runtimeChannelType, section.accounts?.default as ChannelConfigData | undefined)) {
+                accounts.set('default', {
+                    accountId: 'default',
+                    isDefaultAccount: explicitDefaultAccountId ? explicitDefaultAccountId === 'default' : true,
+                    configured: true,
+                });
+            }
             for (const { accountId, config: accountConfig } of resolveConfiguredAccounts(section)) {
+                if (accountId === 'default') continue;
                 if (!hasConfiguredAccountConfig(runtimeChannelType, accountConfig)) continue;
                 accounts.set(accountId, {
                     accountId,
@@ -1746,12 +1912,81 @@ export async function validateChannelCredentials(
     switch (channelType) {
         case 'wecom':
             return validateWeComCredentials(config);
+        case 'qqbot':
+            return validateQQBotCredentials(config);
         case 'discord':
             return validateDiscordCredentials(config);
         case 'telegram':
             return validateTelegramCredentials(config);
         default:
             return { valid: true, errors: [], warnings: ['No online validation available for this channel type.'] };
+    }
+}
+
+async function validateQQBotCredentials(
+    config: Record<string, string>
+): Promise<CredentialValidationResult> {
+    const appId = config.appId?.trim();
+    const clientSecret = config.clientSecret?.trim();
+
+    if (!appId) {
+        return { valid: false, errors: ['App ID is required'], warnings: [] };
+    }
+
+    if (!clientSecret) {
+        return { valid: false, errors: ['Client Secret is required'], warnings: [] };
+    }
+
+    try {
+        const response = await proxyAwareFetch('https://bots.qq.com/app/getAppAccessToken', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ appId, clientSecret }),
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+            access_token?: string;
+            expires_in?: number;
+            code?: number;
+            message?: string;
+        };
+
+        if (response.ok && typeof data.access_token === 'string' && data.access_token.trim()) {
+            return {
+                valid: true,
+                errors: [],
+                warnings: [],
+                details: {
+                    appId,
+                    tokenTtlSeconds: String(data.expires_in ?? ''),
+                },
+            };
+        }
+
+        const code = typeof data.code === 'number' ? data.code : undefined;
+        const message = typeof data.message === 'string' ? data.message : '';
+        if (code === 100016 || /invalid appid or secret/i.test(message)) {
+            return {
+                valid: false,
+                errors: ['Invalid QQ Bot App ID or Client Secret. Please verify the credentials and try again.'],
+                warnings: [],
+            };
+        }
+
+        return {
+            valid: false,
+            errors: [
+                message || `QQ Bot API returned ${response.status}`,
+            ],
+            warnings: [],
+        };
+    } catch (error) {
+        return {
+            valid: false,
+            errors: [`Unable to validate QQ Bot credentials online: ${error instanceof Error ? error.message : String(error)}`],
+            warnings: [],
+        };
     }
 }
 
@@ -1814,7 +2049,7 @@ async function validateWeComCredentials(
             valid: true,
             errors: [],
             warnings: [
-                `Unable to fully verify this WeCom Bot ID online (${advisory}). The Gateway will perform the final runtime check after save.`,
+                `Online verification only supports the WeCom Corp ID + Secret flow. This Bot ID could not be fully verified online (${advisory}), but it can still work at runtime after save.`,
             ],
         };
     } catch (error) {
@@ -1822,7 +2057,7 @@ async function validateWeComCredentials(
             valid: true,
             errors: [],
             warnings: [
-                `Unable to validate WeCom credentials online: ${error instanceof Error ? error.message : String(error)}`,
+                `Online WeCom verification is unavailable right now (${error instanceof Error ? error.message : String(error)}). The Gateway will perform the final runtime check after save.`,
             ],
         };
     }

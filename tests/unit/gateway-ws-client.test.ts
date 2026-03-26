@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildGatewayConnectFrame } from '../../electron/gateway/ws-client';
+import { buildGatewayConnectFrame, waitForGatewayReady } from '../../electron/gateway/ws-client';
 
 describe('buildGatewayConnectFrame', () => {
   it('uses backend gateway client semantics aligned with openclaw', () => {
@@ -33,5 +33,18 @@ describe('buildGatewayConnectFrame', () => {
         ],
       },
     });
+  });
+});
+
+describe('waitForGatewayReady', () => {
+  it('fails immediately when the child exited by signal before readiness', async () => {
+    await expect(
+      waitForGatewayReady({
+        port: 18789,
+        getProcessExitCode: () => 'SIGTERM',
+        retries: 1,
+        intervalMs: 1,
+      }),
+    ).rejects.toThrow('Gateway process exited before becoming ready (status=SIGTERM)');
   });
 });

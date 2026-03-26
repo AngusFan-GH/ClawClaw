@@ -44,7 +44,8 @@ async function sanitizeConfig(filePath: string): Promise<boolean> {
   const isAbsolutePluginPath = (value: string): boolean =>
     value.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(value) || value.startsWith('\\\\');
   const isBundledPluginPath = (value: string): boolean =>
-    value.replace(/\\/g, '/').includes('node_modules/openclaw/extensions');
+    value.replace(/\\/g, '/').includes('node_modules/openclaw/extensions')
+    || value.replace(/\\/g, '/').includes('node_modules/openclaw/dist/extensions');
 
   const acp = config.acp;
   if (acp && typeof acp === 'object' && !Array.isArray(acp)) {
@@ -282,7 +283,12 @@ describe('sanitizeOpenClawConfig (blocklist approach)', () => {
       plugins: {
         load: {
           watch: true,
-          paths: ['/valid/plugin', '/missing/plugin', '/app/node_modules/openclaw/extensions/demo'],
+          paths: [
+            '/valid/plugin',
+            '/missing/plugin',
+            '/app/node_modules/openclaw/extensions/demo',
+            '/app/node_modules/openclaw/dist/extensions/demo',
+          ],
         },
       },
     });

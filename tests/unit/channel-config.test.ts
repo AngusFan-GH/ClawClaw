@@ -166,7 +166,7 @@ describe('channel config lifecycle', () => {
         },
       },
       plugins: {
-        allow: ['openclaw-weixin', 'qqbot'],
+        allow: ['openclaw-weixin', 'channels'],
       },
     });
 
@@ -194,7 +194,7 @@ describe('channel config lifecycle', () => {
     const config = await readOpenClawJson();
     expect(config.channels ?? {}).not.toHaveProperty('openclaw-weixin');
     expect(config.plugins).toEqual({
-      allow: ['qqbot'],
+      allow: ['channels'],
     });
     await expect(listConfiguredChannels({ includeCli: false })).resolves.toEqual([]);
 
@@ -279,7 +279,7 @@ describe('channel config lifecycle', () => {
         },
       },
       plugins: {
-        allow: ['wecom', 'qqbot'],
+        allow: ['channels'],
       },
     });
 
@@ -288,9 +288,7 @@ describe('channel config lifecycle', () => {
 
     const config = await readOpenClawJson();
     expect(config.channels ?? {}).not.toHaveProperty('wecom');
-    expect(config.plugins).toEqual({
-      allow: ['qqbot'],
-    });
+    expect(config.plugins).toBeUndefined();
     await expect(listConfiguredChannels({ includeCli: false })).resolves.toEqual([]);
     await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([]);
   });
@@ -314,7 +312,7 @@ describe('channel config lifecycle', () => {
         },
       },
       plugins: {
-        allow: ['wecom'],
+        allow: ['channels'],
       },
     });
 
@@ -352,19 +350,42 @@ describe('channel config lifecycle', () => {
   it('cleans dangling wechat plugin allowlist when no configured account remains', async () => {
     await writeOpenClawJson({
       plugins: {
-        allow: ['openclaw-weixin', 'qqbot'],
+        allow: ['openclaw-weixin', 'channels'],
+        entries: {
+          'openclaw-weixin': {
+            enabled: true,
+          },
+        },
+        installs: {
+          'openclaw-weixin': {
+            installPath: join(testHome, '.openclaw', 'extensions', 'openclaw-weixin'),
+          },
+        },
+      },
+      channels: {
+        'openclaw-weixin': {
+          enabled: false,
+          accounts: {
+            stale: {
+              enabled: false,
+            },
+          },
+        },
       },
     });
     await mkdir(join(testHome, '.openclaw', 'openclaw-weixin'), { recursive: true });
+    await mkdir(join(testHome, '.openclaw', 'extensions', 'openclaw-weixin'), { recursive: true });
 
     const { cleanupDanglingWeChatPluginState } = await import('@electron/utils/channel-config');
     await expect(cleanupDanglingWeChatPluginState()).resolves.toEqual({ cleanedDanglingState: true });
 
     const config = await readOpenClawJson();
     expect(config.plugins).toEqual({
-      allow: ['qqbot'],
+      allow: ['channels'],
     });
     await expect(access(join(testHome, '.openclaw', 'openclaw-weixin'))).rejects.toThrow();
+    await expect(access(join(testHome, '.openclaw', 'extensions', 'openclaw-weixin'))).rejects.toThrow();
+    expect(config.channels).toBeUndefined();
   });
 
   it('deletes qqbot session state when removing the channel config', async () => {
@@ -377,7 +398,7 @@ describe('channel config lifecycle', () => {
         },
       },
       plugins: {
-        allow: ['qqbot'],
+        allow: ['channels'],
       },
     });
 
@@ -420,12 +441,146 @@ describe('channel config lifecycle', () => {
 
     const config = await readOpenClawJson();
     expect(config.plugins).toEqual({
-      allow: ['openclaw-lark'],
+      allow: ['feishu'],
       enabled: true,
       entries: {
-        'openclaw-lark': { enabled: true },
+        feishu: { enabled: true },
       },
     });
+  });
+
+  it('preserves existing feishu accounts when adding a second named account', async () => {
+    const { saveChannelConfig, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+
+    await saveChannelConfig('feishu', {
+      __accountId: 'team-a',
+      appId: 'app-a',
+      appSecret: 'secret-a',
+      enabled: true,
+    });
+
+    await saveChannelConfig('feishu', {
+      __accountId: 'team-b',
+      appId: 'app-b',
+      appSecret: 'secret-b',
+      enabled: true,
+    });
+
+    const config = await readOpenClawJson();
+    expect(config.channels).toEqual({
+      feishu: {
+        enabled: true,
+        defaultAccount: 'team-a',
+        accounts: {
+          'team-a': {
+            appId: 'app-a',
+            appSecret: 'secret-a',
+            enabled: true,
+            dmPolicy: 'open',
+            allowFrom: ['*'],
+          },
+          'team-b': {
+            appId: 'app-b',
+            appSecret: 'secret-b',
+            enabled: true,
+            dmPolicy: 'open',
+            allowFrom: ['*'],
+          },
+        },
+      },
+    });
+
+    await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([
+      {
+        type: 'feishu',
+        defaultAccountId: 'team-a',
+        configured: true,
+        accounts: [
+          {
+            accountId: 'team-a',
+            isDefaultAccount: true,
+            configured: true,
+          },
+          {
+            accountId: 'team-b',
+            isDefaultAccount: false,
+            configured: true,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('preserves a legacy top-level feishu account when adding a new named account', async () => {
+    await writeOpenClawJson({
+      channels: {
+        feishu: {
+          enabled: true,
+          appId: 'legacy-app',
+          appSecret: 'legacy-secret',
+          dmPolicy: 'open',
+          allowFrom: ['*'],
+        },
+      },
+      plugins: {
+        allow: ['feishu'],
+        entries: {
+          feishu: { enabled: true },
+        },
+      },
+    });
+
+    const { saveChannelConfig, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    await saveChannelConfig('feishu', {
+      __accountId: 'team-b',
+      appId: 'app-b',
+      appSecret: 'secret-b',
+      enabled: true,
+    });
+
+    const config = await readOpenClawJson();
+    expect(config.channels).toEqual({
+      feishu: {
+        enabled: true,
+        defaultAccount: 'default',
+        accounts: {
+          default: {
+            appId: 'legacy-app',
+            appSecret: 'legacy-secret',
+            dmPolicy: 'open',
+            allowFrom: ['*'],
+            enabled: true,
+          },
+          'team-b': {
+            appId: 'app-b',
+            appSecret: 'secret-b',
+            enabled: true,
+            dmPolicy: 'open',
+            allowFrom: ['*'],
+          },
+        },
+      },
+    });
+
+    await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([
+      {
+        type: 'feishu',
+        defaultAccountId: 'default',
+        configured: true,
+        accounts: [
+          {
+            accountId: 'default',
+            isDefaultAccount: true,
+            configured: true,
+          },
+          {
+            accountId: 'team-b',
+            isDefaultAccount: false,
+            configured: true,
+          },
+        ],
+      },
+    ]);
   });
 
   it('repairs invalid defaultAccount and shadow default accounts from legacy multi-account data', async () => {
@@ -488,10 +643,68 @@ describe('channel config lifecycle', () => {
     ]);
   });
 
+  it('deletes only the selected feishu account and preserves remaining accounts plus plugin state', async () => {
+    const { saveChannelConfig, deleteChannelConfig, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+
+    await saveChannelConfig('feishu', {
+      __accountId: 'team-a',
+      appId: 'app-a',
+      appSecret: 'secret-a',
+      enabled: true,
+    });
+    await saveChannelConfig('feishu', {
+      __accountId: 'team-b',
+      appId: 'app-b',
+      appSecret: 'secret-b',
+      enabled: true,
+    });
+
+    await deleteChannelConfig('feishu', 'team-b');
+
+    const config = await readOpenClawJson();
+    expect(config.channels).toEqual({
+      feishu: {
+        enabled: true,
+        defaultAccount: 'team-a',
+        accounts: {
+          'team-a': {
+            appId: 'app-a',
+            appSecret: 'secret-a',
+            enabled: true,
+            dmPolicy: 'open',
+            allowFrom: ['*'],
+          },
+        },
+      },
+    });
+    expect(config.plugins).toEqual({
+      allow: ['feishu'],
+      enabled: true,
+      entries: {
+        feishu: { enabled: true },
+      },
+    });
+
+    await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([
+      {
+        type: 'feishu',
+        defaultAccountId: 'team-a',
+        configured: true,
+        accounts: [
+          {
+            accountId: 'team-a',
+            isDefaultAccount: true,
+            configured: true,
+          },
+        ],
+      },
+    ]);
+  });
+
   it('repairs stale channel plugin allowlist entries when no configured channel remains', async () => {
     await writeOpenClawJson({
       plugins: {
-        allow: ['openclaw-weixin', 'wecom', 'qqbot'],
+        allow: ['openclaw-weixin', 'channels', 'wecom', 'qqbot'],
       },
     });
 

@@ -1,5 +1,6 @@
 import { access, mkdir, readFile, rename, writeFile } from 'fs/promises';
 import { constants } from 'fs';
+import { randomBytes } from 'crypto';
 import { homedir } from 'os';
 import { dirname, join } from 'path';
 import JSON5 from 'json5';
@@ -77,11 +78,27 @@ export async function readOpenClawConfigRecord<T extends Record<string, unknown>
 
 export async function writeOpenClawConfigRecord(config: Record<string, unknown>): Promise<void> {
   sanitizeKnownInvalidOpenClawKeys(config);
-  await ensureConfigDir();
   const nextContent = `${JSON.stringify(config, null, 2)}\n`;
-  const tempPath = `${OPENCLAW_CONFIG_PATH}.tmp-${process.pid}-${Date.now()}`;
-  await writeFile(tempPath, nextContent, 'utf-8');
-  await rename(tempPath, OPENCLAW_CONFIG_PATH);
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await ensureConfigDir();
+      const tempPath = `${OPENCLAW_CONFIG_PATH}.tmp-${process.pid}-${Date.now()}-${randomBytes(4).toString('hex')}`;
+      await writeFile(tempPath, nextContent, 'utf-8');
+      await rename(tempPath, OPENCLAW_CONFIG_PATH);
+      return;
+    } catch (error) {
+      lastError = error;
+      const code = (error as NodeJS.ErrnoException | undefined)?.code;
+      if (code !== 'ENOENT' && code !== 'EPERM' && code !== 'EBUSY') {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 export async function resetMalformedOpenClawConfig(): Promise<string | null> {

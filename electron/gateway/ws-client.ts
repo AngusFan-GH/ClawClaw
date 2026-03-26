@@ -122,7 +122,7 @@ export async function probeGatewayReady(port: number, timeoutMs = 1500): Promise
 
 export async function waitForGatewayReady(options: {
   port: number;
-  getProcessExitCode: () => number | null;
+  getProcessExitCode: () => number | string | null;
   retries?: number;
   intervalMs?: number;
 }): Promise<void> {
@@ -132,8 +132,8 @@ export async function waitForGatewayReady(options: {
   for (let i = 0; i < retries; i++) {
     const exitCode = options.getProcessExitCode();
     if (exitCode !== null) {
-      logger.error(`Gateway process exited before ready (code=${exitCode})`);
-      throw new Error(`Gateway process exited before becoming ready (code=${exitCode})`);
+      logger.error(`Gateway process exited before ready (status=${exitCode})`);
+      throw new Error(`Gateway process exited before becoming ready (status=${exitCode})`);
     }
 
     try {

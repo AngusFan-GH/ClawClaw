@@ -112,6 +112,7 @@ export interface ChannelMeta {
 
 export const MULTI_ACCOUNT_CHANNEL_TYPES: ChannelType[] = [
   'wechat',
+  'feishu',
   'dingtalk',
   'wecom',
   'qqbot',
@@ -451,6 +452,7 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
       'channels:meta.feishu.instructions.4',
     ],
     isPlugin: true,
+    supportsMultipleAccounts: true,
   },
   imessage: {
     id: 'imessage',

@@ -80,7 +80,7 @@ export interface GatewayManagerEvents {
 export class GatewayManager extends EventEmitter {
   private static readonly ATTACH_PROBE_COOLDOWN_MS = 8000;
   private process: ChildProcess | null = null;
-  private processExitCode: number | null = null; // set by exit event, replaces exitCode/signalCode
+  private processExitStatus: number | string | null = null;
   private ownsProcess = false;
   private ws: WebSocket | null = null;
   private status: GatewayStatus = { state: 'stopped', port: PORTS.OPENCLAW_GATEWAY };
@@ -95,6 +95,7 @@ export class GatewayManager extends EventEmitter {
   private pendingRequests: Map<string, PendingGatewayRequest> = new Map();
   private deviceIdentity: DeviceIdentity | null = null;
   private restartInFlight: Promise<void> | null = null;
+  private startInFlight: Promise<void> | null = null;
   private readonly connectionMonitor = new GatewayConnectionMonitor();
   private readonly lifecycleController = new GatewayLifecycleController();
   private readonly restartController = new GatewayRestartController();
@@ -278,8 +279,9 @@ export class GatewayManager extends EventEmitter {
    * Start Gateway process
    */
   async start(): Promise<void> {
-    if (this.startLock) {
-      logger.debug('Gateway start ignored because a start flow is already in progress');
+    if (this.startInFlight) {
+      logger.debug('Gateway start joining existing start flow');
+      await this.startInFlight;
       return;
     }
 
@@ -288,119 +290,130 @@ export class GatewayManager extends EventEmitter {
       return;
     }
 
-    this.startLock = true;
-    this.resetAttachProbeState();
-    const startEpoch = this.lifecycleController.bump('start');
-    logger.info(`Gateway start requested (port=${this.status.port})`);
-    this.lastSpawnSummary = null;
-    this.shouldReconnect = true;
+    const startPromise = (async () => {
+      this.startLock = true;
+      this.resetAttachProbeState();
+      const startEpoch = this.lifecycleController.bump('start');
+      logger.info(`Gateway start requested (port=${this.status.port})`);
+      this.lastSpawnSummary = null;
+      this.shouldReconnect = true;
 
-    // Lazily load device identity (async file I/O + key generation).
-    // Must happen before connect() which uses the identity for the handshake.
-    await this.initDeviceIdentity();
+      // Lazily load device identity (async file I/O + key generation).
+      // Must happen before connect() which uses the identity for the handshake.
+      await this.initDeviceIdentity();
 
-    // Manual start should override and cancel any pending reconnect timer.
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-      logger.debug('Cleared pending reconnect timer because start was requested manually');
-    }
-
-    this.reconnectAttempts = 0;
-    this.setStatus({ state: 'starting', reconnectAttempts: 0, restartExpectedMs: undefined });
-
-    // Check if Python environment is ready (self-healing) asynchronously.
-    // Fire-and-forget: only needs to run once, not on every retry.
-    warmupManagedPythonReadiness();
-
-    if (this.process && this.ownsProcess && this.processExitCode === null) {
-      const lingeringProcess = this.process;
-      logger.info(
-        `Terminating lingering owned Gateway process before startup (pid=${lingeringProcess.pid ?? 'unknown'})`
-      );
-      await terminateOwnedGatewayProcess(lingeringProcess);
-      if (this.process === lingeringProcess) {
-        this.process = null;
+      // Manual start should override and cancel any pending reconnect timer.
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+        logger.debug('Cleared pending reconnect timer because start was requested manually');
       }
-      this.ownsProcess = false;
-      this.processExitCode = null;
-      this.setStatus({ pid: undefined });
-    }
 
-    try {
-      await runGatewayStartupSequence({
-        port: this.status.port,
-        ownedPid: this.process?.pid,
-        shouldWaitForPortFree: process.platform === 'win32',
-        resetStartupStderrLines: () => {
-          this.recentStartupStderrLines = [];
-        },
-        getStartupStderrLines: () => this.recentStartupStderrLines,
-        assertLifecycle: (phase) => {
-          this.lifecycleController.assert(startEpoch, phase);
-        },
-        findExistingGateway: async (port, ownedPid) => {
-          return await findExistingGatewayProcess({ port, ownedPid });
-        },
-        connect: async (port, externalToken) => {
-          await this.connect(port, externalToken);
-        },
-        onConnectedToExistingGateway: () => {
-          this.ownsProcess = false;
-          this.setStatus({ pid: undefined });
-          this.startHealthCheck();
-        },
-        waitForPortFree: async (port) => {
-          await waitForPortFree(port);
-        },
-        startProcess: async () => {
-          await this.startProcess();
-        },
-        waitForReady: async (port) => {
-          await waitForGatewayReady({
-            port,
-            getProcessExitCode: () => this.processExitCode,
-          });
-        },
-        onConnectedToManagedGateway: () => {
-          this.startHealthCheck();
-          logger.debug('Gateway started successfully');
-        },
-        runDoctorRepair: async () => await runOpenClawDoctorRepair(),
-        onDoctorRepairSuccess: () => {
-          this.setStatus({ state: 'starting', error: undefined, reconnectAttempts: 0, restartExpectedMs: undefined });
-        },
-        delay: async (ms) => {
-          await new Promise((resolve) => setTimeout(resolve, ms));
-        },
-      });
-    } catch (error) {
-      if (error instanceof LifecycleSupersededError) {
-        logger.debug(error.message);
-        return;
-      }
-      const enrichedError = this.enrichStartupError(error);
-      logger.error(
-        `Gateway start failed (port=${this.status.port}, reconnectAttempts=${this.reconnectAttempts}, spawn=${this.lastSpawnSummary ?? 'n/a'})`,
-        enrichedError
-      );
-      this.setStatus({ state: 'error', error: String(enrichedError), restartExpectedMs: undefined });
-      throw enrichedError;
-    } finally {
-      this.startLock = false;
-      this.restartController.flushDeferredRestart(
-        'start:finally',
-        {
-          state: this.status.state,
-          startLock: this.startLock,
-          shouldReconnect: this.shouldReconnect,
-        },
-        () => {
-          void this.restart().catch((error) => {
-            logger.warn('Deferred Gateway restart failed:', error);
-          });
+      this.reconnectAttempts = 0;
+      this.setStatus({ state: 'starting', reconnectAttempts: 0, restartExpectedMs: undefined });
+
+      // Check if Python environment is ready (self-healing) asynchronously.
+      // Fire-and-forget: only needs to run once, not on every retry.
+      warmupManagedPythonReadiness();
+
+      if (this.process && this.ownsProcess && this.processExitStatus === null) {
+        const lingeringProcess = this.process;
+        logger.info(
+          `Terminating lingering owned Gateway process before startup (pid=${lingeringProcess.pid ?? 'unknown'})`
+        );
+        await terminateOwnedGatewayProcess(lingeringProcess);
+        if (this.process === lingeringProcess) {
+          this.process = null;
         }
-      );
+        this.ownsProcess = false;
+        this.processExitStatus = null;
+        this.setStatus({ pid: undefined });
+      }
+
+      try {
+        await runGatewayStartupSequence({
+          port: this.status.port,
+          ownedPid: this.process?.pid,
+          shouldWaitForPortFree: process.platform === 'win32',
+          resetStartupStderrLines: () => {
+            this.recentStartupStderrLines = [];
+          },
+          getStartupStderrLines: () => this.recentStartupStderrLines,
+          assertLifecycle: (phase) => {
+            this.lifecycleController.assert(startEpoch, phase);
+          },
+          findExistingGateway: async (port, ownedPid) => {
+            return await findExistingGatewayProcess({ port, ownedPid });
+          },
+          connect: async (port, externalToken) => {
+            await this.connect(port, externalToken);
+          },
+          onConnectedToExistingGateway: () => {
+            this.ownsProcess = false;
+            this.setStatus({ pid: undefined });
+            this.startHealthCheck();
+          },
+          waitForPortFree: async (port) => {
+            await waitForPortFree(port);
+          },
+          startProcess: async () => {
+            await this.startProcess();
+          },
+          waitForReady: async (port) => {
+            await waitForGatewayReady({
+              port,
+              getProcessExitCode: () => this.processExitStatus,
+            });
+          },
+          onConnectedToManagedGateway: () => {
+            this.startHealthCheck();
+            logger.debug('Gateway started successfully');
+          },
+          runDoctorRepair: async () => await runOpenClawDoctorRepair(),
+          onDoctorRepairSuccess: () => {
+            this.setStatus({ state: 'starting', error: undefined, reconnectAttempts: 0, restartExpectedMs: undefined });
+          },
+          delay: async (ms) => {
+            await new Promise((resolve) => setTimeout(resolve, ms));
+          },
+        });
+      } catch (error) {
+        if (error instanceof LifecycleSupersededError) {
+          logger.debug(error.message);
+          return;
+        }
+        const enrichedError = this.enrichStartupError(error);
+        logger.error(
+          `Gateway start failed (port=${this.status.port}, reconnectAttempts=${this.reconnectAttempts}, spawn=${this.lastSpawnSummary ?? 'n/a'})`,
+          enrichedError
+        );
+        this.setStatus({ state: 'error', error: String(enrichedError), restartExpectedMs: undefined });
+        throw enrichedError;
+      } finally {
+        this.startLock = false;
+        this.restartController.flushDeferredRestart(
+          'start:finally',
+          {
+            state: this.status.state,
+            startLock: this.startLock,
+            shouldReconnect: this.shouldReconnect,
+          },
+          () => {
+            void this.restart().catch((error) => {
+              logger.warn('Deferred Gateway restart failed:', error);
+            });
+          }
+        );
+      }
+    })();
+
+    this.startInFlight = startPromise;
+    try {
+      await startPromise;
+    } finally {
+      if (this.startInFlight === startPromise) {
+        this.startInFlight = null;
+      }
     }
   }
 
@@ -464,7 +477,7 @@ export class GatewayManager extends EventEmitter {
       await this.connect(existing.port, existing.token);
       this.ownsProcess = false;
       this.process = null;
-      this.processExitCode = null;
+      this.processExitStatus = null;
       this.lastAttachProbeFoundGateway = true;
       this.startHealthCheck();
       logger.info(`Gateway attach decision: connected to existing Gateway on port ${existing.port}`);
@@ -603,6 +616,18 @@ export class GatewayManager extends EventEmitter {
           return;
         } catch (error) {
           logger.warn('In-process Gateway restart failed, falling back to stop/start:', error);
+          if (this.startInFlight) {
+            logger.info('Waiting for in-flight Gateway start before stop/start fallback');
+            try {
+              await this.startInFlight;
+            } catch (startError) {
+              logger.warn('In-flight Gateway start failed after in-process restart fallback:', startError);
+            }
+            if (this.status.state === 'running') {
+              logger.info('Gateway recovered while restart fallback was pending; skipping stop/start');
+              return;
+            }
+          }
         }
       }
 
@@ -824,7 +849,7 @@ export class GatewayManager extends EventEmitter {
     logger.debug('Ensuring legacy launchctl Gateway service is unloaded...');
     await unloadLaunchctlGatewayService();
     logger.debug('Legacy launchctl Gateway service check complete');
-    this.processExitCode = null;
+    this.processExitStatus = null;
 
     const { child, lastSpawnSummary } = await launchGatewayProcess({
       port: this.status.port,
@@ -845,8 +870,8 @@ export class GatewayManager extends EventEmitter {
       onSpawn: (pid) => {
         this.setStatus({ pid });
       },
-      onExit: (exitedChild, code) => {
-        this.processExitCode = code;
+      onExit: (exitedChild, code, signal) => {
+        this.processExitStatus = code ?? signal ?? 'unknown';
         this.ownsProcess = false;
         if (this.process === exitedChild) {
           this.process = null;

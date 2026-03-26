@@ -6,26 +6,62 @@ import { getApiKey, getDefaultProvider, getProvider } from '../utils/secure-stor
 import { getProviderEnvVar, getKeyableProviderTypes } from '../utils/provider-registry';
 import { getOpenClawDir, getOpenClawEntryPath, isOpenClawPresent } from '../utils/paths';
 import { getUvMirrorEnv } from '../utils/uv-env';
-import { cleanupDanglingWeChatPluginState, listConfiguredChannels, repairChannelConfigConsistency } from '../utils/channel-config';
+import {
+  cleanupDanglingWeChatPluginState,
+  cleanupLegacyChannelPlugins,
+  listConfiguredChannels,
+  repairChannelConfigConsistency,
+} from '../utils/channel-config';
 import {
   syncBrowserConfigToOpenClaw,
   syncGatewayTokenToConfig,
   syncMemorySettingsToOpenClaw,
   sanitizeOpenClawConfig,
 } from '../utils/openclaw-auth';
-import { buildProxyEnvAsync, resolveProxySettingsAsync } from '../utils/proxy';
+import { buildProxyEnvAsync, mergeProxyBypassRules, resolveProxySettingsAsync } from '../utils/proxy';
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { resetMalformedOpenClawConfig } from '../utils/openclaw-config';
 import { logger } from '../utils/logger';
 import { ensureBundledPluginInstalled } from '../utils/bundled-plugin-installer';
 
 const CHANNEL_PLUGIN_INSTALL_MAP: Partial<Record<string, { pluginId: string; displayName: string }>> = {
-  feishu: { pluginId: 'openclaw-lark', displayName: 'Feishu / Lark' },
-  dingtalk: { pluginId: 'dingtalk', displayName: 'DingTalk' },
-  wecom: { pluginId: 'wecom', displayName: 'WeCom' },
-  qqbot: { pluginId: 'qqbot', displayName: 'QQ Bot' },
+  feishu: { pluginId: 'feishu', displayName: 'Feishu / Lark' },
+  dingtalk: { pluginId: 'channels', displayName: 'China Channels' },
+  qqbot: { pluginId: 'channels', displayName: 'China Channels' },
+  wecom: { pluginId: 'channels', displayName: 'China Channels' },
   wechat: { pluginId: 'openclaw-weixin', displayName: 'WeChat' },
 };
+
+const CHANNEL_PROXY_BYPASS_RULES: Partial<Record<string, string[]>> = {
+  wecom: [
+    'openws.work.weixin.qq.com',
+    'qyapi.weixin.qq.com',
+    '*.work.weixin.qq.com',
+  ],
+  qqbot: [
+    'bots.qq.com',
+    'api.sgroup.qq.com',
+  ],
+};
+
+const CHANNELS_REQUIRING_DIRECT_WEBSOCKET = new Set([
+  'wecom',
+  'qqbot',
+]);
+
+function resolveGatewayProxyBypassRules(configuredChannels: string[]): string[] {
+  const merged = new Set<string>();
+  for (const channelType of configuredChannels) {
+    const rules = CHANNEL_PROXY_BYPASS_RULES[channelType];
+    if (!rules) continue;
+    for (const rule of rules) {
+      if (rule.trim()) {
+        merged.add(rule.trim());
+      }
+    }
+  }
+  return Array.from(merged);
+}
 
 function ensureConfiguredPluginsInstalled(configuredChannels: string[]): void {
   for (const channelType of configuredChannels) {
@@ -115,6 +151,17 @@ export async function syncGatewayConfigBeforeLaunch(
     );
   } catch (err) {
     logger.warn('Failed to clean dangling WeChat plugin state:', err);
+  }
+
+  try {
+    await withTimeout(
+      cleanupLegacyChannelPlugins(),
+      3000,
+      'cleanupLegacyChannelPlugins',
+      { cleaned: false },
+    );
+  } catch (err) {
+    logger.warn('Failed to clean legacy channel plugins:', err);
   }
 
   try {
@@ -212,6 +259,7 @@ async function loadProviderEnv(): Promise<{ providerEnv: Record<string, string>;
 async function resolveChannelStartupPolicy(): Promise<{
   skipChannels: boolean;
   channelStartupSummary: string;
+  configuredChannels: string[];
 }> {
   try {
     const configuredChannels = await listConfiguredChannels({ includeCli: false });
@@ -219,18 +267,21 @@ async function resolveChannelStartupPolicy(): Promise<{
       return {
         skipChannels: true,
         channelStartupSummary: 'skipped(no configured channels)',
+        configuredChannels: [],
       };
     }
 
     return {
       skipChannels: false,
       channelStartupSummary: `enabled(${configuredChannels.join(',')})`,
+      configuredChannels,
     };
   } catch (error) {
     logger.warn('Failed to determine configured channels for gateway launch:', error);
     return {
       skipChannels: false,
       channelStartupSummary: 'enabled(unknown)',
+      configuredChannels: [],
     };
   }
 }
@@ -270,13 +321,14 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     'loadProviderEnv',
     { providerEnv: {}, loadedProviderKeyCount: 0 },
   );
-  const { skipChannels, channelStartupSummary } = await withTimeout(
+  const { skipChannels, channelStartupSummary, configuredChannels } = await withTimeout(
     resolveChannelStartupPolicy(),
     1500,
     'resolveChannelStartupPolicy',
     {
       skipChannels: false,
       channelStartupSummary: 'enabled(timeout-fallback)',
+      configuredChannels: [],
     },
   );
   const uvEnv = await withTimeout(getUvMirrorEnv(), 5000, 'getUvMirrorEnv', {});
@@ -291,11 +343,30 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     resolvedProxy.httpProxy || resolvedProxy.httpsProxy || resolvedProxy.allProxy
   );
   const proxyMode = appSettings.proxyMode || (appSettings.proxyEnabled ? 'custom' : 'system');
+  const gatewayProxyBypassRules = resolveGatewayProxyBypassRules(skipChannels ? [] : configuredChannels);
+  if (gatewayProxyBypassRules.length > 0) {
+    const mergedNoProxy = mergeProxyBypassRules(
+      typeof proxyEnv.NO_PROXY === 'string' ? proxyEnv.NO_PROXY : proxyEnv.no_proxy,
+      gatewayProxyBypassRules,
+    );
+    proxyEnv.NO_PROXY = mergedNoProxy;
+    proxyEnv.no_proxy = mergedNoProxy;
+    if (typeof resolvedProxy.bypassRules === 'string') {
+      resolvedProxy.bypassRules = mergeProxyBypassRules(resolvedProxy.bypassRules, gatewayProxyBypassRules);
+    }
+  }
+  const requiresDirectWebSocket = !skipChannels
+    && configuredChannels.some((channelType) => CHANNELS_REQUIRING_DIRECT_WEBSOCKET.has(channelType));
+  if (requiresDirectWebSocket) {
+    proxyEnv.ALL_PROXY = '';
+    proxyEnv.all_proxy = '';
+    resolvedProxy.allProxy = '';
+  }
   const proxySummary =
     proxyMode === 'direct'
       ? 'direct'
       : hasResolvedProxy
-        ? `${proxyMode}: http=${resolvedProxy.httpProxy || '-'}, https=${resolvedProxy.httpsProxy || '-'}, all=${resolvedProxy.allProxy || '-'}`
+        ? `${proxyMode}: http=${resolvedProxy.httpProxy || '-'}, https=${resolvedProxy.httpsProxy || '-'}, all=${resolvedProxy.allProxy || '-'}${requiresDirectWebSocket ? ' (ws-direct)' : ''}`
         : `${proxyMode}: none`;
 
   const { NODE_OPTIONS: _nodeOptions, ...baseEnv } = process.env;

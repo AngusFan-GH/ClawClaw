@@ -384,7 +384,7 @@
       ]
     },
     "qqbot": {
-      "description": "通过 @sliverp/qqbot 插件连接 QQ 机器人",
+      "description": "通过 OpenClaw China Channels 聚合插件连接 QQ 机器人",
       "docsUrl": "https://github.com/sliverp/qqbot/blob/main/README.zh.md",
       "fields": {
         "appId": {
