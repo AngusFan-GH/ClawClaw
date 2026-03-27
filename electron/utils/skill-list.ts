@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
 import type { Skill, SkillSourceDir, SkillSourceStat } from '../../src/types/skill';
 import type { SkillMetadataInfo } from './skill-metadata';
 
@@ -21,6 +22,32 @@ export type GatewaySkillStatus = {
   source?: string;
   filePath?: string;
   baseDir?: string;
+  blockedByAllowlist?: boolean;
+  eligible?: boolean;
+  requirements?: {
+    bins?: string[];
+    anyBins?: string[];
+    env?: string[];
+    config?: string[];
+    os?: string[];
+  };
+  missing?: {
+    bins?: string[];
+    anyBins?: string[];
+    env?: string[];
+    config?: string[];
+    os?: string[];
+  };
+  configChecks?: Array<{
+    path: string;
+    satisfied: boolean;
+  }>;
+  install?: Array<{
+    id: string;
+    kind: 'brew' | 'node' | 'go' | 'uv' | 'download';
+    label: string;
+    bins: string[];
+  }>;
 };
 
 export type ClawHubListResult = {
@@ -184,6 +211,13 @@ export function summarizeGatewaySkillSources(input: {
   stats: SkillSourceStat[];
   dirs: SkillSourceDir[];
 } {
+  // Keep display order aligned with OpenClaw skill source precedence:
+  // extra < bundled < managed < personal_agents < project_agents < workspace
+  const sourceOrder = ['extra', 'bundled', 'managed', 'personal_agents', 'project_agents', 'workspace'];
+  const orderIndex = (key: string) => {
+    const index = sourceOrder.indexOf(key);
+    return index === -1 ? sourceOrder.length : index;
+  };
   const statCounts = new Map<string, number>();
   const dirMap = new Map<string, SkillSourceDir>();
 
@@ -195,33 +229,44 @@ export function summarizeGatewaySkillSources(input: {
   const workspaceDir = input.workspaceDir?.trim();
   const managedSkillsDir = input.managedSkillsDir?.trim();
   if (workspaceDir) {
-    dirMap.set('workspace', {
-      key: 'workspace',
-      label: getSourceLabel('workspace'),
-      path: resolve(workspaceDir, 'skills'),
-      count: statCounts.get('workspace') || 0,
-    });
-    dirMap.set('project_agents', {
-      key: 'project_agents',
-      label: getSourceLabel('project_agents'),
-      path: resolve(workspaceDir, '.agents', 'skills'),
-      count: statCounts.get('project_agents') || 0,
-    });
+    const workspaceSkillsPath = resolve(workspaceDir, 'skills');
+    if (existsSync(workspaceSkillsPath)) {
+      dirMap.set('workspace', {
+        key: 'workspace',
+        label: getSourceLabel('workspace'),
+        path: workspaceSkillsPath,
+        count: statCounts.get('workspace') || 0,
+      });
+    }
+    const projectAgentsPath = resolve(workspaceDir, '.agents', 'skills');
+    if (existsSync(projectAgentsPath)) {
+      dirMap.set('project_agents', {
+        key: 'project_agents',
+        label: getSourceLabel('project_agents'),
+        path: projectAgentsPath,
+        count: statCounts.get('project_agents') || 0,
+      });
+    }
   }
   if (managedSkillsDir) {
-    dirMap.set('managed', {
-      key: 'managed',
-      label: getSourceLabel('managed'),
-      path: managedSkillsDir,
-      count: statCounts.get('managed') || 0,
+    if (existsSync(managedSkillsDir)) {
+      dirMap.set('managed', {
+        key: 'managed',
+        label: getSourceLabel('managed'),
+        path: managedSkillsDir,
+        count: statCounts.get('managed') || 0,
+      });
+    }
+  }
+  const personalAgentsPath = resolve(homedir(), '.agents', 'skills');
+  if (existsSync(personalAgentsPath)) {
+    dirMap.set('personal_agents', {
+      key: 'personal_agents',
+      label: getSourceLabel('personal_agents'),
+      path: personalAgentsPath,
+      count: statCounts.get('personal_agents') || 0,
     });
   }
-  dirMap.set('personal_agents', {
-    key: 'personal_agents',
-    label: getSourceLabel('personal_agents'),
-    path: resolve(homedir(), '.agents', 'skills'),
-    count: statCounts.get('personal_agents') || 0,
-  });
 
   const extraRoots = new Map<string, SkillSourceDir>();
   for (const skill of input.gatewaySkills || []) {
@@ -236,23 +281,24 @@ export function summarizeGatewaySkillSources(input: {
       existing.count += 1;
       continue;
     }
-    extraRoots.set(rootKey, {
-      key,
-      label: getSourceLabel(key),
-      path: rootPath,
-      count: 1,
-    });
+    if (existsSync(rootPath)) {
+      extraRoots.set(rootKey, {
+        key,
+        label: getSourceLabel(key),
+        path: rootPath,
+        count: 1,
+      });
+    }
   }
   for (const [key, dir] of extraRoots.entries()) {
     dirMap.set(key, dir);
   }
 
-  const preferredOrder = ['workspace', 'managed', 'personal_agents', 'project_agents', 'bundled', 'extra'];
   const stats = [...statCounts.entries()]
     .map(([key, count]) => ({ key, count, label: getSourceLabel(key) }))
-    .sort((left, right) => preferredOrder.indexOf(left.key) - preferredOrder.indexOf(right.key));
+    .sort((left, right) => orderIndex(left.key) - orderIndex(right.key));
   const dirs = [...dirMap.values()].sort((left, right) => {
-    const orderDiff = preferredOrder.indexOf(left.key) - preferredOrder.indexOf(right.key);
+    const orderDiff = orderIndex(left.key) - orderIndex(right.key);
     return orderDiff !== 0 ? orderDiff : left.path.localeCompare(right.path);
   });
 
@@ -287,6 +333,9 @@ export function buildUnifiedSkillList(input: {
       name: identity.metadata?.name || identity.slug,
       description: identity.metadata?.description || '',
       enabled: false,
+      disabled: true,
+      eligible: false,
+      blockedByAllowlist: false,
       runtimeEnabled: false,
       installedOnDisk: false,
       loadedInGateway: false,
@@ -299,6 +348,9 @@ export function buildUnifiedSkillList(input: {
       config: {},
       primaryEnv: identity.metadata?.primaryEnv,
       requirements: identity.metadata?.requires,
+      missing: undefined,
+      configChecks: [],
+      install: [],
       configurable: Boolean(
         identity.metadata?.primaryEnv ||
         identity.metadata?.requires?.env?.length,
@@ -346,6 +398,9 @@ export function buildUnifiedSkillList(input: {
       name: gatewaySkill.name || identity.metadata?.name || gatewaySkill.skillKey,
       description: gatewaySkill.description || identity.metadata?.description || '',
       enabled: !gatewaySkill.disabled,
+      disabled: gatewaySkill.disabled ?? false,
+      eligible: gatewaySkill.eligible ?? !gatewaySkill.disabled,
+      blockedByAllowlist: gatewaySkill.blockedByAllowlist ?? false,
       runtimeEnabled: !gatewaySkill.disabled,
       installedOnDisk,
       loadedInGateway: true,
@@ -355,6 +410,10 @@ export function buildUnifiedSkillList(input: {
       version: gatewaySkill.version || pickVersion(installedVersions, aliases) || '',
       author: gatewaySkill.author,
       config: { ...(gatewaySkill.config || {}), ...directConfig },
+      requirements: gatewaySkill.requirements,
+      missing: gatewaySkill.missing,
+      configChecks: gatewaySkill.configChecks || [],
+      install: gatewaySkill.install || [],
       isCore: Boolean(gatewaySkill.bundled && gatewaySkill.always),
       isBundled: Boolean(gatewaySkill.bundled && !identity.metadata?.isProjectBundled),
       sourceKinds: [normalizeSourceKey(gatewaySkill.source)],
@@ -393,6 +452,33 @@ export function buildUnifiedSkillList(input: {
       installedOnDisk: true,
       runtimeStatus: existing?.loadedInGateway ? 'loaded' : input.gatewayRunning ? 'not_loaded' : 'unknown',
       runtimeReason: existing?.loadedInGateway ? undefined : input.gatewayRunning ? 'not_loaded' : 'gateway_offline',
+    }));
+  }
+
+  const handledProjectBundled = new Set<string>();
+  for (const metadata of Object.values(metadataMap)) {
+    if (!metadata?.isProjectBundled) {
+      continue;
+    }
+    const slug = metadata.slug?.trim() || metadata.skillKey?.trim();
+    if (!slug || handledProjectBundled.has(slug)) {
+      continue;
+    }
+    handledProjectBundled.add(slug);
+    upsert([slug, metadata.skillKey, metadata.name], (existing) => ({
+      id: existing?.id || metadata.skillKey || slug,
+      slug: existing?.slug || slug,
+      name: existing?.name || metadata.name || slug,
+      description: existing?.description || metadata.description || 'Pre-installed skill.',
+      enabled:
+        existing?.enabled
+        ?? (typeof existing?.disabled === 'boolean' ? !existing.disabled : true),
+      disabled: existing?.disabled ?? false,
+      installedOnDisk: true,
+      isPreinstalled: true,
+      isBundled: existing?.isBundled || false,
+      runtimeStatus: existing?.runtimeStatus || (input.gatewayRunning ? 'not_loaded' : 'unknown'),
+      runtimeReason: existing?.runtimeReason || (input.gatewayRunning ? 'not_loaded' : 'gateway_offline'),
     }));
   }
 

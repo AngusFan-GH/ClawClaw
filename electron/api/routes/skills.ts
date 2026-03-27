@@ -1,6 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { listAgentsSnapshot } from '../../utils/agent-config';
+import { getOpenClawSkillsDir } from '../../utils/paths';
 import { getAllSkillConfigs, updateSkillConfig } from '../../utils/skill-config';
-import { getManagedInstalledSkillSlugs, getSkillMetadata } from '../../utils/skill-metadata';
+import {
+  getManagedInstalledSkillSlugs,
+  getProjectBundledSkillSlugs,
+  getSkillMetadata,
+} from '../../utils/skill-metadata';
 import { buildUnifiedSkillList, summarizeGatewaySkillSources } from '../../utils/skill-list';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
@@ -11,6 +17,28 @@ export async function handleSkillRoutes(
   url: URL,
   ctx: HostApiContext,
 ): Promise<boolean> {
+  const resolveFallbackSkillDirs = async (agentId?: string): Promise<{
+    workspaceDir: string | null;
+    managedSkillsDir: string | null;
+  }> => {
+    try {
+      const snapshot = await listAgentsSnapshot();
+      const selected =
+        (agentId ? snapshot.agents.find((agent) => agent.id === agentId) : undefined)
+        || snapshot.agents.find((agent) => agent.id === snapshot.defaultAgentId)
+        || snapshot.agents[0];
+      return {
+        workspaceDir: selected?.workspace || null,
+        managedSkillsDir: getOpenClawSkillsDir(),
+      };
+    } catch {
+      return {
+        workspaceDir: null,
+        managedSkillsDir: getOpenClawSkillsDir(),
+      };
+    }
+  };
+
   if (url.pathname === '/api/skills/configs' && req.method === 'GET') {
     sendJson(res, 200, await getAllSkillConfigs());
     return true;
@@ -59,6 +87,8 @@ export async function handleSkillRoutes(
       const configsPromise = getAllSkillConfigs();
       const clawhubPromise = ctx.clawHubService.listInstalled().catch(() => []);
       const localInstalledPromise = getManagedInstalledSkillSlugs().catch(() => []);
+      const projectBundledPromise = getProjectBundledSkillSlugs().catch(() => []);
+      const fallbackDirsPromise = resolveFallbackSkillDirs(agentId);
       const gatewaySkillsPromise =
         gatewayStatus.state === 'running'
           ? ctx.gatewayManager
@@ -79,16 +109,21 @@ export async function handleSkillRoutes(
               .catch(() => ({ skills: null, workspaceDir: null, managedSkillsDir: null }))
           : Promise.resolve({ skills: null, workspaceDir: null, managedSkillsDir: null });
 
-      const [configs, clawhubSkills, localInstalledSlugs, gatewayStatusReport] = await Promise.all([
+      const [configs, clawhubSkills, localInstalledSlugs, projectBundledSlugs, gatewayStatusReport, fallbackDirs] = await Promise.all([
         configsPromise,
         clawhubPromise,
         localInstalledPromise,
+        projectBundledPromise,
         gatewaySkillsPromise,
+        fallbackDirsPromise,
       ]);
       const gatewaySkills = gatewayStatusReport.skills;
+      const effectiveWorkspaceDir = gatewayStatusReport.workspaceDir || fallbackDirs.workspaceDir;
+      const effectiveManagedSkillsDir = gatewayStatusReport.managedSkillsDir || fallbackDirs.managedSkillsDir;
 
       const candidateSlugs = new Set<string>();
       for (const slug of localInstalledSlugs) candidateSlugs.add(slug);
+      for (const slug of projectBundledSlugs) candidateSlugs.add(slug);
       for (const skill of clawhubSkills) candidateSlugs.add(skill.slug);
       for (const skill of gatewaySkills || []) {
         if (skill.slug) candidateSlugs.add(skill.slug);
@@ -107,8 +142,8 @@ export async function handleSkillRoutes(
       });
       const sourceSummary = summarizeGatewaySkillSources({
         gatewaySkills,
-        workspaceDir: gatewayStatusReport.workspaceDir,
-        managedSkillsDir: gatewayStatusReport.managedSkillsDir,
+        workspaceDir: effectiveWorkspaceDir,
+        managedSkillsDir: effectiveManagedSkillsDir,
       });
 
       sendJson(res, 200, {

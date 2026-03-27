@@ -12,6 +12,9 @@ export interface Skill {
   name: string;
   description: string;
   enabled: boolean;
+  disabled?: boolean;
+  eligible?: boolean;
+  blockedByAllowlist?: boolean;
   runtimeEnabled?: boolean;
   installedOnDisk?: boolean;
   loadedInGateway?: boolean;
@@ -31,6 +34,23 @@ export interface Skill {
     config?: string[];
     os?: string[];
   };
+  missing?: {
+    env?: string[];
+    bins?: string[];
+    anyBins?: string[];
+    config?: string[];
+    os?: string[];
+  };
+  configChecks?: Array<{
+    path: string;
+    satisfied: boolean;
+  }>;
+  install?: Array<{
+    id: string;
+    kind: 'brew' | 'node' | 'go' | 'uv' | 'download';
+    label: string;
+    bins: string[];
+  }>;
   isCore?: boolean;
   isBundled?: boolean;
   isPreinstalled?: boolean;

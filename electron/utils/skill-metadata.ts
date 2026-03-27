@@ -171,3 +171,14 @@ export async function getManagedInstalledSkillSlugs(): Promise<string[]> {
     .filter((entry) => entry.isDirectory() && existsSync(join(skillsDir, entry.name, 'SKILL.md')))
     .map((entry) => entry.name);
 }
+
+export async function getProjectBundledSkillSlugs(): Promise<string[]> {
+  const skillsDir = join(getResourcesDir(), 'skills');
+  if (!existsSync(skillsDir)) {
+    return [];
+  }
+  const entries = await readdir(skillsDir, { withFileTypes: true }).catch(() => []);
+  return entries
+    .filter((entry) => entry.isDirectory() && existsSync(join(skillsDir, entry.name, 'SKILL.md')))
+    .map((entry) => entry.name);
+}

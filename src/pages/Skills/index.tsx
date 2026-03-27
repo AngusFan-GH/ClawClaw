@@ -81,6 +81,77 @@ function resolveSkillIcon(...candidates: Array<string | undefined>): string {
   return '🧩';
 }
 
+function getMissingRequirementCount(skill: Skill): number {
+  return (
+    (skill.missing?.env?.length || 0)
+    + (skill.missing?.bins?.length || 0)
+    + (skill.missing?.anyBins?.length || 0)
+    + (skill.missing?.config?.length || 0)
+    + (skill.missing?.os?.length || 0)
+  );
+}
+
+function getSkillStatusMeta(
+  t: ReturnType<typeof useTranslation>['t'],
+  skill: Skill,
+): { label: string; className: string; reason?: string } {
+  if (skill.disabled) {
+    return {
+      label: t('status.disabled'),
+      className: 'bg-muted text-muted-foreground',
+    };
+  }
+  if (skill.eligible) {
+    return {
+      label: t('status.ready'),
+      className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+    };
+  }
+  const missingCount = getMissingRequirementCount(skill);
+  const reason = skill.blockedByAllowlist
+    ? t('status.reasonBlocked')
+    : missingCount > 0
+      ? t('status.reasonMissing', { count: missingCount })
+      : undefined;
+  return {
+    label: t('status.needsSetup'),
+    className: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+    reason,
+  };
+}
+
+function isUserManagedSkill(skill: Skill | undefined): skill is Skill {
+  return Boolean(
+    skill
+    && !skill.isCore
+    && !skill.isBundled
+    && !skill.isPreinstalled
+    && skill.installedOnDisk !== false
+  );
+}
+
+function resolveInstalledMarketplaceSkill(
+  installedSkills: Skill[],
+  marketplaceSkill: MarketplaceSkill,
+): Skill | undefined {
+  const slug = marketplaceSkill.slug.trim().toLowerCase();
+  const name = marketplaceSkill.name.trim().toLowerCase();
+
+  const direct = installedSkills.find((skill) => {
+    if (!isUserManagedSkill(skill)) return false;
+    const skillSlug = (skill.slug || '').trim().toLowerCase();
+    const skillId = (skill.id || '').trim().toLowerCase();
+    return skillSlug === slug || skillId === slug;
+  });
+  if (direct) return direct;
+
+  // Fallback for canonicalized slug / skillKey mapping mismatches.
+  return installedSkills.find((skill) => {
+    if (!isUserManagedSkill(skill)) return false;
+    return (skill.name || '').trim().toLowerCase() === name;
+  });
+}
+
 
 
 // Skill detail dialog component
@@ -443,10 +514,10 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, canToggle, onUnin
               <Button
                 variant="outline"
                 className="h-[42px] flex-1 rounded-[10px] border-black/20 bg-transparent text-[13px] font-semibold text-foreground/80 transition-colors hover:bg-black/5 hover:text-foreground dark:border-white/20 dark:hover:bg-white/5"
-                onClick={() => onToggle(!(skill.runtimeEnabled ?? skill.enabled))}
+                onClick={() => onToggle(Boolean(skill.disabled))}
                 disabled={!canToggle}
               >
-                {(skill.runtimeEnabled ?? skill.enabled) ? t('detail.disable') : t('detail.enable')}
+                {skill.disabled ? t('detail.enable') : t('detail.disable')}
               </Button>
             )}
 
@@ -478,23 +549,9 @@ interface SkillGridCardProps {
 
 function SkillGridCard({ skill, isGatewayRunning, onClick, onToggle }: SkillGridCardProps) {
   const { t } = useTranslation('skills');
-  const runtimeEnabled = skill.runtimeEnabled ?? (skill.loadedInGateway ? skill.enabled : false);
-  const runtimeLabel =
-    skill.runtimeError
-      ? t('status.loadFailed')
-      : skill.loadedInGateway
-        ? (runtimeEnabled ? t('status.loadedEnabled') : t('status.loaded'))
-        : skill.runtimeReason === 'gateway_offline'
-          ? t('status.gatewayOffline')
-          : skill.runtimeReason === 'not_loaded'
-            ? t('status.installedOnly')
-            : t('status.runtimeUnknown');
-  const canToggle = isGatewayRunning && Boolean(skill.loadedInGateway) && !skill.isCore;
-  const runtimeBadgeClass = skill.runtimeError
-    ? 'bg-destructive/10 text-destructive'
-    : skill.loadedInGateway
-      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-      : 'bg-amber-500/10 text-amber-700 dark:text-amber-300';
+  const statusMeta = getSkillStatusMeta(t, skill);
+  const isEnabled = !skill.disabled;
+  const canToggle = isGatewayRunning && !skill.isCore;
 
   return (
     <div
@@ -532,10 +589,10 @@ function SkillGridCard({ skill, isGatewayRunning, onClick, onToggle }: SkillGrid
                 variant="secondary"
                 className={cn(
                   'h-6 rounded-[10px] border-0 px-2.5 py-0 text-[10px] font-medium',
-                  runtimeBadgeClass,
+                  statusMeta.className,
                 )}
               >
-                {runtimeLabel}
+                {statusMeta.label}
               </Badge>
               {skill.version && !skill.isBundled && !skill.isPreinstalled ? (
                 <span className="font-mono text-[11px] text-foreground/45">
@@ -548,7 +605,7 @@ function SkillGridCard({ skill, isGatewayRunning, onClick, onToggle }: SkillGrid
 
         <div className="shrink-0 pl-2 pt-1" onClick={(event) => event.stopPropagation()}>
           <Switch
-            checked={runtimeEnabled}
+            checked={isEnabled}
             onCheckedChange={(checked) => onToggle(skill.id, checked)}
             disabled={!canToggle}
             className="h-7 w-12 border border-border/70 bg-muted data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=unchecked]:bg-muted"
@@ -559,8 +616,8 @@ function SkillGridCard({ skill, isGatewayRunning, onClick, onToggle }: SkillGrid
       <p className="mt-4 line-clamp-4 text-[13px] leading-[1.7] text-muted-foreground">
         {skill.description}
       </p>
-      {skill.runtimeError ? (
-        <p className="mt-3 text-[12px] font-medium text-destructive">{skill.runtimeError}</p>
+      {statusMeta.reason ? (
+        <p className="mt-3 text-[12px] font-medium text-muted-foreground">{statusMeta.reason}</p>
       ) : null}
     </div>
   );
@@ -700,7 +757,7 @@ export function Skills() {
   const [searchQuery, setSearchQuery] = useState('');
   const [marketplaceQuery, setMarketplaceQuery] = useState('');
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
-  const [activeTab, setActiveTab] = useState<'all' | 'preinstalled' | 'installed' | 'marketplace'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'ready' | 'needs-setup' | 'disabled' | 'marketplace'>('all');
   const [marketplaceSearchPerformed, setMarketplaceSearchPerformed] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState(chatAgentId || defaultAgentId || 'main');
   const [folderMenuOpen, setFolderMenuOpen] = useState(false);
@@ -715,6 +772,8 @@ export function Skills() {
         name: agent.gateway.name,
       }))
     : [{ id: preferredAgentId, name: preferredAgentId === 'main' ? 'Main' : preferredAgentId }];
+  const managedSkillsDirPath =
+    sourceDirs.find((dir) => dir.key === 'managed')?.path || '~/.openclaw/skills';
   const agentSelect = (
     <div className="inline-flex min-w-[220px] items-center gap-2 rounded-[16px] border border-border/70 bg-card/85 px-3 py-2 shadow-sm backdrop-blur-sm lg:min-w-[250px]">
       <span className="shrink-0 rounded-[10px] bg-muted px-2.5 py-1 text-[12px] font-medium text-muted-foreground">
@@ -800,19 +859,20 @@ export function Skills() {
       skill.description.toLowerCase().includes(searchQuery.toLowerCase());
 
     let matchesTab = true;
-    if (activeTab === 'preinstalled') {
-      matchesTab = Boolean(skill.isPreinstalled && !skill.isCore);
-    } else if (activeTab === 'installed') {
-      matchesTab = Boolean(!skill.isBundled && !skill.isPreinstalled && !skill.isCore);
+    if (activeTab === 'ready') {
+      matchesTab = Boolean(!skill.disabled && skill.eligible);
+    } else if (activeTab === 'needs-setup') {
+      matchesTab = Boolean(!skill.disabled && !skill.eligible);
+    } else if (activeTab === 'disabled') {
+      matchesTab = Boolean(skill.disabled);
     }
 
     return matchesSearch && matchesTab;
   }).sort((a, b) => {
-    // Enabled skills first
-    const aRuntimeEnabled = a.runtimeEnabled ?? false;
-    const bRuntimeEnabled = b.runtimeEnabled ?? false;
-    if (aRuntimeEnabled && !bRuntimeEnabled) return -1;
-    if (!aRuntimeEnabled && bRuntimeEnabled) return 1;
+    // Ready first, then needs-setup, then disabled
+    const aWeight = a.disabled ? 2 : a.eligible ? 0 : 1;
+    const bWeight = b.disabled ? 2 : b.eligible ? 0 : 1;
+    if (aWeight !== bWeight) return aWeight - bWeight;
     // Then core/bundled
     if (a.isCore && !b.isCore) return -1;
     if (!a.isCore && b.isCore) return 1;
@@ -822,20 +882,16 @@ export function Skills() {
 
   const tabStats = {
     all: safeSkills.length,
-    preinstalled: safeSkills.filter((s) => s.isPreinstalled && !s.isCore).length,
-    installed: safeSkills.filter((s) => !s.isBundled && !s.isPreinstalled && !s.isCore).length,
+    ready: safeSkills.filter((s) => !s.disabled && s.eligible).length,
+    'needs-setup': safeSkills.filter((s) => !s.disabled && !s.eligible).length,
+    disabled: safeSkills.filter((s) => Boolean(s.disabled)).length,
     marketplace: searchResults.length,
   };
 
   // Handle toggle
   const handleToggle = useCallback(async (skillId: string, enable: boolean) => {
-    const skill = safeSkills.find((item) => item.id === skillId);
     if (!isGatewayRunning) {
       toast.error(t('toast.gatewayRequired'));
-      return;
-    }
-    if (!skill?.loadedInGateway) {
-      toast.error(t('toast.skillNotLoaded'));
       return;
     }
     try {
@@ -849,9 +905,9 @@ export function Skills() {
     } catch (err) {
       toast.error(String(err));
     }
-  }, [disableSkill, enableSkill, isGatewayRunning, safeSkills, t]);
+  }, [disableSkill, enableSkill, isGatewayRunning, t]);
 
-  const hasManagedSkills = safeSkills.some((s) => !s.isCore);
+  const hasFolderEntries = sourceDirs.length > 0;
 
   const handleOpenSkillsFolder = useCallback(async (path: string) => {
     try {
@@ -873,14 +929,6 @@ export function Skills() {
     }
   }, [t]);
 
-  const [managedSkillsDirPath, setManagedSkillsDirPath] = useState('~/.openclaw/skills');
-
-  useEffect(() => {
-    invokeIpc<string>('openclaw:getSkillsDir')
-      .then((dir) => setManagedSkillsDirPath(dir as string))
-      .catch(console.error);
-  }, []);
-
   const handleMarketplaceSearch = useCallback(() => {
     if (!marketplaceQuery.trim()) {
       return;
@@ -893,13 +941,25 @@ export function Skills() {
   const handleInstall = useCallback(async (slug: string) => {
     try {
       await installSkill(slug);
-      const installedSkill = useSkillsStore.getState().skills.find(
-        (skill) => skill.slug === slug || skill.id === slug
-      );
-      if (installedSkill) {
-        await enableSkill(installedSkill.id);
+      let enabled = false;
+      if (isGatewayRunning) {
+        const installedSkill = useSkillsStore.getState().skills.find(
+          (skill) => skill.slug === slug || skill.id === slug
+        );
+        if (installedSkill) {
+          try {
+            await enableSkill(installedSkill.id);
+            enabled = true;
+          } catch (enableError) {
+            toast.error(
+              `${t('toast.failedEnableAfterInstall')}: ${
+                enableError instanceof Error ? enableError.message : String(enableError)
+              }`
+            );
+          }
+        }
       }
-      toast.success(t('toast.installed'));
+      toast.success(enabled ? t('toast.installed') : t('toast.installedOnly'));
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       if (['installTimeoutError', 'installRateLimitError'].includes(errorMessage)) {
@@ -908,7 +968,7 @@ export function Skills() {
         toast.error(t('toast.failedInstall') + ': ' + errorMessage);
       }
     }
-  }, [installSkill, enableSkill, managedSkillsDirPath, t]);
+  }, [installSkill, enableSkill, isGatewayRunning, managedSkillsDirPath, t]);
 
   // Handle uninstall
   const handleUninstall = useCallback(async (slug: string) => {
@@ -956,26 +1016,37 @@ export function Skills() {
                   {t('filter.all', { count: tabStats.all })}
                 </button>
                 <button
-                  onClick={() => setActiveTab('preinstalled')}
+                  onClick={() => setActiveTab('ready')}
                   className={cn(
                     "rounded-[12px] px-4 py-2 text-[14px] font-medium transition-all",
-                    activeTab === 'preinstalled'
+                    activeTab === 'ready'
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
                   )}
                 >
-                  {t('filter.preinstalled', { count: tabStats.preinstalled })}
+                  {t('filter.ready', { count: tabStats.ready })}
                 </button>
                 <button
-                  onClick={() => setActiveTab('installed')}
+                  onClick={() => setActiveTab('needs-setup')}
                   className={cn(
                     "rounded-[12px] px-4 py-2 text-[14px] font-medium transition-all",
-                    activeTab === 'installed'
+                    activeTab === 'needs-setup'
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
                   )}
                 >
-                  {t('filter.installed', { count: tabStats.installed })}
+                  {t('filter.needsSetup', { count: tabStats['needs-setup'] })}
+                </button>
+                <button
+                  onClick={() => setActiveTab('disabled')}
+                  className={cn(
+                    "rounded-[12px] px-4 py-2 text-[14px] font-medium transition-all",
+                    activeTab === 'disabled'
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
+                  )}
+                >
+                  {t('filter.disabled', { count: tabStats.disabled })}
                 </button>
                 <button
                   onClick={() => setActiveTab('marketplace')}
@@ -991,49 +1062,57 @@ export function Skills() {
               </div>
 
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
-                {hasManagedSkills && (
-                  <div className="relative" ref={folderMenuRef}>
-                    <button
-                      type="button"
-                      onClick={() => setFolderMenuOpen((open) => !open)}
-                      aria-haspopup="menu"
-                      aria-expanded={folderMenuOpen}
-                      className="inline-flex h-10 items-center rounded-[12px] border border-border/70 px-4 text-[13px] font-medium text-foreground/80 transition-colors hover:bg-accent/70 hover:text-foreground"
-                    >
-                      <FolderOpen className="mr-2 h-4 w-4" />
-                      {t('openFolder')}
-                      <ChevronDown className={cn('ml-2 h-4 w-4 transition-transform', folderMenuOpen && 'rotate-180')} />
-                    </button>
-                    {folderMenuOpen && (
-                      <div className="absolute right-0 z-40 mt-2 w-[360px] max-w-[min(28rem,calc(100vw-2rem))] overflow-hidden rounded-[14px] border border-border/70 bg-card/95 p-1.5 shadow-xl backdrop-blur-md">
-                        <div className="px-3 pb-2 pt-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">
-                          {t('folderMenu.title')}
-                        </div>
-                        {sourceDirs.map((dir) => (
-                          <button
-                            key={`${dir.key}:${dir.path}`}
-                            type="button"
-                            onClick={() => void handleOpenSkillsFolder(dir.path)}
-                            className="flex w-full items-start gap-3 rounded-[10px] px-3 py-2.5 text-left transition-colors hover:bg-accent/70"
-                          >
-                            <FolderOpen className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                            <span className="min-w-0 flex-1 overflow-hidden">
-                              <span className="block text-[13px] font-medium text-foreground">
-                                {t(`folderMenu.${dir.key}`)}
+                <div className="relative" ref={folderMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => hasFolderEntries && setFolderMenuOpen((open) => !open)}
+                    aria-haspopup="menu"
+                    aria-expanded={folderMenuOpen}
+                    disabled={!hasFolderEntries}
+                    className="inline-flex h-10 items-center rounded-[12px] border border-border/70 px-4 text-[13px] font-medium text-foreground/80 transition-colors hover:bg-accent/70 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <FolderOpen className="mr-2 h-4 w-4" />
+                    {t('openFolder')}
+                    <ChevronDown className={cn('ml-2 h-4 w-4 transition-transform', folderMenuOpen && 'rotate-180')} />
+                  </button>
+                  {folderMenuOpen && (
+                    <div className="absolute right-0 z-40 mt-2 w-[360px] max-w-[min(28rem,calc(100vw-2rem))] overflow-hidden rounded-[14px] border border-border/70 bg-card/95 p-1.5 shadow-xl backdrop-blur-md">
+                      <div className="px-3 pb-2 pt-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">
+                        {t('folderMenu.title')}
+                      </div>
+                      {sourceDirs.map((dir, index) => (
+                        <button
+                          key={`${dir.key}:${dir.path}`}
+                          type="button"
+                          onClick={() => void handleOpenSkillsFolder(dir.path)}
+                          className="flex w-full items-start gap-3 rounded-[10px] px-3 py-2.5 text-left transition-colors hover:bg-accent/70"
+                        >
+                          <FolderOpen className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                          <span className="min-w-0 flex-1 overflow-hidden">
+                            <span className="flex items-center gap-2 text-[13px] font-medium text-foreground">
+                              <span className="truncate">
+                                {(() => {
+                                  const key = `folderMenu.${dir.key}`;
+                                  const translated = t(key);
+                                  return translated === key ? dir.label : translated;
+                                })()}
                               </span>
-                              <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
-                                {dir.path}
+                              <span className="shrink-0 rounded-full bg-black/[0.05] px-2 py-0.5 text-[10px] font-semibold text-foreground/60 dark:bg-white/[0.08] dark:text-foreground/60">
+                                #{index + 1}
                               </span>
                             </span>
-                          </button>
-                        ))}
-                        <div className="border-t border-border/60 px-3 pb-2 pt-2 text-[11px] leading-5 text-muted-foreground">
-                          {t('folderMenu.hint')}
-                        </div>
+                            <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                              {dir.path}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                      <div className="border-t border-border/60 px-3 pb-2 pt-2 text-[11px] leading-5 text-muted-foreground">
+                        {t('folderMenu.hint')}
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
                 <Button
                   variant="outline"
                   size="icon"
@@ -1171,7 +1250,7 @@ export function Skills() {
                 {searchResults.length > 0 ? (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
                     {searchResults.map((skill) => {
-                      const installedSkill = safeSkills.find((s) => s.id === skill.slug || s.slug === skill.slug || s.name === skill.name);
+                      const installedSkill = resolveInstalledMarketplaceSkill(safeSkills, skill);
                       const isInstalled = Boolean(installedSkill);
                       const isInstallLoading = !!installing[skill.slug];
 
@@ -1213,11 +1292,11 @@ export function Skills() {
         skill={selectedSkill}
         isOpen={!!selectedSkill}
         onClose={() => setSelectedSkill(null)}
-        canToggle={Boolean(isGatewayRunning && selectedSkill?.loadedInGateway && !selectedSkill?.isCore)}
+        canToggle={Boolean(isGatewayRunning && !selectedSkill?.isCore)}
         onToggle={(enabled) => {
           if (!selectedSkill) return;
           handleToggle(selectedSkill.id, enabled);
-          setSelectedSkill({ ...selectedSkill, enabled, runtimeEnabled: enabled });
+          setSelectedSkill({ ...selectedSkill, enabled, disabled: !enabled });
         }}
         onUninstall={handleUninstall}
       />

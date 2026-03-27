@@ -2,17 +2,17 @@
   "title": "技能",
   "subtitle": "浏览和管理 AI 能力",
   "refresh": "刷新",
-  "openFolder": "打开技能目录",
+  "openFolder": "打开来源目录",
   "agentLabel": "Agent",
   "folderMenu": {
-    "title": "技能来源目录",
-    "workspace": "Workspace skills",
-    "managed": "Managed skills",
-    "personal_agents": "个人 .agents/skills",
-    "project_agents": "项目 .agents/skills",
-    "bundled": "Bundled skills",
-    "extra": "额外 / 插件技能",
-    "hint": "技能页会聚合多个来源的技能；这里可以分别打开对应目录。"
+    "title": "技能来源目录（按加载优先级）",
+    "workspace": "工作区技能目录",
+    "managed": "已管理技能目录",
+    "personal_agents": "个人 .agents 技能目录",
+    "project_agents": "项目 .agents 技能目录",
+    "bundled": "内置技能目录",
+    "extra": "扩展 / 插件技能目录",
+    "hint": "仅展示当前检测到的来源目录，按加载优先级排序。"
   },
   "sourceSummary": {
     "title": "当前视图聚合自"
@@ -27,6 +27,11 @@
   "status": {
     "installed": "已安装",
     "notInstalled": "未安装",
+    "ready": "已就绪",
+    "needsSetup": "需配置",
+    "disabled": "已禁用",
+    "reasonBlocked": "被 allowlist 限制",
+    "reasonMissing": "缺少 {{count}} 项依赖",
     "loadedEnabled": "已加载并启用",
     "loaded": "已加载到网关",
     "installedOnly": "仅安装",
@@ -41,6 +46,9 @@
   },
   "filter": {
     "all": "全部 ({{count}})",
+    "ready": "已就绪 ({{count}})",
+    "needsSetup": "需配置 ({{count}})",
+    "disabled": "已禁用 ({{count}})",
     "builtIn": "内置 ({{count}})",
     "preinstalled": "\u9884\u88c5 ({{count}})",
     "installed": "\u7528\u6237\u5b89\u88c5 ({{count}})",
@@ -104,6 +112,8 @@
     "enabled": "技能已启用",
     "disabled": "技能已禁用",
     "installed": "技能已安装并启用",
+    "installedOnly": "技能已安装（尚未启用）",
+    "failedEnableAfterInstall": "安装成功，但启用失败",
     "uninstalled": "技能已成功卸载",
     "openedEditor": "已在编辑器中打开",
     "failedEditor": "无法打开编辑器",

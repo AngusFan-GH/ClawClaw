@@ -2,17 +2,17 @@
   "title": "Skills",
   "subtitle": "Browse and manage AI capabilities",
   "refresh": "Refresh",
-  "openFolder": "Open Skill Sources",
+  "openFolder": "Open Source Folders",
   "agentLabel": "Agent",
   "folderMenu": {
-    "title": "Skill source directories",
-    "workspace": "Workspace skills",
-    "managed": "Managed skills",
-    "personal_agents": "Personal .agents/skills",
-    "project_agents": "Project .agents/skills",
-    "bundled": "Bundled skills",
-    "extra": "Extra / plugin skills",
-    "hint": "This page merges skills from multiple sources, so open the source directory you want to inspect."
+    "title": "Skill Source Folders (Load Priority)",
+    "workspace": "Workspace Skill Folder",
+    "managed": "Managed Skill Folder",
+    "personal_agents": "Personal .agents Skill Folder",
+    "project_agents": "Project .agents Skill Folder",
+    "bundled": "Bundled Skill Folder",
+    "extra": "Extra / Plugin Skill Folder",
+    "hint": "Only detected source folders are shown, ordered by load priority."
   },
   "sourceSummary": {
     "title": "Current view aggregates"
@@ -27,6 +27,11 @@
   "status": {
     "installed": "Installed",
     "notInstalled": "Not installed",
+    "ready": "Ready",
+    "needsSetup": "Needs setup",
+    "disabled": "Disabled",
+    "reasonBlocked": "Blocked by allowlist",
+    "reasonMissing": "{{count}} requirements missing",
     "loadedEnabled": "Loaded and enabled",
     "loaded": "Loaded in Gateway",
     "installedOnly": "Installed only",
@@ -41,6 +46,9 @@
   },
   "filter": {
     "all": "All ({{count}})",
+    "ready": "Ready ({{count}})",
+    "needsSetup": "Needs Setup ({{count}})",
+    "disabled": "Disabled ({{count}})",
     "builtIn": "Built-in ({{count}})",
     "preinstalled": "Pre-installed ({{count}})",
     "installed": "User Installed ({{count}})",
@@ -104,6 +112,8 @@
     "enabled": "Skill enabled",
     "disabled": "Skill disabled",
     "installed": "Skill installed and enabled",
+    "installedOnly": "Skill installed (not enabled yet)",
+    "failedEnableAfterInstall": "Installed, but failed to enable",
     "uninstalled": "Skill uninstalled successfully",
     "openedEditor": "Opened in editor",
     "failedEditor": "Failed to open editor",

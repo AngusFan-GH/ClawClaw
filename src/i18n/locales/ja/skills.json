@@ -2,17 +2,17 @@
   "title": "スキル",
   "subtitle": "AI機能の閲覧と管理",
   "refresh": "更新",
-  "openFolder": "スキルソースを開く",
+  "openFolder": "ソースフォルダを開く",
   "agentLabel": "Agent",
   "folderMenu": {
-    "title": "スキルソースディレクトリ",
-    "workspace": "Workspace skills",
-    "managed": "Managed skills",
-    "personal_agents": "個人 .agents/skills",
-    "project_agents": "プロジェクト .agents/skills",
-    "bundled": "Bundled skills",
-    "extra": "追加 / プラグインスキル",
-    "hint": "このページは複数のソースからスキルを集約して表示します。確認したいソースのディレクトリを開いてください。"
+    "title": "スキルソースフォルダ（読み込み優先順）",
+    "workspace": "ワークスペーススキルフォルダ",
+    "managed": "管理スキルフォルダ",
+    "personal_agents": "個人 .agents スキルフォルダ",
+    "project_agents": "プロジェクト .agents スキルフォルダ",
+    "bundled": "同梱スキルフォルダ",
+    "extra": "追加 / プラグインスキルフォルダ",
+    "hint": "現在検出されているソースフォルダのみを、読み込み優先順で表示します。"
   },
   "sourceSummary": {
     "title": "現在の表示は次を集約"
@@ -27,6 +27,11 @@
   "status": {
     "installed": "インストール済み",
     "notInstalled": "未インストール",
+    "ready": "準備完了",
+    "needsSetup": "要設定",
+    "disabled": "無効",
+    "reasonBlocked": "allowlist により制限",
+    "reasonMissing": "{{count}} 件の要件が不足",
     "loadedEnabled": "ロード済みかつ有効",
     "loaded": "Gateway にロード済み",
     "installedOnly": "インストールのみ",
@@ -41,6 +46,9 @@
   },
   "filter": {
     "all": "すべて ({{count}})",
+    "ready": "準備完了 ({{count}})",
+    "needsSetup": "要設定 ({{count}})",
+    "disabled": "無効 ({{count}})",
     "builtIn": "内蔵 ({{count}})",
     "preinstalled": "\u30d7\u30ea\u30a4\u30f3\u30b9\u30c8\u30fc\u30eb ({{count}})",
     "installed": "\u30e6\u30fc\u30b6\u30fc\u30a4\u30f3\u30b9\u30c8\u30fc\u30eb ({{count}})",
@@ -94,6 +102,8 @@
     "enabled": "スキルを有効にしました",
     "disabled": "スキルを無効にしました",
     "installed": "スキルをインストールして有効にしました",
+    "installedOnly": "スキルをインストールしました（未有効化）",
+    "failedEnableAfterInstall": "インストールは成功しましたが、有効化に失敗しました",
     "uninstalled": "スキルのアンインストールに成功しました",
     "openedEditor": "エディターで開きました",
     "failedEditor": "エディターを開けませんでした",

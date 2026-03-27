@@ -211,26 +211,15 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
   },
 
   enableSkill: async (skillId) => {
-    const { updateSkill } = get();
     const gatewayStatus = useGatewayStore.getState().status;
-    const skill = get().skills.find((s) => s.id === skillId);
 
     if (gatewayStatus.state !== 'running') {
       throw new Error('Gateway is not running');
     }
-    if (!skill?.loadedInGateway) {
-      throw new Error('Skill is not loaded in Gateway');
-    }
 
     try {
       await useGatewayStore.getState().rpc('skills.update', { skillKey: skillId, enabled: true });
-      updateSkill(skillId, {
-        enabled: true,
-        runtimeEnabled: true,
-        loadedInGateway: true,
-        runtimeStatus: 'loaded',
-        runtimeReason: undefined,
-      });
+      await get().fetchSkills(get().currentAgentId ?? undefined);
     } catch (error) {
       console.error('Failed to enable skill:', error);
       throw error;
@@ -238,7 +227,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
   },
 
   disableSkill: async (skillId) => {
-    const { updateSkill, skills } = get();
+    const { skills } = get();
     const gatewayStatus = useGatewayStore.getState().status;
 
     const skill = skills.find((s) => s.id === skillId);
@@ -248,19 +237,10 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
     if (gatewayStatus.state !== 'running') {
       throw new Error('Gateway is not running');
     }
-    if (!skill?.loadedInGateway) {
-      throw new Error('Skill is not loaded in Gateway');
-    }
 
     try {
       await useGatewayStore.getState().rpc('skills.update', { skillKey: skillId, enabled: false });
-      updateSkill(skillId, {
-        enabled: false,
-        runtimeEnabled: false,
-        loadedInGateway: true,
-        runtimeStatus: 'loaded',
-        runtimeReason: undefined,
-      });
+      await get().fetchSkills(get().currentAgentId ?? undefined);
     } catch (error) {
       console.error('Failed to disable skill:', error);
       throw error;
