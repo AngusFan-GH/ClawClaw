@@ -36,8 +36,8 @@
   },
   "runtime": {
     "label": "运行态",
-    "connected": "已连接",
-    "connecting": "连接中",
+    "connected": "已就绪",
+    "connecting": "启动中",
     "error": "错误",
     "configuredOnly": "已配置",
     "stopped": "已停止",

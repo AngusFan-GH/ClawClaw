@@ -60,6 +60,7 @@ type ChannelsStatusSnapshot = {
     lastConnectedAt?: number | null;
     lastInboundAt?: number | null;
     lastOutboundAt?: number | null;
+    lastEventAt?: number | null;
   }>>;
   channelDefaultAccountId?: Record<string, string>;
 };
@@ -100,24 +101,74 @@ export function mapAccountStatus(account: {
   lastInboundAt?: number | null;
   lastOutboundAt?: number | null;
   lastConnectedAt?: number | null;
+  lastEventAt?: number | null;
 }): ChannelAccountView['status'] {
   const now = Date.now();
   const recentMs = 10 * 60 * 1000;
   const hasRecentActivity =
     (typeof account.lastInboundAt === 'number' && now - account.lastInboundAt < recentMs) ||
     (typeof account.lastOutboundAt === 'number' && now - account.lastOutboundAt < recentMs) ||
-    (typeof account.lastConnectedAt === 'number' && now - account.lastConnectedAt < recentMs);
+    (typeof account.lastConnectedAt === 'number' && now - account.lastConnectedAt < recentMs) ||
+    (typeof account.lastEventAt === 'number' && now - account.lastEventAt < recentMs);
 
-  if (account.connected === true || account.linked === true || hasRecentActivity) {
+  if (account.connected === true || account.linked === true || account.running === true || hasRecentActivity) {
     return 'connected';
-  }
-  if (account.running === true) {
-    return 'connecting';
   }
   if (typeof account.lastError === 'string' && account.lastError) {
     return 'error';
   }
   return 'disconnected';
+}
+
+export function normalizeAccountStatusForUi(params: {
+  channelType: ChannelType;
+  mappedStatus: ChannelAccountView['status'];
+  configured?: boolean;
+  lastError?: string;
+  groupError?: string;
+}): ChannelAccountView['status'] {
+  return params.mappedStatus;
+}
+
+function isSummaryConnected(summary: Record<string, unknown> | undefined): boolean {
+  if (!summary || typeof summary !== 'object') return false;
+  return (
+    summary.connected === true
+    || summary.linked === true
+    || summary.running === true
+    || summary.status === 'connected'
+    || summary.state === 'connected'
+  );
+}
+
+export function promoteConnectedAccountFromSummary(params: {
+  accounts: Map<string, ChannelAccountView>;
+  summary: Record<string, unknown> | undefined;
+  defaultAccountId?: string;
+  type: ChannelType;
+}): void {
+  const { accounts, summary, defaultAccountId, type } = params;
+  if (!isSummaryConnected(summary)) return;
+  if (Array.from(accounts.values()).some((account) => account.status === 'connected')) return;
+
+  const promotedAccountId = defaultAccountId || 'default';
+  const prior = accounts.get(promotedAccountId);
+  accounts.set(promotedAccountId, {
+    id: `${type}:${promotedAccountId}`,
+    type,
+    name: prior?.name || type,
+    status: 'connected',
+    configured: prior?.configured ?? true,
+    runtimeLoaded: true,
+    runtimeStatus: 'connected',
+    accountId: promotedAccountId,
+    isDefaultAccount: promotedAccountId === (defaultAccountId || 'default'),
+    error: undefined,
+    metadata: {
+      ...prior?.metadata,
+      isDefaultAccount: promotedAccountId === (defaultAccountId || 'default'),
+    },
+  });
 }
 
 function shouldKeepRuntimeAccount(account: {
@@ -129,6 +180,7 @@ function shouldKeepRuntimeAccount(account: {
   lastInboundAt?: number | null;
   lastOutboundAt?: number | null;
   lastConnectedAt?: number | null;
+  lastEventAt?: number | null;
 }): boolean {
   const status = mapAccountStatus(account);
   return Boolean(account.configured) || status === 'connected' || status === 'connecting';
@@ -233,11 +285,21 @@ async function buildChannelAccountsView(
         accounts: [],
       };
 
+      const keptRuntimeAccounts = runtimeAccounts.filter((a) => shouldKeepRuntimeAccount(a));
+      const hasRuntimeData = keptRuntimeAccounts.length > 0;
+
       const accountMap = new Map(existing.accounts.map((account) => [account.accountId, account]));
       for (const runtimeAccount of runtimeAccounts) {
         if (!shouldKeepRuntimeAccount(runtimeAccount)) continue;
         const accountId = runtimeAccount.accountId || 'default';
-        const status = mapAccountStatus(runtimeAccount);
+        const mappedStatus = mapAccountStatus(runtimeAccount);
+        const status = normalizeAccountStatusForUi({
+          channelType: type,
+          mappedStatus,
+          configured: runtimeAccount.configured ?? true,
+          lastError: runtimeAccount.lastError,
+          groupError: summaryError,
+        });
         const prior = accountMap.get(accountId);
         accountMap.set(accountId, {
           id: `${type}:${accountId}`,
@@ -257,10 +319,17 @@ async function buildChannelAccountsView(
         });
       }
 
+      promoteConnectedAccountFromSummary({
+        accounts: accountMap,
+        summary,
+        defaultAccountId: defaultAccountId || existing.defaultAccountId,
+        type,
+      });
+
       const nextGroup: ChannelGroupView = {
         ...existing,
         configured: existing.configured || runtimeAccounts.some((account) => account.configured === true),
-        runtimeLoaded: true,
+        runtimeLoaded: hasRuntimeData,
         pluginLoaded: true,
         defaultAccountId: defaultAccountId || existing.defaultAccountId,
         configuredAccounts: Array.from(new Set([
@@ -279,7 +348,7 @@ async function buildChannelAccountsView(
           ...existing,
           accounts: Array.from(accountMap.values()),
           configured: existing.configured || runtimeAccounts.some((account) => account.configured === true),
-          runtimeLoaded: true,
+          runtimeLoaded: hasRuntimeData,
           pluginLoaded: true,
           defaultAccountId: defaultAccountId || existing.defaultAccountId,
           configuredAccounts: Array.from(new Set([

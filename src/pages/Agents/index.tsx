@@ -617,11 +617,27 @@ function AgentSettingsModal({
     [allAgents],
   );
 
+  const configuredChannelTypes = useMemo(
+    () => new Set((channelGroups ?? []).filter((g) => g.configured).map((g) => g.type)),
+    [channelGroups],
+  );
   const assignedChannels = agent.local.boundChannelAccounts.map((binding) => {
     const runtimeChannel = runtimeChannelsByType[binding.channelType];
     const runtimeAccount = runtimeChannel?.accounts.find((account) => account.accountId === binding.accountId);
+    // Prefer runtime account status. When the channel has no runtime account
+    // at all, fall back to the channel-level configured flag to avoid showing
+    // "未连接" for a channel that is properly set up.
+    const accountStatus = runtimeAccount?.status as ChannelRuntimeState | undefined;
     const effectiveStatus: ChannelRuntimeState =
-      runtimeAccount?.status || runtimeChannel?.status || 'disconnected';
+      accountStatus && accountStatus !== 'unknown'
+        ? accountStatus
+        : runtimeChannel
+          ? runtimeChannel.configured
+            ? 'configured'
+            : (runtimeChannel.status as ChannelRuntimeState) || 'disconnected'
+          : configuredChannelTypes.has(binding.channelType as ChannelType)
+            ? 'configured'
+            : 'disconnected';
     const runtimeStatus = resolveChannelRuntimeStatusMeta(effectiveStatus, t);
     return {
       channelType: binding.channelType as ChannelType,
@@ -641,7 +657,16 @@ function AgentSettingsModal({
       group.accounts
         .filter((account) => !channelAccountOwners[`${group.type}:${account.accountId}`])
         .map((account) => {
-          const runtimeStatus = resolveChannelRuntimeStatusMeta(account.status, t);
+          // Prefer runtime account status; if no runtime data at all (account.status
+          // is 'configured' meaning no runtime connection), show "已配置".
+          const accountStatus = account.status as ChannelRuntimeState | undefined;
+          const hasRuntimeStatus = accountStatus && accountStatus !== 'unknown';
+          const effectiveStatus: ChannelRuntimeState = hasRuntimeStatus
+            ? accountStatus
+            : group.configured
+              ? 'configured'
+              : accountStatus || 'disconnected';
+          const runtimeStatus = resolveChannelRuntimeStatusMeta(effectiveStatus, t);
           return {
             channelType: group.type,
             accountId: account.accountId,
@@ -857,54 +882,62 @@ function AgentSettingsModal({
             ) : (
               <div className="space-y-3">
                 {visibleAssignedChannels.map((channel) => (
-                  <div key={`${channel.channelType}:${channel.accountId}`} className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/35 p-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <PageChannelLogo type={channel.channelType} branded />
-                      <div className="min-w-0">
-                        <p className="text-[15px] font-semibold text-foreground">{channel.name}</p>
-                        <p className="text-[13.5px] text-muted-foreground">
-                          {t('settingsDialog.boundAccount', {
-                            accountId: channel.accountId,
-                            defaultValue: `账户：${channel.accountId}`,
-                          })}
-                        </p>
-                        {channel.isDefaultAccount ? (
-                          <Badge
-                            variant="secondary"
-                            className="mt-1 rounded-full border-0 bg-primary/12 px-2 py-0.5 text-[10px] font-medium text-primary shadow-none"
+                  <div
+                    key={`${channel.channelType}:${channel.accountId}`}
+                    className="rounded-2xl border border-border/70 bg-muted/35 p-4 sm:p-5"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-start gap-3.5">
+                        <PageChannelLogo type={channel.channelType} branded />
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                            <p className="truncate text-[15.5px] font-semibold text-foreground">{channel.name}</p>
+                            {'implicitDefault' in channel && channel.implicitDefault ? (
+                              <Badge
+                                variant="secondary"
+                                className="rounded-full border-0 bg-amber-500/12 px-2 py-0.5 text-[10.5px] font-medium text-amber-700 shadow-none dark:text-amber-300"
+                              >
+                                {t('settingsDialog.defaultFallbackBadge', '默认接管')}
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <p
+                            className={cn(
+                              'mt-1 text-[13.5px]',
+                              channel.isDefaultAccount ? 'font-medium text-primary' : 'text-muted-foreground',
+                            )}
                           >
-                            {t('defaultAccount', '默认账户')}
-                          </Badge>
-                        ) : null}
-                        {'implicitDefault' in channel && channel.implicitDefault ? (
-                          <Badge
-                            variant="secondary"
-                            className="mt-1 ml-2 rounded-full border-0 bg-amber-500/12 px-2 py-0.5 text-[10px] font-medium text-amber-700 shadow-none dark:text-amber-300"
-                          >
-                            {t('settingsDialog.defaultFallbackBadge', '默认接管')}
-                          </Badge>
-                        ) : null}
-                        {channel.error && (
-                          <p className="text-xs text-destructive mt-1">{channel.error}</p>
-                        )}
+                            {channel.isDefaultAccount
+                              ? `${t('defaultAccount', '默认账户')}：${channel.accountId}`
+                              : t('settingsDialog.boundAccount', {
+                                accountId: channel.accountId,
+                                defaultValue: `账户：${channel.accountId}`,
+                              })}
+                          </p>
+                          {channel.error ? (
+                            <p className="mt-2 text-[12px] text-destructive">{channel.error}</p>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <StatusBadge status={channel.status} label={channel.statusLabel} />
-                      <Button
-                        variant="dangerGhost"
-                        size="icon"
-                        className="h-8 w-8 rounded-[10px]"
-                        onClick={() =>
-                          setChannelToRemove({
-                            channelType: channel.channelType,
-                            accountId: channel.accountId,
-                            name: `${channel.name} / ${channel.accountId}`,
-                          })
-                        }
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex shrink-0 flex-col items-end gap-2">
+                        <div className="flex items-center justify-end gap-2.5">
+                          <StatusBadge status={channel.status} label={channel.statusLabel} />
+                          <Button
+                            variant="dangerGhost"
+                            size="icon"
+                            className="h-8 w-8 rounded-[10px]"
+                            onClick={() =>
+                              setChannelToRemove({
+                                channelType: channel.channelType,
+                                accountId: channel.accountId,
+                                name: `${channel.name} / ${channel.accountId}`,
+                              })
+                            }
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}

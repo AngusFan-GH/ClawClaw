@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { mapAccountStatus, resolveGroupStatus } from '@electron/api/routes/channels';
+import {
+  mapAccountStatus,
+  normalizeAccountStatusForUi,
+  promoteConnectedAccountFromSummary,
+  resolveGroupStatus,
+} from '@electron/api/routes/channels';
 
 describe('channel route runtime status helpers', () => {
   it('treats connected accounts as connected even if a stale lastError is present', () => {
@@ -7,6 +12,24 @@ describe('channel route runtime status helpers', () => {
       mapAccountStatus({
         connected: true,
         lastError: 'Client network socket disconnected before secure TLS connection was established',
+      }),
+    ).toBe('connected');
+  });
+
+  it('treats recent heartbeat events as connected for channels that only report lastEventAt', () => {
+    expect(
+      mapAccountStatus({
+        configured: true,
+        lastEventAt: Date.now(),
+      }),
+    ).toBe('connected');
+  });
+
+  it('treats running accounts as connected (OpenClaw parity)', () => {
+    expect(
+      mapAccountStatus({
+        configured: true,
+        running: true,
       }),
     ).toBe('connected');
   });
@@ -39,4 +62,23 @@ describe('channel route runtime status helpers', () => {
       }),
     ).toBe('connected');
   });
+
+  it('keeps UI status pass-through without channel-specific overrides', () => {
+    expect(
+      normalizeAccountStatusForUi({
+        channelType: 'feishu',
+        mappedStatus: 'connecting',
+      }),
+    ).toBe('connecting');
+  });
+
+  it('keeps disconnected pass-through without channel-specific overrides', () => {
+    expect(
+      normalizeAccountStatusForUi({
+        channelType: 'qqbot',
+        mappedStatus: 'disconnected',
+      }),
+    ).toBe('disconnected');
+  });
+
 });

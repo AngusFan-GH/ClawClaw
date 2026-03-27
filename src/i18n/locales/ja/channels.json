@@ -35,8 +35,8 @@
   },
   "runtime": {
     "label": "ランタイム",
-    "connected": "接続済み",
-    "connecting": "接続中",
+    "connected": "準備完了",
+    "connecting": "起動中",
     "error": "エラー",
     "configuredOnly": "設定済み",
     "stopped": "停止中",

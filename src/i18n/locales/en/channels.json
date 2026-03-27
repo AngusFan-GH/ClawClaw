@@ -35,8 +35,8 @@
   },
   "runtime": {
     "label": "Runtime",
-    "connected": "Connected",
-    "connecting": "Connecting",
+    "connected": "Ready",
+    "connecting": "Starting",
     "error": "Error",
     "configuredOnly": "Configured",
     "stopped": "Stopped",
