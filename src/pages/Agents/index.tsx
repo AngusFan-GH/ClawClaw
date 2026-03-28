@@ -28,6 +28,19 @@ import { resolveChannelRuntimeStatusMeta, type ChannelRuntimeState } from '@/lib
 import { isMultiInstanceProviderType, PROVIDER_TYPE_INFO, type ProviderAccount, type ProviderVendorInfo } from '@/lib/providers';
 import i18n from '@/i18n';
 
+function resolveLocalizedChannelName(type: ChannelType, fallbackName: string): string {
+  switch (type) {
+    case 'wechat':
+    case 'dingtalk':
+    case 'feishu':
+    case 'wecom':
+    case 'qqbot':
+      return i18n.t(`channels:displayName.${type}`, { defaultValue: fallbackName });
+    default:
+      return fallbackName;
+  }
+}
+
 export function Agents() {
   const { t } = useTranslation('agents');
   const navigate = useNavigate();
@@ -399,7 +412,12 @@ function AgentCard({
     }
   }
   const channelLabels = Array.from(channelTypes)
-    .map((channelType) => CHANNEL_NAMES[channelType as ChannelType] || channelType)
+    .map((channelType) =>
+      resolveLocalizedChannelName(
+        channelType as ChannelType,
+        CHANNEL_NAMES[channelType as ChannelType] || channelType,
+      ),
+    )
     .filter(Boolean);
   const modelMeta = splitAgentModelDisplay(agent.local.modelDisplay);
   const connectionSummary = channelLabels.length > 0
@@ -874,7 +892,10 @@ function AgentSettingsModal({
       channelType: binding.channelType as ChannelType,
       accountId: binding.accountId,
       isDefaultAccount: binding.isDefaultAccount,
-      name: CHANNEL_NAMES[binding.channelType as ChannelType] || binding.channelType,
+      name: resolveLocalizedChannelName(
+        binding.channelType as ChannelType,
+        CHANNEL_NAMES[binding.channelType as ChannelType] || binding.channelType,
+      ),
       status: runtimeStatus.status,
       statusLabel: runtimeStatus.label,
       error: runtimeAccount?.error || runtimeChannel?.error,
@@ -902,7 +923,7 @@ function AgentSettingsModal({
             channelType: group.type,
             accountId: account.accountId,
             isDefaultAccount: account.isDefaultAccount,
-            name: group.name,
+            name: resolveLocalizedChannelName(group.type, group.name),
             status: runtimeStatus.status,
             statusLabel: runtimeStatus.label,
             error: account.error,
@@ -929,7 +950,7 @@ function AgentSettingsModal({
           const implicitAssignedHere = !ownerId && defaultAgentId === agent.gateway.id;
           return {
             channelType: group.type,
-            channelName: group.name,
+            channelName: resolveLocalizedChannelName(group.type, group.name),
             accountId: account.accountId,
             isDefaultAccount: account.isDefaultAccount,
             status: account.status,
