@@ -20,6 +20,13 @@
   "configuredDesc": "すでに設定済みのチャンネルを管理",
   "configuredBadge": "設定済み",
   "accountCount": "{{count}} アカウント",
+  "displayName": {
+    "wechat": "WeChat",
+    "dingtalk": "DingTalk",
+    "feishu": "Feishu",
+    "wecom": "WeCom",
+    "qqbot": "QQ Bot"
+  },
   "addAccount": "アカウント追加",
   "manageBindingAccounts": "アカウント単位でバインド",
   "defaultAccount": "既定アカウント",

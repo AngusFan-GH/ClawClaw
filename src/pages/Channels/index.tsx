@@ -12,7 +12,7 @@ import { ChannelLogo as SharedChannelLogo } from '@/components/channels/ChannelL
 import { PageHeader } from '@/components/layout/PageHeader';
 import { cn } from '@/lib/utils';
 import { useGatewayPageRefresh } from '@/lib/use-gateway-page-refresh';
-import { resolveChannelRuntimeStatusMeta, type ChannelRuntimeState } from '@/lib/channel-runtime-status';
+import { resolveChannelRuntimeStatusMeta } from '@/lib/channel-runtime-status';
 import {
   CHANNEL_META,
   channelSupportsMultipleAccounts,
@@ -24,6 +24,23 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+
+function resolveLocalizedChannelName(
+  type: ChannelType,
+  fallbackName: string,
+  t: ReturnType<typeof useTranslation<'channels'>>['t'],
+): string {
+  switch (type) {
+    case 'wechat':
+    case 'dingtalk':
+    case 'feishu':
+    case 'wecom':
+    case 'qqbot':
+      return t(`displayName.${type}`, fallbackName);
+    default:
+      return fallbackName;
+  }
+}
 
 export function Channels() {
   const { t } = useTranslation('channels');
@@ -145,6 +162,7 @@ export function Channels() {
                     <ChannelTypeCard
                       key={group.type}
                       group={group}
+                      displayName={resolveLocalizedChannelName(group.type, group.name, t)}
                       accountOwnerships={Object.fromEntries(
                         group.accounts.map((account) => {
                           const ownerId = channelAccountOwners[`${group.type}:${account.accountId}`];
@@ -311,6 +329,7 @@ export function Channels() {
 
 function ChannelTypeCard({
   group,
+  displayName,
   accountOwnerships,
   onEditAccount,
   onAddAccount,
@@ -318,6 +337,7 @@ function ChannelTypeCard({
   onDeleteAccount,
 }: {
   group: ChannelGroup;
+  displayName: string;
   accountOwnerships: Record<string, { label: string; mode: 'explicit' | 'fallback' } | undefined>;
   onEditAccount: (account: ChannelAccount) => void;
   onAddAccount: () => void;
@@ -326,7 +346,6 @@ function ChannelTypeCard({
 }) {
   const { t } = useTranslation('channels');
   const meta = CHANNEL_META[group.type];
-  const groupRuntimeStatus = resolveChannelRuntimeStatusMeta(group.status as ChannelRuntimeState, t);
   return (
     <div className="rounded-[16px] border border-border/60 bg-card/84 p-4 transition-colors hover:border-black/10 dark:hover:border-white/10">
       <div className="flex items-start gap-3.5">
@@ -337,17 +356,9 @@ function ChannelTypeCard({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
-                <h3 className="truncate text-[18px] font-semibold tracking-[-0.02em] text-foreground">{group.name}</h3>
+                <h3 className="truncate text-[18px] font-semibold tracking-[-0.02em] text-foreground">{displayName}</h3>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                {group.accounts.length > 1 ? (
-                  <Badge
-                    variant="secondary"
-                    className="rounded-[10px] border border-black/6 bg-black/[0.03] px-2 py-0.5 text-[10px] font-semibold text-foreground/70 shadow-none dark:border-white/10 dark:bg-white/[0.04]"
-                  >
-                    {groupRuntimeStatus.label}
-                  </Badge>
-                ) : null}
                 {meta?.isPlugin && (
                   <Badge
                     variant="secondary"

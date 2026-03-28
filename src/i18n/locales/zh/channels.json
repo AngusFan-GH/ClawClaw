@@ -21,6 +21,13 @@
   "configuredDesc": "管理已完成配置的连接",
   "configuredBadge": "已配置",
   "accountCount": "{{count}} 个账户",
+  "displayName": {
+    "wechat": "微信",
+    "dingtalk": "钉钉",
+    "feishu": "飞书",
+    "wecom": "企业微信",
+    "qqbot": "QQ Bot"
+  },
   "addAccount": "新增账户",
   "manageBindingAccounts": "按账户绑定",
   "defaultAccount": "默认账户",

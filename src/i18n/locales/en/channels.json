@@ -20,6 +20,13 @@
   "configuredDesc": "Manage channels that are already configured",
   "configuredBadge": "Configured",
   "accountCount": "{{count}} accounts",
+  "displayName": {
+    "wechat": "WeChat",
+    "dingtalk": "DingTalk",
+    "feishu": "Feishu",
+    "wecom": "WeCom",
+    "qqbot": "QQ Bot"
+  },
   "addAccount": "Add account",
   "manageBindingAccounts": "Bind by account",
   "defaultAccount": "Default account",

@@ -1,5 +1,5 @@
 {
-  "title": "Agents",
+  "title": "エージェント",
   "subtitle": "OpenClaw エージェントとチャンネルの所属を管理します",
   "stats": {
     "total": "総数",
@@ -8,85 +8,85 @@
     "connected": "接続済み"
   },
   "list": {
-    "title": "Agent 一覧",
-    "description": "各 Agent はデフォルトモデルを継承でき、それぞれの Channel 所属を個別に持てます。"
+    "title": "エージェント一覧",
+    "description": "各エージェントはデフォルトモデルを継承でき、それぞれの接続の所属を個別に持てます。"
   },
   "empty": {
-    "title": "表示できる Agent がまだありません",
-    "description": "新しい Agent を作成すると、役割ごとに会話と Channel 所属を分けられます。"
+    "title": "表示できるエージェントがまだありません",
+    "description": "新しいエージェントを作成すると、役割ごとに会話と接続の所属を分けられます。"
   },
   "refresh": "更新",
-  "addAgent": "Agent を追加",
-  "gatewayWarning": "ゲートウェイは未接続です。接続が復旧すると、Agent と Channel の割り当て同期を再開します。",
+  "addAgent": "エージェントを追加",
+  "gatewayWarning": "ゲートウェイは未接続です。接続が復旧すると、エージェントと接続の割り当て同期を再開します。",
   "defaultBadge": "default",
   "inherited": "デフォルト",
   "none": "なし",
   "fieldLabels": {
-    "model": "Model",
-    "channels": "Channels"
+    "model": "モデル",
+    "channels": "接続"
   },
   "meta": {
-    "defaultAgent": "Default agent",
-    "mainKey": "Main key",
-    "scope": "Scope",
-    "identity": "Identity",
-    "workspace": "Workspace"
+    "defaultAgent": "デフォルトエージェント",
+    "mainKey": "メインキー",
+    "scope": "スコープ",
+    "identity": "識別情報",
+    "workspace": "ワークスペース"
   },
-  "modelLine": "Model: {{model}}{{suffix}}",
-  "channelsLine": "Channels: {{channels}}",
-  "deleteAgent": "Agent を削除",
+  "modelLine": "モデル: {{model}}{{suffix}}",
+  "channelsLine": "接続: {{channels}}",
+  "deleteAgent": "エージェントを削除",
   "settings": "設定",
   "creating": "作成中...",
   "createDialog": {
-    "title": "Agent を追加",
-    "description": "名前だけで新しい Agent を作成できます。ClawClaw はメイン Agent のワークスペース初期ファイルと認証設定をコピーします。",
-    "nameLabel": "Agent 名",
+    "title": "エージェントを追加",
+    "description": "名前だけで新しいエージェントを作成できます。ClawClaw はメインエージェントのワークスペース初期ファイルと認証設定をコピーします。",
+    "nameLabel": "エージェント名",
     "namePlaceholder": "Coding Helper"
   },
   "deleteDialog": {
     "title": "Agent を削除",
-    "message": "ClawClaw から「{{name}}」を削除しますか？この操作により Agent と、その ClawClaw 管理下のワークスペース、実行時ファイル、セッションファイルがディスクから完全に削除されます。"
+    "message": "ClawClaw から「{{name}}」を削除しますか？この操作によりエージェントと、その ClawClaw 管理下のワークスペース、実行時ファイル、セッションファイルがディスクから完全に削除されます。"
   },
   "settingsDialog": {
-    "title": "{{name}} Settings",
-    "description": "Agent 名、デフォルトモデル、この Agent に属する Channel を管理します。",
-    "nameLabel": "Agent 名",
-    "agentIdLabel": "Agent ID",
-    "modelLabel": "Model",
+    "title": "{{name}} の設定",
+    "description": "エージェント名、デフォルトモデル、このエージェントに属する接続を管理します。",
+    "nameLabel": "エージェント名",
+    "agentIdLabel": "エージェント ID",
+    "modelLabel": "モデル",
     "inheritModelOptionSimple": "デフォルトを継承",
     "inheritModelOption": "デフォルトを継承（現在: {{model}}）",
-    "modelHelpInherited": "この Agent はデフォルトモデル {{model}} を継承します。新しい会話はこの既定値から開始します。",
-    "modelHelpSelected": "この Agent は既定で {{model}} を使用します。既存セッションのモデル override はそのまま維持されます。",
-    "modelHelpCustom": "保存後、新しい会話はこの Agent モデルを使います。既存セッションは引き続きセッション単位の設定を優先します。",
-    "channelsTitle": "Channels",
-    "channelsDescription": "まず Connections ページでアカウントを設定し、ここで特定アカウントをこの Agent にバインドします。複数アカウントの接続は別々の Agent に割り当てられます。",
+    "modelHelpInherited": "このエージェントはデフォルトモデル {{model}} を継承します。新しい会話はこの既定値から開始します。",
+    "modelHelpSelected": "このエージェントは既定で {{model}} を使用します。既存セッションのモデル override はそのまま維持されます。",
+    "modelHelpCustom": "保存後、新しい会話はこのエージェントモデルを使います。既存セッションは引き続きセッション単位の設定を優先します。",
+    "channelsTitle": "接続",
+    "channelsDescription": "まず接続ページでアカウントを設定し、ここで特定アカウントをこのエージェントにバインドします。複数アカウントの接続は別々のエージェントに割り当てられます。",
     "addChannel": "接続アカウントをバインド",
-    "noChannels": "この Agent にはまだ Channel が割り当てられていません。",
+    "noChannels": "このエージェントにはまだ接続が割り当てられていません。",
     "assignedStatus": "割り当て済み",
     "boundAccount": "アカウント: {{accountId}}",
     "defaultFallbackStatus": "デフォルトで接管",
     "defaultFallbackBadge": "デフォルトで接管"
   },
   "removeChannelDialog": {
-    "title": "Channel を削除",
-    "message": "{{name}} のバインドを解除しますか？接続設定は残り、現在の Agent との所属関係だけを削除します。"
+    "title": "接続を削除",
+    "message": "{{name}} のバインドを解除しますか？接続設定は残り、現在のエージェントとの所属関係だけを削除します。"
   },
   "toast": {
-    "agentCreated": "Agent を作成しました",
-    "agentCreateFailed": "Agent の作成に失敗しました: {{error}}",
-    "agentDeleted": "Agent を削除しました",
-    "agentUpdated": "Agent を更新しました",
-    "agentUpdateFailed": "Agent の更新に失敗しました: {{error}}",
+    "agentCreated": "エージェントを作成しました",
+    "agentCreateFailed": "エージェントの作成に失敗しました: {{error}}",
+    "agentDeleted": "エージェントを削除しました",
+    "agentUpdated": "エージェントを更新しました",
+    "agentUpdateFailed": "エージェントの更新に失敗しました: {{error}}",
     "openWorkspaceFailed": "ワークスペースを開けませんでした: {{error}}",
-    "channelAssigned": "{{channel}} を Agent に割り当てました",
+    "channelAssigned": "{{channel}} をエージェントに割り当てました",
     "channelAssignFailed": "Channel の割り当てに失敗しました: {{error}}",
     "channelRemoved": "{{channel}} のバインドを解除しました",
     "channelRemoveFailed": "Channel の削除に失敗しました: {{error}}"
   },
   "bindingDialog": {
     "title": "既存の接続をバインド",
-    "description": "設定済みの接続をアカウント単位でバインドします。複数アカウントの接続は別々の Agent に割り当てられます。",
-    "empty": "まだバインドできる接続がありません。先に Connections ページでアカウントを設定してください。",
+    "description": "設定済みの接続をアカウント単位でバインドします。複数アカウントの接続は別々のエージェントに割り当てられます。",
+    "empty": "まだバインドできる接続がありません。先に接続ページでアカウントを設定してください。",
     "otherOwner": "現在の割り当て: {{name}}",
     "fallbackOwner": "明示的なバインドはありません。既定では {{name}} にルーティングされます",
     "unassigned": "未割り当て",
@@ -95,9 +95,9 @@
     "accountNotConfigured": "このアカウントはまだ設定が完了していません。先に Connections ページで設定してください。",
     "binding": "バインド中...",
     "boundHere": "割り当て済み",
-    "bindAction": "この Agent にバインド",
+    "bindAction": "このエージェントにバインド",
     "defaultFallbackHere": "既定で接管中"
   },
-  "loadingTitle": "Agent を読み込み中",
-  "loadingDescription": "Agent 設定と Channel バインドを同期しています。しばらくお待ちください。"
+  "loadingTitle": "エージェントを読み込み中",
+  "loadingDescription": "エージェント設定と接続バインドを同期しています。しばらくお待ちください。"
 }
