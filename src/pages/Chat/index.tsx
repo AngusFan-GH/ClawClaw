@@ -212,6 +212,14 @@ function normalizeSessionModelValue(
   return undefined;
 }
 
+function normalizeModelRefValue(
+  modelRef: string | undefined,
+  options: ChatToolbarModelOption[],
+): string | undefined {
+  if (!modelRef?.trim()) return undefined;
+  return normalizeSessionModelValue({ model: modelRef }, options);
+}
+
 function dedupeModelOptions(options: ChatToolbarModelOption[]): ChatToolbarModelOption[] {
   const seenValues = new Set<string>();
 
@@ -230,12 +238,6 @@ function getAgentIdFromSessionKey(sessionKey: string | undefined): string | unde
   if (!key || !key.startsWith('agent:')) return undefined;
   const parts = key.split(':');
   return parts[1]?.trim() || undefined;
-}
-
-function buildAgentMainSessionKey(agentId: string, mainKey = 'main'): string {
-  const normalizedAgentId = agentId?.trim() || 'main';
-  const normalizedMainKey = mainKey?.trim() || 'main';
-  return `agent:${normalizedAgentId}:${normalizedMainKey}`;
 }
 
 function resolveAgentDisplayName(agent: { gateway: { id: string; name?: string; identity?: { name?: string } } }): string {
@@ -282,7 +284,6 @@ export function Chat() {
 
   const agents = useAgentsStore((s) => s.agents);
   const defaultAgentId = useAgentsStore((s) => s.defaultAgentId);
-  const agentsMainKey = useAgentsStore((s) => s.mainKey);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const providerAccounts = useProviderStore((s) => s.accounts);
   const providerStatuses = useProviderStore((s) => s.statuses);
@@ -580,6 +581,14 @@ export function Chat() {
     () => normalizeSessionModelValue(currentSession, modelOptions),
     [currentSession, modelOptions]
   );
+  const effectiveAgentModelRef = useMemo(() => {
+    const resolvedAgentId = sessionAgentId || currentAgentId || defaultAgentId;
+    return agents.find((agent) => agent.gateway.id === resolvedAgentId)?.local.modelRef;
+  }, [agents, currentAgentId, defaultAgentId, sessionAgentId]);
+  const normalizedAgentModelValue = useMemo(
+    () => normalizeModelRefValue(effectiveAgentModelRef, modelOptions),
+    [effectiveAgentModelRef, modelOptions],
+  );
   const defaultModelMeta = useMemo(() => {
     const defaultAccount = providerAccounts.find((account) => account.id === defaultAccountId);
     if (!defaultAccount) {
@@ -600,15 +609,15 @@ export function Chat() {
     return {
       label: `${providerDisplayName} · ${modelName || modelRef || providerDisplayName}`,
       shortLabel: modelName || modelRef || defaultAccount.label,
-      value: modelRef,
-    };
+        value: modelRef,
+      };
   }, [defaultAccountId, modelOptions, providerAccounts, providerCatalogMap, vendorMap]);
   const normalizedDefaultModelValue = useMemo(
-    () => normalizeSessionModelValue(
+    () => normalizedAgentModelValue || normalizeSessionModelValue(
       defaultModelMeta.value ? { model: defaultModelMeta.value } : undefined,
       modelOptions,
     ),
-    [defaultModelMeta.value, modelOptions]
+    [defaultModelMeta.value, modelOptions, normalizedAgentModelValue]
   );
   const agentOptions = useMemo<ChatAgentOption[]>(() => {
     const sorted = [...agents].sort((left, right) => {
@@ -717,7 +726,7 @@ export function Chat() {
               agentOptions={agentOptions}
               onAgentChange={(agentId) => {
                 if (agentId === currentAgentId) return;
-                switchSession(buildAgentMainSessionKey(agentId, agentsMainKey));
+                newSession(agentId);
               }}
             />
           ) : (
@@ -825,7 +834,7 @@ export function Chat() {
         onToggleThinking={toggleThinking}
         resetKey={`${currentSessionKey || 'no-session'}:${shouldShowWelcome ? 'welcome' : isEmpty ? 'empty' : 'active'}`}
         modelOptions={modelOptions}
-        selectedModel={normalizedSelectedModel}
+        selectedModel={normalizedSelectedModel || normalizedAgentModelValue}
         defaultModelValue={normalizedDefaultModelValue}
         defaultModelShortLabel={defaultModelMeta.shortLabel}
         onModelChange={setSessionModel}

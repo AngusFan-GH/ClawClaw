@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Bot, FolderOpen, PencilLine, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { AlertCircle, Bot, Check, ChevronDown, FolderOpen, PencilLine, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +15,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { useAgentsStore } from '@/stores/agents';
 import { useChannelsStore } from '@/stores/channels';
 import { useGatewayStore } from '@/stores/gateway';
+import { useProviderStore } from '@/stores/providers';
 import { CHANNEL_NAMES, type ChannelGroup, type ChannelType } from '@/types/channel';
 import type { AgentSummary } from '@/types/agent';
 import { useTranslation } from 'react-i18next';
@@ -23,12 +25,15 @@ import { cn } from '@/lib/utils';
 import { invokeIpc } from '@/lib/api-client';
 import { useGatewayPageRefresh } from '@/lib/use-gateway-page-refresh';
 import { resolveChannelRuntimeStatusMeta, type ChannelRuntimeState } from '@/lib/channel-runtime-status';
+import { isMultiInstanceProviderType, PROVIDER_TYPE_INFO, type ProviderAccount, type ProviderVendorInfo } from '@/lib/providers';
+import i18n from '@/i18n';
 
 export function Agents() {
   const { t } = useTranslation('agents');
   const navigate = useNavigate();
   const gatewayStatus = useGatewayStore((state) => state.status);
   const gatewayLifecycle = useGatewayStore((state) => state.lifecycle);
+  const refreshProviderSnapshot = useProviderStore((state) => state.refreshProviderSnapshot);
   const {
     agents,
     defaultAgentId,
@@ -63,6 +68,11 @@ export function Agents() {
     }),
     [agents],
   );
+
+  useEffect(() => {
+    void refreshProviderSnapshot();
+  }, [refreshProviderSnapshot]);
+
   return (
     <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
       <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-6 pb-8 pt-10 md:px-8">
@@ -255,6 +265,81 @@ function splitAgentModelDisplay(modelDisplay: string): { value: string; isDefaul
     value: normalized || trimmed,
     isDefaultModel: normalized !== trimmed,
   };
+}
+
+type AgentModelOption = {
+  value: string;
+  label: string;
+  shortLabel: string;
+};
+
+function getRuntimeProviderFallbackKey(account: ProviderAccount): string | undefined {
+  if (account.vendorId === 'google' && account.authMode === 'oauth_browser') {
+    return 'google-gemini-cli';
+  }
+  if (
+    account.vendorId === 'openai'
+    && (account.authMode === 'oauth_browser' || account.authMode === 'oauth_device')
+  ) {
+    return 'openai-codex';
+  }
+  if (account.vendorId === 'minimax-portal-cn') {
+    return 'minimax-portal';
+  }
+  if (isMultiInstanceProviderType(account.vendorId)) {
+    return undefined;
+  }
+  return account.vendorId;
+}
+
+function getProviderDisplayName(account: ProviderAccount, vendor?: ProviderVendorInfo): string {
+  if (
+    account.vendorId === 'local-model'
+    || account.metadata?.localModel
+    || account.metadata?.managedBy === 'preset-local-model'
+  ) {
+    return i18n.t('chat:composer.localModelProvider', '本地模型');
+  }
+  return account.label || vendor?.name || account.vendorId;
+}
+
+function resolveAccountModelOptions(
+  account: ProviderAccount,
+  vendor: ProviderVendorInfo | undefined,
+  providerDisplayName: string,
+): AgentModelOption[] {
+  const runtimeProviderKey = getRuntimeProviderFallbackKey(account);
+  const fallbackVendor = PROVIDER_TYPE_INFO.find((item) => item.id === account.vendorId);
+  const candidates = [account.model || vendor?.defaultModelId || fallbackVendor?.defaultModelId, ...(account.fallbackModels ?? [])]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
+  const seen = new Set<string>();
+
+  return candidates.flatMap((candidate) => {
+    const normalizedRef = runtimeProviderKey
+      ? (candidate.startsWith(`${runtimeProviderKey}/`) ? candidate : `${runtimeProviderKey}/${candidate}`)
+      : candidate;
+    if (seen.has(normalizedRef)) {
+      return [];
+    }
+    seen.add(normalizedRef);
+    const modelName = normalizedRef.split('/').pop() || normalizedRef;
+    return [{
+      value: normalizedRef,
+      label: `${providerDisplayName} · ${modelName}`,
+      shortLabel: modelName,
+    }];
+  });
+}
+
+function dedupeModelOptions(options: AgentModelOption[]): AgentModelOption[] {
+  const seen = new Set<string>();
+  return options.filter((option) => {
+    const key = option.value.trim().toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function resolveAgentDisplayName(agent: AgentSummary): string {
@@ -553,12 +638,18 @@ function AgentSettingsModal({
   onClose: () => void;
 }) {
   const { t } = useTranslation('agents');
-  const modelMeta = splitAgentModelDisplay(agent.local.modelDisplay);
   const { updateAgent, assignChannel, removeChannel } = useAgentsStore();
   const { fetchChannels } = useChannelsStore();
+  const providerAccounts = useProviderStore((state) => state.accounts);
+  const providerStatuses = useProviderStore((state) => state.statuses);
+  const providerVendors = useProviderStore((state) => state.vendors);
+  const defaultAccountId = useProviderStore((state) => state.defaultAccountId);
   const workspacePath = agent.local.workspace?.trim() || '';
   const [name, setName] = useState(resolveAgentDisplayName(agent));
   const [savingName, setSavingName] = useState(false);
+  const [selectedModelRef, setSelectedModelRef] = useState(agent.local.inheritedModel ? '__inherit__' : (agent.local.modelRef ?? '__inherit__'));
+  const [savingModel, setSavingModel] = useState(false);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [showBindingModal, setShowBindingModal] = useState(false);
   const [channelToRemove, setChannelToRemove] = useState<{
     channelType: ChannelType;
@@ -566,21 +657,140 @@ function AgentSettingsModal({
     name: string;
   } | null>(null);
   const [bindingKey, setBindingKey] = useState<string | null>(null);
+  const modelMenuRef = useRef<HTMLDivElement>(null);
+  const modelTriggerRef = useRef<HTMLButtonElement>(null);
+  const [modelMenuPosition, setModelMenuPosition] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
 
   useEffect(() => {
     setName(resolveAgentDisplayName(agent));
+    setSelectedModelRef(agent.local.inheritedModel ? '__inherit__' : (agent.local.modelRef ?? '__inherit__'));
+    setModelMenuOpen(false);
   }, [agent]);
+
+  const providerStatusMap = useMemo(
+    () => new Map((providerStatuses ?? []).map((status) => [status.id, status])),
+    [providerStatuses],
+  );
+  const vendorMap = useMemo(
+    () => new Map((providerVendors ?? []).map((vendor) => [vendor.id, vendor])),
+    [providerVendors],
+  );
+  const modelOptions = useMemo(() => {
+    const eligibleAccounts = providerAccounts
+      .filter((account) => account.enabled)
+      .filter((account) => account.authMode === 'local'
+        || account.authMode === 'oauth_device'
+        || account.authMode === 'oauth_browser'
+        || Boolean(providerStatusMap.get(account.id)?.hasKey));
+
+    return dedupeModelOptions(
+      eligibleAccounts
+        .flatMap((account) => {
+          const vendor = vendorMap.get(account.vendorId);
+          const providerDisplayName = getProviderDisplayName(account, vendor);
+          return resolveAccountModelOptions(account, vendor, providerDisplayName);
+        })
+        .sort((left, right) => left.label.localeCompare(right.label)),
+    );
+  }, [providerAccounts, providerStatusMap, vendorMap]);
+  const defaultModelOption = useMemo(() => {
+    const defaultAccount = providerAccounts.find((account) => account.id === defaultAccountId);
+    if (!defaultAccount) return null;
+    const vendor = vendorMap.get(defaultAccount.vendorId);
+    const providerDisplayName = getProviderDisplayName(defaultAccount, vendor);
+    return resolveAccountModelOptions(defaultAccount, vendor, providerDisplayName)[0] ?? null;
+  }, [defaultAccountId, providerAccounts, vendorMap]);
+  const selectedModelOption = modelOptions.find((option) => option.value === selectedModelRef);
+  const selectableModelOptions = modelOptions.filter((option) => {
+    if (option.value === selectedModelRef) {
+      return false;
+    }
+    if (defaultModelOption && option.value === defaultModelOption.value) {
+      return false;
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    if (!modelMenuOpen) return;
+
+    const updatePosition = () => {
+      const rect = modelTriggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const viewportPadding = 16;
+      const availableBelow = window.innerHeight - rect.bottom - viewportPadding;
+      const availableAbove = rect.top - viewportPadding;
+      const openUpward = availableBelow < 260 && availableAbove > availableBelow;
+      setModelMenuPosition({
+        top: openUpward ? rect.top - 8 : rect.bottom + 8,
+        left: rect.left,
+        width: rect.width,
+        maxHeight: Math.max(180, Math.min(320, openUpward ? availableAbove - 8 : availableBelow - 8)),
+      });
+    };
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!modelMenuRef.current?.contains(target) && !modelTriggerRef.current?.contains(target)) {
+        setModelMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setModelMenuOpen(false);
+      }
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [modelMenuOpen]);
 
   const handleSaveName = async () => {
     if (!name.trim() || name.trim() === resolveAgentDisplayName(agent)) return;
     setSavingName(true);
     try {
-      await updateAgent(agent.gateway.id, name.trim());
+      await updateAgent(agent.gateway.id, { name: name.trim() });
       toast.success(t('toast.agentUpdated'));
     } catch (error) {
       toast.error(t('toast.agentUpdateFailed', { error: String(error) }));
     } finally {
       setSavingName(false);
+    }
+  };
+
+  const handleSelectModel = async (nextValue: string) => {
+    if (savingModel || nextValue === selectedModelRef) {
+      setModelMenuOpen(false);
+      return;
+    }
+    setSelectedModelRef(nextValue);
+    setModelMenuOpen(false);
+    setSavingModel(true);
+    try {
+      await updateAgent(agent.gateway.id, {
+        model: nextValue === '__inherit__' ? null : nextValue,
+      });
+      toast.success(t('toast.agentUpdated'));
+    } catch (error) {
+      setSelectedModelRef(agent.local.inheritedModel ? '__inherit__' : (agent.local.modelRef ?? '__inherit__'));
+      toast.error(t('toast.agentUpdateFailed', { error: String(error) }));
+    } finally {
+      setSavingModel(false);
     }
   };
 
@@ -808,18 +1018,33 @@ function AgentSettingsModal({
                 <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground/75 font-medium">
                   {t('settingsDialog.modelLabel')}
                 </p>
-                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[13.5px] text-foreground">
-                  <span>{modelMeta.value}</span>
-                  {modelMeta.isDefaultModel ? (
-                    <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                      {t('defaultBadge')}
+                <div className="mt-2 space-y-3">
+                  <Button
+                    ref={modelTriggerRef}
+                    type="button"
+                    variant="outline"
+                    onClick={() => setModelMenuOpen((open) => !open)}
+                    disabled={savingModel}
+                    className="h-[44px] w-full justify-between rounded-xl border-black/10 bg-background px-3.5 text-[13px] font-medium text-foreground shadow-sm hover:bg-background dark:border-white/10 dark:bg-background"
+                  >
+                    <span className="truncate text-left">
+                      {selectedModelRef === '__inherit__'
+                        ? (defaultModelOption?.label ?? agent.local.modelDisplay)
+                        : selectedModelOption
+                          ? selectedModelOption.label
+                          : selectedModelRef}
                     </span>
-                  ) : null}
-                  {agent.local.inheritedModel ? (
-                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                      {t('inherited')}
-                    </span>
-                  ) : null}
+                    {selectedModelRef === '__inherit__' ? (
+                      <span className="mr-1 inline-flex shrink-0 items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                        {t('defaultBadge')}
+                      </span>
+                    ) : null}
+                    {savingModel ? (
+                      <LoadingIcon className="h-4 w-4 shrink-0" />
+                    ) : (
+                      <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', modelMenuOpen && 'rotate-180')} />
+                    )}
+                  </Button>
                 </div>
               </div>
             </section>
@@ -994,6 +1219,46 @@ function AgentSettingsModal({
         }}
         onCancel={() => setChannelToRemove(null)}
       />
+      {modelMenuOpen && modelMenuPosition
+        ? createPortal(
+            <div
+              ref={modelMenuRef}
+              className="fixed z-[130] overflow-hidden rounded-[16px] border border-black/10 bg-card shadow-[0_18px_44px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-card"
+              style={{
+                top: modelMenuPosition.top,
+                left: modelMenuPosition.left,
+                width: modelMenuPosition.width,
+                maxHeight: modelMenuPosition.maxHeight,
+                transform: modelMenuPosition.top > (modelTriggerRef.current?.getBoundingClientRect().top ?? 0) ? 'none' : 'translateY(-100%)',
+              }}
+            >
+              <div className="max-h-[inherit] overflow-y-auto p-1.5">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2.5 text-left text-[13px] text-foreground transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                  onClick={() => void handleSelectModel('__inherit__')}
+                >
+                  <span className="flex-1 truncate">{defaultModelOption?.label ?? agent.local.modelDisplay}</span>
+                  <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    {t('defaultBadge')}
+                  </span>
+                  {selectedModelRef === '__inherit__' ? <Check className="h-4 w-4 shrink-0 text-primary" /> : null}
+                </button>
+                {selectableModelOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2.5 text-left text-[13px] text-foreground transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                    onClick={() => void handleSelectModel(option.value)}
+                  >
+                    <span className="flex-1 truncate">{option.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

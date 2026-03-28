@@ -43,7 +43,7 @@ interface AgentsState {
   error: string | null;
   fetchAgents: () => Promise<void>;
   createAgent: (name: string) => Promise<void>;
-  updateAgent: (agentId: string, name: string) => Promise<void>;
+  updateAgent: (agentId: string, updates: { name?: string; model?: string | null }) => Promise<void>;
   deleteAgent: (agentId: string) => Promise<void>;
   assignChannel: (agentId: string, channelType: ChannelType, accountId?: string) => Promise<void>;
   removeChannel: (agentId: string, channelType: ChannelType, accountId?: string) => Promise<void>;
@@ -66,6 +66,7 @@ function buildDefaultLocalExtras(): LocalAgentExtras {
     workspace: '',
     agentDir: '',
     modelDisplay: 'Not configured',
+    modelRef: undefined,
     inheritedModel: false,
     boundChannels: [],
     boundChannelAccounts: [],
@@ -93,6 +94,7 @@ function buildLocalExtras(localAgent?: LocalAgentSnapshot): LocalAgentExtras {
         workspace: localAgent.workspace,
         agentDir: localAgent.agentDir,
         modelDisplay: localAgent.modelDisplay,
+        modelRef: localAgent.modelRef,
         inheritedModel: localAgent.inheritedModel,
         boundChannels: localAgent.channelTypes,
         boundChannelAccounts: localAgent.channelBindings,
@@ -223,12 +225,12 @@ export const useAgentsStore = create<AgentsState>((set) => ({
     }
   },
 
-  updateAgent: async (agentId: string, name: string) => {
+  updateAgent: async (agentId: string, updates: { name?: string; model?: string | null }) => {
     set({ error: null });
     try {
       await hostApiFetch(`/api/agents/${encodeURIComponent(agentId)}`, {
         method: 'PUT',
-        body: JSON.stringify({ name }),
+        body: JSON.stringify(updates),
       });
       await useAgentsStore.getState().fetchAgents();
     } catch (error) {

@@ -336,6 +336,26 @@ function parseFallbackAttempts(value: unknown): Array<{ provider: string; model:
 
 const DEFAULT_CANONICAL_PREFIX = 'agent:main';
 export const DEFAULT_SESSION_KEY = `${DEFAULT_CANONICAL_PREFIX}:main`;
+const CURRENT_SESSION_STORAGE_KEY = 'clawclaw:current-session-key';
+const INITIAL_SESSION_KEY = loadPersistedCurrentSessionKey();
+const INITIAL_AGENT_ID = getAgentIdFromSessionKey(INITIAL_SESSION_KEY) || 'main';
+
+function loadPersistedCurrentSessionKey(): string {
+  try {
+    const stored = window.localStorage.getItem(CURRENT_SESSION_STORAGE_KEY)?.trim();
+    return stored || DEFAULT_SESSION_KEY;
+  } catch {
+    return DEFAULT_SESSION_KEY;
+  }
+}
+
+function persistCurrentSessionKey(sessionKey: string): void {
+  try {
+    window.localStorage.setItem(CURRENT_SESSION_STORAGE_KEY, sessionKey);
+  } catch {
+    // ignore persistence failures
+  }
+}
 
 function isMainSessionKey(key: string): boolean {
   return key.endsWith(':main');
@@ -1478,13 +1498,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   toolStreamById: new Map<string, ToolStreamEntry>(),
   toolStreamOrder: [],
 
-  sessions: [{ key: DEFAULT_SESSION_KEY, displayName: DEFAULT_SESSION_KEY }],
+  sessions: [{ key: INITIAL_SESSION_KEY, displayName: INITIAL_SESSION_KEY }],
   sessionsLoading: false,
   sessionsHydrated: false,
-  currentSessionKey: DEFAULT_SESSION_KEY,
-  currentAgentId: 'main',
+  currentSessionKey: INITIAL_SESSION_KEY,
+  currentAgentId: INITIAL_AGENT_ID,
   sessionLabels: {},
-  sessionLastActivity: { [DEFAULT_SESSION_KEY]: Date.now() },
+  sessionLastActivity: { [INITIAL_SESSION_KEY]: Date.now() },
   pendingLocalSessionKeys: {},
   pendingSessionModelRefresh: false,
 
@@ -1669,6 +1689,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           sessionLabels: hydratedSessionLabels,
           sessionLastActivity: hydratedSessionLastActivity,
         });
+        persistCurrentSessionKey(nextSessionKey);
 
         if (currentSessionKey !== nextSessionKey) {
           get().loadHistory();
@@ -1775,6 +1796,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ? removeSessionArtifacts(s, currentSessionKey)
         : {}),
     }));
+    persistCurrentSessionKey(key);
     get().loadHistory();
   },
 
@@ -1829,6 +1851,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         currentSessionKey: next?.key ?? DEFAULT_SESSION_KEY,
         currentAgentId: getAgentIdFromSessionKey(next?.key ?? DEFAULT_SESSION_KEY),
       }));
+      persistCurrentSessionKey(next?.key ?? DEFAULT_SESSION_KEY);
       if (next) {
         get().loadHistory();
       }
@@ -1878,6 +1901,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       pendingToolImages: [],
       ...resetToolStreamState(s),
     }));
+    persistCurrentSessionKey(newKey);
   },
 
   // ── Cleanup empty session on navigate away ──
@@ -2197,9 +2221,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
 
-    const { currentSessionKey, sessions, allowedModelRefs, defaultModelRef } = get();
+    const { currentSessionKey, sessions, allowedModelRefs, defaultModelRef, currentAgentId } = get();
     const currentSession = sessions.find((session) => session.key === currentSessionKey);
-    const currentSessionModel = resolveSessionModelRef(currentSession, allowedModelRefs);
+    const currentAgent = useAgentsStore.getState().agents.find((agent) => agent.gateway.id === currentAgentId);
+    const shouldApplyAgentModel =
+      !currentSession?.model?.trim()
+      && Boolean(currentAgent?.local.modelRef)
+      && !currentAgent?.local.inheritedModel;
+
+    if (shouldApplyAgentModel && currentAgent?.local.modelRef) {
+      try {
+        await get().setSessionModel(currentAgent.local.modelRef);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        set({
+          error: `Failed to initialize session model for agent ${currentAgent.gateway.id}: ${message}`,
+        });
+        return;
+      }
+    }
+
+    const refreshedSession = get().sessions.find((session) => session.key === currentSessionKey);
+    const currentSessionModel = resolveSessionModelRef(refreshedSession, allowedModelRefs);
     const hasGuard = allowedModelRefs.length > 0;
     const sessionModelInvalid = hasGuard
       && typeof currentSessionModel === 'string'

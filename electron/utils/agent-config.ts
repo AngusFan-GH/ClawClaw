@@ -70,6 +70,7 @@ export interface AgentSummary {
   name: string;
   isDefault: boolean;
   modelDisplay: string;
+  modelRef?: string;
   inheritedModel: boolean;
   workspace: string;
   agentDir: string;
@@ -101,6 +102,21 @@ function formatModelLabel(model: unknown): string | null {
     if (typeof primary === 'string' && primary.trim()) {
       const parts = primary.trim().split('/');
       return parts[parts.length - 1] || primary.trim();
+    }
+  }
+
+  return null;
+}
+
+function extractModelRef(model: unknown): string | null {
+  if (typeof model === 'string' && model.trim()) {
+    return model.trim();
+  }
+
+  if (model && typeof model === 'object') {
+    const primary = (model as AgentModelConfig).primary;
+    if (typeof primary === 'string' && primary.trim()) {
+      return primary.trim();
     }
   }
 
@@ -477,9 +493,12 @@ async function buildSnapshotFromConfigWith(
   }
 
   const defaultModelLabel = formatModelLabel((config.agents as AgentsConfig | undefined)?.defaults?.model);
+  const defaultModelRef = extractModelRef((config.agents as AgentsConfig | undefined)?.defaults?.model);
   const agents: AgentSummary[] = entries.map((entry) => {
-    const modelLabel = formatModelLabel(entry.model) || defaultModelLabel || 'Not configured';
-    const inheritedModel = !formatModelLabel(entry.model) && Boolean(defaultModelLabel);
+    const entryModelLabel = formatModelLabel(entry.model);
+    const entryModelRef = extractModelRef(entry.model);
+    const modelLabel = entryModelLabel || defaultModelLabel || 'Not configured';
+    const inheritedModel = !entryModelLabel && Boolean(defaultModelLabel);
     const entryIdNorm = normalizeAgentIdForBinding(entry.id);
     const configuredWorkspace =
       entry.workspace || (entry.id === MAIN_AGENT_ID ? getDefaultWorkspacePath(config) : `~/.openclaw/workspace-${entry.id}`);
@@ -499,6 +518,7 @@ async function buildSnapshotFromConfigWith(
       name: entry.name || humanizeAgentId(entry.id),
       isDefault: entry.id === defaultAgentId,
       modelDisplay: modelLabel,
+      modelRef: entryModelRef || defaultModelRef || undefined,
       inheritedModel,
       workspace: expandPath(configuredWorkspace),
       agentDir: expandPath(configuredAgentDir),
@@ -575,7 +595,19 @@ export async function createAgent(name: string): Promise<AgentsSnapshot> {
 }
 
 export async function updateAgentName(agentId: string, name: string): Promise<AgentsSnapshot> {
-  const normalizedName = normalizeAgentName(name);
+  return updateAgentSettings(agentId, { name });
+}
+
+export async function updateAgentSettings(
+  agentId: string,
+  updates: { name?: string; model?: string | null },
+): Promise<AgentsSnapshot> {
+  const hasName = typeof updates.name === 'string';
+  const hasModel = Object.prototype.hasOwnProperty.call(updates, 'model');
+  const normalizedName = hasName ? normalizeAgentName(updates.name ?? '') : undefined;
+  const normalizedModel = typeof updates.model === 'string'
+    ? updates.model.trim() || null
+    : updates.model ?? null;
   const snapshot = await updateOpenClawConfig(async (rawConfig) => {
     const config = rawConfig as AgentConfigDocument;
     const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
@@ -586,7 +618,8 @@ export async function updateAgentName(agentId: string, name: string): Promise<Ag
 
     entries[index] = {
       ...entries[index],
-      name: normalizedName,
+      ...(hasName ? { name: normalizedName } : {}),
+      ...(hasModel ? { model: normalizedModel || undefined } : {}),
     };
 
     config.agents = {
@@ -596,7 +629,7 @@ export async function updateAgentName(agentId: string, name: string): Promise<Ag
 
     return buildSnapshotFromConfig(config, { includeCli: false });
   });
-  logger.info('Updated agent name', { agentId, name: normalizedName });
+  logger.info('Updated agent settings', { agentId, name: normalizedName, model: normalizedModel });
   return snapshot;
 }
 

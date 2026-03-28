@@ -5,7 +5,7 @@ import {
   createAgent,
   deleteAgentConfig,
   listAgentsSnapshot,
-  updateAgentName,
+  updateAgentSettings,
 } from '../../utils/agent-config';
 import type { HostApiContext } from '../context';
 import { runGatewayRefresh } from '../gateway-refresh';
@@ -61,9 +61,9 @@ export async function handleAgentRoutes(
 
     if (parts.length === 1) {
       try {
-        const body = await parseJsonBody<{ name: string }>(req);
+        const body = await parseJsonBody<{ name?: string; model?: string | null }>(req);
         const agentId = decodeURIComponent(parts[0]);
-        const snapshot = await updateAgentName(agentId, body.name);
+        const snapshot = await updateAgentSettings(agentId, body);
         scheduleGatewayReload(ctx, 'update-agent');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {

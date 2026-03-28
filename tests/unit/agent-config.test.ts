@@ -68,6 +68,40 @@ describe('agent config lifecycle', () => {
     await expect(listConfiguredAgentIds()).resolves.toEqual(['main']);
   });
 
+  it('updates an agent model and clears it back to inherited default', async () => {
+    await writeOpenClawJson({
+      agents: {
+        defaults: {
+          model: {
+            primary: 'openai/gpt-5.4',
+          },
+        },
+        list: [
+          { id: 'main', name: 'Main', default: true },
+          { id: 'helper', name: 'Helper' },
+        ],
+      },
+    });
+
+    const { updateAgentSettings } = await import('@electron/utils/agent-config');
+
+    const updated = await updateAgentSettings('helper', { model: 'minimax/MiniMax-M2.5' });
+    const helper = updated.agents.find((agent) => agent.id === 'helper');
+    expect(helper?.modelRef).toBe('minimax/MiniMax-M2.5');
+    expect(helper?.inheritedModel).toBe(false);
+
+    const cleared = await updateAgentSettings('helper', { model: null });
+    const inherited = cleared.agents.find((agent) => agent.id === 'helper');
+    expect(inherited?.modelRef).toBe('openai/gpt-5.4');
+    expect(inherited?.inheritedModel).toBe(true);
+
+    const config = await readOpenClawJson();
+    expect((config.agents as { list: Array<{ id: string; model?: string }> }).list).toEqual([
+      { id: 'main', name: 'Main', default: true },
+      { id: 'helper', name: 'Helper' },
+    ]);
+  });
+
   it('deletes the config entry, bindings, runtime directory, and managed workspace for a removed agent', async () => {
     await writeOpenClawJson({
       agents: {

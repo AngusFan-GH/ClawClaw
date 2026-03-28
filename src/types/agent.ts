@@ -23,6 +23,7 @@ export interface LocalAgentExtras {
   workspace: string;
   agentDir: string;
   modelDisplay: string;
+  modelRef?: string;
   inheritedModel: boolean;
   boundChannels: string[];
   boundChannelAccounts: BoundChannelAccountSummary[];
@@ -38,6 +39,7 @@ export interface LocalAgentSnapshot {
   name: string;
   isDefault: boolean;
   modelDisplay: string;
+  modelRef?: string;
   inheritedModel: boolean;
   workspace: string;
   agentDir: string;
