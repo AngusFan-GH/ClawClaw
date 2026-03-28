@@ -757,7 +757,7 @@ export function Skills() {
   const [searchQuery, setSearchQuery] = useState('');
   const [marketplaceQuery, setMarketplaceQuery] = useState('');
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
-  const [activeTab, setActiveTab] = useState<'all' | 'ready' | 'needs-setup' | 'disabled' | 'marketplace'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'ready' | 'needs-setup' | 'disabled' | 'preinstalled' | 'marketplace'>('all');
   const [marketplaceSearchPerformed, setMarketplaceSearchPerformed] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState(chatAgentId || defaultAgentId || 'main');
   const [folderMenuOpen, setFolderMenuOpen] = useState(false);
@@ -865,6 +865,8 @@ export function Skills() {
       matchesTab = Boolean(!skill.disabled && !skill.eligible);
     } else if (activeTab === 'disabled') {
       matchesTab = Boolean(skill.disabled);
+    } else if (activeTab === 'preinstalled') {
+      matchesTab = Boolean(skill.isPreinstalled);
     }
 
     return matchesSearch && matchesTab;
@@ -885,6 +887,7 @@ export function Skills() {
     ready: safeSkills.filter((s) => !s.disabled && s.eligible).length,
     'needs-setup': safeSkills.filter((s) => !s.disabled && !s.eligible).length,
     disabled: safeSkills.filter((s) => Boolean(s.disabled)).length,
+    preinstalled: safeSkills.filter((s) => Boolean(s.isPreinstalled)).length,
     marketplace: searchResults.length,
   };
 
@@ -1014,6 +1017,17 @@ export function Skills() {
                   )}
                 >
                   {t('filter.all', { count: tabStats.all })}
+                </button>
+                <button
+                  onClick={() => setActiveTab('preinstalled')}
+                  className={cn(
+                    "rounded-[12px] px-4 py-2 text-[14px] font-medium transition-all",
+                    activeTab === 'preinstalled'
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
+                  )}
+                >
+                  {t('filter.preinstalled', { count: tabStats.preinstalled })}
                 </button>
                 <button
                   onClick={() => setActiveTab('ready')}
