@@ -49,11 +49,84 @@ function normalizeMalformedConfigText(raw: string): string {
 
 function trimToRootObject(raw: string): string {
   const firstBrace = raw.indexOf('{');
-  const lastBrace = raw.lastIndexOf('}');
-  if (firstBrace === -1 || lastBrace === -1 || firstBrace >= lastBrace) {
+  if (firstBrace === -1) {
     return raw;
   }
-  return raw.slice(firstBrace, lastBrace + 1);
+
+  let depth = 0;
+  let inString = false;
+  let stringQuote = '';
+  let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let index = firstBrace; index < raw.length; index += 1) {
+    const char = raw[index];
+    const nextChar = raw[index + 1];
+
+    if (inLineComment) {
+      if (char === '\n') {
+        inLineComment = false;
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (char === '*' && nextChar === '/') {
+        inBlockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (char === stringQuote) {
+        inString = false;
+        stringQuote = '';
+      }
+      continue;
+    }
+
+    if (char === '/' && nextChar === '/') {
+      inLineComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (char === '/' && nextChar === '*') {
+      inBlockComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (char === '"' || char === '\'') {
+      inString = true;
+      stringQuote = char;
+      continue;
+    }
+
+    if (char === '{') {
+      depth += 1;
+      continue;
+    }
+
+    if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return raw.slice(firstBrace, index + 1);
+      }
+    }
+  }
+
+  return raw;
 }
 
 async function backupMalformedOpenClawConfig(suffix: 'repaired' | 'broken'): Promise<string> {

@@ -144,10 +144,15 @@ export function Sidebar() {
   const location = useLocation();
   const isOnChat = location.pathname === '/';
 
-  const getSessionLabel = (key: string, displayName?: string, label?: string) => {
-    const derivedLabel = sessionLabels[key] ?? label;
+  const getSessionLabel = (
+    key: string,
+    displayName?: string,
+    label?: string,
+    derivedTitle?: string,
+  ) => {
+    const derivedLabel = sessionLabels[key] ?? derivedTitle ?? label;
     if (derivedLabel) return derivedLabel;
-    if (displayName && displayName !== key) return displayName;
+    if (displayName && displayName !== key && key.endsWith(':main')) return displayName;
     if (pendingLocalSessionKeys[key]) return t('common:sidebar.newChat');
     if (key === DEFAULT_SESSION_KEY) return t('common:sidebar.newChat');
     return key;
@@ -412,7 +417,7 @@ export function Sidebar() {
                           >
                             <div className="flex min-w-0 items-center gap-2.5">
                               <span className="min-w-0 flex-1 truncate text-[13px] leading-5">
-                                {getSessionLabel(s.key, s.displayName, s.label)}
+                                {getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle)}
                               </span>
                               <span
                                 title={getSessionAgentLabel(s.key)}
@@ -434,7 +439,7 @@ export function Sidebar() {
                                 e.stopPropagation();
                                 await handleDeleteSessionClick(
                                   s.key,
-                                  getSessionLabel(s.key, s.displayName, s.label)
+                                  getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle)
                                 );
                               }}
                               className={cn(

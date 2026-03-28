@@ -38,6 +38,20 @@ describe('recoverMalformedOpenClawConfig', () => {
     expect(repaired.models).toEqual({ default: 'anthropic' });
   });
 
+  it('repairs configs when a valid root object is followed by a stray closing brace', async () => {
+    await writeMalformedConfig('{\n  "models": {\n    "default": "anthropic"\n  }\n}\n}\n');
+
+    const { recoverMalformedOpenClawConfig } = await import('@electron/utils/openclaw-config');
+    const result = await recoverMalformedOpenClawConfig();
+
+    expect(result.outcome).toBe('repaired');
+    expect(result.strategy).toBe('trim-root-object');
+    expect(result.backupPath).toContain('.repaired-');
+
+    const repaired = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+    expect(repaired.models).toEqual({ default: 'anthropic' });
+  });
+
   it('falls back to reset when minimal repair cannot recover the file', async () => {
     await writeMalformedConfig('totally broken ;;;;');
 

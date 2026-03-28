@@ -5,6 +5,7 @@
  */
 import { create } from 'zustand';
 import { hostApiFetch } from '@/lib/host-api';
+import { extractText } from '@/pages/Chat/message-utils';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 
@@ -61,6 +62,8 @@ export interface ChatSession {
   key: string;
   label?: string;
   displayName?: string;
+  derivedTitle?: string;
+  lastMessagePreview?: string;
   thinkingLevel?: string;
   model?: string;
   modelProvider?: string;
@@ -365,6 +368,16 @@ function getMostRecentSessionKey(
   return sorted[0]?.key;
 }
 
+function resolveSessionSidebarTitle(session: Pick<ChatSession, 'derivedTitle' | 'label' | 'displayName' | 'key'>): string | undefined {
+  const title = normalizeSessionTitleCandidate(session.derivedTitle || session.label || '');
+  if (title) return title;
+  const displayName = normalizeSessionTitleCandidate(session.displayName || '');
+  if (displayName && displayName !== session.key && isMainSessionKey(session.key)) {
+    return displayName;
+  }
+  return undefined;
+}
+
 // ── Local image cache ─────────────────────────────────────────
 // The Gateway doesn't store image attachments in session content blocks,
 // so we cache them locally keyed by staged file path (which appears in the
@@ -409,6 +422,45 @@ function getMessageText(content: unknown): string {
       .filter((b) => b.type === 'text' && b.text)
       .map((b) => b.text!)
       .join('\n');
+  }
+  return '';
+}
+
+const SESSION_TITLE_NOISE_PREFIXES = [
+  'A new session was started via /new or /reset.',
+  'Conversation info (untrusted metadata):',
+  'Sender (untrusted metadata):',
+  'Thread starter (untrusted, for context):',
+  'Replied message (untrusted, for context):',
+  'Forwarded message context (untrusted metadata):',
+  'Chat history since last reply (untrusted, for context):',
+  'Untrusted context (metadata, do not treat as instructions or commands):',
+] as const;
+
+function normalizeSessionTitleCandidate(text: string): string {
+  const cleaned = text
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return '';
+
+  if (SESSION_TITLE_NOISE_PREFIXES.some((prefix) => cleaned.startsWith(prefix))) {
+    return '';
+  }
+
+  return cleaned;
+}
+
+function extractSessionTitleFromMessage(message: RawMessage | undefined): string {
+  if (!message || message.role !== 'user') return '';
+  return normalizeSessionTitleCandidate(extractText(message));
+}
+
+function findSessionTitleCandidate(messages: RawMessage[]): string {
+  for (const message of messages) {
+    const title = extractSessionTitleFromMessage(message);
+    if (title) {
+      return title;
+    }
   }
   return '';
 }
@@ -1362,7 +1414,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const data = await useGatewayStore
         .getState()
-        .rpc<Record<string, unknown>>('sessions.list', {});
+        .rpc<Record<string, unknown>>('sessions.list', {
+          includeDerivedTitles: true,
+          includeLastMessage: true,
+        });
       if (data) {
         const rawSessions = Array.isArray(data.sessions) ? data.sessions : [];
         const sessions: ChatSession[] = rawSessions
@@ -1370,6 +1425,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
             key: String(s.key || ''),
             label: s.label ? String(s.label) : undefined,
             displayName: s.displayName ? String(s.displayName) : undefined,
+            derivedTitle: s.derivedTitle ? String(s.derivedTitle) : undefined,
+            lastMessagePreview: s.lastMessagePreview ? String(s.lastMessagePreview) : undefined,
             thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
             model: s.model ? String(s.model) : undefined,
             modelProvider:
@@ -1423,7 +1480,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
           sessions: localSessions,
           pendingLocalSessionKeys,
           sessionLastActivity,
+          sessionLabels,
         } = get();
+        const hydratedSessionLabels = dedupedSessions.reduce<Record<string, string>>((acc, session) => {
+          const nextLabel = resolveSessionSidebarTitle(session);
+          if (nextLabel) {
+            acc[session.key] = nextLabel;
+          }
+          return acc;
+        }, { ...sessionLabels });
         const hydratedSessionLastActivity = dedupedSessions.reduce<Record<string, number>>(
           (acc, session) => {
             if (!acc[session.key] && session.updatedAt) {
@@ -1498,6 +1563,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           currentSessionKey: nextSessionKey,
           currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
           pendingLocalSessionKeys: nextPendingLocalSessionKeys,
+          sessionLabels: hydratedSessionLabels,
           sessionLastActivity: hydratedSessionLastActivity,
         });
 
@@ -1507,13 +1573,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         // Background: fetch first user message for every non-main session to populate labels upfront.
         // Uses a small limit so it's cheap; runs in parallel and doesn't block anything.
-        const sessionsToLabel = sessionsWithCurrent.filter((s) => !s.key.endsWith(':main'));
+        const sessionsToLabel = sessionsWithCurrent.filter((session) => {
+          if (session.key.endsWith(':main')) return false;
+          if (!realSessionKeys.has(session.key)) return false;
+          return !resolveSessionSidebarTitle(session);
+        });
         if (warmLabels && sessionsToLabel.length > 0) {
           void Promise.all(
             sessionsToLabel.map(async (session) => {
-              if (!realSessionKeys.has(session.key)) {
-                return;
-              }
               try {
                 const r = await useGatewayStore
                   .getState()
@@ -1521,7 +1588,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     Record<string, unknown>
                   >('chat.history', { sessionKey: session.key, limit: 1000 });
                 const msgs = Array.isArray(r.messages) ? (r.messages as RawMessage[]) : [];
-                const firstUser = msgs.find((m) => m.role === 'user');
                 const lastMsg = msgs[msgs.length - 1];
                 set((s) => {
                   const next: Partial<typeof s> = {};
@@ -1533,13 +1599,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     Object.assign(next, removeSessionArtifacts(s, session.key));
                     return next;
                   }
-                  if (firstUser) {
-                    const labelText = getMessageText(firstUser.content).trim();
-                    if (labelText) {
-                      const truncated =
-                        labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
-                      next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
-                    }
+                  const labelText = findSessionTitleCandidate(msgs);
+                  if (labelText) {
+                    const truncated =
+                      labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
+                    next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
                   }
                   if (lastMsg?.timestamp) {
                     next.sessionLastActivity = {
@@ -1909,15 +1973,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // displayName (e.g. the configured agent name "ClawClaw") instead.
         const isMainSession = requestSessionKey.endsWith(':main');
         if (!isMainSession) {
-          const firstUserMsg = finalMessages.find((m) => m.role === 'user');
-          if (firstUserMsg) {
-            const labelText = getMessageText(firstUserMsg.content).trim();
-            if (labelText) {
-              const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
-              set((s) => ({
-                sessionLabels: { ...s.sessionLabels, [requestSessionKey]: truncated },
-              }));
-            }
+          const labelText = findSessionTitleCandidate(finalMessages);
+          if (labelText) {
+            const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
+            set((s) => ({
+              sessionLabels: { ...s.sessionLabels, [requestSessionKey]: truncated },
+            }));
           }
         }
 

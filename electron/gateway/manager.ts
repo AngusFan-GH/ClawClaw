@@ -44,6 +44,7 @@ import { GatewayRestartGovernor } from './restart-governor';
 import { classifyGatewayStderrMessage, recordGatewayStartupStderrLine } from './startup-stderr';
 import { runGatewayStartupSequence } from './startup-orchestrator';
 import { recoverMalformedOpenClawConfig } from '../utils/openclaw-config';
+import { getSetting } from '../utils/store';
 import type { GatewayConfigRecovery } from '../../src/types/gateway';
 
 export interface GatewayStatus {
@@ -947,8 +948,7 @@ export class GatewayManager extends EventEmitter {
       port,
       deviceIdentity: this.deviceIdentity,
       platform: process.platform,
-      getToken: async () =>
-        await import('../utils/store').then(({ getSetting }) => getSetting('gatewayToken')),
+      getToken: async () => await getSetting('gatewayToken'),
       onHandshakeComplete: (ws) => {
         this.ws = ws;
         this.setStatus({

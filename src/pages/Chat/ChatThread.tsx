@@ -1,11 +1,11 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import DOMPurify from 'dompurify';
-import { marked } from 'marked';
 import { Bot, Check, Copy, User, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import type { RawMessage, StreamSegment } from '@/stores/chat';
 import { extractImages, extractText, extractThinking } from './message-utils';
+import { toSanitizedMarkdownHtml } from './markdown';
+import { detectTextDirection } from './text-direction';
 
 type ToolCard = {
   kind: 'call' | 'result';
@@ -463,87 +463,6 @@ function formatReasoningMarkdown(text: string, labels: ChatThreadLabels): string
   return lines.length ? [`_${labels.reasoning}:_`, ...lines].join('\n') : '';
 }
 
-const allowedTags = [
-  'a', 'b', 'blockquote', 'br', 'button', 'code', 'del', 'details', 'div', 'em', 'h1', 'h2', 'h3', 'h4',
-  'hr', 'i', 'img', 'li', 'ol', 'p', 'pre', 'span', 'strong', 'summary', 'table', 'tbody', 'td', 'th',
-  'thead', 'tr', 'ul',
-];
-const allowedAttrs = ['class', 'href', 'rel', 'target', 'title', 'start', 'src', 'alt', 'data-code', 'type', 'aria-label'];
-const sanitizeOptions = {
-  ALLOWED_TAGS: allowedTags,
-  ALLOWED_ATTR: allowedAttrs,
-  ADD_DATA_URI_TAGS: ['img'],
-};
-const INLINE_DATA_IMAGE_RE = /^data:image\/[a-z0-9.+-]+;base64,/i;
-let markdownHooksInstalled = false;
-
-function installMarkdownHooks() {
-  if (markdownHooksInstalled) return;
-  markdownHooksInstalled = true;
-  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-    if (!(node instanceof HTMLAnchorElement)) return;
-    const href = node.getAttribute('href');
-    if (!href) return;
-    node.setAttribute('rel', 'noreferrer noopener');
-    node.setAttribute('target', '_blank');
-  });
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function renderEscapedPlainTextHtml(value: string): string {
-  return `<div class="markdown-plain-text-fallback">${escapeHtml(value.replace(/\r\n?/g, '\n'))}</div>`;
-}
-
-const htmlEscapeRenderer = new marked.Renderer();
-htmlEscapeRenderer.html = ({ text }) => escapeHtml(text);
-htmlEscapeRenderer.image = ({ href, text }) => {
-  const label = (text || 'image').trim() || 'image';
-  const safeHref = href?.trim() ?? '';
-  if (!INLINE_DATA_IMAGE_RE.test(safeHref)) {
-    return escapeHtml(label);
-  }
-  return `<img class="markdown-inline-image" src="${escapeHtml(safeHref)}" alt="${escapeHtml(label)}">`;
-};
-htmlEscapeRenderer.code = ({ text, lang, escaped }) => {
-  const langClass = lang ? ` class="language-${escapeHtml(lang)}"` : '';
-  const safeText = escaped ? text : escapeHtml(text);
-  const codeBlock = `<pre><code${langClass}>${safeText}</code></pre>`;
-  const langLabel = lang ? `<span class="code-block-lang">${escapeHtml(lang)}</span>` : '';
-  const attrSafe = text
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  const copyBtn = `<button type="button" class="code-block-copy" data-code="${attrSafe}" aria-label="Copy code"><span class="code-block-copy__idle">Copy</span><span class="code-block-copy__done">Copied!</span></button>`;
-  const header = `<div class="code-block-header">${langLabel}${copyBtn}</div>`;
-  return `<div class="code-block-wrapper">${header}${codeBlock}</div>`;
-};
-
-function toSanitizedMarkdownHtml(markdown: string): string {
-  const input = markdown.trim();
-  if (!input) return '';
-  installMarkdownHooks();
-  let rendered: string;
-  try {
-    rendered = marked.parse(input, {
-      renderer: htmlEscapeRenderer,
-      gfm: true,
-      breaks: true,
-    }) as string;
-  } catch {
-    rendered = renderEscapedPlainTextHtml(input);
-  }
-  return DOMPurify.sanitize(rendered, sanitizeOptions);
-}
-
 function detectJson(text: string): { parsed: unknown; pretty: string } | null {
   const trimmed = text.trim();
   if (trimmed.length > 20000) return null;
@@ -810,8 +729,7 @@ const GroupedMessage = memo(function GroupedMessage({
   const markdown = extractText(message)?.trim() ? extractText(message) : '';
   const extractedThinking = showThinking && role === 'assistant' ? extractThinking(message) : null;
   const reasoningMarkdown = extractedThinking ? formatReasoningMarkdown(extractedThinking, labels) : null;
-  const canCopyMarkdown =
-    (role === 'assistant' || role === 'user' || role === 'User') && Boolean(markdown.trim());
+  const canCopyMarkdown = role === 'assistant' && Boolean(markdown.trim());
   const jsonResult = markdown && !isStreaming ? detectJson(markdown) : null;
   const visibleToolCards = showThinking && hasToolCards;
 
@@ -856,7 +774,7 @@ const GroupedMessage = memo(function GroupedMessage({
                 </summary>
                 <pre className="chat-json-content"><code>{jsonResult.pretty}</code></pre>
               </details>
-            ) : markdown ? <MessageMarkdown text={markdown} labels={labels} /> : null}
+            ) : markdown ? <div dir={detectTextDirection(markdown)}><MessageMarkdown text={markdown} labels={labels} /></div> : null}
             {hasToolCards ? <ToolCards cards={toolCards} labels={labels} /> : null}
           </div>
         </details>
@@ -872,7 +790,7 @@ const GroupedMessage = memo(function GroupedMessage({
               </summary>
               <pre className="chat-json-content"><code>{jsonResult.pretty}</code></pre>
             </details>
-          ) : markdown ? <MessageMarkdown text={markdown} labels={labels} /> : null}
+          ) : markdown ? <div dir={detectTextDirection(markdown)}><MessageMarkdown text={markdown} labels={labels} /></div> : null}
           {hasToolCards ? <ToolCards cards={toolCards} labels={labels} /> : null}
         </>
       )}
