@@ -28,8 +28,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { hostApiFetch } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
+import { useSettingsStore } from '@/stores/settings';
 import { useTranslation } from 'react-i18next';
 import { Brain } from 'lucide-react';
+import {
+  CATEGORY_I18N_KEYS,
+  CATEGORY_LABELS,
+  getSlashArgumentCompletions,
+  getSlashCommandCompletions,
+  type SlashCommandDef,
+} from './slash-commands';
 
 // 鈹€鈹€ Types 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
@@ -144,6 +152,7 @@ export function ChatInput({
   showThinking = false,
 }: ChatInputProps) {
   const { t } = useTranslation('chat');
+  const slashCommandHintsEnabled = useSettingsStore((state) => state.slashCommandHintsEnabled);
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
@@ -151,6 +160,8 @@ export function ChatInput({
   const modelMenuRef = useRef<HTMLDivElement>(null);
   const modelTriggerRef = useRef<HTMLButtonElement>(null);
   const isComposingRef = useRef(false);
+  const commandMenuRef = useRef<HTMLDivElement>(null);
+  const slashItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [modelMenuPosition, setModelMenuPosition] = useState<{
     top: number;
     left: number;
@@ -170,6 +181,98 @@ export function ChatInput({
     : modelState === 'unconfigured'
       ? t('composer.configureModels')
       : currentModelShortLabel;
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+  const [slashMenuMode, setSlashMenuMode] = useState<'command' | 'args'>('command');
+  const [slashMenuItems, setSlashMenuItems] = useState<SlashCommandDef[]>([]);
+  const [slashArgCommand, setSlashArgCommand] = useState<SlashCommandDef | null>(null);
+  const [slashArgItems, setSlashArgItems] = useState<string[]>([]);
+  const [slashMenuIndex, setSlashMenuIndex] = useState(0);
+
+  const resetSlashMenu = useCallback(() => {
+    setSlashMenuOpen(false);
+    setSlashMenuMode('command');
+    setSlashMenuItems([]);
+    setSlashArgCommand(null);
+    setSlashArgItems([]);
+    setSlashMenuIndex(0);
+  }, []);
+
+  const updateSlashMenu = useCallback((value: string) => {
+    if (!slashCommandHintsEnabled) {
+      resetSlashMenu();
+      return;
+    }
+
+    const raw = value.trimStart();
+    if (!raw.startsWith('/')) {
+      resetSlashMenu();
+      return;
+    }
+
+    const argMenu = getSlashArgumentCompletions(raw);
+    if (argMenu) {
+      setSlashMenuMode('args');
+      setSlashArgCommand(argMenu.command);
+      setSlashArgItems(argMenu.options);
+      setSlashMenuItems([]);
+      setSlashMenuIndex(0);
+      setSlashMenuOpen(true);
+      return;
+    }
+
+    const match = raw.match(/^\/([^\s:]*)$/u);
+    if (match) {
+      const items = getSlashCommandCompletions(match[1] ?? '');
+      setSlashMenuMode('command');
+      setSlashMenuItems(items);
+      setSlashArgCommand(null);
+      setSlashArgItems([]);
+      setSlashMenuIndex(0);
+      setSlashMenuOpen(items.length > 0);
+      return;
+    }
+
+    resetSlashMenu();
+  }, [resetSlashMenu, slashCommandHintsEnabled]);
+
+  const applySlashCommand = useCallback((command: SlashCommandDef) => {
+    const nextValue = command.acceptsArgs ? `/${command.name} ` : `/${command.name}`;
+    setInput(nextValue);
+    queueMicrotask(() => {
+      textareaRef.current?.focus();
+      if (textareaRef.current) {
+        const caret = nextValue.length;
+        textareaRef.current.setSelectionRange(caret, caret);
+      }
+    });
+
+    if (command.argOptions?.length) {
+      setSlashMenuMode('args');
+      setSlashArgCommand(command);
+      setSlashArgItems(command.argOptions);
+      setSlashMenuItems([]);
+      setSlashMenuIndex(0);
+      setSlashMenuOpen(true);
+      return;
+    }
+
+    resetSlashMenu();
+  }, [resetSlashMenu]);
+
+  const applySlashArg = useCallback((arg: string) => {
+    const command = slashArgCommand;
+    if (!command) return;
+    const nextValue = `/${command.name} ${arg}`;
+    setInput(nextValue);
+    queueMicrotask(() => {
+      textareaRef.current?.focus();
+      if (textareaRef.current) {
+        const caret = nextValue.length;
+        textareaRef.current.setSelectionRange(caret, caret);
+      }
+    });
+    resetSlashMenu();
+  }, [resetSlashMenu, slashArgCommand]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -191,10 +294,11 @@ export function ChatInput({
     setAttachments([]);
     setModelMenuOpen(false);
     setDragOver(false);
+    resetSlashMenu();
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [resetKey]);
+  }, [resetKey, resetSlashMenu]);
 
   useEffect(() => {
     if (!modelMenuOpen) return;
@@ -236,6 +340,37 @@ export function ChatInput({
       window.removeEventListener('scroll', updatePosition, true);
     };
   }, [modelMenuOpen]);
+
+  useEffect(() => {
+    if (!slashCommandHintsEnabled) {
+      resetSlashMenu();
+    }
+  }, [resetSlashMenu, slashCommandHintsEnabled]);
+
+  useEffect(() => {
+    if (!slashMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        !commandMenuRef.current?.contains(target) &&
+        !textareaRef.current?.contains(target as Node)
+      ) {
+        resetSlashMenu();
+      }
+    };
+
+    window.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [resetSlashMenu, slashMenuOpen]);
+
+  useEffect(() => {
+    if (!slashMenuOpen) return;
+    const target = slashItemRefs.current[slashMenuIndex];
+    target?.scrollIntoView({ block: 'nearest' });
+  }, [slashMenuIndex, slashMenuOpen, slashMenuItems, slashArgItems]);
 
   // 鈹€鈹€ File staging via native dialog 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
@@ -416,11 +551,12 @@ export function ChatInput({
     }
     setInput('');
     setAttachments([]);
+    resetSlashMenu();
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
     onSend(textToSend, attachmentsToSend);
-  }, [input, attachments, canSend, onSend]);
+  }, [attachments, canSend, input, onSend, resetSlashMenu]);
 
   const handleStop = useCallback(() => {
     if (!canStop) return;
@@ -429,6 +565,43 @@ export function ChatInput({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (slashMenuOpen) {
+        const items = slashMenuMode === 'args' ? slashArgItems : slashMenuItems;
+        if (items.length > 0) {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setSlashMenuIndex((current) => (current + 1) % items.length);
+            return;
+          }
+          if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setSlashMenuIndex((current) => (current - 1 + items.length) % items.length);
+            return;
+          }
+          if (e.key === 'Tab' || e.key === 'Enter') {
+            const nativeEvent = e.nativeEvent as KeyboardEvent;
+            if (isComposingRef.current || nativeEvent.isComposing || nativeEvent.keyCode === 229) {
+              return;
+            }
+            e.preventDefault();
+            if (slashMenuMode === 'args') {
+              applySlashArg(slashArgItems[slashMenuIndex] || slashArgItems[0]);
+            } else {
+              const selected = slashMenuItems[slashMenuIndex] || slashMenuItems[0];
+              if (selected) {
+                applySlashCommand(selected);
+              }
+            }
+            return;
+          }
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          resetSlashMenu();
+          return;
+        }
+      }
+
       if (e.key === 'Enter' && !e.shiftKey) {
         const nativeEvent = e.nativeEvent as KeyboardEvent;
         if (isComposingRef.current || nativeEvent.isComposing || nativeEvent.keyCode === 229) {
@@ -438,7 +611,7 @@ export function ChatInput({
         handleSend();
       }
     },
-    [handleSend]
+    [applySlashArg, applySlashCommand, handleSend, resetSlashMenu, slashArgItems, slashMenuIndex, slashMenuItems, slashMenuMode, slashMenuOpen]
   );
 
   // Handle paste (Ctrl/Cmd+V with files)
@@ -489,6 +662,29 @@ export function ChatInput({
     [stageBufferFiles]
   );
 
+  const groupedSlashCommands = slashMenuItems.reduce<Record<string, SlashCommandDef[]>>((acc, command) => {
+    const key = command.category;
+    if (!acc[key]) {
+      acc[key] = [];
+    }
+    acc[key].push(command);
+    return acc;
+  }, {});
+
+  slashItemRefs.current = [];
+
+  const getLocalizedCommandDescription = useCallback(
+    (command: SlashCommandDef) =>
+      t(`slash.commands.${command.key}.description`, command.description),
+    [t]
+  );
+
+  const getLocalizedCategoryLabel = useCallback(
+    (category: keyof typeof CATEGORY_LABELS) =>
+      t(CATEGORY_I18N_KEYS[category], CATEGORY_LABELS[category]),
+    [t]
+  );
+
   return (
     <div
       className={cn(
@@ -516,7 +712,8 @@ export function ChatInput({
         {/* Input Row */}
         <div
           className={cn(
-            'relative overflow-hidden border backdrop-blur-xl transition-all',
+            'relative border backdrop-blur-xl transition-all',
+            slashCommandHintsEnabled && slashMenuOpen ? 'overflow-visible' : 'overflow-hidden',
             isEmpty
               ? 'rounded-[16px] p-2 shadow-[0_8px_22px_rgba(15,23,42,0.045)]'
               : 'rounded-[16px] p-2 shadow-[0_18px_45px_rgba(15,23,42,0.08)]',
@@ -525,12 +722,187 @@ export function ChatInput({
               : 'border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0.04)_100%)]'
           )}
         >
+          {slashCommandHintsEnabled && slashMenuOpen && (
+            <div
+              ref={commandMenuRef}
+              className="absolute inset-x-3 bottom-[calc(100%+14px)] z-[140] overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.16)] ring-1 ring-slate-200 dark:border-slate-800 dark:bg-slate-950 dark:ring-slate-800"
+            >
+              {slashMenuMode === 'args' && slashArgCommand ? (
+                <>
+                  <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                    <span className="font-semibold text-slate-900 dark:text-slate-100">/{slashArgCommand.name}</span>
+                    <span className="ml-2">{getLocalizedCommandDescription(slashArgCommand)}</span>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto px-2 py-2">
+                    {slashArgItems.map((arg, index) => (
+                      <button
+                        key={arg}
+                        ref={(node) => {
+                          slashItemRefs.current[index] = node;
+                        }}
+                        type="button"
+                        className={cn(
+                          'flex w-full items-center gap-3 rounded-[14px] border px-4 py-3 text-left text-sm transition-all outline-none',
+                          index === slashMenuIndex
+                            ? 'border-primary/35 bg-primary/[0.10] text-slate-950 shadow-[0_10px_30px_rgba(37,99,235,0.12)] dark:bg-primary/20 dark:text-slate-50'
+                            : 'border-transparent text-slate-900 hover:border-slate-200 hover:bg-slate-50 dark:text-slate-100 dark:hover:border-slate-800 dark:hover:bg-slate-900/80'
+                        )}
+                        onMouseEnter={() => setSlashMenuIndex(index)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => applySlashArg(arg)}
+                      >
+                        <span
+                          className={cn(
+                            'h-8 w-1.5 shrink-0 rounded-full transition-colors',
+                            index === slashMenuIndex
+                              ? 'bg-primary'
+                              : 'bg-transparent'
+                          )}
+                        />
+                        <span
+                          className={cn(
+                            'rounded-full px-2.5 py-1 font-mono text-xs',
+                            index === slashMenuIndex
+                              ? 'bg-primary/15 text-primary dark:bg-primary/25 dark:text-slate-50'
+                              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                          )}
+                        >
+                          {arg}
+                        </span>
+                        <span
+                          className={cn(
+                            'truncate text-xs',
+                            index === slashMenuIndex
+                              ? 'text-slate-700 dark:text-slate-200'
+                              : 'text-slate-500 dark:text-slate-400'
+                          )}
+                        >
+                          /{slashArgCommand.name} {arg}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-3 border-t border-slate-200 bg-slate-50 px-5 py-2.5 text-[11px] text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                    <span>{t('slash.footer.enterSelect', 'Enter select')}</span>
+                    <span>{t('slash.footer.tabFill', 'Tab fill')}</span>
+                    <span>{t('slash.footer.escClose', 'Esc close')}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                    {t('slash.title', 'Commands')}
+                  </div>
+                  <div className="max-h-80 overflow-y-auto px-2 py-2">
+                    {Object.entries(groupedSlashCommands).map(([category, commands]) => (
+                      <div key={category} className="py-1">
+                        <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+                          {getLocalizedCategoryLabel(category as keyof typeof CATEGORY_LABELS)}
+                        </div>
+                        {commands.map((command) => {
+                          const globalIndex = slashMenuItems.findIndex((item) => item.key === command.key);
+                          return (
+                            <button
+                              key={command.key}
+                              ref={(node) => {
+                                slashItemRefs.current[globalIndex] = node;
+                              }}
+                              type="button"
+                              className={cn(
+                                'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[14px] border px-4 py-3 text-left transition-all outline-none',
+                                globalIndex === slashMenuIndex
+                                  ? 'border-primary/35 bg-primary/[0.10] text-slate-950 shadow-[0_10px_30px_rgba(37,99,235,0.12)] dark:bg-primary/20'
+                                  : 'border-transparent hover:border-slate-200 hover:bg-slate-50 dark:hover:border-slate-800 dark:hover:bg-slate-900/80'
+                              )}
+                              onMouseEnter={() => setSlashMenuIndex(globalIndex)}
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => applySlashCommand(command)}
+                            >
+                              <div className="flex min-w-0 items-start gap-3">
+                                <span
+                                  className={cn(
+                                    'mt-0.5 h-8 w-1.5 shrink-0 rounded-full transition-colors',
+                                    globalIndex === slashMenuIndex
+                                      ? 'bg-primary'
+                                      : 'bg-transparent'
+                                  )}
+                                />
+                                <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className={cn(
+                                      'font-mono text-sm font-semibold',
+                                      globalIndex === slashMenuIndex
+                                        ? 'text-slate-950 dark:text-slate-50'
+                                        : 'text-slate-950 dark:text-slate-50'
+                                    )}
+                                  >
+                                    /{command.name}
+                                  </span>
+                                  {command.args ? (
+                                    <span
+                                      className={cn(
+                                        'truncate text-xs',
+                                        globalIndex === slashMenuIndex
+                                          ? 'text-slate-700 dark:text-slate-200'
+                                          : 'text-slate-500 dark:text-slate-400'
+                                      )}
+                                    >
+                                      {command.args}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div
+                                  className={cn(
+                                    'truncate text-xs',
+                                    globalIndex === slashMenuIndex
+                                      ? 'text-slate-700 dark:text-slate-200'
+                                      : 'text-slate-500 dark:text-slate-400'
+                                  )}
+                                >
+                                  {getLocalizedCommandDescription(command)}
+                                </div>
+                              </div>
+                              </div>
+                              {command.argOptions?.length ? (
+                                <span
+                                  className={cn(
+                                    'rounded-full px-2.5 py-1 text-[11px]',
+                                    globalIndex === slashMenuIndex
+                                      ? 'bg-primary/15 text-primary dark:bg-primary/25 dark:text-slate-50'
+                                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                  )}
+                                >
+                                  {command.argOptions.length} options
+                                </span>
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-3 border-t border-slate-200 bg-slate-50 px-5 py-2.5 text-[11px] text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                    <span>{t('slash.footer.navigate', '↑↓ navigate')}</span>
+                    <span>{t('slash.footer.tabFill', 'Tab fill')}</span>
+                    <span>{t('slash.footer.enterSelect', 'Enter select')}</span>
+                    <span>{t('slash.footer.escClose', 'Esc close')}</span>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent dark:via-white/20" />
           <div className="relative">
             <Textarea
               ref={textareaRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                const nextValue = e.target.value;
+                setInput(nextValue);
+                updateSlashMenu(nextValue);
+              }}
               onKeyDown={handleKeyDown}
               onCompositionStart={() => {
                 isComposingRef.current = true;

@@ -86,6 +86,22 @@ export interface StreamSegment {
   ts: number;
 }
 
+export interface CompactionStatus {
+  active: boolean;
+  startedAt: number | null;
+  completedAt: number | null;
+}
+
+export interface FallbackStatus {
+  phase?: 'active' | 'cleared';
+  selected: string;
+  active: string;
+  previous?: string;
+  reason?: string;
+  attempts: string[];
+  occurredAt: number;
+}
+
 interface ToolStreamEntry {
   toolCallId: string;
   runId: string;
@@ -133,6 +149,8 @@ interface ChatState {
   pendingToolImages: AttachedFileMeta[];
   toolStreamById: Map<string, ToolStreamEntry>;
   toolStreamOrder: string[];
+  compactionStatus: CompactionStatus | null;
+  fallbackStatus: FallbackStatus | null;
 
   // Sessions
   sessions: ChatSession[];
@@ -146,6 +164,8 @@ interface ChatState {
   sessionLastActivity: Record<string, number>;
   /** Locally-created sessions not yet materialized in Gateway */
   pendingLocalSessionKeys: Record<string, true>;
+  /** Refresh the current session entry after slash commands that mutate session model. */
+  pendingSessionModelRefresh: boolean;
 
   // Thinking
   showThinking: boolean;
@@ -207,11 +227,29 @@ const HISTORY_POLL_INTERVAL_MS = 4000;
 // error (e.g. "terminated"), it may retry internally and recover. We wait
 // before committing the error to give the recovery path a chance.
 let _errorRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
+let _compactionClearTimer: ReturnType<typeof setTimeout> | null = null;
+let _fallbackClearTimer: ReturnType<typeof setTimeout> | null = null;
+const COMPACTION_TOAST_DURATION_MS = 5000;
+const FALLBACK_TOAST_DURATION_MS = 8000;
 
 function clearErrorRecoveryTimer(): void {
   if (_errorRecoveryTimer) {
     clearTimeout(_errorRecoveryTimer);
     _errorRecoveryTimer = null;
+  }
+}
+
+function clearCompactionTimer(): void {
+  if (_compactionClearTimer) {
+    clearTimeout(_compactionClearTimer);
+    _compactionClearTimer = null;
+  }
+}
+
+function clearFallbackTimer(): void {
+  if (_fallbackClearTimer) {
+    clearTimeout(_fallbackClearTimer);
+    _fallbackClearTimer = null;
   }
 }
 
@@ -236,6 +274,64 @@ function ensureHistoryPollRunning(getState: () => ChatState): void {
   };
 
   _historyPollTimer = setTimeout(pollHistory, HISTORY_POLL_START_DELAY_MS);
+}
+
+function toTrimmedString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function resolveModelLabel(provider: unknown, model: unknown): string | null {
+  const modelValue = toTrimmedString(model);
+  if (!modelValue) return null;
+  const providerValue = toTrimmedString(provider);
+  if (providerValue) {
+    const prefix = `${providerValue}/`;
+    if (modelValue.toLowerCase().startsWith(prefix.toLowerCase())) {
+      const trimmedModel = modelValue.slice(prefix.length).trim();
+      if (trimmedModel) {
+        return `${providerValue}/${trimmedModel}`;
+      }
+    }
+    return `${providerValue}/${modelValue}`;
+  }
+  const slashIndex = modelValue.indexOf('/');
+  if (slashIndex > 0) {
+    const p = modelValue.slice(0, slashIndex).trim();
+    const m = modelValue.slice(slashIndex + 1).trim();
+    if (p && m) {
+      return `${p}/${m}`;
+    }
+  }
+  return modelValue;
+}
+
+function parseFallbackAttemptSummaries(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => toTrimmedString(entry))
+    .filter((entry): entry is string => Boolean(entry));
+}
+
+function parseFallbackAttempts(value: unknown): Array<{ provider: string; model: string; reason: string }> {
+  if (!Array.isArray(value)) return [];
+  const out: Array<{ provider: string; model: string; reason: string }> = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue;
+    const item = entry as Record<string, unknown>;
+    const provider = toTrimmedString(item.provider);
+    const model = toTrimmedString(item.model);
+    if (!provider || !model) continue;
+    const reason =
+      toTrimmedString(item.reason)?.replace(/_/g, ' ')
+      ?? toTrimmedString(item.code)
+      ?? (typeof item.status === 'number' ? `HTTP ${item.status}` : null)
+      ?? toTrimmedString(item.error)
+      ?? 'error';
+    out.push({ provider, model, reason });
+  }
+  return out;
 }
 
 const DEFAULT_CANONICAL_PREFIX = 'agent:main';
@@ -463,6 +559,10 @@ function findSessionTitleCandidate(messages: RawMessage[]): string {
     }
   }
   return '';
+}
+
+function isSlashModelCommandText(text: string): boolean {
+  return /^\/model(?:\s|$)/i.test(text.trim());
 }
 
 /** Extract media file refs from [media attached: <path> (<mime>) | ...] patterns */
@@ -1370,6 +1470,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamingTools: [],
   chatToolMessages: [],
   chatStreamSegments: [],
+  compactionStatus: null,
+  fallbackStatus: null,
   pendingFinal: false,
   lastUserMessageAt: null,
   pendingToolImages: [],
@@ -1384,6 +1486,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sessionLabels: {},
   sessionLastActivity: { [DEFAULT_SESSION_KEY]: Date.now() },
   pendingLocalSessionKeys: {},
+  pendingSessionModelRefresh: false,
 
   showThinking: true,
   thinkingLevel: null,
@@ -2148,6 +2251,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       chatStreamSegments: [],
       pendingFinal: false,
       lastUserMessageAt: nowMs,
+      pendingSessionModelRefresh: isSlashModelCommandText(trimmed),
       toolStreamById: new Map<string, ToolStreamEntry>(),
       toolStreamOrder: [],
     }));
@@ -2474,6 +2578,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
           const toolOnly = isToolOnlyMessage(finalMsg);
           const hasOutput = hasNonToolAssistantContent(finalMsg);
+          const shouldRefreshSessionModel = get().pendingSessionModelRefresh;
           const msgId =
             finalMsg.id || (toolOnly ? `run-${runId}-tool-${Date.now()}` : `run-${runId}`);
           set((s) => {
@@ -2516,6 +2621,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     sending: hasOutput ? false : s.sending,
                     activeRunId: hasOutput ? null : s.activeRunId,
                     pendingFinal: hasOutput ? false : true,
+                    pendingSessionModelRefresh: hasOutput ? false : s.pendingSessionModelRefresh,
                     streamingTools,
                     ...clearPendingImages,
                     ...(hasOutput ? resetToolStreamState(s) : {}),
@@ -2538,6 +2644,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   sending: hasOutput ? false : s.sending,
                   activeRunId: hasOutput ? null : s.activeRunId,
                   pendingFinal: hasOutput ? false : true,
+                  pendingSessionModelRefresh: hasOutput ? false : s.pendingSessionModelRefresh,
                   streamingTools,
                   ...clearPendingImages,
                   ...(hasOutput ? resetToolStreamState(s) : {}),
@@ -2547,11 +2654,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
           // tool-use turns (thinking + tool blocks) from the Gateway's authoritative record.
           if (hasOutput && !toolOnly) {
             clearHistoryPoll();
+            if (shouldRefreshSessionModel) {
+              void get().loadSessions({ preserveCurrent: true, warmLabels: true });
+            }
             void get().loadHistory(true);
           }
         } else {
           // No message in final event - reload history to get complete data
-          set((s) => ({ streamingText: '', streamingMessage: null, pendingFinal: true, ...resetToolStreamState(s) }));
+          const shouldRefreshSessionModel = get().pendingSessionModelRefresh;
+          set((s) => ({
+            streamingText: '',
+            streamingMessage: null,
+            pendingFinal: true,
+            pendingSessionModelRefresh: false,
+            ...resetToolStreamState(s),
+          }));
+          if (shouldRefreshSessionModel) {
+            void get().loadSessions({ preserveCurrent: true, warmLabels: true });
+          }
           get().loadHistory();
         }
         break;
@@ -2586,6 +2706,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           streamingMessage: null,
           streamingTools: [],
           pendingFinal: false,
+          pendingSessionModelRefresh: false,
           pendingToolImages: [],
           ...resetToolStreamState(get()),
         });
@@ -2630,6 +2751,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           streamingMessage: null,
           streamingTools: [],
           pendingFinal: false,
+          pendingSessionModelRefresh: false,
           lastUserMessageAt: null,
           pendingToolImages: [],
           ...resetToolStreamState(get()),
@@ -2662,7 +2784,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   handleAgentEvent: (event: AgentStreamEvent) => {
-    if (!event || event.stream !== 'tool') return;
+    if (!event) return;
 
     const { currentSessionKey, sessions, activeRunId } = get();
     const eventSessionKey = typeof event.sessionKey === 'string' ? event.sessionKey : '';
@@ -2670,6 +2792,93 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const incomingRunId = typeof event.runId === 'string' ? event.runId : '';
     if (activeRunId && incomingRunId && incomingRunId !== activeRunId) return;
+
+    if (event.stream === 'compaction') {
+      const data = event.data && typeof event.data === 'object' ? event.data : {};
+      const phase = typeof data.phase === 'string' ? data.phase : '';
+      clearCompactionTimer();
+      if (phase === 'start') {
+        set({
+          compactionStatus: {
+            active: true,
+            startedAt: Date.now(),
+            completedAt: null,
+          },
+        });
+      } else if (phase === 'end') {
+        set((s) => ({
+          compactionStatus: {
+            active: false,
+            startedAt: s.compactionStatus?.startedAt ?? null,
+            completedAt: Date.now(),
+          },
+        }));
+        _compactionClearTimer = setTimeout(() => {
+          _compactionClearTimer = null;
+          set({ compactionStatus: null });
+        }, COMPACTION_TOAST_DURATION_MS);
+      }
+      return;
+    }
+
+    if (event.stream === 'lifecycle' || event.stream === 'fallback') {
+      const data = event.data && typeof event.data === 'object' ? event.data : {};
+      const phase = event.stream === 'fallback' ? 'fallback' : toTrimmedString(data.phase);
+      if (event.stream === 'lifecycle' && phase !== 'fallback' && phase !== 'fallback_cleared') {
+        return;
+      }
+
+      const selected =
+        resolveModelLabel(data.selectedProvider, data.selectedModel)
+        ?? resolveModelLabel(data.fromProvider, data.fromModel);
+      const active =
+        resolveModelLabel(data.activeProvider, data.activeModel)
+        ?? resolveModelLabel(data.toProvider, data.toModel);
+      const previous =
+        resolveModelLabel(data.previousActiveProvider, data.previousActiveModel)
+        ?? toTrimmedString(data.previousActiveModel)
+        ?? undefined;
+      if (!selected || !active) {
+        return;
+      }
+      if (phase === 'fallback' && selected === active) {
+        return;
+      }
+
+      const reason = toTrimmedString(data.reasonSummary) ?? toTrimmedString(data.reason) ?? undefined;
+      const attempts = (() => {
+        const summaries = parseFallbackAttemptSummaries(data.attemptSummaries);
+        if (summaries.length > 0) {
+          return summaries;
+        }
+        return parseFallbackAttempts(data.attempts).map((attempt) => {
+          const modelRef = resolveModelLabel(attempt.provider, attempt.model);
+          return `${modelRef ?? `${attempt.provider}/${attempt.model}`}: ${attempt.reason}`;
+        });
+      })();
+
+      clearFallbackTimer();
+      set({
+        fallbackStatus: {
+          phase: phase === 'fallback_cleared' ? 'cleared' : 'active',
+          selected,
+          active: phase === 'fallback_cleared' ? selected : active,
+          previous: phase === 'fallback_cleared'
+            ? (previous ?? (active !== selected ? active : undefined))
+            : undefined,
+          reason,
+          attempts,
+          occurredAt: Date.now(),
+        },
+      });
+      _fallbackClearTimer = setTimeout(() => {
+        _fallbackClearTimer = null;
+        set({ fallbackStatus: null });
+      }, FALLBACK_TOAST_DURATION_MS);
+      return;
+    }
+
+    if (event.stream !== 'tool') return;
 
     if (incomingRunId) {
       set((s) => ({

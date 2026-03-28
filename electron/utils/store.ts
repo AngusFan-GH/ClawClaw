@@ -54,6 +54,7 @@ export interface AppSettings {
   // UI State
   sidebarCollapsed: boolean;
   devModeUnlocked: boolean;
+  slashCommandHintsEnabled: boolean;
   setupComplete: boolean;
 
   // Presets
@@ -101,6 +102,7 @@ const defaults: AppSettings = {
   // UI State
   sidebarCollapsed: false,
   devModeUnlocked: false,
+  slashCommandHintsEnabled: false,
   setupComplete: false,
 
   // Presets

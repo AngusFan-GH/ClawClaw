@@ -39,6 +39,7 @@ interface SettingsState {
   // UI State
   sidebarCollapsed: boolean;
   devModeUnlocked: boolean;
+  slashCommandHintsEnabled: boolean;
   reminders: ReminderItem[];
 
   // Memory
@@ -69,6 +70,7 @@ interface SettingsState {
   setAutoDownloadUpdate: (value: boolean) => void;
   setSidebarCollapsed: (value: boolean) => void;
   setDevModeUnlocked: (value: boolean) => void;
+  setSlashCommandHintsEnabled: (value: boolean) => void;
   setReminders: (value: ReminderItem[]) => void;
   setSessionMemoryEnabled: (value: boolean) => void;
   setMemorySearchEnabled: (value: boolean) => void;
@@ -95,6 +97,7 @@ const defaultSettings = {
   autoDownloadUpdate: false,
   sidebarCollapsed: false,
   devModeUnlocked: false,
+  slashCommandHintsEnabled: false,
   reminders: [] as ReminderItem[],
   sessionMemoryEnabled: true,
   memorySearchEnabled: true,
@@ -222,6 +225,12 @@ export const useSettingsStore = create<SettingsState>()(
       setDevModeUnlocked: (devModeUnlocked) => {
         set({ devModeUnlocked });
         void persistMainSettings({ devModeUnlocked }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
+      },
+      setSlashCommandHintsEnabled: (slashCommandHintsEnabled) => {
+        set({ slashCommandHintsEnabled });
+        void persistMainSettings({ slashCommandHintsEnabled }).catch(() => {
           void syncFromMain().catch(() => {});
         });
       },

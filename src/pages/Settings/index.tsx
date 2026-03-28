@@ -160,6 +160,8 @@ export function Settings() {
     setProxyBypassRules,
     devModeUnlocked,
     setDevModeUnlocked,
+    slashCommandHintsEnabled,
+    setSlashCommandHintsEnabled,
     reminders,
     setReminders,
     sessionMemoryEnabled,
@@ -1339,11 +1341,23 @@ export function Settings() {
           </SectionCard>
 
           <SectionCard title={t('advanced.title')} description={t('advanced.description')}>
-            <SettingRow
-              label={t('advanced.devMode')}
-              description={t('advanced.devModeDesc')}
-              control={<Switch checked={devModeUnlocked} onCheckedChange={setDevModeUnlocked} />}
-            />
+            <div className="space-y-4">
+              <SettingRow
+                label={t('advanced.slashCommandHints')}
+                description={t('advanced.slashCommandHintsDesc')}
+                control={
+                  <Switch
+                    checked={slashCommandHintsEnabled}
+                    onCheckedChange={setSlashCommandHintsEnabled}
+                  />
+                }
+              />
+              <SettingRow
+                label={t('advanced.devMode')}
+                description={t('advanced.devModeDesc')}
+                control={<Switch checked={devModeUnlocked} onCheckedChange={setDevModeUnlocked} />}
+              />
+            </div>
           </SectionCard>
 
           {devModeUnlocked ? (

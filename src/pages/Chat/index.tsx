@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, Bot, Check, ChevronDown } from 'lucide-react';
+import { AlertCircle, Bot, Brain, Check, ChevronDown, Loader2 } from 'lucide-react';
 import { DEFAULT_SESSION_KEY, useChatStore, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
@@ -268,6 +268,8 @@ export function Chat() {
   const chatToolMessages = useChatStore((s) => s.chatToolMessages);
   const chatStreamSegments = useChatStore((s) => s.chatStreamSegments);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
+  const compactionStatus = useChatStore((s) => s.compactionStatus);
+  const fallbackStatus = useChatStore((s) => s.fallbackStatus);
   const loadHistory = useChatStore((s) => s.loadHistory);
   const loadSessions = useChatStore((s) => s.loadSessions);
   const restoreSessionsAfterGatewayReady = useChatStore((s) => s.restoreSessionsAfterGatewayReady);
@@ -720,6 +722,56 @@ export function Chat() {
             />
           ) : (
             <>
+              {compactionStatus && (
+                <div
+                  className={cn(
+                    'compaction-indicator',
+                    compactionStatus.active ? 'compaction-indicator--active' : 'compaction-indicator--complete'
+                  )}
+                >
+                  {compactionStatus.active ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                  <span>
+                    {compactionStatus.active
+                      ? t('status.compactingContext', 'Compacting context...')
+                      : t('status.contextCompacted', 'Context compacted')}
+                  </span>
+                </div>
+              )}
+
+              {fallbackStatus && (
+                <div
+                  className={cn(
+                    'compaction-indicator',
+                    fallbackStatus.phase === 'cleared'
+                      ? 'compaction-indicator--fallback-cleared'
+                      : 'compaction-indicator--fallback'
+                  )}
+                >
+                  {fallbackStatus.phase === 'cleared' ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Brain className="h-4 w-4" />
+                  )}
+                  <span>
+                    {fallbackStatus.phase === 'cleared'
+                      ? t(
+                          'status.fallbackCleared',
+                          'Fallback cleared: back on {{model}}',
+                          { model: fallbackStatus.active }
+                        )
+                      : t(
+                          'status.fallbackActive',
+                          'Fallback active: {{selected}} -> {{active}}',
+                          { selected: fallbackStatus.selected, active: fallbackStatus.active }
+                        )}
+                  </span>
+                </div>
+              )}
+
               <ChatThread
                 messages={messages}
                 toolMessages={chatToolMessages}

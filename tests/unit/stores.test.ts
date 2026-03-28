@@ -106,10 +106,14 @@ describe('Chat Store', () => {
       messages: [],
       currentSessionKey: 'agent:main:main',
       pendingLocalSessionKeys: {},
+      pendingSessionModelRefresh: false,
       sending: false,
+      activeRunId: null,
       lastUserMessageAt: null,
       error: null,
       pendingFinal: false,
+      compactionStatus: null,
+      fallbackStatus: null,
       sessions: [{ key: 'agent:main:main', displayName: 'Main' }],
       sessionLabels: {},
       sessionLastActivity: {},
@@ -341,5 +345,116 @@ describe('Chat Store', () => {
     expect(useChatStore.getState().sessionLabels['agent:main:session-4']).toBe('真实历史标题');
 
     rpcMock.mockRestore();
+  });
+
+  it('should track compaction start and completion from agent events', async () => {
+    vi.useFakeTimers();
+
+    useChatStore.getState().handleAgentEvent({
+      runId: 'run-compaction',
+      sessionKey: 'agent:main:main',
+      stream: 'compaction',
+      data: { phase: 'start' },
+    });
+
+    expect(useChatStore.getState().compactionStatus).toMatchObject({
+      active: true,
+      completedAt: null,
+    });
+
+    useChatStore.getState().handleAgentEvent({
+      runId: 'run-compaction',
+      sessionKey: 'agent:main:main',
+      stream: 'compaction',
+      data: { phase: 'end' },
+    });
+
+    expect(useChatStore.getState().compactionStatus).toMatchObject({
+      active: false,
+    });
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(useChatStore.getState().compactionStatus).toBeNull();
+  });
+
+  it('should surface fallback active and cleared states from lifecycle events', async () => {
+    vi.useFakeTimers();
+
+    useChatStore.getState().handleAgentEvent({
+      runId: 'run-fallback',
+      sessionKey: 'agent:main:main',
+      stream: 'lifecycle',
+      data: {
+        phase: 'fallback',
+        selectedProvider: 'openrouter',
+        selectedModel: 'anthropic/claude-3.7-sonnet',
+        activeProvider: 'openai',
+        activeModel: 'gpt-5.4',
+        reasonSummary: 'Primary provider unavailable',
+        attemptSummaries: ['openrouter/anthropic/claude-3.7-sonnet: timeout'],
+      },
+    });
+
+    expect(useChatStore.getState().fallbackStatus).toMatchObject({
+      phase: 'active',
+      selected: 'openrouter/anthropic/claude-3.7-sonnet',
+      active: 'openai/gpt-5.4',
+      reason: 'Primary provider unavailable',
+    });
+
+    useChatStore.getState().handleAgentEvent({
+      runId: 'run-fallback',
+      sessionKey: 'agent:main:main',
+      stream: 'lifecycle',
+      data: {
+        phase: 'fallback_cleared',
+        selectedProvider: 'openrouter',
+        selectedModel: 'anthropic/claude-3.7-sonnet',
+        activeProvider: 'openai',
+        activeModel: 'gpt-5.4',
+      },
+    });
+
+    expect(useChatStore.getState().fallbackStatus).toMatchObject({
+      phase: 'cleared',
+      active: 'openrouter/anthropic/claude-3.7-sonnet',
+      previous: 'openai/gpt-5.4',
+    });
+
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(useChatStore.getState().fallbackStatus).toBeNull();
+  });
+
+  it('should refresh sessions after a slash model command completes', () => {
+    const loadSessionsMock = vi.fn().mockResolvedValue(undefined);
+
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      messages: [
+        {
+          role: 'user',
+          content: '/model openai/gpt-5.4',
+          id: 'user-model-1',
+        },
+      ],
+      pendingSessionModelRefresh: true,
+      sending: true,
+      activeRunId: 'run-model-1',
+      loadSessions: loadSessionsMock,
+    });
+
+    useChatStore.getState().handleChatEvent({
+      runId: 'run-model-1',
+      sessionKey: 'agent:main:main',
+      state: 'final',
+      message: {
+        role: 'assistant',
+        content: 'Switched to openai/gpt-5.4',
+        id: 'assistant-model-1',
+      },
+    });
+
+    expect(loadSessionsMock).toHaveBeenCalledWith({ preserveCurrent: true, warmLabels: true });
+    expect(useChatStore.getState().pendingSessionModelRefresh).toBe(false);
   });
 });

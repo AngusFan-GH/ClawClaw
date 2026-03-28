@@ -230,6 +230,58 @@
   gap: 0;
 }
 
+.compaction-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: min(900px, 68%);
+  padding: 8px 12px;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card) / 0.92);
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  box-shadow: 0 8px 24px hsl(220 20% 20% / 0.06);
+}
+
+.compaction-indicator--active {
+  border-color: hsl(var(--primary) / 0.22);
+  background: hsl(var(--primary) / 0.08);
+  color: hsl(var(--primary));
+}
+
+.compaction-indicator--complete {
+  border-color: hsl(148 45% 58% / 0.28);
+  background: hsl(148 45% 58% / 0.1);
+  color: hsl(148 38% 34%);
+}
+
+.compaction-indicator--fallback {
+  border-color: hsl(38 92% 58% / 0.32);
+  background: hsl(38 92% 58% / 0.12);
+  color: hsl(30 84% 32%);
+}
+
+.compaction-indicator--fallback-cleared {
+  border-color: hsl(var(--border));
+  background: hsl(var(--muted));
+  color: hsl(var(--secondary-foreground));
+}
+
+.dark .compaction-indicator {
+  box-shadow: 0 8px 24px hsl(220 40% 2% / 0.24);
+}
+
+.dark .compaction-indicator--complete {
+  color: hsl(148 48% 72%);
+}
+
+.dark .compaction-indicator--fallback {
+  color: hsl(38 95% 73%);
+}
+
 .chat-group {
   display: flex;
   gap: 10px;

@@ -300,6 +300,8 @@
         "ipcOnly": "IPC only"
       }
     },
+    "slashCommandHints": "Slash Command Hints",
+    "slashCommandHintsDesc": "Show the slash command suggestion menu when typing / in the chat composer",
     "devMode": "Developer Mode",
     "devModeDesc": "Show developer tools and shortcuts"
   },

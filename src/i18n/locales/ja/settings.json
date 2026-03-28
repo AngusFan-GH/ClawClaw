@@ -300,6 +300,8 @@
         "ipcOnly": "IPC のみ"
       }
     },
+    "slashCommandHints": "スラッシュコマンド候補",
+    "slashCommandHintsDesc": "チャット入力欄で / を入力したときにコマンド候補メニューを表示",
     "devMode": "開発者モード",
     "devModeDesc": "開発者ツールとショートカットを表示"
   },
