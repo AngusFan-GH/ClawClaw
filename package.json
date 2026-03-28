@@ -22,7 +22,7 @@
   "private": true,
   "scripts": {
     "init": "pnpm install && pnpm run uv:download",
-    "dev": "vite",
+    "dev": "pnpm run bundle:openclaw-plugins && vite",
     "build": "vite build && zx scripts/bundle-openclaw.mjs && node scripts/clean-builder-output.mjs && electron-builder",
     "build:vite": "vite build",
     "bundle:openclaw-plugins": "zx scripts/bundle-openclaw-plugins.mjs",

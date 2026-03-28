@@ -161,6 +161,7 @@ cd ClawClaw
 pnpm run init
 
 # Start in development mode
+# This also refreshes managed OpenClaw plugin mirrors needed by dev startup.
 pnpm dev
 ```
 
@@ -361,7 +362,7 @@ Chain multiple skills together to create sophisticated automation pipelines. Pro
 ```bash
 # Development
 pnpm run init             # Install dependencies + download uv
-pnpm dev                  # Start with hot reload
+pnpm dev                  # Start with hot reload (also refreshes managed plugin mirrors)
 
 # Quality
 pnpm lint                 # Run ESLint

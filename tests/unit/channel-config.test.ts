@@ -714,4 +714,30 @@ describe('channel config lifecycle', () => {
     const config = await readOpenClawJson();
     expect(config.plugins).toBeUndefined();
   });
+
+  it('removes managed channel plugins whose manifest is missing configSchema', async () => {
+    const channelsDir = join(testHome, '.openclaw', 'extensions', 'channels');
+    const wechatDir = join(testHome, '.openclaw', 'extensions', 'openclaw-weixin');
+    await mkdir(channelsDir, { recursive: true });
+    await mkdir(wechatDir, { recursive: true });
+    await writeFile(
+      join(channelsDir, 'openclaw.plugin.json'),
+      JSON.stringify({ id: 'channels', name: 'China Channels' }, null, 2),
+      'utf8',
+    );
+    await writeFile(
+      join(wechatDir, 'openclaw.plugin.json'),
+      JSON.stringify({ id: 'openclaw-weixin', name: 'WeChat', configSchema: { type: 'object' } }, null, 2),
+      'utf8',
+    );
+
+    const { cleanupInvalidManagedChannelPlugins } = await import('@electron/utils/channel-config');
+    await expect(cleanupInvalidManagedChannelPlugins()).resolves.toEqual({
+      cleaned: true,
+      removedPluginIds: ['channels'],
+    });
+
+    await expect(access(channelsDir)).rejects.toThrow();
+    await expect(access(wechatDir)).resolves.toBeUndefined();
+  });
 });

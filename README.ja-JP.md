@@ -161,6 +161,7 @@ cd ClawClaw
 pnpm run init
 
 # 開発モードで起動
+# 開発起動時に必要な OpenClaw 管理プラグインミラーも更新します
 pnpm dev
 ```
 
@@ -358,7 +359,7 @@ AI を開発ワークフローに統合できます。エージェントを使�
 ```bash
 # 開発
 pnpm run init             # 依存関係のインストール + uvのダウンロード
-pnpm dev                  # ホットリロードで起動
+pnpm dev                  # ホットリロードで起動（管理プラグインミラーも更新）
 
 # コード品質
 pnpm lint                 # ESLintを実行

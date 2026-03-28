@@ -107,7 +107,7 @@ async function writePlugin(
   await mkdir(dir, { recursive: true });
   await writeFile(
     join(dir, 'openclaw.plugin.json'),
-    JSON.stringify({ id: pluginId, name: pluginId }, null, 2),
+    JSON.stringify({ id: pluginId, name: pluginId, configSchema: { type: 'object' } }, null, 2),
     'utf8',
   );
   await writeFile(join(dir, 'package.json'), JSON.stringify({ name: pluginId, version }, null, 2), 'utf8');
@@ -148,11 +148,13 @@ describe('upgrade compatibility baseline', () => {
     await cleanupDir(testHome);
     await cleanupDir(testUserData);
     await cleanupDir(join(process.cwd(), 'build', 'openclaw-plugins', 'test-upgrade-plugin'));
+    await cleanupDir(join(process.cwd(), 'build', 'openclaw-plugins', 'channels'));
   });
 
   afterEach(async () => {
     await flushBackgroundWork();
     await cleanupDir(join(process.cwd(), 'build', 'openclaw-plugins', 'test-upgrade-plugin'));
+    await cleanupDir(join(process.cwd(), 'build', 'openclaw-plugins', 'channels'));
     await cleanupDir(testHome);
     await cleanupDir(testUserData);
   });
@@ -337,6 +339,99 @@ describe('upgrade compatibility baseline', () => {
     expect(result.installed).toBe(true);
     const targetDepPkg = await readFile(join(targetDir, 'node_modules', 'dep', 'package.json'), 'utf8');
     expect(JSON.parse(targetDepPkg)).toMatchObject({ name: 'dep', version: '1.0.0' });
+  });
+
+  it('cleans invalid managed channel plugin manifests before sanitizing config and reinstalls the bundled plugin', async () => {
+    await writeOpenClawJson({
+      channels: {
+        wecom: {
+          enabled: true,
+          accounts: {
+            corp: {
+              botId: 'corp',
+              secret: 'secret',
+            },
+          },
+          defaultAccount: 'corp',
+        },
+      },
+      plugins: {
+        allow: ['channels'],
+      },
+    });
+
+    const sourceDir = join(process.cwd(), 'build', 'openclaw-plugins', 'channels');
+    const targetDir = join(testHome, '.openclaw', 'extensions', 'channels');
+
+    await writePlugin(sourceDir, 'channels', '3.0.0');
+    await mkdir(targetDir, { recursive: true });
+    await writeFile(
+      join(targetDir, 'openclaw.plugin.json'),
+      JSON.stringify({ id: 'channels', name: 'China Channels' }, null, 2),
+      'utf8',
+    );
+    await writeFile(
+      join(targetDir, 'package.json'),
+      JSON.stringify({ name: 'channels', version: '1.0.0' }, null, 2),
+      'utf8',
+    );
+
+    const { syncGatewayConfigBeforeLaunch } = await import('@electron/gateway/config-sync');
+
+    await syncGatewayConfigBeforeLaunch({
+      theme: 'system',
+      language: 'zh',
+      startMinimized: false,
+      launchAtStartup: false,
+      gatewayAutoStart: true,
+      gatewayPort: 18789,
+      gatewayToken: 'test-token',
+      proxyMode: 'system',
+      proxyEnabled: false,
+      proxyServer: '',
+      proxyHttpServer: '',
+      proxyHttpsServer: '',
+      proxyAllServer: '',
+      proxyBypassRules: '<local>;localhost;127.0.0.1;::1',
+      updateChannel: 'stable',
+      autoCheckUpdate: true,
+      autoDownloadUpdate: false,
+      skippedVersions: [],
+      sidebarCollapsed: false,
+      devModeUnlocked: false,
+      setupComplete: false,
+      selectedBundles: [],
+      enabledSkills: [],
+      disabledSkills: [],
+      securityPolicy: {
+        enabled: false,
+        deniedPaths: [],
+        permissions: {
+          denyRuntime: false,
+          denyWrite: false,
+          denyRead: false,
+          denyBrowser: false,
+          denyWebSearch: false,
+          denyWebFetch: false,
+          denyGateway: false,
+        },
+      },
+      reminders: [],
+      sessionMemoryEnabled: true,
+      memorySearchEnabled: true,
+    });
+    await flushBackgroundWork();
+
+    const manifest = JSON.parse(await readFile(join(targetDir, 'openclaw.plugin.json'), 'utf8')) as Record<string, unknown>;
+    expect(manifest.configSchema).toEqual({ type: 'object' });
+    const config = await readOpenClawJson();
+    expect(config.plugins).toEqual({
+      allow: ['channels'],
+      enabled: true,
+      entries: {
+        channels: { enabled: true },
+      },
+    });
   });
 
   it('syncs runtime auth for every configured agent during upgrade, not just the main agent', async () => {

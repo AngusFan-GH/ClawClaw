@@ -72,6 +72,14 @@ const LEGACY_CHANNEL_PLUGIN_IDS = [
     'dingtalk',
 ] as const;
 const OFFICIAL_BUNDLED_PLUGIN_MIRROR_IDS = ['feishu'] as const;
+const MANAGED_CHANNEL_PLUGIN_IDS = [
+    ...new Set<string>([
+        ...LEGACY_CHANNEL_PLUGIN_IDS,
+        ...OFFICIAL_BUNDLED_PLUGIN_MIRROR_IDS,
+        CHINA_CHANNEL_PLUGIN_ID,
+        WECHAT_RUNTIME_CHANNEL_ID,
+    ]),
+] as const;
 
 function collapseShadowDefaultAccount(
     section: AccountScopedChannelSection | undefined
@@ -1537,6 +1545,44 @@ export async function cleanupLegacyChannelPlugins(): Promise<{ cleaned: boolean 
     }
 
     return { cleaned };
+}
+
+export async function cleanupInvalidManagedChannelPlugins(): Promise<{ cleaned: boolean; removedPluginIds: string[] }> {
+    let cleaned = false;
+    const removedPluginIds: string[] = [];
+
+    for (const pluginId of MANAGED_CHANNEL_PLUGIN_IDS) {
+        const pluginDir = join(EXTENSIONS_DIR, pluginId);
+        const manifestPath = join(pluginDir, 'openclaw.plugin.json');
+
+        try {
+            if (!(await fileExists(manifestPath))) {
+                continue;
+            }
+
+            let rawManifest: unknown;
+            try {
+                rawManifest = JSON.parse(await readFile(manifestPath, 'utf8')) as unknown;
+            } catch {
+                rawManifest = null;
+            }
+
+            const configSchema =
+                rawManifest && typeof rawManifest === 'object' && !Array.isArray(rawManifest)
+                    ? (rawManifest as Record<string, unknown>).configSchema
+                    : undefined;
+
+            if (!configSchema || typeof configSchema !== 'object' || Array.isArray(configSchema)) {
+                await rm(pluginDir, { recursive: true, force: true });
+                cleaned = true;
+                removedPluginIds.push(pluginId);
+            }
+        } catch (error) {
+            console.error(`Failed to validate managed channel plugin at ${pluginDir}:`, error);
+        }
+    }
+
+    return { cleaned, removedPluginIds };
 }
 
 export async function repairChannelConfigConsistency(): Promise<{ repaired: boolean }> {

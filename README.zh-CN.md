@@ -161,6 +161,7 @@ cd ClawClaw
 pnpm run init
 
 # 以开发模式启动
+# 同时会刷新开发环境所需的 OpenClaw 受管插件镜像
 pnpm dev
 ```
 
@@ -361,7 +362,7 @@ ClawClaw 采用 **双进程 + Host API 统一接入架构**。渲染进程只调
 ```bash
 # 开发
 pnpm run init             # 安装依赖并下载 uv
-pnpm dev                  # 以热重载模式启动
+pnpm dev                  # 以热重载模式启动（同时刷新受管插件镜像）
 
 # 代码质量
 pnpm lint                 # 运行 ESLint 检查

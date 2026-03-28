@@ -7,6 +7,7 @@ import { getProviderEnvVar, getKeyableProviderTypes } from '../utils/provider-re
 import { getOpenClawDir, getOpenClawEntryPath, isOpenClawPresent } from '../utils/paths';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import {
+  cleanupInvalidManagedChannelPlugins,
   cleanupDanglingWeChatPluginState,
   cleanupLegacyChannelPlugins,
   listConfiguredChannels,
@@ -120,6 +121,62 @@ export async function syncGatewayConfigBeforeLaunch(
   appSettings: Awaited<ReturnType<typeof getAllSettings>>,
 ): Promise<void> {
   try {
+    await withTimeout(
+      repairChannelConfigConsistency(),
+      2000,
+      'repairChannelConfigConsistency',
+      { repaired: false },
+    );
+  } catch (err) {
+    logger.warn('Failed to repair channel config consistency:', err);
+  }
+
+  try {
+    await withTimeout(
+      cleanupDanglingWeChatPluginState(),
+      2000,
+      'cleanupDanglingWeChatPluginState',
+      { cleanedDanglingState: false },
+    );
+  } catch (err) {
+    logger.warn('Failed to clean dangling WeChat plugin state:', err);
+  }
+
+  try {
+    await withTimeout(
+      cleanupLegacyChannelPlugins(),
+      3000,
+      'cleanupLegacyChannelPlugins',
+      { cleaned: false },
+    );
+  } catch (err) {
+    logger.warn('Failed to clean legacy channel plugins:', err);
+  }
+
+  try {
+    await withTimeout(
+      cleanupInvalidManagedChannelPlugins(),
+      3000,
+      'cleanupInvalidManagedChannelPlugins',
+      { cleaned: false, removedPluginIds: [] },
+    );
+  } catch (err) {
+    logger.warn('Failed to clean invalid managed channel plugins:', err);
+  }
+
+  try {
+    const configuredChannels = await withTimeout(
+      listConfiguredChannels({ includeCli: false }),
+      1500,
+      'listConfiguredChannelsForPluginInstall',
+      [],
+    );
+    ensureConfiguredPluginsInstalled(configuredChannels);
+  } catch (err) {
+    logger.warn('Failed to ensure configured channel plugins are installed:', err);
+  }
+
+  try {
     await withTimeout(sanitizeOpenClawConfig(), 2000, 'sanitizeOpenClawConfig', undefined);
   } catch (err) {
     logger.warn('Failed to sanitize openclaw.json:', err);
@@ -175,51 +232,6 @@ export async function syncGatewayConfigBeforeLaunch(
     );
   } catch (err) {
     logger.warn('Failed to sync provider auth to OpenClaw runtime before launch:', err);
-  }
-
-  try {
-    await withTimeout(
-      repairChannelConfigConsistency(),
-      2000,
-      'repairChannelConfigConsistency',
-      { repaired: false },
-    );
-  } catch (err) {
-    logger.warn('Failed to repair channel config consistency:', err);
-  }
-
-  try {
-    await withTimeout(
-      cleanupDanglingWeChatPluginState(),
-      2000,
-      'cleanupDanglingWeChatPluginState',
-      { cleanedDanglingState: false },
-    );
-  } catch (err) {
-    logger.warn('Failed to clean dangling WeChat plugin state:', err);
-  }
-
-  try {
-    await withTimeout(
-      cleanupLegacyChannelPlugins(),
-      3000,
-      'cleanupLegacyChannelPlugins',
-      { cleaned: false },
-    );
-  } catch (err) {
-    logger.warn('Failed to clean legacy channel plugins:', err);
-  }
-
-  try {
-    const configuredChannels = await withTimeout(
-      listConfiguredChannels({ includeCli: false }),
-      1500,
-      'listConfiguredChannelsForPluginInstall',
-      [],
-    );
-    ensureConfiguredPluginsInstalled(configuredChannels);
-  } catch (err) {
-    logger.warn('Failed to ensure configured channel plugins are installed:', err);
   }
 
   // These sync tasks improve eventual config consistency, but they are not
