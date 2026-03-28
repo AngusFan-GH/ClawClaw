@@ -43,6 +43,8 @@ import { GatewayRestartController } from './restart-controller';
 import { GatewayRestartGovernor } from './restart-governor';
 import { classifyGatewayStderrMessage, recordGatewayStartupStderrLine } from './startup-stderr';
 import { runGatewayStartupSequence } from './startup-orchestrator';
+import { recoverMalformedOpenClawConfig } from '../utils/openclaw-config';
+import type { GatewayConfigRecovery } from '../../src/types/gateway';
 
 export interface GatewayStatus {
   state: GatewayLifecycleState;
@@ -100,6 +102,7 @@ export class GatewayManager extends EventEmitter {
   private readonly lifecycleController = new GatewayLifecycleController();
   private readonly restartController = new GatewayRestartController();
   private readonly restartGovernor = new GatewayRestartGovernor();
+  private lastStartupRecovery: GatewayConfigRecovery | null = null;
   private reloadDebounceTimer: NodeJS.Timeout | null = null;
   private externalShutdownSupported: boolean | null = null;
   private pendingExpectedReconnectDelayMs: number | null = null;
@@ -264,6 +267,10 @@ export class GatewayManager extends EventEmitter {
     return this.stateController.getStatus();
   }
 
+  getLastStartupRecovery(): GatewayConfigRecovery | null {
+    return this.lastStartupRecovery;
+  }
+
   /**
    * Check if Gateway is connected and ready
    */
@@ -292,6 +299,7 @@ export class GatewayManager extends EventEmitter {
 
     const startPromise = (async () => {
       this.startLock = true;
+      this.lastStartupRecovery = null;
       this.resetAttachProbeState();
       const startEpoch = this.lifecycleController.bump('start');
       logger.info(`Gateway start requested (port=${this.status.port})`);
@@ -366,8 +374,42 @@ export class GatewayManager extends EventEmitter {
             });
           },
           onConnectedToManagedGateway: () => {
+            this.lastStartupRecovery = null;
             this.startHealthCheck();
             logger.debug('Gateway started successfully');
+          },
+          recoverMalformedConfig: async () => {
+            try {
+              const result = await recoverMalformedOpenClawConfig();
+              if (result.outcome === 'repaired') {
+                this.lastStartupRecovery = {
+                  kind: 'config-repaired',
+                  strategy: result.strategy,
+                  backupPath: result.backupPath ?? undefined,
+                };
+                logger.warn(
+                  `Repaired malformed openclaw.json during Gateway startup${result.backupPath ? ` (backup: ${result.backupPath})` : ''}${result.strategy ? ` using ${result.strategy}` : ''}`,
+                );
+              } else if (result.outcome === 'reset') {
+                this.lastStartupRecovery = {
+                  kind: 'config-reset',
+                  strategy: result.strategy,
+                  backupPath: result.backupPath ?? undefined,
+                };
+                logger.warn(
+                  `Reset malformed openclaw.json during Gateway startup${result.backupPath ? ` (backup: ${result.backupPath})` : ''}`,
+                );
+              } else {
+                logger.warn('Malformed openclaw.json recovery was requested, but no config file was present');
+              }
+              return true;
+            } catch (resetError) {
+              logger.error('Failed to recover malformed openclaw.json during Gateway startup:', resetError);
+              return false;
+            }
+          },
+          onMalformedConfigRecoverySuccess: () => {
+            this.setStatus({ state: 'starting', error: undefined, reconnectAttempts: 0, restartExpectedMs: undefined });
           },
           runDoctorRepair: async () => await runOpenClawDoctorRepair(),
           onDoctorRepairSuccess: () => {

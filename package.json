@@ -29,6 +29,7 @@
     "lint": "eslint . --fix",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "release:check": "node scripts/release-gate.mjs",
     "uv:download": "zx scripts/download-bundled-uv.mjs",
     "uv:download:mac": "zx scripts/download-bundled-uv.mjs --platform=mac",
     "uv:download:win": "zx scripts/download-bundled-uv.mjs --platform=win",

@@ -247,7 +247,6 @@
     "channelFixedTitle": "更新チャネル",
     "channelFixedDesc": "現在は安定版のみ提供しています。アプリは常に安定版フィードを確認します。",
     "channel": "更新チャネル",
-    "channelDesc": "安定版、ベータ版、開発版のどれを受け取るか選択します。",
     "autoCheck": "自動更新チェック",
     "autoCheckDesc": "起動時に更新を確認",
     "autoDownload": "自動アップデート",
@@ -264,20 +263,7 @@
       "latest": "最新バージョンです",
       "check": "更新を確認して最新の機能を入手"
     },
-    "channels": {
-      "stable": {
-        "label": "安定版",
-        "description": "正式リリースのみ受け取ります。通常利用に推奨されます。"
-      },
-      "beta": {
-        "label": "ベータ版",
-        "description": "今後の機能を早めに受け取れますが、追加のリスクがあります。"
-      },
-      "dev": {
-        "label": "開発版",
-        "description": "最新の実験的ビルドを受け取ります。内部検証向けです。"
-      }
-    },
+    "channelDesc": "現在利用できる更新フィードは安定版のみです。",
     "action": {
       "checking": "確認中...",
       "downloading": "ダウンロード中...",

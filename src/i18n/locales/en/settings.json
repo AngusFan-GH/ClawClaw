@@ -247,7 +247,6 @@
     "channelFixedTitle": "Release channel",
     "channelFixedDesc": "Only the stable release channel is available right now. The app always checks the stable feed.",
     "channel": "Update channel",
-    "channelDesc": "Choose whether this app follows stable, beta, or dev releases.",
     "autoCheck": "Auto-check for updates",
     "autoCheckDesc": "Check for updates on startup",
     "autoDownload": "Auto-update",
@@ -264,20 +263,7 @@
       "latest": "You have the latest version",
       "check": "Check for updates to get the latest features"
     },
-    "channels": {
-      "stable": {
-        "label": "Stable",
-        "description": "Only receive production releases. Best for most users."
-      },
-      "beta": {
-        "label": "Beta",
-        "description": "Get upcoming features earlier, with some additional risk."
-      },
-      "dev": {
-        "label": "Dev",
-        "description": "Track the newest experimental builds. Intended for internal testing."
-      }
-    },
+    "channelDesc": "Only the stable update feed is currently available.",
     "action": {
       "checking": "Checking...",
       "downloading": "Downloading...",

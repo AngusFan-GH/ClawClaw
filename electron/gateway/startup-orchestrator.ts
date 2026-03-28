@@ -22,6 +22,8 @@ type StartupHooks = {
   startProcess: () => Promise<void>;
   waitForReady: (port: number) => Promise<void>;
   onConnectedToManagedGateway: () => void;
+  recoverMalformedConfig: () => Promise<boolean>;
+  onMalformedConfigRecoverySuccess: () => void;
   runDoctorRepair: () => Promise<boolean>;
   onDoctorRepairSuccess: () => void;
   delay: (ms: number) => Promise<void>;
@@ -79,6 +81,20 @@ export async function runGatewayStartupSequence(hooks: StartupHooks): Promise<vo
         attempt: startAttempts,
         maxAttempts: maxStartAttempts,
       });
+
+      if (recoveryAction === 'reset-config') {
+        configRepairAttempted = true;
+        logger.warn(
+          'Detected malformed OpenClaw config during Gateway startup; attempting recovery before retry',
+        );
+        const recovered = await hooks.recoverMalformedConfig();
+        if (recovered) {
+          logger.info('Malformed OpenClaw config recovery completed; retrying Gateway startup');
+          hooks.onMalformedConfigRecoverySuccess();
+          continue;
+        }
+        logger.error('Malformed OpenClaw config recovery failed; not retrying Gateway startup');
+      }
 
       if (recoveryAction === 'repair') {
         configRepairAttempted = true;

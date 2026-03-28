@@ -366,6 +366,7 @@ pnpm typecheck            # TypeScriptの型チェック
 
 # テスト
 pnpm test                 # ユニットテストを実行
+pnpm run release:check    # リリースゲートを実行（アップグレード互換性と復旧チェック）
 
 # ビルド＆パッケージ
 pnpm run build:vite       # フロントエンドのみビルド
@@ -377,6 +378,18 @@ pnpm package:win:cross    # macOS/Linux から Windows NSIS をクロスビル�
 pnpm package:linux        # Linux向けにパッケージ化
 pnpm run upload:update    # release/latest.yml と参照される Windows 更新ファイルをアップロード
 ```
+
+### Release Gate
+
+顧客向けリリースの前に、`pnpm run release:check` を実行してください。
+
+このゲートは一般的な機能テストではなく、アップグレード安定性を確認します。現在は次を検証します。
+
+- 旧 provider store から account ベース構成への移行
+- 初回 Gateway 起動前の runtime provider/auth の自動収束
+- 破損した `openclaw.json` の自動復旧とバックアップ保持
+- インストール済みプラグインが不完全な場合のミラー再インストール
+- 複数 agent 環境での runtime auth 収束
 
 ### 技術スタック
 

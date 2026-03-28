@@ -45,6 +45,50 @@ function readPluginVersion(dir: string): string | null {
   }
 }
 
+function readPluginManifestId(dir: string): string | null {
+  try {
+    const manifest = JSON.parse(readFileSync(join(dir, 'openclaw.plugin.json'), 'utf-8')) as { id?: string };
+    return typeof manifest.id === 'string' && manifest.id.trim() ? manifest.id.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function hasBundledRuntimeDependencies(dir: string): boolean {
+  return existsSync(join(dir, 'node_modules'));
+}
+
+function isPluginMirrorInstallHealthy(targetDir: string, sourceDir: string, pluginId: string): boolean {
+  const targetManifest = join(targetDir, 'openclaw.plugin.json');
+  const targetPackage = join(targetDir, 'package.json');
+
+  if (!existsSync(targetManifest) || !existsSync(targetPackage)) {
+    return false;
+  }
+
+  const targetManifestId = readPluginManifestId(targetDir);
+  if (targetManifestId !== pluginId) {
+    return false;
+  }
+
+  const sourceManifestId = readPluginManifestId(sourceDir);
+  if (sourceManifestId && sourceManifestId !== targetManifestId) {
+    return false;
+  }
+
+  const targetVersion = readPluginVersion(targetDir);
+  const sourceVersion = readPluginVersion(sourceDir);
+  if (!targetVersion || !sourceVersion || targetVersion !== sourceVersion) {
+    return false;
+  }
+
+  if (hasBundledRuntimeDependencies(sourceDir) && !hasBundledRuntimeDependencies(targetDir)) {
+    return false;
+  }
+
+  return true;
+}
+
 export function findBundledPluginMirror(pluginId: string): string | null {
   const candidateSources = app.isPackaged
     ? [
@@ -95,9 +139,7 @@ export function ensureBundledPluginInstalled(
   }
 
   if (existsSync(targetManifest)) {
-    const targetVersion = readPluginVersion(targetDir);
-    const sourceVersion = readPluginVersion(sourceDir);
-    if (targetVersion && sourceVersion && targetVersion === sourceVersion) {
+    if (isPluginMirrorInstallHealthy(targetDir, sourceDir, pluginId)) {
       return { installed: true, sourceDir };
     }
   }

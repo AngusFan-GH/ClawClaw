@@ -46,7 +46,7 @@ export interface AppSettings {
   proxyBypassRules: string;
 
   // Update
-  updateChannel: 'stable' | 'beta' | 'dev';
+  updateChannel: 'stable';
   autoCheckUpdate: boolean;
   autoDownloadUpdate: boolean;
   skippedVersions: string[];

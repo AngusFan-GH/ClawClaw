@@ -46,7 +46,7 @@ interface UpdateState {
   downloadUpdate: () => Promise<void>;
   installUpdate: () => void;
   cancelAutoInstall: () => Promise<void>;
-  setChannel: (channel: 'stable' | 'beta' | 'dev') => Promise<void>;
+  setChannel: (channel: 'stable') => Promise<void>;
   setAutoDownload: (enable: boolean) => Promise<void>;
   clearError: () => void;
 }

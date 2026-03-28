@@ -10,7 +10,7 @@ import type { ReminderItem } from '@/shared/reminders';
 import { normalizeReminders } from '@/shared/reminders';
 
 type Theme = 'light' | 'dark' | 'system';
-type UpdateChannel = 'stable' | 'beta' | 'dev';
+type UpdateChannel = 'stable';
 type ProxyMode = 'system' | 'custom' | 'direct';
 
 interface SettingsState {

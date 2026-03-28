@@ -369,6 +369,7 @@ pnpm typecheck            # TypeScript 类型检查
 
 # 测试
 pnpm test                 # 运行单元测试
+pnpm run release:check    # 运行发版门禁（升级兼容与恢复检查）
 
 # 构建与打包
 pnpm run build:vite       # 仅构建前端
@@ -380,6 +381,18 @@ pnpm package:win:cross    # 在 macOS/Linux 上交叉打包 Windows NSIS（同�
 pnpm package:linux        # 为 Linux 打包
 pnpm run upload:update    # 上传 release/latest.yml 及其引用的 Windows 更新文件
 ```
+
+### 发版门禁
+
+面向客户发版前，先执行 `pnpm run release:check`。
+
+这组门禁关注的是升级稳定性，而不是普通功能覆盖，当前会验证：
+
+- 旧版 provider store 到新账户模型的迁移
+- 首次启动前 runtime provider 与 auth 的自动收敛
+- 损坏的 `openclaw.json` 自动恢复并保留备份
+- 已安装插件目录不完整时的镜像重装修复
+- 多 agent 场景下升级时的 runtime auth 收敛
 
 ### 技术栈
 

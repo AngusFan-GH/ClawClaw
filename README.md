@@ -369,6 +369,7 @@ pnpm typecheck            # TypeScript validation
 
 # Testing
 pnpm test                 # Run unit tests
+pnpm run release:check    # Run the release gate (upgrade compatibility + recovery checks)
 
 # Build & Package
 pnpm run build:vite       # Build frontend only
@@ -380,6 +381,18 @@ pnpm package:win:cross    # Cross-build Windows NSIS from macOS/Linux (also bund
 pnpm package:linux        # Package for Linux
 pnpm run upload:update    # Upload release/latest.yml and referenced Windows update artifacts
 ```
+
+### Release Gate
+
+Before packaging a customer-facing release, run `pnpm run release:check`.
+
+This gate focuses on upgrade stability rather than generic feature coverage. It verifies:
+
+- legacy provider-store migration
+- runtime provider/auth reconciliation before first Gateway launch
+- malformed `openclaw.json` recovery with backup preservation
+- bundled plugin mirror repair when the installed target is incomplete
+- multi-agent runtime auth convergence during upgrade
 
 ### Tech Stack
 

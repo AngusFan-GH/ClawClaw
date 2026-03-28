@@ -535,10 +535,8 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
           }
           if (request.action === 'setChannel') {
             const payload = request.payload as
-              | { channel?: 'stable' | 'beta' | 'dev' }
+              | { channel?: 'stable' }
               | 'stable'
-              | 'beta'
-              | 'dev'
               | undefined;
             const channel = typeof payload === 'string' ? payload : payload?.channel;
             if (!channel) throw new Error('Invalid update.setChannel payload');

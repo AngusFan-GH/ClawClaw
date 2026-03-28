@@ -46,7 +46,7 @@ export const APP_PATHS = {
 /**
  * Update channels
  */
-export const UPDATE_CHANNELS = ['stable', 'beta', 'dev'] as const;
+export const UPDATE_CHANNELS = ['stable'] as const;
 export type UpdateChannel = (typeof UPDATE_CHANNELS)[number];
 
 /**

@@ -247,7 +247,6 @@
     "channelFixedTitle": "更新通道",
     "channelFixedDesc": "当前仅提供稳定版更新，应用会始终从稳定版发布源检查新版本。",
     "channel": "更新通道",
-    "channelDesc": "选择接收稳定版、测试版或开发版更新。",
     "autoCheck": "自动检查更新",
     "autoCheckDesc": "启动时检查更新",
     "autoDownload": "自动更新",
@@ -264,20 +263,7 @@
       "latest": "您已拥有最新版本",
       "check": "检查更新以获取最新功能"
     },
-    "channels": {
-      "stable": {
-        "label": "稳定版",
-        "description": "仅接收正式发布版本，适合大多数用户。"
-      },
-      "beta": {
-        "label": "测试版",
-        "description": "提前获取即将发布的功能，可能包含未完全验证的改动。"
-      },
-      "dev": {
-        "label": "开发版",
-        "description": "接收最新实验版本，仅适合愿意承担更高风险的测试用户。"
-      }
-    },
+    "channelDesc": "当前仅提供稳定版更新源。",
     "action": {
       "checking": "检查中...",
       "downloading": "下载中...",

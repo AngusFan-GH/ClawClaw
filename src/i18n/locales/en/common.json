@@ -73,6 +73,20 @@
             "failedTitle": "Failed to apply Gateway changes",
             "failedDescription": "Try again later or inspect the Gateway logs.",
             "overlayBlockedHint": "Applying configuration now. UI actions are temporarily blocked to avoid inconsistent state.",
+            "recovery": {
+                "panelTitle": "Automatic recovery",
+                "repairedBadge": "Config repaired",
+                "resetBadge": "Config rebuilt",
+                "repairedSummary": "A malformed Gateway config was detected. The app attempted a conservative repair before starting again.",
+                "resetSummary": "A damaged Gateway config was detected. The app backed it up and rebuilt a default config before starting again.",
+                "repairedNextStep": "Confirm the app is behaving normally. If something still looks off, compare the backup file with the current config.",
+                "resetNextStep": "Review the default model, proxy, channels, and plugin settings. Restore anything missing from the backup if needed.",
+                "backupCreated": "Backup created",
+                "backupPathLabel": "Backup file",
+                "strategyLabel": "Recovery strategy: {{strategy}}",
+                "showDetails": "Show raw error",
+                "hideDetails": "Hide raw error"
+            },
             "sources": {
                 "channels": "channel settings",
                 "agents": "agent settings",

@@ -18,6 +18,12 @@ export interface GatewayStatus {
   restartExpectedMs?: number;
 }
 
+export interface GatewayConfigRecovery {
+  kind: 'config-repaired' | 'config-reset';
+  strategy?: 'normalize' | 'trim-root-object' | 'reset';
+  backupPath?: string;
+}
+
 export interface GatewayLifecycle {
   state: 'idle' | 'scheduled' | 'applying' | 'completed' | 'failed';
   action?: 'start' | 'restart' | 'reload';
@@ -26,6 +32,7 @@ export interface GatewayLifecycle {
   delayMs?: number;
   at?: number;
   error?: string;
+  recovery?: GatewayConfigRecovery;
 }
 
 /**

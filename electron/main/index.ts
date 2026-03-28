@@ -417,6 +417,7 @@ async function initialize(): Promise<void> {
         source: 'gateway.autoStart',
         reason: 'gateway.autoStart',
         error: String(error),
+        recovery: gatewayManager.getLastStartupRecovery() ?? undefined,
         at: Date.now(),
       };
       hostEventBus.emit('gateway:lifecycle', failedStartupLifecycleEvent);

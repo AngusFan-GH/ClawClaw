@@ -23,6 +23,11 @@ import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { resetMalformedOpenClawConfig } from '../utils/openclaw-config';
 import { logger } from '../utils/logger';
 import { ensureBundledPluginInstalled } from '../utils/bundled-plugin-installer';
+import { syncDefaultProviderToRuntime } from '../services/providers/provider-runtime-sync';
+import {
+  syncAllProviderAuthToRuntime,
+  syncAllProvidersToRuntime,
+} from '../services/providers/provider-runtime-sync';
 
 const CHANNEL_PLUGIN_INSTALL_MAP: Partial<Record<string, { pluginId: string; displayName: string }>> = {
   feishu: { pluginId: 'feishu', displayName: 'Feishu / Lark' },
@@ -129,6 +134,47 @@ export async function syncGatewayConfigBeforeLaunch(
         logger.error('Failed to recover malformed openclaw.json:', recoveryErr);
       }
     }
+  }
+
+  try {
+    const defaultProviderId = await withTimeout(
+      getDefaultProvider(),
+      1500,
+      'getDefaultProviderForRuntimeSync',
+      null,
+    );
+    if (defaultProviderId) {
+      await withTimeout(
+        syncDefaultProviderToRuntime(defaultProviderId),
+        3000,
+        'syncDefaultProviderToRuntime',
+        undefined,
+      );
+    }
+  } catch (err) {
+    logger.warn('Failed to sync default provider to OpenClaw runtime before launch:', err);
+  }
+
+  try {
+    await withTimeout(
+      syncAllProvidersToRuntime(),
+      4000,
+      'syncAllProvidersToRuntimeBeforeLaunch',
+      undefined,
+    );
+  } catch (err) {
+    logger.warn('Failed to sync provider configs to OpenClaw runtime before launch:', err);
+  }
+
+  try {
+    await withTimeout(
+      syncAllProviderAuthToRuntime(),
+      4000,
+      'syncAllProviderAuthToRuntimeBeforeLaunch',
+      undefined,
+    );
+  } catch (err) {
+    logger.warn('Failed to sync provider auth to OpenClaw runtime before launch:', err);
   }
 
   try {

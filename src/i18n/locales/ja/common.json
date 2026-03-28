@@ -73,6 +73,20 @@
             "failedTitle": "ゲートウェイ変更の適用に失敗しました",
             "failedDescription": "後でもう一度試すか、ゲートウェイログを確認してください。",
             "overlayBlockedHint": "設定を適用中です。状態不整合を避けるため、一時的に UI 操作を無効化しています。",
+            "recovery": {
+                "panelTitle": "自動復旧情報",
+                "repairedBadge": "設定を自動修復",
+                "resetBadge": "既定設定で再構築",
+                "repairedSummary": "ゲートウェイ設定ファイルの形式異常を検出しました。アプリは設定をできるだけ保持したまま修復して再起動を試みました。",
+                "resetSummary": "ゲートウェイ設定ファイルの破損を検出しました。アプリは元ファイルをバックアップし、既定設定を再構築してから再起動を試みました。",
+                "repairedNextStep": "まず動作が正常に戻ったか確認してください。まだ問題があれば、バックアップと現在の設定を比較してください。",
+                "resetNextStep": "既定モデル、プロキシ、チャンネル、プラグイン設定が正しいか確認してください。必要ならバックアップから復元してください。",
+                "backupCreated": "バックアップを作成しました",
+                "backupPathLabel": "バックアップファイル",
+                "strategyLabel": "復旧戦略: {{strategy}}",
+                "showDetails": "生のエラーを表示",
+                "hideDetails": "生のエラーを隠す"
+            },
             "sources": {
                 "channels": "チャンネル設定",
                 "agents": "Agents 設定",
