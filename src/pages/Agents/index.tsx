@@ -37,6 +37,7 @@ export function Agents() {
   const {
     agents,
     defaultAgentId,
+    channelAccountOwners,
     loading,
     error,
     fetchAgents,
@@ -192,6 +193,9 @@ export function Agents() {
                   <AgentCard
                     key={agent.gateway.id}
                     agent={agent}
+                    channelGroups={channelGroups}
+                    channelAccountOwners={channelAccountOwners}
+                    defaultAgentId={defaultAgentId}
                     onOpenSettings={() => setActiveAgentId(agent.gateway.id)}
                     onDelete={() => setAgentToDelete(agent)}
                   />
@@ -365,10 +369,16 @@ async function openWorkspaceFolder(workspace?: string | null) {
 
 function AgentCard({
   agent,
+  channelGroups,
+  channelAccountOwners,
+  defaultAgentId,
   onOpenSettings,
   onDelete,
 }: {
   agent: AgentSummary;
+  channelGroups: ChannelGroup[];
+  channelAccountOwners: Record<string, string>;
+  defaultAgentId: string;
   onOpenSettings: () => void;
   onDelete: () => void;
 }) {
@@ -377,7 +387,18 @@ function AgentCard({
   const identityName = agent.gateway.identity?.name?.trim();
   const avatarGlyph = resolveAgentAvatar(agent);
   const workspacePath = agent.local.workspace?.trim() || '';
-  const channelLabels = Array.from(new Set(agent.local.boundChannelAccounts.map((binding) => binding.channelType)))
+  const channelTypes = new Set(agent.local.boundChannelAccounts.map((binding) => binding.channelType));
+  if (agent.gateway.id === defaultAgentId) {
+    for (const group of channelGroups) {
+      for (const account of group.accounts) {
+        const ownerId = channelAccountOwners[`${group.type}:${account.accountId}`];
+        if (!ownerId) {
+          channelTypes.add(group.type);
+        }
+      }
+    }
+  }
+  const channelLabels = Array.from(channelTypes)
     .map((channelType) => CHANNEL_NAMES[channelType as ChannelType] || channelType)
     .filter(Boolean);
   const modelMeta = splitAgentModelDisplay(agent.local.modelDisplay);
