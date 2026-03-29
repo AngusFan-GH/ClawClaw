@@ -30,8 +30,7 @@ import { getOpenClawCliSpawnConfig } from '../../utils/openclaw-cli';
 import { prepareWinSpawn } from '../../utils/win-shell';
 import { applyPresetLocalModelSelection, readLocalModelPresets } from '../../services/providers/local-model-presets';
 import { getOpenClawProviderKeyForType } from '../../utils/provider-keys';
-import { getAllSettings } from '../../utils/store';
-import { syncGatewayConfigBeforeLaunch } from '../../gateway/config-sync';
+import { runOpenClawStartupPreflightRepair } from '../../gateway/config-sync';
 
 type OpenClawModelListResponse = {
   count?: number;
@@ -120,8 +119,7 @@ async function runSerializedOpenClawModelList<T>(task: () => Promise<T>): Promis
 async function ensureOpenClawConfigReadyForModelQueries(): Promise<void> {
   if (!openClawModelQueryPrepPromise) {
     openClawModelQueryPrepPromise = (async () => {
-      const settings = await getAllSettings();
-      await syncGatewayConfigBeforeLaunch(settings);
+      await runOpenClawStartupPreflightRepair();
     })().finally(() => {
       openClawModelQueryPrepPromise = null;
     });
