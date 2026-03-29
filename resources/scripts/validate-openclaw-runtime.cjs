@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
 const { existsSync } = require('fs');
-const { join } = require('path');
-const { pathToFileURL } = require('url');
+const { join, resolve } = require('path');
+const { createRequire } = require('module');
 
 async function main() {
-  const openclawDir = process.argv[2];
+  const openclawDirArg = process.argv[2];
+  const openclawDir = openclawDirArg ? resolve(openclawDirArg) : undefined;
   if (!openclawDir) {
     throw new Error('Missing OpenClaw directory argument.');
   }
@@ -15,23 +16,27 @@ async function main() {
     throw new Error(`OpenClaw package is missing: ${pkgJsonPath}`);
   }
 
-  const hostedGitInfoPath = join(openclawDir, 'node_modules', 'hosted-git-info', 'lib', 'index.js');
-  const minimatchEsmPath = join(openclawDir, 'node_modules', 'minimatch', 'dist', 'esm', 'index.js');
-  const globEsmPath = join(openclawDir, 'node_modules', 'glob', 'dist', 'esm', 'index.js');
+  const openclawRequire = createRequire(pkgJsonPath);
 
-  const hostedGitInfo = require(hostedGitInfoPath);
+  const hostedGitInfo = openclawRequire('hosted-git-info');
   if (typeof hostedGitInfo?.fromUrl !== 'function') {
     throw new Error('hosted-git-info runtime check failed.');
   }
 
-  const minimatchModule = await import(pathToFileURL(minimatchEsmPath).href);
-  if (typeof minimatchModule?.minimatch !== 'function') {
-    throw new Error('minimatch ESM runtime check failed.');
+  const minimatchModule = openclawRequire('minimatch');
+  const minimatch =
+    minimatchModule?.minimatch ||
+    minimatchModule?.default?.minimatch ||
+    minimatchModule?.default ||
+    minimatchModule;
+  if (typeof minimatch !== 'function') {
+    throw new Error('minimatch runtime check failed.');
   }
 
-  const globModule = await import(pathToFileURL(globEsmPath).href);
-  if (typeof globModule?.glob !== 'function') {
-    throw new Error('glob ESM runtime check failed.');
+  const globModule = openclawRequire('glob');
+  const glob = globModule?.glob || globModule?.default?.glob || globModule?.default || globModule;
+  if (typeof glob !== 'function') {
+    throw new Error('glob runtime check failed.');
   }
 
   process.stdout.write('ok\n');

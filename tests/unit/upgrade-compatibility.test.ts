@@ -73,6 +73,10 @@ vi.mock('electron-store', () => {
   };
 });
 
+vi.mock('@electron/utils/openclaw-runtime-integrity', () => ({
+  validateBundledOpenClawRuntime: vi.fn(async () => undefined),
+}));
+
 async function writeOpenClawJson(config: unknown): Promise<void> {
   const openclawDir = join(testHome, '.openclaw');
   await mkdir(openclawDir, { recursive: true });
@@ -638,5 +642,94 @@ describe('upgrade compatibility baseline', () => {
     expect(
       (analystProfiles.profiles as Record<string, { key: string }>)['openrouter:default'].key,
     ).toBe('sk-test-openrouter');
+  });
+
+  it('cleans orphan local model runtime accounts during startup preflight instead of mutating provider state from the chat UI', async () => {
+    storeState.stores.set('clawclaw-providers', {
+      schemaVersion: 1,
+      providers: {},
+      providerAccounts: {
+        'local-model-stale': {
+          id: 'local-model-stale',
+          vendorId: 'local-model',
+          label: 'ClawClaw',
+          authMode: 'api_key',
+          baseUrl: 'http://127.0.0.1:11434/v1',
+          apiProtocol: 'openai-completions',
+          model: 'ClawClaw',
+          enabled: true,
+          isDefault: true,
+          metadata: {
+            localModel: true,
+          },
+          createdAt: '2026-03-01T00:00:00.000Z',
+          updatedAt: '2026-03-02T00:00:00.000Z',
+        },
+      },
+      apiKeys: {
+        'local-model-stale': 'ollama-local',
+      },
+      providerSecrets: {
+        'local-model-stale': {
+          type: 'local',
+          accountId: 'local-model-stale',
+          apiKey: 'ollama-local',
+        },
+      },
+      defaultProvider: 'local-model-stale',
+      defaultProviderAccountId: 'local-model-stale',
+    });
+
+    const { syncGatewayConfigBeforeLaunch } = await import('@electron/gateway/config-sync');
+    const { getClawXProviderStore } = await import('@electron/services/providers/store-instance');
+
+    await syncGatewayConfigBeforeLaunch({
+      theme: 'system',
+      language: 'zh',
+      startMinimized: false,
+      launchAtStartup: false,
+      gatewayAutoStart: true,
+      gatewayPort: 18789,
+      gatewayToken: 'test-token',
+      proxyMode: 'system',
+      proxyEnabled: false,
+      proxyServer: '',
+      proxyHttpServer: '',
+      proxyHttpsServer: '',
+      proxyAllServer: '',
+      proxyBypassRules: '<local>;localhost;127.0.0.1;::1',
+      updateChannel: 'stable',
+      autoCheckUpdate: true,
+      autoDownloadUpdate: false,
+      skippedVersions: [],
+      sidebarCollapsed: false,
+      devModeUnlocked: false,
+      setupComplete: false,
+      selectedBundles: [],
+      enabledSkills: [],
+      disabledSkills: [],
+      securityPolicy: {
+        enabled: false,
+        deniedPaths: [],
+        permissions: {
+          denyRuntime: false,
+          denyWrite: false,
+          denyRead: false,
+          denyBrowser: false,
+          denyWebSearch: false,
+          denyWebFetch: false,
+          denyGateway: false,
+        },
+      },
+      reminders: [],
+      sessionMemoryEnabled: true,
+      memorySearchEnabled: true,
+    });
+    await flushBackgroundWork();
+
+    const store = await getClawXProviderStore();
+    expect(store.get('defaultProviderAccountId')).toBeUndefined();
+    expect(store.get('defaultProvider')).toBeUndefined();
+    expect(store.get('providerAccounts')).toEqual({});
   });
 });

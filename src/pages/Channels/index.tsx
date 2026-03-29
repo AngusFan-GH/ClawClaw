@@ -72,7 +72,10 @@ export function Channels() {
   });
 
   const configuredGroups = useMemo(
-    () => [...channelGroups].sort((left, right) => getPrimaryChannels().indexOf(left.type) - getPrimaryChannels().indexOf(right.type)),
+    () =>
+      [...channelGroups]
+        .filter((group) => group.configured || group.accounts.some((account) => account.configured))
+        .sort((left, right) => getPrimaryChannels().indexOf(left.type) - getPrimaryChannels().indexOf(right.type)),
     [channelGroups],
   );
 
@@ -238,7 +241,9 @@ export function Channels() {
                         </div>
                         <div className="mt-0.5 flex min-w-0 flex-1 flex-col">
                           <div className="mb-2 flex items-center gap-2">
-                            <h3 className="truncate text-[17px] font-semibold tracking-[-0.02em] text-foreground">{meta.name}</h3>
+                            <h3 className="truncate text-[17px] font-semibold tracking-[-0.02em] text-foreground">
+                              {resolveLocalizedChannelName(type, meta.name, t)}
+                            </h3>
                             {meta.isPlugin && (
                               <Badge
                                 variant="secondary"

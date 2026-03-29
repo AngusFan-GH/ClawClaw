@@ -206,6 +206,37 @@ describe('channel config lifecycle', () => {
     ).rejects.toThrow();
   });
 
+  it('does not keep a plugin-only wecom channel visible after deleting its last configured account', async () => {
+    await writeOpenClawJson({
+      channels: {
+        wecom: {
+          enabled: true,
+          accounts: {
+            default: {
+              botId: 'wxcorp',
+              secret: 'top-secret',
+              enabled: true,
+            },
+          },
+          defaultAccount: 'default',
+        },
+      },
+      plugins: {
+        entries: {
+          wecom: {
+            enabled: true,
+          },
+        },
+      },
+    });
+
+    const { deleteChannelConfig, listConfiguredChannelAccounts, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    await deleteChannelConfig('wecom', 'default');
+
+    await expect(listConfiguredChannelAccounts({ includeCli: false })).resolves.toEqual({});
+    await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([]);
+  });
+
   it('saves a named wechat account without leaving a shadow default account behind', async () => {
     await writeOpenClawJson({
       channels: {
@@ -330,6 +361,105 @@ describe('channel config lifecycle', () => {
           },
         },
       },
+    });
+    await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([
+      {
+        type: 'wecom',
+        defaultAccountId: undefined,
+        configured: true,
+        accounts: [
+          {
+            accountId: 'corp-b',
+            isDefaultAccount: false,
+            configured: true,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('deletes a named default wecom account instead of only clearing top-level fallback fields', async () => {
+    await writeOpenClawJson({
+      channels: {
+        wecom: {
+          enabled: true,
+          botId: 'legacy-default',
+          secret: 'legacy-secret',
+          defaultAccount: 'default',
+          accounts: {
+            default: {
+              botId: 'default-bot',
+              secret: 'default-secret',
+            },
+            'corp-b': {
+              botId: 'corp-b',
+              secret: 'secret-b',
+            },
+          },
+        },
+      },
+      plugins: {
+        allow: ['channels'],
+      },
+    });
+
+    const { deleteChannelConfig, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    await deleteChannelConfig('wecom', 'default');
+
+    const config = await readOpenClawJson();
+    expect(config.channels).toEqual({
+      wecom: {
+        enabled: true,
+        botId: 'legacy-default',
+        secret: 'legacy-secret',
+        accounts: {
+          'corp-b': {
+            botId: 'corp-b',
+            secret: 'secret-b',
+          },
+        },
+      },
+    });
+    await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([
+      {
+        type: 'wecom',
+        defaultAccountId: undefined,
+        configured: true,
+        accounts: [
+          {
+            accountId: 'corp-b',
+            isDefaultAccount: false,
+            configured: true,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('does not synthesize a duplicate default account row from top-level wecom fields when named accounts exist', async () => {
+    await writeOpenClawJson({
+      channels: {
+        wecom: {
+          enabled: true,
+          botId: 'legacy-default',
+          secret: 'legacy-secret',
+          accounts: {
+            'corp-b': {
+              botId: 'corp-b',
+              secret: 'secret-b',
+            },
+          },
+        },
+      },
+      plugins: {
+        allow: ['channels'],
+      },
+    });
+
+    const { listConfiguredChannelAccounts, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+
+    await expect(listConfiguredChannelAccounts({ includeCli: false })).resolves.toEqual({
+      wecom: ['corp-b'],
     });
     await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([
       {
@@ -699,6 +829,54 @@ describe('channel config lifecycle', () => {
         ],
       },
     ]);
+  });
+
+  it('does not keep a plugin-only feishu channel visible after deleting its last configured account', async () => {
+    const { saveChannelConfig, deleteChannelConfig, listConfiguredChannelAccounts, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+
+    await saveChannelConfig('feishu', {
+      __accountId: 'team-a',
+      appId: 'app-a',
+      appSecret: 'secret-a',
+      enabled: true,
+    });
+
+    await deleteChannelConfig('feishu', 'team-a');
+
+    await expect(listConfiguredChannelAccounts({ includeCli: false })).resolves.toEqual({});
+    await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([]);
+  });
+
+  it('does not keep a plugin-only qqbot channel visible after deleting its last configured account', async () => {
+    await writeOpenClawJson({
+      channels: {
+        qqbot: {
+          enabled: true,
+          accounts: {
+            default: {
+              appId: 'qq-app',
+              token: 'qq-token',
+              secret: 'qq-secret',
+              enabled: true,
+            },
+          },
+          defaultAccount: 'default',
+        },
+      },
+      plugins: {
+        entries: {
+          qqbot: {
+            enabled: true,
+          },
+        },
+      },
+    });
+
+    const { deleteChannelConfig, listConfiguredChannelAccounts, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    await deleteChannelConfig('qqbot', 'default');
+
+    await expect(listConfiguredChannelAccounts({ includeCli: false })).resolves.toEqual({});
+    await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([]);
   });
 
   it('repairs stale channel plugin allowlist entries when no configured channel remains', async () => {

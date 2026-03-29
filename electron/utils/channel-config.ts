@@ -622,6 +622,16 @@ function resolveConfiguredAccounts(
         .map(([accountId, config]) => ({ accountId, config }));
 }
 
+function hasConfiguredNamedAccounts(
+    channelType: string,
+    section: AccountScopedChannelSection | undefined
+): boolean {
+    return resolveConfiguredAccounts(section).some(
+        ({ accountId, config: accountConfig }) =>
+            accountId !== 'default' && hasConfiguredAccountConfig(channelType, accountConfig),
+    );
+}
+
 function stripChannelSectionScaffolding(
     value: ChannelConfigData | undefined
 ): Record<string, unknown> {
@@ -687,15 +697,15 @@ function resolveEditableChannelSource(
             ? preferredAccountId.trim()
             : '';
 
+    if (normalizedPreferredAccountId && section?.accounts?.[normalizedPreferredAccountId]) {
+        return { kind: 'account', accountId: normalizedPreferredAccountId };
+    }
+
     if (
         normalizedPreferredAccountId === 'default' &&
         hasMeaningfulSectionConfig(section)
     ) {
         return { kind: 'top-level' };
-    }
-
-    if (normalizedPreferredAccountId && section?.accounts?.[normalizedPreferredAccountId]) {
-        return { kind: 'account', accountId: normalizedPreferredAccountId };
     }
 
     if (configuredAccounts.length === 1) {
@@ -1747,18 +1757,6 @@ export function listConfiguredChannelsFromConfig(
         }
     }
 
-    if (config.plugins && typeof config.plugins === 'object') {
-        const plugins = config.plugins as Record<string, unknown>;
-        if (plugins.entries && typeof plugins.entries === 'object') {
-            for (const [pluginId, pluginConfig] of Object.entries(plugins.entries)) {
-                if (pluginConfig && typeof pluginConfig === 'object' && (pluginConfig as Record<string, unknown>).enabled === false) continue;
-                if (PLUGIN_CHANNELS.includes(pluginId as typeof PLUGIN_CHANNELS[number])) {
-                    channels.add(toUiChannelType(pluginId));
-                }
-            }
-        }
-    }
-
     return Array.from(channels);
 }
 
@@ -1773,12 +1771,13 @@ export async function listConfiguredChannelAccounts(options?: { includeCli?: boo
         const normalizedSection = normalizeChannelSectionForRuntime(runtimeChannelType, section);
         const effectiveSection = normalizedSection || section;
         const accountIds = new Set<string>();
+        const hasNamedAccounts = hasConfiguredNamedAccounts(runtimeChannelType, effectiveSection);
 
         if (effectiveSection && effectiveSection.enabled !== false) {
             if (hasConfiguredAccountConfig(runtimeChannelType, effectiveSection.accounts?.default as ChannelConfigData | undefined)) {
                 accountIds.add('default');
             }
-            if (getAccountScopedTopLevelKeys(runtimeChannelType, effectiveSection).length > 0) {
+            if (!hasNamedAccounts && getAccountScopedTopLevelKeys(runtimeChannelType, effectiveSection).length > 0) {
                 accountIds.add('default');
             }
             for (const { accountId, config: accountConfig } of resolveConfiguredAccounts(effectiveSection)) {
@@ -1790,10 +1789,6 @@ export async function listConfiguredChannelAccounts(options?: { includeCli?: boo
             if (isImplicitlyConfiguredChannel(runtimeChannelType, effectiveSection) && accountIds.size === 0) {
                 accountIds.add('default');
             }
-        }
-
-        if (PLUGIN_CHANNELS.includes(runtimeChannelType) && accountIds.size === 0) {
-            accountIds.add('default');
         }
 
         if (accountIds.size > 0) {
@@ -1839,8 +1834,14 @@ export function listConfiguredChannelGroupsFromConfig(
             typeof section?.defaultAccount === 'string' && section.defaultAccount.trim()
                 ? section.defaultAccount.trim()
                 : undefined;
+        const hasNamedAccounts = hasConfiguredNamedAccounts(runtimeChannelType, section);
 
-        if (section && section.enabled !== false && getAccountScopedTopLevelKeys(runtimeChannelType, section).length > 0) {
+        if (
+            section &&
+            section.enabled !== false &&
+            !hasNamedAccounts &&
+            getAccountScopedTopLevelKeys(runtimeChannelType, section).length > 0
+        ) {
             accounts.set('default', {
                 accountId: 'default',
                 isDefaultAccount: explicitDefaultAccountId ? explicitDefaultAccountId === 'default' : true,
@@ -1874,14 +1875,6 @@ export function listConfiguredChannelGroupsFromConfig(
                     configured: true,
                 });
             }
-        }
-
-        if (PLUGIN_CHANNELS.includes(runtimeChannelType) && accounts.size === 0) {
-            accounts.set('default', {
-                accountId: 'default',
-                isDefaultAccount: true,
-                configured: true,
-            });
         }
 
         const sortedAccounts = Array.from(accounts.values()).sort((left, right) => {

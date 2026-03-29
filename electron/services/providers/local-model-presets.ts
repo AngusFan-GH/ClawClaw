@@ -107,6 +107,28 @@ export async function migrateLegacyLocalModelAccounts(gatewayManager?: GatewayMa
   }
 }
 
+export async function cleanupOrphanLocalModelRuntimeAccounts(): Promise<{ removedAccountIds: string[] }> {
+  const providerService = getProviderService();
+  const accounts = await providerService.listAccounts();
+  const hasLocalModelProvider = accounts.some((account) => (
+    account.vendorId === 'local-model' && account.metadata?.localModelProvider === true
+  ));
+
+  if (hasLocalModelProvider) {
+    return { removedAccountIds: [] };
+  }
+
+  const orphanAccounts = accounts.filter((account) => (
+    account.vendorId === 'local-model' && account.metadata?.localModelProvider !== true
+  ));
+
+  for (const orphanAccount of orphanAccounts) {
+    await providerService.deleteAccount(orphanAccount.id);
+  }
+
+  return { removedAccountIds: orphanAccounts.map((account) => account.id) };
+}
+
 export async function ensurePresetLocalModelsApplied(gatewayManager?: GatewayManager): Promise<void> {
   const presets = await readLocalModelPresets();
   if (presets.length === 0) {

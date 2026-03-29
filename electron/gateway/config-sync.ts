@@ -30,6 +30,7 @@ import {
   syncAllProviderAuthToRuntime,
   syncAllProvidersToRuntime,
 } from '../services/providers/provider-runtime-sync';
+import { cleanupOrphanLocalModelRuntimeAccounts } from '../services/providers/local-model-presets';
 import { runGatewayStartupPreflight, type GatewayStartupPreflightStep } from './startup-preflight';
 import type { GatewayConfigRecovery } from '../../src/types/gateway';
 
@@ -296,6 +297,23 @@ export async function runOpenClawStartupPreflightRepair(): Promise<void> {
         const installedPluginIds = ensureConfiguredPluginsInstalled(configuredChannels);
         if (installedPluginIds.length > 0) {
           recoveryTopics.push('plugins');
+        }
+      },
+    },
+    {
+      id: 'cleanup-orphan-local-model-runtime-accounts',
+      label: 'cleanupOrphanLocalModelRuntimeAccounts',
+      run: async () => {
+        const result = await withTimeout(
+          cleanupOrphanLocalModelRuntimeAccounts(),
+          3000,
+          'cleanupOrphanLocalModelRuntimeAccounts',
+          { removedAccountIds: [] },
+        );
+        if (result.removedAccountIds.length > 0) {
+          logger.warn(
+            `Removed orphan local model runtime accounts during startup preflight: ${result.removedAccountIds.join(', ')}`,
+          );
         }
       },
     },

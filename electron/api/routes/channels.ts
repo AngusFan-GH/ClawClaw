@@ -263,6 +263,10 @@ async function buildChannelAccountsView(
     for (const rawChannelId of channelOrder) {
       const channelId = rawChannelId === 'openclaw-weixin' ? 'wechat' : rawChannelId;
       const type = channelId as ChannelType;
+      const existing = groups.get(type);
+      if (!existing) {
+        continue;
+      }
       const summary = (runtimeSnapshot.channels as Record<string, unknown> | undefined)?.[rawChannelId] as Record<string, unknown> | undefined;
       const summaryError =
         typeof (summary as { error?: string })?.error === 'string'
@@ -272,18 +276,6 @@ async function buildChannelAccountsView(
             : undefined;
       const defaultAccountId = runtimeSnapshot.channelDefaultAccountId?.[rawChannelId];
       const runtimeAccounts = runtimeSnapshot.channelAccounts?.[rawChannelId] || [];
-      const existing = groups.get(type) || {
-        type,
-        name: type,
-        status: 'unknown' as const,
-        configured: false,
-        runtimeLoaded: false,
-        runtimeStatus: 'unknown' as const,
-        pluginLoaded: false,
-        defaultAccountId,
-        configuredAccounts: [],
-        accounts: [],
-      };
 
       const keptRuntimeAccounts = runtimeAccounts.filter((a) => shouldKeepRuntimeAccount(a));
       const hasRuntimeData = keptRuntimeAccounts.length > 0;
