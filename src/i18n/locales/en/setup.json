@@ -48,6 +48,8 @@
     "title": "Checking Environment",
     "viewLogs": "View Logs",
     "recheck": "Re-check",
+    "showDetails": "Show Details",
+    "hideDetails": "Hide Details",
     "nodejs": "Node.js Runtime",
     "openclaw": "OpenClaw Package",
     "gateway": "Gateway Service",
@@ -62,6 +64,11 @@
     "issue": {
       "title": "Environment issue detected",
       "desc": "Please ensure OpenClaw is properly installed. Check the logs for details."
+    },
+    "gatewayIssues": {
+      "braceExpansion": "OpenClaw runtime dependencies failed to load. Please reinstall with the latest installer.",
+      "nestedDependency": "OpenClaw runtime dependencies are incomplete. Please reinstall with the latest installer.",
+      "runtimeValidation": "The bundled OpenClaw runtime failed its post-install validation. Please run the latest installer again."
     },
     "logs": {
       "title": "Application Logs",

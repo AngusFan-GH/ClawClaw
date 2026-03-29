@@ -17,6 +17,15 @@
  */
 
 import 'zx/globals';
+import semver from 'semver';
+import bundleValidator from './openclaw-bundle-validator.cjs';
+
+const {
+  parseDependencySpec,
+  isCheckableRange,
+  validateBundledNodeModules,
+  formatValidationIssues,
+} = bundleValidator;
 
 const ROOT = path.resolve(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'build', 'openclaw');
@@ -68,8 +77,19 @@ fs.cpSync(openclawReal, OUTPUT, { recursive: true, dereference: true });
 // We BFS from openclaw's virtual store node_modules, following each symlink
 // to discover the target's own virtual store node_modules and its deps.
 
-const collected = new Map(); // realPath -> packageName (for deduplication)
+const collectedByName = new Map(); // pkgName -> realPath (first retained version)
+const discoveredRealPathsByName = new Map(); // pkgName -> Set<realPath>
+const visitedRealPaths = new Set(); // real paths already traversed for BFS
 const queue = []; // BFS queue of virtual-store node_modules dirs to visit
+
+function addDiscoveredPackage(pkgName, realPath) {
+  let realPaths = discoveredRealPathsByName.get(pkgName);
+  if (!realPaths) {
+    realPaths = new Set();
+    discoveredRealPathsByName.set(pkgName, realPaths);
+  }
+  realPaths.add(realPath);
+}
 
 /**
  * Given a real path of a package, find the containing virtual-store node_modules.
@@ -138,6 +158,7 @@ const SKIP_PACKAGES = new Set([
 ]);
 const SKIP_SCOPES = ['@cloudflare/', '@types/'];
 let skippedDevCount = 0;
+let skippedDupes = 0;
 
 while (queue.length > 0) {
   const { nodeModulesDir, skipPkg } = queue.shift();
@@ -159,8 +180,16 @@ while (queue.length > 0) {
       continue; // broken symlink, skip
     }
 
-    if (collected.has(realPath)) continue; // already visited
-    collected.set(realPath, name);
+    const retainedRealPath = collectedByName.get(name);
+    addDiscoveredPackage(name, realPath);
+    if (retainedRealPath == null) {
+      collectedByName.set(name, realPath);
+    } else if (retainedRealPath !== realPath) {
+      skippedDupes++;
+    }
+
+    if (visitedRealPaths.has(realPath)) continue; // already traversed
+    visitedRealPaths.add(realPath);
 
     // Find this package's own virtual store node_modules to discover ITS deps
     const depVirtualNM = getVirtualStoreNodeModules(realPath);
@@ -172,7 +201,7 @@ while (queue.length > 0) {
   }
 }
 
-echo`   Found ${collected.size} total packages (direct + transitive)`;
+echo`   Found ${collectedByName.size} package names across ${visitedRealPaths.size} real packages`;
 echo`   Skipped ${skippedDevCount} dev-only package references`;
 
 // 5. Copy all collected packages into OUTPUT/node_modules/ (flat structure)
@@ -185,26 +214,135 @@ echo`   Skipped ${skippedDevCount} dev-only package references`;
 const outputNodeModules = path.join(OUTPUT, 'node_modules');
 fs.mkdirSync(outputNodeModules, { recursive: true });
 
-const copiedNames = new Set(); // Track package names already copied
+const copiedRealPathsByName = new Map(); // pkg name -> real path retained at top level
 let copiedCount = 0;
-let skippedDupes = 0;
 
-for (const [realPath, pkgName] of collected) {
-  if (copiedNames.has(pkgName)) {
-    skippedDupes++;
-    continue; // Keep the first version (closer to openclaw in dep tree)
-  }
-  copiedNames.add(pkgName);
+for (const [pkgName, realPath] of collectedByName) {
 
   const dest = path.join(outputNodeModules, pkgName);
 
   try {
     fs.mkdirSync(normWin(path.dirname(dest)), { recursive: true });
     fs.cpSync(normWin(realPath), normWin(dest), { recursive: true, dereference: true });
+    copiedRealPathsByName.set(pkgName, realPath);
     copiedCount++;
   } catch (err) {
     echo`   ⚠️  Skipped ${pkgName}: ${err.message}`;
   }
+}
+
+// 5.1 Preserve package-local dependency overrides for version conflicts.
+//
+// Flat copying keeps only the first version for a package name. That is good
+// for size, but incorrect when a package needs a different major than the
+// version retained at the top level. In those cases we recreate the package's
+// own node_modules override, but only for the conflicting deps.
+let preservedOverrides = 0;
+for (const [pkgName, pkgRealPath] of collectedByName) {
+  if (copiedRealPathsByName.get(pkgName) !== pkgRealPath) continue;
+
+  // Only preserve nested overrides for the package version that we actually
+  // retained at the top level.  Older versions with the same package name may
+  // still exist in the dependency graph, but copying their nested deps into the
+  // retained package directory corrupts the runtime tree.
+  const packageDest = path.join(outputNodeModules, pkgName);
+  if (!fs.existsSync(normWin(packageDest))) continue;
+
+  const depVirtualNM = getVirtualStoreNodeModules(pkgRealPath);
+  if (!depVirtualNM) continue;
+
+  for (const { name: depName, fullPath } of listPackages(depVirtualNM)) {
+    if (depName === pkgName) continue;
+    if (SKIP_PACKAGES.has(depName) || SKIP_SCOPES.some(s => depName.startsWith(s))) continue;
+
+    let depRealPath;
+    try {
+      depRealPath = fs.realpathSync.native(fullPath);
+    } catch {
+      continue;
+    }
+
+    const topLevelRealPath = copiedRealPathsByName.get(depName);
+    if (!topLevelRealPath || topLevelRealPath === depRealPath) continue;
+
+    const nestedDest = path.join(packageDest, 'node_modules', depName);
+    if (fs.existsSync(normWin(nestedDest))) continue;
+
+    try {
+      fs.mkdirSync(normWin(path.dirname(nestedDest)), { recursive: true });
+      fs.cpSync(normWin(depRealPath), normWin(nestedDest), { recursive: true, dereference: true });
+      preservedOverrides++;
+    } catch (err) {
+      echo`   ⚠️  Failed to preserve nested override ${pkgName} -> ${depName}: ${err.message}`;
+    }
+  }
+}
+
+function selectCompatibleRealPath(pkgName, rawRange) {
+  const candidates = [...(discoveredRealPathsByName.get(pkgName) || [])];
+  if (candidates.length === 0) return null;
+
+  const spec = parseDependencySpec(rawRange);
+  if (!spec) return candidates[0];
+
+  for (const realPath of candidates) {
+    let pkg;
+    try {
+      pkg = JSON.parse(fs.readFileSync(path.join(realPath, 'package.json'), 'utf8'));
+    } catch {
+      continue;
+    }
+
+    if (spec.type === 'alias' && spec.aliasTarget && pkg.name !== pkgName && pkg.name !== spec.aliasTarget) {
+      continue;
+    }
+
+    if (!isCheckableRange(spec)) return realPath;
+    if (semver.satisfies(pkg.version || '0.0.0', spec.range, { includePrerelease: true, loose: true })) {
+      return realPath;
+    }
+  }
+
+  return null;
+}
+
+function repairBundledDependencyGraph(nodeModulesRoot) {
+  let totalRepairs = 0;
+
+  for (let pass = 0; pass < 8; pass++) {
+    const issues = validateBundledNodeModules(nodeModulesRoot);
+    if (issues.length === 0) return totalRepairs;
+
+    let repairedThisPass = 0;
+    for (const issue of issues) {
+      if (issue.type !== 'missing' && issue.type !== 'version-mismatch' && issue.type !== 'alias-mismatch') {
+        continue;
+      }
+
+      const candidateRealPath = selectCompatibleRealPath(issue.dependencyName, issue.requestedRange);
+      if (!candidateRealPath) continue;
+
+      const nestedDest = path.join(issue.packageDir, 'node_modules', issue.dependencyName);
+      try {
+        fs.rmSync(normWin(nestedDest), { recursive: true, force: true });
+        fs.mkdirSync(normWin(path.dirname(nestedDest)), { recursive: true });
+        fs.cpSync(normWin(candidateRealPath), normWin(nestedDest), { recursive: true, dereference: true });
+        repairedThisPass++;
+      } catch (err) {
+        echo`   ⚠️  Failed to repair ${issue.packageName} -> ${issue.dependencyName}: ${err.message}`;
+      }
+    }
+
+    if (repairedThisPass === 0) break;
+    totalRepairs += repairedThisPass;
+  }
+
+  return totalRepairs;
+}
+
+const repairedDependencyIssues = repairBundledDependencyGraph(outputNodeModules);
+if (repairedDependencyIssues > 0) {
+  echo`   🛠️  Repaired ${repairedDependencyIssues} bundled dependency override(s)`;
 }
 
 // 6. Clean up the bundle to reduce package size
@@ -725,7 +863,8 @@ echo`✅ Bundle complete: ${OUTPUT}`;
 echo`   Unique packages copied: ${copiedCount}`;
 echo`   Dev-only packages skipped: ${skippedDevCount}`;
 echo`   Duplicate versions skipped: ${skippedDupes}`;
-echo`   Total discovered: ${collected.size}`;
+echo`   Nested overrides preserved: ${preservedOverrides}`;
+echo`   Total discovered: ${collectedByName.size}`;
 echo`   openclaw.mjs: ${entryExists ? '✓' : '✗'}`;
 echo`   dist/entry.js: ${distExists ? '✓' : '✗'}`;
 
@@ -733,3 +872,14 @@ if (!entryExists || !distExists) {
   echo`❌ Bundle verification failed!`;
   process.exit(1);
 }
+
+const dependencyIssues = validateBundledNodeModules(outputNodeModules);
+if (dependencyIssues.length > 0) {
+  echo`❌ Bundled dependency validation failed:`;
+  for (const line of formatValidationIssues(dependencyIssues)) {
+    echo`   - ${line}`;
+  }
+  process.exit(1);
+}
+
+echo`   Dependency validation: ✓`;

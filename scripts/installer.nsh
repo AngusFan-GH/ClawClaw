@@ -46,14 +46,11 @@ ShowUnInstDetails show
   FunctionEnd
 
   Function customInstFilesShow-custom
-    ; Force-open the details pane so the user sees the installation log instead of
-    ; only the progress bar.  1027 is the built-in "Show details" toggle button.
-    FindWindow $0 "#32770" "" $HWNDPARENT
-    GetDlgItem $1 $0 1027
-    GetDlgItem $2 $0 1016
-    ShowWindow $2 ${SW_SHOW}
-    SendMessage $1 ${BM_CLICK} 0 0
+    ; Use the native MUI "show details" mode only. Manually clicking the
+    ; built-in toggle can leave the details control visible but detached from
+    ; the actual installer output on some Windows builds.
     SetDetailsPrint both
+    DetailPrint "$(installPhasePrepare)"
   FunctionEnd
 
   Function customInstFilesLeave-custom
@@ -84,6 +81,10 @@ LangString installPhaseAssociations 1033 "Registering file associations..."
 LangString installPhaseAssociations 2052 "正在注册文件关联..."
 LangString installPhaseFinalize 1033 "Applying post-install system configuration..."
 LangString installPhaseFinalize 2052 "正在执行安装后的系统配置..."
+LangString installPhaseValidateRuntime 1033 "Validating bundled OpenClaw runtime..."
+LangString installPhaseValidateRuntime 2052 "正在验证内置 OpenClaw 运行时..."
+LangString installRuntimeValidationFailed 1033 "The bundled OpenClaw runtime failed validation after installation.$\r$\n$\r$\nPlease run this installer again or contact support."
+LangString installRuntimeValidationFailed 2052 "安装完成后，内置 OpenClaw 运行时校验失败。$\r$\n$\r$\n请重新运行安装包，或联系支持。"
 
 !macro customWelcomePage
   ; customWelcomePage is expanded at compile-time in assistedInstaller.nsh.
@@ -175,6 +176,7 @@ LangString installPhaseFinalize 2052 "正在执行安装后的系统配置..."
   Delete "$SMPROGRAMS\${PRODUCT_NAME}.lnk"
   CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
   CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+  StrCpy $launchLink "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
 
   ; Re-create the desktop shortcut when upgrading.  electron-builder's
   ; createDesktopShortcut only fires on fresh installs; differential
@@ -208,6 +210,25 @@ LangString installPhaseFinalize 2052 "正在执行安装后的系统配置..."
   DetailPrint "Warning: PowerShell PATH update exited with code $0."
 
   _ci_done:
+  DetailPrint "$(installPhaseValidateRuntime)"
+  ClearErrors
+  nsExec::ExecToStack '"$INSTDIR\resources\bin\node.exe" "$INSTDIR\resources\resources\scripts\validate-openclaw-runtime.cjs" "$INSTDIR\resources\openclaw"'
+  Pop $0
+  Pop $1
+  StrCmp $0 "error" 0 +3
+    MessageBox MB_OK|MB_ICONSTOP "$(installRuntimeValidationFailed)"
+    Abort
+  StrCmp $0 "timeout" 0 +3
+    MessageBox MB_OK|MB_ICONSTOP "$(installRuntimeValidationFailed)"
+    Abort
+  StrCmp $0 "0" 0 +4
+    DetailPrint "OpenClaw runtime validation passed."
+    Goto _runtime_validation_done
+  DetailPrint "Bundled runtime validation failed: $1"
+  MessageBox MB_OK|MB_ICONSTOP "$(installRuntimeValidationFailed)"
+  Abort
+
+  _runtime_validation_done:
   ; Add an explicit Start Menu uninstall shortcut so users have a visible
   ; uninstall entry even when Windows doesn't surface one prominently.
   DetailPrint "正在创建卸载快捷方式..."

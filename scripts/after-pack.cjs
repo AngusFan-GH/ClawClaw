@@ -21,6 +21,13 @@
 
 const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync, realpathSync } = require('fs');
 const { join, dirname, basename } = require('path');
+const semver = require('semver');
+const {
+  parseDependencySpec,
+  isCheckableRange,
+  validateBundledNodeModules,
+  formatValidationIssues,
+} = require('./openclaw-bundle-validator.cjs');
 
 // On Windows, paths in pnpm's virtual store can exceed the default MAX_PATH
 // limit (260 chars). Node.js 18.17+ respects the system LongPathsEnabled
@@ -229,7 +236,9 @@ function bundlePlugin(nodeModulesRoot, npmName, destDir) {
   cpSync(normWin(realPluginPath), normWin(destDir), { recursive: true, dereference: true });
 
   // Collect transitive deps via pnpm virtual store BFS
-  const collected = new Map();
+  const collectedByName = new Map();
+  const discoveredRealPathsByName = new Map();
+  const visitedRealPaths = new Set();
   const queue = [];
 
   const rootVirtualNM = getVirtualStoreNodeModules(realPluginPath);
@@ -252,6 +261,77 @@ function bundlePlugin(nodeModulesRoot, npmName, destDir) {
     }
   } catch { /* ignore */ }
 
+  function addDiscoveredPackage(pkgName, realPath) {
+    let realPaths = discoveredRealPathsByName.get(pkgName);
+    if (!realPaths) {
+      realPaths = new Set();
+      discoveredRealPathsByName.set(pkgName, realPaths);
+    }
+    realPaths.add(realPath);
+  }
+
+  function selectCompatibleRealPath(pkgName, rawRange) {
+    const candidates = [...(discoveredRealPathsByName.get(pkgName) || [])];
+    if (candidates.length === 0) return null;
+
+    const spec = parseDependencySpec(rawRange);
+    if (!spec) return candidates[0];
+
+    for (const realPath of candidates) {
+      let pkg;
+      try {
+        pkg = JSON.parse(require('fs').readFileSync(join(realPath, 'package.json'), 'utf8'));
+      } catch {
+        continue;
+      }
+
+      if (spec.type === 'alias' && spec.aliasTarget && pkg.name !== pkgName && pkg.name !== spec.aliasTarget) {
+        continue;
+      }
+
+      if (!isCheckableRange(spec)) return realPath;
+      if (semver.satisfies(pkg.version || '0.0.0', spec.range, { includePrerelease: true, loose: true })) {
+        return realPath;
+      }
+    }
+
+    return null;
+  }
+
+  function repairBundledDependencyGraph(nodeModulesRoot) {
+    let totalRepairs = 0;
+
+    for (let pass = 0; pass < 8; pass++) {
+      const issues = validateBundledNodeModules(nodeModulesRoot);
+      if (issues.length === 0) return totalRepairs;
+
+      let repairedThisPass = 0;
+      for (const issue of issues) {
+        if (issue.type !== 'missing' && issue.type !== 'version-mismatch' && issue.type !== 'alias-mismatch') {
+          continue;
+        }
+
+        const candidateRealPath = selectCompatibleRealPath(issue.dependencyName, issue.requestedRange);
+        if (!candidateRealPath) continue;
+
+        const nestedDest = join(issue.packageDir, 'node_modules', issue.dependencyName);
+        try {
+          rmSync(normWin(nestedDest), { recursive: true, force: true });
+          mkdirSync(normWin(dirname(nestedDest)), { recursive: true });
+          cpSync(normWin(candidateRealPath), normWin(nestedDest), { recursive: true, dereference: true });
+          repairedThisPass++;
+        } catch (e) {
+          console.warn(`[after-pack]   Failed to repair ${issue.packageName} -> ${issue.dependencyName}: ${e.message}`);
+        }
+      }
+
+      if (repairedThisPass === 0) break;
+      totalRepairs += repairedThisPass;
+    }
+
+    return totalRepairs;
+  }
+
   while (queue.length > 0) {
     const { nodeModulesDir, skipPkg } = queue.shift();
     for (const { name, fullPath } of listPkgs(nodeModulesDir)) {
@@ -259,8 +339,12 @@ function bundlePlugin(nodeModulesRoot, npmName, destDir) {
       if (SKIP_PACKAGES.has(name) || SKIP_SCOPES.some(s => name.startsWith(s))) continue;
       let rp;
       try { rp = realpathSync.native(fullPath); } catch { continue; }
-      if (collected.has(rp)) continue;
-      collected.set(rp, name);
+      addDiscoveredPackage(name, rp);
+      if (!collectedByName.has(name)) {
+        collectedByName.set(name, rp);
+      }
+      if (visitedRealPaths.has(rp)) continue;
+      visitedRealPaths.add(rp);
       const depVirtualNM = getVirtualStoreNodeModules(rp);
       if (depVirtualNM && depVirtualNM !== nodeModulesDir) {
         queue.push({ nodeModulesDir: depVirtualNM, skipPkg: name });
@@ -271,21 +355,56 @@ function bundlePlugin(nodeModulesRoot, npmName, destDir) {
   // Copy flattened deps into destDir/node_modules
   const destNM = join(destDir, 'node_modules');
   mkdirSync(destNM, { recursive: true });
-  const copiedNames = new Set();
+  const copiedRealPathsByName = new Map();
   let count = 0;
-  for (const [rp, pkgName] of collected) {
-    if (copiedNames.has(pkgName)) continue;
-    copiedNames.add(pkgName);
+  for (const [pkgName, rp] of collectedByName) {
     const d = join(destNM, pkgName);
     try {
       mkdirSync(normWin(dirname(d)), { recursive: true });
       cpSync(normWin(rp), normWin(d), { recursive: true, dereference: true });
+      copiedRealPathsByName.set(pkgName, rp);
       count++;
     } catch (e) {
       console.warn(`[after-pack]   Skipped dep ${pkgName}: ${e.message}`);
     }
   }
-  console.log(`[after-pack] ✅ Plugin ${npmName}: copied ${count} deps to ${destDir}`);
+  let preservedOverrides = 0;
+  for (const [pkgName, pkgRealPath] of collectedByName) {
+    if (copiedRealPathsByName.get(pkgName) !== pkgRealPath) continue;
+
+    const packageDest = join(destNM, pkgName);
+    if (!existsSync(normWin(packageDest))) continue;
+
+    const depVirtualNM = getVirtualStoreNodeModules(pkgRealPath);
+    if (!depVirtualNM) continue;
+
+    for (const { name: depName, fullPath } of listPkgs(depVirtualNM)) {
+      if (depName === pkgName) continue;
+      if (SKIP_PACKAGES.has(depName) || SKIP_SCOPES.some(s => depName.startsWith(s))) continue;
+
+      let depRealPath;
+      try { depRealPath = realpathSync.native(fullPath); } catch { continue; }
+
+      const topLevelRealPath = copiedRealPathsByName.get(depName);
+      if (!topLevelRealPath || topLevelRealPath === depRealPath) continue;
+
+      const nestedDest = join(packageDest, 'node_modules', depName);
+      if (existsSync(normWin(nestedDest))) continue;
+
+      try {
+        mkdirSync(normWin(dirname(nestedDest)), { recursive: true });
+        cpSync(normWin(depRealPath), normWin(nestedDest), { recursive: true, dereference: true });
+        preservedOverrides++;
+      } catch (e) {
+        console.warn(`[after-pack]   Failed nested override ${pkgName} -> ${depName}: ${e.message}`);
+      }
+    }
+  }
+  const repairedDependencyIssues = repairBundledDependencyGraph(destNM);
+  if (repairedDependencyIssues > 0) {
+    console.log(`[after-pack] 🛠️  Plugin ${npmName}: repaired ${repairedDependencyIssues} dependency override(s)`);
+  }
+  console.log(`[after-pack] ✅ Plugin ${npmName}: copied ${count} deps to ${destDir} (preserved overrides: ${preservedOverrides})`);
   return true;
 }
 
@@ -330,6 +449,13 @@ exports.default = async function afterPack(context) {
   // Patch broken modules whose CJS transpiled output sets module.exports = undefined,
   // causing TypeError in Node.js 22+ ESM interop.
   patchBrokenModules(dest);
+
+  const dependencyIssues = validateBundledNodeModules(dest);
+  if (dependencyIssues.length > 0) {
+    throw new Error(
+      `[after-pack] OpenClaw dependency validation failed:\n${formatValidationIssues(dependencyIssues).join('\n')}`
+    );
+  }
 
   // 1.1 Bundle OpenClaw plugins directly from node_modules into packaged resources.
   //     This is intentionally done in afterPack (not extraResources) because:

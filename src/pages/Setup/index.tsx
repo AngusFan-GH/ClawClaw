@@ -292,6 +292,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
   const gatewayStatus = useGatewayStore((state) => state.status);
   const startGateway = useGatewayStore((state) => state.start);
   const gatewayStartAttemptedRef = useRef(false);
+  const [showGatewayErrorDetails, setShowGatewayErrorDetails] = useState(false);
 
   const [checks, setChecks] = useState({
     nodejs: { status: 'checking' as 'checking' | 'success' | 'error', message: '' },
@@ -496,12 +497,36 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
 
   const handleStartGateway = async () => {
     gatewayStartAttemptedRef.current = true;
+    setShowGatewayErrorDetails(false);
     setChecks((prev) => ({
       ...prev,
       gateway: { status: 'checking', message: t('runtime.status.checking') },
     }));
     await startGateway();
   };
+
+  const summarizeGatewayError = useCallback((message: string) => {
+    if (!message) return t('runtime.status.error');
+
+    if (/brace-expansion/i.test(message)) {
+      return t('runtime.gatewayIssues.braceExpansion');
+    }
+
+    if (/LRUCache is not a constructor/i.test(message)) {
+      return t('runtime.gatewayIssues.nestedDependency');
+    }
+
+    if (/Bundled OpenClaw runtime validation failed/i.test(message)) {
+      return t('runtime.gatewayIssues.runtimeValidation');
+    }
+
+    const firstLine = message
+      .split('|')[0]
+      ?.split('\n')[0]
+      ?.trim();
+
+    return firstLine || t('runtime.status.error');
+  }, [t]);
 
   const renderStatus = (status: 'checking' | 'success' | 'error', message: string) => {
     if (status === 'checking') {
@@ -522,9 +547,9 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
     }
 
     return (
-      <span className="flex items-center gap-2 text-red-400 whitespace-nowrap">
+      <span className="flex items-center gap-2 text-red-400">
         <XCircle className="h-5 w-5 flex-shrink-0" />
-        <span>{message}</span>
+        <span className="min-w-0 break-words">{summarizeGatewayError(message)}</span>
       </span>
     );
   };
@@ -546,18 +571,40 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
             {renderStatus(checks.openclaw.status, checks.openclaw.message)}
           </div>
         </div>
-        <div className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 rounded-lg bg-muted/50">
-          <div className="flex items-center gap-2 text-left">
-            <span>{t('runtime.gateway')}</span>
-            {checks.gateway.status === 'error' && (
-              <Button variant="outline" size="sm" onClick={handleStartGateway}>
-                {t('runtime.startGateway')}
-              </Button>
-            )}
+        <div className="rounded-lg bg-muted/50 p-3">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex min-w-0 items-start gap-2 text-left">
+              <span>{t('runtime.gateway')}</span>
+            </div>
+            <div className="flex justify-end">
+              {renderStatus(checks.gateway.status, checks.gateway.message)}
+            </div>
           </div>
-          <div className="flex justify-end">
-            {renderStatus(checks.gateway.status, checks.gateway.message)}
-          </div>
+          {checks.gateway.status === 'error' && (
+            <div className="mt-3 space-y-3 rounded-xl border border-border/70 bg-background/80 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" size="sm" onClick={handleStartGateway}>
+                  {t('runtime.startGateway')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1 px-2 text-muted-foreground"
+                  onClick={() => setShowGatewayErrorDetails((prev) => !prev)}
+                >
+                  <ChevronDown
+                    className={cn('h-4 w-4 transition-transform', showGatewayErrorDetails && 'rotate-180')}
+                  />
+                  {showGatewayErrorDetails ? t('runtime.hideDetails') : t('runtime.showDetails')}
+                </Button>
+              </div>
+              {showGatewayErrorDetails && (
+                <pre className="max-h-48 overflow-auto rounded-lg bg-muted px-3 py-2 text-xs leading-6 text-muted-foreground whitespace-pre-wrap break-words">
+                  {checks.gateway.message}
+                </pre>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

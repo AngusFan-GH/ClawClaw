@@ -48,6 +48,8 @@
     "title": "检查环境",
     "viewLogs": "查看日志",
     "recheck": "重新检查",
+    "showDetails": "查看详情",
+    "hideDetails": "收起详情",
     "nodejs": "Node.js 运行时",
     "openclaw": "OpenClaw 包",
     "gateway": "网关服务",
@@ -62,6 +64,11 @@
     "issue": {
       "title": "检测到环境问题",
       "desc": "请确保 OpenClaw 已正确安装。查看日志以获取详情。"
+    },
+    "gatewayIssues": {
+      "braceExpansion": "OpenClaw 运行时依赖加载失败，请使用最新安装包重新安装。",
+      "nestedDependency": "OpenClaw 运行时依赖不完整，请使用最新安装包重新安装。",
+      "runtimeValidation": "安装后的 OpenClaw 运行时自检失败，请重新运行最新安装包。"
     },
     "logs": {
       "title": "应用程序日志",

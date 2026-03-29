@@ -4,6 +4,8 @@
 ; - electron-builder's nsis include flow (via installer.nsh)
 ; - custom BUILD_UNINSTALLER flow (via installer.nsi)
 
+!include "nsDialogs.nsh"
+
 LangString uninstallWelcomeTitle 1033 "Uninstall ${PRODUCT_NAME}"
 LangString uninstallWelcomeTitle 2052 "卸载 ${PRODUCT_NAME}"
 LangString uninstallWelcomeText 1033 "The uninstaller always removes the app, shortcuts, the PATH entry for the bundled CLI, and attempts to stop/uninstall the OpenClaw Gateway service. On the next page you can also choose whether to delete local settings, logs, and OpenClaw user data."
@@ -18,35 +20,47 @@ LangString uninstallOptionOpenClawTitle 1033 "Also delete OpenClaw user data (~/
 LangString uninstallOptionOpenClawTitle 2052 "同时删除 OpenClaw 用户数据（~/.openclaw）"
 LangString uninstallOptionOpenClawDesc 1033 "Removes all OpenClaw data: agents, channels, providers, and credentials stored in your home directory. This cannot be undone."
 LangString uninstallOptionOpenClawDesc 2052 "删除所有 OpenClaw 数据：保存在主目录中的 agents、channels、providers 和 credentials。此操作无法撤销。"
-LangString uninstallComponentsTop 1033 "Choose the additional data you want to remove."
-LangString uninstallComponentsTop 2052 "选择你希望额外删除的数据。"
+LangString uninstallDataPageTitle 1033 "Choose Data to Remove"
+LangString uninstallDataPageTitle 2052 "选择要删除的数据"
+LangString uninstallDataPageSubtitle 1033 "Select the additional ClawClaw or OpenClaw data you want removed."
+LangString uninstallDataPageSubtitle 2052 "选择你希望额外删除的 ClawClaw 或 OpenClaw 数据。"
 
-!define MUI_COMPONENTSPAGE_SMALLDESC
-!define MUI_COMPONENTSPAGE_TEXT_TOP "$(uninstallComponentsTop)"
+Var unRemoveClawClawDataState
+Var unRemoveOpenClawDataState
+Var unRemoveClawClawDataCheckbox
+Var unRemoveOpenClawDataCheckbox
 
 ; Replace the default MUI uninstall welcome page with our localised text.
 !macro customUnWelcomePage
   !define MUI_UNWELCOMEPAGE_TITLE "$(uninstallWelcomeTitle)"
   !define MUI_UNWELCOMEPAGE_TEXT "$(uninstallWelcomeText)"
   !insertmacro MUI_UNPAGE_WELCOME
+  UninstPage custom un.UninstallDataPageCreate un.UninstallDataPageLeave
 !macroend
 
-; MUI descriptions for the optional uninstaller checkboxes.
-; These must be at the same compile level as Section declarations — placing
-; them inside !ifdef BUILD_UNINSTALLER achieves that, since this file is
-; included from the uninstaller script's !ifdef BUILD_UNINSTALLER block.
-!ifdef BUILD_UNINSTALLER
-  ; Define un.onMouseOverSection so MUI calls it when the section selection changes.
-  ; The InstFiles page (uninstall) uses $mui.InstFilesPage.Text for the header.
-  ; We update the header subtitle to show the selected option's description.
-  Function un.onMouseOverSection
-    ; $mui.InstFilesPage.Text is control 1006, but for descriptions the
-    ; standard MUI InstFiles page has no dedicated description pane.
-    ; We use SendMessage to update the page subtitle area (control 1006).
-    ; If no section hovered, leave as-is (uninstall is usually done immediately).
-    StrCpy $0 ""
-  FunctionEnd
-!endif
+Function un.UninstallDataPageCreate
+  nsDialogs::Create 1018
+  Pop $0
+
+  ${NSD_CreateCheckbox} 0 8u 100% 12u "$(uninstallOptionAppDataTitle)"
+  Pop $unRemoveClawClawDataCheckbox
+
+  ${NSD_CreateLabel} 12u 22u 88% 20u "$(uninstallOptionAppDataDesc)"
+  Pop $1
+
+  ${NSD_CreateCheckbox} 0 56u 100% 12u "$(uninstallOptionOpenClawTitle)"
+  Pop $unRemoveOpenClawDataCheckbox
+
+  ${NSD_CreateLabel} 12u 70u 88% 24u "$(uninstallOptionOpenClawDesc)"
+  Pop $2
+
+  nsDialogs::Show
+FunctionEnd
+
+Function un.UninstallDataPageLeave
+  ${NSD_GetState} $unRemoveClawClawDataCheckbox $unRemoveClawClawDataState
+  ${NSD_GetState} $unRemoveOpenClawDataCheckbox $unRemoveOpenClawDataState
+FunctionEnd
 
 !macro RunOpenClawCli commandLine
   nsExec::ExecToStack '"$SYSDIR\cmd.exe" /d /c ""$INSTDIR\resources\cli\openclaw.cmd" ${commandLine}""'
@@ -93,15 +107,8 @@ LangString uninstallComponentsTop 2052 "选择你希望额外删除的数据。"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\卸载 ${PRODUCT_NAME}.lnk"
   RMDir "$SMPROGRAMS\${PRODUCT_NAME}"
-  DetailPrint "命令行环境清理已完成。"
-!macroend
 
-; Optional section checkboxes for the uninstaller UI.
-; electron-builder's template expands this macro inside the uninstaller section body.
-; The MUI_DESCRIPTION_BEGIN/END above set descriptions for these sections so they
-; appear in the sidebar when the user selects each checkbox.
-!macro customUnInstallSection
-  Section /o "$(uninstallOptionAppDataTitle)" un.RemoveClawClawData
+  ${If} $unRemoveClawClawDataState == ${BST_CHECKED}
     DetailPrint "正在删除 ClawClaw 本地数据..."
     RMDir /r "$APPDATA\${APP_FILENAME}"
     !ifdef APP_PRODUCT_FILENAME
@@ -117,10 +124,12 @@ LangString uninstallComponentsTop 2052 "选择你希望额外删除的数据。"
     !ifdef APP_PACKAGE_NAME
       RMDir /r "$LOCALAPPDATA\${APP_PACKAGE_NAME}"
     !endif
-  SectionEnd
+  ${EndIf}
 
-  Section /o "$(uninstallOptionOpenClawTitle)" un.RemoveOpenClawData
+  ${If} $unRemoveOpenClawDataState == ${BST_CHECKED}
     DetailPrint "正在删除 OpenClaw 用户数据..."
     RMDir /r "$PROFILE\.openclaw"
-  SectionEnd
+  ${EndIf}
+
+  DetailPrint "命令行环境清理已完成。"
 !macroend

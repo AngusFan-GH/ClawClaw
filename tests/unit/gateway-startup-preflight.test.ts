@@ -40,4 +40,41 @@ describe('gateway startup preflight runner', () => {
     expect(onStepError).toHaveBeenCalledTimes(1);
     expect(onStepError.mock.calls[0]?.[0]).toMatchObject({ id: 'two', label: 'stepTwo' });
   });
+
+  it('stops immediately when a fatal step fails', async () => {
+    const calls: string[] = [];
+    const onStepError = vi.fn();
+
+    await expect(runGatewayStartupPreflight({
+      steps: [
+        {
+          id: 'one',
+          label: 'stepOne',
+          run: async () => {
+            calls.push('one');
+          },
+        },
+        {
+          id: 'two',
+          label: 'stepTwo',
+          fatal: true,
+          run: async () => {
+            calls.push('two');
+            throw new Error('fatal');
+          },
+        },
+        {
+          id: 'three',
+          label: 'stepThree',
+          run: async () => {
+            calls.push('three');
+          },
+        },
+      ],
+      onStepError,
+    })).rejects.toThrow('fatal');
+
+    expect(calls).toEqual(['one', 'two']);
+    expect(onStepError).toHaveBeenCalledTimes(1);
+  });
 });

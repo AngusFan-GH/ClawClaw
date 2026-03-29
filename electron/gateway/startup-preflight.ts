@@ -2,6 +2,7 @@ export interface GatewayStartupPreflightStep {
   id: string;
   label: string;
   run: () => Promise<void>;
+  fatal?: boolean;
 }
 
 export interface GatewayStartupPreflightResult {
@@ -23,6 +24,9 @@ export async function runGatewayStartupPreflight(params: {
     } catch (error) {
       failedStepIds.push(step.id);
       params.onStepError(step, error);
+      if (step.fatal) {
+        throw error;
+      }
     }
   }
 

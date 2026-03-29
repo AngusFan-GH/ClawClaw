@@ -5,6 +5,7 @@ import { getAllSettings } from '../utils/store';
 import { getApiKey, getDefaultProvider, getProvider } from '../utils/secure-storage';
 import { getProviderEnvVar, getKeyableProviderTypes } from '../utils/provider-registry';
 import { getOpenClawDir, getOpenClawEntryPath, isOpenClawPresent } from '../utils/paths';
+import { validateBundledOpenClawRuntime } from '../utils/openclaw-runtime-integrity';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import {
   cleanupInvalidManagedChannelPlugins,
@@ -199,6 +200,19 @@ export async function runOpenClawStartupPreflightRepair(): Promise<void> {
   let configRecovery: GatewayConfigRecovery | null = null;
 
   const steps: GatewayStartupPreflightStep[] = [
+    {
+      id: 'validate-bundled-runtime',
+      label: 'validateBundledOpenClawRuntime',
+      fatal: true,
+      run: async () => {
+        await withTimeout(
+          validateBundledOpenClawRuntime(),
+          6000,
+          'validateBundledOpenClawRuntime',
+          undefined,
+        );
+      },
+    },
     {
       id: 'repair-openclaw-config',
       label: 'repairOpenClawConfigFile',

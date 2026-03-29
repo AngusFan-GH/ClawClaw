@@ -4,6 +4,7 @@ InitPluginsDir
 
 ${IfNot} ${Silent}
   SetDetailsPrint both
+  DetailPrint "$(installPhasePrepare)"
 ${endif}
 
 StrCpy $appExe "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
@@ -49,6 +50,9 @@ ${if} $isTryToKeepShortcuts == "true"
   ${endIf}
 ${endif}
 
+${IfNot} ${Silent}
+  DetailPrint "$(installPhaseRemovePrevious)"
+${endif}
 !insertmacro uninstallOldVersion SHELL_CONTEXT
 !insertmacro handleUninstallResult SHELL_CONTEXT
 
@@ -57,14 +61,35 @@ ${if} $installMode == "all"
   !insertmacro handleUninstallResult HKEY_CURRENT_USER
 ${endIf}
 
+; Differential NSIS updates can leave stale files inside extraResources when the
+; target directory already exists.  OpenClaw ships a full Node.js runtime tree
+; under resources\openclaw, and stale nested dependencies from a previous
+; version can break startup even when the new package is correct.  Always wipe
+; the managed runtime directory before copying the new bundle.
+${IfNot} ${Silent}
+  DetailPrint "正在清理旧版 OpenClaw 运行时..."
+${endif}
+RMDir /r "$INSTDIR\resources\openclaw"
+
 SetOutPath $INSTDIR
 
 !ifdef UNINSTALLER_ICON
   File /oname=uninstallerIcon.ico "${UNINSTALLER_ICON}"
 !endif
 
+${IfNot} ${Silent}
+  DetailPrint "$(installPhaseCopyFiles)"
+${endif}
 !insertmacro installApplicationFiles
+
+${IfNot} ${Silent}
+  DetailPrint "$(installPhaseRegister)"
+${endif}
 !insertmacro registryAddInstallInfo
+
+${IfNot} ${Silent}
+  DetailPrint "$(installPhaseShortcuts)"
+${endif}
 !insertmacro addStartMenuLink $keepShortcuts
 !insertmacro addDesktopLink $keepShortcuts
 
@@ -75,10 +100,16 @@ ${else}
 ${endIf}
 
 !ifmacrodef registerFileAssociations
+  ${IfNot} ${Silent}
+    DetailPrint "$(installPhaseAssociations)"
+  ${endif}
   !insertmacro registerFileAssociations
 !endif
 
 !ifmacrodef customInstall
+  ${IfNot} ${Silent}
+    DetailPrint "$(installPhaseFinalize)"
+  ${endif}
   !insertmacro customInstall
 !endif
 

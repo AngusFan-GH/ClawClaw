@@ -48,6 +48,8 @@
         "title": "環境をチェック中",
         "viewLogs": "ログを表示",
         "recheck": "再チェック",
+        "showDetails": "詳細を表示",
+        "hideDetails": "詳細を隠す",
         "nodejs": "Node.js ランタイム",
         "openclaw": "OpenClaw パッケージ",
         "gateway": "ゲートウェイサービス",
@@ -62,6 +64,11 @@
         "issue": {
             "title": "環境の問題が検出されました",
             "desc": "OpenClawが正しくインストールされていることを確認してください。詳細はログを確認してください。"
+        },
+        "gatewayIssues": {
+            "braceExpansion": "OpenClaw ランタイム依存関係の読み込みに失敗しました。最新のインストーラーで再インストールしてください。",
+            "nestedDependency": "OpenClaw ランタイム依存関係が不完全です。最新のインストーラーで再インストールしてください。",
+            "runtimeValidation": "インストール後の OpenClaw ランタイム自己診断に失敗しました。最新のインストーラーを再実行してください。"
         },
         "logs": {
             "title": "アプリケーションログ",
