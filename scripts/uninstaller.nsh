@@ -18,6 +18,11 @@ LangString uninstallOptionOpenClawTitle 1033 "Also delete OpenClaw user data (~/
 LangString uninstallOptionOpenClawTitle 2052 "同时删除 OpenClaw 用户数据（~/.openclaw）"
 LangString uninstallOptionOpenClawDesc 1033 "Removes all OpenClaw data: agents, channels, providers, and credentials stored in your home directory. This cannot be undone."
 LangString uninstallOptionOpenClawDesc 2052 "删除所有 OpenClaw 数据：保存在主目录中的 agents、channels、providers 和 credentials。此操作无法撤销。"
+LangString uninstallComponentsTop 1033 "Choose the additional data you want to remove."
+LangString uninstallComponentsTop 2052 "选择你希望额外删除的数据。"
+
+!define MUI_COMPONENTSPAGE_SMALLDESC
+!define MUI_COMPONENTSPAGE_TEXT_TOP "$(uninstallComponentsTop)"
 
 ; Replace the default MUI uninstall welcome page with our localised text.
 !macro customUnWelcomePage

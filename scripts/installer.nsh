@@ -31,11 +31,28 @@ ShowUnInstDetails show
   ; to "instFilesPre".  MUI_PAGE_INSTFILES reuses that value, so we must undefine
   ; and redefine it to inject our function.
   !undef MUI_PAGE_CUSTOMFUNCTION_PRE
-  !undef MUI_PAGE_CUSTOMFUNCTION_LEAVE
+  !ifdef MUI_PAGE_CUSTOMFUNCTION_SHOW
+    !undef MUI_PAGE_CUSTOMFUNCTION_SHOW
+  !endif
+  !ifdef MUI_PAGE_CUSTOMFUNCTION_LEAVE
+    !undef MUI_PAGE_CUSTOMFUNCTION_LEAVE
+  !endif
   !define MUI_PAGE_CUSTOMFUNCTION_PRE "customInstFilesPre-custom"
+  !define MUI_PAGE_CUSTOMFUNCTION_SHOW "customInstFilesShow-custom"
   !define MUI_PAGE_CUSTOMFUNCTION_LEAVE "customInstFilesLeave-custom"
 
   Function customInstFilesPre-custom
+    SetDetailsPrint both
+  FunctionEnd
+
+  Function customInstFilesShow-custom
+    ; Force-open the details pane so the user sees the installation log instead of
+    ; only the progress bar.  1027 is the built-in "Show details" toggle button.
+    FindWindow $0 "#32770" "" $HWNDPARENT
+    GetDlgItem $1 $0 1027
+    GetDlgItem $2 $0 1016
+    ShowWindow $2 ${SW_SHOW}
+    SendMessage $1 ${BM_CLICK} 0 0
     SetDetailsPrint both
   FunctionEnd
 
@@ -194,7 +211,12 @@ LangString installPhaseFinalize 2052 "正在执行安装后的系统配置..."
   ; Add an explicit Start Menu uninstall shortcut so users have a visible
   ; uninstall entry even when Windows doesn't surface one prominently.
   DetailPrint "正在创建卸载快捷方式..."
-  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\卸载 ${PRODUCT_NAME}.lnk" "$INSTDIR\${UNINSTALL_FILENAME}"
+  ${if} $installMode == "all"
+    StrCpy $3 "/allusers"
+  ${else}
+    StrCpy $3 "/currentuser"
+  ${endIf}
+  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\卸载 ${PRODUCT_NAME}.lnk" "$INSTDIR\${UNINSTALL_FILENAME}" "$3"
 
   DetailPrint "安装后的系统配置已完成。"
 !macroend
