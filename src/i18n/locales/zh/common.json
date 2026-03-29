@@ -75,17 +75,27 @@
       "overlayBlockedHint": "正在应用配置，期间会暂时禁用界面操作以避免状态冲突。",
         "recovery": {
           "panelTitle": "自动恢复信息",
+          "completedTitle": "已完成启动前兼容修复",
           "repairedBadge": "已自动修复配置",
+          "preflightBadge": "已完成兼容修复",
           "resetBadge": "已重建默认配置",
+          "preflightSummary": "程序在启动网关前检测到旧配置或旧插件状态，并已自动完成兼容修复与同步。",
           "repairedSummary": "检测到网关配置文件格式异常，程序已尝试自动修复原配置后再次启动。",
           "resetSummary": "检测到网关配置文件已损坏，程序已备份原文件并重建默认配置后再次启动。",
+          "preflightNextStep": "通常无需额外操作；如果连接、插件或模型行为仍异常，请优先检查相关设置页。",
           "repairedNextStep": "请先确认应用是否恢复正常；如果仍有功能异常，可查看下方备份文件并对比配置差异。",
           "resetNextStep": "请检查默认模型、代理、连接与插件配置是否仍然正确；如有缺失，可参考下方备份文件恢复。",
           "backupCreated": "已创建备份",
           "backupPathLabel": "备份文件路径",
           "strategyLabel": "恢复策略: {{strategy}}",
           "showDetails": "显示原始错误",
-          "hideDetails": "隐藏原始错误"
+          "hideDetails": "隐藏原始错误",
+          "topic": {
+            "config": "配置",
+            "channels": "连接",
+            "plugins": "插件",
+            "auth": "认证"
+          }
         },
         "sources": {
           "channels": "连接配置",

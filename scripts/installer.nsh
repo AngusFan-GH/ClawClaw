@@ -84,6 +84,8 @@ LangString installPhaseFinalize 2052 "正在执行安装后的系统配置..."
   ; Delete is a silent no-op when the file doesn't exist (safe for fresh installs).
   Delete "$DESKTOP\${PRODUCT_NAME}.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCT_NAME}\卸载 ${PRODUCT_NAME}.lnk"
 
   ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
 
@@ -146,16 +148,23 @@ LangString installPhaseFinalize 2052 "正在执行安装后的系统配置..."
   SetDetailsPrint listonly
   DetailPrint "正在完成安装后的系统配置..."
 
-  ; Re-create shortcuts when upgrading.  electron-builder's
-  ; createDesktopShortcut/createStartMenuShortcut only fire on fresh
-  ; installs; differential (incremental) updates skip shortcut creation.
-  ; We deleted these files in customCheckAppRunning to prevent Windows'
-  ; "broken shortcut" dialog, so we must recreate them here.
+  ; Always normalize Start Menu entries into a single folder.  electron-builder's
+  ; default shortcut creation can leave the app shortcut at
+  ; "$SMPROGRAMS\${PRODUCT_NAME}.lnk", while our custom uninstall shortcut lives in
+  ; "$SMPROGRAMS\${PRODUCT_NAME}\".  On some Windows installs this causes Start Menu
+  ; results to surface only the uninstall entry.  We explicitly recreate the app
+  ; shortcut in the product folder on every install and remove the legacy flat link.
+  DetailPrint "正在创建开始菜单快捷方式..."
+  Delete "$SMPROGRAMS\${PRODUCT_NAME}.lnk"
+  CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
+  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+
+  ; Re-create the desktop shortcut when upgrading.  electron-builder's
+  ; createDesktopShortcut only fires on fresh installs; differential
+  ; (incremental) updates skip desktop shortcut creation.
   ${if} ${isUpdated}
     DetailPrint "正在重建快捷方式..."
     CreateShortCut "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
-    CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
-    CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
   ${endIf}
 
   ; Enable Windows long path support (Windows 10 1607+ / Windows 11).
@@ -185,7 +194,6 @@ LangString installPhaseFinalize 2052 "正在执行安装后的系统配置..."
   ; Add an explicit Start Menu uninstall shortcut so users have a visible
   ; uninstall entry even when Windows doesn't surface one prominently.
   DetailPrint "正在创建卸载快捷方式..."
-  CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
   CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\卸载 ${PRODUCT_NAME}.lnk" "$INSTDIR\${UNINSTALL_FILENAME}"
 
   DetailPrint "安装后的系统配置已完成。"

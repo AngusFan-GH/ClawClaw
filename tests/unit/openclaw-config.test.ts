@@ -65,4 +65,17 @@ describe('recoverMalformedOpenClawConfig', () => {
     const repaired = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
     expect(repaired).toEqual({});
   });
+
+  it('returns none for already valid configs without creating a backup', async () => {
+    await writeMalformedConfig('{\n  "models": {\n    "default": "openrouter"\n  }\n}\n');
+
+    const { recoverMalformedOpenClawConfig } = await import('@electron/utils/openclaw-config');
+    const result = await recoverMalformedOpenClawConfig();
+
+    expect(result.outcome).toBe('none');
+    expect(result.backupPath).toBeNull();
+
+    const repaired = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+    expect(repaired.models).toEqual({ default: 'openrouter' });
+  });
 });

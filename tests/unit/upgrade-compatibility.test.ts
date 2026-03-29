@@ -325,6 +325,98 @@ describe('upgrade compatibility baseline', () => {
     expect(backups.some((entry) => entry.includes('openclaw.json.repaired-') && entry.endsWith('.bak'))).toBe(true);
   });
 
+  it('repairs malformed config before startup sync and still converges runtime provider/auth state', async () => {
+    await writeRawOpenClawJson('{\n  "agents": {\n    "defaults": {\n      "model": {\n        "primary": "anthropic/claude-old",\n        "fallbacks": []\n      }\n    }\n  }\n}\n}\n');
+
+    storeState.stores.set('clawclaw-providers', {
+      schemaVersion: 1,
+      providers: {},
+      providerAccounts: {
+        openrouter: {
+          id: 'openrouter',
+          vendorId: 'openrouter',
+          label: 'OpenRouter',
+          authMode: 'api_key',
+          model: 'openai/gpt-4.1-mini',
+          enabled: true,
+          isDefault: true,
+          createdAt: '2026-03-01T00:00:00.000Z',
+          updatedAt: '2026-03-02T00:00:00.000Z',
+        },
+      },
+      apiKeys: {
+        openrouter: 'sk-test-openrouter',
+      },
+      providerSecrets: {
+        openrouter: {
+          type: 'api_key',
+          accountId: 'openrouter',
+          apiKey: 'sk-test-openrouter',
+        },
+      },
+      defaultProvider: 'openrouter',
+      defaultProviderAccountId: 'openrouter',
+    });
+
+    const { syncGatewayConfigBeforeLaunch } = await import('@electron/gateway/config-sync');
+
+    await syncGatewayConfigBeforeLaunch({
+      theme: 'system',
+      language: 'zh',
+      startMinimized: false,
+      launchAtStartup: false,
+      gatewayAutoStart: true,
+      gatewayPort: 18789,
+      gatewayToken: 'test-token',
+      proxyMode: 'system',
+      proxyEnabled: false,
+      proxyServer: '',
+      proxyHttpServer: '',
+      proxyHttpsServer: '',
+      proxyAllServer: '',
+      proxyBypassRules: '<local>;localhost;127.0.0.1;::1',
+      updateChannel: 'stable',
+      autoCheckUpdate: true,
+      autoDownloadUpdate: false,
+      skippedVersions: [],
+      sidebarCollapsed: false,
+      devModeUnlocked: false,
+      setupComplete: false,
+      selectedBundles: [],
+      enabledSkills: [],
+      disabledSkills: [],
+      securityPolicy: {
+        enabled: false,
+        deniedPaths: [],
+        permissions: {
+          denyRuntime: false,
+          denyWrite: false,
+          denyRead: false,
+          denyBrowser: false,
+          denyWebSearch: false,
+          denyWebFetch: false,
+          denyGateway: false,
+        },
+      },
+      reminders: [],
+      sessionMemoryEnabled: true,
+      memorySearchEnabled: true,
+    });
+    await flushBackgroundWork();
+
+    const config = await readOpenClawJson();
+    expect((config.agents as { defaults: { model: { primary: string } } }).defaults.model.primary)
+      .toBe('openrouter/openai/gpt-4.1-mini');
+
+    const authProfiles = await readAuthProfiles('main');
+    expect(
+      (authProfiles.profiles as Record<string, { key: string }>)['openrouter:default'].key,
+    ).toBe('sk-test-openrouter');
+
+    const backups = await readdir(join(testHome, '.openclaw'));
+    expect(backups.some((entry) => entry.includes('openclaw.json.repaired-') && entry.endsWith('.bak'))).toBe(true);
+  });
+
   it('reinstalls a damaged bundled plugin mirror during upgrade when the old target is incomplete', async () => {
     const pluginId = 'test-upgrade-plugin';
     const sourceDir = join(process.cwd(), 'build', 'openclaw-plugins', pluginId);

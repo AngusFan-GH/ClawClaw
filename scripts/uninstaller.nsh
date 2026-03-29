@@ -83,6 +83,9 @@ LangString uninstallOptionOpenClawDesc 2052 "删除所有 OpenClaw 数据：保�
   DetailPrint "Warning: PowerShell PATH removal exited with code $0."
 
   _cu_pathDone:
+  Delete "$DESKTOP\${PRODUCT_NAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCT_NAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\卸载 ${PRODUCT_NAME}.lnk"
   RMDir "$SMPROGRAMS\${PRODUCT_NAME}"
   DetailPrint "命令行环境清理已完成。"

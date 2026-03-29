@@ -21,7 +21,7 @@ import {
 } from '../utils/openclaw-auth';
 import { buildProxyEnvAsync, mergeProxyBypassRules, resolveProxySettingsAsync } from '../utils/proxy';
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
-import { resetMalformedOpenClawConfig } from '../utils/openclaw-config';
+import { recoverMalformedOpenClawConfig, resetMalformedOpenClawConfig } from '../utils/openclaw-config';
 import { logger } from '../utils/logger';
 import { ensureBundledPluginInstalled } from '../utils/bundled-plugin-installer';
 import { syncDefaultProviderToRuntime } from '../services/providers/provider-runtime-sync';
@@ -29,6 +29,8 @@ import {
   syncAllProviderAuthToRuntime,
   syncAllProvidersToRuntime,
 } from '../services/providers/provider-runtime-sync';
+import { runGatewayStartupPreflight, type GatewayStartupPreflightStep } from './startup-preflight';
+import type { GatewayConfigRecovery } from '../../src/types/gateway';
 
 const CHANNEL_PLUGIN_INSTALL_MAP: Partial<Record<string, { pluginId: string; displayName: string }>> = {
   feishu: { pluginId: 'feishu', displayName: 'Feishu / Lark' },
@@ -69,15 +71,20 @@ function resolveGatewayProxyBypassRules(configuredChannels: string[]): string[] 
   return Array.from(merged);
 }
 
-function ensureConfiguredPluginsInstalled(configuredChannels: string[]): void {
+function ensureConfiguredPluginsInstalled(configuredChannels: string[]): string[] {
+  const installedPluginIds = new Set<string>();
   for (const channelType of configuredChannels) {
     const plugin = CHANNEL_PLUGIN_INSTALL_MAP[channelType];
     if (!plugin) continue;
     const result = ensureBundledPluginInstalled(plugin.pluginId, plugin.displayName);
+    if (result.installed) {
+      installedPluginIds.add(plugin.pluginId);
+    }
     if (!result.installed && result.warning) {
       logger.warn(result.warning);
     }
   }
+  return Array.from(installedPluginIds);
 }
 
 async function withTimeout<T>(
@@ -117,63 +124,31 @@ export interface GatewayLaunchContext {
   channelStartupSummary: string;
 }
 
-export async function syncGatewayConfigBeforeLaunch(
-  appSettings: Awaited<ReturnType<typeof getAllSettings>>,
-): Promise<void> {
+async function repairOpenClawConfigFile(): Promise<GatewayConfigRecovery | null> {
+  let outcome: GatewayConfigRecovery | null = null;
+  let recoveredMalformedConfig = false;
+
   try {
-    await withTimeout(
-      repairChannelConfigConsistency(),
+    const result = await withTimeout(
+      recoverMalformedOpenClawConfig(),
       2000,
-      'repairChannelConfigConsistency',
-      { repaired: false },
+      'recoverMalformedOpenClawConfig',
+      { outcome: 'none', backupPath: null } as const,
     );
+    if (result.outcome === 'repaired' || result.outcome === 'reset') {
+      recoveredMalformedConfig = true;
+      outcome = {
+        kind: result.outcome === 'repaired' ? 'config-repaired' : 'config-reset',
+        strategy: result.strategy,
+        backupPath: result.backupPath ?? undefined,
+        topics: ['config'],
+      };
+      logger.warn(
+        `OpenClaw config preflight ${result.outcome}${result.backupPath ? ` (backup: ${result.backupPath})` : ''}${result.strategy ? ` using ${result.strategy}` : ''}`,
+      );
+    }
   } catch (err) {
-    logger.warn('Failed to repair channel config consistency:', err);
-  }
-
-  try {
-    await withTimeout(
-      cleanupDanglingWeChatPluginState(),
-      2000,
-      'cleanupDanglingWeChatPluginState',
-      { cleanedDanglingState: false },
-    );
-  } catch (err) {
-    logger.warn('Failed to clean dangling WeChat plugin state:', err);
-  }
-
-  try {
-    await withTimeout(
-      cleanupLegacyChannelPlugins(),
-      3000,
-      'cleanupLegacyChannelPlugins',
-      { cleaned: false },
-    );
-  } catch (err) {
-    logger.warn('Failed to clean legacy channel plugins:', err);
-  }
-
-  try {
-    await withTimeout(
-      cleanupInvalidManagedChannelPlugins(),
-      3000,
-      'cleanupInvalidManagedChannelPlugins',
-      { cleaned: false, removedPluginIds: [] },
-    );
-  } catch (err) {
-    logger.warn('Failed to clean invalid managed channel plugins:', err);
-  }
-
-  try {
-    const configuredChannels = await withTimeout(
-      listConfiguredChannels({ includeCli: false }),
-      1500,
-      'listConfiguredChannelsForPluginInstall',
-      [],
-    );
-    ensureConfiguredPluginsInstalled(configuredChannels);
-  } catch (err) {
-    logger.warn('Failed to ensure configured channel plugins are installed:', err);
+    logger.warn('Failed to recover malformed openclaw.json during preflight:', err);
   }
 
   try {
@@ -181,11 +156,17 @@ export async function syncGatewayConfigBeforeLaunch(
   } catch (err) {
     logger.warn('Failed to sanitize openclaw.json:', err);
     const message = err instanceof Error ? err.message : String(err);
-    if (message.includes('Failed to parse OpenClaw config')) {
+    if (!recoveredMalformedConfig && message.includes('Failed to parse OpenClaw config')) {
       try {
         const backupPath = await resetMalformedOpenClawConfig();
+        outcome = {
+          kind: 'config-reset',
+          strategy: 'reset',
+          backupPath: backupPath ?? undefined,
+          topics: ['config'],
+        };
         logger.warn(
-          `Recovered malformed openclaw.json by recreating it${backupPath ? ` (backup: ${backupPath})` : ''}`
+          `Recovered malformed openclaw.json by recreating it${backupPath ? ` (backup: ${backupPath})` : ''}`,
         );
       } catch (recoveryErr) {
         logger.error('Failed to recover malformed openclaw.json:', recoveryErr);
@@ -193,46 +174,184 @@ export async function syncGatewayConfigBeforeLaunch(
     }
   }
 
-  try {
-    const defaultProviderId = await withTimeout(
-      getDefaultProvider(),
-      1500,
-      'getDefaultProviderForRuntimeSync',
-      null,
+  return outcome;
+}
+
+let lastStartupPreflightRecovery: GatewayConfigRecovery | null = null;
+
+function buildPreflightRecovery(topics: GatewayConfigRecovery['topics']): GatewayConfigRecovery | null {
+  const uniqueTopics = Array.from(new Set((topics ?? []).filter(Boolean)));
+  if (uniqueTopics.length === 0) {
+    return null;
+  }
+  return {
+    kind: 'preflight',
+    topics: uniqueTopics,
+  };
+}
+
+export function getLastStartupPreflightRecovery(): GatewayConfigRecovery | null {
+  return lastStartupPreflightRecovery;
+}
+
+export async function runOpenClawStartupPreflightRepair(): Promise<void> {
+  const recoveryTopics: NonNullable<GatewayConfigRecovery['topics']> = [];
+  let configRecovery: GatewayConfigRecovery | null = null;
+
+  const steps: GatewayStartupPreflightStep[] = [
+    {
+      id: 'repair-openclaw-config',
+      label: 'repairOpenClawConfigFile',
+      run: async () => {
+        configRecovery = await repairOpenClawConfigFile();
+        if (configRecovery?.topics) {
+          recoveryTopics.push(...configRecovery.topics);
+        }
+      },
+    },
+    {
+      id: 'repair-channel-config-consistency',
+      label: 'repairChannelConfigConsistency',
+      run: async () => {
+        const result = await withTimeout(
+          repairChannelConfigConsistency(),
+          2000,
+          'repairChannelConfigConsistency',
+          { repaired: false },
+        );
+        if (result.repaired) {
+          recoveryTopics.push('channels');
+        }
+      },
+    },
+    {
+      id: 'cleanup-dangling-wechat-plugin-state',
+      label: 'cleanupDanglingWeChatPluginState',
+      run: async () => {
+        const result = await withTimeout(
+          cleanupDanglingWeChatPluginState(),
+          2000,
+          'cleanupDanglingWeChatPluginState',
+          { cleanedDanglingState: false },
+        );
+        if (result.cleanedDanglingState) {
+          recoveryTopics.push('channels', 'plugins');
+        }
+      },
+    },
+    {
+      id: 'cleanup-legacy-channel-plugins',
+      label: 'cleanupLegacyChannelPlugins',
+      run: async () => {
+        const result = await withTimeout(
+          cleanupLegacyChannelPlugins(),
+          3000,
+          'cleanupLegacyChannelPlugins',
+          { cleaned: false },
+        );
+        if (result.cleaned) {
+          recoveryTopics.push('plugins');
+        }
+      },
+    },
+    {
+      id: 'cleanup-invalid-managed-channel-plugins',
+      label: 'cleanupInvalidManagedChannelPlugins',
+      run: async () => {
+        const result = await withTimeout(
+          cleanupInvalidManagedChannelPlugins(),
+          3000,
+          'cleanupInvalidManagedChannelPlugins',
+          { cleaned: false, removedPluginIds: [] },
+        );
+        if (result.cleaned) {
+          recoveryTopics.push('plugins');
+        }
+      },
+    },
+    {
+      id: 'ensure-configured-channel-plugins',
+      label: 'ensureConfiguredPluginsInstalled',
+      run: async () => {
+        const configuredChannels = await withTimeout(
+          listConfiguredChannels({ includeCli: false }),
+          1500,
+          'listConfiguredChannelsForPluginInstall',
+          [],
+        );
+        const installedPluginIds = ensureConfiguredPluginsInstalled(configuredChannels);
+        if (installedPluginIds.length > 0) {
+          recoveryTopics.push('plugins');
+        }
+      },
+    },
+    {
+      id: 'sync-default-provider',
+      label: 'syncDefaultProviderToRuntime',
+      run: async () => {
+        const defaultProviderId = await withTimeout(
+          getDefaultProvider(),
+          1500,
+          'getDefaultProviderForRuntimeSync',
+          null,
+        );
+        if (!defaultProviderId) {
+          return;
+        }
+        await withTimeout(
+          syncDefaultProviderToRuntime(defaultProviderId),
+          3000,
+          'syncDefaultProviderToRuntime',
+          undefined,
+        );
+      },
+    },
+    {
+      id: 'sync-provider-configs',
+      label: 'syncAllProvidersToRuntimeBeforeLaunch',
+      run: async () => {
+        await withTimeout(
+          syncAllProvidersToRuntime(),
+          4000,
+          'syncAllProvidersToRuntimeBeforeLaunch',
+          undefined,
+        );
+      },
+    },
+    {
+      id: 'sync-provider-auth',
+      label: 'syncAllProviderAuthToRuntimeBeforeLaunch',
+      run: async () => {
+        await withTimeout(
+          syncAllProviderAuthToRuntime(),
+          4000,
+          'syncAllProviderAuthToRuntimeBeforeLaunch',
+          undefined,
+        );
+      },
+    },
+  ];
+
+  const result = await runGatewayStartupPreflight({
+    steps,
+    onStepError: (step, error) => {
+      logger.warn(`Startup preflight step failed: ${step.label}`, error);
+    },
+  });
+
+  if (result.failedStepIds.length > 0) {
+    logger.warn(
+      `Startup preflight completed with partial failures: ${result.failedStepIds.join(', ')}`,
     );
-    if (defaultProviderId) {
-      await withTimeout(
-        syncDefaultProviderToRuntime(defaultProviderId),
-        3000,
-        'syncDefaultProviderToRuntime',
-        undefined,
-      );
-    }
-  } catch (err) {
-    logger.warn('Failed to sync default provider to OpenClaw runtime before launch:', err);
   }
 
-  try {
-    await withTimeout(
-      syncAllProvidersToRuntime(),
-      4000,
-      'syncAllProvidersToRuntimeBeforeLaunch',
-      undefined,
-    );
-  } catch (err) {
-    logger.warn('Failed to sync provider configs to OpenClaw runtime before launch:', err);
-  }
+  lastStartupPreflightRecovery = configRecovery ?? buildPreflightRecovery(recoveryTopics);
+}
 
-  try {
-    await withTimeout(
-      syncAllProviderAuthToRuntime(),
-      4000,
-      'syncAllProviderAuthToRuntimeBeforeLaunch',
-      undefined,
-    );
-  } catch (err) {
-    logger.warn('Failed to sync provider auth to OpenClaw runtime before launch:', err);
-  }
+export async function syncGatewayConfigBeforeLaunch(
+  appSettings: Awaited<ReturnType<typeof getAllSettings>>,
+): Promise<void> {
+  await runOpenClawStartupPreflightRepair();
 
   // These sync tasks improve eventual config consistency, but they are not
   // required to block process launch because the gateway receives token/proxy

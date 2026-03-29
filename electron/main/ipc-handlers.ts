@@ -1024,12 +1024,13 @@ function registerLogHandlers(): void {
  */
 function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: BrowserWindow): void {
   const emitGatewayLifecycle = (payload: {
-    phase: 'scheduled' | 'failed';
+    phase: 'scheduled' | 'completed' | 'failed';
     action: 'start' | 'restart' | 'reload';
     source: string;
     reason: string;
     error?: string;
     delayMs?: number;
+    recovery?: GatewayConfigRecovery;
   }) => {
     const event = {
       ...payload,
@@ -2239,3 +2240,4 @@ function registerSessionHandlers(gatewayManager: GatewayManager): void {
     }
   });
 }
+import type { GatewayConfigRecovery } from '../../src/types/gateway';

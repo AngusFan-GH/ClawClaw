@@ -1,14 +1,16 @@
+import type { GatewayConfigRecovery } from '../../src/types/gateway';
 import type { HostApiContext } from './context';
 
 export type GatewayLifecycleAction = 'start' | 'restart' | 'reload';
 
 export interface GatewayLifecycleEventPayload {
-  phase: 'scheduled' | 'failed';
+  phase: 'scheduled' | 'completed' | 'failed';
   action: GatewayLifecycleAction;
   source: string;
   reason: string;
   delayMs?: number;
   error?: string;
+  recovery?: GatewayConfigRecovery;
   at: number;
 }
 

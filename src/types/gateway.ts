@@ -19,9 +19,10 @@ export interface GatewayStatus {
 }
 
 export interface GatewayConfigRecovery {
-  kind: 'config-repaired' | 'config-reset';
+  kind: 'config-repaired' | 'config-reset' | 'preflight';
   strategy?: 'normalize' | 'trim-root-object' | 'reset';
   backupPath?: string;
+  topics?: Array<'config' | 'channels' | 'plugins' | 'auth'>;
 }
 
 export interface GatewayLifecycle {

@@ -32,11 +32,14 @@ export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecy
   const { t } = useTranslation('common');
   const [showDetails, setShowDetails] = useState(false);
 
-  if (lifecycle.state !== 'failed') return null;
+  const recovery = getGatewayRecoveryPresentation(lifecycle.recovery);
+  const showRecoverySuccess = lifecycle.state === 'completed' && Boolean(recovery);
+  if (lifecycle.state !== 'failed' && !showRecoverySuccess) return null;
 
   const sourceLabel = getSourceLabel(t, lifecycle.source);
-  const title = t('gateway.lifecycle.failedTitle');
-  const recovery = getGatewayRecoveryPresentation(lifecycle.recovery);
+  const title = showRecoverySuccess
+    ? t('gateway.lifecycle.recovery.completedTitle')
+    : t('gateway.lifecycle.failedTitle');
   const description = recovery
     ? t(recovery.summaryKey)
     : lifecycle.error || t('gateway.lifecycle.failedDescription');
@@ -55,12 +58,14 @@ export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecy
     <div
       className={cn(
         'mb-6 rounded-2xl border px-4 py-4 transition-colors',
-        'border-destructive/30 bg-destructive/10'
+        showRecoverySuccess
+          ? 'border-emerald-500/25 bg-emerald-500/10'
+          : 'border-destructive/30 bg-destructive/10'
       )}
     >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 shrink-0">
-          <AlertCircle className="h-4.5 w-4.5 text-destructive" />
+          <AlertCircle className={cn('h-4.5 w-4.5', showRecoverySuccess ? 'text-emerald-600 dark:text-emerald-300' : 'text-destructive')} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -68,7 +73,9 @@ export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecy
             <span
               className={cn(
                 'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
-                'bg-destructive/12 text-destructive'
+                showRecoverySuccess
+                  ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-destructive/12 text-destructive'
               )}
             >
               {sourceLabel}
@@ -79,14 +86,12 @@ export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecy
                   'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
                   recovery.tone === 'repaired'
                     ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
-                    : 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
+                    : recovery.tone === 'preflight'
+                      ? 'bg-sky-500/12 text-sky-700 dark:text-sky-300'
+                      : 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
                 )}
               >
-                {t(
-                  recovery.tone === 'repaired'
-                    ? 'gateway.lifecycle.recovery.repairedBadge'
-                    : 'gateway.lifecycle.recovery.resetBadge'
-                )}
+                {t(recovery.badgeKey)}
               </span>
             ) : null}
           </div>
@@ -100,7 +105,9 @@ export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecy
                     'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg',
                     recovery.tone === 'repaired'
                       ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
-                      : 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
+                      : recovery.tone === 'preflight'
+                        ? 'bg-sky-500/12 text-sky-700 dark:text-sky-300'
+                        : 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
                   )}
                 >
                   <LifeBuoy className="h-3.5 w-3.5" />
@@ -113,6 +120,11 @@ export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecy
                     {t(recovery.nextStepKey)}
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {lifecycle.recovery?.topics?.map((topic) => (
+                      <span key={topic} className="inline-flex rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                        {t(`gateway.lifecycle.recovery.topic.${topic}`)}
+                      </span>
+                    ))}
                     {recovery.strategyLabel ? (
                       <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                         {t('gateway.lifecycle.recovery.strategyLabel', { strategy: recovery.strategyLabel })}

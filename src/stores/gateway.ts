@@ -371,21 +371,29 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
               return { status: normalizedPayload };
             });
           }));
-          unsubscribers.push(subscribeHostEvent<Omit<GatewayLifecycle, 'state'> & { phase?: 'scheduled' | 'failed' }>(
+          unsubscribers.push(subscribeHostEvent<Omit<GatewayLifecycle, 'state'> & { phase?: 'scheduled' | 'completed' | 'failed' }>(
             'gateway:lifecycle',
             (payload) => {
               if (lifecycleClearTimer) {
                 clearTimeout(lifecycleClearTimer);
                 lifecycleClearTimer = null;
               }
+              const nextState = payload.phase === 'failed'
+                ? 'failed'
+                : payload.phase === 'completed'
+                  ? 'completed'
+                  : 'scheduled';
               set((state) => ({
                 lifecycle: {
                   ...state.lifecycle,
                   ...payload,
-                  state: payload.phase === 'failed' ? 'failed' : 'scheduled',
+                  state: nextState,
                   error: payload.phase === 'failed' ? payload.error : undefined,
                 },
               }));
+              if (payload.phase === 'completed') {
+                scheduleLifecycleClear((partial) => set(partial), 5000);
+              }
             }
           ));
           unsubscribers.push(subscribeHostEvent<{ message?: string }>('gateway:error', (payload) => {

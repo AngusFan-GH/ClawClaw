@@ -407,6 +407,18 @@ async function initialize(): Promise<void> {
         mainWindow.webContents.send('gateway:lifecycle-changed', startupLifecycleEvent);
       }
       await gatewayManager.start();
+      const completedStartupLifecycleEvent = {
+        phase: 'completed' as const,
+        action: 'start' as const,
+        source: 'gateway.autoStart',
+        reason: 'gateway.autoStart',
+        recovery: gatewayManager.getLastStartupRecovery() ?? undefined,
+        at: Date.now(),
+      };
+      hostEventBus.emit('gateway:lifecycle', completedStartupLifecycleEvent);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('gateway:lifecycle-changed', completedStartupLifecycleEvent);
+      }
       logger.info('Gateway auto-start succeeded');
       void syncProviderRuntimeAfterGatewayReady();
     } catch (error) {

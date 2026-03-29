@@ -231,6 +231,9 @@ export async function recoverMalformedOpenClawConfig(): Promise<MalformedOpenCla
   }
 
   const raw = await readFile(OPENCLAW_CONFIG_PATH, 'utf-8');
+  if (parseConfigCandidate(raw)) {
+    return { outcome: 'none', backupPath: null };
+  }
   const normalized = normalizeMalformedConfigText(raw);
   const candidates: Array<{ content: string; strategy: 'normalize' | 'trim-root-object' }> = [];
 

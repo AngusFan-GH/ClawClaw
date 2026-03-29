@@ -26,7 +26,11 @@ import {
 } from './request-store';
 import { dispatchJsonRpcNotification, dispatchProtocolEvent } from './event-dispatch';
 import { GatewayStateController } from './state';
-import { prepareGatewayLaunchContext } from './config-sync';
+import {
+  getLastStartupPreflightRecovery,
+  prepareGatewayLaunchContext,
+  runOpenClawStartupPreflightRepair,
+} from './config-sync';
 import { connectGatewaySocket, waitForGatewayReady } from './ws-client';
 import {
   findExistingGatewayProcess,
@@ -375,7 +379,6 @@ export class GatewayManager extends EventEmitter {
             });
           },
           onConnectedToManagedGateway: () => {
-            this.lastStartupRecovery = null;
             this.startHealthCheck();
             logger.debug('Gateway started successfully');
           },
@@ -387,6 +390,7 @@ export class GatewayManager extends EventEmitter {
                   kind: 'config-repaired',
                   strategy: result.strategy,
                   backupPath: result.backupPath ?? undefined,
+                  topics: ['config'],
                 };
                 logger.warn(
                   `Repaired malformed openclaw.json during Gateway startup${result.backupPath ? ` (backup: ${result.backupPath})` : ''}${result.strategy ? ` using ${result.strategy}` : ''}`,
@@ -396,6 +400,7 @@ export class GatewayManager extends EventEmitter {
                   kind: 'config-reset',
                   strategy: result.strategy,
                   backupPath: result.backupPath ?? undefined,
+                  topics: ['config'],
                 };
                 logger.warn(
                   `Reset malformed openclaw.json during Gateway startup${result.backupPath ? ` (backup: ${result.backupPath})` : ''}`,
@@ -412,7 +417,16 @@ export class GatewayManager extends EventEmitter {
           onMalformedConfigRecoverySuccess: () => {
             this.setStatus({ state: 'starting', error: undefined, reconnectAttempts: 0, restartExpectedMs: undefined });
           },
-          runDoctorRepair: async () => await runOpenClawDoctorRepair(),
+          runDoctorRepair: async () => {
+            try {
+              await runOpenClawStartupPreflightRepair();
+              logger.info('OpenClaw startup preflight repair completed; retrying Gateway startup');
+              return true;
+            } catch (preflightError) {
+              logger.warn('OpenClaw startup preflight repair failed; falling back to doctor --fix:', preflightError);
+            }
+            return await runOpenClawDoctorRepair();
+          },
           onDoctorRepairSuccess: () => {
             this.setStatus({ state: 'starting', error: undefined, reconnectAttempts: 0, restartExpectedMs: undefined });
           },
@@ -888,6 +902,7 @@ export class GatewayManager extends EventEmitter {
   private async startProcess(): Promise<void> {
     logger.debug('Preparing Gateway launch context...');
     const launchContext = await prepareGatewayLaunchContext(this.status.port);
+    this.lastStartupRecovery = getLastStartupPreflightRecovery();
     logger.debug('Gateway launch context ready');
     logger.debug('Ensuring legacy launchctl Gateway service is unloaded...');
     await unloadLaunchctlGatewayService();
