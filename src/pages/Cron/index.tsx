@@ -32,6 +32,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { useGatewayStore } from '@/stores/gateway';
 import { useChannelsStore } from '@/stores/channels';
 import { useCronStore } from '@/stores/cron';
+import { DEFAULT_SESSION_KEY, useChatStore } from '@/stores/chat';
 import { CHANNEL_ICONS, CHANNEL_NAMES, type ChannelType } from '@/types/channel';
 import type { CronJob, CronJobCreateInput, CronJobUpdateInput, ScheduleType } from '@/types/cron';
 import { cn, formatRelativeTime } from '@/lib/utils';
@@ -79,22 +80,12 @@ const DEFAULT_SCHEDULE_STATE: ScheduleBuilderState = {
 
 const WEEKDAY_OPTIONS = ['1', '2', '3', '4', '5', '6', '0'] as const;
 
-function requiresExplicitDeliveryTarget(channel: string): boolean {
-  return channel.trim().length > 0;
-}
-
-function deliveryTargetPlaceholder(channel: string, t: TFunction<'cron'>): string {
-  switch (channel.trim()) {
-    case 'feishu':
-      return t('dialog.targetPlaceholderFeishu');
-    case 'telegram':
-      return t('dialog.targetPlaceholderTelegram');
-    case 'wechat':
-    case 'openclaw-weixin':
-      return t('dialog.targetPlaceholderWechat');
-    default:
-      return t('dialog.targetPlaceholderGeneric');
+function resolveCronSessionTarget(sessionKey?: string | null): string | undefined {
+  const normalized = sessionKey?.trim();
+  if (!normalized || normalized === DEFAULT_SESSION_KEY) {
+    return undefined;
   }
+  return `session:${normalized}`;
 }
 
 function weekdayTranslationKey(day: string): 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' {
@@ -438,11 +429,12 @@ function validateCronExpression(expr: string): boolean {
 interface TaskDialogProps {
   job?: CronJob;
   channelOptions: Array<{ value: string; label: string }>;
+  defaultSessionTarget?: string;
   onClose: () => void;
   onSave: (input: CronJobCreateInput) => Promise<void>;
 }
 
-function TaskDialog({ job, channelOptions, onClose, onSave }: TaskDialogProps) {
+function TaskDialog({ job, channelOptions, defaultSessionTarget, onClose, onSave }: TaskDialogProps) {
   const { t } = useTranslation('cron');
   const [saving, setSaving] = useState(false);
   const readOnly = Boolean(job && job.uiManaged === false);
@@ -462,7 +454,6 @@ function TaskDialog({ job, channelOptions, onClose, onSave }: TaskDialogProps) {
   const [customSchedule, setCustomSchedule] = useState(initialBuilderState.custom || initialSchedule);
   const [enabled, setEnabled] = useState(job?.enabled ?? true);
   const [deliveryChannel, setDeliveryChannel] = useState(job?.deliveryChannel || '');
-  const [deliveryTo, setDeliveryTo] = useState(job?.deliveryTo || '');
 
   const finalSchedule = buildCronFromBuilder({
     mode: scheduleMode,
@@ -526,11 +517,6 @@ function TaskDialog({ job, channelOptions, onClose, onSave }: TaskDialogProps) {
       toast.error(t('toast.invalidTime'));
       return;
     }
-    if (requiresExplicitDeliveryTarget(deliveryChannel) && !deliveryTo.trim()) {
-      toast.error(t('toast.deliveryTargetRequired'));
-      return;
-    }
-
     setSaving(true);
     try {
       await onSave({
@@ -539,7 +525,7 @@ function TaskDialog({ job, channelOptions, onClose, onSave }: TaskDialogProps) {
         schedule: finalSchedule,
         enabled,
         deliveryChannel: deliveryChannel.trim() || undefined,
-        deliveryTo: deliveryTo.trim() || undefined,
+        sessionTarget: job?.sessionTarget || defaultSessionTarget,
       });
       onClose();
       toast.success(job ? t('toast.updated') : t('toast.created'));
@@ -803,19 +789,6 @@ function TaskDialog({ job, channelOptions, onClose, onSave }: TaskDialogProps) {
                 ))}
               </Select>
             </div>
-            {deliveryChannel ? (
-              <div className="space-y-2">
-                <Label htmlFor="task-delivery-target">{t('dialog.deliveryTarget')}</Label>
-                <Input
-                  id="task-delivery-target"
-                  value={deliveryTo}
-                  onChange={(e) => setDeliveryTo(e.target.value)}
-                  placeholder={deliveryTargetPlaceholder(deliveryChannel, t)}
-                  disabled={readOnly}
-                />
-                <p className="text-xs text-muted-foreground">{t('dialog.deliveryTargetHelp')}</p>
-              </div>
-            ) : null}
           </div>
 
           <div className="flex justify-end gap-2">
@@ -852,10 +825,14 @@ function CronJobCard({ job, busy = false, onToggle, onEdit, onDelete, onTrigger,
 
   const scheduleText = parseCronSchedule(job.schedule, t);
   const isAdvancedJob = job.uiManaged === false;
+  const deliveryError = job.lastRun?.error ?? '';
   const needsChannelRepair = Boolean(
     isAdvancedJob
     && job.deliveryMode === 'announce'
-    && job.lastRun?.error?.includes('Channel is required'),
+    && (
+      deliveryError.includes('Channel is required')
+      || deliveryError.includes('requires target')
+    ),
   );
 
   const handleTrigger = async (e: React.MouseEvent) => {
@@ -1010,28 +987,27 @@ function CronJobCard({ job, busy = false, onToggle, onEdit, onDelete, onTrigger,
 interface DeliveryChannelDialogProps {
   job: CronJob;
   channelOptions: Array<{ value: string; label: string }>;
+  defaultSessionTarget?: string;
   onClose: () => void;
   onSave: (input: CronJobUpdateInput) => Promise<void>;
 }
 
-function DeliveryChannelDialog({ job, channelOptions, onClose, onSave }: DeliveryChannelDialogProps) {
+function DeliveryChannelDialog({ job, channelOptions, defaultSessionTarget, onClose, onSave }: DeliveryChannelDialogProps) {
   const { t } = useTranslation('cron');
   const [saving, setSaving] = useState(false);
   const [channel, setChannel] = useState(job.deliveryChannel ?? '');
-  const [target, setTarget] = useState(job.deliveryTo ?? '');
 
   const handleSubmit = async () => {
     if (!channel.trim()) {
       toast.error(t('toast.channelRequired'));
       return;
     }
-    if (requiresExplicitDeliveryTarget(channel) && !target.trim()) {
-      toast.error(t('toast.deliveryTargetRequired'));
-      return;
-    }
     setSaving(true);
     try {
-      await onSave({ deliveryChannel: channel.trim(), deliveryTo: target.trim() || undefined });
+      await onSave({
+        deliveryChannel: channel.trim(),
+        sessionTarget: job.sessionTarget || defaultSessionTarget,
+      });
       toast.success(t('toast.updated'));
       onClose();
     } catch (error) {
@@ -1073,16 +1049,6 @@ function DeliveryChannelDialog({ job, channelOptions, onClose, onSave }: Deliver
             </Select>
             <p className="text-xs text-muted-foreground">{t('dialog.repairDeliveryHelp')}</p>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="cron-delivery-target">{t('dialog.deliveryTarget')}</Label>
-            <Input
-              id="cron-delivery-target"
-              value={target}
-              onChange={(e) => setTarget(e.target.value)}
-              placeholder={deliveryTargetPlaceholder(channel, t)}
-            />
-            <p className="text-xs text-muted-foreground">{t('dialog.deliveryTargetHelp')}</p>
-          </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onClose} className="rounded-xl px-5">
               {t('common:actions.cancel', 'Cancel')}
@@ -1107,6 +1073,7 @@ export function Cron() {
   const { jobs, loading, error, fetchJobs, createJob, updateJob, toggleJob, deleteJob, triggerJob } = useCronStore();
   const { channelGroups, fetchChannels } = useChannelsStore();
   const gatewayStatus = useGatewayStore((state) => state.status);
+  const currentSessionKey = useChatStore((state) => state.currentSessionKey);
 
   const [showDialog, setShowDialog] = useState(false);
   const [editingJob, setEditingJob] = useState<CronJob | undefined>();
@@ -1145,6 +1112,10 @@ export function Cron() {
       }];
     });
   }, [channelGroups]);
+  const defaultSessionTarget = useMemo(
+    () => resolveCronSessionTarget(currentSessionKey),
+    [currentSessionKey],
+  );
 
   const orderedJobs = useMemo(() => {
     return [...safeJobs].sort((a, b) => {
@@ -1360,6 +1331,7 @@ export function Cron() {
         <TaskDialog
           job={editingJob}
           channelOptions={configuredDeliveryChannels}
+          defaultSessionTarget={defaultSessionTarget}
           onClose={() => {
             setShowDialog(false);
             setEditingJob(undefined);
@@ -1372,6 +1344,7 @@ export function Cron() {
         <DeliveryChannelDialog
           job={jobToRepair}
           channelOptions={configuredDeliveryChannels}
+          defaultSessionTarget={defaultSessionTarget}
           onClose={() => setJobToRepair(null)}
           onSave={async (input) => {
             await updateJob(jobToRepair.id, input);

@@ -60,8 +60,9 @@ export interface CronJob {
 
 /**
  * Input for creating a cron job from the UI.
- * No target/delivery — UI-created tasks push results to the ClawClaw chat page.
- * Tasks created via external channels are handled directly by the Gateway.
+ * UI-created tasks may optionally target an external channel.
+ * When no explicit target is provided, OpenClaw should reuse the current
+ * conversation route or the channel's configured default target.
  */
 export interface CronJobCreateInput {
   name: string;
@@ -69,7 +70,7 @@ export interface CronJobCreateInput {
   schedule: string;
   enabled?: boolean;
   deliveryChannel?: string;
-  deliveryTo?: string;
+  sessionTarget?: string;
 }
 
 /**
@@ -81,7 +82,7 @@ export interface CronJobUpdateInput {
   schedule?: string;
   enabled?: boolean;
   deliveryChannel?: string;
-  deliveryTo?: string;
+  sessionTarget?: string;
 }
 
 /**

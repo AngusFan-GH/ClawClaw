@@ -137,19 +137,19 @@ export async function handleCronRoutes(
         schedule: string;
         enabled?: boolean;
         deliveryChannel?: string;
-        deliveryTo?: string;
+        sessionTarget?: string;
       }>(req);
       const deliveryChannel = typeof input.deliveryChannel === 'string' ? input.deliveryChannel.trim() : '';
-      const deliveryTo = typeof input.deliveryTo === 'string' ? input.deliveryTo.trim() : '';
+      const sessionTarget = typeof input.sessionTarget === 'string' ? input.sessionTarget.trim() : '';
       const result = await ctx.gatewayManager.rpc('cron.add', {
         name: input.name,
         schedule: { kind: 'cron', expr: input.schedule },
         payload: { kind: 'agentTurn', message: input.message },
         enabled: input.enabled ?? true,
         wakeMode: 'next-heartbeat',
-        sessionTarget: 'isolated',
+        sessionTarget: sessionTarget || 'isolated',
         delivery: deliveryChannel
-          ? { mode: 'announce', channel: deliveryChannel, ...(deliveryTo ? { to: deliveryTo } : {}) }
+          ? { mode: 'announce', channel: deliveryChannel }
           : { mode: 'none' },
       });
       const agentSnapshot = await listAgentsSnapshot();
@@ -178,7 +178,7 @@ export async function handleCronRoutes(
       }
       const requestedKeys = Object.keys(input);
       const deliveryRepairOnly = requestedKeys.length > 0 && requestedKeys.every(
-        (key) => key === 'deliveryChannel' || key === 'deliveryTo',
+        (key) => key === 'deliveryChannel' || key === 'sessionTarget',
       );
       if (!isEditableUiJob(current) && !deliveryRepairOnly) {
         sendJson(res, 400, {
@@ -196,35 +196,29 @@ export async function handleCronRoutes(
         delete patch.message;
       }
       const hasDeliveryChannel = Object.prototype.hasOwnProperty.call(patch, 'deliveryChannel');
-      const hasDeliveryTo = Object.prototype.hasOwnProperty.call(patch, 'deliveryTo');
-      if (hasDeliveryChannel || hasDeliveryTo) {
+      const hasSessionTarget = Object.prototype.hasOwnProperty.call(patch, 'sessionTarget');
+      if (hasDeliveryChannel) {
         const nextDelivery = {
           ...(current.delivery ?? {}),
           mode: current.delivery?.mode ?? 'announce',
         } as NonNullable<GatewayCronJob['delivery']>;
-        if (hasDeliveryChannel) {
-          const nextChannel = typeof patch.deliveryChannel === 'string' ? patch.deliveryChannel.trim() : '';
-          if (nextChannel) {
-            nextDelivery.channel = nextChannel;
-          } else {
-            delete nextDelivery.channel;
-          }
-          delete patch.deliveryChannel;
+        const nextChannel = typeof patch.deliveryChannel === 'string' ? patch.deliveryChannel.trim() : '';
+        if (nextChannel) {
+          nextDelivery.channel = nextChannel;
+        } else {
+          delete nextDelivery.channel;
         }
-        if (hasDeliveryTo) {
-          const nextTo = typeof patch.deliveryTo === 'string' ? patch.deliveryTo.trim() : '';
-          if (nextTo) {
-            nextDelivery.to = nextTo;
-          } else {
-            delete nextDelivery.to;
-          }
-          delete patch.deliveryTo;
-        }
+        delete nextDelivery.to;
+        delete patch.deliveryChannel;
         patch.delivery = nextDelivery;
       } else if (isEditableUiJob(current)) {
         patch.delivery = {
           mode: current.delivery?.mode ?? 'none',
         };
+      }
+      if (hasSessionTarget) {
+        const nextSessionTarget = typeof patch.sessionTarget === 'string' ? patch.sessionTarget.trim() : '';
+        patch.sessionTarget = nextSessionTarget || 'isolated';
       }
       sendJson(res, 200, await ctx.gatewayManager.rpc('cron.update', { id, patch }));
     } catch (error) {
