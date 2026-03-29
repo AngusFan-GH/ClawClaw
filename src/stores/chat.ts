@@ -504,27 +504,34 @@ const IMAGE_CACHE_KEY = 'clawclaw:image-cache';
 const IMAGE_CACHE_MAX = 100; // max entries to prevent unbounded growth
 
 function loadImageCache(): Map<string, AttachedFileMeta> {
+  const raw = localStorage.getItem(IMAGE_CACHE_KEY);
+  if (!raw) return new Map();
+
   try {
-    const raw = localStorage.getItem(IMAGE_CACHE_KEY);
-    if (raw) {
-      const entries = JSON.parse(raw) as Array<[string, AttachedFileMeta]>;
-      return new Map(entries);
+    const entries = JSON.parse(raw) as Array<[string, AttachedFileMeta]>;
+    if (!Array.isArray(entries)) throw new Error('Cache entries must be an array');
+    return new Map(entries);
+  } catch (err) {
+    // ✅ Fix HR-2: Corrupted localStorage data — clear it so we don't retry forever.
+    console.warn('[loadImageCache] Corrupted cache data, clearing:', err);
+    try {
+      localStorage.removeItem(IMAGE_CACHE_KEY);
+    } catch {
+      // ignore cleanup failure
     }
-  } catch {
-    /* ignore parse errors */
+    return new Map();
   }
-  return new Map();
 }
 
 function saveImageCache(cache: Map<string, AttachedFileMeta>): void {
   try {
-    // Evict oldest entries if over limit
     const entries = Array.from(cache.entries());
     const trimmed =
       entries.length > IMAGE_CACHE_MAX ? entries.slice(entries.length - IMAGE_CACHE_MAX) : entries;
     localStorage.setItem(IMAGE_CACHE_KEY, JSON.stringify(trimmed));
-  } catch {
-    /* ignore quota errors */
+  } catch (err) {
+    // ✅ Fix HR-2: Log quota errors so they're visible during development.
+    console.warn('[saveImageCache] Failed to persist image cache (quota exceeded?):', err);
   }
 }
 
@@ -2455,13 +2462,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (!result.success) {
         clearHistoryPoll();
-        set({ error: result.error || 'Failed to send message', sending: false, ...resetToolStreamState(get()) });
+        // ✅ Fix HR-1: Roll back the optimistically-added user message on failure.
+        set((s) => ({
+          messages: s.messages.filter((m) => m.id !== userMsg.id),
+          error: result.error || 'Failed to send message',
+          sending: false,
+          activeRunId: null,
+          ...resetToolStreamState(get()),
+        }));
       } else if (result.result?.runId) {
         set({ activeRunId: result.result.runId });
       }
     } catch (err) {
       clearHistoryPoll();
-      set({ error: String(err), sending: false, ...resetToolStreamState(get()) });
+      // ✅ Fix HR-1: Roll back the optimistically-added user message on error.
+      set((s) => ({
+        messages: s.messages.filter((m) => m.id !== userMsg.id),
+        error: String(err),
+        sending: false,
+        activeRunId: null,
+        ...resetToolStreamState(get()),
+      }));
     }
   },
 

@@ -138,7 +138,13 @@ function handleGatewayChatMessage(data: unknown): void {
       : chatData;
 
     if (payload.state) {
-      useChatStore.getState().handleChatEvent(payload);
+      // ✅ Fix CR-3: Always spread all top-level fields so sessionKey is preserved.
+      // OpenClaw chat:message event: sessionKey lives at payload top level, same as runId.
+      useChatStore.getState().handleChatEvent({
+        ...payload,
+        runId: chatData.runId ?? payload.runId,
+        sessionKey: chatData.sessionKey ?? payload.sessionKey,
+      });
       return;
     }
 
@@ -146,6 +152,7 @@ function handleGatewayChatMessage(data: unknown): void {
       state: 'final',
       message: payload,
       runId: chatData.runId ?? payload.runId,
+      sessionKey: chatData.sessionKey ?? payload.sessionKey,
     });
   }).catch(() => {});
 }

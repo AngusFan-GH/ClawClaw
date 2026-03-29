@@ -1087,23 +1087,34 @@ export class GatewayManager extends EventEmitter {
       });
       const scheduledEpoch = this.lifecycleController.getCurrentEpoch();
 
+      // ✅ Fix HR-4: Use inFlight flag to prevent re-entrancy and make timer lifecycle explicit.
+      let inFlight = false;
       this.reconnectTimer = setTimeout(async () => {
-        this.reconnectTimer = null;
-        const skipReason = getReconnectSkipReason({
-          scheduledEpoch,
-          currentEpoch: this.lifecycleController.getCurrentEpoch(),
-          shouldReconnect: this.shouldReconnect,
-        });
-        if (skipReason) {
-          logger.debug(`Skipping fast reconnect attempt: ${skipReason}`);
+        if (inFlight) {
+          logger.debug('Reconnect already in flight, skipping duplicate timer');
           return;
         }
+        inFlight = true;
         try {
-          await this.start();
-          this.reconnectAttempts = 0;
-        } catch (error) {
-          logger.error('Fast Gateway reconnection attempt failed:', error);
-          this.scheduleReconnect();
+          const skipReason = getReconnectSkipReason({
+            scheduledEpoch,
+            currentEpoch: this.lifecycleController.getCurrentEpoch(),
+            shouldReconnect: this.shouldReconnect,
+          });
+          if (skipReason) {
+            logger.debug(`Skipping fast reconnect attempt: ${skipReason}`);
+            return;
+          }
+          try {
+            await this.start();
+            this.reconnectAttempts = 0;
+          } catch (error) {
+            logger.error('Fast Gateway reconnection attempt failed:', error);
+            this.scheduleReconnect();
+          }
+        } finally {
+          inFlight = false;
+          this.reconnectTimer = null;
         }
       }, delay);
       return;

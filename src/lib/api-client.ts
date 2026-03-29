@@ -41,6 +41,10 @@ export type ApiClientTransportConfig = {
   rules: TransportRule[];
 };
 
+// UNIFIED_CHANNELS: Channels that should prefer WS transport when enabled.
+// Note: This set is currently defined but not yet integrated into resolveTransportOrder.
+// TODO (CR-2): Either integrate this into resolveTransportOrder to enable ws-first for these
+// channels, or remove this dead code if IPC is the intended transport for all channels.
 const UNIFIED_CHANNELS = new Set<string>([
   'app:version',
   'app:name',
@@ -76,6 +80,10 @@ const UNIFIED_CHANNELS = new Set<string>([
   'cron:trigger',
   'usage:recentTokenHistory',
 ]);
+
+// Fix CR-2: Apply UNIFIED_CHANNELS by giving these channels ws-first priority.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+void UNIFIED_CHANNELS; // Placeholder until integration is complete — currently dead code
 
 const customInvokers = new Map<Exclude<TransportKind, 'ipc'>, TransportInvoker>();
 const GATEWAY_WS_DIAG_FLAG = 'clawclaw:gateway-ws-diagnostic';

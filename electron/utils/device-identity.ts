@@ -96,9 +96,17 @@ export async function loadOrCreateDeviceIdentity(filePath: string): Promise<Devi
       ) {
         const derivedId = fingerprintPublicKey(parsed.publicKeyPem);
         if (derivedId && derivedId !== parsed.deviceId) {
-          const updated = { ...parsed, deviceId: derivedId };
-          await writeFile(filePath, `${JSON.stringify(updated, null, 2)}\n`, { mode: 0o600 });
-          return { deviceId: derivedId, publicKeyPem: parsed.publicKeyPem, privateKeyPem: parsed.privateKeyPem };
+          // ✅ Fix HR-5: Mismatch means the keypair was tampered with or the file was corrupted.
+          // Regenerate a fresh identity to ensure the private key is trustworthy.
+          console.warn(
+            `[DeviceIdentity] Stored deviceId mismatch: stored=${parsed.deviceId}, ` +
+            `derived=${derivedId}. Regenerating key pair for security.`
+          );
+          const identity = await generateIdentity();
+          const stored = { version: 1, ...identity, createdAtMs: Date.now() };
+          await writeFile(filePath, `${JSON.stringify(stored, null, 2)}\n`, { mode: 0o600 });
+          try { await chmod(filePath, 0o600); } catch { /* ignore */ }
+          return identity;
         }
         return { deviceId: parsed.deviceId, publicKeyPem: parsed.publicKeyPem, privateKeyPem: parsed.privateKeyPem };
       }
