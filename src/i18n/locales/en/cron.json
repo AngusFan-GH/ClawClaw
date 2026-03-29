@@ -29,6 +29,7 @@
     "deleteConfirm": "Are you sure you want to delete this task?",
     "last": "Last",
     "next": "Next",
+    "setDeliveryChannel": "Set delivery channel",
     "expandError": "Expand",
     "collapseError": "Collapse"
   },
@@ -79,6 +80,10 @@
     "discordChannelId": "Discord Channel ID",
     "discordChannelIdPlaceholder": "e.g., 1438452657525100686",
     "discordChannelIdDesc": "Right-click the Discord channel → Copy Channel ID",
+    "repairDeliveryTitle": "Repair delivery channel",
+    "repairDeliveryDescription": "This task is missing an explicit delivery channel. When multiple channels are configured, choose one here so it can send successfully.",
+    "repairDeliveryHelp": "Saving will update this job's delivery.channel.",
+    "selectChannel": "Select a channel",
     "enableImmediately": "Enable immediately",
     "enableImmediatelyDesc": "Start running this task after creation",
     "saveChanges": "Save Changes"

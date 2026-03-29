@@ -30,9 +30,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { LoadingIcon, PageLoader } from '@/components/common/LoadingSpinner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useGatewayStore } from '@/stores/gateway';
+import { useChannelsStore } from '@/stores/channels';
 import { useCronStore } from '@/stores/cron';
-import { CHANNEL_ICONS, type ChannelType } from '@/types/channel';
-import type { CronJob, CronJobCreateInput, ScheduleType } from '@/types/cron';
+import { CHANNEL_ICONS, CHANNEL_NAMES, type ChannelType } from '@/types/channel';
+import type { CronJob, CronJobCreateInput, CronJobUpdateInput, ScheduleType } from '@/types/cron';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
@@ -778,15 +779,21 @@ interface CronJobCardProps {
   onEdit: () => void;
   onDelete: () => void;
   onTrigger: () => Promise<void>;
+  onRepairChannel?: () => void;
 }
 
-function CronJobCard({ job, busy = false, onToggle, onEdit, onDelete, onTrigger }: CronJobCardProps) {
+function CronJobCard({ job, busy = false, onToggle, onEdit, onDelete, onTrigger, onRepairChannel }: CronJobCardProps) {
   const { t } = useTranslation('cron');
   const [triggering, setTriggering] = useState(false);
   const [errorExpanded, setErrorExpanded] = useState(false);
 
   const scheduleText = parseCronSchedule(job.schedule, t);
   const isAdvancedJob = job.uiManaged === false;
+  const needsChannelRepair = Boolean(
+    isAdvancedJob
+    && job.deliveryMode === 'announce'
+    && job.lastRun?.error?.includes('Channel is required'),
+  );
 
   const handleTrigger = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -906,6 +913,18 @@ function CronJobCard({ job, busy = false, onToggle, onEdit, onDelete, onTrigger 
               >
                 {errorExpanded ? t('card.collapseError', 'Collapse') : t('card.expandError', 'Expand')}
               </button>
+              {needsChannelRepair && onRepairChannel && (
+                <div className="mt-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9 rounded-xl border-destructive/30 bg-background/80 text-destructive hover:bg-destructive/5"
+                    onClick={onRepairChannel}
+                  >
+                    {t('card.setDeliveryChannel')}
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -925,14 +944,96 @@ function CronJobCard({ job, busy = false, onToggle, onEdit, onDelete, onTrigger 
   );
 }
 
+interface DeliveryChannelDialogProps {
+  job: CronJob;
+  channelOptions: Array<{ value: string; label: string }>;
+  onClose: () => void;
+  onSave: (input: CronJobUpdateInput) => Promise<void>;
+}
+
+function DeliveryChannelDialog({ job, channelOptions, onClose, onSave }: DeliveryChannelDialogProps) {
+  const { t } = useTranslation('cron');
+  const [saving, setSaving] = useState(false);
+  const [channel, setChannel] = useState(job.deliveryChannel ?? '');
+
+  const handleSubmit = async () => {
+    if (!channel.trim()) {
+      toast.error(t('toast.channelRequired'));
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave({ deliveryChannel: channel.trim() });
+      toast.success(t('toast.updated'));
+      onClose();
+    } catch (error) {
+      toast.error(String(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/35 backdrop-blur-md flex items-center justify-center p-4" onClick={onClose}>
+      <Card className="w-full max-w-lg rounded-2xl" onClick={(e) => e.stopPropagation()}>
+        <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
+          <div>
+            <CardTitle className="text-xl font-semibold tracking-tight">{t('dialog.repairDeliveryTitle')}</CardTitle>
+            <CardDescription className="mt-1">{t('dialog.repairDeliveryDescription')}</CardDescription>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose} className="rounded-xl">
+            <X className="h-4 w-4" />
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-2xl border border-border/70 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+            {job.name}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="cron-delivery-channel">{t('dialog.targetChannel')}</Label>
+            <Select
+              id="cron-delivery-channel"
+              value={channel}
+              onChange={(e) => setChannel(e.target.value)}
+            >
+              <option value="">{t('dialog.selectChannel')}</option>
+              {channelOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+            <p className="text-xs text-muted-foreground">{t('dialog.repairDeliveryHelp')}</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={onClose} className="rounded-xl px-5">
+              {t('common:actions.cancel', 'Cancel')}
+            </Button>
+            <Button onClick={handleSubmit} disabled={saving} className="rounded-xl px-5">
+              {saving ? (
+                <>
+                  <LoadingIcon className="h-4 w-4 mr-2" />
+                  {t('common:status.saving', 'Saving...')}
+                </>
+              ) : t('dialog.saveChanges')}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export function Cron() {
   const { t } = useTranslation('cron');
   const { jobs, loading, error, fetchJobs, createJob, updateJob, toggleJob, deleteJob, triggerJob } = useCronStore();
+  const { channelGroups, fetchChannels } = useChannelsStore();
   const gatewayStatus = useGatewayStore((state) => state.status);
 
   const [showDialog, setShowDialog] = useState(false);
   const [editingJob, setEditingJob] = useState<CronJob | undefined>();
   const [jobToDelete, setJobToDelete] = useState<{ id: string } | null>(null);
+  const [jobToRepair, setJobToRepair] = useState<CronJob | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'failed'>('all');
@@ -943,14 +1044,29 @@ export function Cron() {
   useEffect(() => {
     if (isGatewayRunning) {
       void fetchJobs();
+      void fetchChannels(false, { includeRuntime: false });
     }
-  }, [fetchJobs, isGatewayRunning]);
+  }, [fetchChannels, fetchJobs, isGatewayRunning]);
 
   const safeJobs = useMemo(() => (Array.isArray(jobs) ? jobs : []), [jobs]);
   const activeJobs = useMemo(() => safeJobs.filter((j) => j.enabled), [safeJobs]);
   const pausedJobs = useMemo(() => safeJobs.filter((j) => !j.enabled), [safeJobs]);
   const failedJobs = useMemo(() => safeJobs.filter((j) => j.lastRun && !j.lastRun.success), [safeJobs]);
   const advancedJobs = useMemo(() => safeJobs.filter((j) => j.uiManaged === false), [safeJobs]);
+  const configuredDeliveryChannels = useMemo(() => {
+    const seen = new Set<string>();
+    return channelGroups.flatMap((group) => {
+      const configured = group.configured || group.accounts.some((account) => account.configured);
+      if (!configured || seen.has(group.type)) {
+        return [];
+      }
+      seen.add(group.type);
+      return [{
+        value: group.type,
+        label: group.name?.trim() || CHANNEL_NAMES[group.type as ChannelType] || group.type,
+      }];
+    });
+  }, [channelGroups]);
 
   const orderedJobs = useMemo(() => {
     return [...safeJobs].sort((a, b) => {
@@ -1139,22 +1255,23 @@ export function Cron() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-4">
-                    {filteredJobs.map((job) => (
-                      <CronJobCard
-                        key={job.id}
-                        job={job}
-                        busy={Boolean(busyJobIds[job.id])}
+              {filteredJobs.map((job) => (
+                <CronJobCard
+                  key={job.id}
+                  job={job}
+                  busy={Boolean(busyJobIds[job.id])}
                         onToggle={(enabled) => handleToggle(job.id, enabled)}
                         onEdit={() => {
                           setEditingJob(job);
                           setShowDialog(true);
                         }}
-                        onDelete={() => setJobToDelete({ id: job.id })}
-                        onTrigger={() => triggerJob(job.id)}
-                      />
-                    ))}
-                  </div>
-                )}
+                  onDelete={() => setJobToDelete({ id: job.id })}
+                  onTrigger={() => triggerJob(job.id)}
+                  onRepairChannel={() => setJobToRepair(job)}
+                />
+              ))}
+            </div>
+          )}
               </div>
             </CardContent>
           </Card>
@@ -1169,6 +1286,18 @@ export function Cron() {
             setEditingJob(undefined);
           }}
           onSave={handleSave}
+        />
+      )}
+
+      {jobToRepair && (
+        <DeliveryChannelDialog
+          job={jobToRepair}
+          channelOptions={configuredDeliveryChannels}
+          onClose={() => setJobToRepair(null)}
+          onSave={async (input) => {
+            await updateJob(jobToRepair.id, input);
+            await fetchJobs();
+          }}
         />
       )}
 

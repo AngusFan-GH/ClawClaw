@@ -29,6 +29,7 @@
     "deleteConfirm": "确定要删除这个任务吗？",
     "last": "上次",
     "next": "下次",
+    "setDeliveryChannel": "设置投递频道",
     "expandError": "\u5c55\u5f00",
     "collapseError": "\u6536\u8d77"
   },
@@ -79,6 +80,10 @@
     "discordChannelId": "Discord 频道 ID",
     "discordChannelIdPlaceholder": "例如：1438452657525100686",
     "discordChannelIdDesc": "在 Discord 中右键频道，选择“复制频道 ID”",
+    "repairDeliveryTitle": "修复投递频道",
+    "repairDeliveryDescription": "这个任务缺少明确的投递频道。在多连接环境下，需要指定一个频道后才能正常发送。",
+    "repairDeliveryHelp": "选择后会更新该任务的 delivery.channel。",
+    "selectChannel": "请选择频道",
     "enableImmediately": "立即启用",
     "enableImmediatelyDesc": "创建后立刻开始按计划执行",
     "saveChanges": "保存更改"

@@ -52,6 +52,8 @@ export interface CronJob {
   kind?: string;
   uiManaged?: boolean;
   deliveryMode?: string;
+  deliveryChannel?: string;
+  deliveryTo?: string;
   sessionTarget?: string | null;
   readOnlyReason?: string;
 }
@@ -76,6 +78,8 @@ export interface CronJobUpdateInput {
   message?: string;
   schedule?: string;
   enabled?: boolean;
+  deliveryChannel?: string;
+  deliveryTo?: string;
 }
 
 /**

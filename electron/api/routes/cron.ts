@@ -102,6 +102,8 @@ function transformCronJob(job: GatewayCronJob, agentNameMap: Map<string, string>
     kind: job.payload?.kind ?? 'unknown',
     uiManaged,
     deliveryMode: job.delivery?.mode ?? 'none',
+    deliveryChannel: job.delivery?.channel,
+    deliveryTo: job.delivery?.to,
     sessionTarget: job.sessionTarget ?? null,
     readOnlyReason: uiManaged ? undefined : 'advanced-openclaw-job',
   };
@@ -163,7 +165,11 @@ export async function handleCronRoutes(
         sendJson(res, 404, { success: false, error: 'Cron job not found' });
         return true;
       }
-      if (!isEditableUiJob(current)) {
+      const requestedKeys = Object.keys(input);
+      const deliveryRepairOnly = requestedKeys.length > 0 && requestedKeys.every(
+        (key) => key === 'deliveryChannel' || key === 'deliveryTo',
+      );
+      if (!isEditableUiJob(current) && !deliveryRepairOnly) {
         sendJson(res, 400, {
           success: false,
           error: 'Advanced OpenClaw jobs cannot be edited from this UI',
@@ -178,9 +184,37 @@ export async function handleCronRoutes(
         patch.payload = { kind: 'agentTurn', message: patch.message };
         delete patch.message;
       }
-      patch.delivery = {
-        mode: isEditableUiJob(current) ? (current.delivery?.mode ?? 'none') : 'none',
-      };
+      const hasDeliveryChannel = Object.prototype.hasOwnProperty.call(patch, 'deliveryChannel');
+      const hasDeliveryTo = Object.prototype.hasOwnProperty.call(patch, 'deliveryTo');
+      if (hasDeliveryChannel || hasDeliveryTo) {
+        const nextDelivery = {
+          ...(current.delivery ?? {}),
+          mode: current.delivery?.mode ?? 'announce',
+        } as NonNullable<GatewayCronJob['delivery']>;
+        if (hasDeliveryChannel) {
+          const nextChannel = typeof patch.deliveryChannel === 'string' ? patch.deliveryChannel.trim() : '';
+          if (nextChannel) {
+            nextDelivery.channel = nextChannel;
+          } else {
+            delete nextDelivery.channel;
+          }
+          delete patch.deliveryChannel;
+        }
+        if (hasDeliveryTo) {
+          const nextTo = typeof patch.deliveryTo === 'string' ? patch.deliveryTo.trim() : '';
+          if (nextTo) {
+            nextDelivery.to = nextTo;
+          } else {
+            delete nextDelivery.to;
+          }
+          delete patch.deliveryTo;
+        }
+        patch.delivery = nextDelivery;
+      } else if (isEditableUiJob(current)) {
+        patch.delivery = {
+          mode: current.delivery?.mode ?? 'none',
+        };
+      }
       sendJson(res, 200, await ctx.gatewayManager.rpc('cron.update', { id, patch }));
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
