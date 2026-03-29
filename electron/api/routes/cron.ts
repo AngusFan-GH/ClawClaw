@@ -29,7 +29,7 @@ function isUiManagedAgentTurn(job: GatewayCronJob): boolean {
   return (
     (job.sessionTarget === 'isolated' || !job.sessionTarget)
     && job.payload?.kind === 'agentTurn'
-    && (job.delivery?.mode ?? 'none') === 'none'
+    && ['none', 'announce'].includes(job.delivery?.mode ?? 'none')
   );
 }
 
@@ -131,7 +131,16 @@ export async function handleCronRoutes(
 
   if (url.pathname === '/api/cron/jobs' && req.method === 'POST') {
     try {
-      const input = await parseJsonBody<{ name: string; message: string; schedule: string; enabled?: boolean }>(req);
+      const input = await parseJsonBody<{
+        name: string;
+        message: string;
+        schedule: string;
+        enabled?: boolean;
+        deliveryChannel?: string;
+        deliveryTo?: string;
+      }>(req);
+      const deliveryChannel = typeof input.deliveryChannel === 'string' ? input.deliveryChannel.trim() : '';
+      const deliveryTo = typeof input.deliveryTo === 'string' ? input.deliveryTo.trim() : '';
       const result = await ctx.gatewayManager.rpc('cron.add', {
         name: input.name,
         schedule: { kind: 'cron', expr: input.schedule },
@@ -139,7 +148,9 @@ export async function handleCronRoutes(
         enabled: input.enabled ?? true,
         wakeMode: 'next-heartbeat',
         sessionTarget: 'isolated',
-        delivery: { mode: 'none' },
+        delivery: deliveryChannel
+          ? { mode: 'announce', channel: deliveryChannel, ...(deliveryTo ? { to: deliveryTo } : {}) }
+          : { mode: 'none' },
       });
       const agentSnapshot = await listAgentsSnapshot();
       const agentNameMap = new Map(agentSnapshot.agents.map((agent) => [agent.id, agent.name]));

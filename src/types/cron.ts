@@ -68,6 +68,8 @@ export interface CronJobCreateInput {
   message: string;
   schedule: string;
   enabled?: boolean;
+  deliveryChannel?: string;
+  deliveryTo?: string;
 }
 
 /**

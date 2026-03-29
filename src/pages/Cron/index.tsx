@@ -79,6 +79,24 @@ const DEFAULT_SCHEDULE_STATE: ScheduleBuilderState = {
 
 const WEEKDAY_OPTIONS = ['1', '2', '3', '4', '5', '6', '0'] as const;
 
+function requiresExplicitDeliveryTarget(channel: string): boolean {
+  return channel.trim().length > 0;
+}
+
+function deliveryTargetPlaceholder(channel: string, t: TFunction<'cron'>): string {
+  switch (channel.trim()) {
+    case 'feishu':
+      return t('dialog.targetPlaceholderFeishu');
+    case 'telegram':
+      return t('dialog.targetPlaceholderTelegram');
+    case 'wechat':
+    case 'openclaw-weixin':
+      return t('dialog.targetPlaceholderWechat');
+    default:
+      return t('dialog.targetPlaceholderGeneric');
+  }
+}
+
 function weekdayTranslationKey(day: string): 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' {
   switch (day) {
     case '1':
@@ -419,11 +437,12 @@ function validateCronExpression(expr: string): boolean {
 
 interface TaskDialogProps {
   job?: CronJob;
+  channelOptions: Array<{ value: string; label: string }>;
   onClose: () => void;
   onSave: (input: CronJobCreateInput) => Promise<void>;
 }
 
-function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
+function TaskDialog({ job, channelOptions, onClose, onSave }: TaskDialogProps) {
   const { t } = useTranslation('cron');
   const [saving, setSaving] = useState(false);
   const readOnly = Boolean(job && job.uiManaged === false);
@@ -442,6 +461,8 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
   const [monthlyTime, setMonthlyTime] = useState(initialBuilderState.monthlyTime);
   const [customSchedule, setCustomSchedule] = useState(initialBuilderState.custom || initialSchedule);
   const [enabled, setEnabled] = useState(job?.enabled ?? true);
+  const [deliveryChannel, setDeliveryChannel] = useState(job?.deliveryChannel || '');
+  const [deliveryTo, setDeliveryTo] = useState(job?.deliveryTo || '');
 
   const finalSchedule = buildCronFromBuilder({
     mode: scheduleMode,
@@ -505,6 +526,10 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
       toast.error(t('toast.invalidTime'));
       return;
     }
+    if (requiresExplicitDeliveryTarget(deliveryChannel) && !deliveryTo.trim()) {
+      toast.error(t('toast.deliveryTargetRequired'));
+      return;
+    }
 
     setSaving(true);
     try {
@@ -513,6 +538,8 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
         message: message.trim(),
         schedule: finalSchedule,
         enabled,
+        deliveryChannel: deliveryChannel.trim() || undefined,
+        deliveryTo: deliveryTo.trim() || undefined,
       });
       onClose();
       toast.success(job ? t('toast.updated') : t('toast.created'));
@@ -755,6 +782,42 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
             <Switch checked={enabled} onCheckedChange={setEnabled} disabled={readOnly} />
           </div>
 
+          <div className="rounded-2xl border border-border/70 bg-card/80 p-4 space-y-3">
+            <div>
+              <p className="text-sm font-medium">{t('dialog.targetChannel')}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{t('dialog.targetChannelHelp')}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="task-delivery-channel">{t('dialog.targetChannel')}</Label>
+              <Select
+                id="task-delivery-channel"
+                value={deliveryChannel}
+                onChange={(e) => setDeliveryChannel(e.target.value)}
+                disabled={readOnly}
+              >
+                <option value="">{t('dialog.deliveryInternalOnly')}</option>
+                {channelOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            {deliveryChannel ? (
+              <div className="space-y-2">
+                <Label htmlFor="task-delivery-target">{t('dialog.deliveryTarget')}</Label>
+                <Input
+                  id="task-delivery-target"
+                  value={deliveryTo}
+                  onChange={(e) => setDeliveryTo(e.target.value)}
+                  placeholder={deliveryTargetPlaceholder(deliveryChannel, t)}
+                  disabled={readOnly}
+                />
+                <p className="text-xs text-muted-foreground">{t('dialog.deliveryTargetHelp')}</p>
+              </div>
+            ) : null}
+          </div>
+
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onClose} className="rounded-xl px-5">{t('common:actions.cancel', 'Cancel')}</Button>
             <Button onClick={handleSubmit} disabled={saving || readOnly} className="rounded-xl px-5">
@@ -955,15 +1018,20 @@ function DeliveryChannelDialog({ job, channelOptions, onClose, onSave }: Deliver
   const { t } = useTranslation('cron');
   const [saving, setSaving] = useState(false);
   const [channel, setChannel] = useState(job.deliveryChannel ?? '');
+  const [target, setTarget] = useState(job.deliveryTo ?? '');
 
   const handleSubmit = async () => {
     if (!channel.trim()) {
       toast.error(t('toast.channelRequired'));
       return;
     }
+    if (requiresExplicitDeliveryTarget(channel) && !target.trim()) {
+      toast.error(t('toast.deliveryTargetRequired'));
+      return;
+    }
     setSaving(true);
     try {
-      await onSave({ deliveryChannel: channel.trim() });
+      await onSave({ deliveryChannel: channel.trim(), deliveryTo: target.trim() || undefined });
       toast.success(t('toast.updated'));
       onClose();
     } catch (error) {
@@ -1004,6 +1072,16 @@ function DeliveryChannelDialog({ job, channelOptions, onClose, onSave }: Deliver
               ))}
             </Select>
             <p className="text-xs text-muted-foreground">{t('dialog.repairDeliveryHelp')}</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="cron-delivery-target">{t('dialog.deliveryTarget')}</Label>
+            <Input
+              id="cron-delivery-target"
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              placeholder={deliveryTargetPlaceholder(channel, t)}
+            />
+            <p className="text-xs text-muted-foreground">{t('dialog.deliveryTargetHelp')}</p>
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onClose} className="rounded-xl px-5">
@@ -1281,6 +1359,7 @@ export function Cron() {
       {showDialog && (
         <TaskDialog
           job={editingJob}
+          channelOptions={configuredDeliveryChannels}
           onClose={() => {
             setShowDialog(false);
             setEditingJob(undefined);
