@@ -44,12 +44,14 @@ Function un.UninstallDataPageCreate
 
   ${NSD_CreateCheckbox} 0 8u 100% 12u "$(uninstallOptionAppDataTitle)"
   Pop $unRemoveClawClawDataCheckbox
+  ${NSD_Uncheck} $unRemoveClawClawDataCheckbox
 
   ${NSD_CreateLabel} 12u 22u 88% 20u "$(uninstallOptionAppDataDesc)"
   Pop $1
 
   ${NSD_CreateCheckbox} 0 56u 100% 12u "$(uninstallOptionOpenClawTitle)"
   Pop $unRemoveOpenClawDataCheckbox
+  ${NSD_Uncheck} $unRemoveOpenClawDataCheckbox
 
   ${NSD_CreateLabel} 12u 70u 88% 24u "$(uninstallOptionOpenClawDesc)"
   Pop $2

@@ -32,6 +32,7 @@ import { parseJsonBody, sendJson } from '../route-utils';
 import { ensureBundledPluginInstalled } from '../../utils/bundled-plugin-installer';
 import { getOpenClawCliSpawnConfig } from '../../utils/openclaw-cli';
 import { clearAllChannelBindings, clearChannelBinding } from '../../utils/agent-config';
+import { repairManagedPluginSdkImports } from '../../utils/plugin-sdk-compat';
 import type { ChannelType } from '../../../src/types/channel';
 
 const WECHAT_QR_TIMEOUT_MS = 8 * 60 * 1000;
@@ -380,15 +381,20 @@ async function buildChannelAccountsView(
     );
 }
 
-function scheduleGatewayChannelRefresh(ctx: HostApiContext, channelType: string, reason: string): void {
+function scheduleGatewayChannelRefresh(
+  ctx: HostApiContext,
+  channelType: string,
+  reason: string,
+  options?: { mode?: 'debounced' | 'immediate'; awaitCompletion?: boolean },
+): void {
   const action = FORCE_RESTART_CHANNELS.has(channelType) ? 'restart' : 'reload';
   void runGatewayRefresh(ctx, {
     action,
     source: reason,
     reason,
-    delayMs: action === 'restart' ? 2000 : 1200,
-    mode: 'debounced',
-    awaitCompletion: false,
+    delayMs: options?.mode === 'immediate' ? undefined : action === 'restart' ? 2000 : 1200,
+    mode: options?.mode ?? 'debounced',
+    awaitCompletion: options?.awaitCompletion ?? false,
   });
 }
 
@@ -444,6 +450,7 @@ async function ensureWeChatPluginInstalled(): Promise<{ installed: boolean; warn
     });
 
     if (existsSync(pluginManifest)) {
+      repairManagedPluginSdkImports(join(homedir(), '.openclaw', 'extensions', 'openclaw-weixin'));
       return {
         installed: true,
         warning: bundledResult.warning,
@@ -776,7 +783,14 @@ export async function handleChannelRoutes(
       } else {
         await clearAllChannelBindings(channelType).catch(() => undefined);
       }
-      scheduleGatewayChannelRefresh(ctx, toRuntimeChannelType(channelType), `channel:deleteConfig:${channelType}`);
+      await runGatewayRefresh(ctx, {
+        action: FORCE_RESTART_CHANNELS.has(toRuntimeChannelType(channelType)) ? 'restart' : 'reload',
+        source: `channel:deleteConfig:${channelType}`,
+        reason: `channel:deleteConfig:${channelType}`,
+        mode: 'immediate',
+        awaitCompletion: true,
+        skipIfStopped: true,
+      });
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

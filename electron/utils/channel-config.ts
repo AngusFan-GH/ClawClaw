@@ -18,6 +18,7 @@ import {
     sanitizeKnownInvalidOpenClawKeys,
     updateOpenClawConfigRecord,
 } from './openclaw-config';
+import { hasIncompatibleManagedPluginSdkImports } from './plugin-sdk-compat';
 import { proxyAwareFetch } from './proxy-fetch';
 import { prepareWinSpawn } from './win-shell';
 import {
@@ -1582,7 +1583,11 @@ export async function cleanupInvalidManagedChannelPlugins(): Promise<{ cleaned: 
                     ? (rawManifest as Record<string, unknown>).configSchema
                     : undefined;
 
-            if (!configSchema || typeof configSchema !== 'object' || Array.isArray(configSchema)) {
+            const hasInvalidManifest =
+                !configSchema || typeof configSchema !== 'object' || Array.isArray(configSchema);
+            const hasIncompatibleSdkImports = hasIncompatibleManagedPluginSdkImports(pluginDir);
+
+            if (hasInvalidManifest || hasIncompatibleSdkImports) {
                 await rm(pluginDir, { recursive: true, force: true });
                 cleaned = true;
                 removedPluginIds.push(pluginId);

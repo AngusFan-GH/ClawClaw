@@ -48,6 +48,10 @@ const PLUGINS = [
   { npmName: '@tencent-weixin/openclaw-weixin', pluginId: 'openclaw-weixin' },
 ];
 
+const MOVED_ROOT_PLUGIN_SDK_EXPORTS = {
+  resolvePreferredOpenClawTmpDir: 'openclaw/plugin-sdk/temp-path',
+};
+
 function getVirtualStoreNodeModules(realPkgPath) {
   let dir = realPkgPath;
   while (dir !== path.dirname(dir)) {
@@ -88,6 +92,87 @@ function listPackages(nodeModulesDir) {
   return result;
 }
 
+function collectPluginSourceFiles(rootDir) {
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(normWin(dir), { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name === '.git') continue;
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (entry.name.endsWith('.d.ts')) continue;
+      if (!/\.(ts|js|mjs|cjs)$/.test(entry.name)) continue;
+      files.push(fullPath);
+    }
+  };
+  walk(rootDir);
+  return files;
+}
+
+function parseRootImportSpecifiers(rawSpecifiers) {
+  return rawSpecifiers
+    .split(',')
+    .map((specifier) => specifier.trim())
+    .filter(Boolean)
+    .map((specifier) => {
+      const [imported, local] = specifier.split(/\s+as\s+/).map((part) => part.trim());
+      return { imported, local: local || imported, raw: specifier };
+    });
+}
+
+function repairPluginSdkRootImports(rootDir) {
+  const importPattern = /^(\s*)import\s+\{([^}]+)\}\s+from\s+["']openclaw\/plugin-sdk["'];?\s*$/gm;
+  let changedFiles = 0;
+
+  for (const filePath of collectPluginSourceFiles(rootDir)) {
+    const source = fs.readFileSync(normWin(filePath), 'utf8');
+    let changed = false;
+    const nextContent = source.replace(importPattern, (match, indent, rawSpecifiers) => {
+      const specifiers = parseRootImportSpecifiers(rawSpecifiers);
+      const remaining = [];
+      const movedBySubpath = new Map();
+
+      for (const specifier of specifiers) {
+        const subpath = MOVED_ROOT_PLUGIN_SDK_EXPORTS[specifier.imported];
+        if (!subpath) {
+          remaining.push(specifier.raw);
+          continue;
+        }
+        const movedSpecifiers = movedBySubpath.get(subpath) || [];
+        movedSpecifiers.push(
+          specifier.imported === specifier.local
+            ? specifier.imported
+            : `${specifier.imported} as ${specifier.local}`,
+        );
+        movedBySubpath.set(subpath, movedSpecifiers);
+      }
+
+      if (movedBySubpath.size === 0) {
+        return match;
+      }
+
+      changed = true;
+      const lines = [];
+      if (remaining.length > 0) {
+        lines.push(`${indent}import { ${remaining.join(', ')} } from "openclaw/plugin-sdk";`);
+      }
+      for (const [subpath, movedSpecifiers] of movedBySubpath.entries()) {
+        lines.push(`${indent}import { ${movedSpecifiers.join(', ')} } from "${subpath}";`);
+      }
+      return lines.join('\n');
+    });
+
+    if (!changed || nextContent === source) continue;
+    fs.writeFileSync(normWin(filePath), nextContent, 'utf8');
+    changedFiles++;
+  }
+
+  return changedFiles;
+}
+
 function bundleOnePlugin({ npmName, pluginId }) {
   const pkgPath = path.join(NODE_MODULES, ...npmName.split('/'));
   if (!fs.existsSync(pkgPath)) {
@@ -108,6 +193,10 @@ function bundleOnePlugin({ npmName, pluginId }) {
 
   // 1) Copy plugin package itself
   fs.cpSync(realPluginPath, outputDir, { recursive: true, dereference: true });
+  const repairedSourceFiles = repairPluginSdkRootImports(outputDir);
+  if (repairedSourceFiles > 0) {
+    echo`   🔧 Repaired ${repairedSourceFiles} plugin-sdk import file(s) for ${pluginId}`;
+  }
 
   // 2) Collect transitive deps from pnpm virtual store
   const collectedByName = new Map();

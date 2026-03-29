@@ -3,6 +3,10 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { toFsPath } from './fs-path';
+import {
+  hasIncompatibleManagedPluginSdkImports,
+  repairManagedPluginSdkImports,
+} from './plugin-sdk-compat';
 
 export interface BundledPluginInstallResult {
   installed: boolean;
@@ -86,6 +90,10 @@ function isPluginMirrorInstallHealthy(targetDir: string, sourceDir: string, plug
     return false;
   }
 
+  if (hasIncompatibleManagedPluginSdkImports(targetDir)) {
+    return false;
+  }
+
   return true;
 }
 
@@ -148,6 +156,7 @@ export function ensureBundledPluginInstalled(
     mkdirSync(toFsPath(join(homedir(), '.openclaw', 'extensions')), { recursive: true });
     rmSync(toFsPath(targetDir), { recursive: true, force: true });
     cpSync(toFsPath(sourceDir), toFsPath(targetDir), { recursive: true, dereference: true });
+    repairManagedPluginSdkImports(targetDir);
     if (!existsSync(targetManifest)) {
       return {
         installed: false,
