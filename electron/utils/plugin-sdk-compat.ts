@@ -128,6 +128,22 @@ function fileContainsIncompatibleRootImports(filePath: string): boolean {
     }
   }
 
+  const requirePattern = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\(\s*["'](openclaw\/plugin-sdk(?:\/compat)?)["']\s*\)/g;
+  let requireMatch: RegExpExecArray | null;
+  while ((requireMatch = requirePattern.exec(content)) !== null) {
+    const alias = requireMatch[1];
+    const sourceSpec = requireMatch[2];
+    if (sourceSpec === COMPAT_PLUGIN_SDK_SPEC) {
+      return true;
+    }
+    for (const movedExport of Object.keys(MOVED_ROOT_PLUGIN_SDK_EXPORTS)) {
+      const memberUsePattern = new RegExp(`\\b${alias}\\.${movedExport}\\b`);
+      if (memberUsePattern.test(content)) {
+        return true;
+      }
+    }
+  }
+
   return false;
 }
 

@@ -15,6 +15,52 @@ export interface BundledPluginInstallResult {
   sourceDir?: string;
 }
 
+function finalizeInstalledManagedPlugin(
+  targetDir: string,
+  targetManifest: string,
+  pluginId: string,
+  displayName: string,
+  sourceDir: string,
+): BundledPluginInstallResult {
+  repairManagedPluginSdkImports(targetDir);
+
+  if (!existsSync(targetManifest)) {
+    return {
+      installed: false,
+      warning: `Failed to install ${displayName} plugin mirror (manifest missing).`,
+      sourceDir,
+    };
+  }
+
+  if (hasIncompatibleManagedPluginSdkImports(targetDir)) {
+    try {
+      rmSync(toFsPath(targetDir), { recursive: true, force: true });
+    } catch {
+      // ignore cleanup failure and surface the real compatibility error below
+    }
+    return {
+      installed: false,
+      warning: `Bundled ${displayName} plugin mirror is incompatible with the current OpenClaw SDK.`,
+      sourceDir,
+    };
+  }
+
+  if (readPluginManifestId(targetDir) !== pluginId) {
+    try {
+      rmSync(toFsPath(targetDir), { recursive: true, force: true });
+    } catch {
+      // ignore cleanup failure and surface the real manifest error below
+    }
+    return {
+      installed: false,
+      warning: `Bundled ${displayName} plugin mirror manifest id is invalid.`,
+      sourceDir,
+    };
+  }
+
+  return { installed: true, changed: true, sourceDir };
+}
+
 function findOpenClawBundledExtension(pluginId: string): string | null {
   const candidateRoots = app.isPackaged
     ? [
@@ -161,14 +207,7 @@ export function ensureBundledPluginInstalled(
     mkdirSync(toFsPath(join(homedir(), '.openclaw', 'extensions')), { recursive: true });
     rmSync(toFsPath(targetDir), { recursive: true, force: true });
     cpSync(toFsPath(sourceDir), toFsPath(targetDir), { recursive: true, dereference: true });
-    repairManagedPluginSdkImports(targetDir);
-    if (!existsSync(targetManifest)) {
-      return {
-        installed: false,
-        warning: `Failed to install ${displayName} plugin mirror (manifest missing).`,
-      };
-    }
-    return { installed: true, changed: true, sourceDir };
+    return finalizeInstalledManagedPlugin(targetDir, targetManifest, pluginId, displayName, sourceDir);
   } catch {
     return {
       installed: false,

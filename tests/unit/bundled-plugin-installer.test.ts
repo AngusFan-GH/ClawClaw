@@ -87,4 +87,27 @@ describe('ensureBundledPluginInstalled', () => {
     expect(result.changed).toBe(true);
     await expect(readFile(join(targetDir, 'stale.txt'), 'utf8')).rejects.toThrow();
   });
+
+  it('rejects a bundled plugin mirror that still has incompatible plugin-sdk imports after repair', async () => {
+    const pluginId = 'test-plugin-manifest-id';
+    const sourceDir = join(process.cwd(), 'build', 'openclaw-plugins', pluginId);
+    const targetDir = join(testHome, '.openclaw', 'extensions', pluginId);
+    await writePlugin(sourceDir, pluginId, '1.0.0', { withNodeModules: true });
+    await writeFile(
+      join(sourceDir, 'index.js'),
+      [
+        'const pluginSdk = require("openclaw/plugin-sdk");',
+        'module.exports = { value: pluginSdk.resolvePreferredOpenClawTmpDir() };',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const { ensureBundledPluginInstalled } = await import('@electron/utils/bundled-plugin-installer');
+    const result = ensureBundledPluginInstalled(pluginId, 'Test Plugin', { forceReinstall: true });
+
+    expect(result.installed).toBe(false);
+    expect(result.warning).toContain('incompatible');
+    await expect(readFile(join(targetDir, 'openclaw.plugin.json'), 'utf8')).rejects.toThrow();
+  });
 });

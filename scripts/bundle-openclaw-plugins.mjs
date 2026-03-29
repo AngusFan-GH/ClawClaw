@@ -173,6 +173,26 @@ function repairPluginSdkRootImports(rootDir) {
   return changedFiles;
 }
 
+function hasIncompatiblePluginSdkImports(rootDir) {
+  for (const filePath of collectPluginSourceFiles(rootDir)) {
+    const source = fs.readFileSync(normWin(filePath), 'utf8');
+    if (/openclaw\/plugin-sdk\/compat/.test(source)) {
+      return true;
+    }
+    if (/resolvePreferredOpenClawTmpDir/.test(source) && /openclaw\/plugin-sdk/.test(source) && !/openclaw\/plugin-sdk\/temp-path/.test(source)) {
+      return true;
+    }
+    const requireMatch = source.match(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\(\s*["']openclaw\/plugin-sdk(?:\/compat)?["']\s*\)/);
+    if (requireMatch) {
+      const alias = requireMatch[1];
+      if (new RegExp(`\\b${alias}\\.resolvePreferredOpenClawTmpDir\\b`).test(source)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function bundleOnePlugin({ npmName, pluginId }) {
   const pkgPath = path.join(NODE_MODULES, ...npmName.split('/'));
   if (!fs.existsSync(pkgPath)) {
@@ -196,6 +216,9 @@ function bundleOnePlugin({ npmName, pluginId }) {
   const repairedSourceFiles = repairPluginSdkRootImports(outputDir);
   if (repairedSourceFiles > 0) {
     echo`   🔧 Repaired ${repairedSourceFiles} plugin-sdk import file(s) for ${pluginId}`;
+  }
+  if (hasIncompatiblePluginSdkImports(outputDir)) {
+    throw new Error(`Bundled plugin ${pluginId} still contains incompatible plugin-sdk imports after repair.`);
   }
 
   // 2) Collect transitive deps from pnpm virtual store

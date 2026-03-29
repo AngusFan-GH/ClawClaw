@@ -237,6 +237,26 @@ function repairPluginSdkRootImports(rootDir) {
   return changedFiles;
 }
 
+function hasIncompatiblePluginSdkImports(rootDir) {
+  for (const filePath of collectPluginSourceFiles(rootDir)) {
+    const source = require('fs').readFileSync(normWin(filePath), 'utf8');
+    if (/openclaw\/plugin-sdk\/compat/.test(source)) {
+      return true;
+    }
+    if (/resolvePreferredOpenClawTmpDir/.test(source) && /openclaw\/plugin-sdk/.test(source) && !/openclaw\/plugin-sdk\/temp-path/.test(source)) {
+      return true;
+    }
+    const requireMatch = source.match(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\(\s*["']openclaw\/plugin-sdk(?:\/compat)?["']\s*\)/);
+    if (requireMatch) {
+      const alias = requireMatch[1];
+      if (new RegExp(`\\b${alias}\\.resolvePreferredOpenClawTmpDir\\b`).test(source)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 // ── Broken module patcher ─────────────────────────────────────────────────────
 // Some bundled packages have transpiled CJS that sets `module.exports = exports.default`
 // without ever assigning `exports.default`, leaving module.exports === undefined.
@@ -329,6 +349,9 @@ function bundlePlugin(nodeModulesRoot, npmName, destDir) {
   const repairedSourceFiles = repairPluginSdkRootImports(destDir);
   if (repairedSourceFiles > 0) {
     console.log(`[after-pack] 🔧 Repaired ${repairedSourceFiles} plugin-sdk import file(s) for ${npmName}`);
+  }
+  if (hasIncompatiblePluginSdkImports(destDir)) {
+    throw new Error(`[after-pack] Bundled plugin ${npmName} still contains incompatible plugin-sdk imports after repair.`);
   }
 
   // Collect transitive deps via pnpm virtual store BFS
