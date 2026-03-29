@@ -274,6 +274,8 @@
       "check": "Check for Updates"
     },
     "currentVersion": "Current Version",
+    "openclawVersionLabel": "OpenClaw Version",
+    "openclawVersionUnavailable": "Unavailable",
     "whatsNew": "What's New:",
     "errorDetails": "Error Details:",
     "help": "When auto-update is enabled, updates are downloaded and installed automatically."

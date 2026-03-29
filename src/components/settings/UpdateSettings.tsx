@@ -1,8 +1,9 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Download, RefreshCw, Rocket, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Switch } from '@/components/ui/switch';
+import { invokeIpc } from '@/lib/api-client';
 import { useSettingsStore } from '@/stores/settings';
 import { useUpdateStore } from '@/stores/update';
 import { useTranslation } from 'react-i18next';
@@ -18,6 +19,7 @@ function formatBytes(bytes: number): string {
 
 export function UpdateSettings() {
   const { t } = useTranslation('settings');
+  const [openclawVersion, setOpenclawVersion] = useState<string | null>(null);
   const {
     autoCheckUpdate,
     autoDownloadUpdate,
@@ -47,6 +49,27 @@ export function UpdateSettings() {
   useEffect(() => {
     void init();
   }, [init]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void invokeIpc<{
+      packageExists: boolean;
+      version?: string;
+    }>('openclaw:status')
+      .then((status: { packageExists: boolean; version?: string }) => {
+        if (cancelled) return;
+        setOpenclawVersion(status.packageExists ? status.version ?? null : null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setOpenclawVersion(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     void setChannel('stable');
@@ -193,6 +216,12 @@ export function UpdateSettings() {
                 {renderStatusIcon()}
                 <span>{renderStatusText()}</span>
               </div>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
+              <span className="font-medium">{t('updates.openclawVersionLabel')}</span>
+              <span className="rounded-full border border-black/10 bg-black/[0.03] px-2.5 py-1 font-mono dark:border-white/10 dark:bg-white/[0.03]">
+                {openclawVersion ? `v${openclawVersion}` : t('updates.openclawVersionUnavailable')}
+              </span>
             </div>
           </div>
 

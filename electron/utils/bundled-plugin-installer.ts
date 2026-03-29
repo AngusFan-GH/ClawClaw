@@ -10,6 +10,7 @@ import {
 
 export interface BundledPluginInstallResult {
   installed: boolean;
+  changed?: boolean;
   warning?: string;
   sourceDir?: string;
 }
@@ -117,10 +118,12 @@ export function findBundledPluginMirror(pluginId: string): string | null {
 export function ensureBundledPluginInstalled(
   pluginId: string,
   displayName: string,
+  options?: { forceReinstall?: boolean },
 ): BundledPluginInstallResult {
   const targetDir = join(homedir(), '.openclaw', 'extensions', pluginId);
   const targetManifest = join(targetDir, 'openclaw.plugin.json');
   const sourceDir = findBundledPluginMirror(pluginId);
+  const forceReinstall = options?.forceReinstall === true;
   if (!sourceDir) {
     return {
       installed: false,
@@ -132,9 +135,11 @@ export function ensureBundledPluginInstalled(
   // own dist/extensions tree. Copying them into ~/.openclaw/extensions causes
   // duplicate plugin-id warnings and can mask the real bundled version.
   if (isOpenClawBundledExtensionSource(sourceDir)) {
+    let changed = false;
     if (existsSync(targetManifest)) {
       try {
         rmSync(toFsPath(targetDir), { recursive: true, force: true });
+        changed = true;
       } catch {
         return {
           installed: false,
@@ -143,12 +148,12 @@ export function ensureBundledPluginInstalled(
         };
       }
     }
-    return { installed: true, sourceDir };
+    return { installed: true, changed, sourceDir };
   }
 
   if (existsSync(targetManifest)) {
-    if (isPluginMirrorInstallHealthy(targetDir, sourceDir, pluginId)) {
-      return { installed: true, sourceDir };
+    if (!forceReinstall && isPluginMirrorInstallHealthy(targetDir, sourceDir, pluginId)) {
+      return { installed: true, changed: false, sourceDir };
     }
   }
 
@@ -163,7 +168,7 @@ export function ensureBundledPluginInstalled(
         warning: `Failed to install ${displayName} plugin mirror (manifest missing).`,
       };
     }
-    return { installed: true, sourceDir };
+    return { installed: true, changed: true, sourceDir };
   } catch {
     return {
       installed: false,

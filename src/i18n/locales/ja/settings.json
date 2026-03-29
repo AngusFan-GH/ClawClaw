@@ -274,6 +274,8 @@
       "check": "更新を確認"
     },
     "currentVersion": "現在のバージョン",
+    "openclawVersionLabel": "OpenClaw バージョン",
+    "openclawVersionUnavailable": "利用不可",
     "whatsNew": "更新内容：",
     "errorDetails": "エラー詳細：",
     "help": "自動アップデートが有効な場合、更新は自動的にダウンロードされインストールされます。"

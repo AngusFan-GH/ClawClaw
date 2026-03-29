@@ -732,4 +732,77 @@ describe('upgrade compatibility baseline', () => {
     expect(store.get('defaultProvider')).toBeUndefined();
     expect(store.get('providerAccounts')).toEqual({});
   });
+
+  it('replaces a stale managed wechat plugin from the user extensions directory during startup preflight', async () => {
+    const sourceDir = join(process.cwd(), 'build', 'openclaw-plugins', 'openclaw-weixin');
+    const targetDir = join(testHome, '.openclaw', 'extensions', 'openclaw-weixin');
+
+    await writePlugin(sourceDir, 'openclaw-weixin', '1.0.3');
+    await mkdir(join(sourceDir, 'src'), { recursive: true });
+    await writeFile(
+      join(sourceDir, 'src', 'channel.ts'),
+      'import { resolvePreferredOpenClawTmpDir } from "openclaw/plugin-sdk/temp-path";\nexport const value = resolvePreferredOpenClawTmpDir();\n',
+      'utf8',
+    );
+
+    await writePlugin(targetDir, 'openclaw-weixin', '1.0.3');
+    await mkdir(join(targetDir, 'src'), { recursive: true });
+    await writeFile(
+      join(targetDir, 'src', 'channel.ts'),
+      'import { resolvePreferredOpenClawTmpDir } from "openclaw/plugin-sdk";\nexport const value = resolvePreferredOpenClawTmpDir();\n',
+      'utf8',
+    );
+    await writeFile(join(targetDir, 'stale.txt'), 'legacy-plugin', 'utf8');
+
+    const { syncGatewayConfigBeforeLaunch } = await import('@electron/gateway/config-sync');
+
+    await syncGatewayConfigBeforeLaunch({
+      theme: 'system',
+      language: 'zh',
+      startMinimized: false,
+      launchAtStartup: false,
+      gatewayAutoStart: true,
+      gatewayPort: 18789,
+      gatewayToken: 'test-token',
+      proxyMode: 'system',
+      proxyEnabled: false,
+      proxyServer: '',
+      proxyHttpServer: '',
+      proxyHttpsServer: '',
+      proxyAllServer: '',
+      proxyBypassRules: '<local>;localhost;127.0.0.1;::1',
+      updateChannel: 'stable',
+      autoCheckUpdate: true,
+      autoDownloadUpdate: false,
+      skippedVersions: [],
+      sidebarCollapsed: false,
+      devModeUnlocked: false,
+      setupComplete: false,
+      selectedBundles: [],
+      enabledSkills: [],
+      disabledSkills: [],
+      securityPolicy: {
+        enabled: false,
+        deniedPaths: [],
+        permissions: {
+          denyRuntime: false,
+          denyWrite: false,
+          denyRead: false,
+          denyBrowser: false,
+          denyWebSearch: false,
+          denyWebFetch: false,
+          denyGateway: false,
+        },
+      },
+      reminders: [],
+      sessionMemoryEnabled: true,
+      memorySearchEnabled: true,
+    });
+    await flushBackgroundWork();
+
+    await expect(readFile(join(targetDir, 'src', 'channel.ts'), 'utf8')).resolves.toContain(
+      'openclaw/plugin-sdk/temp-path',
+    );
+    await expect(readFile(join(targetDir, 'stale.txt'), 'utf8')).rejects.toThrow();
+  });
 });

@@ -456,19 +456,19 @@ function scheduleGatewayChannelRefresh(
 }
 
 async function ensureDingTalkPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  return ensureBundledPluginInstalled('channels', 'China Channels');
+  return ensureBundledPluginInstalled('channels', 'China Channels', { forceReinstall: true });
 }
 
 async function ensureFeishuPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  return ensureBundledPluginInstalled('feishu', 'Feishu / Lark');
+  return ensureBundledPluginInstalled('feishu', 'Feishu / Lark', { forceReinstall: true });
 }
 
 async function ensureQQBotPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  return ensureBundledPluginInstalled('channels', 'China Channels');
+  return ensureBundledPluginInstalled('channels', 'China Channels', { forceReinstall: true });
 }
 
 async function ensureWeChatPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  const bundledResult = ensureBundledPluginInstalled('openclaw-weixin', 'WeChat');
+  const bundledResult = ensureBundledPluginInstalled('openclaw-weixin', 'WeChat', { forceReinstall: true });
   if (bundledResult.installed) {
     return bundledResult;
   }
@@ -479,6 +479,8 @@ async function ensureWeChatPluginInstalled(): Promise<{ installed: boolean; warn
     : ['plugins', 'install', WECHAT_PLUGIN_SPEC];
   const spawnConfig = getOpenClawCliSpawnConfig(cliArgs);
 
+  const INSTALL_TIMEOUT_MS = 120_000; // 2-minute timeout for plugin installation.
+
   try {
     await new Promise<void>((resolve, reject) => {
       const child = spawn(spawnConfig.command, spawnConfig.args, {
@@ -488,13 +490,23 @@ async function ensureWeChatPluginInstalled(): Promise<{ installed: boolean; warn
         windowsHide: true,
       });
 
+      // ✅ Fix HR-3: Kill child process if installation times out.
+      const killTimer = setTimeout(() => {
+        console.warn('[ensureWeChatPluginInstalled] Installation timed out, killing child process');
+        child.kill('SIGTERM');
+      }, INSTALL_TIMEOUT_MS);
+
       let stderr = '';
       child.stderr.on('data', (chunk: Buffer | string) => {
         stderr += String(chunk);
       });
 
-      child.once('error', reject);
+      child.once('error', (err) => {
+        clearTimeout(killTimer);
+        reject(err);
+      });
       child.once('close', (code, signal) => {
+        clearTimeout(killTimer);
         if (code === 0) {
           resolve();
           return;

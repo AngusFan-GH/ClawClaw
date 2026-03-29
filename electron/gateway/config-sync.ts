@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import path from 'path';
 import { existsSync } from 'fs';
+import { homedir } from 'os';
 import { getAllSettings } from '../utils/store';
 import { getApiKey, getDefaultProvider, getProvider } from '../utils/secure-storage';
 import { getProviderEnvVar, getKeyableProviderTypes } from '../utils/provider-registry';
@@ -8,7 +9,6 @@ import { getOpenClawDir, getOpenClawEntryPath, isOpenClawPresent } from '../util
 import { validateBundledOpenClawRuntime } from '../utils/openclaw-runtime-integrity';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import {
-  cleanupInvalidManagedChannelPlugins,
   cleanupDanglingWeChatPluginState,
   cleanupLegacyChannelPlugins,
   listConfiguredChannels,
@@ -42,6 +42,12 @@ const CHANNEL_PLUGIN_INSTALL_MAP: Partial<Record<string, { pluginId: string; dis
   wechat: { pluginId: 'openclaw-weixin', displayName: 'WeChat' },
 };
 
+const MANAGED_CHANNEL_PLUGIN_MIRRORS = [
+  { pluginId: 'feishu', displayName: 'Feishu / Lark' },
+  { pluginId: 'channels', displayName: 'China Channels' },
+  { pluginId: 'openclaw-weixin', displayName: 'WeChat' },
+] as const;
+
 const CHANNEL_PROXY_BYPASS_RULES: Partial<Record<string, string[]>> = {
   wecom: [
     'openws.work.weixin.qq.com',
@@ -73,22 +79,51 @@ function resolveGatewayProxyBypassRules(configuredChannels: string[]): string[] 
   return Array.from(merged);
 }
 
-function ensureConfiguredPluginsInstalled(configuredChannels: string[]): string[] {
-  const installedPluginIds = new Set<string>();
+function resolveManagedPluginIdsForStartup(configuredChannels: string[]): string[] {
+  const pluginIds = new Set<string>();
+
   for (const channelType of configuredChannels) {
     const plugin = CHANNEL_PLUGIN_INSTALL_MAP[channelType];
-    if (!plugin) continue;
-    const result = ensureBundledPluginInstalled(plugin.pluginId, plugin.displayName);
-    if (result.installed) {
-      installedPluginIds.add(plugin.pluginId);
-    }
-    if (!result.installed && result.warning) {
-      logger.warn(result.warning);
+    if (plugin) {
+      pluginIds.add(plugin.pluginId);
     }
   }
-  return Array.from(installedPluginIds);
+
+  const extensionsRoot = path.join(homedir(), '.openclaw', 'extensions');
+  for (const plugin of MANAGED_CHANNEL_PLUGIN_MIRRORS) {
+    if (existsSync(path.join(extensionsRoot, plugin.pluginId))) {
+      pluginIds.add(plugin.pluginId);
+    }
+  }
+
+  return Array.from(pluginIds);
 }
 
+function syncManagedChannelPluginMirrors(configuredChannels: string[]): string[] {
+  const touchedPluginIds: string[] = [];
+  const pluginIds = resolveManagedPluginIdsForStartup(configuredChannels);
+
+  for (const pluginId of pluginIds) {
+    const plugin = MANAGED_CHANNEL_PLUGIN_MIRRORS.find((entry) => entry.pluginId === pluginId);
+    if (!plugin) continue;
+    const result = ensureBundledPluginInstalled(plugin.pluginId, plugin.displayName, { forceReinstall: true });
+    if (result.warning) {
+      logger.warn(result.warning);
+    }
+    if (result.installed && result.changed) {
+      touchedPluginIds.push(pluginId);
+    }
+  }
+
+  return touchedPluginIds;
+}
+
+/**
+ * Wraps a promise with a timeout. If the promise times out, returns `fallback`.
+ * Suitable for READ-ONLY operations where a stale/default result is acceptable.
+ * WARNING: The underlying promise continues to run even after timeout resolves —
+ * for write operations, use withTimeoutOrThrow instead to avoid partial writes.
+ */
 async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
@@ -101,7 +136,7 @@ async function withTimeout<T>(
       promise,
       new Promise<T>((resolve) => {
         timeoutHandle = setTimeout(() => {
-          logger.warn(`${label} timed out after ${timeoutMs}ms; continuing with fallback`);
+          logger.warn(`${label} timed out after ${timeoutMs}ms; returning fallback`);
           resolve(fallback);
         }, timeoutMs);
       }),
@@ -110,6 +145,29 @@ async function withTimeout<T>(
     if (timeoutHandle) {
       clearTimeout(timeoutHandle);
     }
+  }
+}
+
+/**
+ * Wraps a promise with a timeout. If the promise times out, throws an error.
+ * Suitable for WRITE operations where partial completion is worse than failure.
+ */
+async function withTimeoutOrThrow<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  let timeoutHandle: NodeJS.Timeout | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(
+      () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+      timeoutMs,
+    );
+  });
+  try {
+    return await Promise.race<T>([promise, timeout]);
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
   }
 }
 
@@ -270,32 +328,17 @@ export async function runOpenClawStartupPreflightRepair(): Promise<void> {
       },
     },
     {
-      id: 'cleanup-invalid-managed-channel-plugins',
-      label: 'cleanupInvalidManagedChannelPlugins',
-      run: async () => {
-        const result = await withTimeout(
-          cleanupInvalidManagedChannelPlugins(),
-          3000,
-          'cleanupInvalidManagedChannelPlugins',
-          { cleaned: false, removedPluginIds: [] },
-        );
-        if (result.cleaned) {
-          recoveryTopics.push('plugins');
-        }
-      },
-    },
-    {
-      id: 'ensure-configured-channel-plugins',
-      label: 'ensureConfiguredPluginsInstalled',
+      id: 'sync-managed-channel-plugin-mirrors',
+      label: 'syncManagedChannelPluginMirrors',
       run: async () => {
         const configuredChannels = await withTimeout(
           listConfiguredChannels({ includeCli: false }),
           1500,
-          'listConfiguredChannelsForPluginInstall',
+          'listConfiguredChannelsForManagedPluginSync',
           [],
         );
-        const installedPluginIds = ensureConfiguredPluginsInstalled(configuredChannels);
-        if (installedPluginIds.length > 0) {
+        const synchronizedPluginIds = syncManagedChannelPluginMirrors(configuredChannels);
+        if (synchronizedPluginIds.length > 0) {
           recoveryTopics.push('plugins');
         }
       },

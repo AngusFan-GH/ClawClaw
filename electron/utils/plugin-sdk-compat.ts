@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ROOT_PLUGIN_SDK_SPEC = 'openclaw/plugin-sdk';
+const COMPAT_PLUGIN_SDK_SPEC = 'openclaw/plugin-sdk/compat';
 
 const MOVED_ROOT_PLUGIN_SDK_EXPORTS: Record<string, string> = {
   resolvePreferredOpenClawTmpDir: 'openclaw/plugin-sdk/temp-path',
@@ -52,9 +53,13 @@ function parseRootImportSpecifiers(rawSpecifiers: string): RootImportSpecifier[]
     });
 }
 
-function rewriteRootPluginSdkImports(content: string): { nextContent: string; changed: boolean } {
+function rewriteRootPluginSdkImports(
+  content: string,
+  sourceSpec: string,
+): { nextContent: string; changed: boolean } {
   let changed = false;
-  const importPattern = /^(\s*)import\s+\{([^}]+)\}\s+from\s+["']openclaw\/plugin-sdk["'];?\s*$/gm;
+  const escapedSourceSpec = sourceSpec.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const importPattern = new RegExp(`^(\\s*)import\\s+\\{([^}]+)\\}\\s+from\\s+["']${escapedSourceSpec}["'];?\\s*$`, 'gm');
 
   const nextContent = content.replace(importPattern, (_match, indent: string, rawSpecifiers: string) => {
     const specifiers = parseRootImportSpecifiers(rawSpecifiers);
@@ -83,7 +88,7 @@ function rewriteRootPluginSdkImports(content: string): { nextContent: string; ch
     changed = true;
     const lines: string[] = [];
     if (remaining.length > 0) {
-      lines.push(`${indent}import { ${remaining.join(', ')} } from "${ROOT_PLUGIN_SDK_SPEC}";`);
+      lines.push(`${indent}import { ${remaining.join(', ')} } from "${sourceSpec}";`);
     }
     for (const [subpath, movedSpecifiers] of movedBySubpath.entries()) {
       lines.push(`${indent}import { ${movedSpecifiers.join(', ')} } from "${subpath}";`);
@@ -96,14 +101,33 @@ function rewriteRootPluginSdkImports(content: string): { nextContent: string; ch
 
 function fileContainsIncompatibleRootImports(filePath: string): boolean {
   const content = readFileSync(filePath, 'utf8');
-  const importPattern = /import\s+\{([^}]+)\}\s+from\s+["']openclaw\/plugin-sdk["']/g;
-  let match: RegExpExecArray | null;
-  while ((match = importPattern.exec(content)) !== null) {
-    const specifiers = parseRootImportSpecifiers(match[1]);
-    if (specifiers.some((specifier) => specifier.imported in MOVED_ROOT_PLUGIN_SDK_EXPORTS)) {
+  const namedImportPattern = /import\s+\{([^}]+)\}\s+from\s+["'](openclaw\/plugin-sdk(?:\/compat)?)["']/g;
+  let namedImportMatch: RegExpExecArray | null;
+  while ((namedImportMatch = namedImportPattern.exec(content)) !== null) {
+    const specifiers = parseRootImportSpecifiers(namedImportMatch[1]);
+    if (
+      namedImportMatch[2] === COMPAT_PLUGIN_SDK_SPEC
+      || specifiers.some((specifier) => specifier.imported in MOVED_ROOT_PLUGIN_SDK_EXPORTS)
+    ) {
       return true;
     }
   }
+
+  const namespaceImportPattern = /import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["'](openclaw\/plugin-sdk(?:\/compat)?)["']/g;
+  let namespaceImportMatch: RegExpExecArray | null;
+  while ((namespaceImportMatch = namespaceImportPattern.exec(content)) !== null) {
+    if (namespaceImportMatch[2] === COMPAT_PLUGIN_SDK_SPEC) {
+      return true;
+    }
+    const alias = namespaceImportMatch[1];
+    for (const movedExport of Object.keys(MOVED_ROOT_PLUGIN_SDK_EXPORTS)) {
+      const memberUsePattern = new RegExp(`\\b${alias}\\.${movedExport}\\b`);
+      if (memberUsePattern.test(content)) {
+        return true;
+      }
+    }
+  }
+
   return false;
 }
 
@@ -124,7 +148,10 @@ export function repairManagedPluginSdkImports(rootDir: string): { repaired: bool
   const changedFiles: string[] = [];
   for (const filePath of collectSourceFiles(rootDir)) {
     const source = readFileSync(filePath, 'utf8');
-    const { nextContent, changed } = rewriteRootPluginSdkImports(source);
+    const rootRewrite = rewriteRootPluginSdkImports(source, ROOT_PLUGIN_SDK_SPEC);
+    const compatRewrite = rewriteRootPluginSdkImports(rootRewrite.nextContent, COMPAT_PLUGIN_SDK_SPEC);
+    const nextContent = compatRewrite.nextContent;
+    const changed = rootRewrite.changed || compatRewrite.changed;
     if (!changed || nextContent === source) continue;
     writeFileSync(filePath, nextContent, 'utf8');
     changedFiles.push(filePath);

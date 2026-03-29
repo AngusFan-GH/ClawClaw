@@ -71,4 +71,20 @@ describe('ensureBundledPluginInstalled', () => {
     const manifest = await readFile(join(targetDir, 'openclaw.plugin.json'), 'utf8');
     expect(JSON.parse(manifest)).toMatchObject({ id: pluginId });
   });
+
+  it('force reinstalls a healthy managed plugin mirror to replace stale contents', async () => {
+    const pluginId = 'test-plugin-manifest-id';
+    const sourceDir = join(process.cwd(), 'build', 'openclaw-plugins', pluginId);
+    const targetDir = join(testHome, '.openclaw', 'extensions', pluginId);
+    await writePlugin(sourceDir, pluginId, '1.0.0', { withNodeModules: true });
+    await writePlugin(targetDir, pluginId, '1.0.0', { withNodeModules: true });
+    await writeFile(join(targetDir, 'stale.txt'), 'old-state', 'utf8');
+
+    const { ensureBundledPluginInstalled } = await import('@electron/utils/bundled-plugin-installer');
+    const result = ensureBundledPluginInstalled(pluginId, 'Test Plugin', { forceReinstall: true });
+
+    expect(result.installed).toBe(true);
+    expect(result.changed).toBe(true);
+    await expect(readFile(join(targetDir, 'stale.txt'), 'utf8')).rejects.toThrow();
+  });
 });
