@@ -961,7 +961,7 @@ export async function saveChannelConfig(
       }
 
       if (runtimeChannelType === WECHAT_RUNTIME_CHANNEL_ID) {
-          ensurePluginEnabled(currentConfig, WECHAT_RUNTIME_CHANNEL_ID);
+          ensurePluginEnabled(currentConfig, WECHAT_RUNTIME_CHANNEL_ID, { createEntry: true });
       }
 
     // Plugin-based channels (e.g. WhatsApp) go under plugins.entries, not channels
@@ -1710,6 +1710,19 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
             if (removePluginIds(currentConfig, FEISHU_PLUGIN_ID_CANDIDATES)) {
                 repaired = true;
             }
+        }
+
+        if (hasConfiguredChannelState(WECHAT_RUNTIME_CHANNEL_ID, currentConfig.channels?.[WECHAT_RUNTIME_CHANNEL_ID] as AccountScopedChannelSection | undefined)) {
+            const beforeAllow = JSON.stringify(currentConfig.plugins?.allow ?? null);
+            const beforeEntry = JSON.stringify(currentConfig.plugins?.entries?.[WECHAT_RUNTIME_CHANNEL_ID] ?? null);
+            ensurePluginEnabled(currentConfig, WECHAT_RUNTIME_CHANNEL_ID, { createEntry: true });
+            const afterAllow = JSON.stringify(currentConfig.plugins?.allow ?? null);
+            const afterEntry = JSON.stringify(currentConfig.plugins?.entries?.[WECHAT_RUNTIME_CHANNEL_ID] ?? null);
+            if (beforeAllow !== afterAllow || beforeEntry !== afterEntry) {
+                repaired = true;
+            }
+        } else if (removePluginIds(currentConfig, [WECHAT_RUNTIME_CHANNEL_ID])) {
+            repaired = true;
         }
 
         if (hasConfiguredChinaManagedChannel(currentConfig)) {

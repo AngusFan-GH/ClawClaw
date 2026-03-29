@@ -893,6 +893,27 @@ describe('channel config lifecycle', () => {
     expect(config.plugins).toBeUndefined();
   });
 
+  it('re-enables the wechat managed plugin entry when wechat channel config exists', async () => {
+    await writeOpenClawJson({
+      channels: {
+        'openclaw-weixin': {
+          enabled: true,
+          appId: 'wx-app',
+        },
+      },
+      plugins: {
+        enabled: true,
+      },
+    });
+
+    const { repairChannelConfigConsistency } = await import('@electron/utils/channel-config');
+    await expect(repairChannelConfigConsistency()).resolves.toEqual({ repaired: true });
+
+    const config = await readOpenClawJson();
+    expect(config.plugins?.allow).toContain('openclaw-weixin');
+    expect(config.plugins?.entries?.['openclaw-weixin']).toMatchObject({ enabled: true });
+  });
+
   it('removes managed channel plugins whose manifest is missing configSchema', async () => {
     const channelsDir = join(testHome, '.openclaw', 'extensions', 'channels');
     const wechatDir = join(testHome, '.openclaw', 'extensions', 'openclaw-weixin');

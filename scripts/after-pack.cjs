@@ -29,6 +29,12 @@ const {
   formatValidationIssues,
 } = require('./openclaw-bundle-validator.cjs');
 
+const ROOT_PLUGIN_SDK_SPEC = 'openclaw/plugin-sdk';
+const COMPAT_PLUGIN_SDK_SPEC = 'openclaw/plugin-sdk/compat';
+const MOVED_ROOT_PLUGIN_SDK_EXPORTS = {
+  resolvePreferredOpenClawTmpDir: 'openclaw/plugin-sdk/temp-path',
+};
+
 // On Windows, paths in pnpm's virtual store can exceed the default MAX_PATH
 // limit (260 chars). Node.js 18.17+ respects the system LongPathsEnabled
 // registry key, but as a safety net we normalize paths to use the \\?\ prefix
@@ -145,6 +151,92 @@ function cleanupNativePlatformPackages(nodeModulesDir, platform, arch) {
   return removed;
 }
 
+function collectPluginSourceFiles(rootDir) {
+  const files = [];
+  function walk(dir) {
+    for (const entry of readdirSync(normWin(dir), { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name === '.git') continue;
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (entry.name.endsWith('.d.ts')) continue;
+      if (!/\.(ts|js|mjs|cjs)$/.test(entry.name)) continue;
+      files.push(fullPath);
+    }
+  }
+  walk(rootDir);
+  return files;
+}
+
+function parseRootImportSpecifiers(rawSpecifiers) {
+  return rawSpecifiers
+    .split(',')
+    .map((specifier) => specifier.trim())
+    .filter(Boolean)
+    .map((specifier) => {
+      const [imported, local] = specifier.split(/\s+as\s+/).map((part) => part.trim());
+      return { imported, local: local || imported, raw: specifier };
+    });
+}
+
+function repairPluginSdkRootImports(rootDir) {
+  let changedFiles = 0;
+
+  for (const filePath of collectPluginSourceFiles(rootDir)) {
+    const source = require('fs').readFileSync(normWin(filePath), 'utf8');
+    let nextContent = source;
+    let changed = false;
+
+    for (const sourceSpec of [ROOT_PLUGIN_SDK_SPEC, COMPAT_PLUGIN_SDK_SPEC]) {
+      const escapedSourceSpec = sourceSpec.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const importPattern = new RegExp(`^(\\s*)import\\s+\\{([^}]+)\\}\\s+from\\s+["']${escapedSourceSpec}["'];?\\s*$`, 'gm');
+      nextContent = nextContent.replace(importPattern, (match, indent, rawSpecifiers) => {
+        const specifiers = parseRootImportSpecifiers(rawSpecifiers);
+        const remaining = [];
+        const movedBySubpath = new Map();
+
+        for (const specifier of specifiers) {
+          const subpath = MOVED_ROOT_PLUGIN_SDK_EXPORTS[specifier.imported];
+          if (!subpath) {
+            remaining.push(specifier.raw);
+            continue;
+          }
+          const movedSpecifiers = movedBySubpath.get(subpath) || [];
+          movedSpecifiers.push(
+            specifier.imported === specifier.local
+              ? specifier.imported
+              : `${specifier.imported} as ${specifier.local}`,
+          );
+          movedBySubpath.set(subpath, movedSpecifiers);
+        }
+
+        if (movedBySubpath.size === 0) {
+          return match;
+        }
+
+        changed = true;
+        const lines = [];
+        if (remaining.length > 0) {
+          lines.push(`${indent}import { ${remaining.join(', ')} } from "${sourceSpec}";`);
+        }
+        for (const [subpath, movedSpecifiers] of movedBySubpath.entries()) {
+          lines.push(`${indent}import { ${movedSpecifiers.join(', ')} } from "${subpath}";`);
+        }
+        return lines.join('\n');
+      });
+    }
+
+    if (!changed || nextContent === source) continue;
+    require('fs').writeFileSync(normWin(filePath), nextContent, 'utf8');
+    changedFiles++;
+  }
+
+  return changedFiles;
+}
+
 // ── Broken module patcher ─────────────────────────────────────────────────────
 // Some bundled packages have transpiled CJS that sets `module.exports = exports.default`
 // without ever assigning `exports.default`, leaving module.exports === undefined.
@@ -234,6 +326,10 @@ function bundlePlugin(nodeModulesRoot, npmName, destDir) {
   if (existsSync(normWin(destDir))) rmSync(normWin(destDir), { recursive: true, force: true });
   mkdirSync(normWin(destDir), { recursive: true });
   cpSync(normWin(realPluginPath), normWin(destDir), { recursive: true, dereference: true });
+  const repairedSourceFiles = repairPluginSdkRootImports(destDir);
+  if (repairedSourceFiles > 0) {
+    console.log(`[after-pack] 🔧 Repaired ${repairedSourceFiles} plugin-sdk import file(s) for ${npmName}`);
+  }
 
   // Collect transitive deps via pnpm virtual store BFS
   const collectedByName = new Map();

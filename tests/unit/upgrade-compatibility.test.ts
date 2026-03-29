@@ -153,12 +153,14 @@ describe('upgrade compatibility baseline', () => {
     await cleanupDir(testUserData);
     await cleanupDir(join(process.cwd(), 'build', 'openclaw-plugins', 'test-upgrade-plugin'));
     await cleanupDir(join(process.cwd(), 'build', 'openclaw-plugins', 'channels'));
+    await cleanupDir(join(process.cwd(), 'build', 'openclaw-plugins', 'openclaw-weixin'));
   });
 
   afterEach(async () => {
     await flushBackgroundWork();
     await cleanupDir(join(process.cwd(), 'build', 'openclaw-plugins', 'test-upgrade-plugin'));
     await cleanupDir(join(process.cwd(), 'build', 'openclaw-plugins', 'channels'));
+    await cleanupDir(join(process.cwd(), 'build', 'openclaw-plugins', 'openclaw-weixin'));
     await cleanupDir(testHome);
     await cleanupDir(testUserData);
   });
