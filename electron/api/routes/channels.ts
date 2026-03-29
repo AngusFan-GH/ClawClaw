@@ -131,6 +131,50 @@ export function normalizeAccountStatusForUi(params: {
   return params.mappedStatus;
 }
 
+export function resolveRuntimeAccountIdForUi(params: {
+  reportedAccountId?: string | null;
+  configuredAccounts: string[];
+  explicitDefaultAccountId?: string;
+  runtimeConfigured?: boolean;
+}): string | null {
+  const normalizedReportedAccountId =
+    typeof params.reportedAccountId === 'string' && params.reportedAccountId.trim()
+      ? params.reportedAccountId.trim()
+      : '';
+
+  if (normalizedReportedAccountId && normalizedReportedAccountId !== 'default') {
+    const configuredNamedAccounts = params.configuredAccounts.filter((accountId) => accountId !== 'default');
+    const hasConfiguredDefault = params.configuredAccounts.includes('default');
+    if (
+      hasConfiguredDefault
+      && configuredNamedAccounts.length === 0
+    ) {
+      return 'default';
+    }
+    return normalizedReportedAccountId;
+  }
+
+  const hasConfiguredDefault = params.configuredAccounts.includes('default');
+  if (hasConfiguredDefault) {
+    return 'default';
+  }
+
+  const configuredNamedAccounts = params.configuredAccounts.filter((accountId) => accountId !== 'default');
+  if (params.runtimeConfigured === true) {
+    return params.explicitDefaultAccountId || normalizedReportedAccountId || 'default';
+  }
+
+  if (configuredNamedAccounts.length === 1) {
+    return configuredNamedAccounts[0];
+  }
+
+  if (configuredNamedAccounts.length > 1) {
+    return null;
+  }
+
+  return normalizedReportedAccountId || 'default';
+}
+
 function isSummaryConnected(summary: Record<string, unknown> | undefined): boolean {
   if (!summary || typeof summary !== 'object') return false;
   return (
@@ -280,11 +324,34 @@ async function buildChannelAccountsView(
 
       const keptRuntimeAccounts = runtimeAccounts.filter((a) => shouldKeepRuntimeAccount(a));
       const hasRuntimeData = keptRuntimeAccounts.length > 0;
+      const configuredAccounts = Array.from(new Set([
+        ...existing.configuredAccounts,
+        ...runtimeAccounts
+          .filter((account) => account.configured === true)
+          .map((account) => account.accountId || 'default'),
+      ]));
+      const resolvedDefaultAccountId =
+        defaultAccountId
+        || existing.defaultAccountId
+        || (() => {
+          const configuredNamedAccounts = configuredAccounts.filter((accountId) => accountId !== 'default');
+          if (configuredAccounts.includes('default')) return 'default';
+          if (configuredNamedAccounts.length === 1) return configuredNamedAccounts[0];
+          return undefined;
+        })();
 
       const accountMap = new Map(existing.accounts.map((account) => [account.accountId, account]));
       for (const runtimeAccount of runtimeAccounts) {
         if (!shouldKeepRuntimeAccount(runtimeAccount)) continue;
-        const accountId = runtimeAccount.accountId || 'default';
+        const accountId = resolveRuntimeAccountIdForUi({
+          reportedAccountId: runtimeAccount.accountId,
+          configuredAccounts: existing.configuredAccounts,
+          explicitDefaultAccountId: resolvedDefaultAccountId,
+          runtimeConfigured: runtimeAccount.configured,
+        });
+        if (!accountId) {
+          continue;
+        }
         const mappedStatus = mapAccountStatus(runtimeAccount);
         const status = normalizeAccountStatusForUi({
           channelType: type,
@@ -299,15 +366,15 @@ async function buildChannelAccountsView(
           type,
           name: runtimeAccount.name || prior?.name || type,
           status,
-          configured: runtimeAccount.configured ?? prior?.configured ?? true,
+          configured: runtimeAccount.configured ?? prior?.configured ?? existing.configuredAccounts.includes(accountId),
           runtimeLoaded: true,
           runtimeStatus: status,
           accountId,
-          isDefaultAccount: accountId === (defaultAccountId || existing.defaultAccountId || 'default'),
+          isDefaultAccount: accountId === (resolvedDefaultAccountId || 'default'),
           error: status === 'error' ? (runtimeAccount.lastError || summaryError || prior?.error) : undefined,
           metadata: {
             ...prior?.metadata,
-            isDefaultAccount: accountId === (defaultAccountId || existing.defaultAccountId || 'default'),
+            isDefaultAccount: accountId === (resolvedDefaultAccountId || 'default'),
           },
         });
       }
@@ -315,7 +382,7 @@ async function buildChannelAccountsView(
       promoteConnectedAccountFromSummary({
         accounts: accountMap,
         summary,
-        defaultAccountId: defaultAccountId || existing.defaultAccountId,
+        defaultAccountId: resolvedDefaultAccountId,
         type,
       });
 
@@ -324,13 +391,8 @@ async function buildChannelAccountsView(
         configured: existing.configured || runtimeAccounts.some((account) => account.configured === true),
         runtimeLoaded: hasRuntimeData,
         pluginLoaded: true,
-        defaultAccountId: defaultAccountId || existing.defaultAccountId,
-        configuredAccounts: Array.from(new Set([
-          ...existing.configuredAccounts,
-          ...runtimeAccounts
-            .filter((account) => account.configured === true)
-            .map((account) => account.accountId || 'default'),
-        ])),
+        defaultAccountId: resolvedDefaultAccountId,
+        configuredAccounts,
         accounts: Array.from(accountMap.values()).sort((left, right) => {
           if (left.isDefaultAccount !== right.isDefaultAccount) {
             return left.isDefaultAccount ? -1 : 1;
@@ -343,13 +405,8 @@ async function buildChannelAccountsView(
           configured: existing.configured || runtimeAccounts.some((account) => account.configured === true),
           runtimeLoaded: hasRuntimeData,
           pluginLoaded: true,
-          defaultAccountId: defaultAccountId || existing.defaultAccountId,
-          configuredAccounts: Array.from(new Set([
-            ...existing.configuredAccounts,
-            ...runtimeAccounts
-              .filter((account) => account.configured === true)
-              .map((account) => account.accountId || 'default'),
-          ])),
+          defaultAccountId: resolvedDefaultAccountId,
+          configuredAccounts,
           error: undefined,
           runtimeStatus: 'unknown',
           status: 'unknown',
