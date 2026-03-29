@@ -162,8 +162,9 @@ LangString installRuntimeValidationFailed 2052 "安装完成后，内置 OpenCla
 !macroend
 
 !macro customInstall
-  ; Restore listonly mode for post-install steps (show summary text, not every file)
-  SetDetailsPrint listonly
+  ; Keep detail output fully enabled so the status line and details pane stay
+  ; in sync during post-install steps.
+  SetDetailsPrint both
   DetailPrint "正在完成安装后的系统配置..."
 
   ; Always normalize Start Menu entries into a single folder.  electron-builder's

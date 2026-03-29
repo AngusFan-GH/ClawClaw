@@ -129,13 +129,11 @@ nsis:
   warningsAsErrors: false
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
-  # Reliability wins over smaller Windows updates here.  ClawClaw bundles a
-  # large OpenClaw runtime tree under extraResources/openclaw, and repeated
-  # field reports showed stale files surviving incremental upgrades.  Disable
-  # differential NSIS packages so auto-update always downloads and runs the
-  # full installer, together with our explicit runtime directory cleanup in the
-  # installer script.
-  differentialPackage: false
+  # Differential updates stay enabled on Windows, but the installer now
+  # force-cleans managed runtime directories (OpenClaw + bundled plugins)
+  # before copying files so incremental upgrades do not keep stale runtime
+  # dependencies around.
+  differentialPackage: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: ${productName}

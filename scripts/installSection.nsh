@@ -51,6 +51,7 @@ ${if} $isTryToKeepShortcuts == "true"
 ${endif}
 
 ${IfNot} ${Silent}
+  SetDetailsPrint both
   DetailPrint "$(installPhaseRemovePrevious)"
 ${endif}
 !insertmacro uninstallOldVersion SHELL_CONTEXT
@@ -61,15 +62,17 @@ ${if} $installMode == "all"
   !insertmacro handleUninstallResult HKEY_CURRENT_USER
 ${endIf}
 
-; Differential NSIS updates can leave stale files inside extraResources when the
-; target directory already exists.  OpenClaw ships a full Node.js runtime tree
-; under resources\openclaw, and stale nested dependencies from a previous
-; version can break startup even when the new package is correct.  Always wipe
-; the managed runtime directory before copying the new bundle.
+; NSIS upgrades (including differential package updates) can leave stale files
+; inside extraResources when the target directory already exists. ClawClaw
+; ships a managed OpenClaw runtime tree and bundled plugin mirrors under
+; resources\, so old nested dependencies must be removed before the new files
+; are copied.
 ${IfNot} ${Silent}
+  SetDetailsPrint both
   DetailPrint "正在清理旧版 OpenClaw 运行时..."
 ${endif}
 RMDir /r "$INSTDIR\resources\openclaw"
+RMDir /r "$INSTDIR\resources\openclaw-plugins"
 
 SetOutPath $INSTDIR
 
@@ -78,16 +81,19 @@ SetOutPath $INSTDIR
 !endif
 
 ${IfNot} ${Silent}
+  SetDetailsPrint both
   DetailPrint "$(installPhaseCopyFiles)"
 ${endif}
 !insertmacro installApplicationFiles
 
 ${IfNot} ${Silent}
+  SetDetailsPrint both
   DetailPrint "$(installPhaseRegister)"
 ${endif}
 !insertmacro registryAddInstallInfo
 
 ${IfNot} ${Silent}
+  SetDetailsPrint both
   DetailPrint "$(installPhaseShortcuts)"
 ${endif}
 !insertmacro addStartMenuLink $keepShortcuts
@@ -101,6 +107,7 @@ ${endIf}
 
 !ifmacrodef registerFileAssociations
   ${IfNot} ${Silent}
+    SetDetailsPrint both
     DetailPrint "$(installPhaseAssociations)"
   ${endif}
   !insertmacro registerFileAssociations
@@ -108,6 +115,7 @@ ${endIf}
 
 !ifmacrodef customInstall
   ${IfNot} ${Silent}
+    SetDetailsPrint both
     DetailPrint "$(installPhaseFinalize)"
   ${endif}
   !insertmacro customInstall

@@ -239,7 +239,7 @@ Notes:
 Open **Settings → Data & Uninstall** to export a JSON backup of your current configuration before removing data or uninstalling the app. The same section can stop the Gateway, clean managed ClawClaw/OpenClaw data from a fixed allowlist, and prepare a full uninstall flow before you remove the app itself from the OS uninstaller. On Windows, ClawClaw's own cache, storage, and logs are queued for post-exit cleanup so locked Chromium files can be removed safely after the app quits.
 
 Open **Settings → Updates** to control auto-check / auto-download behavior and manually trigger update checks from the packaged app. ClawClaw currently follows the stable release feed only.
-On Windows, packaged updates now prefer the full NSIS installer instead of differential packages so the bundled OpenClaw runtime is replaced cleanly during upgrades. The installer also runs a post-copy OpenClaw runtime validation step and aborts before finishing if the bundled CLI tree is unhealthy.
+On Windows, packaged updates continue to use NSIS differential packages, but the installer now force-cleans the managed `resources/openclaw` and `resources/openclaw-plugins` directories before copying files. It also runs a post-copy OpenClaw runtime validation step and aborts before finishing if the bundled CLI tree is unhealthy.
 
 ---
 
