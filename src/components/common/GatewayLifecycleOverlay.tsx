@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Lock, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { GatewayLifecycle } from '@/types/gateway';
@@ -39,6 +40,29 @@ function getSourceLabel(t: (key: string) => string, source?: string): string {
 export function GatewayLifecycleOverlay({ lifecycle }: { lifecycle: GatewayLifecycle }) {
   const { t } = useTranslation('common');
 
+  // Countdown timer for the 'scheduled' debounce window (e.g. 2s before restart fires).
+  const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
+  useEffect(() => {
+    if (lifecycle.state !== 'scheduled' || !lifecycle.delayMs) {
+      setCountdownSeconds(null);
+      return;
+    }
+    const totalSec = Math.ceil(lifecycle.delayMs / 1000);
+    setCountdownSeconds(totalSec);
+    const id = setInterval(() => {
+      setCountdownSeconds((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(id);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [lifecycle.state, lifecycle.delayMs]);
+
+  console.debug(`[overlay] render: state=${lifecycle.state} action=${lifecycle.action} source=${lifecycle.source}`);
+
   if (lifecycle.state !== 'scheduled' && lifecycle.state !== 'applying') {
     return null;
   }
@@ -46,33 +70,35 @@ export function GatewayLifecycleOverlay({ lifecycle }: { lifecycle: GatewayLifec
   const sourceLabel = getSourceLabel(t, lifecycle.source);
   const isStart = lifecycle.action === 'start';
   const isReload = lifecycle.action === 'reload';
-  const title =
-    lifecycle.state === 'scheduled'
-      ? isStart
-        ? t('gateway.lifecycle.scheduledStartTitle')
-        : isReload
-        ? t('gateway.lifecycle.scheduledReloadTitle')
-        : t('gateway.lifecycle.scheduledRestartTitle')
-      : isStart
-        ? t('gateway.lifecycle.applyingStartTitle')
-        : isReload
-        ? t('gateway.lifecycle.applyingReloadTitle')
-        : t('gateway.lifecycle.applyingRestartTitle');
-  const description =
-    lifecycle.state === 'scheduled'
-      ? t('gateway.lifecycle.scheduledDescription', { source: sourceLabel })
-      : t('gateway.lifecycle.applyingDescription', { source: sourceLabel });
+  const isScheduled = lifecycle.state === 'scheduled';
+  const title = isScheduled
+    ? isStart
+      ? t('gateway.lifecycle.scheduledStartTitle')
+      : isReload
+      ? t('gateway.lifecycle.scheduledReloadTitle')
+      : t('gateway.lifecycle.scheduledRestartTitle')
+    : isStart
+      ? t('gateway.lifecycle.applyingStartTitle')
+      : isReload
+      ? t('gateway.lifecycle.applyingReloadTitle')
+      : t('gateway.lifecycle.applyingRestartTitle');
+
+  // Show countdown in description during the debounce window; fall back to static description once at 0.
+  const description = isScheduled
+    ? countdownSeconds !== null && countdownSeconds > 0
+      ? t('gateway.lifecycle.scheduledCountdown', {
+          seconds: countdownSeconds,
+          source: sourceLabel,
+        })
+      : t('gateway.lifecycle.scheduledDescription', { source: sourceLabel })
+    : t('gateway.lifecycle.applyingDescription', { source: sourceLabel });
 
   return (
     <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-background/72 backdrop-blur-[3px]">
       <div className="mx-6 w-full max-w-md rounded-[20px] border border-border/80 bg-card/95 p-6 shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
         <div className="flex items-start gap-4">
           <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-500/[0.12] text-sky-600 dark:text-sky-400">
-            {lifecycle.state === 'scheduled' ? (
-              <RefreshCw className="h-5 w-5" />
-            ) : (
-              <LoadingIcon className="h-5 w-5" />
-            )}
+            <LoadingIcon className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-[16px] font-semibold tracking-tight text-foreground">{title}</div>
@@ -83,10 +109,28 @@ export function GatewayLifecycleOverlay({ lifecycle }: { lifecycle: GatewayLifec
           </div>
         </div>
 
-        <div className="mt-5 flex items-center gap-2 rounded-xl border border-border/70 bg-muted/35 px-3 py-2.5 text-[12px] text-muted-foreground">
-          <Lock className="h-3.5 w-3.5 shrink-0" />
-          <span>{t('gateway.lifecycle.overlayBlockedHint')}</span>
-        </div>
+        {/* Countdown hint during the debounce window */}
+        {isScheduled && countdownSeconds !== null && countdownSeconds > 0 && (
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-border/70 bg-muted/35 px-3 py-2.5 text-[12px] text-muted-foreground">
+            <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
+            <span>{t('gateway.lifecycle.countdownHint', { seconds: countdownSeconds })}</span>
+          </div>
+        )}
+
+        {/* Static blocked hint when debounce has already fired (countdown at 0) or in applying state */}
+        {(countdownSeconds === null || countdownSeconds === 0 || !isScheduled) && (
+          <div className="mt-5 flex items-center gap-2 rounded-xl border border-border/70 bg-muted/35 px-3 py-2.5 text-[12px] text-muted-foreground">
+            <Lock className="h-3.5 w-3.5 shrink-0" />
+            <span>{t('gateway.lifecycle.overlayBlockedHint')}</span>
+          </div>
+        )}
+
+        {/* Animated progress bar during applying — gives a sense of forward motion */}
+        {!isScheduled && (
+          <div className="mt-4 h-[3px] w-full overflow-hidden rounded-full bg-muted/40">
+            <div className="clawx-restart-progress h-full bg-sky-500" />
+          </div>
+        )}
       </div>
     </div>
   );

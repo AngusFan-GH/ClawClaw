@@ -245,6 +245,10 @@ function resolveAgentDisplayName(agent: { gateway: { id: string; name?: string; 
 }
 
 export function Chat() {
+  useEffect(() => {
+    console.debug('[chat] Chat component mounted');
+    return () => console.debug('[chat] Chat component unmounted');
+  }, []);
   const { t } = useTranslation('chat');
   const navigate = useNavigate();
   const location = useLocation();

@@ -900,6 +900,13 @@ export async function syncGatewayTokenToConfig(token: string): Promise<void> {
       : {}
   ) as Record<string, unknown>;
 
+  // Only write if the token actually changed — otherwise we overwrite gateway.tailscale
+  // (and other externally-added gateway fields) and trigger a spurious restart loop.
+  if (auth.token === token && auth.mode === 'token') {
+    return;
+  }
+  logger.debug('[syncGatewayTokenToConfig] token changed — writing to openclaw.json');
+
   auth.mode = 'token';
   auth.token = token;
   gateway.auth = auth;

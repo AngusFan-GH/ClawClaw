@@ -381,6 +381,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
           unsubscribers.push(subscribeHostEvent<Omit<GatewayLifecycle, 'state'> & { phase?: 'scheduled' | 'completed' | 'failed' }>(
             'gateway:lifecycle',
             (payload) => {
+              console.debug(`[gateway:lifecycle] received: phase=${payload.phase} action=${payload.action} source=${payload.source}`);
               if (lifecycleClearTimer) {
                 clearTimeout(lifecycleClearTimer);
                 lifecycleClearTimer = null;
@@ -573,7 +574,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
         return health;
       }
       const health: GatewayHealth = { ok: result.ok, error: result.error, uptime: result.uptime };
-      set({ health: result });
+      set({ health });
       return health;
     } catch (error) {
       const health: GatewayHealth = { ok: false, error: String(error) };

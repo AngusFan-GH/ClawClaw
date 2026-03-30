@@ -224,6 +224,26 @@
   animation-delay: 0.24s;
 }
 
+/* Animated progress bar for GatewayLifecycleOverlay during 'applying' state */
+@keyframes clawx-restart-progress {
+  0% {
+    width: 0%;
+    opacity: 1;
+  }
+  60% {
+    width: 80%;
+    opacity: 1;
+  }
+  100% {
+    width: 100%;
+    opacity: 0;
+  }
+}
+
+.clawx-restart-progress {
+  animation: clawx-restart-progress 1.6s ease-out forwards;
+}
+
 .openclaw-chat-thread {
   display: flex;
   flex-direction: column;

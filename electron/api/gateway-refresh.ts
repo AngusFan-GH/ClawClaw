@@ -37,7 +37,9 @@ export async function runGatewayRefresh(
   ctx: HostApiContext,
   options: GatewayRefreshOptions,
 ): Promise<{ triggered: boolean; accepted: boolean }> {
+  console.debug(`[gateway-refresh] runGatewayRefresh called: action=${options.action} source=${options.source} reason=${options.reason} mode=${options.mode ?? 'default'}`);
   if (shouldSkipRefresh(ctx, options)) {
+    console.debug(`[gateway-refresh] skipped because gateway is stopped`);
     return { triggered: false, accepted: false };
   }
 

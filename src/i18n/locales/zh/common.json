@@ -68,6 +68,8 @@
         "completedRestartTitle": "更改已应用",
         "completedReloadTitle": "更改已同步",
       "scheduledDescription": "{{source}}已保存，正在准备应用，请稍候。",
+      "scheduledCountdown": "网关将在 {{seconds}} 秒后重启 — {{source}} 的更改已排队。",
+      "countdownHint": "网关将在 {{seconds}} 秒后重启",
       "applyingDescription": "正在应用{{source}}的更改，功能可能会短暂中断。",
         "completedDescription": "{{source}}的更改已经完成应用。",
       "failedTitle": "网关应用更改失败",

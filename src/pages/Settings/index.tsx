@@ -136,6 +136,10 @@ function SettingRow({
 }
 
 export function Settings() {
+  useEffect(() => {
+    console.debug('[settings] Settings component mounted');
+    return () => console.debug('[settings] Settings component unmounted');
+  }, []);
   const { t } = useTranslation(['settings', 'common']);
   const {
     theme,
@@ -635,35 +639,48 @@ export function Settings() {
     }
   };
 
+  // Proxy auto-save: persist draft → store when draft differs from current Zustand state.
+  // We compare against getState() rather than persistedProxyState (localStorage) because
+  // Zustand's persist middleware debounces writes to localStorage (1 s), so
+  // persistedProxyState can lag behind the in-memory Zustand state after
+  // initSettings() fetches fresh values from the backend.  Comparing against
+  // getState() ensures we only save when the user has actually edited the draft.
   useEffect(() => {
     if (!proxyInitRef.current) {
       proxyInitRef.current = true;
       return;
     }
-
-    if (draftProxyState === persistedProxyState || savingProxy) {
-      return;
-    }
-
-    if (proxySaveTimerRef.current) {
-      clearTimeout(proxySaveTimerRef.current);
-    }
-
-    if (proxyModeDraft === 'custom') {
-      return;
-    }
-
-    const delay = 0;
-    proxySaveTimerRef.current = setTimeout(() => {
-      void handleSaveProxySettings();
-    }, delay);
-
-    return () => {
-      if (proxySaveTimerRef.current) {
-        clearTimeout(proxySaveTimerRef.current);
-        proxySaveTimerRef.current = null;
-      }
+    if (savingProxy) return;
+    if (proxyModeDraft === 'custom') return;
+    const storeState = useSettingsStore.getState();
+    const current = {
+      proxyMode: storeState.proxyMode || (storeState.proxyEnabled ? 'custom' : 'system'),
+      proxyServer: (storeState.proxyServer ?? '').trim(),
+      proxyHttpServer: (storeState.proxyHttpServer ?? '').trim(),
+      proxyHttpsServer: (storeState.proxyHttpsServer ?? '').trim(),
+      proxyAllServer: (storeState.proxyAllServer ?? '').trim(),
+      proxyBypassRules: (storeState.proxyBypassRules ?? '').trim(),
     };
+    const draft = {
+      proxyMode: proxyModeDraft,
+      proxyServer: proxyServerDraft.trim(),
+      proxyHttpServer: proxyHttpServerDraft.trim(),
+      proxyHttpsServer: proxyHttpsServerDraft.trim(),
+      proxyAllServer: proxyAllServerDraft.trim(),
+      proxyBypassRules: proxyBypassRulesDraft.trim(),
+    };
+    if (
+      current.proxyMode === draft.proxyMode &&
+      current.proxyServer === draft.proxyServer &&
+      current.proxyHttpServer === draft.proxyHttpServer &&
+      current.proxyHttpsServer === draft.proxyHttpsServer &&
+      current.proxyAllServer === draft.proxyAllServer &&
+      current.proxyBypassRules === draft.proxyBypassRules
+    ) {
+      return;
+    }
+    console.debug('[settings:proxy] auto-save triggered: draft differs from store state, calling handleSaveProxySettings');
+    void handleSaveProxySettings();
   }, [draftProxyState, persistedProxyState, proxyModeDraft, savingProxy]);
 
   useEffect(() => {

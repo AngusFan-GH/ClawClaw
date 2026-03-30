@@ -1536,22 +1536,20 @@ function registerProviderHandlers(gatewayManager: GatewayManager): void {
     );
   };
 
-  // Listen for OAuth success to automatically restart the Gateway with new tokens/configs.
-  // Use a longer debounce (8s) so that provider:setDefault — which writes the full config
-  // and then calls debouncedRestart(2s) — has time to fire and coalesce into a single
-  // restart.  Without this, the OAuth restart fires first with stale config, and the
-  // subsequent provider:setDefault restart is deferred and dropped.
+  // provider:setDefault already schedules a restart (via syncSavedProviderToRuntime →
+  // scheduleGatewayRefresh) which writes the OAuth token to config synchronously before
+  // the restart fires. The setDefault restart therefore always picks up the new token.
+  // No additional restart is needed here; scheduling one would only waste the governor's
+  // restart budget and risk cascading conflicts with nearby provider operations.
   deviceOAuthManager.on('oauth:success', ({ provider, accountId }) => {
-    logger.info(
-      `[IPC] Scheduling Gateway restart after ${provider} OAuth success for ${accountId}...`
+    logger.debug(
+      `[IPC] OAuth token saved by provider:setDefault; no separate Gateway restart needed (provider=${provider}, accountId=${accountId})`
     );
-    gatewayManager.debouncedRestart(8000);
   });
   browserOAuthManager.on('oauth:success', ({ provider, accountId }) => {
-    logger.info(
-      `[IPC] Scheduling Gateway restart after ${provider} OAuth success for ${accountId}...`
+    logger.debug(
+      `[IPC] OAuth token saved by provider:setDefault; no separate Gateway restart needed (provider=${provider}, accountId=${accountId})`
     );
-    gatewayManager.debouncedRestart(8000);
   });
 
   // Get all providers with key info

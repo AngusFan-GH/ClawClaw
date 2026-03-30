@@ -68,6 +68,8 @@
             "completedRestartTitle": "変更が適用されました",
             "completedReloadTitle": "変更が同期されました",
             "scheduledDescription": "{{source}} の変更を保存しました。まもなく適用します。",
+            "scheduledCountdown": "{{seconds}}秒後に再起動します — {{source}} の変更はキューに追加されました。",
+            "countdownHint": "ゲートウェイは{{seconds}}秒後に再起動します",
             "applyingDescription": "{{source}} の変更を適用中です。一時的に機能が中断する場合があります。",
             "completedDescription": "{{source}} の変更が適用されました。",
             "failedTitle": "ゲートウェイ変更の適用に失敗しました",

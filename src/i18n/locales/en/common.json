@@ -68,6 +68,8 @@
             "completedRestartTitle": "Changes applied",
             "completedReloadTitle": "Changes synchronized",
             "scheduledDescription": "{{source}} has been saved and will be applied shortly.",
+            "scheduledCountdown": "Restarting in {{seconds}}s — {{source}} changes are queued.",
+            "countdownHint": "Gateway will restart in {{seconds}}s",
             "applyingDescription": "Applying changes from {{source}}. Some features may pause briefly.",
             "completedDescription": "Changes from {{source}} have been applied.",
             "failedTitle": "Failed to apply Gateway changes",

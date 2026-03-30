@@ -776,7 +776,9 @@ export async function syncDefaultProviderToRuntime(
     }, fallbackModels);
 
     logger.info(`Configured openclaw.json for OAuth provider "${provider.type}"`);
-
+    // scheduleGatewayRefresh is already called by syncSavedProviderToRuntime (which runs
+    // before this function and already scheduled a restart). Calling it again here would
+    // emit an extra reload/restart signal that races with the one already queued.
     try {
       const defaultModelId = provider.model?.split('/').pop();
       await updateAgentModelProvider(targetProviderKey, {
