@@ -28,10 +28,11 @@ describe('managed plugin sdk compatibility repair', () => {
         repaired: true,
         changedFiles: [filePath],
       });
+      // After rewriting to infra-runtime subpath, the file is now compatible.
       expect(hasIncompatibleManagedPluginSdkImports(rootDir)).toBe(false);
 
       await expect(readFile(filePath, 'utf8')).resolves.toContain(
-        'import { resolvePreferredOpenClawTmpDir } from "openclaw/plugin-sdk/temp-path";',
+        'import { resolvePreferredOpenClawTmpDir } from "openclaw/plugin-sdk/infra-runtime";',
       );
       await expect(readFile(filePath, 'utf8')).resolves.toContain(
         'import { normalizeAccountId } from "openclaw/plugin-sdk";',
@@ -65,7 +66,7 @@ describe('managed plugin sdk compatibility repair', () => {
       expect(hasIncompatibleManagedPluginSdkImports(rootDir)).toBe(true);
 
       await expect(readFile(filePath, 'utf8')).resolves.toContain(
-        'import { resolvePreferredOpenClawTmpDir } from "openclaw/plugin-sdk/temp-path";',
+        'import { resolvePreferredOpenClawTmpDir } from "openclaw/plugin-sdk/infra-runtime";',
       );
       await expect(readFile(filePath, 'utf8')).resolves.toContain(
         'import { normalizeAccountId } from "openclaw/plugin-sdk/compat";',

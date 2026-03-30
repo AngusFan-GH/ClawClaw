@@ -5,7 +5,7 @@ const ROOT_PLUGIN_SDK_SPEC = 'openclaw/plugin-sdk';
 const COMPAT_PLUGIN_SDK_SPEC = 'openclaw/plugin-sdk/compat';
 
 const MOVED_ROOT_PLUGIN_SDK_EXPORTS: Record<string, string> = {
-  resolvePreferredOpenClawTmpDir: 'openclaw/plugin-sdk/temp-path',
+  resolvePreferredOpenClawTmpDir: 'openclaw/plugin-sdk/infra-runtime',
 };
 
 const JS_LIKE_EXTENSIONS = new Set(['.ts', '.js', '.mjs', '.cjs']);

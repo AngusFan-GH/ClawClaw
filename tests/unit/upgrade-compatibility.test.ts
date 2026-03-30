@@ -739,11 +739,11 @@ describe('upgrade compatibility baseline', () => {
     const sourceDir = join(process.cwd(), 'build', 'openclaw-plugins', 'openclaw-weixin');
     const targetDir = join(testHome, '.openclaw', 'extensions', 'openclaw-weixin');
 
-    await writePlugin(sourceDir, 'openclaw-weixin', '1.0.3');
+    await writePlugin(sourceDir, 'openclaw-weixin', '2.1.1');
     await mkdir(join(sourceDir, 'src'), { recursive: true });
     await writeFile(
       join(sourceDir, 'src', 'channel.ts'),
-      'import { resolvePreferredOpenClawTmpDir } from "openclaw/plugin-sdk/temp-path";\nexport const value = resolvePreferredOpenClawTmpDir();\n',
+      'import { resolvePreferredOpenClawTmpDir } from "openclaw/plugin-sdk/infra-runtime";\nexport const value = resolvePreferredOpenClawTmpDir();\n',
       'utf8',
     );
 
@@ -751,7 +751,7 @@ describe('upgrade compatibility baseline', () => {
     await mkdir(join(targetDir, 'src'), { recursive: true });
     await writeFile(
       join(targetDir, 'src', 'channel.ts'),
-      'import { resolvePreferredOpenClawTmpDir } from "openclaw/plugin-sdk";\nexport const value = resolvePreferredOpenClawTmpDir();\n',
+      'import { resolvePreferredOpenClawTmpDir } from "openclaw/plugin-sdk/temp-path";\nexport const value = resolvePreferredOpenClawTmpDir();\n',
       'utf8',
     );
     await writeFile(join(targetDir, 'stale.txt'), 'legacy-plugin', 'utf8');
@@ -803,7 +803,7 @@ describe('upgrade compatibility baseline', () => {
     await flushBackgroundWork();
 
     await expect(readFile(join(targetDir, 'src', 'channel.ts'), 'utf8')).resolves.toContain(
-      'openclaw/plugin-sdk/temp-path',
+      'openclaw/plugin-sdk/infra-runtime',
     );
     await expect(readFile(join(targetDir, 'stale.txt'), 'utf8')).rejects.toThrow();
   });

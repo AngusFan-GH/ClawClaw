@@ -49,7 +49,7 @@ const PLUGINS = [
 ];
 
 const MOVED_ROOT_PLUGIN_SDK_EXPORTS = {
-  resolvePreferredOpenClawTmpDir: 'openclaw/plugin-sdk/temp-path',
+  resolvePreferredOpenClawTmpDir: 'openclaw/plugin-sdk/infra-runtime',
 };
 
 function getVirtualStoreNodeModules(realPkgPath) {
@@ -179,7 +179,7 @@ function hasIncompatiblePluginSdkImports(rootDir) {
     if (/openclaw\/plugin-sdk\/compat/.test(source)) {
       return true;
     }
-    if (/resolvePreferredOpenClawTmpDir/.test(source) && /openclaw\/plugin-sdk/.test(source) && !/openclaw\/plugin-sdk\/temp-path/.test(source)) {
+    if (/resolvePreferredOpenClawTmpDir/.test(source) && /openclaw\/plugin-sdk/.test(source) && !/openclaw\/plugin-sdk\/infra-runtime/.test(source)) {
       return true;
     }
     const requireMatch = source.match(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\(\s*["']openclaw\/plugin-sdk(?:\/compat)?["']\s*\)/);
