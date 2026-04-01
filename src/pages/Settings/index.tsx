@@ -7,11 +7,29 @@ import {
   Copy,
   ExternalLink,
   FileText,
+  GripVertical,
   Monitor,
   Moon,
   RefreshCw,
   Sun,
 } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,6 +60,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { UpdateSettings } from '@/components/settings/UpdateSettings';
 import type { GatewayStatus } from '@/types/gateway';
+import { ALL_MENU_ITEMS } from '@/shared/menu-items';
 
 type ControlUiInfo = {
   url: string;
@@ -81,14 +100,16 @@ function SubCard({
   description,
   action,
   children,
+  className,
 }: {
   title: string;
   description?: string;
   action?: ReactNode;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="rounded-[10px] border border-black/10 bg-black/[0.03] p-4 dark:border-white/10 dark:bg-white/[0.03]">
+    <div className={cn('rounded-[10px] border border-black/10 bg-black/[0.03] p-4 dark:border-white/10 dark:bg-white/[0.03]', className)}>
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <h3 className="text-[15px] font-medium text-foreground">{title}</h3>
@@ -97,6 +118,65 @@ function SubCard({
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>
       {children}
+    </div>
+  );
+}
+
+function SortableMenuItem({
+  id,
+  icon,
+  label,
+  checked,
+  disabled,
+  onToggle,
+}: {
+  id: string;
+  icon: ReactNode;
+  label: string;
+  checked: boolean;
+  disabled: boolean;
+  onToggle: (val: boolean) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id, disabled });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        'flex items-center justify-between rounded-[10px] border border-black/10 bg-white/75 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]',
+        isDragging && 'z-50 opacity-50 shadow-lg'
+      )}
+    >
+      <div className="flex items-center gap-2.5">
+        <span
+          {...attributes}
+          {...listeners}
+          className={cn(
+            'cursor-grab text-muted-foreground active:cursor-grabbing',
+            disabled && 'cursor-not-allowed opacity-40'
+          )}
+        >
+          <GripVertical className="h-4 w-4" strokeWidth={2} />
+        </span>
+        <span className="text-muted-foreground">{icon}</span>
+        <span className={cn('text-[13px] font-medium', checked ? 'text-foreground' : 'text-muted-foreground')}>
+          {label}
+        </span>
+      </div>
+      <Switch checked={checked} disabled={disabled} onCheckedChange={onToggle} />
     </div>
   );
 }
@@ -134,6 +214,10 @@ export function Settings() {
     return () => console.debug('[settings] Settings component unmounted');
   }, []);
   const { t } = useTranslation(['settings', 'common']);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
   const {
     theme,
     setTheme,
@@ -157,6 +241,8 @@ export function Settings() {
     setProxyBypassRules,
     devModeUnlocked,
     setDevModeUnlocked,
+    shortcutMenuItems,
+    setShortcutMenuItems,
     slashCommandHintsEnabled,
     setSlashCommandHintsEnabled,
     sessionMemoryEnabled,
@@ -717,6 +803,77 @@ export function Settings() {
                 </div>
               </SubCard>
             </div>
+
+            <SubCard
+              title={t('appearance.shortcutMenu.title')}
+              description={t('appearance.shortcutMenu.description')}
+              className="mt-4"
+            >
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <Badge variant="secondary" className="rounded-[10px] px-3 py-1 text-[12px]">
+                  {t('appearance.shortcutMenu.selectedCount', { count: shortcutMenuItems.length })}
+                </Badge>
+              </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={(event: DragEndEvent) => {
+                  const { active, over } = event;
+                  if (over && active.id !== over.id) {
+                    const oldIndex = shortcutMenuItems.indexOf(active.id as MenuItemId);
+                    const newIndex = shortcutMenuItems.indexOf(over.id as MenuItemId);
+                    setShortcutMenuItems(arrayMove(shortcutMenuItems, oldIndex, newIndex));
+                  }
+                }}
+              >
+                <SortableContext items={shortcutMenuItems} strategy={verticalListSortingStrategy}>
+                  <div className="grid w-full grid-cols-1 gap-2">
+                    {shortcutMenuItems.map((id) => {
+                      const item = ALL_MENU_ITEMS.find((m) => m.id === id)!;
+                      return (
+                        <SortableMenuItem
+                          key={item.id}
+                          id={item.id}
+                          icon={item.icon}
+                          label={t(`common:sidebar.${item.i18nKey}`)}
+                          checked={true}
+                          disabled={false}
+                          onToggle={() => setShortcutMenuItems(shortcutMenuItems.filter((i) => i !== item.id))}
+                        />
+                      );
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
+
+              {ALL_MENU_ITEMS.filter((item) => !shortcutMenuItems.includes(item.id)).length > 0 && (
+                <>
+                  <div className="mb-2 mt-3 flex items-center gap-2">
+                    <div className="h-px flex-1 border-t border-black/10 dark:border-white/10" />
+                  </div>
+                  <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+                    {ALL_MENU_ITEMS.filter((item) => !shortcutMenuItems.includes(item.id)).map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between rounded-[10px] border border-black/10 bg-white/75 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-muted-foreground">{item.icon}</span>
+                          <span className="text-[13px] font-medium text-muted-foreground">
+                            {t(`common:sidebar.${item.i18nKey}`)}
+                          </span>
+                        </div>
+                        <Switch
+                          checked={false}
+                          disabled={shortcutMenuItems.length >= 3}
+                          onCheckedChange={() => setShortcutMenuItems([...shortcutMenuItems, item.id])}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </SubCard>
           </SectionCard>
 
           <SectionCard title={t('gateway.title')} description={t('gateway.description')}>

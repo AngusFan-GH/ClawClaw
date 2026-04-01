@@ -31,6 +31,59 @@ import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useTranslation } from 'react-i18next';
 import logoFullSvg from '@/assets/logo-full.svg';
+import { type MenuItemConfig, type MenuItemId } from '@/shared/menu-items';
+
+/** Menu items with icons attached. Defined here so icons (lucide) are imported in one place. */
+const SIDEBAR_MENU_ITEMS: MenuItemConfig[] = [
+  {
+    id: 'skills',
+    i18nKey: 'skills',
+    icon: <Puzzle className="h-[18px] w-[18px]" strokeWidth={2} />,
+    to: '/skills',
+  },
+  {
+    id: 'cron',
+    i18nKey: 'cronTasks',
+    icon: <Clock className="h-[18px] w-[18px]" strokeWidth={2} />,
+    to: '/cron',
+  },
+  {
+    id: 'models',
+    i18nKey: 'models',
+    icon: <Bot className="h-[18px] w-[18px]" strokeWidth={2} />,
+    to: '/models',
+  },
+  {
+    id: 'agents',
+    i18nKey: 'agents',
+    icon: <Copy className="h-[18px] w-[18px]" strokeWidth={2} />,
+    to: '/agents',
+  },
+  {
+    id: 'channels',
+    i18nKey: 'channels',
+    icon: <MessageCircleMore className="h-[18px] w-[18px]" strokeWidth={2} />,
+    to: '/channels',
+  },
+  {
+    id: 'security',
+    i18nKey: 'security',
+    icon: <Shield className="h-[18px] w-[18px]" strokeWidth={2} />,
+    to: '/security',
+  },
+  {
+    id: 'reminders',
+    i18nKey: 'reminders',
+    icon: <Bell className="h-[18px] w-[18px]" strokeWidth={2} />,
+    to: '/reminders',
+  },
+  {
+    id: 'settings',
+    i18nKey: 'settings',
+    icon: <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />,
+    to: '/settings',
+  },
+];
 
 type SessionBucketKey =
   | 'today'
@@ -121,6 +174,7 @@ function resolveAgentDisplayName(agent: { gateway: { id: string; name?: string; 
 export function Sidebar() {
   const sidebarCollapsed = useSettingsStore((state) => state.sidebarCollapsed);
   const setSidebarCollapsed = useSettingsStore((state) => state.setSidebarCollapsed);
+  const shortcutMenuItems = useSettingsStore((state) => state.shortcutMenuItems);
 
   const sessions = useChatStore((s) => s.sessions);
   const sessionsLoading = useChatStore((s) => s.sessionsLoading);
@@ -257,53 +311,13 @@ export function Sidebar() {
     sessionBucketMap[bucketKey].sessions.push(session);
   }
 
-  const navItems = [
-    {
-      to: '/skills',
-      icon: <Puzzle className="h-[18px] w-[18px]" strokeWidth={2} />,
-      label: t('sidebar.skills'),
-    },
-    {
-      to: '/cron',
-      icon: <Clock className="h-[18px] w-[18px]" strokeWidth={2} />,
-      label: t('sidebar.cronTasks'),
-    },
-  ];
+  const shortcutIds = new Set<MenuItemId>(shortcutMenuItems);
+  const shortcutItems = shortcutMenuItems
+    .map((id) => SIDEBAR_MENU_ITEMS.find((item) => item.id === id)!)
+    .filter(Boolean);
+  const popupItems = SIDEBAR_MENU_ITEMS.filter((item) => !shortcutIds.has(item.id));
 
-  const settingsItems = [
-    {
-      to: '/models',
-      icon: <Bot className="h-[18px] w-[18px]" strokeWidth={2} />,
-      label: t('sidebar.models'),
-    },
-    {
-      to: '/agents',
-      icon: <Copy className="h-[18px] w-[18px]" strokeWidth={2} />,
-      label: t('sidebar.agents'),
-    },
-    {
-      to: '/channels',
-      icon: <MessageCircleMore className="h-[18px] w-[18px]" strokeWidth={2} />,
-      label: t('sidebar.channels'),
-    },
-    {
-      to: '/security',
-      icon: <Shield className="h-[18px] w-[18px]" strokeWidth={2} />,
-      label: t('sidebar.security'),
-    },
-    {
-      to: '/reminders',
-      icon: <Bell className="h-[18px] w-[18px]" strokeWidth={2} />,
-      label: t('sidebar.reminders'),
-    },
-    {
-      to: '/settings',
-      icon: <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />,
-      label: t('sidebar.settings'),
-    },
-  ];
-
-  const settingsActive = settingsItems.some((item) => location.pathname.startsWith(item.to));
+  const settingsActive = shortcutItems.some((item) => location.pathname.startsWith(item.to)) || popupItems.some((item) => location.pathname.startsWith(item.to));
   const gatewayBadgeLabel = displayGatewayState === 'running'
     ? t('chat:toolbar.gatewayRunning')
     : displayGatewayState === 'error'
@@ -372,8 +386,14 @@ export function Sidebar() {
           )}
         </button>
 
-        {navItems.map((item) => (
-          <NavItem key={item.to} {...item} collapsed={sidebarCollapsed} />
+        {shortcutItems.map((item) => (
+          <NavItem
+            key={item.id}
+            to={item.to}
+            icon={item.icon}
+            label={t(`sidebar.${item.i18nKey}`)}
+            collapsed={sidebarCollapsed}
+          />
         ))}
       </nav>
 
@@ -490,9 +510,9 @@ export function Sidebar() {
               )}
             >
               <div className="space-y-1">
-                {settingsItems.map((item) => (
+                {popupItems.map((item) => (
                   <NavLink
-                    key={item.to}
+                    key={item.id}
                     to={item.to}
                     onClick={() => setSettingsMenuOpen(false)}
                     className={({ isActive }) =>
@@ -514,7 +534,7 @@ export function Sidebar() {
                           {item.icon}
                         </div>
                         <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                          {item.label}
+                          {t(`sidebar.${item.i18nKey}`)}
                         </span>
                       </>
                     )}

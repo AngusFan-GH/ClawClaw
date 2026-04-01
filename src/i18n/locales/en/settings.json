@@ -8,7 +8,12 @@
     "light": "Light",
     "dark": "Dark",
     "system": "System",
-    "language": "Language"
+    "language": "Language",
+    "shortcutMenu": {
+      "title": "Shortcut Menu",
+      "description": "Choose which items appear as shortcuts in the sidebar. Unselected items remain in the menu popup.",
+      "selectedCount": "{{count}}/3 selected"
+    }
   },
   "reminders": {
     "title": "Reminders",

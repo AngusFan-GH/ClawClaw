@@ -8,6 +8,7 @@ import i18n from '@/i18n';
 import { hostApiFetch } from '@/lib/host-api';
 import type { ReminderItem } from '@/shared/reminders';
 import { normalizeReminders } from '@/shared/reminders';
+import { DEFAULT_SHORTCUT_MENU_IDS, type MenuItemId } from '@/shared/menu-items';
 
 type Theme = 'light' | 'dark' | 'system';
 type UpdateChannel = 'stable';
@@ -38,6 +39,7 @@ interface SettingsState {
 
   // UI State
   sidebarCollapsed: boolean;
+  shortcutMenuItems: MenuItemId[];
   devModeUnlocked: boolean;
   slashCommandHintsEnabled: boolean;
   reminders: ReminderItem[];
@@ -69,6 +71,7 @@ interface SettingsState {
   setAutoCheckUpdate: (value: boolean) => void;
   setAutoDownloadUpdate: (value: boolean) => void;
   setSidebarCollapsed: (value: boolean) => void;
+  setShortcutMenuItems: (value: MenuItemId[]) => void;
   setDevModeUnlocked: (value: boolean) => void;
   setSlashCommandHintsEnabled: (value: boolean) => void;
   setReminders: (value: ReminderItem[]) => void;
@@ -96,6 +99,7 @@ const defaultSettings = {
   autoCheckUpdate: true,
   autoDownloadUpdate: false,
   sidebarCollapsed: false,
+  shortcutMenuItems: DEFAULT_SHORTCUT_MENU_IDS,
   devModeUnlocked: false,
   slashCommandHintsEnabled: false,
   reminders: [] as ReminderItem[],
@@ -219,6 +223,12 @@ export const useSettingsStore = create<SettingsState>()(
       setSidebarCollapsed: (sidebarCollapsed) => {
         set({ sidebarCollapsed });
         void persistMainSettings({ sidebarCollapsed }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
+      },
+      setShortcutMenuItems: (shortcutMenuItems) => {
+        set({ shortcutMenuItems });
+        void persistMainSettings({ shortcutMenuItems }).catch(() => {
           void syncFromMain().catch(() => {});
         });
       },

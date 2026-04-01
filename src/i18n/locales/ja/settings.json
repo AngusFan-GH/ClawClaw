@@ -8,7 +8,12 @@
     "light": "ライト",
     "dark": "ダーク",
     "system": "システム",
-    "language": "言語"
+    "language": "言語",
+    "shortcutMenu": {
+      "title": "クイックメニュー",
+      "description": "サイドバーにショートカットとして表示する項目を選びます。未選択の項目はメニュー内に残ります。",
+      "selectedCount": "{{count}}/3 項目選択中"
+    }
   },
   "reminders": {
     "title": "言い聞かせ",

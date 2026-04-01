@@ -8,7 +8,12 @@
     "light": "浅色",
     "dark": "深色",
     "system": "跟随系统",
-    "language": "语言"
+    "language": "语言",
+    "shortcutMenu": {
+      "title": "快捷菜单",
+      "description": "选择哪些菜单项显示在侧边栏快捷入口。未选中的项保留在菜单弹框中。",
+      "selectedCount": "已选择 {{count}}/3 项"
+    }
   },
   "reminders": {
     "title": "叮嘱",
