@@ -30,7 +30,6 @@ import { getOpenClawCliSpawnConfig } from '../../utils/openclaw-cli';
 import { prepareWinSpawn } from '../../utils/win-shell';
 import { applyPresetLocalModelSelection, readLocalModelPresets } from '../../services/providers/local-model-presets';
 import { getOpenClawProviderKeyForType } from '../../utils/provider-keys';
-import { runOpenClawStartupPreflightRepair } from '../../gateway/config-sync';
 
 type OpenClawModelListResponse = {
   count?: number;
@@ -58,7 +57,6 @@ type OpenClawModelCacheEntry = {
 const OPENCLAW_MODEL_LIST_CACHE_TTL_MS = 10_000;
 const openClawModelListCache = new Map<OpenClawModelScope, OpenClawModelCacheEntry>();
 let openClawModelListQueue: Promise<void> = Promise.resolve();
-let openClawModelQueryPrepPromise: Promise<void> | null = null;
 
 const WINDOWS_MODELS_JSON_RENAME_RETRY_DELAYS_MS = [120, 250, 500];
 
@@ -114,18 +112,6 @@ async function runSerializedOpenClawModelList<T>(task: () => Promise<T>): Promis
   } finally {
     release();
   }
-}
-
-async function ensureOpenClawConfigReadyForModelQueries(): Promise<void> {
-  if (!openClawModelQueryPrepPromise) {
-    openClawModelQueryPrepPromise = (async () => {
-      await runOpenClawStartupPreflightRepair();
-    })().finally(() => {
-      openClawModelQueryPrepPromise = null;
-    });
-  }
-
-  await openClawModelQueryPrepPromise;
 }
 
 function isLocalModelProviderConfig(account: Pick<ProviderAccount, 'vendorId' | 'metadata'> | null | undefined): boolean {
@@ -306,6 +292,7 @@ async function getOpenClawModelList(scope: OpenClawModelScope): Promise<OpenClaw
 }
 
 async function listRuntimeModelRefs(): Promise<string[]> {
+  // Renderer model queries run on Chat remount, so this path must stay read-only.
   const models = await getOpenClawModelList('runtime');
   const refs = models
     .filter((model) => model.available !== false)
@@ -565,7 +552,6 @@ export async function handleProviderRoutes(
 
   if (url.pathname === '/api/provider-model-options' && req.method === 'GET') {
     try {
-      await ensureOpenClawConfigReadyForModelQueries();
       const vendorId = url.searchParams.get('vendorId');
       const authMode = url.searchParams.get('authMode');
       const accountId = url.searchParams.get('accountId');
@@ -600,7 +586,6 @@ export async function handleProviderRoutes(
 
   if (url.pathname === '/api/provider-model-options/resolve' && req.method === 'POST') {
     try {
-      await ensureOpenClawConfigReadyForModelQueries();
       const body = await parseJsonBody<{
         vendorId: string;
         authMode?: string;
@@ -650,7 +635,6 @@ export async function handleProviderRoutes(
 
   if (url.pathname === '/api/runtime-model-refs' && req.method === 'GET') {
     try {
-      await ensureOpenClawConfigReadyForModelQueries();
       const models = await listRuntimeModelRefs();
       sendJson(res, 200, { models });
     } catch (error) {

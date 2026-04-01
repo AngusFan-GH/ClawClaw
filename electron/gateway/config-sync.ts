@@ -106,7 +106,10 @@ function syncManagedChannelPluginMirrors(configuredChannels: string[]): string[]
   for (const pluginId of pluginIds) {
     const plugin = MANAGED_CHANNEL_PLUGIN_MIRRORS.find((entry) => entry.pluginId === pluginId);
     if (!plugin) continue;
-    const result = ensureBundledPluginInstalled(plugin.pluginId, plugin.displayName, { forceReinstall: true });
+    // Startup preflight should only repair stale/broken mirrors. Forcing a
+    // reinstall on every launch makes packaged builds report a fake "repaired"
+    // recovery even when nothing is wrong.
+    const result = ensureBundledPluginInstalled(plugin.pluginId, plugin.displayName);
     if (result.warning) {
       logger.warn(result.warning);
     }

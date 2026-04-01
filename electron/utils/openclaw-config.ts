@@ -161,7 +161,7 @@ export function sanitizeKnownInvalidOpenClawKeys(config: Record<string, unknown>
   return modified;
 }
 
-async function readOpenClawConfigRecordRaw<T extends Record<string, unknown> = Record<string, unknown>>(): Promise<T> {
+export async function readOpenClawConfigRecordRaw<T extends Record<string, unknown> = Record<string, unknown>>(): Promise<T> {
   if (!(await fileExists(OPENCLAW_CONFIG_PATH))) {
     return {} as T;
   }

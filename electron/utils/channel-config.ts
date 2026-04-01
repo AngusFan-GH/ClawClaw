@@ -15,8 +15,10 @@ import { getOpenClawEntryPath, getOpenClawResolvedDir, getOpenClawDir } from './
 import * as logger from './logger';
 import {
     readOpenClawConfigRecord,
+    readOpenClawConfigRecordRaw,
     sanitizeKnownInvalidOpenClawKeys,
     updateOpenClawConfigRecord,
+    writeOpenClawConfigRecord,
 } from './openclaw-config';
 import { hasIncompatibleManagedPluginSdkImports } from './plugin-sdk-compat';
 import { proxyAwareFetch } from './proxy-fetch';
@@ -894,14 +896,23 @@ export async function readOpenClawConfig(): Promise<OpenClawConfig> {
 
 export async function writeOpenClawConfig(config: OpenClawConfig): Promise<void> {
     try {
+        // Read current content BEFORE sanitization so we can compare the true before/after.
+        const currentConfig = await readOpenClawConfigRecordRaw().catch(() => null);
+
         sanitizeKnownInvalidOpenClawKeys(config as unknown as Record<string, unknown>);
 
-        // Enable graceful in-process reload authorization for SIGUSR1 flows.
+        // Only set commands.restart = true if the config content actually changed.
+        const nextContent = JSON.stringify(config, null, 2);
+        const currentContent = currentConfig ? JSON.stringify(currentConfig, null, 2) : null;
+
         const commands =
             config.commands && typeof config.commands === 'object'
                 ? { ...(config.commands as Record<string, unknown>) }
                 : {};
-        commands.restart = true;
+
+        if (currentContent !== nextContent) {
+            commands.restart = true;
+        }
         config.commands = commands;
 
         await writeOpenClawConfigRecord(config as unknown as Record<string, unknown>);
@@ -915,9 +926,14 @@ export async function writeOpenClawConfig(config: OpenClawConfig): Promise<void>
 export async function updateOpenClawConfig<T>(
     updater: (config: OpenClawConfig) => Promise<T> | T
 ): Promise<T> {
-    return await updateOpenClawConfigRecord(async (config) => {
+    const result = await updateOpenClawConfigRecord(async (config) => {
         const typedConfig = config as OpenClawConfig;
-        const result = await updater(typedConfig);
+        const updaterResult = await updater(typedConfig);
+        if (!updaterResult) {
+            // No changes — skip writing commands.restart so the gateway is not
+            // spuriously restarted on every preflight repair run.
+            return updaterResult;
+        }
 
         sanitizeKnownInvalidOpenClawKeys(typedConfig as unknown as Record<string, unknown>);
         const commands =
@@ -927,8 +943,9 @@ export async function updateOpenClawConfig<T>(
         commands.restart = true;
         typedConfig.commands = commands;
 
-        return result;
+        return updaterResult;
     });
+    return result;
 }
 
 // ── Channel operations ───────────────────────────────────────────

@@ -14,12 +14,14 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { listConfiguredAgentIds } from './agent-config';
 import { toFsPath } from './fs-path';
-import { getProviderEnvVar, getProviderDefaultModel, getProviderConfig } from './provider-registry';
+import { getProviderDefaultModel, getProviderConfig } from './provider-registry';
 import {
   readOpenClawConfigRecord,
+  readOpenClawConfigRecordRaw,
   sanitizeKnownInvalidOpenClawKeys,
   writeOpenClawConfigRecord,
 } from './openclaw-config';
+import { logger } from './logger';
 import {
   OPENCLAW_PROVIDER_KEY_MOONSHOT,
   isOAuthProviderType,
@@ -239,8 +241,19 @@ function sanitizeAgentsDefaultsMemorySearch(config: Record<string, unknown>): bo
 }
 
 export async function writeOpenClawJson(config: Record<string, unknown>): Promise<void> {
+  // Read current content BEFORE sanitization so we can compare the true before/after.
+  const currentConfig = await readOpenClawConfigRecordRaw().catch(() => null);
+
   sanitizeKnownInvalidOpenClawKeys(config);
   normalizeAgentsDefaultsCompactionMode(config);
+
+  // Only set commands.restart = true if the config content actually changed.
+  // Without this check, every call to writeOpenClawJson (e.g. from
+  // setOpenClawDefaultModel, syncProviderConfigToOpenClaw, etc.) would
+  // unconditionally trigger a gateway restart, even when the provider
+  // config is already correct and nothing was modified.
+  const nextContent = JSON.stringify(config, null, 2);
+  const currentContent = currentConfig ? JSON.stringify(currentConfig, null, 2) : null;
 
   // Ensure SIGUSR1 graceful reload is authorized by OpenClaw config.
   const commands = (
@@ -248,7 +261,10 @@ export async function writeOpenClawJson(config: Record<string, unknown>): Promis
       ? { ...(config.commands as Record<string, unknown>) }
       : {}
   ) as Record<string, unknown>;
-  commands.restart = true;
+
+  if (currentContent !== nextContent) {
+    commands.restart = true;
+  }
   config.commands = commands;
 
   await writeOpenClawConfigRecord(config);
@@ -295,32 +311,6 @@ export async function saveOAuthTokenToOpenClaw(
   console.log(
     `Saved OAuth token for provider "${provider}" to OpenClaw auth-profiles (agents: ${agentIds.join(', ')})`
   );
-}
-
-/**
- * Retrieve an OAuth token from OpenClaw's auth-profiles.json.
- * Useful when the Gateway does not natively inject the Authorization header.
- *
- * @param provider - Provider type (e.g., 'minimax-portal')
- * @param agentId - Optional single agent ID to read from, defaults to 'main'
- * @returns The OAuth token access string or null if not found
- */
-export async function getOAuthTokenFromOpenClaw(
-  provider: string,
-  agentId = 'main'
-): Promise<string | null> {
-  try {
-    const store = await readAuthProfiles(agentId);
-    const profileId = `${provider}:default`;
-    const profile = store.profiles[profileId];
-
-    if (profile && profile.type === 'oauth' && 'access' in profile) {
-      return (profile as OAuthProfileEntry).access;
-    }
-  } catch (err) {
-    console.warn(`[getOAuthToken] Failed to read token for ${provider}:`, err);
-  }
-  return null;
 }
 
 /**
@@ -467,23 +457,6 @@ export async function removeProviderFromOpenClaw(provider: string): Promise<void
   } catch (err) {
     console.warn(`Failed to remove provider ${provider} from openclaw.json:`, err);
   }
-}
-
-/**
- * Build environment variables object with all stored API keys
- * for passing to the Gateway process
- */
-export function buildProviderEnvVars(
-  providers: Array<{ type: string; apiKey: string }>
-): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const { type, apiKey } of providers) {
-    const envVar = getProviderEnvVar(type);
-    if (envVar && apiKey) {
-      env[envVar] = apiKey;
-    }
-  }
-  return env;
 }
 
 /**
@@ -635,7 +608,6 @@ function upsertOpenClawProviderEntry(
 ): void {
   const models = (config.models || {}) as Record<string, unknown>;
   const providers = (models.providers || {}) as Record<string, unknown>;
-  const removedLegacyMoonshot = removeLegacyMoonshotProviderEntry(provider, providers);
   const existingProvider =
     providers[provider] && typeof providers[provider] === 'object'
       ? (providers[provider] as Record<string, unknown>)
@@ -677,17 +649,6 @@ function upsertOpenClawProviderEntry(
   providers[provider] = nextProvider;
   models.providers = providers;
   config.models = models;
-
-  if (removedLegacyMoonshot) {
-    console.log('Removed legacy models.providers.moonshot alias entry');
-  }
-}
-
-function removeLegacyMoonshotProviderEntry(
-  _provider: string,
-  _providers: Record<string, unknown>
-): boolean {
-  return false;
 }
 
 function ensureMoonshotKimiWebSearchCnBaseUrl(
@@ -1261,17 +1222,10 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
 
   // ── commands section ───────────────────────────────────────────
   // Required for SIGUSR1 in-process reload authorization.
-  const commands = (
-    config.commands && typeof config.commands === 'object'
-      ? { ...(config.commands as Record<string, unknown>) }
-      : {}
-  ) as Record<string, unknown>;
-  if (commands.restart !== true) {
-    commands.restart = true;
-    config.commands = commands;
-    modified = true;
-    console.log('[sanitize] Enabling commands.restart for graceful reload support');
-  }
+  // NOTE: Do NOT set commands.restart = true here. writeOpenClawJson already
+  // compares content before vs after sanitization and sets restart=true only
+  // when the actual config content changed. Setting it here unconditionally
+  // would always trigger a write (and restart) even when nothing changed.
 
   // ── tools.web.search.kimi ─────────────────────────────────────
   // OpenClaw web_search(kimi) prioritizes tools.web.search.kimi.apiKey over
