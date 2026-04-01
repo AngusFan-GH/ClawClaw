@@ -16,6 +16,7 @@ import {
   SquarePen,
   Trash2,
   Bot,
+  Bell,
   ChevronUp,
   Copy,
   Menu,
@@ -289,6 +290,11 @@ export function Sidebar() {
       to: '/security',
       icon: <Shield className="h-[18px] w-[18px]" strokeWidth={2} />,
       label: t('sidebar.security'),
+    },
+    {
+      to: '/reminders',
+      icon: <Bell className="h-[18px] w-[18px]" strokeWidth={2} />,
+      label: t('sidebar.reminders'),
     },
     {
       to: '/settings',

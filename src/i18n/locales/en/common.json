@@ -13,6 +13,7 @@
         "devConsole": "Developer Console",
         "models": "Models",
         "security": "Security",
+        "reminders": "Reminders",
         "deleteSessionConfirm": "Are you sure you want to delete session \"{{label}}\"?",
         "openClawPage": "OpenClaw Page"
     },

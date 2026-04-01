@@ -13,6 +13,7 @@
         "devConsole": "開発者コンソール",
         "models": "モデル",
         "security": "セキュリティ",
+        "reminders": "リマインダー",
         "deleteSessionConfirm": "セッション \"{{label}}\" を削除してもよろしいですか？",
         "openClawPage": "OpenClaw ページ"
     },

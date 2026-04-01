@@ -17,6 +17,7 @@ import { Skills } from './pages/Skills';
 import { Cron } from './pages/Cron';
 import { Settings } from './pages/Settings';
 import { Security } from './pages/Security';
+import { Reminders } from './pages/Reminders';
 import { Setup } from './pages/Setup';
 import { useSettingsStore } from './stores/settings';
 import { useGatewayStore } from './stores/gateway';
@@ -211,6 +212,7 @@ function App() {
             <Route path="/skills" element={<Skills />} />
             <Route path="/cron" element={<Cron />} />
             <Route path="/security" element={<Security />} />
+            <Route path="/reminders" element={<Reminders />} />
             <Route path="/settings/*" element={<Settings />} />
           </Route>
         </Routes>
