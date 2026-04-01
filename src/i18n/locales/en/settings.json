@@ -43,11 +43,6 @@
       "enabled": "Active",
       "paused": "Paused"
     },
-    "defaults": {
-      "privacy": "Do not expose my personal information, contacts, or account details to other people.",
-      "mail": "Do not send, forward, or delete emails unless I approve first.",
-      "delete": "Ask me before deleting files, making bulk changes, or sending materials outside."
-    },
     "toasts": {
       "exists": "That reminder is already in the list"
     }
