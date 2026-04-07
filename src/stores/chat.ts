@@ -982,6 +982,23 @@ function sessionKeysMatch(currentKey: string, incomingKey: string, sessions: Cha
   return canonicalizeSessionKey(currentKey, sessions) === canonicalizeSessionKey(incomingKey, sessions);
 }
 
+/** Detect assistant messages whose text is purely NO_REPLY sentinel — filter from history display. */
+const SILENT_REPLY_PATTERN = /^\s*NO_REPLY\s*$/;
+
+function isSilentReplyText(text: string): boolean {
+  return SILENT_REPLY_PATTERN.test(text);
+}
+
+function isAssistantSilentReply(message: RawMessage | undefined): boolean {
+  if (!message || typeof message !== 'object') return false;
+  const msg = message as unknown as Record<string, unknown>;
+  const role = typeof msg.role === 'string' ? msg.role.toLowerCase() : '';
+  if (role !== 'assistant') return false;
+  if (typeof msg.text === 'string') return isSilentReplyText(msg.text);
+  const text = extractTextFromContent(msg.content);
+  return typeof text === 'string' && isSilentReplyText(text);
+}
+
 function isToolOnlyMessage(message: RawMessage | undefined): boolean {
   if (!message) return false;
   if (isToolResultRole(message.role)) return true;
@@ -2071,7 +2088,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return;
       }
       if (data) {
-        const rawMessages = Array.isArray(data.messages) ? (data.messages as RawMessage[]) : [];
+        const rawMessages = (Array.isArray(data.messages) ? (data.messages as RawMessage[]) : [])
+          .filter((message) => !isAssistantSilentReply(message));
 
         // Keep transcript ordering as close to Gateway history as possible.
         // Only enrich cached file/image previews for display.
@@ -2521,8 +2539,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Treat canonical aliases as the same session (`main` <-> `agent:<id>:main`).
     if (eventSessionKey != null && !sessionKeysMatch(currentSessionKey, eventSessionKey, sessions)) return;
 
+    // Final from another run (e.g. sub-agent announce): refresh history to show new message.
+    // See https://github.com/openclaw/openclaw/issues/1909
+    if (activeRunId && runId && runId !== activeRunId) {
+      if (eventState === 'final') {
+        const finalMsg = event.message as RawMessage | undefined;
+        if (finalMsg && !isAssistantSilentReply(finalMsg)) {
+          set((s) => ({ messages: [...s.messages, finalMsg] }));
+        }
+      }
+      return;
+    }
+
     // Only process events for the active run (or if no active run set)
-    if (activeRunId && runId && runId !== activeRunId) return;
 
     _lastChatEventAt = Date.now();
 

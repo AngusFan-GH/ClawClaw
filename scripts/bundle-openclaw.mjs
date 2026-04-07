@@ -345,6 +345,77 @@ if (repairedDependencyIssues > 0) {
   echo`   🛠️  Repaired ${repairedDependencyIssues} bundled dependency override(s)`;
 }
 
+// 5b. Merge built-in extension node_modules into top-level node_modules
+//
+// OpenClaw ships built-in extensions under dist/extensions/<ext>/node_modules/.
+// Some shared chunks in dist/ import extension-specific packages like "grammy"
+// directly, and Node's ESM resolver only walks upward from the importing file.
+// It does not search dist/extensions/<ext>/node_modules, so we need those deps
+// available from the bundle root.
+const BUILTIN_EXTENSION_RUNTIME_PACKAGES = new Set([
+  'grammy',
+  '@grammyjs/runner',
+  '@grammyjs/transformer-throttler',
+]);
+const extensionsDir = path.join(OUTPUT, 'dist', 'extensions');
+let mergedExtensionDepCount = 0;
+if (fs.existsSync(extensionsDir)) {
+  for (const extEntry of fs.readdirSync(extensionsDir, { withFileTypes: true })) {
+    if (!extEntry.isDirectory()) continue;
+    const extNodeModules = path.join(extensionsDir, extEntry.name, 'node_modules');
+    if (!fs.existsSync(extNodeModules)) continue;
+
+    for (const pkgEntry of fs.readdirSync(extNodeModules, { withFileTypes: true })) {
+      if (pkgEntry.name === '.bin') continue;
+      const srcPkg = path.join(extNodeModules, pkgEntry.name);
+
+      if (pkgEntry.name.startsWith('@')) {
+        let scopeEntries;
+        try {
+          scopeEntries = fs.readdirSync(srcPkg, { withFileTypes: true });
+        } catch {
+          continue;
+        }
+        for (const scopeEntry of scopeEntries) {
+          if (!scopeEntry.isDirectory()) continue;
+          const scopedName = `${pkgEntry.name}/${scopeEntry.name}`;
+          if (!BUILTIN_EXTENSION_RUNTIME_PACKAGES.has(scopedName)) continue;
+          if (copiedRealPathsByName.has(scopedName)) continue;
+          const destScoped = path.join(outputNodeModules, pkgEntry.name, scopeEntry.name);
+          try {
+            fs.mkdirSync(normWin(path.dirname(destScoped)), { recursive: true });
+            fs.cpSync(normWin(path.join(srcPkg, scopeEntry.name)), normWin(destScoped), { recursive: true, dereference: true });
+            copiedRealPathsByName.set(scopedName, path.join(srcPkg, scopeEntry.name));
+            mergedExtensionDepCount++;
+          } catch {
+            // non-fatal
+          }
+        }
+        continue;
+      }
+
+      if (!BUILTIN_EXTENSION_RUNTIME_PACKAGES.has(pkgEntry.name)) continue;
+      if (!pkgEntry.isDirectory() || copiedRealPathsByName.has(pkgEntry.name)) continue;
+      const dest = path.join(outputNodeModules, pkgEntry.name);
+      try {
+        fs.mkdirSync(normWin(path.dirname(dest)), { recursive: true });
+        fs.cpSync(normWin(srcPkg), normWin(dest), { recursive: true, dereference: true });
+        copiedRealPathsByName.set(pkgEntry.name, srcPkg);
+        mergedExtensionDepCount++;
+      } catch {
+        // non-fatal
+      }
+    }
+  }
+}
+if (mergedExtensionDepCount > 0) {
+  echo`   📎 Merged ${mergedExtensionDepCount} built-in extension runtime dependencies`;
+  const repairedAfterExtensionMerge = repairBundledDependencyGraph(outputNodeModules);
+  if (repairedAfterExtensionMerge > 0) {
+    echo`   🛠️  Repaired ${repairedAfterExtensionMerge} dependency override(s) after extension merge`;
+  }
+}
+
 // 6. Clean up the bundle to reduce package size
 //
 // This removes platform-agnostic waste: dev artifacts, docs, source maps,

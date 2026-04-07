@@ -7,6 +7,7 @@ import { extractImages, extractText, extractThinking } from './message-utils';
 import { toSanitizedMarkdownHtml } from './markdown';
 import { detectTextDirection } from './text-direction';
 
+
 type ToolCard = {
   kind: 'call' | 'result';
   name: string;
@@ -87,15 +88,15 @@ function toDisplayTimestampMs(timestamp: number): number {
   return timestamp < 1e12 ? timestamp * 1000 : timestamp;
 }
 
-function getMessageKey(message: RawMessage, index: number): string {
+function getMessageKey(message: RawMessage): string {
   const toolCallId = typeof message.toolCallId === 'string' ? message.toolCallId : '';
   if (toolCallId) return `tool:${toolCallId}`;
   const id = typeof message.id === 'string' ? message.id : '';
   if (id) return `msg:${id}`;
   const timestamp = typeof message.timestamp === 'number' ? message.timestamp : null;
   const role = typeof message.role === 'string' ? message.role : 'unknown';
-  if (timestamp != null) return `msg:${role}:${timestamp}:${index}`;
-  return `msg:${role}:${index}`;
+  if (timestamp != null) return `msg:${role}:${timestamp}`;
+  return `msg:${role}`;
 }
 
 function makeStreamMessage(text: string, ts: number): RawMessage {
@@ -231,7 +232,7 @@ function buildChatItems(params: {
     }
     items.push({
       kind: 'message',
-      key: getMessageKey(history[i], i),
+      key: getMessageKey(history[i]),
       message: history[i],
     });
   }
@@ -249,7 +250,7 @@ function buildChatItems(params: {
     if (i < tools.length) {
       items.push({
         kind: 'message',
-        key: getMessageKey(tools[i], i + history.length),
+        key: getMessageKey(tools[i]),
         message: tools[i],
       });
     }
@@ -524,7 +525,8 @@ const CopyButton = memo(function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       className="chat-copy-button"
-      onClick={async () => {
+      onClick={async (e) => {
+        e.stopPropagation();
         try {
           await navigator.clipboard.writeText(text);
           setCopied(true);
@@ -538,6 +540,7 @@ const CopyButton = memo(function CopyButton({ text }: { text: string }) {
     </button>
   );
 });
+
 
 function extractToolCards(message: RawMessage): ToolCard[] {
   const m = message as unknown as Record<string, unknown>;
@@ -753,8 +756,12 @@ const GroupedMessage = memo(function GroupedMessage({
   const toolPreview = markdown && !toolSummaryLabel ? markdown.trim().replace(/\s+/g, ' ').slice(0, 120) : '';
 
   return (
-    <div className={cn('chat-bubble', isStreaming && 'streaming', isStreaming && 'fade-in')}>
-      {canCopyMarkdown ? <div className="chat-bubble-actions"><CopyButton text={markdown} /></div> : null}
+    <div className={cn('chat-bubble', 'fade-in', isStreaming && 'streaming', canCopyMarkdown && 'has-copy')}>
+      {canCopyMarkdown ? (
+        <div className="chat-bubble-actions">
+          <CopyButton text={markdown!} />
+        </div>
+      ) : null}
       {isToolMessage ? (
         <details className="chat-tool-msg-collapse">
           <summary className="chat-tool-msg-summary">
@@ -799,9 +806,26 @@ const GroupedMessage = memo(function GroupedMessage({
 });
 
 const Avatar = memo(function Avatar({ role }: { role: string }) {
+  const normalizedRole = normalizeRoleForGrouping(role);
+  if (normalizedRole === 'user') {
+    return (
+      <div className="chat-avatar user">
+        <User className="h-4 w-4" />
+      </div>
+    );
+  }
+  if (normalizedRole === 'tool') {
+    return (
+      <div className="chat-avatar tool">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+          <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53a7.76 7.76 0 0 0 .07-1 7.76 7.76 0 0 0-.07-.97l2.11-1.63a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.15 7.15 0 0 0-1.69-.98l-.38-2.65A.49.49 0 0 0 14 2h-4a.49.49 0 0 0-.49.42l-.38 2.65a7.15 7.15 0 0 0-1.69.98l-2.49-1a.5.5 0 0 0-.61.22l-2 3.46a.49.49 0 0 0 .12.64L4.57 11a7.9 7.9 0 0 0 0 1.94l-2.11 1.69a.49.49 0 0 0-.12.64l2 3.46a.5.5 0 0 0 .61.22l2.49-1c.52.4 1.08.72 1.69.98l.38 2.65c.05.24.26.42.49.42h4c.23 0 .44-.18.49-.42l.38-2.65a7.15 7.15 0 0 0 1.69-.98l2.49 1a.5.5 0 0 0 .61-.22l2-3.46a.49.49 0 0 0-.12-.64z" />
+        </svg>
+      </div>
+    );
+  }
   return (
-    <div className="chat-avatar">
-      {role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+    <div className="chat-avatar assistant">
+      <Bot className="h-4 w-4" />
     </div>
   );
 });
@@ -850,13 +874,28 @@ const Group = memo(function Group({
   );
 });
 
-const StreamingGroup = memo(function StreamingGroup({ text, startedAt, labels, locale }: { text: string; startedAt: number; labels: ChatThreadLabels; locale: string }) {
+const StreamingGroup = memo(function StreamingGroup({
+  text,
+  startedAt,
+  labels,
+  locale,
+}: {
+  text: string;
+  startedAt: number;
+  labels: ChatThreadLabels;
+  locale: string;
+}) {
   const timestamp = formatChatTime(startedAt, locale);
   return (
     <div className="chat-group assistant">
       <Avatar role="assistant" />
       <div className="chat-group-messages">
-        <GroupedMessage message={makeStreamMessage(text, startedAt)} isStreaming showThinking={false} labels={labels} />
+        <GroupedMessage
+          message={makeStreamMessage(text, startedAt)}
+          isStreaming
+          showThinking={false}
+          labels={labels}
+        />
         <div className="chat-group-footer">
           <span className="chat-sender-name">{labels.assistant}</span>
           <span className="chat-group-timestamp">{timestamp}</span>
@@ -947,8 +986,43 @@ export const ChatThread = memo(function ChatThread({
     showThinking,
   }), [messages, toolMessages, streamSegments, streamingMessage, streamingStartedAt, sessionKey, sending, pendingFinal, showThinking]);
 
+  // Context usage notice (>= 85% threshold)
+  const contextNotice = useMemo<{ pct: number; used: number; limit: number } | null>(() => {
+    if (!contextWindow) return null;
+    let used = 0;
+    // Find last assistant message with usage
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role === 'assistant') {
+        const u = msg.usage as Record<string, number> | undefined;
+        if (u) {
+          used = u.input ?? u.inputTokens ?? 0;
+          break;
+        }
+      }
+    }
+    if (!used) return null;
+    const ratio = used / contextWindow;
+    if (ratio < 0.85) return null;
+    const pct = Math.min(Math.round(ratio * 100), 100);
+    return { pct, used, limit: contextWindow };
+  }, [messages, contextWindow]);
+
   return (
     <div className="openclaw-chat-thread">
+      {contextNotice ? (
+        <div className="context-notice">
+          <svg className="context-notice__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <span>{contextNotice.pct}% context used</span>
+          <span className="context-notice__detail">
+            {contextNotice.used.toLocaleString()} / {contextNotice.limit.toLocaleString()}
+          </span>
+        </div>
+      ) : null}
       {items.map((item) => {
         if (item.kind === 'group') {
           return (
@@ -963,10 +1037,19 @@ export const ChatThread = memo(function ChatThread({
           );
         }
         if (item.kind === 'stream') {
-          return <StreamingGroup key={item.key} text={item.text} startedAt={item.startedAt} labels={labels} locale={locale} />;
+          return (
+            <StreamingGroup
+              key={item.key}
+              text={item.text}
+              startedAt={item.startedAt}
+              labels={labels}
+              locale={locale}
+            />
+          );
         }
         return <ReadingIndicator key={item.key} />;
       })}
     </div>
   );
 });
+

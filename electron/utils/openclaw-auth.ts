@@ -31,6 +31,7 @@ import {
 const AUTH_STORE_VERSION = 1;
 const AUTH_PROFILE_FILENAME = 'auth-profiles.json';
 const FEISHU_PLUGIN_ID_CANDIDATES = ['feishu', 'openclaw-lark', 'feishu-openclaw-plugin'] as const;
+const QQBOT_LEGACY_PLUGIN_ID_CANDIDATES = ['qqbot', 'openclaw-qqbot'] as const;
 
 function getOAuthPluginId(provider: string): string {
   if (provider === 'minimax-portal' || provider === 'minimax-portal-cn') {
@@ -1173,6 +1174,23 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
     const allowArr = Array.isArray(pluginsObj.allow) ? (pluginsObj.allow as string[]) : [];
     if (!Array.isArray(pluginsObj.allow)) {
       pluginsObj.allow = allowArr;
+    }
+
+    const normalizedAllowWithoutLegacyQqbot = allowArr.filter(
+      (id) => !QQBOT_LEGACY_PLUGIN_ID_CANDIDATES.includes(id as typeof QQBOT_LEGACY_PLUGIN_ID_CANDIDATES[number]),
+    );
+    if (normalizedAllowWithoutLegacyQqbot.length !== allowArr.length) {
+      pluginsObj.allow = normalizedAllowWithoutLegacyQqbot;
+      modified = true;
+      console.log('[sanitize] Removed legacy qqbot plugin allowlist entries (qqbot is now built-in)');
+    }
+
+    for (const pluginId of QQBOT_LEGACY_PLUGIN_ID_CANDIDATES) {
+      if (pEntries[pluginId]) {
+        delete pEntries[pluginId];
+        modified = true;
+        console.log(`[sanitize] Removed legacy plugins.entries.${pluginId} (qqbot is now built-in)`);
+      }
     }
 
     const installedFeishuId = await resolveInstalledFeishuPluginId();

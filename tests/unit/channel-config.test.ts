@@ -894,7 +894,7 @@ describe('channel config lifecycle', () => {
   it('repairs stale channel plugin allowlist entries when no configured channel remains', async () => {
     await writeOpenClawJson({
       plugins: {
-        allow: ['openclaw-weixin', 'channels', 'wecom', 'qqbot'],
+        allow: ['openclaw-weixin', 'channels', 'wecom', 'qqbot', 'openclaw-qqbot'],
       },
     });
 
@@ -903,6 +903,44 @@ describe('channel config lifecycle', () => {
 
     const config = await readOpenClawJson();
     expect(config.plugins).toBeUndefined();
+  });
+
+  it('removes the stale china channels mirror when only built-in qqbot remains', async () => {
+    await writeOpenClawJson({
+      channels: {
+        qqbot: {
+          enabled: true,
+          accounts: {
+            default: {
+              appId: 'qq-app',
+              token: 'qq-token',
+              clientSecret: 'qq-secret',
+              enabled: true,
+            },
+          },
+          defaultAccount: 'default',
+        },
+      },
+      plugins: {
+        enabled: true,
+        allow: ['channels', 'qqbot'],
+        entries: {
+          channels: { enabled: true },
+          qqbot: { enabled: true },
+        },
+      },
+    });
+
+    const staleMirrorDir = join(testHome, '.openclaw', 'extensions', 'channels');
+    await mkdir(staleMirrorDir, { recursive: true });
+    await writeFile(join(staleMirrorDir, 'openclaw.plugin.json'), JSON.stringify({ id: 'channels' }, null, 2), 'utf8');
+
+    const { repairChannelConfigConsistency } = await import('@electron/utils/channel-config');
+    await expect(repairChannelConfigConsistency()).resolves.toEqual({ repaired: true });
+
+    const config = await readOpenClawJson();
+    expect(config.plugins).toBeUndefined();
+    await expect(access(staleMirrorDir)).rejects.toThrow();
   });
 
   it('re-enables the wechat managed plugin entry when wechat channel config exists', async () => {

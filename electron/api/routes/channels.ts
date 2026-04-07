@@ -721,7 +721,6 @@ async function awaitWeChatQrLogin(
       enabled: true,
       __accountId: normalizedAccountId,
     });
-    scheduleGatewayChannelRefresh(ctx, WECHAT_RUNTIME_CHANNEL_ID, `channel:saveConfig:${WECHAT_RUNTIME_CHANNEL_ID}`);
 
     if (!isActiveQrLogin(loginKey, sessionKey)) {
       return;
@@ -732,6 +731,12 @@ async function awaitWeChatQrLogin(
       rawAccountId: result.accountId,
       message: result.message,
     });
+
+    try {
+      scheduleGatewayChannelRefresh(ctx, WECHAT_RUNTIME_CHANNEL_ID, `channel:saveConfig:${WECHAT_RUNTIME_CHANNEL_ID}`);
+    } catch (refreshError) {
+      console.warn('Failed to enqueue Gateway refresh after WeChat login:', refreshError);
+    }
   } catch (error) {
     if (!isActiveQrLogin(loginKey, sessionKey)) {
       return;

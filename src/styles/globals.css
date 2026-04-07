@@ -326,7 +326,7 @@
 }
 
 .chat-group.user .chat-group-messages {
-  align-items: stretch;
+  align-items: flex-end;
 }
 
 @media (max-width: 600px) {
@@ -357,12 +357,24 @@
   border-color: hsl(var(--primary) / 0.2);
 }
 
+.chat-avatar.tool {
+  background: hsl(var(--secondary));
+  color: hsl(var(--muted-foreground));
+  border-color: hsl(var(--border));
+}
+
+.chat-avatar.assistant {
+  background: hsl(var(--secondary));
+  color: hsl(var(--muted-foreground));
+  border-color: hsl(var(--border));
+}
+
 .chat-bubble {
   position: relative;
   display: block;
   border: 1px solid hsl(var(--border));
   background: hsl(var(--card));
-  border-radius: 16px;
+  border-radius: 14px;
   padding: 10px 14px;
   box-shadow: none;
   width: fit-content;
@@ -385,7 +397,22 @@
 }
 
 .chat-bubble.streaming {
-  border-color: hsl(var(--primary) / 0.35);
+  animation: chat-pulsing-border 1.5s ease-out infinite;
+}
+
+@keyframes chat-pulsing-border {
+  0%,
+  100% {
+    border-color: hsl(var(--border));
+  }
+
+  50% {
+    border-color: hsl(var(--primary) / 0.6);
+  }
+}
+
+.chat-bubble.has-copy {
+  padding-right: 70px;
 }
 
 .chat-bubble:hover {
@@ -860,6 +887,8 @@
   color: hsl(var(--muted-foreground));
   font-size: 12px;
   line-height: 1.4;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .chat-tool-stack {
@@ -1089,7 +1118,7 @@
 }
 
 .fade-in {
-  animation: chat-fade-in 160ms ease-out;
+  animation: chat-fade-in 200ms ease-out;
 }
 
 .chat-group.user .chat-text {
@@ -1120,3 +1149,34 @@
     transform: translateY(0);
   }
 }
+
+/* =============================================
+   CONTEXT NOTICE BAR
+   ============================================= */
+
+.context-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--ctx-color, hsl(var(--warn)));
+  background: var(--ctx-bg, hsl(var(--warn) / 0.08));
+  color: var(--ctx-color, hsl(var(--warn)));
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.context-notice__icon {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.context-notice__detail {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace;
+}
+

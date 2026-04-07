@@ -92,6 +92,31 @@ async function sanitizeConfig(filePath: string): Promise<boolean> {
   const plugins = config.plugins;
   if (plugins && typeof plugins === 'object' && !Array.isArray(plugins)) {
     const pluginsObj = plugins as Record<string, unknown>;
+    const entries =
+      pluginsObj.entries && typeof pluginsObj.entries === 'object' && !Array.isArray(pluginsObj.entries)
+        ? (pluginsObj.entries as Record<string, unknown>)
+        : undefined;
+    const allow = Array.isArray(pluginsObj.allow) ? (pluginsObj.allow as string[]) : undefined;
+
+    if (allow) {
+      const nextAllow = allow.filter((pluginId) => pluginId !== 'qqbot' && pluginId !== 'openclaw-qqbot');
+      if (nextAllow.length !== allow.length) {
+        pluginsObj.allow = nextAllow;
+        modified = true;
+      }
+    }
+
+    if (entries) {
+      if ('qqbot' in entries) {
+        delete entries.qqbot;
+        modified = true;
+      }
+      if ('openclaw-qqbot' in entries) {
+        delete entries['openclaw-qqbot'];
+        modified = true;
+      }
+    }
+
     const load = pluginsObj.load;
     if (load && typeof load === 'object' && !Array.isArray(load)) {
       const loadObj = load as Record<string, unknown>;
@@ -361,6 +386,33 @@ describe('sanitizeOpenClawConfig (blocklist approach)', () => {
     expect(result.plugins).toEqual({ entries: { whatsapp: { enabled: true } } });
     expect(result.gateway).toEqual({ mode: 'local', auth: { token: 'xyz' } });
     expect(result.agents).toEqual({ defaults: { model: { primary: 'gpt-4' } } });
+  });
+
+  it('removes legacy qqbot plugin entries because qqbot is built-in', async () => {
+    await writeConfig({
+      channels: {
+        qqbot: { enabled: true },
+      },
+      plugins: {
+        allow: ['channels', 'qqbot', 'openclaw-qqbot'],
+        entries: {
+          channels: { enabled: true },
+          qqbot: { enabled: true },
+          'openclaw-qqbot': { enabled: true },
+        },
+      },
+    });
+
+    const modified = await sanitizeConfig(configPath);
+    expect(modified).toBe(true);
+
+    const result = await readConfig();
+    expect(result.plugins).toEqual({
+      allow: ['channels'],
+      entries: {
+        channels: { enabled: true },
+      },
+    });
   });
 
   it('removes tools.web.search.kimi.apiKey when moonshot provider exists', async () => {

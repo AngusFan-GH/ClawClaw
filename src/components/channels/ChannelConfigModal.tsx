@@ -86,7 +86,7 @@ interface ChannelConfigModalProps {
   showChannelName?: boolean;
   allowExistingConfig?: boolean;
   onClose: () => void;
-  onChannelSaved?: (channelType: ChannelType) => void | Promise<void>;
+  onChannelSaved?: (channelType: ChannelType, accountId?: string) => void | Promise<void>;
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
@@ -256,7 +256,7 @@ export function ChannelConfigModal({
     }
   }, [selectedType, loadingConfig, showChannelName]);
 
-  const finishSave = useCallback(async (channelType: ChannelType) => {
+  const finishSave = useCallback(async (channelType: ChannelType, savedAccountId?: string) => {
     try {
       const displayName = showChannelName && channelName.trim()
         ? channelName.trim()
@@ -273,7 +273,7 @@ export function ChannelConfigModal({
         await fetchChannels();
       }
 
-      await onChannelSaved?.(channelType);
+      await onChannelSaved?.(channelType, savedAccountId);
     } catch (error) {
       console.error('post-save channel refresh failed', error);
       toast.warning(t('toast.channelSavedRefreshPending', {
@@ -299,7 +299,9 @@ export function ChannelConfigModal({
       setConnecting(false);
     };
 
-    const onSuccess = async () => {
+    const onSuccess = async (...args: unknown[]) => {
+      const payload = (args[0] && typeof args[0] === 'object' ? args[0] : null) as { accountId?: string } | null;
+      const savedAccountId = payload?.accountId?.trim() || undefined;
       toast.success(t(channelType === 'wechat' ? 'toast.wechatConnected' : 'toast.whatsappConnected'));
       try {
         if (channelType === 'whatsapp') {
@@ -311,7 +313,10 @@ export function ChannelConfigModal({
             throw new Error(saveResult?.error || 'Failed to save WhatsApp config');
           }
         }
-        await finishSave(channelType);
+        if (savedAccountId) {
+          setSelectedAccountId(savedAccountId);
+        }
+        await finishSave(channelType, savedAccountId);
         onClose();
       } catch (error) {
         toast.error(t('toast.configFailed', { error: String(error) }));

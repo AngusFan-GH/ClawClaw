@@ -1,6 +1,6 @@
 import { app } from 'electron';
 import path from 'path';
-import { existsSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync } from 'fs';
 import { homedir } from 'os';
 import { getAllSettings } from '../utils/store';
 import { getApiKey, getDefaultProvider, getProvider } from '../utils/secure-storage';
@@ -37,7 +37,6 @@ import type { GatewayConfigRecovery } from '../../src/types/gateway';
 const CHANNEL_PLUGIN_INSTALL_MAP: Partial<Record<string, { pluginId: string; displayName: string }>> = {
   feishu: { pluginId: 'feishu', displayName: 'Feishu / Lark' },
   dingtalk: { pluginId: 'channels', displayName: 'China Channels' },
-  qqbot: { pluginId: 'channels', displayName: 'China Channels' },
   wecom: { pluginId: 'channels', displayName: 'China Channels' },
   wechat: { pluginId: 'openclaw-weixin', displayName: 'WeChat' },
 };
@@ -89,14 +88,72 @@ function resolveManagedPluginIdsForStartup(configuredChannels: string[]): string
     }
   }
 
-  const extensionsRoot = path.join(homedir(), '.openclaw', 'extensions');
-  for (const plugin of MANAGED_CHANNEL_PLUGIN_MIRRORS) {
-    if (existsSync(path.join(extensionsRoot, plugin.pluginId))) {
-      pluginIds.add(plugin.pluginId);
+  return Array.from(pluginIds);
+}
+
+/**
+ * Make built-in extension runtime deps resolvable from shared dist chunks.
+ *
+ * OpenClaw bundles some extension dependencies under dist/extensions/<ext>/node_modules,
+ * but shared chunks under dist/ may import those packages directly. Standard ESM
+ * resolution does not search dist/extensions/<ext>/node_modules, so we symlink any
+ * missing extension-owned deps into the top-level openclaw/node_modules.
+ */
+function ensureExtensionDepsResolvable(openclawDir: string): void {
+  const extDir = path.join(openclawDir, 'dist', 'extensions');
+  const topNodeModules = path.join(openclawDir, 'node_modules');
+  let linkedCount = 0;
+
+  try {
+    if (!existsSync(extDir)) return;
+
+    for (const ext of readdirSync(extDir, { withFileTypes: true })) {
+      if (!ext.isDirectory()) continue;
+      const extNodeModules = path.join(extDir, ext.name, 'node_modules');
+      if (!existsSync(extNodeModules)) continue;
+
+      for (const pkg of readdirSync(extNodeModules, { withFileTypes: true })) {
+        if (pkg.name === '.bin') continue;
+
+        if (pkg.name.startsWith('@')) {
+          const scopeDir = path.join(extNodeModules, pkg.name);
+          let scopeEntries: ReturnType<typeof readdirSync>;
+          try {
+            scopeEntries = readdirSync(scopeDir, { withFileTypes: true });
+          } catch {
+            continue;
+          }
+
+          for (const sub of scopeEntries) {
+            if (!sub.isDirectory()) continue;
+            const dest = path.join(topNodeModules, pkg.name, sub.name);
+            if (existsSync(dest)) continue;
+            try {
+              mkdirSync(path.join(topNodeModules, pkg.name), { recursive: true });
+              symlinkSync(path.join(scopeDir, sub.name), dest);
+              linkedCount++;
+            } catch {
+              // Non-fatal: skip on symlink errors and rely on existing deps.
+            }
+          }
+        } else {
+          const dest = path.join(topNodeModules, pkg.name);
+          if (existsSync(dest)) continue;
+          try {
+            mkdirSync(topNodeModules, { recursive: true });
+            symlinkSync(path.join(extNodeModules, pkg.name), dest);
+            linkedCount++;
+          } catch {
+            // Non-fatal: skip on symlink errors and rely on existing deps.
+          }
+        }
+      }
+    }
+  } finally {
+    if (linkedCount > 0) {
+      logger.info(`[plugin] Linked ${linkedCount} built-in extension runtime dependencies into openclaw/node_modules`);
     }
   }
-
-  return Array.from(pluginIds);
 }
 
 function syncManagedChannelPluginMirrors(configuredChannels: string[]): string[] {
@@ -273,6 +330,7 @@ export async function runOpenClawStartupPreflightRepair(): Promise<void> {
           'validateBundledOpenClawRuntime',
           undefined,
         );
+        ensureExtensionDepsResolvable(getOpenClawDir());
       },
     },
     {

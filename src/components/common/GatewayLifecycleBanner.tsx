@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, Copy, LifeBuoy } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, ChevronDown, ChevronUp, Copy, LifeBuoy, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { GatewayLifecycle } from '@/types/gateway';
 import { cn } from '@/lib/utils';
@@ -31,10 +31,32 @@ function getSourceLabel(t: (key: string) => string, source?: string): string {
 export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecycle }) {
   const { t } = useTranslation('common');
   const [showDetails, setShowDetails] = useState(false);
+  const [dismissedKey, setDismissedKey] = useState<string | null>(null);
+
+  const bannerKey = useMemo(
+    () => JSON.stringify({
+      state: lifecycle.state,
+      action: lifecycle.action,
+      source: lifecycle.source,
+      reason: lifecycle.reason,
+      at: lifecycle.at,
+      error: lifecycle.error,
+      recovery: lifecycle.recovery,
+    }),
+    [lifecycle],
+  );
+
+  useEffect(() => {
+    setShowDetails(false);
+  }, [bannerKey]);
 
   const recovery = getGatewayRecoveryPresentation(lifecycle.recovery);
   const showRecoverySuccess = lifecycle.state === 'completed' && Boolean(recovery);
   if (lifecycle.state !== 'failed' && !showRecoverySuccess) return null;
+
+  if (dismissedKey === bannerKey) {
+    return null;
+  }
 
   const sourceLabel = getSourceLabel(t, lifecycle.source);
   const title = showRecoverySuccess
@@ -182,6 +204,19 @@ export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecy
             </div>
           ) : null}
         </div>
+        <button
+          type="button"
+          onClick={() => setDismissedKey(bannerKey)}
+          aria-label={t('actions.close')}
+          className={cn(
+            'shrink-0 rounded-full p-1.5 transition-colors',
+            showRecoverySuccess
+              ? 'text-emerald-700/75 hover:bg-emerald-500/10 hover:text-emerald-800 dark:text-emerald-300/80 dark:hover:bg-emerald-400/10'
+              : 'text-destructive/80 hover:bg-destructive/10 hover:text-destructive',
+          )}
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );

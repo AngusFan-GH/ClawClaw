@@ -37,11 +37,11 @@ const EXTENSIONS_DIR = join(OPENCLAW_DIR, 'extensions');
 const CONFIG_FILE = join(OPENCLAW_DIR, 'openclaw.json');
 const FEISHU_PLUGIN_ID_CANDIDATES = ['feishu', 'openclaw-lark', 'feishu-openclaw-plugin'] as const;
 const CHINA_CHANNEL_PLUGIN_ID = 'channels';
-const CHINA_CHANNEL_TYPES = ['dingtalk', 'wecom', 'qqbot'] as const;
+const CHINA_CHANNEL_TYPES = ['dingtalk', 'wecom'] as const;
+const QQBOT_LEGACY_PLUGIN_IDS = ['qqbot', 'openclaw-qqbot'] as const;
 const CHINA_CHANNEL_LEGACY_PLUGIN_IDS: Record<(typeof CHINA_CHANNEL_TYPES)[number], string[]> = {
     dingtalk: ['dingtalk'],
     wecom: ['wecom', 'wecom-openclaw-plugin'],
-    qqbot: ['qqbot'],
 };
 const CHANNEL_PLUGIN_ALLOWLIST_IDS: Partial<Record<string, string>> = {
     [WECHAT_RUNTIME_CHANNEL_ID]: WECHAT_RUNTIME_CHANNEL_ID,
@@ -72,6 +72,7 @@ const LEGACY_CHANNEL_PLUGIN_IDS = [
     'wecom-openclaw-plugin',
     'wecom',
     'qqbot',
+    'openclaw-qqbot',
     'dingtalk',
 ] as const;
 const OFFICIAL_BUNDLED_PLUGIN_MIRROR_IDS = ['feishu'] as const;
@@ -264,6 +265,29 @@ function removePluginIds(
     }
 
     return changed;
+}
+
+function pruneEmptyPluginsConfig(currentConfig: OpenClawConfig): void {
+    if (!currentConfig.plugins || typeof currentConfig.plugins !== 'object') {
+        return;
+    }
+
+    const hasMeaningfulKeys = Object.entries(currentConfig.plugins).some(([key, value]) => {
+        if (key === 'enabled') {
+            return false;
+        }
+        if (Array.isArray(value)) {
+            return value.length > 0;
+        }
+        if (value && typeof value === 'object') {
+            return Object.keys(value as Record<string, unknown>).length > 0;
+        }
+        return value !== undefined;
+    });
+
+    if (!hasMeaningfulKeys) {
+        delete currentConfig.plugins;
+    }
 }
 
 function hasConfiguredChinaManagedChannel(currentConfig: OpenClawConfig): boolean {
@@ -1247,6 +1271,7 @@ export async function deleteChannelConfig(
     const runtimeChannelType = toRuntimeChannelType(channelType);
     let deletedWeChatAccountId: string | undefined;
     let clearAllWeChatState = false;
+    let removeChinaManagedPluginMirror = false;
     const configChanged = await updateOpenClawConfig(async (currentConfig) => {
     migrateLegacyWechatSection(currentConfig);
     let changed = false;
@@ -1363,9 +1388,19 @@ export async function deleteChannelConfig(
         }
     }
 
-    if (currentConfig.plugins && Object.keys(currentConfig.plugins).length === 0) {
-        delete currentConfig.plugins;
+    if (runtimeChannelType === 'qqbot') {
+        if (removePluginIds(currentConfig, QQBOT_LEGACY_PLUGIN_IDS)) {
+            changed = true;
+        }
+        if (!hasConfiguredChinaManagedChannel(currentConfig)) {
+            if (removePluginIds(currentConfig, [CHINA_CHANNEL_PLUGIN_ID])) {
+                changed = true;
+            }
+            removeChinaManagedPluginMirror = true;
+        }
     }
+
+    pruneEmptyPluginsConfig(currentConfig);
 
     return changed;
     });
@@ -1385,6 +1420,17 @@ export async function deleteChannelConfig(
 
     if (configChanged && runtimeChannelType === 'qqbot') {
         await removeQQBotAccountState(preferredAccountId ?? undefined);
+    }
+
+    if (removeChinaManagedPluginMirror) {
+        const pluginDir = join(EXTENSIONS_DIR, CHINA_CHANNEL_PLUGIN_ID);
+        try {
+            if (await fileExists(pluginDir)) {
+                await rm(pluginDir, { recursive: true, force: true });
+            }
+        } catch (error) {
+            console.error(`Failed to delete stale managed channel plugin mirror at ${pluginDir}:`, error);
+        }
     }
 
     // WeChat login state is stored outside openclaw.json. Clearing only the
@@ -1480,9 +1526,7 @@ export async function cleanupDanglingWeChatPluginState(): Promise<{ cleanedDangl
             }
         }
 
-        if (currentConfig.plugins && Object.keys(currentConfig.plugins).length === 0) {
-            delete currentConfig.plugins;
-        }
+        pruneEmptyPluginsConfig(currentConfig);
 
         return cleanedDanglingState;
     });
@@ -1539,9 +1583,7 @@ export async function cleanupLegacyChannelPlugins(): Promise<{ cleaned: boolean 
             }
         }
 
-        if (currentConfig.plugins && Object.keys(currentConfig.plugins).length === 0) {
-            delete currentConfig.plugins;
-        }
+        pruneEmptyPluginsConfig(currentConfig);
 
         return cleaned;
     });
@@ -1617,6 +1659,7 @@ export async function cleanupInvalidManagedChannelPlugins(): Promise<{ cleaned: 
 
 export async function repairChannelConfigConsistency(): Promise<{ repaired: boolean }> {
     let repaired = false;
+    let removeChinaManagedPluginMirror = false;
 
     await updateOpenClawConfig(async (currentConfig) => {
         migrateLegacyWechatSection(currentConfig);
@@ -1714,9 +1757,7 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
                 } else if (currentConfig.plugins) {
                     delete currentConfig.plugins.allow;
                 }
-                if (currentConfig.plugins && Object.keys(currentConfig.plugins).length === 0) {
-                    delete currentConfig.plugins;
-                }
+                pruneEmptyPluginsConfig(currentConfig);
                 repaired = true;
             }
         }
@@ -1740,6 +1781,10 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
             repaired = true;
         }
 
+        if (removePluginIds(currentConfig, QQBOT_LEGACY_PLUGIN_IDS)) {
+            repaired = true;
+        }
+
         if (hasConfiguredChinaManagedChannel(currentConfig)) {
             ensurePluginEnabled(currentConfig, CHINA_CHANNEL_PLUGIN_ID, { createEntry: true });
             for (const channelType of CHINA_CHANNEL_TYPES) {
@@ -1749,10 +1794,25 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
             }
         } else if (removePluginIds(currentConfig, [CHINA_CHANNEL_PLUGIN_ID, ...CHINA_CHANNEL_TYPES.flatMap((channelType) => getLegacyChannelPluginIds(channelType))])) {
             repaired = true;
+            removeChinaManagedPluginMirror = true;
         }
+
+        pruneEmptyPluginsConfig(currentConfig);
 
         return repaired;
     });
+
+    if (removeChinaManagedPluginMirror) {
+        const pluginDir = join(EXTENSIONS_DIR, CHINA_CHANNEL_PLUGIN_ID);
+        try {
+            if (await fileExists(pluginDir)) {
+                await rm(pluginDir, { recursive: true, force: true });
+                repaired = true;
+            }
+        } catch (error) {
+            console.error(`Failed to delete stale managed channel plugin mirror at ${pluginDir}:`, error);
+        }
+    }
 
     return { repaired };
 }
