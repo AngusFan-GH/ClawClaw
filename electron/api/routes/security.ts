@@ -3,7 +3,6 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { HostApiContext } from '../context';
-import { runGatewayRefresh } from '../gateway-refresh';
 import { getSetting, setSetting } from '../../utils/store';
 import { logger } from '../../utils/logger';
 import { getOpenClawConfigDir } from '../../utils/paths';
@@ -372,12 +371,11 @@ export async function handleSecurityRoutes(
       await setSetting('securityPolicy', policy);
       const reminders = normalizeReminders(await getSetting('reminders'));
       const syncResult = await syncSecurityPolicyArtifacts(config, policy, reminders);
-      const gatewayRestartResult = await runGatewayRefresh(ctx, {
-        action: 'restart',
+      const gatewayRestartResult = await ctx.gatewayApplyCoordinator.applyNow({
         source: 'security.apply',
         reason: 'security.apply',
-        mode: 'immediate',
-        awaitCompletion: true,
+        requires: 'restart_immediate',
+        skipIfStopped: true,
       });
 
       sendJson(res, 200, {
@@ -401,12 +399,11 @@ export async function handleSecurityRoutes(
       await setSetting('securityPolicy', DEFAULT_SECURITY_POLICY);
       const reminders = normalizeReminders(await getSetting('reminders'));
       const syncResult = await syncSecurityPolicyArtifacts(config, DEFAULT_SECURITY_POLICY, reminders);
-      const gatewayRestartResult = await runGatewayRefresh(ctx, {
-        action: 'restart',
+      const gatewayRestartResult = await ctx.gatewayApplyCoordinator.applyNow({
         source: 'security.reset',
         reason: 'security.reset',
-        mode: 'immediate',
-        awaitCompletion: true,
+        requires: 'restart_immediate',
+        skipIfStopped: true,
       });
 
       sendJson(res, 200, {

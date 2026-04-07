@@ -88,7 +88,7 @@ export function Agents() {
   }, [refreshProviderSnapshot]);
 
   return (
-    <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
+    <div className="flex h-[calc(100vh-2.5rem)] flex-col overflow-hidden bg-background -m-6">
       <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-6 pb-8 pt-10 md:px-8">
         <PageHeader
           title={t('title')}
@@ -139,40 +139,53 @@ export function Agents() {
             </div>
           )}
 
-          <div className="grid gap-3 mb-5 md:grid-cols-2 xl:grid-cols-4">
-            {loading && agents.length === 0 ? (
-              Array.from({ length: 4 }).map((_, index) => (
-                <div key={`agent-stat-skeleton-${index}`} className="rounded-xl border bg-card px-4 py-4 animate-pulse">
-                  <div className="h-3 w-20 rounded bg-muted" />
-                  <div className="mt-3 h-8 w-12 rounded bg-muted" />
-                </div>
-              ))
-            ) : (
-              <>
-                <AgentStatCard label={t('stats.total')} value={stats.total} />
-                <AgentStatCard label={t('stats.defaults')} value={stats.defaults} />
-                <AgentStatCard label={t('stats.custom')} value={stats.custom} />
-                <AgentStatCard label={t('stats.connected')} value={stats.connected} />
-              </>
-            )}
-          </div>
+          <section className="mb-8 rounded-[18px] border border-border/70 bg-card/78 p-4">
+            <div className="mb-4">
+              <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+                {t('stats.title', '概览')}
+              </h2>
+              <p className="mt-1 text-[13px] text-muted-foreground">
+                {t('stats.description', '快速查看分身数量、默认分身和当前已接管的连接情况。')}
+              </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {loading && agents.length === 0 ? (
+                Array.from({ length: 4 }).map((_, index) => (
+                  <div
+                    key={`agent-stat-skeleton-${index}`}
+                    className="rounded-[16px] border border-border/60 bg-background/88 px-4 py-4 animate-pulse"
+                  >
+                    <div className="h-3 w-20 rounded bg-muted" />
+                    <div className="mt-3 h-8 w-12 rounded bg-muted" />
+                  </div>
+                ))
+              ) : (
+                <>
+                  <AgentStatCard label={t('stats.total')} value={stats.total} />
+                  <AgentStatCard label={t('stats.defaults')} value={stats.defaults} />
+                  <AgentStatCard label={t('stats.custom')} value={stats.custom} />
+                  <AgentStatCard label={t('stats.connected')} value={stats.connected} />
+                </>
+              )}
+            </div>
+          </section>
 
-          <section className="rounded-xl border bg-card p-4">
-            <div className="mb-3">
-              <h2 className="text-lg font-semibold tracking-tight text-foreground">
+          <section className="rounded-[18px] border border-border/70 bg-card/78 p-4">
+            <div className="mb-4">
+              <h2 className="text-2xl font-semibold tracking-tight text-foreground">
                 {t('list.title')}
               </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-1 text-[13px] text-muted-foreground">
                 {t('list.description')}
               </p>
             </div>
 
             {loading && agents.length === 0 ? (
-              <div className="grid gap-3 grid-cols-1">
+              <div className="grid grid-cols-1 gap-4">
                 {Array.from({ length: 3 }).map((_, index) => (
                   <div
                     key={`agent-card-skeleton-${index}`}
-                    className="rounded-xl border bg-card px-4 py-4 animate-pulse"
+                    className="rounded-[18px] border border-border/60 bg-background/88 px-4 py-4 animate-pulse"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -196,12 +209,12 @@ export function Agents() {
                 ))}
               </div>
             ) : agents.length === 0 ? (
-              <div className="rounded-xl border border-dashed px-4 py-8 text-center">
+              <div className="rounded-2xl border border-dashed border-border/70 bg-muted/30 px-4 py-8 text-center">
                 <p className="text-sm font-medium text-foreground">{t('empty.title')}</p>
                 <p className="mt-1 text-sm text-muted-foreground">{t('empty.description')}</p>
               </div>
             ) : (
-              <div className="grid gap-3 grid-cols-1">
+              <div className="grid grid-cols-1 gap-4">
                 {agents.map((agent) => (
                   <AgentCard
                     key={agent.gateway.id}
@@ -266,7 +279,7 @@ export function Agents() {
 
 function AgentStatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border bg-card px-4 py-4">
+    <div className="rounded-[16px] border border-border/60 bg-background/88 px-4 py-4">
       <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/80">
         {label}
       </div>
@@ -427,18 +440,18 @@ function AgentCard({
   return (
     <div
       className={cn(
-        'h-full rounded-[28px] border border-border/80 bg-background/96 p-5 shadow-[0_10px_30px_rgba(15,23,42,0.045)] transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_18px_44px_rgba(15,23,42,0.08)]',
-        agent.gateway.isDefault && 'border-sky-200/80 bg-[linear-gradient(180deg,rgba(56,189,248,0.08),rgba(255,255,255,0.96))]'
+        'h-full rounded-[18px] border border-border/70 bg-background/88 p-5 transition-colors hover:border-black/10 hover:bg-accent/35 dark:hover:border-white/10',
+        agent.gateway.isDefault && 'border-sky-200/80 bg-[linear-gradient(180deg,rgba(56,189,248,0.08),rgba(255,255,255,0.88))]'
       )}
     >
       <div className="flex h-full flex-col">
         <div className="flex items-start gap-4">
           <div
             className={cn(
-              'mt-0.5 flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border text-[24px] shadow-[0_8px_20px_rgba(15,23,42,0.08)]',
+              'mt-0.5 flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] border text-[24px]',
               agent.gateway.isDefault
                 ? 'border-sky-200 bg-sky-50 text-sky-600'
-                : 'border-border/70 bg-muted/[0.5] text-foreground/78'
+                : 'border-border/70 bg-muted/[0.45] text-foreground/78'
             )}
           >
             {avatarGlyph ? (
@@ -479,7 +492,7 @@ function AgentCard({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-9 w-9 rounded-2xl border border-border/70 bg-background/80 text-muted-foreground shadow-sm hover:bg-accent hover:text-foreground"
+                        className="h-9 w-9 rounded-[12px] border border-border/70 bg-background/80 text-muted-foreground shadow-none hover:bg-accent hover:text-foreground"
                         onClick={onOpenSettings}
                       >
                         <PencilLine className="h-4 w-4" />
@@ -493,7 +506,7 @@ function AgentCard({
                         <Button
                           variant="dangerGhost"
                           size="icon"
-                          className="h-9 w-9 rounded-2xl border border-red-200/80 bg-red-50/80 shadow-sm hover:bg-red-100"
+                          className="h-9 w-9 rounded-[12px] border border-red-200/80 bg-red-50/80 shadow-none hover:bg-red-100"
                           onClick={onDelete}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -509,7 +522,7 @@ function AgentCard({
         </div>
 
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,0.85fr)_minmax(0,1.35fr)]">
-          <div className="rounded-[22px] border border-border/70 bg-white/72 px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+          <div className="rounded-[16px] border border-border/70 bg-card/88 px-4 py-3">
             <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/75">
               {t('fieldLabels.model')}
             </div>
@@ -528,7 +541,7 @@ function AgentCard({
             </div>
           </div>
 
-          <div className="rounded-[22px] border border-border/70 bg-white/72 px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+          <div className="rounded-[16px] border border-border/70 bg-card/88 px-4 py-3">
             <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/75">
               {t('fieldLabels.channels')}
             </div>
@@ -537,7 +550,7 @@ function AgentCard({
             </div>
           </div>
 
-          <div className="rounded-[22px] border border-border/70 bg-white/72 px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+          <div className="rounded-[16px] border border-border/70 bg-card/88 px-4 py-3">
             <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/75">
               {t('meta.workspace', 'Workspace')}
             </div>

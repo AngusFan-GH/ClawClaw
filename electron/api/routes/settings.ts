@@ -19,7 +19,6 @@ import {
 } from '../../utils/store';
 import { syncMemorySettingsToOpenClaw } from '../../utils/openclaw-auth';
 import type { HostApiContext } from '../context';
-import { runGatewayRefresh } from '../gateway-refresh';
 import { parseJsonBody, sendJson } from '../route-utils';
 
 type CleanupDataRequest = {
@@ -116,12 +115,11 @@ async function applyRuntimeSettingsSideEffects(
     });
   }
 
-  await runGatewayRefresh(ctx, {
-    action: 'restart',
+  await ctx.gatewayApplyCoordinator.applyNow({
     source: options.source,
     reason: options.source,
-    mode: 'immediate',
-    awaitCompletion: true,
+    requires: 'restart_immediate',
+    skipIfStopped: true,
   });
 }
 

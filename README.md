@@ -89,6 +89,7 @@ Building AI agents shouldn't require mastering the command line. ClawClaw was de
 ClawClaw is built directly upon the official **OpenClaw** core. Instead of requiring a separate installation, we embed the runtime within the application to provide a seamless "battery-included" experience.
 
 We are committed to maintaining strict alignment with the upstream OpenClaw project, ensuring that you always have access to the latest capabilities, stability improvements, and ecosystem compatibility provided by the official releases.
+The bundled stable runtime is now aligned to **OpenClaw 2026.4.2**, which keeps ClawClaw on the current upstream stable release track while preserving the packaged desktop integration.
 
 ---
 
@@ -218,7 +219,8 @@ Notes:
 
 - A bare `host:port` value is treated as HTTP.
 - If advanced proxy fields are left empty, ClawClaw falls back to `Proxy Server`.
-- Saving proxy settings reapplies Electron networking immediately and restarts the Gateway automatically.
+- Saving proxy settings reapplies Electron networking immediately and still restarts the Gateway automatically when required.
+- ClawClaw now coalesces runtime config changes in the background, so repeated edits no longer trigger multiple Gateway restarts in a row and ordinary reloads do not block the full UI.
 - In `Follow System` mode, ClawClaw also resolves the OS proxy and passes it to the auto-started OpenClaw Gateway process.
 - ClawClaw also syncs the proxy to OpenClaw's Telegram channel config when Telegram is enabled.
 
@@ -233,6 +235,7 @@ Notes:
 
 - The current conversation still relies on the normal OpenClaw session transcript. `session-memory` is an additional cross-session archive, not the primary source of in-session context.
 - Changing either memory toggle updates `~/.openclaw/openclaw.json` and restarts the Gateway automatically so the upstream runtime picks up the new setting.
+- Runtime-backed settings now apply through the same background coordinator used by channel and agent edits, which reduces restart churn during rapid configuration changes.
 
 ### Settings Backup and Cleanup
 
@@ -240,6 +243,8 @@ Open **Settings → Data & Uninstall** to export a JSON backup of your current c
 
 Open **Settings → Updates** to control auto-check / auto-download behavior and manually trigger update checks from the packaged app. ClawClaw currently follows the stable release feed only.
 On Windows, packaged updates continue to use NSIS differential packages, but the installer now force-cleans the managed `resources/openclaw` and `resources/openclaw-plugins` directories before copying files. It also runs a post-copy OpenClaw runtime validation step and aborts before finishing if the bundled CLI tree is unhealthy.
+On the first launch after upgrading from an older ClawClaw or bundled OpenClaw version, ClawClaw now runs a one-time maintenance pass before normal Gateway startup so legacy provider records, managed plugin mirrors, and older `openclaw.json` shapes are repaired proactively instead of waiting for a startup failure.
+In **Settings → Developer**, you can run **OpenClaw Doctor** and **OpenClaw Doctor Fix** directly against the bundled runtime to inspect or repair migration issues without leaving the app.
 
 ---
 

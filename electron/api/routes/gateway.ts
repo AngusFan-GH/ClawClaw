@@ -3,7 +3,6 @@ import { PORTS } from '../../utils/config';
 import { buildOpenClawControlUiUrl } from '../../utils/openclaw-control-ui';
 import { getSetting } from '../../utils/store';
 import type { HostApiContext } from '../context';
-import { runGatewayRefresh } from '../gateway-refresh';
 import { parseJsonBody, sendJson } from '../route-utils';
 
 export async function handleGatewayRoutes(
@@ -73,12 +72,11 @@ export async function handleGatewayRoutes(
 
   if (url.pathname === '/api/gateway/restart' && req.method === 'POST') {
     try {
-      const result = await runGatewayRefresh(ctx, {
-        action: 'restart',
+      const result = await ctx.gatewayApplyCoordinator.applyNow({
         source: 'gateway.manualRestart',
         reason: 'gateway.manualRestart',
-        mode: 'immediate',
-        awaitCompletion: false,
+        requires: 'restart_immediate',
+        skipIfStopped: false,
       });
       sendJson(res, 200, { success: true, accepted: result.accepted });
     } catch (error) {

@@ -10,6 +10,7 @@ type GatewayRefreshOptions = {
   strategy?: 'auto' | 'stop-start';
   awaitCompletion?: boolean;
   skipIfStopped?: boolean;
+  suppressScheduledEvent?: boolean;
 };
 
 function shouldSkipRefresh(ctx: HostApiContext, options: GatewayRefreshOptions): boolean {
@@ -43,13 +44,15 @@ export async function runGatewayRefresh(
     return { triggered: false, accepted: false };
   }
 
-  emitGatewayLifecycleEvent(ctx, {
-    phase: 'scheduled',
-    action: options.action,
-    source: options.source,
-    reason: options.reason,
-    delayMs: options.delayMs,
-  });
+  if (options.suppressScheduledEvent !== true) {
+    emitGatewayLifecycleEvent(ctx, {
+      phase: 'scheduled',
+      action: options.action,
+      source: options.source,
+      reason: options.reason,
+      delayMs: options.delayMs,
+    });
+  }
 
   if (options.awaitCompletion === false) {
     void executeGatewayRefresh(ctx, options).catch((error) => {
@@ -66,6 +69,12 @@ export async function runGatewayRefresh(
 
   try {
     await executeGatewayRefresh(ctx, options);
+    emitGatewayLifecycleEvent(ctx, {
+      phase: 'completed',
+      action: options.action,
+      source: options.source,
+      reason: options.reason,
+    });
     return { triggered: true, accepted: true };
   } catch (error) {
     emitGatewayLifecycleEvent(ctx, {

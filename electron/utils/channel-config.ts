@@ -206,13 +206,11 @@ function ensurePluginEnabled(
         currentConfig.plugins = {};
     }
     currentConfig.plugins.enabled = true;
-    const allow = Array.isArray(currentConfig.plugins.allow)
-        ? currentConfig.plugins.allow as string[]
-        : [];
-    if (!allow.includes(pluginId)) {
-        currentConfig.plugins.allow = [...allow, pluginId];
-    } else if (!Array.isArray(currentConfig.plugins.allow)) {
-        currentConfig.plugins.allow = allow;
+    if (Array.isArray(currentConfig.plugins.allow)) {
+        const allow = currentConfig.plugins.allow as string[];
+        if (!allow.includes(pluginId)) {
+            currentConfig.plugins.allow = [...allow, pluginId];
+        }
     }
 
     if (!options?.createEntry) {

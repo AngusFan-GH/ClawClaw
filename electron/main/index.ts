@@ -6,6 +6,7 @@ import { app, BrowserWindow, nativeImage, session, shell } from 'electron';
 import type { Server } from 'node:http';
 import { join } from 'path';
 import { GatewayManager } from '../gateway/manager';
+import { GatewayApplyCoordinator } from '../gateway/apply-coordinator';
 import { registerIpcHandlers } from './ipc-handlers';
 import { createTray } from './tray';
 import { createMenu } from './menu';
@@ -26,16 +27,20 @@ import { isQuitting, setQuitting } from './app-state';
 import { applyProxySettings } from './proxy';
 import { getAllSettings, getSetting } from '../utils/store';
 import { ensureBuiltinSkillsInstalled } from '../utils/skill-config';
+import { performUpgradeMaintenanceIfNeeded } from '../utils/upgrade-maintenance';
 import { startHostApiServer } from '../api/server';
 import { HostEventBus } from '../api/event-bus';
 import { deviceOAuthManager } from '../utils/device-oauth';
 import { browserOAuthManager } from '../utils/browser-oauth';
 import { whatsAppLoginManager } from '../utils/whatsapp-login';
 import {
+  registerGatewayRefreshScheduler,
   syncAllProviderAuthToRuntime,
   syncAllProvidersToRuntime,
   syncDefaultProviderToRuntime,
 } from '../services/providers/provider-runtime-sync';
+import { emitGatewayLifecycleEvent } from '../api/gateway-lifecycle';
+import { runGatewayRefresh } from '../api/gateway-refresh';
 import {
 } from '../services/providers/local-model-presets';
 import { getProviderService } from '../services/providers/provider-service';
@@ -85,6 +90,39 @@ let mainWindow: BrowserWindow | null = null;
 const gatewayManager = new GatewayManager();
 const clawHubService = new ClawHubService();
 const hostEventBus = new HostEventBus();
+const gatewayApplyCoordinator = new GatewayApplyCoordinator({
+  getGatewayStatus: () => gatewayManager.getStatus(),
+  emitLifecycle: (payload) => {
+    if (!mainWindow) return;
+    emitGatewayLifecycleEvent({
+      gatewayManager,
+      gatewayApplyCoordinator,
+      clawHubService,
+      eventBus: hostEventBus,
+      mainWindow,
+    }, payload);
+  },
+  executeRefresh: async (action, source, reason, options) => {
+    if (!mainWindow) {
+      return { triggered: false, accepted: false };
+    }
+    return await runGatewayRefresh({
+      gatewayManager,
+      gatewayApplyCoordinator,
+      clawHubService,
+      eventBus: hostEventBus,
+      mainWindow,
+    }, {
+      action,
+      source,
+      reason,
+      mode: 'immediate',
+      awaitCompletion: true,
+      skipIfStopped: options.skipIfStopped,
+      suppressScheduledEvent: options.suppressScheduledEvent,
+    });
+  },
+});
 let hostApiServer: Server | null = null;
 
 /**
@@ -242,8 +280,20 @@ async function initialize(): Promise<void> {
   // Register IPC handlers
   registerIpcHandlers(gatewayManager, clawHubService, mainWindow);
 
+  registerGatewayRefreshScheduler((request) => {
+    const requires = request.mode === 'restart' ? 'restart' : 'reload';
+    gatewayApplyCoordinator.enqueue({
+      source: request.source ?? 'provider.runtimeSync',
+      reason: request.reason ?? request.source ?? 'provider.runtimeSync',
+      requires,
+      delayMs: request.delayMs,
+      skipIfStopped: request.onlyIfRunning !== true,
+    });
+  });
+
   hostApiServer = startHostApiServer({
     gatewayManager,
+    gatewayApplyCoordinator,
     clawHubService,
     eventBus: hostEventBus,
     mainWindow,
@@ -287,6 +337,17 @@ async function initialize(): Promise<void> {
   void ensureBuiltinSkillsInstalled().catch((error) => {
     logger.warn('Failed to install built-in skills:', error);
   });
+
+  try {
+    const upgradeMaintenance = await performUpgradeMaintenanceIfNeeded();
+    if (upgradeMaintenance.triggered) {
+      logger.info(
+        `Upgrade maintenance completed (app ${upgradeMaintenance.previousAppVersion ?? 'none'} -> ${upgradeMaintenance.currentAppVersion}, openclaw ${upgradeMaintenance.previousOpenClawVersion ?? 'none'} -> ${upgradeMaintenance.currentOpenClawVersion ?? 'unknown'})`,
+      );
+    }
+  } catch (error) {
+    logger.warn('Upgrade maintenance failed:', error);
+  }
 
   // Bridge gateway and host-side events before any auto-start logic runs, so
   // renderer subscribers observe the full startup lifecycle.

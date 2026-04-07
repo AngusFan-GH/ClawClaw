@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { Buffer } from 'node:buffer';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -27,7 +28,6 @@ import {
   waitForWeChatLoginSession,
 } from '../../utils/wechat-login';
 import type { HostApiContext } from '../context';
-import { runGatewayRefresh } from '../gateway-refresh';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { ensureBundledPluginInstalled } from '../../utils/bundled-plugin-installer';
 import { getOpenClawCliSpawnConfig } from '../../utils/openclaw-cli';
@@ -38,6 +38,7 @@ import type { ChannelType } from '../../../src/types/channel';
 const WECHAT_QR_TIMEOUT_MS = 8 * 60 * 1000;
 const activeQrLogins = new Map<string, string>();
 const WECHAT_PLUGIN_SPEC = '@tencent-weixin/openclaw-weixin';
+const WECHAT_PLUGIN_NPM_ONLY_SPEC = `npm:${WECHAT_PLUGIN_SPEC}`;
 const FORCE_RESTART_CHANNELS = new Set([
   'feishu',
   'dingtalk',
@@ -119,6 +120,98 @@ export function mapAccountStatus(account: {
     return 'error';
   }
   return 'disconnected';
+}
+
+function looksLikeUtf16Le(buffer: Buffer): boolean {
+  if (buffer.length < 4 || buffer.length % 2 !== 0) {
+    return false;
+  }
+
+  let zeroBytes = 0;
+  let oddZeroBytes = 0;
+  for (let i = 0; i < buffer.length; i += 1) {
+    if (buffer[i] !== 0) {
+      continue;
+    }
+    zeroBytes += 1;
+    if (i % 2 === 1) {
+      oddZeroBytes += 1;
+    }
+  }
+
+  return zeroBytes >= Math.floor(buffer.length / 4) && oddZeroBytes >= Math.floor(zeroBytes * 0.8);
+}
+
+export function decodeCliInstallOutput(chunk: Buffer | string): string {
+  if (typeof chunk === 'string') {
+    return chunk.replace(/\u0000/g, '');
+  }
+
+  const decoded = looksLikeUtf16Le(chunk) ? chunk.toString('utf16le') : chunk.toString('utf8');
+  return decoded.replace(/\u0000/g, '');
+}
+
+export function formatWeChatPluginInstallError(raw: string): string {
+  const trimmed = raw.replace(/\u0000/g, '').trim();
+  if (!trimmed) {
+    return 'WeChat plugin install failed.';
+  }
+
+  const pluginOnly = trimmed.replace(/\nAlso not a valid hook pack:.*$/s, '').trim();
+  if (/ClawHub\/api\/v1\/packages\/.+failed \(429\):/i.test(pluginOnly) || /Ratelimit exceeded/i.test(pluginOnly)) {
+    return 'ClawHub rate limit exceeded while resolving the WeChat plugin. Please retry in a moment.';
+  }
+
+  return pluginOnly;
+}
+
+async function runOpenClawPluginCommand(args: string[]): Promise<void> {
+  const spawnConfig = getOpenClawCliSpawnConfig(args);
+  const INSTALL_TIMEOUT_MS = 120_000;
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(spawnConfig.command, spawnConfig.args, {
+      cwd: spawnConfig.cwd,
+      env: spawnConfig.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+
+    const killTimer = setTimeout(() => {
+      console.warn('[runOpenClawPluginCommand] Installation timed out, killing child process');
+      child.kill('SIGTERM');
+    }, INSTALL_TIMEOUT_MS);
+
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+
+    child.stdout.on('data', (chunk: Buffer | string) => {
+      stdoutChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+
+    child.stderr.on('data', (chunk: Buffer | string) => {
+      stderrChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+
+    child.once('error', (err) => {
+      clearTimeout(killTimer);
+      reject(err);
+    });
+    child.once('close', (code, signal) => {
+      clearTimeout(killTimer);
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      const stderr = decodeCliInstallOutput(Buffer.concat(stderrChunks)).trim();
+      const stdout = decodeCliInstallOutput(Buffer.concat(stdoutChunks)).trim();
+      const detail = formatWeChatPluginInstallError(stderr || stdout);
+      reject(new Error(
+        detail || `WeChat plugin install failed with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`,
+      ));
+    });
+  });
 }
 
 export function normalizeAccountStatusForUi(params: {
@@ -444,15 +537,48 @@ function scheduleGatewayChannelRefresh(
   reason: string,
   options?: { mode?: 'debounced' | 'immediate'; awaitCompletion?: boolean },
 ): void {
-  const action = FORCE_RESTART_CHANNELS.has(channelType) ? 'restart' : 'reload';
-  void runGatewayRefresh(ctx, {
-    action,
+  const requires = FORCE_RESTART_CHANNELS.has(channelType)
+    ? (options?.mode === 'immediate' ? 'restart_immediate' : 'restart')
+    : 'reload';
+  ctx.gatewayApplyCoordinator.enqueue({
     source: reason,
     reason,
-    delayMs: options?.mode === 'immediate' ? undefined : action === 'restart' ? 2000 : 1200,
-    mode: options?.mode ?? 'debounced',
-    awaitCompletion: options?.awaitCompletion ?? false,
+    requires,
+    delayMs: options?.mode === 'immediate' ? 0 : undefined,
+    skipIfStopped: true,
   });
+}
+
+function toComparableConfig(input: Record<string, unknown>): Record<string, string> {
+  const next: Record<string, string> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === 'string') {
+      next[key] = value.trim();
+      continue;
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      next[key] = String(value);
+    }
+  }
+  return next;
+}
+
+function isSameConfigValues(
+  existing: Record<string, unknown> | undefined,
+  incoming: Record<string, unknown>,
+): boolean {
+  if (!existing) return false;
+  const current = toComparableConfig(existing);
+  const next = toComparableConfig(incoming);
+  const keys = new Set([...Object.keys(current), ...Object.keys(next)]);
+  if (keys.size === 0) return false;
+  for (const key of keys) {
+    if ((current[key] ?? '') !== (next[key] ?? '')) {
+      return false;
+    }
+  }
+  return true;
 }
 
 async function ensureDingTalkPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
@@ -474,49 +600,30 @@ async function ensureWeChatPluginInstalled(): Promise<{ installed: boolean; warn
   }
 
   const pluginManifest = join(homedir(), '.openclaw', 'extensions', 'openclaw-weixin', 'openclaw.plugin.json');
-  const cliArgs = existsSync(pluginManifest)
-    ? ['plugins', 'update', 'openclaw-weixin']
-    : ['plugins', 'install', WECHAT_PLUGIN_SPEC];
-  const spawnConfig = getOpenClawCliSpawnConfig(cliArgs);
-
-  const INSTALL_TIMEOUT_MS = 120_000; // 2-minute timeout for plugin installation.
+  const cliAttempts = existsSync(pluginManifest)
+    ? [
+        ['plugins', 'update', 'openclaw-weixin'],
+        ['plugins', 'install', WECHAT_PLUGIN_NPM_ONLY_SPEC],
+      ]
+    : [
+        ['plugins', 'install', WECHAT_PLUGIN_NPM_ONLY_SPEC],
+      ];
 
   try {
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn(spawnConfig.command, spawnConfig.args, {
-        cwd: spawnConfig.cwd,
-        env: spawnConfig.env,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        windowsHide: true,
-      });
+    let lastError: unknown;
+    for (const cliArgs of cliAttempts) {
+      try {
+        await runOpenClawPluginCommand(cliArgs);
+        lastError = undefined;
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
 
-      // ✅ Fix HR-3: Kill child process if installation times out.
-      const killTimer = setTimeout(() => {
-        console.warn('[ensureWeChatPluginInstalled] Installation timed out, killing child process');
-        child.kill('SIGTERM');
-      }, INSTALL_TIMEOUT_MS);
-
-      let stderr = '';
-      child.stderr.on('data', (chunk: Buffer | string) => {
-        stderr += String(chunk);
-      });
-
-      child.once('error', (err) => {
-        clearTimeout(killTimer);
-        reject(err);
-      });
-      child.once('close', (code, signal) => {
-        clearTimeout(killTimer);
-        if (code === 0) {
-          resolve();
-          return;
-        }
-        reject(new Error(
-          stderr.trim()
-            || `WeChat plugin install failed with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`,
-        ));
-      });
-    });
+    if (lastError) {
+      throw lastError;
+    }
 
     if (existsSync(pluginManifest)) {
       repairManagedPluginSdkImports(join(homedir(), '.openclaw', 'extensions', 'openclaw-weixin'));
@@ -533,7 +640,7 @@ async function ensureWeChatPluginInstalled(): Promise<{ installed: boolean; warn
   } catch (error) {
     return {
       installed: false,
-      warning: error instanceof Error ? error.message : String(error),
+      warning: formatWeChatPluginInstallError(error instanceof Error ? error.message : String(error)),
     };
   }
 }
@@ -798,6 +905,11 @@ export async function handleChannelRoutes(
           return true;
         }
       }
+      const existingValues = await getChannelFormValues(body.channelType, body.config.__accountId as string | undefined);
+      if (isSameConfigValues(existingValues ?? undefined, body.config)) {
+        sendJson(res, 200, { success: true, noChange: true });
+        return true;
+      }
       await saveChannelConfig(body.channelType, body.config);
       if (!body.skipRestart) {
         scheduleGatewayChannelRefresh(ctx, runtimeChannelType, `channel:saveConfig:${runtimeChannelType}`);
@@ -852,12 +964,10 @@ export async function handleChannelRoutes(
       } else {
         await clearAllChannelBindings(channelType).catch(() => undefined);
       }
-      await runGatewayRefresh(ctx, {
-        action: FORCE_RESTART_CHANNELS.has(toRuntimeChannelType(channelType)) ? 'restart' : 'reload',
+      await ctx.gatewayApplyCoordinator.applyNow({
         source: `channel:deleteConfig:${channelType}`,
         reason: `channel:deleteConfig:${channelType}`,
-        mode: 'immediate',
-        awaitCompletion: true,
+        requires: FORCE_RESTART_CHANNELS.has(toRuntimeChannelType(channelType)) ? 'restart_immediate' : 'reload',
         skipIfStopped: true,
       });
       sendJson(res, 200, { success: true });

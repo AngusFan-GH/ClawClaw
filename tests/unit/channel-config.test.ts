@@ -619,6 +619,12 @@ describe('channel config lifecycle', () => {
         },
       },
     });
+    expect(config.plugins).toEqual({
+      enabled: true,
+      entries: {
+        feishu: { enabled: true },
+      },
+    });
 
     await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([
       {
@@ -689,6 +695,13 @@ describe('channel config lifecycle', () => {
             allowFrom: ['*'],
           },
         },
+      },
+    });
+    expect(config.plugins).toEqual({
+      allow: ['feishu'],
+      enabled: true,
+      entries: {
+        feishu: { enabled: true },
       },
     });
 
@@ -808,7 +821,6 @@ describe('channel config lifecycle', () => {
       },
     });
     expect(config.plugins).toEqual({
-      allow: ['feishu'],
       enabled: true,
       entries: {
         feishu: { enabled: true },
@@ -910,7 +922,7 @@ describe('channel config lifecycle', () => {
     await expect(repairChannelConfigConsistency()).resolves.toEqual({ repaired: true });
 
     const config = await readOpenClawJson();
-    expect(config.plugins?.allow).toContain('openclaw-weixin');
+    expect(config.plugins?.allow).toBeUndefined();
     expect(config.plugins?.entries?.['openclaw-weixin']).toMatchObject({ enabled: true });
   });
 

@@ -6,7 +6,7 @@ import {
 } from './provider-store';
 import { getClawXProviderStore } from './store-instance';
 
-const PROVIDER_STORE_SCHEMA_VERSION = 1;
+const PROVIDER_STORE_SCHEMA_VERSION = 2;
 
 export async function ensureProviderStoreMigrated(): Promise<void> {
   const store = await getClawXProviderStore();
@@ -16,19 +16,25 @@ export async function ensureProviderStoreMigrated(): Promise<void> {
     return;
   }
 
-  const legacyProviders = (store.get('providers') ?? {}) as Record<string, ProviderConfig>;
-  const defaultProviderId = (store.get('defaultProvider') ?? null) as string | null;
-  const existingDefaultAccountId = await getDefaultProviderAccountId();
+  if (schemaVersion < 1) {
+    const legacyProviders = (store.get('providers') ?? {}) as Record<string, ProviderConfig>;
+    const defaultProviderId = (store.get('defaultProvider') ?? null) as string | null;
+    const existingDefaultAccountId = await getDefaultProviderAccountId();
 
-  for (const provider of Object.values(legacyProviders)) {
-    const account = providerConfigToAccount(provider, {
-      isDefault: provider.id === defaultProviderId,
-    });
-    await saveProviderAccount(account);
+    for (const provider of Object.values(legacyProviders)) {
+      const account = providerConfigToAccount(provider, {
+        isDefault: provider.id === defaultProviderId,
+      });
+      await saveProviderAccount(account);
+    }
+
+    if (!existingDefaultAccountId && defaultProviderId) {
+      store.set('defaultProviderAccountId', defaultProviderId);
+    }
   }
 
-  if (!existingDefaultAccountId && defaultProviderId) {
-    store.set('defaultProviderAccountId', defaultProviderId);
+  if (schemaVersion < 2) {
+    store.set('providers', {});
   }
 
   store.set('schemaVersion', PROVIDER_STORE_SCHEMA_VERSION);

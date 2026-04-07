@@ -6,7 +6,7 @@
 
 - ClawClaw 项目：`/Users/angusfan/Documents/xzinfra/projects/clawx`
 - OpenClaw 本地源码：`/Users/angusfan/Documents/xzinfra/research/openclaw`
-- 当前对照版本：`openclaw@2026.3.24`
+- 当前对照版本：`openclaw@2026.4.2`
 
 ## 1. 当前已经补好的部分
 
@@ -444,4 +444,3 @@ ClawClaw 当前仍更像“当前会话聊天器”。
 - `in_progress`
 - `done`
 - `deferred`
-

@@ -60,7 +60,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { UpdateSettings } from '@/components/settings/UpdateSettings';
 import type { GatewayStatus } from '@/types/gateway';
-import { ALL_MENU_ITEMS } from '@/shared/menu-items';
+import { ALL_MENU_ITEMS, type MenuItemId } from '@/shared/menu-items';
 
 type ControlUiInfo = {
   url: string;
@@ -68,6 +68,19 @@ type ControlUiInfo = {
   port: number;
   ready: boolean;
   state?: GatewayStatus['state'];
+  error?: string;
+};
+
+type OpenClawDoctorResult = {
+  mode: 'diagnose' | 'fix';
+  success: boolean;
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  command: string;
+  cwd: string;
+  durationMs: number;
+  timedOut?: boolean;
   error?: string;
 };
 
@@ -265,6 +278,8 @@ export function Settings() {
   const [openclawCliCommand, setOpenclawCliCommand] = useState('');
   const [openclawCliError, setOpenclawCliError] = useState<string | null>(null);
   const [wsDiagnosticEnabled, setWsDiagnosticEnabled] = useState(false);
+  const [doctorRunningMode, setDoctorRunningMode] = useState<OpenClawDoctorResult['mode'] | null>(null);
+  const [doctorResult, setDoctorResult] = useState<OpenClawDoctorResult | null>(null);
   const [showTelemetryViewer, setShowTelemetryViewer] = useState(false);
   const [telemetryEntries, setTelemetryEntries] = useState<UiTelemetryEntry[]>([]);
   const [showAdvancedProxy, setShowAdvancedProxy] = useState(false);
@@ -624,6 +639,42 @@ export function Settings() {
     toast.success(
       enabled ? t('developer.wsDiagnosticEnabled') : t('developer.wsDiagnosticDisabled')
     );
+  };
+
+  const handleRunOpenClawDoctor = async (mode: OpenClawDoctorResult['mode']) => {
+    setDoctorRunningMode(mode);
+    try {
+      const result = await hostApiFetch<OpenClawDoctorResult>('/api/app/openclaw-doctor', {
+        method: 'POST',
+        body: JSON.stringify({ mode }),
+      });
+      setDoctorResult(result);
+      toast[result.success ? 'success' : 'error'](
+        result.success
+          ? mode === 'fix'
+            ? t('developer.doctorFixSucceeded')
+            : t('developer.doctorSucceeded')
+          : mode === 'fix'
+            ? t('developer.doctorFixFailed')
+            : t('developer.doctorFailed')
+      );
+    } catch (error) {
+      const message = toUserMessage(error);
+      toast.error(message);
+      setDoctorResult({
+        mode,
+        success: false,
+        exitCode: null,
+        stdout: '',
+        stderr: '',
+        command: `openclaw ${mode === 'fix' ? 'doctor --fix --yes --non-interactive' : 'doctor'}`,
+        cwd: '',
+        durationMs: 0,
+        error: message,
+      });
+    } finally {
+      setDoctorRunningMode(null);
+    }
   };
 
   const handleSaveProxySettings = async () => {
@@ -1337,6 +1388,116 @@ export function Settings() {
                       />
                     }
                   />
+                </SubCard>
+
+                <SubCard title={t('developer.doctor')} description={t('developer.doctorDesc')}>
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-10 rounded-[10px] border-black/10 bg-transparent px-4 dark:border-white/10 dark:hover:bg-white/5"
+                        disabled={doctorRunningMode !== null}
+                        onClick={() => void handleRunOpenClawDoctor('diagnose')}
+                      >
+                        {doctorRunningMode === 'diagnose' ? (
+                          <LoadingIcon className="mr-1.5 h-3.5 w-3.5" />
+                        ) : (
+                          <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        {t('developer.runDoctor')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-10 rounded-[10px] border-black/10 bg-transparent px-4 dark:border-white/10 dark:hover:bg-white/5"
+                        disabled={doctorRunningMode !== null}
+                        onClick={() => void handleRunOpenClawDoctor('fix')}
+                      >
+                        {doctorRunningMode === 'fix' ? (
+                          <LoadingIcon className="mr-1.5 h-3.5 w-3.5" />
+                        ) : (
+                          <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        {t('developer.runDoctorFix')}
+                      </Button>
+                    </div>
+
+                    {doctorResult ? (
+                      <div className="space-y-3 rounded-[10px] border border-black/10 bg-white/75 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="secondary" className="rounded-[10px] px-3 py-1">
+                            {doctorResult.mode === 'fix'
+                              ? t('developer.doctorFixLabel')
+                              : t('developer.doctorLabel')}
+                          </Badge>
+                          <Badge
+                            variant="secondary"
+                            className={cn(
+                              'rounded-[10px] px-3 py-1',
+                              doctorResult.success
+                                ? 'bg-green-500/10 text-green-600 dark:text-green-500'
+                                : 'bg-red-500/10 text-red-600 dark:text-red-500'
+                            )}
+                          >
+                            {doctorResult.success
+                              ? t('developer.doctorStatusSuccess')
+                              : t('developer.doctorStatusFailed')}
+                          </Badge>
+                          <span className="text-[12px] text-muted-foreground">
+                            {t('developer.doctorExitCode', { code: doctorResult.exitCode ?? 'null' })}
+                          </span>
+                          <span className="text-[12px] text-muted-foreground">
+                            {t('developer.doctorDuration', { ms: doctorResult.durationMs })}
+                          </span>
+                        </div>
+
+                        <div className="grid gap-3 lg:grid-cols-2">
+                          <div className="rounded-[10px] border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                            <p className="mb-2 text-[12px] font-semibold text-muted-foreground">
+                              {t('developer.doctorCommand')}
+                            </p>
+                            <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">
+                              {doctorResult.command}
+                            </pre>
+                          </div>
+                          <div className="rounded-[10px] border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                            <p className="mb-2 text-[12px] font-semibold text-muted-foreground">
+                              {t('developer.doctorWorkingDir')}
+                            </p>
+                            <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">
+                              {doctorResult.cwd || '-'}
+                            </pre>
+                          </div>
+                        </div>
+
+                        {doctorResult.error ? (
+                          <div className="rounded-[10px] border border-red-500/20 bg-red-500/10 p-3 text-[12px] text-red-600 dark:text-red-400">
+                            {doctorResult.error}
+                          </div>
+                        ) : null}
+
+                        <div className="grid gap-3 lg:grid-cols-2">
+                          <div className="rounded-[10px] border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                            <p className="mb-2 text-[12px] font-semibold text-muted-foreground">
+                              STDOUT
+                            </p>
+                            <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">
+                              {doctorResult.stdout || '-'}
+                            </pre>
+                          </div>
+                          <div className="rounded-[10px] border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                            <p className="mb-2 text-[12px] font-semibold text-muted-foreground">
+                              STDERR
+                            </p>
+                            <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">
+                              {doctorResult.stderr || '-'}
+                            </pre>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 </SubCard>
 
                 <SubCard

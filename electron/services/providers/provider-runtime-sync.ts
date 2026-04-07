@@ -76,6 +76,19 @@ type RuntimeProviderSyncContext = {
   disableTools: boolean;
 };
 
+type GatewayRefreshMode = 'reload' | 'restart';
+
+type GatewayRefreshRequest = {
+  source?: string;
+  reason?: string;
+  mode?: GatewayRefreshMode;
+  delayMs?: number;
+  onlyIfRunning?: boolean;
+  message: string;
+};
+
+let gatewayRefreshScheduler: ((request: GatewayRefreshRequest) => void) | null = null;
+
 function buildAgentProviderModels(
   providerType: string,
   modelIds: string[],
@@ -329,13 +342,35 @@ export async function getProviderFallbackModelRefs(config: ProviderConfig): Prom
   return results;
 }
 
-type GatewayRefreshMode = 'reload' | 'restart';
+export function registerGatewayRefreshScheduler(
+  scheduler: ((request: GatewayRefreshRequest) => void) | null,
+): void {
+  gatewayRefreshScheduler = scheduler;
+}
 
 function scheduleGatewayRefresh(
   gatewayManager: GatewayManager | undefined,
   message: string,
-  options?: { delayMs?: number; onlyIfRunning?: boolean; mode?: GatewayRefreshMode },
+  options?: {
+    delayMs?: number;
+    onlyIfRunning?: boolean;
+    mode?: GatewayRefreshMode;
+    source?: string;
+    reason?: string;
+  },
 ): void {
+  if (gatewayRefreshScheduler) {
+    gatewayRefreshScheduler({
+      source: options?.source,
+      reason: options?.reason,
+      mode: options?.mode,
+      delayMs: options?.delayMs,
+      onlyIfRunning: options?.onlyIfRunning,
+      message,
+    });
+    return;
+  }
+
   if (!gatewayManager) {
     return;
   }

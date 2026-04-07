@@ -1,6 +1,6 @@
 {
   "name": "clawclaw",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "pnpm": {
     "onlyBuiltDependencies": [
       "@discordjs/opus",
@@ -13,6 +13,13 @@
       "node-llama-cpp",
       "protobufjs",
       "sharp"
+    ],
+    "ignoredBuiltDependencies": [
+      "@matrix-org/matrix-sdk-crypto-nodejs",
+      "electron",
+      "esbuild",
+      "ffmpeg-static",
+      "openclaw"
     ]
   },
   "description": "ClawClaw - Graphical AI Assistant based on OpenClaw",
@@ -99,7 +106,7 @@
     "i18next": "^25.8.11",
     "jsdom": "^28.1.0",
     "lucide-react": "^0.563.0",
-    "openclaw": "2026.3.24",
+    "openclaw": "2026.4.2",
     "png2icons": "^2.0.1",
     "postcss": "^8.5.6",
     "react": "^19.2.4",

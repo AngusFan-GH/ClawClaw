@@ -195,7 +195,8 @@ describe('upgrade compatibility baseline', () => {
 
     const store = await getClawXProviderStore();
     const providerAccounts = store.get('providerAccounts') as Record<string, Record<string, unknown>>;
-    expect(store.get('schemaVersion')).toBe(1);
+    expect(store.get('schemaVersion')).toBe(2);
+    expect(store.get('providers')).toEqual({});
     expect(store.get('defaultProviderAccountId')).toBe('moonshot');
     expect(providerAccounts.moonshot).toMatchObject({
       id: 'moonshot',

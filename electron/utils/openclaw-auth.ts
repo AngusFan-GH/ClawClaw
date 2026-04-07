@@ -42,6 +42,27 @@ function getOAuthPluginId(provider: string): string {
   return `${provider}-auth`;
 }
 
+function ensurePluginEntryEnabled(
+  config: Record<string, unknown>,
+  pluginId: string,
+  options?: { syncAllowlist?: boolean },
+): void {
+  const plugins = (config.plugins || {}) as Record<string, unknown>;
+  const entries = (plugins.entries || {}) as Record<string, unknown>;
+  entries[pluginId] = {
+    ...(entries[pluginId] && typeof entries[pluginId] === 'object' ? entries[pluginId] as Record<string, unknown> : {}),
+    enabled: true,
+  };
+  plugins.entries = entries;
+  if (options?.syncAllowlist && Array.isArray(plugins.allow)) {
+    const allow = [...(plugins.allow as string[])];
+    if (!allow.includes(pluginId)) {
+      plugins.allow = [...allow, pluginId];
+    }
+  }
+  config.plugins = plugins;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────
 
 /** Non-throwing async existence check (replaces existsSync). */
@@ -724,17 +745,8 @@ export async function syncProviderConfigToOpenClaw(
 
   // Ensure extension is enabled for oauth providers to prevent gateway wiping config
   if (isOpenClawOAuthPluginProviderKey(provider)) {
-    const plugins = (config.plugins || {}) as Record<string, unknown>;
-    const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
-    const pEntries = (plugins.entries || {}) as Record<string, unknown>;
     const pluginId = getOAuthPluginId(provider);
-    if (!allow.includes(pluginId)) {
-      allow.push(pluginId);
-    }
-    pEntries[pluginId] = { enabled: true };
-    plugins.allow = allow;
-    plugins.entries = pEntries;
-    config.plugins = plugins;
+    ensurePluginEntryEnabled(config, pluginId, { syncAllowlist: true });
   }
 
   await writeOpenClawJson(config);
@@ -790,17 +802,8 @@ export async function setOpenClawDefaultModelWithOverride(
 
   // Ensure the extension plugin is marked as enabled in openclaw.json
   if (isOpenClawOAuthPluginProviderKey(provider)) {
-    const plugins = (config.plugins || {}) as Record<string, unknown>;
-    const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
-    const pEntries = (plugins.entries || {}) as Record<string, unknown>;
     const pluginId = getOAuthPluginId(provider);
-    if (!allow.includes(pluginId)) {
-      allow.push(pluginId);
-    }
-    pEntries[pluginId] = { enabled: true };
-    plugins.allow = allow;
-    plugins.entries = pEntries;
-    config.plugins = plugins;
+    ensurePluginEntryEnabled(config, pluginId, { syncAllowlist: true });
   }
 
   await writeOpenClawJson(config);
@@ -1185,14 +1188,16 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
     );
 
     if (hasFeishuChannelConfig || existingFeishuEntry || configuredFeishuId || installedFeishuId) {
-      const normalizedAllow = allowArr.filter(
-        (id) => !FEISHU_PLUGIN_ID_CANDIDATES.includes(id as typeof FEISHU_PLUGIN_ID_CANDIDATES[number]),
-      );
-      normalizedAllow.push(canonicalFeishuId);
-      if (JSON.stringify(normalizedAllow) !== JSON.stringify(allowArr)) {
-        pluginsObj.allow = normalizedAllow;
-        modified = true;
-        console.log(`[sanitize] Normalized plugins.allow for feishu -> ${canonicalFeishuId}`);
+      if (Array.isArray(pluginsObj.allow)) {
+        const normalizedAllow = allowArr.filter(
+          (id) => !FEISHU_PLUGIN_ID_CANDIDATES.includes(id as typeof FEISHU_PLUGIN_ID_CANDIDATES[number]),
+        );
+        normalizedAllow.push(canonicalFeishuId);
+        if (JSON.stringify(normalizedAllow) !== JSON.stringify(allowArr)) {
+          pluginsObj.allow = normalizedAllow;
+          modified = true;
+          console.log(`[sanitize] Normalized plugins.allow for feishu -> ${canonicalFeishuId}`);
+        }
       }
 
       if (existingFeishuEntry || !pEntries[canonicalFeishuId]) {

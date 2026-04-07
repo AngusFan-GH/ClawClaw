@@ -7,29 +7,34 @@ import {
   listAgentsSnapshot,
   updateAgentSettings,
 } from '../../utils/agent-config';
+import { toRuntimeChannelType } from '../../utils/channel-alias';
 import type { HostApiContext } from '../context';
-import { runGatewayRefresh } from '../gateway-refresh';
 import { parseJsonBody, sendJson } from '../route-utils';
 
 function scheduleGatewayReload(ctx: HostApiContext, reason: string): void {
-  void runGatewayRefresh(ctx, {
-    action: 'reload',
+  ctx.gatewayApplyCoordinator.enqueue({
     source: reason,
     reason,
-    delayMs: 1200,
-    mode: 'debounced',
-    awaitCompletion: false,
+    requires: 'reload',
+    delayMs: 1500,
+    skipIfStopped: true,
   });
 }
 
 async function restartGatewayForAgentDeletion(ctx: HostApiContext): Promise<void> {
-  await runGatewayRefresh(ctx, {
-    action: 'restart',
+  await ctx.gatewayApplyCoordinator.applyNow({
     source: 'delete-agent',
     reason: 'delete-agent',
-    mode: 'immediate',
-    awaitCompletion: true,
+    requires: 'restart_immediate',
   });
+}
+
+function normalizeComparableString(value: string | null | undefined): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeComparableAgentId(value: string | null | undefined): string {
+  return normalizeComparableString(value).toLowerCase();
 }
 
 export async function handleAgentRoutes(
@@ -63,6 +68,27 @@ export async function handleAgentRoutes(
       try {
         const body = await parseJsonBody<{ name?: string; model?: string | null }>(req);
         const agentId = decodeURIComponent(parts[0]);
+        const snapshotBeforeUpdate = await listAgentsSnapshot();
+        const existingAgent = snapshotBeforeUpdate.agents.find((agent) => agent.id === agentId);
+        if (!existingAgent) {
+          throw new Error(`Agent "${agentId}" not found`);
+        }
+
+        const nextName = Object.prototype.hasOwnProperty.call(body, 'name')
+          ? normalizeComparableString(body.name)
+          : normalizeComparableString(existingAgent.name);
+        const nextModel = Object.prototype.hasOwnProperty.call(body, 'model')
+          ? normalizeComparableString(body.model)
+          : normalizeComparableString(existingAgent.modelRef);
+
+        if (
+          nextName === normalizeComparableString(existingAgent.name)
+          && nextModel === normalizeComparableString(existingAgent.modelRef)
+        ) {
+          sendJson(res, 200, { success: true, noChange: true, ...snapshotBeforeUpdate });
+          return true;
+        }
+
         const snapshot = await updateAgentSettings(agentId, body);
         scheduleGatewayReload(ctx, 'update-agent');
         sendJson(res, 200, { success: true, ...snapshot });
@@ -77,6 +103,17 @@ export async function handleAgentRoutes(
         const agentId = decodeURIComponent(parts[0]);
         const channelType = decodeURIComponent(parts[2]);
         const accountId = url.searchParams.get('accountId') || undefined;
+        const runtimeChannelType = toRuntimeChannelType(channelType);
+        const snapshotBeforeUpdate = await listAgentsSnapshot();
+        const existingOwner = accountId
+          ? snapshotBeforeUpdate.channelAccountOwners[`${runtimeChannelType}:${accountId.trim() || 'default'}`]
+          : snapshotBeforeUpdate.channelOwners[runtimeChannelType];
+
+        if (normalizeComparableAgentId(existingOwner) === normalizeComparableAgentId(agentId)) {
+          sendJson(res, 200, { success: true, noChange: true, ...snapshotBeforeUpdate });
+          return true;
+        }
+
         const snapshot = await assignChannelToAgent(agentId, channelType, accountId);
         scheduleGatewayReload(ctx, 'assign-channel');
         sendJson(res, 200, { success: true, ...snapshot });
@@ -108,6 +145,17 @@ export async function handleAgentRoutes(
         const agentId = decodeURIComponent(parts[0]);
         const channelType = decodeURIComponent(parts[2]);
         const accountId = url.searchParams.get('accountId') || undefined;
+        const runtimeChannelType = toRuntimeChannelType(channelType);
+        const snapshotBeforeUpdate = await listAgentsSnapshot();
+        const existingOwner = accountId
+          ? snapshotBeforeUpdate.channelAccountOwners[`${runtimeChannelType}:${accountId.trim() || 'default'}`]
+          : snapshotBeforeUpdate.channelOwners[runtimeChannelType];
+
+        if (!existingOwner) {
+          sendJson(res, 200, { success: true, noChange: true, ...snapshotBeforeUpdate });
+          return true;
+        }
+
         const snapshot = await clearChannelBinding(channelType, agentId, accountId);
         scheduleGatewayReload(ctx, 'remove-agent-channel');
         sendJson(res, 200, { success: true, ...snapshot });
