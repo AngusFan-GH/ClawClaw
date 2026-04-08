@@ -570,6 +570,8 @@ const SESSION_TITLE_NOISE_PREFIXES = [
 ] as const;
 
 const LEADING_TIMESTAMP_PREFIX_RE = /^\[[A-Za-z]{3} \d{4}-\d{2}-\d{2} \d{2}:\d{2}[^\]]*\] */;
+const LEADING_INTERNAL_TAG_RE = /^(?:\[(?:Subagent Context|Subagent Task|Task|Context|System)\]\s*)+/i;
+const LEADING_INTERNAL_MARKER_RE = /^(?:<<<[A-Z0-9_:-]+>>>\s*)+/i;
 const INBOUND_META_BLOCK_RE =
   /^(?:(?:Conversation info|Sender|Thread starter|Replied message|Forwarded message context|Chat history since last reply) \(untrusted(?: metadata|, for context)?\):\s*```json[\s\S]*?```\s*)+/;
 
@@ -577,6 +579,8 @@ function normalizeSessionTitleCandidate(text: string): string {
   let cleaned = text.trim();
   cleaned = cleaned.replace(INBOUND_META_BLOCK_RE, '').trim();
   cleaned = cleaned.replace(LEADING_TIMESTAMP_PREFIX_RE, '').trim();
+  cleaned = cleaned.replace(LEADING_INTERNAL_TAG_RE, '').trim();
+  cleaned = cleaned.replace(LEADING_INTERNAL_MARKER_RE, '').trim();
   cleaned = cleaned.replace(INBOUND_META_BLOCK_RE, '').trim();
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
   if (!cleaned) return '';

@@ -247,6 +247,7 @@ export function Sidebar() {
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [backgroundExpanded, setBackgroundExpanded] = useState(false);
   const [showCronBackground, setShowCronBackground] = useState(false);
+  const [expandedTaskParents, setExpandedTaskParents] = useState<Record<string, boolean>>({});
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -361,13 +362,6 @@ export function Sidebar() {
     sessionBucketMap[bucketKey].sessions.push(session);
   }
 
-  const sortedBackgroundSessions = [
-    ...nonCronBackgroundSessions,
-    ...(showCronBackground ? cronBackgroundSessions : []),
-  ].sort(
-    (a, b) => (sessionLastActivity[b.key] ?? 0) - (sessionLastActivity[a.key] ?? 0)
-  );
-
   const getParentSessionKey = (session: { spawnedBy?: string; parentSessionKey?: string }) =>
     session.spawnedBy?.trim() || session.parentSessionKey?.trim() || '';
 
@@ -380,6 +374,62 @@ export function Sidebar() {
     }
     return parentKey;
   };
+
+  const conversationSessionKeys = useMemo(
+    () => new Set(conversationSessions.map((session) => session.key)),
+    [conversationSessions]
+  );
+
+  const resolveConversationParentKey = (session: { key: string; spawnedBy?: string; parentSessionKey?: string }) => {
+    const seen = new Set<string>();
+    let currentParentKey = getParentSessionKey(session);
+
+    while (currentParentKey && !seen.has(currentParentKey)) {
+      seen.add(currentParentKey);
+      if (conversationSessionKeys.has(currentParentKey)) {
+        return currentParentKey;
+      }
+
+      const parentSession = sessionByKey.get(currentParentKey);
+      if (!parentSession) break;
+      currentParentKey = getParentSessionKey(parentSession);
+    }
+
+    return '';
+  };
+
+  const nestedBackgroundSessions = useMemo(
+    () => nonCronBackgroundSessions.filter((session) => Boolean(resolveConversationParentKey(session))),
+    [nonCronBackgroundSessions, conversationSessionKeys, sessionByKey]
+  );
+
+  const nestedBackgroundSessionMap = useMemo(() => {
+    const groups = new Map<string, typeof nestedBackgroundSessions>();
+
+    for (const session of nestedBackgroundSessions) {
+      const parentKey = resolveConversationParentKey(session);
+      if (!parentKey) continue;
+      const existing = groups.get(parentKey);
+      if (existing) {
+        existing.push(session);
+      } else {
+        groups.set(parentKey, [session]);
+      }
+    }
+
+    for (const sessions of groups.values()) {
+      sessions.sort((a, b) => (sessionLastActivity[b.key] ?? 0) - (sessionLastActivity[a.key] ?? 0));
+    }
+
+    return groups;
+  }, [nestedBackgroundSessions, sessionLastActivity, conversationSessionKeys, sessionByKey]);
+
+  const sortedBackgroundSessions = [
+    ...nonCronBackgroundSessions.filter((session) => !resolveConversationParentKey(session)),
+    ...(showCronBackground ? cronBackgroundSessions : []),
+  ].sort(
+    (a, b) => (sessionLastActivity[b.key] ?? 0) - (sessionLastActivity[a.key] ?? 0)
+  );
 
   const backgroundSessionGroups = useMemo(() => {
     const groups = new Map<string, {
@@ -415,6 +465,15 @@ export function Sidebar() {
 
     return [...groups.values()].sort((a, b) => b.latestActivity - a.latestActivity);
   }, [getParentSessionLabel, sessionLastActivity, sortedBackgroundSessions, t]);
+
+  useEffect(() => {
+    const currentSession = sessionByKey.get(currentSessionKey);
+    const activeParentKey = currentSession ? resolveConversationParentKey(currentSession) : '';
+    if (!activeParentKey) return;
+    setExpandedTaskParents((current) => (
+      current[activeParentKey] ? current : { ...current, [activeParentKey]: true }
+    ));
+  }, [currentSessionKey, conversationSessionKeys, sessionByKey]);
 
   const shortcutIds = new Set<MenuItemId>(shortcutMenuItems);
   const shortcutItems = shortcutMenuItems
@@ -532,59 +591,167 @@ export function Sidebar() {
                     <div className="space-y-1">
                       {bucket.sessions.map((s) => {
                         const canDeleteSession = !isMainSessionKey(s.key);
+                        const childSessions = nestedBackgroundSessionMap.get(s.key) ?? [];
+                        const childTasksExpanded = expandedTaskParents[s.key]
+                          ?? childSessions.some((session) => session.key === currentSessionKey);
                         return (
-                          <div key={s.key} className="group relative flex items-center">
-                            <button
-                              onClick={() => {
-                                switchSession(s.key);
-                                navigate('/');
-                              }}
-                              className={cn(
-                                'w-full text-left rounded-[14px] border px-3 py-2.5 pr-8 transition-all',
-                                'hover:border-black/6 hover:bg-white/55 dark:hover:border-white/10 dark:hover:bg-white/[0.06]',
-                                isOnChat && currentSessionKey === s.key
-                                  ? 'border-black/8 bg-white/90 text-foreground font-semibold shadow-[0_8px_18px_rgba(15,23,42,0.06)] dark:border-white/12 dark:bg-white/[0.08]'
-                                  : 'border-transparent bg-black/[0.025] text-foreground/78 dark:bg-white/[0.02]'
-                              )}
-                            >
-                              <div className="flex min-w-0 items-center gap-2.5">
-                                <span className="min-w-0 flex-1 truncate text-[13px] leading-5">
-                                  {getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle)}
-                                </span>
-                                <span className="shrink-0 rounded-[10px] bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground dark:bg-white/8">
-                                  {getBackgroundSessionKindLabel(s, (key, fallback) => t(key, fallback))}
-                                </span>
-                                <span
-                                  title={getSessionAgentLabel(s.key)}
-                                  className={cn(
-                                    'ml-auto max-w-[104px] shrink-0 truncate rounded-[10px] px-2 py-0.5 text-[10px] font-medium',
-                                    isOnChat && currentSessionKey === s.key
-                                      ? 'bg-slate-100 text-foreground/72 dark:bg-white/10 dark:text-foreground/80'
-                                      : 'bg-black/[0.035] text-muted-foreground dark:bg-white/8'
-                                  )}
-                                >
-                                  {getSessionAgentLabel(s.key)}
-                                </span>
-                              </div>
-                            </button>
-                            {canDeleteSession && (
+                          <div
+                            key={s.key}
+                            className={cn(
+                              'group relative overflow-hidden rounded-[18px] border transition-all',
+                              isOnChat && currentSessionKey === s.key
+                                ? 'border-black/8 bg-white/90 shadow-[0_10px_22px_rgba(15,23,42,0.06)] dark:border-white/12 dark:bg-white/[0.08]'
+                                : 'border-transparent bg-black/[0.025] dark:bg-white/[0.02]'
+                            )}
+                          >
+                            <div className="relative flex items-center">
                               <button
-                                aria-label={t('common:actions.delete')}
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  await handleDeleteSessionClick(
-                                    s.key,
-                                    getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle)
-                                  );
+                                onClick={() => {
+                                  switchSession(s.key);
+                                  navigate('/');
                                 }}
                                 className={cn(
-                                  'absolute right-1.5 flex h-7 w-7 items-center justify-center rounded-[10px] border border-transparent transition-opacity',
-                                  'opacity-0 group-hover:opacity-100',
-                                  'text-muted-foreground hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive'
+                                  'w-full text-left px-3 py-2.5 pr-8 transition-all',
+                                  'hover:bg-white/55 dark:hover:bg-white/[0.06]',
+                                  isOnChat && currentSessionKey === s.key
+                                    ? 'text-foreground font-semibold'
+                                    : 'text-foreground/78'
                                 )}
                               >
-                                <Trash2 className="h-3.5 w-3.5" />
+                                <div className="flex min-w-0 items-center gap-2.5">
+                                  <span className="min-w-0 flex-1 truncate text-[13px] leading-5">
+                                    {getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle)}
+                                  </span>
+                                  <span
+                                    title={getSessionAgentLabel(s.key)}
+                                    className={cn(
+                                      'ml-auto max-w-[104px] shrink-0 truncate rounded-[10px] px-2 py-0.5 text-[10px] font-medium',
+                                      isOnChat && currentSessionKey === s.key
+                                        ? 'bg-slate-100 text-foreground/72 dark:bg-white/10 dark:text-foreground/80'
+                                        : 'bg-black/[0.035] text-muted-foreground dark:bg-white/8'
+                                    )}
+                                  >
+                                    {getSessionAgentLabel(s.key)}
+                                  </span>
+                                </div>
                               </button>
+                              {canDeleteSession && (
+                                <button
+                                  aria-label={t('common:actions.delete')}
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    await handleDeleteSessionClick(
+                                      s.key,
+                                      getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle)
+                                    );
+                                  }}
+                                  className={cn(
+                                    'absolute right-1.5 flex h-7 w-7 items-center justify-center rounded-[10px] border border-transparent transition-opacity',
+                                    'opacity-0 group-hover:opacity-100',
+                                    'text-muted-foreground hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive'
+                                  )}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                            {childSessions.length > 0 && (
+                              <div className="border-t border-black/6 bg-black/[0.018] dark:border-white/8 dark:bg-white/[0.018]">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setExpandedTaskParents((current) => ({
+                                      ...current,
+                                      [s.key]: !childTasksExpanded,
+                                    }));
+                                  }}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-medium text-muted-foreground transition-colors hover:bg-white/35 hover:text-foreground dark:hover:bg-white/[0.04]"
+                                >
+                                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/70 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)] dark:bg-white/[0.08] dark:shadow-none">
+                                    {childTasksExpanded ? (
+                                      <ChevronUp className="h-3 w-3 shrink-0" />
+                                    ) : (
+                                      <ChevronDown className="h-3 w-3 shrink-0" />
+                                    )}
+                                  </span>
+                                  <span className="truncate tracking-[0.01em]">
+                                    {t('chat:history.childTasks', {
+                                      defaultValue: '子任务',
+                                    })}
+                                  </span>
+                                  <span className="ml-auto shrink-0 rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)] dark:bg-white/[0.08] dark:shadow-none">
+                                    {childSessions.length}
+                                  </span>
+                                </button>
+                                {childTasksExpanded && (
+                                  <div className="px-2.5 pb-2.5">
+                                    <div className="space-y-1.5 rounded-[14px] bg-white/52 p-2 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)] dark:bg-white/[0.035] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]">
+                                    {childSessions.map((child) => {
+                                      const canDeleteChildSession = !child.key.endsWith(':main');
+                                      const childAgentLabel = getSessionAgentLabel(child.key);
+                                      const parentAgentLabel = getSessionAgentLabel(s.key);
+                                      const showChildAgentLabel = childAgentLabel !== parentAgentLabel;
+                                      return (
+                                        <div key={child.key} className="group relative flex items-center">
+                                          <div
+                                            className={cn(
+                                              'w-full rounded-[12px] border px-3 py-2.5 pr-8 transition-all',
+                                              'hover:border-black/6 hover:bg-white/78 dark:hover:border-white/10 dark:hover:bg-white/[0.06]',
+                                              isOnChat && currentSessionKey === child.key
+                                                ? 'border-black/8 bg-white/95 text-foreground font-semibold shadow-[0_8px_16px_rgba(15,23,42,0.05)] dark:border-white/12 dark:bg-white/[0.08]'
+                                                : 'border-transparent bg-black/[0.02] text-foreground/76 dark:bg-white/[0.02]'
+                                            )}
+                                          >
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                switchSession(child.key);
+                                                navigate('/');
+                                              }}
+                                              className="w-full text-left"
+                                            >
+                                              <div className="flex min-w-0 items-center gap-2">
+                                                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400/70 dark:bg-slate-500/80" />
+                                                <span className="min-w-0 flex-1 truncate text-[12px] leading-5">
+                                                  {getSessionLabel(child.key, child.displayName, child.label, child.derivedTitle)}
+                                                </span>
+                                                {showChildAgentLabel && (
+                                                  <span
+                                                    title={childAgentLabel}
+                                                    className="max-w-[88px] shrink-0 truncate rounded-[10px] bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground dark:bg-white/8"
+                                                  >
+                                                    {childAgentLabel}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </button>
+                                          </div>
+                                          {canDeleteChildSession && (
+                                            <button
+                                              aria-label={t('common:actions.delete')}
+                                              onClick={async (e) => {
+                                                e.stopPropagation();
+                                                await handleDeleteSessionClick(
+                                                  child.key,
+                                                  getSessionLabel(child.key, child.displayName, child.label, child.derivedTitle)
+                                                );
+                                              }}
+                                              className={cn(
+                                                'absolute right-1 flex h-6 w-6 items-center justify-center rounded-[10px] border border-transparent transition-opacity',
+                                                'opacity-0 group-hover:opacity-100',
+                                                'text-muted-foreground hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive'
+                                              )}
+                                            >
+                                              <Trash2 className="h-3 w-3" />
+                                            </button>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
                         );
