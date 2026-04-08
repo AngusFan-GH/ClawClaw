@@ -209,6 +209,7 @@ interface ChatState {
     }>
   ) => Promise<void>;
   abortRun: () => Promise<void>;
+  interruptActiveRunForPolicyChange: (message: string) => Promise<boolean>;
   handleChatEvent: (event: Record<string, unknown>) => void;
   handleAgentEvent: (event: AgentStreamEvent) => void;
   toggleThinking: () => void;
@@ -2694,6 +2695,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { currentSessionKey } = get();
     set({
       sending: false,
+      activeRunId: null,
       streamingText: '',
       streamingMessage: null,
       pendingFinal: false,
@@ -2708,6 +2710,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (err) {
       set({ error: String(err) });
     }
+  },
+
+  interruptActiveRunForPolicyChange: async (message: string) => {
+    const { sending, activeRunId, currentSessionKey } = get();
+    if (!sending && !activeRunId) {
+      return false;
+    }
+
+    clearHistoryPoll();
+    clearErrorRecoveryTimer();
+    set({
+      sending: false,
+      activeRunId: null,
+      streamingText: '',
+      streamingMessage: null,
+      pendingFinal: false,
+      lastUserMessageAt: null,
+      pendingToolImages: [],
+      error: message,
+      ...resetToolStreamState(get()),
+    });
+    set({ streamingTools: [] });
+
+    try {
+      await useGatewayStore.getState().rpc('chat.abort', { sessionKey: currentSessionKey });
+    } catch (err) {
+      set({ error: `${message} (${String(err)})` });
+    }
+
+    return true;
   },
 
   // ── Handle incoming chat events from Gateway ──

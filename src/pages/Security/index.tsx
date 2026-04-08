@@ -9,6 +9,7 @@ import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
+import { useChatStore } from '@/stores/chat';
 import {
   DEFAULT_SECURITY_POLICY,
   type SecurityPolicy,
@@ -23,6 +24,7 @@ import {
 
 export function Security() {
   const { t } = useTranslation('settings');
+  const interruptActiveRunForPolicyChange = useChatStore((state) => state.interruptActiveRunForPolicyChange);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [policy, setPolicy] = useState<SecurityPolicy>(DEFAULT_SECURITY_POLICY);
@@ -135,6 +137,10 @@ export function Security() {
 
     setApplying(true);
     try {
+      const interrupted = await interruptActiveRunForPolicyChange(t('security.toasts.interrupted'));
+      if (interrupted) {
+        toast.message(t('security.toasts.interrupted'));
+      }
       const response = await hostApiFetch<{
         snapshot?: SecurityPolicySnapshot;
       }>('/api/security/apply', {
@@ -150,11 +156,15 @@ export function Security() {
     } finally {
       setApplying(false);
     }
-  }, [policy, runtime, t]);
+  }, [interruptActiveRunForPolicyChange, policy, runtime, t]);
 
   const resetPolicy = useCallback(async () => {
     setApplying(true);
     try {
+      const interrupted = await interruptActiveRunForPolicyChange(t('security.toasts.interrupted'));
+      if (interrupted) {
+        toast.message(t('security.toasts.interrupted'));
+      }
       const response = await hostApiFetch<{
         snapshot?: SecurityPolicySnapshot;
       }>('/api/security/reset', {
@@ -176,7 +186,7 @@ export function Security() {
     } finally {
       setApplying(false);
     }
-  }, [t]);
+  }, [interruptActiveRunForPolicyChange, t]);
 
   const summary = useMemo(() => {
     if (!policy.prompt.enabled) {

@@ -44,7 +44,8 @@
       "paused": "Paused"
     },
     "toasts": {
-      "exists": "That reminder is already in the list"
+      "exists": "That reminder is already in the list",
+      "interrupted": "Current run stopped so updated reminders can take effect immediately."
     }
   },
   "aiProviders": {
@@ -388,7 +389,8 @@
       "applyFailed": "Apply failed",
       "resetSuccess": "Security policy reset.",
       "resetFailed": "Reset failed",
-      "enablePromptPolicyFirst": "Please add at least one denied directory or enable at least one preset restriction before enabling security policy."
+      "enablePromptPolicyFirst": "Please add at least one denied directory or enable at least one preset restriction before enabling security policy.",
+      "interrupted": "Current run stopped so the updated security policy can take effect immediately."
     },
     "dialog": {
       "selectDeniedDirs": "Select denied directories"

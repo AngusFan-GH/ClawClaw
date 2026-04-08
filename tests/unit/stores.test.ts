@@ -506,6 +506,31 @@ describe('Chat Store', () => {
     expect(useChatStore.getState().pendingSessionModelRefresh).toBe(false);
   });
 
+  it('should abort the active run when policy changes require immediate effect', async () => {
+    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockResolvedValue({ success: true });
+
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      sending: true,
+      activeRunId: 'run-policy-1',
+      pendingFinal: true,
+      error: null,
+    });
+
+    const interrupted = await useChatStore
+      .getState()
+      .interruptActiveRunForPolicyChange('Policy changed');
+
+    expect(interrupted).toBe(true);
+    expect(rpcMock).toHaveBeenCalledWith('chat.abort', { sessionKey: 'agent:main:main' });
+    expect(useChatStore.getState().sending).toBe(false);
+    expect(useChatStore.getState().activeRunId).toBeNull();
+    expect(useChatStore.getState().pendingFinal).toBe(false);
+    expect(useChatStore.getState().error).toBe('Policy changed');
+
+    rpcMock.mockRestore();
+  });
+
   it('should prepend older transcript messages when loading earlier history', async () => {
     const hostApiSpy = vi.spyOn(hostApi, 'hostApiFetch').mockResolvedValue({
       success: true,

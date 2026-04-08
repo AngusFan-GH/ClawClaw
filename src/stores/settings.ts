@@ -6,6 +6,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import i18n from '@/i18n';
 import { hostApiFetch } from '@/lib/host-api';
+import { useChatStore } from '@/stores/chat';
+import { toast } from 'sonner';
 import type { ReminderItem } from '@/shared/reminders';
 import { normalizeReminders } from '@/shared/reminders';
 import { DEFAULT_SHORTCUT_MENU_IDS, type MenuItemId } from '@/shared/menu-items';
@@ -139,6 +141,12 @@ export const useSettingsStore = create<SettingsState>()(
       };
 
       const persistReminders = async (reminders: ReminderItem[]): Promise<void> => {
+        const interrupted = await useChatStore.getState().interruptActiveRunForPolicyChange(
+          i18n.t('settings:reminders.toasts.interrupted', 'Current run stopped so updated reminders can take effect immediately.')
+        );
+        if (interrupted) {
+          toast.message(i18n.t('settings:reminders.toasts.interrupted', 'Current run stopped so updated reminders can take effect immediately.'));
+        }
         await hostApiFetch<{ success: boolean }>('/api/security/reminders', {
           method: 'PUT',
           body: JSON.stringify({ reminders }),

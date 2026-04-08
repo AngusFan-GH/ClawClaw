@@ -44,7 +44,8 @@
       "paused": "已暂停"
     },
     "toasts": {
-      "exists": "这条叮嘱已经在列表里了"
+      "exists": "这条叮嘱已经在列表里了",
+      "interrupted": "已停止当前这轮运行，让更新后的叮嘱立刻对后续回合生效。"
     }
   },
   "aiProviders": {
@@ -505,7 +506,8 @@
       "applyFailed": "应用失败",
       "resetSuccess": "安全策略已重置。",
       "resetFailed": "重置失败",
-      "enablePromptPolicyFirst": "请先添加至少一个禁止目录，或勾选至少一条限制规则，再启用安全策略。"
+      "enablePromptPolicyFirst": "请先添加至少一个禁止目录，或勾选至少一条限制规则，再启用安全策略。",
+      "interrupted": "已停止当前这轮运行，让更新后的安全策略立刻对后续回合生效。"
     },
     "dialog": {
       "selectDeniedDirs": "选择禁止的目录"
