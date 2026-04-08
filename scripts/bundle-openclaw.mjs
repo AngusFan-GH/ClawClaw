@@ -18,6 +18,7 @@
 
 import 'zx/globals';
 import semver from 'semver';
+import { pathToFileURL } from 'node:url';
 import bundleValidator from './openclaw-bundle-validator.cjs';
 
 const {
@@ -51,6 +52,7 @@ if (!fs.existsSync(openclawLink)) {
 // some Node versions; resolve symlinks using the native path form.
 const openclawReal = fs.realpathSync.native(openclawLink);
 echo`   openclaw resolved: ${openclawReal}`;
+const openclawBundledPluginPostinstallScript = path.join(openclawReal, 'scripts', 'postinstall-bundled-plugins.mjs');
 
 // 2. Clean and create output directory
 if (fs.existsSync(OUTPUT)) {
@@ -485,6 +487,61 @@ if (mergedExtensionDepCount > 0) {
     echo`   🛠️  Repaired ${repairedAfterExtensionMerge} dependency override(s) after extension merge`;
   }
 }
+
+async function stageBundledPluginRuntimeDeps(packageRoot) {
+  if (!fs.existsSync(openclawBundledPluginPostinstallScript)) {
+    echo`   ⚠️  Skipped bundled plugin runtime deps staging: postinstall script not found`;
+    return;
+  }
+
+  const { discoverBundledPluginRuntimeDeps, runBundledPluginPostinstall } = await import(
+    pathToFileURL(openclawBundledPluginPostinstallScript).href
+  );
+
+  const extensionsDir = path.join(packageRoot, 'dist', 'extensions');
+  const findMissingSpecs = () => {
+    const runtimeDeps = discoverBundledPluginRuntimeDeps({
+      extensionsDir,
+      existsSync: fs.existsSync,
+    });
+    return runtimeDeps
+      .filter((dep) => !fs.existsSync(path.join(packageRoot, dep.sentinelPath)))
+      .map((dep) => `${dep.name}@${dep.version}`);
+  };
+
+  const missingBefore = findMissingSpecs();
+  if (missingBefore.length === 0) {
+    return;
+  }
+
+  echo`   📦 Installing bundled plugin runtime deps: ${missingBefore.join(', ')}`;
+  runBundledPluginPostinstall({
+    packageRoot,
+    extensionsDir,
+    execPath: process.execPath,
+    env: {
+      ...process.env,
+      OPENCLAW_NO_RESPAWN: '1',
+    },
+    log: {
+      log(message) {
+        echo`   ${message}`;
+      },
+      warn(message) {
+        echo`   ⚠️  ${message}`;
+      },
+    },
+  });
+
+  const missingAfter = findMissingSpecs();
+  if (missingAfter.length > 0) {
+    throw new Error(
+      `Bundled plugin runtime deps are still missing after staging: ${missingAfter.join(', ')}`
+    );
+  }
+}
+
+await stageBundledPluginRuntimeDeps(OUTPUT);
 
 // 6. Clean up the bundle to reduce package size
 //

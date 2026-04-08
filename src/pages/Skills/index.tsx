@@ -13,7 +13,6 @@ import {
   Plus,
   Key,
   Trash2,
-  RefreshCw,
   FolderOpen,
   FileCode,
   Globe,
@@ -30,7 +29,8 @@ import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { useSkillsStore } from '@/stores/skills';
 import { useGatewayStore } from '@/stores/gateway';
-import { LoadingIcon, LoadingSpinner, PageLoader } from '@/components/common/LoadingSpinner';
+import { LoadingSpinner, PageLoader } from '@/components/common/LoadingSpinner';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { cn } from '@/lib/utils';
 import { invokeIpc } from '@/lib/api-client';
@@ -1127,16 +1127,13 @@ export function Skills() {
                     </div>
                   )}
                 </div>
-                <Button
-                  variant="outline"
-                  size="icon"
+                <RefreshButton
+                  label={t('refresh')}
+                  loading={loading}
+                  mode="icon"
                   onClick={() => void fetchSkills(selectedAgentId)}
                   disabled={!isGatewayRunning}
-                  className="h-10 w-10 rounded-[12px] border-border/70 bg-transparent shadow-none text-muted-foreground hover:bg-accent/70 hover:text-foreground"
-                  title={t('refresh')}
-                >
-                  {loading ? <LoadingIcon className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}
-                </Button>
+                />
               </div>
             </div>
 

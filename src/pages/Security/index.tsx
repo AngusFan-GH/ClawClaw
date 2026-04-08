@@ -3,7 +3,7 @@ import { FolderPlus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { LoadingIcon } from '@/components/common/LoadingSpinner';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
@@ -223,15 +223,12 @@ export function Security() {
             />
 
             <div className="flex flex-wrap items-center gap-2 md:justify-end">
-              {loading ? (
-                <div className="inline-flex h-9 items-center gap-2 rounded-xl border border-border/70 bg-card/85 px-3.5 text-[12px] font-medium text-muted-foreground">
-                  <LoadingIcon className="h-3.5 w-3.5" />
-                  <span>{t('security.loadingDescription')}</span>
-                </div>
-              ) : null}
-              <Button variant="outline" onClick={() => void loadPolicy()} disabled={applying}>
-                {t('security.actions.reload')}
-              </Button>
+              <RefreshButton
+                label={t('security.actions.reload')}
+                loading={loading}
+                onClick={() => void loadPolicy()}
+                disabled={applying}
+              />
               <Button variant="outline" onClick={() => void resetPolicy()} disabled={applying}>
                 {t('security.actions.reset')}
               </Button>

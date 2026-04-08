@@ -13,7 +13,6 @@ import {
   Pause,
   Play,
   Plus,
-  RefreshCw,
   Search,
   Trash2,
   X,
@@ -28,6 +27,7 @@ import { Select } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { LoadingIcon, PageLoader } from '@/components/common/LoadingSpinner';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useGatewayStore } from '@/stores/gateway';
 import { useChannelsStore } from '@/stores/channels';
@@ -1194,10 +1194,13 @@ export function Cron() {
           subtitle={t('subtitle')}
           actions={(
             <div className="flex flex-nowrap items-center gap-2">
-              <Button variant="outline" onClick={handleRefresh} disabled={!isGatewayRunning || refreshing} className="shrink-0 rounded-xl">
-                {refreshing ? <LoadingIcon className="h-4 w-4 mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                {t('refresh')}
-              </Button>
+              <RefreshButton
+                label={t('refresh')}
+                loading={refreshing}
+                onClick={handleRefresh}
+                disabled={!isGatewayRunning}
+                className="shrink-0"
+              />
               <Button
                 onClick={() => {
                   setEditingJob(undefined);

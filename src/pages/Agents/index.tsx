@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, Bot, Check, ChevronDown, FolderOpen, PencilLine, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { AlertCircle, Bot, Check, ChevronDown, FolderOpen, PencilLine, Plus, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { ChannelLogo as SharedChannelLogo } from '@/components/channels/ChannelLogo';
@@ -95,20 +96,7 @@ export function Agents() {
           subtitle={t('subtitle')}
           actions={(
             <div className="flex items-center gap-3">
-              {loading && (
-                <div className="inline-flex h-9 items-center gap-2 rounded-xl border border-border/70 bg-card/85 px-3.5 text-[12px] font-medium text-muted-foreground">
-                  <LoadingIcon className="h-3.5 w-3.5" />
-                  <span>{t('loadingDescription', '正在同步分身配置和绑定关系，请稍候。')}</span>
-                </div>
-              )}
-              <Button
-                variant="outline"
-                onClick={handleRefresh}
-                className="h-9 rounded-xl border-black/10 bg-transparent px-4 text-[13px] font-medium text-foreground/80 shadow-none transition-colors hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
-              >
-                <RefreshCw className="h-3.5 w-3.5 mr-2" />
-                {t('refresh')}
-              </Button>
+              <RefreshButton label={t('refresh')} loading={loading} onClick={handleRefresh} />
               <Button
                 onClick={() => setShowAddDialog(true)}
                 className="h-9 rounded-xl px-4 text-[13px] font-medium shadow-none"

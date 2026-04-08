@@ -11,7 +11,9 @@ import {
   Monitor,
   Moon,
   RefreshCw,
+  Search,
   Sun,
+  Wrench,
 } from 'lucide-react';
 import {
   DndContext,
@@ -58,6 +60,7 @@ import {
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { UpdateSettings } from '@/components/settings/UpdateSettings';
 import type { GatewayStatus } from '@/types/gateway';
 import { ALL_MENU_ITEMS, type MenuItemId } from '@/shared/menu-items';
@@ -1313,16 +1316,12 @@ export function Settings() {
                         />
 
                         <div className="flex flex-wrap gap-2">
-                          <Button
+                          <RefreshButton
                             type="button"
-                            variant="outline"
-                            size="sm"
+                            label={t('common:actions.refresh')}
                             onClick={refreshControlUiInfo}
-                            className="h-10 rounded-[10px] border-black/10 bg-transparent px-4 dark:border-white/10 dark:hover:bg-white/5"
-                          >
-                            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                            {t('common:actions.refresh')}
-                          </Button>
+                            className="h-10 rounded-[10px] px-4"
+                          />
                           <Button
                             type="button"
                             variant="outline"
@@ -1403,7 +1402,7 @@ export function Settings() {
                         {doctorRunningMode === 'diagnose' ? (
                           <LoadingIcon className="mr-1.5 h-3.5 w-3.5" />
                         ) : (
-                          <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                          <Search className="mr-1.5 h-3.5 w-3.5" />
                         )}
                         {t('developer.runDoctor')}
                       </Button>
@@ -1417,7 +1416,7 @@ export function Settings() {
                         {doctorRunningMode === 'fix' ? (
                           <LoadingIcon className="mr-1.5 h-3.5 w-3.5" />
                         ) : (
-                          <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                          <Wrench className="mr-1.5 h-3.5 w-3.5" />
                         )}
                         {t('developer.runDoctorFix')}
                       </Button>

@@ -3,11 +3,9 @@
  * Model selector, gateway status, refresh, and thinking toggle.
  * Rendered in the Header when on the Chat page.
  */
-import { RefreshCw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { LoadingIcon } from '@/components/common/LoadingSpinner';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
@@ -116,15 +114,14 @@ export function ChatToolbar({
 
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button
+            <RefreshButton
+              label={t('toolbar.refresh')}
+              loading={loading}
+              mode="icon"
               variant="ghost"
-              size="icon"
-              className="h-8 w-8"
+              className="h-8 w-8 rounded-lg border-0 bg-transparent"
               onClick={() => refresh()}
-              disabled={loading}
-            >
-              {loading ? <LoadingIcon className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}
-            </Button>
+            />
           </TooltipTrigger>
           <TooltipContent>
             <p>{t('toolbar.refresh')}</p>

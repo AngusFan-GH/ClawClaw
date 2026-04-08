@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
-import { AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
+import { AlertCircle, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { LoadingIcon } from '@/components/common/LoadingSpinner';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { useChannelsStore } from '@/stores/channels';
 import { useAgentsStore } from '@/stores/agents';
 import { useGatewayStore } from '@/stores/gateway';
@@ -111,21 +111,12 @@ export function Channels() {
           subtitle={t('subtitle')}
           actions={(
             <div className="flex items-center gap-2.5">
-              {loading && (
-                <div className="inline-flex h-8 items-center gap-2 rounded-[12px] border border-border/70 bg-card/85 px-3 text-[12px] font-medium text-muted-foreground">
-                  <LoadingIcon className="h-3.5 w-3.5" />
-                  <span>{t('refreshingStatus', '正在同步连接状态')}</span>
-                </div>
-              )}
-              <Button
-                variant="outline"
+              <RefreshButton
+                label={t('refresh')}
+                loading={loading}
+                mode="compact"
                 onClick={() => void fetchChannels(true)}
-                disabled={loading}
-                className="h-8 rounded-[12px] border-black/10 bg-transparent px-3.5 text-[12px] font-medium text-foreground/80 shadow-none transition-colors hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
-              >
-                <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                {t('refresh')}
-              </Button>
+              />
             </div>
           )}
         />

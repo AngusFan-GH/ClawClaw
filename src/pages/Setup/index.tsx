@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { useSettingsStore } from '@/stores/settings';
@@ -2011,15 +2012,13 @@ function ModelSetupContent({
         </div>
 
         <div className="flex items-center justify-center">
-          <Button
+          <RefreshButton
+            label={t('modelSetup.refresh')}
+            loading={refreshing}
             variant="ghost"
-            onClick={() => void handleRefresh()}
-            disabled={refreshing}
             className="h-11 rounded-xl px-6"
-          >
-            {refreshing ? <LoadingIcon className="mr-2 h-4 w-4" /> : null}
-            {t('modelSetup.refresh')}
-          </Button>
+            onClick={() => void handleRefresh()}
+          />
         </div>
       </div>
     );
@@ -2135,16 +2134,14 @@ function ModelSetupContent({
               >
                 {t('modelSetup.editProvider')}
               </Button>
-              <Button
+              <RefreshButton
+                label={t('modelSetup.refresh')}
+                loading={refreshing}
                 variant="ghost"
-                size="sm"
+                mode="compact"
                 className="h-7 rounded-lg px-2.5 text-xs"
                 onClick={() => void handleRefresh()}
-                disabled={refreshing}
-              >
-                {refreshing ? <LoadingIcon className="mr-2 h-4 w-4" /> : null}
-                {t('modelSetup.refresh')}
-              </Button>
+              />
             </div>
           </div>
         )}
