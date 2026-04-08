@@ -114,7 +114,7 @@ export function Channels() {
               {loading && (
                 <div className="inline-flex h-8 items-center gap-2 rounded-[12px] border border-border/70 bg-card/85 px-3 text-[12px] font-medium text-muted-foreground">
                   <LoadingIcon className="h-3.5 w-3.5" />
-                  <span>{t('refreshingStatus', '正在同步连接状态...')}</span>
+                  <span>{t('refreshingStatus', '正在同步连接状态')}</span>
                 </div>
               )}
               <Button

@@ -36,7 +36,7 @@
   "channelsLine": "Channels: {{channels}}",
   "deleteAgent": "Delete Agent",
   "settings": "Settings",
-  "creating": "Creating...",
+  "creating": "Creating",
   "createDialog": {
     "title": "Add Agent",
     "description": "Create a new agent by name. ClawClaw will copy the main agent's workspace bootstrap files and runtime auth setup.",
@@ -93,7 +93,7 @@
     "account": "Account: {{accountId}}",
     "accountConfigured": "This account is configured and ready to bind.",
     "accountNotConfigured": "This account is not fully configured yet. Finish it on the Connections page first.",
-    "binding": "Binding...",
+    "binding": "Binding",
     "boundHere": "Bound",
     "bindAction": "Bind to Current Agent",
     "defaultFallbackHere": "Default fallback here"

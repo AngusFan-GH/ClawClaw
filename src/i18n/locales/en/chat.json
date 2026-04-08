@@ -52,7 +52,7 @@
     "close": "Close"
   },
   "status": {
-    "processingToolResults": "Processing tool results..."
+    "processingToolResults": "Processing tool results"
   },
   "thread": {
     "codeCopy": "Copy",
@@ -77,11 +77,11 @@
     "exec": "Exec",
     "historyWindowLimited": "Only the latest portion of this conversation is loaded. Earlier messages may be hidden.",
     "historyCompacted": "Earlier parts of this conversation were compacted by OpenClaw to save context window space.",
-    "loadingEarlier": "Loading earlier messages…"
+    "loadingEarlier": "Loading earlier messages"
   },
   "history": {
     "title": "Recent chats",
-    "loading": "Restoring recent chats...",
+    "loading": "Restoring recent chats",
     "connectingGateway": "Gateway is reconnecting.",
     "waitingForGateway": "Gateway offline. Start or restart the Gateway to continue.",
     "backgroundSessions": "Background Tasks",

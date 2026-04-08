@@ -52,7 +52,7 @@
     "close": "閉じる"
   },
   "status": {
-    "processingToolResults": "ツール結果を処理中..."
+    "processingToolResults": "ツール結果を処理中"
   },
   "thread": {
     "codeCopy": "コピー",
@@ -76,11 +76,11 @@
     "exec": "Exec",
     "historyWindowLimited": "この会話は最新部分のみ読み込まれています。以前のメッセージは表示されていない可能性があります。",
     "historyCompacted": "この会話の古い部分は、コンテキスト節約のため OpenClaw により圧縮されています。",
-    "loadingEarlier": "以前のメッセージを読み込み中…"
+    "loadingEarlier": "以前のメッセージを読み込み中"
   },
   "history": {
     "title": "最近の会話",
-    "loading": "最近の会話を復元しています…",
+    "loading": "最近の会話を復元しています",
     "connectingGateway": "ゲートウェイ再接続中です",
     "waitingForGateway": "ゲートウェイ未接続です。起動または再起動してから再試行してください",
     "backgroundSessions": "バックグラウンド タスク",

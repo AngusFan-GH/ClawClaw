@@ -1427,7 +1427,7 @@ function BindingPickerModal({
                         className="h-9 rounded-xl px-4 text-[13px] font-medium shadow-none"
                       >
                         {bindingKey === currentBindingKey
-                          ? t('bindingDialog.binding', '绑定中...')
+                          ? t('bindingDialog.binding', '绑定中')
                           : binding.isAssignedHere
                             ? t('bindingDialog.boundHere', '已绑定')
                             : binding.implicitAssignedHere

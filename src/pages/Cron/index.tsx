@@ -797,7 +797,7 @@ function TaskDialog({ job, channelOptions, defaultSessionTarget, onClose, onSave
               {saving ? (
                 <>
                   <LoadingIcon className="h-4 w-4 mr-2" />
-                  {t('common:status.saving', 'Saving...')}
+                  {t('common:status.saving', 'Saving')}
                 </>
               ) : job ? t('dialog.saveChanges') : t('dialog.createTitle')}
             </Button>
@@ -1057,7 +1057,7 @@ function DeliveryChannelDialog({ job, channelOptions, defaultSessionTarget, onCl
               {saving ? (
                 <>
                   <LoadingIcon className="h-4 w-4 mr-2" />
-                  {t('common:status.saving', 'Saving...')}
+                  {t('common:status.saving', 'Saving')}
                 </>
               ) : t('dialog.saveChanges')}
             </Button>

@@ -120,7 +120,7 @@
       "modelFilterVision": "Vision",
       "modelFilterAudio": "Audio",
       "modelFilterEmbedding": "Embedding",
-      "loadingModels": "Loading models from this source...",
+      "loadingModels": "Loading models from this source",
       "noVerifiedModels": "No verified model list is available yet. You can still enter a model ID manually.",
       "protocol": "Protocol",
       "fallbackModels": "Fallback Models",
@@ -176,9 +176,9 @@
       "loginButton": "Login with Browser",
       "loggedIn": "Signed In",
       "getApiKey": "Get API Key",
-      "waiting": "Waiting...",
+      "waiting": "Waiting",
       "openLoginPage": "Open Login Page",
-      "waitingApproval": "Waiting for approval in browser...",
+      "waitingApproval": "Waiting for approval in browser",
       "cancel": "Cancel",
       "codeCopied": "Code copied to clipboard",
       "authFailed": "Authentication Failed",
@@ -196,7 +196,7 @@
       "step1": "Copy the authorization code below.",
       "step2": "Open the login page in your browser.",
       "step3": "Paste the code to approve access.",
-      "requestingCode": "Requesting secure login code..."
+      "requestingCode": "Requesting secure login code"
     }
   },
   "gateway": {
@@ -255,19 +255,19 @@
     "unsupported": "Automatic updates are not available in the current environment. Install a packaged build to use them.",
     "actionsDisabled": "Unavailable",
     "status": {
-      "checking": "Checking for updates...",
-      "downloading": "Downloading update...",
+      "checking": "Checking for updates",
+      "downloading": "Downloading update",
       "available": "Update available: v{{version}}",
       "downloaded": "Ready to install: v{{version}}",
-      "autoInstalling": "Restarting to install update in {{seconds}}s...",
+      "autoInstalling": "Restarting to install update in {{seconds}}s",
       "failed": "Update check failed",
       "latest": "You have the latest version",
       "check": "Check for updates to get the latest features"
     },
     "channelDesc": "Only the stable update feed is currently available.",
     "action": {
-      "checking": "Checking...",
-      "downloading": "Downloading...",
+      "checking": "Checking",
+      "downloading": "Downloading",
       "download": "Download Update",
       "install": "Install & Restart",
       "cancelAutoInstall": "Cancel",
@@ -310,7 +310,7 @@
   },
   "security": {
     "title": "Security Policy",
-    "loading": "Loading security policy...",
+    "loading": "Loading security policy",
     "enableDirectoryPolicy": "Enable security policy",
     "enableDirectoryPolicyDesc": "Turn this on to apply the limits below right away. Turn it off to keep the settings without actively blocking actions.",
     "addDeniedDirectories": "Add denied directory",
@@ -358,7 +358,7 @@
       "reset": "Reset"
     },
     "apply": "Apply",
-    "applying": "Applying...",
+    "applying": "Applying",
     "pendingNotice": "These changes are not active yet. Apply them to sync the config and restart the Gateway.",
     "lastApplied": "Last applied: {{time}}",
     "summary": {

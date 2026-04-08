@@ -55,7 +55,7 @@
     "gateway": "Gateway Service",
     "startGateway": "Start Gateway",
     "status": {
-      "checking": "Checking...",
+      "checking": "Checking",
       "success": "Node.js is available",
       "error": "Failed",
       "gatewayRunning": "Running on port {{port}}",
@@ -116,7 +116,7 @@
     "progress": "Progress",
     "status": {
       "pending": "Pending",
-      "installing": "Installing...",
+      "installing": "Installing",
       "installed": "Installed",
       "failed": "Failed"
     },

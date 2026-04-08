@@ -36,7 +36,7 @@
   "channelsLine": "接続: {{channels}}",
   "deleteAgent": "エージェントを削除",
   "settings": "設定",
-  "creating": "作成中...",
+  "creating": "作成中",
   "createDialog": {
     "title": "エージェントを追加",
     "description": "名前だけで新しいエージェントを作成できます。ClawClaw はメインエージェントのワークスペース初期ファイルと認証設定をコピーします。",
@@ -93,7 +93,7 @@
     "account": "アカウント: {{accountId}}",
     "accountConfigured": "このアカウントは設定済みなので、そのままバインドできます。",
     "accountNotConfigured": "このアカウントはまだ設定が完了していません。先に Connections ページで設定してください。",
-    "binding": "バインド中...",
+    "binding": "バインド中",
     "boundHere": "割り当て済み",
     "bindAction": "このエージェントにバインド",
     "defaultFallbackHere": "既定で接管中"

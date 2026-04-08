@@ -55,7 +55,7 @@
         "gateway": "ゲートウェイサービス",
         "startGateway": "ゲートウェイを起動",
         "status": {
-            "checking": "確認中...",
+            "checking": "確認中",
             "success": "Node.js は利用可能です",
             "error": "失敗",
             "gatewayRunning": "ポート {{port}} で実行中",
@@ -116,7 +116,7 @@
         "progress": "進捗",
         "status": {
             "pending": "待機中",
-            "installing": "インストール中...",
+            "installing": "インストール中",
             "installed": "インストール済み",
             "failed": "失敗"
         },

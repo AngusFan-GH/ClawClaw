@@ -732,7 +732,7 @@ export function Chat() {
             ? 'syncing'
             : 'unconfigured';
   const loadingDescription = isGatewayRunning
-    ? t('history.loading', '正在恢复最近对话…')
+    ? t('history.loading', '正在恢复最近对话')
     : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
       ? t('history.connectingGateway', '网关正在恢复连接')
       : t('history.waitingForGateway', '网关未连接，请启动或重启网关后再试');
@@ -798,7 +798,7 @@ export function Chat() {
                   )}
                   <span>
                     {compactionStatus.active
-                      ? t('status.compactingContext', 'Compacting context...')
+                      ? t('status.compactingContext', 'Compacting context')
                       : t('status.contextCompacted', 'Context compacted')}
                   </span>
                 </div>

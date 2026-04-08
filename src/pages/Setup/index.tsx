@@ -533,7 +533,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
       return (
         <span className="flex items-center gap-2 text-yellow-400 whitespace-nowrap">
           <LoadingIcon className="h-5 w-5 flex-shrink-0" />
-          {message || 'Checking...'}
+          {message || 'Checking'}
         </span>
       );
     }

@@ -36,7 +36,7 @@
   "channelsLine": "Channels: {{channels}}",
   "deleteAgent": "删除分身",
   "settings": "设置",
-  "creating": "创建中...",
+  "creating": "创建中",
   "createDialog": {
     "title": "添加分身",
     "description": "只需输入名称即可创建新的分身。ClawClaw 会复制主分身的工作区引导文件和运行时认证配置。",
@@ -93,7 +93,7 @@
     "account": "账户：{{accountId}}",
     "accountConfigured": "该账户已完成配置，可直接绑定。",
     "accountNotConfigured": "该账户尚未完成配置，建议先回到连接页补全配置。",
-    "binding": "绑定中...",
+    "binding": "绑定中",
     "boundHere": "已绑定",
     "bindAction": "绑定到当前分身",
     "defaultFallbackHere": "默认接管中"

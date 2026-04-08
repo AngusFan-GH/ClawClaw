@@ -971,7 +971,7 @@ function LocalProviderConfigDialog({
             取消
           </Button>
           <Button onClick={() => void handleSubmit()} disabled={saving} className="h-10 rounded-xl px-5">
-            {saving ? '保存中...' : '保存配置'}
+            {saving ? '保存中' : '保存配置'}
           </Button>
         </div>
       </div>
@@ -1129,7 +1129,7 @@ function AddLocalModelDialog({
         <div className="space-y-5 px-5 py-5">
           {loadingModels ? (
             <div className="rounded-[10px] border border-dashed border-border/80 bg-muted/35 px-5 py-8 text-sm text-muted-foreground">
-              正在获取模型列表...
+              正在获取模型列表
             </div>
           ) : usingResolvedModels ? (
             <>
@@ -1249,7 +1249,7 @@ function AddLocalModelDialog({
             取消
           </Button>
           <Button onClick={() => void handleSubmit()} disabled={saving || !effectiveModelId} className="h-10 rounded-xl px-5">
-            {saving ? '添加中...' : '添加模型'}
+            {saving ? '添加中' : '添加模型'}
           </Button>
         </div>
       </div>

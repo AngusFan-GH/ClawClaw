@@ -44,7 +44,7 @@
   "recentTokenHistory": {
     "title": "Recent Token Usage",
     "description": "Recent assistant responses and tool results with model/provider usage data.",
-    "loading": "Loading token usage history...",
+    "loading": "Loading token usage history",
     "empty": "No token usage history yet",
     "groupByModel": "By model",
     "groupByTime": "By time",

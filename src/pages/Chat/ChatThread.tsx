@@ -1073,7 +1073,7 @@ export const ChatThread = memo(function ChatThread({
     exec: t('thread.exec', 'Exec'),
     historyWindowLimited: t('thread.historyWindowLimited', 'Only the latest portion of this conversation is loaded. Earlier messages may be hidden.'),
     historyCompacted: t('thread.historyCompacted', 'Earlier parts of this conversation were compacted by OpenClaw to save context window space.'),
-    loadingEarlier: t('thread.loadingEarlier', 'Loading earlier messages…'),
+    loadingEarlier: t('thread.loadingEarlier', 'Loading earlier messages'),
   }), [resolvedAssistantName, t]);
 
   const hasCompactionSummary = useMemo(

@@ -55,7 +55,7 @@
     "gateway": "网关服务",
     "startGateway": "启动网关",
     "status": {
-      "checking": "检查中...",
+      "checking": "检查中",
       "success": "Node.js 可用",
       "error": "失败",
       "gatewayRunning": "运行在端口 {{port}}",
@@ -116,7 +116,7 @@
     "progress": "进度",
     "status": {
       "pending": "等待中",
-      "installing": "安装中...",
+      "installing": "安装中",
       "installed": "已安装",
       "failed": "失败"
     },

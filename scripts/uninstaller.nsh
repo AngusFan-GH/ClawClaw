@@ -39,6 +39,7 @@ Var unRemoveOpenClawDataCheckbox
 !macroend
 
 Function un.UninstallDataPageCreate
+  !insertmacro MUI_HEADER_TEXT "$(uninstallDataPageTitle)" "$(uninstallDataPageSubtitle)"
   nsDialogs::Create 1018
   Pop $0
 
@@ -46,14 +47,14 @@ Function un.UninstallDataPageCreate
   Pop $unRemoveClawClawDataCheckbox
   ${NSD_Uncheck} $unRemoveClawClawDataCheckbox
 
-  ${NSD_CreateLabel} 12u 22u 88% 20u "$(uninstallOptionAppDataDesc)"
+  ${NSD_CreateLabel} 12u 22u 88% 34u "$(uninstallOptionAppDataDesc)"
   Pop $1
 
-  ${NSD_CreateCheckbox} 0 56u 100% 12u "$(uninstallOptionOpenClawTitle)"
+  ${NSD_CreateCheckbox} 0 66u 100% 12u "$(uninstallOptionOpenClawTitle)"
   Pop $unRemoveOpenClawDataCheckbox
   ${NSD_Uncheck} $unRemoveOpenClawDataCheckbox
 
-  ${NSD_CreateLabel} 12u 70u 88% 24u "$(uninstallOptionOpenClawDesc)"
+  ${NSD_CreateLabel} 12u 80u 88% 28u "$(uninstallOptionOpenClawDesc)"
   Pop $2
 
   nsDialogs::Show

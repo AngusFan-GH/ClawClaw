@@ -119,8 +119,17 @@ LangString installRuntimeValidationFailed 2052 "安装完成后，内置 OpenCla
     doStopProcess:
     DetailPrint `Closing running "${PRODUCT_NAME}"...`
 
-    # Silently kill the process using nsProcess instead of taskkill / cmd.exe
+    # First try the lightweight image-name kill. On Windows, Electron helper
+    # subprocesses reuse the same executable name as the main app, so killing
+    # only the top-level instance can leave GPU/utility processes behind and
+    # make the installer think the app is still running.
     ${nsProcess::KillProcess} "${APP_EXECUTABLE_FILENAME}" $R0
+
+    # Then force-kill the whole process tree by image name so helper
+    # subprocesses do not keep the executable locked.
+    nsExec::ExecToStack '"$SYSDIR\taskkill.exe" /F /T /IM "${APP_EXECUTABLE_FILENAME}"'
+    Pop $R2
+    Pop $R3
 
     # to ensure that files are not "in-use"
     Sleep 300
@@ -136,6 +145,9 @@ LangString installRuntimeValidationFailed 2052 "安装完成后，内置 OpenCla
         # wait to give a chance to exit gracefully
         Sleep 1000
         ${nsProcess::KillProcess} "${APP_EXECUTABLE_FILENAME}" $R0
+        nsExec::ExecToStack '"$SYSDIR\taskkill.exe" /F /T /IM "${APP_EXECUTABLE_FILENAME}"'
+        Pop $R2
+        Pop $R3
 
         ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
         ${If} $R0 == 0
