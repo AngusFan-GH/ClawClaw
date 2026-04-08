@@ -74,7 +74,10 @@
     "toolCount": "{{count}} 个工具",
     "process": "进程",
     "read": "读取",
-    "exec": "执行"
+    "exec": "执行",
+    "historyWindowLimited": "当前只加载了这段对话最近的一部分，更早消息可能未显示。",
+    "historyCompacted": "这段对话更早的内容已被 OpenClaw 压缩，以节省上下文窗口。",
+    "loadingEarlier": "正在加载更早消息…"
   },
   "history": {
     "title": "最近对话",

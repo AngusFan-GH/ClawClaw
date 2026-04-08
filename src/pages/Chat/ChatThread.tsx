@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { Bot, Check, Copy, User, Zap } from 'lucide-react';
+import { AlertCircle, Bot, Check, Copy, User, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import type { RawMessage, StreamSegment } from '@/stores/chat';
@@ -41,6 +41,9 @@ type ChatThreadLabels = {
   process: string;
   read: string;
   exec: string;
+  historyWindowLimited: string;
+  historyCompacted: string;
+  loadingEarlier: string;
 };
 
 type ChatItem =
@@ -226,6 +229,9 @@ function buildChatItems(params: {
   const tools = params.showThinking && Array.isArray(params.toolMessages) ? params.toolMessages : [];
 
   for (let i = 0; i < history.length; i += 1) {
+    if (history[i].role === 'compactionSummary') {
+      continue;
+    }
     const normalizedRole = normalizeRoleForGrouping(history[i]);
     if (!params.showThinking && normalizedRole === 'tool') {
       continue;
@@ -934,6 +940,9 @@ export const ChatThread = memo(function ChatThread({
   streamingStartedAt,
   contextWindow,
   assistantName,
+  historyWindowLimited,
+  canLoadEarlier,
+  loadingEarlierHistory,
 }: {
   messages: RawMessage[];
   toolMessages: RawMessage[];
@@ -946,6 +955,9 @@ export const ChatThread = memo(function ChatThread({
   streamingStartedAt: number;
   contextWindow?: number | null;
   assistantName?: string;
+  historyWindowLimited?: boolean;
+  canLoadEarlier?: boolean;
+  loadingEarlierHistory?: boolean;
 }) {
   const { t, i18n } = useTranslation('chat');
   const locale = i18n.language || 'en';
@@ -972,7 +984,15 @@ export const ChatThread = memo(function ChatThread({
     process: t('thread.process', 'Process'),
     read: t('thread.read', 'Read'),
     exec: t('thread.exec', 'Exec'),
+    historyWindowLimited: t('thread.historyWindowLimited', 'Only the latest portion of this conversation is loaded. Earlier messages may be hidden.'),
+    historyCompacted: t('thread.historyCompacted', 'Earlier parts of this conversation were compacted by OpenClaw to save context window space.'),
+    loadingEarlier: t('thread.loadingEarlier', 'Loading earlier messages…'),
   }), [resolvedAssistantName, t]);
+
+  const hasCompactionSummary = useMemo(
+    () => messages.some((message) => message.role === 'compactionSummary'),
+    [messages]
+  );
 
   const items = useMemo(() => buildChatItems({
     messages,
@@ -1023,6 +1043,21 @@ export const ChatThread = memo(function ChatThread({
           </span>
         </div>
       ) : null}
+      {historyWindowLimited ? (
+        <div className="context-notice">
+          <AlertCircle className="context-notice__icon" />
+          <span>{loadingEarlierHistory ? labels.loadingEarlier : labels.historyWindowLimited}</span>
+          {canLoadEarlier && !loadingEarlierHistory ? (
+            <span className="context-notice__detail">↑</span>
+          ) : null}
+        </div>
+      ) : null}
+      {hasCompactionSummary ? (
+        <div className="context-notice">
+          <AlertCircle className="context-notice__icon" />
+          <span>{labels.historyCompacted}</span>
+        </div>
+      ) : null}
       {items.map((item) => {
         if (item.kind === 'group') {
           return (
@@ -1052,4 +1087,3 @@ export const ChatThread = memo(function ChatThread({
     </div>
   );
 });
-

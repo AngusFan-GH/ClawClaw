@@ -74,7 +74,10 @@
     "toolCount_other": "{{count}} tools",
     "process": "Process",
     "read": "Read",
-    "exec": "Exec"
+    "exec": "Exec",
+    "historyWindowLimited": "Only the latest portion of this conversation is loaded. Earlier messages may be hidden.",
+    "historyCompacted": "Earlier parts of this conversation were compacted by OpenClaw to save context window space.",
+    "loadingEarlier": "Loading earlier messages…"
   },
   "history": {
     "title": "Recent chats",

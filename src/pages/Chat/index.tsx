@@ -4,7 +4,7 @@
  * via gateway:rpc IPC. Session selector, thinking toggle, and refresh
  * are in the toolbar; messages render with markdown + streaming.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertCircle, Bot, Brain, Check, ChevronDown, Loader2 } from 'lucide-react';
 import { DEFAULT_SESSION_KEY, useChatStore, type RawMessage } from '@/stores/chat';
@@ -270,6 +270,9 @@ export function Chat() {
   const newSession = useChatStore((s) => s.newSession);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const pendingLocalSessionKeys = useChatStore((s) => s.pendingLocalSessionKeys);
+  const historyWindowLimited = useChatStore((s) => s.historyWindowLimited);
+  const hasEarlierHistory = useChatStore((s) => s.hasEarlierHistory);
+  const loadingEarlierHistory = useChatStore((s) => s.loadingEarlierHistory);
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const chatToolMessages = useChatStore((s) => s.chatToolMessages);
   const chatStreamSegments = useChatStore((s) => s.chatStreamSegments);
@@ -277,6 +280,7 @@ export function Chat() {
   const compactionStatus = useChatStore((s) => s.compactionStatus);
   const fallbackStatus = useChatStore((s) => s.fallbackStatus);
   const loadHistory = useChatStore((s) => s.loadHistory);
+  const loadEarlierHistory = useChatStore((s) => s.loadEarlierHistory);
   const loadSessions = useChatStore((s) => s.loadSessions);
   const restoreSessionsAfterGatewayReady = useChatStore((s) => s.restoreSessionsAfterGatewayReady);
   const sendMessage = useChatStore((s) => s.sendMessage);
@@ -298,6 +302,9 @@ export function Chat() {
   const [runtimeModelRefs, setRuntimeModelRefs] = useState<string[] | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
+  const shouldStickToBottomRef = useRef(true);
+  const pendingPrependScrollRef = useRef<{ height: number; top: number } | null>(null);
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
   const currentSession = sessions.find((session) => session.key === currentSessionKey);
   const sessionAgentId = useMemo(
@@ -468,12 +475,52 @@ export function Chat() {
     };
   }, [eligibleAccounts]);
 
-  // Auto-scroll on new messages, streaming, or activity changes
+  // Auto-scroll on new messages, streaming, or activity changes when the user is already near the bottom.
   useEffect(() => {
+    if (loadingEarlierHistory || !shouldStickToBottomRef.current) {
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({
       behavior: streamingMessage ? 'auto' : 'smooth',
     });
-  }, [messages, streamingMessage, sending, pendingFinal]);
+  }, [messages, streamingMessage, sending, pendingFinal, loadingEarlierHistory]);
+
+  useLayoutEffect(() => {
+    const pending = pendingPrependScrollRef.current;
+    const viewport = scrollViewportRef.current;
+    if (!pending || !viewport || loadingEarlierHistory) {
+      return;
+    }
+    const delta = viewport.scrollHeight - pending.height;
+    viewport.scrollTop = pending.top + Math.max(0, delta);
+    pendingPrependScrollRef.current = null;
+  }, [messages, loadingEarlierHistory]);
+
+  useEffect(() => {
+    if (!loadingEarlierHistory) {
+      pendingPrependScrollRef.current = null;
+    }
+  }, [loadingEarlierHistory]);
+
+  const handleMessagesScroll = (): void => {
+    const viewport = scrollViewportRef.current;
+    if (!viewport) return;
+
+    const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+    shouldStickToBottomRef.current = distanceFromBottom < 120;
+
+    if (
+      viewport.scrollTop <= 96
+      && hasEarlierHistory
+      && !loadingEarlierHistory
+    ) {
+      pendingPrependScrollRef.current = {
+        height: viewport.scrollHeight,
+        top: viewport.scrollTop,
+      };
+      void loadEarlierHistory();
+    }
+  };
 
   // Update timestamp when sending starts
   useEffect(() => {
@@ -713,7 +760,11 @@ export function Chat() {
       </div>
 
       {/* Messages Area */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <div
+        ref={scrollViewportRef}
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+        onScroll={handleMessagesScroll}
+      >
         <div className="max-w-4xl mx-auto space-y-4">
           {(loading && !sending) || isRestoringSessions ? (
             <PageLoader
@@ -797,6 +848,9 @@ export function Chat() {
                 sessionKey={currentSessionKey}
                 contextWindow={currentSession?.contextTokens ?? null}
                 assistantName={resolvedAssistantName}
+                historyWindowLimited={historyWindowLimited}
+                canLoadEarlier={hasEarlierHistory}
+                loadingEarlierHistory={loadingEarlierHistory}
               />
 
               {sending

@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { isBackgroundSession, useChatStore } from '@/stores/chat';
 import { useSettingsStore } from '@/stores/settings';
 import { useGatewayStore } from '@/stores/gateway';
+import * as hostApi from '@/lib/host-api';
 
 describe('Settings Store', () => {
   beforeEach(() => {
@@ -111,6 +112,8 @@ describe('Chat Store', () => {
       activeRunId: null,
       lastUserMessageAt: null,
       error: null,
+      hasEarlierHistory: false,
+      loadingEarlierHistory: false,
       pendingFinal: false,
       compactionStatus: null,
       fallbackStatus: null,
@@ -501,5 +504,54 @@ describe('Chat Store', () => {
 
     expect(loadSessionsMock).toHaveBeenCalledWith({ preserveCurrent: true, warmLabels: true });
     expect(useChatStore.getState().pendingSessionModelRefresh).toBe(false);
+  });
+
+  it('should prepend older transcript messages when loading earlier history', async () => {
+    const hostApiSpy = vi.spyOn(hostApi, 'hostApiFetch').mockResolvedValue({
+      success: true,
+      hasMore: false,
+      anchorFound: true,
+      messages: [
+        { role: 'user', content: 'Earlier prompt', timestamp: 100, id: 'msg-earlier-user' },
+        { role: 'assistant', content: 'Earlier answer', timestamp: 110, id: 'msg-earlier-assistant' },
+        { role: 'user', content: 'Current prompt', timestamp: 200, id: 'msg-current-user' },
+      ],
+    });
+
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      messages: [
+        { role: 'user', content: 'Current prompt', timestamp: 200, id: 'msg-current-user' },
+        { role: 'assistant', content: 'Current answer', timestamp: 210, id: 'msg-current-assistant' },
+      ],
+      hasEarlierHistory: true,
+      loadingEarlierHistory: false,
+    });
+
+    await useChatStore.getState().loadEarlierHistory();
+
+    expect(hostApiSpy).toHaveBeenCalledWith('/api/sessions/history', {
+      method: 'POST',
+      body: JSON.stringify({
+        sessionKey: 'agent:main:main',
+        limit: 1000,
+        before: {
+          role: 'user',
+          timestamp: 200,
+          id: 'msg-current-user',
+        },
+      }),
+    });
+
+    expect(useChatStore.getState().messages.map((message) => message.id)).toEqual([
+      'msg-earlier-user',
+      'msg-earlier-assistant',
+      'msg-current-user',
+      'msg-current-assistant',
+    ]);
+    expect(useChatStore.getState().hasEarlierHistory).toBe(false);
+    expect(useChatStore.getState().historyWindowLimited).toBe(false);
+
+    hostApiSpy.mockRestore();
   });
 });
