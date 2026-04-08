@@ -18,6 +18,7 @@
 
 import 'zx/globals';
 import semver from 'semver';
+import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import bundleValidator from './openclaw-bundle-validator.cjs';
 
@@ -30,6 +31,8 @@ const {
 
 const ROOT = path.resolve(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'build', 'openclaw');
+const RUNTIME_DEPS_CACHE_ROOT = path.join(ROOT, 'build', 'cache', 'bundled-plugin-runtime');
+const RUNTIME_DEPS_CACHE_NODE_MODULES = path.join(RUNTIME_DEPS_CACHE_ROOT, 'node_modules');
 const BUNDLED_PLUGIN_REGISTRY =
   process.env.OPENCLAW_BUNDLED_PLUGIN_REGISTRY || 'https://registry.npmjs.org/';
 const NODE_MODULES = path.join(ROOT, 'node_modules');
@@ -55,6 +58,7 @@ if (!fs.existsSync(openclawLink)) {
 const openclawReal = fs.realpathSync.native(openclawLink);
 echo`   openclaw resolved: ${openclawReal}`;
 const openclawBundledPluginPostinstallScript = path.join(openclawReal, 'scripts', 'postinstall-bundled-plugins.mjs');
+const openclawNpmRunnerScript = path.join(openclawReal, 'scripts', 'npm-runner.mjs');
 
 // 2. Clean and create output directory
 if (fs.existsSync(OUTPUT)) {
@@ -361,7 +365,160 @@ function selectCompatibleRealPath(pkgName, rawRange) {
     if (check(pkgJson)) return realPath;
   }
 
+  // 3. Bundled extension-local dependencies under dist/extensions/*/node_modules.
+  // These packages are copied with OpenClaw's built-in extensions but may not be
+  // reachable from the bundle root unless we explicitly lift or preserve them.
+  const bundledExtensionRoots = [];
+  const bundledExtensionsDir = path.join(OUTPUT, 'dist', 'extensions');
+  if (fs.existsSync(bundledExtensionsDir)) {
+    try {
+      for (const entry of fs.readdirSync(bundledExtensionsDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const extNodeModules = path.join(bundledExtensionsDir, entry.name, 'node_modules');
+        if (fs.existsSync(extNodeModules)) {
+          bundledExtensionRoots.push(extNodeModules);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const searchQueue = [...bundledExtensionRoots];
+  const visitedNodeModules = new Set();
+  while (searchQueue.length > 0) {
+    const currentNodeModules = searchQueue.shift();
+    if (!currentNodeModules || visitedNodeModules.has(currentNodeModules)) continue;
+    visitedNodeModules.add(currentNodeModules);
+
+    const pkgPath = path.join(currentNodeModules, pkgName);
+    if (fs.existsSync(pkgPath)) {
+      let pkgJson;
+      try { pkgJson = JSON.parse(fs.readFileSync(path.join(pkgPath, 'package.json'), 'utf8')); }
+      catch { pkgJson = null; }
+      if (check(pkgJson)) return pkgPath;
+    }
+
+    let packages = [];
+    try { packages = listPackages(currentNodeModules); } catch { packages = []; }
+    for (const { fullPath } of packages) {
+      const nestedNodeModules = path.join(fullPath, 'node_modules');
+      if (fs.existsSync(nestedNodeModules)) {
+        searchQueue.push(nestedNodeModules);
+      }
+    }
+  }
+
+  // 4. Reusable cache for bundled plugin runtime dependencies.
+  if (fs.existsSync(RUNTIME_DEPS_CACHE_NODE_MODULES)) {
+    const cachedPkgPath = path.join(RUNTIME_DEPS_CACHE_NODE_MODULES, pkgName);
+    if (fs.existsSync(cachedPkgPath)) {
+      let pkgJson;
+      try { pkgJson = JSON.parse(fs.readFileSync(path.join(cachedPkgPath, 'package.json'), 'utf8')); }
+      catch { pkgJson = null; }
+      if (check(pkgJson)) return cachedPkgPath;
+    }
+
+    const cacheQueue = [RUNTIME_DEPS_CACHE_NODE_MODULES];
+    const visitedCacheNodeModules = new Set();
+    while (cacheQueue.length > 0) {
+      const currentNodeModules = cacheQueue.shift();
+      if (!currentNodeModules || visitedCacheNodeModules.has(currentNodeModules)) continue;
+      visitedCacheNodeModules.add(currentNodeModules);
+
+      const candidate = path.join(currentNodeModules, pkgName);
+      if (fs.existsSync(candidate)) {
+        let pkgJson;
+        try { pkgJson = JSON.parse(fs.readFileSync(path.join(candidate, 'package.json'), 'utf8')); }
+        catch { pkgJson = null; }
+        if (check(pkgJson)) return candidate;
+      }
+
+      let packages = [];
+      try { packages = listPackages(currentNodeModules); } catch { packages = []; }
+      for (const { fullPath } of packages) {
+        const nestedNodeModules = path.join(fullPath, 'node_modules');
+        if (fs.existsSync(nestedNodeModules)) cacheQueue.push(nestedNodeModules);
+      }
+    }
+  }
+
   return null;
+}
+
+function resolveExtensionDependencyRealPath(pkgName, rawRange) {
+  const spec = parseDependencySpec(rawRange);
+  const bundledExtensionsDir = path.join(OUTPUT, 'dist', 'extensions');
+  if (!fs.existsSync(bundledExtensionsDir)) return null;
+
+  const check = (pkgJson) => {
+    if (!pkgJson) return false;
+    if (spec?.type === 'alias' && spec.aliasTarget && pkgJson.name !== pkgName && pkgJson.name !== spec.aliasTarget) {
+      return false;
+    }
+    if (!isCheckableRange(spec)) return true;
+    return semver.satisfies(pkgJson.version || '0.0.0', spec.range, { includePrerelease: true, loose: true });
+  };
+
+  const queue = [];
+  const visited = new Set();
+  try {
+    for (const entry of fs.readdirSync(bundledExtensionsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const extNodeModules = path.join(bundledExtensionsDir, entry.name, 'node_modules');
+      if (fs.existsSync(extNodeModules)) queue.push(extNodeModules);
+    }
+  } catch {
+    return null;
+  }
+
+  while (queue.length > 0) {
+    const currentNodeModules = queue.shift();
+    if (!currentNodeModules || visited.has(currentNodeModules)) continue;
+    visited.add(currentNodeModules);
+
+    const candidate = path.join(currentNodeModules, ...pkgName.split('/'));
+    if (fs.existsSync(path.join(candidate, 'package.json'))) {
+      let pkgJson;
+      try { pkgJson = JSON.parse(fs.readFileSync(path.join(candidate, 'package.json'), 'utf8')); }
+      catch { pkgJson = null; }
+      if (check(pkgJson)) return candidate;
+    }
+
+    let packages = [];
+    try { packages = listPackages(currentNodeModules); } catch { packages = []; }
+    for (const { fullPath } of packages) {
+      const nestedNodeModules = path.join(fullPath, 'node_modules');
+      if (fs.existsSync(nestedNodeModules)) queue.push(nestedNodeModules);
+    }
+  }
+
+  return null;
+}
+
+function backfillDependencyIssuesFromExtensions(issues) {
+  let backfilled = 0;
+
+  for (const issue of issues) {
+    if (issue.type !== 'missing' && issue.type !== 'version-mismatch' && issue.type !== 'alias-mismatch') {
+      continue;
+    }
+
+    const candidateRealPath = resolveExtensionDependencyRealPath(issue.dependencyName, issue.requestedRange);
+    if (!candidateRealPath) continue;
+
+    const nestedDest = path.join(issue.packageDir, 'node_modules', issue.dependencyName);
+    try {
+      fs.rmSync(normWin(nestedDest), { recursive: true, force: true });
+      fs.mkdirSync(normWin(path.dirname(nestedDest)), { recursive: true });
+      fs.cpSync(normWin(candidateRealPath), normWin(nestedDest), { recursive: true, dereference: true });
+      backfilled++;
+    } catch {
+      // best effort
+    }
+  }
+
+  return backfilled;
 }
 
 function repairBundledDependencyGraph(nodeModulesRoot) {
@@ -496,57 +653,247 @@ async function stageBundledPluginRuntimeDeps(packageRoot) {
     return;
   }
 
-  const { discoverBundledPluginRuntimeDeps, runBundledPluginPostinstall } = await import(
+  const { createNestedNpmInstallEnv, discoverBundledPluginRuntimeDeps } = await import(
     pathToFileURL(openclawBundledPluginPostinstallScript).href
   );
+  const { resolveNpmRunner } = await import(pathToFileURL(openclawNpmRunnerScript).href);
 
   const extensionsDir = path.join(packageRoot, 'dist', 'extensions');
-  const findMissingSpecs = () => {
-    const runtimeDeps = discoverBundledPluginRuntimeDeps({
-      extensionsDir,
-      existsSync: fs.existsSync,
-    });
-    return runtimeDeps
-      .filter((dep) => !fs.existsSync(path.join(packageRoot, dep.sentinelPath)))
-      .map((dep) => `${dep.name}@${dep.version}`);
+  const extensionRuntimeDepRoots = fs.existsSync(extensionsDir)
+    ? fs
+        .readdirSync(extensionsDir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => path.join(extensionsDir, entry.name, 'node_modules'))
+        .filter((dir) => fs.existsSync(dir))
+    : [];
+
+  const ensureRuntimeDepsCacheRoot = () => {
+    fs.mkdirSync(RUNTIME_DEPS_CACHE_ROOT, { recursive: true });
+    const cachePackageJson = path.join(RUNTIME_DEPS_CACHE_ROOT, 'package.json');
+    if (!fs.existsSync(cachePackageJson)) {
+      fs.writeFileSync(
+        cachePackageJson,
+        `${JSON.stringify({ name: 'clawx-bundled-plugin-runtime-cache', private: true }, null, 2)}\n`,
+        'utf8'
+      );
+    }
   };
 
-  const missingBefore = findMissingSpecs();
-  if (missingBefore.length === 0) {
-    return;
-  }
+  const getRuntimeDepSourceRoots = () => {
+    const roots = [...extensionRuntimeDepRoots];
+    if (fs.existsSync(RUNTIME_DEPS_CACHE_NODE_MODULES)) {
+      roots.push(RUNTIME_DEPS_CACHE_NODE_MODULES);
+    }
+    return roots;
+  };
 
-  echo`   📦 Installing bundled plugin runtime deps: ${missingBefore.join(', ')}`;
-  echo`   🌐 Using bundled plugin registry: ${BUNDLED_PLUGIN_REGISTRY}`;
-  runBundledPluginPostinstall({
-    packageRoot,
-    extensionsDir,
-    execPath: process.execPath,
-    env: {
+  const findPackageInNodeModulesTree = (nodeModulesRoot, pkgName, rawRange = null) => {
+    const spec = rawRange == null ? null : parseDependencySpec(rawRange);
+    const matchesSpec = (pkgJson) => {
+      if (!pkgJson) return false;
+      if (spec?.type === 'alias' && spec.aliasTarget && pkgJson.name !== pkgName && pkgJson.name !== spec.aliasTarget) {
+        return false;
+      }
+      if (!isCheckableRange(spec)) return true;
+      return semver.satisfies(pkgJson.version || '0.0.0', spec.range, { includePrerelease: true, loose: true });
+    };
+
+    const queue = [nodeModulesRoot];
+    const visited = new Set();
+    const packageSegments = pkgName.split('/');
+
+    while (queue.length > 0) {
+      const currentNodeModules = queue.shift();
+      if (!currentNodeModules || visited.has(currentNodeModules)) continue;
+      visited.add(currentNodeModules);
+
+      const candidate = path.join(currentNodeModules, ...packageSegments);
+      if (fs.existsSync(path.join(candidate, 'package.json'))) {
+        let pkgJson;
+        try { pkgJson = JSON.parse(fs.readFileSync(path.join(candidate, 'package.json'), 'utf8')); }
+        catch { pkgJson = null; }
+        if (matchesSpec(pkgJson)) {
+          return candidate;
+        }
+      }
+
+      let packages;
+      try {
+        packages = listPackages(currentNodeModules);
+      } catch {
+        continue;
+      }
+
+      for (const { fullPath } of packages) {
+        const nestedNodeModules = path.join(fullPath, 'node_modules');
+        if (fs.existsSync(nestedNodeModules)) {
+          queue.push(nestedNodeModules);
+        }
+      }
+    }
+
+    return null;
+  };
+
+  const stageRuntimeDepFromSourceRoots = (depName, rawRange = null) => {
+    for (const sourceRoot of getRuntimeDepSourceRoots()) {
+      const sourcePkg = findPackageInNodeModulesTree(sourceRoot, depName, rawRange);
+      if (!sourcePkg) continue;
+
+      const destPkg = path.join(packageRoot, 'node_modules', ...depName.split('/'));
+      if (fs.existsSync(path.join(destPkg, 'package.json'))) {
+        return sourcePkg;
+      }
+
+      try {
+        fs.mkdirSync(normWin(path.dirname(destPkg)), { recursive: true });
+        fs.cpSync(normWin(sourcePkg), normWin(destPkg), { recursive: true, dereference: true });
+        copiedRealPathsByName.set(depName, sourcePkg);
+        return sourcePkg;
+      } catch (err) {
+        echo`   ⚠️  Failed to stage ${depName} from built-in extensions: ${err.message}`;
+      }
+    }
+
+    return null;
+  };
+
+  const stageMissingRuntimeDepsFromSourceRoots = (runtimeDeps) => {
+    let stagedCount = 0;
+    for (const dep of runtimeDeps) {
+      if (stageRuntimeDepFromSourceRoots(dep.name, dep.version)) {
+        stagedCount++;
+      }
+    }
+    if (stagedCount > 0) {
+      const repairedAfterLocalStage = repairBundledDependencyGraph(outputNodeModules);
+      if (repairedAfterLocalStage > 0) {
+        echo`   🛠️  Repaired ${repairedAfterLocalStage} dependency override(s) after local plugin staging`;
+      }
+    }
+    return stagedCount;
+  };
+
+  const installPackageSpecs = (specs) => {
+    const parsedSpecs = [...new Set(specs)]
+      .map((specText) => {
+        const atIndex = specText.lastIndexOf('@');
+        return {
+          raw: specText,
+          name: specText.slice(0, atIndex),
+          range: specText.slice(atIndex + 1),
+        };
+      })
+      .filter((spec) => spec.name && spec.range);
+
+    const specsToInstall = parsedSpecs
+      .filter((spec) => !findPackageInNodeModulesTree(RUNTIME_DEPS_CACHE_NODE_MODULES, spec.name, spec.range))
+      .map((spec) => spec.raw)
+      .sort();
+
+    if (specsToInstall.length === 0) return false;
+    ensureRuntimeDepsCacheRoot();
+
+    const nestedEnv = createNestedNpmInstallEnv({
       ...process.env,
       npm_config_registry: BUNDLED_PLUGIN_REGISTRY,
       NPM_CONFIG_REGISTRY: BUNDLED_PLUGIN_REGISTRY,
       OPENCLAW_NO_RESPAWN: '1',
-    },
-    log: {
-      log(message) {
-        echo`   ${message}`;
-      },
-      warn(message) {
-        echo`   ⚠️  ${message}`;
-      },
-    },
-  });
+    });
+    const npmRunner = resolveNpmRunner({
+      env: nestedEnv,
+      execPath: process.execPath,
+      existsSync: fs.existsSync,
+      npmArgs: ['install', '--omit=dev', '--no-save', '--package-lock=false', ...specsToInstall],
+    });
 
-  const missingAfter = findMissingSpecs();
+    const result = spawnSync(npmRunner.command, npmRunner.args, {
+      cwd: RUNTIME_DEPS_CACHE_ROOT,
+      encoding: 'utf8',
+      env: npmRunner.env ?? nestedEnv,
+      stdio: 'pipe',
+      shell: npmRunner.shell,
+      windowsVerbatimArguments: npmRunner.windowsVerbatimArguments,
+    });
+
+    if (result.stdout) process.stdout.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+
+    if (result.status !== 0) {
+      const output = [result.stderr, result.stdout].filter(Boolean).join('\n').trim();
+      throw new Error(output || `npm install failed for ${specsToInstall.join(', ')}`);
+    }
+
+    echo`   📦 Installed supplemental dependency specs into cache: ${specsToInstall.join(', ')}`;
+    return true;
+  };
+
+  const findMissingRuntimeDeps = () => {
+    const runtimeDeps = discoverBundledPluginRuntimeDeps({
+      extensionsDir,
+      existsSync: fs.existsSync,
+    });
+    return runtimeDeps.filter((dep) => !fs.existsSync(path.join(packageRoot, dep.sentinelPath)));
+  };
+
+  let missingBefore = findMissingRuntimeDeps();
+  if (missingBefore.length === 0) {
+    return;
+  }
+
+  let stagedFromExtensions = stageMissingRuntimeDepsFromSourceRoots(missingBefore);
+  if (stagedFromExtensions > 0) {
+    echo`   📎 Staged ${stagedFromExtensions} bundled plugin runtime deps from local sources`;
+    missingBefore = findMissingRuntimeDeps();
+  }
+
+  if (missingBefore.length === 0) {
+    return;
+  }
+
+  const missingSpecs = missingBefore.map((dep) => `${dep.name}@${dep.version}`);
+  echo`   📦 Syncing bundled plugin runtime deps into cache: ${missingSpecs.join(', ')}`;
+  echo`   🌐 Using bundled plugin registry: ${BUNDLED_PLUGIN_REGISTRY}`;
+  installPackageSpecs(missingSpecs);
+
+  let missingAfter = findMissingRuntimeDeps();
+  const restagedAfterInstall = stageMissingRuntimeDepsFromSourceRoots(missingAfter);
+  if (restagedAfterInstall > 0) {
+    echo`   📎 Restaged ${restagedAfterInstall} bundled plugin runtime deps from cache`;
+    missingAfter = findMissingRuntimeDeps();
+  }
+
+  const unresolvedValidationSpecs = validateBundledNodeModules(outputNodeModules)
+    .filter((issue) => {
+      if (issue.type !== 'missing' && issue.type !== 'version-mismatch') return false;
+      const spec = parseDependencySpec(issue.requestedRange);
+      if (!isCheckableRange(spec)) return false;
+      if (selectCompatibleRealPath(issue.dependencyName, issue.requestedRange)) return false;
+      if (resolveExtensionDependencyRealPath(issue.dependencyName, issue.requestedRange)) return false;
+      return true;
+    })
+    .map((issue) => `${issue.dependencyName}@${parseDependencySpec(issue.requestedRange).range}`);
+
+  if (installPackageSpecs(unresolvedValidationSpecs)) {
+    const repairedAfterSupplementalInstall = repairBundledDependencyGraph(outputNodeModules);
+    if (repairedAfterSupplementalInstall > 0) {
+      echo`   🛠️  Repaired ${repairedAfterSupplementalInstall} dependency override(s) after supplemental installs`;
+    }
+  }
+
   if (missingAfter.length > 0) {
     throw new Error(
-      `Bundled plugin runtime deps are still missing after staging: ${missingAfter.join(', ')}`
+      `Bundled plugin runtime deps are still missing after staging: ${missingAfter.map((dep) => `${dep.name}@${dep.version}`).join(', ')}`
     );
   }
 }
 
 await stageBundledPluginRuntimeDeps(OUTPUT);
+
+const repairedAfterPluginStaging = repairBundledDependencyGraph(outputNodeModules);
+if (repairedAfterPluginStaging > 0) {
+  echo`   🛠️  Repaired ${repairedAfterPluginStaging} dependency override(s) after bundled plugin staging`;
+}
 
 // 6. Clean up the bundle to reduce package size
 //
@@ -1076,7 +1423,23 @@ if (!entryExists || !distExists) {
   process.exit(1);
 }
 
-const dependencyIssues = validateBundledNodeModules(outputNodeModules);
+let dependencyIssues = validateBundledNodeModules(outputNodeModules);
+if (dependencyIssues.length > 0) {
+  const repairedBeforeValidationExit = repairBundledDependencyGraph(outputNodeModules);
+  if (repairedBeforeValidationExit > 0) {
+    echo`   🛠️  Repaired ${repairedBeforeValidationExit} dependency override(s) during final validation`;
+    dependencyIssues = validateBundledNodeModules(outputNodeModules);
+  }
+}
+
+if (dependencyIssues.length > 0) {
+  const backfilledFromExtensions = backfillDependencyIssuesFromExtensions(dependencyIssues);
+  if (backfilledFromExtensions > 0) {
+    echo`   📎 Backfilled ${backfilledFromExtensions} dependency override(s) from built-in extensions during final validation`;
+    dependencyIssues = validateBundledNodeModules(outputNodeModules);
+  }
+}
+
 if (dependencyIssues.length > 0) {
   echo`❌ Bundled dependency validation failed:`;
   for (const line of formatValidationIssues(dependencyIssues)) {

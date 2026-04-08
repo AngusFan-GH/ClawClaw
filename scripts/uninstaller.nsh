@@ -39,7 +39,6 @@ Var unRemoveOpenClawDataCheckbox
 !macroend
 
 Function un.UninstallDataPageCreate
-  !insertmacro MUI_HEADER_TEXT "$(uninstallDataPageTitle)" "$(uninstallDataPageSubtitle)"
   nsDialogs::Create 1018
   Pop $0
 
