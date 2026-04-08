@@ -15,6 +15,8 @@ import {
   compactSecurityPaths,
   createSecurityPolicySnapshot,
   getManagedToolDenyForRules,
+  mergeManagedToolDeny,
+  normalizeToolPolicyEntries,
   normalizeSecurityPath,
   normalizeSecurityPolicy,
   normalizeSecurityRules,
@@ -165,38 +167,55 @@ function mergeAgentsSecuritySection(
   policy: SecurityPolicy,
   reminders: ReminderItem[],
 ): string {
-  const deniedPaths = policy.prompt.enabled
-    ? policy.prompt.deniedPaths.map((p) => `  - ${p}`).join('\n')
-    : '  - not configured';
   const enabledReminders = reminders.filter((item) => item.enabled);
-  const reminderLines = enabledReminders.length > 0
-    ? enabledReminders.map((item) => `  - ${item.text}`).join('\n')
-    : '  - not configured';
   const selectedRules = policy.prompt.rules
     .map((key) => SECURITY_RULE_DEFINITIONS.find((rule) => rule.key === key))
     .filter((item): item is (typeof SECURITY_RULE_DEFINITIONS)[number] => Boolean(item));
+  const reminderLines = enabledReminders.length > 0
+    ? enabledReminders.map((item) => `- ${item.text}`).join('\n')
+    : '- No persistent reminders are enabled right now.';
+  const deniedPathLines = policy.prompt.enabled && policy.prompt.deniedPaths.length > 0
+    ? policy.prompt.deniedPaths.map((p) => `- Never read from, write to, or browse inside \`${p}\`.`).join('\n')
+    : '- No denied directories are configured right now.';
   const ruleLines = selectedRules.length > 0
-    ? selectedRules.map((rule) => `  - ${rule.title}: ${rule.description}`).join('\n')
-    : '  - not configured';
-
-  const section = [
-    POLICY_BEGIN,
-    '## Security Policy (Managed by ClawClaw)',
-    renderPolicyLine('prompt directory denylist', policy.prompt.enabled),
-    '- denied directories:',
-    `  - enabled: ${policy.prompt.enabled ? 'yes' : 'no'}`,
-    `  - paths:\n${deniedPaths}`,
-    '- persistent reminders:',
-    `  - enabled: ${enabledReminders.length > 0 ? 'yes' : 'no'}`,
-    `  - items:\n${reminderLines}`,
-    '- preset restrictions:',
-    `  - enabled: ${selectedRules.length > 0 ? 'yes' : 'no'}`,
-    `  - rules:\n${ruleLines}`,
-    POLICY_END,
-  ].join('\n');
+    ? selectedRules.map((rule) => `- ${rule.title}: ${rule.description}`).join('\n')
+    : '- No runtime hard blocks are configured right now.';
+  const hasManagedContent =
+    enabledReminders.length > 0
+    || (policy.prompt.enabled && policy.prompt.deniedPaths.length > 0)
+    || selectedRules.length > 0;
 
   const begin = existing.indexOf(POLICY_BEGIN);
   const end = existing.indexOf(POLICY_END);
+  if (!hasManagedContent) {
+    if (begin !== -1 && end !== -1) {
+      const before = existing.slice(0, begin).trimEnd();
+      const after = existing.slice(end + POLICY_END.length).trimStart();
+      return [before, after].filter(Boolean).join('\n\n').trimEnd() + '\n';
+    }
+    return existing;
+  }
+
+  const section = [
+    POLICY_BEGIN,
+    '## Session Startup',
+    'Treat the following managed rules as standing orders for every turn, including resumed and long-running conversations.',
+    'If context is compacted, keep these rules active unless the user explicitly changes them in the current conversation.',
+    '',
+    '### Persistent Reminders',
+    reminderLines,
+    '',
+    '## Red Lines',
+    'These restrictions are managed by ClawClaw. Do not override them on your own.',
+    '',
+    '### Denied Directories',
+    deniedPathLines,
+    '',
+    '### Runtime Hard Blocks',
+    ruleLines,
+    POLICY_END,
+  ].join('\n');
+
   if (begin !== -1 && end !== -1) {
     return `${existing.slice(0, begin)}${section}${existing.slice(end + POLICY_END.length)}`;
   }
@@ -285,24 +304,12 @@ async function normalizePolicyInput(body: Partial<SecurityPolicy>): Promise<Secu
 
 function normalizeToolEntries(values: unknown): string[] {
   if (!Array.isArray(values)) return [];
-
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const item of values) {
-    if (typeof item !== 'string') continue;
-    const trimmed = item.trim();
-    if (!trimmed) continue;
-    const key = trimmed.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(trimmed);
-  }
-  return out;
+  return normalizeToolPolicyEntries(values.filter((item): item is string => typeof item === 'string'));
 }
 
 async function applyPolicyRuntimeConfig(
   config: Record<string, unknown>,
-  _previousPolicy: SecurityPolicy,
+  previousPolicy: SecurityPolicy,
   nextPolicy: SecurityPolicy,
 ): Promise<{ managedToolDeny: string[]; totalToolDeny: string[] }> {
   const nextManaged = nextPolicy.prompt.enabled
@@ -310,7 +317,11 @@ async function applyPolicyRuntimeConfig(
     : [];
 
   const tools = ensureObject(config, 'tools');
-  const mergedDeny = normalizeToolEntries(nextManaged);
+  const mergedDeny = mergeManagedToolDeny(
+    normalizeToolEntries(tools.deny),
+    previousPolicy.prompt.enabled ? previousPolicy.prompt.rules : [],
+    nextPolicy.prompt.enabled ? nextPolicy.prompt.rules : [],
+  );
 
   if (mergedDeny.length > 0) {
     tools.deny = mergedDeny;
@@ -426,6 +437,23 @@ export async function handleSecurityRoutes(
       const reminders = normalizeReminders(await getSetting('reminders'));
       const syncResult = await syncSecurityPolicyArtifacts(config, policy, reminders);
       sendJson(res, 200, { success: true, sync: syncResult });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/security/reminders' && req.method === 'PUT') {
+    try {
+      const body = await parseJsonBody<{ reminders?: ReminderItem[] | string[] }>(req);
+      const reminders = normalizeReminders(body.reminders ?? []);
+      await setSetting('reminders', reminders);
+
+      const config = await readOpenclawConfig();
+      const policy = normalizeSecurityPolicy(await getSetting('securityPolicy'));
+      const syncResult = await syncSecurityPolicyArtifacts(config, policy, reminders);
+
+      sendJson(res, 200, { success: true, reminders, sync: syncResult });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

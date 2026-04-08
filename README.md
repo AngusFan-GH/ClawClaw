@@ -125,7 +125,7 @@ Connect to multiple AI providers (OpenAI, Anthropic, OpenCode Go, and more) with
 
 ### 🛡️ Granular Security Policy
 
-Configure denied directories and capability-level runtime restrictions separately. Directory entries are synced into workspace policy docs as guidance, while behavior restrictions can block runtime commands, file access, browser automation, web search, web fetch, and gateway access at the OpenClaw tool layer.
+Configure denied directories and capability-level runtime restrictions separately. Reminders and denied-directory rules are synced into the agent workspace `AGENTS.md` as standing orders that continue to apply in new and existing conversations, while behavior restrictions map to OpenClaw's tool deny layer without overwriting unrelated deny rules already present in `openclaw.json`.
 
 ### 💻 Flexible Model Setup
 

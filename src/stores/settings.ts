@@ -138,11 +138,12 @@ export const useSettingsStore = create<SettingsState>()(
         await syncFromMain();
       };
 
-      const syncReminderDocs = async (): Promise<void> => {
-        await hostApiFetch<{ success: boolean }>('/api/security/reminders/sync', {
-          method: 'POST',
-          body: JSON.stringify({}),
+      const persistReminders = async (reminders: ReminderItem[]): Promise<void> => {
+        await hostApiFetch<{ success: boolean }>('/api/security/reminders', {
+          method: 'PUT',
+          body: JSON.stringify({ reminders }),
         });
+        await syncFromMain();
       };
 
       return ({
@@ -247,10 +248,9 @@ export const useSettingsStore = create<SettingsState>()(
       setReminders: (reminders) => {
         const nextReminders = normalizeReminders(reminders);
         set({ reminders: nextReminders });
-        void persistMainSettings({ reminders: nextReminders }).catch(() => {
+        void persistReminders(nextReminders).catch(() => {
           void syncFromMain().catch(() => {});
         });
-        void syncReminderDocs().catch(() => {});
       },
       setSessionMemoryEnabled: (sessionMemoryEnabled) => {
         set({ sessionMemoryEnabled });

@@ -186,6 +186,20 @@ function normalizeToolPolicyEntry(value: string): string {
   return TOOL_NAME_ALIASES[normalized] ?? normalized;
 }
 
+export function normalizeToolPolicyEntries(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of values) {
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+    const key = normalizeToolPolicyEntry(trimmed);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+  }
+  return out;
+}
+
 function expandToolPolicyEntry(value: string): string[] {
   const normalized = normalizeToolPolicyEntry(value);
   const group = TOOL_GROUPS[normalized];
@@ -222,6 +236,21 @@ export function getManagedToolDenyForRules(rules: SecurityRuleKey[]): string[] {
   );
 }
 
+export function mergeManagedToolDeny(
+  existingToolDeny: readonly string[],
+  previousRules: readonly SecurityRuleKey[],
+  nextRules: readonly SecurityRuleKey[],
+): string[] {
+  const previousManaged = new Set(
+    getManagedToolDenyForRules([...previousRules]).map((entry) => normalizeToolPolicyEntry(entry)),
+  );
+  const preserved = existingToolDeny.filter(
+    (entry) => !previousManaged.has(normalizeToolPolicyEntry(entry)),
+  );
+  const nextManaged = getManagedToolDenyForRules([...nextRules]);
+  return normalizeToolPolicyEntries([...preserved, ...nextManaged]);
+}
+
 export function inferSecurityRulesFromToolDeny(toolDeny: string[]): SecurityRuleKey[] {
   const normalizedDeny = Array.from(
     new Set(toolDeny.map((entry) => normalizeToolPolicyEntry(entry)).filter(Boolean)),
@@ -235,7 +264,7 @@ export function createSecurityRuntimeState(
   policy: SecurityPolicy,
   toolDeny: string[],
 ): SecurityRuntimeState {
-  const normalizedToolDeny = Array.from(new Set(toolDeny.map((entry) => entry.trim()).filter(Boolean)));
+  const normalizedToolDeny = normalizeToolPolicyEntries(toolDeny);
   const activeRules = inferSecurityRulesFromToolDeny(normalizedToolDeny);
   const expectedRules = policy.prompt.enabled ? normalizeSecurityRules(policy.prompt.rules) : [];
   const expectedManagedDeny = getManagedToolDenyForRules(expectedRules);
