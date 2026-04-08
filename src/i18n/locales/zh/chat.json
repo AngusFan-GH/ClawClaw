@@ -80,7 +80,11 @@
     "title": "最近对话",
     "loading": "正在恢复最近对话…",
     "connectingGateway": "网关正在恢复连接",
-    "waitingForGateway": "网关未连接，请启动或重启网关后再试"
+    "waitingForGateway": "网关未连接，请启动或重启网关后再试",
+    "backgroundSessions": "后台任务",
+    "backgroundKindCron": "Cron",
+    "backgroundKindSubagent": "子任务",
+    "backgroundKindTask": "任务"
   },
   "historyBuckets": {
     "today": "今天",

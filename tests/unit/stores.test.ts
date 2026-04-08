@@ -2,7 +2,7 @@
  * Zustand Stores Tests
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useChatStore } from '@/stores/chat';
+import { isBackgroundSession, useChatStore } from '@/stores/chat';
 import { useSettingsStore } from '@/stores/settings';
 import { useGatewayStore } from '@/stores/gateway';
 
@@ -345,6 +345,50 @@ describe('Chat Store', () => {
     expect(useChatStore.getState().sessionLabels['agent:main:session-4']).toBe('真实历史标题');
 
     rpcMock.mockRestore();
+  });
+
+  it('should strip injected timestamp prefixes when warming sidebar titles', async () => {
+    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method, params) => {
+      if (method === 'sessions.list') {
+        return {
+          sessions: [
+            {
+              key: 'agent:main:session-5',
+              displayName: 'Main',
+              updatedAt: 500,
+            },
+          ],
+        };
+      }
+      if (method === 'chat.history') {
+        expect(params).toMatchObject({ sessionKey: 'agent:main:session-5', limit: 1000 });
+        return {
+          messages: [
+            {
+              role: 'user',
+              content: '[Wed 2026-04-08 10:30 GMT+8] 你好，请帮我整理今天的任务',
+              timestamp: 510,
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected RPC method: ${String(method)}`);
+    });
+
+    await useChatStore.getState().loadSessions({ preserveCurrent: true, warmLabels: true });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(useChatStore.getState().sessionLabels['agent:main:session-5']).toBe('你好，请帮我整理今天的任务');
+
+    rpcMock.mockRestore();
+  });
+
+  it('should classify cron and subagent sessions as background work', () => {
+    expect(isBackgroundSession({ key: 'agent:main:cron:daily', kind: 'cron' })).toBe(true);
+    expect(isBackgroundSession({ key: 'agent:main:subagent:child', kind: 'subagent' })).toBe(true);
+    expect(isBackgroundSession({ key: 'agent:main:session-6', spawnedBy: 'agent:main:main' })).toBe(true);
+    expect(isBackgroundSession({ key: 'agent:main:session-7' })).toBe(false);
   });
 
   it('should track compaction start and completion from agent events', async () => {

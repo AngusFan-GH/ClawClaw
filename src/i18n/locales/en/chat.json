@@ -80,7 +80,11 @@
     "title": "Recent chats",
     "loading": "Restoring recent chats...",
     "connectingGateway": "Gateway is reconnecting.",
-    "waitingForGateway": "Gateway offline. Start or restart the Gateway to continue."
+    "waitingForGateway": "Gateway offline. Start or restart the Gateway to continue.",
+    "backgroundSessions": "Background Tasks",
+    "backgroundKindCron": "Cron",
+    "backgroundKindSubagent": "Subagent",
+    "backgroundKindTask": "Task"
   },
   "historyBuckets": {
     "today": "Today",
