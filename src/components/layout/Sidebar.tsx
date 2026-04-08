@@ -381,6 +381,41 @@ export function Sidebar() {
     return parentKey;
   };
 
+  const backgroundSessionGroups = useMemo(() => {
+    const groups = new Map<string, {
+      id: string;
+      parentSessionKey?: string;
+      label: string;
+      sessions: typeof sortedBackgroundSessions;
+      latestActivity: number;
+    }>();
+
+    for (const session of sortedBackgroundSessions) {
+      const parentSessionKey = getParentSessionKey(session);
+      const groupId = parentSessionKey ? `parent:${parentSessionKey}` : 'standalone';
+      const existing = groups.get(groupId);
+      const activity = sessionLastActivity[session.key] ?? 0;
+
+      if (existing) {
+        existing.sessions.push(session);
+        existing.latestActivity = Math.max(existing.latestActivity, activity);
+        continue;
+      }
+
+      groups.set(groupId, {
+        id: groupId,
+        parentSessionKey: parentSessionKey || undefined,
+        label: parentSessionKey
+          ? getParentSessionLabel(session)
+          : t('chat:history.backgroundGroupStandalone', 'Other background tasks'),
+        sessions: [session],
+        latestActivity: activity,
+      });
+    }
+
+    return [...groups.values()].sort((a, b) => b.latestActivity - a.latestActivity);
+  }, [getParentSessionLabel, sessionLastActivity, sortedBackgroundSessions, t]);
+
   const shortcutIds = new Set<MenuItemId>(shortcutMenuItems);
   const shortcutItems = shortcutMenuItems
     .map((id) => SIDEBAR_MENU_ITEMS.find((item) => item.id === id)!)
@@ -596,92 +631,122 @@ export function Sidebar() {
                     )}
                   </div>
                   {backgroundExpanded && (
-                    <div className="space-y-1">
-                      {sortedBackgroundSessions.map((s) => {
-                        const canDeleteSession = !s.key.endsWith(':main');
-                        const parentSessionLabel = getParentSessionLabel(s);
-                        const parentSessionKey = getParentSessionKey(s);
-                        return (
-                          <div key={s.key} className="group relative flex items-center">
-                            <div
-                              className={cn(
-                                'w-full rounded-[14px] border px-3 py-2.5 pr-8 transition-all',
-                                'hover:border-black/6 hover:bg-white/55 dark:hover:border-white/10 dark:hover:bg-white/[0.06]',
-                                isOnChat && currentSessionKey === s.key
-                                  ? 'border-black/8 bg-white/90 text-foreground font-semibold shadow-[0_8px_18px_rgba(15,23,42,0.06)] dark:border-white/12 dark:bg-white/[0.08]'
-                                  : 'border-transparent bg-black/[0.025] text-foreground/78 dark:bg-white/[0.02]'
-                              )}
+                    <div className="space-y-3">
+                      {backgroundSessionGroups.map((group) => (
+                        <div key={group.id} className="space-y-1">
+                          <div className="flex items-center gap-2 px-2.5 pb-1">
+                            <span className="truncate text-[11px] font-semibold tracking-[0.06em] text-muted-foreground/70">
+                              {group.label}
+                            </span>
+                            <Badge
+                              variant="secondary"
+                              className="rounded-full px-1.5 py-0 text-[10px] font-medium text-muted-foreground"
                             >
+                              {group.sessions.length}
+                            </Badge>
+                            <div className="h-px flex-1 bg-black/6 dark:bg-white/10" />
+                            {group.parentSessionKey && (
                               <button
                                 type="button"
                                 onClick={() => {
-                                  switchSession(s.key);
+                                  switchSession(group.parentSessionKey!);
                                   navigate('/');
                                 }}
-                                className="w-full text-left"
+                                className="shrink-0 rounded-full bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-black/8 hover:text-foreground dark:bg-white/8 dark:hover:bg-white/12"
                               >
-                                <div className="flex min-w-0 items-center gap-2.5">
-                                  <span className="min-w-0 flex-1 truncate text-[13px] leading-5">
-                                    {getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle)}
-                                  </span>
-                                  <span className="shrink-0 rounded-[10px] bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground dark:bg-white/8">
-                                    {getBackgroundSessionKindLabel(s, (key, fallback) => t(key, fallback))}
-                                  </span>
-                                  <span
-                                    title={getSessionAgentLabel(s.key)}
-                                    className={cn(
-                                      'max-w-[104px] shrink-0 truncate rounded-[10px] px-2 py-0.5 text-[10px] font-medium',
-                                      isOnChat && currentSessionKey === s.key
-                                        ? 'bg-slate-100 text-foreground/72 dark:bg-white/10 dark:text-foreground/80'
-                                        : 'bg-black/[0.035] text-muted-foreground dark:bg-white/8'
-                                    )}
-                                  >
-                                    {getSessionAgentLabel(s.key)}
-                                  </span>
-                                </div>
-                              </button>
-                              {parentSessionKey && (
-                                <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground/80">
-                                  <CornerUpLeft className="h-3 w-3 shrink-0" />
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      switchSession(parentSessionKey);
-                                      navigate('/');
-                                    }}
-                                    className="truncate text-left hover:text-foreground"
-                                    title={parentSessionLabel}
-                                  >
-                                    {t('chat:history.parentSession', {
-                                      label: parentSessionLabel,
-                                      defaultValue: `来源：${parentSessionLabel}`,
-                                    })}
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                            {canDeleteSession && (
-                              <button
-                                aria-label={t('common:actions.delete')}
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  await handleDeleteSessionClick(
-                                    s.key,
-                                    getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle)
-                                  );
-                                }}
-                                className={cn(
-                                  'absolute right-1.5 flex h-7 w-7 items-center justify-center rounded-[10px] border border-transparent transition-opacity',
-                                  'opacity-0 group-hover:opacity-100',
-                                  'text-muted-foreground hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive'
-                                )}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
+                                {t('chat:history.openParentSession', 'Open')}
                               </button>
                             )}
                           </div>
-                        );
-                      })}
+                          <div className="space-y-1">
+                            {group.sessions.map((s) => {
+                              const canDeleteSession = !s.key.endsWith(':main');
+                              const parentSessionLabel = getParentSessionLabel(s);
+                              const parentSessionKey = getParentSessionKey(s);
+                              return (
+                                <div key={s.key} className="group relative flex items-center">
+                                  <div
+                                    className={cn(
+                                      'w-full rounded-[14px] border px-3 py-2.5 pr-8 transition-all',
+                                      'hover:border-black/6 hover:bg-white/55 dark:hover:border-white/10 dark:hover:bg-white/[0.06]',
+                                      isOnChat && currentSessionKey === s.key
+                                        ? 'border-black/8 bg-white/90 text-foreground font-semibold shadow-[0_8px_18px_rgba(15,23,42,0.06)] dark:border-white/12 dark:bg-white/[0.08]'
+                                        : 'border-transparent bg-black/[0.025] text-foreground/78 dark:bg-white/[0.02]'
+                                    )}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        switchSession(s.key);
+                                        navigate('/');
+                                      }}
+                                      className="w-full text-left"
+                                    >
+                                      <div className="flex min-w-0 items-center gap-2.5">
+                                        <span className="min-w-0 flex-1 truncate text-[13px] leading-5">
+                                          {getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle)}
+                                        </span>
+                                        <span className="shrink-0 rounded-[10px] bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground dark:bg-white/8">
+                                          {getBackgroundSessionKindLabel(s, (key, fallback) => t(key, fallback))}
+                                        </span>
+                                        <span
+                                          title={getSessionAgentLabel(s.key)}
+                                          className={cn(
+                                            'max-w-[104px] shrink-0 truncate rounded-[10px] px-2 py-0.5 text-[10px] font-medium',
+                                            isOnChat && currentSessionKey === s.key
+                                              ? 'bg-slate-100 text-foreground/72 dark:bg-white/10 dark:text-foreground/80'
+                                              : 'bg-black/[0.035] text-muted-foreground dark:bg-white/8'
+                                          )}
+                                        >
+                                          {getSessionAgentLabel(s.key)}
+                                        </span>
+                                      </div>
+                                    </button>
+                                    {parentSessionKey && group.parentSessionKey !== parentSessionKey && (
+                                      <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground/80">
+                                        <CornerUpLeft className="h-3 w-3 shrink-0" />
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            switchSession(parentSessionKey);
+                                            navigate('/');
+                                          }}
+                                          className="truncate text-left hover:text-foreground"
+                                          title={parentSessionLabel}
+                                        >
+                                          {t('chat:history.parentSession', {
+                                            label: parentSessionLabel,
+                                            defaultValue: `来源：${parentSessionLabel}`,
+                                          })}
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {canDeleteSession && (
+                                    <button
+                                      aria-label={t('common:actions.delete')}
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        await handleDeleteSessionClick(
+                                          s.key,
+                                          getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle)
+                                        );
+                                      }}
+                                      className={cn(
+                                        'absolute right-1.5 flex h-7 w-7 items-center justify-center rounded-[10px] border border-transparent transition-opacity',
+                                        'opacity-0 group-hover:opacity-100',
+                                        'text-muted-foreground hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive'
+                                      )}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

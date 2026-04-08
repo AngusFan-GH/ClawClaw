@@ -83,6 +83,8 @@
     "backgroundSessions": "バックグラウンド タスク",
     "showCronSessionsHidden": "Cron を表示 ({{count}})",
     "parentSession": "元の会話: {{label}}",
+    "backgroundGroupStandalone": "その他のバックグラウンド タスク",
+    "openParentSession": "開く",
     "backgroundKindCron": "Cron",
     "backgroundKindSubagent": "Subagent",
     "backgroundKindTask": "Task"

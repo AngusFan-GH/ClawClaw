@@ -84,6 +84,8 @@
     "backgroundSessions": "Background Tasks",
     "showCronSessionsHidden": "Show Cron ({{count}})",
     "parentSession": "From: {{label}}",
+    "backgroundGroupStandalone": "Other background tasks",
+    "openParentSession": "Open",
     "backgroundKindCron": "Cron",
     "backgroundKindSubagent": "Subagent",
     "backgroundKindTask": "Task"

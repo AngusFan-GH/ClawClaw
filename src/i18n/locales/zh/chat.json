@@ -84,6 +84,8 @@
     "backgroundSessions": "后台任务",
     "showCronSessionsHidden": "显示 Cron（{{count}}）",
     "parentSession": "来源：{{label}}",
+    "backgroundGroupStandalone": "其他后台任务",
+    "openParentSession": "打开",
     "backgroundKindCron": "Cron",
     "backgroundKindSubagent": "子任务",
     "backgroundKindTask": "任务"
