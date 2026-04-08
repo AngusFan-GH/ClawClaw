@@ -6,7 +6,7 @@
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, Bot, Brain, Check, ChevronDown, Loader2 } from 'lucide-react';
+import { AlertCircle, Brain, Check, ChevronDown, Loader2 } from 'lucide-react';
 import { DEFAULT_SESSION_KEY, useChatStore, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
@@ -556,8 +556,6 @@ export function Chat() {
       hasStreamThinking ||
       hasStreamTools ||
       hasStreamImages);
-  const hasAnyStreamContent =
-    hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages;
   const liveStreamingMessage = shouldRenderStreaming
     ? ((streamMsg
         ? {
@@ -853,12 +851,6 @@ export function Chat() {
                 loadingEarlierHistory={loadingEarlierHistory}
               />
 
-              {sending
-                && !pendingFinal
-                && !hasAnyStreamContent
-                && chatToolMessages.length === 0
-                && chatStreamSegments.length === 0
-                && <TypingIndicator />}
             </>
           )}
 
@@ -1053,39 +1045,6 @@ function WelcomeScreen({
               document.body
             )
           : null}
-      </div>
-    </div>
-  );
-}
-
-// ── Typing Indicator ────────────────────────────────────────────
-
-function TypingIndicator() {
-  const { t } = useTranslation('chat');
-
-  return (
-    <div className="flex items-center gap-3 px-1">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border border-slate-200/80 bg-slate-50 text-slate-700 shadow-[0_4px_12px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.05] dark:text-slate-200">
-        <Bot className="h-[18px] w-[18px]" />
-      </div>
-      <div className="inline-flex min-w-0 items-center gap-3 rounded-[16px] border border-slate-200/80 bg-white px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
-        <div className="flex gap-1.5">
-            <span
-              className="h-2.5 w-2.5 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
-              style={{ animationDelay: '0ms' }}
-            />
-            <span
-              className="h-2.5 w-2.5 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
-              style={{ animationDelay: '150ms' }}
-            />
-            <span
-              className="h-2.5 w-2.5 rounded-full bg-slate-400/70 animate-bounce dark:bg-slate-300/55"
-              style={{ animationDelay: '300ms' }}
-            />
-        </div>
-        <div className="min-w-0 text-sm font-medium text-foreground">
-          {t('status.generatingReply', '正在生成回复')}
-        </div>
       </div>
     </div>
   );

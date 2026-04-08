@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { AlertCircle, Bot, Check, Copy, User, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { cn } from '@/lib/utils';
 import type { RawMessage, StreamSegment } from '@/stores/chat';
 import { extractImages, extractText, extractThinking } from './message-utils';
@@ -51,6 +52,13 @@ type ChatItem =
   | { kind: 'stream'; key: string; text: string; startedAt: number }
   | { kind: 'reading-indicator'; key: string };
 
+type TimedLiveItem = {
+  item: ChatItem;
+  timestamp: number;
+  sourceOrder: number;
+  priority: number;
+};
+
 type MessageGroup = {
   kind: 'group';
   key: string;
@@ -59,6 +67,7 @@ type MessageGroup = {
   messages: Array<{ key: string; message: RawMessage }>;
   timestamp: number;
   isStreaming: boolean;
+  hasReadingIndicator?: boolean;
 };
 
 type GroupMeta = {
@@ -176,6 +185,10 @@ function groupMessages(items: ChatItem[]): Array<ChatItem | MessageGroup> {
 
   for (const item of items) {
     if (item.kind !== 'message') {
+      if (item.kind === 'reading-indicator' && currentGroup?.role === 'assistant') {
+        currentGroup.hasReadingIndicator = true;
+        continue;
+      }
       if (currentGroup) {
         result.push(currentGroup);
         currentGroup = null;
@@ -213,7 +226,54 @@ function groupMessages(items: ChatItem[]): Array<ChatItem | MessageGroup> {
   return result;
 }
 
-function buildChatItems(params: {
+function buildTimedLiveItems(params: {
+  toolMessages: RawMessage[];
+  streamSegments: StreamSegment[];
+  showThinking: boolean;
+  sessionKey: string;
+}): TimedLiveItem[] {
+  const items: TimedLiveItem[] = [];
+  const tools = params.showThinking && Array.isArray(params.toolMessages) ? params.toolMessages : [];
+
+  params.streamSegments.forEach((segment, index) => {
+    if (segment.text.trim().length === 0) return;
+    items.push({
+      item: {
+        kind: 'stream',
+        key: `stream-seg:${params.sessionKey}:${index}`,
+        text: segment.text,
+        startedAt: segment.ts,
+      },
+      timestamp: segment.ts,
+      sourceOrder: index,
+      priority: 0,
+    });
+  });
+
+  tools.forEach((message, index) => {
+    const normalized = normalizeMessage(message);
+    items.push({
+      item: {
+        kind: 'message',
+        key: getMessageKey(message),
+        message,
+      },
+      timestamp: normalized.timestamp || Date.now(),
+      sourceOrder: index,
+      priority: 1,
+    });
+  });
+
+  items.sort((a, b) => {
+    if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    return a.sourceOrder - b.sourceOrder;
+  });
+
+  return items;
+}
+
+export function buildChatItems(params: {
   messages: RawMessage[];
   toolMessages: RawMessage[];
   streamSegments: StreamSegment[];
@@ -226,7 +286,7 @@ function buildChatItems(params: {
 }): Array<ChatItem | MessageGroup> {
   const items: ChatItem[] = [];
   const history = Array.isArray(params.messages) ? params.messages : [];
-  const tools = params.showThinking && Array.isArray(params.toolMessages) ? params.toolMessages : [];
+  let hasLiveActivity = false;
 
   for (let i = 0; i < history.length; i += 1) {
     if (history[i].role === 'compactionSummary') {
@@ -243,26 +303,20 @@ function buildChatItems(params: {
     });
   }
 
-  const maxLen = Math.max(params.streamSegments.length, tools.length);
-  for (let i = 0; i < maxLen; i += 1) {
-    if (i < params.streamSegments.length && params.streamSegments[i].text.trim().length > 0) {
-      items.push({
-        kind: 'stream',
-        key: `stream-seg:${params.sessionKey}:${i}`,
-        text: params.streamSegments[i].text,
-        startedAt: params.streamSegments[i].ts,
-      });
-    }
-    if (i < tools.length) {
-      items.push({
-        kind: 'message',
-        key: getMessageKey(tools[i]),
-        message: tools[i],
-      });
-    }
-  }
+  items.push(
+    ...buildTimedLiveItems({
+      toolMessages: params.toolMessages,
+      streamSegments: params.streamSegments,
+      showThinking: params.showThinking,
+      sessionKey: params.sessionKey,
+    }).map((entry) => {
+      hasLiveActivity = true;
+      return entry.item;
+    })
+  );
 
   if (params.streamingMessage) {
+    hasLiveActivity = true;
     const text = extractText(params.streamingMessage);
     const key = `stream:${params.sessionKey}`;
     if (text.trim().length > 0) {
@@ -278,7 +332,7 @@ function buildChatItems(params: {
     } else {
       items.push({ kind: 'reading-indicator', key });
     }
-  } else if (params.sending && params.pendingFinal) {
+  } else if (params.sending && (params.pendingFinal || !hasLiveActivity)) {
     items.push({ kind: 'reading-indicator', key: `reading:${params.sessionKey}` });
   }
 
@@ -604,6 +658,33 @@ function extractToolCards(message: RawMessage): ToolCard[] {
   return cards;
 }
 
+function hasVisibleMessageContent(message: RawMessage, showThinking: boolean): boolean {
+  const m = message as unknown as Record<string, unknown>;
+  const role = typeof m.role === 'string' ? m.role : 'unknown';
+  const normalizedRole = normalizeRoleForGrouping(role);
+  const isToolResult =
+    String(role).toLowerCase() === 'toolresult'
+    || String(role).toLowerCase() === 'tool_result'
+    || typeof m.toolCallId === 'string'
+    || typeof m.tool_call_id === 'string';
+  const toolCards = extractToolCards(message);
+  const hasToolCards = toolCards.length > 0;
+  const hasImages = extractImages(message).length > 0;
+  const markdown = extractText(message)?.trim() ? extractText(message) : '';
+  const visibleToolCards = showThinking && hasToolCards;
+
+  if (!showThinking && (normalizedRole === 'tool' || isToolResult) && !markdown.trim()) {
+    return false;
+  }
+  if (!markdown && visibleToolCards && isToolResult) {
+    return true;
+  }
+  if (!markdown && !visibleToolCards && !hasImages) {
+    return false;
+  }
+  return true;
+}
+
 const ToolCards = memo(function ToolCards({ cards, labels }: { cards: ToolCard[]; labels: ChatThreadLabels }) {
   if (cards.length === 0) return null;
   const calls = cards.filter((card) => card.kind === 'call');
@@ -856,20 +937,26 @@ const Group = memo(function Group({
       ? labels.assistant
       : labels.tool;
   const meta = extractGroupMeta(group, contextWindow);
+  const visibleMessages = group.messages.filter((item) => hasVisibleMessageContent(item.message, showThinking));
+
+  if (visibleMessages.length === 0 && !group.hasReadingIndicator) {
+    return null;
+  }
 
   return (
     <div className={cn('chat-group', group.role)}>
       <Avatar role={group.role} />
       <div className="chat-group-messages">
-        {group.messages.map((item, index) => (
+        {visibleMessages.map((item, index) => (
           <GroupedMessage
             key={item.key}
             message={item.message}
-            isStreaming={group.isStreaming && index === group.messages.length - 1}
+            isStreaming={group.isStreaming && index === visibleMessages.length - 1}
             showThinking={showThinking}
             labels={labels}
           />
         ))}
+        {group.hasReadingIndicator ? <div className="chat-group-reading"><ReadingIndicator inline /></div> : null}
         <div className="chat-group-footer">
           <span className="chat-sender-name">{label}</span>
           <span className="chat-group-timestamp">{timestamp}</span>
@@ -911,16 +998,16 @@ const StreamingGroup = memo(function StreamingGroup({
   );
 });
 
-const ReadingIndicator = memo(function ReadingIndicator() {
+const ReadingIndicator = memo(function ReadingIndicator({ inline = false }: { inline?: boolean }) {
+  const { t } = useTranslation(['chat', 'common']);
   return (
-    <div className="chat-group assistant">
-      <Avatar role="assistant" />
-      <div className="chat-group-messages">
-        <div className="chat-bubble chat-reading-indicator" aria-hidden="true">
-          <span className="chat-reading-indicator__dots">
-            <span />
-            <span />
-            <span />
+    <div className={cn(!inline && 'chat-group assistant')}>
+      {!inline ? <Avatar role="assistant" /> : null}
+      <div className={cn(!inline && 'chat-group-messages')}>
+        <div className="chat-reading-indicator" aria-hidden="true">
+          <LoadingIcon className="chat-reading-indicator__icon" />
+          <span className="chat-reading-indicator__label">
+            {t('common:status.loading', 'Loading')}
           </span>
         </div>
       </div>

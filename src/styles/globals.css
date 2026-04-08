@@ -829,35 +829,36 @@
 
 .chat-reading-indicator {
   display: inline-flex;
+  align-items: center;
+  gap: 10px;
   width: fit-content;
-  min-width: 88px;
+  min-width: 104px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklab, hsl(var(--border)) 88%, hsl(var(--primary)) 12%);
+  border-radius: 14px;
+  background: hsl(var(--card) / 0.72);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 20px hsl(220 20% 20% / 0.05);
 }
 
 .chat-group.user .chat-reading-indicator {
   margin-left: auto;
 }
 
-.chat-reading-indicator__dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.chat-reading-indicator__icon {
+  width: 18px;
+  height: 18px;
+  color: hsl(var(--primary));
+  flex-shrink: 0;
 }
 
-.chat-reading-indicator__dots span {
-  width: 8px;
-  height: 8px;
-  border-radius: 9999px;
-  background: hsl(var(--muted-foreground) / 0.55);
-  animation: bounce 1.2s infinite ease-in-out;
+.chat-reading-indicator__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: hsl(var(--muted-foreground) / 0.7);
 }
 
-.chat-reading-indicator__dots span:nth-child(2) {
-  animation-delay: 0.15s;
-}
-
-.chat-reading-indicator__dots span:nth-child(3) {
-  animation-delay: 0.3s;
-}
 
 .chat-reasoning-collapse {
   display: block;

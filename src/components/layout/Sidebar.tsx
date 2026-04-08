@@ -19,6 +19,7 @@ import {
   Bell,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
   Copy,
   Menu,
   CornerUpLeft,
@@ -231,12 +232,26 @@ export function Sidebar() {
     displayName?: string,
     label?: string,
     derivedTitle?: string,
+    subagentRole?: string,
   ) => {
     const derivedLabel = sessionLabels[key] ?? derivedTitle ?? label;
     if (derivedLabel) return derivedLabel;
-    if (displayName && displayName !== key && key.endsWith(':main')) return displayName;
+    const normalizedDisplayName = displayName?.trim();
+    const agentLabel = getSessionAgentLabel(key).trim();
+    if (
+      normalizedDisplayName
+      && normalizedDisplayName !== key
+      && normalizedDisplayName !== agentLabel
+    ) {
+      return normalizedDisplayName;
+    }
+    const normalizedRole = subagentRole?.trim();
+    if (normalizedRole) return normalizedRole;
     if (pendingLocalSessionKeys[key]) return t('common:sidebar.newChat');
     if (key === DEFAULT_SESSION_KEY) return t('common:sidebar.newChat');
+    if (key.includes(':subagent:') || key.includes(':acp:')) {
+      return t('chat:history.backgroundKindSubagent', 'Subagent');
+    }
     return key;
   };
 
@@ -370,7 +385,7 @@ export function Sidebar() {
     if (!parentKey) return '';
     const parent = sessionByKey.get(parentKey);
     if (parent) {
-      return getSessionLabel(parent.key, parent.displayName, parent.label, parent.derivedTitle);
+      return getSessionLabel(parent.key, parent.displayName, parent.label, parent.derivedTitle, parent.subagentRole);
     }
     return parentKey;
   };
@@ -465,15 +480,6 @@ export function Sidebar() {
 
     return [...groups.values()].sort((a, b) => b.latestActivity - a.latestActivity);
   }, [getParentSessionLabel, sessionLastActivity, sortedBackgroundSessions, t]);
-
-  useEffect(() => {
-    const currentSession = sessionByKey.get(currentSessionKey);
-    const activeParentKey = currentSession ? resolveConversationParentKey(currentSession) : '';
-    if (!activeParentKey) return;
-    setExpandedTaskParents((current) => (
-      current[activeParentKey] ? current : { ...current, [activeParentKey]: true }
-    ));
-  }, [currentSessionKey, conversationSessionKeys, sessionByKey]);
 
   const shortcutIds = new Set<MenuItemId>(shortcutMenuItems);
   const shortcutItems = shortcutMenuItems
@@ -592,8 +598,10 @@ export function Sidebar() {
                       {bucket.sessions.map((s) => {
                         const canDeleteSession = !isMainSessionKey(s.key);
                         const childSessions = nestedBackgroundSessionMap.get(s.key) ?? [];
-                        const childTasksExpanded = expandedTaskParents[s.key]
-                          ?? childSessions.some((session) => session.key === currentSessionKey);
+                        const childTasksVisible = isOnChat
+                          && (currentSessionKey === s.key
+                            || childSessions.some((session) => session.key === currentSessionKey));
+                        const childTasksExpanded = expandedTaskParents[s.key] === true;
                         return (
                           <div
                             key={s.key}
@@ -620,7 +628,7 @@ export function Sidebar() {
                               >
                                 <div className="flex min-w-0 items-center gap-2.5">
                                   <span className="min-w-0 flex-1 truncate text-[13px] leading-5">
-                                    {getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle)}
+                                    {getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle, s.subagentRole)}
                                   </span>
                                   <span
                                     title={getSessionAgentLabel(s.key)}
@@ -642,7 +650,7 @@ export function Sidebar() {
                                     e.stopPropagation();
                                     await handleDeleteSessionClick(
                                       s.key,
-                                      getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle)
+                                      getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle, s.subagentRole)
                                     );
                                   }}
                                   className={cn(
@@ -655,7 +663,7 @@ export function Sidebar() {
                                 </button>
                               )}
                             </div>
-                            {childSessions.length > 0 && (
+                            {childSessions.length > 0 && childTasksVisible && (
                               <div className="border-t border-black/6 bg-black/[0.018] dark:border-white/8 dark:bg-white/[0.018]">
                                 <button
                                   type="button"
@@ -669,9 +677,9 @@ export function Sidebar() {
                                 >
                                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/70 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)] dark:bg-white/[0.08] dark:shadow-none">
                                     {childTasksExpanded ? (
-                                      <ChevronUp className="h-3 w-3 shrink-0" />
-                                    ) : (
                                       <ChevronDown className="h-3 w-3 shrink-0" />
+                                    ) : (
+                                      <ChevronRight className="h-3 w-3 shrink-0" />
                                     )}
                                   </span>
                                   <span className="truncate tracking-[0.01em]">
@@ -686,68 +694,68 @@ export function Sidebar() {
                                 {childTasksExpanded && (
                                   <div className="px-2.5 pb-2.5">
                                     <div className="space-y-1.5 rounded-[14px] bg-white/52 p-2 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)] dark:bg-white/[0.035] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]">
-                                    {childSessions.map((child) => {
-                                      const canDeleteChildSession = !child.key.endsWith(':main');
-                                      const childAgentLabel = getSessionAgentLabel(child.key);
-                                      const parentAgentLabel = getSessionAgentLabel(s.key);
-                                      const showChildAgentLabel = childAgentLabel !== parentAgentLabel;
-                                      return (
-                                        <div key={child.key} className="group relative flex items-center">
-                                          <div
-                                            className={cn(
-                                              'w-full rounded-[12px] border px-3 py-2.5 pr-8 transition-all',
-                                              'hover:border-black/6 hover:bg-white/78 dark:hover:border-white/10 dark:hover:bg-white/[0.06]',
-                                              isOnChat && currentSessionKey === child.key
-                                                ? 'border-black/8 bg-white/95 text-foreground font-semibold shadow-[0_8px_16px_rgba(15,23,42,0.05)] dark:border-white/12 dark:bg-white/[0.08]'
-                                                : 'border-transparent bg-black/[0.02] text-foreground/76 dark:bg-white/[0.02]'
-                                            )}
-                                          >
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                switchSession(child.key);
-                                                navigate('/');
-                                              }}
-                                              className="w-full text-left"
-                                            >
-                                              <div className="flex min-w-0 items-center gap-2">
-                                                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400/70 dark:bg-slate-500/80" />
-                                                <span className="min-w-0 flex-1 truncate text-[12px] leading-5">
-                                                  {getSessionLabel(child.key, child.displayName, child.label, child.derivedTitle)}
-                                                </span>
-                                                {showChildAgentLabel && (
-                                                  <span
-                                                    title={childAgentLabel}
-                                                    className="max-w-[88px] shrink-0 truncate rounded-[10px] bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground dark:bg-white/8"
-                                                  >
-                                                    {childAgentLabel}
-                                                  </span>
-                                                )}
-                                              </div>
-                                            </button>
-                                          </div>
-                                          {canDeleteChildSession && (
-                                            <button
-                                              aria-label={t('common:actions.delete')}
-                                              onClick={async (e) => {
-                                                e.stopPropagation();
-                                                await handleDeleteSessionClick(
-                                                  child.key,
-                                                  getSessionLabel(child.key, child.displayName, child.label, child.derivedTitle)
-                                                );
-                                              }}
+                                      {childSessions.map((child) => {
+                                        const canDeleteChildSession = !child.key.endsWith(':main');
+                                        const childAgentLabel = getSessionAgentLabel(child.key);
+                                        const parentAgentLabel = getSessionAgentLabel(s.key);
+                                        const showChildAgentLabel = childAgentLabel !== parentAgentLabel;
+                                        return (
+                                          <div key={child.key} className="group relative flex items-center">
+                                            <div
                                               className={cn(
-                                                'absolute right-1 flex h-6 w-6 items-center justify-center rounded-[10px] border border-transparent transition-opacity',
-                                                'opacity-0 group-hover:opacity-100',
-                                                'text-muted-foreground hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive'
+                                                'w-full rounded-[12px] border px-3 py-2.5 pr-8 transition-all',
+                                                'hover:border-black/6 hover:bg-white/78 dark:hover:border-white/10 dark:hover:bg-white/[0.06]',
+                                                isOnChat && currentSessionKey === child.key
+                                                  ? 'border-black/8 bg-white/95 text-foreground font-semibold shadow-[0_8px_16px_rgba(15,23,42,0.05)] dark:border-white/12 dark:bg-white/[0.08]'
+                                                  : 'border-transparent bg-black/[0.02] text-foreground/76 dark:bg-white/[0.02]'
                                               )}
                                             >
-                                              <Trash2 className="h-3 w-3" />
-                                            </button>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  switchSession(child.key);
+                                                  navigate('/');
+                                                }}
+                                                className="w-full text-left"
+                                              >
+                                                <div className="flex min-w-0 items-center gap-2">
+                                                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400/70 dark:bg-slate-500/80" />
+                                                  <span className="min-w-0 flex-1 truncate text-[12px] leading-5">
+                                                    {getSessionLabel(child.key, child.displayName, child.label, child.derivedTitle, child.subagentRole)}
+                                                  </span>
+                                                  {showChildAgentLabel && (
+                                                    <span
+                                                      title={childAgentLabel}
+                                                      className="max-w-[88px] shrink-0 truncate rounded-[10px] bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground dark:bg-white/8"
+                                                    >
+                                                      {childAgentLabel}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </button>
+                                            </div>
+                                            {canDeleteChildSession && (
+                                              <button
+                                                aria-label={t('common:actions.delete')}
+                                                onClick={async (e) => {
+                                                  e.stopPropagation();
+                                                  await handleDeleteSessionClick(
+                                                    child.key,
+                                                    getSessionLabel(child.key, child.displayName, child.label, child.derivedTitle, child.subagentRole)
+                                                  );
+                                                }}
+                                                className={cn(
+                                                  'absolute right-1 flex h-6 w-6 items-center justify-center rounded-[10px] border border-transparent transition-opacity',
+                                                  'opacity-0 group-hover:opacity-100',
+                                                  'text-muted-foreground hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive'
+                                                )}
+                                              >
+                                                <Trash2 className="h-3 w-3" />
+                                              </button>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   </div>
                                 )}
@@ -851,7 +859,7 @@ export function Sidebar() {
                                     >
                                       <div className="flex min-w-0 items-center gap-2.5">
                                         <span className="min-w-0 flex-1 truncate text-[13px] leading-5">
-                                          {getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle)}
+                                          {getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle, s.subagentRole)}
                                         </span>
                                         <span className="shrink-0 rounded-[10px] bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground dark:bg-white/8">
                                           {getBackgroundSessionKindLabel(s, (key, fallback) => t(key, fallback))}
@@ -896,7 +904,7 @@ export function Sidebar() {
                                         e.stopPropagation();
                                         await handleDeleteSessionClick(
                                           s.key,
-                                          getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle)
+                                          getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle, s.subagentRole)
                                         );
                                       }}
                                       className={cn(

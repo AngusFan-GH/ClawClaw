@@ -52,8 +52,8 @@
         "active": "Active",
         "paused": "Paused",
         "configured": "Configured",
-        "loading": "Loading...",
-        "saving": "Saving..."
+        "loading": "Loading",
+        "saving": "Saving"
     },
     "gateway": {
         "notRunning": "Gateway Not Running",

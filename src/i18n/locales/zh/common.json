@@ -52,8 +52,8 @@
     "active": "活跃",
     "paused": "已暂停",
     "configured": "已配置",
-    "loading": "加载中...",
-    "saving": "保存中..."
+    "loading": "加载中",
+    "saving": "保存中"
   },
   "gateway": {
     "notRunning": "网关未运行",
