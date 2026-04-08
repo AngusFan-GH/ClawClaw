@@ -342,7 +342,7 @@ async function initialize(): Promise<void> {
     const upgradeMaintenance = await performUpgradeMaintenanceIfNeeded();
     if (upgradeMaintenance.triggered) {
       logger.info(
-        `Upgrade maintenance completed (app ${upgradeMaintenance.previousAppVersion ?? 'none'} -> ${upgradeMaintenance.currentAppVersion}, openclaw ${upgradeMaintenance.previousOpenClawVersion ?? 'none'} -> ${upgradeMaintenance.currentOpenClawVersion ?? 'unknown'})`,
+        `Upgrade maintenance completed (app ${upgradeMaintenance.previousAppVersion ?? 'none'} -> ${upgradeMaintenance.currentAppVersion}, openclaw ${upgradeMaintenance.previousOpenClawVersion ?? 'none'} -> ${upgradeMaintenance.currentOpenClawVersion ?? 'unknown'}, preflightTopics=${upgradeMaintenance.preflightRecoveredTopics.length}, doctorFix=${upgradeMaintenance.doctorFixStatus ?? 'skipped'}, doctorWarnings=${upgradeMaintenance.doctorFixWarningCount})`,
       );
     }
   } catch (error) {

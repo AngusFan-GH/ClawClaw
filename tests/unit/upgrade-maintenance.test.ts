@@ -7,7 +7,19 @@ const storeState = vi.hoisted(() => ({
 const mockFns = vi.hoisted(() => ({
   ensureProviderStoreMigrated: vi.fn(async () => undefined),
   runOpenClawStartupPreflightRepair: vi.fn(async () => undefined),
-  runOpenClawDoctorRepair: vi.fn(async () => true),
+  getLastStartupPreflightRecovery: vi.fn(() => ({ kind: 'preflight', topics: ['config'] })),
+  runOpenClawDoctorFix: vi.fn(async () => ({
+    mode: 'fix',
+    status: 'success_with_warnings',
+    success: true,
+    exitCode: 0,
+    stdout: '',
+    stderr: 'warning',
+    command: 'openclaw doctor --fix --yes --non-interactive',
+    cwd: '/tmp/openclaw',
+    durationMs: 10,
+    warnings: ['warning'],
+  })),
   readFile: vi.fn(async () => JSON.stringify({ version: '2026.4.2' })),
 }));
 
@@ -58,10 +70,12 @@ vi.mock('@electron/services/providers/provider-migration', () => ({
 
 vi.mock('@electron/gateway/config-sync', () => ({
   runOpenClawStartupPreflightRepair: mockFns.runOpenClawStartupPreflightRepair,
+  getLastStartupPreflightRecovery: mockFns.getLastStartupPreflightRecovery,
 }));
 
-vi.mock('@electron/gateway/supervisor', () => ({
-  runOpenClawDoctorRepair: mockFns.runOpenClawDoctorRepair,
+vi.mock('@electron/utils/openclaw-doctor', () => ({
+  OPENCLAW_DOCTOR_FIX_TIMEOUT_MS: 120_000,
+  runOpenClawDoctorFix: mockFns.runOpenClawDoctorFix,
 }));
 
 describe('upgrade maintenance', () => {
@@ -78,9 +92,21 @@ describe('upgrade maintenance', () => {
     const result = await performUpgradeMaintenanceIfNeeded();
 
     expect(result.triggered).toBe(true);
+    expect(result.preflightRan).toBe(true);
+    expect(result.preflightRecoveredTopics).toEqual(['config']);
+    expect(result.doctorFixRan).toBe(true);
+    expect(result.doctorFixStatus).toBe('success_with_warnings');
+    expect(result.doctorFixWarningCount).toBe(1);
     expect(mockFns.ensureProviderStoreMigrated).toHaveBeenCalledTimes(1);
     expect(mockFns.runOpenClawStartupPreflightRepair).toHaveBeenCalledTimes(1);
-    expect(mockFns.runOpenClawDoctorRepair).toHaveBeenCalledTimes(1);
+    expect(mockFns.runOpenClawDoctorFix).toHaveBeenCalledTimes(1);
+    expect(mockFns.runOpenClawDoctorFix).toHaveBeenCalledWith({ timeoutMs: 120_000 });
+
+    const persisted = storeState.stores.get('upgrade-state') || {};
+    expect(persisted.lastPreflightOpenClawVersion).toBe('2026.4.2');
+    expect(persisted.lastDoctorFixOpenClawVersion).toBe('2026.4.2');
+    expect(persisted.lastDoctorFixStatus).toBe('success_with_warnings');
+    expect(persisted.lastDoctorFixWarningCount).toBe(1);
   });
 
   it('does not rerun when recorded versions already match the current app and openclaw', async () => {
@@ -94,8 +120,10 @@ describe('upgrade maintenance', () => {
     const result = await performUpgradeMaintenanceIfNeeded();
 
     expect(result.triggered).toBe(false);
+    expect(result.preflightRan).toBe(false);
+    expect(result.doctorFixRan).toBe(false);
     expect(mockFns.ensureProviderStoreMigrated).not.toHaveBeenCalled();
     expect(mockFns.runOpenClawStartupPreflightRepair).not.toHaveBeenCalled();
-    expect(mockFns.runOpenClawDoctorRepair).not.toHaveBeenCalled();
+    expect(mockFns.runOpenClawDoctorFix).not.toHaveBeenCalled();
   });
 });

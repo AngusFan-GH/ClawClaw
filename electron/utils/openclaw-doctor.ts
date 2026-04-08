@@ -8,14 +8,17 @@ import { getUvMirrorEnv } from './uv-env';
 import { getOpenClawCliSpawnConfig } from './openclaw-cli';
 
 const OPENCLAW_DOCTOR_TIMEOUT_MS = 60_000;
+export const OPENCLAW_DOCTOR_FIX_TIMEOUT_MS = 120_000;
 const MAX_DOCTOR_OUTPUT_BYTES = 10 * 1024 * 1024;
 const OPENCLAW_DOCTOR_ARGS = ['doctor'];
 const OPENCLAW_DOCTOR_FIX_ARGS = ['doctor', '--fix', '--yes', '--non-interactive'];
 
 export type OpenClawDoctorMode = 'diagnose' | 'fix';
+export type OpenClawDoctorStatus = 'success' | 'success_with_warnings' | 'failed';
 
 export interface OpenClawDoctorResult {
   mode: OpenClawDoctorMode;
+  status: OpenClawDoctorStatus;
   success: boolean;
   exitCode: number | null;
   stdout: string;
@@ -23,8 +26,62 @@ export interface OpenClawDoctorResult {
   command: string;
   cwd: string;
   durationMs: number;
+  warnings: string[];
   timedOut?: boolean;
   error?: string;
+}
+
+const WARNING_LINE_LIMIT = 8;
+
+function collectWarningLines(stderr: string): string[] {
+  if (!stderr.trim()) {
+    return [];
+  }
+
+  const warnings: string[] = [];
+  const seen = new Set<string>();
+  for (const rawLine of stderr.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (seen.has(line)) continue;
+    seen.add(line);
+    warnings.push(line);
+    if (warnings.length >= WARNING_LINE_LIMIT) {
+      break;
+    }
+  }
+
+  return warnings;
+}
+
+export function classifyOpenClawDoctorResult(input: {
+  exitCode: number | null;
+  stderr: string;
+  timedOut?: boolean;
+  error?: string;
+}): { status: OpenClawDoctorStatus; success: boolean; warnings: string[] } {
+  if (input.timedOut || input.error || input.exitCode !== 0) {
+    return {
+      status: 'failed',
+      success: false,
+      warnings: [],
+    };
+  }
+
+  const warnings = collectWarningLines(input.stderr);
+  if (warnings.length > 0) {
+    return {
+      status: 'success_with_warnings',
+      success: true,
+      warnings,
+    };
+  }
+
+  return {
+    status: 'success',
+    success: true,
+    warnings: [],
+  };
 }
 
 function appendDoctorOutput(
@@ -70,6 +127,7 @@ function getBundledBinPath(): string {
 async function runDoctorCommandWithArgs(
   mode: OpenClawDoctorMode,
   args: string[],
+  timeoutMs = OPENCLAW_DOCTOR_TIMEOUT_MS,
 ): Promise<OpenClawDoctorResult> {
   const openclawDir = getOpenClawDir();
   const entryScript = getOpenClawEntryPath();
@@ -81,6 +139,7 @@ async function runDoctorCommandWithArgs(
     logger.error(`Cannot run OpenClaw doctor: ${error}`);
     return {
       mode,
+      status: 'failed',
       success: false,
       exitCode: null,
       stdout: '',
@@ -88,6 +147,7 @@ async function runDoctorCommandWithArgs(
       command,
       cwd: openclawDir,
       durationMs: Date.now() - startedAt,
+      warnings: [],
       error,
     };
   }
@@ -126,17 +186,23 @@ async function runDoctorCommandWithArgs(
     let stderrTruncated = false;
     let settled = false;
 
-    const finish = (result: Omit<OpenClawDoctorResult, 'durationMs'>) => {
+    const finish = (
+      result: Omit<OpenClawDoctorResult, 'durationMs' | 'status' | 'success' | 'warnings'>,
+    ) => {
       if (settled) return;
       settled = true;
+      const classified = classifyOpenClawDoctorResult(result);
       resolve({
         ...result,
         durationMs: Date.now() - startedAt,
+        status: classified.status,
+        success: classified.success,
+        warnings: classified.warnings,
       });
     };
 
     const timeout = setTimeout(() => {
-      logger.error(`OpenClaw doctor timed out after ${OPENCLAW_DOCTOR_TIMEOUT_MS}ms`);
+      logger.error(`OpenClaw doctor timed out after ${timeoutMs}ms`);
       try {
         child.kill();
       } catch {
@@ -144,16 +210,15 @@ async function runDoctorCommandWithArgs(
       }
       finish({
         mode,
-        success: false,
         exitCode: null,
         stdout,
         stderr,
         command,
         cwd: openclawDir,
         timedOut: true,
-        error: `Timed out after ${OPENCLAW_DOCTOR_TIMEOUT_MS}ms`,
+        error: `Timed out after ${timeoutMs}ms`,
       });
-    }, OPENCLAW_DOCTOR_TIMEOUT_MS);
+    }, timeoutMs);
 
     child.stdout?.on('data', (data) => {
       const next = appendDoctorOutput(stdout, stdoutBytes, data, 'stdout', stdoutTruncated);
@@ -174,7 +239,6 @@ async function runDoctorCommandWithArgs(
       logger.error('Failed to spawn OpenClaw doctor process:', error);
       finish({
         mode,
-        success: false,
         exitCode: null,
         stdout,
         stderr,
@@ -189,7 +253,6 @@ async function runDoctorCommandWithArgs(
       logger.info(`OpenClaw doctor exited with code ${code ?? 'null'}`);
       finish({
         mode,
-        success: code === 0,
         exitCode: code,
         stdout,
         stderr,
@@ -204,6 +267,12 @@ export async function runOpenClawDoctor(): Promise<OpenClawDoctorResult> {
   return await runDoctorCommandWithArgs('diagnose', OPENCLAW_DOCTOR_ARGS);
 }
 
-export async function runOpenClawDoctorFix(): Promise<OpenClawDoctorResult> {
-  return await runDoctorCommandWithArgs('fix', OPENCLAW_DOCTOR_FIX_ARGS);
+export async function runOpenClawDoctorFix(
+  options?: { timeoutMs?: number },
+): Promise<OpenClawDoctorResult> {
+  return await runDoctorCommandWithArgs(
+    'fix',
+    OPENCLAW_DOCTOR_FIX_ARGS,
+    options?.timeoutMs ?? OPENCLAW_DOCTOR_TIMEOUT_MS,
+  );
 }

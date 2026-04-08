@@ -76,6 +76,7 @@ type ControlUiInfo = {
 
 type OpenClawDoctorResult = {
   mode: 'diagnose' | 'fix';
+  status: 'success' | 'success_with_warnings' | 'failed';
   success: boolean;
   exitCode: number | null;
   stdout: string;
@@ -83,6 +84,7 @@ type OpenClawDoctorResult = {
   command: string;
   cwd: string;
   durationMs: number;
+  warnings: string[];
   timedOut?: boolean;
   error?: string;
 };
@@ -652,20 +654,31 @@ export function Settings() {
         body: JSON.stringify({ mode }),
       });
       setDoctorResult(result);
-      toast[result.success ? 'success' : 'error'](
-        result.success
+      const toastMethod =
+        result.status === 'failed'
+          ? 'error'
+          : result.status === 'success_with_warnings'
+            ? 'warning'
+            : 'success';
+      toast[toastMethod](
+        result.status === 'failed'
           ? mode === 'fix'
-            ? t('developer.doctorFixSucceeded')
-            : t('developer.doctorSucceeded')
-          : mode === 'fix'
             ? t('developer.doctorFixFailed')
             : t('developer.doctorFailed')
+          : result.status === 'success_with_warnings'
+            ? mode === 'fix'
+              ? t('developer.doctorFixSucceededWithWarnings')
+              : t('developer.doctorSucceededWithWarnings')
+            : mode === 'fix'
+              ? t('developer.doctorFixSucceeded')
+              : t('developer.doctorSucceeded')
       );
     } catch (error) {
       const message = toUserMessage(error);
       toast.error(message);
       setDoctorResult({
         mode,
+        status: 'failed',
         success: false,
         exitCode: null,
         stdout: '',
@@ -673,6 +686,7 @@ export function Settings() {
         command: `openclaw ${mode === 'fix' ? 'doctor --fix --yes --non-interactive' : 'doctor'}`,
         cwd: '',
         durationMs: 0,
+        warnings: [],
         error: message,
       });
     } finally {
@@ -1434,13 +1448,17 @@ export function Settings() {
                             variant="secondary"
                             className={cn(
                               'rounded-[10px] px-3 py-1',
-                              doctorResult.success
+                              doctorResult.status === 'success'
                                 ? 'bg-green-500/10 text-green-600 dark:text-green-500'
+                                : doctorResult.status === 'success_with_warnings'
+                                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
                                 : 'bg-red-500/10 text-red-600 dark:text-red-500'
                             )}
                           >
-                            {doctorResult.success
+                            {doctorResult.status === 'success'
                               ? t('developer.doctorStatusSuccess')
+                              : doctorResult.status === 'success_with_warnings'
+                                ? t('developer.doctorStatusWarning')
                               : t('developer.doctorStatusFailed')}
                           </Badge>
                           <span className="text-[12px] text-muted-foreground">
@@ -1473,6 +1491,19 @@ export function Settings() {
                         {doctorResult.error ? (
                           <div className="rounded-[10px] border border-red-500/20 bg-red-500/10 p-3 text-[12px] text-red-600 dark:text-red-400">
                             {doctorResult.error}
+                          </div>
+                        ) : null}
+
+                        {doctorResult.warnings.length > 0 ? (
+                          <div className="rounded-[10px] border border-amber-500/20 bg-amber-500/10 p-3 text-[12px] text-amber-700 dark:text-amber-300">
+                            <p className="mb-2 font-semibold">
+                              {t('developer.doctorWarnings', { count: doctorResult.warnings.length })}
+                            </p>
+                            <ul className="space-y-1">
+                              {doctorResult.warnings.map((warning) => (
+                                <li key={warning}>{warning}</li>
+                              ))}
+                            </ul>
                           </div>
                         ) : null}
 

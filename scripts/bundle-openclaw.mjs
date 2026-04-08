@@ -30,6 +30,8 @@ const {
 
 const ROOT = path.resolve(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'build', 'openclaw');
+const BUNDLED_PLUGIN_REGISTRY =
+  process.env.OPENCLAW_BUNDLED_PLUGIN_REGISTRY || 'https://registry.npmjs.org/';
 const NODE_MODULES = path.join(ROOT, 'node_modules');
 
 // On Windows, pnpm virtual store paths can exceed MAX_PATH (260 chars).
@@ -515,12 +517,15 @@ async function stageBundledPluginRuntimeDeps(packageRoot) {
   }
 
   echo`   📦 Installing bundled plugin runtime deps: ${missingBefore.join(', ')}`;
+  echo`   🌐 Using bundled plugin registry: ${BUNDLED_PLUGIN_REGISTRY}`;
   runBundledPluginPostinstall({
     packageRoot,
     extensionsDir,
     execPath: process.execPath,
     env: {
       ...process.env,
+      npm_config_registry: BUNDLED_PLUGIN_REGISTRY,
+      NPM_CONFIG_REGISTRY: BUNDLED_PLUGIN_REGISTRY,
       OPENCLAW_NO_RESPAWN: '1',
     },
     log: {

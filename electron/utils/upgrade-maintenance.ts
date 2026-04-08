@@ -4,12 +4,28 @@ import { join } from 'path';
 import { getOpenClawDir } from './paths';
 import { logger } from './logger';
 import { ensureProviderStoreMigrated } from '../services/providers/provider-migration';
-import { runOpenClawStartupPreflightRepair } from '../gateway/config-sync';
-import { runOpenClawDoctorRepair } from '../gateway/supervisor';
+import {
+  getLastStartupPreflightRecovery,
+  runOpenClawStartupPreflightRepair,
+} from '../gateway/config-sync';
+import {
+  OPENCLAW_DOCTOR_FIX_TIMEOUT_MS,
+  runOpenClawDoctorFix,
+  type OpenClawDoctorStatus,
+} from './openclaw-doctor';
 
 interface UpgradeState {
   lastAppVersion?: string;
   lastOpenClawVersion?: string;
+  lastMaintenanceAt?: string;
+  lastPreflightAt?: string;
+  lastPreflightAppVersion?: string;
+  lastPreflightOpenClawVersion?: string;
+  lastPreflightRecoveredTopics?: string[];
+  lastDoctorFixAt?: string;
+  lastDoctorFixOpenClawVersion?: string;
+  lastDoctorFixStatus?: OpenClawDoctorStatus;
+  lastDoctorFixWarningCount?: number;
 }
 
 let upgradeStoreInstance: {
@@ -54,6 +70,11 @@ export interface UpgradeMaintenanceResult {
   previousAppVersion: string | null;
   currentOpenClawVersion: string | null;
   previousOpenClawVersion: string | null;
+  preflightRan: boolean;
+  preflightRecoveredTopics: string[];
+  doctorFixRan: boolean;
+  doctorFixStatus: OpenClawDoctorStatus | null;
+  doctorFixWarningCount: number;
 }
 
 export async function performUpgradeMaintenanceIfNeeded(): Promise<UpgradeMaintenanceResult> {
@@ -72,6 +93,11 @@ export async function performUpgradeMaintenanceIfNeeded(): Promise<UpgradeMainte
       previousAppVersion,
       currentOpenClawVersion,
       previousOpenClawVersion,
+      preflightRan: false,
+      preflightRecoveredTopics: [],
+      doctorFixRan: false,
+      doctorFixStatus: null,
+      doctorFixWarningCount: 0,
     };
   }
 
@@ -81,10 +107,38 @@ export async function performUpgradeMaintenanceIfNeeded(): Promise<UpgradeMainte
 
   await ensureProviderStoreMigrated();
   await runOpenClawStartupPreflightRepair();
+  const preflightRecoveredTopics = getLastStartupPreflightRecovery()?.topics ?? [];
+  const maintenanceAt = new Date().toISOString();
+  store.set('lastPreflightAt', maintenanceAt);
+  store.set('lastPreflightAppVersion', currentAppVersion);
+  if (currentOpenClawVersion) {
+    store.set('lastPreflightOpenClawVersion', currentOpenClawVersion);
+  }
+  store.set('lastPreflightRecoveredTopics', preflightRecoveredTopics);
+
+  let doctorFixRan = false;
+  let doctorFixStatus: OpenClawDoctorStatus | null = null;
+  let doctorFixWarningCount = 0;
   if (openClawUpgraded) {
-    const doctorOk = await runOpenClawDoctorRepair();
-    if (!doctorOk) {
+    doctorFixRan = true;
+    const doctorResult = await runOpenClawDoctorFix({
+      timeoutMs: OPENCLAW_DOCTOR_FIX_TIMEOUT_MS,
+    });
+    doctorFixStatus = doctorResult.status;
+    doctorFixWarningCount = doctorResult.warnings.length;
+    store.set('lastDoctorFixAt', new Date().toISOString());
+    if (currentOpenClawVersion) {
+      store.set('lastDoctorFixOpenClawVersion', currentOpenClawVersion);
+    }
+    store.set('lastDoctorFixStatus', doctorResult.status);
+    store.set('lastDoctorFixWarningCount', doctorResult.warnings.length);
+
+    if (!doctorResult.success) {
       logger.warn('OpenClaw doctor --fix did not complete successfully during upgrade maintenance');
+    } else if (doctorResult.status === 'success_with_warnings') {
+      logger.warn(
+        `OpenClaw doctor --fix completed with ${doctorResult.warnings.length} warning(s) during upgrade maintenance`,
+      );
     }
   }
 
@@ -92,6 +146,7 @@ export async function performUpgradeMaintenanceIfNeeded(): Promise<UpgradeMainte
   if (currentOpenClawVersion) {
     store.set('lastOpenClawVersion', currentOpenClawVersion);
   }
+  store.set('lastMaintenanceAt', maintenanceAt);
 
   return {
     triggered: true,
@@ -99,5 +154,10 @@ export async function performUpgradeMaintenanceIfNeeded(): Promise<UpgradeMainte
     previousAppVersion,
     currentOpenClawVersion,
     previousOpenClawVersion,
+    preflightRan: true,
+    preflightRecoveredTopics,
+    doctorFixRan,
+    doctorFixStatus,
+    doctorFixWarningCount,
   };
 }
