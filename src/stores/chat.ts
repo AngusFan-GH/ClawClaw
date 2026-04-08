@@ -66,6 +66,7 @@ export interface ChatSession {
   lastMessagePreview?: string;
   kind?: string;
   spawnedBy?: string;
+  parentSessionKey?: string;
   forkedFromParent?: boolean;
   subagentRole?: string;
   thinkingLevel?: string;
@@ -602,11 +603,12 @@ function findSessionTitleCandidate(messages: RawMessage[]): string {
   return '';
 }
 
-export function isBackgroundSession(session: Pick<ChatSession, 'key' | 'kind' | 'spawnedBy' | 'forkedFromParent' | 'subagentRole'>): boolean {
+export function isBackgroundSession(session: Pick<ChatSession, 'key' | 'kind' | 'spawnedBy' | 'parentSessionKey' | 'forkedFromParent' | 'subagentRole'>): boolean {
   if (isCronSessionKey(session.key)) return true;
   if (isSubagentSessionKey(session.key)) return true;
   if (session.kind === 'cron' || session.kind === 'subagent') return true;
   if (typeof session.spawnedBy === 'string' && session.spawnedBy.trim()) return true;
+  if (typeof session.parentSessionKey === 'string' && session.parentSessionKey.trim()) return true;
   if (session.forkedFromParent === true) return true;
   if (typeof session.subagentRole === 'string' && session.subagentRole.trim()) return true;
   return false;
@@ -1600,6 +1602,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             lastMessagePreview: s.lastMessagePreview ? String(s.lastMessagePreview) : undefined,
             kind: typeof s.kind === 'string' ? s.kind : undefined,
             spawnedBy: typeof s.spawnedBy === 'string' ? s.spawnedBy : undefined,
+            parentSessionKey: typeof s.parentSessionKey === 'string' ? s.parentSessionKey : undefined,
             forkedFromParent: s.forkedFromParent === true,
             subagentRole: typeof s.subagentRole === 'string' ? s.subagentRole : undefined,
             thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,

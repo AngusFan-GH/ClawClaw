@@ -388,7 +388,8 @@ describe('Chat Store', () => {
     expect(isBackgroundSession({ key: 'agent:main:cron:daily', kind: 'cron' })).toBe(true);
     expect(isBackgroundSession({ key: 'agent:main:subagent:child', kind: 'subagent' })).toBe(true);
     expect(isBackgroundSession({ key: 'agent:main:session-6', spawnedBy: 'agent:main:main' })).toBe(true);
-    expect(isBackgroundSession({ key: 'agent:main:session-7' })).toBe(false);
+    expect(isBackgroundSession({ key: 'agent:main:session-7', parentSessionKey: 'agent:main:main' })).toBe(true);
+    expect(isBackgroundSession({ key: 'agent:main:session-8' })).toBe(false);
   });
 
   it('should track compaction start and completion from agent events', async () => {

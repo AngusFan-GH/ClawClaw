@@ -81,6 +81,8 @@
     "connectingGateway": "ゲートウェイ再接続中です",
     "waitingForGateway": "ゲートウェイ未接続です。起動または再起動してから再試行してください",
     "backgroundSessions": "バックグラウンド タスク",
+    "showCronSessionsHidden": "Cron を表示 ({{count}})",
+    "parentSession": "元の会話: {{label}}",
     "backgroundKindCron": "Cron",
     "backgroundKindSubagent": "Subagent",
     "backgroundKindTask": "Task"

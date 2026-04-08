@@ -21,6 +21,7 @@ import {
   ChevronDown,
   Copy,
   Menu,
+  CornerUpLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
@@ -149,6 +150,7 @@ function getBackgroundSessionKindLabel(session: {
   key: string;
   kind?: string;
   spawnedBy?: string;
+  parentSessionKey?: string;
   forkedFromParent?: boolean;
   subagentRole?: string;
 }, translate: (key: string, fallback: string) => string): string {
@@ -244,6 +246,7 @@ export function Sidebar() {
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [backgroundExpanded, setBackgroundExpanded] = useState(false);
+  const [showCronBackground, setShowCronBackground] = useState(false);
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -253,6 +256,10 @@ export function Sidebar() {
   const agentNameMap = useMemo(
     () => new Map((agents ?? []).map((agent) => [agent.gateway.id, resolveAgentDisplayName(agent)])),
     [agents]
+  );
+  const sessionByKey = useMemo(
+    () => new Map((sessions ?? []).map((session) => [session.key, session])),
+    [sessions]
   );
 
   const getSessionAgentLabel = (key: string) => {
@@ -325,6 +332,14 @@ export function Sidebar() {
     () => visibleSessions.filter((session) => isBackgroundSession(session)),
     [visibleSessions],
   );
+  const nonCronBackgroundSessions = useMemo(
+    () => backgroundSessions.filter((session) => !(session.kind === 'cron' || session.key.includes(':cron:'))),
+    [backgroundSessions]
+  );
+  const cronBackgroundSessions = useMemo(
+    () => backgroundSessions.filter((session) => session.kind === 'cron' || session.key.includes(':cron:')),
+    [backgroundSessions]
+  );
 
   const sessionBuckets: Array<{ key: SessionBucketKey; label: string; sessions: typeof sessions }> =
     [
@@ -346,9 +361,25 @@ export function Sidebar() {
     sessionBucketMap[bucketKey].sessions.push(session);
   }
 
-  const sortedBackgroundSessions = [...backgroundSessions].sort(
+  const sortedBackgroundSessions = [
+    ...nonCronBackgroundSessions,
+    ...(showCronBackground ? cronBackgroundSessions : []),
+  ].sort(
     (a, b) => (sessionLastActivity[b.key] ?? 0) - (sessionLastActivity[a.key] ?? 0)
   );
+
+  const getParentSessionKey = (session: { spawnedBy?: string; parentSessionKey?: string }) =>
+    session.spawnedBy?.trim() || session.parentSessionKey?.trim() || '';
+
+  const getParentSessionLabel = (session: { spawnedBy?: string; parentSessionKey?: string }) => {
+    const parentKey = getParentSessionKey(session);
+    if (!parentKey) return '';
+    const parent = sessionByKey.get(parentKey);
+    if (parent) {
+      return getSessionLabel(parent.key, parent.displayName, parent.label, parent.derivedTitle);
+    }
+    return parentKey;
+  };
 
   const shortcutIds = new Set<MenuItemId>(shortcutMenuItems);
   const shortcutItems = shortcutMenuItems
@@ -529,63 +560,106 @@ export function Sidebar() {
               )}
               {sortedBackgroundSessions.length > 0 && (
                 <div className="pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setBackgroundExpanded((value) => !value)}
-                    className="flex w-full items-center gap-2 px-2.5 pb-2 text-left"
-                  >
-                    <span className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground/70">
-                      {t('chat:history.backgroundSessions', '后台任务')}
-                    </span>
-                    <Badge
-                      variant="secondary"
-                      className="rounded-full px-1.5 py-0 text-[10px] font-medium text-muted-foreground"
+                  <div className="flex items-center gap-2 px-2.5 pb-2">
+                    <button
+                      type="button"
+                      onClick={() => setBackgroundExpanded((value) => !value)}
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
                     >
-                      {sortedBackgroundSessions.length}
-                    </Badge>
-                    <div className="h-px flex-1 bg-black/6 dark:bg-white/10" />
-                    {backgroundExpanded ? (
-                      <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-                    ) : (
-                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground/70">
+                        {t('chat:history.backgroundSessions', '后台任务')}
+                      </span>
+                      <Badge
+                        variant="secondary"
+                        className="rounded-full px-1.5 py-0 text-[10px] font-medium text-muted-foreground"
+                      >
+                        {sortedBackgroundSessions.length}
+                      </Badge>
+                      <div className="h-px flex-1 bg-black/6 dark:bg-white/10" />
+                      {backgroundExpanded ? (
+                        <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
+                    </button>
+                    {cronBackgroundSessions.length > 0 && !showCronBackground && (
+                      <button
+                        type="button"
+                        onClick={() => setShowCronBackground(true)}
+                        className="shrink-0 rounded-full bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-black/8 dark:bg-white/8 dark:hover:bg-white/12"
+                      >
+                        {t('chat:history.showCronSessionsHidden', {
+                          count: cronBackgroundSessions.length,
+                          defaultValue: `显示 Cron (${cronBackgroundSessions.length})`,
+                        })}
+                      </button>
                     )}
-                  </button>
+                  </div>
                   {backgroundExpanded && (
                     <div className="space-y-1">
                       {sortedBackgroundSessions.map((s) => {
                         const canDeleteSession = !s.key.endsWith(':main');
+                        const parentSessionLabel = getParentSessionLabel(s);
+                        const parentSessionKey = getParentSessionKey(s);
                         return (
                           <div key={s.key} className="group relative flex items-center">
-                            <button
-                              onClick={() => {
-                                switchSession(s.key);
-                                navigate('/');
-                              }}
+                            <div
                               className={cn(
-                                'w-full text-left rounded-[14px] border px-3 py-2.5 pr-8 transition-all',
+                                'w-full rounded-[14px] border px-3 py-2.5 pr-8 transition-all',
                                 'hover:border-black/6 hover:bg-white/55 dark:hover:border-white/10 dark:hover:bg-white/[0.06]',
                                 isOnChat && currentSessionKey === s.key
                                   ? 'border-black/8 bg-white/90 text-foreground font-semibold shadow-[0_8px_18px_rgba(15,23,42,0.06)] dark:border-white/12 dark:bg-white/[0.08]'
                                   : 'border-transparent bg-black/[0.025] text-foreground/78 dark:bg-white/[0.02]'
                               )}
                             >
-                              <div className="flex min-w-0 items-center gap-2.5">
-                                <span className="min-w-0 flex-1 truncate text-[13px] leading-5">
-                                  {getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle)}
-                                </span>
-                                <span
-                                  title={getSessionAgentLabel(s.key)}
-                                  className={cn(
-                                    'ml-auto max-w-[104px] shrink-0 truncate rounded-[10px] px-2 py-0.5 text-[10px] font-medium',
-                                    isOnChat && currentSessionKey === s.key
-                                      ? 'bg-slate-100 text-foreground/72 dark:bg-white/10 dark:text-foreground/80'
-                                      : 'bg-black/[0.035] text-muted-foreground dark:bg-white/8'
-                                  )}
-                                >
-                                  {getSessionAgentLabel(s.key)}
-                                </span>
-                              </div>
-                            </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  switchSession(s.key);
+                                  navigate('/');
+                                }}
+                                className="w-full text-left"
+                              >
+                                <div className="flex min-w-0 items-center gap-2.5">
+                                  <span className="min-w-0 flex-1 truncate text-[13px] leading-5">
+                                    {getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle)}
+                                  </span>
+                                  <span className="shrink-0 rounded-[10px] bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground dark:bg-white/8">
+                                    {getBackgroundSessionKindLabel(s, (key, fallback) => t(key, fallback))}
+                                  </span>
+                                  <span
+                                    title={getSessionAgentLabel(s.key)}
+                                    className={cn(
+                                      'max-w-[104px] shrink-0 truncate rounded-[10px] px-2 py-0.5 text-[10px] font-medium',
+                                      isOnChat && currentSessionKey === s.key
+                                        ? 'bg-slate-100 text-foreground/72 dark:bg-white/10 dark:text-foreground/80'
+                                        : 'bg-black/[0.035] text-muted-foreground dark:bg-white/8'
+                                    )}
+                                  >
+                                    {getSessionAgentLabel(s.key)}
+                                  </span>
+                                </div>
+                              </button>
+                              {parentSessionKey && (
+                                <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground/80">
+                                  <CornerUpLeft className="h-3 w-3 shrink-0" />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      switchSession(parentSessionKey);
+                                      navigate('/');
+                                    }}
+                                    className="truncate text-left hover:text-foreground"
+                                    title={parentSessionLabel}
+                                  >
+                                    {t('chat:history.parentSession', {
+                                      label: parentSessionLabel,
+                                      defaultValue: `来源：${parentSessionLabel}`,
+                                    })}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                             {canDeleteSession && (
                               <button
                                 aria-label={t('common:actions.delete')}

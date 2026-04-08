@@ -82,6 +82,8 @@
     "connectingGateway": "Gateway is reconnecting.",
     "waitingForGateway": "Gateway offline. Start or restart the Gateway to continue.",
     "backgroundSessions": "Background Tasks",
+    "showCronSessionsHidden": "Show Cron ({{count}})",
+    "parentSession": "From: {{label}}",
     "backgroundKindCron": "Cron",
     "backgroundKindSubagent": "Subagent",
     "backgroundKindTask": "Task"
