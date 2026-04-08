@@ -421,6 +421,37 @@ async function removeWeChatAccountState(accountId: string): Promise<void> {
     }
 }
 
+async function hasPersistedWeChatAccountState(): Promise<boolean> {
+    const weChatStateDir = join(homedir(), '.openclaw', WECHAT_RUNTIME_CHANNEL_ID);
+    const weChatAccountsDir = join(weChatStateDir, 'accounts');
+    const accountIndexPath = join(weChatStateDir, 'accounts.json');
+
+    try {
+        if (await fileExists(accountIndexPath)) {
+            const raw = await readFile(accountIndexPath, 'utf-8').catch(() => '');
+            const parsed = raw ? JSON.parse(raw) : [];
+            if (Array.isArray(parsed) && parsed.some((entry) => typeof entry === 'string' && entry.trim().length > 0)) {
+                return true;
+            }
+        }
+    } catch {
+        // Ignore malformed index content and fall back to scanning account files.
+    }
+
+    try {
+        if (await fileExists(weChatAccountsDir)) {
+            const candidates = await readdir(weChatAccountsDir);
+            if (candidates.some((name) => name.endsWith('.json'))) {
+                return true;
+            }
+        }
+    } catch {
+        // Ignore directory scan failures and treat as no persisted state.
+    }
+
+    return false;
+}
+
 function toQQBotSessionFileName(accountId: string): string {
     const safeId = accountId.replace(/[^a-zA-Z0-9_-]/g, '_');
     return `session-${safeId}.json`;
@@ -1481,6 +1512,7 @@ export async function deleteChannelConfig(
 
 export async function cleanupDanglingWeChatPluginState(): Promise<{ cleanedDanglingState: boolean }> {
     let cleanedDanglingState = false;
+    const hasPersistedState = await hasPersistedWeChatAccountState();
 
     await updateOpenClawConfig(async (currentConfig) => {
         migrateLegacyWechatSection(currentConfig);
@@ -1494,7 +1526,7 @@ export async function cleanupDanglingWeChatPluginState(): Promise<{ cleanedDangl
                 || isImplicitlyConfiguredChannel(WECHAT_RUNTIME_CHANNEL_ID, section)
             );
 
-        if (hasConfiguredWeChatAccounts) {
+        if (hasConfiguredWeChatAccounts || hasPersistedState) {
             return false;
         }
 

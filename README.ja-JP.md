@@ -380,11 +380,16 @@ pnpm run build:vite       # フロントエンドのみビルド
 pnpm build                # フルプロダクションビルド（パッケージアセット含む）
 pnpm package              # 現在のプラットフォーム向けにパッケージ化
 pnpm package:mac          # macOS向けにパッケージ化
-pnpm package:win          # Windowsホスト / VM 上で Windows 向けにパッケージ化（openclaw CLI 用の node.exe も同梱）
-pnpm package:win:cross    # macOS/Linux から Windows NSIS をクロスビルド（openclaw CLI 用の node.exe も同梱）
+pnpm package:win          # 補助パッケージャーで Windows NSIS をビルド（openclaw CLI 用の node.exe も同梱）
+pnpm package:win:cross    # `package:win` の別名。macOS/Linux でのクロスビルド用途向け
 pnpm package:linux        # Linux向けにパッケージ化
 pnpm run upload:update    # release/latest.yml と参照される Windows 更新ファイルをアップロード
 ```
+
+注記:
+
+- `pnpm package:win` と `pnpm package:win:cross` はどちらも `scripts/package-win.mjs` を使います。違いは実行するホスト環境だけです。
+- 同梱 OpenClaw プラグインミラーは `after-pack` 段階でコピーされるため、パッケージ化時に別途 `bundle:openclaw-plugins` を実行する必要はありません。
 
 ### Release Gate
 

@@ -594,7 +594,7 @@ async function ensureQQBotPluginInstalled(): Promise<{ installed: boolean; warni
 }
 
 async function ensureWeChatPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  const bundledResult = ensureBundledPluginInstalled('openclaw-weixin', 'WeChat', { forceReinstall: true });
+  const bundledResult = ensureBundledPluginInstalled('openclaw-weixin', 'WeChat');
   if (bundledResult.installed) {
     return bundledResult;
   }

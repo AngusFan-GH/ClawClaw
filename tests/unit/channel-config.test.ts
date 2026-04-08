@@ -518,6 +518,46 @@ describe('channel config lifecycle', () => {
     expect(config.channels).toBeUndefined();
   });
 
+  it('preserves wechat runtime state when account files still exist but config was lost', async () => {
+    await writeOpenClawJson({
+      plugins: {
+        allow: ['openclaw-weixin'],
+        entries: {
+          'openclaw-weixin': {
+            enabled: true,
+          },
+        },
+      },
+    });
+    await mkdir(join(testHome, '.openclaw', 'openclaw-weixin', 'accounts'), { recursive: true });
+    await writeFile(
+      join(testHome, '.openclaw', 'openclaw-weixin', 'accounts', 'bot-im-bot.json'),
+      JSON.stringify({ token: 'persisted-token' }),
+      'utf8',
+    );
+    await writeFile(
+      join(testHome, '.openclaw', 'openclaw-weixin', 'accounts.json'),
+      JSON.stringify(['bot-im-bot']),
+      'utf8',
+    );
+    await mkdir(join(testHome, '.openclaw', 'extensions', 'openclaw-weixin'), { recursive: true });
+
+    const { cleanupDanglingWeChatPluginState } = await import('@electron/utils/channel-config');
+    await expect(cleanupDanglingWeChatPluginState()).resolves.toEqual({ cleanedDanglingState: false });
+
+    const config = await readOpenClawJson();
+    expect(config.plugins).toEqual({
+      allow: ['openclaw-weixin'],
+      entries: {
+        'openclaw-weixin': {
+          enabled: true,
+        },
+      },
+    });
+    await expect(access(join(testHome, '.openclaw', 'openclaw-weixin'))).resolves.toBeUndefined();
+    await expect(access(join(testHome, '.openclaw', 'extensions', 'openclaw-weixin'))).resolves.toBeUndefined();
+  });
+
   it('deletes qqbot session state when removing the channel config', async () => {
     await writeOpenClawJson({
       channels: {

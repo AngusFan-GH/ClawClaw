@@ -62,6 +62,14 @@ fs.mkdirSync(OUTPUT, { recursive: true });
 echo`   Copying openclaw package...`;
 fs.cpSync(openclawReal, OUTPUT, { recursive: true, dereference: true });
 
+// The copied package may include pnpm-linked node_modules entries from the
+// source install. We rebuild OUTPUT/node_modules ourselves below, so drop the
+// copied tree first to avoid leaking symlinks back to the developer machine.
+const copiedRootNodeModules = path.join(OUTPUT, 'node_modules');
+if (fs.existsSync(copiedRootNodeModules)) {
+  fs.rmSync(copiedRootNodeModules, { recursive: true, force: true });
+}
+
 // 4. Recursively collect ALL transitive dependencies via pnpm virtual store BFS
 //
 // pnpm structure example:
@@ -265,6 +273,30 @@ for (const [pkgName, pkgRealPath] of collectedByName) {
     const topLevelRealPath = copiedRealPathsByName.get(depName);
     if (!topLevelRealPath || topLevelRealPath === depRealPath) continue;
 
+    // Check if the top-level version satisfies this package's own dependency range.
+    // If the top-level version works, we don't need a nested override.
+    // If it doesn't work, we MUST copy the package's own version as a nested override.
+    const pkgJson = (() => {
+      try { return JSON.parse(fs.readFileSync(path.join(pkgRealPath, 'package.json'), 'utf8')); }
+      catch { return null; }
+    })();
+    if (pkgJson) {
+      const depRange = (pkgJson.dependencies || {})[depName];
+      if (depRange) {
+        const depSpec = parseDependencySpec(depRange);
+        if (depSpec && isCheckableRange(depSpec)) {
+          const topPkgJson = (() => {
+            try { return JSON.parse(fs.readFileSync(path.join(topLevelRealPath, 'package.json'), 'utf8')); }
+            catch { return null; }
+          })();
+          if (topPkgJson && semver.satisfies(topPkgJson.version || '0.0.0', depSpec.range, { includePrerelease: true, loose: true })) {
+            // Top-level version is compatible — no need for a nested override
+            continue;
+          }
+        }
+      }
+    }
+
     const nestedDest = path.join(packageDest, 'node_modules', depName);
     if (fs.existsSync(normWin(nestedDest))) continue;
 
@@ -279,28 +311,50 @@ for (const [pkgName, pkgRealPath] of collectedByName) {
 }
 
 function selectCompatibleRealPath(pkgName, rawRange) {
-  const candidates = [...(discoveredRealPathsByName.get(pkgName) || [])];
-  if (candidates.length === 0) return null;
-
   const spec = parseDependencySpec(rawRange);
-  if (!spec) return candidates[0];
+  const check = (pkgJson) => {
+    if (!pkgJson) return false;
+    if (spec.type === 'alias' && spec.aliasTarget && pkgJson.name !== pkgName && pkgJson.name !== spec.aliasTarget) return false;
+    if (!isCheckableRange(spec)) return true;
+    return semver.satisfies(pkgJson.version || '0.0.0', spec.range, { includePrerelease: true, loose: true });
+  };
 
-  for (const realPath of candidates) {
-    let pkg;
-    try {
-      pkg = JSON.parse(fs.readFileSync(path.join(realPath, 'package.json'), 'utf8'));
-    } catch {
-      continue;
-    }
+  // 1. Candidates from BFS discovery (first-discovered version takes priority)
+  for (const realPath of (discoveredRealPathsByName.get(pkgName) || [])) {
+    let pkgJson;
+    try { pkgJson = JSON.parse(fs.readFileSync(path.join(realPath, 'package.json'), 'utf8')); }
+    catch { continue; }
+    if (check(pkgJson)) return realPath;
+  }
 
-    if (spec.type === 'alias' && spec.aliasTarget && pkg.name !== pkgName && pkg.name !== spec.aliasTarget) {
-      continue;
+  // 2. Any version of this package already in the bundle (nested overrides,
+  // preserveOverrides copies, etc.). These may not be in discoveredRealPathsByName.
+  const bundlePkgPaths = [];
+  const scanStack = [outputNodeModules];
+  while (scanStack.length > 0) {
+    const dir = scanStack.shift();
+    let entries = [];
+    try { entries = fs.readdirSync(dir); } catch { continue; }
+    for (const entry of entries) {
+      if (entry === '.bin' || entry === pkgName) continue;
+      const full = path.join(dir, entry);
+      const nestedNM = path.join(full, 'node_modules');
+      if (fs.existsSync(nestedNM)) {
+        scanStack.push(nestedNM);
+      }
     }
+    // Is this a node_modules directory? Check if it contains our package.
+    const pkgInDir = path.join(dir, pkgName);
+    if (fs.existsSync(pkgInDir)) {
+      bundlePkgPaths.push(pkgInDir);
+    }
+  }
 
-    if (!isCheckableRange(spec)) return realPath;
-    if (semver.satisfies(pkg.version || '0.0.0', spec.range, { includePrerelease: true, loose: true })) {
-      return realPath;
-    }
+  for (const realPath of bundlePkgPaths) {
+    let pkgJson;
+    try { pkgJson = JSON.parse(fs.readFileSync(path.join(realPath, 'package.json'), 'utf8')); }
+    catch { continue; }
+    if (check(pkgJson)) return realPath;
   }
 
   return null;
@@ -365,6 +419,7 @@ if (fs.existsSync(extensionsDir)) {
     const extNodeModules = path.join(extensionsDir, extEntry.name, 'node_modules');
     if (!fs.existsSync(extNodeModules)) continue;
 
+    const extensionPackages = new Map();
     for (const pkgEntry of fs.readdirSync(extNodeModules, { withFileTypes: true })) {
       if (pkgEntry.name === '.bin') continue;
       const srcPkg = path.join(extNodeModules, pkgEntry.name);
@@ -378,32 +433,47 @@ if (fs.existsSync(extensionsDir)) {
         }
         for (const scopeEntry of scopeEntries) {
           if (!scopeEntry.isDirectory()) continue;
-          const scopedName = `${pkgEntry.name}/${scopeEntry.name}`;
-          if (!BUILTIN_EXTENSION_RUNTIME_PACKAGES.has(scopedName)) continue;
-          if (copiedRealPathsByName.has(scopedName)) continue;
-          const destScoped = path.join(outputNodeModules, pkgEntry.name, scopeEntry.name);
-          try {
-            fs.mkdirSync(normWin(path.dirname(destScoped)), { recursive: true });
-            fs.cpSync(normWin(path.join(srcPkg, scopeEntry.name)), normWin(destScoped), { recursive: true, dereference: true });
-            copiedRealPathsByName.set(scopedName, path.join(srcPkg, scopeEntry.name));
-            mergedExtensionDepCount++;
-          } catch {
-            // non-fatal
-          }
+          extensionPackages.set(`${pkgEntry.name}/${scopeEntry.name}`, path.join(srcPkg, scopeEntry.name));
         }
         continue;
       }
 
-      if (!BUILTIN_EXTENSION_RUNTIME_PACKAGES.has(pkgEntry.name)) continue;
-      if (!pkgEntry.isDirectory() || copiedRealPathsByName.has(pkgEntry.name)) continue;
-      const dest = path.join(outputNodeModules, pkgEntry.name);
+      if (pkgEntry.isDirectory()) {
+        extensionPackages.set(pkgEntry.name, srcPkg);
+      }
+    }
+
+    const mergeQueue = [...BUILTIN_EXTENSION_RUNTIME_PACKAGES];
+    const enqueued = new Set(mergeQueue);
+    while (mergeQueue.length > 0) {
+      const pkgName = mergeQueue.shift();
+      const srcPkg = extensionPackages.get(pkgName);
+      if (!srcPkg) continue;
+
+      let pkgJson = null;
       try {
-        fs.mkdirSync(normWin(path.dirname(dest)), { recursive: true });
-        fs.cpSync(normWin(srcPkg), normWin(dest), { recursive: true, dereference: true });
-        copiedRealPathsByName.set(pkgEntry.name, srcPkg);
-        mergedExtensionDepCount++;
+        pkgJson = JSON.parse(fs.readFileSync(path.join(srcPkg, 'package.json'), 'utf8'));
       } catch {
-        // non-fatal
+        pkgJson = null;
+      }
+
+      if (!copiedRealPathsByName.has(pkgName)) {
+        const dest = path.join(outputNodeModules, pkgName);
+        try {
+          fs.mkdirSync(normWin(path.dirname(dest)), { recursive: true });
+          fs.cpSync(normWin(srcPkg), normWin(dest), { recursive: true, dereference: true });
+          copiedRealPathsByName.set(pkgName, srcPkg);
+          mergedExtensionDepCount++;
+        } catch {
+          // non-fatal
+        }
+      }
+
+      for (const depName of Object.keys(pkgJson?.dependencies || {})) {
+        if (enqueued.has(depName)) continue;
+        if (!extensionPackages.has(depName)) continue;
+        enqueued.add(depName);
+        mergeQueue.push(depName);
       }
     }
   }
