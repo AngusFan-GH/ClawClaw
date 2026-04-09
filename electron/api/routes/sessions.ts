@@ -5,6 +5,7 @@ import { createRequire } from 'module';
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
+import { getOpenClawDir } from '../../utils/paths';
 
 type SessionHistoryBody = {
   sessionKey?: string;
@@ -77,8 +78,11 @@ function normalizeHistoryMessage(message: unknown): Record<string, unknown> | nu
 async function loadOpenClawSessionHelpers(): Promise<OpenClawSessionHelpers> {
   if (!sessionHelpersPromise) {
     sessionHelpersPromise = (async () => {
-      const openclawEntry = require.resolve('openclaw');
-      const distDir = path.dirname(openclawEntry);
+      let distDir = path.join(getOpenClawDir(), 'dist');
+      if (!fs.existsSync(distDir)) {
+        const openclawEntry = require.resolve('openclaw');
+        distDir = path.dirname(openclawEntry);
+      }
       const sessionUtilsFile = fs
         .readdirSync(distDir)
         .find((name) => name.startsWith('session-utils-') && name.endsWith('.js'));

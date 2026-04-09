@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { toFsPath } from './fs-path';
+import { getOpenClawDir } from './paths';
 import {
   hasIncompatibleManagedPluginSdkImports,
   repairManagedPluginSdkImports,
@@ -64,10 +65,12 @@ function finalizeInstalledManagedPlugin(
 function findOpenClawBundledExtension(pluginId: string): string | null {
   const candidateRoots = app.isPackaged
     ? [
+        getOpenClawDir(),
         join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'openclaw'),
         join(process.resourcesPath, 'node_modules', 'openclaw'),
       ]
     : [
+        getOpenClawDir(),
         join(app.getAppPath(), 'node_modules', 'openclaw'),
         join(process.cwd(), 'node_modules', 'openclaw'),
       ];
@@ -84,7 +87,7 @@ function findOpenClawBundledExtension(pluginId: string): string | null {
 
 function isOpenClawBundledExtensionSource(sourceDir: string): boolean {
   const normalized = sourceDir.replace(/\\/g, '/');
-  return normalized.includes('/node_modules/openclaw/dist/extensions/');
+  return normalized.includes('/openclaw/dist/extensions/');
 }
 
 function readPluginVersion(dir: string): string | null {

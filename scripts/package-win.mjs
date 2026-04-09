@@ -104,7 +104,6 @@ const ensureBundledUvForWin = (archs, env) => {
   const result = spawnSync(pnpmCmd, ['run', 'uv:download:win'], {
     stdio: 'inherit',
     env,
-    shell: isWindowsHost,
   });
 
   if (result.error) {
@@ -138,7 +137,6 @@ const ensureBundledNodeForWin = (archs, env) => {
   const result = spawnSync(pnpmCmd, ['run', 'node:download:win'], {
     stdio: 'inherit',
     env,
-    shell: isWindowsHost,
   });
 
   if (result.error) {
