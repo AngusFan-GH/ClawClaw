@@ -41,7 +41,7 @@ interface AgentsState {
   channelAccountOwners: Record<string, string>;
   loading: boolean;
   error: string | null;
-  fetchAgents: () => Promise<void>;
+  fetchAgents: (options?: { silent?: boolean }) => Promise<void>;
   createAgent: (name: string) => Promise<void>;
   updateAgent: (agentId: string, updates: { name?: string; model?: string | null }) => Promise<void>;
   deleteAgent: (agentId: string) => Promise<void>;
@@ -170,8 +170,12 @@ export const useAgentsStore = create<AgentsState>((set) => ({
   loading: false,
   error: null,
 
-  fetchAgents: async () => {
-    set({ loading: true, error: null });
+  fetchAgents: async (options) => {
+    const silent = options?.silent === true;
+    set((state) => ({
+      loading: silent ? state.loading : true,
+      error: null,
+    }));
     let localSnapshot: (AgentsSnapshot & { success?: boolean }) | undefined;
     try {
       localSnapshot = await hostApiFetch<AgentsSnapshot & { success?: boolean }>('/api/agents');

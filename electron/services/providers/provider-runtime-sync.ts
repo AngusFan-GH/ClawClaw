@@ -689,8 +689,19 @@ export async function syncDeletedProviderApiKeyToRuntime(
 
 export async function syncDefaultProviderToRuntime(
   providerId: string,
-  gatewayManager?: GatewayManager,
+  gatewayManagerOrOptions?: GatewayManager | {
+    gatewayManager?: GatewayManager;
+    suppressRefresh?: boolean;
+  },
 ): Promise<void> {
+  const gatewayManager =
+    gatewayManagerOrOptions && 'getStatus' in gatewayManagerOrOptions
+      ? gatewayManagerOrOptions
+      : gatewayManagerOrOptions?.gatewayManager;
+  const suppressRefresh =
+    gatewayManagerOrOptions != null
+    && (!('getStatus' in gatewayManagerOrOptions))
+    && gatewayManagerOrOptions.suppressRefresh === true;
   const provider = await getProvider(providerId);
   if (!provider) {
     return;
@@ -751,11 +762,13 @@ export async function syncDefaultProviderToRuntime(
 
       await setOpenClawDefaultModel(GOOGLE_OAUTH_RUNTIME_PROVIDER, modelOverride, fallbackModels);
       logger.info(`Configured openclaw.json for Google browser OAuth provider "${provider.id}"`);
-      scheduleGatewayRefresh(
-        gatewayManager,
-        `Scheduling Gateway restart after provider switch to "${GOOGLE_OAUTH_RUNTIME_PROVIDER}"`,
-        { mode: 'restart' },
-      );
+      if (!suppressRefresh) {
+        scheduleGatewayRefresh(
+          gatewayManager,
+          `Scheduling Gateway restart after provider switch to "${GOOGLE_OAUTH_RUNTIME_PROVIDER}"`,
+          { mode: 'restart' },
+        );
+      }
       return;
     }
 
@@ -778,11 +791,13 @@ export async function syncDefaultProviderToRuntime(
 
       await setOpenClawDefaultModel(OPENAI_OAUTH_RUNTIME_PROVIDER, modelOverride, fallbackModels);
       logger.info(`Configured openclaw.json for OpenAI OAuth provider "${provider.id}"`);
-      scheduleGatewayRefresh(
-        gatewayManager,
-        `Scheduling Gateway restart after provider switch to "${OPENAI_OAUTH_RUNTIME_PROVIDER}"`,
-        { mode: 'restart' },
-      );
+      if (!suppressRefresh) {
+        scheduleGatewayRefresh(
+          gatewayManager,
+          `Scheduling Gateway restart after provider switch to "${OPENAI_OAUTH_RUNTIME_PROVIDER}"`,
+          { mode: 'restart' },
+        );
+      }
       return;
     }
 
@@ -847,9 +862,11 @@ export async function syncDefaultProviderToRuntime(
   await rebuildOpenClawModelAllowlistFromAccounts();
   await reconcileRuntimeProvidersFromAccounts();
 
-  scheduleGatewayRefresh(
-    gatewayManager,
-    `Scheduling Gateway restart after provider switch to "${ock}"`,
-    { onlyIfRunning: true },
-  );
+  if (!suppressRefresh) {
+    scheduleGatewayRefresh(
+      gatewayManager,
+      `Scheduling Gateway restart after provider switch to "${ock}"`,
+      { onlyIfRunning: true },
+    );
+  }
 }

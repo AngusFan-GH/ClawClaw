@@ -21,11 +21,13 @@ function scheduleGatewayReload(ctx: HostApiContext, reason: string): void {
   });
 }
 
-async function restartGatewayForAgentDeletion(ctx: HostApiContext): Promise<void> {
-  await ctx.gatewayApplyCoordinator.applyNow({
-    source: 'delete-agent',
-    reason: 'delete-agent',
-    requires: 'restart_immediate',
+function scheduleGatewayRestart(ctx: HostApiContext, reason: string): void {
+  ctx.gatewayApplyCoordinator.enqueue({
+    source: reason,
+    reason,
+    requires: 'restart',
+    delayMs: 1500,
+    skipIfStopped: true,
   });
 }
 
@@ -52,7 +54,7 @@ export async function handleAgentRoutes(
     try {
       const body = await parseJsonBody<{ name: string }>(req);
       const snapshot = await createAgent(body.name);
-      scheduleGatewayReload(ctx, 'create-agent');
+      scheduleGatewayRestart(ctx, 'create-agent');
       sendJson(res, 200, { success: true, ...snapshot });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -90,7 +92,7 @@ export async function handleAgentRoutes(
         }
 
         const snapshot = await updateAgentSettings(agentId, body);
-        scheduleGatewayReload(ctx, 'update-agent');
+        scheduleGatewayRestart(ctx, 'update-agent');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {
         sendJson(res, 500, { success: false, error: String(error) });
@@ -115,7 +117,7 @@ export async function handleAgentRoutes(
         }
 
         const snapshot = await assignChannelToAgent(agentId, channelType, accountId);
-        scheduleGatewayReload(ctx, 'assign-channel');
+        scheduleGatewayRestart(ctx, 'assign-channel');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {
         sendJson(res, 500, { success: false, error: String(error) });
@@ -132,7 +134,12 @@ export async function handleAgentRoutes(
       try {
         const agentId = decodeURIComponent(parts[0]);
         const snapshot = await deleteAgentConfig(agentId);
-        await restartGatewayForAgentDeletion(ctx);
+        // Deleting an agent still rewrites the shared OpenClaw config through the
+        // generic config writer. In current ClawClaw that can surface unrelated
+        // gateway.* diffs (for example tailscale) that OpenClaw refuses to hot-reload.
+        // Use a normal restart here instead of a reload to avoid 503 apply failures,
+        // while still coalescing with other pending changes.
+        scheduleGatewayRestart(ctx, 'delete-agent');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {
         sendJson(res, 500, { success: false, error: String(error) });
@@ -157,7 +164,7 @@ export async function handleAgentRoutes(
         }
 
         const snapshot = await clearChannelBinding(channelType, agentId, accountId);
-        scheduleGatewayReload(ctx, 'remove-agent-channel');
+        scheduleGatewayRestart(ctx, 'remove-agent-channel');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {
         sendJson(res, 500, { success: false, error: String(error) });

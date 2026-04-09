@@ -41,6 +41,7 @@ import {
 } from '../services/providers/provider-runtime-sync';
 import { emitGatewayLifecycleEvent } from '../api/gateway-lifecycle';
 import { runGatewayRefresh } from '../api/gateway-refresh';
+import { getLastStartupPreflightFailedStepIds } from '../gateway/config-sync';
 import {
 } from '../services/providers/local-model-presets';
 import { getProviderService } from '../services/providers/provider-service';
@@ -281,6 +282,16 @@ async function initialize(): Promise<void> {
   registerIpcHandlers(gatewayManager, clawHubService, mainWindow);
 
   registerGatewayRefreshScheduler((request) => {
+    if (
+      request.source === 'provider.runtimeSync'
+      && gatewayManager.isInStartupStabilizationWindow()
+    ) {
+      logger.debug(
+        `Suppressing provider runtime Gateway refresh during startup stabilization (mode=${request.mode ?? 'reload'})`,
+      );
+      return;
+    }
+
     const requires = request.mode === 'restart' ? 'restart' : 'reload';
     gatewayApplyCoordinator.enqueue({
       source: request.source ?? 'provider.runtimeSync',
@@ -422,18 +433,35 @@ async function initialize(): Promise<void> {
 
 
   const syncProviderRuntimeAfterGatewayReady = async () => {
+    const failedStepIds = new Set(getLastStartupPreflightFailedStepIds());
+    if (failedStepIds.size === 0) {
+      logger.debug('Skipping background provider runtime sync after Gateway availability (startup preflight completed cleanly)');
+      return;
+    }
+
     try {
-      logger.debug('Starting background provider runtime sync after Gateway availability');
-      await syncAllProvidersToRuntime();
-      logger.debug('Background provider config sync completed');
-      await syncAllProviderAuthToRuntime();
-      logger.debug('Background provider auth sync completed');
-      const defaultProviderAccountId = await getProviderService().getDefaultAccountId();
-      if (defaultProviderAccountId) {
-        await syncDefaultProviderToRuntime(defaultProviderAccountId);
-        logger.debug(`Background default provider sync completed (${defaultProviderAccountId})`);
-      } else {
-        logger.debug('Background default provider sync skipped (no default account)');
+      logger.debug(
+        `Starting compensating provider runtime sync after Gateway availability (failed preflight steps: ${Array.from(failedStepIds).join(', ')})`,
+      );
+
+      if (failedStepIds.has('sync-provider-configs')) {
+        await syncAllProvidersToRuntime();
+        logger.debug('Background provider config sync completed');
+      }
+
+      if (failedStepIds.has('sync-provider-auth')) {
+        await syncAllProviderAuthToRuntime();
+        logger.debug('Background provider auth sync completed');
+      }
+
+      if (failedStepIds.has('sync-default-provider')) {
+        const defaultProviderAccountId = await getProviderService().getDefaultAccountId();
+        if (defaultProviderAccountId) {
+          await syncDefaultProviderToRuntime(defaultProviderAccountId, { suppressRefresh: true });
+          logger.debug(`Background default provider sync completed (${defaultProviderAccountId})`);
+        } else {
+          logger.debug('Background default provider sync skipped (no default account)');
+        }
       }
     } catch (error) {
       logger.warn('Background provider runtime sync failed:', error);

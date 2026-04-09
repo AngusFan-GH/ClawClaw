@@ -3,21 +3,21 @@ import { subscribeHostEvent } from '@/lib/host-events';
 import type { GatewayStatus } from '@/types/gateway';
 
 type FetchChannels = (probe?: boolean, options?: { includeRuntime?: boolean }) => Promise<void>;
-type FetchAgents = () => Promise<void>;
+type FetchAgents = (options?: { silent?: boolean }) => Promise<void>;
 
 export function useGatewayPageRefresh(params: {
   fetchAgents: FetchAgents;
   fetchChannels: FetchChannels;
   gatewayState: GatewayStatus['state'];
-  gatewayLifecycleState: string;
+  gatewayLifecycleState?: string;
 }): { refresh: () => void } {
-  const { fetchAgents, fetchChannels, gatewayState, gatewayLifecycleState } = params;
+  const { fetchAgents, fetchChannels, gatewayState } = params;
   const previousGatewayStateRef = useRef(gatewayState);
 
   useEffect(() => {
     let cancelled = false;
 
-    void fetchAgents();
+    void fetchAgents({ silent: true });
     void fetchChannels(false, { includeRuntime: false }).then(() => {
       if (cancelled || gatewayState !== 'running') return;
       void fetchChannels(false, { includeRuntime: true });
@@ -30,7 +30,7 @@ export function useGatewayPageRefresh(params: {
 
   useEffect(() => {
     const refreshAll = () => {
-      void fetchAgents();
+      void fetchAgents({ silent: true });
       void fetchChannels(false);
     };
 
@@ -54,12 +54,6 @@ export function useGatewayPageRefresh(params: {
   useEffect(() => {
     previousGatewayStateRef.current = gatewayState;
   }, [gatewayState]);
-
-  useEffect(() => {
-    if (gatewayLifecycleState !== 'completed') return;
-    void fetchAgents();
-    void fetchChannels(false);
-  }, [fetchAgents, fetchChannels, gatewayLifecycleState]);
 
   return {
     refresh: () => {

@@ -26,6 +26,7 @@ const CONNECT_ERROR_CODES = {
   AUTH_TOKEN_MISMATCH: 'AUTH_TOKEN_MISMATCH',
   AUTH_DEVICE_TOKEN_MISMATCH: 'AUTH_DEVICE_TOKEN_MISMATCH',
 } as const;
+const DEFAULT_GATEWAY_HANDSHAKE_TIMEOUT_MS = 20_000;
 
 type GatewayHelloOk = {
   auth?: {
@@ -52,6 +53,17 @@ type GatewayResponseFrame = {
     details?: unknown;
   };
 };
+
+function resolveGatewayHandshakeTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.OPENCLAW_HANDSHAKE_TIMEOUT_MS;
+  if (raw) {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return DEFAULT_GATEWAY_HANDSHAKE_TIMEOUT_MS;
+}
 
 function resolveConnectErrorDetailCode(details: unknown): string | null {
   if (!details || typeof details !== 'object' || Array.isArray(details)) {
@@ -238,6 +250,7 @@ export async function connectGatewaySocket(options: {
   return await new Promise<WebSocket>((resolve, reject) => {
     const wsUrl = `ws://localhost:${options.port}/ws`;
     const ws = new WebSocket(wsUrl);
+    const handshakeTimeoutMs = resolveGatewayHandshakeTimeoutMs();
     let handshakeComplete = false;
     let connectId: string | null = null;
     let handshakeTimeout: NodeJS.Timeout | null = null;
@@ -305,7 +318,7 @@ export async function connectGatewaySocket(options: {
           ws.close();
           rejectOnce(new Error('Connect handshake timeout'));
         }
-      }, 10000);
+      }, handshakeTimeoutMs);
     };
 
     challengeTimer = setTimeout(() => {
@@ -314,7 +327,7 @@ export async function connectGatewaySocket(options: {
         ws.close();
         rejectOnce(new Error('Timed out waiting for connect.challenge from Gateway'));
       }
-    }, 10000);
+    }, handshakeTimeoutMs);
 
     ws.on('open', () => {
       logger.debug('Gateway WebSocket opened, waiting for connect.challenge...');

@@ -12,9 +12,11 @@ interface ConfirmDialogProps {
   title: string;
   message: string;
   confirmLabel?: string;
+  confirmPendingLabel?: string;
   cancelLabel?: string;
   variant?: 'default' | 'destructive';
   size?: 'sm' | 'md';
+  confirmPending?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -24,9 +26,11 @@ export function ConfirmDialog({
   title,
   message,
   confirmLabel = 'OK',
+  confirmPendingLabel,
   cancelLabel = 'Cancel',
   variant = 'default',
   size = 'md',
+  confirmPending = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -43,6 +47,7 @@ export function ConfirmDialog({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.preventDefault();
+      if (confirmPending) return;
       onCancel();
     }
   };
@@ -54,7 +59,10 @@ export function ConfirmDialog({
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
       onKeyDown={handleKeyDown}
-      onClick={onCancel}
+      onClick={() => {
+        if (confirmPending) return;
+        onCancel();
+      }}
     >
       <div
         className={cn(
@@ -74,6 +82,7 @@ export function ConfirmDialog({
             ref={cancelRef}
             variant="outline"
             className="rounded-xl"
+            disabled={confirmPending}
             onClick={onCancel}
           >
             {cancelLabel}
@@ -81,9 +90,10 @@ export function ConfirmDialog({
           <Button
             variant={variant === 'destructive' ? 'destructive' : 'default'}
             className="rounded-xl"
+            disabled={confirmPending}
             onClick={onConfirm}
           >
-            {confirmLabel}
+            {confirmPending ? (confirmPendingLabel || confirmLabel) : confirmLabel}
           </Button>
         </div>
       </div>

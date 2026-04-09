@@ -238,9 +238,11 @@ function toMs(ts: number): number {
 let _historyPollTimer: ReturnType<typeof setTimeout> | null = null;
 let _historyLoadSeq = 0;
 let _sessionRestorePromise: Promise<void> | null = null;
+let _sessionRestoreRetryTimer: ReturnType<typeof setTimeout> | null = null;
 const HISTORY_POLL_START_DELAY_MS = 3000;
 const HISTORY_POLL_INTERVAL_MS = 4000;
 const CHAT_HISTORY_PAGE_LIMIT = 200;
+const SESSION_RESTORE_RETRY_DELAY_MS = 2000;
 
 function getRawMessageKey(message: Partial<RawMessage>): string {
   const toolCallId = typeof message.toolCallId === 'string' ? message.toolCallId : '';
@@ -297,6 +299,13 @@ function clearHistoryPoll(): void {
   if (_historyPollTimer) {
     clearTimeout(_historyPollTimer);
     _historyPollTimer = null;
+  }
+}
+
+function clearSessionRestoreRetry(): void {
+  if (_sessionRestoreRetryTimer) {
+    clearTimeout(_sessionRestoreRetryTimer);
+    _sessionRestoreRetryTimer = null;
   }
 }
 
@@ -1846,7 +1855,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     } catch (err) {
       console.warn('Failed to load sessions:', err);
-      set({ sessionsLoading: false, sessionsHydrated: true });
+      set({ sessionsLoading: false, sessionsHydrated: false });
     }
   },
 
@@ -1862,6 +1871,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // do not temporarily fall back to the agent displayName ("ClawClaw")
         // until the user clicks into each session.
         await get().loadSessions({ preserveCurrent: true, warmLabels: true });
+        if (!get().sessionsHydrated) {
+          clearSessionRestoreRetry();
+          _sessionRestoreRetryTimer = setTimeout(() => {
+            _sessionRestoreRetryTimer = null;
+            if (useGatewayStore.getState().status.state === 'running' && !get().sessionsHydrated) {
+              void get().restoreSessionsAfterGatewayReady();
+            }
+          }, SESSION_RESTORE_RETRY_DELAY_MS);
+          return;
+        }
+        clearSessionRestoreRetry();
         await get().loadHistory(false);
       } finally {
         _sessionRestorePromise = null;

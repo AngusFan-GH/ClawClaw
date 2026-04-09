@@ -16,13 +16,18 @@ type DeferredRestartContext = RestartDeferralState & {
 
 export class GatewayRestartController {
   private deferredRestartPending = false;
+  private deferredRestartAction: 'reload' | 'restart' | null = null;
   private restartDebounceTimer: NodeJS.Timeout | null = null;
 
   isRestartDeferred(context: RestartDeferralState): boolean {
     return shouldDeferRestart(context);
   }
 
-  markDeferredRestart(reason: string, context: RestartDeferralState): void {
+  markDeferredRestart(
+    reason: string,
+    context: RestartDeferralState,
+    action: 'reload' | 'restart',
+  ): void {
     if (!this.deferredRestartPending) {
       logger.info(
         `Deferring Gateway restart (${reason}) until startup/reconnect settles (state=${context.state}, startLock=${context.startLock})`,
@@ -33,12 +38,15 @@ export class GatewayRestartController {
       );
     }
     this.deferredRestartPending = true;
+    if (this.deferredRestartAction !== 'restart') {
+      this.deferredRestartAction = action;
+    }
   }
 
   flushDeferredRestart(
     trigger: string,
     context: DeferredRestartContext,
-    executeRestart: () => void,
+    execute: { reload: () => void; restart: () => void },
   ): void {
     const action = getDeferredRestartAction({
       hasPendingRestart: this.deferredRestartPending,
@@ -55,7 +63,9 @@ export class GatewayRestartController {
       return;
     }
 
+    const deferredAction = this.deferredRestartAction ?? 'restart';
     this.deferredRestartPending = false;
+    this.deferredRestartAction = null;
     if (action === 'drop') {
       logger.info(
         `Dropping deferred Gateway restart (${trigger}) because lifecycle already recovered (state=${context.state}, shouldReconnect=${context.shouldReconnect})`,
@@ -63,8 +73,8 @@ export class GatewayRestartController {
       return;
     }
 
-    logger.info(`Executing deferred Gateway restart now (${trigger})`);
-    executeRestart();
+    logger.info(`Executing deferred Gateway ${deferredAction} now (${trigger})`);
+    execute[deferredAction]();
   }
 
   debouncedRestart(delayMs: number, executeRestart: () => void): void {
@@ -87,5 +97,6 @@ export class GatewayRestartController {
 
   resetDeferredRestart(): void {
     this.deferredRestartPending = false;
+    this.deferredRestartAction = null;
   }
 }

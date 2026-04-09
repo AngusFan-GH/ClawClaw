@@ -133,10 +133,17 @@ export class GatewayManager extends EventEmitter {
             startLock: this.startLock,
             shouldReconnect: this.shouldReconnect,
           },
-          () => {
-            void this.restart().catch((error) => {
-              logger.warn('Deferred Gateway restart failed:', error);
-            });
+          {
+            reload: () => {
+              void this.reload().catch((error) => {
+                logger.warn('Deferred Gateway reload failed:', error);
+              });
+            },
+            restart: () => {
+              void this.restart().catch((error) => {
+                logger.warn('Deferred Gateway restart failed:', error);
+              });
+            },
           }
         );
       },
@@ -285,6 +292,18 @@ export class GatewayManager extends EventEmitter {
 
   isStartInProgress(): boolean {
     return this.startLock || this.status.state === 'starting' || this.status.state === 'reconnecting';
+  }
+
+  isInStartupStabilizationWindow(windowMs = 8000): boolean {
+    if (this.isStartInProgress()) {
+      return true;
+    }
+
+    if (this.status.state !== 'running' || !this.status.connectedAt) {
+      return false;
+    }
+
+    return (Date.now() - this.status.connectedAt) < windowMs;
   }
 
   /**
@@ -455,10 +474,17 @@ export class GatewayManager extends EventEmitter {
             startLock: this.startLock,
             shouldReconnect: this.shouldReconnect,
           },
-          () => {
-            void this.restart().catch((error) => {
-              logger.warn('Deferred Gateway restart failed:', error);
-            });
+          {
+            reload: () => {
+              void this.reload().catch((error) => {
+                logger.warn('Deferred Gateway reload failed:', error);
+              });
+            },
+            restart: () => {
+              void this.restart().catch((error) => {
+                logger.warn('Deferred Gateway restart failed:', error);
+              });
+            },
           }
         );
       }
@@ -637,7 +663,7 @@ export class GatewayManager extends EventEmitter {
       this.restartController.markDeferredRestart('restart', {
         state: this.status.state,
         startLock: this.startLock,
-      });
+      }, 'restart');
       return;
     }
 
@@ -703,10 +729,17 @@ export class GatewayManager extends EventEmitter {
           startLock: this.startLock,
           shouldReconnect: this.shouldReconnect,
         },
-        () => {
-          void this.restart().catch((error) => {
-            logger.warn('Deferred Gateway restart failed:', error);
-          });
+        {
+          reload: () => {
+            void this.reload().catch((error) => {
+              logger.warn('Deferred Gateway reload failed:', error);
+            });
+          },
+          restart: () => {
+            void this.restart().catch((error) => {
+              logger.warn('Deferred Gateway restart failed:', error);
+            });
+          },
         }
       );
     }
@@ -741,7 +774,7 @@ export class GatewayManager extends EventEmitter {
       this.restartController.markDeferredRestart('reload', {
         state: this.status.state,
         startLock: this.startLock,
-      });
+      }, 'reload');
       return;
     }
 

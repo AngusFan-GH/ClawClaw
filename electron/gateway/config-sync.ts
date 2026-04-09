@@ -298,6 +298,7 @@ async function repairOpenClawConfigFile(): Promise<GatewayConfigRecovery | null>
 }
 
 let lastStartupPreflightRecovery: GatewayConfigRecovery | null = null;
+let lastStartupPreflightFailedStepIds: string[] = [];
 
 function buildPreflightRecovery(topics: GatewayConfigRecovery['topics']): GatewayConfigRecovery | null {
   const uniqueTopics = Array.from(new Set((topics ?? []).filter(Boolean)));
@@ -312,6 +313,10 @@ function buildPreflightRecovery(topics: GatewayConfigRecovery['topics']): Gatewa
 
 export function getLastStartupPreflightRecovery(): GatewayConfigRecovery | null {
   return lastStartupPreflightRecovery;
+}
+
+export function getLastStartupPreflightFailedStepIds(): string[] {
+  return [...lastStartupPreflightFailedStepIds];
 }
 
 export async function runOpenClawStartupPreflightRepair(): Promise<void> {
@@ -435,7 +440,7 @@ export async function runOpenClawStartupPreflightRepair(): Promise<void> {
           return;
         }
         await withTimeout(
-          syncDefaultProviderToRuntime(defaultProviderId),
+          syncDefaultProviderToRuntime(defaultProviderId, { suppressRefresh: true }),
           3000,
           'syncDefaultProviderToRuntime',
           undefined,
@@ -481,6 +486,7 @@ export async function runOpenClawStartupPreflightRepair(): Promise<void> {
     );
   }
 
+  lastStartupPreflightFailedStepIds = [...result.failedStepIds];
   lastStartupPreflightRecovery = configRecovery ?? buildPreflightRecovery(recoveryTopics);
 }
 
@@ -690,6 +696,7 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     ...uvEnv,
     ...proxyEnv,
     OPENCLAW_GATEWAY_TOKEN: appSettings.gatewayToken,
+    OPENCLAW_HANDSHAKE_TIMEOUT_MS: process.env.OPENCLAW_HANDSHAKE_TIMEOUT_MS || '20000',
     OPENCLAW_SKIP_CHANNELS: skipChannels ? '1' : '',
     CLAWDBOT_SKIP_CHANNELS: skipChannels ? '1' : '',
     OPENCLAW_NO_RESPAWN: '1',

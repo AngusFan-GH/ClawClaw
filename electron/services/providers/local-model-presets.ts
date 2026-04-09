@@ -103,7 +103,7 @@ export async function migrateLegacyLocalModelAccounts(gatewayManager?: GatewayMa
   }
 
   if (legacyAccounts.length > 0) {
-    schedulePresetGatewayRefresh(gatewayManager, 'restart');
+    schedulePresetGatewayRefresh(gatewayManager, 'reload');
   }
 }
 
@@ -160,7 +160,6 @@ export async function applyPresetLocalModelSelection(
   const preferredAccount = presetAccounts.find((account) => account.metadata?.presetId === primaryPreset.id);
   const targetAccount = preferredAccount ?? presetAccounts[0];
   const now = new Date().toISOString();
-  let requiresRestart = false;
 
   const updatePatch = {
     label: primaryPreset.name,
@@ -220,12 +219,11 @@ export async function applyPresetLocalModelSelection(
     if (staleAccount.id === account.id) continue;
     await providerService.deleteAccount(staleAccount.id);
     await syncDeletedProviderToRuntime(providerAccountToConfig(staleAccount), staleAccount.id, undefined);
-    requiresRestart = true;
   }
 
   await providerService.setDefaultAccount(account.id);
   await syncDefaultProviderToRuntime(account.id, undefined);
-  schedulePresetGatewayRefresh(gatewayManager, requiresRestart ? 'restart' : 'reload');
+  schedulePresetGatewayRefresh(gatewayManager, 'reload');
 
   return { accountId: account.id, primaryPresetId: primaryPreset.id };
 }

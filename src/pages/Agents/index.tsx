@@ -63,12 +63,12 @@ export function Agents() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [agentToDelete, setAgentToDelete] = useState<AgentSummary | null>(null);
+  const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
   const { refresh: handleRefresh } = useGatewayPageRefresh({
     fetchAgents,
     fetchChannels,
     gatewayState: gatewayStatus.state,
-    gatewayLifecycleState: gatewayLifecycle.state,
   });
   const activeAgent = useMemo(
     () => agents.find((agent) => agent.gateway.id === activeAgentId) ?? null,
@@ -212,6 +212,7 @@ export function Agents() {
                     defaultAgentId={defaultAgentId}
                     onOpenSettings={() => setActiveAgentId(agent.gateway.id)}
                     onDelete={() => setAgentToDelete(agent)}
+                    isDeleting={deletingAgentId === agent.gateway.id}
                   />
                 ))}
               </div>
@@ -248,18 +249,34 @@ export function Agents() {
         title={t('deleteDialog.title')}
         message={agentToDelete ? t('deleteDialog.message', { name: resolveAgentDisplayName(agentToDelete) }) : ''}
         confirmLabel={t('common:actions.delete')}
+        confirmPendingLabel={t('common:status.deleting', 'Deleting...')}
         cancelLabel={t('common:actions.cancel')}
         variant="destructive"
+        confirmPending={Boolean(agentToDelete && deletingAgentId === agentToDelete.gateway.id)}
         onConfirm={async () => {
           if (!agentToDelete) return;
-          await deleteAgent(agentToDelete.gateway.id);
-          setAgentToDelete(null);
-          if (activeAgentId === agentToDelete.gateway.id) {
-            setActiveAgentId(null);
+          const deleting = agentToDelete;
+          setDeletingAgentId(deleting.gateway.id);
+          try {
+            await deleteAgent(deleting.gateway.id);
+            setAgentToDelete(null);
+            if (activeAgentId === deleting.gateway.id) {
+              setActiveAgentId(null);
+            }
+            toast.success(t('toast.agentDeleted'));
+          } catch (error) {
+            toast.error(t('toast.agentDeleteFailed', {
+              error: error instanceof Error ? error.message : String(error),
+              defaultValue: `Delete failed: ${String(error)}`,
+            }));
+          } finally {
+            setDeletingAgentId(null);
           }
-          toast.success(t('toast.agentDeleted'));
         }}
-        onCancel={() => setAgentToDelete(null)}
+        onCancel={() => {
+          if (deletingAgentId) return;
+          setAgentToDelete(null);
+        }}
       />
     </div>
   );
@@ -388,6 +405,7 @@ function AgentCard({
   defaultAgentId,
   onOpenSettings,
   onDelete,
+  isDeleting,
 }: {
   agent: AgentSummary;
   channelGroups: ChannelGroup[];
@@ -395,6 +413,7 @@ function AgentCard({
   defaultAgentId: string;
   onOpenSettings: () => void;
   onDelete: () => void;
+  isDeleting?: boolean;
 }) {
   const { t } = useTranslation('agents');
   const displayName = resolveAgentDisplayName(agent);
@@ -495,9 +514,10 @@ function AgentCard({
                           variant="dangerGhost"
                           size="icon"
                           className="h-9 w-9 rounded-[12px] border border-red-200/80 bg-red-50/80 shadow-none hover:bg-red-100"
+                          disabled={isDeleting}
                           onClick={onDelete}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          {isDeleting ? <LoadingIcon className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>{t('deleteAgent')}</TooltipContent>
