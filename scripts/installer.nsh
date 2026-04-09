@@ -104,6 +104,7 @@ LangString installRuntimeValidationFailed 2052 "安装完成后，内置 OpenCla
   Delete "$SMPROGRAMS\${PRODUCT_NAME}.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\卸载 ${PRODUCT_NAME}.lnk"
+  !insertmacro KillInstallDirProcesses
 
   ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
 
@@ -118,6 +119,7 @@ LangString installRuntimeValidationFailed 2052 "安装完成后，内置 OpenCla
 
     doStopProcess:
     DetailPrint `Closing running "${PRODUCT_NAME}"...`
+    !insertmacro KillInstallDirProcesses
 
     # First try the lightweight image-name kill. On Windows, Electron helper
     # subprocesses reuse the same executable name as the main app, so killing
@@ -139,6 +141,7 @@ LangString installRuntimeValidationFailed 2052 "安装完成后，内置 OpenCla
 
     loop:
       IntOp $R1 $R1 + 1
+      !insertmacro KillInstallDirProcesses
 
       ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
       ${if} $R0 == 0
@@ -169,8 +172,60 @@ LangString installRuntimeValidationFailed 2052 "安装完成后，内置 OpenCla
         Goto loop
       ${endIf}
     not_running:
+      !insertmacro KillInstallDirProcesses
       ${nsProcess::Unload}
   ${endIf}
+!macroend
+
+!macro PreparePreviousInstallForUpgrade
+  !insertmacro KillInstallDirProcesses
+  ${If} ${FileExists} "$INSTDIR\resources\cli\openclaw.cmd"
+    DetailPrint `Stopping old bundled Gateway before uninstall...`
+    nsExec::ExecToStack '"$SYSDIR\cmd.exe" /d /c ""$INSTDIR\resources\cli\openclaw.cmd" gateway stop"'
+    Pop $R6
+    Pop $R7
+    DetailPrint `Uninstalling old bundled Gateway service/task before uninstall...`
+    nsExec::ExecToStack '"$SYSDIR\cmd.exe" /d /c ""$INSTDIR\resources\cli\openclaw.cmd" gateway uninstall"'
+    Pop $R6
+    Pop $R7
+  ${EndIf}
+  !insertmacro KillInstallDirProcesses
+!macroend
+
+!macro FallbackInteractiveOldUninstall
+  ${If} ${isUpdated}
+  ${andIf} $R0 != 0
+    MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION \
+      "The installed ClawClaw version could not be removed silently.$\r$\n$\r$\nClawClaw will now open the old uninstaller. Complete that uninstall, then setup will continue automatically." \
+      /SD IDCANCEL IDOK +2
+    Quit
+
+    DetailPrint `Silent uninstall failed with code $R0. Falling back to interactive old uninstaller.`
+    !insertmacro KillInstallDirProcesses
+
+    StrCpy $R8 ""
+    ${if} $installMode == "CurrentUser"
+    ${orIf} $rootKey == "HKEY_CURRENT_USER"
+      StrCpy $R8 "/currentuser"
+    ${else}
+      StrCpy $R8 "/allusers"
+    ${endif}
+
+    ExecWait '"$uninstallerFileName" $R8 _?=$installationDir' $R0
+    !insertmacro KillInstallDirProcesses
+    ${If} $R0 == 0
+      ClearErrors
+      Return
+    ${EndIf}
+  ${EndIf}
+!macroend
+
+!macro customUnInstallCheck
+  !insertmacro FallbackInteractiveOldUninstall
+!macroend
+
+!macro customUnInstallCheckCurrentUser
+  !insertmacro FallbackInteractiveOldUninstall
 !macroend
 
 !macro customInstall

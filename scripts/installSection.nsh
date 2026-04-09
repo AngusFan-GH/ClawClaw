@@ -54,10 +54,12 @@ ${IfNot} ${Silent}
   SetDetailsPrint both
   DetailPrint "$(installPhaseRemovePrevious)"
 ${endif}
+!insertmacro PreparePreviousInstallForUpgrade
 !insertmacro uninstallOldVersion SHELL_CONTEXT
 !insertmacro handleUninstallResult SHELL_CONTEXT
 
 ${if} $installMode == "all"
+  !insertmacro PreparePreviousInstallForUpgrade
   !insertmacro uninstallOldVersion HKEY_CURRENT_USER
   !insertmacro handleUninstallResult HKEY_CURRENT_USER
 ${endIf}

@@ -6,9 +6,9 @@ import { autoUpdater, UpdateInfo, ProgressInfo, UpdateDownloadedEvent } from 'el
 import { BrowserWindow, app, ipcMain } from 'electron';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
-import { setQuitting } from './app-state';
 import type { AppSettings } from '../utils/store';
 import { UPDATE_FEEDS, type UpdateChannel } from '../shared/update-feed';
+import { markAppQuitting } from './quit';
 
 type FeedConfig = {
   channel: UpdateChannel;
@@ -230,7 +230,7 @@ export class AppUpdater extends EventEmitter {
 
   quitAndInstall(): void {
     logger.info('[Updater] quitAndInstall called');
-    setQuitting();
+    markAppQuitting();
     autoUpdater.quitAndInstall();
   }
 

@@ -5,6 +5,7 @@
 import { Tray, Menu, BrowserWindow, app, nativeImage } from 'electron';
 import { join } from 'path';
 import type { GatewayManager } from '../gateway/manager';
+import { quitApp } from './quit';
 
 let tray: Tray | null = null;
 
@@ -115,7 +116,7 @@ export function createTray(mainWindow: BrowserWindow, gatewayManager: GatewayMan
     {
       label: 'Quit ClawClaw',
       click: () => {
-        app.quit();
+        quitApp(app);
       },
     },
   ]);

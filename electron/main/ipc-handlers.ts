@@ -56,6 +56,7 @@ import {
 import { validateApiKeyWithProvider } from '../services/providers/provider-validation';
 import { appUpdater } from './updater';
 import { PORTS } from '../utils/config';
+import { quitApp, relaunchApp } from './quit';
 
 type AppRequest = {
   id?: string;
@@ -1937,13 +1938,12 @@ function registerAppHandlers(): void {
 
   // Quit app
   ipcMain.handle('app:quit', () => {
-    app.quit();
+    quitApp(app);
   });
 
   // Relaunch app
   ipcMain.handle('app:relaunch', () => {
-    app.relaunch();
-    app.quit();
+    relaunchApp(app);
   });
 }
 

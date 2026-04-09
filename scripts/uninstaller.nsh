@@ -20,49 +20,18 @@ LangString uninstallOptionOpenClawTitle 1033 "Also delete OpenClaw user data (~/
 LangString uninstallOptionOpenClawTitle 2052 "同时删除 OpenClaw 用户数据（~/.openclaw）"
 LangString uninstallOptionOpenClawDesc 1033 "Removes all OpenClaw data: agents, channels, providers, and credentials stored in your home directory. This cannot be undone."
 LangString uninstallOptionOpenClawDesc 2052 "删除所有 OpenClaw 数据：保存在主目录中的 agents、channels、providers 和 credentials。此操作无法撤销。"
-LangString uninstallDataPageTitle 1033 "Choose Data to Remove"
-LangString uninstallDataPageTitle 2052 "选择要删除的数据"
-LangString uninstallDataPageSubtitle 1033 "Select the additional ClawClaw or OpenClaw data you want removed."
-LangString uninstallDataPageSubtitle 2052 "选择你希望额外删除的 ClawClaw 或 OpenClaw 数据。"
+LangString uninstallComponentsTop 1033 "Choose the additional data you want to remove."
+LangString uninstallComponentsTop 2052 "选择你希望额外删除的数据。"
 
-Var unRemoveClawClawDataState
-Var unRemoveOpenClawDataState
-Var unRemoveClawClawDataCheckbox
-Var unRemoveOpenClawDataCheckbox
+!define MUI_COMPONENTSPAGE_SMALLDESC
+!define MUI_COMPONENTSPAGE_TEXT_TOP "$(uninstallComponentsTop)"
 
 ; Replace the default MUI uninstall welcome page with our localised text.
 !macro customUnWelcomePage
   !define MUI_UNWELCOMEPAGE_TITLE "$(uninstallWelcomeTitle)"
   !define MUI_UNWELCOMEPAGE_TEXT "$(uninstallWelcomeText)"
   !insertmacro MUI_UNPAGE_WELCOME
-  UninstPage custom un.UninstallDataPageCreate un.UninstallDataPageLeave
 !macroend
-
-Function un.UninstallDataPageCreate
-  nsDialogs::Create 1018
-  Pop $0
-
-  ${NSD_CreateCheckbox} 0 8u 100% 12u "$(uninstallOptionAppDataTitle)"
-  Pop $unRemoveClawClawDataCheckbox
-  ${NSD_Uncheck} $unRemoveClawClawDataCheckbox
-
-  ${NSD_CreateLabel} 12u 22u 88% 34u "$(uninstallOptionAppDataDesc)"
-  Pop $1
-
-  ${NSD_CreateCheckbox} 0 66u 100% 12u "$(uninstallOptionOpenClawTitle)"
-  Pop $unRemoveOpenClawDataCheckbox
-  ${NSD_Uncheck} $unRemoveOpenClawDataCheckbox
-
-  ${NSD_CreateLabel} 12u 80u 88% 28u "$(uninstallOptionOpenClawDesc)"
-  Pop $2
-
-  nsDialogs::Show
-FunctionEnd
-
-Function un.UninstallDataPageLeave
-  ${NSD_GetState} $unRemoveClawClawDataCheckbox $unRemoveClawClawDataState
-  ${NSD_GetState} $unRemoveOpenClawDataCheckbox $unRemoveOpenClawDataState
-FunctionEnd
 
 !macro RunOpenClawCli commandLine
   nsExec::ExecToStack '"$SYSDIR\cmd.exe" /d /c ""$INSTDIR\resources\cli\openclaw.cmd" ${commandLine}""'
@@ -70,10 +39,29 @@ FunctionEnd
   Pop $1
 !macroend
 
+!macro KillInstallDirProcesses
+  InitPluginsDir
+  ClearErrors
+  File "/oname=$PLUGINSDIR\kill-install-dir-processes.ps1" "${PROJECT_DIR}\scripts\kill-install-dir-processes.ps1"
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\kill-install-dir-processes.ps1" -InstallDir "$INSTDIR"'
+  Pop $0
+  Pop $1
+  StrCmp $0 "error" 0 +3
+    DetailPrint "Warning: Failed to launch install-dir process cleanup helper."
+    Goto +5
+  StrCmp $0 "timeout" 0 +3
+    DetailPrint "Warning: Install-dir process cleanup helper timed out."
+    Goto +3
+  StrCmp $0 "0" 0 +2
+    Goto +2
+  DetailPrint "Warning: Install-dir process cleanup helper exited with code $0."
+!macroend
+
 ; Core uninstaller cleanup: stop gateway, remove PATH entry, remove shortcuts.
 ; File/registry cleanup is handled by electron-builder's built-in uninstaller section.
 !macro customUnInstall
   SetDetailsPrint both
+  !insertmacro KillInstallDirProcesses
   DetailPrint "正在停止并清理 OpenClaw Gateway 服务..."
 
   ${If} ${FileExists} "$INSTDIR\resources\cli\openclaw.cmd"
@@ -110,7 +98,14 @@ FunctionEnd
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\卸载 ${PRODUCT_NAME}.lnk"
   RMDir "$SMPROGRAMS\${PRODUCT_NAME}"
 
-  ${If} $unRemoveClawClawDataState == ${BST_CHECKED}
+  !insertmacro KillInstallDirProcesses
+  DetailPrint "命令行环境清理已完成。"
+!macroend
+
+; Keep optional data cleanup in dedicated uninstall sections so electron-builder's
+; standard silent uninstall path remains compatible with older installers.
+!macro customUnInstallSection
+  Section /o "$(uninstallOptionAppDataTitle)" un.RemoveClawClawData
     DetailPrint "正在删除 ClawClaw 本地数据..."
     RMDir /r "$APPDATA\${APP_FILENAME}"
     !ifdef APP_PRODUCT_FILENAME
@@ -126,12 +121,15 @@ FunctionEnd
     !ifdef APP_PACKAGE_NAME
       RMDir /r "$LOCALAPPDATA\${APP_PACKAGE_NAME}"
     !endif
-  ${EndIf}
+  SectionEnd
 
-  ${If} $unRemoveOpenClawDataState == ${BST_CHECKED}
+  Section /o "$(uninstallOptionOpenClawTitle)" un.RemoveOpenClawData
     DetailPrint "正在删除 OpenClaw 用户数据..."
     RMDir /r "$PROFILE\.openclaw"
-  ${EndIf}
+  SectionEnd
 
-  DetailPrint "命令行环境清理已完成。"
+  !insertmacro MUI_UNFUNCTION_DESCRIPTION_BEGIN
+    !insertmacro MUI_DESCRIPTION_TEXT ${un.RemoveClawClawData} "$(uninstallOptionAppDataDesc)"
+    !insertmacro MUI_DESCRIPTION_TEXT ${un.RemoveOpenClawData} "$(uninstallOptionOpenClawDesc)"
+  !insertmacro MUI_UNFUNCTION_DESCRIPTION_END
 !macroend
