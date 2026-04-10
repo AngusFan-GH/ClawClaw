@@ -128,6 +128,7 @@ Section "install" INSTALL_SECTION_ID
     ${IfNot} ${Silent}
       SetDetailsPrint both
       DetailPrint "$(installPhasePrepare)"
+      DetailPrint "$(installPhaseCheckRunning)"
     ${endif}
 
     StrCpy $appExe "$INSTDIR\${APP_EXECUTABLE_FILENAME}"

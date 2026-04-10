@@ -967,6 +967,10 @@ export class GatewayManager extends EventEmitter {
         if (this.process === exitedChild) {
           this.process = null;
         }
+        clearPendingGatewayRequests(
+          this.pendingRequests,
+          new Error(`Gateway process exited (${code ?? signal ?? 'unknown'})`),
+        );
         this.emit('exit', code);
 
         if (this.status.state === 'running') {
@@ -1012,6 +1016,10 @@ export class GatewayManager extends EventEmitter {
       },
       onCloseAfterHandshake: () => {
         this.lastAttachProbeFoundGateway = false;
+        clearPendingGatewayRequests(
+          this.pendingRequests,
+          new Error('Gateway connection closed during request'),
+        );
         if (this.status.state === 'running') {
           this.setStatus({ state: 'stopped', restartExpectedMs: undefined });
           this.scheduleReconnect();

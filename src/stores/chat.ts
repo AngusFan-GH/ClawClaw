@@ -212,6 +212,7 @@ interface ChatState {
   interruptActiveRunForPolicyChange: (message: string) => Promise<boolean>;
   handleChatEvent: (event: Record<string, unknown>) => void;
   handleAgentEvent: (event: AgentStreamEvent) => void;
+  handleGatewayStatusChange: (state: 'stopped' | 'starting' | 'running' | 'error' | 'reconnecting') => void;
   toggleThinking: () => void;
   refresh: () => Promise<void>;
   clearError: () => void;
@@ -306,6 +307,31 @@ function clearSessionRestoreRetry(): void {
   if (_sessionRestoreRetryTimer) {
     clearTimeout(_sessionRestoreRetryTimer);
     _sessionRestoreRetryTimer = null;
+  }
+}
+
+function isGatewayDisconnectErrorMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes('gateway not connected')
+    || normalized.includes('gateway connection closed')
+    || normalized.includes('gateway process exited')
+    || normalized.includes('rpc timeout: chat.send')
+    || normalized.includes('connect handshake timeout')
+    || normalized.includes('websocket closed before handshake');
+}
+
+function getGatewayStatusErrorMessage(state: 'stopped' | 'starting' | 'running' | 'error' | 'reconnecting'): string | null {
+  switch (state) {
+    case 'reconnecting':
+      return 'Gateway is reconnecting. This response may resume after the Gateway comes back.';
+    case 'starting':
+      return 'Gateway is starting. Wait for it to finish reconnecting, then refresh the conversation.';
+    case 'stopped':
+      return 'Gateway went offline while the response was in progress. Restart it and refresh the conversation.';
+    case 'error':
+      return 'Gateway failed while the response was in progress. Restart it and refresh the conversation.';
+    default:
+      return null;
   }
 }
 
@@ -2683,27 +2709,51 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (!result.success) {
         clearHistoryPoll();
-        // ✅ Fix HR-1: Roll back the optimistically-added user message on failure.
-        set((s) => ({
-          messages: s.messages.filter((m) => m.id !== userMsg.id),
-          error: result.error || 'Failed to send message',
-          sending: false,
-          activeRunId: null,
-          ...resetToolStreamState(get()),
-        }));
+        const errorMessage = result.error || 'Failed to send message';
+        if (isGatewayDisconnectErrorMessage(errorMessage)) {
+          set((s) => ({
+            error: 'Gateway disconnected while sending. The message was kept locally; refresh after the Gateway recovers to verify whether it was delivered.',
+            sending: false,
+            activeRunId: null,
+            pendingFinal: false,
+            lastUserMessageAt: null,
+            ...resetToolStreamState(s),
+          }));
+        } else {
+          // ✅ Fix HR-1: Roll back the optimistically-added user message on failure.
+          set((s) => ({
+            messages: s.messages.filter((m) => m.id !== userMsg.id),
+            error: errorMessage,
+            sending: false,
+            activeRunId: null,
+            ...resetToolStreamState(s),
+          }));
+        }
       } else if (result.result?.runId) {
         set({ activeRunId: result.result.runId });
       }
     } catch (err) {
       clearHistoryPoll();
-      // ✅ Fix HR-1: Roll back the optimistically-added user message on error.
-      set((s) => ({
-        messages: s.messages.filter((m) => m.id !== userMsg.id),
-        error: String(err),
-        sending: false,
-        activeRunId: null,
-        ...resetToolStreamState(get()),
-      }));
+      const errorMessage = String(err);
+      if (isGatewayDisconnectErrorMessage(errorMessage)) {
+        set((s) => ({
+          error: 'Gateway disconnected while sending. The message was kept locally; refresh after the Gateway recovers to verify whether it was delivered.',
+          sending: false,
+          activeRunId: null,
+          pendingFinal: false,
+          lastUserMessageAt: null,
+          ...resetToolStreamState(s),
+        }));
+      } else {
+        // ✅ Fix HR-1: Roll back the optimistically-added user message on error.
+        set((s) => ({
+          messages: s.messages.filter((m) => m.id !== userMsg.id),
+          error: errorMessage,
+          sending: false,
+          activeRunId: null,
+          ...resetToolStreamState(s),
+        }));
+      }
     }
   },
 
@@ -3303,6 +3353,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
         activeRunId: s.activeRunId || incomingRunId || null,
       };
     });
+  },
+
+  handleGatewayStatusChange: (gatewayState) => {
+    const nextError = getGatewayStatusErrorMessage(gatewayState);
+    if (!nextError) return;
+
+    const state = get();
+    if (!state.sending && !state.activeRunId && !state.pendingFinal) {
+      return;
+    }
+
+    clearHistoryPoll();
+    clearErrorRecoveryTimer();
+    set((s) => ({
+      error: nextError,
+      sending: false,
+      activeRunId: null,
+      streamingText: '',
+      streamingMessage: null,
+      streamingTools: [],
+      pendingFinal: false,
+      pendingSessionModelRefresh: false,
+      lastUserMessageAt: null,
+      pendingToolImages: [],
+      ...resetToolStreamState(s),
+    }));
   },
 
   // ── Toggle thinking visibility ──

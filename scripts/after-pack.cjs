@@ -85,6 +85,30 @@ function cleanupUnnecessaryFiles(dir) {
   return removedCount;
 }
 
+function listPackageEntries(nodeModulesDir) {
+  if (!existsSync(nodeModulesDir)) return [];
+
+  const entries = [];
+  for (const entry of readdirSync(nodeModulesDir)) {
+    if (entry === '.bin') continue;
+    const entryPath = join(nodeModulesDir, entry);
+
+    if (entry.startsWith('@')) {
+      if (!existsSync(entryPath)) continue;
+      for (const scoped of readdirSync(entryPath)) {
+        const fullPath = join(entryPath, scoped);
+        if (existsSync(join(fullPath, 'package.json'))) {
+          entries.push(fullPath);
+        }
+      }
+    } else if (existsSync(join(entryPath, 'package.json'))) {
+      entries.push(entryPath);
+    }
+  }
+
+  return entries;
+}
+
 // ── Platform-specific: koffi ─────────────────────────────────────────────────
 // koffi ships 18 platform pre-builds under koffi/build/koffi/{platform}_{arch}/.
 // We only need the one matching the target.
@@ -167,7 +191,7 @@ const MODULE_PATCHES = {
 };
 
 function patchBrokenModules(nodeModulesDir) {
-  const { writeFileSync } = require('fs');
+  const { writeFileSync, readFileSync } = require('fs');
   let count = 0;
   for (const [rel, content] of Object.entries(MODULE_PATCHES)) {
     const target = join(nodeModulesDir, rel);
@@ -176,9 +200,49 @@ function patchBrokenModules(nodeModulesDir) {
       count++;
     }
   }
+  count += patchKnownDependencyMetadata(nodeModulesDir);
   if (count > 0) {
     console.log(`[after-pack] 🩹 Patched ${count} broken module(s) in ${nodeModulesDir}`);
   }
+}
+
+function patchKnownDependencyMetadata(nodeModulesDir) {
+  let count = 0;
+  const queue = [nodeModulesDir];
+  const seen = new Set();
+
+  while (queue.length > 0) {
+    const currentNodeModules = queue.shift();
+    if (!currentNodeModules || seen.has(currentNodeModules) || !existsSync(currentNodeModules)) continue;
+    seen.add(currentNodeModules);
+
+    for (const pkgDir of listPackageEntries(currentNodeModules)) {
+      const pkgJsonPath = join(pkgDir, 'package.json');
+      let pkg;
+      try {
+        pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8'));
+      } catch {
+        pkg = null;
+      }
+
+      if (
+        pkg?.name === 'p-queue' &&
+        pkg?.version === '6.6.2' &&
+        pkg?.dependencies?.['p-timeout'] === '^3.2.0'
+      ) {
+        pkg.dependencies['p-timeout'] = '^3.2.0 || ^4.0.0';
+        writeFileSync(pkgJsonPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+        count++;
+      }
+
+      const nestedNodeModules = join(pkgDir, 'node_modules');
+      if (existsSync(nestedNodeModules)) {
+        queue.push(nestedNodeModules);
+      }
+    }
+  }
+
+  return count;
 }
 
 // ── Plugin bundler ───────────────────────────────────────────────────────────

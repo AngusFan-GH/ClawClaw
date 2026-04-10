@@ -181,6 +181,43 @@ describe('Chat Store', () => {
     await vi.runOnlyPendingTimersAsync();
   });
 
+  it('should stop a stuck send when the gateway reports reconnecting', () => {
+    useChatStore.setState({
+      messages: [{ role: 'user', content: 'hello', id: 'u1' }],
+      sending: true,
+      activeRunId: 'run-1',
+      pendingFinal: true,
+      lastUserMessageAt: Date.now(),
+      error: null,
+    });
+
+    useChatStore.getState().handleGatewayStatusChange('reconnecting');
+
+    const state = useChatStore.getState();
+    expect(state.sending).toBe(false);
+    expect(state.activeRunId).toBeNull();
+    expect(state.pendingFinal).toBe(false);
+    expect(state.messages).toHaveLength(1);
+    expect(state.error).toContain('Gateway is reconnecting');
+  });
+
+  it('should keep the optimistic user message when chat.send fails due to gateway disconnect', async () => {
+    const rpcMock = vi
+      .spyOn(useGatewayStore.getState(), 'rpc')
+      .mockRejectedValueOnce(new Error('Gateway connection closed during request'));
+
+    await useChatStore.getState().sendMessage('hello after disconnect');
+
+    const state = useChatStore.getState();
+    expect(state.messages).toHaveLength(1);
+    expect(state.messages[0].role).toBe('user');
+    expect(state.sending).toBe(false);
+    expect(state.activeRunId).toBeNull();
+    expect(state.error).toContain('message was kept locally');
+
+    rpcMock.mockRestore();
+  });
+
   it('should prefer derived titles from sessions.list and avoid extra history fetches for labeled sessions', async () => {
     const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method, params) => {
       if (method === 'sessions.list') {

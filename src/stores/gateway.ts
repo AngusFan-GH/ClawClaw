@@ -157,6 +157,17 @@ function handleGatewayChatMessage(data: unknown): void {
   }).catch(() => {});
 }
 
+function notifyChatStoreOfGatewayStatus(
+  state: GatewayStatus['state'],
+): void {
+  if (state === 'running') return;
+  import('./chat')
+    .then(({ useChatStore }) => {
+      useChatStore.getState().handleGatewayStatusChange(state);
+    })
+    .catch(() => {});
+}
+
 function scheduleLifecycleClear(set: (partial: Partial<GatewayState>) => void, delayMs = 2200): void {
   if (lifecycleClearTimer) {
     clearTimeout(lifecycleClearTimer);
@@ -314,6 +325,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
   refreshStatus: async () => {
     try {
       const status = normalizeGatewayStatus(await fetchGatewayStatusSnapshot());
+      notifyChatStoreOfGatewayStatus(status.state);
       const shouldClearLifecycle = shouldPromoteLifecycleToCompleted(get().lifecycle, status);
       set((state) => ({
         status,
@@ -344,6 +356,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
           unsubscribers.push(subscribeHostEvent<GatewayStatus>('gateway:status', (payload) => {
             set((state) => {
               const normalizedPayload = normalizeGatewayStatus(payload);
+              notifyChatStoreOfGatewayStatus(normalizedPayload.state);
               if (
                 normalizedPayload.state === 'running' &&
                 isLifecyclePending(state.lifecycle)

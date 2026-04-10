@@ -1,6 +1,9 @@
 param(
   [Parameter(Mandatory = $true)]
-  [string]$InstallDir
+  [string]$InstallDir,
+
+  [ValidateSet('kill', 'detect')]
+  [string]$Mode = 'kill'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -39,6 +42,13 @@ $matchingProcesses = Get-CimInstance Win32_Process | Where-Object {
   }
 
   return $false
+}
+
+if ($Mode -eq 'detect') {
+  if ($matchingProcesses.Count -gt 0) {
+    exit 2
+  }
+  exit 0
 }
 
 foreach ($proc in $matchingProcesses) {

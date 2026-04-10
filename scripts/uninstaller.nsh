@@ -57,6 +57,15 @@ LangString uninstallComponentsTop 2052 "选择你希望额外删除的数据。"
   DetailPrint "Warning: Install-dir process cleanup helper exited with code $0."
 !macroend
 
+!macro DetectInstallDirProcesses resultVar
+  InitPluginsDir
+  ClearErrors
+  File "/oname=$PLUGINSDIR\kill-install-dir-processes.ps1" "${PROJECT_DIR}\scripts\kill-install-dir-processes.ps1"
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\kill-install-dir-processes.ps1" -InstallDir "$INSTDIR" -Mode detect'
+  Pop ${resultVar}
+  Pop $1
+!macroend
+
 ; Core uninstaller cleanup: stop gateway, remove PATH entry, remove shortcuts.
 ; File/registry cleanup is handled by electron-builder's built-in uninstaller section.
 !macro customUnInstall

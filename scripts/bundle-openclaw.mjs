@@ -1117,6 +1117,7 @@ function patchBrokenModules(nodeModulesDir) {
   ];
 
   let count = patchHttpsProxyAgentPackageMetadata(nodeModulesDir);
+  count += patchKnownDependencyMetadata(nodeModulesDir);
   for (const [rel, content] of Object.entries(rewritePatches)) {
     const target = path.join(nodeModulesDir, rel);
     if (fs.existsSync(target)) {
@@ -1143,6 +1144,51 @@ function patchBrokenModules(nodeModulesDir) {
   if (count > 0) {
     echo`   🩹 Patched ${count} broken module(s) in node_modules`;
   }
+}
+
+function patchKnownDependencyMetadata(nodeModulesDir) {
+  const packageDirs = [];
+  const queue = [nodeModulesDir];
+  const seen = new Set();
+
+  while (queue.length > 0) {
+    const currentNodeModules = queue.shift();
+    if (!currentNodeModules || seen.has(currentNodeModules) || !fs.existsSync(currentNodeModules)) continue;
+    seen.add(currentNodeModules);
+
+    for (const { fullPath: pkgDir } of listPackages(currentNodeModules)) {
+      packageDirs.push(pkgDir);
+      const nestedNodeModules = path.join(pkgDir, 'node_modules');
+      if (fs.existsSync(nestedNodeModules)) queue.push(nestedNodeModules);
+    }
+  }
+
+  let count = 0;
+  for (const pkgDir of packageDirs) {
+    const pkgJsonPath = path.join(pkgDir, 'package.json');
+    let pkg;
+    try {
+      pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+    } catch {
+      continue;
+    }
+
+    // openclaw@2026.4.2 bundles slack runtime deps with p-queue@6.6.2 but only
+    // ships p-timeout@4.x. Runtime works with that tree, but the upstream
+    // package.json dependency range is still ^3.2.0, so we normalize the
+    // bundled metadata to the actually shipped compatible layout.
+    if (
+      pkg?.name === 'p-queue' &&
+      pkg?.version === '6.6.2' &&
+      pkg?.dependencies?.['p-timeout'] === '^3.2.0'
+    ) {
+      pkg.dependencies['p-timeout'] = '^3.2.0 || ^4.0.0';
+      fs.writeFileSync(pkgJsonPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+      count++;
+    }
+  }
+
+  return count;
 }
 
 function patchHttpsProxyAgentPackageMetadata(nodeModulesDir) {

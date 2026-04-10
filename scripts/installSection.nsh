@@ -5,6 +5,7 @@ InitPluginsDir
 ${IfNot} ${Silent}
   SetDetailsPrint both
   DetailPrint "$(installPhasePrepare)"
+  DetailPrint "$(installPhaseCheckRunning)"
 ${endif}
 
 StrCpy $appExe "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
@@ -71,7 +72,7 @@ ${endIf}
 ; are copied.
 ${IfNot} ${Silent}
   SetDetailsPrint both
-  DetailPrint "正在清理旧版 OpenClaw 运行时..."
+  DetailPrint "$(installPhaseCleanRuntime)"
 ${endif}
 RMDir /r "$INSTDIR\resources\openclaw"
 RMDir /r "$INSTDIR\resources\openclaw-plugins"

@@ -8,10 +8,6 @@
 ; electron-builder's templates version.
 !addincludedir "${PROJECT_DIR}\scripts"
 
-!ifndef nsProcess::FindProcess
-  !include "nsProcess.nsh"
-!endif
-
 !define MUI_INSTFILESPAGE_SHOWDETAILS show
 !define MUI_UNINSTFILESPAGE_SHOWDETAILS show
 
@@ -67,10 +63,22 @@ LangString welcomeTitle 2052 "欢迎安装 ${PRODUCT_NAME}"
 LangString welcomeText 1033 "Install ${PRODUCT_NAME}, configure the bundled OpenClaw CLI, and create the standard Windows shortcuts."
 LangString welcomeText 2052 "安装 ${PRODUCT_NAME}，配置内置 OpenClaw CLI，并创建标准 Windows 快捷方式。"
 
-LangString installPhasePrepare 1033 "Preparing installation environment..."
-LangString installPhasePrepare 2052 "正在准备安装环境..."
+LangString installPhasePrepare 1033 "Initializing installer..."
+LangString installPhasePrepare 2052 "正在初始化安装器..."
+LangString installPhaseCheckRunning 1033 "Checking for running processes from the previous installation..."
+LangString installPhaseCheckRunning 2052 "正在检查旧版本的相关进程..."
+LangString installPhaseClosingRunning 1033 "Stopping processes from the previous installation..."
+LangString installPhaseClosingRunning 2052 "正在停止旧版本相关进程..."
+LangString installPhaseWaitRunning 1033 "Waiting for previous-installation processes to exit..."
+LangString installPhaseWaitRunning 2052 "正在等待旧版本相关进程退出..."
 LangString installPhaseRemovePrevious 1033 "Checking and removing previous installation..."
 LangString installPhaseRemovePrevious 2052 "正在检查并清理旧版本安装..."
+LangString installPhaseStopGateway 1033 "Stopping bundled Gateway from the previous installation..."
+LangString installPhaseStopGateway 2052 "正在停止旧版本内置 Gateway..."
+LangString installPhaseUninstallGatewayService 1033 "Removing bundled Gateway service/task from the previous installation..."
+LangString installPhaseUninstallGatewayService 2052 "正在卸载旧版本内置 Gateway 服务/任务..."
+LangString installPhaseCleanRuntime 1033 "Cleaning bundled OpenClaw runtime from the previous installation..."
+LangString installPhaseCleanRuntime 2052 "正在清理旧版 OpenClaw 运行时..."
 LangString installPhaseCopyFiles 1033 "Copying application files..."
 LangString installPhaseCopyFiles 2052 "正在复制应用文件..."
 LangString installPhaseRegister 1033 "Registering application with Windows..."
@@ -104,11 +112,9 @@ LangString installRuntimeValidationFailed 2052 "安装完成后，内置 OpenCla
   Delete "$SMPROGRAMS\${PRODUCT_NAME}.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\卸载 ${PRODUCT_NAME}.lnk"
-  !insertmacro KillInstallDirProcesses
+  !insertmacro DetectInstallDirProcesses $R0
 
-  ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
-
-  ${if} $R0 == 0
+  ${if} $R0 == 2
     ${if} ${isUpdated}
       # allow app to exit without explicit kill
       Sleep 1000
@@ -118,20 +124,8 @@ LangString installRuntimeValidationFailed 2052 "安装完成后，内置 OpenCla
     Quit
 
     doStopProcess:
-    DetailPrint `Closing running "${PRODUCT_NAME}"...`
+    DetailPrint "$(installPhaseClosingRunning)"
     !insertmacro KillInstallDirProcesses
-
-    # First try the lightweight image-name kill. On Windows, Electron helper
-    # subprocesses reuse the same executable name as the main app, so killing
-    # only the top-level instance can leave GPU/utility processes behind and
-    # make the installer think the app is still running.
-    ${nsProcess::KillProcess} "${APP_EXECUTABLE_FILENAME}" $R0
-
-    # Then force-kill the whole process tree by image name so helper
-    # subprocesses do not keep the executable locked.
-    nsExec::ExecToStack '"$SYSDIR\taskkill.exe" /F /T /IM "${APP_EXECUTABLE_FILENAME}"'
-    Pop $R2
-    Pop $R3
 
     # to ensure that files are not "in-use"
     Sleep 300
@@ -143,18 +137,14 @@ LangString installRuntimeValidationFailed 2052 "安装完成后，内置 OpenCla
       IntOp $R1 $R1 + 1
       !insertmacro KillInstallDirProcesses
 
-      ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
-      ${if} $R0 == 0
+      !insertmacro DetectInstallDirProcesses $R0
+      ${if} $R0 == 2
         # wait to give a chance to exit gracefully
         Sleep 1000
-        ${nsProcess::KillProcess} "${APP_EXECUTABLE_FILENAME}" $R0
-        nsExec::ExecToStack '"$SYSDIR\taskkill.exe" /F /T /IM "${APP_EXECUTABLE_FILENAME}"'
-        Pop $R2
-        Pop $R3
-
-        ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
-        ${If} $R0 == 0
-          DetailPrint `Waiting for "${PRODUCT_NAME}" to close.`
+        !insertmacro KillInstallDirProcesses
+        !insertmacro DetectInstallDirProcesses $R0
+        ${If} $R0 == 2
+          DetailPrint "$(installPhaseWaitRunning)"
           Sleep 2000
         ${else}
           Goto not_running
@@ -173,18 +163,17 @@ LangString installRuntimeValidationFailed 2052 "安装完成后，内置 OpenCla
       ${endIf}
     not_running:
       !insertmacro KillInstallDirProcesses
-      ${nsProcess::Unload}
   ${endIf}
 !macroend
 
 !macro PreparePreviousInstallForUpgrade
   !insertmacro KillInstallDirProcesses
   ${If} ${FileExists} "$INSTDIR\resources\cli\openclaw.cmd"
-    DetailPrint `Stopping old bundled Gateway before uninstall...`
+    DetailPrint "$(installPhaseStopGateway)"
     nsExec::ExecToStack '"$SYSDIR\cmd.exe" /d /c ""$INSTDIR\resources\cli\openclaw.cmd" gateway stop"'
     Pop $R6
     Pop $R7
-    DetailPrint `Uninstalling old bundled Gateway service/task before uninstall...`
+    DetailPrint "$(installPhaseUninstallGatewayService)"
     nsExec::ExecToStack '"$SYSDIR\cmd.exe" /d /c ""$INSTDIR\resources\cli\openclaw.cmd" gateway uninstall"'
     Pop $R6
     Pop $R7
