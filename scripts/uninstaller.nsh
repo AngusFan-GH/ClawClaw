@@ -1,5 +1,7 @@
 ; ${PRODUCT_NAME} custom uninstall helpers.
 ;
+; Shadowed upstream template: app-builder-lib/templates/nsis/uninstaller.nsh
+;
 ; Shared by:
 ; - electron-builder's nsis include flow (via installer.nsh)
 ; - custom BUILD_UNINSTALLER flow (via installer.nsi)
@@ -43,25 +45,16 @@ LangString uninstallComponentsTop 2052 "选择你希望额外删除的数据。"
   InitPluginsDir
   ClearErrors
   File "/oname=$PLUGINSDIR\kill-install-dir-processes.ps1" "${PROJECT_DIR}\scripts\kill-install-dir-processes.ps1"
-  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\kill-install-dir-processes.ps1" -InstallDir "$INSTDIR"'
-  Pop $0
-  Pop $1
-  StrCmp $0 "error" 0 +3
-    DetailPrint "Warning: Failed to launch install-dir process cleanup helper."
-    Goto +5
-  StrCmp $0 "timeout" 0 +3
-    DetailPrint "Warning: Install-dir process cleanup helper timed out."
-    Goto +3
-  StrCmp $0 "0" 0 +2
-    Goto +2
-  DetailPrint "Warning: Install-dir process cleanup helper exited with code $0."
+  ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\kill-install-dir-processes.ps1" -InstallDir "$INSTDIR"' $0
+  ; Give Windows a moment to release file handles after termination.
+  Sleep 1500
 !macroend
 
-!macro DetectInstallDirProcesses resultVar
+!macro DetectInstallDirLocks resultVar
   InitPluginsDir
   ClearErrors
-  File "/oname=$PLUGINSDIR\kill-install-dir-processes.ps1" "${PROJECT_DIR}\scripts\kill-install-dir-processes.ps1"
-  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\kill-install-dir-processes.ps1" -InstallDir "$INSTDIR" -Mode detect'
+  File "/oname=$PLUGINSDIR\check-install-dir-locks.ps1" "${PROJECT_DIR}\scripts\check-install-dir-locks.ps1"
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\check-install-dir-locks.ps1" -InstallDir "$INSTDIR"'
   Pop ${resultVar}
   Pop $1
 !macroend
@@ -89,7 +82,7 @@ LangString uninstallComponentsTop 2052 "选择你希望额外删除的数据。"
   InitPluginsDir
   ClearErrors
   File "/oname=$PLUGINSDIR\update-user-path.ps1" "${PROJECT_DIR}\resources\cli\win32\update-user-path.ps1"
-  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\update-user-path.ps1" -Action remove -CliDir "$INSTDIR\resources\cli"'
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\update-user-path.ps1" -Action remove -CliDir "$INSTDIR\resources\cli"'
   Pop $0
   Pop $1
   StrCmp $0 "error" 0 +2

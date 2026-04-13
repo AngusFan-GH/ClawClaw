@@ -1,9 +1,6 @@
 param(
   [Parameter(Mandatory = $true)]
-  [string]$InstallDir,
-
-  [ValidateSet('kill', 'detect')]
-  [string]$Mode = 'kill'
+  [string]$InstallDir
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,6 +23,12 @@ if ([string]::IsNullOrWhiteSpace($normalizedInstallDir)) {
 }
 
 $escapedInstallDir = [Regex]::Escape($normalizedInstallDir)
+$commandLineOnlyProcessNames = @(
+  'ClawClaw.exe',
+  'Uninstall ClawClaw.exe',
+  'node.exe',
+  'uv.exe'
+)
 
 $matchingProcesses = Get-CimInstance Win32_Process | Where-Object {
   if ($_.ProcessId -eq $PID) {
@@ -37,18 +40,16 @@ $matchingProcesses = Get-CimInstance Win32_Process | Where-Object {
     return $true
   }
 
-  if ($_.CommandLine -and $_.CommandLine -match $escapedInstallDir) {
+  $processName = [string]$_.Name
+  if (
+    $_.CommandLine -and
+    $_.CommandLine -match $escapedInstallDir -and
+    $commandLineOnlyProcessNames -contains $processName
+  ) {
     return $true
   }
 
   return $false
-}
-
-if ($Mode -eq 'detect') {
-  if ($matchingProcesses.Count -gt 0) {
-    exit 2
-  }
-  exit 0
 }
 
 foreach ($proc in $matchingProcesses) {
@@ -60,5 +61,5 @@ foreach ($proc in $matchingProcesses) {
   }
 }
 
-Start-Sleep -Milliseconds 300
+Start-Sleep -Seconds 2
 exit 0

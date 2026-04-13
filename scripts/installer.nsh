@@ -14,6 +14,8 @@
 ShowInstDetails show
 ShowUnInstDetails show
 
+Var /GLOBAL shouldRunLegacyUninstaller
+
 ; assistedInstaller.nsh calls MUI_PAGE_DIRECTORY (when allowToChangeInstallationDirectory
 ; is true), which sets MUI_PAGE_CUSTOMFUNCTION_PRE="instFilesPre".  MUI_PAGE_INSTFILES
 ; then reuses that value.  Override it here via customPageAfterChangeDir, which
@@ -93,6 +95,8 @@ LangString installPhaseValidateRuntime 1033 "Validating bundled OpenClaw runtime
 LangString installPhaseValidateRuntime 2052 "正在验证内置 OpenClaw 运行时..."
 LangString installRuntimeValidationFailed 1033 "The bundled OpenClaw runtime failed validation after installation.$\r$\n$\r$\nPlease run this installer again or contact support."
 LangString installRuntimeValidationFailed 2052 "安装完成后，内置 OpenClaw 运行时校验失败。$\r$\n$\r$\n请重新运行安装包，或联系支持。"
+LangString installFilesLocked 1033 "Files from the previous installation are still in use.$\r$\n$\r$\nClose the related ClawClaw or runtime process, then click Retry."
+LangString installFilesLocked 2052 "旧版本安装中的文件仍被占用。$\r$\n$\r$\n请关闭相关的 ClawClaw 或运行时进程，然后单击“重试”。"
 
 !macro customWelcomePage
   ; customWelcomePage is expanded at compile-time in assistedInstaller.nsh.
@@ -112,61 +116,11 @@ LangString installRuntimeValidationFailed 2052 "安装完成后，内置 OpenCla
   Delete "$SMPROGRAMS\${PRODUCT_NAME}.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\卸载 ${PRODUCT_NAME}.lnk"
-  !insertmacro DetectInstallDirProcesses $R0
 
-  ${if} $R0 == 2
-    ${if} ${isUpdated}
-      # allow app to exit without explicit kill
-      Sleep 1000
-      Goto doStopProcess
-    ${endIf}
-    MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$(appRunning)" /SD IDOK IDOK doStopProcess
-    Quit
-
-    doStopProcess:
-    DetailPrint "$(installPhaseClosingRunning)"
-    !insertmacro KillInstallDirProcesses
-
-    # to ensure that files are not "in-use"
-    Sleep 300
-
-    # Retry counter
-    StrCpy $R1 0
-
-    loop:
-      IntOp $R1 $R1 + 1
-      !insertmacro KillInstallDirProcesses
-
-      !insertmacro DetectInstallDirProcesses $R0
-      ${if} $R0 == 2
-        # wait to give a chance to exit gracefully
-        Sleep 1000
-        !insertmacro KillInstallDirProcesses
-        !insertmacro DetectInstallDirProcesses $R0
-        ${If} $R0 == 2
-          DetailPrint "$(installPhaseWaitRunning)"
-          Sleep 2000
-        ${else}
-          Goto not_running
-        ${endIf}
-      ${else}
-        Goto not_running
-      ${endIf}
-
-      # App likely running with elevated permissions.
-      # Ask user to close it manually
-      ${if} $R1 > 1
-        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY loop
-        Quit
-      ${else}
-        Goto loop
-      ${endIf}
-    not_running:
-      !insertmacro KillInstallDirProcesses
-  ${endIf}
+  !insertmacro EnsurePreviousInstallReadyForUpgrade
 !macroend
 
-!macro PreparePreviousInstallForUpgrade
+!macro RunManagedUpgradeCleanup
   !insertmacro KillInstallDirProcesses
   ${If} ${FileExists} "$INSTDIR\resources\cli\openclaw.cmd"
     DetailPrint "$(installPhaseStopGateway)"
@@ -181,13 +135,104 @@ LangString installRuntimeValidationFailed 2052 "安装完成后，内置 OpenCla
   !insertmacro KillInstallDirProcesses
 !macroend
 
+!macro EnsurePreviousInstallReadyForUpgrade
+  ; Best-effort preflight cleanup before we decide the previous installation
+  ; is still blocking the upgrade. In practice the lingering locker is often
+  ; the bundled Gateway or its node child, not the ClawClaw UI itself.
+  !insertmacro RunManagedUpgradeCleanup
+  !insertmacro DetectInstallDirLocks $R0
+
+  ${if} $R0 == 2
+    DetailPrint "$(installPhaseClosingRunning)"
+    !insertmacro KillInstallDirProcesses
+
+    ; KillInstallDirProcesses already waits 1.5s internally for handle release.
+    ; No additional sleep needed here — DetectInstallDirLocks below will
+    ; immediately determine whether the locks are cleared.
+
+    StrCpy $R1 0
+
+    loop:
+      IntOp $R1 $R1 + 1
+      !insertmacro KillInstallDirProcesses
+
+      !insertmacro DetectInstallDirLocks $R0
+      ${if} $R0 == 2
+        ; Give Windows more time to fully release file handles.
+        Sleep 3000
+        !insertmacro KillInstallDirProcesses
+        !insertmacro DetectInstallDirLocks $R0
+        ${If} $R0 == 2
+          DetailPrint "$(installPhaseWaitRunning)"
+          Sleep 5000
+        ${else}
+          Goto not_running
+        ${endIf}
+      ${else}
+        Goto not_running
+      ${endIf}
+
+      ${if} $R1 > 0
+        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(installFilesLocked)" /SD IDCANCEL IDRETRY loop
+        Abort
+      ${else}
+        Goto loop
+      ${endIf}
+    not_running:
+      !insertmacro KillInstallDirProcesses
+  ${endIf}
+!macroend
+
+Function NormalizeInstallPath
+  Exch $0
+  Push $1
+
+  StrCpy $1 $0 1 -1
+  ${If} $1 == "\"
+    StrCpy $0 $0 -1
+  ${EndIf}
+
+  Pop $1
+  Exch $0
+FunctionEnd
+
+!macro NormalizeInstallPath outVar inVar
+  Push "${inVar}"
+  Call NormalizeInstallPath
+  Pop "${outVar}"
+!macroend
+
+!macro ResolveUpgradeStrategy
+  StrCpy $shouldRunLegacyUninstaller "true"
+
+  ${if} ${isUpdated}
+    ReadRegStr $R2 HKCU "${INSTALL_REGISTRY_KEY}" InstallLocation
+    ReadRegStr $R3 HKLM "${INSTALL_REGISTRY_KEY}" InstallLocation
+    !insertmacro NormalizeInstallPath $R2 $R2
+    !insertmacro NormalizeInstallPath $R3 $R3
+    !insertmacro NormalizeInstallPath $R4 $INSTDIR
+
+    ${if} $installMode == "all"
+      ${if} $R3 == $R4
+      ${andIf} $R2 == ""
+        StrCpy $shouldRunLegacyUninstaller "false"
+      ${endIf}
+    ${else}
+      ${if} $R2 == $R4
+      ${andIf} $R3 == ""
+        StrCpy $shouldRunLegacyUninstaller "false"
+      ${endIf}
+    ${endIf}
+  ${endif}
+!macroend
+
 !macro FallbackInteractiveOldUninstall
   ${If} ${isUpdated}
   ${andIf} $R0 != 0
     MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION \
       "The installed ClawClaw version could not be removed silently.$\r$\n$\r$\nClawClaw will now open the old uninstaller. Complete that uninstall, then setup will continue automatically." \
       /SD IDCANCEL IDOK +2
-    Quit
+    Abort
 
     DetailPrint `Silent uninstall failed with code $R0. Falling back to interactive old uninstaller.`
     !insertmacro KillInstallDirProcesses
@@ -255,11 +300,11 @@ LangString installRuntimeValidationFailed 2052 "安装完成后，内置 OpenCla
   InitPluginsDir
   ClearErrors
   File "/oname=$PLUGINSDIR\update-user-path.ps1" "${PROJECT_DIR}\resources\cli\win32\update-user-path.ps1"
-  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\update-user-path.ps1" -Action add -CliDir "$INSTDIR\resources\cli"'
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\update-user-path.ps1" -Action add -CliDir "$INSTDIR\resources\cli"'
   Pop $0
   Pop $1
   StrCmp $0 "error" 0 +2
-    DetailPrint "Warning: Failed to launch PowerShell while removing PATH entry."
+    DetailPrint "Warning: Failed to launch PowerShell while updating PATH entry."
   StrCmp $0 "timeout" 0 +2
     DetailPrint "Warning: PowerShell PATH update timed out."
   StrCmp $0 "0" 0 +2

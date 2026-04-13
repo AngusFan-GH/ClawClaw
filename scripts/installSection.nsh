@@ -1,3 +1,7 @@
+; Shadowed upstream template: app-builder-lib/templates/nsis/installSection.nsh
+; Keep install-flow behavior here so scripts/installer.nsi can remain a thin
+; wrapper over the upstream template.
+
 !include installer.nsh
 
 InitPluginsDir
@@ -55,15 +59,24 @@ ${IfNot} ${Silent}
   SetDetailsPrint both
   DetailPrint "$(installPhaseRemovePrevious)"
 ${endif}
-!insertmacro PreparePreviousInstallForUpgrade
-!insertmacro uninstallOldVersion SHELL_CONTEXT
-!insertmacro handleUninstallResult SHELL_CONTEXT
+!insertmacro ResolveUpgradeStrategy
+!insertmacro RunManagedUpgradeCleanup
+${if} $shouldRunLegacyUninstaller == "false"
+  ${IfNot} ${Silent}
+    DetailPrint "Using in-place upgrade for the current install scope and directory; skipping the legacy uninstaller."
+  ${endif}
+${else}
+  !insertmacro uninstallOldVersion SHELL_CONTEXT
+  !insertmacro handleUninstallResult SHELL_CONTEXT
 
-${if} $installMode == "all"
-  !insertmacro PreparePreviousInstallForUpgrade
-  !insertmacro uninstallOldVersion HKEY_CURRENT_USER
-  !insertmacro handleUninstallResult HKEY_CURRENT_USER
-${endIf}
+  ${if} $installMode == "all"
+    ; The current-user uninstall can relaunch or leave behind helper processes,
+    ; so repeat managed cleanup before checking the other install scope.
+    !insertmacro RunManagedUpgradeCleanup
+    !insertmacro uninstallOldVersion HKEY_CURRENT_USER
+    !insertmacro handleUninstallResult HKEY_CURRENT_USER
+  ${endIf}
+${endif}
 
 ; NSIS upgrades (including differential package updates) can leave stale files
 ; inside extraResources when the target directory already exists. ClawClaw

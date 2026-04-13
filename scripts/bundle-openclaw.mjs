@@ -18,6 +18,7 @@
 
 import 'zx/globals';
 import semver from 'semver';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import bundleValidator from './openclaw-bundle-validator.cjs';
@@ -31,17 +32,55 @@ const {
 
 const ROOT = path.resolve(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'build', 'openclaw');
+const BUNDLE_META_PATH = path.join(OUTPUT, '.bundle-meta.json');
 const RUNTIME_DEPS_CACHE_ROOT = path.join(ROOT, 'build', 'cache', 'bundled-plugin-runtime');
 const RUNTIME_DEPS_CACHE_NODE_MODULES = path.join(RUNTIME_DEPS_CACHE_ROOT, 'node_modules');
 const BUNDLED_PLUGIN_REGISTRY =
   process.env.OPENCLAW_BUNDLED_PLUGIN_REGISTRY || 'https://registry.npmjs.org/';
 const NODE_MODULES = path.join(ROOT, 'node_modules');
+const FORCE_REBUILD = process.argv.includes('--force') || process.env.OPENCLAW_BUNDLE_FORCE === '1';
 
 // On Windows, pnpm virtual store paths can exceed MAX_PATH (260 chars).
 function normWin(p) {
   if (process.platform !== 'win32') return p;
   if (p.startsWith('\\\\?\\')) return p;
   return '\\\\?\\' + p.replace(/\//g, '\\');
+}
+
+function readTextIfExists(filePath) {
+  try {
+    return fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+function computeBundleCacheKey(openclawReal) {
+  const hash = createHash('sha256');
+  hash.update('bundle-openclaw-cache-v1\n');
+  hash.update(readTextIfExists(path.join(ROOT, 'pnpm-lock.yaml')));
+  hash.update('\n--- package.json ---\n');
+  hash.update(readTextIfExists(path.join(ROOT, 'package.json')));
+  hash.update('\n--- openclaw package.json ---\n');
+  hash.update(readTextIfExists(path.join(openclawReal, 'package.json')));
+  hash.update('\n--- bundler script ---\n');
+  hash.update(readTextIfExists(__filename));
+  return hash.digest('hex');
+}
+
+function readBundleMeta() {
+  try {
+    return JSON.parse(fs.readFileSync(BUNDLE_META_PATH, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function outputBundleLooksReusable() {
+  return fs.existsSync(path.join(OUTPUT, 'package.json'))
+    && fs.existsSync(path.join(OUTPUT, 'openclaw.mjs'))
+    && fs.existsSync(path.join(OUTPUT, 'dist', 'entry.js'))
+    && fs.existsSync(path.join(OUTPUT, 'node_modules'));
 }
 
 echo`📦 Bundling openclaw for electron-builder...`;
@@ -59,6 +98,14 @@ const openclawReal = fs.realpathSync.native(openclawLink);
 echo`   openclaw resolved: ${openclawReal}`;
 const openclawBundledPluginPostinstallScript = path.join(openclawReal, 'scripts', 'postinstall-bundled-plugins.mjs');
 const openclawNpmRunnerScript = path.join(openclawReal, 'scripts', 'npm-runner.mjs');
+const bundleCacheKey = computeBundleCacheKey(openclawReal);
+const existingBundleMeta = readBundleMeta();
+
+if (!FORCE_REBUILD && existingBundleMeta?.cacheKey === bundleCacheKey && outputBundleLooksReusable()) {
+  echo`   Reusing cached OpenClaw bundle at ${OUTPUT}`;
+  echo`   Cache key: ${bundleCacheKey.slice(0, 12)}…`;
+  process.exit(0);
+}
 
 // 2. Clean and create output directory
 if (fs.existsSync(OUTPUT)) {
@@ -1495,3 +1542,18 @@ if (dependencyIssues.length > 0) {
 }
 
 echo`   Dependency validation: ✓`;
+
+fs.writeFileSync(
+  BUNDLE_META_PATH,
+  JSON.stringify(
+    {
+      cacheKey: bundleCacheKey,
+      generatedAt: new Date().toISOString(),
+      openclawReal,
+    },
+    null,
+    2
+  ) + '\n',
+  'utf8'
+);
+echo`   Bundle cache metadata: ✓`;
