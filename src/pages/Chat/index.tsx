@@ -475,6 +475,19 @@ export function Chat() {
     };
   }, [eligibleAccounts]);
 
+  // Always scroll to bottom when the user sends a message, regardless of scroll position.
+  // This uses queueMicrotask (runs after DOM update) to ensure the user's own
+  // message is visible immediately after send.
+  const prevSendingRef = useRef(false);
+  const sendingJustStarted = sending && !prevSendingRef.current;
+  prevSendingRef.current = sending;
+  if (sendingJustStarted) {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    queueMicrotask(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+    });
+  }
+
   // Auto-scroll on new messages, streaming, or activity changes when the user is already near the bottom.
   useEffect(() => {
     if (loadingEarlierHistory || !shouldStickToBottomRef.current) {
