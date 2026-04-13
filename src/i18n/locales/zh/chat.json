@@ -42,8 +42,14 @@
     "gatewayNotConnected": "网关未连接，请先启动或重启网关",
     "send": "发送",
     "stop": "停止",
-    "retryFailedAttachments": "重试失败附件"
-    ,
+    "sendBtw": "发送旁支问题",
+    "queueMessage": "加入队列",
+    "commandBtwHint": "旁支回答不会写入会话历史，也不会污染后续上下文。",
+    "commandCompactHint": "这会触发一次手动上下文压缩。",
+    "commandQueueHint": "这会修改当前会话在忙碌时的排队策略。",
+    "commandQueuedHint": "发送后将排队，等待当前运行结束",
+    "commandDetachedHint": "会并行发送，不打断当前运行",
+    "retryFailedAttachments": "重试失败附件",
     "localModelProvider": "本地模型"
   },
   "message": {
@@ -53,7 +59,9 @@
     "close": "关闭"
   },
   "status": {
-    "processingToolResults": "正在处理工具结果"
+    "processingToolResults": "正在处理工具结果",
+    "queuedMessages": "已排队",
+    "queuedAttachmentOnly": "仅附件消息"
   },
   "thread": {
     "codeCopy": "复制",
@@ -77,7 +85,9 @@
     "exec": "执行",
     "historyWindowLimited": "当前只加载了这段对话最近的一部分，更早消息可能未显示。",
     "historyCompacted": "这段对话更早的内容已被 OpenClaw 压缩，以节省上下文窗口。",
-    "loadingEarlier": "正在加载更早消息"
+    "loadingEarlier": "正在加载更早消息",
+    "btw": "BTW",
+    "btwEphemeral": "不会保存到会话历史"
   },
   "history": {
     "title": "最近对话",

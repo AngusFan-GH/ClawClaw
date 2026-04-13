@@ -36,6 +36,7 @@ import {
   CATEGORY_LABELS,
   getSlashArgumentCompletions,
   getSlashCommandCompletions,
+  parseSlashCommand,
   type SlashCommandDef,
 } from './slash-commands';
 
@@ -522,11 +523,17 @@ export function ChatInput({
 
   const allReady = attachments.length === 0 || attachments.every((a) => a.status === 'ready');
   const hasFailedAttachments = attachments.some((a) => a.status === 'error');
-  const canSend = (input.trim() || attachments.length > 0) && allReady && !disabled && !sending;
+  const trimmedInput = input.trim();
+  const parsedSlashCommand = parseSlashCommand(trimmedInput);
+  const activeCommand = parsedSlashCommand?.command ?? null;
+  const isBtwCommand = activeCommand?.name === 'btw';
+  const hasSubmitContent = Boolean(trimmedInput || attachments.length > 0);
+  const canSubmit = hasSubmitContent && allReady && !disabled;
+  const canQueueWhileSending = canSubmit && sending;
   const canStop = sending && !disabled && !!onStop;
 
   const handleSend = useCallback(() => {
-    if (!canSend) return;
+    if (!canSubmit) return;
     const readyAttachments = attachments.filter((a) => a.status === 'ready');
     // Capture values before clearing 鈥?clear input immediately for snappy UX,
     // but keep attachments available for the async send
@@ -556,7 +563,7 @@ export function ChatInput({
       textareaRef.current.style.height = 'auto';
     }
     onSend(textToSend, attachmentsToSend);
-  }, [attachments, canSend, input, onSend, resetSlashMenu]);
+  }, [attachments, canSubmit, input, onSend, resetSlashMenu]);
 
   const handleStop = useCallback(() => {
     if (!canStop) return;
@@ -608,10 +615,14 @@ export function ChatInput({
           return;
         }
         e.preventDefault();
-        handleSend();
+        if (canSubmit) {
+          handleSend();
+        } else if (canStop) {
+          handleStop();
+        }
       }
     },
-    [applySlashArg, applySlashCommand, handleSend, resetSlashMenu, slashArgItems, slashMenuIndex, slashMenuItems, slashMenuMode, slashMenuOpen]
+    [applySlashArg, applySlashCommand, canStop, canSubmit, handleSend, handleStop, resetSlashMenu, slashArgItems, slashMenuIndex, slashMenuItems, slashMenuMode, slashMenuOpen]
   );
 
   // Handle paste (Ctrl/Cmd+V with files)
@@ -684,6 +695,25 @@ export function ChatInput({
       t(CATEGORY_I18N_KEYS[category], CATEGORY_LABELS[category]),
     [t]
   );
+
+  const primaryAction = sending && !hasSubmitContent ? 'stop' : 'send';
+  const primaryActionTitle =
+    primaryAction === 'stop'
+      ? t('composer.stop')
+      : sending
+        ? isBtwCommand
+          ? t('composer.sendBtw', '发送旁支问题')
+          : t('composer.queueMessage', '加入队列')
+        : t('composer.send');
+  const commandHelperText = activeCommand
+    ? isBtwCommand
+      ? t('composer.commandBtwHint', '旁支回答不会写入会话历史，也不会污染后续上下文。')
+      : activeCommand.name === 'compact'
+        ? t('composer.commandCompactHint', '这会触发一次手动上下文压缩。')
+        : activeCommand.name === 'queue'
+          ? t('composer.commandQueueHint', '这会修改当前会话在忙碌时的排队策略。')
+          : getLocalizedCommandDescription(activeCommand)
+    : null;
 
   return (
     <div
@@ -922,6 +952,24 @@ export function ChatInput({
               rows={1}
             />
           </div>
+          {activeCommand ? (
+            <div className="flex flex-wrap items-center gap-2 px-2 pb-1 text-xs">
+              <span className="rounded-full bg-primary/10 px-2.5 py-1 font-mono font-semibold text-primary">
+                /{activeCommand.name}
+              </span>
+              <span className="text-muted-foreground">{commandHelperText}</span>
+              {canQueueWhileSending && !isBtwCommand ? (
+                <span className="rounded-full bg-amber-500/10 px-2 py-1 text-amber-700 dark:text-amber-300">
+                  {t('composer.commandQueuedHint', '发送后将排队，等待当前运行结束')}
+                </span>
+              ) : null}
+              {canQueueWhileSending && isBtwCommand ? (
+                <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-emerald-700 dark:text-emerald-300">
+                  {t('composer.commandDetachedHint', '会并行发送，不打断当前运行')}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           <div className="flex flex-col gap-2 px-1 pt-1.5 sm:flex-row sm:items-center sm:justify-between">
             <Button
               variant="ghost"
@@ -931,7 +979,7 @@ export function ChatInput({
                 isEmpty ? 'h-10 w-10' : 'h-11 w-11'
               )}
               onClick={pickFiles}
-              disabled={disabled || sending}
+              disabled={disabled}
               title={t('composer.attachFiles')}
             >
               <Paperclip className="h-4 w-4" />
@@ -996,21 +1044,35 @@ export function ChatInput({
                   <Brain className="h-4 w-4" />
                 </Button>
               ) : null}
+              {sending && hasSubmitContent && canStop ? (
+                <Button
+                  onClick={handleStop}
+                  size="icon"
+                  variant="ghost"
+                  className={cn(
+                    'shrink-0 self-end rounded-[14px] border border-black/10 bg-white/70 text-foreground shadow-none hover:bg-black/5 dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/10',
+                    isEmpty ? 'h-10 w-10' : 'h-11 w-11'
+                  )}
+                  title={t('composer.stop')}
+                >
+                  <Square className="h-4 w-4" fill="currentColor" />
+                </Button>
+              ) : null}
               <Button
-                onClick={sending ? handleStop : handleSend}
-                disabled={sending ? !canStop : !canSend}
+                onClick={primaryAction === 'stop' ? handleStop : handleSend}
+                disabled={primaryAction === 'stop' ? !canStop : !canSubmit}
                 size="icon"
                 className={cn(
                   'shrink-0 self-end rounded-[14px] transition-colors',
                   isEmpty ? 'h-10 w-10' : 'h-11 w-11',
-                  sending || canSend
+                  (primaryAction === 'stop' && canStop) || (primaryAction === 'send' && canSubmit)
                     ? 'bg-[linear-gradient(135deg,#2563eb_0%,#3b82f6_100%)] text-white shadow-[0_10px_25px_rgba(37,99,235,0.28)] hover:opacity-95 dark:bg-[linear-gradient(135deg,#2563eb_0%,#60a5fa_100%)]'
                     : 'bg-transparent text-muted-foreground/50 hover:bg-transparent'
                 )}
                 variant="ghost"
-                title={sending ? t('composer.stop') : t('composer.send')}
+                title={primaryActionTitle}
               >
-                {sending ? (
+                {primaryAction === 'stop' ? (
                   <Square className="h-4 w-4" fill="currentColor" />
                 ) : (
                   <SendHorizontal className="h-[18px] w-[18px]" strokeWidth={2} />

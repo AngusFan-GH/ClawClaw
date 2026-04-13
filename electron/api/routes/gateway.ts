@@ -1,9 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { PORTS } from '../../utils/config';
 import { buildOpenClawControlUiUrl } from '../../utils/openclaw-control-ui';
+import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { getSetting } from '../../utils/store';
 import type { HostApiContext } from '../context';
-import { parseJsonBody, sendJson } from '../route-utils';
+import { parseJsonBody, sendBuffer, sendJson } from '../route-utils';
 
 export async function handleGatewayRoutes(
   req: IncomingMessage,
@@ -149,6 +150,44 @@ export async function handleGatewayRoutes(
       }
       const result = await ctx.gatewayManager.rpc('chat.send', rpcParams, 120000);
       sendJson(res, 200, { success: true, result });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/chat/assistant-media' && req.method === 'GET') {
+    try {
+      const source = url.searchParams.get('source')?.trim();
+      if (!source) {
+        sendJson(res, 400, { success: false, error: 'Missing source parameter' });
+        return true;
+      }
+
+      const status = await resolveGatewayStatus();
+      const port = status.port || PORTS.OPENCLAW_GATEWAY;
+      const token = await getSetting('gatewayToken');
+      const upstream = new URL(`http://127.0.0.1:${port}/__openclaw__/assistant-media`);
+      upstream.searchParams.set('source', source);
+      if (url.searchParams.get('meta') === '1') {
+        upstream.searchParams.set('meta', '1');
+      }
+
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await proxyAwareFetch(upstream, { method: 'GET', headers });
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const payload = await response.json().catch(() => null);
+        sendJson(res, response.status, payload ?? { success: false, error: 'Invalid upstream JSON' });
+        return true;
+      }
+
+      const bytes = Buffer.from(await response.arrayBuffer());
+      sendBuffer(res, response.status, bytes, contentType || 'application/octet-stream');
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

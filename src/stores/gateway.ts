@@ -57,9 +57,38 @@ function extractExpectedRestartDelayMs(
   return Math.max(0, Math.floor(restartExpectedMs));
 }
 
+function handleBtwEventFromGateway(params: Record<string, unknown>): void {
+  const question = typeof params.question === 'string' ? params.question.trim() : '';
+  const text = typeof params.text === 'string' ? params.text.trim() : '';
+  console.log('[handleBtwEventFromGateway] params:', JSON.stringify({ question, text, isError: params.isError, keys: Object.keys(params) }));
+  if (!question || !text) {
+    console.log('[handleBtwEventFromGateway] SKIPPED — question or text empty');
+    return;
+  }
+
+  import('./chat')
+    .then(({ useChatStore }) => {
+      useChatStore.getState().handleBtwEvent({ question, text, isError: Boolean(params.isError) });
+    })
+    .catch(() => {});
+}
+
 function handleGatewayNotification(notification: { method?: string; params?: Record<string, unknown> } | undefined): void {
   const payload = notification;
-  if (!payload || payload.method !== 'agent' || !payload.params || typeof payload.params !== 'object') {
+  if (!payload || !payload.method) {
+    return;
+  }
+
+  // Debug: log all notification methods
+  console.log('[handleGatewayNotification] received:', JSON.stringify({ method: payload.method, hasParams: Boolean(payload.params) }));
+
+  if (payload.method === 'chat.side_result' && payload.params) {
+    console.log('[handleGatewayNotification] dispatching BTW event, params:', JSON.stringify(payload.params));
+    handleBtwEventFromGateway(payload.params as Record<string, unknown>);
+    return;
+  }
+
+  if (payload.method !== 'agent' || !payload.params || typeof payload.params !== 'object') {
     return;
   }
 

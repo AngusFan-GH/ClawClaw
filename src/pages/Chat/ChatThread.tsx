@@ -1,7 +1,8 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { AlertCircle, Bot, Check, Copy, User, Zap } from 'lucide-react';
+import { AlertCircle, Bot, Check, Copy, RotateCcw, Search, Trash2, User, X, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { LoadingIcon } from '@/components/common/LoadingSpinner';
+import { invokeIpc } from '@/lib/api-client';
+import { getHostApiBase } from '@/lib/host-api';
 import { cn } from '@/lib/utils';
 import type { RawMessage, StreamSegment } from '@/stores/chat';
 import { extractImages, extractText, extractThinking } from './message-utils';
@@ -45,10 +46,19 @@ type ChatThreadLabels = {
   historyWindowLimited: string;
   historyCompacted: string;
   loadingEarlier: string;
+  btw: string;
+  btwEphemeral: string;
+  dismiss: string;
+  delete: string;
+  searchPlaceholder: string;
+  noResults: string;
+  deletedHidden: string;
+  restore: string;
 };
 
 type ChatItem =
   | { kind: 'message'; key: string; message: RawMessage }
+  | { kind: 'divider'; key: string; label: string; timestamp: number }
   | { kind: 'stream'; key: string; text: string; startedAt: number }
   | { kind: 'reading-indicator'; key: string };
 
@@ -70,6 +80,52 @@ type MessageGroup = {
   hasReadingIndicator?: boolean;
 };
 
+type TranscriptEntry =
+  | { kind: 'notice'; key: string; tone?: 'default' | 'warning'; icon?: 'alert'; message: string; detail?: string }
+  | { kind: 'side-result'; key: string; message: RawMessage }
+  | { kind: 'divider'; key: string; label: string; timestamp: number }
+  | MessageGroup
+  | Extract<ChatItem, { kind: 'stream' | 'reading-indicator' }>;
+
+type TranscriptFlowItem = Exclude<ChatItem, { kind: 'message' }> | MessageGroup;
+
+const hiddenGroupsBySession = new Map<string, Set<string>>();
+const deletedGroupOrderBySession = new Map<string, string[]>();
+const expandedToolMessagesBySession = new Map<string, Map<string, boolean>>();
+const expandedToolCardsBySession = new Map<string, Map<string, boolean>>();
+
+function getHiddenGroups(sessionKey: string): Set<string> {
+  const existing = hiddenGroupsBySession.get(sessionKey);
+  if (existing) return existing;
+  const next = new Set<string>();
+  hiddenGroupsBySession.set(sessionKey, next);
+  return next;
+}
+
+function getExpandedToolMessages(sessionKey: string): Map<string, boolean> {
+  const existing = expandedToolMessagesBySession.get(sessionKey);
+  if (existing) return existing;
+  const next = new Map<string, boolean>();
+  expandedToolMessagesBySession.set(sessionKey, next);
+  return next;
+}
+
+function getExpandedToolCards(sessionKey: string): Map<string, boolean> {
+  const existing = expandedToolCardsBySession.get(sessionKey);
+  if (existing) return existing;
+  const next = new Map<string, boolean>();
+  expandedToolCardsBySession.set(sessionKey, next);
+  return next;
+}
+
+function getDeletedGroupOrder(sessionKey: string): string[] {
+  const existing = deletedGroupOrderBySession.get(sessionKey);
+  if (existing) return existing;
+  const next: string[] = [];
+  deletedGroupOrderBySession.set(sessionKey, next);
+  return next;
+}
+
 type GroupMeta = {
   input: number;
   output: number;
@@ -86,6 +142,20 @@ type NormalizedContentItem = {
   name?: string;
   args?: unknown;
   arguments?: unknown;
+  attachment?: {
+    url: string;
+    kind: 'image' | 'audio' | 'video' | 'document';
+    label: string;
+    mimeType?: string;
+    isVoiceNote?: boolean;
+  };
+  preview?: {
+    kind?: string;
+    url?: string;
+    viewId?: string;
+    title?: string;
+  };
+  rawText?: string | null;
 };
 
 type NormalizedMessage = {
@@ -143,13 +213,61 @@ function normalizeMessage(message: RawMessage): NormalizedMessage {
   if (typeof m.content === 'string') {
     content = [{ type: 'text', text: m.content }];
   } else if (Array.isArray(m.content)) {
-    content = (m.content as Array<Record<string, unknown>>).map((item) => ({
-      type: (item.type as string) || 'text',
-      text: item.text as string | undefined,
-      name: item.name as string | undefined,
-      args: item.args,
-      arguments: item.arguments,
-    }));
+    content = (m.content as Array<Record<string, unknown>>).flatMap((item) => {
+      if (
+        item.type === 'attachment'
+        && item.attachment
+        && typeof item.attachment === 'object'
+        && !Array.isArray(item.attachment)
+      ) {
+        const attachment = item.attachment as Record<string, unknown>;
+        const url = typeof attachment.url === 'string' ? attachment.url.trim() : '';
+        const label = typeof attachment.label === 'string' ? attachment.label.trim() : '';
+        const kind = attachment.kind;
+        if (
+          url
+          && label
+          && (kind === 'image' || kind === 'audio' || kind === 'video' || kind === 'document')
+        ) {
+          return [{
+            type: 'attachment',
+            attachment: {
+              url,
+              kind,
+              label,
+              mimeType: typeof attachment.mimeType === 'string' ? attachment.mimeType : undefined,
+              isVoiceNote: attachment.isVoiceNote === true,
+            },
+          }];
+        }
+        return [];
+      }
+      if (
+        item.type === 'canvas'
+        && item.preview
+        && typeof item.preview === 'object'
+        && !Array.isArray(item.preview)
+      ) {
+        const preview = item.preview as Record<string, unknown>;
+        return [{
+          type: 'canvas',
+          preview: {
+            kind: typeof preview.kind === 'string' ? preview.kind : undefined,
+            url: typeof preview.url === 'string' ? preview.url : undefined,
+            viewId: typeof preview.viewId === 'string' ? preview.viewId : undefined,
+            title: typeof preview.title === 'string' ? preview.title : undefined,
+          },
+          rawText: typeof item.rawText === 'string' ? item.rawText : null,
+        }];
+      }
+      return [{
+        type: (item.type as string) || 'text',
+        text: item.text as string | undefined,
+        name: item.name as string | undefined,
+        args: item.args,
+        arguments: item.arguments,
+      }];
+    });
   } else if (typeof m.text === 'string') {
     content = [{ type: 'text', text: m.text }];
   }
@@ -162,6 +280,12 @@ function normalizeMessage(message: RawMessage): NormalizedMessage {
     senderLabel:
       typeof m.senderLabel === 'string' && m.senderLabel.trim() ? m.senderLabel.trim() : null,
   };
+}
+
+function buildAssistantAttachmentUrl(source: string): string {
+  const url = new URL('/api/chat/assistant-media', getHostApiBase());
+  url.searchParams.set('source', source);
+  return url.toString();
 }
 
 function normalizeRoleForGrouping(roleOrMessage: string | RawMessage): string {
@@ -273,6 +397,56 @@ function buildTimedLiveItems(params: {
   return items;
 }
 
+function isSameCalendarDay(left: number, right: number): boolean {
+  const a = new Date(left);
+  const b = new Date(right);
+  return (
+    a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate()
+  );
+}
+
+function formatDividerLabel(timestamp: number, locale: string): string {
+  const date = new Date(timestamp);
+  return date.toLocaleDateString(locale, {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function withDateDividers(items: TranscriptFlowItem[], locale: string): TranscriptFlowItem[] {
+  const result: TranscriptFlowItem[] = [];
+  let lastTimestamp: number | null = null;
+
+  for (const item of items) {
+    const timestamp =
+      item.kind === 'group'
+        ? item.timestamp
+        : item.kind === 'stream'
+          ? item.startedAt
+          : item.kind === 'divider'
+              ? item.timestamp
+              : null;
+
+    if (timestamp != null && (!lastTimestamp || !isSameCalendarDay(lastTimestamp, timestamp))) {
+      result.push({
+        kind: 'divider',
+        key: `divider:${new Date(timestamp).toDateString()}`,
+        label: formatDividerLabel(timestamp, locale),
+        timestamp,
+      });
+      lastTimestamp = timestamp;
+    } else if (timestamp != null) {
+      lastTimestamp = timestamp;
+    }
+
+    result.push(item);
+  }
+
+  return result;
+}
+
 export function buildChatItems(params: {
   messages: RawMessage[];
   toolMessages: RawMessage[];
@@ -283,7 +457,8 @@ export function buildChatItems(params: {
   sending: boolean;
   pendingFinal: boolean;
   showThinking: boolean;
-}): Array<ChatItem | MessageGroup> {
+  locale: string;
+}): TranscriptFlowItem[] {
   const items: ChatItem[] = [];
   const history = Array.isArray(params.messages) ? params.messages : [];
   let hasLiveActivity = false;
@@ -336,7 +511,7 @@ export function buildChatItems(params: {
     items.push({ kind: 'reading-indicator', key: `reading:${params.sessionKey}` });
   }
 
-  return groupMessages(items);
+  return withDateDividers(groupMessages(items) as TranscriptFlowItem[], params.locale);
 }
 
 function extractGroupMeta(group: MessageGroup, contextWindow: number | null): GroupMeta | null {
@@ -378,6 +553,14 @@ function fmtTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
   return String(n);
+}
+
+function extractGroupSearchText(group: MessageGroup): string {
+  return group.messages
+    .map(({ message }) => extractText(message)?.trim() ?? '')
+    .filter(Boolean)
+    .join('\n')
+    .toLowerCase();
 }
 
 const MessageMeta = memo(function MessageMeta({ meta, labels }: { meta: GroupMeta | null; labels: ChatThreadLabels }) {
@@ -685,7 +868,19 @@ function hasVisibleMessageContent(message: RawMessage, showThinking: boolean): b
   return true;
 }
 
-const ToolCards = memo(function ToolCards({ cards, labels }: { cards: ToolCard[]; labels: ChatThreadLabels }) {
+const ToolCards = memo(function ToolCards({
+  cards,
+  labels,
+  messageKey,
+  isExpanded,
+  onToggle,
+}: {
+  cards: ToolCard[];
+  labels: ChatThreadLabels;
+  messageKey: string;
+  isExpanded: (toolCardId: string) => boolean;
+  onToggle: (toolCardId: string) => void;
+}) {
   if (cards.length === 0) return null;
   const calls = cards.filter((card) => card.kind === 'call');
   const results = cards.filter((card) => card.kind === 'result');
@@ -705,7 +900,13 @@ const ToolCards = memo(function ToolCards({ cards, labels }: { cards: ToolCard[]
       </summary>
       <div className="chat-tools-collapse__body">
         {cards.map((card, index) => (
-          <ToolCardItem key={`${card.kind}:${card.name}:${index}`} card={card} labels={labels} />
+          <ToolCardItem
+            key={`${card.kind}:${card.name}:${index}`}
+            card={card}
+            labels={labels}
+            expanded={isExpanded(`${messageKey}:toolcard:${index}`)}
+            onToggle={() => onToggle(`${messageKey}:toolcard:${index}`)}
+          />
         ))}
       </div>
     </details>
@@ -715,11 +916,14 @@ const ToolCards = memo(function ToolCards({ cards, labels }: { cards: ToolCard[]
 const ToolCardItem = memo(function ToolCardItem({
   card,
   labels,
+  expanded,
+  onToggle,
 }: {
   card: ToolCard;
   labels: ChatThreadLabels;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const display = resolveToolDisplay(card.name, card.args, labels);
   const hasText = Boolean(card.text?.trim());
   const inline = hasText && (card.text?.length ?? 0) <= 80;
@@ -737,7 +941,7 @@ const ToolCardItem = memo(function ToolCardItem({
           <button
             type="button"
             className="chat-tool-card__action"
-            onClick={() => setExpanded((value) => !value)}
+            onClick={onToggle}
           >
             {expanded ? labels.collapse : labels.view}
           </button>
@@ -792,16 +996,92 @@ const MessageImages = memo(function MessageImages({ message }: { message: RawMes
   );
 });
 
+const AssistantAttachments = memo(function AssistantAttachments({ message }: { message: RawMessage }) {
+  const normalized = normalizeMessage(message);
+  const attachments = normalized.content
+    .filter((item): item is NormalizedContentItem & { attachment: NonNullable<NormalizedContentItem['attachment']> } => item.type === 'attachment' && Boolean(item.attachment))
+    .map((item) => item.attachment);
+
+  if (attachments.length === 0) return null;
+
+  return (
+    <div className="chat-assistant-attachments">
+      {attachments.map((attachment, index) => {
+        const src = buildAssistantAttachmentUrl(attachment.url);
+        if (attachment.kind === 'image') {
+          return (
+            <img
+              key={`${attachment.url}:${index}`}
+              className="chat-message-image"
+              src={src}
+              alt={attachment.label}
+              onClick={() => { void invokeIpc('shell:openExternal', src); }}
+            />
+          );
+        }
+        if (attachment.kind === 'audio') {
+          return (
+            <div key={`${attachment.url}:${index}`} className="chat-assistant-attachment-card chat-assistant-attachment-card--audio">
+              <div className="chat-assistant-attachment-card__header">
+                <span className="chat-assistant-attachment-card__title">{attachment.label}</span>
+                {attachment.isVoiceNote ? <span className="chat-assistant-attachment-badge">Voice note</span> : null}
+              </div>
+              <audio controls preload="metadata" src={src} />
+            </div>
+          );
+        }
+        if (attachment.kind === 'video') {
+          return (
+            <div key={`${attachment.url}:${index}`} className="chat-assistant-attachment-card chat-assistant-attachment-card--video">
+              <video controls preload="metadata" src={src} />
+              <a
+                className="chat-assistant-attachment-card__link"
+                href={src}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {attachment.label}
+              </a>
+            </div>
+          );
+        }
+        return (
+          <div key={`${attachment.url}:${index}`} className="chat-assistant-attachment-card">
+            <a
+              className="chat-assistant-attachment-card__link"
+              href={src}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {attachment.label}
+            </a>
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+
 const GroupedMessage = memo(function GroupedMessage({
   message,
+  messageKey,
   isStreaming,
   showThinking,
   labels,
+  toolMessageExpanded,
+  onToggleToolMessage,
+  isToolCardExpanded,
+  onToggleToolCard,
 }: {
   message: RawMessage;
+  messageKey: string;
   isStreaming: boolean;
   showThinking: boolean;
   labels: ChatThreadLabels;
+  toolMessageExpanded: boolean;
+  onToggleToolMessage: () => void;
+  isToolCardExpanded: (toolCardId: string) => boolean;
+  onToggleToolCard: (toolCardId: string) => void;
 }) {
   const m = message as unknown as Record<string, unknown>;
   const role = typeof m.role === 'string' ? m.role : 'unknown';
@@ -828,7 +1108,15 @@ const GroupedMessage = memo(function GroupedMessage({
   }
 
   if (!markdown && visibleToolCards && isToolResult) {
-    return <ToolCards cards={toolCards} labels={labels} />;
+    return (
+      <ToolCards
+        cards={toolCards}
+        labels={labels}
+        messageKey={messageKey}
+        isExpanded={isToolCardExpanded}
+        onToggle={onToggleToolCard}
+      />
+    );
   }
   if (!markdown && !visibleToolCards && !hasImages) {
     return null;
@@ -851,30 +1139,48 @@ const GroupedMessage = memo(function GroupedMessage({
       ) : null}
       {isToolMessage ? (
         <details className="chat-tool-msg-collapse">
-          <summary className="chat-tool-msg-summary">
+          <summary
+            className="chat-tool-msg-summary"
+            onClick={(event) => {
+              event.preventDefault();
+              onToggleToolMessage();
+            }}
+          >
             <span className="chat-tool-msg-summary__icon"><Zap className="h-3.5 w-3.5" /></span>
             <span className="chat-tool-msg-summary__label">{labels.toolOutput}</span>
             {toolSummaryLabel ? <span className="chat-tool-msg-summary__names">{toolSummaryLabel}</span> : null}
             {!toolSummaryLabel && toolPreview ? <span className="chat-tool-msg-summary__preview">{toolPreview}</span> : null}
           </summary>
-          <div className="chat-tool-msg-body">
-            <MessageImages message={message} />
-            {reasoningMarkdown ? <div className="chat-thinking"><MessageMarkdown text={reasoningMarkdown} labels={labels} /></div> : null}
-            {jsonResult ? (
-              <details className="chat-json-collapse">
-                <summary className="chat-json-summary">
-                  <span className="chat-json-badge">{labels.json}</span>
-                  <span className="chat-json-label">{jsonSummaryLabel(jsonResult.parsed)}</span>
-                </summary>
-                <pre className="chat-json-content"><code>{jsonResult.pretty}</code></pre>
-              </details>
-            ) : markdown ? <div dir={detectTextDirection(markdown)}><MessageMarkdown text={markdown} labels={labels} /></div> : null}
-            {hasToolCards ? <ToolCards cards={toolCards} labels={labels} /> : null}
-          </div>
+          {toolMessageExpanded ? (
+            <div className="chat-tool-msg-body">
+              <MessageImages message={message} />
+              <AssistantAttachments message={message} />
+              {reasoningMarkdown ? <div className="chat-thinking"><MessageMarkdown text={reasoningMarkdown} labels={labels} /></div> : null}
+              {jsonResult ? (
+                <details className="chat-json-collapse">
+                  <summary className="chat-json-summary">
+                    <span className="chat-json-badge">{labels.json}</span>
+                    <span className="chat-json-label">{jsonSummaryLabel(jsonResult.parsed)}</span>
+                  </summary>
+                  <pre className="chat-json-content"><code>{jsonResult.pretty}</code></pre>
+                </details>
+              ) : markdown ? <div dir={detectTextDirection(markdown)}><MessageMarkdown text={markdown} labels={labels} /></div> : null}
+              {hasToolCards ? (
+                <ToolCards
+                  cards={toolCards}
+                  labels={labels}
+                  messageKey={messageKey}
+                  isExpanded={isToolCardExpanded}
+                  onToggle={onToggleToolCard}
+                />
+              ) : null}
+            </div>
+          ) : null}
         </details>
       ) : (
         <>
           <MessageImages message={message} />
+          <AssistantAttachments message={message} />
           {reasoningMarkdown ? <div className="chat-thinking"><MessageMarkdown text={reasoningMarkdown} labels={labels} /></div> : null}
           {jsonResult ? (
             <details className="chat-json-collapse">
@@ -885,7 +1191,15 @@ const GroupedMessage = memo(function GroupedMessage({
               <pre className="chat-json-content"><code>{jsonResult.pretty}</code></pre>
             </details>
           ) : markdown ? <div dir={detectTextDirection(markdown)}><MessageMarkdown text={markdown} labels={labels} /></div> : null}
-          {hasToolCards ? <ToolCards cards={toolCards} labels={labels} /> : null}
+          {hasToolCards ? (
+            <ToolCards
+              cards={toolCards}
+              labels={labels}
+              messageKey={messageKey}
+              isExpanded={isToolCardExpanded}
+              onToggle={onToggleToolCard}
+            />
+          ) : null}
         </>
       )}
     </div>
@@ -923,12 +1237,22 @@ const Group = memo(function Group({
   labels,
   contextWindow,
   locale,
+  onDelete,
+  isToolMessageExpanded,
+  onToggleToolMessage,
+  isToolCardExpanded,
+  onToggleToolCard,
 }: {
   group: MessageGroup;
   showThinking: boolean;
   labels: ChatThreadLabels;
   contextWindow: number | null;
   locale: string;
+  onDelete: () => void;
+  isToolMessageExpanded: (messageId: string) => boolean;
+  onToggleToolMessage: (messageId: string) => void;
+  isToolCardExpanded: (toolCardId: string) => boolean;
+  onToggleToolCard: (toolCardId: string) => void;
 }) {
   const timestamp = formatChatTime(group.timestamp, locale);
   const label = group.role === 'user'
@@ -951,9 +1275,14 @@ const Group = memo(function Group({
           <GroupedMessage
             key={item.key}
             message={item.message}
+            messageKey={item.key}
             isStreaming={group.isStreaming && index === visibleMessages.length - 1}
             showThinking={showThinking}
             labels={labels}
+            toolMessageExpanded={isToolMessageExpanded(`toolmsg:${item.key}`)}
+            onToggleToolMessage={() => onToggleToolMessage(`toolmsg:${item.key}`)}
+            isToolCardExpanded={isToolCardExpanded}
+            onToggleToolCard={onToggleToolCard}
           />
         ))}
         {group.hasReadingIndicator ? <div className="chat-group-reading"><ReadingIndicator inline /></div> : null}
@@ -961,6 +1290,15 @@ const Group = memo(function Group({
           <span className="chat-sender-name">{label}</span>
           <span className="chat-group-timestamp">{timestamp}</span>
           <MessageMeta meta={meta} labels={labels} />
+          <button
+            type="button"
+            className="chat-group-delete"
+            title={labels.delete}
+            aria-label={labels.delete}
+            onClick={onDelete}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
     </div>
@@ -985,9 +1323,14 @@ const StreamingGroup = memo(function StreamingGroup({
       <div className="chat-group-messages">
         <GroupedMessage
           message={makeStreamMessage(text, startedAt)}
+          messageKey={`stream:${startedAt}`}
           isStreaming
           showThinking={false}
           labels={labels}
+          toolMessageExpanded={false}
+          onToggleToolMessage={() => undefined}
+          isToolCardExpanded={() => false}
+          onToggleToolCard={() => undefined}
         />
         <div className="chat-group-footer">
           <span className="chat-sender-name">{labels.assistant}</span>
@@ -999,15 +1342,15 @@ const StreamingGroup = memo(function StreamingGroup({
 });
 
 const ReadingIndicator = memo(function ReadingIndicator({ inline = false }: { inline?: boolean }) {
-  const { t } = useTranslation(['chat', 'common']);
   return (
     <div className={cn(!inline && 'chat-group assistant')}>
       {!inline ? <Avatar role="assistant" /> : null}
       <div className={cn(!inline && 'chat-group-messages')}>
-        <div className="chat-reading-indicator" aria-hidden="true">
-          <LoadingIcon className="chat-reading-indicator__icon" />
-          <span className="chat-reading-indicator__label">
-            {t('common:status.loading', 'Loading')}
+        <div className={cn('chat-reading-indicator', inline && 'chat-reading-indicator--inline')} aria-hidden="true">
+          <span className="chat-reading-indicator__dots">
+            <span />
+            <span />
+            <span />
           </span>
         </div>
       </div>
@@ -1015,8 +1358,72 @@ const ReadingIndicator = memo(function ReadingIndicator({ inline = false }: { in
   );
 });
 
+const TranscriptNotice = memo(function TranscriptNotice({
+  message,
+  detail,
+  icon,
+}: {
+  message: string;
+  detail?: string;
+  icon?: 'alert';
+}) {
+  return (
+    <div className="context-notice">
+      {icon === 'alert' ? <AlertCircle className="context-notice__icon" /> : null}
+      <span>{message}</span>
+      {detail ? <span className="context-notice__detail">{detail}</span> : null}
+    </div>
+  );
+});
+
+const TranscriptDivider = memo(function TranscriptDivider({ label }: { label: string }) {
+  return (
+    <div className="chat-divider" role="separator">
+      <span className="chat-divider__line" />
+      <span className="chat-divider__label">{label}</span>
+      <span className="chat-divider__line" />
+    </div>
+  );
+});
+
+const BtwBubble = memo(function BtwBubble({
+  message,
+  labels,
+  onDismiss,
+}: {
+  message: RawMessage;
+  labels: ChatThreadLabels;
+  onDismiss: () => void;
+}) {
+  const content = extractText(message);
+  const btwInfo = message.btw;
+  const question = btwInfo?.question ?? '';
+
+  return (
+    <div className="btw-bubble">
+      <div className="btw-bubble__header">
+        <div className="btw-bubble__title">
+          <span className="btw-bubble__tag">{labels.btw}</span>
+          <span className="btw-bubble__meta">{labels.btwEphemeral}</span>
+        </div>
+        <button type="button" className="btw-bubble__dismiss" onClick={onDismiss} title={labels.dismiss}>
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      {question && <div className="btw-bubble__question">{question}</div>}
+      {content && (
+        <div
+          className="btw-bubble__content"
+          dangerouslySetInnerHTML={{ __html: toSanitizedMarkdownHtml(content) }}
+        />
+      )}
+    </div>
+  );
+});
+
 export const ChatThread = memo(function ChatThread({
   messages,
+  btwMessages,
   toolMessages,
   streamSegments,
   streamingMessage,
@@ -1032,6 +1439,7 @@ export const ChatThread = memo(function ChatThread({
   loadingEarlierHistory,
 }: {
   messages: RawMessage[];
+  btwMessages: RawMessage[];
   toolMessages: RawMessage[];
   streamSegments: StreamSegment[];
   streamingMessage: RawMessage | null;
@@ -1074,7 +1482,18 @@ export const ChatThread = memo(function ChatThread({
     historyWindowLimited: t('thread.historyWindowLimited', 'Only the latest portion of this conversation is loaded. Earlier messages may be hidden.'),
     historyCompacted: t('thread.historyCompacted', 'Earlier parts of this conversation were compacted by OpenClaw to save context window space.'),
     loadingEarlier: t('thread.loadingEarlier', 'Loading earlier messages'),
+    btw: t('thread.btw', 'Side answer'),
+    btwEphemeral: t('thread.btwEphemeral', 'Not saved to chat history'),
+    dismiss: t('common:actions.dismiss', 'Dismiss'),
+    delete: t('common:actions.delete', 'Delete'),
+    searchPlaceholder: t('common:actions.search', 'Search'),
+    noResults: t('common:status.noResults', 'No matching messages'),
+    deletedHidden: t('thread.deletedHidden', 'Hidden messages'),
+    restore: t('common:actions.restore', 'Restore'),
   }), [resolvedAssistantName, t]);
+  const [dismissedBtwAt, setDismissedBtwAt] = useState<number | null>(null);
+  const [uiVersion, setUiVersion] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const hasCompactionSummary = useMemo(
     () => messages.some((message) => message.role === 'compactionSummary'),
@@ -1091,7 +1510,8 @@ export const ChatThread = memo(function ChatThread({
     sending,
     pendingFinal,
     showThinking,
-  }), [messages, toolMessages, streamSegments, streamingMessage, streamingStartedAt, sessionKey, sending, pendingFinal, showThinking]);
+    locale,
+  }), [locale, messages, toolMessages, streamSegments, streamingMessage, streamingStartedAt, sessionKey, sending, pendingFinal, showThinking]);
 
   // Context usage notice (>= 85% threshold)
   const contextNotice = useMemo<{ pct: number; used: number; limit: number } | null>(() => {
@@ -1114,39 +1534,181 @@ export const ChatThread = memo(function ChatThread({
     const pct = Math.min(Math.round(ratio * 100), 100);
     return { pct, used, limit: contextWindow };
   }, [messages, contextWindow]);
+  const latestBtwMessage = useMemo(() => {
+    const latest = btwMessages[btwMessages.length - 1] ?? null;
+    if (!latest) return null;
+    const ts = latest.timestamp ? toDisplayTimestampMs(latest.timestamp) : 0;
+    if (dismissedBtwAt && ts <= dismissedBtwAt) {
+      return null;
+    }
+    return latest;
+  }, [btwMessages, dismissedBtwAt]);
+  useEffect(() => {
+    setDismissedBtwAt(null);
+  }, [sessionKey]);
+  const hiddenGroups = useMemo(() => getHiddenGroups(sessionKey), [sessionKey]);
+  const deletedGroupOrder = useMemo(() => getDeletedGroupOrder(sessionKey), [sessionKey]);
+  const expandedToolMessages = useMemo(() => getExpandedToolMessages(sessionKey), [sessionKey]);
+  const expandedToolCards = useMemo(() => getExpandedToolCards(sessionKey), [sessionKey]);
+
+  const isToolMessageExpanded = (messageId: string): boolean => expandedToolMessages.get(messageId) ?? false;
+  const onToggleToolMessage = (messageId: string): void => {
+    expandedToolMessages.set(messageId, !(expandedToolMessages.get(messageId) ?? false));
+    setUiVersion((value) => value + 1);
+  };
+  const isToolCardExpanded = (toolCardId: string): boolean => expandedToolCards.get(toolCardId) ?? false;
+  const onToggleToolCard = (toolCardId: string): void => {
+    expandedToolCards.set(toolCardId, !(expandedToolCards.get(toolCardId) ?? false));
+    setUiVersion((value) => value + 1);
+  };
+  void uiVersion;
+
+  const transcriptEntries = useMemo<TranscriptEntry[]>(() => {
+    const entries: TranscriptEntry[] = [];
+    if (contextNotice) {
+      entries.push({
+        kind: 'notice',
+        key: 'notice:context',
+        message: `${contextNotice.pct}% context used`,
+        detail: `${contextNotice.used.toLocaleString()} / ${contextNotice.limit.toLocaleString()}`,
+      });
+    }
+    if (historyWindowLimited) {
+      entries.push({
+        kind: 'notice',
+        key: 'notice:history-window',
+        icon: 'alert',
+        message: loadingEarlierHistory ? labels.loadingEarlier : labels.historyWindowLimited,
+        detail: canLoadEarlier && !loadingEarlierHistory ? '↑' : undefined,
+      });
+    }
+    if (hasCompactionSummary) {
+      entries.push({
+        kind: 'notice',
+        key: 'notice:history-compacted',
+        icon: 'alert',
+        message: labels.historyCompacted,
+      });
+    }
+    if (latestBtwMessage) {
+      entries.push({
+        kind: 'side-result',
+        key: `side-result:${latestBtwMessage.timestamp ?? 'latest'}`,
+        message: latestBtwMessage,
+      });
+    }
+    entries.push(...items);
+    return entries;
+  }, [
+    canLoadEarlier,
+    contextNotice,
+    hasCompactionSummary,
+    historyWindowLimited,
+    items,
+    labels.historyCompacted,
+    labels.historyWindowLimited,
+    labels.loadingEarlier,
+    latestBtwMessage,
+    loadingEarlierHistory,
+  ]);
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredEntries = useMemo(() => {
+    if (!normalizedSearchQuery) {
+      return transcriptEntries;
+    }
+    return transcriptEntries.filter((item) => {
+      if (item.kind === 'group') {
+        return extractGroupSearchText(item).includes(normalizedSearchQuery);
+      }
+      if (item.kind === 'stream') {
+        return item.text.toLowerCase().includes(normalizedSearchQuery);
+      }
+      if (item.kind === 'side-result') {
+        return extractText(item.message).toLowerCase().includes(normalizedSearchQuery);
+      }
+      return false;
+    });
+  }, [normalizedSearchQuery, transcriptEntries]);
+  const visibleEntries = useMemo(() => {
+    if (!normalizedSearchQuery) {
+      return transcriptEntries;
+    }
+    return filteredEntries.filter((item, index, entries) => {
+      if (item.kind !== 'divider') {
+        return true;
+      }
+      const next = entries[index + 1];
+      return Boolean(next && next.kind !== 'divider');
+    });
+  }, [filteredEntries, normalizedSearchQuery, transcriptEntries]);
 
   return (
     <div className="openclaw-chat-thread">
-      {contextNotice ? (
+      <div className="chat-thread-search">
+        <Search className="chat-thread-search__icon h-3.5 w-3.5" />
+        <input
+          type="text"
+          className="chat-thread-search__input"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder={labels.searchPlaceholder}
+          aria-label={labels.searchPlaceholder}
+        />
+        {searchQuery ? (
+          <button
+            type="button"
+            className="chat-thread-search__clear"
+            onClick={() => setSearchQuery('')}
+            title={labels.dismiss}
+            aria-label={labels.dismiss}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+      </div>
+      {deletedGroupOrder.length > 0 ? (
         <div className="context-notice">
-          <svg className="context-notice__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-            <line x1="12" y1="9" x2="12" y2="13" />
-            <line x1="12" y1="17" x2="12.01" y2="17" />
-          </svg>
-          <span>{contextNotice.pct}% context used</span>
-          <span className="context-notice__detail">
-            {contextNotice.used.toLocaleString()} / {contextNotice.limit.toLocaleString()}
-          </span>
+          <span>{labels.deletedHidden}: {deletedGroupOrder.length}</span>
+          <button
+            type="button"
+            className="chat-thread-restore"
+            onClick={() => {
+              const last = deletedGroupOrder.pop();
+              if (last) {
+                hiddenGroups.delete(last);
+                setUiVersion((value) => value + 1);
+              }
+            }}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            <span>{labels.restore}</span>
+          </button>
         </div>
       ) : null}
-      {historyWindowLimited ? (
-        <div className="context-notice">
-          <AlertCircle className="context-notice__icon" />
-          <span>{loadingEarlierHistory ? labels.loadingEarlier : labels.historyWindowLimited}</span>
-          {canLoadEarlier && !loadingEarlierHistory ? (
-            <span className="context-notice__detail">↑</span>
-          ) : null}
-        </div>
+      {normalizedSearchQuery && visibleEntries.length === 0 ? (
+        <div className="chat-thread-empty-search">{labels.noResults}</div>
       ) : null}
-      {hasCompactionSummary ? (
-        <div className="context-notice">
-          <AlertCircle className="context-notice__icon" />
-          <span>{labels.historyCompacted}</span>
-        </div>
-      ) : null}
-      {items.map((item) => {
+      {visibleEntries.map((item) => {
+        if (item.kind === 'notice') {
+          return <TranscriptNotice key={item.key} message={item.message} detail={item.detail} icon={item.icon} />;
+        }
+        if (item.kind === 'side-result') {
+          return (
+            <BtwBubble
+              key={item.key}
+              message={item.message}
+              labels={labels}
+              onDismiss={() => setDismissedBtwAt(toDisplayTimestampMs(item.message.timestamp ?? Date.now()))}
+            />
+          );
+        }
+        if (item.kind === 'divider') {
+          return <TranscriptDivider key={item.key} label={item.label} />;
+        }
         if (item.kind === 'group') {
+          if (hiddenGroups.has(item.key)) {
+            return null;
+          }
           return (
             <Group
               key={item.key}
@@ -1155,6 +1717,15 @@ export const ChatThread = memo(function ChatThread({
               labels={labels}
               contextWindow={contextWindow ?? null}
               locale={locale}
+              onDelete={() => {
+                hiddenGroups.add(item.key);
+                deletedGroupOrder.push(item.key);
+                setUiVersion((value) => value + 1);
+              }}
+              isToolMessageExpanded={isToolMessageExpanded}
+              onToggleToolMessage={onToggleToolMessage}
+              isToolCardExpanded={isToolCardExpanded}
+              onToggleToolCard={onToggleToolCard}
             />
           );
         }

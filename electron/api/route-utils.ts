@@ -37,3 +37,16 @@ export function sendText(res: ServerResponse, statusCode: number, text: string):
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.end(text);
 }
+
+export function sendBuffer(
+  res: ServerResponse,
+  statusCode: number,
+  buffer: Buffer,
+  contentType = 'application/octet-stream',
+): void {
+  setCorsHeaders(res);
+  res.statusCode = statusCode;
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Length', String(buffer.byteLength));
+  res.end(buffer);
+}

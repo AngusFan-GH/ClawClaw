@@ -21,6 +21,11 @@ export interface AttachedFileMeta {
 }
 
 /** Raw message from OpenClaw chat.history */
+export interface BtwInfo {
+  question: string;
+  isError?: boolean;
+}
+
 export interface RawMessage {
   role: 'user' | 'assistant' | 'system' | 'toolresult' | 'compactionSummary';
   content: unknown; // string | ContentBlock[]
@@ -35,6 +40,8 @@ export interface RawMessage {
   isError?: boolean;
   /** Local-only: file metadata for user-uploaded attachments (not sent to/from Gateway) */
   _attachedFiles?: AttachedFileMeta[];
+  /** Present when this message is a BTW side-question response */
+  btw?: BtwInfo;
 }
 
 type HistoryAnchor = {
@@ -144,6 +151,7 @@ interface LoadSessionsOptions {
 interface ChatState {
   // Messages
   messages: RawMessage[];
+  btwMessages: RawMessage[];
   loading: boolean;
   error: string | null;
 
@@ -212,6 +220,7 @@ interface ChatState {
   interruptActiveRunForPolicyChange: (message: string) => Promise<boolean>;
   handleChatEvent: (event: Record<string, unknown>) => void;
   handleAgentEvent: (event: AgentStreamEvent) => void;
+  handleBtwEvent: (btw: { question: string; text: string; isError?: boolean }) => void;
   handleGatewayStatusChange: (state: 'stopped' | 'starting' | 'running' | 'error' | 'reconnecting') => void;
   toggleThinking: () => void;
   refresh: () => Promise<void>;
@@ -1604,6 +1613,7 @@ function hasNonToolAssistantContent(message: RawMessage | undefined): boolean {
 
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
+  btwMessages: [],
   loading: false,
   error: null,
 
@@ -1928,6 +1938,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       currentSessionKey: key,
       currentAgentId: getAgentIdFromSessionKey(key),
       messages: [],
+      btwMessages: [],
       historyWindowLimited: false,
       hasEarlierHistory: false,
       loadingEarlierHistory: false,
@@ -1987,6 +1998,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((s) => ({
         ...removeSessionArtifacts(s, key),
         messages: [],
+        btwMessages: [],
         historyWindowLimited: false,
         hasEarlierHistory: false,
         loadingEarlierHistory: false,
@@ -2042,6 +2054,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         [newKey]: true,
       },
       messages: [],
+      btwMessages: [],
       historyWindowLimited: false,
       hasEarlierHistory: false,
       loadingEarlierHistory: false,
@@ -2204,6 +2217,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ...(quiet ? {} : { loading: false }),
         error: null,
         messages: [],
+        btwMessages: [],
         historyWindowLimited: false,
         hasEarlierHistory: false,
         loadingEarlierHistory: false,
@@ -2316,6 +2330,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const shouldResetLiveState = !stateBeforeCommit.sending;
         set((s) => ({
           messages: finalMessages,
+          btwMessages: [],
           thinkingLevel,
           historyWindowLimited: rawMessages.length >= CHAT_HISTORY_PAGE_LIMIT,
           hasEarlierHistory: rawMessages.length >= CHAT_HISTORY_PAGE_LIMIT,
@@ -2356,7 +2371,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           clearLoadingIfLatest();
           return;
         }
-        set({ messages: [], loading: false, historyWindowLimited: false, hasEarlierHistory: false, loadingEarlierHistory: false });
+        set({ messages: [], btwMessages: [], loading: false, historyWindowLimited: false, hasEarlierHistory: false, loadingEarlierHistory: false });
       }
     } catch (err) {
       if (isStale()) {
@@ -2364,7 +2379,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return;
       }
       console.warn('Failed to load chat history:', err);
-      set({ messages: [], loading: false, historyWindowLimited: false, hasEarlierHistory: false, loadingEarlierHistory: false });
+      set({ messages: [], btwMessages: [], loading: false, historyWindowLimited: false, hasEarlierHistory: false, loadingEarlierHistory: false });
     }
   },
 
@@ -2821,7 +2836,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { activeRunId, currentSessionKey, sessions } = get();
 
     // Treat canonical aliases as the same session (`main` <-> `agent:<id>:main`).
-    if (eventSessionKey != null && !sessionKeysMatch(currentSessionKey, eventSessionKey, sessions)) return;
+    // Also allow events from the active run even if their session key format differs
+    // (e.g. BTW responses may use a different session key alias than the current session).
+    const isActiveRun = Boolean(activeRunId && runId && runId === activeRunId);
+    if (eventSessionKey != null && !sessionKeysMatch(currentSessionKey, eventSessionKey, sessions) && !isActiveRun) return;
 
     // Final from another run (e.g. sub-agent announce): refresh history to show new message.
     // See https://github.com/openclaw/openclaw/issues/1909
@@ -2905,6 +2923,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (get().error) set({ error: null });
         // Message complete - add to history and clear streaming
         const finalMsg = event.message as RawMessage | undefined;
+        // BTW emits a `chat.final` with no role/content — skip the empty message but
+        // clear sending to exit the loading spinner. This must be checked before `if (finalMsg)`
+        // because BTW's `event.message` is undefined (payload is { state: 'final', runId, sessionKey }).
+        if (!finalMsg?.role && !finalMsg?.content && !finalMsg?.toolCallId) {
+          set({ sending: false, activeRunId: null, pendingFinal: false });
+          break;
+        }
         if (finalMsg) {
           const updates = collectToolUpdates(finalMsg, resolvedState);
           if (isToolResultRole(finalMsg.role)) {
@@ -2936,21 +2961,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 if (!mediaRefPaths.has(ref.filePath)) toolFiles.push(makeAttachedFile(ref));
               }
             }
-            set((s) => {
-              return {
-                streamingText: '',
-                streamingMessage: null,
-                pendingFinal: true,
-                pendingToolImages:
-                  toolFiles.length > 0
-                    ? [...s.pendingToolImages, ...toolFiles]
-                    : s.pendingToolImages,
-                streamingTools:
-                  updates.length > 0
-                    ? upsertToolStatuses(s.streamingTools, updates)
-                    : s.streamingTools,
-              };
-            });
+            set((s) => ({
+              streamingText: '',
+              streamingMessage: null,
+              pendingFinal: true,
+              pendingToolImages:
+                toolFiles.length > 0
+                  ? [...s.pendingToolImages, ...toolFiles]
+                  : s.pendingToolImages,
+              streamingTools:
+                updates.length > 0
+                  ? upsertToolStatuses(s.streamingTools, updates)
+                  : s.streamingTools,
+            }));
             break;
           }
           const toolOnly = isToolOnlyMessage(finalMsg);
@@ -3158,6 +3181,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
         break;
       }
     }
+  },
+
+  handleBtwEvent: ({ question, text, isError }) => {
+    const btwMsg: RawMessage = {
+      role: 'assistant',
+      content: text,
+      timestamp: Date.now(),
+      btw: { question, isError },
+    };
+
+    set((s) => ({ btwMessages: [...s.btwMessages, btwMsg] }));
   },
 
   handleAgentEvent: (event: AgentStreamEvent) => {

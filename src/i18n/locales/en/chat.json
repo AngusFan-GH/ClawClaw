@@ -42,6 +42,13 @@
     "gatewayNotConnected": "Gateway offline. Start or restart the Gateway first.",
     "send": "Send",
     "stop": "Stop",
+    "sendBtw": "Send side question",
+    "queueMessage": "Queue message",
+    "commandBtwHint": "Side answers are not saved to chat history and do not affect future context.",
+    "commandCompactHint": "This triggers a manual context compaction.",
+    "commandQueueHint": "This changes queue behavior for the current session when it is busy.",
+    "commandQueuedHint": "Will be queued until the current run finishes",
+    "commandDetachedHint": "Will be sent in parallel without interrupting the current run",
     "retryFailedAttachments": "Retry failed attachments",
     "localModelProvider": "Local Model"
   },
@@ -52,7 +59,9 @@
     "close": "Close"
   },
   "status": {
-    "processingToolResults": "Processing tool results"
+    "processingToolResults": "Processing tool results",
+    "queuedMessages": "Queued",
+    "queuedAttachmentOnly": "Attachment-only message"
   },
   "thread": {
     "codeCopy": "Copy",
@@ -77,7 +86,9 @@
     "exec": "Exec",
     "historyWindowLimited": "Only the latest portion of this conversation is loaded. Earlier messages may be hidden.",
     "historyCompacted": "Earlier parts of this conversation were compacted by OpenClaw to save context window space.",
-    "loadingEarlier": "Loading earlier messages"
+    "loadingEarlier": "Loading earlier messages",
+    "btw": "BTW",
+    "btwEphemeral": "Not saved to chat history"
   },
   "history": {
     "title": "Recent chats",

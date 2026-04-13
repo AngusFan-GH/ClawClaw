@@ -15,6 +15,7 @@ import { PageLoader } from '@/components/common/LoadingSpinner';
 import { ChatThread } from './ChatThread';
 import { ChatInput, type ChatAgentOption, type FileAttachment } from './ChatInput';
 import { ChatToolbar, type ChatToolbarModelOption } from './ChatToolbar';
+import { parseSlashCommand } from './slash-commands';
 import { extractImages, extractText, extractThinking, extractToolUse } from './message-utils';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -244,6 +245,12 @@ function resolveAgentDisplayName(agent: { gateway: { id: string; name?: string; 
   return agent.gateway.name?.trim() || agent.gateway.identity?.name?.trim() || agent.gateway.id;
 }
 
+type QueuedChatItem = {
+  id: string;
+  text: string;
+  attachments?: FileAttachment[];
+};
+
 export function Chat() {
   useEffect(() => {
     console.debug('[chat] Chat component mounted');
@@ -258,6 +265,7 @@ export function Chat() {
   const isGatewayRunning = displayGatewayState === 'running';
 
   const messages = useChatStore((s) => s.messages);
+  const btwMessages = useChatStore((s) => s.btwMessages);
   const loading = useChatStore((s) => s.loading);
   const sending = useChatStore((s) => s.sending);
   const error = useChatStore((s) => s.error);
@@ -300,6 +308,7 @@ export function Chat() {
   const refreshProviderSnapshot = useProviderStore((s) => s.refreshProviderSnapshot);
   const [providerCatalogMap, setProviderCatalogMap] = useState<Record<string, ProviderCatalogResponse>>({});
   const [runtimeModelRefs, setRuntimeModelRefs] = useState<string[] | null>(null);
+  const [queuedMessages, setQueuedMessages] = useState<QueuedChatItem[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
@@ -482,7 +491,6 @@ export function Chat() {
   const sendingJustStarted = sending && !prevSendingRef.current;
   prevSendingRef.current = sending;
   if (sendingJustStarted) {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     queueMicrotask(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
     });
@@ -538,7 +546,6 @@ export function Chat() {
   // Update timestamp when sending starts
   useEffect(() => {
     if (sending && streamingTimestamp === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStreamingTimestamp(Date.now() / 1000);
     } else if (!sending && streamingTimestamp !== 0) {
       setStreamingTimestamp(0);
@@ -756,6 +763,91 @@ export function Chat() {
       : displayGatewayState === 'reconnecting'
         ? t('toolbar.gatewayReconnecting', '网关重连中')
         : t('toolbar.gatewayStopped', '网关未连接');
+
+  useEffect(() => {
+    setQueuedMessages([]);
+  }, [currentSessionKey]);
+
+  useEffect(() => {
+    if (sending || queuedMessages.length === 0) {
+      return;
+    }
+    const [next, ...rest] = queuedMessages;
+    setQueuedMessages(rest);
+    void sendMessage(next.text, next.attachments);
+  }, [queuedMessages, sendMessage, sending]);
+
+  const handleRemoveQueuedMessage = (id: string): void => {
+    setQueuedMessages((items) => items.filter((item) => item.id !== id));
+  };
+
+  const handleDetachedBtwSend = async (
+    text: string,
+    attachments?: FileAttachment[],
+  ): Promise<void> => {
+    const trimmed = text.trim();
+    if (!trimmed || !isGatewayRunning) {
+      return;
+    }
+    try {
+      if (attachments && attachments.length > 0) {
+        await hostApiFetch('/api/chat/send-with-media', {
+          method: 'POST',
+          body: JSON.stringify({
+            sessionKey: currentSessionKey,
+            message: trimmed,
+            deliver: false,
+            idempotencyKey: crypto.randomUUID(),
+            media: attachments.map((file) => ({
+              filePath: file.stagedPath,
+              mimeType: file.mimeType,
+              fileName: file.fileName,
+            })),
+          }),
+        });
+      } else {
+        await useGatewayStore.getState().rpc('chat.send', {
+          sessionKey: currentSessionKey,
+          message: trimmed,
+          deliver: false,
+          idempotencyKey: crypto.randomUUID(),
+        }, 120_000);
+      }
+    } catch (err) {
+      useChatStore.setState({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  const handleChatSend = async (text: string, attachments?: FileAttachment[]): Promise<void> => {
+    const trimmed = text.trim();
+    const parsed = parseSlashCommand(trimmed);
+    const commandName = parsed?.command.name;
+
+    if (sending) {
+      if (commandName === 'stop') {
+        await abortRun();
+        return;
+      }
+      if (commandName === 'btw') {
+        await handleDetachedBtwSend(trimmed, attachments);
+        return;
+      }
+      setQueuedMessages((items) => [
+        ...items,
+        {
+          id: crypto.randomUUID(),
+          text: trimmed,
+          attachments,
+        },
+      ]);
+      return;
+    }
+
+    await sendMessage(trimmed, attachments);
+  };
+
   return (
     <div
       className={cn(
@@ -849,6 +941,7 @@ export function Chat() {
 
               <ChatThread
                 messages={messages}
+                btwMessages={btwMessages}
                 toolMessages={chatToolMessages}
                 streamSegments={chatStreamSegments}
                 streamingMessage={liveStreamingMessage}
@@ -863,6 +956,32 @@ export function Chat() {
                 canLoadEarlier={hasEarlierHistory}
                 loadingEarlierHistory={loadingEarlierHistory}
               />
+              {queuedMessages.length > 0 ? (
+                <div className="rounded-[16px] border border-black/10 bg-card/80 p-3 shadow-sm dark:border-white/10">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    {t('status.queuedMessages', '已排队')} ({queuedMessages.length})
+                  </div>
+                  <div className="space-y-2">
+                    {queuedMessages.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center gap-3 rounded-[12px] bg-black/5 px-3 py-2 text-sm dark:bg-white/5"
+                      >
+                        <div className="min-w-0 flex-1 truncate">
+                          {item.text || t('status.queuedAttachmentOnly', '仅附件消息')}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveQueuedMessage(item.id)}
+                          className="text-xs text-muted-foreground underline hover:text-foreground"
+                        >
+                          {t('common:actions.remove', '移除')}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
             </>
           )}
@@ -892,7 +1011,7 @@ export function Chat() {
 
       {/* Input Area */}
       <ChatInput
-        onSend={(text: string, attachments?: FileAttachment[]) => sendMessage(text, attachments)}
+        onSend={handleChatSend}
         onStop={abortRun}
         onToggleThinking={toggleThinking}
         resetKey={`${currentSessionKey || 'no-session'}:${shouldShowWelcome ? 'welcome' : isEmpty ? 'empty' : 'active'}`}
