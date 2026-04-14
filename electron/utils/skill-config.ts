@@ -9,8 +9,7 @@ import { access, cp, mkdir, readdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { constants } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
-import { getOpenClawDir, getResourcesDir } from './paths';
+import { getOpenClawDir, getOpenClawSkillsDir, getResourcesDir } from './paths';
 import { logger } from './logger';
 import {
   readOpenClawConfigRecord,
@@ -204,7 +203,7 @@ async function getBuiltinSkillCandidates(): Promise<BuiltinSkillCandidate[]> {
  * block the normal startup flow.
  */
 export async function ensureBuiltinSkillsInstalled(): Promise<void> {
-  const skillsRoot = join(homedir(), '.openclaw', 'skills');
+  const skillsRoot = getOpenClawSkillsDir();
   const builtinSkills = await getBuiltinSkillCandidates();
 
   for (const { slug, sourceDir } of builtinSkills) {
