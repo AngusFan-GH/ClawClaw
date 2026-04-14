@@ -178,15 +178,21 @@ const nsisPath = isWindowsHost
     ].find((candidate) => candidate && existsSync(candidate))
   : null;
 
-if (isWindowsHost && !nsisPath) {
+const args = process.argv.slice(2);
+const hasDirTarget = args.includes('--dir');
+const hasArchArg = args.some((arg) => arg === '--x64' || arg === '--arm64' || arg === '--ia32' || arg.startsWith('--arch'));
+const archArgs = hasArchArg ? [] : ['--x64', '--arm64'];
+
+// Only require NSIS for non-dir builds on Windows
+if (!hasDirTarget && isWindowsHost && !nsisPath) {
   console.error('[package:win] NSIS is required for Windows packaging. Please install makensis first.');
   process.exit(1);
 }
 
-const args = process.argv.slice(2);
-const hasArchArg = args.some((arg) => arg === '--x64' || arg === '--arm64' || arg === '--ia32' || arg.startsWith('--arch'));
-const archArgs = hasArchArg ? [] : ['--x64', '--arm64'];
-const builderArgs = ['--win', 'nsis', ...archArgs, ...args];
+// --dir produces portable directory only (no NSIS/Wine required on macOS)
+const builderArgs = hasDirTarget
+  ? ['--win', 'dir', ...archArgs, ...args.filter((a) => a !== '--dir')]
+  : ['--win', 'nsis', ...archArgs, ...args];
 
 const builderEnv = { ...process.env };
 if (nsisPath) {
@@ -228,12 +234,14 @@ const runBuild = () => {
   return result;
 };
 
-if (isWindowsHost) {
+if (hasDirTarget) {
+  console.log('[package:win] Building portable directory (dir target, no NSIS required).');
+} else if (isWindowsHost) {
   console.log(`[package:win] Found NSIS at ${nsisPath}.`);
 } else {
   console.log('[package:win] Running cross-platform Windows NSIS build.');
 }
-console.log(`[package:win] Building NSIS for ${archArgs.length > 0 ? 'x64 and arm64' : 'specified'} architectures.`);
+console.log(`[package:win] Building ${hasDirTarget ? 'dir' : 'NSIS'} for ${archArgs.length > 0 ? 'x64 and arm64' : 'specified'} architectures.`);
 
 killPackagingProcesses();
 cleanBuildDirs();
