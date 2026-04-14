@@ -1,3 +1,4 @@
+import { app } from 'electron';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, writeFileSync } from 'fs';
 import path from 'path';

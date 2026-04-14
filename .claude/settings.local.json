@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm run:*)",
+      "Read(//d D:/Angus/Work/Projects/**)",
+      "Bash(grep -rn \"app\\\\.\" electron/gateway/*.ts electron/utils/*.ts electron/main/*.ts)",
+      "Bash(grep -v \"//\")",
+      "Bash(node -e \"const path = require\\('path'\\); const p = path.resolve\\('G:\\\\\\\\\\\\\\\\win-unpacked\\\\\\\\\\\\\\\\resources\\\\\\\\\\\\\\\\app.asar'\\).split\\(/[/\\\\\\\\\\\\\\\\]/\\); console.log\\('parts:', p\\); for\\(let i=0;i<=p.length;i++\\){const base=p.slice\\(0,i+1\\).join\\('/'\\);console.log\\('i='+i, base, '-> .portable exists:', require\\('fs'\\).existsSync\\(require\\('path'\\).join\\(base,'.portable'\\)\\)\\);}\")",
+      "Bash(node:*)"
+    ]
+  }
+}

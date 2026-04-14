@@ -8,7 +8,7 @@ import { homedir } from 'node:os';
 import { join, extname, basename, resolve } from 'node:path';
 import crypto from 'node:crypto';
 import { GatewayManager } from '../gateway/manager';
-import { getDataDir, getLogsDir, getOpenClawConfigDir, getPortableBase } from '../utils/paths';
+import { getDataDir, getLogsDir, getPortableBase } from '../utils/paths';
 import {
   ClawHubService,
   ClawHubSearchParams,
@@ -24,6 +24,7 @@ import {
   getDefaultExportDir,
   ensureDir,
   expandPath,
+  resolveOpenClawDir,
 } from '../utils/paths';
 import { getOpenClawCliCommand } from '../utils/openclaw-cli';
 import {
