@@ -1437,6 +1437,9 @@ export const ChatThread = memo(function ChatThread({
   historyWindowLimited,
   canLoadEarlier,
   loadingEarlierHistory,
+  searchQuery,
+  onSearchChange,
+  hideSearch,
 }: {
   messages: RawMessage[];
   btwMessages: RawMessage[];
@@ -1453,6 +1456,9 @@ export const ChatThread = memo(function ChatThread({
   historyWindowLimited?: boolean;
   canLoadEarlier?: boolean;
   loadingEarlierHistory?: boolean;
+  searchQuery: string;
+  onSearchChange: (q: string) => void;
+  hideSearch?: boolean;
 }) {
   const { t, i18n } = useTranslation('chat');
   const locale = i18n.language || 'en';
@@ -1493,7 +1499,6 @@ export const ChatThread = memo(function ChatThread({
   }), [resolvedAssistantName, t]);
   const [dismissedBtwAt, setDismissedBtwAt] = useState<number | null>(null);
   const [uiVersion, setUiVersion] = useState(0);
-  const [searchQuery, setSearchQuery] = useState('');
 
   const hasCompactionSummary = useMemo(
     () => messages.some((message) => message.role === 'compactionSummary'),
@@ -1644,13 +1649,14 @@ export const ChatThread = memo(function ChatThread({
 
   return (
     <div className="openclaw-chat-thread">
+      {!hideSearch ? (
       <div className="chat-thread-search">
         <Search className="chat-thread-search__icon h-3.5 w-3.5" />
         <input
           type="text"
           className="chat-thread-search__input"
           value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
+          onChange={(event) => onSearchChange(event.target.value)}
           placeholder={labels.searchPlaceholder}
           aria-label={labels.searchPlaceholder}
         />
@@ -1658,7 +1664,7 @@ export const ChatThread = memo(function ChatThread({
           <button
             type="button"
             className="chat-thread-search__clear"
-            onClick={() => setSearchQuery('')}
+            onClick={() => onSearchChange('')}
             title={labels.dismiss}
             aria-label={labels.dismiss}
           >
@@ -1666,6 +1672,7 @@ export const ChatThread = memo(function ChatThread({
           </button>
         ) : null}
       </div>
+      ) : null}
       {deletedGroupOrder.length > 0 ? (
         <div className="context-notice">
           <span>{labels.deletedHidden}: {deletedGroupOrder.length}</span>

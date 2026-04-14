@@ -24,6 +24,7 @@ const expectedShadowFiles = new Set([
   'installer.nsi',
   'installer.nsh',
   'installSection.nsh',
+  'installUtil.nsh',
   'uninstaller.nsh',
 ]);
 
@@ -54,6 +55,17 @@ for (const requiredSnippet of [
 ]) {
   if (!installSection.includes(requiredSnippet)) {
     fail(`scripts/installSection.nsh is missing expected snippet: ${requiredSnippet}`);
+  }
+}
+
+const installUtil = requireText(resolve(scriptsDir, 'installUtil.nsh'));
+for (const requiredSnippet of [
+  'Shadowed upstream template: app-builder-lib/templates/nsis/include/installUtil.nsh',
+  'run-gateway-cmd.ps1',
+  'Silent uninstall could not complete after repeated attempts.',
+]) {
+  if (!installUtil.includes(requiredSnippet)) {
+    fail(`scripts/installUtil.nsh is missing expected snippet: ${requiredSnippet}`);
   }
 }
 

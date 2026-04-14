@@ -309,6 +309,7 @@ export function Chat() {
   const [providerCatalogMap, setProviderCatalogMap] = useState<Record<string, ProviderCatalogResponse>>({});
   const [runtimeModelRefs, setRuntimeModelRefs] = useState<string[] | null>(null);
   const [queuedMessages, setQueuedMessages] = useState<QueuedChatItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
@@ -855,10 +856,12 @@ export function Chat() {
       )}
     >
       {/* Toolbar */}
-      <div className="flex shrink-0 items-center justify-end px-4 py-2">
+      <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-2">
         <ChatToolbar
           currentAgentLabel={resolvedAgentLabel}
           showAgentLabel={!shouldShowWelcome && !canSwitchAgent}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
         />
       </div>
 
@@ -955,6 +958,9 @@ export function Chat() {
                 historyWindowLimited={historyWindowLimited}
                 canLoadEarlier={hasEarlierHistory}
                 loadingEarlierHistory={loadingEarlierHistory}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                hideSearch
               />
               {queuedMessages.length > 0 ? (
                 <div className="rounded-[16px] border border-black/10 bg-card/80 p-3 shadow-sm dark:border-white/10">

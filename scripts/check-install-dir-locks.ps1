@@ -22,13 +22,29 @@ function Test-ExclusiveOpen([string]$PathValue) {
     $stream = [System.IO.File]::Open(
       $PathValue,
       [System.IO.FileMode]::Open,
-      [System.IO.FileAccess]::ReadWrite,
+      [System.IO.FileAccess]::Read,
       [System.IO.FileShare]::None
     )
     $stream.Dispose()
     return $false
   } catch {
-    return $true
+    $exception = $_.Exception
+    while ($exception -and $exception.InnerException) {
+      $exception = $exception.InnerException
+    }
+
+    if ($exception -is [System.UnauthorizedAccessException]) {
+      return $false
+    }
+
+    if ($exception -is [System.IO.IOException]) {
+      switch ($exception.HResult) {
+        -2147024864 { return $true } # ERROR_SHARING_VIOLATION
+        -2147024863 { return $true } # ERROR_LOCK_VIOLATION
+      }
+    }
+
+    return $false
   }
 }
 

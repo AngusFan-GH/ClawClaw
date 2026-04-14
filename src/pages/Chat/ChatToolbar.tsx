@@ -6,6 +6,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RefreshButton } from '@/components/common/RefreshButton';
+import { Search, X } from 'lucide-react';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
@@ -21,9 +22,13 @@ export interface ChatToolbarModelOption {
 export function ChatToolbar({
   currentAgentLabel,
   showAgentLabel = false,
+  searchQuery,
+  onSearchChange,
 }: {
   currentAgentLabel?: string;
   showAgentLabel?: boolean;
+  searchQuery?: string;
+  onSearchChange?: (q: string) => void;
 }) {
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const modelMenuRef = useRef<HTMLDivElement>(null);
@@ -70,7 +75,7 @@ export function ChatToolbar({
 
   return (
     <div className="flex w-full items-center justify-between gap-3">
-      <div className="flex min-w-0 items-center">
+      <div className="flex min-w-0 shrink-0 items-center">
         {showAgentLabel && currentAgentLabel ? (
           <div
             className="flex h-8 max-w-[140px] items-center rounded-[10px] border border-black/10 bg-white/80 px-3 text-[12px] text-foreground/80 dark:border-white/10 dark:bg-white/[0.06]"
@@ -80,6 +85,32 @@ export function ChatToolbar({
           </div>
         ) : null}
       </div>
+
+      {onSearchChange ? (
+        <div className="flex min-w-0 flex-1 justify-center px-4">
+          <div className="flex h-8 w-full max-w-sm items-center rounded-[10px] border border-black/10 bg-white/80 px-3 text-[12px] text-foreground/80 dark:border-white/10 dark:bg-white/[0.06]">
+            <Search className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <input
+              type="text"
+              className="flex-1 border-0 bg-transparent text-[12px] text-foreground outline-none placeholder:text-muted-foreground"
+              placeholder="Search"
+              value={searchQuery ?? ''}
+              onChange={(e) => onSearchChange(e.target.value)}
+              aria-label="Search"
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                className="ml-1 shrink-0 text-muted-foreground hover:text-foreground"
+                onClick={() => onSearchChange('')}
+                aria-label="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       <div className="flex shrink-0 items-center gap-2">
         <Badge

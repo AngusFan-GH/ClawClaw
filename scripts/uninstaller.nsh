@@ -36,7 +36,10 @@ LangString uninstallComponentsTop 2052 "选择你希望额外删除的数据。"
 !macroend
 
 !macro RunOpenClawCli commandLine
-  nsExec::ExecToStack '"$SYSDIR\cmd.exe" /d /c ""$INSTDIR\resources\cli\openclaw.cmd" ${commandLine}""'
+  InitPluginsDir
+  ClearErrors
+  File "/oname=$PLUGINSDIR\run-gateway-cmd.ps1" "${PROJECT_DIR}\scripts\run-gateway-cmd.ps1"
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\run-gateway-cmd.ps1" -InstallDir "$INSTDIR" -Command "${commandLine}"'
   Pop $0
   Pop $1
 !macroend
@@ -45,7 +48,8 @@ LangString uninstallComponentsTop 2052 "选择你希望额外删除的数据。"
   InitPluginsDir
   ClearErrors
   File "/oname=$PLUGINSDIR\kill-install-dir-processes.ps1" "${PROJECT_DIR}\scripts\kill-install-dir-processes.ps1"
-  ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\kill-install-dir-processes.ps1" -InstallDir "$INSTDIR"' $0
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\kill-install-dir-processes.ps1" -InstallDir "$INSTDIR"'
+  Pop $0
   ; Give Windows a moment to release file handles after termination.
   Sleep 1500
 !macroend

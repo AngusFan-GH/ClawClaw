@@ -122,13 +122,16 @@ LangString installFilesLocked 2052 "旧版本安装中的文件仍被占用。$\
 
 !macro RunManagedUpgradeCleanup
   !insertmacro KillInstallDirProcesses
+  InitPluginsDir
+  ClearErrors
+  File "/oname=$PLUGINSDIR\run-gateway-cmd.ps1" "${PROJECT_DIR}\scripts\run-gateway-cmd.ps1"
   ${If} ${FileExists} "$INSTDIR\resources\cli\openclaw.cmd"
     DetailPrint "$(installPhaseStopGateway)"
-    nsExec::ExecToStack '"$SYSDIR\cmd.exe" /d /c ""$INSTDIR\resources\cli\openclaw.cmd" gateway stop"'
+    nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\run-gateway-cmd.ps1" -InstallDir "$INSTDIR" -Command "gateway stop"'
     Pop $R6
     Pop $R7
     DetailPrint "$(installPhaseUninstallGatewayService)"
-    nsExec::ExecToStack '"$SYSDIR\cmd.exe" /d /c ""$INSTDIR\resources\cli\openclaw.cmd" gateway uninstall"'
+    nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\run-gateway-cmd.ps1" -InstallDir "$INSTDIR" -Command "gateway uninstall"'
     Pop $R6
     Pop $R7
   ${EndIf}
@@ -172,7 +175,7 @@ LangString installFilesLocked 2052 "旧版本安装中的文件仍被占用。$\
         Goto not_running
       ${endIf}
 
-      ${if} $R1 > 0
+      ${if} $R1 > 1
         MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(installFilesLocked)" /SD IDCANCEL IDRETRY loop
         Abort
       ${else}
@@ -314,7 +317,7 @@ FunctionEnd
   _ci_done:
   DetailPrint "$(installPhaseValidateRuntime)"
   ClearErrors
-  nsExec::ExecToStack '"$INSTDIR\resources\bin\node.exe" "$INSTDIR\resources\resources\scripts\validate-openclaw-runtime.cjs" "$INSTDIR\resources\openclaw"'
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -Command "Start-Process -Wait -WindowStyle Hidden -FilePath ''$INSTDIR\resources\bin\node.exe'' -ArgumentList ''$INSTDIR\resources\resources\scripts\validate-openclaw-runtime.cjs'',''$INSTDIR\resources\openclaw''; exit $LASTEXITCODE""'
   Pop $0
   Pop $1
   StrCmp $0 "error" 0 +3
