@@ -180,7 +180,7 @@ Model configuration is now manual. You can jump to **Models** from setup to add 
 ### Bundled Project Skills
 
 ClawClaw also preinstalls any project-local skill placed under `resources/skills/<slug>/SKILL.md`.
-On startup, those directories are copied into `~/.openclaw/skills/<slug>/` if they are not already installed.
+On startup, those directories are copied into the managed OpenClaw skills directory if they are not already installed.
 
 Minimal example:
 
@@ -234,12 +234,12 @@ Open **Settings → Memory** to control how ClawClaw and OpenClaw preserve and r
 Notes:
 
 - The current conversation still relies on the normal OpenClaw session transcript. `session-memory` is an additional cross-session archive, not the primary source of in-session context.
-- Changing either memory toggle updates `~/.openclaw/openclaw.json` and restarts the Gateway automatically so the upstream runtime picks up the new setting.
+- Changing either memory toggle updates the managed OpenClaw config and restarts the Gateway automatically so the upstream runtime picks up the new setting.
 - Runtime-backed settings now apply through the same background coordinator used by channel and agent edits, which reduces restart churn during rapid configuration changes.
 
 ### Settings Backup and Cleanup
 
-Open **Settings → Data & Uninstall** to export a JSON backup of your current configuration before removing data or uninstalling the app. The same section can stop the Gateway, clean managed ClawClaw/OpenClaw data from a fixed allowlist, and prepare a full uninstall flow before you remove the app itself from the OS uninstaller. On Windows, ClawClaw's own cache, storage, and logs are queued for post-exit cleanup so locked Chromium files can be removed safely after the app quits.
+Open **Settings → Data & Uninstall** to export a JSON backup of your current configuration before removing data or uninstalling the app. Portable builds now default user-initiated exports into `portable/exports/settings`, `portable/exports/images`, or `portable/exports/general` as appropriate. The same section can stop the Gateway, clean managed ClawClaw/OpenClaw data from a fixed allowlist, and prepare a full uninstall flow before you remove the app itself from the OS uninstaller. On Windows, ClawClaw's own cache, storage, and logs are queued for post-exit cleanup so locked Chromium files can be removed safely after the app quits.
 
 Open **Settings → Updates** to control auto-check / auto-download behavior and manually trigger update checks from the packaged app. ClawClaw currently follows the stable release feed only.
 On Windows, packaged updates continue to use NSIS differential packages, but the installer now force-cleans the managed `resources/openclaw` and `resources/openclaw-plugins` directories before copying files. The upgrade flow also checks only processes tied to the target install directory, so unrelated `ClawClaw.exe` copies elsewhere no longer trigger false "app is still running" prompts. It also runs a post-copy OpenClaw runtime validation step and aborts before finishing if the bundled CLI tree is unhealthy.

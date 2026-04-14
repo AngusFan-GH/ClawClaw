@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { extname, join } from 'node:path';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
-import { resolveOpenClawDir } from '../../utils/paths';
+import { ensureDir, getDefaultExportDir, resolveOpenClawDir } from '../../utils/paths';
 
 const EXT_MIME_MAP: Record<string, string> = {
   '.png': 'image/png',
@@ -169,8 +169,10 @@ export async function handleFileRoutes(
       const ext = body.defaultFileName.includes('.')
         ? body.defaultFileName.split('.').pop()!
         : (body.mimeType?.split('/')[1] || 'png');
+      const exportDir = getDefaultExportDir('images');
+      ensureDir(exportDir);
       const result = await dialog.showSaveDialog({
-        defaultPath: join(homedir(), 'Downloads', body.defaultFileName),
+        defaultPath: join(exportDir, body.defaultFileName),
         filters: [
           { name: 'Images', extensions: [ext, 'png', 'jpg', 'jpeg', 'webp', 'gif'] },
           { name: 'All Files', extensions: ['*'] },

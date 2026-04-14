@@ -3,12 +3,11 @@ import { app, dialog } from 'electron';
 import { spawn } from 'node:child_process';
 import { access, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
-import { homedir } from 'node:os';
 import { join, normalize } from 'node:path';
 import { applyProxySettings } from '../../main/proxy';
 import { listAgentsSnapshot } from '../../utils/agent-config';
 import { getOpenClawCliSpawnConfig } from '../../utils/openclaw-cli';
-import { getDataDir, getLogsDir, getOpenClawConfigDir, expandPath } from '../../utils/paths';
+import { getDataDir, getDefaultExportDir, getLogsDir, getOpenClawConfigDir, expandPath } from '../../utils/paths';
 import {
   exportSettings,
   getAllSettings,
@@ -619,9 +618,11 @@ export async function handleSettingsRoutes(
         settings: rawSettings,
       };
       const defaultFileName = `clawclaw-settings-${exportedAt.slice(0, 10)}.json`;
+      const exportDir = getDefaultExportDir('settings');
+      await mkdir(exportDir, { recursive: true });
       const result = await dialog.showSaveDialog({
         title: 'Export ClawClaw settings',
-        defaultPath: join(homedir(), 'Downloads', defaultFileName),
+        defaultPath: join(exportDir, defaultFileName),
         filters: [
           { name: 'JSON', extensions: ['json'] },
           { name: 'All Files', extensions: ['*'] },

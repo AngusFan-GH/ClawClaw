@@ -104,6 +104,19 @@ export function getPortableUvCacheDir(): string | null {
   return join(data, 'cache');
 }
 
+export type ExportCategory = 'general' | 'images' | 'settings';
+
+/**
+ * Get the default directory for user-initiated exports/saves.
+ * In portable mode: <portable>/exports/<category>
+ * Otherwise: ~/Downloads
+ */
+export function getDefaultExportDir(category: ExportCategory = 'general'): string {
+  const portableData = getPortableDataDir();
+  if (portableData) return join(portableData, 'exports', category);
+  return join(homedir(), 'Downloads');
+}
+
 export {
   quoteForCmd,
   needsWinShell,

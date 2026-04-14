@@ -180,7 +180,7 @@ pnpm dev
 ### 项目内置 Skills 预装
 
 ClawClaw 也会自动预装放在 `resources/skills/<slug>/SKILL.md` 下的项目本地 skill。
-应用启动时，如果 `~/.openclaw/skills/<slug>/` 还不存在，就会自动把该目录复制过去。
+应用启动时，如果受管 OpenClaw skills 目录里还不存在对应 skill，就会自动把该目录复制过去。
 
 最小示例：
 
@@ -234,12 +234,12 @@ ClawClaw 内置了代理设置，适用于需要通过本地代理客户端访�
 说明：
 
 - 当前会话的连续上下文仍然主要依赖 OpenClaw 的 session transcript。`session-memory` 是额外的跨会话归档，不是当前会话上下文的主来源。
-- 修改任一记忆开关后，ClawClaw 会同步更新 `~/.openclaw/openclaw.json`，并自动重启 Gateway，让上游运行时立即加载新配置。
+- 修改任一记忆开关后，ClawClaw 会同步更新受管 OpenClaw 配置，并自动重启 Gateway，让上游运行时立即加载新配置。
 - 这类运行时设置现在会和频道、Agent 等配置共用同一套后台应用协调器，因此在短时间内连续调整多个设置时，重启次数会显著减少。
 
 ### 配置备份与数据清理
 
-打开 **设置 → 数据与卸载**，可以在清理数据或卸载前先导出当前配置的 JSON 备份。同一处也能先停止 Gateway，再按白名单清理受管的 ClawClaw / OpenClaw 本地数据，并在真正从系统卸载器移除应用本体之前完成“完全卸载准备”。在 Windows 上，ClawClaw 自身的缓存、存储和日志会排队到应用退出后继续清理，避免被 Chromium 文件锁占用而删除失败。
+打开 **设置 → 数据与卸载**，可以在清理数据或卸载前先导出当前配置的 JSON 备份。便携版现在会按用途默认保存到 `portable/exports/settings`、`portable/exports/images` 或 `portable/exports/general`。同一处也能先停止 Gateway，再按白名单清理受管的 ClawClaw / OpenClaw 本地数据，并在真正从系统卸载器移除应用本体之前完成“完全卸载准备”。在 Windows 上，ClawClaw 自身的缓存、存储和日志会排队到应用退出后继续清理，避免被 Chromium 文件锁占用而删除失败。
 
 打开 **设置 → 更新**，可以控制自动检查 / 自动下载，并在打包版应用里手动触发更新检查。ClawClaw 当前只跟随稳定版发布源。
 在 Windows 上，打包更新继续使用 NSIS 差分更新，但安装器现在会在复制文件前强制清理受管的 `resources/openclaw` 和 `resources/openclaw-plugins` 目录，避免升级时保留旧运行时残留。升级阶段现在也只检查目标安装目录关联的进程，因此其他目录里的 `ClawClaw.exe` 副本不再误触发“应用仍在运行”的提示。安装器在复制完成后还会额外执行一次 OpenClaw 运行时自检，如果内置 CLI 树不健康，会在安装完成前直接中止。

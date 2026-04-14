@@ -21,6 +21,7 @@ import {
   getOpenClawDir,
   getOpenClawConfigDir,
   getOpenClawSkillsDir,
+  getDefaultExportDir,
   ensureDir,
   expandPath,
 } from '../utils/paths';
@@ -1902,7 +1903,13 @@ function registerDialogHandlers(): void {
 
   // Show save dialog
   ipcMain.handle('dialog:save', async (_, options: Electron.SaveDialogOptions) => {
-    const result = await dialog.showSaveDialog(options);
+    const nextOptions = { ...options };
+    if (!nextOptions.defaultPath) {
+      const exportDir = getDefaultExportDir('general');
+      ensureDir(exportDir);
+      nextOptions.defaultPath = exportDir;
+    }
+    const result = await dialog.showSaveDialog(nextOptions);
     return result;
   });
 
@@ -2169,8 +2176,10 @@ function registerFileHandlers(): void {
         const ext = params.defaultFileName.includes('.')
           ? params.defaultFileName.split('.').pop()!
           : params.mimeType?.split('/')[1] || 'png';
+        const exportDir = getDefaultExportDir('images');
+        ensureDir(exportDir);
         const result = await dialog.showSaveDialog({
-          defaultPath: join(homedir(), 'Downloads', params.defaultFileName),
+          defaultPath: join(exportDir, params.defaultFileName),
           filters: [
             { name: 'Images', extensions: [ext, 'png', 'jpg', 'jpeg', 'webp', 'gif'] },
             { name: 'All Files', extensions: ['*'] },

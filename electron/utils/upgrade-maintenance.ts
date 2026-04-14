@@ -1,7 +1,7 @@
 import { app } from 'electron';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
-import { getOpenClawDir } from './paths';
+import { getDataDir, getOpenClawDir } from './paths';
 import { logger } from './logger';
 import { ensureProviderStoreMigrated } from '../services/providers/provider-migration';
 import {
@@ -38,6 +38,7 @@ async function getUpgradeStore() {
     const Store = (await import('electron-store')).default;
     upgradeStoreInstance = new Store<UpgradeState>({
       name: 'upgrade-state',
+      cwd: getDataDir(),
       defaults: {},
     });
   }
