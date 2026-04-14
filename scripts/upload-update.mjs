@@ -6,7 +6,9 @@ import { resolve } from "node:path";
 
 const cwd = process.cwd();
 const releaseDir = resolve(cwd, "release");
-const latestYmlPath = resolve(releaseDir, "latest.yml");
+const packageJson = JSON.parse(readFileSync(resolve(cwd, "package.json"), "utf8"));
+const windowsReleaseDir = resolve(releaseDir, `v${packageJson.version}`, "windows");
+const latestYmlPath = resolve(windowsReleaseDir, "latest.yml");
 
 const config = {
   host: process.env.UPDATE_HOST || "101.200.13.235",
@@ -103,7 +105,7 @@ function collectArtifacts() {
   const files = [latestYmlPath];
 
   for (const url of parseLatestYml(latestYmlPath)) {
-    const artifactPath = resolve(releaseDir, url);
+    const artifactPath = resolve(windowsReleaseDir, url);
     if (!existsSync(artifactPath)) {
       throw new Error(`artifact referenced by latest.yml not found: ${artifactPath}`);
     }

@@ -9,10 +9,12 @@ Var oldMenuDirectory
 ; Keep this file as a thin wrapper over the upstream template. Any install-flow
 ; customization belongs in scripts/installer.nsh or scripts/installSection.nsh.
 
+!addincludedir "${PROJECT_DIR}\scripts"
+
 !include "common.nsh"
 !include "MUI2.nsh"
 !include "multiUser.nsh"
-!include "allowOnlyOneInstallerInstance.nsh"
+!include "${PROJECT_DIR}\scripts\allowOnlyOneInstallerInstance.nsh"
 !ifdef BUILD_UNINSTALLER
   !include "${PROJECT_DIR}\scripts\uninstaller.nsh"
   !ifmacrodef customUnInstallSection
@@ -92,8 +94,8 @@ Function .onInit
 FunctionEnd
 
 !ifndef BUILD_UNINSTALLER
-  !include "installUtil.nsh"
-  !include "installer.nsh"
+  !include "${PROJECT_DIR}\scripts\installUtil.nsh"
+  !include "${PROJECT_DIR}\scripts\installer.nsh"
 !endif
 
 Section "install" INSTALL_SECTION_ID
@@ -124,7 +126,7 @@ Section "install" INSTALL_SECTION_ID
           ${endIf}
       !endif
     !endif
-    !include "installSection.nsh"
+    !include "${PROJECT_DIR}\scripts\installSection.nsh"
   !endif
 SectionEnd
 

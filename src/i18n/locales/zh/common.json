@@ -53,7 +53,8 @@
     "paused": "已暂停",
     "configured": "已配置",
     "loading": "加载中",
-    "saving": "保存中"
+    "saving": "保存中",
+    "noResults": "没有匹配的消息"
   },
   "gateway": {
     "notRunning": "网关未运行",

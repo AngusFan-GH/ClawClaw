@@ -236,10 +236,13 @@ interface ChatState {
 // between tool-result finals and the next delta.
 let _lastChatEventAt = 0;
 
-/** Normalize a timestamp to milliseconds. Handles both seconds and ms. */
-function toMs(ts: number): number {
+/** Normalize a timestamp to milliseconds. Handles string seconds, numeric seconds, and ms. */
+function toMs(ts: unknown): number {
+  // Coerce strings (including ISO "2026-04-14T...") to a number first
+  const n = typeof ts === 'string' || typeof ts === 'number' ? Number(ts) : 0;
+  if (!n || Number.isNaN(n)) return 0;
   // Timestamps < 1e12 are in seconds (before ~2033); >= 1e12 are milliseconds
-  return ts < 1e12 ? ts * 1000 : ts;
+  return n < 1e12 ? n * 1000 : n;
 }
 
 // Timer for fallback history polling during active sends.
@@ -1710,12 +1713,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     : typeof s.context_tokens === 'string'
                       ? Number(s.context_tokens)
                       : undefined,
-            updatedAt:
-              typeof s.updatedAt === 'number'
-                ? s.updatedAt
-                : typeof s.updatedAt === 'string'
-                  ? Number(s.updatedAt)
-                  : undefined,
+            updatedAt: toMs(s.updatedAt) || undefined,
           }))
           .filter((s: ChatSession) => s.key && isChatSidebarSessionKey(s.key));
         const realSessionKeys = new Set(sessions.map((session) => session.key));

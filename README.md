@@ -381,18 +381,24 @@ pnpm run release:check    # Run the release gate (upgrade compatibility + recove
 
 # Build & Package
 pnpm run build:vite       # Build frontend only
-pnpm build                # Full production build (with packaging assets)
+pnpm run package:prepare  # Shared packaging prep (vite + bundled OpenClaw + cleaned builder output)
+pnpm build                # Prepare production packaging assets
 pnpm package              # Package for current platform
 pnpm package:mac          # Package for macOS
 pnpm package:win          # Build Windows NSIS with the helper packager (also bundles node.exe for openclaw CLI)
-pnpm package:win:cross    # Alias of package:win for macOS/Linux cross-build workflows
+pnpm package:desktop      # Package macOS, Windows, and Linux in one serial workflow
+pnpm run package:organize # Re-home staged artifacts under release/v<version>/windows|mac|linux|metadata
 pnpm package:linux        # Package for Linux
-pnpm run upload:update    # Upload release/latest.yml and referenced Windows update artifacts
+pnpm run upload:update    # Upload release/v<version>/windows/latest.yml and referenced Windows update artifacts
 ```
 
 Notes:
 
-- `pnpm package:win` and `pnpm package:win:cross` both use `scripts/package-win.mjs`; the difference is only the host environment you run them from.
+- `pnpm package:win` is the single Windows packaging entrypoint and uses `scripts/package-win.mjs`.
+- `pnpm package:prepare` is the shared pre-packaging step used by `build`, `package`, and all platform package commands. It only cleans root-level builder staging output and leaves existing versioned release directories untouched.
+- `pnpm package:organize` moves root-level builder output into `release/v<package.json version>/windows`, `release/v<package.json version>/mac`, `release/v<package.json version>/linux`, and `release/v<package.json version>/metadata`.
+- `pnpm package:desktop` runs macOS, Windows, and Linux packaging serially. Keep it serial; do not run platform packaging in parallel because they share `dist`, `dist-electron`, and `build/openclaw`.
+- `release/` now uses versioned directories. Existing versions are preserved; only artifacts inside the same version directory are replaced. The updater uploader reads from `release/v<package.json version>/windows/latest.yml`.
 - Bundled OpenClaw plugin mirrors are copied during `after-pack`, so packaging does not require a separate `bundle:openclaw-plugins` step.
 
 ### Release Gate

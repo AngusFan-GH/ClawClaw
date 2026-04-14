@@ -982,6 +982,26 @@ function cleanupBundle(outputDir) {
   const nm = path.join(outputDir, 'node_modules');
   const ext = path.join(outputDir, 'extensions');
 
+  function removeNestedBinDirs(rootDir) {
+    if (!fs.existsSync(rootDir)) return;
+
+    function walk(dir) {
+      let entries;
+      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const full = path.join(dir, entry.name);
+        if (entry.name === '.bin' && path.basename(dir) === 'node_modules') {
+          if (rmSafe(full)) removedCount++;
+          continue;
+        }
+        walk(full);
+      }
+    }
+
+    walk(rootDir);
+  }
+
   // --- openclaw root junk ---
   for (const name of ['CHANGELOG.md', 'README.md']) {
     if (rmSafe(path.join(outputDir, name))) removedCount++;
@@ -1046,6 +1066,11 @@ function cleanupBundle(outputDir) {
     walkExt(ext, false, false);
   }
 
+  // Nested node_modules/.bin directories are developer-tool shims. In pnpm
+  // installs they can be absolute symlinks into the local workspace cache,
+  // which makes packaged macOS bundles fail codesign verification.
+  removeNestedBinDirs(ext);
+
   // --- node_modules: remove unnecessary file types and directories ---
   if (fs.existsSync(nm)) {
     const REMOVE_DIRS = new Set([
@@ -1078,6 +1103,8 @@ function cleanupBundle(outputDir) {
     }
     walkClean(nm);
   }
+
+  removeNestedBinDirs(nm);
 
   // --- known large unused subdirectories ---
   const LARGE_REMOVALS = [

@@ -860,8 +860,8 @@ export function Chat() {
         <ChatToolbar
           currentAgentLabel={resolvedAgentLabel}
           showAgentLabel={!shouldShowWelcome && !canSwitchAgent}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
+          searchQuery={shouldShowWelcome ? undefined : searchQuery}
+          onSearchChange={shouldShowWelcome ? undefined : setSearchQuery}
         />
       </div>
 

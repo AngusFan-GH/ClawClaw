@@ -2,7 +2,7 @@
 ; Keep install-flow behavior here so scripts/installer.nsi can remain a thin
 ; wrapper over the upstream template.
 
-!include installer.nsh
+!include "${PROJECT_DIR}\scripts\installerInclude.nsh"
 
 InitPluginsDir
 

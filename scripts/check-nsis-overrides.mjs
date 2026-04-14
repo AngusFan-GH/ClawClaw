@@ -21,6 +21,8 @@ const requireText = (filePath) => {
 };
 
 const expectedShadowFiles = new Set([
+  'allowOnlyOneInstallerInstance.nsh',
+  'extractAppPackage.nsh',
   'installer.nsi',
   'installer.nsh',
   'installSection.nsh',
@@ -37,7 +39,10 @@ for (const name of localNsisFiles) {
 }
 
 const installerNsi = requireText(resolve(scriptsDir, 'installer.nsi'));
-if (!installerNsi.includes('!include "installSection.nsh"')) {
+if (
+  !installerNsi.includes('!include "installSection.nsh"') &&
+  !installerNsi.includes('!include "${PROJECT_DIR}\\scripts\\installSection.nsh"')
+) {
   fail('scripts/installer.nsi must delegate the install section to installSection.nsh.');
 }
 if (installerNsi.includes('!insertmacro uninstallOldVersion SHELL_CONTEXT')) {
@@ -45,6 +50,11 @@ if (installerNsi.includes('!insertmacro uninstallOldVersion SHELL_CONTEXT')) {
 }
 if (installerNsi.includes('!insertmacro installApplicationFiles')) {
   fail('scripts/installer.nsi must not inline file-copy logic.');
+}
+
+const builderConfig = requireText(resolve(repoRoot, 'electron-builder.yml'));
+if (!builderConfig.includes('script: scripts/installer.nsi')) {
+  fail('electron-builder.yml must use nsis.script: scripts/installer.nsi so local NSIS shadow files become the actual compile entry.');
 }
 
 const installSection = requireText(resolve(scriptsDir, 'installSection.nsh'));
@@ -66,6 +76,27 @@ for (const requiredSnippet of [
 ]) {
   if (!installUtil.includes(requiredSnippet)) {
     fail(`scripts/installUtil.nsh is missing expected snippet: ${requiredSnippet}`);
+  }
+}
+
+const allowOnlyOneInstallerInstance = requireText(resolve(scriptsDir, 'allowOnlyOneInstallerInstance.nsh'));
+for (const requiredSnippet of [
+  'Shadowed upstream template: app-builder-lib/templates/nsis/include/allowOnlyOneInstallerInstance.nsh',
+  '!insertmacro customCheckAppRunning',
+]) {
+  if (!allowOnlyOneInstallerInstance.includes(requiredSnippet)) {
+    fail(`scripts/allowOnlyOneInstallerInstance.nsh is missing expected snippet: ${requiredSnippet}`);
+  }
+}
+
+const extractAppPackage = requireText(resolve(scriptsDir, 'extractAppPackage.nsh'));
+for (const requiredSnippet of [
+  'Shadowed upstream template: app-builder-lib/templates/nsis/include/extractAppPackage.nsh',
+  '!insertmacro RunManagedUpgradeCleanup',
+  '$(installFilesLocked)',
+]) {
+  if (!extractAppPackage.includes(requiredSnippet)) {
+    fail(`scripts/extractAppPackage.nsh is missing expected snippet: ${requiredSnippet}`);
   }
 }
 

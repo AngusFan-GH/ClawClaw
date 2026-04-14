@@ -53,7 +53,8 @@
         "paused": "Paused",
         "configured": "Configured",
         "loading": "Loading",
-        "saving": "Saving"
+        "saving": "Saving",
+        "noResults": "No matching messages"
     },
     "gateway": {
         "notRunning": "Gateway Not Running",

@@ -189,8 +189,6 @@ function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
   return 'older';
 }
 
-const INITIAL_NOW_MS = Date.now();
-
 function isMainSessionKey(key: string): boolean {
   return key.endsWith(':main');
 }
@@ -258,7 +256,7 @@ export function Sidebar() {
   const [sessionToDelete, setSessionToDelete] = useState<{ key: string; label: string } | null>(
     null
   );
-  const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
+  const [nowMs, setNowMs] = useState(() => Date.now()); // lazy init: computed at mount time, not module-load time
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [backgroundExpanded, setBackgroundExpanded] = useState(false);
   const [showCronBackground, setShowCronBackground] = useState(false);

@@ -31,8 +31,14 @@ try {
   [Environment]::SetEnvironmentVariable('OPENCLAW_EMBEDDED_IN', 'ClawClaw', 'Process')
   Push-Location $openclawCwd
   try {
-    & $nodeExe '--disable-warning=ExperimentalWarning' $entryScript $Command.Split(' ')
-    exit $LASTEXITCODE
+    $child = Start-Process `
+      -FilePath $nodeExe `
+      -ArgumentList @('--disable-warning=ExperimentalWarning', $entryScript) + $Command.Split(' ') `
+      -WorkingDirectory $openclawCwd `
+      -WindowStyle Hidden `
+      -Wait `
+      -PassThru
+    exit $child.ExitCode
   } finally {
     Pop-Location
   }

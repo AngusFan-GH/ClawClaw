@@ -85,6 +85,39 @@ function cleanupUnnecessaryFiles(dir) {
   return removedCount;
 }
 
+function removeNodeModulesBinDirs(dir) {
+  let removedCount = 0;
+
+  function walk(currentDir) {
+    let entries;
+    try {
+      entries = readdirSync(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const fullPath = join(currentDir, entry.name);
+
+      if (entry.name === '.bin' && currentDir.endsWith('node_modules')) {
+        try {
+          rmSync(fullPath, { recursive: true, force: true });
+          removedCount++;
+        } catch {
+          // ignore best-effort cleanup errors
+        }
+        continue;
+      }
+
+      walk(fullPath);
+    }
+  }
+
+  walk(dir);
+  return removedCount;
+}
+
 function listPackageEntries(nodeModulesDir) {
   if (!existsSync(nodeModulesDir)) return [];
 
@@ -343,6 +376,11 @@ exports.default = async function afterPack(context) {
   console.log('[after-pack] 🧹 Cleaning up unnecessary files ...');
   const removedRoot = cleanupUnnecessaryFiles(openclawRoot);
   console.log(`[after-pack] ✅ Removed ${removedRoot} unnecessary files/directories.`);
+
+  const removedBinDirs = removeNodeModulesBinDirs(openclawRoot);
+  if (removedBinDirs > 0) {
+    console.log(`[after-pack] ✅ Removed ${removedBinDirs} nested node_modules/.bin director${removedBinDirs === 1 ? 'y' : 'ies'}.`);
+  }
 
   // 3. Platform-specific: strip koffi non-target platform binaries
   const koffiRemoved = cleanupKoffi(dest, platform, arch);

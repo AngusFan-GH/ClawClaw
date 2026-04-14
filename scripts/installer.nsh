@@ -317,7 +317,9 @@ FunctionEnd
   _ci_done:
   DetailPrint "$(installPhaseValidateRuntime)"
   ClearErrors
-  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -Command "Start-Process -Wait -WindowStyle Hidden -FilePath ''$INSTDIR\resources\bin\node.exe'' -ArgumentList ''$INSTDIR\resources\resources\scripts\validate-openclaw-runtime.cjs'',''$INSTDIR\resources\openclaw''; exit $LASTEXITCODE""'
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\run-runtime-validation.ps1" "${PROJECT_DIR}\scripts\run-runtime-validation.ps1"
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\run-runtime-validation.ps1" -InstallDir "$INSTDIR"'
   Pop $0
   Pop $1
   StrCmp $0 "error" 0 +3

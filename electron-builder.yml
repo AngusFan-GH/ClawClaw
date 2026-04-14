@@ -70,20 +70,16 @@ mac:
   category: public.app-category.productivity
   icon: resources/icons/icon.icns
   target:
-    - target: dmg
-      arch:
-        - x64
-        - arm64
     - target: zip
       arch:
         - x64
         - arm64
   darkModeSupport: true
-  hardenedRuntime: true
+  hardenedRuntime: false
   gatekeeperAssess: false
   entitlements: entitlements.mac.plist
   entitlementsInherit: entitlements.mac.plist
-  notarize: true
+  notarize: false
   extendInfo:
     NSMicrophoneUsageDescription: ClawClaw requires microphone access for voice features
     NSCameraUsageDescription: ClawClaw requires camera access for video features
@@ -139,7 +135,7 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   license: resources/legal/EULA.rtf
-  include: scripts/installer.nsh
+  script: scripts/installer.nsi
   installerIcon: resources/icons/icon.ico
   uninstallerIcon: resources/icons/icon.ico
 

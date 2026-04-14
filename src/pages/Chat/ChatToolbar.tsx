@@ -93,7 +93,7 @@ export function ChatToolbar({
             <input
               type="text"
               className="flex-1 border-0 bg-transparent text-[12px] text-foreground outline-none placeholder:text-muted-foreground"
-              placeholder="Search"
+              placeholder={t('common:actions.search', 'Search')}
               value={searchQuery ?? ''}
               onChange={(e) => onSearchChange(e.target.value)}
               aria-label="Search"

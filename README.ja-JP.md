@@ -378,18 +378,24 @@ pnpm run release:check    # リリースゲートを実行（アップグレー�
 
 # ビルド＆パッケージ
 pnpm run build:vite       # フロントエンドのみビルド
-pnpm build                # フルプロダクションビルド（パッケージアセット含む）
+pnpm run package:prepare  # 共通パッケージ前処理（vite + OpenClaw bundle + builder出力クリーン）
+pnpm build                # 本番パッケージ用アセットを準備
 pnpm package              # 現在のプラットフォーム向けにパッケージ化
 pnpm package:mac          # macOS向けにパッケージ化
 pnpm package:win          # 補助パッケージャーで Windows NSIS をビルド（openclaw CLI 用の node.exe も同梱）
-pnpm package:win:cross    # `package:win` の別名。macOS/Linux でのクロスビルド用途向け
+pnpm package:desktop      # macOS・Windows・Linux を直列でまとめてパッケージ化
+pnpm run package:organize # ルート出力を release/v<version>/windows|mac|linux|metadata に整理
 pnpm package:linux        # Linux向けにパッケージ化
-pnpm run upload:update    # release/latest.yml と参照される Windows 更新ファイルをアップロード
+pnpm run upload:update    # release/v<version>/windows/latest.yml と参照される Windows 更新ファイルをアップロード
 ```
 
 注記:
 
-- `pnpm package:win` と `pnpm package:win:cross` はどちらも `scripts/package-win.mjs` を使います。違いは実行するホスト環境だけです。
+- `pnpm package:win` は Windows 向けパッケージングの唯一の入口で、内部では `scripts/package-win.mjs` を使います。
+- `pnpm package:prepare` は `build`、`package`、各プラットフォーム向けパッケージコマンドで共通利用する前処理で、release 直下の builder 一時出力だけを掃除し、既存のバージョン別成果物には触れません。
+- `pnpm package:organize` は builder が一時的に release 直下へ出力した成果物を `release/v<package.json version>/windows`、`release/v<package.json version>/mac`、`release/v<package.json version>/linux`、`release/v<package.json version>/metadata` へ振り分けます。
+- `pnpm package:desktop` は macOS、Windows、Linux の順にパッケージングを実行します。`dist`、`dist-electron`、`build/openclaw` を共有するため、各プラットフォームのパッケージングは並列実行しないでください。
+- `release/` はバージョン別ディレクトリで運用します。既存バージョンは保持され、同じバージョンの成果物だけが上書きされます。更新アップロードスクリプトは `release/v<package.json version>/windows/latest.yml` を参照します。
 - 同梱 OpenClaw プラグインミラーは `after-pack` 段階でコピーされるため、パッケージ化時に別途 `bundle:openclaw-plugins` を実行する必要はありません。
 
 ### Release Gate
