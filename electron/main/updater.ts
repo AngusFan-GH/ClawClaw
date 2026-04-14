@@ -9,6 +9,7 @@ import { logger } from '../utils/logger';
 import type { AppSettings } from '../utils/store';
 import { UPDATE_FEEDS, type UpdateChannel } from '../shared/update-feed';
 import { markAppQuitting } from './quit';
+import { getPortableBase } from '../utils/paths';
 
 type FeedConfig = {
   channel: UpdateChannel;
@@ -125,7 +126,7 @@ export class AppUpdater extends EventEmitter {
   }
 
   isSupported(): boolean {
-    return app.isPackaged;
+    return app.isPackaged && getPortableBase() === null;
   }
 
   private setupListeners(): void {
@@ -277,11 +278,18 @@ export function registerUpdateHandlers(
 ): void {
   updater.setMainWindow(mainWindow);
 
+  const unsupportedResult = () => ({
+    success: false,
+    error: 'Automatic updates are not available in portable mode or the current environment.',
+    status: updater.getStatus(),
+  });
+
   ipcMain.handle('update:status', () => updater.getStatus());
   ipcMain.handle('update:version', () => updater.getCurrentVersion());
   ipcMain.handle('update:isSupported', () => updater.isSupported());
 
   ipcMain.handle('update:check', async () => {
+    if (!updater.isSupported()) return unsupportedResult();
     try {
       await updater.checkForUpdates();
       return { success: true, status: updater.getStatus() };
@@ -291,6 +299,7 @@ export function registerUpdateHandlers(
   });
 
   ipcMain.handle('update:download', async () => {
+    if (!updater.isSupported()) return unsupportedResult();
     try {
       await updater.downloadUpdate();
       return { success: true };
@@ -300,21 +309,25 @@ export function registerUpdateHandlers(
   });
 
   ipcMain.handle('update:install', () => {
+    if (!updater.isSupported()) return unsupportedResult();
     updater.quitAndInstall();
     return { success: true };
   });
 
   ipcMain.handle('update:setChannel', (_, channel: UpdateChannel) => {
+    if (!updater.isSupported()) return unsupportedResult();
     updater.setChannel(channel);
     return { success: true };
   });
 
   ipcMain.handle('update:setAutoDownload', (_, enable: boolean) => {
+    if (!updater.isSupported()) return unsupportedResult();
     updater.setAutoDownload(enable);
     return { success: true };
   });
 
   ipcMain.handle('update:cancelAutoInstall', () => {
+    if (!updater.isSupported()) return unsupportedResult();
     updater.cancelAutoInstall();
     return { success: true };
   });

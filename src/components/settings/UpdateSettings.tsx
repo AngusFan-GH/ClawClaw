@@ -17,9 +17,10 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-export function UpdateSettings() {
+export function UpdateSettings({ versionOnly = false }: { versionOnly?: boolean }) {
   const { t } = useTranslation('settings');
   const [openclawVersion, setOpenclawVersion] = useState<string | null>(null);
+  const [appVersion, setAppVersion] = useState<string>('0.0.0');
   const {
     autoCheckUpdate,
     autoDownloadUpdate,
@@ -47,8 +48,25 @@ export function UpdateSettings() {
   } = useUpdateStore();
 
   useEffect(() => {
+    let cancelled = false;
+
+    void invokeIpc<string>('update:version')
+      .then((version) => {
+        if (!cancelled) setAppVersion(version);
+      })
+      .catch(() => {
+        if (!cancelled) setAppVersion('0.0.0');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (versionOnly) return;
     void init();
-  }, [init]);
+  }, [init, versionOnly]);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,19 +90,22 @@ export function UpdateSettings() {
   }, []);
 
   useEffect(() => {
+    if (versionOnly) return;
     void setChannel('stable');
-  }, [setChannel]);
+  }, [setChannel, versionOnly]);
 
   useEffect(() => {
+    if (versionOnly) return;
     void setAutoDownload(autoDownloadUpdate);
-  }, [autoDownloadUpdate, setAutoDownload]);
+  }, [autoDownloadUpdate, setAutoDownload, versionOnly]);
 
   useEffect(() => {
+    if (versionOnly) return;
     if (!isInitialized || !isSupported || !autoCheckUpdate || hasCheckedOnce || status !== 'idle') {
       return;
     }
     void checkForUpdates();
-  }, [autoCheckUpdate, checkForUpdates, hasCheckedOnce, isInitialized, isSupported, status]);
+  }, [autoCheckUpdate, checkForUpdates, hasCheckedOnce, isInitialized, isSupported, status, versionOnly]);
 
   const handleCheckForUpdates = useCallback(async () => {
     clearError();
@@ -195,11 +216,32 @@ export function UpdateSettings() {
     }
   };
 
-  if (!isInitialized) {
+  if (!versionOnly && !isInitialized) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
         <LoadingIcon className="h-4 w-4" />
         <span>{t('common:status.loading')}</span>
+      </div>
+    );
+  }
+
+  if (versionOnly) {
+    return (
+      <div className="rounded-[10px] border border-black/10 bg-card/80 p-5 dark:border-white/10 dark:bg-card/50">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-muted-foreground">{t('updates.currentVersion')}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <p className="text-4xl font-bold tracking-tight">v{appVersion}</p>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
+              <span className="font-medium">{t('updates.openclawVersionLabel')}</span>
+              <span className="rounded-full border border-black/10 bg-black/[0.03] px-2.5 py-1 font-mono dark:border-white/10 dark:bg-white/[0.03]">
+                {openclawVersion ? `v${openclawVersion}` : t('updates.openclawVersionUnavailable')}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

@@ -385,7 +385,8 @@ pnpm run package:prepare  # Shared packaging prep (vite + bundled OpenClaw + cle
 pnpm build                # Prepare production packaging assets
 pnpm package              # Package for current platform
 pnpm package:mac          # Package for macOS
-pnpm package:win          # Build Windows NSIS with the helper packager (also bundles node.exe for openclaw CLI)
+pnpm package:win          # Build Windows NSIS installer with the helper packager (also bundles node.exe for openclaw CLI)
+pnpm package:win:portable # Build Windows portable directory (win-unpacked / win-arm64-unpacked)
 pnpm package:desktop      # Package macOS, Windows, and Linux in one serial workflow
 pnpm run package:organize # Re-home staged artifacts under release/v<version>/windows|mac|linux|metadata
 pnpm package:linux        # Package for Linux
@@ -394,7 +395,9 @@ pnpm run upload:update    # Upload release/v<version>/windows/latest.yml and ref
 
 Notes:
 
-- `pnpm package:win` is the single Windows packaging entrypoint and uses `scripts/package-win.mjs`.
+- `pnpm package:win` builds the Windows NSIS installer via `scripts/package-win.mjs`.
+- `pnpm package:win:portable` builds the Windows portable directory target via `scripts/package-win.mjs --dir`.
+- `pnpm package:portable` is an alias of `pnpm package:win:portable`.
 - `pnpm package:prepare` is the shared pre-packaging step used by `build`, `package`, and all platform package commands. It only cleans root-level builder staging output and leaves existing versioned release directories untouched.
 - `pnpm package:organize` moves root-level builder output into `release/v<package.json version>/windows`, `release/v<package.json version>/mac`, `release/v<package.json version>/linux`, and `release/v<package.json version>/metadata`.
 - `pnpm package:desktop` runs macOS, Windows, and Linux packaging serially. Keep it serial; do not run platform packaging in parallel because they share `dist`, `dist-electron`, and `build/openclaw`.

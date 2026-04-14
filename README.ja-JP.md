@@ -382,7 +382,8 @@ pnpm run package:prepare  # 共通パッケージ前処理（vite + OpenClaw bun
 pnpm build                # 本番パッケージ用アセットを準備
 pnpm package              # 現在のプラットフォーム向けにパッケージ化
 pnpm package:mac          # macOS向けにパッケージ化
-pnpm package:win          # 補助パッケージャーで Windows NSIS をビルド（openclaw CLI 用の node.exe も同梱）
+pnpm package:win          # 補助パッケージャーで Windows NSIS インストーラーをビルド（openclaw CLI 用の node.exe も同梱）
+pnpm package:win:portable # Windows ポータブルディレクトリ版をビルド（win-unpacked / win-arm64-unpacked）
 pnpm package:desktop      # macOS・Windows・Linux を直列でまとめてパッケージ化
 pnpm run package:organize # ルート出力を release/v<version>/windows|mac|linux|metadata に整理
 pnpm package:linux        # Linux向けにパッケージ化
@@ -391,7 +392,9 @@ pnpm run upload:update    # release/v<version>/windows/latest.yml と参照さ�
 
 注記:
 
-- `pnpm package:win` は Windows 向けパッケージングの唯一の入口で、内部では `scripts/package-win.mjs` を使います。
+- `pnpm package:win` は Windows NSIS インストーラーをビルドし、内部では `scripts/package-win.mjs` を使います。
+- `pnpm package:win:portable` は Windows ポータブルディレクトリ版をビルドし、内部では `scripts/package-win.mjs --dir` を使います。
+- `pnpm package:portable` は `pnpm package:win:portable` のエイリアスです。
 - `pnpm package:prepare` は `build`、`package`、各プラットフォーム向けパッケージコマンドで共通利用する前処理で、release 直下の builder 一時出力だけを掃除し、既存のバージョン別成果物には触れません。
 - `pnpm package:organize` は builder が一時的に release 直下へ出力した成果物を `release/v<package.json version>/windows`、`release/v<package.json version>/mac`、`release/v<package.json version>/linux`、`release/v<package.json version>/metadata` へ振り分けます。
 - `pnpm package:desktop` は macOS、Windows、Linux の順にパッケージングを実行します。`dist`、`dist-electron`、`build/openclaw` を共有するため、各プラットフォームのパッケージングは並列実行しないでください。

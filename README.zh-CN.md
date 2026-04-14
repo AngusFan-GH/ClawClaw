@@ -385,7 +385,8 @@ pnpm run package:prepare  # 共享打包前置步骤（vite + OpenClaw bundle + 
 pnpm build                # 准备生产打包资产
 pnpm package              # 为当前平台打包
 pnpm package:mac          # 为 macOS 打包
-pnpm package:win          # 使用辅助打包脚本构建 Windows NSIS（同时内置 openclaw CLI 所需的 node.exe）
+pnpm package:win          # 使用辅助打包脚本构建 Windows NSIS 安装包（同时内置 openclaw CLI 所需的 node.exe）
+pnpm package:win:portable # 构建 Windows 便携目录版（win-unpacked / win-arm64-unpacked）
 pnpm package:desktop      # 串行打包 macOS、Windows、Linux
 pnpm run package:organize # 将根目录产物整理到 release/v<version>/windows|mac|linux|metadata
 pnpm package:linux        # 为 Linux 打包
@@ -394,7 +395,9 @@ pnpm run upload:update    # 上传 release/v<version>/windows/latest.yml 及其�
 
 说明：
 
-- `pnpm package:win` 是唯一的 Windows 打包入口，内部走 `scripts/package-win.mjs`。
+- `pnpm package:win` 用于构建 Windows NSIS 安装包，内部走 `scripts/package-win.mjs`。
+- `pnpm package:win:portable` 用于构建 Windows 便携目录版，内部走 `scripts/package-win.mjs --dir`。
+- `pnpm package:portable` 是 `pnpm package:win:portable` 的别名。
 - `pnpm package:prepare` 是 `build`、`package` 以及所有平台打包命令共用的前置步骤，只清理 release 根目录的 builder 暂存输出，不会触碰已存在的版本目录。
 - `pnpm package:organize` 会把 builder 暂存到 release 根目录的产物整理到 `release/v<package.json version>/windows`、`release/v<package.json version>/mac`、`release/v<package.json version>/linux`、`release/v<package.json version>/metadata`。
 - `pnpm package:desktop` 会依次打 macOS、Windows、Linux。请保持串行执行，不要并行打各平台，因为它们共享 `dist`、`dist-electron` 和 `build/openclaw`。

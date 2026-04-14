@@ -232,6 +232,7 @@ export function Settings() {
     return () => console.debug('[settings] Settings component unmounted');
   }, []);
   const { t } = useTranslation(['settings', 'common']);
+  const [isPortable, setIsPortable] = useState(false);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -306,6 +307,22 @@ export function Settings() {
   useEffect(() => {
     void initGateway();
   }, [initGateway]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void invokeIpc<boolean>('app:isPortable')
+      .then((value) => {
+        if (!cancelled) setIsPortable(Boolean(value));
+      })
+      .catch(() => {
+        if (!cancelled) setIsPortable(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1279,8 +1296,11 @@ export function Settings() {
             </div>
           </SectionCard>
 
-          <SectionCard title={t('updates.title')} description={t('updates.description')}>
-            <UpdateSettings />
+          <SectionCard
+            title={isPortable ? t('about.title') : t('updates.title')}
+            description={isPortable ? undefined : t('updates.description')}
+          >
+            <UpdateSettings versionOnly={isPortable} />
           </SectionCard>
 
           <SectionCard title={t('advanced.title')} description={t('advanced.description')}>
