@@ -144,6 +144,23 @@ export function getOpenClawCliSpawnConfig(args: string[]): {
 
   const packagedCli = getPackagedCliWrapperPath();
   if (packagedCli) {
+    // On macOS, spawning the shell script wrapper via spawn() causes the OS to
+    // allocate a TTY / Terminal window for each invocation.  Avoid this by
+    // invoking the Electron binary directly in ELECTRON_RUN_AS_NODE mode, which
+    // is equivalent to what the wrapper does but without the shell intermediary.
+    if (platform === 'darwin') {
+      return {
+        command: process.execPath,
+        args: [entryPath, ...args],
+        env: {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: '1',
+          OPENCLAW_NO_RESPAWN: '1',
+          OPENCLAW_EMBEDDED_IN: 'ClawClaw',
+        },
+        cwd,
+      };
+    }
     return {
       command: packagedCli,
       args,
