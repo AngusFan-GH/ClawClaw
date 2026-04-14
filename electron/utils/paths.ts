@@ -213,6 +213,22 @@ export function getOpenClawDir(): string {
 }
 
 /**
+ * Resolve the OpenClaw config directory, respecting the OPENCLAW_HOME environment
+ * variable when set (e.g. by the main process in portable mode before modules load).
+ *
+ * Priority:
+ *   1. process.env.OPENCLAW_HOME   — set in main.ts before module load (portable mode)
+ *   2. getOpenClawConfigDir()     — portable-aware (requires app.whenReady)
+ *   3. ~/.openclaw                — final fallback
+ */
+export function resolveOpenClawDir(): string {
+  if (process.env.OPENCLAW_HOME) return process.env.OPENCLAW_HOME;
+  const portable = getPortableOpenClawDir();
+  if (portable) return portable;
+  return join(homedir(), '.openclaw');
+}
+
+/**
  * Get OpenClaw package directory resolved to a real path.
  * Useful when consumers need deterministic module resolution under pnpm symlinks.
  */

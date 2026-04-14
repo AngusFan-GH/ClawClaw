@@ -9,9 +9,8 @@ import { constants } from 'fs';
 import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { dirname, join } from 'path';
-import { homedir } from 'os';
 import { app, utilityProcess } from 'electron';
-import { getOpenClawEntryPath, getOpenClawResolvedDir, getOpenClawDir } from './paths';
+import { getOpenClawEntryPath, getOpenClawResolvedDir, getOpenClawDir, resolveOpenClawDir } from './paths';
 import * as logger from './logger';
 import {
     readOpenClawConfigRecord,
@@ -32,7 +31,7 @@ import {
     toUiChannelType,
 } from './channel-alias';
 
-const OPENCLAW_DIR = join(homedir(), '.openclaw');
+const OPENCLAW_DIR = resolveOpenClawDir();
 const EXTENSIONS_DIR = join(OPENCLAW_DIR, 'extensions');
 const CONFIG_FILE = join(OPENCLAW_DIR, 'openclaw.json');
 const FEISHU_PLUGIN_ID_CANDIDATES = ['feishu', 'openclaw-lark', 'feishu-openclaw-plugin'] as const;
@@ -297,7 +296,7 @@ function hasConfiguredChinaManagedChannel(currentConfig: OpenClawConfig): boolea
 }
 
 async function resolveFeishuPluginId(): Promise<string> {
-    const extensionRoot = join(homedir(), '.openclaw', 'extensions');
+    const extensionRoot = join(resolveOpenClawDir(), 'extensions');
     for (const dirName of FEISHU_PLUGIN_ID_CANDIDATES) {
         const manifestPath = join(extensionRoot, dirName, 'openclaw.plugin.json');
         try {
@@ -315,7 +314,7 @@ async function resolveFeishuPluginId(): Promise<string> {
 
 async function removeWeChatAccountState(accountId: string): Promise<void> {
     const normalizedAccountId = normalizeOpenClawAccountId(accountId);
-    const weChatStateDir = join(homedir(), '.openclaw', WECHAT_RUNTIME_CHANNEL_ID);
+    const weChatStateDir = join(resolveOpenClawDir(), WECHAT_RUNTIME_CHANNEL_ID);
     const weChatAccountsDir = join(weChatStateDir, 'accounts');
     const accountFilePrefixes = [
         `${normalizedAccountId}.json`,
@@ -360,7 +359,7 @@ async function removeWeChatAccountState(accountId: string): Promise<void> {
     }
 
     try {
-        const credentialsDir = join(homedir(), '.openclaw', 'credentials');
+        const credentialsDir = join(resolveOpenClawDir(), 'credentials');
         if (await fileExists(credentialsDir)) {
             const candidates = await readdir(credentialsDir);
             await Promise.all(
@@ -384,7 +383,7 @@ async function removeWeChatAccountState(accountId: string): Promise<void> {
     }
 
     try {
-        const scopedCredentialsDir = join(homedir(), '.openclaw', 'credentials', WECHAT_RUNTIME_CHANNEL_ID);
+        const scopedCredentialsDir = join(resolveOpenClawDir(), 'credentials', WECHAT_RUNTIME_CHANNEL_ID);
         if (await fileExists(scopedCredentialsDir)) {
             const candidates = await readdir(scopedCredentialsDir);
             await Promise.all(
@@ -422,7 +421,7 @@ async function removeWeChatAccountState(accountId: string): Promise<void> {
 }
 
 async function hasPersistedWeChatAccountState(): Promise<boolean> {
-    const weChatStateDir = join(homedir(), '.openclaw', WECHAT_RUNTIME_CHANNEL_ID);
+    const weChatStateDir = join(resolveOpenClawDir(), WECHAT_RUNTIME_CHANNEL_ID);
     const weChatAccountsDir = join(weChatStateDir, 'accounts');
     const accountIndexPath = join(weChatStateDir, 'accounts.json');
 
@@ -472,7 +471,7 @@ async function compactDirectoryIfEmpty(targetDir: string): Promise<void> {
 }
 
 async function removeQQBotAccountState(accountId?: string): Promise<void> {
-    const qqbotDir = join(homedir(), '.openclaw', 'qqbot');
+    const qqbotDir = join(resolveOpenClawDir(), 'qqbot');
     const sessionsDir = join(qqbotDir, 'sessions');
 
     try {
@@ -1439,7 +1438,7 @@ export async function deleteChannelConfig(
     // Special handling for WhatsApp credentials
     if (configChanged && runtimeChannelType === 'whatsapp') {
         try {
-            const whatsappDir = join(homedir(), '.openclaw', 'credentials', 'whatsapp');
+            const whatsappDir = join(resolveOpenClawDir(), 'credentials', 'whatsapp');
             if (await fileExists(whatsappDir)) {
                 await rm(whatsappDir, { recursive: true, force: true });
                 console.log('Deleted WhatsApp credentials directory');
@@ -1469,10 +1468,10 @@ export async function deleteChannelConfig(
     // files and the connection appears to "come back" after refresh/restart.
     if (isWeChatRuntimeChannel(runtimeChannelType) && clearAllWeChatState) {
         const cleanupTargets = [
-            join(homedir(), '.openclaw', 'openclaw-weixin'),
-            join(homedir(), '.openclaw', 'credentials', 'openclaw-weixin'),
-            join(homedir(), '.openclaw', 'agents', 'default', 'sessions', '.openclaw-weixin-sync'),
-            join(homedir(), '.openclaw', 'extensions', 'openclaw-weixin'),
+            join(resolveOpenClawDir(), 'openclaw-weixin'),
+            join(resolveOpenClawDir(), 'credentials', 'openclaw-weixin'),
+            join(resolveOpenClawDir(), 'agents', 'default', 'sessions', '.openclaw-weixin-sync'),
+            join(resolveOpenClawDir(), 'extensions', 'openclaw-weixin'),
         ];
 
         for (const target of cleanupTargets) {
@@ -1486,7 +1485,7 @@ export async function deleteChannelConfig(
         }
 
         try {
-            const credentialsDir = join(homedir(), '.openclaw', 'credentials');
+            const credentialsDir = join(resolveOpenClawDir(), 'credentials');
             if (await fileExists(credentialsDir)) {
                 const candidates = await readdir(credentialsDir);
                 await Promise.all(
@@ -1565,10 +1564,10 @@ export async function cleanupDanglingWeChatPluginState(): Promise<{ cleanedDangl
 
     if (cleanedDanglingState) {
         const cleanupTargets = [
-            join(homedir(), '.openclaw', 'openclaw-weixin'),
-            join(homedir(), '.openclaw', 'credentials', 'openclaw-weixin'),
-            join(homedir(), '.openclaw', 'agents', 'default', 'sessions', '.openclaw-weixin-sync'),
-            join(homedir(), '.openclaw', 'extensions', 'openclaw-weixin'),
+            join(resolveOpenClawDir(), 'openclaw-weixin'),
+            join(resolveOpenClawDir(), 'credentials', 'openclaw-weixin'),
+            join(resolveOpenClawDir(), 'agents', 'default', 'sessions', '.openclaw-weixin-sync'),
+            join(resolveOpenClawDir(), 'extensions', 'openclaw-weixin'),
         ];
 
         for (const target of cleanupTargets) {

@@ -1,9 +1,8 @@
 import { app } from 'electron';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { toFsPath } from './fs-path';
-import { getOpenClawDir } from './paths';
+import { getOpenClawDir, resolveOpenClawDir } from './paths';
 import {
   hasIncompatibleManagedPluginSdkImports,
   repairManagedPluginSdkImports,
@@ -169,7 +168,7 @@ export function ensureBundledPluginInstalled(
   displayName: string,
   options?: { forceReinstall?: boolean },
 ): BundledPluginInstallResult {
-  const targetDir = join(homedir(), '.openclaw', 'extensions', pluginId);
+  const targetDir = join(resolveOpenClawDir(), 'extensions', pluginId);
   const targetManifest = join(targetDir, 'openclaw.plugin.json');
   const sourceDir = findBundledPluginMirror(pluginId);
   const forceReinstall = options?.forceReinstall === true;
@@ -207,7 +206,7 @@ export function ensureBundledPluginInstalled(
   }
 
   try {
-    mkdirSync(toFsPath(join(homedir(), '.openclaw', 'extensions')), { recursive: true });
+    mkdirSync(toFsPath(join(resolveOpenClawDir(), 'extensions')), { recursive: true });
     rmSync(toFsPath(targetDir), { recursive: true, force: true });
     cpSync(toFsPath(sourceDir), toFsPath(targetDir), { recursive: true, dereference: true });
     return finalizeInstalledManagedPlugin(targetDir, targetManifest, pluginId, displayName, sourceDir);

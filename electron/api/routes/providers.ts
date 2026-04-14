@@ -1,6 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { spawn } from 'node:child_process';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import {
@@ -13,6 +12,7 @@ import { deviceOAuthManager, type OAuthProviderType } from '../../utils/device-o
 import { browserOAuthManager, type BrowserOAuthProviderType } from '../../utils/browser-oauth';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
+import { resolveOpenClawDir } from '../../utils/paths';
 import {
   syncDefaultProviderToRuntime,
   syncDeletedProviderApiKeyToRuntime,
@@ -75,7 +75,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function readMainAgentModelsJsonEntries(): Promise<OpenClawModelEntry[]> {
-  const modelsPath = join(homedir(), '.openclaw', 'agents', 'main', 'agent', 'models.json');
+  const modelsPath = join(resolveOpenClawDir(), 'agents', 'main', 'agent', 'models.json');
   try {
     const raw = await readFile(modelsPath, 'utf8');
     const parsed = JSON.parse(raw) as {

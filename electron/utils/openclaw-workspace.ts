@@ -7,9 +7,8 @@
 import { access, readFile, writeFile, readdir, mkdir, unlink } from 'fs/promises';
 import { constants, Dirent } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
 import { logger } from './logger';
-import { getResourcesDir } from './paths';
+import { getResourcesDir, resolveOpenClawDir } from './paths';
 
 const CLAWX_BEGIN = '<!-- clawclaw:begin -->';
 const CLAWX_END = '<!-- clawclaw:end -->';
@@ -56,7 +55,7 @@ export function mergeClawXSection(existing: string, section: string): string {
  * directories that already exist under ~/.openclaw/.
  */
 async function resolveAllWorkspaceDirs(): Promise<string[]> {
-  const openclawDir = join(homedir(), '.openclaw');
+  const openclawDir = resolveOpenClawDir();
   const dirs = new Set<string>();
 
   const configPath = join(openclawDir, 'openclaw.json');

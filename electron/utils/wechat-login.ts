@@ -2,11 +2,10 @@ import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { normalizeOpenClawAccountId, WECHAT_RUNTIME_CHANNEL_ID } from './channel-alias';
-import { getOpenClawResolvedDir } from './paths';
+import { getOpenClawResolvedDir, resolveOpenClawDir } from './paths';
 
 export const DEFAULT_WECHAT_BASE_URL = 'https://ilinkai.weixin.qq.com';
 
@@ -14,7 +13,7 @@ const DEFAULT_ILINK_BOT_TYPE = '3';
 const ACTIVE_LOGIN_TTL_MS = 5 * 60_000;
 const QR_POLL_TIMEOUT_MS = 35_000;
 const MAX_QR_REFRESH_COUNT = 3;
-const OPENCLAW_DIR = join(homedir(), '.openclaw');
+const OPENCLAW_DIR = resolveOpenClawDir();
 const WECHAT_STATE_DIR = join(OPENCLAW_DIR, WECHAT_RUNTIME_CHANNEL_ID);
 const WECHAT_ACCOUNT_INDEX_FILE = join(WECHAT_STATE_DIR, 'accounts.json');
 const WECHAT_ACCOUNTS_DIR = join(WECHAT_STATE_DIR, 'accounts');

@@ -1,9 +1,8 @@
 import { EventEmitter } from 'events';
 import { existsSync, readdirSync, rmSync } from 'fs';
-import { homedir } from 'os';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
-import { getOpenClawResolvedDir } from './paths';
+import { getOpenClawResolvedDir, resolveOpenClawDir } from './paths';
 
 type WhatsAppLoginApi = {
   startWebLoginWithQr(opts?: {
@@ -32,12 +31,12 @@ async function loadWhatsAppLoginApi(): Promise<WhatsAppLoginApi> {
 
 function cleanupPendingAuth(accountId: string): void {
   try {
-    const authDir = join(homedir(), '.openclaw', 'credentials', 'whatsapp', accountId);
+    const authDir = join(resolveOpenClawDir(), 'credentials', 'whatsapp', accountId);
     if (existsSync(authDir)) {
       rmSync(authDir, { recursive: true, force: true });
     }
 
-    const parentDir = join(homedir(), '.openclaw', 'credentials', 'whatsapp');
+    const parentDir = join(resolveOpenClawDir(), 'credentials', 'whatsapp');
     if (existsSync(parentDir)) {
       const remaining = readdirSync(parentDir);
       if (remaining.length === 0) {

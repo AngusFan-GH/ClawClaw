@@ -1,11 +1,11 @@
 import { access, mkdir, readFile, rename, writeFile } from 'fs/promises';
 import { constants } from 'fs';
 import { randomBytes } from 'crypto';
-import { homedir } from 'os';
 import { dirname, join } from 'path';
 import JSON5 from 'json5';
+import { resolveOpenClawDir } from './paths';
 
-const OPENCLAW_CONFIG_PATH = join(homedir(), '.openclaw', 'openclaw.json');
+const OPENCLAW_CONFIG_PATH = join(resolveOpenClawDir(), 'openclaw.json');
 
 let configWriteChain: Promise<unknown> = Promise.resolve();
 

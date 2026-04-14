@@ -2,8 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { Buffer } from 'node:buffer';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { resolveOpenClawDir } from '../../utils/paths';
 import {
   deleteChannelConfig,
   getChannelFormValues,
@@ -599,7 +599,7 @@ async function ensureWeChatPluginInstalled(): Promise<{ installed: boolean; warn
     return bundledResult;
   }
 
-  const pluginManifest = join(homedir(), '.openclaw', 'extensions', 'openclaw-weixin', 'openclaw.plugin.json');
+  const pluginManifest = join(resolveOpenClawDir(), 'extensions', 'openclaw-weixin', 'openclaw.plugin.json');
   const cliAttempts = existsSync(pluginManifest)
     ? [
         ['plugins', 'update', 'openclaw-weixin'],
@@ -626,7 +626,7 @@ async function ensureWeChatPluginInstalled(): Promise<{ installed: boolean; warn
     }
 
     if (existsSync(pluginManifest)) {
-      repairManagedPluginSdkImports(join(homedir(), '.openclaw', 'extensions', 'openclaw-weixin'));
+      repairManagedPluginSdkImports(join(resolveOpenClawDir(), 'extensions', 'openclaw-weixin'));
       return {
         installed: true,
         warning: bundledResult.warning,

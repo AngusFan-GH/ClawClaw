@@ -2,9 +2,9 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { dialog, nativeImage } from 'electron';
 import crypto from 'node:crypto';
 import { extname, join } from 'node:path';
-import { homedir } from 'node:os';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
+import { resolveOpenClawDir } from '../../utils/paths';
 
 const EXT_MIME_MAP: Record<string, string> = {
   '.png': 'image/png',
@@ -53,7 +53,7 @@ function mimeToExt(mimeType: string): string {
   return '';
 }
 
-const OUTBOUND_DIR = join(homedir(), '.openclaw', 'media', 'outbound');
+const OUTBOUND_DIR = join(resolveOpenClawDir(), 'media', 'outbound');
 
 async function generateImagePreview(filePath: string, mimeType: string): Promise<string | null> {
   try {
