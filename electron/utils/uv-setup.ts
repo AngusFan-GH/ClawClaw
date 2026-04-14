@@ -4,7 +4,7 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { getUvMirrorEnv } from './uv-env';
 import { logger } from './logger';
-import { quoteForCmd, needsWinShell } from './paths';
+import { quoteForCmd, needsWinShell, getPortablePythonHome, getPortableUvCacheDir } from './paths';
 
 /**
  * Get the path to the bundled uv binary
@@ -90,11 +90,22 @@ export async function installUv(): Promise<void> {
 export async function isPythonReady(): Promise<boolean> {
   const { bin: uvBin } = resolveUvBin();
   const useShell = needsWinShell(uvBin);
+  const uvEnv = await getUvMirrorEnv();
+  const portablePythonHome = getPortablePythonHome();
+  const portableUvCache = getPortableUvCacheDir();
+
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    ...uvEnv,
+    ...(portablePythonHome ? { UV_PYTHON_HOME: portablePythonHome } : {}),
+    ...(portableUvCache ? { UV_CACHE_DIR: portableUvCache } : {}),
+  };
 
   return new Promise<boolean>((resolve) => {
     try {
       const child = spawn(useShell ? quoteForCmd(uvBin) : uvBin, ['python', 'find', '3.12'], {
         shell: useShell,
+        env,
         windowsHide: true,
       });
       child.on('close', (code) => resolve(code === 0));
@@ -170,6 +181,9 @@ async function runPythonInstall(
 /**
  * Use bundled uv to install a managed Python version (default 3.12).
  *
+ * In portable mode, Python and cache are redirected to the USB drive so nothing
+ * is written to the host computer.
+ *
  * Tries with mirror env first (for CN region), then retries without mirror
  * if the first attempt fails, to rule out mirror-specific issues.
  */
@@ -178,12 +192,21 @@ export async function setupManagedPython(): Promise<void> {
   const uvEnv = await getUvMirrorEnv();
   const hasMirror = Object.keys(uvEnv).length > 0;
 
+  // In portable mode, redirect Python and cache to the USB drive.
+  const portablePythonHome = getPortablePythonHome();
+  const portableUvCache = getPortableUvCacheDir();
+
   logger.info(
     `Setting up managed Python 3.12 ` +
-    `(uv=${uvBin}, source=${source}, arch=${process.arch}, mirror=${hasMirror})`
+    `(uv=${uvBin}, source=${source}, arch=${process.arch}, mirror=${hasMirror}` +
+    (portablePythonHome ? `, pythonHome=${portablePythonHome}` : '') +
+    (portableUvCache ? `, cache=${portableUvCache}` : '') +
+    `)`
   );
 
   const baseEnv: Record<string, string | undefined> = { ...process.env };
+  if (portablePythonHome) baseEnv.UV_PYTHON_HOME = portablePythonHome;
+  if (portableUvCache) baseEnv.UV_CACHE_DIR = portableUvCache;
 
   // Attempt 1: with mirror (if applicable)
   try {
@@ -207,11 +230,17 @@ export async function setupManagedPython(): Promise<void> {
 
   // After installation, verify and log the Python path
   const verifyShell = needsWinShell(uvBin);
+  const verifyEnv: Record<string, string | undefined> = {
+    ...process.env,
+    ...uvEnv,
+    ...(portablePythonHome ? { UV_PYTHON_HOME: portablePythonHome } : {}),
+    ...(portableUvCache ? { UV_CACHE_DIR: portableUvCache } : {}),
+  };
   try {
     const findPath = await new Promise<string>((resolve) => {
       const child = spawn(verifyShell ? quoteForCmd(uvBin) : uvBin, ['python', 'find', '3.12'], {
         shell: verifyShell,
-        env: { ...process.env, ...uvEnv },
+        env: verifyEnv,
         windowsHide: true,
       });
       let output = '';
