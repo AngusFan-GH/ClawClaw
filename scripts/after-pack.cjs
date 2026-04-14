@@ -413,4 +413,32 @@ exports.default = async function afterPack(context) {
 
     console.log('[after-pack] ✅ Windows CLI runtime validated (node.exe + wrapper + entry script).');
   }
+
+  // 6. Portable mode marker — place .portable at the app root so the app detects
+  // portable mode when the directory is copied to a USB drive and run from there.
+  // The file is empty; its presence alone is the signal.
+  try {
+    const portableMarker = join(appOutDir, '.portable');
+    const { writeFileSync } = require('fs');
+    writeFileSync(portableMarker, '', 'utf8');
+    console.log(`[after-pack] ✅ Portable marker created at ${portableMarker}`);
+  } catch (err) {
+    console.warn(`[after-pack] ⚠️  Failed to create portable marker: ${err.message}`);
+  }
+
+  // 7. Copy portable launcher scripts to app root (next to ClawClaw.exe) on Windows.
+  // These enable double-click-to-run from a USB drive.
+  if (platform === 'win32') {
+    const { copyFileSync } = require('fs');
+    const srcDir = join(__dirname, '..', 'resources');
+    const launchers = ['Start ClawClaw.bat', 'Start ClawClaw.vbs', 'README Portable.txt'];
+    for (const name of launchers) {
+      try {
+        copyFileSync(join(srcDir, name), join(appOutDir, name));
+        console.log(`[after-pack] ✅ Copied ${name} to app root`);
+      } catch {
+        // ignore if source doesn't exist (dev mode)
+      }
+    }
+  }
 };

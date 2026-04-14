@@ -1,7 +1,7 @@
-import { app } from 'electron';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, writeFileSync } from 'fs';
 import path from 'path';
+import { getDataDir } from '../utils/paths';
 import type { GatewayLaunchContext } from './config-sync';
 import type { GatewayLifecycleState } from './process-policy';
 import { getOpenClawCliSpawnConfig } from '../utils/openclaw-cli';
@@ -81,7 +81,7 @@ const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
 `;
 
 function ensureGatewayFetchPreload(): string {
-  const dest = path.join(app.getPath('userData'), 'gateway-fetch-preload.cjs');
+  const dest = path.join(getDataDir(), 'gateway-fetch-preload.cjs');
   try {
     writeFileSync(dest, GATEWAY_FETCH_PRELOAD_SOURCE, 'utf-8');
   } catch {

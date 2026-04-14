@@ -11,6 +11,7 @@ import {
 } from '../shared/security-policy';
 import type { ReminderItem } from '../shared/reminders';
 import { normalizeReminders } from '../shared/reminders';
+import { getDataDir } from './paths';
 
 // Lazy-load electron-store (ESM module)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -121,6 +122,7 @@ const defaults: AppSettings = {
 
 /**
  * Get the settings store instance (lazy initialization)
+ * Uses getDataDir() so it respects portable mode automatically.
  */
 async function getSettingsStore() {
   if (!settingsStoreInstance) {
@@ -128,6 +130,7 @@ async function getSettingsStore() {
     settingsStoreInstance = new Store<AppSettings>({
       name: 'settings',
       defaults,
+      cwd: getDataDir(),
     });
   }
   return settingsStoreInstance;

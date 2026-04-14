@@ -11,6 +11,7 @@ import { PORTS } from '../utils/config';
 import { JsonRpcNotification, isNotification, isResponse } from './protocol';
 import { logger } from '../utils/logger';
 import { loadOrCreateDeviceIdentity, type DeviceIdentity } from '../utils/device-identity';
+import { getDataDir } from '../utils/paths';
 import {
   DEFAULT_RECONNECT_CONFIG,
   type ReconnectConfig,
@@ -156,7 +157,7 @@ export class GatewayManager extends EventEmitter {
   private async initDeviceIdentity(): Promise<void> {
     if (this.deviceIdentity) return; // already loaded
     try {
-      const identityPath = path.join(app.getPath('userData'), 'clawclaw-device-identity.json');
+      const identityPath = path.join(getDataDir(), 'clawclaw-device-identity.json');
       this.deviceIdentity = await loadOrCreateDeviceIdentity(identityPath);
       logger.debug(`Device identity loaded (deviceId=${this.deviceIdentity.deviceId})`);
     } catch (err) {

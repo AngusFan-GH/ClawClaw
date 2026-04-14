@@ -117,6 +117,12 @@ win:
       arch:
         - x64
         - arm64
+    # Portable directory target — produces release/win-unpacked/ which can be
+    # copied directly to a USB drive and run without installation.
+    - target: dir
+      arch:
+        - x64
+        - arm64
 
 nsis:
   oneClick: false

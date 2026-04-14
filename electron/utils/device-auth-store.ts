@@ -1,6 +1,6 @@
-import { app } from 'electron';
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
+import { getDataDir } from './paths';
 
 export type DeviceAuthEntry = {
   token: string;
@@ -16,7 +16,7 @@ type DeviceAuthStore = {
 };
 
 function getStorePath(): string {
-  return path.join(app.getPath('userData'), 'clawclaw-device-auth.json');
+  return path.join(getDataDir(), 'clawclaw-device-auth.json');
 }
 
 function normalizeRole(role: string): string {

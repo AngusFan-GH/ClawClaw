@@ -8,7 +8,7 @@
  * guarantee the last few messages are flushed before the process exits.
  */
 import { app } from 'electron';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { existsSync, mkdirSync, appendFileSync } from 'fs';
 import { appendFile, readFile, readdir, stat } from 'fs/promises';
 
@@ -86,7 +86,27 @@ process.on('exit', flushBufferSync);
 // ── Initialisation ───────────────────────────────────────────────
 
 /**
- * Initialize logger — safe to call before app.isReady()
+ * Detect portable base directory (mirrors paths.ts logic, inlined to avoid circular import).
+ * Returns null when not in portable mode.
+ */
+function detectPortableLogDir(): string | null {
+  try {
+    if (!app.isPackaged) return null;
+    const appPath = app.getAppPath();
+    if (!appPath) return null;
+    const parts = resolve(appPath).split(/[/\\]/);
+    for (let i = 0; i <= parts.length; i++) {
+      const base = parts.slice(0, i + 1).join('/') || '/';
+      if (existsSync(join(base, '.portable'))) {
+        return join(base, 'portable', 'logs');
+      }
+    }
+  } catch { /* best-effort */ }
+  return null;
+}
+
+/**
+ * Initialize logger — safe to call after app.whenReady()
  */
 export function initLogger(): void {
   try {
@@ -95,7 +115,7 @@ export function initLogger(): void {
       currentLevel = LogLevel.INFO;
     }
 
-    logDir = join(app.getPath('userData'), 'logs');
+    logDir = detectPortableLogDir() ?? join(app.getPath('userData'), 'logs');
 
     if (!existsSync(logDir)) {
       mkdirSync(logDir, { recursive: true });

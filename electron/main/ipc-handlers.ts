@@ -8,6 +8,7 @@ import { homedir } from 'node:os';
 import { join, extname, basename, resolve } from 'node:path';
 import crypto from 'node:crypto';
 import { GatewayManager } from '../gateway/manager';
+import { getDataDir, getLogsDir, getOpenClawConfigDir, getPortableBase } from '../utils/paths';
 import {
   ClawHubService,
   ClawHubSearchParams,
@@ -1926,12 +1927,19 @@ function registerAppHandlers(): void {
     return app.getName();
   });
 
-  // Get app path
+  // Get app path — portable-aware overrides for user-facing paths
   ipcMain.handle('app:getPath', (_, name: Parameters<typeof app.getPath>[0]) => {
+    if (name === 'userData') return getDataDir();
+    if (name === 'logs') return getLogsDir();
+    if (name === 'home') return getOpenClawConfigDir(); // maps to .openclaw for renderer
     return app.getPath(name);
   });
 
   // Get platform
+  ipcMain.handle('app:isPortable', () => {
+    return getPortableBase() !== null;
+  });
+
   ipcMain.handle('app:platform', () => {
     return process.platform;
   });

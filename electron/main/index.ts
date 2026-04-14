@@ -14,6 +14,7 @@ import { createMenu } from './menu';
 import { appUpdater, registerUpdateHandlers } from './updater';
 import { logger } from '../utils/logger';
 import { warmupNetworkOptimization } from '../utils/uv-env';
+import { getPortableBase, getDataDir, getLogsDir, getOpenClawConfigDir, ensureDir } from '../utils/paths';
 
 import { ClawHubService } from '../gateway/clawhub';
 import { ensureClawXContext, repairClawXOnlyBootstrapFiles } from '../utils/openclaw-workspace';
@@ -205,8 +206,20 @@ async function initialize(): Promise<void> {
   // Initialize logger first
   logger.init();
   logger.info('=== ClawClaw Application Starting ===');
+
+  // ── Portable mode ───────────────────────────────────────────────────────────
+  const portableBase = getPortableBase();
+  if (portableBase) {
+    const portableData = getDataDir();
+    logger.info(`[portable] Running in portable mode — data at: ${portableData}`);
+
+    // Ensure all portable data directories exist before anything else tries to use them.
+    ensureDir(portableData);                       // portable/
+    ensureDir(getLogsDir());                       // portable/logs
+    ensureDir(getOpenClawConfigDir());             // portable/.openclaw
+  }
   logger.debug(
-    `Runtime: platform=${process.platform}/${process.arch}, electron=${process.versions.electron}, node=${process.versions.node}, packaged=${app.isPackaged}`
+    `Runtime: platform=${process.platform}/${process.arch}, electron=${process.versions.electron}, node=${process.versions.node}, packaged=${app.isPackaged}${portableBase ? `, portable=${portableBase}` : ''}`
   );
 
   // Warm up network optimization (non-blocking)
