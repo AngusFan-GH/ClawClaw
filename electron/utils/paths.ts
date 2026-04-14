@@ -82,6 +82,28 @@ export function getPortableOpenClawDir(): string | null {
   return join(data, '.openclaw');
 }
 
+/**
+ * Returns the portable Python runtime directory for uv-managed Python.
+ * In portable mode: <portable>/python/
+ * Returns null if not in portable mode.
+ */
+export function getPortablePythonHome(): string | null {
+  const data = getPortableDataDir();
+  if (!data) return null;
+  return join(data, 'python');
+}
+
+/**
+ * Returns the portable uv cache directory.
+ * In portable mode: <portable>/cache/
+ * Returns null if not in portable mode.
+ */
+export function getPortableUvCacheDir(): string | null {
+  const data = getPortableDataDir();
+  if (!data) return null;
+  return join(data, 'cache');
+}
+
 export {
   quoteForCmd,
   needsWinShell,
