@@ -3,6 +3,8 @@
  * Centralized configuration constants and helpers
  */
 
+import { createServer } from 'node:net';
+
 /**
  * Port configuration
  */
@@ -18,7 +20,38 @@ export const PORTS = {
 
   /** OpenClaw Gateway port */
   OPENCLAW_GATEWAY: 18789,
+
+  /** Portable Gateway port (fallback when default is taken) */
+  OPENCLAW_GATEWAY_PORTABLE: 18790,
 } as const;
+
+const MAX_PORT = 18899;
+
+/**
+ * Check if a TCP port is available (not in use)
+ */
+export async function isPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once('error', () => resolve(false));
+    server.once('listening', () => {
+      server.close();
+      resolve(true);
+    });
+    server.listen(port, '127.0.0.1');
+  });
+}
+
+/**
+ * Find the first available port starting from startPort (inclusive).
+ * Scans up to MAX_PORT.
+ */
+export async function findAvailablePort(startPort: number): Promise<number> {
+  for (let port = startPort; port <= MAX_PORT; port++) {
+    if (await isPortAvailable(port)) return port;
+  }
+  throw new Error(`No available port found between ${startPort} and ${MAX_PORT}`);
+}
 
 /**
  * Get port from environment or default

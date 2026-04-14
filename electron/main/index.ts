@@ -26,7 +26,8 @@ import {
 } from '../utils/openclaw-cli';
 import { isQuitting, setQuitting } from './app-state';
 import { applyProxySettings } from './proxy';
-import { getAllSettings, getSetting } from '../utils/store';
+import { getAllSettings, getSetting, setSetting } from '../utils/store';
+import { PORTS, isPortAvailable, findAvailablePort } from '../utils/config';
 import { ensureBuiltinSkillsInstalled } from '../utils/skill-config';
 import { performUpgradeMaintenanceIfNeeded } from '../utils/upgrade-maintenance';
 import { startHostApiServer } from '../api/server';
@@ -217,6 +218,22 @@ async function initialize(): Promise<void> {
     ensureDir(portableData);                       // portable/
     ensureDir(getLogsDir());                       // portable/logs
     ensureDir(getOpenClawConfigDir());             // portable/.openclaw
+
+    // Auto-detect: if default port 18789 is already in use (likely by a
+    // normally-installed ClawClaw on the same machine), automatically switch
+    // to the next available port so both instances can run simultaneously.
+    const defaultPort = PORTS.OPENCLAW_GATEWAY;
+    const currentSettings = await getAllSettings();
+    const currentPort = currentSettings.gatewayPort;
+
+    if (currentPort === defaultPort) {
+      // Port is set to default — check if it's available
+      if (!(await isPortAvailable(defaultPort))) {
+        const newPort = await findAvailablePort(PORTS.OPENCLAW_GATEWAY_PORTABLE);
+        await setSetting('gatewayPort', newPort);
+        logger.info(`[portable] Port ${defaultPort} is in use, switched to ${newPort}`);
+      }
+    }
   }
   logger.debug(
     `Runtime: platform=${process.platform}/${process.arch}, electron=${process.versions.electron}, node=${process.versions.node}, packaged=${app.isPackaged}${portableBase ? `, portable=${portableBase}` : ''}`
