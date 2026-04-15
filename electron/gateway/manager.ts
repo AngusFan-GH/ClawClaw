@@ -7,7 +7,7 @@ import path from 'path';
 import { EventEmitter } from 'events';
 import type { ChildProcess } from 'node:child_process';
 import WebSocket from 'ws';
-import { PORTS } from '../utils/config';
+import { PORTS, findAvailablePort, isPortAvailable } from '../utils/config';
 import { JsonRpcNotification, isNotification, isResponse } from './protocol';
 import { logger } from '../utils/logger';
 import { loadOrCreateDeviceIdentity, type DeviceIdentity } from '../utils/device-identity';
@@ -312,6 +312,30 @@ export class GatewayManager extends EventEmitter {
   }
 
   /**
+   * Resolve the port to start the Gateway on.
+   *
+   * Tries the preferred port (this.status.port) first.  If it is already in use
+   * by another process, scans 18789–18899 for the first available port.
+   * This enables multiple ClawClaw instances (installed + portable) to coexist
+   * on the same machine without manual port configuration.
+   */
+  private async resolveStartPort(): Promise<void> {
+    const preferred = this.status.port;
+    if (await isPortAvailable(preferred)) {
+      return;
+    }
+    // Port is occupied — scan for the first free one.
+    const resolved = await findAvailablePort(PORTS.OPENCLAW_GATEWAY);
+    if (resolved !== preferred) {
+      logger.warn(
+        `[Gateway] Preferred port ${preferred} is in use; falling back to port ${resolved}`
+      );
+    }
+    this.status.port = resolved;
+    this.setStatus({ port: resolved });
+  }
+
+  /**
    * Start Gateway process
    */
   async start(): Promise<void> {
@@ -331,6 +355,10 @@ export class GatewayManager extends EventEmitter {
       this.lastStartupRecovery = null;
       this.resetAttachProbeState();
       const startEpoch = this.lifecycleController.bump('start');
+
+      // Resolve an available port before starting — allows multiple instances
+      // (installed + portable) to coexist on the same machine.
+      await this.resolveStartPort();
       logger.info(`Gateway start requested (port=${this.status.port})`);
       this.lastSpawnSummary = null;
       this.shouldReconnect = true;
