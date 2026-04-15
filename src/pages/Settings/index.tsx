@@ -62,6 +62,8 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { RefreshButton } from '@/components/common/RefreshButton';
 import { UpdateSettings } from '@/components/settings/UpdateSettings';
+import { GatewayPortsSettings } from '@/components/settings/GatewayPortsSettings';
+import { BackupRestoreSettings } from '@/components/settings/BackupRestoreSettings';
 import type { GatewayStatus } from '@/types/gateway';
 import { ALL_MENU_ITEMS, type MenuItemId } from '@/shared/menu-items';
 
@@ -1268,6 +1270,16 @@ export function Settings() {
                   </div>
                 </div>
               </SubCard>
+
+              <SubCard
+                title={t('gatewayPorts.title')}
+                description={t('gatewayPorts.description')}
+              >
+                <GatewayPortsSettings
+                  currentPort={gatewayStatus.port}
+                  currentPid={gatewayStatus.pid}
+                />
+              </SubCard>
             </div>
           </SectionCard>
 
@@ -1294,6 +1306,13 @@ export function Settings() {
                 }
               />
             </div>
+          </SectionCard>
+
+          <SectionCard
+            title={t('dataManagement.title')}
+            description={t('dataManagement.description')}
+          >
+            <BackupRestoreSettings />
           </SectionCard>
 
           <SectionCard

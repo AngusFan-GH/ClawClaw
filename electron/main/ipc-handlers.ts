@@ -1131,6 +1131,19 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
     }
   });
 
+  // Scan ports 18789–18799 for all running OpenClaw Gateway instances.
+  ipcMain.handle('gateway:scanPorts', async () => {
+    const { scanGatewayPorts } = await import('../gateway/supervisor');
+    return await scanGatewayPorts();
+  });
+
+  // Kill the gateway process listening on a specific port.
+  // Resets the restart governor so the local instance can restart cleanly.
+  ipcMain.handle('gateway:killPort', async (_, port: number) => {
+    const { killGatewayOnPort } = await import('../gateway/supervisor');
+    return await killGatewayOnPort(port, gatewayManager);
+  });
+
   // Gateway RPC call
   ipcMain.handle('gateway:rpc', async (_, method: string, params?: unknown, timeoutMs?: number) => {
     try {

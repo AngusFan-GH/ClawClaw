@@ -789,6 +789,15 @@ export class GatewayManager extends EventEmitter {
   }
 
   /**
+   * Reset the restart governor — clears restart budget, cooldown, and circuit-breaker
+   * state.  Used by the port-scanner kill API so killing an external gateway
+   * doesn't get suppressed by the governor on the next restart.
+   */
+  public resetGovernor(): void {
+    this.restartGovernor.reset();
+  }
+
+  /**
    * Debounced restart — coalesces multiple rapid restart requests into a
    * single restart after `delayMs` of inactivity.  This prevents the
    * cascading stop/start cycles that occur when provider:save,

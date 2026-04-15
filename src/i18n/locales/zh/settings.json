@@ -518,5 +518,45 @@
     },
     "loadingTitle": "正在加载安全设置",
     "loadingDescription": "正在同步当前安全策略，请稍候。"
+  },
+  "gatewayPorts": {
+    "title": "网关端口",
+    "description": "检测并管理本机上运行的所有 OpenClaw Gateway 实例。",
+    "scan": "扫描网关",
+    "scanning": "扫描中...",
+    "scanComplete": "发现 {{count}} 个网关",
+    "scanCompleteEmpty": "在端口 18789–18799 上未发现网关",
+    "scanFailed": "端口扫描失败",
+    "found": "已检测到 {{count}} 个网关",
+    "noGateways": "未检测到网关。点击「扫描网关」搜索 18789–18799 端口。",
+    "ownInstance": "本实例",
+    "externalInstance": "其他实例",
+    "stop": "停止",
+    "killSuccess": "已停止端口 {{port}} 上的网关",
+    "killFailed": "停止网关失败：{{error}}",
+    "confirmKillTitle": "停止外部网关？",
+    "confirmKillMessage": "停止端口 {{port}} 上的网关？该 ClawClaw 实例需要手动重启网关。无法撤销此操作。"
+  },
+  "dataManagement": {
+    "title": "数据管理",
+    "description": "备份和恢复 ClawClaw 设置及配置。"
+  },
+  "backupRestore": {
+    "export": "导出备份",
+    "exportHelp": "将所有设置、OpenClaw 配置和 Provider 列表保存为 JSON 文件。API Key 存储在系统 Keychain 中，不会被导出。",
+    "exportSuccess": "备份已保存至 {{path}}",
+    "exportFailed": "备份导出失败",
+    "import": "导入备份",
+    "importHelp": "从之前导出的备份文件中恢复设置。",
+    "importFailed": "读取备份文件失败",
+    "importSuccess": "备份恢复成功",
+    "importPartial": "备份恢复完成，但有警告",
+    "importSucceeded": "备份恢复成功",
+    "importHadWarnings": "备份恢复完成，但有警告",
+    "autoBackupSaved": "自动备份已保存至：{{path}}",
+    "confirmTitle": "确认恢复",
+    "confirmMessage": "将导入 ClawClaw {{version}}（创建于 {{date}}，含 {{providers}} 个已配置的 Provider）的设置。当前进度将被覆盖。系统将自动创建当前状态备份。",
+    "confirmGeneric": "将使用导入备份覆盖当前的设置。",
+    "confirm": "恢复备份"
   }
 }

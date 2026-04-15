@@ -518,5 +518,45 @@
     },
     "loadingTitle": "セキュリティ設定を読み込み中",
     "loadingDescription": "現在のセキュリティポリシーを同期しています。しばらくお待ちください。"
+  },
+  "gatewayPorts": {
+    "title": "ゲートウェイポート",
+    "description": "マシン上で実行中のすべての OpenClaw Gateway インスタンスを検出して管理します。",
+    "scan": "ゲートウェイをスキャン",
+    "scanning": "スキャン中...",
+    "scanComplete": "{{count}} 個のゲートウェイを発見",
+    "scanCompleteEmpty": "ポート 18789–18799 にゲートウェイは見つかりませんでした",
+    "scanFailed": "ポートスキャンに失敗しました",
+    "found": "{{count}} 個のゲートウェイを検出",
+    "noGateways": "ゲートウェイが検出されていません。「ゲートウェイをスキャン」をクリックして 18789–18799 をスキャンします。",
+    "ownInstance": "このインスタンス",
+    "externalInstance": "他のインスタンス",
+    "stop": "停止",
+    "killSuccess": "ポート {{port}} のゲートウェイを停止しました",
+    "killFailed": "ゲートウェイの停止に失敗しました：{{error}}",
+    "confirmKillTitle": "外部ゲートウェイを停止しますか？",
+    "confirmKillMessage": "ポート {{port}} で実行中のゲートウェイを停止しますか？他の ClawClaw インスタンスは手動でゲートウェイを再起動する必要があります。この操作は取り消せません。"
+  },
+  "dataManagement": {
+    "title": "データ管理",
+    "description": "ClawClaw の設定と構成のバックアップと復元を行います。"
+  },
+  "backupRestore": {
+    "export": "バックアップをエクスポート",
+    "exportHelp": "すべての設定、OpenClaw 構成、Provider リストを JSON ファイルとして保存します。API キーはシステムキーチェーンに保存されるため、エクスポートされません。",
+    "exportSuccess": "バックアップを保存しました：{{path}}",
+    "exportFailed": "バックアップのエクスポートに失敗しました",
+    "import": "バックアップをインポート",
+    "importHelp": "以前にエクスポートしたバックアップファイルから設定を復元します。",
+    "importFailed": "バックアップファイルの読み込みに失敗しました",
+    "importSuccess": "バックアップを復元しました",
+    "importPartial": "バックアップを復元しましたが、警告がありました",
+    "importSucceeded": "バックアップを復元しました",
+    "importHadWarnings": "バックアップを復元しましたが、警告がありました",
+    "autoBackupSaved": "自動バックアップを保存しました：{{path}}",
+    "confirmTitle": "復元の確認",
+    "confirmMessage": "ClawClaw {{version}}（作成日：{{date}}、Provider 数：{{providers}}）のバックアップから設定をインポートします。現在の設定は上書きされます。現在の状態の自動バックアップが事前に作成されます。",
+    "confirmGeneric": "インポートしたバックアップで現在の設定を上書きします。",
+    "confirm": "バックアップを復元"
   }
 }

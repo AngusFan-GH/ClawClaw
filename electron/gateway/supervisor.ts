@@ -293,6 +293,92 @@ export async function findExistingGatewayProcess(options: {
   }
 }
 
+// ── Port Scanner ────────────────────────────────────────────────
+
+export interface DetectedGateway {
+  port: number;
+  pids: number[];
+}
+
+/**
+ * Probe a single port — returns true if an OpenClaw Gateway is listening.
+ */
+async function probeGateway(port: number): Promise<boolean> {
+  return await new Promise<boolean>((resolve) => {
+    const testWs = new WebSocket(`ws://localhost:${port}/ws`);
+    const timeout = setTimeout(() => {
+      try { testWs.close(); } catch { /* ignore */ }
+      resolve(false);
+    }, 2000);
+
+    testWs.on('message', (data) => {
+      try {
+        const message = JSON.parse(data.toString()) as { type?: string; event?: string };
+        if (message.type === 'event' && message.event === 'connect.challenge') {
+          clearTimeout(timeout);
+          try { testWs.close(); } catch { /* ignore */ }
+          resolve(true);
+        }
+      } catch { /* ignore malformed */ }
+    });
+    testWs.on('error', () => { clearTimeout(timeout); resolve(false); });
+    testWs.on('close', () => { clearTimeout(timeout); resolve(false); });
+  });
+}
+
+/**
+ * Scan ports 18789–18799 for all OpenClaw Gateway instances.
+ * Returns a list of detected gateways with their port and PIDs.
+ * Does NOT kill anything — use killGatewayOnPort() for that.
+ */
+export async function scanGatewayPorts(): Promise<DetectedGateway[]> {
+  const BASE_PORT = 18789;
+  const MAX_PORT = 18799;
+  const results: DetectedGateway[] = [];
+
+  for (let port = BASE_PORT; port <= MAX_PORT; port++) {
+    const pids = await getListeningProcessIds(port);
+    if (pids.length === 0) continue;
+
+    const isGateway = await probeGateway(port);
+    if (!isGateway) continue;
+
+    results.push({
+      port,
+      pids: [...new Set(pids.map((p) => parseInt(p, 10)))],
+    });
+  }
+
+  return results;
+}
+
+/**
+ * Kill all processes listening on a specific port.
+ * After killing, resets the restart governor so the local ClawClaw instance
+ * can cleanly restart its own gateway without suppression.
+ */
+export async function killGatewayOnPort(
+  port: number,
+  gatewayManager: import('./manager').GatewayManager,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const pids = await getListeningProcessIds(port);
+    if (pids.length === 0) {
+      return { success: false, error: `No process found on port ${port}` };
+    }
+
+    await terminateOrphanedProcessIds(port, pids);
+
+    // Reset the restart governor so the local instance can restart without
+    // being suppressed after killing an external gateway on the same port.
+    gatewayManager.resetGovernor();
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
 export async function runOpenClawDoctorRepair(): Promise<boolean> {
   const openclawDir = getOpenClawDir();
   const entryScript = getOpenClawEntryPath();

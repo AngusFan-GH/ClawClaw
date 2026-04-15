@@ -9,12 +9,15 @@ import { listAgentsSnapshot } from '../../utils/agent-config';
 import { getOpenClawCliSpawnConfig } from '../../utils/openclaw-cli';
 import { getDataDir, getDefaultExportDir, getLogsDir, getOpenClawConfigDir, expandPath } from '../../utils/paths';
 import {
-  exportSettings,
   getAllSettings,
   getSetting,
   resetSettings,
   setSetting,
+  buildBackupPayload,
+  applyBackupPayload,
+  createAutoBackup,
   type AppSettings,
+  type BackupPayload,
 } from '../../utils/store';
 import { syncMemorySettingsToOpenClaw } from '../../utils/openclaw-auth';
 import type { HostApiContext } from '../context';
@@ -592,13 +595,19 @@ export async function handleSettingsRoutes(
 
   if (url.pathname === '/api/settings/reset' && req.method === 'POST') {
     try {
+      // Auto-backup before destructive reset
+      const autoBackupPath = await createAutoBackup('pre-reset');
       await resetSettings();
       await applyRuntimeSettingsSideEffects(ctx, {
         source: 'settings.reset',
         proxyChanged: true,
         memoryChanged: true,
       });
-      sendJson(res, 200, { success: true, settings: await getAllSettings() });
+      sendJson(res, 200, {
+        success: true,
+        settings: await getAllSettings(),
+        autoBackupPath,
+      });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }
@@ -607,21 +616,13 @@ export async function handleSettingsRoutes(
 
   if (url.pathname === '/api/settings/export-config' && req.method === 'POST') {
     try {
-      const exportedAt = new Date().toISOString();
-      const rawSettings = JSON.parse(await exportSettings()) as Record<string, unknown>;
-      const payload = {
-        metadata: {
-          appVersion: app.getVersion(),
-          platform: process.platform,
-          exportedAt,
-        },
-        settings: rawSettings,
-      };
-      const defaultFileName = `clawclaw-settings-${exportedAt.slice(0, 10)}.json`;
+      const payload = await buildBackupPayload();
+      const exportedAt = payload.metadata.exportedAt;
+      const defaultFileName = `clawclaw-backup-${exportedAt.slice(0, 10)}.json`;
       const exportDir = getDefaultExportDir('settings');
       await mkdir(exportDir, { recursive: true });
       const result = await dialog.showSaveDialog({
-        title: 'Export ClawClaw settings',
+        title: 'Export ClawClaw backup',
         defaultPath: join(exportDir, defaultFileName),
         filters: [
           { name: 'JSON', extensions: ['json'] },
@@ -638,6 +639,92 @@ export async function handleSettingsRoutes(
       sendJson(res, 200, {
         success: true,
         savedPath: result.filePath,
+      });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  // POST /api/settings/import-config — open file picker, validate, return preview
+  if (url.pathname === '/api/settings/import-config' && req.method === 'POST') {
+    try {
+      const openResult = await dialog.showOpenDialog({
+        title: 'Import ClawClaw backup',
+        defaultPath: getDefaultExportDir('settings'),
+        filters: [
+          { name: 'JSON', extensions: ['json'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+        properties: ['openFile'],
+      });
+
+      if (openResult.canceled || !openResult.filePaths[0]) {
+        sendJson(res, 200, { success: false, cancelled: true });
+        return true;
+      }
+
+      const filePath = openResult.filePaths[0];
+      const raw = await readFile(filePath, 'utf-8');
+      let parsed: BackupPayload;
+      try {
+        parsed = JSON.parse(raw) as BackupPayload;
+      } catch {
+        sendJson(res, 400, { success: false, error: 'Invalid JSON file' });
+        return true;
+      }
+
+      // Basic validation
+      if (!parsed?.metadata || !parsed?.settings || !parsed?.openclawConfig) {
+        sendJson(res, 400, { success: false, error: 'This file is not a valid ClawClaw backup' });
+        return true;
+      }
+
+      sendJson(res, 200, {
+        success: true,
+        preview: {
+          appVersion: parsed.metadata.appVersion,
+          exportedAt: parsed.metadata.exportedAt,
+          backupId: parsed.metadata.backupId,
+          hasOpenClawConfig: Object.keys(parsed.openclawConfig).length > 0,
+          providerCount: parsed.providerMeta?.length ?? 0,
+        },
+        // Return full payload so renderer can forward it to apply-import
+        payload: parsed,
+      });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  // POST /api/settings/apply-import — actually apply a previously selected backup
+  if (url.pathname === '/api/settings/apply-import' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{
+        payload: BackupPayload;
+        skipApiKeyWarning?: boolean;
+        createAutoBackup?: boolean;
+      }>(req);
+
+      if (!body?.payload) {
+        sendJson(res, 400, { success: false, error: 'Missing backup payload' });
+        return true;
+      }
+
+      // Auto-backup current state before overwriting
+      let autoBackupPath: string | null = null;
+      if (body.createAutoBackup !== false) {
+        autoBackupPath = await createAutoBackup('pre-import');
+      }
+
+      const result = await applyBackupPayload(body.payload, {
+        skipApiKeyWarning: body.skipApiKeyWarning,
+      });
+
+      sendJson(res, 200, {
+        ...result,
+        autoBackupPath,
       });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
