@@ -23,6 +23,7 @@
     ]
   },
   "description": "ClawClaw - Graphical AI Assistant based on OpenClaw",
+  "homepage": "https://clawclaw.xzinfra.com",
   "main": "dist-electron/main/index.js",
   "author": "ClawClaw Team",
   "license": "MIT",

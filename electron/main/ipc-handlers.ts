@@ -1099,7 +1099,8 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
     }
   });
 
-  // Restart Gateway
+  // Restart Gateway — force=true so it always stops/starts immediately regardless
+  // of startup lock, governor cooldown, or deferred-restart queue.
   ipcMain.handle('gateway:restart', async () => {
     try {
       emitGatewayLifecycle({
@@ -1108,7 +1109,7 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
         source: 'gateway.manualRestart',
         reason: 'gateway.manualRestart',
       });
-      void gatewayManager.restart({ strategy: 'auto' }).catch((error) => {
+      void gatewayManager.restart({ force: true }).catch((error) => {
         emitGatewayLifecycle({
           phase: 'failed',
           action: 'restart',

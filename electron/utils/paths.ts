@@ -3,7 +3,7 @@
  * Cross-platform path resolution helpers
  */
 import { app } from 'electron';
-import { join, resolve } from 'path';
+import { join, resolve, sep } from 'path';
 import { homedir } from 'os';
 import { existsSync, mkdirSync, readFileSync, realpathSync } from 'fs';
 import { logger } from './logger';
@@ -31,7 +31,7 @@ function detectPortableBaseDir(): string | null {
     // Walk up from app path toward filesystem root, looking for .portable marker.
     // On macOS the marker is typically at Contents/Resources/.portable.
     // On Windows it is at <app-dir>/.portable (same dir as the .exe).
-    const parts = resolve(appPath).split(/[/\\]/);
+    const parts = resolve(appPath).split(sep);
     for (let i = 0; i <= parts.length; i++) {
       const base = parts.slice(0, i + 1).join('/') || '/';
       if (existsSync(join(base, '.portable'))) {
@@ -226,16 +226,20 @@ export function getOpenClawDir(): string {
 }
 
 /**
- * Resolve the OpenClaw config directory, respecting the OPENCLAW_HOME environment
- * variable when set (e.g. by the main process in portable mode before modules load).
+ * Resolve the OpenClaw config/state directory, respecting OpenClaw env vars
+ * and portable mode.
  *
  * Priority:
- *   1. process.env.OPENCLAW_HOME   — set in main.ts before module load (portable mode)
- *   2. getOpenClawConfigDir()     — portable-aware (requires app.whenReady)
- *   3. ~/.openclaw                — final fallback
+ *   1. OPENCLAW_STATE_DIR  — explicit state dir (used by portable mode)
+ *   2. getPortableOpenClawDir() — portable USB mode
+ *   3. ~/.openclaw          — default
+ *
+ * Note: OPENCLAW_HOME is NOT used. OpenClaw treats it as a home-directory
+ * (and appends ".openclaw" internally), causing ~/.openclaw/.openclaw duplication.
+ * Use OPENCLAW_STATE_DIR instead for custom state directories.
  */
 export function resolveOpenClawDir(): string {
-  if (process.env.OPENCLAW_HOME) return process.env.OPENCLAW_HOME;
+  if (process.env.OPENCLAW_STATE_DIR) return process.env.OPENCLAW_STATE_DIR;
   const portable = getPortableOpenClawDir();
   if (portable) return portable;
   return join(homedir(), '.openclaw');

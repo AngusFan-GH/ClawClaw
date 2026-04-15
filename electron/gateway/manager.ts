@@ -66,6 +66,10 @@ export interface GatewayStatus {
 
 export interface GatewayRestartOptions {
   strategy?: 'auto' | 'stop-start';
+  /** Force immediate restart, bypassing startup lock, governor cooldown, and
+   * any deferred-restart queue.  Use this when the user explicitly requests a
+   * restart from the Settings UI. */
+  force?: boolean;
 }
 
 /**
@@ -655,6 +659,14 @@ export class GatewayManager extends EventEmitter {
    * Restart Gateway process
    */
   async restart(options?: GatewayRestartOptions): Promise<void> {
+    // ── Force restart: bypasses all deferral/governor logic and stops/starts
+    // immediately.  Used when the user explicitly requests a restart from the
+    // Settings UI — it must work regardless of gateway state.
+    if (options?.force) {
+      await this.forceRestart();
+      return;
+    }
+
     if (
       this.restartController.isRestartDeferred({
         state: this.status.state,
@@ -744,6 +756,36 @@ export class GatewayManager extends EventEmitter {
         }
       );
     }
+  }
+
+  /**
+   * Force immediate restart — stops the gateway right now and starts a new one,
+   * ignoring startup locks, governor suppression, and deferred queues.  Any in-flight
+   * stop/start operations are abandoned.
+   */
+  private async forceRestart(): Promise<void> {
+    logger.info('Force Gateway restart requested');
+
+    // 1. Reset all barriers
+    this.startLock = false;
+    this.restartGovernor.reset();
+    this.restartController.resetDeferredRestart();
+    this.restartController.clearDebounceTimer();
+
+    // 2. Abandon any in-flight stop/start so we don't wait on them
+    this.startInFlight = null;
+    this.restartInFlight = null;
+
+    // 3. Clear all timers so nothing fires during the transition
+    this.clearAllTimers();
+
+    // 4. Stop immediately (synchronously-set flags only; no awaits on previous ops)
+    // Re-enable reconnect for the upcoming start
+    this.shouldReconnect = true;
+    await this.stop();
+
+    // 5. Start fresh
+    await this.start();
   }
 
   /**

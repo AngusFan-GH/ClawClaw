@@ -83,6 +83,13 @@ export class GatewayRestartGovernor {
     this.pruneOld(now);
   }
 
+  reset(): void {
+    this.restartTimestamps = [];
+    this.circuitOpenUntil = 0;
+    this.consecutiveRestarts = 0;
+    this.lastRestartAt = 0;
+  }
+
   private getCooldownMs(): number {
     const factor = Math.pow(2, Math.max(0, this.consecutiveRestarts));
     return Math.min(this.options.baseCooldownMs * factor, this.options.maxCooldownMs);

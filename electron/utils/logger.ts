@@ -8,7 +8,7 @@
  * guarantee the last few messages are flushed before the process exits.
  */
 import { app } from 'electron';
-import { join, resolve } from 'path';
+import { join, resolve, sep } from 'path';
 import { existsSync, mkdirSync, appendFileSync } from 'fs';
 import { appendFile, readFile, readdir, stat } from 'fs/promises';
 
@@ -94,7 +94,7 @@ function detectPortableLogDir(): string | null {
     if (!app.isPackaged) return null;
     const appPath = app.getAppPath();
     if (!appPath) return null;
-    const parts = resolve(appPath).split(/[/\\]/);
+    const parts = resolve(appPath).split(sep);
     for (let i = 0; i <= parts.length; i++) {
       const base = parts.slice(0, i + 1).join('/') || '/';
       if (existsSync(join(base, '.portable'))) {

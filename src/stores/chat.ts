@@ -255,7 +255,13 @@ let _sessionRestoreRetryTimer: ReturnType<typeof setTimeout> | null = null;
 const HISTORY_POLL_START_DELAY_MS = 3000;
 const HISTORY_POLL_INTERVAL_MS = 4000;
 const CHAT_HISTORY_PAGE_LIMIT = 200;
-const SESSION_RESTORE_RETRY_DELAY_MS = 2000;
+// Session restore retry backoff
+const SESSION_RESTORE_INITIAL_DELAY_MS = 1000;
+const SESSION_RESTORE_MAX_DELAY_MS = 15_000;
+// Hard timeouts (ms) — prevent indefinite hangs
+const SESSIONS_LIST_TIMEOUT_MS = 10_000;
+const HISTORY_LOAD_TIMEOUT_MS = 15_000;
+const RESTORE_SAFETY_TIMEOUT_MS = 20_000;
 
 function getRawMessageKey(message: Partial<RawMessage>): string {
   const toolCallId = typeof message.toolCallId === 'string' ? message.toolCallId : '';
@@ -1675,12 +1681,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { preferMostRecent, preserveCurrent, warmLabels } = normalizeLoadSessionsOptions(options);
     set({ sessionsLoading: true });
     try {
-      const data = await useGatewayStore
-        .getState()
-        .rpc<Record<string, unknown>>('sessions.list', {
-          includeDerivedTitles: true,
-          includeLastMessage: true,
-        });
+      // Timeout guard: prevents indefinite hang if Gateway is degraded and
+      // doesn't respond to sessions.list (e.g. during context merge or overload).
+      const data = await Promise.race([
+        useGatewayStore
+          .getState()
+          .rpc<Record<string, unknown>>('sessions.list', {
+            includeDerivedTitles: true,
+            includeLastMessage: true,
+          }),
+        new Promise<null>((_, reject) =>
+          setTimeout(() => reject(new Error('sessions.list timed out')), SESSIONS_LIST_TIMEOUT_MS)
+        ),
+      ]);
       if (data) {
         const rawSessions = Array.isArray(data.sessions) ? data.sessions : [];
         const sessions: ChatSession[] = rawSessions
@@ -1900,25 +1913,88 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     _sessionRestorePromise = (async () => {
+      // Early exit: gateway must still be running when we actually start.
+      // This prevents a stale restore attempt from running after the gateway
+      // has gone down (e.g. a deferred restart fired just before a real restart).
+      if (useGatewayStore.getState().status.state !== 'running') {
+        return;
+      }
+
+      // Safety timeout: if everything hangs, give up after RESTORE_SAFETY_TIMEOUT_MS
+      // so the retry path gets unblocked and the UI can show a useful state.
+      let safetyTimedOut = false;
+      const safetyTimer = setTimeout(() => {
+        safetyTimedOut = true;
+        // Mark sessions as not hydrated so scheduleRetry will fire a retry.
+        // Also clear loading flags so the UI is not stuck.
+        set({ sessionsLoading: false, loading: false, sessionsHydrated: false });
+      }, RESTORE_SAFETY_TIMEOUT_MS);
+
+      let attempt = 0;
+
       try {
-        // Cold start should eagerly hydrate sidebar labels so recent conversations
-        // do not temporarily fall back to the agent displayName ("ClawClaw")
-        // until the user clicks into each session.
-        await get().loadSessions({ preserveCurrent: true, warmLabels: true });
-        if (!get().sessionsHydrated) {
-          clearSessionRestoreRetry();
-          _sessionRestoreRetryTimer = setTimeout(() => {
-            _sessionRestoreRetryTimer = null;
-            if (useGatewayStore.getState().status.state === 'running' && !get().sessionsHydrated) {
-              void get().restoreSessionsAfterGatewayReady();
+        while (true) {
+          attempt++;
+          if (safetyTimedOut) break;
+
+          // Check gateway is still running before each attempt.
+          if (useGatewayStore.getState().status.state !== 'running') break;
+
+          try {
+            // ── Step 1: Load session list (with per-attempt timeout) ────────
+            const sessionsOk = await Promise.race([
+              get().loadSessions({ preserveCurrent: true, warmLabels: true }),
+              new Promise<false>((_, reject) =>
+                setTimeout(() => reject(new Error('sessions.list timeout')), SESSIONS_LIST_TIMEOUT_MS * 2)
+              ),
+            ]).then(() => true).catch(() => false);
+
+            if (!sessionsOk || safetyTimedOut) {
+              scheduleRetry(attempt);
+              break;
             }
-          }, SESSION_RESTORE_RETRY_DELAY_MS);
-          return;
+
+            // sessionsHydrated is now true if loadSessions succeeded.
+            // ── Step 2: Load history for current session ───────────────────────
+            // (warm-label fetching already runs in parallel inside loadSessions).
+            // If history times out, sessions are still shown — scheduleRetry
+            // will continue retrying history in the background.
+            await Promise.race([
+              get().loadHistory(false),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('chat.history timeout')), HISTORY_LOAD_TIMEOUT_MS)
+              ),
+            ]).catch(() => { /* timeout → scheduleRetry will retry */ });
+
+            clearSessionRestoreRetry();
+            break; // success or partial — either way we're done here
+          } catch {
+            scheduleRetry(attempt);
+            break;
+          }
         }
-        clearSessionRestoreRetry();
-        await get().loadHistory(false);
       } finally {
+        clearTimeout(safetyTimer);
         _sessionRestorePromise = null;
+      }
+
+      function scheduleRetry(currentAttempt: number): void {
+        if (useGatewayStore.getState().status.state !== 'running') return;
+        // Partial success: if we have sessions (even without history), stop retrying.
+        if (get().sessionsHydrated && get().messages.length > 0) return;
+
+        clearSessionRestoreRetry();
+        // Exponential backoff: 1s, 2s, 4s, 8s … capped at MAX_DELAY.
+        const delay = Math.min(
+          SESSION_RESTORE_INITIAL_DELAY_MS * Math.pow(2, currentAttempt - 1),
+          SESSION_RESTORE_MAX_DELAY_MS
+        );
+        _sessionRestoreRetryTimer = setTimeout(() => {
+          _sessionRestoreRetryTimer = null;
+          if (useGatewayStore.getState().status.state === 'running' && !get().sessionsHydrated) {
+            void get().restoreSessionsAfterGatewayReady();
+          }
+        }, delay);
       }
     })();
 
@@ -2224,11 +2300,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     try {
-      const data = await useGatewayStore
-        .getState()
-        .rpc<
-          Record<string, unknown>
-        >('chat.history', { sessionKey: requestSessionKey, limit: CHAT_HISTORY_PAGE_LIMIT });
+      // Timeout guard: prevents indefinite hang if Gateway is degraded.
+      const data = await Promise.race([
+        useGatewayStore
+          .getState()
+          .rpc<
+            Record<string, unknown>
+          >('chat.history', { sessionKey: requestSessionKey, limit: CHAT_HISTORY_PAGE_LIMIT }),
+        new Promise<null>((_, reject) =>
+          setTimeout(() => reject(new Error('chat.history timed out')), HISTORY_LOAD_TIMEOUT_MS)
+        ),
+      ]);
       if (isStale()) {
         clearLoadingIfLatest();
         return;

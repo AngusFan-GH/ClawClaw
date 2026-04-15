@@ -5,7 +5,7 @@ import { homedir } from 'os';
 import { getAllSettings } from '../utils/store';
 import { getApiKey, getDefaultProvider, getProvider } from '../utils/secure-storage';
 import { getProviderEnvVar, getKeyableProviderTypes } from '../utils/provider-registry';
-import { getOpenClawDir, getOpenClawEntryPath, getOpenClawConfigDir, isOpenClawPresent } from '../utils/paths';
+import { getOpenClawDir, getOpenClawEntryPath, getOpenClawConfigDir, getPortableBase, isOpenClawPresent } from '../utils/paths';
 import { validateBundledOpenClawRuntime } from '../utils/openclaw-runtime-integrity';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import {
@@ -689,16 +689,30 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
         : `${proxyMode}: none`;
 
   const { NODE_OPTIONS: _nodeOptions, ...baseEnv } = process.env;
-  // In portable mode, set OPENCLAW_HOME so the gateway stores all config/data
-  // inside the USB's portable directory instead of ~/.openclaw on the host.
-  const openclawHome = getOpenClawConfigDir();
+  // Follows the same pattern as u-claw:
+  //   OPENCLAW_HOME        = parent data dir (portable/ or unset for default)
+  //   OPENCLAW_STATE_DIR   = actual state dir (portable/.openclaw/ or ~/.openclaw/)
+  //   OPENCLAW_CONFIG_PATH = state dir + openclaw.json
+  // In dev/installed mode these are all omitted so OpenClaw uses its defaults.
+  // In portable mode they redirect everything to the USB drive.
+  // NOTE: OPENCLAW_HOME must NOT be set to a .openclaw path directly —
+  // OpenClaw appends ".openclaw" to it, causing ~/.openclaw/.openclaw duplication.
+  const portableBase = getPortableBase();          // null in dev/installed
+  const openclawStateDir = getOpenClawConfigDir(); // null in dev; portable/.openclaw in portable
   const forkEnv: Record<string, string | undefined> = {
     ...baseEnv,
     PATH: finalPath,
     ...providerEnv,
     ...uvEnv,
     ...proxyEnv,
-    OPENCLAW_HOME: openclawHome,
+    ...(portableBase
+      ? {
+          // Portable: parent data dir (portable/), state dir (portable/.openclaw/), config
+          OPENCLAW_HOME: path.join(portableBase, 'portable'),
+          OPENCLAW_STATE_DIR: openclawStateDir,
+          OPENCLAW_CONFIG_PATH: path.join(openclawStateDir!, 'openclaw.json'),
+        }
+      : {}),
     OPENCLAW_GATEWAY_TOKEN: appSettings.gatewayToken,
     OPENCLAW_HANDSHAKE_TIMEOUT_MS: process.env.OPENCLAW_HANDSHAKE_TIMEOUT_MS || '20000',
     OPENCLAW_SKIP_CHANNELS: skipChannels ? '1' : '',
