@@ -19,8 +19,8 @@
  *      @mariozechner/clipboard).
  */
 
-const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync } = require('fs');
-const { join } = require('path');
+const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync, writeFileSync, copyFileSync } = require('fs');
+const { join, dirname } = require('path');
 const {
   validateBundledNodeModules,
   formatValidationIssues,
@@ -414,31 +414,49 @@ exports.default = async function afterPack(context) {
     console.log('[after-pack] ✅ Windows CLI runtime validated (node.exe + wrapper + entry script).');
   }
 
-  // 6. Portable mode marker — place .portable at the app root so the app detects
-  // portable mode when the directory is copied to a USB drive and run from there.
-  // The file is empty; its presence alone is the signal.
+  // 6. Portable mode marker — place .portable at the portable root so the app
+  // detects portable mode when the directory is copied to a USB drive and run.
+  // On macOS appOutDir is <dir>/ClawClaw.app/, so .portable goes alongside the
+  // .app bundle (the parent of appOutDir). On Windows appOutDir is <dir>/ and
+  // .portable goes directly inside it.
   try {
-    const portableMarker = join(appOutDir, '.portable');
-    const { writeFileSync } = require('fs');
+    const isMacAppBundle = platform === 'darwin' && appOutDir.endsWith('.app' + sep);
+    const portableDir = isMacAppBundle ? dirname(appOutDir) : appOutDir;
+    const portableMarker = join(portableDir, '.portable');
     writeFileSync(portableMarker, '', 'utf8');
     console.log(`[after-pack] ✅ Portable marker created at ${portableMarker}`);
   } catch (err) {
     console.warn(`[after-pack] ⚠️  Failed to create portable marker: ${err.message}`);
   }
 
-  // 7. Copy portable launcher scripts to app root (next to ClawClaw.exe) on Windows.
-  // These enable double-click-to-run from a USB drive.
-  if (platform === 'win32') {
-    const { copyFileSync } = require('fs');
+  // 7. Copy portable launcher scripts to the portable root directory.
+  // Windows: next to ClawClaw.exe (appOutDir = win-unpacked/).
+  // macOS: next to ClawClaw.app (portableDir = parent of appOutDir).
+  {
+    const isMacBundle = platform === 'darwin' && appOutDir.endsWith('.app' + sep);
+    const destRoot = isMacBundle ? dirname(appOutDir) : appOutDir;
     const srcDir = join(__dirname, '..', 'resources');
-    const launchers = ['Start ClawClaw.bat', 'Start ClawClaw.vbs', 'README Portable.txt'];
-    for (const name of launchers) {
-      try {
-        copyFileSync(join(srcDir, name), join(appOutDir, name));
-        console.log(`[after-pack] ✅ Copied ${name} to app root`);
-      } catch {
-        // ignore if source doesn't exist (dev mode)
+
+    if (platform === 'win32') {
+      const launchers = ['Start ClawClaw.bat', 'Start ClawClaw.vbs', 'README Portable.txt'];
+      for (const name of launchers) {
+        try { copyFileSync(join(srcDir, name), join(destRoot, name)); } catch { /* */ }
       }
+    }
+
+    if (platform === 'darwin') {
+      const scriptName = 'Start ClawClaw.command';
+      const dest = join(destRoot, scriptName);
+      try {
+        copyFileSync(join(srcDir, scriptName), dest);
+        // Ensure executable permission (macOS zip strips executable bits on files from USB).
+        try { require('child_process').execSync(`chmod +x "${dest}"`, { stdio: 'ignore' }); } catch { /* */ }
+        console.log(`[after-pack] ✅ Copied ${scriptName} to portable root with +x`);
+      } catch { /* */ }
+
+      try {
+        copyFileSync(join(srcDir, 'README Portable.txt'), join(destRoot, 'README Portable.txt'));
+      } catch { /* */ }
     }
   }
 };

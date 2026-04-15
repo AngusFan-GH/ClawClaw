@@ -151,12 +151,15 @@ function buildPortableForArch(arch) {
     console.log('[package:mac] Copied README Portable.txt');
   }
 
-  // Inject .portable marker inside the app bundle's Resources/
+  // .portable is created by afterPack inside electron-builder (at appOutDir/).
+  // A second injection here (inside Contents/Resources/) is harmless — the app
+  // will find the one in Contents/Resources/ first when walking up from app.asar,
+  // and the zip root copy handles the portable-root detection.
   const stagingApp = resolve(stagingDir, 'ClawClaw.app');
   const stagingResources = resolve(stagingApp, 'Contents', 'Resources');
   ensureDir(stagingResources);
   execSync(`touch "${resolve(stagingResources, '.portable')}"`, { stdio: 'ignore' });
-  console.log(`[package:mac] Injected .portable marker`);
+  console.log('[package:mac] Ensured .portable marker in Contents/Resources/');
 
   // Stage → portable dir
   renameSync(stagingDir, portableDir);
