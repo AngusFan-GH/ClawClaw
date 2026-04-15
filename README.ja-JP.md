@@ -384,6 +384,7 @@ pnpm package              # 現在のプラットフォーム向けにパッケ�
 pnpm package:mac          # macOS向けにパッケージ化
 pnpm package:win          # 補助パッケージャーで Windows NSIS インストーラーをビルド（openclaw CLI 用の node.exe も同梱）
 pnpm package:win:portable # Windows ポータブルディレクトリ版をビルド（win-unpacked / win-arm64-unpacked）
+pnpm package:mac:portable # macOS ポータブル zip をビルド（起動スクリプト + .portable マーカー付き）
 pnpm package:desktop      # macOS・Windows・Linux を直列でまとめてパッケージ化
 pnpm run package:organize # ルート出力を release/v<version>/windows|mac|linux|metadata に整理
 pnpm package:linux        # Linux向けにパッケージ化
@@ -394,7 +395,8 @@ pnpm run upload:update    # release/v<version>/windows/latest.yml と参照さ�
 
 - `pnpm package:win` は Windows NSIS インストーラーをビルドし、内部では `scripts/package-win.mjs` を使います。
 - `pnpm package:win:portable` は Windows ポータブルディレクトリ版をビルドし、内部では `scripts/package-win.mjs --dir` を使います。
-- `pnpm package:portable` は `pnpm package:win:portable` のエイリアスです。
+- `pnpm package:mac:portable` は macOS ポータブル zip をビルドし、内部では `scripts/package-mac.mjs --build` を使います。electron-builder で macOS zip を生成後、`Start ClawClaw.command`（Gatekeeper 隔離属性を自動解除する起動スクリプト）と `.portable` マーカーを含むポータブルディレクトリを組み立て、`release/v<version>/mac/ClawClaw-v<version>-mac-{arch}-portable.zip` を出力します。
+- `pnpm package:portable` は Windows と macOS のポータブルアーティファクトを両方ビルドします。
 - `pnpm package:prepare` は `build`、`package`、各プラットフォーム向けパッケージコマンドで共通利用する前処理で、release 直下の builder 一時出力だけを掃除し、既存のバージョン別成果物には触れません。
 - `pnpm package:organize` は builder が一時的に release 直下へ出力した成果物を `release/v<package.json version>/windows`、`release/v<package.json version>/mac`、`release/v<package.json version>/linux`、`release/v<package.json version>/metadata` へ振り分けます。
 - `pnpm package:desktop` は macOS、Windows、Linux の順にパッケージングを実行します。`dist`、`dist-electron`、`build/openclaw` を共有するため、各プラットフォームのパッケージングは並列実行しないでください。
