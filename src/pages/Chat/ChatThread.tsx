@@ -213,7 +213,7 @@ function normalizeMessage(message: RawMessage): NormalizedMessage {
   if (typeof m.content === 'string') {
     content = [{ type: 'text', text: m.content }];
   } else if (Array.isArray(m.content)) {
-    content = (m.content as Array<Record<string, unknown>>).flatMap((item) => {
+    content = (m.content as Array<Record<string, unknown>>).flatMap((item): NormalizedContentItem[] => {
       if (
         item.type === 'attachment'
         && item.attachment
