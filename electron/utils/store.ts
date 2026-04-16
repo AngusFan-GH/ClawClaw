@@ -70,6 +70,10 @@ export interface AppSettings {
   // Memory
   sessionMemoryEnabled: boolean;
   memorySearchEnabled: boolean;
+
+  // Startup optimization: hash of provider config state at last successful sync.
+  // If unchanged since last sync, expensive runtime sync steps are skipped.
+  providerSyncHash: string;
 }
 
 /**
@@ -118,6 +122,9 @@ const defaults: AppSettings = {
   // Memory
   sessionMemoryEnabled: true,
   memorySearchEnabled: true,
+
+  // Startup optimization
+  providerSyncHash: '',
 };
 
 /**
@@ -184,6 +191,20 @@ export async function setSetting<K extends keyof AppSettings>(
 export async function getAllSettings(): Promise<AppSettings> {
   const store = await getSettingsStore();
   return normalizeSettings(store.store);
+}
+
+/**
+ * Get the provider config sync hash (used to skip redundant runtime syncs).
+ */
+export async function getProviderSyncHash(): Promise<string> {
+  return (await getSetting('providerSyncHash')) ?? '';
+}
+
+/**
+ * Persist the provider config sync hash after a successful sync.
+ */
+export async function setProviderSyncHash(hash: string): Promise<void> {
+  await setSetting('providerSyncHash', hash);
 }
 
 /**

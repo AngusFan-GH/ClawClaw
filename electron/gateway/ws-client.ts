@@ -84,7 +84,40 @@ function canRetryWithDeviceToken(details: unknown): boolean {
   );
 }
 
-export async function probeGatewayReady(port: number, timeoutMs = 1500): Promise<boolean> {
+/**
+ * Fast TCP check — returns immediately if the port is not listening.
+ * This avoids the cost of spinning up a full WebSocket client when the
+ * Gateway process hasn't even opened its port yet.
+ */
+async function isPortListening(port: number): Promise<boolean> {
+  const net = await import('node:net');
+  return await new Promise<boolean>((resolve) => {
+    const server = net.createServer();
+    server.once('error', () => resolve(false));
+    server.once('listening', () => {
+      server.close(() => resolve(true));
+    });
+    server.listen(port, '127.0.0.1');
+  });
+}
+
+/**
+ * Probe whether the OpenClaw Gateway is ready to accept connections.
+ *
+ * OpenClaw sends `connect.challenge` immediately on WebSocket connection
+ * (see openclaw/src/gateway/server/ws-connection.ts:247-249), so a 300ms
+ * timeout is plenty. We first do a cheap TCP check to avoid the WS
+ * handshake overhead when the port isn't even open yet.
+ *
+ * @param port  Gateway port
+ * @param timeoutMs  Max time to wait for connect.challenge (default 300ms)
+ */
+export async function probeGatewayReady(port: number, timeoutMs = 300): Promise<boolean> {
+  // Fast path: if the port isn't open yet, don't bother spinning up a WebSocket.
+  if (!(await isPortListening(port))) {
+    return false;
+  }
+
   return await new Promise<boolean>((resolve) => {
     const testWs = new WebSocket(`ws://localhost:${port}/ws`);
     let settled = false;
@@ -92,7 +125,7 @@ export async function probeGatewayReady(port: number, timeoutMs = 1500): Promise
     const resolveOnce = (value: boolean) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeout);
+      clearTimeout(timeoutId);
       try {
         testWs.close();
       } catch {
@@ -101,7 +134,7 @@ export async function probeGatewayReady(port: number, timeoutMs = 1500): Promise
       resolve(value);
     };
 
-    const timeout = setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       resolveOnce(false);
     }, timeoutMs);
 
@@ -149,7 +182,7 @@ export async function waitForGatewayReady(options: {
     }
 
     try {
-      const ready = await probeGatewayReady(options.port, 1500);
+      const ready = await probeGatewayReady(options.port);
       if (ready) {
         logger.debug(`Gateway ready after ${i + 1} attempt(s)`);
         return;

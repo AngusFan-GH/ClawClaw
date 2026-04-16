@@ -224,6 +224,7 @@ async function terminateOrphanedProcessIds(port: number, pids: string[]): Promis
 export async function findExistingGatewayProcess(options: {
   port: number;
   ownedPid?: number;
+  /** When true, terminate any process occupying the port that is not owned by us. */
   terminateUnexpected?: boolean;
 }): Promise<{ port: number; externalToken?: string } | null> {
   const { port, ownedPid, terminateUnexpected = true } = options;
@@ -239,7 +240,7 @@ export async function findExistingGatewayProcess(options: {
             // ignore
           }
           resolve(null);
-        }, 2000);
+        }, 500);
 
         testWs.on('message', (data) => {
           try {
@@ -273,6 +274,8 @@ export async function findExistingGatewayProcess(options: {
     try {
       const pids = await getListeningProcessIds(port);
       if (pids.length > 0) {
+        // Probe with WebSocket first — if a real Gateway is running on this port,
+        // return it immediately instead of terminating it.
         const existingGateway = await probeExistingGateway();
         if (existingGateway) {
           return existingGateway;
@@ -309,7 +312,7 @@ async function probeGateway(port: number): Promise<boolean> {
     const timeout = setTimeout(() => {
       try { testWs.close(); } catch { /* ignore */ }
       resolve(false);
-    }, 2000);
+    }, 500);
 
     testWs.on('message', (data) => {
       try {

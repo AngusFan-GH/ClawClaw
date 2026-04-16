@@ -245,6 +245,11 @@ async function initialize(): Promise<void> {
   // Apply persisted proxy settings before creating windows or network requests.
   await applyProxySettings();
 
+  // Pre-warm the Gateway launch context in the background while the window loads.
+  // The 8-second keychain read for provider credentials runs here, so by the
+  // time the user triggers Gateway start the context is already cached.
+  void gatewayManager.prewarmLaunchContext();
+
   if (isDev) {
     await session.defaultSession.clearCache().catch((error: unknown) => {
       logger.warn('Failed to clear Chromium cache in dev mode:', error);

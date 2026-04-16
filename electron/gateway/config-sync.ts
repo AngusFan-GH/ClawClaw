@@ -1,11 +1,11 @@
+import { createHash } from 'crypto';
 import { app } from 'electron';
 import path from 'path';
-import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync } from 'fs';
-import { homedir } from 'os';
-import { getAllSettings } from '../utils/store';
+import { existsSync, mkdirSync, readdirSync, symlinkSync } from 'fs';
+import { getAllSettings, getProviderSyncHash, setProviderSyncHash } from '../utils/store';
 import { getApiKey, getDefaultProvider, getProvider } from '../utils/secure-storage';
-import { getProviderEnvVar, getKeyableProviderTypes } from '../utils/provider-registry';
-import { getOpenClawDir, getOpenClawEntryPath, getOpenClawConfigDir, getPortableBase, isOpenClawPresent } from '../utils/paths';
+import { getKeyableProviderTypes, getProviderEnvVar } from '../utils/provider-registry';
+import { getOpenClawConfigDir, getOpenClawDir, getOpenClawEntryPath, getPortableBase, isOpenClawPresent } from '../utils/paths';
 import { validateBundledOpenClawRuntime } from '../utils/openclaw-runtime-integrity';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import {
@@ -15,8 +15,7 @@ import {
   repairChannelConfigConsistency,
 } from '../utils/channel-config';
 import {
-  syncBrowserConfigToOpenClaw,
-  syncGatewayTokenToConfig,
+  batchSyncConfigFields,
   syncMemorySettingsToOpenClaw,
   sanitizeOpenClawConfig,
 } from '../utils/openclaw-auth';
@@ -25,19 +24,23 @@ import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { recoverMalformedOpenClawConfig, resetMalformedOpenClawConfig } from '../utils/openclaw-config';
 import { logger } from '../utils/logger';
 import { ensureBundledPluginInstalled } from '../utils/bundled-plugin-installer';
-import { syncDefaultProviderToRuntime } from '../services/providers/provider-runtime-sync';
 import {
+  syncDefaultProviderToRuntime,
   syncAllProviderAuthToRuntime,
   syncAllProvidersToRuntime,
 } from '../services/providers/provider-runtime-sync';
+import { listProviderAccounts } from '../services/providers/provider-store';
 import { cleanupOrphanLocalModelRuntimeAccounts } from '../services/providers/local-model-presets';
-import { runGatewayStartupPreflight, type GatewayStartupPreflightStep } from './startup-preflight';
+import {
+  runGatewayStartupPreflight,
+  type GatewayStartupPreflightStep,
+} from './startup-preflight';
 import type { GatewayConfigRecovery } from '../../src/types/gateway';
 
 const CHANNEL_PLUGIN_INSTALL_MAP: Partial<Record<string, { pluginId: string; displayName: string }>> = {
   feishu: { pluginId: 'feishu', displayName: 'Feishu / Lark' },
   dingtalk: { pluginId: 'channels', displayName: 'China Channels' },
-  wecom: { pluginId: 'channels', displayName: 'China Channels' },
+  wecom: { pluginId: 'wecom', displayName: 'WeCom' },
   wechat: { pluginId: 'openclaw-weixin', displayName: 'WeChat' },
 };
 
@@ -45,6 +48,7 @@ const MANAGED_CHANNEL_PLUGIN_MIRRORS = [
   { pluginId: 'feishu', displayName: 'Feishu / Lark' },
   { pluginId: 'channels', displayName: 'China Channels' },
   { pluginId: 'openclaw-weixin', displayName: 'WeChat' },
+  { pluginId: 'wecom', displayName: 'WeCom' },
 ] as const;
 
 const CHANNEL_PROXY_BYPASS_RULES: Partial<Record<string, string[]>> = {
@@ -156,33 +160,9 @@ function ensureExtensionDepsResolvable(openclawDir: string): void {
   }
 }
 
-function syncManagedChannelPluginMirrors(configuredChannels: string[]): string[] {
-  const touchedPluginIds: string[] = [];
-  const pluginIds = resolveManagedPluginIdsForStartup(configuredChannels);
-
-  for (const pluginId of pluginIds) {
-    const plugin = MANAGED_CHANNEL_PLUGIN_MIRRORS.find((entry) => entry.pluginId === pluginId);
-    if (!plugin) continue;
-    // Startup preflight should only repair stale/broken mirrors. Forcing a
-    // reinstall on every launch makes packaged builds report a fake "repaired"
-    // recovery even when nothing is wrong.
-    const result = ensureBundledPluginInstalled(plugin.pluginId, plugin.displayName);
-    if (result.warning) {
-      logger.warn(result.warning);
-    }
-    if (result.installed && result.changed) {
-      touchedPluginIds.push(pluginId);
-    }
-  }
-
-  return touchedPluginIds;
-}
-
 /**
  * Wraps a promise with a timeout. If the promise times out, returns `fallback`.
  * Suitable for READ-ONLY operations where a stale/default result is acceptable.
- * WARNING: The underlying promise continues to run even after timeout resolves —
- * for write operations, use withTimeoutOrThrow instead to avoid partial writes.
  */
 async function withTimeout<T>(
   promise: Promise<T>,
@@ -209,25 +189,85 @@ async function withTimeout<T>(
 }
 
 /**
- * Wraps a promise with a timeout. If the promise times out, throws an error.
- * Suitable for WRITE operations where partial completion is worse than failure.
+ * Extract stable (non-secret, non-timestamp) fields from a provider account
+ * for deterministic hash computation.  `createdAt`/`updatedAt` are excluded
+ * because they change on every settings save even when nothing substantive changed.
  */
-async function withTimeoutOrThrow<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  label: string,
-): Promise<T> {
-  let timeoutHandle: NodeJS.Timeout | null = null;
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutHandle = setTimeout(
-      () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
-      timeoutMs,
-    );
+function stableAccountFingerprint(account: ReturnType<typeof listProviderAccounts>[number]): string {
+  return JSON.stringify({
+    id: account.id,
+    vendorId: account.vendorId,
+    label: account.label,
+    authMode: account.authMode,
+    baseUrl: account.baseUrl,
+    apiProtocol: account.apiProtocol,
+    model: account.model,
+    fallbackModels: account.fallbackModels,
+    fallbackAccountIds: account.fallbackAccountIds,
+    enabled: account.enabled,
+    isDefault: account.isDefault,
+    metadata: account.metadata
+      ? {
+          region: account.metadata.region,
+          resourceUrl: account.metadata.resourceUrl,
+          customModels: account.metadata.customModels,
+          localModel: account.metadata.localModel,
+          localModelProvider: account.metadata.localModelProvider,
+          presetId: account.metadata.presetId,
+          primaryPresetId: account.metadata.primaryPresetId,
+          presetIds: account.metadata.presetIds,
+        }
+      : undefined,
   });
+}
+
+/**
+ * Compute a fast SHA-256 hash of the current provider account configuration.
+ * If no accounts exist, returns a fixed sentinel hash so the first launch
+ * still performs a sync.
+ */
+async function computeCurrentProviderHash(): Promise<string> {
+  const accounts = await listProviderAccounts();
+  const stable = accounts.map(stableAccountFingerprint).sort((a, b) => a.localeCompare(b));
+  return createHash('sha256').update(JSON.stringify(stable)).digest('hex');
+}
+
+/**
+ * Returns true if the provider runtime sync steps should be SKIPPED.
+ * Skips when the hash of stable account fields matches the hash stored after
+ * the last successful sync — meaning no provider configuration changed.
+ *
+ * This eliminates redundant `openclaw.json` writes on every app launch when
+ * the provider list is unchanged.
+ */
+async function shouldSkipProviderSync(): Promise<boolean> {
   try {
-    return await Promise.race<T>([promise, timeout]);
-  } finally {
-    if (timeoutHandle) clearTimeout(timeoutHandle);
+    const [currentHash, lastHash] = await Promise.all([
+      computeCurrentProviderHash(),
+      getProviderSyncHash(),
+    ]);
+    if (currentHash === lastHash && lastHash !== '') {
+      logger.debug(`[provider-hash] Config unchanged (${currentHash.slice(0, 8)}…), skipping provider sync`);
+      return true;
+    }
+    return false;
+  } catch (err) {
+    logger.debug('[provider-hash] Could not compare provider hashes, proceeding with sync:', err);
+    return false;
+  }
+}
+
+/**
+ * Called after a successful provider runtime sync to persist the hash
+ * so subsequent launches can skip the sync when nothing changed.
+ */
+async function recordProviderSyncHash(): Promise<void> {
+  try {
+    const hash = await computeCurrentProviderHash();
+    await setProviderSyncHash(hash);
+    logger.debug(`[provider-hash] Recorded hash after sync: ${hash.slice(0, 8)}…`);
+  } catch (err) {
+    logger.debug('[provider-hash] Failed to record sync hash (non-fatal):', err);
   }
 }
 
@@ -319,25 +359,59 @@ export function getLastStartupPreflightFailedStepIds(): string[] {
   return [...lastStartupPreflightFailedStepIds];
 }
 
+/**
+ * Background deferred sync of managed channel plugin mirrors.
+ * Runs after Gateway is connected — failures are non-fatal since the
+ * Gateway can operate without the optional China-channel plugins.
+ *
+ * DEFERRED from preflight (optimization: plugin file copy is I/O-bound
+ * and not required for Gateway startup; deferring unblocks startup).
+ */
+export function runDeferredManagedPluginSync(configuredChannels: string[] = []): void {
+  void (async () => {
+    try {
+      const pluginIds = resolveManagedPluginIdsForStartup(configuredChannels);
+      for (const pluginId of pluginIds) {
+        const plugin = MANAGED_CHANNEL_PLUGIN_MIRRORS.find((p) => p.pluginId === pluginId);
+        if (!plugin) continue;
+        const result = ensureBundledPluginInstalled(plugin.pluginId, plugin.displayName);
+        if (result.warning) {
+          logger.warn(`[deferred-plugin-sync] ${result.warning}`);
+        } else if (result.installed && result.changed) {
+          logger.info(`[deferred-plugin-sync] Installed ${plugin.displayName} plugin`);
+        }
+      }
+    } catch (err) {
+      logger.warn('[deferred-plugin-sync] Plugin sync failed (non-fatal):', err);
+    }
+  })();
+}
+
 export async function runOpenClawStartupPreflightRepair(): Promise<void> {
   const recoveryTopics: NonNullable<GatewayConfigRecovery['topics']> = [];
   let configRecovery: GatewayConfigRecovery | null = null;
 
-  const steps: GatewayStartupPreflightStep[] = [
-    {
-      id: 'validate-bundled-runtime',
-      label: 'validateBundledOpenClawRuntime',
-      fatal: true,
-      run: async () => {
-        await withTimeout(
-          validateBundledOpenClawRuntime(),
-          6000,
-          'validateBundledOpenClawRuntime',
-          undefined,
-        );
-        ensureExtensionDepsResolvable(getOpenClawDir());
-      },
+  // ── Phase 1: Runtime validation (fatal, sequential) ──────────────
+  // `validate-bundled-runtime` must run alone because it is fatal — if
+  // OpenClaw is missing/corrupt we cannot proceed at all.
+  const PHASE_1_FATAL: GatewayStartupPreflightStep = {
+    id: 'validate-bundled-runtime',
+    label: 'validateBundledOpenClawRuntime',
+    fatal: true,
+    run: async () => {
+      await withTimeout(
+        validateBundledOpenClawRuntime(),
+        6000,
+        'validateBundledOpenClawRuntime',
+        undefined,
+      );
+      ensureExtensionDepsResolvable(getOpenClawDir());
     },
+  };
+
+  // ── Phase 2: Config + channel repair (parallel, non-fatal) ─────────
+  // These two are independent and can run concurrently.
+  const PHASE_2_REPAIR: GatewayStartupPreflightStep[] = [
     {
       id: 'repair-openclaw-config',
       label: 'repairOpenClawConfigFile',
@@ -363,6 +437,12 @@ export async function runOpenClawStartupPreflightRepair(): Promise<void> {
         }
       },
     },
+  ];
+
+  // ── Phase 3: Cleanup + sync (parallel, non-fatal) ───────────────────
+  // NOTE: `sync-managed-channel-plugin-mirrors` is DEFERRED to post-startup
+  // (see `runDeferredManagedPluginSync`) — it is omitted here.
+  const PHASE_3_CLEANUP_SYNC: GatewayStartupPreflightStep[] = [
     {
       id: 'cleanup-dangling-wechat-plugin-state',
       label: 'cleanupDanglingWeChatPluginState',
@@ -389,22 +469,6 @@ export async function runOpenClawStartupPreflightRepair(): Promise<void> {
           { cleaned: false },
         );
         if (result.cleaned) {
-          recoveryTopics.push('plugins');
-        }
-      },
-    },
-    {
-      id: 'sync-managed-channel-plugin-mirrors',
-      label: 'syncManagedChannelPluginMirrors',
-      run: async () => {
-        const configuredChannels = await withTimeout(
-          listConfiguredChannels({ includeCli: false }),
-          1500,
-          'listConfiguredChannelsForManagedPluginSync',
-          [],
-        );
-        const synchronizedPluginIds = syncManagedChannelPluginMirrors(configuredChannels);
-        if (synchronizedPluginIds.length > 0) {
           recoveryTopics.push('plugins');
         }
       },
@@ -451,18 +515,28 @@ export async function runOpenClawStartupPreflightRepair(): Promise<void> {
       id: 'sync-provider-configs',
       label: 'syncAllProvidersToRuntimeBeforeLaunch',
       run: async () => {
+        if (await shouldSkipProviderSync()) {
+          await recordProviderSyncHash();
+          return;
+        }
         await withTimeout(
           syncAllProvidersToRuntime(),
           4000,
           'syncAllProvidersToRuntimeBeforeLaunch',
           undefined,
         );
+        await recordProviderSyncHash();
       },
     },
     {
       id: 'sync-provider-auth',
       label: 'syncAllProviderAuthToRuntimeBeforeLaunch',
       run: async () => {
+        // Auth sync also guarded by the same hash — if the provider account list
+        // hasn't changed, credentials are unchanged too.
+        if (await shouldSkipProviderSync()) {
+          return;
+        }
         await withTimeout(
           syncAllProviderAuthToRuntime(),
           4000,
@@ -473,8 +547,13 @@ export async function runOpenClawStartupPreflightRepair(): Promise<void> {
     },
   ];
 
+  // Phases run sequentially; steps within phases 2 and 3 run in parallel.
   const result = await runGatewayStartupPreflight({
-    steps,
+    phases: [
+      { id: 'phase-1-runtime', label: 'Runtime validation (fatal)', steps: [PHASE_1_FATAL] },
+      { id: 'phase-2-repair', label: 'Config & channel repair', steps: PHASE_2_REPAIR },
+      { id: 'phase-3-cleanup-sync', label: 'Cleanup & sync', steps: PHASE_3_CLEANUP_SYNC },
+    ],
     onStepError: (step, error) => {
       logger.warn(`Startup preflight step failed: ${step.label}`, error);
     },
@@ -509,16 +588,12 @@ export async function syncGatewayConfigBeforeLaunch(
   });
 
   void withTimeout(
-    syncGatewayTokenToConfig(appSettings.gatewayToken),
-    2000,
-    'syncGatewayTokenToConfig',
+    batchSyncConfigFields(appSettings.gatewayToken),
+    5000,
+    'batchSyncConfigFields',
     undefined,
   ).catch((err) => {
-    logger.warn('Failed to sync gateway token to openclaw.json:', err);
-  });
-
-  void withTimeout(syncBrowserConfigToOpenClaw(), 2000, 'syncBrowserConfigToOpenClaw', undefined).catch((err) => {
-    logger.warn('Failed to sync browser config to openclaw.json:', err);
+    logger.warn('Failed to batch-sync config fields to openclaw.json:', err);
   });
 
   void withTimeout(

@@ -285,4 +285,20 @@ export async function updateOpenClawConfigRecord<T>(
   return await next;
 }
 
+/**
+ * Serialize concurrent writes to openclaw.json via a promise chain.
+ * Every call waits for the previous write to finish before executing,
+ * preventing concurrent writes from racing.
+ *
+ * NOTE: functions passed to withConfigLock should use readOpenClawJson /
+ * writeOpenClawJson directly (not updateOpenClawConfigRecord which would
+ * attempt to re-serialize the return value as a config).
+ */
+export async function withConfigLock<T>(fn: () => Promise<T>): Promise<T> {
+  const pending = configWriteChain.catch(() => undefined);
+  const next = pending.then(fn);
+  configWriteChain = next.then(() => undefined, () => undefined);
+  return await next;
+}
+
 export { OPENCLAW_CONFIG_PATH };

@@ -2,7 +2,6 @@
  * Gateway Process Manager
  * Manages the OpenClaw Gateway process lifecycle
  */
-import { app } from 'electron';
 import path from 'path';
 import { EventEmitter } from 'events';
 import type { ChildProcess } from 'node:child_process';
@@ -30,6 +29,7 @@ import { GatewayStateController } from './state';
 import {
   getLastStartupPreflightRecovery,
   prepareGatewayLaunchContext,
+  runDeferredManagedPluginSync,
   runOpenClawStartupPreflightRepair,
 } from './config-sync';
 import { connectGatewaySocket, waitForGatewayReady } from './ws-client';
@@ -119,6 +119,8 @@ export class GatewayManager extends EventEmitter {
   private attachProbeInFlight: Promise<boolean> | null = null;
   private lastAttachProbeAt = 0;
   private lastAttachProbeFoundGateway = false;
+  /** Pre-computed launch context from a prior warmup call. Cleared on each start. */
+  private cachedLaunchContext: { context: import('./config-sync').GatewayLaunchContext; port: number } | null = null;
 
   constructor(config?: Partial<ReconnectConfig>) {
     super();
@@ -433,6 +435,10 @@ export class GatewayManager extends EventEmitter {
           onConnectedToManagedGateway: () => {
             this.startHealthCheck();
             logger.debug('Gateway started successfully');
+            // Deferred: sync managed channel plugin mirrors after Gateway is up.
+            // Blocking plugin copy during preflight would delay startup; these
+            // plugins are optional China-channel extensions — non-fatal if absent.
+            runDeferredManagedPluginSync();
           },
           recoverMalformedConfig: async () => {
             try {
@@ -653,9 +659,15 @@ export class GatewayManager extends EventEmitter {
       }
     }
 
-    // Close WebSocket
+    // Close WebSocket — terminate() forcefully closes the TCP connection
+    // without waiting for the WebSocket close handshake, which is
+    // appropriate when the Gateway process itself is being stopped.
     if (this.ws) {
-      this.ws.close(1000, 'Gateway stopped by user');
+      try {
+        this.ws.terminate();
+      } catch {
+        // ignore — the connection may already be dead
+      }
       this.ws = null;
     }
 
@@ -823,6 +835,28 @@ export class GatewayManager extends EventEmitter {
    */
   public resetGovernor(): void {
     this.restartGovernor.reset();
+  }
+
+  /**
+   * Pre-warm the launch context in the background — runs `prepareGatewayLaunchContext`
+   * while the window is loading so `startProcess()` can reuse the result without
+   * recomputing (saving ~8 s of keychain reads on the critical path).
+   *
+   * This is called fire-and-forget from `initialize()` in the main process.
+   * If `start()` is called before warmup finishes, it falls through to computing
+   * the context normally (no correctness impact, just no speedup).
+   */
+  public async prewarmLaunchContext(): Promise<void> {
+    try {
+      const targetPort = this.status.port || PORTS.OPENCLAW_GATEWAY;
+      logger.debug(`[warmup] Pre-computing Gateway launch context for port ${targetPort}…`);
+      const context = await prepareGatewayLaunchContext(targetPort);
+      this.cachedLaunchContext = { context, port: targetPort };
+      logger.debug('[warmup] Gateway launch context ready and cached');
+    } catch (err) {
+      logger.debug('[warmup] Could not pre-warm launch context (non-fatal):', err);
+      this.cachedLaunchContext = null;
+    }
   }
 
   /**
@@ -1013,8 +1047,19 @@ export class GatewayManager extends EventEmitter {
    * Uses OpenClaw npm package from node_modules (dev) or resources (production)
    */
   private async startProcess(): Promise<void> {
-    logger.debug('Preparing Gateway launch context...');
-    const launchContext = await prepareGatewayLaunchContext(this.status.port);
+    const cachedCtx = this.cachedLaunchContext;
+    const useCached = Boolean(cachedCtx) && cachedCtx.port === this.status.port;
+    const launchContext: import('./config-sync').GatewayLaunchContext = useCached
+      ? cachedCtx.context
+      : await prepareGatewayLaunchContext(this.status.port);
+    // Always clear after use (or if stale) — TypeScript type narrowing on the
+    // local `cachedCtx` const prevents ESLint from flagging this as a no-op.
+    this.cachedLaunchContext = null;
+    if (useCached) {
+      logger.debug('Using pre-warmed Gateway launch context');
+    } else {
+      logger.debug('Preparing Gateway launch context…');
+    }
     this.lastStartupRecovery = getLastStartupPreflightRecovery();
     logger.debug('Gateway launch context ready');
     logger.debug('Ensuring legacy launchctl Gateway service is unloaded...');

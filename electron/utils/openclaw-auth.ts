@@ -20,6 +20,7 @@ import {
   readOpenClawConfigRecordRaw,
   sanitizeKnownInvalidOpenClawKeys,
   writeOpenClawConfigRecord,
+  withConfigLock,
 } from './openclaw-config';
 import { logger } from './logger';
 import {
@@ -848,7 +849,127 @@ export async function getActiveOpenClawProviders(): Promise<Set<string>> {
 }
 
 /**
+ * Batch-sync gateway token, browser config, and session idle to openclaw.json
+ * in a single withConfigLock cycle (replaces separate syncGatewayTokenToConfig
+ * + syncBrowserConfigToOpenClaw calls, reducing file I/O on Windows + Defender).
+ *
+ * Also sets browser.ssrfPolicy.dangerouslyAllowPrivateNetwork for enterprise
+ * internal network access.
+ */
+export async function batchSyncConfigFields(token: string): Promise<void> {
+  const DEFAULT_IDLE_MINUTES = 10_080; // 7 days
+
+  return withConfigLock(async () => {
+    const config = await readOpenClawJson();
+    let modified = false;
+
+    // ── Gateway token + controlUi ──
+    const gateway = (
+      config.gateway && typeof config.gateway === 'object'
+        ? { ...(config.gateway as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+
+    const auth = (
+      gateway.auth && typeof gateway.auth === 'object'
+        ? { ...(gateway.auth as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+
+    // Only write if the token actually changed — avoids overwriting gateway.tailscale
+    // (and other externally-added gateway fields) and suppresses spurious restarts.
+    if (auth.token === token && auth.mode === 'token') {
+      // still need to ensure browser + session are correct, so don't early-return
+    } else {
+      auth.mode = 'token';
+      auth.token = token;
+      gateway.auth = auth;
+      modified = true;
+    }
+
+    // Packaged ClawClaw loads the renderer from file://, so the gateway must allow
+    // that origin for the chat WebSocket handshake.
+    const controlUi = (
+      gateway.controlUi && typeof gateway.controlUi === 'object'
+        ? { ...(gateway.controlUi as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    const allowedOrigins = Array.isArray(controlUi.allowedOrigins)
+      ? (controlUi.allowedOrigins as unknown[]).filter(
+          (value): value is string => typeof value === 'string'
+        )
+      : [];
+    if (!allowedOrigins.includes('file://')) {
+      controlUi.allowedOrigins = [...allowedOrigins, 'file://'];
+      gateway.controlUi = controlUi;
+      modified = true;
+    }
+
+    if (!gateway.mode) {
+      gateway.mode = 'local';
+      modified = true;
+    }
+    config.gateway = gateway;
+
+    // ── Browser config ──
+    const browser = (
+      config.browser && typeof config.browser === 'object'
+        ? { ...(config.browser as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    let browserModified = false;
+
+    if (browser.enabled === undefined) {
+      browser.enabled = true;
+      browserModified = true;
+    }
+    if (browser.defaultProfile === undefined) {
+      browser.defaultProfile = 'openclaw';
+      browserModified = true;
+    }
+    // Default ssrfPolicy to allow private network access for enterprise/internal use.
+    if (browser.ssrfPolicy == null) {
+      browser.ssrfPolicy = { dangerouslyAllowPrivateNetwork: true };
+      browserModified = true;
+    } else if (
+      typeof browser.ssrfPolicy === 'object' &&
+      (browser.ssrfPolicy as Record<string, unknown>).dangerouslyAllowPrivateNetwork === undefined
+    ) {
+      (browser.ssrfPolicy as Record<string, unknown>).dangerouslyAllowPrivateNetwork = true;
+      browserModified = true;
+    }
+    if (browserModified) {
+      config.browser = browser;
+      modified = true;
+    }
+
+    // ── Session idle minutes ──
+    const session = (
+      config.session && typeof config.session === 'object'
+        ? { ...(config.session as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    const hasExplicitSessionConfig =
+      session.idleMinutes !== undefined
+      || session.reset !== undefined
+      || session.resetByType !== undefined
+      || session.resetByChannel !== undefined;
+    if (!hasExplicitSessionConfig) {
+      session.idleMinutes = DEFAULT_IDLE_MINUTES;
+      config.session = session;
+      modified = true;
+    }
+
+    if (modified) {
+      await writeOpenClawJson(config);
+      console.log('Synced gateway token, browser config, and session idle to openclaw.json');
+    }
+  });
+}
+
+/**
  * Write the ClawClaw gateway token into ~/.openclaw/openclaw.json.
+ * @deprecated Use batchSyncConfigFields instead (single-lock for token + browser + session).
  */
 export async function syncGatewayTokenToConfig(token: string): Promise<void> {
   const config = await readOpenClawJson();
@@ -902,6 +1023,7 @@ export async function syncGatewayTokenToConfig(token: string): Promise<void> {
 
 /**
  * Ensure browser automation is enabled in ~/.openclaw/openclaw.json.
+ * @deprecated Use batchSyncConfigFields instead (single-lock for token + browser + session).
  */
 export async function syncBrowserConfigToOpenClaw(): Promise<void> {
   const config = await readOpenClawJson();
@@ -1249,6 +1371,44 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
   // compares content before vs after sanitization and sets restart=true only
   // when the actual config content changed. Setting it here unconditionally
   // would always trigger a write (and restart) even when nothing changed.
+
+  // ── tools section (OpenClaw 3.8+) ──────────────────────────────
+  // ClawClaw is a local desktop app where the user is the trusted operator.
+  // Set tools.profile = 'full' for full tool integration.
+  // Set tools.sessions.visibility = 'all' so session history is accessible.
+  // Set tools.exec.security = 'full' and ask = 'off' to disable exec approval
+  // prompts — they add unnecessary friction in a desktop context where the
+  // user already trusts all commands they run.  If a user has manually
+  // configured a stricter exec-approvals.json, OpenClaw's minSecurity/maxAsk
+  // merge will still respect their intent.
+  const toolsConfig = (config.tools as Record<string, unknown> | undefined) || {};
+  let toolsModified = false;
+
+  if (toolsConfig.profile !== 'full') {
+    toolsConfig.profile = 'full';
+    toolsModified = true;
+  }
+
+  const sessions = (toolsConfig.sessions as Record<string, unknown> | undefined) || {};
+  if (sessions.visibility !== 'all') {
+    sessions.visibility = 'all';
+    toolsConfig.sessions = sessions;
+    toolsModified = true;
+  }
+
+  const execConfig = (toolsConfig.exec as Record<string, unknown> | undefined) || {};
+  if (execConfig.security !== 'full' || execConfig.ask !== 'off') {
+    execConfig.security = 'full';
+    execConfig.ask = 'off';
+    toolsConfig.exec = execConfig;
+    toolsModified = true;
+    console.log('[sanitize] Set tools.exec.security="full" and tools.exec.ask="off"');
+  }
+
+  if (toolsModified) {
+    config.tools = toolsConfig;
+    modified = true;
+  }
 
   // ── tools.web.search.kimi ─────────────────────────────────────
   // OpenClaw web_search(kimi) prioritizes tools.web.search.kimi.apiKey over
