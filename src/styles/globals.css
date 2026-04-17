@@ -1089,31 +1089,11 @@
   color: hsl(var(--primary));
 }
 
-.chat-reading-indicator {
+.chat-bubble--reading {
+  min-width: 78px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  width: fit-content;
-  min-width: 78px;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in oklab, hsl(var(--border)) 88%, hsl(var(--primary)) 12%);
-  border-radius: 14px;
-  background: hsl(var(--card) / 0.72);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 8px 20px hsl(220 20% 20% / 0.05);
-}
-
-.chat-group.user .chat-reading-indicator {
-  margin-left: auto;
-}
-
-.chat-reading-indicator--inline {
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  backdrop-filter: none;
-  box-shadow: none;
+  justify-content: center;
 }
 
 .chat-reading-indicator__dots {

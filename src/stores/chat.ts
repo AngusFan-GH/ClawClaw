@@ -151,6 +151,8 @@ interface LoadSessionsOptions {
 interface ChatState {
   // Messages
   messages: RawMessage[];
+  pendingUserMessage: RawMessage | null;
+  pendingAssistantMessage: RawMessage | null;
   btwMessages: RawMessage[];
   loading: boolean;
   error: string | null;
@@ -353,6 +355,30 @@ function getGatewayStatusErrorMessage(state: 'stopped' | 'starting' | 'running' 
   }
 }
 
+function shouldPollHistoryForAuthoritativeUpdates(
+  state: Pick<
+    ChatState,
+    'sending'
+    | 'pendingFinal'
+    | 'streamingMessage'
+    | 'streamingText'
+    | 'chatToolMessages'
+    | 'chatStreamSegments'
+    | 'streamingTools'
+  >,
+): boolean {
+  if (!state.sending) return false;
+  if (state.pendingFinal) return true;
+  const hasLiveActivity = Boolean(
+    state.streamingMessage
+    || state.streamingText
+    || state.chatToolMessages.length > 0
+    || state.chatStreamSegments.length > 0
+    || state.streamingTools.length > 0,
+  );
+  return !hasLiveActivity;
+}
+
 function ensureHistoryPollRunning(getState: () => ChatState): void {
   if (_historyPollTimer) return;
 
@@ -362,7 +388,9 @@ function ensureHistoryPollRunning(getState: () => ChatState): void {
       clearHistoryPoll();
       return;
     }
-    void state.loadHistory(true);
+    if (shouldPollHistoryForAuthoritativeUpdates(state)) {
+      void state.loadHistory(true);
+    }
     _historyPollTimer = setTimeout(pollHistory, HISTORY_POLL_INTERVAL_MS);
   };
 
@@ -644,6 +672,72 @@ function getMessageText(content: unknown): string {
       .join('\n');
   }
   return '';
+}
+
+function getComparableAttachmentPaths(message: RawMessage | undefined): string[] {
+  if (!message?._attachedFiles || message._attachedFiles.length === 0) {
+    return [];
+  }
+  return message._attachedFiles
+    .map((file) => (typeof file.filePath === 'string' ? file.filePath.trim() : ''))
+    .filter(Boolean)
+    .sort();
+}
+
+function normalizeComparableMessageText(content: unknown): string {
+  return getMessageText(content).replace(/\s+/g, ' ').trim();
+}
+
+function isLikelySameUserMessage(
+  historyMessage: RawMessage,
+  optimisticMessage: RawMessage,
+  optimisticTimestampMs: number,
+): boolean {
+  if (historyMessage.role !== 'user' || optimisticMessage.role !== 'user') {
+    return false;
+  }
+
+  const historyText = normalizeComparableMessageText(historyMessage.content);
+  const optimisticText = normalizeComparableMessageText(optimisticMessage.content);
+  if (historyText !== optimisticText) {
+    return false;
+  }
+
+  const historyTimestampMs = historyMessage.timestamp ? toMs(historyMessage.timestamp) : 0;
+  if (historyTimestampMs > 0 && Math.abs(historyTimestampMs - optimisticTimestampMs) > 30_000) {
+    return false;
+  }
+
+  const historyPaths = getComparableAttachmentPaths(historyMessage);
+  const optimisticPaths = getComparableAttachmentPaths(optimisticMessage);
+  if (historyPaths.length !== optimisticPaths.length) {
+    return false;
+  }
+  for (let i = 0; i < historyPaths.length; i += 1) {
+    if (historyPaths[i] !== optimisticPaths[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function authoritativeHistoryContainsPendingUser(
+  enrichedMessages: RawMessage[],
+  pendingUserMessage: RawMessage | null,
+  lastUserMessageAt: number | null,
+): boolean {
+  if (!pendingUserMessage || !lastUserMessageAt) {
+    return false;
+  }
+
+  const optimisticTimestampMs = toMs(lastUserMessageAt);
+  return enrichedMessages.some((message) => (
+    (message.role === 'user'
+      && message.timestamp
+      && Math.abs(toMs(message.timestamp) - optimisticTimestampMs) < 30_000)
+    || isLikelySameUserMessage(message, pendingUserMessage, optimisticTimestampMs)
+  ));
 }
 
 const SESSION_TITLE_NOISE_PREFIXES = [
@@ -1248,6 +1342,44 @@ function resetToolStreamState(_state: Pick<ChatState, 'toolStreamById' | 'toolSt
   };
 }
 
+function clearPendingMessageState(): Pick<ChatState, 'pendingUserMessage' | 'pendingAssistantMessage'> {
+  return {
+    pendingUserMessage: null,
+    pendingAssistantMessage: null,
+  };
+}
+
+function resetStreamingPresentationState(): Pick<ChatState, 'streamingText' | 'streamingMessage' | 'streamingTools' | 'pendingToolImages'> {
+  return {
+    streamingText: '',
+    streamingMessage: null,
+    streamingTools: [],
+    pendingToolImages: [],
+  };
+}
+
+function resetChatRuntimeActivity(
+  state: Pick<ChatState, 'toolStreamById' | 'toolStreamOrder'>,
+): Pick<
+  ChatState,
+  | 'pendingUserMessage'
+  | 'pendingAssistantMessage'
+  | 'streamingText'
+  | 'streamingMessage'
+  | 'streamingTools'
+  | 'pendingToolImages'
+  | 'toolStreamById'
+  | 'toolStreamOrder'
+  | 'chatToolMessages'
+  | 'chatStreamSegments'
+> {
+  return {
+    ...clearPendingMessageState(),
+    ...resetStreamingPresentationState(),
+    ...resetToolStreamState(state),
+  };
+}
+
 function summarizeToolOutput(text: string): string | undefined {
   const trimmed = text.trim();
   if (!trimmed) return undefined;
@@ -1622,6 +1754,8 @@ function hasNonToolAssistantContent(message: RawMessage | undefined): boolean {
 
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
+  pendingUserMessage: null,
+  pendingAssistantMessage: null,
   btwMessages: [],
   loading: false,
   error: null,
@@ -2012,6 +2146,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       currentSessionKey: key,
       currentAgentId: getAgentIdFromSessionKey(key),
       messages: [],
+      pendingUserMessage: null,
+      pendingAssistantMessage: null,
       btwMessages: [],
       historyWindowLimited: false,
       hasEarlierHistory: false,
@@ -2072,6 +2208,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((s) => ({
         ...removeSessionArtifacts(s, key),
         messages: [],
+        pendingUserMessage: null,
+        pendingAssistantMessage: null,
         btwMessages: [],
         historyWindowLimited: false,
         hasEarlierHistory: false,
@@ -2128,6 +2266,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         [newKey]: true,
       },
       messages: [],
+      pendingUserMessage: null,
+      pendingAssistantMessage: null,
       btwMessages: [],
       historyWindowLimited: false,
       hasEarlierHistory: false,
@@ -2291,6 +2431,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ...(quiet ? {} : { loading: false }),
         error: null,
         messages: [],
+        pendingUserMessage: null,
+        pendingAssistantMessage: null,
         btwMessages: [],
         historyWindowLimited: false,
         hasEarlierHistory: false,
@@ -2327,26 +2469,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // Preserve the optimistic user message during an active send.
         // The Gateway may not include the user's message in chat.history
         // until the run completes, causing it to flash out of the UI.
-        let finalMessages = enrichedMessages;
-        const userMsgAt = get().lastUserMessageAt;
-        if (get().sending && userMsgAt) {
-          const userMsMs = toMs(userMsgAt);
-          const hasRecentUser = enrichedMessages.some(
-            (m) => m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsMs) < 5000
-          );
-          if (!hasRecentUser) {
-            const currentMsgs = get().messages;
-            const optimistic = [...currentMsgs]
-              .reverse()
-              .find(
-                (m) =>
-                  m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsMs) < 5000
-              );
-            if (optimistic) {
-              finalMessages = [...enrichedMessages, optimistic];
-            }
-          }
-        }
+        const pendingUserMessage = get().pendingUserMessage;
+        const finalMessages = enrichedMessages;
+        const hasEquivalentAuthoritativeUserMessage = authoritativeHistoryContainsPendingUser(
+          enrichedMessages,
+          pendingUserMessage,
+          get().lastUserMessageAt,
+        );
 
         // Extract first user message text as a session label for display in the toolbar.
         // Skip main sessions (key ends with ":main") — they rely on the Gateway-provided
@@ -2388,28 +2517,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         });
         const stateBeforeCommit = get();
-        const { pendingFinal, lastUserMessageAt, sending: isSendingNow } = stateBeforeCommit;
+        const { pendingFinal, lastUserMessageAt } = stateBeforeCommit;
         if (isStale()) {
           clearLoadingIfLatest();
           return;
         }
 
-        // If we're sending but haven't received streaming events, check
-        // whether the loaded history reveals intermediate tool-call activity.
-        // This surfaces progress via the pendingFinal → ActivityIndicator path.
         const userMsTs = lastUserMessageAt ? toMs(lastUserMessageAt) : 0;
         const isAfterUserMsg = (msg: RawMessage): boolean => {
           if (!userMsTs || !msg.timestamp) return true;
           return toMs(msg.timestamp) >= userMsTs;
         };
-        const hasRecentAssistantActivity = [...enrichedMessages].reverse().some((msg) => {
-          if (msg.role !== 'assistant' && msg.role !== 'toolresult') return false;
-          return isAfterUserMsg(msg);
-        });
 
         const shouldResetLiveState = !stateBeforeCommit.sending;
         set((s) => ({
           messages: finalMessages,
+          pendingUserMessage: hasEquivalentAuthoritativeUserMessage ? null : s.pendingUserMessage,
+          pendingAssistantMessage: null,
           btwMessages: [],
           thinkingLevel,
           historyWindowLimited: rawMessages.length >= CHAT_HISTORY_PAGE_LIMIT,
@@ -2419,12 +2543,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ...(shouldResetLiveState ? resetToolStreamState(s) : {}),
           ...(shouldResetLiveState ? { streamingText: '', streamingMessage: null, streamingTools: [] as ToolStatus[] } : {}),
         }));
-
-        if (isSendingNow && !pendingFinal) {
-          if (hasRecentAssistantActivity) {
-            set({ pendingFinal: true });
-          }
-        }
 
         // If pendingFinal, check whether the AI produced a final text response.
         if (pendingFinal || get().pendingFinal) {
@@ -2451,7 +2569,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           clearLoadingIfLatest();
           return;
         }
-        set({ messages: [], btwMessages: [], loading: false, historyWindowLimited: false, hasEarlierHistory: false, loadingEarlierHistory: false });
+        set({ messages: [], pendingUserMessage: null, pendingAssistantMessage: null, btwMessages: [], loading: false, historyWindowLimited: false, hasEarlierHistory: false, loadingEarlierHistory: false });
       }
     } catch (err) {
       if (isStale()) {
@@ -2459,7 +2577,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return;
       }
       console.warn('Failed to load chat history:', err);
-      set({ messages: [], btwMessages: [], loading: false, historyWindowLimited: false, hasEarlierHistory: false, loadingEarlierHistory: false });
+      set({ messages: [], pendingUserMessage: null, pendingAssistantMessage: null, btwMessages: [], loading: false, historyWindowLimited: false, hasEarlierHistory: false, loadingEarlierHistory: false });
     }
   },
 
@@ -2632,8 +2750,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         filePath: a.stagedPath,
       })),
     };
-    set((s) => ({
-      messages: [...s.messages, userMsg],
+    set(() => ({
+      pendingUserMessage: userMsg,
+      pendingAssistantMessage: null,
       sending: true,
       error: null,
       streamingText: '',
@@ -2650,7 +2769,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Update session label with first user message text as soon as it's sent
     const { sessionLabels, messages } = get();
-    const isFirstMessage = !messages.slice(0, -1).some((m) => m.role === 'user');
+    const isFirstMessage = !messages.some((m) => m.role === 'user');
     if (
       !currentSessionKey.endsWith(':main') &&
       isFirstMessage &&
@@ -2812,12 +2931,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
             activeRunId: null,
             pendingFinal: false,
             lastUserMessageAt: null,
+            pendingUserMessage: null,
+            pendingAssistantMessage: null,
             ...resetToolStreamState(s),
           }));
         } else {
-          // ✅ Fix HR-1: Roll back the optimistically-added user message on failure.
           set((s) => ({
-            messages: s.messages.filter((m) => m.id !== userMsg.id),
+            pendingUserMessage: s.pendingUserMessage?.id === userMsg.id ? null : s.pendingUserMessage,
+            pendingAssistantMessage: null,
             error: errorMessage,
             sending: false,
             activeRunId: null,
@@ -2837,12 +2958,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
           activeRunId: null,
           pendingFinal: false,
           lastUserMessageAt: null,
+          pendingUserMessage: null,
+          pendingAssistantMessage: null,
           ...resetToolStreamState(s),
         }));
       } else {
-        // ✅ Fix HR-1: Roll back the optimistically-added user message on error.
         set((s) => ({
-          messages: s.messages.filter((m) => m.id !== userMsg.id),
+          pendingUserMessage: s.pendingUserMessage?.id === userMsg.id ? null : s.pendingUserMessage,
+          pendingAssistantMessage: null,
           error: errorMessage,
           sending: false,
           activeRunId: null,
@@ -2861,14 +2984,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       sending: false,
       activeRunId: null,
-      streamingText: '',
-      streamingMessage: null,
       pendingFinal: false,
       lastUserMessageAt: null,
-      pendingToolImages: [],
-      ...resetToolStreamState(get()),
+      ...resetChatRuntimeActivity(get()),
     });
-    set({ streamingTools: [] });
 
     try {
       await useGatewayStore.getState().rpc('chat.abort', { sessionKey: currentSessionKey });
@@ -2888,15 +3007,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       sending: false,
       activeRunId: null,
-      streamingText: '',
-      streamingMessage: null,
       pendingFinal: false,
       lastUserMessageAt: null,
-      pendingToolImages: [],
       error: message,
-      ...resetToolStreamState(get()),
+      ...resetChatRuntimeActivity(get()),
     });
-    set({ streamingTools: [] });
 
     try {
       await useGatewayStore.getState().rpc('chat.abort', { sessionKey: currentSessionKey });
@@ -2925,10 +3040,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // See https://github.com/openclaw/openclaw/issues/1909
     if (activeRunId && runId && runId !== activeRunId) {
       if (eventState === 'final') {
-        const finalMsg = event.message as RawMessage | undefined;
-        if (finalMsg && !isAssistantSilentReply(finalMsg)) {
-          set((s) => ({ messages: [...s.messages, finalMsg] }));
-        }
+        void get().loadHistory(true);
       }
       return;
     }
@@ -3007,7 +3119,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // clear sending to exit the loading spinner. This must be checked before `if (finalMsg)`
         // because BTW's `event.message` is undefined (payload is { state: 'final', runId, sessionKey }).
         if (!finalMsg?.role && !finalMsg?.content && !finalMsg?.toolCallId) {
-          set({ sending: false, activeRunId: null, pendingFinal: false });
+          set({ sending: false, activeRunId: null, pendingFinal: false, pendingUserMessage: null, pendingAssistantMessage: null });
           break;
         }
         if (finalMsg) {
@@ -3045,6 +3157,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               streamingText: '',
               streamingMessage: null,
               pendingFinal: true,
+              pendingAssistantMessage: null,
               pendingToolImages:
                 toolFiles.length > 0
                   ? [...s.pendingToolImages, ...toolFiles]
@@ -3091,6 +3204,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     streamingText: '',
                     streamingMessage: null,
                     pendingFinal: true,
+                    pendingUserMessage: null,
+                    pendingAssistantMessage: null,
                     streamingTools,
                     ...clearPendingImages,
                     ...resetToolStreamState(s),
@@ -3101,6 +3216,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     sending: hasOutput ? false : s.sending,
                     activeRunId: hasOutput ? null : s.activeRunId,
                     pendingFinal: hasOutput ? false : true,
+                    pendingUserMessage: hasOutput ? null : s.pendingUserMessage,
+                    pendingAssistantMessage: null,
                     pendingSessionModelRefresh: hasOutput ? false : s.pendingSessionModelRefresh,
                     streamingTools,
                     ...clearPendingImages,
@@ -3109,21 +3226,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
             return toolOnly
               ? {
-                  messages: [...s.messages, msgWithImages],
                   streamingText: '',
                   streamingMessage: null,
                   pendingFinal: true,
+                  pendingUserMessage: null,
+                  pendingAssistantMessage: null,
                   streamingTools,
                   ...clearPendingImages,
                   ...resetToolStreamState(s),
                 }
               : {
-                  messages: [...s.messages, msgWithImages],
                   streamingText: '',
                   streamingMessage: null,
                   sending: hasOutput ? false : s.sending,
                   activeRunId: hasOutput ? null : s.activeRunId,
-                  pendingFinal: hasOutput ? false : true,
+                  pendingFinal: true,
+                  pendingUserMessage: hasOutput ? null : s.pendingUserMessage,
+                  pendingAssistantMessage: hasOutput ? msgWithImages : null,
                   pendingSessionModelRefresh: hasOutput ? false : s.pendingSessionModelRefresh,
                   streamingTools,
                   ...clearPendingImages,
@@ -3146,6 +3265,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             streamingText: '',
             streamingMessage: null,
             pendingFinal: true,
+            pendingAssistantMessage: null,
             pendingSessionModelRefresh: false,
             ...resetToolStreamState(s),
           }));
@@ -3160,25 +3280,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const errorMsg = String(event.errorMessage || 'An error occurred');
         const wasSending = get().sending;
 
-        // Snapshot the current streaming message into messages[] so partial
-        // content ("Let me get that written down...") is preserved in the UI
-        // rather than being silently discarded.
         const currentStream = get().streamingMessage as RawMessage | null;
-        if (
+        const errorAssistantSnapshot =
           currentStream &&
           (currentStream.role === 'assistant' || currentStream.role === undefined)
-        ) {
-          const snapId = (currentStream as RawMessage).id || `error-snap-${Date.now()}`;
-          const alreadyExists = get().messages.some((m) => m.id === snapId);
-          if (!alreadyExists) {
-            set((s) => ({
-              messages: [
-                ...s.messages,
-                { ...currentStream, role: 'assistant' as const, id: snapId },
-              ],
-            }));
-          }
-        }
+            ? {
+                ...currentStream,
+                role: 'assistant' as const,
+                id: (currentStream as RawMessage).id || `error-snap-${Date.now()}`,
+              }
+            : null;
 
         set({
           error: errorMsg,
@@ -3186,6 +3297,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           streamingMessage: null,
           streamingTools: [],
           pendingFinal: false,
+          pendingAssistantMessage: errorAssistantSnapshot,
           pendingSessionModelRefresh: false,
           pendingToolImages: [],
           ...resetToolStreamState(get()),
@@ -3208,6 +3320,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 sending: false,
                 activeRunId: null,
                 lastUserMessageAt: null,
+                pendingUserMessage: null,
+                pendingAssistantMessage: null,
                 ...resetToolStreamState(state),
               });
               // One final history reload in case the Gateway completed in the
@@ -3217,7 +3331,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }, ERROR_RECOVERY_GRACE_MS);
         } else {
           clearHistoryPoll();
-          set((s) => ({ sending: false, activeRunId: null, lastUserMessageAt: null, ...resetToolStreamState(s) }));
+          set((s) => ({ sending: false, activeRunId: null, lastUserMessageAt: null, pendingUserMessage: null, pendingAssistantMessage: null, ...resetToolStreamState(s) }));
         }
         break;
       }
@@ -3227,14 +3341,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set({
           sending: false,
           activeRunId: null,
-          streamingText: '',
-          streamingMessage: null,
-          streamingTools: [],
           pendingFinal: false,
           pendingSessionModelRefresh: false,
           lastUserMessageAt: null,
-          pendingToolImages: [],
-          ...resetToolStreamState(get()),
+          ...resetChatRuntimeActivity(get()),
         });
         break;
       }
@@ -3484,14 +3594,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       error: nextError,
       sending: false,
       activeRunId: null,
-      streamingText: '',
-      streamingMessage: null,
-      streamingTools: [],
       pendingFinal: false,
       pendingSessionModelRefresh: false,
       lastUserMessageAt: null,
-      pendingToolImages: [],
-      ...resetToolStreamState(s),
+      ...resetChatRuntimeActivity(s),
     }));
   },
 

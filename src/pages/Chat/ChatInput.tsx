@@ -6,24 +6,15 @@
  * Files are staged to disk via IPC 鈥?only lightweight path references
  * are sent with the message (no base64 over WebSocket).
  */
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   SendHorizontal,
   Square,
   Paperclip,
-  Check,
   ChevronsUpDown,
   LoaderCircle,
-  Trash2,
-  FileText,
-  Film,
-  Music,
-  FileArchive,
-  File,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { Textarea } from '@/components/ui/textarea';
 import { hostApiFetch } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
@@ -31,6 +22,9 @@ import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { useTranslation } from 'react-i18next';
 import { Brain } from 'lucide-react';
+import { ChatAttachmentPreview } from './ChatAttachmentPreview';
+import { ChatModelMenu } from './ChatModelMenu';
+import { ChatSlashMenu } from './ChatSlashMenu';
 import {
   CATEGORY_I18N_KEYS,
   CATEGORY_LABELS,
@@ -75,37 +69,6 @@ interface ChatInputProps {
   sending?: boolean;
   isEmpty?: boolean;
   showThinking?: boolean;
-}
-
-// 鈹€鈹€ Helpers 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
-function FileIcon({ mimeType, className }: { mimeType: string; className?: string }) {
-  if (mimeType.startsWith('video/')) return <Film className={className} />;
-  if (mimeType.startsWith('audio/')) return <Music className={className} />;
-  if (
-    mimeType.startsWith('text/') ||
-    mimeType === 'application/json' ||
-    mimeType === 'application/xml'
-  )
-    return <FileText className={className} />;
-  if (
-    mimeType.includes('zip') ||
-    mimeType.includes('compressed') ||
-    mimeType.includes('archive') ||
-    mimeType.includes('tar') ||
-    mimeType.includes('rar') ||
-    mimeType.includes('7z')
-  )
-    return <FileArchive className={className} />;
-  if (mimeType === 'application/pdf') return <FileText className={className} />;
-  return <File className={className} />;
 }
 
 /**
@@ -695,6 +658,17 @@ export function ChatInput({
       t(CATEGORY_I18N_KEYS[category], CATEGORY_LABELS[category]),
     [t]
   );
+  const slashMenuLabels = useMemo(
+    () => ({
+      title: t('slash.title', 'Commands'),
+      enterSelect: t('slash.footer.enterSelect', 'Enter select'),
+      tabFill: t('slash.footer.tabFill', 'Tab fill'),
+      escClose: t('slash.footer.escClose', 'Esc close'),
+      navigate: t('slash.footer.navigate', '↑↓ navigate'),
+      optionsSuffix: t('slash.optionsSuffix', 'options'),
+    }),
+    [t]
+  );
 
   const primaryAction = sending && !hasSubmitContent ? 'stop' : 'send';
   const primaryActionTitle =
@@ -728,12 +702,13 @@ export function ChatInput({
       <div className="w-full">
         {/* Attachment Previews */}
         {attachments.length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-2.5">
+          <div className="mb-2 flex flex-wrap gap-2">
             {attachments.map((att) => (
-              <AttachmentPreview
+              <ChatAttachmentPreview
                 key={att.id}
                 attachment={att}
                 onRemove={() => removeAttachment(att.id)}
+                removeAriaLabel={t('composer.removeAttachment', '移除附件')}
               />
             ))}
           </div>
@@ -753,174 +728,24 @@ export function ChatInput({
           )}
         >
           {slashCommandHintsEnabled && slashMenuOpen && (
-            <div
-              ref={commandMenuRef}
-              className="absolute inset-x-3 bottom-[calc(100%+14px)] z-[140] overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.16)] ring-1 ring-slate-200 dark:border-slate-800 dark:bg-slate-950 dark:ring-slate-800"
-            >
-              {slashMenuMode === 'args' && slashArgCommand ? (
-                <>
-                  <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                    <span className="font-semibold text-slate-900 dark:text-slate-100">/{slashArgCommand.name}</span>
-                    <span className="ml-2">{getLocalizedCommandDescription(slashArgCommand)}</span>
-                  </div>
-                  <div className="max-h-72 overflow-y-auto px-2 py-2">
-                    {slashArgItems.map((arg, index) => (
-                      <button
-                        key={arg}
-                        ref={(node) => {
-                          slashItemRefs.current[index] = node;
-                        }}
-                        type="button"
-                        className={cn(
-                          'flex w-full items-center gap-3 rounded-[14px] border px-4 py-3 text-left text-sm transition-all outline-none',
-                          index === slashMenuIndex
-                            ? 'border-primary/35 bg-primary/[0.10] text-slate-950 shadow-[0_10px_30px_rgba(37,99,235,0.12)] dark:bg-primary/20 dark:text-slate-50'
-                            : 'border-transparent text-slate-900 hover:border-slate-200 hover:bg-slate-50 dark:text-slate-100 dark:hover:border-slate-800 dark:hover:bg-slate-900/80'
-                        )}
-                        onMouseEnter={() => setSlashMenuIndex(index)}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => applySlashArg(arg)}
-                      >
-                        <span
-                          className={cn(
-                            'h-8 w-1.5 shrink-0 rounded-full transition-colors',
-                            index === slashMenuIndex
-                              ? 'bg-primary'
-                              : 'bg-transparent'
-                          )}
-                        />
-                        <span
-                          className={cn(
-                            'rounded-full px-2.5 py-1 font-mono text-xs',
-                            index === slashMenuIndex
-                              ? 'bg-primary/15 text-primary dark:bg-primary/25 dark:text-slate-50'
-                              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-                          )}
-                        >
-                          {arg}
-                        </span>
-                        <span
-                          className={cn(
-                            'truncate text-xs',
-                            index === slashMenuIndex
-                              ? 'text-slate-700 dark:text-slate-200'
-                              : 'text-slate-500 dark:text-slate-400'
-                          )}
-                        >
-                          /{slashArgCommand.name} {arg}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-3 border-t border-slate-200 bg-slate-50 px-5 py-2.5 text-[11px] text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                    <span>{t('slash.footer.enterSelect', 'Enter select')}</span>
-                    <span>{t('slash.footer.tabFill', 'Tab fill')}</span>
-                    <span>{t('slash.footer.escClose', 'Esc close')}</span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                    {t('slash.title', 'Commands')}
-                  </div>
-                  <div className="max-h-80 overflow-y-auto px-2 py-2">
-                    {Object.entries(groupedSlashCommands).map(([category, commands]) => (
-                      <div key={category} className="py-1">
-                        <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
-                          {getLocalizedCategoryLabel(category as keyof typeof CATEGORY_LABELS)}
-                        </div>
-                        {commands.map((command) => {
-                          const globalIndex = slashMenuItems.findIndex((item) => item.key === command.key);
-                          return (
-                            <button
-                              key={command.key}
-                              ref={(node) => {
-                                slashItemRefs.current[globalIndex] = node;
-                              }}
-                              type="button"
-                              className={cn(
-                                'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[14px] border px-4 py-3 text-left transition-all outline-none',
-                                globalIndex === slashMenuIndex
-                                  ? 'border-primary/35 bg-primary/[0.10] text-slate-950 shadow-[0_10px_30px_rgba(37,99,235,0.12)] dark:bg-primary/20'
-                                  : 'border-transparent hover:border-slate-200 hover:bg-slate-50 dark:hover:border-slate-800 dark:hover:bg-slate-900/80'
-                              )}
-                              onMouseEnter={() => setSlashMenuIndex(globalIndex)}
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => applySlashCommand(command)}
-                            >
-                              <div className="flex min-w-0 items-start gap-3">
-                                <span
-                                  className={cn(
-                                    'mt-0.5 h-8 w-1.5 shrink-0 rounded-full transition-colors',
-                                    globalIndex === slashMenuIndex
-                                      ? 'bg-primary'
-                                      : 'bg-transparent'
-                                  )}
-                                />
-                                <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className={cn(
-                                      'font-mono text-sm font-semibold',
-                                      globalIndex === slashMenuIndex
-                                        ? 'text-slate-950 dark:text-slate-50'
-                                        : 'text-slate-950 dark:text-slate-50'
-                                    )}
-                                  >
-                                    /{command.name}
-                                  </span>
-                                  {command.args ? (
-                                    <span
-                                      className={cn(
-                                        'truncate text-xs',
-                                        globalIndex === slashMenuIndex
-                                          ? 'text-slate-700 dark:text-slate-200'
-                                          : 'text-slate-500 dark:text-slate-400'
-                                      )}
-                                    >
-                                      {command.args}
-                                    </span>
-                                  ) : null}
-                                </div>
-                                <div
-                                  className={cn(
-                                    'truncate text-xs',
-                                    globalIndex === slashMenuIndex
-                                      ? 'text-slate-700 dark:text-slate-200'
-                                      : 'text-slate-500 dark:text-slate-400'
-                                  )}
-                                >
-                                  {getLocalizedCommandDescription(command)}
-                                </div>
-                              </div>
-                              </div>
-                              {command.argOptions?.length ? (
-                                <span
-                                  className={cn(
-                                    'rounded-full px-2.5 py-1 text-[11px]',
-                                    globalIndex === slashMenuIndex
-                                      ? 'bg-primary/15 text-primary dark:bg-primary/25 dark:text-slate-50'
-                                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-                                  )}
-                                >
-                                  {command.argOptions.length} options
-                                </span>
-                              ) : null}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-3 border-t border-slate-200 bg-slate-50 px-5 py-2.5 text-[11px] text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                    <span>{t('slash.footer.navigate', '↑↓ navigate')}</span>
-                    <span>{t('slash.footer.tabFill', 'Tab fill')}</span>
-                    <span>{t('slash.footer.enterSelect', 'Enter select')}</span>
-                    <span>{t('slash.footer.escClose', 'Esc close')}</span>
-                  </div>
-                </>
-              )}
-            </div>
+            <ChatSlashMenu
+              menuRef={commandMenuRef}
+              mode={slashMenuMode}
+              argCommand={slashArgCommand}
+              argItems={slashArgItems}
+              menuIndex={slashMenuIndex}
+              menuItems={slashMenuItems}
+              groupedCommands={groupedSlashCommands}
+              itemRefs={slashItemRefs}
+              onHoverIndex={setSlashMenuIndex}
+              onApplyArg={applySlashArg}
+              onApplyCommand={applySlashCommand}
+              getCommandDescription={getLocalizedCommandDescription}
+              getCategoryLabel={(category) =>
+                getLocalizedCategoryLabel(category as keyof typeof CATEGORY_LABELS)
+              }
+              labels={slashMenuLabels}
+            />
           )}
 
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent dark:via-white/20" />
@@ -1096,114 +921,18 @@ export function ChatInput({
             </Button>
           </div>
         )}
-        {modelMenuOpen && modelMenuPosition
-          ? createPortal(
-              <div
-                ref={modelMenuRef}
-                className="fixed z-[120] overflow-hidden rounded-[12px] border border-black/10 bg-card/95 p-1 shadow-lg dark:border-white/10 dark:bg-card/95"
-                style={{
-                  top: modelMenuPosition.compact ? modelMenuPosition.top : undefined,
-                  bottom: modelMenuPosition.compact ? undefined : window.innerHeight - modelMenuPosition.top,
-                  left: modelMenuPosition.left,
-                  width: modelMenuPosition.compact
-                    ? Math.min(Math.max(modelMenuPosition.width, 220), window.innerWidth - 32)
-                    : Math.min(320, window.innerWidth - 32),
-                  maxHeight: modelMenuPosition.maxHeight,
-                  transform: modelMenuPosition.compact ? 'none' : 'translateX(-100%)',
-                }}
-              >
-                <div className="max-h-[inherit] overflow-y-auto">
-                  {modelOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-left text-[13px] text-foreground hover:bg-black/5 dark:hover:bg-white/5"
-                      onClick={() => {
-                        setModelMenuOpen(false);
-                        void onModelChange?.(option.value);
-                      }}
-                    >
-                      <span className="flex-1 truncate">{option.label}</span>
-                      {currentModelValue === option.value ? (
-                        <Check className="h-3.5 w-3.5 shrink-0" />
-                      ) : null}
-                    </button>
-                  ))}
-                </div>
-              </div>,
-              document.body
-            )
-          : null}
+        <ChatModelMenu
+          menuRef={modelMenuRef}
+          open={modelMenuOpen}
+          position={modelMenuPosition}
+          options={modelOptions}
+          currentValue={currentModelValue}
+          onSelect={(value) => {
+            setModelMenuOpen(false);
+            void onModelChange?.(value);
+          }}
+        />
       </div>
-    </div>
-  );
-}
-
-// 鈹€鈹€ Attachment Preview 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-
-function AttachmentPreview({
-  attachment,
-  onRemove,
-}: {
-  attachment: FileAttachment;
-  onRemove: () => void;
-}) {
-  const isImage = attachment.mimeType.startsWith('image/') && attachment.preview;
-
-  return (
-    <div className="group relative overflow-hidden rounded-[14px] border border-slate-200/80 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.05)] dark:border-white/10 dark:bg-white/[0.05]">
-      {isImage ? (
-        // Image thumbnail
-        <div className="relative h-16 w-16">
-          <img
-            src={attachment.preview!}
-            alt={attachment.fileName}
-            className="w-full h-full object-cover"
-          />
-          <button
-            onClick={onRemove}
-            aria-label="Remove attachment"
-            className="absolute bottom-2 right-2 z-10 flex h-8 w-8 items-center justify-center rounded-[10px] border border-transparent bg-white/92 text-muted-foreground transition-colors hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive dark:bg-black/60"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      ) : (
-        // Generic file card
-        <div className="flex max-w-[248px] items-center gap-2.5 bg-white px-3.5 py-2.5 dark:bg-transparent">
-          <FileIcon
-            mimeType={attachment.mimeType}
-            className="h-5 w-5 shrink-0 text-muted-foreground"
-          />
-          <div className="min-w-0 overflow-hidden">
-            <p className="text-xs font-medium truncate">{attachment.fileName}</p>
-            <p className="text-[10px] text-muted-foreground">
-              {attachment.fileSize > 0 ? formatFileSize(attachment.fileSize) : '...'}
-            </p>
-          </div>
-          <button
-            onClick={onRemove}
-            aria-label="Remove attachment"
-            className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-transparent bg-white/92 text-muted-foreground transition-colors hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive dark:bg-black/60"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      )}
-
-      {/* Staging overlay */}
-      {attachment.status === 'staging' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-          <LoadingIcon className="h-4 w-4 text-white" />
-        </div>
-      )}
-
-      {/* Error overlay */}
-      {attachment.status === 'error' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-destructive/20">
-          <span className="text-[10px] text-destructive font-medium px-1">!</span>
-        </div>
-      )}
     </div>
   );
 }
