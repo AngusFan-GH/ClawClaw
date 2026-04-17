@@ -20,6 +20,7 @@ import 'zx/globals';
 import semver from 'semver';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import bundleValidator from './openclaw-bundle-validator.cjs';
 
@@ -28,6 +29,7 @@ const {
   isCheckableRange,
   validateBundledNodeModules,
   formatValidationIssues,
+  verifyBundledRuntimeResolutions,
 } = bundleValidator;
 
 const ROOT = path.resolve(__dirname, '..');
@@ -39,6 +41,18 @@ const BUNDLED_PLUGIN_REGISTRY =
   process.env.OPENCLAW_BUNDLED_PLUGIN_REGISTRY || 'https://registry.npmjs.org/';
 const NODE_MODULES = path.join(ROOT, 'node_modules');
 const FORCE_REBUILD = process.argv.includes('--force') || process.env.OPENCLAW_BUNDLE_FORCE === '1';
+const BUNDLED_RUNTIME_RESOLVE_SPECIFIERS = [
+  'https-proxy-agent',
+  '@slack/bolt',
+  '@slack/web-api',
+  '@google/genai',
+  '@whiskeysockets/baileys',
+  'fake-indexeddb',
+  'grammy',
+  'matrix-js-sdk',
+  'music-metadata',
+  '@aws-sdk/client-bedrock-runtime',
+];
 
 // On Windows, pnpm virtual store paths can exceed MAX_PATH (260 chars).
 function normWin(p) {
@@ -81,6 +95,56 @@ function outputBundleLooksReusable() {
     && fs.existsSync(path.join(OUTPUT, 'openclaw.mjs'))
     && fs.existsSync(path.join(OUTPUT, 'dist', 'entry.js'))
     && fs.existsSync(path.join(OUTPUT, 'node_modules'));
+}
+
+function verifyBundledRuntimeResolves(bundleRoot) {
+  const issues = verifyBundledRuntimeResolutions(bundleRoot, BUNDLED_RUNTIME_RESOLVE_SPECIFIERS);
+  if (issues.length > 0) {
+    echo`❌ Bundled runtime resolution validation failed:`;
+    for (const issue of issues) {
+      echo`   - ${issue.specifier}: ${issue.error}`;
+    }
+    process.exit(1);
+  }
+
+  const bundleRequire = createRequire(path.join(bundleRoot, 'package.json'));
+  const resolvedProxyAgentEntry = bundleRequire.resolve('https-proxy-agent');
+  const resolvedProxyAgentPkg = path.join(path.dirname(path.dirname(resolvedProxyAgentEntry)), 'package.json');
+  const resolvedProxyAgent = JSON.parse(fs.readFileSync(resolvedProxyAgentPkg, 'utf8'));
+  if (!semver.satisfies(resolvedProxyAgent.version, '^9.0.0', { includePrerelease: true })) {
+    echo`❌ Bundled runtime resolved https-proxy-agent@${resolvedProxyAgent.version}; expected ^9.0.0`;
+    process.exit(1);
+  }
+
+  const pierreDiffsPkgPath = path.join(bundleRoot, 'node_modules', '@pierre', 'diffs', 'package.json');
+  if (!fs.existsSync(pierreDiffsPkgPath)) {
+    echo`❌ Bundled runtime is missing @pierre/diffs/package.json`;
+    process.exit(1);
+  }
+  const pierreDiffsPkg = JSON.parse(fs.readFileSync(pierreDiffsPkgPath, 'utf8'));
+  const pierreDiffImport = pierreDiffsPkg?.exports?.['.']?.import;
+  const pierreDiffSsrImport = pierreDiffsPkg?.exports?.['./ssr']?.import;
+  if (
+    typeof pierreDiffImport !== 'string'
+    || !fs.existsSync(path.join(path.dirname(pierreDiffsPkgPath), pierreDiffImport))
+    || typeof pierreDiffSsrImport !== 'string'
+    || !fs.existsSync(path.join(path.dirname(pierreDiffsPkgPath), pierreDiffSsrImport))
+  ) {
+    echo`❌ Bundled runtime has an incomplete @pierre/diffs ESM export layout`;
+    process.exit(1);
+  }
+
+  const openShellPkgPath = path.join(bundleRoot, 'node_modules', 'openshell', 'package.json');
+  if (!fs.existsSync(openShellPkgPath)) {
+    echo`❌ Bundled runtime is missing openshell/package.json`;
+    process.exit(1);
+  }
+  const openShellPkg = JSON.parse(fs.readFileSync(openShellPkgPath, 'utf8'));
+  const openShellBin = typeof openShellPkg?.bin === 'string' ? openShellPkg.bin : openShellPkg?.bin?.openshell;
+  if (typeof openShellBin !== 'string' || !fs.existsSync(path.join(path.dirname(openShellPkgPath), openShellBin))) {
+    echo`❌ Bundled runtime has an incomplete openshell CLI layout`;
+    process.exit(1);
+  }
 }
 
 echo`📦 Bundling openclaw for electron-builder...`;
@@ -1247,7 +1311,7 @@ function patchKnownDependencyMetadata(nodeModulesDir) {
       continue;
     }
 
-    // openclaw@2026.4.2 bundles slack runtime deps with p-queue@6.6.2 but only
+    // openclaw stable builds currently bundle slack runtime deps with p-queue@6.6.2 but only
     // ships p-timeout@4.x. Runtime works with that tree, but the upstream
     // package.json dependency range is still ^3.2.0, so we normalize the
     // bundled metadata to the actually shipped compatible layout.
@@ -1569,6 +1633,9 @@ if (dependencyIssues.length > 0) {
 }
 
 echo`   Dependency validation: ✓`;
+
+verifyBundledRuntimeResolves(OUTPUT);
+echo`   Runtime resolution validation: ✓`;
 
 fs.writeFileSync(
   BUNDLE_META_PATH,

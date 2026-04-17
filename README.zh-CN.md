@@ -89,7 +89,7 @@ ClawClaw 原生支持预装本地模型、主流云端供应商以及多语言�
 ClawClaw 直接基于官方 **OpenClaw** 核心构建。无需单独安装，我们将运行时嵌入应用内部，提供开箱即用的无缝体验。
 
 我们致力于与上游 OpenClaw 项目保持严格同步，确保你始终可以使用官方发布的最新功能、稳定性改进和生态兼容性。
-当前随包稳定运行时已对齐到 **OpenClaw 2026.4.2**，在保持桌面端集成体验不变的前提下，跟随上游当前稳定发布线。
+当前随包稳定运行时已对齐到 **OpenClaw 2026.4.15**，在保持桌面端集成体验不变的前提下，跟随上游当前稳定发布线。
 
 ---
 
@@ -119,7 +119,7 @@ ClawClaw 直接基于官方 **OpenClaw** 核心构建。无需单独安装，我
 
 ### 🔐 安全的供应商集成
 
-连接多个 AI 供应商（OpenAI、Anthropic、OpenCode Go 等），支持 API 密钥和已接入的 OAuth 登录方式。OpenAI Codex 登录现已对齐 OpenClaw 原生浏览器 OAuth 流程，并在登录完成后从 OpenClaw 当前可用的 Codex 模型列表中选择模型。其他供应商账户在条件允许时会优先使用上游接口返回的已验证模型列表，只有在无法枚举模型时才继续允许手动填写模型 ID。模型类型筛选只会在上游明确返回分类字段时显示；如果上游没有提供这类元数据，界面只保留搜索，不再做启发式猜测。对于 Ollama、vLLM、SGLang 这类自托管 OpenAI 兼容运行时，仍然作为一等 Provider 提供；而项目现有的本地模型工作流继续由独立的本地模型中心承载。凭证安全存储在系统原生密钥链中。
+连接多个 AI 供应商（OpenAI、Anthropic、OpenCode Go 等），支持 API 密钥和已接入的 OAuth 登录方式。OpenAI Codex 登录现已对齐 OpenClaw 原生浏览器 OAuth 流程；当上游真正提供时，会优先推荐 `gpt-5.4-pro` 这类更新的 Codex 模型，但不会强制改写你已经保存的旧模型选择。其他供应商账户在条件允许时会优先使用上游接口返回的已验证模型列表，只有在无法枚举模型时才继续允许手动填写模型 ID。模型类型筛选只会在上游明确返回分类字段时显示；如果上游没有提供这类元数据，界面只保留搜索，不再做启发式猜测。对于 Ollama、vLLM、SGLang 这类自托管 OpenAI 兼容运行时，仍然作为一等 Provider 提供；现在每个自托管账户也可以单独允许访问局域网或 localhost 之类的私有网络地址。项目现有的本地模型工作流继续由独立的本地模型中心承载。凭证安全存储在系统原生密钥链中。
 
 > vLLM 说明：ClawClaw 现在会默认把 vLLM 模型标记为 `supportsTools: false`，避免常见的 `400 "auto" tool choice` 报错。现在你也可以在 provider 设置里显式开启 vLLM 工具调用，但前提是 vLLM 服务端已经使用 `--enable-auto-tool-choice` 和 `--tool-call-parser` 启动。
 
@@ -230,6 +230,7 @@ ClawClaw 内置了代理设置，适用于需要通过本地代理客户端访�
 
 - **自动归档会话记忆**：开启 OpenClaw 内置的 `session-memory` hook。在执行 `/new` 或 `/reset` 时，OpenClaw 会把刚结束的会话摘要写入工作区的 `memory/` 目录。
 - **启用记忆检索**：开启 OpenClaw 的 `memorySearch` 运行时配置，让后续问答可以通过上游 `memory_search` 和 `memory_get` 工具检索 `MEMORY.md` 与 `memory/*.md`。
+- **本地模型轻量运行模式**：开启 OpenClaw 的 `agents.defaults.experimental.localModelLean`，让本地模型链路优先使用更轻量的上游运行时模式。
 
 说明：
 

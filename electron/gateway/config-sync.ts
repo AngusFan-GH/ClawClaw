@@ -213,6 +213,7 @@ function stableAccountFingerprint(account: ReturnType<typeof listProviderAccount
           customModels: account.metadata.customModels,
           localModel: account.metadata.localModel,
           localModelProvider: account.metadata.localModelProvider,
+          allowPrivateNetwork: account.metadata.allowPrivateNetwork,
           presetId: account.metadata.presetId,
           primaryPresetId: account.metadata.primaryPresetId,
           presetIds: account.metadata.presetIds,

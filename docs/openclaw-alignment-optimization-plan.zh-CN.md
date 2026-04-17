@@ -6,7 +6,7 @@
 
 - ClawClaw 项目：`/Users/angusfan/Documents/xzinfra/projects/clawx`
 - OpenClaw 本地源码：`/Users/angusfan/Documents/xzinfra/research/openclaw`
-- 当前对照版本：`openclaw@2026.4.2`
+- 当前对照版本：`openclaw@2026.4.15`
 
 ## 1. 当前已经补好的部分
 

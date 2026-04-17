@@ -270,6 +270,8 @@ export function Settings() {
     setSessionMemoryEnabled,
     memorySearchEnabled,
     setMemorySearchEnabled,
+    localModelLean,
+    setLocalModelLean,
     initialized,
   } = useSettingsStore();
 
@@ -1302,6 +1304,16 @@ export function Settings() {
                   <Switch
                     checked={memorySearchEnabled}
                     onCheckedChange={setMemorySearchEnabled}
+                  />
+                }
+              />
+              <SettingRow
+                label={t('memory.localModelLean')}
+                description={t('memory.localModelLeanDesc')}
+                control={
+                  <Switch
+                    checked={localModelLean}
+                    onCheckedChange={setLocalModelLean}
                   />
                 }
               />

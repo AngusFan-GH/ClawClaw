@@ -368,14 +368,14 @@ async function listRuntimeModelRefs(ctx: HostApiContext): Promise<string[]> {
 }
 
 const OPENAI_OAUTH_RUNTIME_PROVIDER = 'openai-codex';
-const OPENAI_OAUTH_PREFERRED_MODEL = 'gpt-5.4';
+const OPENAI_OAUTH_PREFERRED_MODELS = ['gpt-5.4-pro', 'gpt-5.4'] as const;
 
 function normalizeProviderModelId(runtimeProviderId: string, modelId: string): string {
   if (
     runtimeProviderId === OPENAI_OAUTH_RUNTIME_PROVIDER
     && (modelId === 'gpt-5.2' || modelId === 'gpt-5.3-codex')
   ) {
-    return OPENAI_OAUTH_PREFERRED_MODEL;
+    return OPENAI_OAUTH_PREFERRED_MODELS[1];
   }
   return modelId;
 }
@@ -386,11 +386,12 @@ function compareProviderModelOptions(
   right: { id: string; name: string },
 ): number {
   if (runtimeProviderId === OPENAI_OAUTH_RUNTIME_PROVIDER) {
-    if (left.id === OPENAI_OAUTH_PREFERRED_MODEL && right.id !== OPENAI_OAUTH_PREFERRED_MODEL) {
-      return -1;
-    }
-    if (right.id === OPENAI_OAUTH_PREFERRED_MODEL && left.id !== OPENAI_OAUTH_PREFERRED_MODEL) {
-      return 1;
+    const leftRank = OPENAI_OAUTH_PREFERRED_MODELS.indexOf(left.id as (typeof OPENAI_OAUTH_PREFERRED_MODELS)[number]);
+    const rightRank = OPENAI_OAUTH_PREFERRED_MODELS.indexOf(right.id as (typeof OPENAI_OAUTH_PREFERRED_MODELS)[number]);
+    if (leftRank !== -1 || rightRank !== -1) {
+      if (leftRank === -1) return 1;
+      if (rightRank === -1) return -1;
+      if (leftRank !== rightRank) return leftRank - rightRank;
     }
   }
 
@@ -647,10 +648,11 @@ export async function handleProviderRoutes(
         authMode,
         accountId,
       );
-      const { models, source } = await listProviderModelOptionsWithRuntimeFallback(runtimeProviderId, scope, ctx, {
+      const effectiveScope: 'catalog' | 'runtime' = runtimeOnlyCatalog ? 'runtime' : scope;
+      const { models, source } = await listProviderModelOptionsWithRuntimeFallback(runtimeProviderId, effectiveScope, ctx, {
         allowModelsJsonFallback: !runtimeOnlyCatalog,
       });
-      sendJson(res, 200, { runtimeProviderId, models, source });
+      sendJson(res, 200, { runtimeProviderId, models, source, scope: effectiveScope });
     } catch (error) {
       logger.warn('[providers] Failed to list provider model options:', error);
       sendJson(res, 500, { error: String(error) });

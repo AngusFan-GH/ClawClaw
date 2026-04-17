@@ -105,10 +105,14 @@
       "replaceApiKey": "Replace API Key",
       "replaceApiKeyHelp": "Leave this field empty if you want to keep the currently stored API key.",
       "baseUrl": "Base URL",
+      "allowPrivateNetwork": "Allow private network",
+      "allowPrivateNetworkHelp": "Allow this self-hosted provider to reach localhost, RFC1918, and other private network endpoints through OpenClaw.",
       "model": "Model",
       "modelId": "Model ID",
       "verifiedModels": "Verified Models",
       "verifiedModelsHelp": "Prefer selecting a real model returned by this source to avoid saving an invalid model ID.",
+      "loadModels": "Load Verified Models",
+      "reloadModels": "Reload Verified Models",
       "searchModels": "Search model ID or name",
       "noFilteredModels": "No models match the current filters",
       "filteredModelCount_one": "{{count}} available model",
@@ -240,7 +244,9 @@
     "sessionMemory": "Auto-archive session memory",
     "sessionMemoryDesc": "When enabled, finished conversations are automatically saved when you reset or start a new chat, so they can be referenced later.",
     "search": "Enable memory search",
-    "searchDesc": "When enabled, later chats can recall previously saved notes and conversation memories. Changing this restarts the Gateway automatically."
+    "searchDesc": "When enabled, later chats can recall previously saved notes and conversation memories. Changing this restarts the Gateway automatically.",
+    "localModelLean": "Lean local model runtime",
+    "localModelLeanDesc": "Enable OpenClaw's lightweight local-model execution mode. Useful when you want local providers to prefer lower-overhead runtime behavior. Changing this restarts the Gateway automatically."
   },
   "updates": {
     "title": "Updates",

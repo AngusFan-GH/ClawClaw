@@ -22,7 +22,7 @@ const mockFns = vi.hoisted(() => ({
     durationMs: 10,
     warnings: [],
   })),
-  readFile: vi.fn(async () => JSON.stringify({ version: '2026.4.2' })),
+  readFile: vi.fn(async () => JSON.stringify({ version: '2026.4.15' })),
 }))
 
 vi.mock('electron', () => ({
@@ -63,8 +63,23 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return {
     ...actual,
-    default: actual,
     readFile: mockFns.readFile,
+    default: {
+      ...actual,
+      readFile: mockFns.readFile,
+    },
+  };
+});
+
+vi.mock('fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs/promises')>();
+  return {
+    ...actual,
+    readFile: mockFns.readFile,
+    default: {
+      ...actual,
+      readFile: mockFns.readFile,
+    },
   };
 });
 

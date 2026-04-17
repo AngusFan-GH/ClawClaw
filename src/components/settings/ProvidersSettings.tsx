@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import {
   useProviderStore,
   type ProviderAccount,
@@ -129,7 +130,7 @@ type ResolvedProviderModelResponse = {
   error?: string;
 };
 
-const OPENAI_OAUTH_PREFERRED_MODEL_ID = 'gpt-5.4';
+const OPENAI_OAUTH_PREFERRED_MODEL_IDS = ['gpt-5.4-pro', 'gpt-5.4'] as const;
 
 function normalizeOAuthSelectedModel(vendorId: string, modelId?: string | null): string {
   const normalized = modelId?.trim() || '';
@@ -137,7 +138,7 @@ function normalizeOAuthSelectedModel(vendorId: string, modelId?: string | null):
     return '';
   }
   if (vendorId === 'openai' && (normalized === 'gpt-5.2' || normalized === 'gpt-5.3-codex')) {
-    return OPENAI_OAUTH_PREFERRED_MODEL_ID;
+    return OPENAI_OAUTH_PREFERRED_MODEL_IDS[1];
   }
   return normalized;
 }
@@ -158,8 +159,12 @@ function pickOAuthModelSelection(
     return normalizedFallback;
   }
 
-  if (vendorId === 'openai' && options.some((option) => option.id === OPENAI_OAUTH_PREFERRED_MODEL_ID)) {
-    return OPENAI_OAUTH_PREFERRED_MODEL_ID;
+  if (vendorId === 'openai') {
+    for (const preferredId of OPENAI_OAUTH_PREFERRED_MODEL_IDS) {
+      if (options.some((option) => option.id === preferredId)) {
+        return preferredId;
+      }
+    }
   }
 
   return options[0]?.id || normalizedFallback || normalizedPreferred || '';
@@ -627,6 +632,7 @@ function ProviderCard({
   const [baseUrl, setBaseUrl] = useState(account.baseUrl || '');
   const [apiProtocol, setApiProtocol] = useState<ProviderAccount['apiProtocol']>(account.apiProtocol || 'openai-completions');
   const [modelId, setModelId] = useState(account.model || '');
+  const [allowPrivateNetwork, setAllowPrivateNetwork] = useState(account.metadata?.allowPrivateNetwork === true);
   const [fallbackModelsText, setFallbackModelsText] = useState(
     normalizeFallbackModels(account.fallbackModels).join('\n')
   );
@@ -663,52 +669,56 @@ function ProviderCard({
       setBaseUrl(account.baseUrl || '');
       setApiProtocol(account.apiProtocol || 'openai-completions');
       setModelId(normalizeOAuthSelectedModel(account.vendorId, account.model));
+      setAllowPrivateNetwork(account.metadata?.allowPrivateNetwork === true);
       setFallbackModelsText(normalizeFallbackModels(account.fallbackModels).join('\n'));
       setFallbackProviderIds(normalizeFallbackProviderIds(account.fallbackAccountIds));
     }
   }, [isEditing, account.baseUrl, account.fallbackModels, account.fallbackAccountIds, account.metadata, account.model, account.apiProtocol, account.vendorId]);
 
   useEffect(() => {
-    let cancelled = false;
     if (!isEditing || !showModelIdField) {
       setModelOptions([]);
       setLoadingModelOptions(false);
       setModelOptionsError(null);
-      return;
+    } else {
+      setLoadingModelOptions(false);
+      setModelOptionsError(null);
     }
+  }, [account.authMode, account.id, account.model, account.vendorId, isEditing, showModelIdField, typeInfo?.defaultModelId]);
+
+  const handleLoadModelOptions = React.useCallback(async () => {
+    if (!isEditing || !showModelIdField) return;
 
     setLoadingModelOptions(true);
     setModelOptionsError(null);
-    hostApiFetch<{ models: ProviderModelOption[] }>(
-      `/api/provider-model-options?vendorId=${encodeURIComponent(account.vendorId)}&authMode=${encodeURIComponent(account.authMode)}&accountId=${encodeURIComponent(account.id)}`
-    )
-      .then((response) => {
-        if (cancelled) return;
-        setModelOptions(response.models ?? []);
-        setModelId((current) => pickResolvedModelSelection(
-          account.vendorId,
-          response.models ?? [],
-          current || account.model,
-          typeInfo?.defaultModelId,
-        ));
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          console.error('Failed to load provider model options:', error);
-          setModelOptions([]);
-          setModelOptionsError(String(error));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoadingModelOptions(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [account.authMode, account.id, account.model, account.vendorId, isEditing, showModelIdField, typeInfo?.defaultModelId]);
+    try {
+      const response = await hostApiFetch<{ models: ProviderModelOption[] }>(
+        `/api/provider-model-options?vendorId=${encodeURIComponent(account.vendorId)}&authMode=${encodeURIComponent(account.authMode)}&accountId=${encodeURIComponent(account.id)}`
+      );
+      const options = response.models ?? [];
+      setModelOptions(options);
+      setModelId((current) => pickResolvedModelSelection(
+        account.vendorId,
+        options,
+        current || account.model,
+        typeInfo?.defaultModelId,
+      ));
+    } catch (error) {
+      console.error('Failed to load provider model options:', error);
+      setModelOptions([]);
+      setModelOptionsError(String(error));
+    } finally {
+      setLoadingModelOptions(false);
+    }
+  }, [
+    account.authMode,
+    account.id,
+    account.model,
+    account.vendorId,
+    isEditing,
+    showModelIdField,
+    typeInfo?.defaultModelId,
+  ]);
 
   const fallbackOptions = allProviders.filter((candidate) => candidate.account.id !== account.id);
 
@@ -768,6 +778,15 @@ function ProviderCard({
         }
         if (!fallbackProviderIdsEqual(fallbackProviderIds, account.fallbackAccountIds)) {
           updates.fallbackProviderIds = normalizeFallbackProviderIds(fallbackProviderIds);
+        }
+        if (isSelfHostedProviderType(account.vendorId) && allowPrivateNetwork !== (account.metadata?.allowPrivateNetwork === true)) {
+          payload.updates = {
+            ...(payload.updates || {}),
+            metadata: {
+              ...(account.metadata || {}),
+              allowPrivateNetwork,
+            },
+          };
         }
         if (Object.keys(updates).length > 0) {
           payload.updates = {
@@ -946,8 +965,36 @@ function ProviderCard({
                   />
                 </div>
               )}
+              {isSelfHostedProviderType(account.vendorId) && (
+                <div className="rounded-xl border border-black/10 bg-black/[0.02] p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <Label className={currentLabelClasses}>{t('aiProviders.dialog.allowPrivateNetwork')}</Label>
+                      <p className="text-[12px] text-muted-foreground">
+                        {t('aiProviders.dialog.allowPrivateNetworkHelp')}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={allowPrivateNetwork}
+                      onCheckedChange={setAllowPrivateNetwork}
+                    />
+                  </div>
+                </div>
+              )}
               {showModelIdField && hasVerifiedModelOptions && (
-                <div className="pt-2">
+                <div className="space-y-2.5 pt-2">
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-lg"
+                      onClick={() => void handleLoadModelOptions()}
+                      disabled={loadingModelOptions}
+                    >
+                      {hasVerifiedModelOptions ? t('aiProviders.dialog.reloadModels') : t('aiProviders.dialog.loadModels')}
+                    </Button>
+                  </div>
                   <VerifiedModelSelect
                     id={`verified-models-${account.id}`}
                     label={t('aiProviders.dialog.verifiedModels')}
@@ -963,6 +1010,18 @@ function ProviderCard({
               )}
               {showModelIdField && !hasVerifiedModelOptions && (
                 <div className="space-y-1.5 pt-2">
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-lg"
+                      onClick={() => void handleLoadModelOptions()}
+                      disabled={loadingModelOptions}
+                    >
+                      {t('aiProviders.dialog.loadModels')}
+                    </Button>
+                  </div>
                   <Label className={currentLabelClasses}>{t('aiProviders.dialog.modelId')}</Label>
                   <Input
                     value={modelId}
@@ -1191,6 +1250,7 @@ function AddProviderDialog({
   const [baseUrl, setBaseUrl] = useState('');
   const [modelId, setModelId] = useState('');
   const [apiProtocol, setApiProtocol] = useState<ProviderAccount['apiProtocol']>('openai-completions');
+  const [allowPrivateNetwork, setAllowPrivateNetwork] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -1254,6 +1314,54 @@ function AddProviderDialog({
     return response.models ?? [];
   };
 
+  const loadResolvedModelOptions = React.useCallback(async () => {
+    if (!selectedType || !showEditableModelField || useOAuthFlow) {
+      return;
+    }
+
+    setLoadingResolvedModels(true);
+    setResolvedModelsError(null);
+    try {
+      const response = await resolveProviderModelOptions({
+        vendorId: selectedType,
+        authMode: (selectedType === 'ollama' || ((selectedType === 'custom' || selectedType === 'local-model') && !apiKey.trim()))
+          ? 'local'
+          : 'api_key',
+        baseUrl: baseUrl.trim() || undefined,
+        apiProtocol: isSelfHostedProviderType(selectedType) ? apiProtocol : undefined,
+        apiKey: apiKey.trim() || undefined,
+      });
+      const models = response.models ?? [];
+      setResolvedModelOptions(models);
+      setResolvedRuntimeProviderId(response.runtimeProviderId || null);
+      if (models.length > 0) {
+        setModelId((current) => pickResolvedModelSelection(
+          selectedType,
+          models,
+          current,
+          typeInfo?.defaultModelId,
+        ));
+      }
+      if (response.error) {
+        setResolvedModelsError(response.error);
+      }
+    } catch (error) {
+      setResolvedModelOptions([]);
+      setResolvedRuntimeProviderId(null);
+      setResolvedModelsError(String(error));
+    } finally {
+      setLoadingResolvedModels(false);
+    }
+  }, [
+    apiKey,
+    apiProtocol,
+    baseUrl,
+    selectedType,
+    showEditableModelField,
+    typeInfo?.defaultModelId,
+    useOAuthFlow,
+  ]);
+
   useEffect(() => {
     if (mode !== 'local-model' || selectedType) {
       return;
@@ -1281,6 +1389,7 @@ function AddProviderDialog({
     setLoadingResolvedModels(false);
     setResolvedModelsError(null);
     setResolvedRuntimeProviderId(null);
+    setAllowPrivateNetwork(false);
   }, [selectedType, authMode]);
 
   useEffect(() => {
@@ -1305,54 +1414,6 @@ function AddProviderDialog({
       setResolvedRuntimeProviderId(null);
       return;
     }
-
-    let cancelled = false;
-    const timeoutId = window.setTimeout(() => {
-      setLoadingResolvedModels(true);
-      setResolvedModelsError(null);
-        void resolveProviderModelOptions({
-          vendorId: selectedType,
-          authMode: (selectedType === 'ollama' || ((selectedType === 'custom' || selectedType === 'local-model') && !apiKey.trim()))
-            ? 'local'
-            : 'api_key',
-          baseUrl: baseUrl.trim() || undefined,
-          apiProtocol: isSelfHostedProviderType(selectedType) ? apiProtocol : undefined,
-          apiKey: apiKey.trim() || undefined,
-        })
-        .then((response) => {
-          if (cancelled) return;
-          const models = response.models ?? [];
-          setResolvedModelOptions(models);
-          setResolvedRuntimeProviderId(response.runtimeProviderId || null);
-          if (models.length > 0) {
-            setModelId((current) => pickResolvedModelSelection(
-              selectedType,
-              models,
-              current,
-              typeInfo?.defaultModelId,
-            ));
-          }
-          if (response.error) {
-            setResolvedModelsError(response.error);
-          }
-        })
-        .catch((error) => {
-          if (cancelled) return;
-          setResolvedModelOptions([]);
-          setResolvedRuntimeProviderId(null);
-          setResolvedModelsError(String(error));
-        })
-        .finally(() => {
-          if (!cancelled) {
-            setLoadingResolvedModels(false);
-          }
-        });
-    }, 300);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeoutId);
-    };
   }, [apiKey, apiProtocol, baseUrl, mode, selectedType, showEditableModelField, typeInfo?.defaultModelId, typeInfo?.requiresApiKey, typeInfo?.showBaseUrl, useOAuthFlow]);
 
   // Keep refs to the latest values so event handlers see the current dialog state.
@@ -1639,6 +1700,7 @@ function AddProviderDialog({
           model: resolveProviderModelForSave(typeInfo, modelId, devModeUnlocked),
           metadata: {
             ...(mode === 'local-model' ? { localModel: true } : {}),
+            ...(isSelfHostedProviderType(selectedType) ? { allowPrivateNetwork } : {}),
           },
           authMode: useOAuthFlow ? (preferredOAuthMode || 'oauth_device') : ((selectedType === 'ollama' || ((selectedType === 'custom' || selectedType === 'local-model') && !apiKey.trim())) && mode !== 'local-model')
             ? 'local'
@@ -1867,6 +1929,22 @@ function AddProviderDialog({
                     ) : null}
                   </div>
                 )}
+                {selectedType && isSelfHostedProviderType(selectedType) && (
+                  <div className="rounded-xl border border-black/10 bg-black/[0.02] p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <Label className={labelClasses}>{t('aiProviders.dialog.allowPrivateNetwork')}</Label>
+                        <p className="text-[12px] text-muted-foreground">
+                          {t('aiProviders.dialog.allowPrivateNetworkHelp')}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={allowPrivateNetwork}
+                        onCheckedChange={setAllowPrivateNetwork}
+                      />
+                    </div>
+                  </div>
+                )}
                 {resolvedRuntimeProviderId ? (
                   <div className="rounded-xl border border-black/10 bg-muted/35 px-4 py-3 text-[13px] dark:border-white/10 dark:bg-white/[0.04]">
                     <div className="text-muted-foreground">{t('aiProviders.card.runtimeProvider')}</div>
@@ -1875,24 +1953,55 @@ function AddProviderDialog({
                 ) : null}
 
                 {showEditableModelField && hasResolvedModelOptions && (
-                  <VerifiedModelSelect
-                    id="modelId"
-                    label={t('aiProviders.dialog.verifiedModels')}
-                    helpText={t('aiProviders.dialog.verifiedModelsHelp')}
-                    value={modelId}
-                    options={displayedResolvedOptions}
-                    onChange={(value) => {
-                      setModelId(normalizeOAuthSelectedModel(selectedType, value));
-                      setValidationError(null);
-                    }}
-                    disabled={loadingResolvedModels}
-                    loading={loadingResolvedModels}
-                    countLabel={t('aiProviders.card.verifiedModelCount', { count: resolvedModelOptions.length })}
-                  />
+                  <div className="space-y-2.5">
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-lg"
+                        onClick={() => void loadResolvedModelOptions()}
+                        disabled={loadingResolvedModels}
+                      >
+                        {hasResolvedModelOptions ? t('aiProviders.dialog.reloadModels') : t('aiProviders.dialog.loadModels')}
+                      </Button>
+                    </div>
+                    <VerifiedModelSelect
+                      id="modelId"
+                      label={t('aiProviders.dialog.verifiedModels')}
+                      helpText={t('aiProviders.dialog.verifiedModelsHelp')}
+                      value={modelId}
+                      options={displayedResolvedOptions}
+                      onChange={(value) => {
+                        setModelId(normalizeOAuthSelectedModel(selectedType, value));
+                        setValidationError(null);
+                      }}
+                      disabled={loadingResolvedModels}
+                      loading={loadingResolvedModels}
+                      countLabel={t('aiProviders.card.verifiedModelCount', { count: resolvedModelOptions.length })}
+                    />
+                  </div>
                 )}
 
                 {showEditableModelField && !hasResolvedModelOptions && (
                   <div className="space-y-2.5">
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-lg"
+                        onClick={() => void loadResolvedModelOptions()}
+                        disabled={
+                          loadingResolvedModels
+                          || !selectedType
+                          || ((typeInfo?.requiresApiKey ?? false) && !apiKey.trim())
+                          || ((typeInfo?.showBaseUrl ?? false) && !baseUrl.trim())
+                        }
+                      >
+                        {t('aiProviders.dialog.loadModels')}
+                      </Button>
+                    </div>
                     <Label htmlFor="modelId" className={labelClasses}>{t('aiProviders.dialog.modelId')}</Label>
                     <Input
                       id="modelId"

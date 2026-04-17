@@ -19,7 +19,7 @@ import {
   type AppSettings,
   type BackupPayload,
 } from '../../utils/store';
-import { syncMemorySettingsToOpenClaw } from '../../utils/openclaw-auth';
+import { syncMemorySettingsToOpenClaw, syncModelRuntimeSettingsToOpenClaw } from '../../utils/openclaw-auth';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -87,7 +87,8 @@ function normalizePathForCompare(path: string): string {
 
 function patchTouchesMemory(patch: Partial<AppSettings>): boolean {
   return Object.prototype.hasOwnProperty.call(patch, 'sessionMemoryEnabled')
-    || Object.prototype.hasOwnProperty.call(patch, 'memorySearchEnabled');
+    || Object.prototype.hasOwnProperty.call(patch, 'memorySearchEnabled')
+    || Object.prototype.hasOwnProperty.call(patch, 'localModelLean');
 }
 
 async function applyRuntimeSettingsSideEffects(
@@ -114,6 +115,9 @@ async function applyRuntimeSettingsSideEffects(
     await syncMemorySettingsToOpenClaw({
       sessionMemoryEnabled: settings.sessionMemoryEnabled,
       memorySearchEnabled: settings.memorySearchEnabled,
+    });
+    await syncModelRuntimeSettingsToOpenClaw({
+      localModelLean: settings.localModelLean,
     });
   }
 
@@ -576,7 +580,9 @@ export async function handleSettingsRoutes(
         key === 'proxyHttpsServer' ||
         key === 'proxyAllServer' ||
         key === 'proxyBypassRules';
-      const memoryChanged = key === 'sessionMemoryEnabled' || key === 'memorySearchEnabled';
+      const memoryChanged = key === 'sessionMemoryEnabled'
+        || key === 'memorySearchEnabled'
+        || key === 'localModelLean';
       await applyRuntimeSettingsSideEffects(ctx, {
         source: proxyChanged
           ? 'settings.proxy'

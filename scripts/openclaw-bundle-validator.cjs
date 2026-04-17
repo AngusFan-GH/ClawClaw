@@ -1,5 +1,6 @@
 const { existsSync, readdirSync, readFileSync } = require('fs');
 const { join } = require('path');
+const { createRequire } = require('module');
 const semver = require('semver');
 
 function listPackageEntries(nodeModulesDir) {
@@ -175,9 +176,28 @@ function formatValidationIssues(issues, limit = 20) {
   });
 }
 
+function verifyBundledRuntimeResolutions(bundleRoot, specifiers) {
+  const bundleRequire = createRequire(join(bundleRoot, 'package.json'));
+  const issues = [];
+
+  for (const specifier of specifiers) {
+    try {
+      bundleRequire.resolve(specifier);
+    } catch (error) {
+      issues.push({
+        specifier,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return issues;
+}
+
 module.exports = {
   parseDependencySpec,
   isCheckableRange,
   validateBundledNodeModules,
   formatValidationIssues,
+  verifyBundledRuntimeResolutions,
 };

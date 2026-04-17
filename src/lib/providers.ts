@@ -130,6 +130,7 @@ export interface ProviderAccount {
     customModels?: string[];
     localModel?: boolean;
     localModelProvider?: boolean;
+    allowPrivateNetwork?: boolean;
     presetId?: string;
     primaryPresetId?: string;
     presetIds?: string[];

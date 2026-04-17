@@ -70,6 +70,7 @@ export interface AppSettings {
   // Memory
   sessionMemoryEnabled: boolean;
   memorySearchEnabled: boolean;
+  localModelLean: boolean;
 
   // Startup optimization: hash of provider config state at last successful sync.
   // If unchanged since last sync, expensive runtime sync steps are skipped.
@@ -122,6 +123,7 @@ const defaults: AppSettings = {
   // Memory
   sessionMemoryEnabled: true,
   memorySearchEnabled: true,
+  localModelLean: false,
 
   // Startup optimization
   providerSyncHash: '',
@@ -440,4 +442,3 @@ export async function createAutoBackup(reason: string): Promise<string | null> {
     return null;
   }
 }
-

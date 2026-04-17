@@ -84,4 +84,90 @@ describe('openclaw auth plugin entry sync', () => {
       },
     });
   });
+
+  it('migrates legacy Moonshot Kimi web search config into plugins.entries', async () => {
+    await writeOpenClawJson({
+      models: {
+        providers: {
+          moonshot: {
+            baseUrl: 'https://api.moonshot.cn/v1',
+            api: 'openai-completions',
+          },
+        },
+      },
+      tools: {
+        web: {
+          search: {
+            kimi: {
+              apiKey: 'legacy-inline-key',
+              timeoutMs: 5000,
+            },
+          },
+        },
+      },
+    });
+
+    const { syncProviderConfigToOpenClaw } = await import('@electron/utils/openclaw-auth');
+    await syncProviderConfigToOpenClaw('moonshot', 'kimi-k2.5', {
+      baseUrl: 'https://api.moonshot.cn/v1',
+      api: 'openai-completions',
+      apiKeyEnv: 'MOONSHOT_API_KEY',
+    });
+
+    const config = await readOpenClawJson();
+    expect(config.tools).toBeUndefined();
+    expect(config.plugins).toEqual({
+      entries: {
+        moonshot: {
+          config: {
+            webSearch: {
+              timeoutMs: 5000,
+              baseUrl: 'https://api.moonshot.cn/v1',
+            },
+          },
+        },
+      },
+    });
+  });
+
+  it('writes allowPrivateNetwork into models.providers.request for self-hosted providers', async () => {
+    await writeOpenClawJson({});
+
+    const { syncProviderConfigToOpenClaw } = await import('@electron/utils/openclaw-auth');
+    await syncProviderConfigToOpenClaw('custom-runtime', 'my-model', {
+      baseUrl: 'http://127.0.0.1:4000/v1',
+      api: 'openai-completions',
+      allowPrivateNetwork: true,
+    });
+
+    const config = await readOpenClawJson();
+    expect(config.models).toEqual({
+      providers: {
+        'custom-runtime': {
+          baseUrl: 'http://127.0.0.1:4000/v1',
+          api: 'openai-completions',
+          models: [{ id: 'my-model', name: 'my-model' }],
+          request: {
+            allowPrivateNetwork: true,
+          },
+        },
+      },
+    });
+  });
+
+  it('syncs localModelLean into agents.defaults.experimental', async () => {
+    await writeOpenClawJson({});
+
+    const { syncModelRuntimeSettingsToOpenClaw } = await import('@electron/utils/openclaw-auth');
+    await syncModelRuntimeSettingsToOpenClaw({ localModelLean: true });
+
+    const config = await readOpenClawJson();
+    expect(config.agents).toEqual({
+      defaults: {
+        experimental: {
+          localModelLean: true,
+        },
+      },
+    });
+  });
 });

@@ -74,6 +74,7 @@ type RuntimeProviderSyncContext = {
   meta: ReturnType<typeof getProviderConfig>;
   api: string;
   disableTools: boolean;
+  allowPrivateNetwork: boolean;
 };
 
 type GatewayRefreshMode = 'reload' | 'restart';
@@ -503,6 +504,7 @@ async function resolveRuntimeSyncContext(config: ProviderConfig): Promise<Runtim
     meta,
     api,
     disableTools: config.type === 'vllm',
+    allowPrivateNetwork: account?.metadata?.allowPrivateNetwork === true,
   };
 }
 
@@ -520,6 +522,7 @@ async function syncRuntimeProviderConfig(
     apiKeyEnv: context.meta?.apiKeyEnv,
     headers: context.meta?.headers,
     disableTools: context.disableTools,
+    allowPrivateNetwork: context.allowPrivateNetwork,
   });
 }
 
@@ -626,6 +629,7 @@ export async function syncUpdatedProviderToRuntime(
           api: context.api,
           apiKeyEnv: context.meta?.apiKeyEnv,
           headers: context.meta?.headers,
+          allowPrivateNetwork: context.allowPrivateNetwork,
         }, fallbackModels);
       } else {
         await setOpenClawDefaultModel(ock, modelOverride, fallbackModels);
@@ -635,6 +639,7 @@ export async function syncUpdatedProviderToRuntime(
         baseUrl: config.baseUrl,
         api: config.apiProtocol || 'openai-completions',
         disableTools: context.disableTools,
+        allowPrivateNetwork: context.allowPrivateNetwork,
       }, fallbackModels);
     }
   }

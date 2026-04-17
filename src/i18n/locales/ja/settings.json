@@ -105,10 +105,14 @@
       "replaceApiKey": "API キーを置き換える",
       "replaceApiKeyHelp": "現在保存されている API キーをそのまま使う場合は、この欄を空のままにしてください。",
       "baseUrl": "ベース URL",
+      "allowPrivateNetwork": "プライベートネットワークを許可",
+      "allowPrivateNetworkHelp": "このセルフホスト型プロバイダーが OpenClaw 経由で localhost、RFC1918、その他のプライベートネットワークへ接続できるようにします。",
       "model": "モデル",
       "modelId": "モデル ID",
       "verifiedModels": "検証済みモデル",
       "verifiedModelsHelp": "無効なモデル ID を保存しないよう、この接続先が返した実在モデルを優先して選択します。",
+      "loadModels": "検証済みモデルを取得",
+      "reloadModels": "検証済みモデルを再取得",
       "searchModels": "モデル ID または名前で検索",
       "noFilteredModels": "現在の絞り込み条件に一致するモデルはありません",
       "filteredModelCount_one": "選択可能モデル {{count}} 件",
@@ -240,7 +244,9 @@
     "sessionMemory": "会話メモリを自動保存",
     "sessionMemoryDesc": "有効にすると、新しい会話を始めるときや会話をリセットするときに、これまでの会話内容を自動で保存します。",
     "search": "メモリ検索を有効化",
-    "searchDesc": "有効にすると、後の会話で以前に保存した内容を思い出して使えるようになります。変更後は Gateway が自動再起動されます。"
+    "searchDesc": "有効にすると、後の会話で以前に保存した内容を思い出して使えるようになります。変更後は Gateway が自動再起動されます。",
+    "localModelLean": "ローカルモデルの軽量実行モード",
+    "localModelLeanDesc": "有効にすると、OpenClaw はローカルモデルでより軽量な実行設定を優先します。ローカル推論のオーバーヘッドを抑えたい場合に有効です。変更後は Gateway が自動再起動されます。"
   },
   "updates": {
     "title": "アップデート",

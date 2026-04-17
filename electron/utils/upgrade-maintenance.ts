@@ -1,5 +1,5 @@
 import { app } from 'electron';
-import { readFile } from 'fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'path';
 import { getDataDir, getOpenClawDir } from './paths';
 import { logger } from './logger';

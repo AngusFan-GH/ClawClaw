@@ -680,7 +680,7 @@ export function AutoConfiguredLocalModelContent({
   );
 }
 
-const OPENAI_OAUTH_PREFERRED_MODEL_ID = 'gpt-5.4';
+const OPENAI_OAUTH_PREFERRED_MODEL_IDS = ['gpt-5.4-pro', 'gpt-5.4'] as const;
 
 function normalizeOAuthSelectedModel(vendorId: string, modelId?: string | null): string {
   const normalized = modelId?.trim() || '';
@@ -688,7 +688,7 @@ function normalizeOAuthSelectedModel(vendorId: string, modelId?: string | null):
     return '';
   }
   if (vendorId === 'openai' && (normalized === 'gpt-5.2' || normalized === 'gpt-5.3-codex')) {
-    return OPENAI_OAUTH_PREFERRED_MODEL_ID;
+    return OPENAI_OAUTH_PREFERRED_MODEL_IDS[1];
   }
   return normalized;
 }
@@ -709,8 +709,12 @@ function pickOAuthModelSelection(
     return normalizedFallback;
   }
 
-  if (vendorId === 'openai' && options.some((option) => option.id === OPENAI_OAUTH_PREFERRED_MODEL_ID)) {
-    return OPENAI_OAUTH_PREFERRED_MODEL_ID;
+  if (vendorId === 'openai') {
+    for (const preferredId of OPENAI_OAUTH_PREFERRED_MODEL_IDS) {
+      if (options.some((option) => option.id === preferredId)) {
+        return preferredId;
+      }
+    }
   }
 
   return options[0]?.id || normalizedFallback || normalizedPreferred || '';

@@ -89,7 +89,7 @@ Building AI agents shouldn't require mastering the command line. ClawClaw was de
 ClawClaw is built directly upon the official **OpenClaw** core. Instead of requiring a separate installation, we embed the runtime within the application to provide a seamless "battery-included" experience.
 
 We are committed to maintaining strict alignment with the upstream OpenClaw project, ensuring that you always have access to the latest capabilities, stability improvements, and ecosystem compatibility provided by the official releases.
-The bundled stable runtime is now aligned to **OpenClaw 2026.4.2**, which keeps ClawClaw on the current upstream stable release track while preserving the packaged desktop integration.
+The bundled stable runtime is now aligned to **OpenClaw 2026.4.15**, which keeps ClawClaw on the current upstream stable release track while preserving the packaged desktop integration.
 
 ---
 
@@ -119,7 +119,7 @@ Extend your AI agents with pre-built skills. Browse, install, and manage skills 
 
 ### 🔐 Secure Provider Integration
 
-Connect to multiple AI providers (OpenAI, Anthropic, OpenCode Go, and more) with API keys or supported OAuth flows. OpenAI Codex sign-in follows OpenClaw's native browser OAuth flow and chooses the model from OpenClaw's available Codex model list after sign-in. Other provider accounts now prefer verified model lists resolved from the upstream endpoint when available, while still allowing manual model IDs if a provider cannot enumerate models. Model-type filters are shown only when the upstream source explicitly returns category metadata; otherwise the picker falls back to search-only, with no heuristic guessing in the UI. Self-hosted OpenAI-compatible runtimes such as Ollama, vLLM, and SGLang remain available as first-class providers, while the dedicated local-model center continues to handle the project-specific local model workflow. Credentials are stored securely in your system's native keychain.
+Connect to multiple AI providers (OpenAI, Anthropic, OpenCode Go, and more) with API keys or supported OAuth flows. OpenAI Codex sign-in follows OpenClaw's native browser OAuth flow and now prefers newer upstream Codex models such as `gpt-5.4-pro` when that model is actually available, while keeping existing accounts on their saved model until you change them. Other provider accounts now prefer verified model lists resolved from the upstream endpoint when available, while still allowing manual model IDs if a provider cannot enumerate models. Model-type filters are shown only when the upstream source explicitly returns category metadata; otherwise the picker falls back to search-only, with no heuristic guessing in the UI. Self-hosted OpenAI-compatible runtimes such as Ollama, vLLM, and SGLang remain available as first-class providers, and each self-hosted account can now explicitly allow private-network endpoints when your OpenClaw request path must reach LAN or localhost services. The dedicated local-model center continues to handle the project-specific local model workflow. Credentials are stored securely in your system's native keychain.
 
 > vLLM note: ClawClaw defaults vLLM models to `supportsTools: false` to avoid the common `400 "auto" tool choice` server error. You can now enable vLLM tool calling explicitly in provider settings, but your vLLM server must be started with `--enable-auto-tool-choice` and `--tool-call-parser`.
 
@@ -230,6 +230,7 @@ Open **Settings → Memory** to control how ClawClaw and OpenClaw preserve and r
 
 - **Auto-archive session memory** enables OpenClaw's bundled `session-memory` hook. On `/new` or `/reset`, OpenClaw writes a memory summary for the finished conversation into the workspace `memory/` folder.
 - **Enable memory search** enables OpenClaw's `memorySearch` runtime configuration so later conversations can recall `MEMORY.md` and `memory/*.md` through the upstream `memory_search` and `memory_get` tools.
+- **Lean local model runtime** enables OpenClaw's `agents.defaults.experimental.localModelLean` switch so local-model execution paths can prefer the lighter upstream runtime mode.
 
 Notes:
 

@@ -20,7 +20,7 @@ const mockFns = vi.hoisted(() => ({
     durationMs: 10,
     warnings: ['warning'],
   })),
-  readFile: vi.fn(async () => JSON.stringify({ version: '2026.4.2' })),
+  readFile: vi.fn(async () => JSON.stringify({ version: '2026.4.15' })),
 }));
 
 vi.mock('electron', () => ({
@@ -59,8 +59,23 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return {
     ...actual,
-    default: actual,
     readFile: mockFns.readFile,
+    default: {
+      ...actual,
+      readFile: mockFns.readFile,
+    },
+  };
+});
+
+vi.mock('fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs/promises')>();
+  return {
+    ...actual,
+    readFile: mockFns.readFile,
+    default: {
+      ...actual,
+      readFile: mockFns.readFile,
+    },
   };
 });
 
@@ -83,7 +98,7 @@ describe('upgrade maintenance', () => {
     vi.resetModules();
     vi.clearAllMocks();
     storeState.stores.clear();
-    mockFns.readFile.mockResolvedValue(JSON.stringify({ version: '2026.4.2' }));
+    mockFns.readFile.mockResolvedValue(JSON.stringify({ version: '2026.4.15' }));
   });
 
   it('runs once when current versions have not been recorded yet', async () => {
@@ -103,8 +118,8 @@ describe('upgrade maintenance', () => {
     expect(mockFns.runOpenClawDoctorFix).toHaveBeenCalledWith({ timeoutMs: 120_000 });
 
     const persisted = storeState.stores.get('upgrade-state') || {};
-    expect(persisted.lastPreflightOpenClawVersion).toBe('2026.4.2');
-    expect(persisted.lastDoctorFixOpenClawVersion).toBe('2026.4.2');
+    expect(persisted.lastPreflightOpenClawVersion).toBe('2026.4.15');
+    expect(persisted.lastDoctorFixOpenClawVersion).toBe('2026.4.15');
     expect(persisted.lastDoctorFixStatus).toBe('success_with_warnings');
     expect(persisted.lastDoctorFixWarningCount).toBe(1);
   });
@@ -112,7 +127,7 @@ describe('upgrade maintenance', () => {
   it('does not rerun when recorded versions already match the current app and openclaw', async () => {
     storeState.stores.set('upgrade-state', {
       lastAppVersion: '0.1.16',
-      lastOpenClawVersion: '2026.4.2',
+      lastOpenClawVersion: '2026.4.15',
     });
 
     const { performUpgradeMaintenanceIfNeeded } = await import('@electron/utils/upgrade-maintenance');
