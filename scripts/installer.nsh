@@ -7,6 +7,7 @@
 ; (which sets SetDetailsPrint both instead of none) is found before
 ; electron-builder's templates version.
 !addincludedir "${PROJECT_DIR}\scripts"
+!include "WordFunc.nsh"
 
 !define MUI_INSTFILESPAGE_SHOWDETAILS show
 !define MUI_UNINSTFILESPAGE_SHOWDETAILS show
@@ -15,6 +16,7 @@ ShowInstDetails show
 ShowUnInstDetails show
 
 Var /GLOBAL shouldRunLegacyUninstaller
+Var /GLOBAL isLegacyInstalledVersion
 
 ; assistedInstaller.nsh calls MUI_PAGE_DIRECTORY (when allowToChangeInstallationDirectory
 ; is true), which sets MUI_PAGE_CUSTOMFUNCTION_PRE="instFilesPre".  MUI_PAGE_INSTFILES
@@ -227,6 +229,32 @@ FunctionEnd
       ${endIf}
     ${endIf}
   ${endif}
+!macroend
+
+!macro ResolveInstalledVersionCompatibility
+  StrCpy $isLegacyInstalledVersion "false"
+  StrCpy $R5 ""
+  StrCpy $R6 ""
+
+  ReadRegStr $R5 HKCU "${UNINSTALL_REGISTRY_KEY}" "DisplayVersion"
+  ReadRegStr $R6 HKLM "${UNINSTALL_REGISTRY_KEY}" "DisplayVersion"
+
+  ${If} $R5 != ""
+    ${VersionCompare} "$R5" "0.1.15" $R7
+    ${If} $R7 == 0
+    ${OrIf} $R7 == 2
+      StrCpy $isLegacyInstalledVersion "true"
+    ${EndIf}
+  ${EndIf}
+
+  ${If} $isLegacyInstalledVersion != "true"
+  ${AndIf} $R6 != ""
+    ${VersionCompare} "$R6" "0.1.15" $R7
+    ${If} $R7 == 0
+    ${OrIf} $R7 == 2
+      StrCpy $isLegacyInstalledVersion "true"
+    ${EndIf}
+  ${EndIf}
 !macroend
 
 !macro FallbackInteractiveOldUninstall

@@ -60,6 +60,7 @@ ${IfNot} ${Silent}
   DetailPrint "$(installPhaseRemovePrevious)"
 ${endif}
 !insertmacro ResolveUpgradeStrategy
+!insertmacro ResolveInstalledVersionCompatibility
 !insertmacro RunManagedUpgradeCleanup
 ${if} $shouldRunLegacyUninstaller == "false"
   ${IfNot} ${Silent}
@@ -87,8 +88,17 @@ ${IfNot} ${Silent}
   SetDetailsPrint both
   DetailPrint "$(installPhaseCleanRuntime)"
 ${endif}
+${if} $isLegacyInstalledVersion == "true"
+  ${IfNot} ${Silent}
+    DetailPrint "Detected an installed ClawClaw version at or below 0.1.15; running expanded runtime cleanup."
+  ${endif}
+${endif}
 RMDir /r "$INSTDIR\resources\openclaw"
 RMDir /r "$INSTDIR\resources\openclaw-plugins"
+${if} $isLegacyInstalledVersion == "true"
+  RMDir /r "$INSTDIR\resources\bin"
+  RMDir /r "$INSTDIR\resources\cli"
+${endif}
 
 SetOutPath $INSTDIR
 

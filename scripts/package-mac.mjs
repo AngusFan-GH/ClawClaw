@@ -108,6 +108,14 @@ function createPortableDataLayout(portableDir) {
   }
 }
 
+function validatePortableSupportFiles(stagingApp, arch) {
+  const helperPath = resolve(stagingApp, 'Contents', 'Resources', 'resources', 'portable-updater-mac.sh');
+  if (!existsSync(helperPath)) {
+    throw new Error(`[package:mac] Portable updater helper missing for ${arch}: ${helperPath}`);
+  }
+  execSync(`chmod +x "${helperPath}"`, { stdio: 'ignore' });
+}
+
 function buildPortableForArch(arch) {
   ensureDir(macDir);
 
@@ -151,6 +159,7 @@ function buildPortableForArch(arch) {
   const stagingApp = resolve(stagingDir, 'ClawClaw.app');
   const stagingResources = resolve(stagingApp, 'Contents', 'Resources');
   createPortableDataLayout(resolve(stagingResources, 'portable'));
+  validatePortableSupportFiles(stagingApp, arch);
   console.log('[package:mac] Prepared portable data directory inside app bundle');
 
   // Stage → portable dir

@@ -258,6 +258,8 @@
     "autoCheckDesc": "Check for updates on startup",
     "autoDownload": "Auto-update",
     "autoDownloadDesc": "Automatically download and install updates",
+    "portableAutoCheckDesc": "Portable builds can still check for updates on startup.",
+    "portableAutoDownloadDesc": "Portable builds use a separate download-and-restart flow. Background auto-download stays disabled.",
     "unsupported": "Automatic updates are not available in the current environment. Install a packaged build to use them.",
     "actionsDisabled": "Unavailable",
     "status": {
@@ -265,6 +267,8 @@
       "downloading": "Downloading update",
       "available": "Update available: v{{version}}",
       "downloaded": "Ready to install: v{{version}}",
+      "installing": "Installing update",
+      "migrationRequired": "This portable build requires a one-time manual migration before in-place updates are available.",
       "autoInstalling": "Restarting to install update in {{seconds}}s",
       "failed": "Update check failed",
       "latest": "You have the latest version",
@@ -276,6 +280,8 @@
       "downloading": "Downloading",
       "download": "Download Update",
       "install": "Install & Restart",
+      "installAndRestart": "Install & Restart",
+      "manualMigration": "Manual migration required",
       "cancelAutoInstall": "Cancel",
       "retry": "Retry",
       "check": "Check for Updates"

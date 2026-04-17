@@ -258,6 +258,8 @@
     "autoCheckDesc": "起動時に更新を確認",
     "autoDownload": "自動アップデート",
     "autoDownloadDesc": "更新を自動的にダウンロードしてインストール",
+    "portableAutoCheckDesc": "ポータブル版でも起動時の更新確認は利用できます。",
+    "portableAutoDownloadDesc": "ポータブル版は専用の「ダウンロードして再起動で適用」フローを使うため、自動ダウンロードは無効のままです。",
     "unsupported": "現在の環境では自動更新を利用できません。パッケージ版をインストールしてください。",
     "actionsDisabled": "利用不可",
     "status": {
@@ -265,6 +267,8 @@
       "downloading": "更新をダウンロード中",
       "available": "更新あり: v{{version}}",
       "downloaded": "インストール準備完了: v{{version}}",
+      "installing": "更新をインストール中",
+      "migrationRequired": "このポータブル版では、原位置更新を使う前に一度だけ手動移行が必要です。",
       "autoInstalling": "{{seconds}} 秒後に再起動して更新をインストールします...",
       "failed": "更新の確認に失敗しました",
       "latest": "最新バージョンです",
@@ -276,6 +280,8 @@
       "downloading": "ダウンロード中",
       "download": "更新をダウンロード",
       "install": "インストールして再起動",
+      "installAndRestart": "インストールして再起動",
+      "manualMigration": "手動移行が必要",
       "cancelAutoInstall": "キャンセル",
       "retry": "再試行",
       "check": "更新を確認"

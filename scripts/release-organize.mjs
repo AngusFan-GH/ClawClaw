@@ -16,6 +16,7 @@ const GROUPS = [
       /^latest\.yml$/i,
       /^ClawClaw-Setup-v.+\.exe(?:\.blockmap)?$/i,
       /^clawclaw-.+\.nsis\.7z$/i,
+      /^win(?:-.+)?-unpacked\.zip$/i,
     ],
   },
   {

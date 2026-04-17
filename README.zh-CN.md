@@ -245,7 +245,8 @@ ClawClaw 内置了代理设置，适用于需要通过本地代理客户端访�
 打开 **设置 → 更新**，可以控制自动检查 / 自动下载，并在打包版应用里手动触发更新检查。ClawClaw 当前只跟随稳定版发布源。
 在 Windows 上，打包更新继续使用 NSIS 差分更新，但安装器现在会在复制文件前强制清理受管的 `resources/openclaw` 和 `resources/openclaw-plugins` 目录，避免升级时保留旧运行时残留。升级阶段现在也只检查目标安装目录关联的进程，因此其他目录里的 `ClawClaw.exe` 副本不再误触发“应用仍在运行”的提示。安装器在复制完成后还会额外执行一次 OpenClaw 运行时自检，如果内置 CLI 树不健康，会在安装完成前直接中止。
 安装器状态文案也已细化为更具体的升级步骤，例如检查旧进程、停止内置 Gateway、清理旧运行时、复制文件和验证内置运行时。
-现在从旧版 ClawClaw 或旧版随包 OpenClaw 升级后的第一次启动，会在正常 Gateway 启动前自动执行一次性的升级维护：主动迁移旧版 provider 存储、修复受管插件镜像和较旧的 `openclaw.json` 结构，尽量避免等到启动失败后才被动修复。
+现在从旧版 ClawClaw 或旧版随包 OpenClaw 升级后的第一次启动，会在正常 Gateway 启动前、以及自动重新检查更新前，自动执行一次性的升级维护：主动迁移旧版 provider 存储、修复受管插件镜像和较旧的 `openclaw.json` 结构，尽量避免等到启动失败后才被动修复。
+Windows 安装版从 `0.1.15` 及更早版本升级时，还会走一条额外的兼容路径：安装器会在复制新文件前清理旧的内置 runtime 和 CLI 目录，首次启动也会强制执行更重的一轮 OpenClaw 修复，以兼容旧插件、旧 channel 和旧 runtime 布局。
 在 **设置 → 开发者** 中，现在可以直接运行 **OpenClaw Doctor** 和 **OpenClaw Doctor Fix**，对随包运行时执行诊断或修复迁移问题，而不必离开应用。
 
 ---
@@ -393,6 +394,7 @@ pnpm package:desktop      # 串行打包 macOS、Windows、Linux
 pnpm run package:organize # 将根目录产物整理到 release/v<version>/windows|mac|linux|metadata
 pnpm package:linux        # 为 Linux 打包
 pnpm run upload:update    # 上传 release/v<version>/windows/latest.yml 及其引用的 Windows 更新文件
+pnpm run upload:update:portable # 上传便携包及 updates-portable/stable 下的按平台 JSON manifest
 ```
 
 说明：
@@ -405,6 +407,8 @@ pnpm run upload:update    # 上传 release/v<version>/windows/latest.yml 及其�
 - `pnpm package:organize` 会把 builder 暂存到 release 根目录的产物整理到 `release/v<package.json version>/windows`、`release/v<package.json version>/mac`、`release/v<package.json version>/linux`、`release/v<package.json version>/metadata`。
 - `pnpm package:desktop` 会依次打 macOS、Windows、Linux。请保持串行执行，不要并行打各平台，因为它们共享 `dist`、`dist-electron` 和 `build/openclaw`。
 - `release/` 现在采用按版本分目录模式。旧版本会保留不动，只有同版本目录下的产物会被覆盖；更新上传脚本读取 `release/v<package.json version>/windows/latest.yml`。
+- `pnpm run upload:update` 会继续只负责 Windows 安装版更新发布，用来保持旧安装版依赖的 `latest.yml` 协议不变。
+- `pnpm run upload:update:portable` 则是独立的便携版更新发布脚本，会上传便携包，并生成 `win32-x64.json`、`darwin-arm64.json` 这类按平台区分的 manifest 到 `updates-portable/stable/`。
 - OpenClaw 受管插件镜像是在 `after-pack` 阶段复制进安装包，因此打包时不需要额外执行独立的 `bundle:openclaw-plugins`。
 
 ### 发版门禁

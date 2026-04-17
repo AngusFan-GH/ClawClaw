@@ -242,7 +242,8 @@ ClawClawには、Electron、OpenClaw Gateway、またはTelegramなどのチャ�
 **設定 → アップデート** では、自動確認 / 自動ダウンロードの制御と、パッケージ版アプリでの手動更新確認が行えます。ClawClaw は現在、安定版フィードのみを利用します。
 Windows では、パッケージ更新は引き続き NSIS の差分更新を使用しますが、インストーラーがコピー前に `resources/openclaw` と `resources/openclaw-plugins` を強制的にクリーンアップするようになり、旧ランタイムの残骸がアップグレード後に残らないようにしています。アップグレード時の実行中チェックも、対象のインストール先ディレクトリに紐づくプロセスだけを見るようになったため、別フォルダにある `ClawClaw.exe` のコピーで誤って「まだ起動中」と判定されにくくなりました。さらに、コピー完了後に OpenClaw ランタイムの自己診断を実行し、同梱 CLI ツリーが不健全な場合はインストール完了前に中断します。
 インストーラーの状態表示も、旧プロセスの確認、同梱 Gateway の停止、旧ランタイムのクリーンアップ、ファイルコピー、同梱ランタイムの検証といった具体的な段階に分けて表示するようになりました。
-また、旧バージョンの ClawClaw または同梱 OpenClaw から更新した直後の初回起動では、通常の Gateway 起動前に一度だけアップグレード保守を実行し、旧 provider ストア、管理プラグインミラー、古い `openclaw.json` 形状を先回りして修復します。起動失敗後の後追い修復に頼りにくくするためです。
+また、旧バージョンの ClawClaw または同梱 OpenClaw から更新した直後の初回起動では、通常の Gateway 起動前、かつ自動更新の再チェック前に、一度だけアップグレード保守を実行し、旧 provider ストア、管理プラグインミラー、古い `openclaw.json` 形状を先回りして修復します。起動失敗後の後追い修復に頼りにくくするためです。
+Windows のインストール版を `0.1.15` 以前から更新する場合は、追加の互換経路も有効になります。インストーラは新しいファイルをコピーする前に旧バンドル runtime / CLI ディレクトリを削除し、初回起動では旧プラグイン・旧 channel・旧 runtime レイアウト向けの重めの OpenClaw 修復を強制します。
 **設定 → 開発者** から **OpenClaw Doctor** と **OpenClaw Doctor Fix** を直接実行できるようになり、同梱ランタイムに対する診断や移行修復をアプリ内で確認できます。
 
 ---
@@ -390,6 +391,7 @@ pnpm package:desktop      # macOS・Windows・Linux を直列でまとめてパ�
 pnpm run package:organize # ルート出力を release/v<version>/windows|mac|linux|metadata に整理
 pnpm package:linux        # Linux向けにパッケージ化
 pnpm run upload:update    # release/v<version>/windows/latest.yml と参照される Windows 更新ファイルをアップロード
+pnpm run upload:update:portable # ポータブル zip と updates-portable/stable 配下のターゲット別 JSON manifest をアップロード
 ```
 
 注記:
@@ -402,6 +404,8 @@ pnpm run upload:update    # release/v<version>/windows/latest.yml と参照さ�
 - `pnpm package:organize` は builder が一時的に release 直下へ出力した成果物を `release/v<package.json version>/windows`、`release/v<package.json version>/mac`、`release/v<package.json version>/linux`、`release/v<package.json version>/metadata` へ振り分けます。
 - `pnpm package:desktop` は macOS、Windows、Linux の順にパッケージングを実行します。`dist`、`dist-electron`、`build/openclaw` を共有するため、各プラットフォームのパッケージングは並列実行しないでください。
 - `release/` はバージョン別ディレクトリで運用します。既存バージョンは保持され、同じバージョンの成果物だけが上書きされます。更新アップロードスクリプトは `release/v<package.json version>/windows/latest.yml` を参照します。
+- `pnpm run upload:update` は引き続き Windows インストール版専用です。古いインストール版が依存する `latest.yml` 契約を維持するため、この挙動は分離したままにしています。
+- `pnpm run upload:update:portable` はポータブル版専用の公開スクリプトで、ポータブル成果物と `win32-x64.json`・`darwin-arm64.json` のようなターゲット別 manifest を `updates-portable/stable/` に配置します。
 - 同梱 OpenClaw プラグインミラーは `after-pack` 段階でコピーされるため、パッケージ化時に別途 `bundle:openclaw-plugins` を実行する必要はありません。
 
 ### Release Gate

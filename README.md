@@ -245,7 +245,8 @@ Open **Settings → Data & Uninstall** to export a JSON backup of your current c
 Open **Settings → Updates** to control auto-check / auto-download behavior and manually trigger update checks from the packaged app. ClawClaw currently follows the stable release feed only.
 On Windows, packaged updates continue to use NSIS differential packages, but the installer now force-cleans the managed `resources/openclaw` and `resources/openclaw-plugins` directories before copying files. The upgrade flow also checks only processes tied to the target install directory, so unrelated `ClawClaw.exe` copies elsewhere no longer trigger false "app is still running" prompts. It also runs a post-copy OpenClaw runtime validation step and aborts before finishing if the bundled CLI tree is unhealthy.
 The installer status text is now split into concrete upgrade steps such as checking old processes, stopping the bundled Gateway, cleaning the old runtime, copying files, and validating the bundled runtime.
-On the first launch after upgrading from an older ClawClaw or bundled OpenClaw version, ClawClaw now runs a one-time maintenance pass before normal Gateway startup so legacy provider records, managed plugin mirrors, and older `openclaw.json` shapes are repaired proactively instead of waiting for a startup failure.
+On the first launch after upgrading from an older ClawClaw or bundled OpenClaw version, ClawClaw now runs a one-time maintenance pass before normal Gateway startup and before any automatic update re-check so legacy provider records, managed plugin mirrors, and older `openclaw.json` shapes are repaired proactively instead of waiting for a startup failure.
+Windows installed-build upgrades from `0.1.15` and earlier also trigger an expanded compatibility path: the installer clears legacy bundled runtime and CLI directories before copying new files, and the first launch forces a heavier OpenClaw repair pass for older plugin, channel, and runtime layouts.
 In **Settings → Developer**, you can run **OpenClaw Doctor** and **OpenClaw Doctor Fix** directly against the bundled runtime to inspect or repair migration issues without leaving the app.
 
 ---
@@ -393,6 +394,7 @@ pnpm package:desktop      # Package macOS, Windows, and Linux in one serial work
 pnpm run package:organize # Re-home staged artifacts under release/v<version>/windows|mac|linux|metadata
 pnpm package:linux        # Package for Linux
 pnpm run upload:update    # Upload release/v<version>/windows/latest.yml and referenced Windows update artifacts
+pnpm run upload:update:portable # Upload portable zips + per-platform JSON manifests under updates-portable/stable
 ```
 
 Notes:
@@ -405,6 +407,8 @@ Notes:
 - `pnpm package:organize` moves root-level builder output into `release/v<package.json version>/windows`, `release/v<package.json version>/mac`, `release/v<package.json version>/linux`, and `release/v<package.json version>/metadata`.
 - `pnpm package:desktop` runs macOS, Windows, and Linux packaging serially. Keep it serial; do not run platform packaging in parallel because they share `dist`, `dist-electron`, and `build/openclaw`.
 - `release/` now uses versioned directories. Existing versions are preserved; only artifacts inside the same version directory are replaced. The updater uploader reads from `release/v<package.json version>/windows/latest.yml`.
+- `pnpm run upload:update` is intentionally kept as the Windows installed-build uploader. It preserves the legacy `latest.yml` contract for older installed versions.
+- `pnpm run upload:update:portable` is the separate portable update publisher. It uploads portable artifacts and generates per-target JSON manifests such as `win32-x64.json` and `darwin-arm64.json` under `updates-portable/stable/`.
 - Bundled OpenClaw plugin mirrors are copied during `after-pack`, so packaging does not require a separate `bundle:openclaw-plugins` step.
 
 ### Release Gate

@@ -35,6 +35,7 @@ export function UpdateSettings({ versionOnly = false }: { versionOnly?: boolean 
     error,
     isInitialized,
     isSupported,
+    isPortable,
     hasCheckedOnce,
     autoInstallCountdown,
     init,
@@ -96,8 +97,9 @@ export function UpdateSettings({ versionOnly = false }: { versionOnly?: boolean 
 
   useEffect(() => {
     if (versionOnly) return;
+    if (isPortable) return;
     void setAutoDownload(autoDownloadUpdate);
-  }, [autoDownloadUpdate, setAutoDownload, versionOnly]);
+  }, [autoDownloadUpdate, isPortable, setAutoDownload, versionOnly]);
 
   useEffect(() => {
     if (versionOnly) return;
@@ -132,6 +134,9 @@ export function UpdateSettings({ versionOnly = false }: { versionOnly?: boolean 
     if (!isSupported) {
       return t('updates.unsupported');
     }
+    if (status === 'migration-required') {
+      return error || t('updates.status.migrationRequired');
+    }
     if (status === 'downloaded' && autoInstallCountdown != null && autoInstallCountdown >= 0) {
       return t('updates.status.autoInstalling', { seconds: autoInstallCountdown });
     }
@@ -144,6 +149,8 @@ export function UpdateSettings({ versionOnly = false }: { versionOnly?: boolean 
         return t('updates.status.available', { version: updateInfo?.version });
       case 'downloaded':
         return t('updates.status.downloaded', { version: updateInfo?.version });
+      case 'installing':
+        return t('updates.status.installing');
       case 'error':
         return error || t('updates.status.failed');
       case 'not-available':
@@ -185,6 +192,14 @@ export function UpdateSettings({ versionOnly = false }: { versionOnly?: boolean 
           </Button>
         );
       case 'downloaded':
+        if (isPortable) {
+          return (
+            <Button onClick={installUpdate} size="sm">
+              <Rocket className="mr-2 h-4 w-4" />
+              {t('updates.action.installAndRestart')}
+            </Button>
+          );
+        }
         if (autoInstallCountdown != null && autoInstallCountdown >= 0) {
           return (
             <Button onClick={cancelAutoInstall} size="sm" variant="outline">
@@ -204,6 +219,12 @@ export function UpdateSettings({ versionOnly = false }: { versionOnly?: boolean 
           <Button onClick={handleCheckForUpdates} variant="outline" size="sm">
             <RefreshCw className="mr-2 h-4 w-4" />
             {t('updates.action.retry')}
+          </Button>
+        );
+      case 'migration-required':
+        return (
+          <Button disabled variant="outline" size="sm">
+            {t('updates.action.manualMigration')}
           </Button>
         );
       default:
@@ -290,7 +311,9 @@ export function UpdateSettings({ versionOnly = false }: { versionOnly?: boolean 
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-sm font-medium">{t('updates.autoCheck')}</p>
-                <p className="mt-1 text-[13px] text-muted-foreground">{t('updates.autoCheckDesc')}</p>
+                <p className="mt-1 text-[13px] text-muted-foreground">
+                  {isPortable ? t('updates.portableAutoCheckDesc') : t('updates.autoCheckDesc')}
+                </p>
               </div>
               <Switch checked={autoCheckUpdate} onCheckedChange={setAutoCheckUpdate} />
             </div>
@@ -300,9 +323,11 @@ export function UpdateSettings({ versionOnly = false }: { versionOnly?: boolean 
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-sm font-medium">{t('updates.autoDownload')}</p>
-                <p className="mt-1 text-[13px] text-muted-foreground">{t('updates.autoDownloadDesc')}</p>
+                <p className="mt-1 text-[13px] text-muted-foreground">
+                  {isPortable ? t('updates.portableAutoDownloadDesc') : t('updates.autoDownloadDesc')}
+                </p>
               </div>
-              <Switch checked={autoDownloadUpdate} onCheckedChange={setAutoDownloadUpdate} />
+              <Switch checked={autoDownloadUpdate} onCheckedChange={setAutoDownloadUpdate} disabled={isPortable} />
             </div>
           </div>
         </div>

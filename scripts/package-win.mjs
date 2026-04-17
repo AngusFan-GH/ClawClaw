@@ -70,6 +70,21 @@ const createPortableDataLayout = (portableDir) => {
   }
 };
 
+const validatePortableSupportFiles = (unpackedDir, arch) => {
+  const requiredPaths = [
+    join(unpackedDir, 'resources', 'resources', 'portable-updater-win.cjs'),
+    join(unpackedDir, 'resources', 'bin', 'node.exe'),
+  ];
+
+  for (const requiredPath of requiredPaths) {
+    if (!existsSync(requiredPath)) {
+      throw new Error(
+        `[package:win] Portable updater support file missing for ${arch}: ${requiredPath}`,
+      );
+    }
+  }
+};
+
 const stagePortableLaunchers = (archs) => {
   const resourcesDir = resolve(process.cwd(), 'resources');
   const portableLaunchers = ['Start ClawClaw.bat', 'Start ClawClaw.vbs', 'README Portable.txt'];
@@ -83,6 +98,7 @@ const stagePortableLaunchers = (archs) => {
 
     const portableDir = join(unpackedDir, 'portable');
     createPortableDataLayout(portableDir);
+    validatePortableSupportFiles(unpackedDir, arch);
 
     for (const launcher of portableLaunchers) {
       const source = join(resourcesDir, launcher);

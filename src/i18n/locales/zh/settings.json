@@ -258,6 +258,8 @@
     "autoCheckDesc": "启动时检查更新",
     "autoDownload": "自动更新",
     "autoDownloadDesc": "自动下载并安装更新",
+    "portableAutoCheckDesc": "便携版仍可在启动时自动检查更新。",
+    "portableAutoDownloadDesc": "便携版使用单独的“下载并重启安装”流程，后台自动下载会保持关闭。",
     "unsupported": "当前环境不支持自动更新，请使用安装包手动升级。",
     "actionsDisabled": "当前不可用",
     "status": {
@@ -265,6 +267,8 @@
       "downloading": "正在下载更新",
       "available": "可用更新：v{{version}}",
       "downloaded": "准备安装：v{{version}}",
+      "installing": "正在安装更新",
+      "migrationRequired": "当前便携版需要先做一次手动迁移，之后才能使用原位在线更新。",
       "autoInstalling": "将在 {{seconds}} 秒后重启并安装更新...",
       "failed": "检查更新失败",
       "latest": "您已拥有最新版本",
@@ -276,6 +280,8 @@
       "downloading": "下载中",
       "download": "下载更新",
       "install": "安装并重启",
+      "installAndRestart": "安装并重启",
+      "manualMigration": "需要手动迁移",
       "cancelAutoInstall": "取消",
       "retry": "重试",
       "check": "检查更新"

@@ -358,13 +358,6 @@ async function initialize(): Promise<void> {
   // Register update handlers
   registerUpdateHandlers(appUpdater, mainWindow);
 
-  const { autoCheckUpdate } = currentSettings;
-  if (autoCheckUpdate && appUpdater.isSupported()) {
-    void appUpdater.checkForUpdates().catch((error) => {
-      logger.warn('Startup auto-update check failed:', error);
-    });
-  }
-
   // Minimize to tray on close instead of quitting (macOS & Windows)
   mainWindow.on('close', (event) => {
     if (!isQuitting()) {
@@ -395,11 +388,18 @@ async function initialize(): Promise<void> {
     const upgradeMaintenance = await performUpgradeMaintenanceIfNeeded();
     if (upgradeMaintenance.triggered) {
       logger.info(
-        `Upgrade maintenance completed (app ${upgradeMaintenance.previousAppVersion ?? 'none'} -> ${upgradeMaintenance.currentAppVersion}, openclaw ${upgradeMaintenance.previousOpenClawVersion ?? 'none'} -> ${upgradeMaintenance.currentOpenClawVersion ?? 'unknown'}, preflightTopics=${upgradeMaintenance.preflightRecoveredTopics.length}, doctorFix=${upgradeMaintenance.doctorFixStatus ?? 'skipped'}, doctorWarnings=${upgradeMaintenance.doctorFixWarningCount})`,
+        `Upgrade maintenance completed (app ${upgradeMaintenance.previousAppVersion ?? 'none'} -> ${upgradeMaintenance.currentAppVersion}, openclaw ${upgradeMaintenance.previousOpenClawVersion ?? 'none'} -> ${upgradeMaintenance.currentOpenClawVersion ?? 'unknown'}, legacyUpgrade=${upgradeMaintenance.legacyUpgradeRan}, preflightTopics=${upgradeMaintenance.preflightRecoveredTopics.length}, doctorFix=${upgradeMaintenance.doctorFixStatus ?? 'skipped'}, doctorWarnings=${upgradeMaintenance.doctorFixWarningCount})`,
       );
     }
   } catch (error) {
     logger.warn('Upgrade maintenance failed:', error);
+  }
+
+  const { autoCheckUpdate } = currentSettings;
+  if (autoCheckUpdate && appUpdater.isSupported()) {
+    void appUpdater.checkForUpdates().catch((error) => {
+      logger.warn('Startup auto-update check failed:', error);
+    });
   }
 
   // Bridge gateway and host-side events before any auto-start logic runs, so

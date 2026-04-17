@@ -64,6 +64,7 @@
     "package:mac:portable": "pnpm run package:prepare && pnpm run package:mac:portable:raw && pnpm run package:organize",
     "package:desktop": "pnpm run package:prepare && pnpm run package:mac:raw && pnpm run package:organize && pnpm run package:win:raw && pnpm run package:organize && pnpm run package:linux:raw && pnpm run package:organize",
     "upload:update": "node scripts/upload-update.mjs",
+    "upload:update:portable": "node scripts/upload-portable-update.mjs",
     "package:linux": "pnpm run package:prepare && pnpm run package:linux:raw && pnpm run package:organize",
     "release": "pnpm run uv:download && pnpm run package:prepare && electron-builder --publish always && pnpm run package:organize",
     "version:patch": "pnpm version patch",

@@ -10,6 +10,10 @@ const mockFns = vi.hoisted(() => ({
   ensureProviderStoreMigrated: vi.fn(async () => undefined),
   runOpenClawStartupPreflightRepair: vi.fn(async () => undefined),
   getLastStartupPreflightRecovery: vi.fn(() => null),
+  cleanupDanglingWeChatPluginState: vi.fn(async () => ({ cleanedDanglingState: false })),
+  cleanupLegacyChannelPlugins: vi.fn(async () => ({ cleaned: false })),
+  migrateLegacyLocalModelAccounts: vi.fn(async () => undefined),
+  cleanupOrphanLocalModelRuntimeAccounts: vi.fn(async () => ({ removedAccountIds: [] })),
   runOpenClawDoctorFix: vi.fn(async () => ({
     mode: 'fix',
     status: 'success',
@@ -90,6 +94,16 @@ vi.mock('@electron/services/providers/provider-migration', () => ({
 vi.mock('@electron/gateway/config-sync', () => ({
   runOpenClawStartupPreflightRepair: mockFns.runOpenClawStartupPreflightRepair,
   getLastStartupPreflightRecovery: mockFns.getLastStartupPreflightRecovery,
+}));
+
+vi.mock('@electron/utils/channel-config', () => ({
+  cleanupDanglingWeChatPluginState: mockFns.cleanupDanglingWeChatPluginState,
+  cleanupLegacyChannelPlugins: mockFns.cleanupLegacyChannelPlugins,
+}));
+
+vi.mock('@electron/services/providers/local-model-presets', () => ({
+  migrateLegacyLocalModelAccounts: mockFns.migrateLegacyLocalModelAccounts,
+  cleanupOrphanLocalModelRuntimeAccounts: mockFns.cleanupOrphanLocalModelRuntimeAccounts,
 }));
 
 vi.mock('@electron/utils/openclaw-doctor', () => ({

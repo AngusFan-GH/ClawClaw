@@ -9,6 +9,14 @@ import {
   runOpenClawStartupPreflightRepair,
 } from '../gateway/config-sync';
 import {
+  cleanupDanglingWeChatPluginState,
+  cleanupLegacyChannelPlugins,
+} from './channel-config';
+import {
+  cleanupOrphanLocalModelRuntimeAccounts,
+  migrateLegacyLocalModelAccounts,
+} from '../services/providers/local-model-presets';
+import {
   OPENCLAW_DOCTOR_FIX_TIMEOUT_MS,
   runOpenClawDoctorFix,
   type OpenClawDoctorStatus,
@@ -18,6 +26,8 @@ interface UpgradeState {
   lastAppVersion?: string;
   lastOpenClawVersion?: string;
   lastMaintenanceAt?: string;
+  lastLegacyUpgradeAt?: string;
+  lastLegacyUpgradeFromVersion?: string;
   lastPreflightAt?: string;
   lastPreflightAppVersion?: string;
   lastPreflightOpenClawVersion?: string;
@@ -65,12 +75,53 @@ function hasUpgrade(previous: string | null, current: string | null): boolean {
   return previous !== current;
 }
 
+function parseVersionParts(version: string): [number, number, number] | null {
+  const normalized = version.trim().replace(/^v/i, '');
+  const match = normalized.match(/^(\d+)\.(\d+)\.(\d+)/);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+export function isLegacyInstallUpgradeVersion(version: string | null | undefined): boolean {
+  if (!version) return false;
+  const parsed = parseVersionParts(version);
+  if (!parsed) return false;
+  const [major, minor, patch] = parsed;
+  if (major !== 0) {
+    return false;
+  }
+  if (minor !== 1) {
+    return minor < 1;
+  }
+  return patch <= 15;
+}
+
+async function runLegacyInstallUpgradeCleanup(previousAppVersion: string | null): Promise<void> {
+  logger.info(
+    `Running legacy install upgrade cleanup for app ${previousAppVersion ?? 'unknown'} -> ${app.getVersion()}`,
+  );
+
+  await ensureProviderStoreMigrated();
+  await migrateLegacyLocalModelAccounts();
+
+  const [wechatCleanup, channelCleanup, orphanRuntimeCleanup] = await Promise.all([
+    cleanupDanglingWeChatPluginState(),
+    cleanupLegacyChannelPlugins(),
+    cleanupOrphanLocalModelRuntimeAccounts(),
+  ]);
+
+  logger.info(
+    `Legacy install upgrade cleanup completed (wechat=${wechatCleanup.cleanedDanglingState}, legacyChannels=${channelCleanup.cleaned}, orphanLocalModelAccounts=${orphanRuntimeCleanup.removedAccountIds.length})`,
+  );
+}
+
 export interface UpgradeMaintenanceResult {
   triggered: boolean;
   currentAppVersion: string;
   previousAppVersion: string | null;
   currentOpenClawVersion: string | null;
   previousOpenClawVersion: string | null;
+  legacyUpgradeRan: boolean;
   preflightRan: boolean;
   preflightRecoveredTopics: string[];
   doctorFixRan: boolean;
@@ -94,6 +145,7 @@ export async function performUpgradeMaintenanceIfNeeded(): Promise<UpgradeMainte
       previousAppVersion,
       currentOpenClawVersion,
       previousOpenClawVersion,
+      legacyUpgradeRan: false,
       preflightRan: false,
       preflightRecoveredTopics: [],
       doctorFixRan: false,
@@ -107,9 +159,19 @@ export async function performUpgradeMaintenanceIfNeeded(): Promise<UpgradeMainte
   );
 
   await ensureProviderStoreMigrated();
+  const legacyUpgradeRan = isLegacyInstallUpgradeVersion(previousAppVersion);
+  if (legacyUpgradeRan) {
+    await runLegacyInstallUpgradeCleanup(previousAppVersion);
+  }
   await runOpenClawStartupPreflightRepair();
   const preflightRecoveredTopics = getLastStartupPreflightRecovery()?.topics ?? [];
   const maintenanceAt = new Date().toISOString();
+  if (legacyUpgradeRan) {
+    store.set('lastLegacyUpgradeAt', maintenanceAt);
+    if (previousAppVersion) {
+      store.set('lastLegacyUpgradeFromVersion', previousAppVersion);
+    }
+  }
   store.set('lastPreflightAt', maintenanceAt);
   store.set('lastPreflightAppVersion', currentAppVersion);
   if (currentOpenClawVersion) {
@@ -120,7 +182,7 @@ export async function performUpgradeMaintenanceIfNeeded(): Promise<UpgradeMainte
   let doctorFixRan = false;
   let doctorFixStatus: OpenClawDoctorStatus | null = null;
   let doctorFixWarningCount = 0;
-  if (openClawUpgraded) {
+  if (openClawUpgraded || legacyUpgradeRan) {
     doctorFixRan = true;
     const doctorResult = await runOpenClawDoctorFix({
       timeoutMs: OPENCLAW_DOCTOR_FIX_TIMEOUT_MS,
@@ -155,6 +217,7 @@ export async function performUpgradeMaintenanceIfNeeded(): Promise<UpgradeMainte
     previousAppVersion,
     currentOpenClawVersion,
     previousOpenClawVersion,
+    legacyUpgradeRan,
     preflightRan: true,
     preflightRecoveredTopics,
     doctorFixRan,
