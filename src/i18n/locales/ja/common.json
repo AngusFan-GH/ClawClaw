@@ -104,6 +104,7 @@
             "sources": {
                 "channels": "チャンネル設定",
                 "agents": "エージェント設定",
+                "models": "モデル設定",
                 "proxy": "プロキシ設定",
                 "security": "セキュリティ設定",
                 "manual": "手動再起動",

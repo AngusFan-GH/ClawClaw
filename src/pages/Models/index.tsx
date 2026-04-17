@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useGatewayStore } from '@/stores/gateway';
 import { useSettingsStore } from '@/stores/settings';
 import { useProviderStore } from '@/stores/providers';
@@ -146,12 +147,17 @@ export function Models() {
   );
 
   const [usageHistory, setUsageHistory] = useState<UsageHistoryEntry[]>([]);
+  const [stableUsageHistory, setStableUsageHistory] = useState<UsageHistoryEntry[]>([]);
+  const [usageLoading, setUsageLoading] = useState(false);
   const [usageGroupBy, setUsageGroupBy] = useState<UsageGroupBy>('model');
   const [usageWindow, setUsageWindow] = useState<UsageWindow>('7d');
   const [usagePage, setUsagePage] = useState(1);
   const [selectedUsageEntry, setSelectedUsageEntry] = useState<UsageHistoryEntry | null>(null);
   const [showLocalProviderDialog, setShowLocalProviderDialog] = useState(false);
   const [showAddLocalModelDialog, setShowAddLocalModelDialog] = useState(false);
+  const [confirmDeleteModelId, setConfirmDeleteModelId] = useState<string | null>(null);
+  const [confirmClearProviderOpen, setConfirmClearProviderOpen] = useState(false);
+  const [confirmPending, setConfirmPending] = useState(false);
 
   useEffect(() => {
     trackUiEvent('models.page_viewed');
@@ -162,26 +168,48 @@ export function Models() {
   }, [refreshProviderSnapshot]);
 
   useEffect(() => {
-    if (isGatewayRunning) {
-      hostApiFetch<UsageHistoryEntry[]>('/api/usage/recent-token-history')
-        .then((entries) => {
-          setUsageHistory(Array.isArray(entries) ? entries : []);
-          setUsagePage(1);
-        })
-        .catch(() => {
-          setUsageHistory([]);
-        });
+    if (!isGatewayRunning) {
+      setUsageLoading(false);
+      return;
     }
-  }, [isGatewayRunning]);
 
-  const visibleUsageHistory = isGatewayRunning ? usageHistory : [];
+    let cancelled = false;
+    setUsageLoading(true);
+    hostApiFetch<UsageHistoryEntry[]>('/api/usage/recent-token-history')
+      .then((entries) => {
+        if (cancelled) return;
+        const normalized = Array.isArray(entries) ? entries : [];
+        setUsageHistory(normalized);
+        if (normalized.length > 0 || stableUsageHistory.length === 0) {
+          setStableUsageHistory(normalized);
+        }
+        setUsagePage(1);
+      })
+      .catch(() => {
+        if (cancelled) return;
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setUsageLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isGatewayRunning, gatewayStatus.connectedAt, gatewayStatus.pid, stableUsageHistory.length]);
+
+  const visibleUsageHistory = useMemo(() => {
+    if (usageHistory.length > 0) return usageHistory;
+    return stableUsageHistory;
+  }, [stableUsageHistory, usageHistory]);
   const filteredUsageHistory = filterUsageHistoryByWindow(visibleUsageHistory, usageWindow);
   const usageGroups = groupUsageHistory(filteredUsageHistory, usageGroupBy);
   const usagePageSize = 5;
   const usageTotalPages = Math.max(1, Math.ceil(filteredUsageHistory.length / usagePageSize));
   const safeUsagePage = Math.min(usagePage, usageTotalPages);
   const pagedUsageHistory = filteredUsageHistory.slice((safeUsagePage - 1) * usagePageSize, safeUsagePage * usagePageSize);
-  const usageLoading = isGatewayRunning && visibleUsageHistory.length === 0;
+  const shouldShowUsageLoading = isGatewayRunning && usageLoading && visibleUsageHistory.length === 0;
   const totalTokensInWindow = filteredUsageHistory.reduce((sum, entry) => sum + entry.totalTokens, 0);
   const totalCostInWindow = filteredUsageHistory.reduce((sum, entry) => sum + (entry.costUsd || 0), 0);
 
@@ -206,11 +234,29 @@ export function Models() {
     [accounts],
   );
   const handleDeleteLocalModel = async (accountId: string) => {
+    setConfirmPending(true);
     try {
       await removeAccount(accountId);
-      toast.success('已删除本地模型');
+      setConfirmDeleteModelId(null);
+      toast.success('已删除本地模型，正在同步网关配置');
     } catch (error) {
       toast.error(`删除失败: ${String(error)}`);
+    } finally {
+      setConfirmPending(false);
+    }
+  };
+
+  const handleClearLocalProvider = async () => {
+    if (!localProviderAccount) return;
+    setConfirmPending(true);
+    try {
+      await removeAccount(localProviderAccount.id);
+      setConfirmClearProviderOpen(false);
+      toast.success('本地模型提供商配置已清除，正在同步网关配置');
+    } catch (error) {
+      toast.error(`清除失败: ${String(error)}`);
+    } finally {
+      setConfirmPending(false);
     }
   };
 
@@ -386,14 +432,7 @@ export function Models() {
                   variant="outline"
                   size="sm"
                   className="h-8 shrink-0 rounded-[10px] border-red-500/25 bg-transparent px-3 text-red-600 hover:bg-red-500/5 hover:text-red-600 dark:border-red-400/20 dark:text-red-300 dark:hover:bg-red-400/10 dark:hover:text-red-300"
-                  onClick={() => void (async () => {
-                    try {
-                      await removeAccount(localProviderAccount.id);
-                      toast.success('本地模型提供商配置已清除，本地模型已同步清空');
-                    } catch (error) {
-                      toast.error(`清除失败: ${String(error)}`);
-                    }
-                  })()}
+                  onClick={() => setConfirmClearProviderOpen(true)}
                 >
                   清除配置
                 </Button>
@@ -461,7 +500,7 @@ export function Models() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 rounded-[10px] text-muted-foreground hover:bg-black/5 hover:text-red-500 dark:hover:bg-white/5"
-                            onClick={() => void handleDeleteLocalModel(account.id)}
+                            onClick={() => setConfirmDeleteModelId(account.id)}
                             aria-label="删除本地模型"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -524,7 +563,7 @@ export function Models() {
               </div>
             </div>
             <div>
-              {usageLoading ? (
+              {shouldShowUsageLoading ? (
                 <div className="flex items-center justify-center rounded-[10px] border border-dashed border-border/80 bg-muted/35 py-12 text-muted-foreground">
                   <PageLoader
                     compact
@@ -681,6 +720,41 @@ export function Models() {
           }}
         />
       ) : null}
+      <ConfirmDialog
+        open={Boolean(confirmDeleteModelId)}
+        title="删除本地模型"
+        message="删除后会立即同步网关运行时模型列表。当前使用该模型的会话会在下一次模型刷新后切换到可用模型。"
+        confirmLabel="删除并同步"
+        confirmPendingLabel="正在删除..."
+        cancelLabel="取消"
+        variant="destructive"
+        confirmPending={confirmPending}
+        onCancel={() => {
+          if (confirmPending) return;
+          setConfirmDeleteModelId(null);
+        }}
+        onConfirm={() => {
+          if (!confirmDeleteModelId) return;
+          void handleDeleteLocalModel(confirmDeleteModelId);
+        }}
+      />
+      <ConfirmDialog
+        open={confirmClearProviderOpen}
+        title="清除本地模型提供商"
+        message="清除后会同时移除关联的本地模型，并同步网关运行时配置。当前使用这些模型的会话在下一次刷新后将不再可用。"
+        confirmLabel="清除并同步"
+        confirmPendingLabel="正在清除..."
+        cancelLabel="取消"
+        variant="destructive"
+        confirmPending={confirmPending}
+        onCancel={() => {
+          if (confirmPending) return;
+          setConfirmClearProviderOpen(false);
+        }}
+        onConfirm={() => {
+          void handleClearLocalProvider();
+        }}
+      />
     </div>
   );
 }

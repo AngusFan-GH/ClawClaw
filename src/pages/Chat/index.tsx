@@ -11,6 +11,7 @@ import { DEFAULT_SESSION_KEY, useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { useAgentsStore } from '@/stores/agents';
+import type { ProviderAccount } from '@/lib/providers';
 import { PageLoader } from '@/components/common/LoadingSpinner';
 import { ChatThread } from './ChatThread';
 import { ChatInput, type ChatAgentOption, type FileAttachment } from './ChatInput';
@@ -20,21 +21,15 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { hostApiFetch } from '@/lib/host-api';
-import {
-  type ProviderCatalogResponse,
-  isLocalModelProviderAccount,
-} from './chat-model-options';
+import { buildChatCatalogModelOptions, type ChatModelCatalogEntry } from './chat-model-catalog';
 import {
   buildAgentOptions,
-  buildConfiguredModelOptions,
   buildChatRuntimeViewModel,
-  buildPrioritizedModelOptions,
   normalizeAgentModelValue,
-  normalizeDefaultModelValue,
+  resolveFallbackModelValue,
   normalizeSelectedModelValue,
   resolveChatModelState,
   resolveCurrentAgentLabel,
-  resolveDefaultModelMeta,
   resolveEffectiveAgentModelRef,
 } from './chat-page-view-model';
 
@@ -104,14 +99,13 @@ export function Chat() {
   const defaultAgentId = useAgentsStore((s) => s.defaultAgentId);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const providerAccounts = useProviderStore((s) => s.accounts);
-  const providerStatuses = useProviderStore((s) => s.statuses);
-  const providerVendors = useProviderStore((s) => s.vendors);
-  const defaultAccountId = useProviderStore((s) => s.defaultAccountId);
   const refreshProviderSnapshot = useProviderStore((s) => s.refreshProviderSnapshot);
-  const [providerCatalogMap] = useState<Record<string, ProviderCatalogResponse>>({});
-  const [runtimeModelRefs] = useState<string[]>([]);
+  const [chatModelCatalog, setChatModelCatalog] = useState<ChatModelCatalogEntry[]>([]);
+  const [chatModelsLoading, setChatModelsLoading] = useState(false);
+  const [chatModelsRetryNonce, setChatModelsRetryNonce] = useState(0);
   const [queuedMessages, setQueuedMessages] = useState<QueuedChatItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const chatModelCatalogRef = useRef<ChatModelCatalogEntry[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
@@ -122,14 +116,6 @@ export function Chat() {
   const sessionAgentId = useMemo(
     () => getAgentIdFromSessionKey(currentSessionKey) || getAgentIdFromSessionKey(currentSession?.key),
     [currentSession?.key, currentSessionKey]
-  );
-  const providerStatusMap = useMemo(
-    () => new Map((providerStatuses ?? []).map((status) => [status.id, status])),
-    [providerStatuses]
-  );
-  const vendorMap = useMemo(
-    () => new Map((providerVendors ?? []).map((vendor) => [vendor.id, vendor])),
-    [providerVendors]
   );
   const forceSessionKeyFromRoute = useMemo(() => {
     const state = location.state as { forceSessionKey?: string } | null;
@@ -164,7 +150,7 @@ export function Chat() {
           switchSession(forceSessionKeyFromRoute);
         }
         navigate(location.pathname, { replace: true, state: null });
-        await loadHistory(false);
+        await loadHistory(messages.length > 0);
         if (!cancelled) {
           void loadSessions({ preserveCurrent: true });
         }
@@ -174,7 +160,7 @@ export function Chat() {
       if (!sessionsHydrated) {
         await restoreSessionsAfterGatewayReady();
       } else {
-        await loadHistory(false);
+        await loadHistory(messages.length > 0);
       }
     })();
     return () => {
@@ -187,6 +173,7 @@ export function Chat() {
     newSession,
     restoreSessionsAfterGatewayReady,
     sessionsHydrated,
+    messages.length,
     createNewSessionFromRoute,
     forceSessionKeyFromRoute,
     switchSession,
@@ -202,18 +189,105 @@ export function Chat() {
     void fetchAgents();
   }, [fetchAgents]);
 
-  const eligibleAccounts = useMemo(
-    () => providerAccounts.filter((account) => account.enabled)
-      .filter((account) => !isLocalModelProviderAccount(account))
-      .filter(
-        (account) =>
-          account.authMode === 'local'
-          || account.authMode === 'oauth_device'
-          || account.authMode === 'oauth_browser'
-          || Boolean(providerStatusMap.get(account.id)?.hasKey),
-      ),
-    [providerAccounts, providerStatusMap]
+  const providerCatalogReloadKey = useMemo(
+    () => providerAccounts
+      .map((account) => [account.id, account.vendorId, account.model, account.enabled, account.updatedAt].join(':'))
+      .sort()
+      .join('|'),
+    [providerAccounts],
   );
+
+  const providerDisplayOverrides = useMemo(() => {
+    const candidates = new Map<string, Set<string>>();
+    const enabledAccounts = providerAccounts.filter((account) => account.enabled);
+    const runtimeKeyForAccount = (account: ProviderAccount): string | undefined => {
+      if (account.vendorId === 'google' && account.authMode === 'oauth_browser') {
+        return 'google-gemini-cli';
+      }
+      if (
+        account.vendorId === 'openai'
+        && (account.authMode === 'oauth_browser' || account.authMode === 'oauth_device')
+      ) {
+        return 'openai-codex';
+      }
+      if (account.vendorId === 'minimax-portal-cn') {
+        return 'minimax-portal';
+      }
+      if (account.vendorId === 'custom' || account.vendorId === 'ollama' || account.vendorId === 'vllm' || account.vendorId === 'sglang') {
+        const suffix = account.id.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'default';
+        return `${account.vendorId}-${suffix}`;
+      }
+      return account.vendorId;
+    };
+
+    for (const account of enabledAccounts) {
+      const runtimeKey = runtimeKeyForAccount(account);
+      const label = account.label?.trim();
+      if (!runtimeKey || !label) continue;
+      const labels = candidates.get(runtimeKey) ?? new Set<string>();
+      labels.add(label);
+      candidates.set(runtimeKey, labels);
+    }
+
+    const map = new Map<string, string>();
+    for (const [runtimeKey, labels] of candidates) {
+      if (labels.size === 1) {
+        const [label] = [...labels];
+        if (label) {
+          map.set(runtimeKey, label);
+        }
+      }
+    }
+    return map;
+  }, [providerAccounts]);
+
+  useEffect(() => {
+    chatModelCatalogRef.current = chatModelCatalog;
+  }, [chatModelCatalog]);
+
+  useEffect(() => {
+    if (!isGatewayRunning) {
+      setChatModelsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    setChatModelsLoading(true);
+    void useGatewayStore.getState().rpc<{ models?: ChatModelCatalogEntry[] }>('models.list', {}, 30_000)
+      .then((result) => {
+        if (cancelled) return;
+        const nextModels = Array.isArray(result?.models) ? result.models : [];
+        if (nextModels.length > 0 || chatModelCatalogRef.current.length === 0) {
+          setChatModelCatalog(nextModels);
+          return;
+        }
+        retryTimer = setTimeout(() => {
+          if (!cancelled && useGatewayStore.getState().status.state === 'running') {
+            setChatModelsRetryNonce((value) => value + 1);
+          }
+        }, 2_000);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.warn('[chat] Failed to load models.list for chat picker:', error);
+        retryTimer = setTimeout(() => {
+          if (!cancelled && useGatewayStore.getState().status.state === 'running') {
+            setChatModelsRetryNonce((value) => value + 1);
+          }
+        }, 2_000);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setChatModelsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+    };
+  }, [chatModelsRetryNonce, isGatewayRunning, providerCatalogReloadKey]);
 
   // Always scroll to bottom when the user sends a message, regardless of scroll position.
   // This uses queueMicrotask (runs after DOM update) to ensure the user's own
@@ -293,6 +367,8 @@ export function Chat() {
     shouldShowWelcome,
   } = useMemo(() => buildChatRuntimeViewModel({
     messages,
+    pendingUserMessage,
+    pendingAssistantMessage,
     sending,
     showThinking,
     streamingMessage,
@@ -307,6 +383,8 @@ export function Chat() {
     defaultSessionKey: DEFAULT_SESSION_KEY,
   }), [
     messages,
+    pendingUserMessage,
+    pendingAssistantMessage,
     sending,
     showThinking,
     streamingMessage,
@@ -319,17 +397,9 @@ export function Chat() {
     sessionsHydrated,
     isGatewayRunning,
   ]);
-  const configuredModelOptions = useMemo<ChatToolbarModelOption[]>(() => {
-    return buildConfiguredModelOptions({
-      eligibleAccounts,
-      vendorMap,
-      providerCatalogMap,
-    });
-  }, [eligibleAccounts, providerCatalogMap, vendorMap]);
-
   const modelOptions = useMemo<ChatToolbarModelOption[]>(() => {
-    return buildPrioritizedModelOptions(configuredModelOptions, runtimeModelRefs);
-  }, [configuredModelOptions, runtimeModelRefs]);
+    return buildChatCatalogModelOptions(chatModelCatalog, providerDisplayOverrides);
+  }, [chatModelCatalog, providerDisplayOverrides]);
   const normalizedSelectedModel = useMemo(
     () => normalizeSelectedModelValue(currentSession, modelOptions),
     [currentSession, modelOptions]
@@ -346,22 +416,17 @@ export function Chat() {
     () => normalizeAgentModelValue(effectiveAgentModelRef, modelOptions),
     [effectiveAgentModelRef, modelOptions],
   );
-  const defaultModelMeta = useMemo(() => {
-    return resolveDefaultModelMeta({
-      defaultAccountId,
-      providerAccounts,
-      vendorMap,
-      providerCatalogMap,
-      modelOptions,
-    });
-  }, [defaultAccountId, modelOptions, providerAccounts, providerCatalogMap, vendorMap]);
   const normalizedDefaultModelValue = useMemo(
-    () => normalizeDefaultModelValue({
+    () => resolveFallbackModelValue({
       normalizedAgentModelValue,
-      defaultModelValue: defaultModelMeta.value,
+      normalizedSelectedModel,
       modelOptions,
     }),
-    [defaultModelMeta.value, modelOptions, normalizedAgentModelValue]
+    [modelOptions, normalizedAgentModelValue, normalizedSelectedModel]
+  );
+  const defaultModelShortLabel = useMemo(
+    () => modelOptions.find((option) => option.value === normalizedDefaultModelValue)?.shortLabel,
+    [modelOptions, normalizedDefaultModelValue]
   );
   const agentOptions = useMemo<ChatAgentOption[]>(() => {
     return buildAgentOptions(agents);
@@ -386,15 +451,13 @@ export function Chat() {
     setModelGuard(allowed, normalizedDefaultModelValue);
   }, [modelOptions, normalizedDefaultModelValue, setModelGuard]);
 
-  const modelCatalogSyncing = false;
   const modelState = resolveChatModelState({
     isGatewayRunning,
-    configuredModelOptions,
     currentSessionModel: currentSession?.model,
     normalizedSelectedModel,
+    defaultModelValue: normalizedDefaultModelValue,
     modelOptions,
-    eligibleAccounts,
-    modelCatalogSyncing,
+    modelCatalogSyncing: chatModelsLoading,
   });
   const loadingDescription = isGatewayRunning
     ? t('history.loading', '正在恢复最近对话')
@@ -670,7 +733,7 @@ export function Chat() {
         modelOptions={modelOptions}
         selectedModel={normalizedSelectedModel || normalizedAgentModelValue}
         defaultModelValue={normalizedDefaultModelValue}
-        defaultModelShortLabel={defaultModelMeta.shortLabel}
+        defaultModelShortLabel={defaultModelShortLabel}
         onModelChange={setSessionModel}
         onConfigureModels={() => navigate('/models')}
         modelDisabled={!isGatewayRunning}

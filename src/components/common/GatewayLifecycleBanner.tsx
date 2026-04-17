@@ -12,6 +12,9 @@ function getSourceLabel(t: (key: string) => string, source?: string): string {
   if (source?.startsWith('create-agent') || source?.startsWith('update-agent') || source?.startsWith('assign-channel') || source?.startsWith('delete-agent') || source?.startsWith('remove-agent-channel')) {
     return t('gateway.lifecycle.sources.agents');
   }
+  if (source === 'provider.runtimeSync') {
+    return t('gateway.lifecycle.sources.models');
+  }
 
   switch (source) {
     case 'settings.proxy':

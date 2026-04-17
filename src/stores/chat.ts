@@ -539,9 +539,16 @@ function removeSessionArtifacts<
 function isEmptyEphemeralSession(
   sessionKey: string,
   messages: RawMessage[],
-  pendingLocalSessionKeys: Record<string, true>
+  pendingLocalSessionKeys: Record<string, true>,
+  pendingUserMessage?: RawMessage | null,
+  pendingAssistantMessage?: RawMessage | null,
 ): boolean {
-  return Boolean(pendingLocalSessionKeys[sessionKey]) && messages.length === 0;
+  return (
+    Boolean(pendingLocalSessionKeys[sessionKey])
+    && messages.length === 0
+    && !pendingUserMessage
+    && !pendingAssistantMessage
+  );
 }
 
 function normalizeModelRefs(values: string[]): string[] {
@@ -2094,7 +2101,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             // If history times out, sessions are still shown — scheduleRetry
             // will continue retrying history in the background.
             await Promise.race([
-              get().loadHistory(false),
+              get().loadHistory(get().messages.length > 0),
               new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error('chat.history timeout')), HISTORY_LOAD_TIMEOUT_MS)
               ),
@@ -2125,7 +2132,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         );
         _sessionRestoreRetryTimer = setTimeout(() => {
           _sessionRestoreRetryTimer = null;
-          if (useGatewayStore.getState().status.state === 'running' && !get().sessionsHydrated) {
+          if (
+            useGatewayStore.getState().status.state === 'running'
+            && (!get().sessionsHydrated || get().messages.length === 0)
+          ) {
             void get().restoreSessionsAfterGatewayReady();
           }
         }, delay);
@@ -2138,10 +2148,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ── Switch session ──
 
   switchSession: (key: string) => {
-    const { currentSessionKey, messages, pendingLocalSessionKeys } = get();
+    const {
+      currentSessionKey,
+      messages,
+      pendingLocalSessionKeys,
+      pendingUserMessage,
+      pendingAssistantMessage,
+    } = get();
     const leavingEmpty =
       !currentSessionKey.endsWith(':main')
-      && isEmptyEphemeralSession(currentSessionKey, messages, pendingLocalSessionKeys);
+      && isEmptyEphemeralSession(
+        currentSessionKey,
+        messages,
+        pendingLocalSessionKeys,
+        pendingUserMessage,
+        pendingAssistantMessage,
+      );
     set((s) => ({
       currentSessionKey: key,
       currentAgentId: getAgentIdFromSessionKey(key),
@@ -2239,11 +2261,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ── New session ──
 
   newSession: (targetAgentId) => {
-    const { currentSessionKey, messages, pendingLocalSessionKeys } = get();
+    const {
+      currentSessionKey,
+      messages,
+      pendingLocalSessionKeys,
+      pendingUserMessage,
+      pendingAssistantMessage,
+    } = get();
     const nextAgentId = targetAgentId || get().currentAgentId || useAgentsStore.getState().defaultAgentId || 'main';
     const isCurrentEmptyEphemeral =
       !currentSessionKey.endsWith(':main')
-      && isEmptyEphemeralSession(currentSessionKey, messages, pendingLocalSessionKeys);
+      && isEmptyEphemeralSession(
+        currentSessionKey,
+        messages,
+        pendingLocalSessionKeys,
+        pendingUserMessage,
+        pendingAssistantMessage,
+      );
     const prefix = `agent:${nextAgentId}`;
     const newKey = `${prefix}:session-${Date.now()}`;
     const newSessionEntry: ChatSession = { key: newKey, displayName: newKey };
@@ -2289,14 +2323,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ── Cleanup empty session on navigate away ──
 
   cleanupEmptySession: () => {
-    const { currentSessionKey, messages, pendingLocalSessionKeys } = get();
+    const {
+      currentSessionKey,
+      messages,
+      pendingLocalSessionKeys,
+      pendingUserMessage,
+      pendingAssistantMessage,
+    } = get();
     // Only remove non-main sessions that were never used (no messages sent).
     // This mirrors the "leavingEmpty" logic in switchSession so that creating
     // a new session and immediately navigating away doesn't leave a ghost entry
     // in the sidebar.
     const isEmptyNonMain =
       !currentSessionKey.endsWith(':main')
-      && isEmptyEphemeralSession(currentSessionKey, messages, pendingLocalSessionKeys);
+      && isEmptyEphemeralSession(
+        currentSessionKey,
+        messages,
+        pendingLocalSessionKeys,
+        pendingUserMessage,
+        pendingAssistantMessage,
+      );
     if (!isEmptyNonMain) return;
     set((s) => removeSessionArtifacts(s, currentSessionKey));
   },
@@ -2348,8 +2394,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         attempts.add(trimmed);
       };
 
-      if (targetProvider && !isCrossProvider) {
-        queueAttempt(targetModelId);
+      if (targetProvider) {
         queueAttempt(modelForPatch);
       } else {
         queueAttempt(modelForPatch);
@@ -2359,7 +2404,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (isCrossProvider) {
         queueAttempt(providerDefaultRef);
         queueAttempt(providerDefaultId);
-        queueAttempt(targetModelId);
         queueAttempt(modelForPatch);
       }
 
@@ -2426,7 +2470,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // for them can fall back to an older real transcript, which makes "New chat"
     // appear to jump back into a previous conversation. Keep them empty until the
     // first user message materializes the session in Gateway.
-    if (isEmptyEphemeralSession(requestSessionKey, get().messages, pendingLocalSessionKeys)) {
+    if (isEmptyEphemeralSession(
+      requestSessionKey,
+      get().messages,
+      pendingLocalSessionKeys,
+      get().pendingUserMessage,
+      get().pendingAssistantMessage,
+    )) {
       set({
         ...(quiet ? {} : { loading: false }),
         error: null,
@@ -2460,6 +2510,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (data) {
         const rawMessages = (Array.isArray(data.messages) ? (data.messages as RawMessage[]) : [])
           .filter((message) => !isAssistantSilentReply(message));
+        const stateBeforeCommit = get();
+        const hasExistingAuthoritativeMessages = stateBeforeCommit.messages.length > 0;
+
+        if (rawMessages.length === 0 && hasExistingAuthoritativeMessages) {
+          set({
+            loading: false,
+            loadingEarlierHistory: false,
+          });
+          return;
+        }
 
         // Keep transcript ordering as close to Gateway history as possible.
         // Only enrich cached file/image previews for display.
@@ -2516,7 +2576,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
             });
           }
         });
-        const stateBeforeCommit = get();
         const { pendingFinal, lastUserMessageAt } = stateBeforeCommit;
         if (isStale()) {
           clearLoadingIfLatest();
@@ -2569,7 +2628,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
           clearLoadingIfLatest();
           return;
         }
-        set({ messages: [], pendingUserMessage: null, pendingAssistantMessage: null, btwMessages: [], loading: false, historyWindowLimited: false, hasEarlierHistory: false, loadingEarlierHistory: false });
+        set((state) => ({
+          loading: false,
+          loadingEarlierHistory: false,
+          ...(state.messages.length === 0
+            ? {
+                messages: [],
+                pendingUserMessage: null,
+                pendingAssistantMessage: null,
+                btwMessages: [],
+                historyWindowLimited: false,
+                hasEarlierHistory: false,
+              }
+            : {}),
+        }));
       }
     } catch (err) {
       if (isStale()) {
@@ -2577,7 +2649,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return;
       }
       console.warn('Failed to load chat history:', err);
-      set({ messages: [], pendingUserMessage: null, pendingAssistantMessage: null, btwMessages: [], loading: false, historyWindowLimited: false, hasEarlierHistory: false, loadingEarlierHistory: false });
+      set((state) => ({
+        loading: false,
+        loadingEarlierHistory: false,
+        ...(state.messages.length === 0
+          ? {
+              messages: [],
+              pendingUserMessage: null,
+              pendingAssistantMessage: null,
+              btwMessages: [],
+              historyWindowLimited: false,
+              hasEarlierHistory: false,
+            }
+          : {}),
+      }));
     }
   },
 
@@ -2586,6 +2671,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       currentSessionKey,
       messages,
       pendingLocalSessionKeys,
+      pendingUserMessage,
+      pendingAssistantMessage,
       loadingEarlierHistory,
       hasEarlierHistory,
     } = get();
@@ -2594,7 +2681,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
-    if (isEmptyEphemeralSession(currentSessionKey, messages, pendingLocalSessionKeys)) {
+    if (isEmptyEphemeralSession(
+      currentSessionKey,
+      messages,
+      pendingLocalSessionKeys,
+      pendingUserMessage,
+      pendingAssistantMessage,
+    )) {
       set({ hasEarlierHistory: false, loadingEarlierHistory: false });
       return;
     }
@@ -2691,18 +2784,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { currentSessionKey, sessions, allowedModelRefs, defaultModelRef, currentAgentId } = get();
     const currentSession = sessions.find((session) => session.key === currentSessionKey);
     const currentAgent = useAgentsStore.getState().agents.find((agent) => agent.gateway.id === currentAgentId);
+    const normalizedAgentModelRef = currentAgent?.local.modelRef?.trim();
+    const agentModelAllowed =
+      !normalizedAgentModelRef
+      || allowedModelRefs.length === 0
+      || allowedModelRefs.includes(normalizedAgentModelRef);
     const shouldApplyAgentModel =
       !currentSession?.model?.trim()
-      && Boolean(currentAgent?.local.modelRef)
-      && !currentAgent?.local.inheritedModel;
+      && Boolean(normalizedAgentModelRef)
+      && currentAgent?.local.inheritedModel !== true
+      && agentModelAllowed;
 
-    if (shouldApplyAgentModel && currentAgent?.local.modelRef) {
+    if (shouldApplyAgentModel && normalizedAgentModelRef) {
       try {
-        await get().setSessionModel(currentAgent.local.modelRef);
+        await get().setSessionModel(normalizedAgentModelRef);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         set({
-          error: `Failed to initialize session model for agent ${currentAgent.gateway.id}: ${message}`,
+          error: `Failed to initialize session model for agent ${currentAgent?.gateway.id ?? currentAgentId}: ${message}`,
         });
         return;
       }
