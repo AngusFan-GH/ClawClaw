@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Select } from '@/components/ui/select';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
@@ -779,18 +780,17 @@ export function Skills() {
       <span className="shrink-0 rounded-[10px] bg-muted px-2.5 py-1 text-[12px] font-medium text-muted-foreground">
         {t('agentLabel')}
       </span>
-      <div className="relative min-w-0 flex-1">
-        <select
+      <div className="min-w-0 flex-1">
+        <Select
           value={selectedAgentId}
           onChange={(event) => setSelectedAgentId(event.target.value)}
           aria-label={t('agentLabel')}
-          className="h-9 w-full appearance-none border-0 bg-transparent pl-2 pr-8 text-[15px] font-semibold text-foreground outline-none ring-0"
+          className="h-9 border-0 bg-transparent px-2 pr-1 text-[15px] font-semibold text-foreground shadow-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
         >
           {agentOptions.map((agent) => (
             <option key={agent.id} value={agent.id}>{agent.name}</option>
           ))}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        </Select>
       </div>
     </div>
   );

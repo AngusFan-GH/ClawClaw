@@ -21,6 +21,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
@@ -335,7 +336,7 @@ function VerifiedModelSelect({
             ))}
           </div>
         ) : null}
-        <select
+        <Select
           id={id}
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -353,7 +354,7 @@ function VerifiedModelSelect({
               {t('aiProviders.dialog.noFilteredModels', '没有匹配当前筛选条件的模型')}
             </option>
           )}
-        </select>
+        </Select>
         <div className="flex items-center justify-between gap-3 text-[12px] text-muted-foreground">
           <span>{helpText}</span>
           <span className="shrink-0">
@@ -2026,7 +2027,7 @@ function AddProviderDialog({
                       <Label htmlFor="oauthModelId" className={labelClasses}>{t('aiProviders.dialog.model')}</Label>
                       {loadingOAuthModels ? <LoadingIcon className="h-4 w-4 text-muted-foreground" /> : null}
                     </div>
-                    <select
+                    <Select
                       id="oauthModelId"
                       value={modelId}
                       onChange={(e) => {
@@ -2046,7 +2047,7 @@ function AddProviderDialog({
                           {option.name}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                     <p className="text-[12px] text-muted-foreground">
                       {loadingOAuthModels
                         ? t('aiProviders.dialog.loadingModels')
