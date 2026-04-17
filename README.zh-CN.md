@@ -387,7 +387,7 @@ pnpm package              # 为当前平台打包
 pnpm package:mac          # 为 macOS 打包
 pnpm package:win          # 使用辅助打包脚本构建 Windows NSIS 安装包（同时内置 openclaw CLI 所需的 node.exe）
 pnpm package:win:portable # 构建 Windows 便携目录版（win-unpacked / win-arm64-unpacked）
-pnpm package:mac:portable # 构建 macOS 便携 zip（含启动脚本 + .portable 标记）
+pnpm package:mac:portable # 构建 macOS 便携 zip（含启动脚本 + 内嵌 portable/ 数据目录）
 pnpm package:desktop      # 串行打包 macOS、Windows、Linux
 pnpm run package:organize # 将根目录产物整理到 release/v<version>/windows|mac|linux|metadata
 pnpm package:linux        # 为 Linux 打包
@@ -398,7 +398,7 @@ pnpm run upload:update    # 上传 release/v<version>/windows/latest.yml 及其�
 
 - `pnpm package:win` 用于构建 Windows NSIS 安装包，内部走 `scripts/package-win.mjs`。
 - `pnpm package:win:portable` 用于构建 Windows 便携目录版，内部走 `scripts/package-win.mjs --dir`。
-- `pnpm package:mac:portable` 用于构建 macOS 便携 zip，内部走 `scripts/package-mac.mjs --build`。会先调用 electron-builder 生成 macOS zip，再组装包含 `Start ClawClaw.command`（启动脚本，自动清除 Gatekeeper 隔离标记）和 `.portable` 标记的便携目录，输出 `release/v<version>/mac/ClawClaw-v<version>-mac-{arch}-portable.zip`。
+- `pnpm package:mac:portable` 用于构建 macOS 便携 zip，内部走 `scripts/package-mac.mjs --build`。会先调用 electron-builder 生成 macOS zip，再组装包含 `Start ClawClaw.command`（启动脚本，自动清除 Gatekeeper 隔离标记）和应用包内嵌 `portable/` 数据目录的便携目录，输出 `release/v<version>/mac/ClawClaw-v<version>-mac-{arch}-portable.zip`。
 - `pnpm package:portable` 同时构建 Windows 和 macOS 便携包。
 - `pnpm package:prepare` 是 `build`、`package` 以及所有平台打包命令共用的前置步骤，只清理 release 根目录的 builder 暂存输出，不会触碰已存在的版本目录。
 - `pnpm package:organize` 会把 builder 暂存到 release 根目录的产物整理到 `release/v<package.json version>/windows`、`release/v<package.json version>/mac`、`release/v<package.json version>/linux`、`release/v<package.json version>/metadata`。

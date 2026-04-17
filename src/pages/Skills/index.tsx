@@ -289,7 +289,7 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, canToggle, onUnin
       }
 
       // Refresh skills from gateway to get updated config
-      await fetchSkills(currentAgentId || undefined);
+      await fetchSkills(currentAgentId || undefined, { includeRuntime: true });
 
       toast.success(t('detail.configSaved'));
     } catch (err) {
@@ -849,8 +849,8 @@ export function Skills() {
   // Fetch skills for the selected agent view
   useEffect(() => {
     if (!selectedAgentId) return;
-    void fetchSkills(selectedAgentId);
-  }, [fetchSkills, isGatewayRunning, selectedAgentId]);
+    void fetchSkills(selectedAgentId, { includeRuntime: true });
+  }, [fetchSkills, selectedAgentId]);
 
   // Filter skills
   const safeSkills = Array.isArray(skills) ? skills : [];
@@ -1131,8 +1131,7 @@ export function Skills() {
                   label={t('refresh')}
                   loading={loading}
                   mode="icon"
-                  onClick={() => void fetchSkills(selectedAgentId)}
-                  disabled={!isGatewayRunning}
+                  onClick={() => void fetchSkills(selectedAgentId, { includeRuntime: true })}
                 />
               </div>
             </div>

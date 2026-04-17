@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'path';
 import { existsSync } from 'fs';
 import WebSocket from 'ws';
-import { getOpenClawDir, getOpenClawEntryPath, getPortableBase } from '../utils/paths';
+import { getOpenClawDir, getOpenClawEntryPath, getPortableDataDir } from '../utils/paths';
 import { getOpenClawCliSpawnConfig } from '../utils/openclaw-cli';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { isPythonReady, setupManagedPython } from '../utils/uv-setup';
@@ -65,7 +65,7 @@ export async function terminateOwnedGatewayProcess(
 export async function unloadLaunchctlGatewayService(): Promise<void> {
   if (process.platform !== 'darwin') return;
   // Portable builds should not modify host LaunchAgents.
-  if (getPortableBase()) return;
+  if (getPortableDataDir()) return;
 
   try {
     const uid = process.getuid?.();

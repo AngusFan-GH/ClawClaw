@@ -387,7 +387,7 @@ pnpm package              # Package for current platform
 pnpm package:mac          # Package for macOS
 pnpm package:win          # Build Windows NSIS installer with the helper packager (also bundles node.exe for openclaw CLI)
 pnpm package:win:portable # Build Windows portable directory (win-unpacked / win-arm64-unpacked)
-pnpm package:mac:portable # Build macOS portable zip (ClawClaw.app + launcher + .portable marker)
+pnpm package:mac:portable # Build macOS portable zip (ClawClaw.app + launcher + embedded portable/ data dir)
 pnpm package:desktop      # Package macOS, Windows, and Linux in one serial workflow
 pnpm run package:organize # Re-home staged artifacts under release/v<version>/windows|mac|linux|metadata
 pnpm package:linux        # Package for Linux
@@ -398,7 +398,7 @@ Notes:
 
 - `pnpm package:win` builds the Windows NSIS installer via `scripts/package-win.mjs`.
 - `pnpm package:win:portable` builds the Windows portable directory target via `scripts/package-win.mjs --dir`.
-- `pnpm package:mac:portable` builds the macOS portable zip via `scripts/package-mac.mjs --build`. It runs electron-builder for macOS (zip), then assembles a portable directory with `Start ClawClaw.command` (launcher + Gatekeeper quarantine-clear script) and `.portable` marker inside the app bundle. Output: `release/v<version>/mac/ClawClaw-v<version>-mac-{arch}-portable.zip`.
+- `pnpm package:mac:portable` builds the macOS portable zip via `scripts/package-mac.mjs --build`. It runs electron-builder for macOS (zip), then assembles a portable directory with `Start ClawClaw.command` (launcher + Gatekeeper quarantine-clear script) plus an embedded `portable/` data directory inside the app bundle. Output: `release/v<version>/mac/ClawClaw-v<version>-mac-{arch}-portable.zip`.
 - `pnpm package:portable` builds both Windows and macOS portable artifacts.
 - `pnpm package:prepare` is the shared pre-packaging step used by `build`, `package`, and all platform package commands. It only cleans root-level builder staging output and leaves existing versioned release directories untouched.
 - `pnpm package:organize` moves root-level builder output into `release/v<package.json version>/windows`, `release/v<package.json version>/mac`, `release/v<package.json version>/linux`, and `release/v<package.json version>/metadata`.

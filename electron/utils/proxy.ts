@@ -41,6 +41,8 @@ const BLANK_PROXY_ENV = {
   no_proxy: '',
 };
 
+const LOCAL_PROXY_BYPASS_RULES = ['<local>', 'localhost', '127.0.0.1', '::1'] as const;
+
 function trimValue(value: string | undefined | null): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -328,7 +330,7 @@ export function buildElectronProxyConfig(settings: ProxySettings): ElectronProxy
   return {
     mode: 'fixed_servers',
     proxyRules: rules.join(';'),
-    ...(resolved.bypassRules ? { proxyBypassRules: resolved.bypassRules } : {}),
+    proxyBypassRules: mergeProxyBypassRules(resolved.bypassRules, LOCAL_PROXY_BYPASS_RULES),
   };
 }
 
@@ -338,7 +340,7 @@ export function buildProxyEnv(settings: ProxySettings): Record<string, string> {
   }
 
   const resolved = resolveProxySettings(settings);
-  const noProxy = mergeProxyBypassRules(resolved.bypassRules, []);
+  const noProxy = mergeProxyBypassRules(resolved.bypassRules, LOCAL_PROXY_BYPASS_RULES);
 
   return {
     HTTP_PROXY: resolved.httpProxy,
@@ -359,7 +361,7 @@ export async function buildProxyEnvAsync(settings: ProxySettings): Promise<Recor
   }
 
   const resolved = await resolveProxySettingsAsync(settings);
-  const noProxy = mergeProxyBypassRules(resolved.bypassRules, []);
+  const noProxy = mergeProxyBypassRules(resolved.bypassRules, LOCAL_PROXY_BYPASS_RULES);
 
   if (!resolved.httpProxy && !resolved.httpsProxy && !resolved.allProxy) {
     return {

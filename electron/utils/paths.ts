@@ -3,69 +3,71 @@
  * Cross-platform path resolution helpers
  */
 import { app } from 'electron';
-import { join, resolve, sep } from 'path';
+import { dirname, join, resolve } from 'path';
 import { homedir } from 'os';
 import { existsSync, mkdirSync, readFileSync, realpathSync } from 'fs';
 import { logger } from './logger';
 
 // ── Portable Mode ────────────────────────────────────────────────────────────
 
+type PortablePaths = {
+  rootDir: string;
+  dataDir: string;
+};
+
 /**
  * Detects whether the app is running in portable (USB) mode.
  *
- * Approach: check for a `portable/` directory that sits alongside the app bundle.
- * Falls back to the legacy `.portable` marker file for backward compatibility.
+ * Portable mode is enabled only when a bundled `portable/` data directory exists.
+ * That keeps regular installed builds and portable builds on separate, explicit
+ * packaging paths instead of relying on legacy marker files.
  *
  * Directory structure on USB drive:
  *   USB/
  *   ├── ClawClaw.exe              (Windows: next to portable/)
+ *   ├── Start ClawClaw.bat/.vbs   (Windows portable launchers)
  *   ├── ClawClaw.app/             (macOS: portable/ inside the .app bundle)
+ *   ├── Start ClawClaw.command    (macOS portable launcher)
  *   └── portable/                 ← data directory (all user data here)
  *       ├── .openclaw/            (OpenClaw state)
  *       ├── cache/
  *       ├── python/
  *       └── logs/
- *
- * This mirrors u-claw's portable detection: `portable/` directory
- * existence is more robust than walking up directory trees for a marker file.
  */
-function detectPortableBaseDir(): string | null {
+function getPackagedResourcesDir(): string {
+  if (typeof process.resourcesPath === 'string' && process.resourcesPath.length > 0) {
+    return resolve(process.resourcesPath);
+  }
+
+  const appPath = resolve(app.getAppPath());
+  const resourcesSuffixes = [
+    join('Contents', 'Resources', 'app'),
+    join('Contents', 'Resources', 'app.asar'),
+    join('resources', 'app'),
+    join('resources', 'app.asar'),
+  ];
+
+  for (const suffix of resourcesSuffixes) {
+    if (appPath.endsWith(suffix)) {
+      return dirname(appPath);
+    }
+  }
+
+  return resolve(appPath, 'resources');
+}
+
+function detectPortablePaths(): PortablePaths | null {
   try {
-    const appPath = app.getAppPath();
-    if (!appPath || appPath === process.execPath) return null;
+    const resourcesDir = getPackagedResourcesDir();
+    const isMac = process.platform === 'darwin';
+    const dataDir = isMac
+      ? join(resourcesDir, 'portable')
+      : join(dirname(resourcesDir), 'portable');
+    const rootDir = isMac ? dirname(dirname(resourcesDir)) : dirname(resourcesDir);
 
-    const resolved = resolve(appPath);
-
-    // ── macOS: portable/ is INSIDE the .app bundle at Contents/Resources/portable ──
-    // app.getAppPath() returns Contents/Resources/app/ on macOS.
-    // We look for Contents/Resources/portable/ and return its parent (the .app root).
-    const MACOS_APP_PATH_SUFFIX = join('Contents', 'Resources', 'app');
-    if (resolved.endsWith(MACOS_APP_PATH_SUFFIX)) {
-      const bundleRoot = resolved.slice(0, -MACOS_APP_PATH_SUFFIX.length - 1);
-      const portableDir = join(bundleRoot, 'Contents', 'Resources', 'portable');
-      if (existsSync(portableDir)) {
-        logger.info(`[portable] Detected at ${portableDir} (inside .app bundle)`);
-        return portableDir;
-      }
-      // Fall through to marker-based detection
-    }
-
-    // ── Windows / Linux: portable/ is a SIBLING of the app directory ──
-    // app.getAppPath() returns the unpacked app dir (e.g. win-unpacked/).
-    const sibling = join(resolved, 'portable');
-    if (existsSync(sibling)) {
-      logger.info(`[portable] Detected at ${sibling} (sibling of app)`);
-      return sibling;
-    }
-
-    // ── Legacy fallback: walk up looking for .portable marker file ──
-    const parts = resolved.split(sep);
-    for (let i = 0; i <= parts.length; i++) {
-      const base = parts.slice(0, i + 1).join('/') || '/';
-      if (existsSync(join(base, '.portable'))) {
-        logger.info(`[portable] Legacy .portable marker found at ${base}`);
-        return base;
-      }
+    if (existsSync(dataDir)) {
+      logger.info(`[portable] Detected root=${rootDir} data=${dataDir}`);
+      return { rootDir, dataDir };
     }
   } catch {
     // best-effort
@@ -73,21 +75,31 @@ function detectPortableBaseDir(): string | null {
   return null;
 }
 
-// Cached portable base (set once at startup — must be called after app.whenReady)
-let _portableBase: string | null | undefined = undefined;
+// Cached portable paths (set once at startup — must be called after app.whenReady)
+let _portablePaths: PortablePaths | null | undefined = undefined;
+
+/**
+ * Returns the portable bundle root if portable mode is active, otherwise null.
+ * The result is cached after the first call.
+ */
+export function getPortableRootDir(): string | null {
+  if (_portablePaths !== undefined) return _portablePaths?.rootDir ?? null;
+  if (!app.isPackaged) {
+    _portablePaths = null;
+    return null;
+  }
+  _portablePaths = detectPortablePaths();
+  return _portablePaths?.rootDir ?? null;
+}
 
 /**
  * Returns the portable data directory if portable mode is active, otherwise null.
- * The result is cached after the first call.
  */
-export function getPortableBase(): string | null {
-  if (_portableBase !== undefined) return _portableBase;
-  if (!app.isPackaged) {
-    _portableBase = null;
-    return null;
+export function getPortableDataDir(): string | null {
+  if (_portablePaths === undefined) {
+    getPortableRootDir();
   }
-  _portableBase = detectPortableBaseDir();
-  return _portableBase;
+  return _portablePaths?.dataDir ?? null;
 }
 
 /**
@@ -96,9 +108,9 @@ export function getPortableBase(): string | null {
  * Returns null if not in portable mode.
  */
 export function getPortableOpenClawDir(): string | null {
-  const base = getPortableBase();
-  if (!base) return null;
-  return join(base, '.openclaw');
+  const dataDir = getPortableDataDir();
+  if (!dataDir) return null;
+  return join(dataDir, '.openclaw');
 }
 
 /**
@@ -107,9 +119,9 @@ export function getPortableOpenClawDir(): string | null {
  * Returns null if not in portable mode.
  */
 export function getPortablePythonHome(): string | null {
-  const base = getPortableBase();
-  if (!base) return null;
-  return join(base, 'python');
+  const dataDir = getPortableDataDir();
+  if (!dataDir) return null;
+  return join(dataDir, 'python');
 }
 
 /**
@@ -118,9 +130,9 @@ export function getPortablePythonHome(): string | null {
  * Returns null if not in portable mode.
  */
 export function getPortableUvCacheDir(): string | null {
-  const base = getPortableBase();
-  if (!base) return null;
-  return join(base, 'cache');
+  const dataDir = getPortableDataDir();
+  if (!dataDir) return null;
+  return join(dataDir, 'cache');
 }
 
 export type ExportCategory = 'general' | 'images' | 'settings';
@@ -131,8 +143,8 @@ export type ExportCategory = 'general' | 'images' | 'settings';
  * Otherwise: ~/Downloads
  */
 export function getDefaultExportDir(category: ExportCategory = 'general'): string {
-  const base = getPortableBase();
-  if (base) return join(base, 'exports', category);
+  const dataDir = getPortableDataDir();
+  if (dataDir) return join(dataDir, 'exports', category);
   return join(homedir(), 'Downloads');
 }
 
@@ -178,8 +190,8 @@ export function getOpenClawSkillsDir(): string {
  * Otherwise: ~/.clawclaw
  */
 export function getClawXConfigDir(): string {
-  const base = getPortableBase();
-  if (base) return base;
+  const dataDir = getPortableDataDir();
+  if (dataDir) return dataDir;
   return join(homedir(), '.clawclaw');
 }
 
@@ -189,8 +201,8 @@ export function getClawXConfigDir(): string {
  * Otherwise: app.getPath('userData')/logs
  */
 export function getLogsDir(): string {
-  const base = getPortableBase();
-  if (base) return join(base, 'logs');
+  const dataDir = getPortableDataDir();
+  if (dataDir) return join(dataDir, 'logs');
   return join(app.getPath('userData'), 'logs');
 }
 
@@ -200,8 +212,8 @@ export function getLogsDir(): string {
  * Otherwise: app.getPath('userData')
  */
 export function getDataDir(): string {
-  const base = getPortableBase();
-  if (base) return base;
+  const dataDir = getPortableDataDir();
+  if (dataDir) return dataDir;
   return app.getPath('userData');
 }
 
@@ -219,7 +231,7 @@ export function ensureDir(dir: string): void {
  */
 export function getResourcesDir(): string {
   if (app.isPackaged) {
-    return join(process.resourcesPath, 'resources');
+    return getPackagedResourcesDir();
   }
   return join(__dirname, '../../resources');
 }
@@ -238,7 +250,7 @@ export function getPreloadPath(): string {
  */
 export function getOpenClawDir(): string {
   if (app.isPackaged) {
-    return join(process.resourcesPath, 'openclaw');
+    return join(getPackagedResourcesDir(), 'openclaw');
   }
   // Development: use node_modules/openclaw
   return join(__dirname, '../../node_modules/openclaw');

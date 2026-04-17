@@ -8,7 +8,7 @@
  * guarantee the last few messages are flushed before the process exits.
  */
 import { app } from 'electron';
-import { join, resolve, sep } from 'path';
+import { dirname, join, resolve } from 'path';
 import { existsSync, mkdirSync, appendFileSync } from 'fs';
 import { appendFile, readFile, readdir, stat } from 'fs/promises';
 
@@ -86,20 +86,22 @@ process.on('exit', flushBufferSync);
 // ── Initialisation ───────────────────────────────────────────────
 
 /**
- * Detect portable base directory (mirrors paths.ts logic, inlined to avoid circular import).
+ * Detect the portable data directory (mirrors paths.ts logic, inlined to avoid circular import).
  * Returns null when not in portable mode.
  */
 function detectPortableLogDir(): string | null {
   try {
     if (!app.isPackaged) return null;
-    const appPath = app.getAppPath();
-    if (!appPath) return null;
-    const parts = resolve(appPath).split(sep);
-    for (let i = 0; i <= parts.length; i++) {
-      const base = parts.slice(0, i + 1).join('/') || '/';
-      if (existsSync(join(base, '.portable'))) {
-        return join(base, 'portable', 'logs');
-      }
+    const resourcesDir =
+      typeof process.resourcesPath === 'string' && process.resourcesPath.length > 0
+        ? resolve(process.resourcesPath)
+        : dirname(resolve(app.getAppPath()));
+    const portableDataDir =
+      process.platform === 'darwin'
+        ? join(resourcesDir, 'portable')
+        : join(dirname(resourcesDir), 'portable');
+    if (existsSync(portableDataDir)) {
+      return join(portableDataDir, 'logs');
     }
   } catch { /* best-effort */ }
   return null;

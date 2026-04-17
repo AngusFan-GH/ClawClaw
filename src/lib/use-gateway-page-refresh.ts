@@ -15,23 +15,18 @@ export function useGatewayPageRefresh(params: {
   const previousGatewayStateRef = useRef(gatewayState);
 
   useEffect(() => {
-    let cancelled = false;
-
     void fetchAgents({ silent: true });
-    void fetchChannels(false, { includeRuntime: false }).then(() => {
-      if (cancelled || gatewayState !== 'running') return;
+    void fetchChannels(false, { includeRuntime: false });
+    if (gatewayState === 'running') {
       void fetchChannels(false, { includeRuntime: true });
-    });
-
-    return () => {
-      cancelled = true;
-    };
+    }
   }, [fetchAgents, fetchChannels, gatewayState]);
 
   useEffect(() => {
     const refreshAll = () => {
       void fetchAgents({ silent: true });
-      void fetchChannels(false);
+      void fetchChannels(false, { includeRuntime: false });
+      void fetchChannels(false, { includeRuntime: true });
     };
 
     const unsubscribeGateway = subscribeHostEvent<GatewayStatus>('gateway:status', (payload) => {
@@ -42,7 +37,7 @@ export function useGatewayPageRefresh(params: {
       }
     });
     const unsubscribeChannels = subscribeHostEvent('gateway:channel-status', () => {
-      void fetchChannels(false);
+      void fetchChannels(false, { includeRuntime: true });
     });
 
     return () => {
@@ -58,7 +53,7 @@ export function useGatewayPageRefresh(params: {
   return {
     refresh: () => {
       void fetchAgents();
-      void fetchChannels(false);
+      void fetchChannels(false, { includeRuntime: true });
     },
   };
 }

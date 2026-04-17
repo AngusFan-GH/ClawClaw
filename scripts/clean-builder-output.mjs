@@ -5,9 +5,12 @@ import { extname, resolve } from 'node:path';
 
 const TARGETS = [
   'release/.DS_Store',
+  'release/mac',
   'release/win-unpacked',
   'release/win-arm64-unpacked',
   'release/win-ia32-unpacked',
+  'release/linux-unpacked',
+  'release/linux-arm64-unpacked',
   'release/mac-arm64',
   'release/mac-universal',
   'release/github',

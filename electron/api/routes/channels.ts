@@ -4,11 +4,10 @@ import { existsSync } from 'node:fs';
 import { Buffer } from 'node:buffer';
 import { join } from 'node:path';
 import { resolveOpenClawDir } from '../../utils/paths';
+import { getChannelsConfigSnapshot } from '../../services/config-snapshot';
 import {
   deleteChannelConfig,
   getChannelFormValues,
-  listConfiguredChannelAccounts,
-  listConfiguredChannelGroups,
   saveChannelConfig,
   setChannelEnabled,
   validateChannelConfig,
@@ -347,13 +346,14 @@ async function buildChannelAccountsView(
   ctx: HostApiContext,
   options?: { includeRuntime?: boolean; probe?: boolean },
 ): Promise<ChannelGroupView[]> {
-  const [configuredGroups, configuredAccountsByType] = await Promise.all([
-    listConfiguredChannelGroups({ includeCli: false }),
-    listConfiguredChannelAccounts({ includeCli: false }),
-  ]);
+  const { groups: configuredGroups, accountsByType: configuredAccountsByType } = await getChannelsConfigSnapshot();
 
   let runtimeSnapshot: ChannelsStatusSnapshot | undefined;
-  if (options?.includeRuntime !== false && ctx.gatewayManager.getStatus().state === 'running') {
+  if (
+    options?.includeRuntime !== false
+    && ctx.gatewayManager.getStatus().state === 'running'
+    && !ctx.gatewayManager.isInStartupStabilizationWindow()
+  ) {
     try {
       runtimeSnapshot = await ctx.gatewayManager.rpc<ChannelsStatusSnapshot>(
         'channels.status',

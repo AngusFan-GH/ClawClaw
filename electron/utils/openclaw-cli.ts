@@ -14,7 +14,7 @@ import {
 import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { getOpenClawDir, getOpenClawEntryPath, getPortableBase } from './paths';
+import { getOpenClawDir, getOpenClawEntryPath, getPortableDataDir } from './paths';
 import { logger } from './logger';
 
 // ── Quoting helpers ──────────────────────────────────────────────────────────
@@ -374,7 +374,7 @@ function ensureLocalBinInPath(): void {
 
 export async function autoInstallCliIfNeeded(notify?: (path: string) => void): Promise<void> {
   // Skip CLI auto-install in portable mode — don't write to host's ~/.local/bin/
-  if (getPortableBase()) return;
+  if (getPortableDataDir()) return;
   if (!app.isPackaged) return;
   if (process.platform === 'win32') {
     try {
@@ -484,7 +484,7 @@ export function verifyWindowsBundledCliRuntime(): void {
 
 export function installCompletionToProfile(): void {
   // Skip in portable mode — don't modify host's shell profile
-  if (getPortableBase()) return;
+  if (getPortableDataDir()) return;
   if (!app.isPackaged) return;
   if (process.platform === 'win32') return;
 

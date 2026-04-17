@@ -12,7 +12,7 @@ import { join } from 'path';
 import { getOpenClawDir, getOpenClawSkillsDir, getResourcesDir } from './paths';
 import { logger } from './logger';
 import {
-  readOpenClawConfigRecord,
+  readOpenClawConfigRecordRaw,
   updateOpenClawConfigRecord,
 } from './openclaw-config';
 
@@ -42,9 +42,9 @@ async function fileExists(p: string): Promise<boolean> {
 /**
  * Read the current OpenClaw config
  */
-async function readConfig(): Promise<OpenClawConfig> {
+async function readConfigSnapshot(): Promise<OpenClawConfig> {
   try {
-    return await readOpenClawConfigRecord<OpenClawConfig>();
+    return await readOpenClawConfigRecordRaw<OpenClawConfig>();
   } catch (err) {
     console.error('Failed to read openclaw config:', err);
     return {};
@@ -55,7 +55,7 @@ async function readConfig(): Promise<OpenClawConfig> {
  * Get skill config
  */
 export async function getSkillConfig(skillKey: string): Promise<SkillEntry | undefined> {
-  const config = await readConfig();
+  const config = await readConfigSnapshot();
   return config.skills?.entries?.[skillKey];
 }
 
@@ -121,7 +121,7 @@ export async function updateSkillConfig(
  * Get all skill configs (for syncing to frontend)
  */
 export async function getAllSkillConfigs(): Promise<Record<string, SkillEntry>> {
-  const config = await readConfig();
+  const config = await readConfigSnapshot();
   return config.skills?.entries || {};
 }
 

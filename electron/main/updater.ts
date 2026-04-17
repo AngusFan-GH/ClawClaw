@@ -9,7 +9,7 @@ import { logger } from '../utils/logger';
 import type { AppSettings } from '../utils/store';
 import { UPDATE_FEEDS, type UpdateChannel } from '../shared/update-feed';
 import { markAppQuitting } from './quit';
-import { getPortableBase } from '../utils/paths';
+import { getPortableDataDir } from '../utils/paths';
 
 type FeedConfig = {
   channel: UpdateChannel;
@@ -126,7 +126,7 @@ export class AppUpdater extends EventEmitter {
   }
 
   isSupported(): boolean {
-    return app.isPackaged && getPortableBase() === null;
+    return app.isPackaged && getPortableDataDir() === null;
   }
 
   private setupListeners(): void {

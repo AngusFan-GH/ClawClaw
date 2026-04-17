@@ -19,7 +19,7 @@
  *      @mariozechner/clipboard).
  */
 
-const { cpSync, existsSync, readFileSync, readdirSync, rmSync, mkdirSync, writeFileSync, copyFileSync, statSync } = require('fs');
+const { cpSync, existsSync, readFileSync, readdirSync, rmSync, mkdirSync, writeFileSync, statSync } = require('fs');
 const { join, dirname, sep, relative } = require('path');
 const {
   validateBundledNodeModules,
@@ -556,78 +556,7 @@ exports.default = async function afterPack(context) {
     console.log('[after-pack] ✅ Windows CLI runtime validated (node.exe + wrapper + entry script).');
   }
 
-  // 6. Portable mode — create the portable/ data directory structure.
-  //
-  // Directory layout on USB drive:
-  //   USB/
-  //   ├── ClawClaw.exe              (Windows: alongside portable/)
-  //   ├── ClawClaw.app/             (macOS: portable/ inside .app bundle)
-  //   └── portable/                 ← all user data here
-  //       ├── .portable             (marker for legacy detection fallback)
-  //       ├── .openclaw/            (OpenClaw state)
-  //       ├── cache/                (uv cache)
-  //       ├── python/               (managed Python runtime)
-  //       ├── logs/                 (app logs)
-  //       └── exports/              (user exports)
-  //
-  // On macOS: portable/ is at Contents/Resources/portable/ inside the .app bundle.
-  // On Windows/Linux: portable/ is a sibling of the unpacked app directory.
-  try {
-    let portableDir;
-    if (platform === 'darwin') {
-      // resourcesDir = Contents/Resources/, portable/ goes inside it
-      portableDir = join(resourcesDir, 'portable');
-    } else {
-      // appOutDir contains the unpacked app, portable/ is a sibling
-      portableDir = join(appOutDir, 'portable');
-    }
-
-    const subDirs = ['.openclaw', 'cache', 'python', 'logs', 'exports'];
-    for (const sub of subDirs) {
-      mkdirSync(join(portableDir, sub), { recursive: true });
-    }
-
-    // Legacy .portable marker (for backward compat with old detection)
-    writeFileSync(join(portableDir, '.portable'), '', 'utf8');
-
-    console.log(`[after-pack] ✅ Portable directory structure created at ${portableDir}`);
-  } catch (err) {
-    console.warn(`[after-pack] ⚠️  Failed to create portable directory: ${err.message}`);
-  }
-
-  // 7. Copy portable launcher scripts into the portable/ directory.
-  //
-  // Windows: portable/ is alongside ClawClaw.exe (win-unpacked/portable/).
-  // macOS: portable/ is inside ClawClaw.app (Contents/Resources/portable/).
-  {
-    const srcDir = join(__dirname, '..', 'resources');
-
-    if (platform === 'win32') {
-      const portableDest = join(appOutDir, 'portable');
-      const launchers = ['Start ClawClaw.bat', 'Start ClawClaw.vbs', 'README Portable.txt'];
-      for (const name of launchers) {
-        try { copyFileSync(join(srcDir, name), join(portableDest, name)); } catch { /* */ }
-      }
-    }
-
-    if (platform === 'darwin') {
-      const portableDest = join(resourcesDir, 'portable');
-      const scriptName = 'Start ClawClaw.command';
-      const dest = join(portableDest, scriptName);
-      try {
-        copyFileSync(join(srcDir, scriptName), dest);
-        // Ensure executable permission (macOS zip strips executable bits on files from USB).
-        try { require('child_process').execSync(`chmod +x "${dest}"`, { stdio: 'ignore' }); } catch { /* */ }
-        console.log(`[after-pack] ✅ Copied ${scriptName} into portable/ with +x`);
-      } catch { /* */ }
-
-      try {
-        copyFileSync(join(srcDir, 'README Portable.txt'), join(portableDest, 'README Portable.txt'));
-      } catch { /* */ }
-    }
-  }
-
-  // 8. Patch lru-cache in app.asar.unpacked.
+  // 6. Patch lru-cache in app.asar.unpacked.
   //
   // Production dependencies (electron-updater → semver → lru-cache@6,
   // posthog-node → proxy agents → lru-cache@7, etc.) end up inside app.asar.
@@ -709,7 +638,7 @@ exports.default = async function afterPack(context) {
     }
   }
 
-  // 9. [Windows only] Patch NSIS extractAppPackage.nsh to skip CopyFiles.
+  // 7. [Windows only] Patch NSIS extractAppPackage.nsh to skip CopyFiles.
   //
   // electron-builder's extractUsing7za macro decompresses app-64.7z into a temp
   // directory, then uses CopyFiles to copy ~300MB (thousands of small files) to

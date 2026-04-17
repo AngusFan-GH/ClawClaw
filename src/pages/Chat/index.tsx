@@ -306,8 +306,8 @@ export function Chat() {
   const providerVendors = useProviderStore((s) => s.vendors);
   const defaultAccountId = useProviderStore((s) => s.defaultAccountId);
   const refreshProviderSnapshot = useProviderStore((s) => s.refreshProviderSnapshot);
-  const [providerCatalogMap, setProviderCatalogMap] = useState<Record<string, ProviderCatalogResponse>>({});
-  const [runtimeModelRefs, setRuntimeModelRefs] = useState<string[] | null>(null);
+  const [providerCatalogMap] = useState<Record<string, ProviderCatalogResponse>>({});
+  const [runtimeModelRefs] = useState<string[]>([]);
   const [queuedMessages, setQueuedMessages] = useState<QueuedChatItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -400,33 +400,6 @@ export function Chat() {
     void fetchAgents();
   }, [fetchAgents]);
 
-  useEffect(() => {
-    if (!isGatewayRunning) {
-      queueMicrotask(() => {
-        setRuntimeModelRefs(null);
-      });
-      return;
-    }
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (!cancelled) {
-        setRuntimeModelRefs(null);
-      }
-    });
-    hostApiFetch<{ models?: string[] }>('/api/runtime-model-refs')
-      .then((response) => {
-        if (cancelled) return;
-        setRuntimeModelRefs(Array.isArray(response.models) ? response.models : []);
-      })
-      .catch((error) => {
-        console.warn('Failed to load runtime model refs:', error);
-        if (!cancelled) setRuntimeModelRefs([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isGatewayRunning, providerAccounts, providerStatuses]);
-
   const eligibleAccounts = useMemo(
     () => providerAccounts.filter((account) => account.enabled)
       .filter((account) => !isLocalModelProviderAccount(account))
@@ -439,51 +412,6 @@ export function Chat() {
       ),
     [providerAccounts, providerStatusMap]
   );
-
-  useEffect(() => {
-    let cancelled = false;
-    const requestKeys = eligibleAccounts.map((account) => account.id);
-
-    if (requestKeys.length === 0) {
-      queueMicrotask(() => {
-        if (!cancelled) {
-          setProviderCatalogMap({});
-        }
-      });
-      return;
-    }
-
-    Promise.all(requestKeys.map(async (accountId) => {
-      const account = eligibleAccounts.find((item) => item.id === accountId);
-      if (!account) {
-        return [accountId, { runtimeProviderId: undefined, models: [] }] as const;
-      }
-      try {
-        const response = await hostApiFetch<ProviderCatalogResponse>(
-          `/api/provider-model-options?vendorId=${encodeURIComponent(account.vendorId)}&authMode=${encodeURIComponent(account.authMode)}&accountId=${encodeURIComponent(account.id)}&scope=runtime`,
-        );
-        return [accountId, {
-          runtimeProviderId: response.runtimeProviderId,
-          models: response.models ?? [],
-          resolved: true,
-        }] as const;
-      } catch (error) {
-        console.warn(`Failed to load provider model options for ${accountId}:`, error);
-        return [accountId, {
-          runtimeProviderId: getRuntimeProviderFallbackKey(account),
-          models: [],
-          resolved: false,
-        }] as const;
-      }
-    })).then((entries) => {
-      if (cancelled) return;
-      setProviderCatalogMap(Object.fromEntries(entries));
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [eligibleAccounts]);
 
   // Always scroll to bottom when the user sends a message, regardless of scroll position.
   // This uses queueMicrotask (runs after DOM update) to ensure the user's own
@@ -633,9 +561,6 @@ export function Chat() {
 
   const modelOptions = useMemo<ChatToolbarModelOption[]>(() => {
     const deduped = dedupeModelOptions(configuredModelOptions);
-    if (runtimeModelRefs === null) {
-      return deduped;
-    }
     const runtimeSet = new Set(runtimeModelRefs);
     const runtimeFiltered = deduped.filter((option) => runtimeSet.has(option.value));
     if (runtimeFiltered.length === 0) {
@@ -732,12 +657,7 @@ export function Chat() {
     setModelGuard(allowed, normalizedDefaultModelValue);
   }, [modelOptions, normalizedDefaultModelValue, setModelGuard]);
 
-  const modelCatalogSyncing = isGatewayRunning
-    && eligibleAccounts.length > 0
-    && (
-      runtimeModelRefs === null
-      || eligibleAccounts.some((account) => !providerCatalogMap[account.id])
-    );
+  const modelCatalogSyncing = false;
   const hasAnyConfiguredModels = configuredModelOptions.length > 0;
   const currentSessionHasModel = Boolean(currentSession?.model?.trim());
   const currentModelInvalid = currentSessionHasModel && !normalizedSelectedModel && modelOptions.length > 0;

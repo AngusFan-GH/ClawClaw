@@ -5,7 +5,7 @@
  *
  * Builds the macOS app via electron-builder, then assembles a portable
  * directory containing:
- *   ClawClaw.app/          (the app bundle, with .portable marker inside)
+ *   ClawClaw.app/          (the app bundle, with portable/ data dir inside)
  *   Start ClawClaw.command  (launcher + quarantine-clear script)
  *   README Portable.txt      (usage instructions)
  *
@@ -29,34 +29,31 @@ import {
   rmSync,
   cpSync,
 } from 'node:fs';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { platform } from 'node:os';
 
 const isMacHost = platform() === 'darwin';
 
 const cwd = resolve(process.cwd());
 const releaseDir = resolve(cwd, 'release');
-const versionDir = resolve(
-  cwd,
-  'release',
-  `v${JSON.parse(readFileSync(resolve(cwd, 'package.json'), 'utf8')).version}`,
-);
-const macDir = resolve(versionDir, 'mac');
+const macDir = releaseDir;
 const buildResourcesDir = resolve(cwd, 'resources');
 
 function ensureDir(dirPath) {
   mkdirSync(dirPath, { recursive: true });
 }
 
-function runElectronBuilder(arch) {
-  console.log(`[package:mac] Running electron-builder for macOS ${arch}...`);
+function runElectronBuilder(archs) {
+  console.log(`[package:mac] Running electron-builder for macOS ${archs.join(', ')}...`);
 
   const electronBuilderCli = resolve(cwd, 'node_modules', 'electron-builder', 'cli.js');
   const electronBuilderBin = resolve(cwd, 'node_modules', '.bin', 'electron-builder');
 
   let command = 'electron-builder';
-  // electron-builder handles arm64/x64 via the config targets in electron-builder.yml
   const args = ['--mac', 'zip'];
+  if (archs.length === 1) {
+    args.push(archs[0] === 'arm64' ? '--arm64' : '--x64');
+  }
 
   if (existsSync(electronBuilderCli)) {
     command = process.execPath;
@@ -78,25 +75,18 @@ function runElectronBuilder(arch) {
 }
 
 function findBuiltApp(arch) {
-  // electron-builder for mac zip outputs to release/mac-{arch}/ClawClaw.app
-  const candidates = [
-    resolve(releaseDir, `mac-${arch}`, 'ClawClaw.app'),
-    resolve(releaseDir, 'mac'),
-  ];
+  const candidates = arch === 'arm64'
+    ? [resolve(releaseDir, 'mac-arm64', 'ClawClaw.app')]
+    : [
+        resolve(releaseDir, 'mac', 'ClawClaw.app'),
+        resolve(releaseDir, 'mac-x64', 'ClawClaw.app'),
+      ];
 
   for (const candidate of candidates) {
-    if (existsSync(candidate)) {
-      const appPath =
-        existsSync(resolve(candidate, 'ClawClaw.app')) && candidate.includes('mac')
-          ? resolve(candidate, 'ClawClaw.app')
-          : candidate.includes('ClawClaw.app')
-            ? candidate
-            : null;
-      if (appPath) return appPath;
-    }
+    if (existsSync(candidate)) return candidate;
   }
 
-  // Fallback: scan release dir for ClawClaw.app
+  // Fallback: only accept a single matching app bundle for this run.
   try {
     const entries = execSync(
       `find "${releaseDir}" -maxdepth 4 -name "ClawClaw.app" -type d 2>/dev/null`,
@@ -105,9 +95,16 @@ function findBuiltApp(arch) {
       .trim()
       .split('\n')
       .filter(Boolean);
-    return entries[0] || null;
+    if (entries.length === 1) return entries[0];
   } catch {
-    return null;
+    // best effort
+  }
+  return null;
+}
+
+function createPortableDataLayout(portableDir) {
+  for (const subDir of ['.openclaw', 'cache', 'python', 'logs', 'exports']) {
+    mkdirSync(join(portableDir, subDir), { recursive: true });
   }
 }
 
@@ -151,15 +148,10 @@ function buildPortableForArch(arch) {
     console.log('[package:mac] Copied README Portable.txt');
   }
 
-  // .portable is created by afterPack inside electron-builder (at appOutDir/).
-  // A second injection here (inside Contents/Resources/) is harmless — the app
-  // will find the one in Contents/Resources/ first when walking up from app.asar,
-  // and the zip root copy handles the portable-root detection.
   const stagingApp = resolve(stagingDir, 'ClawClaw.app');
   const stagingResources = resolve(stagingApp, 'Contents', 'Resources');
-  ensureDir(stagingResources);
-  execSync(`touch "${resolve(stagingResources, '.portable')}"`, { stdio: 'ignore' });
-  console.log('[package:mac] Ensured .portable marker in Contents/Resources/');
+  createPortableDataLayout(resolve(stagingResources, 'portable'));
+  console.log('[package:mac] Prepared portable data directory inside app bundle');
 
   // Stage → portable dir
   renameSync(stagingDir, portableDir);
@@ -199,7 +191,7 @@ const archs = args.includes('--arm64')
 
 // --build flag: run electron-builder first
 if (args.includes('--build')) {
-  runElectronBuilder(archs[0]);
+  runElectronBuilder(archs);
 }
 
 // Assemble portable zip(s)

@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readdirSync, symlinkSync } from 'fs';
 import { getAllSettings, getProviderSyncHash, setProviderSyncHash } from '../utils/store';
 import { getApiKey, getDefaultProvider, getProvider } from '../utils/secure-storage';
 import { getKeyableProviderTypes, getProviderEnvVar } from '../utils/provider-registry';
-import { getOpenClawConfigDir, getOpenClawDir, getOpenClawEntryPath, getPortableBase, isOpenClawPresent } from '../utils/paths';
+import { getOpenClawConfigDir, getOpenClawDir, getOpenClawEntryPath, getPortableDataDir, isOpenClawPresent } from '../utils/paths';
 import { validateBundledOpenClawRuntime } from '../utils/openclaw-runtime-integrity';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import {
@@ -772,7 +772,7 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
   // In portable mode they redirect everything to the USB drive.
   // NOTE: OPENCLAW_HOME must NOT be set to a .openclaw path directly —
   // OpenClaw appends ".openclaw" to it, causing ~/.openclaw/.openclaw duplication.
-  const portableBase = getPortableBase();          // null in dev/installed
+  const portableDataDir = getPortableDataDir();    // null in dev/installed
   const openclawStateDir = getOpenClawConfigDir(); // null in dev; portable/.openclaw in portable
   const forkEnv: Record<string, string | undefined> = {
     ...baseEnv,
@@ -780,10 +780,10 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     ...providerEnv,
     ...uvEnv,
     ...proxyEnv,
-    ...(portableBase
+    ...(portableDataDir
       ? {
           // Portable: parent data dir (portable/), state dir (portable/.openclaw/), config
-          OPENCLAW_HOME: path.join(portableBase, 'portable'),
+          OPENCLAW_HOME: portableDataDir,
           OPENCLAW_STATE_DIR: openclawStateDir,
           OPENCLAW_CONFIG_PATH: path.join(openclawStateDir!, 'openclaw.json'),
         }

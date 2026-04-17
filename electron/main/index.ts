@@ -14,7 +14,7 @@ import { createMenu } from './menu';
 import { appUpdater, registerUpdateHandlers } from './updater';
 import { logger } from '../utils/logger';
 import { warmupNetworkOptimization } from '../utils/uv-env';
-import { getPortableBase, getDataDir, getLogsDir, getOpenClawConfigDir, ensureDir } from '../utils/paths';
+import { getPortableDataDir, getPortableRootDir, getDataDir, getLogsDir, getOpenClawConfigDir, ensureDir } from '../utils/paths';
 
 import { ClawHubService } from '../gateway/clawhub';
 import { ensureClawXContext, repairClawXOnlyBootstrapFiles } from '../utils/openclaw-workspace';
@@ -209,10 +209,11 @@ async function initialize(): Promise<void> {
   logger.info('=== ClawClaw Application Starting ===');
 
   // ── Portable mode ───────────────────────────────────────────────────────────
-  const portableBase = getPortableBase();
-  if (portableBase) {
+  const portableRootDir = getPortableRootDir();
+  const portableDataDir = getPortableDataDir();
+  if (portableDataDir) {
     const portableData = getDataDir();
-    logger.info(`[portable] Running in portable mode — data at: ${portableData}`);
+    logger.info(`[portable] Running in portable mode — root=${portableRootDir} data=${portableData}`);
 
     // Ensure all portable data directories exist before anything else tries to use them.
     ensureDir(portableData);                       // portable/
@@ -236,7 +237,7 @@ async function initialize(): Promise<void> {
     }
   }
   logger.debug(
-    `Runtime: platform=${process.platform}/${process.arch}, electron=${process.versions.electron}, node=${process.versions.node}, packaged=${app.isPackaged}${portableBase ? `, portable=${portableBase}` : ''}`
+    `Runtime: platform=${process.platform}/${process.arch}, electron=${process.versions.electron}, node=${process.versions.node}, packaged=${app.isPackaged}${portableDataDir ? `, portableRoot=${portableRootDir}, portableData=${portableDataDir}` : ''}`
   );
 
   // Warm up network optimization (non-blocking)
@@ -317,14 +318,20 @@ async function initialize(): Promise<void> {
   registerIpcHandlers(gatewayManager, clawHubService, mainWindow);
 
   registerGatewayRefreshScheduler((request) => {
-    if (
-      request.source === 'provider.runtimeSync'
-      && gatewayManager.isInStartupStabilizationWindow()
-    ) {
-      logger.debug(
-        `Suppressing provider runtime Gateway refresh during startup stabilization (mode=${request.mode ?? 'reload'})`,
-      );
-      return;
+    if (request.source === 'provider.runtimeSync') {
+      const gatewayState = gatewayManager.getStatus().state;
+      if (gatewayState !== 'running') {
+        logger.debug(
+          `Suppressing provider runtime Gateway refresh while Gateway is ${gatewayState} (mode=${request.mode ?? 'reload'})`,
+        );
+        return;
+      }
+      if (gatewayManager.isInStartupStabilizationWindow()) {
+        logger.debug(
+          `Suppressing provider runtime Gateway refresh during startup stabilization (mode=${request.mode ?? 'reload'})`,
+        );
+        return;
+      }
     }
 
     const requires = request.mode === 'restart' ? 'restart' : 'reload';
@@ -337,7 +344,7 @@ async function initialize(): Promise<void> {
     });
   });
 
-  hostApiServer = startHostApiServer({
+  hostApiServer = await startHostApiServer({
     gatewayManager,
     gatewayApplyCoordinator,
     clawHubService,

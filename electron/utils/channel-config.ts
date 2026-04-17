@@ -946,6 +946,16 @@ export async function readOpenClawConfig(): Promise<OpenClawConfig> {
     }
 }
 
+export async function readOpenClawConfigSnapshot(): Promise<OpenClawConfig> {
+    try {
+        return await readOpenClawConfigRecordRaw<OpenClawConfig>();
+    } catch (error) {
+        logger.error('Failed to read OpenClaw config snapshot', error);
+        console.error('Failed to read OpenClaw config snapshot:', error);
+        return {};
+    }
+}
+
 export async function writeOpenClawConfig(config: OpenClawConfig): Promise<void> {
     try {
         // Read current content BEFORE sanitization so we can compare the true before/after.
@@ -1849,7 +1859,7 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
 }
 
 export async function listConfiguredChannels(options?: { includeCli?: boolean }): Promise<string[]> {
-    const config = await readOpenClawConfig();
+    const config = await readOpenClawConfigSnapshot();
     migrateLegacyWechatSection(config);
     return listConfiguredChannelsFromConfig(config, options);
 }
@@ -1885,11 +1895,18 @@ export function listConfiguredChannelsFromConfig(
 }
 
 export async function listConfiguredChannelAccounts(options?: { includeCli?: boolean }): Promise<Record<string, string[]>> {
-    const config = await readOpenClawConfig();
+    const config = await readOpenClawConfigSnapshot();
     migrateLegacyWechatSection(config);
+    return listConfiguredChannelAccountsFromConfig(config, options);
+}
+
+export function listConfiguredChannelAccountsFromConfig(
+    config: Record<string, unknown>,
+    options?: { includeCli?: boolean },
+): Record<string, string[]> {
     const result: Record<string, string[]> = {};
 
-    for (const channelType of await listConfiguredChannels(options)) {
+    for (const channelType of listConfiguredChannelsFromConfig(config, options)) {
         const runtimeChannelType = toRuntimeChannelType(channelType);
         const section = config.channels?.[runtimeChannelType] as AccountScopedChannelSection | undefined;
         const normalizedSection = normalizeChannelSectionForRuntime(runtimeChannelType, section);
@@ -1935,7 +1952,7 @@ export interface ConfiguredChannelGroupSnapshot {
 }
 
 export async function listConfiguredChannelGroups(options?: { includeCli?: boolean }): Promise<ConfiguredChannelGroupSnapshot[]> {
-    const config = await readOpenClawConfig();
+    const config = await readOpenClawConfigSnapshot();
     migrateLegacyWechatSection(config);
     return listConfiguredChannelGroupsFromConfig(config, options);
 }

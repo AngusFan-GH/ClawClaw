@@ -8,7 +8,7 @@ import { homedir } from 'node:os';
 import { join, extname, basename, resolve } from 'node:path';
 import crypto from 'node:crypto';
 import { GatewayManager } from '../gateway/manager';
-import { getDataDir, getLogsDir, getPortableBase } from '../utils/paths';
+import { getDataDir, getLogsDir, getPortableDataDir } from '../utils/paths';
 import {
   ClawHubService,
   ClawHubSearchParams,
@@ -60,6 +60,7 @@ import { validateApiKeyWithProvider } from '../services/providers/provider-valid
 import { appUpdater } from './updater';
 import { PORTS } from '../utils/config';
 import { quitApp, relaunchApp } from './quit';
+import { getHostApiPort } from '../api/server';
 
 type AppRequest = {
   id?: string;
@@ -163,8 +164,11 @@ type HostApiFetchRequest = {
   body?: unknown;
 };
 
+const HOST_API_FETCH_TIMEOUT_MS = 8000;
+
 function registerHostApiProxyHandlers(): void {
   ipcMain.handle('hostapi:fetch', async (_, request: HostApiFetchRequest) => {
+    const startedAt = Date.now();
     try {
       const path = typeof request?.path === 'string' ? request.path : '';
       if (!path || !path.startsWith('/')) {
@@ -186,11 +190,26 @@ function registerHostApiProxyHandlers(): void {
         }
       }
 
-      const response = await proxyAwareFetch(`http://127.0.0.1:${PORTS.CLAWX_HOST_API}${path}`, {
-        method,
-        headers,
-        body,
-      });
+      const hostApiPort = getHostApiPort();
+      const url = `http://127.0.0.1:${hostApiPort}${path}`;
+      logger.debug(`[hostapi:fetch] -> ${request.method || 'GET'} ${url}`);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort(new Error(`Host API fetch timed out after ${HOST_API_FETCH_TIMEOUT_MS}ms`));
+      }, HOST_API_FETCH_TIMEOUT_MS);
+
+      let response: Response;
+      try {
+        response = await proxyAwareFetch(url, {
+          method,
+          headers,
+          body,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       const data: { status: number; ok: boolean; json?: unknown; text?: string } = {
         status: response.status,
@@ -206,8 +225,15 @@ function registerHostApiProxyHandlers(): void {
         }
       }
 
+      logger.debug(
+        `[hostapi:fetch] <- ${method} ${path} status=${response.status} durationMs=${Date.now() - startedAt}`,
+      );
       return { ok: true, data };
     } catch (error) {
+      const path = typeof request?.path === 'string' ? request.path : '<invalid>';
+      logger.warn(
+        `[hostapi:fetch] !! ${request.method || 'GET'} ${path} durationMs=${Date.now() - startedAt} error=${error instanceof Error ? error.stack || error.message : String(error)}`,
+      );
       return {
         ok: false,
         error: {
@@ -1959,7 +1985,7 @@ function registerAppHandlers(): void {
 
   // Get platform
   ipcMain.handle('app:isPortable', () => {
-    return getPortableBase() !== null;
+    return getPortableDataDir() !== null;
   });
 
   ipcMain.handle('app:platform', () => {

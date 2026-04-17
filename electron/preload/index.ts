@@ -40,6 +40,7 @@ const electronAPI = {
         'app:version',
         'app:name',
         'app:getPath',
+        'app:isPortable',
         'app:platform',
         'app:quit',
         'app:relaunch',

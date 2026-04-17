@@ -78,7 +78,7 @@ async function fetchChannelGroups(probe = false, options?: { includeRuntime?: bo
   if (probe) {
     search.set('probe', 'true');
   }
-  if (options?.includeRuntime === false) {
+  if ((options?.includeRuntime ?? false) === false) {
     search.set('includeRuntime', 'false');
   }
   const query = search.toString();
@@ -97,23 +97,33 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
   error: null,
 
   fetchChannels: async (probe = false, options) => {
-    set({ loading: true, error: null });
+    const shouldShowLoading = get().channelGroups.length === 0;
+    set((state) => ({
+      loading: shouldShowLoading ? true : state.loading,
+      error: null,
+    }));
     try {
       const finalGroups = sortGroups(await fetchChannelGroups(probe, options));
       set({
         channelGroups: finalGroups,
         channels: flattenGroups(finalGroups),
         loading: false,
+        error: null,
       });
     } catch (error) {
-      set({ loading: false, error: String(error) });
+      set((state) => ({
+        loading: false,
+        error: String(error),
+        channelGroups: state.channelGroups,
+        channels: state.channels,
+      }));
     }
   },
 
   addChannel: async (params) => {
     set({ error: null });
     try {
-      await get().fetchChannels();
+      await get().fetchChannels(false, { includeRuntime: false });
       const existing = get().channels.find((channel) => channel.type === params.type);
       if (existing) {
         return existing;

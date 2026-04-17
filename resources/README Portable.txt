@@ -49,11 +49,11 @@ macOS 用户 / macOS:
 便携原理 / How It Works
 ------------------------
 
-U 盘上的 .portable 文件是便携模式标记。
-当 ClawClaw 检测到这个文件时，会将所有数据目录切换到 U 盘上的 portable/ 目录。
+便携版是否生效，取决于发行包中是否包含 portable/ 数据目录。
+当 ClawClaw 检测到与程序一起分发的 portable/ 目录时，会把所有数据目录切换到这个 portable/ 目录。
 
-The .portable file on the USB is the portable mode marker.
-When ClawClaw detects this file, it stores all data in the portable/ directory
-on the USB instead of the host computer's user directory.
+Portable mode is enabled by the bundled portable/ data directory.
+When ClawClaw detects that packaged portable/ directory, it stores all data
+there instead of using the host computer's user directory.
 
 ================================================================================

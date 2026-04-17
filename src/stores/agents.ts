@@ -183,9 +183,20 @@ export const useAgentsStore = create<AgentsState>((set) => ({
       set({
         ...mergedLocal,
         loading: false,
+        error: null,
       });
     } catch (error) {
-      set({ loading: false, error: String(error) });
+      set((state) => ({
+        loading: false,
+        error: String(error),
+        agents: state.agents,
+        defaultAgentId: state.defaultAgentId,
+        mainKey: state.mainKey,
+        scope: state.scope,
+        configuredChannelTypes: state.configuredChannelTypes,
+        channelOwners: state.channelOwners,
+        channelAccountOwners: state.channelAccountOwners,
+      }));
       return;
     }
 

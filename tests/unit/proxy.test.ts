@@ -71,7 +71,7 @@ describe('proxy helpers', () => {
       proxyHttpsServer: '',
       proxyAllServer: '',
       proxyBypassRules: '<local>',
-    })).toEqual({ mode: 'direct' });
+    })).toEqual({ mode: 'system' });
   });
 
   it('builds protocol-specific Electron rules when proxy is enabled', () => {
@@ -85,7 +85,7 @@ describe('proxy helpers', () => {
     })).toEqual({
       mode: 'fixed_servers',
       proxyRules: 'http=http://127.0.0.1:7890;https=http://127.0.0.1:7892;socks5://127.0.0.1:7891',
-      proxyBypassRules: '<local>;localhost',
+      proxyBypassRules: '<local>,localhost,127.0.0.1,::1',
     });
   });
 
@@ -104,8 +104,8 @@ describe('proxy helpers', () => {
       http_proxy: 'http://127.0.0.1:7890',
       https_proxy: 'http://127.0.0.1:7890',
       all_proxy: 'socks5://127.0.0.1:7891',
-      NO_PROXY: '<local>,localhost,127.0.0.1',
-      no_proxy: '<local>,localhost,127.0.0.1',
+      NO_PROXY: '<local>,localhost,127.0.0.1,::1',
+      no_proxy: '<local>,localhost,127.0.0.1,::1',
     });
   });
 });

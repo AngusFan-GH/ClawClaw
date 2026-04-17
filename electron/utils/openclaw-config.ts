@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto';
 import { dirname, join } from 'path';
 import JSON5 from 'json5';
 import { resolveOpenClawDir } from './paths';
+import { logger } from './logger';
 
 const OPENCLAW_CONFIG_PATH = join(resolveOpenClawDir(), 'openclaw.json');
 
@@ -271,11 +272,16 @@ export async function updateOpenClawConfigRecord<T>(
   updater: (config: Record<string, unknown>) => Promise<T> | T,
 ): Promise<T> {
   const run = async (): Promise<T> => {
+    const startedAt = Date.now();
+    logger.debug('[openclaw-config] updateOpenClawConfigRecord:start');
     // Read the file directly inside the serialized writer to avoid waiting on
     // the very promise chain entry we are currently executing.
     const config = await readOpenClawConfigRecordRaw();
     const result = await updater(config);
     await writeOpenClawConfigRecord(config);
+    logger.debug(
+      `[openclaw-config] updateOpenClawConfigRecord:done durationMs=${Date.now() - startedAt}`,
+    );
     return result;
   };
 
@@ -296,7 +302,17 @@ export async function updateOpenClawConfigRecord<T>(
  */
 export async function withConfigLock<T>(fn: () => Promise<T>): Promise<T> {
   const pending = configWriteChain.catch(() => undefined);
-  const next = pending.then(fn);
+  const next = pending.then(async () => {
+    const startedAt = Date.now();
+    logger.debug('[openclaw-config] withConfigLock:start');
+    try {
+      return await fn();
+    } finally {
+      logger.debug(
+        `[openclaw-config] withConfigLock:done durationMs=${Date.now() - startedAt}`,
+      );
+    }
+  });
   configWriteChain = next.then(() => undefined, () => undefined);
   return await next;
 }

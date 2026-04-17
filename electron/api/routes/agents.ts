@@ -4,9 +4,9 @@ import {
   clearChannelBinding,
   createAgent,
   deleteAgentConfig,
-  listAgentsSnapshot,
   updateAgentSettings,
 } from '../../utils/agent-config';
+import { getAgentsConfigSnapshot } from '../../services/config-snapshot';
 import { toRuntimeChannelType } from '../../utils/channel-alias';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
@@ -46,7 +46,7 @@ export async function handleAgentRoutes(
   ctx: HostApiContext,
 ): Promise<boolean> {
   if (url.pathname === '/api/agents' && req.method === 'GET') {
-    sendJson(res, 200, { success: true, ...(await listAgentsSnapshot()) });
+    sendJson(res, 200, { success: true, ...(await getAgentsConfigSnapshot()) });
     return true;
   }
 
@@ -70,7 +70,7 @@ export async function handleAgentRoutes(
       try {
         const body = await parseJsonBody<{ name?: string; model?: string | null }>(req);
         const agentId = decodeURIComponent(parts[0]);
-        const snapshotBeforeUpdate = await listAgentsSnapshot();
+        const snapshotBeforeUpdate = await getAgentsConfigSnapshot();
         const existingAgent = snapshotBeforeUpdate.agents.find((agent) => agent.id === agentId);
         if (!existingAgent) {
           throw new Error(`Agent "${agentId}" not found`);
@@ -106,7 +106,7 @@ export async function handleAgentRoutes(
         const channelType = decodeURIComponent(parts[2]);
         const accountId = url.searchParams.get('accountId') || undefined;
         const runtimeChannelType = toRuntimeChannelType(channelType);
-        const snapshotBeforeUpdate = await listAgentsSnapshot();
+        const snapshotBeforeUpdate = await getAgentsConfigSnapshot();
         const existingOwner = accountId
           ? snapshotBeforeUpdate.channelAccountOwners[`${runtimeChannelType}:${accountId.trim() || 'default'}`]
           : snapshotBeforeUpdate.channelOwners[runtimeChannelType];

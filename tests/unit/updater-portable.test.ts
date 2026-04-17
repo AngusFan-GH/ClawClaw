@@ -31,7 +31,7 @@ vi.mock('electron-updater', () => ({
 }));
 
 vi.mock('@electron/utils/paths', () => ({
-  getPortableBase: () => '/tmp/portable-app',
+  getPortableDataDir: () => '/tmp/portable-app/portable',
 }));
 
 vi.mock('@electron/main/quit', () => ({

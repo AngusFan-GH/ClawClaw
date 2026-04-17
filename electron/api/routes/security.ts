@@ -23,6 +23,7 @@ import {
 } from '../../shared/security-policy';
 import { normalizeReminders, type ReminderItem } from '../../shared/reminders';
 import {
+  readOpenClawConfigRecordRaw,
   readOpenClawConfigRecord,
   updateOpenClawConfigRecord,
 } from '../../utils/openclaw-config';
@@ -82,7 +83,7 @@ function ensureObject(parent: Record<string, unknown>, key: string): Record<stri
 
 async function readOpenclawConfig(): Promise<Record<string, unknown>> {
   try {
-    return await readOpenClawConfigRecord();
+    return await readOpenClawConfigRecordRaw();
   } catch {
     return {};
   }

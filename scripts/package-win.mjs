@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { execSync, spawnSync } from 'node:child_process';
-import { existsSync, rmSync } from 'node:fs';
-import { delimiter, dirname, resolve } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { platform } from 'node:os';
 
 const hostPlatform = platform();
@@ -56,6 +56,43 @@ const cleanBuildDirs = () => {
   removeDirIfExists(resolve(process.cwd(), 'release', 'win-unpacked'));
   removeDirIfExists(resolve(process.cwd(), 'release', 'win-arm64-unpacked'));
   removeDirIfExists(resolve(process.cwd(), 'release', 'win-ia32-unpacked'));
+};
+
+const getUnpackedDirForArch = (arch) => {
+  if (arch === 'arm64') return resolve(process.cwd(), 'release', 'win-arm64-unpacked');
+  if (arch === 'ia32') return resolve(process.cwd(), 'release', 'win-ia32-unpacked');
+  return resolve(process.cwd(), 'release', 'win-unpacked');
+};
+
+const createPortableDataLayout = (portableDir) => {
+  for (const subDir of ['.openclaw', 'cache', 'python', 'logs', 'exports']) {
+    mkdirSync(join(portableDir, subDir), { recursive: true });
+  }
+};
+
+const stagePortableLaunchers = (archs) => {
+  const resourcesDir = resolve(process.cwd(), 'resources');
+  const portableLaunchers = ['Start ClawClaw.bat', 'Start ClawClaw.vbs', 'README Portable.txt'];
+
+  for (const arch of archs) {
+    const unpackedDir = getUnpackedDirForArch(arch);
+    if (!existsSync(unpackedDir)) {
+      console.warn(`[package:win] Expected unpacked output missing for ${arch}: ${unpackedDir}`);
+      continue;
+    }
+
+    const portableDir = join(unpackedDir, 'portable');
+    createPortableDataLayout(portableDir);
+
+    for (const launcher of portableLaunchers) {
+      const source = join(resourcesDir, launcher);
+      const destination = join(unpackedDir, launcher);
+      if (!existsSync(source)) continue;
+      copyFileSync(source, destination);
+    }
+
+    console.log(`[package:win] Portable layout prepared for ${arch} at ${unpackedDir}`);
+  }
 };
 
 const resolveWinArchTargets = (argv) => {
@@ -191,7 +228,13 @@ if (!hasDirTarget && isWindowsHost && !nsisPath) {
 
 // --dir produces portable directory only (no NSIS/Wine required on macOS)
 const builderArgs = hasDirTarget
-  ? ['--win', 'dir', ...archArgs, ...args.filter((a) => a !== '--dir')]
+  ? [
+      '--win',
+      'dir',
+      '-c.win.signAndEditExecutable=false',
+      ...archArgs,
+      ...args.filter((a) => a !== '--dir'),
+    ]
   : ['--win', 'nsis', ...archArgs, ...args];
 
 const builderEnv = { ...process.env };
@@ -264,6 +307,10 @@ if (result.status !== 0) {
 if (result.error) {
   console.error('[package:win] Failed to start electron-builder:', result.error.message);
   process.exit(1);
+}
+
+if ((result.status ?? 1) === 0 && hasDirTarget) {
+  stagePortableLaunchers(winArchTargets);
 }
 
 process.exit(result.status ?? 0);

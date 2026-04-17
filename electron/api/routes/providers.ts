@@ -55,6 +55,7 @@ type OpenClawModelCacheEntry = {
 };
 
 const OPENCLAW_MODEL_LIST_CACHE_TTL_MS = 10_000;
+const OPENCLAW_MODEL_LIST_TIMEOUT_MS = 4_000;
 const openClawModelListCache = new Map<OpenClawModelScope, OpenClawModelCacheEntry>();
 let openClawModelListQueue: Promise<void> = Promise.resolve();
 
@@ -124,6 +125,11 @@ function isLocalModelRuntimeAccount(account: Pick<ProviderAccount, 'vendorId' | 
 
 function invalidateOpenClawModelListCache(): void {
   openClawModelListCache.clear();
+}
+
+function getStaleCachedOpenClawModelList(scope: OpenClawModelScope): OpenClawModelEntry[] {
+  const cached = openClawModelListCache.get(scope)?.value;
+  return Array.isArray(cached) ? cached : [];
 }
 
 function extractJsonObjectFromMixedOutput(raw: string): string | null {
@@ -291,9 +297,69 @@ async function getOpenClawModelList(scope: OpenClawModelScope): Promise<OpenClaw
   return await promise;
 }
 
-async function listRuntimeModelRefs(): Promise<string[]> {
+async function getOpenClawModelListWithFallback(scope: OpenClawModelScope): Promise<{
+  models: OpenClawModelEntry[];
+  source: ProviderModelOptionsSource;
+}> {
+  const staleCachedModels = getStaleCachedOpenClawModelList(scope);
+
+  try {
+    const models = await Promise.race<OpenClawModelEntry[]>([
+      getOpenClawModelList(scope),
+      new Promise<OpenClawModelEntry[]>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(`openclaw models list timed out after ${OPENCLAW_MODEL_LIST_TIMEOUT_MS}ms`));
+        }, OPENCLAW_MODEL_LIST_TIMEOUT_MS);
+      }),
+    ]);
+    return { models, source: 'runtime' };
+  } catch (error) {
+    logger.warn(`[providers] openclaw models list (${scope}) unavailable; falling back`, error);
+
+    if (Array.isArray(staleCachedModels) && staleCachedModels.length > 0) {
+      logger.info(`[providers] Serving stale cached model list for ${scope} scope`);
+      return { models: staleCachedModels, source: 'runtime' };
+    }
+
+    const fallbackModels = await readMainAgentModelsJsonEntries();
+    if (fallbackModels.length > 0) {
+      logger.info(`[providers] Serving models.json fallback for ${scope} scope`);
+      return { models: fallbackModels, source: 'models_json_fallback' };
+    }
+
+    throw error;
+  }
+}
+
+async function getStaticOpenClawModelListFallback(scope: OpenClawModelScope): Promise<{
+  models: OpenClawModelEntry[];
+  source: ProviderModelOptionsSource;
+}> {
+  const staleCachedModels = getStaleCachedOpenClawModelList(scope);
+  if (staleCachedModels.length > 0) {
+    logger.info(`[providers] Serving stale cached model list for ${scope} scope without runtime refresh`);
+    return { models: staleCachedModels, source: 'runtime' };
+  }
+
+  const fallbackModels = await readMainAgentModelsJsonEntries();
+  if (fallbackModels.length > 0) {
+    logger.info(`[providers] Serving models.json fallback for ${scope} scope without runtime refresh`);
+    return { models: fallbackModels, source: 'models_json_fallback' };
+  }
+
+  return { models: [], source: 'models_json_fallback' };
+}
+
+function shouldDeferRuntimeModelQueries(ctx: HostApiContext): boolean {
+  const gatewayState = ctx.gatewayManager.getStatus().state;
+  return gatewayState !== 'running' || ctx.gatewayManager.isInStartupStabilizationWindow();
+}
+
+async function listRuntimeModelRefs(ctx: HostApiContext): Promise<string[]> {
   // Renderer model queries run on Chat remount, so this path must stay read-only.
-  const models = await getOpenClawModelList('runtime');
+  const { models } = shouldDeferRuntimeModelQueries(ctx)
+    ? await getStaticOpenClawModelListFallback('runtime')
+    : await getOpenClawModelListWithFallback('runtime');
   const refs = models
     .filter((model) => model.available !== false)
     .map((model) => (typeof model.key === 'string' ? model.key : ''))
@@ -373,6 +439,7 @@ async function resolveRuntimeProviderId(
 async function listProviderModelOptions(
   runtimeProviderId: string,
   scope: 'catalog' | 'runtime' = 'catalog',
+  ctx?: HostApiContext,
   options?: { allowModelsJsonFallback?: boolean },
 ): Promise<{
   models: Array<{
@@ -388,22 +455,28 @@ async function listProviderModelOptions(
   let parsedModels: OpenClawModelEntry[];
   let source: ProviderModelOptionsSource = 'runtime';
 
-  try {
-    parsedModels = await getOpenClawModelList(scope);
-  } catch (error) {
-    const allowModelsJsonFallback = options?.allowModelsJsonFallback
-      && process.platform === 'win32'
-      && scope === 'runtime';
-    if (!allowModelsJsonFallback) {
-      throw error;
-    }
+  if (scope === 'runtime') {
+    const result = ctx && shouldDeferRuntimeModelQueries(ctx)
+      ? await getStaticOpenClawModelListFallback(scope)
+      : await getOpenClawModelListWithFallback(scope);
+    parsedModels = result.models;
+    source = result.source;
+  } else {
+    try {
+      parsedModels = await getOpenClawModelList(scope);
+    } catch (error) {
+      const allowModelsJsonFallback = options?.allowModelsJsonFallback;
+      if (!allowModelsJsonFallback) {
+        throw error;
+      }
 
-    logger.warn(
-      `[providers] Falling back to main agent models.json for ${runtimeProviderId} after OpenClaw model listing failed:`,
-      error,
-    );
-    parsedModels = await readMainAgentModelsJsonEntries();
-    source = 'models_json_fallback';
+      logger.warn(
+        `[providers] Falling back to main agent models.json for ${runtimeProviderId} after OpenClaw model listing failed:`,
+        error,
+      );
+      parsedModels = await readMainAgentModelsJsonEntries();
+      source = 'models_json_fallback';
+    }
   }
 
   const models = parsedModels
@@ -440,6 +513,7 @@ async function listProviderModelOptions(
 async function listProviderModelOptionsWithRuntimeFallback(
   runtimeProviderId: string,
   scope: 'catalog' | 'runtime',
+  ctx?: HostApiContext,
   options?: { allowModelsJsonFallback?: boolean },
 ): Promise<{
   models: Array<{
@@ -452,12 +526,12 @@ async function listProviderModelOptionsWithRuntimeFallback(
   }>;
   source: ProviderModelOptionsSource;
 }> {
-  const primary = await listProviderModelOptions(runtimeProviderId, scope, options);
+  const primary = await listProviderModelOptions(runtimeProviderId, scope, ctx, options);
   if (scope !== 'catalog' || primary.models.length > 0) {
     return primary;
   }
 
-  return await listProviderModelOptions(runtimeProviderId, 'runtime', {
+  return await listProviderModelOptions(runtimeProviderId, 'runtime', ctx, {
     allowModelsJsonFallback: false,
   });
 }
@@ -573,7 +647,7 @@ export async function handleProviderRoutes(
         authMode,
         accountId,
       );
-      const { models, source } = await listProviderModelOptionsWithRuntimeFallback(runtimeProviderId, scope, {
+      const { models, source } = await listProviderModelOptionsWithRuntimeFallback(runtimeProviderId, scope, ctx, {
         allowModelsJsonFallback: !runtimeOnlyCatalog,
       });
       sendJson(res, 200, { runtimeProviderId, models, source });
@@ -610,7 +684,7 @@ export async function handleProviderRoutes(
         body.authMode === 'oauth_browser'
         || body.authMode === 'oauth_device'
       ) {
-        const { models, source } = await listProviderModelOptions(runtimeProviderId, 'runtime', {
+        const { models, source } = await listProviderModelOptions(runtimeProviderId, 'runtime', ctx, {
           allowModelsJsonFallback: false,
         });
         sendJson(res, 200, { runtimeProviderId, models, resolved: true, source });
@@ -635,7 +709,7 @@ export async function handleProviderRoutes(
 
   if (url.pathname === '/api/runtime-model-refs' && req.method === 'GET') {
     try {
-      const models = await listRuntimeModelRefs();
+      const models = await listRuntimeModelRefs(ctx);
       sendJson(res, 200, { models });
     } catch (error) {
       logger.warn('[providers] Failed to list runtime model refs:', error);
