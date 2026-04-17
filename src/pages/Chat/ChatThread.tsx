@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { AlertCircle, Bot, Check, Copy, RotateCcw, Search, Trash2, User, X, Zap } from 'lucide-react';
+import { AlertCircle, Bot, Check, Copy, FileText, RotateCcw, Search, Trash2, User, X, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invokeIpc } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
@@ -280,6 +280,32 @@ const MessageImages = memo(function MessageImages({ message }: { message: RawMes
   );
 });
 
+const UserFileAttachments = memo(function UserFileAttachments({ message }: { message: RawMessage }) {
+  const files = (message._attachedFiles || []).filter((file) => !file.mimeType.startsWith('image/'));
+  if (files.length === 0) return null;
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {files.map((file, index) => (
+        <div
+          key={`${file.filePath || file.fileName}:${index}`}
+          className="flex max-w-[220px] items-center gap-2 rounded-[12px] border border-black/8 bg-black/4 px-2.5 py-2 dark:border-white/10 dark:bg-white/5"
+        >
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-black/6 text-muted-foreground dark:bg-white/8">
+            <FileText className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-xs font-medium">{file.fileName}</div>
+            <div className="text-[10px] text-muted-foreground">
+              {file.fileSize > 0 ? `${(file.fileSize / 1024).toFixed(file.fileSize >= 10240 ? 0 : 1)} KB` : file.mimeType}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+});
+
 const AssistantAttachments = memo(function AssistantAttachments({ message }: { message: RawMessage }) {
   const normalized = normalizeMessage(message);
   const attachments = normalized.content
@@ -439,6 +465,7 @@ const GroupedMessage = memo(function GroupedMessage({
           {toolMessageExpanded ? (
             <div className="chat-tool-msg-body">
               <MessageImages message={message} />
+              {normalizedRole === 'user' ? <UserFileAttachments message={message} /> : null}
               <AssistantAttachments message={message} />
               {reasoningMarkdown ? <div className="chat-thinking"><MessageMarkdown text={reasoningMarkdown} labels={labels} /></div> : null}
               {jsonResult ? (
@@ -465,6 +492,7 @@ const GroupedMessage = memo(function GroupedMessage({
       ) : (
         <>
           <MessageImages message={message} />
+          {normalizedRole === 'user' ? <UserFileAttachments message={message} /> : null}
           <AssistantAttachments message={message} />
           {reasoningMarkdown ? <div className="chat-thinking"><MessageMarkdown text={reasoningMarkdown} labels={labels} /></div> : null}
           {jsonResult ? (

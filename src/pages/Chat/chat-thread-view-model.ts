@@ -402,6 +402,31 @@ function withDateDividers(items: TranscriptFlowItem[], locale: string): Transcri
   return result;
 }
 
+function toGroupedFlowItems(items: ChatItem[]): TranscriptFlowItem[] {
+  return groupMessages(items) as TranscriptFlowItem[];
+}
+
+function mergeTrailingReadingIndicatorIntoAssistantGroup(
+  transcriptFlow: TranscriptFlowItem[],
+  liveFlow: TranscriptFlowItem[],
+): TranscriptFlowItem[] {
+  if (liveFlow.length !== 1 || liveFlow[0]?.kind !== 'reading-indicator') {
+    return [...transcriptFlow, ...liveFlow];
+  }
+  const lastTranscriptItem = transcriptFlow.at(-1);
+  if (!lastTranscriptItem || lastTranscriptItem.kind !== 'group' || lastTranscriptItem.role !== 'assistant') {
+    return [...transcriptFlow, ...liveFlow];
+  }
+
+  return [
+    ...transcriptFlow.slice(0, -1),
+    {
+      ...lastTranscriptItem,
+      hasReadingIndicator: true,
+    },
+  ];
+}
+
 export function buildChatItems(params: {
   messages: RawMessage[];
   pendingUserMessage: RawMessage | null;
@@ -416,7 +441,8 @@ export function buildChatItems(params: {
   showThinking: boolean;
   locale: string;
 }): TranscriptFlowItem[] {
-  const items: ChatItem[] = [];
+  const transcriptItems: ChatItem[] = [];
+  const liveItems: ChatItem[] = [];
   const history = Array.isArray(params.messages) ? params.messages : [];
   let hasLiveActivity = false;
 
@@ -428,7 +454,7 @@ export function buildChatItems(params: {
     if (!params.showThinking && normalizedRole === 'tool') {
       continue;
     }
-    items.push({
+    transcriptItems.push({
       kind: 'message',
       key: getMessageKey(history[i]),
       message: history[i],
@@ -436,14 +462,14 @@ export function buildChatItems(params: {
   }
 
   if (params.pendingUserMessage) {
-    items.push({
+    liveItems.push({
       kind: 'message',
       key: `pending:${params.pendingUserMessage.id ?? params.sessionKey}`,
       message: params.pendingUserMessage,
     });
   }
 
-  items.push(
+  liveItems.push(
     ...buildTimedLiveItems({
       toolMessages: params.toolMessages,
       streamSegments: params.streamSegments,
@@ -457,7 +483,7 @@ export function buildChatItems(params: {
 
   if (params.pendingAssistantMessage) {
     hasLiveActivity = true;
-    items.push({
+    liveItems.push({
       kind: 'message',
       key: `final:${params.pendingAssistantMessage.id ?? params.sessionKey}`,
       message: params.pendingAssistantMessage,
@@ -469,7 +495,7 @@ export function buildChatItems(params: {
     const text = extractText(params.streamingMessage);
     const key = `stream:${params.sessionKey}`;
     if (text.trim().length > 0) {
-      items.push({
+      liveItems.push({
         kind: 'stream',
         key,
         text,
@@ -479,13 +505,15 @@ export function buildChatItems(params: {
             : Date.now()),
       });
     } else {
-      items.push({ kind: 'reading-indicator', key });
+      liveItems.push({ kind: 'reading-indicator', key });
     }
   } else if (params.sending && (params.pendingFinal || !hasLiveActivity)) {
-    items.push({ kind: 'reading-indicator', key: `reading:${params.sessionKey}` });
+    liveItems.push({ kind: 'reading-indicator', key: `reading:${params.sessionKey}` });
   }
 
-  return withDateDividers(groupMessages(items) as TranscriptFlowItem[], params.locale);
+  const transcriptFlow = withDateDividers(toGroupedFlowItems(transcriptItems), params.locale);
+  const liveFlow = toGroupedFlowItems(liveItems);
+  return mergeTrailingReadingIndicatorIntoAssistantGroup(transcriptFlow, liveFlow);
 }
 
 export function extractGroupMeta(group: MessageGroup, contextWindow: number | null): GroupMeta | null {
