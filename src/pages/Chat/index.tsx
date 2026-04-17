@@ -126,6 +126,10 @@ export function Chat() {
     const state = location.state as { createNewSession?: boolean } | null;
     return state?.createNewSession === true;
   }, [location.state]);
+  const routeAgentId = useMemo(() => {
+    const state = location.state as { agentId?: string } | null;
+    return typeof state?.agentId === 'string' && state.agentId.trim() ? state.agentId : undefined;
+  }, [location.state]);
 
   // Load data when gateway is running.
   // When the store already holds messages for this session (i.e. the user
@@ -137,7 +141,7 @@ export function Chat() {
     let cancelled = false;
     (async () => {
       if (createNewSessionFromRoute) {
-        newSession();
+        newSession(routeAgentId);
         navigate(location.pathname, { replace: true, state: null });
         if (!cancelled) {
           void loadSessions({ preserveCurrent: true });
@@ -175,6 +179,7 @@ export function Chat() {
     sessionsHydrated,
     messages.length,
     createNewSessionFromRoute,
+    routeAgentId,
     forceSessionKeyFromRoute,
     switchSession,
     navigate,

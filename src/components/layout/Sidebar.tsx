@@ -225,6 +225,24 @@ export function Sidebar() {
   const location = useLocation();
   const isOnChat = location.pathname === '/';
 
+  const openSession = (sessionKey: string) => {
+    if (isOnChat) {
+      if (currentSessionKey !== sessionKey) {
+        switchSession(sessionKey);
+      }
+      return;
+    }
+    navigate('/', { state: { forceSessionKey: sessionKey } });
+  };
+
+  const openNewChat = (agentId?: string) => {
+    if (isOnChat) {
+      newSession(agentId);
+      return;
+    }
+    navigate('/', { state: { createNewSession: true, agentId } });
+  };
+
   const getSessionLabel = (
     key: string,
     displayName?: string,
@@ -534,9 +552,7 @@ export function Sidebar() {
       <nav className="flex flex-col px-2 gap-0.5">
         <button
           onClick={() => {
-            newSession();
-            const forcedSessionKey = useChatStore.getState().currentSessionKey;
-            navigate('/', { state: { forceSessionKey: forcedSessionKey } });
+            openNewChat();
           }}
           className={cn(
             'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-[14px] font-medium transition-colors mb-2',
@@ -613,8 +629,7 @@ export function Sidebar() {
                             <div className="relative flex items-center">
                               <button
                                 onClick={() => {
-                                  switchSession(s.key);
-                                  navigate('/');
+                                  openSession(s.key);
                                 }}
                                 className={cn(
                                   'w-full text-left px-3 py-2.5 pr-8 transition-all',
@@ -711,8 +726,7 @@ export function Sidebar() {
                                               <button
                                                 type="button"
                                                 onClick={() => {
-                                                  switchSession(child.key);
-                                                  navigate('/');
+                                                  openSession(child.key);
                                                 }}
                                                 className="w-full text-left"
                                               >
@@ -822,8 +836,7 @@ export function Sidebar() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  switchSession(group.parentSessionKey!);
-                                  navigate('/');
+                                  openSession(group.parentSessionKey!);
                                 }}
                                 className="shrink-0 rounded-full bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-black/8 hover:text-foreground dark:bg-white/8 dark:hover:bg-white/12"
                               >
@@ -850,8 +863,7 @@ export function Sidebar() {
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        switchSession(s.key);
-                                        navigate('/');
+                                        openSession(s.key);
                                       }}
                                       className="w-full text-left"
                                     >
@@ -881,8 +893,7 @@ export function Sidebar() {
                                         <button
                                           type="button"
                                           onClick={() => {
-                                            switchSession(parentSessionKey);
-                                            navigate('/');
+                                            openSession(parentSessionKey);
                                           }}
                                           className="truncate text-left hover:text-foreground"
                                           title={parentSessionLabel}

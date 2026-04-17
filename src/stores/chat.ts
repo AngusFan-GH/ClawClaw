@@ -626,6 +626,56 @@ function resolveSessionSidebarTitle(session: Pick<ChatSession, 'derivedTitle' | 
   return undefined;
 }
 
+function normalizeSidebarTitleForMatch(value?: string): string {
+  return (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function isRecentSessionMaterialization(
+  pendingActivityMs: number | undefined,
+  candidateActivityMs: number | undefined,
+): boolean {
+  if (!pendingActivityMs || !candidateActivityMs) return false;
+  return Math.abs(candidateActivityMs - pendingActivityMs) <= 5 * 60 * 1000;
+}
+
+function findMaterializedSessionKey(params: {
+  pendingKey: string;
+  pendingLabel?: string;
+  pendingActivityMs?: number;
+  sessions: ChatSession[];
+  sessionLabels: Record<string, string>;
+  sessionLastActivity: Record<string, number>;
+}): string | undefined {
+  const { pendingKey, pendingLabel, pendingActivityMs, sessions, sessionLabels, sessionLastActivity } = params;
+  const pendingAgentId = getAgentIdFromSessionKey(pendingKey);
+  const normalizedPendingLabel = normalizeSidebarTitleForMatch(pendingLabel);
+  const candidates = sessions.filter((session) => (
+    session.key !== pendingKey
+    && getAgentIdFromSessionKey(session.key) === pendingAgentId
+    && isRecentSessionMaterialization(pendingActivityMs, sessionLastActivity[session.key] ?? session.updatedAt)
+  ));
+
+  if (candidates.length === 0) return undefined;
+
+  const exactLabelMatches = normalizedPendingLabel
+    ? candidates.filter((session) => {
+        const label = sessionLabels[session.key] ?? resolveSessionSidebarTitle(session) ?? session.label ?? session.displayName;
+        return normalizeSidebarTitleForMatch(label) === normalizedPendingLabel;
+      })
+    : [];
+
+  const rankedCandidates = (exactLabelMatches.length > 0 ? exactLabelMatches : candidates)
+    .sort((left, right) => (sessionLastActivity[right.key] ?? right.updatedAt ?? 0) - (sessionLastActivity[left.key] ?? left.updatedAt ?? 0));
+
+  if (rankedCandidates.length === 1) {
+    return rankedCandidates[0].key;
+  }
+
+  const topActivity = sessionLastActivity[rankedCandidates[0].key] ?? rankedCandidates[0].updatedAt ?? 0;
+  const runnerUpActivity = sessionLastActivity[rankedCandidates[1].key] ?? rankedCandidates[1].updatedAt ?? 0;
+  return topActivity > runnerUpActivity ? rankedCandidates[0].key : undefined;
+}
+
 // ── Local image cache ─────────────────────────────────────────
 // The Gateway doesn't store image attachments in session content blocks,
 // so we cache them locally keyed by staged file path (which appears in the
@@ -1915,7 +1965,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
           },
           { ...sessionLastActivity }
         );
+        const materializedSessionKeyMap = new Map<string, string>();
+        for (const pendingKey of Object.keys(pendingLocalSessionKeys)) {
+          if (realSessionKeys.has(pendingKey)) continue;
+          const materializedKey = findMaterializedSessionKey({
+            pendingKey,
+            pendingLabel: hydratedSessionLabels[pendingKey],
+            pendingActivityMs: hydratedSessionLastActivity[pendingKey],
+            sessions: dedupedSessions,
+            sessionLabels: hydratedSessionLabels,
+            sessionLastActivity: hydratedSessionLastActivity,
+          });
+          if (!materializedKey) continue;
+          materializedSessionKeyMap.set(pendingKey, materializedKey);
+          if (!hydratedSessionLabels[materializedKey] && hydratedSessionLabels[pendingKey]) {
+            hydratedSessionLabels[materializedKey] = hydratedSessionLabels[pendingKey];
+          }
+          if (!hydratedSessionLastActivity[materializedKey] && hydratedSessionLastActivity[pendingKey]) {
+            hydratedSessionLastActivity[materializedKey] = hydratedSessionLastActivity[pendingKey];
+          }
+          delete hydratedSessionLabels[pendingKey];
+          delete hydratedSessionLastActivity[pendingKey];
+        }
         let nextSessionKey = currentSessionKey || DEFAULT_SESSION_KEY;
+        nextSessionKey = materializedSessionKeyMap.get(nextSessionKey) || nextSessionKey;
         if (!nextSessionKey.startsWith('agent:')) {
           const canonicalMatch = canonicalBySuffix.get(nextSessionKey);
           if (canonicalMatch) {
@@ -1970,7 +2043,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             : dedupedSessions;
 
         const nextPendingLocalSessionKeys = Object.fromEntries(
-          Object.entries(pendingLocalSessionKeys).filter(([key]) => !realSessionKeys.has(key))
+          Object.entries(pendingLocalSessionKeys).filter(([key]) => (
+            !realSessionKeys.has(key) && !materializedSessionKeyMap.has(key)
+          ))
         ) as Record<string, true>;
 
         set({
