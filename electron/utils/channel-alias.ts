@@ -13,6 +13,11 @@ export function toRuntimeChannelType(channelType: string): string {
   return channelType === WECHAT_UI_CHANNEL_ID ? WECHAT_RUNTIME_CHANNEL_ID : channelType;
 }
 
+// Backward-compatible alias used by older route helpers.
+export function toOpenClawChannelType(channelType: string): string {
+  return toRuntimeChannelType(channelType);
+}
+
 export function toUiChannelType(channelType: string): string {
   return channelType === WECHAT_RUNTIME_CHANNEL_ID ? WECHAT_UI_CHANNEL_ID : channelType;
 }

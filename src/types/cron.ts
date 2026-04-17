@@ -5,13 +5,23 @@
 
 import { ChannelType } from './channel';
 
+export type CronJobDeliveryMode = 'none' | 'announce';
+
+export interface CronJobDelivery {
+  mode: CronJobDeliveryMode;
+  channel?: ChannelType | string;
+  to?: string;
+  accountId?: string;
+}
+
 /**
  * Cron job target (where to send the result)
  */
 export interface CronJobTarget {
-  channelType: ChannelType;
+  channelType: ChannelType | string;
   channelId: string;
   channelName: string;
+  recipient?: string;
 }
 
 /**
@@ -43,6 +53,7 @@ export interface CronJob {
   name: string;
   message: string;
   schedule: string | CronSchedule;
+  delivery?: CronJobDelivery;
   target?: CronJobTarget;
   enabled: boolean;
   createdAt: string;
@@ -51,9 +62,6 @@ export interface CronJob {
   nextRun?: string;
   kind?: string;
   uiManaged?: boolean;
-  deliveryMode?: string;
-  deliveryChannel?: string;
-  deliveryTo?: string;
   sessionTarget?: string | null;
   readOnlyReason?: string;
 }
@@ -69,7 +77,8 @@ export interface CronJobCreateInput {
   message: string;
   schedule: string;
   enabled?: boolean;
-  deliveryChannel?: string;
+  agentId?: string;
+  delivery?: CronJobDelivery;
   sessionTarget?: string;
 }
 
@@ -81,7 +90,8 @@ export interface CronJobUpdateInput {
   message?: string;
   schedule?: string;
   enabled?: boolean;
-  deliveryChannel?: string;
+  agentId?: string;
+  delivery?: CronJobDelivery;
   sessionTarget?: string;
 }
 

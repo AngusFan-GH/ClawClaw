@@ -29,10 +29,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { LoadingIcon, PageLoader } from '@/components/common/LoadingSpinner';
 import { RefreshButton } from '@/components/common/RefreshButton';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from '@/stores/gateway';
 import { useChannelsStore } from '@/stores/channels';
 import { useCronStore } from '@/stores/cron';
-import { DEFAULT_SESSION_KEY, useChatStore } from '@/stores/chat';
+import { useAgentsStore } from '@/stores/agents';
+import { useChatStore } from '@/stores/chat';
 import { CHANNEL_ICONS, CHANNEL_NAMES, type ChannelType } from '@/types/channel';
 import type { CronJob, CronJobCreateInput, CronJobUpdateInput, ScheduleType } from '@/types/cron';
 import { cn, formatRelativeTime } from '@/lib/utils';
@@ -66,6 +68,52 @@ type ScheduleBuilderState = {
   custom: string;
 };
 
+type CronHistoryMessage = {
+  id: string;
+  role: 'assistant' | 'system';
+  content: string;
+  timestamp: number;
+  isError?: boolean;
+};
+
+interface DeliveryChannelAccount {
+  accountId: string;
+  name: string;
+  isDefault: boolean;
+}
+
+interface DeliveryChannelGroup {
+  channelType: string;
+  defaultAccountId: string;
+  accounts: DeliveryChannelAccount[];
+}
+
+interface ChannelTargetOption {
+  value: string;
+  label: string;
+  kind: 'user' | 'group' | 'channel';
+}
+
+function isKnownChannelType(value: string): value is ChannelType {
+  return value in CHANNEL_NAMES;
+}
+
+function getChannelDisplayName(value: string): string {
+  return isKnownChannelType(value) ? CHANNEL_NAMES[value] : value;
+}
+
+function getDeliveryAccountDisplayName(account: DeliveryChannelAccount, t: TFunction<'cron'>): string {
+  return account.accountId === 'default' && account.name === account.accountId
+    ? t('dialog.defaultDeliveryAccount')
+    : account.name;
+}
+
+const TESTED_CRON_DELIVERY_CHANNELS = new Set<string>(['feishu', 'telegram', 'qqbot', 'wecom', 'wechat']);
+
+function isSupportedCronDeliveryChannel(channelType: string): boolean {
+  return TESTED_CRON_DELIVERY_CHANNELS.has(channelType);
+}
+
 const DEFAULT_SCHEDULE_STATE: ScheduleBuilderState = {
   mode: 'daily',
   intervalCount: 1,
@@ -79,14 +127,6 @@ const DEFAULT_SCHEDULE_STATE: ScheduleBuilderState = {
 };
 
 const WEEKDAY_OPTIONS = ['1', '2', '3', '4', '5', '6', '0'] as const;
-
-function resolveCronSessionTarget(sessionKey?: string | null): string | undefined {
-  const normalized = sessionKey?.trim();
-  if (!normalized || normalized === DEFAULT_SESSION_KEY) {
-    return undefined;
-  }
-  return `session:${normalized}`;
-}
 
 function weekdayTranslationKey(day: string): 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' {
   switch (day) {
@@ -428,19 +468,28 @@ function validateCronExpression(expr: string): boolean {
 
 interface TaskDialogProps {
   job?: CronJob;
-  channelOptions: Array<{ value: string; label: string }>;
-  defaultSessionTarget?: string;
+  configuredChannels: DeliveryChannelGroup[];
   onClose: () => void;
   onSave: (input: CronJobCreateInput) => Promise<void>;
 }
 
-function TaskDialog({ job, channelOptions, defaultSessionTarget, onClose, onSave }: TaskDialogProps) {
+function TaskDialog({ job, configuredChannels, onClose, onSave }: TaskDialogProps) {
   const { t } = useTranslation('cron');
   const [saving, setSaving] = useState(false);
   const readOnly = Boolean(job && job.uiManaged === false);
+  const agents = useAgentsStore((state) => state.agents);
+  const currentAgentId = useChatStore((state) => state.currentAgentId);
+  const agentOptions = useMemo(
+    () => agents.map((agent) => ({
+      id: agent.gateway.id,
+      name: agent.gateway.name,
+    })),
+    [agents],
+  );
 
   const [name, setName] = useState(job?.name || '');
   const [message, setMessage] = useState(job?.message || '');
+  const [agentId, setAgentId] = useState(job?.agentId || currentAgentId || 'main');
   const initialSchedule = normalizeScheduleExpr(job?.schedule) || '0 9 * * *';
   const initialBuilderState = parseScheduleBuilder(initialSchedule);
   const [scheduleMode, setScheduleMode] = useState<ScheduleBuilderMode>(initialBuilderState.mode);
@@ -453,7 +502,46 @@ function TaskDialog({ job, channelOptions, defaultSessionTarget, onClose, onSave
   const [monthlyTime, setMonthlyTime] = useState(initialBuilderState.monthlyTime);
   const [customSchedule, setCustomSchedule] = useState(initialBuilderState.custom || initialSchedule);
   const [enabled, setEnabled] = useState(job?.enabled ?? true);
-  const [deliveryChannel, setDeliveryChannel] = useState(job?.deliveryChannel || '');
+  const [deliveryMode, setDeliveryMode] = useState<'none' | 'announce'>(job?.delivery?.mode === 'announce' ? 'announce' : 'none');
+  const [deliveryChannel, setDeliveryChannel] = useState(job?.delivery?.channel || '');
+  const [deliveryTarget, setDeliveryTarget] = useState(job?.delivery?.to || '');
+  const [selectedDeliveryAccountId, setSelectedDeliveryAccountId] = useState(job?.delivery?.accountId || '');
+  const [channelTargetOptions, setChannelTargetOptions] = useState<ChannelTargetOption[]>([]);
+  const [loadingChannelTargets, setLoadingChannelTargets] = useState(false);
+
+  const selectableChannels = useMemo(
+    () => configuredChannels.filter((group) => isSupportedCronDeliveryChannel(group.channelType)),
+    [configuredChannels],
+  );
+  const availableChannels = useMemo(() => (
+    selectableChannels.some((group) => group.channelType === deliveryChannel)
+      ? selectableChannels
+      : (
+        deliveryChannel && isSupportedCronDeliveryChannel(deliveryChannel)
+          ? [
+              ...selectableChannels,
+              configuredChannels.find((group) => group.channelType === deliveryChannel) || {
+                channelType: deliveryChannel,
+                defaultAccountId: 'default',
+                accounts: [],
+              },
+            ]
+          : selectableChannels
+      )
+  ), [configuredChannels, deliveryChannel, selectableChannels]);
+  const effectiveDeliveryChannel = deliveryChannel
+    || (deliveryMode === 'announce' ? (availableChannels[0]?.channelType || '') : '');
+  const selectedChannel = availableChannels.find((group) => group.channelType === effectiveDeliveryChannel);
+  const deliveryAccountOptions = (selectedChannel?.accounts ?? []).map((account) => ({
+    accountId: account.accountId,
+    displayName: getDeliveryAccountDisplayName(account, t),
+  }));
+  const effectiveDeliveryAccountId = selectedDeliveryAccountId
+    || selectedChannel?.defaultAccountId
+    || deliveryAccountOptions[0]?.accountId
+    || '';
+  const showsAccountSelector = (selectedChannel?.accounts.length ?? 0) > 0;
+  const selectedResolvedAccountId = effectiveDeliveryAccountId || undefined;
 
   const finalSchedule = buildCronFromBuilder({
     mode: scheduleMode,
@@ -492,6 +580,49 @@ function TaskDialog({ job, channelOptions, defaultSessionTarget, onClose, onSave
   );
   const selectedPresetValue = visiblePresets.some((preset) => preset.value === finalSchedule) ? finalSchedule : '__none';
 
+  useEffect(() => {
+    if (deliveryMode !== 'announce' || !effectiveDeliveryChannel) {
+      setChannelTargetOptions([]);
+      setLoadingChannelTargets(false);
+      return;
+    }
+
+    if (showsAccountSelector && !selectedResolvedAccountId) {
+      setChannelTargetOptions([]);
+      setLoadingChannelTargets(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingChannelTargets(true);
+    const params = new URLSearchParams({ channelType: effectiveDeliveryChannel });
+    if (selectedResolvedAccountId) {
+      params.set('accountId', selectedResolvedAccountId);
+    }
+
+    void hostApiFetch<{ success: boolean; targets?: ChannelTargetOption[]; error?: string }>(
+      `/api/channels/targets?${params.toString()}`,
+    ).then((result) => {
+      if (cancelled) return;
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to load channel targets');
+      }
+      setChannelTargetOptions(Array.isArray(result.targets) ? result.targets : []);
+    }).catch((error) => {
+      if (cancelled) return;
+      console.warn('Failed to load channel targets:', error);
+      setChannelTargetOptions([]);
+    }).finally(() => {
+      if (!cancelled) {
+        setLoadingChannelTargets(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [deliveryMode, effectiveDeliveryChannel, selectedResolvedAccountId, showsAccountSelector]);
+
   const handleSubmit = async () => {
     if (readOnly) {
       toast.error(t('advanced.readOnlyToast'));
@@ -517,6 +648,22 @@ function TaskDialog({ job, channelOptions, defaultSessionTarget, onClose, onSave
       toast.error(t('toast.invalidTime'));
       return;
     }
+    const delivery = deliveryMode === 'announce'
+      ? {
+          mode: 'announce' as const,
+          channel: effectiveDeliveryChannel.trim(),
+          ...(deliveryTarget.trim() ? { to: deliveryTarget.trim() } : {}),
+          ...(effectiveDeliveryAccountId ? { accountId: effectiveDeliveryAccountId } : {}),
+        }
+      : { mode: 'none' as const };
+    if (deliveryMode === 'announce' && !effectiveDeliveryChannel.trim()) {
+      toast.error(t('toast.channelRequired'));
+      return;
+    }
+    if (deliveryMode === 'announce' && !deliveryTarget.trim()) {
+      toast.error(t('toast.deliveryTargetRequired'));
+      return;
+    }
     setSaving(true);
     try {
       await onSave({
@@ -524,8 +671,8 @@ function TaskDialog({ job, channelOptions, defaultSessionTarget, onClose, onSave
         message: message.trim(),
         schedule: finalSchedule,
         enabled,
-        deliveryChannel: deliveryChannel.trim() || undefined,
-        sessionTarget: job?.sessionTarget || defaultSessionTarget,
+        agentId,
+        delivery,
       });
       onClose();
       toast.success(job ? t('toast.updated') : t('toast.created'));
@@ -577,6 +724,23 @@ function TaskDialog({ job, channelOptions, defaultSessionTarget, onClose, onSave
               placeholder={t('dialog.messagePlaceholder')}
               disabled={readOnly}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="task-agent">{t('dialog.agent')}</Label>
+            <Select
+              id="task-agent"
+              value={agentId}
+              onChange={(e) => setAgentId(e.target.value)}
+              disabled={readOnly}
+            >
+              {agentOptions.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </Select>
+            <p className="text-xs text-muted-foreground">{t('dialog.agentHelp')}</p>
           </div>
 
           <div className="space-y-3">
@@ -770,25 +934,120 @@ function TaskDialog({ job, channelOptions, defaultSessionTarget, onClose, onSave
 
           <div className="rounded-2xl border border-border/70 bg-card/80 p-4 space-y-3">
             <div>
-              <p className="text-sm font-medium">{t('dialog.targetChannel')}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{t('dialog.targetChannelHelp')}</p>
+              <p className="text-sm font-medium">{t('dialog.deliveryTitle')}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{t('dialog.deliveryDescription')}</p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="task-delivery-channel">{t('dialog.targetChannel')}</Label>
-              <Select
-                id="task-delivery-channel"
-                value={deliveryChannel}
-                onChange={(e) => setDeliveryChannel(e.target.value)}
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={deliveryMode === 'none' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDeliveryMode('none')}
                 disabled={readOnly}
+                className="h-auto min-h-12 justify-start rounded-xl px-4 py-3 text-left whitespace-normal"
               >
-                <option value="">{t('dialog.deliveryInternalOnly')}</option>
-                {channelOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
+                <div>
+                  <div className="text-[13px] font-semibold">{t('dialog.deliveryModeNone')}</div>
+                  <div className="text-[11px] opacity-80">{t('dialog.deliveryModeNoneDesc')}</div>
+                </div>
+              </Button>
+              <Button
+                type="button"
+                variant={deliveryMode === 'announce' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDeliveryMode('announce')}
+                disabled={readOnly}
+                className="h-auto min-h-12 justify-start rounded-xl px-4 py-3 text-left whitespace-normal"
+              >
+                <div>
+                  <div className="text-[13px] font-semibold">{t('dialog.deliveryModeAnnounce')}</div>
+                  <div className="text-[11px] opacity-80">{t('dialog.deliveryModeAnnounceDesc')}</div>
+                </div>
+              </Button>
             </div>
+            {deliveryMode === 'announce' && (
+              <div className="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-4">
+                <div className="space-y-2">
+                  <Label htmlFor="task-delivery-channel">{t('dialog.deliveryChannel')}</Label>
+                  <Select
+                    id="task-delivery-channel"
+                    value={effectiveDeliveryChannel}
+                    onChange={(e) => {
+                      setDeliveryChannel(e.target.value);
+                      setSelectedDeliveryAccountId('');
+                      setDeliveryTarget('');
+                    }}
+                    disabled={readOnly}
+                  >
+                    <option value="">{t('dialog.selectChannel')}</option>
+                    {availableChannels.map((group) => (
+                      <option key={group.channelType} value={group.channelType}>
+                        {getChannelDisplayName(group.channelType)}
+                      </option>
+                    ))}
+                  </Select>
+                  {availableChannels.length === 0 && (
+                    <p className="text-xs text-muted-foreground">{t('dialog.noChannels')}</p>
+                  )}
+                </div>
+                {showsAccountSelector && (
+                  <div className="space-y-2">
+                    <Label htmlFor="task-delivery-account">{t('dialog.deliveryAccount')}</Label>
+                    <Select
+                      id="task-delivery-account"
+                      value={effectiveDeliveryAccountId}
+                      onChange={(e) => {
+                        setSelectedDeliveryAccountId(e.target.value);
+                        setDeliveryTarget('');
+                      }}
+                      disabled={readOnly || deliveryAccountOptions.length === 0}
+                    >
+                      <option value="">{t('dialog.selectDeliveryAccount')}</option>
+                      {deliveryAccountOptions.map((option) => (
+                        <option key={option.accountId} value={option.accountId}>
+                          {option.displayName}
+                        </option>
+                      ))}
+                    </Select>
+                    <p className="text-xs text-muted-foreground">{t('dialog.deliveryAccountDesc')}</p>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="task-delivery-target">{t('dialog.deliveryTarget')}</Label>
+                  {channelTargetOptions.length > 0 && (
+                    <Select
+                      id="task-delivery-target-suggestions"
+                      value={deliveryTarget}
+                      onChange={(e) => setDeliveryTarget(e.target.value)}
+                      disabled={readOnly || loadingChannelTargets}
+                    >
+                      <option value="">
+                        {loadingChannelTargets ? t('dialog.loadingTargets') : t('dialog.selectDeliveryTarget')}
+                      </option>
+                      {channelTargetOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                  <Input
+                    id="task-delivery-target"
+                    value={deliveryTarget}
+                    onChange={(e) => setDeliveryTarget(e.target.value)}
+                    placeholder={t('dialog.deliveryTargetPlaceholder')}
+                    disabled={readOnly}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {channelTargetOptions.length > 0
+                      ? t('dialog.deliveryTargetDescAuto')
+                      : loadingChannelTargets
+                        ? t('dialog.loadingTargets')
+                        : t('dialog.deliveryTargetDesc')}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-2">
@@ -810,15 +1069,27 @@ function TaskDialog({ job, channelOptions, defaultSessionTarget, onClose, onSave
 
 interface CronJobCardProps {
   job: CronJob;
+  deliveryAccountName?: string;
   busy?: boolean;
   onToggle: (enabled: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
   onTrigger: () => Promise<void>;
+  onViewHistory: () => void;
   onRepairChannel?: () => void;
 }
 
-function CronJobCard({ job, busy = false, onToggle, onEdit, onDelete, onTrigger, onRepairChannel }: CronJobCardProps) {
+function CronJobCard({
+  job,
+  deliveryAccountName,
+  busy = false,
+  onToggle,
+  onEdit,
+  onDelete,
+  onTrigger,
+  onViewHistory,
+  onRepairChannel,
+}: CronJobCardProps) {
   const { t } = useTranslation('cron');
   const [triggering, setTriggering] = useState(false);
   const [errorExpanded, setErrorExpanded] = useState(false);
@@ -828,7 +1099,7 @@ function CronJobCard({ job, busy = false, onToggle, onEdit, onDelete, onTrigger,
   const deliveryError = job.lastRun?.error ?? '';
   const needsChannelRepair = Boolean(
     isAdvancedJob
-    && job.deliveryMode === 'announce'
+    && job.delivery?.mode === 'announce'
     && (
       deliveryError.includes('Channel is required')
       || deliveryError.includes('requires target')
@@ -931,10 +1202,16 @@ function CronJobCard({ job, busy = false, onToggle, onEdit, onDelete, onTrigger,
             </span>
           )}
 
-          {job.target && (
+          {job.delivery?.mode === 'announce' && job.delivery.channel && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-muted/40 px-3 py-1">
-              {CHANNEL_ICONS[job.target.channelType as ChannelType]}
-              {job.target.channelName}
+              {isKnownChannelType(job.delivery.channel) ? CHANNEL_ICONS[job.delivery.channel] : '🔔'}
+              {getChannelDisplayName(job.delivery.channel)}
+              {deliveryAccountName ? (
+                <span className="max-w-[220px] truncate">{deliveryAccountName}</span>
+              ) : null}
+              {job.delivery.to ? (
+                <span className="max-w-[220px] truncate">{job.delivery.to}</span>
+              ) : null}
             </span>
           )}
         </div>
@@ -970,6 +1247,10 @@ function CronJobCard({ job, busy = false, onToggle, onEdit, onDelete, onTrigger,
         )}
 
         <div className="flex flex-wrap justify-end gap-3 pt-1">
+          <Button variant="outline" size="sm" className="h-12 rounded-[18px] px-5 text-sm" onClick={onViewHistory} disabled={busy || triggering}>
+            <History className="h-3.5 w-3.5 mr-1.5" />
+            {t('card.viewHistory')}
+          </Button>
           <Button variant="outline" size="sm" onClick={handleTrigger} disabled={triggering || busy} className="h-12 rounded-[18px] px-5 text-sm">
             {triggering ? <LoadingIcon className="h-3.5 w-3.5 mr-1.5" /> : <Play className="h-3.5 w-3.5 mr-1.5" />}
             {t('card.runNow')}
@@ -986,27 +1267,91 @@ function CronJobCard({ job, busy = false, onToggle, onEdit, onDelete, onTrigger,
 
 interface DeliveryChannelDialogProps {
   job: CronJob;
-  channelOptions: Array<{ value: string; label: string }>;
-  defaultSessionTarget?: string;
+  configuredChannels: DeliveryChannelGroup[];
   onClose: () => void;
   onSave: (input: CronJobUpdateInput) => Promise<void>;
 }
 
-function DeliveryChannelDialog({ job, channelOptions, defaultSessionTarget, onClose, onSave }: DeliveryChannelDialogProps) {
+function DeliveryChannelDialog({ job, configuredChannels, onClose, onSave }: DeliveryChannelDialogProps) {
   const { t } = useTranslation('cron');
   const [saving, setSaving] = useState(false);
-  const [channel, setChannel] = useState(job.deliveryChannel ?? '');
+  const [channel, setChannel] = useState(job.delivery?.channel ?? '');
+  const [target, setTarget] = useState(job.delivery?.to ?? '');
+  const [channelTargetOptions, setChannelTargetOptions] = useState<ChannelTargetOption[]>([]);
+  const [loadingChannelTargets, setLoadingChannelTargets] = useState(false);
+  const availableChannels = useMemo(
+    () => configuredChannels.filter((group) => isSupportedCronDeliveryChannel(group.channelType)),
+    [configuredChannels],
+  );
+  const selectedChannel = availableChannels.find((group) => group.channelType === channel);
+  const accountOptions = (selectedChannel?.accounts ?? []).map((account) => ({
+    accountId: account.accountId,
+    displayName: getDeliveryAccountDisplayName(account, t),
+  }));
+  const [accountId, setAccountId] = useState(job.delivery?.accountId || selectedChannel?.defaultAccountId || '');
+  const effectiveAccountId = accountId || selectedChannel?.defaultAccountId || '';
+
+  useEffect(() => {
+    if (!channel.trim()) {
+      setChannelTargetOptions([]);
+      setLoadingChannelTargets(false);
+      return;
+    }
+
+    if ((selectedChannel?.accounts.length ?? 0) > 0 && !effectiveAccountId) {
+      setChannelTargetOptions([]);
+      setLoadingChannelTargets(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingChannelTargets(true);
+    const params = new URLSearchParams({ channelType: channel.trim() });
+    if (effectiveAccountId) {
+      params.set('accountId', effectiveAccountId);
+    }
+
+    void hostApiFetch<{ success: boolean; targets?: ChannelTargetOption[]; error?: string }>(
+      `/api/channels/targets?${params.toString()}`,
+    ).then((result) => {
+      if (cancelled) return;
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to load channel targets');
+      }
+      setChannelTargetOptions(Array.isArray(result.targets) ? result.targets : []);
+    }).catch((error) => {
+      if (cancelled) return;
+      console.warn('Failed to load channel targets:', error);
+      setChannelTargetOptions([]);
+    }).finally(() => {
+      if (!cancelled) {
+        setLoadingChannelTargets(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [channel, effectiveAccountId, selectedChannel?.accounts.length]);
 
   const handleSubmit = async () => {
     if (!channel.trim()) {
       toast.error(t('toast.channelRequired'));
       return;
     }
+    if (!target.trim()) {
+      toast.error(t('toast.deliveryTargetRequired'));
+      return;
+    }
     setSaving(true);
     try {
       await onSave({
-        deliveryChannel: channel.trim(),
-        sessionTarget: job.sessionTarget || defaultSessionTarget,
+        delivery: {
+          mode: 'announce',
+          channel: channel.trim(),
+          to: target.trim(),
+          ...(accountId.trim() ? { accountId: accountId.trim() } : {}),
+        },
       });
       toast.success(t('toast.updated'));
       onClose();
@@ -1034,20 +1379,77 @@ function DeliveryChannelDialog({ job, channelOptions, defaultSessionTarget, onCl
             {job.name}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="cron-delivery-channel">{t('dialog.targetChannel')}</Label>
+            <Label htmlFor="cron-delivery-channel">{t('dialog.deliveryChannel')}</Label>
             <Select
               id="cron-delivery-channel"
               value={channel}
-              onChange={(e) => setChannel(e.target.value)}
+              onChange={(e) => {
+                setChannel(e.target.value);
+                setAccountId('');
+              }}
             >
               <option value="">{t('dialog.selectChannel')}</option>
-              {channelOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+              {availableChannels.map((option) => (
+                <option key={option.channelType} value={option.channelType}>
+                  {getChannelDisplayName(option.channelType)}
                 </option>
               ))}
             </Select>
             <p className="text-xs text-muted-foreground">{t('dialog.repairDeliveryHelp')}</p>
+          </div>
+          {(selectedChannel?.accounts.length ?? 0) > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="cron-delivery-account">{t('dialog.deliveryAccount')}</Label>
+              <Select
+                id="cron-delivery-account"
+                value={accountId || selectedChannel?.defaultAccountId || ''}
+                onChange={(e) => {
+                  setAccountId(e.target.value);
+                  setTarget('');
+                }}
+              >
+                <option value="">{t('dialog.selectDeliveryAccount')}</option>
+                {accountOptions.map((option) => (
+                  <option key={option.accountId} value={option.accountId}>
+                    {option.displayName}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-xs text-muted-foreground">{t('dialog.deliveryAccountDesc')}</p>
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="cron-delivery-target">{t('dialog.deliveryTarget')}</Label>
+            {channelTargetOptions.length > 0 && (
+              <Select
+                id="cron-delivery-target-suggestions"
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+                disabled={loadingChannelTargets}
+              >
+                <option value="">
+                  {loadingChannelTargets ? t('dialog.loadingTargets') : t('dialog.selectDeliveryTarget')}
+                </option>
+                {channelTargetOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            )}
+            <Input
+              id="cron-delivery-target"
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              placeholder={t('dialog.deliveryTargetPlaceholder')}
+            />
+            <p className="text-xs text-muted-foreground">
+              {channelTargetOptions.length > 0
+                ? t('dialog.deliveryTargetDescAuto')
+                : loadingChannelTargets
+                  ? t('dialog.loadingTargets')
+                  : t('dialog.deliveryTargetDesc')}
+            </p>
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onClose} className="rounded-xl px-5">
@@ -1068,17 +1470,109 @@ function DeliveryChannelDialog({ job, channelOptions, defaultSessionTarget, onCl
   );
 }
 
+interface CronRunHistoryDialogProps {
+  job: CronJob;
+  onClose: () => void;
+}
+
+function CronRunHistoryDialog({ job, onClose }: CronRunHistoryDialogProps) {
+  const { t } = useTranslation('cron');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [messages, setMessages] = useState<CronHistoryMessage[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const sessionKey = `agent:${job.agentId || 'main'}:cron:${job.id}`;
+    setLoading(true);
+    setError(null);
+    void hostApiFetch<{ messages?: CronHistoryMessage[] }>(
+      `/api/cron/session-history?${new URLSearchParams({ sessionKey, limit: '50' }).toString()}`,
+    ).then((result) => {
+      if (cancelled) return;
+      setMessages(Array.isArray(result.messages) ? result.messages : []);
+    }).catch((fetchError) => {
+      if (cancelled) return;
+      setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
+    }).finally(() => {
+      if (!cancelled) {
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [job.agentId, job.id]);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/35 backdrop-blur-md flex items-center justify-center p-4" onClick={onClose}>
+      <Card className="w-full max-w-2xl max-h-[85vh] rounded-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
+          <div>
+            <CardTitle className="text-xl font-semibold tracking-tight">{t('history.title')}</CardTitle>
+            <CardDescription className="mt-1">{job.name}</CardDescription>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose} className="rounded-xl">
+            <X className="h-4 w-4" />
+          </Button>
+        </CardHeader>
+        <CardContent className="min-h-0 flex-1 overflow-y-auto space-y-3">
+          {loading ? (
+            <div className="py-10 flex items-center justify-center text-sm text-muted-foreground">
+              <LoadingIcon className="h-4 w-4 mr-2" />
+              {t('history.loading')}
+            </div>
+          ) : error ? (
+            <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border/80 bg-muted/30 p-6 text-sm text-muted-foreground">
+              {t('history.empty')}
+            </div>
+          ) : (
+            messages.map((message) => (
+              <div
+                key={message.id}
+                className={cn(
+                  'rounded-2xl border px-4 py-3 text-sm whitespace-pre-wrap break-words',
+                  message.role === 'system' || message.isError
+                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-100'
+                    : 'border-border/70 bg-card/70 text-foreground',
+                )}
+              >
+                <div className="mb-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                  <span>{message.role === 'system' ? t('history.system') : t('history.assistant')}</span>
+                  <span>{new Date(message.timestamp).toLocaleString()}</span>
+                </div>
+                {message.content}
+              </div>
+            ))
+          )}
+        </CardContent>
+        <div className="px-6 pb-6 pt-2 flex justify-end">
+          <Button variant="outline" onClick={onClose} className="rounded-xl px-5">
+            {t('common:actions.close', 'Close')}
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 export function Cron() {
   const { t } = useTranslation('cron');
   const { jobs, loading, error, fetchJobs, createJob, updateJob, toggleJob, deleteJob, triggerJob } = useCronStore();
   const { channelGroups, fetchChannels } = useChannelsStore();
+  const fetchAgents = useAgentsStore((state) => state.fetchAgents);
   const gatewayStatus = useGatewayStore((state) => state.status);
-  const currentSessionKey = useChatStore((state) => state.currentSessionKey);
 
   const [showDialog, setShowDialog] = useState(false);
   const [editingJob, setEditingJob] = useState<CronJob | undefined>();
   const [jobToDelete, setJobToDelete] = useState<{ id: string } | null>(null);
   const [jobToRepair, setJobToRepair] = useState<CronJob | null>(null);
+  const [jobToViewHistory, setJobToViewHistory] = useState<CronJob | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'failed'>('all');
@@ -1090,32 +1584,32 @@ export function Cron() {
     if (isGatewayRunning) {
       void fetchJobs();
       void fetchChannels(false, { includeRuntime: false });
+      void fetchAgents({ silent: true });
     }
-  }, [fetchChannels, fetchJobs, isGatewayRunning]);
+  }, [fetchAgents, fetchChannels, fetchJobs, isGatewayRunning]);
 
   const safeJobs = useMemo(() => (Array.isArray(jobs) ? jobs : []), [jobs]);
   const activeJobs = useMemo(() => safeJobs.filter((j) => j.enabled), [safeJobs]);
   const pausedJobs = useMemo(() => safeJobs.filter((j) => !j.enabled), [safeJobs]);
   const failedJobs = useMemo(() => safeJobs.filter((j) => j.lastRun && !j.lastRun.success), [safeJobs]);
   const advancedJobs = useMemo(() => safeJobs.filter((j) => j.uiManaged === false), [safeJobs]);
-  const configuredDeliveryChannels = useMemo(() => {
-    const seen = new Set<string>();
-    return channelGroups.flatMap((group) => {
+  const configuredDeliveryChannels = useMemo<DeliveryChannelGroup[]>(() => (
+    channelGroups.flatMap((group) => {
       const configured = group.configured || group.accounts.some((account) => account.configured);
-      if (!configured || seen.has(group.type)) {
+      if (!configured) {
         return [];
       }
-      seen.add(group.type);
       return [{
-        value: group.type,
-        label: group.name?.trim() || CHANNEL_NAMES[group.type as ChannelType] || group.type,
+        channelType: group.type,
+        defaultAccountId: group.defaultAccountId || group.accounts.find((account) => account.isDefaultAccount)?.accountId || 'default',
+        accounts: group.accounts.map((account) => ({
+          accountId: account.accountId,
+          name: account.name,
+          isDefault: account.isDefaultAccount,
+        })),
       }];
-    });
-  }, [channelGroups]);
-  const defaultSessionTarget = useMemo(
-    () => resolveCronSessionTarget(currentSessionKey),
-    [currentSessionKey],
-  );
+    })
+  ), [channelGroups]);
 
   const orderedJobs = useMemo(() => {
     return [...safeJobs].sort((a, b) => {
@@ -1307,21 +1801,29 @@ export function Cron() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-4">
-              {filteredJobs.map((job) => (
+              {filteredJobs.map((job) => {
+                const deliveryChannel = typeof job.delivery?.channel === 'string' ? job.delivery.channel : '';
+                const channelGroup = configuredDeliveryChannels.find((group) => group.channelType === deliveryChannel);
+                const account = channelGroup?.accounts.find((entry) => entry.accountId === job.delivery?.accountId);
+                const deliveryAccountName = account ? getDeliveryAccountDisplayName(account, t) : undefined;
+                return (
                 <CronJobCard
                   key={job.id}
                   job={job}
+                  deliveryAccountName={deliveryAccountName}
                   busy={Boolean(busyJobIds[job.id])}
-                        onToggle={(enabled) => handleToggle(job.id, enabled)}
-                        onEdit={() => {
-                          setEditingJob(job);
-                          setShowDialog(true);
-                        }}
+                  onToggle={(enabled) => handleToggle(job.id, enabled)}
+                  onEdit={() => {
+                    setEditingJob(job);
+                    setShowDialog(true);
+                  }}
                   onDelete={() => setJobToDelete({ id: job.id })}
                   onTrigger={() => triggerJob(job.id)}
+                  onViewHistory={() => setJobToViewHistory(job)}
                   onRepairChannel={() => setJobToRepair(job)}
                 />
-              ))}
+                );
+              })}
             </div>
           )}
               </div>
@@ -1333,8 +1835,7 @@ export function Cron() {
       {showDialog && (
         <TaskDialog
           job={editingJob}
-          channelOptions={configuredDeliveryChannels}
-          defaultSessionTarget={defaultSessionTarget}
+          configuredChannels={configuredDeliveryChannels}
           onClose={() => {
             setShowDialog(false);
             setEditingJob(undefined);
@@ -1346,13 +1847,19 @@ export function Cron() {
       {jobToRepair && (
         <DeliveryChannelDialog
           job={jobToRepair}
-          channelOptions={configuredDeliveryChannels}
-          defaultSessionTarget={defaultSessionTarget}
+          configuredChannels={configuredDeliveryChannels}
           onClose={() => setJobToRepair(null)}
           onSave={async (input) => {
             await updateJob(jobToRepair.id, input);
             await fetchJobs();
           }}
+        />
+      )}
+
+      {jobToViewHistory && (
+        <CronRunHistoryDialog
+          job={jobToViewHistory}
+          onClose={() => setJobToViewHistory(null)}
         />
       )}
 

@@ -3250,6 +3250,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (!sending && runId) {
         set({ sending: true, activeRunId: runId, error: null });
       }
+      if (get().pendingUserMessage) {
+        set({ pendingUserMessage: null });
+      }
     }
 
     switch (resolvedState) {

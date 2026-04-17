@@ -543,6 +543,33 @@ describe('Chat Store', () => {
     expect(useChatStore.getState().pendingSessionModelRefresh).toBe(false);
   });
 
+  it('clears the optimistic user message as soon as the active run starts producing events', () => {
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      sending: true,
+      activeRunId: 'run-user-1',
+      pendingUserMessage: {
+        role: 'user',
+        content: '创建一个定时任务，每10分钟告诉我一次几点了。',
+        id: 'pending-user-1',
+        timestamp: 1_000,
+      },
+    });
+
+    useChatStore.getState().handleChatEvent({
+      runId: 'run-user-1',
+      sessionKey: 'agent:main:main',
+      state: 'delta',
+      message: {
+        role: 'assistant',
+        content: '正在处理',
+        id: 'assistant-delta-1',
+      },
+    });
+
+    expect(useChatStore.getState().pendingUserMessage).toBeNull();
+  });
+
   it('should abort the active run when policy changes require immediate effect', async () => {
     const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockResolvedValue({ success: true });
 
