@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import { hostApiFetch } from '@/lib/host-api';
 import { extractText } from '@/pages/Chat/message-utils';
+import { historyContainsPendingUserMessage } from '@/pages/Chat/pending-user-message';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 
@@ -732,91 +733,14 @@ function getMessageText(content: unknown): string {
   return '';
 }
 
-function getComparableAttachmentPaths(message: RawMessage | undefined): string[] {
-  if (!message?._attachedFiles || message._attachedFiles.length === 0) {
-    return [];
-  }
-  return message._attachedFiles
-    .map((file) => (typeof file.filePath === 'string' ? file.filePath.trim() : ''))
-    .filter(Boolean)
-    .sort();
-}
-
-function normalizeComparableMessageText(content: unknown): string {
-  return getMessageText(content).replace(/\s+/g, ' ').trim();
-}
-
-function isLikelySameUserMessage(
-  historyMessage: RawMessage,
-  optimisticMessage: RawMessage,
-  optimisticTimestampMs: number,
-): boolean {
-  if (historyMessage.role !== 'user' || optimisticMessage.role !== 'user') {
-    return false;
-  }
-
-  if (
-    typeof historyMessage.idempotencyKey === 'string'
-    && historyMessage.idempotencyKey.length > 0
-    && historyMessage.idempotencyKey === optimisticMessage.idempotencyKey
-  ) {
-    return true;
-  }
-
-  const historyText = normalizeComparableMessageText(historyMessage.content);
-  const optimisticText = normalizeComparableMessageText(optimisticMessage.content);
-  if (historyText !== optimisticText) {
-    return false;
-  }
-
-  const historyTimestampMs = historyMessage.timestamp ? toMs(historyMessage.timestamp) : 0;
-  if (historyTimestampMs > 0 && Math.abs(historyTimestampMs - optimisticTimestampMs) > 30_000) {
-    return false;
-  }
-
-  const historyPaths = getComparableAttachmentPaths(historyMessage);
-  const optimisticPaths = getComparableAttachmentPaths(optimisticMessage);
-  if (historyPaths.length !== optimisticPaths.length) {
-    return false;
-  }
-  for (let i = 0; i < historyPaths.length; i += 1) {
-    if (historyPaths[i] !== optimisticPaths[i]) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
 function authoritativeHistoryContainsPendingUser(
   enrichedMessages: RawMessage[],
   pendingUserMessage: RawMessage | null,
   lastUserMessageAt: number | null,
 ): boolean {
-  if (!pendingUserMessage) {
-    return false;
-  }
-
-  if (typeof pendingUserMessage.idempotencyKey === 'string' && pendingUserMessage.idempotencyKey.length > 0) {
-    const exactMatch = enrichedMessages.some(
-      (message) => message.role === 'user' && message.idempotencyKey === pendingUserMessage.idempotencyKey,
-    );
-    if (exactMatch) {
-      return true;
-    }
-  }
-
-  if (!lastUserMessageAt) {
-    return false;
-  }
-
-  const optimisticTimestampMs = toMs(lastUserMessageAt);
-  return enrichedMessages.some((message) => (
-    (message.role === 'user'
-      && message.timestamp
-      && Math.abs(toMs(message.timestamp) - optimisticTimestampMs) < 30_000)
-    || isLikelySameUserMessage(message, pendingUserMessage, optimisticTimestampMs)
-  ));
+  return historyContainsPendingUserMessage(enrichedMessages, pendingUserMessage, {
+    optimisticTimestampMs: lastUserMessageAt ? toMs(lastUserMessageAt) : undefined,
+  });
 }
 
 const SESSION_TITLE_NOISE_PREFIXES = [

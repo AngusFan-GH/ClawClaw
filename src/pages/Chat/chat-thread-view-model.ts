@@ -1,6 +1,7 @@
 import { getHostApiBase } from '@/lib/host-api';
 import type { RawMessage, StreamSegment } from '@/stores/chat';
 import { extractImages, extractText, extractThinking } from './message-utils';
+import { historyContainsPendingUserMessage } from './pending-user-message';
 
 export type ToolCard = {
   kind: 'call' | 'result';
@@ -461,7 +462,7 @@ export function buildChatItems(params: {
     });
   }
 
-  if (params.pendingUserMessage) {
+  if (params.pendingUserMessage && !historyContainsPendingUserMessage(history, params.pendingUserMessage)) {
     liveItems.push({
       kind: 'message',
       key: `pending:${params.pendingUserMessage.id ?? params.sessionKey}`,

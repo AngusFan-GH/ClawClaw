@@ -121,4 +121,42 @@ describe('chat render alignment', () => {
     expect(items.some((item) => item.kind === 'divider')).toBe(false);
     expect(items[0]).toMatchObject({ kind: 'group', role: 'user' });
   });
+
+  it('does not append a duplicate pending user message after history catches up', () => {
+    const items = buildChatItems({
+      messages: [
+        {
+          role: 'user',
+          timestamp: 2_000,
+          content: 'hello',
+          id: 'history-user-1',
+        },
+        {
+          role: 'assistant',
+          timestamp: 2_001,
+          content: 'hi',
+          id: 'history-assistant-1',
+        },
+      ],
+      pendingUserMessage: {
+        role: 'user',
+        timestamp: 1_999,
+        content: 'hello',
+        id: 'pending-user-1',
+      },
+      pendingAssistantMessage: null,
+      toolMessages: [],
+      streamSegments: [],
+      streamingMessage: null,
+      streamingStartedAt: 0,
+      sessionKey: 'agent:main',
+      sending: false,
+      pendingFinal: false,
+      showThinking: true,
+      locale: 'en',
+    });
+
+    const userGroups = items.filter((item) => item.kind === 'group' && item.role === 'user');
+    expect(userGroups).toHaveLength(1);
+  });
 });
