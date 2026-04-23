@@ -702,7 +702,7 @@ function isSameConfigValues(
 }
 
 async function ensureDingTalkPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  return ensureBundledPluginInstalled('channels', 'China Channels', { forceReinstall: true });
+  return ensureBundledPluginInstalled('dingtalk', 'DingTalk', { forceReinstall: true });
 }
 
 async function ensureFeishuPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
@@ -710,7 +710,7 @@ async function ensureFeishuPluginInstalled(): Promise<{ installed: boolean; warn
 }
 
 async function ensureQQBotPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  return ensureBundledPluginInstalled('channels', 'China Channels', { forceReinstall: true });
+  return { installed: true };
 }
 
 async function ensureWeChatPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {

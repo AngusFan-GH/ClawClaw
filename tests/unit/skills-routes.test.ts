@@ -9,6 +9,7 @@ const buildUnifiedSkillListMock = vi.fn();
 const summarizeGatewaySkillSourcesMock = vi.fn();
 const listAgentsSnapshotMock = vi.fn();
 const getOpenClawSkillsDirMock = vi.fn();
+const resolveOpenClawDirMock = vi.fn();
 const sendJsonMock = vi.fn();
 
 vi.mock('@electron/utils/skill-config', () => ({
@@ -33,6 +34,7 @@ vi.mock('@electron/utils/agent-config', () => ({
 
 vi.mock('@electron/utils/paths', () => ({
   getOpenClawSkillsDir: (...args: unknown[]) => getOpenClawSkillsDirMock(...args),
+  resolveOpenClawDir: (...args: unknown[]) => resolveOpenClawDirMock(...args),
 }));
 
 vi.mock('@electron/api/route-utils', () => ({
@@ -54,6 +56,7 @@ describe('handleSkillRoutes', () => {
       defaultAgentId: 'main',
     });
     getOpenClawSkillsDirMock.mockReturnValue('/tmp/managed');
+    resolveOpenClawDirMock.mockReturnValue('/tmp/openclaw');
   });
 
   it('passes agentId through to skills.status for scoped skill lists', async () => {
@@ -63,10 +66,11 @@ describe('handleSkillRoutes', () => {
     const handled = await handleSkillRoutes(
       { method: 'GET' } as IncomingMessage,
       {} as ServerResponse,
-      new URL('http://127.0.0.1:3210/api/skills/list?agentId=agent-sales'),
+      new URL('http://127.0.0.1:3210/api/skills/runtime?agentId=agent-sales'),
       {
         gatewayManager: {
           getStatus: () => ({ state: 'running' }),
+          isInStartupStabilizationWindow: () => false,
           rpc: rpcMock,
         },
         clawHubService: {
@@ -97,6 +101,7 @@ describe('handleSkillRoutes', () => {
       {
         gatewayManager: {
           getStatus: () => ({ state: 'stopped' }),
+          isInStartupStabilizationWindow: () => false,
           rpc: rpcMock,
         },
         clawHubService: {

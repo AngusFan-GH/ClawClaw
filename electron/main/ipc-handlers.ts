@@ -162,9 +162,11 @@ type HostApiFetchRequest = {
   method?: string;
   headers?: Record<string, string>;
   body?: unknown;
+  timeoutMs?: number;
 };
 
-const HOST_API_FETCH_TIMEOUT_MS = 8000;
+const DEFAULT_HOST_API_FETCH_TIMEOUT_MS = 15000;
+const MAX_HOST_API_FETCH_TIMEOUT_MS = 180000;
 
 function registerHostApiProxyHandlers(): void {
   ipcMain.handle('hostapi:fetch', async (_, request: HostApiFetchRequest) => {
@@ -194,10 +196,14 @@ function registerHostApiProxyHandlers(): void {
       const url = `http://127.0.0.1:${hostApiPort}${path}`;
       logger.debug(`[hostapi:fetch] -> ${request.method || 'GET'} ${url}`);
 
+      const timeoutMs =
+        typeof request.timeoutMs === 'number' && Number.isFinite(request.timeoutMs) && request.timeoutMs > 0
+          ? Math.min(Math.floor(request.timeoutMs), MAX_HOST_API_FETCH_TIMEOUT_MS)
+          : DEFAULT_HOST_API_FETCH_TIMEOUT_MS;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
-        controller.abort(new Error(`Host API fetch timed out after ${HOST_API_FETCH_TIMEOUT_MS}ms`));
-      }, HOST_API_FETCH_TIMEOUT_MS);
+        controller.abort(new Error(`Host API fetch timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
 
       let response: Response;
       try {

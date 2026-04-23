@@ -5,10 +5,10 @@
  *
  * All file I/O uses async fs/promises to avoid blocking the main thread.
  */
-import { access, cp, mkdir, readdir } from 'fs/promises';
+import { access, cp, lstat, mkdir, readdir, realpath, rm } from 'fs/promises';
 import { existsSync } from 'fs';
 import { constants } from 'fs';
-import { join } from 'path';
+import { dirname, isAbsolute, join, relative, resolve } from 'path';
 import { getOpenClawDir, getOpenClawSkillsDir, getResourcesDir } from './paths';
 import { logger } from './logger';
 import {
@@ -37,6 +37,11 @@ async function fileExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function isPathInside(parent: string, child: string): boolean {
+  const rel = relative(parent, child);
+  return rel === '' || (!!rel && !rel.startsWith('..') && !isAbsolute(rel));
 }
 
 /**
@@ -194,6 +199,51 @@ async function getBuiltinSkillCandidates(): Promise<BuiltinSkillCandidate[]> {
   return [...deduped.values()];
 }
 
+async function cleanupEscapedManagedSkillSymlinks(skillsRoot: string): Promise<void> {
+  if (!(await fileExists(skillsRoot))) {
+    return;
+  }
+
+  let rootRealPath: string;
+  try {
+    rootRealPath = await realpath(skillsRoot);
+  } catch {
+    return;
+  }
+
+  const entries = await readdir(skillsRoot, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (!entry.isSymbolicLink()) {
+      continue;
+    }
+
+    const linkPath = join(skillsRoot, entry.name);
+    try {
+      const targetRealPath = await realpath(linkPath);
+      if (isPathInside(rootRealPath, targetRealPath)) {
+        continue;
+      }
+
+      const targetParent = dirname(targetRealPath);
+      const targetIsPersonalAgentsSkill =
+        targetParent === resolve(process.env.HOME || '', '.agents', 'skills');
+      if (!targetIsPersonalAgentsSkill || !(await fileExists(join(targetRealPath, 'SKILL.md')))) {
+        continue;
+      }
+
+      const stat = await lstat(linkPath);
+      if (!stat.isSymbolicLink()) {
+        continue;
+      }
+
+      await rm(linkPath);
+      logger.info(`Removed escaped managed skill symlink: ${linkPath} -> ${targetRealPath}`);
+    } catch (error) {
+      logger.warn(`Failed to inspect managed skill symlink ${linkPath}:`, error);
+    }
+  }
+}
+
 /**
  * Ensure built-in skills are deployed to ~/.openclaw/skills/<slug>/.
  * Sources include packaged OpenClaw extension skills plus any first-party
@@ -204,6 +254,7 @@ async function getBuiltinSkillCandidates(): Promise<BuiltinSkillCandidate[]> {
  */
 export async function ensureBuiltinSkillsInstalled(): Promise<void> {
   const skillsRoot = getOpenClawSkillsDir();
+  await cleanupEscapedManagedSkillSymlinks(skillsRoot);
   const builtinSkills = await getBuiltinSkillCandidates();
 
   for (const { slug, sourceDir } of builtinSkills) {

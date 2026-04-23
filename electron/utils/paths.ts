@@ -84,7 +84,7 @@ let _portablePaths: PortablePaths | null | undefined = undefined;
  */
 export function getPortableRootDir(): string | null {
   if (_portablePaths !== undefined) return _portablePaths?.rootDir ?? null;
-  if (!app.isPackaged) {
+  if (!app?.isPackaged) {
     _portablePaths = null;
     return null;
   }
@@ -231,7 +231,7 @@ export function ensureDir(dir: string): void {
  */
 export function getResourcesDir(): string {
   if (app.isPackaged) {
-    return getPackagedResourcesDir();
+    return join(getPackagedResourcesDir(), 'resources');
   }
   return join(__dirname, '../../resources');
 }

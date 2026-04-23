@@ -39,7 +39,10 @@ importers:
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.0.0(jiti@1.21.7))
-      '@openclaw-china/channels':
+      '@openclaw-china/dingtalk':
+        specifier: 2026.3.22
+        version: 2026.3.22(moltbot@0.1.0)
+      '@openclaw-china/wecom':
         specifier: 2026.3.22
         version: 2026.3.22(moltbot@0.1.0)
       '@radix-ui/react-dialog':
@@ -532,17 +535,11 @@ packages:
   '@clack/core@0.5.0':
     resolution: {integrity: sha512-p3y0FIOwaYRUPRcMO7+dlmLh8PSRcrjuTndsiA0WAFbWES0mLZlrjVoBRZ9DzkPFJZG6KGkJmoEAY0ZcVWTkow==}
 
-  '@clack/core@1.1.0':
-    resolution: {integrity: sha512-SVcm4Dqm2ukn64/8Gub2wnlA5nS2iWJyCkdNHcvNHPIeBTGojpdJ+9cZKwLfmqy7irD4N5qLteSilJlE0WLAtA==}
-
   '@clack/core@1.2.0':
     resolution: {integrity: sha512-qfxof/3T3t9DPU/Rj3OmcFyZInceqj/NVtO9rwIuJqCUgh32gwPjpFQQp/ben07qKlhpwq7GzfWpST4qdJ5Drg==}
 
   '@clack/prompts@0.11.0':
     resolution: {integrity: sha512-pMN5FcrEw9hUkZA4f+zLlzivQSeQf5dRGJjSUbvVYDLvpKCdQx5OaknvKzgbtXOizhP+SJJJjqEbOe55uKKfAw==}
-
-  '@clack/prompts@1.1.0':
-    resolution: {integrity: sha512-pkqbPGtohJAvm4Dphs2M8xE29ggupihHdy1x84HNojZuMtFsHiUlRvqD24tM2+XmI+61LlfNceM3Wr7U5QES5g==}
 
   '@clack/prompts@1.2.0':
     resolution: {integrity: sha512-4jmztR9fMqPMjz6H/UZXj0zEmE43ha1euENwkckKKel4XpSfokExPo5AiVStdHSAlHekz4d0CA/r45Ok1E4D3w==}
@@ -1302,9 +1299,6 @@ packages:
     peerDependencies:
       apache-arrow: '>=15.0.0 <=18.1.0'
 
-  '@larksuiteoapi/node-sdk@1.59.0':
-    resolution: {integrity: sha512-sBpkruTvZDOxnVtoTbepWKRX0j1Y1ZElQYu0x7+v088sI9pcpbVp6ZzCGn62dhrKPatzNyCJyzYCPXPYQWccrA==}
-
   '@larksuiteoapi/node-sdk@1.60.0':
     resolution: {integrity: sha512-MS1eXx7K6HHIyIcCBkJLb21okoa8ZatUGQWZaCCUePm6a37RWFmT6ZKlKvHxAanSX26wNuNlwP0RhgscsE+T6g==}
 
@@ -1577,14 +1571,6 @@ packages:
     resolution: {integrity: sha512-/xGlezI6xfGO9NwuJlnwz/K14qD1kCSAGtacBHnGzeAIuJGazcp45KP5NuyARXoKb7cwulAGWVsbeSxdG/cb0Q==}
     engines: {node: ^18.17.0 || >=20.5.0}
 
-  '@openclaw-china/channels@2026.3.22':
-    resolution: {integrity: sha512-RA02kY9ZGzP2kAC39XPauCKOiQmWj/RGaEyRPw6oPpuzx0K3FQHynLCrlU8ZKopq84NLD/NEy6zjWKhHy2uZag==}
-    peerDependencies:
-      moltbot: '>=0.1.0'
-    peerDependenciesMeta:
-      moltbot:
-        optional: true
-
   '@openclaw-china/dingtalk@2026.3.22':
     resolution: {integrity: sha512-l6teRKqLKLMkFEeBcwWxOt1ivGaGLjp2MMo5IMxefbhKXGqCg+p08xOASRoMdJi18DYcBVNCok02gaSRc3yMyA==}
     peerDependencies:
@@ -1593,43 +1579,8 @@ packages:
       moltbot:
         optional: true
 
-  '@openclaw-china/feishu-china@2026.3.22':
-    resolution: {integrity: sha512-7vHX/zBnrkJMkQ5sNsLr1Yq33fHAuGxp6vmOijrSGYXomDGnqR6jK1M8lSu+WfvyCRUQU7ibtOMqqkneG9e1Jg==}
-    peerDependencies:
-      moltbot: '>=0.1.0'
-    peerDependenciesMeta:
-      moltbot:
-        optional: true
-
-  '@openclaw-china/qqbot@2026.3.22':
-    resolution: {integrity: sha512-UNt8PeoFUXG5w33QahZti2e/8ED69iw580sMwFleGjE/6M7KYcj4nCSJD6r0zKMzjsZaVZjFvYY5ImXwduPWAg==}
-    peerDependencies:
-      moltbot: '>=0.1.0'
-    peerDependenciesMeta:
-      moltbot:
-        optional: true
-
   '@openclaw-china/shared@2026.3.22':
     resolution: {integrity: sha512-meHUxJNKwMKK2u6WTjiedglitPuGkKJysee/umpw6OFxZTsksK90lqhJL9TSEwz5N1tVbFUuxM/oO/pV4w4Otw==}
-
-  '@openclaw-china/wechat-mp@2026.3.22':
-    resolution: {integrity: sha512-vSic7IcfeeylfcIQVo6Wqp7o77KL0T/dHJ7ucYKISd6sLV5CIr23HAVX1keIXWh1GIbHq3jhcSpimV2p/Fg/mg==}
-
-  '@openclaw-china/wecom-app@2026.3.22':
-    resolution: {integrity: sha512-+jMgQyGHZKG7FzTsjtgnmizF80Wo2fF5C5LaTs4JmvwrHcnJyVq1oLr8ZnObO6thZe9oRaxU59rjseQdWIVS5Q==}
-    peerDependencies:
-      moltbot: '>=0.1.0'
-    peerDependenciesMeta:
-      moltbot:
-        optional: true
-
-  '@openclaw-china/wecom-kf@2026.3.22':
-    resolution: {integrity: sha512-QSBf4iLKax4xsdv4H2Xbyr16kUIAD3pi0H1aw7NzQZ9hkNvdTZlgTpW+TGLjBgN43QE47l/CwZa+PT5Oz3cGLA==}
-    peerDependencies:
-      moltbot: '>=0.1.0'
-    peerDependenciesMeta:
-      moltbot:
-        optional: true
 
   '@openclaw-china/wecom@2026.3.22':
     resolution: {integrity: sha512-D03oaD+BnQdb/lDhagiuvlB9f5xPlVWLSP0IJ7V5e4mHJBe0wTssAVSB6Tc8OxhsIf9lvJjlCli/wIOFuY+sTQ==}
@@ -7628,10 +7579,6 @@ snapshots:
       picocolors: 1.1.1
       sisteransi: 1.0.5
 
-  '@clack/core@1.1.0':
-    dependencies:
-      sisteransi: 1.0.5
-
   '@clack/core@1.2.0':
     dependencies:
       fast-wrap-ansi: 0.1.6
@@ -7641,11 +7588,6 @@ snapshots:
     dependencies:
       '@clack/core': 0.5.0
       picocolors: 1.1.1
-      sisteransi: 1.0.5
-
-  '@clack/prompts@1.1.0':
-    dependencies:
-      '@clack/core': 1.1.0
       sisteransi: 1.0.5
 
   '@clack/prompts@1.2.0':
@@ -7686,6 +7628,7 @@ snapshots:
       concat-stream: 2.0.0
       http-response-object: 3.0.2
       parse-cache-control: 1.0.1
+    optional: true
 
   '@develar/schema-utils@2.6.5':
     dependencies:
@@ -8460,23 +8403,9 @@ snapshots:
       '@lancedb/lancedb-win32-arm64-msvc': 0.27.2
       '@lancedb/lancedb-win32-x64-msvc': 0.27.2
 
-  '@larksuiteoapi/node-sdk@1.59.0':
-    dependencies:
-      axios: 1.13.6(debug@4.4.3)
-      lodash.identity: 3.0.0
-      lodash.merge: 4.6.2
-      lodash.pickby: 4.6.0
-      protobufjs: 7.5.4
-      qs: 6.15.0
-      ws: 8.20.0
-    transitivePeerDependencies:
-      - bufferutil
-      - debug
-      - utf-8-validate
-
   '@larksuiteoapi/node-sdk@1.60.0':
     dependencies:
-      axios: 1.13.6(debug@4.4.3)
+      axios: 1.13.6
       lodash.identity: 3.0.0
       lodash.merge: 4.6.2
       lodash.pickby: 4.6.0
@@ -8787,25 +8716,6 @@ snapshots:
     dependencies:
       semver: 7.7.4
 
-  '@openclaw-china/channels@2026.3.22(moltbot@0.1.0)':
-    dependencies:
-      '@clack/prompts': 1.1.0
-      '@openclaw-china/dingtalk': 2026.3.22(moltbot@0.1.0)
-      '@openclaw-china/feishu-china': 2026.3.22(moltbot@0.1.0)
-      '@openclaw-china/qqbot': 2026.3.22(moltbot@0.1.0)
-      '@openclaw-china/shared': 2026.3.22
-      '@openclaw-china/wechat-mp': 2026.3.22
-      '@openclaw-china/wecom': 2026.3.22(moltbot@0.1.0)
-      '@openclaw-china/wecom-app': 2026.3.22(moltbot@0.1.0)
-      '@openclaw-china/wecom-kf': 2026.3.22(moltbot@0.1.0)
-    optionalDependencies:
-      moltbot: 0.1.0
-    transitivePeerDependencies:
-      - bufferutil
-      - debug
-      - supports-color
-      - utf-8-validate
-
   '@openclaw-china/dingtalk@2026.3.22(moltbot@0.1.0)':
     dependencies:
       '@openclaw-china/shared': 2026.3.22
@@ -8817,52 +8727,9 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@openclaw-china/feishu-china@2026.3.22(moltbot@0.1.0)':
-    dependencies:
-      '@larksuiteoapi/node-sdk': 1.59.0
-      '@openclaw-china/shared': 2026.3.22
-    optionalDependencies:
-      moltbot: 0.1.0
-    transitivePeerDependencies:
-      - bufferutil
-      - debug
-      - utf-8-validate
-
-  '@openclaw-china/qqbot@2026.3.22(moltbot@0.1.0)':
-    dependencies:
-      '@openclaw-china/shared': 2026.3.22
-      ffmpeg-static: 5.3.0
-      silk-wasm: 3.7.1
-      ws: 8.20.0
-    optionalDependencies:
-      moltbot: 0.1.0
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-
   '@openclaw-china/shared@2026.3.22':
     dependencies:
-      '@clack/prompts': 1.1.0
-
-  '@openclaw-china/wechat-mp@2026.3.22':
-    dependencies:
-      '@openclaw-china/shared': 2026.3.22
-
-  '@openclaw-china/wecom-app@2026.3.22(moltbot@0.1.0)':
-    dependencies:
-      '@openclaw-china/shared': 2026.3.22
-      ffmpeg-static: 5.3.0
-    optionalDependencies:
-      moltbot: 0.1.0
-    transitivePeerDependencies:
-      - supports-color
-
-  '@openclaw-china/wecom-kf@2026.3.22(moltbot@0.1.0)':
-    dependencies:
-      '@openclaw-china/shared': 2026.3.22
-    optionalDependencies:
-      moltbot: 0.1.0
+      '@clack/prompts': 1.2.0
 
   '@openclaw-china/wecom@2026.3.22(moltbot@0.1.0)':
     dependencies:
@@ -9506,7 +9373,7 @@ snapshots:
       '@slack/types': 2.20.1
       '@slack/web-api': 7.15.1
       '@types/express': 5.0.6
-      axios: 1.15.0
+      axios: 1.15.0(debug@4.4.3)
       express: 5.2.1
       path-to-regexp: 8.3.0
       raw-body: 3.0.2
@@ -9552,7 +9419,7 @@ snapshots:
       '@slack/types': 2.20.1
       '@types/node': 25.6.0
       '@types/retry': 0.12.0
-      axios: 1.15.0
+      axios: 1.15.0(debug@4.4.3)
       eventemitter3: 5.0.4
       form-data: 4.0.5
       is-electron: 2.2.2
@@ -10334,7 +10201,7 @@ snapshots:
 
   '@wecom/aibot-node-sdk@1.0.4':
     dependencies:
-      axios: 1.13.6(debug@4.4.3)
+      axios: 1.15.0(debug@4.4.3)
       eventemitter3: 5.0.4
       ws: 8.20.0
     transitivePeerDependencies:
@@ -10394,6 +10261,7 @@ snapshots:
       debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   agent-base@7.1.4: {}
 
@@ -10580,7 +10448,7 @@ snapshots:
 
   await-to-js@3.0.0: {}
 
-  axios@1.13.6(debug@4.4.3):
+  axios@1.13.6:
     dependencies:
       follow-redirects: 1.15.11(debug@4.4.3)
       form-data: 4.0.5
@@ -10588,7 +10456,7 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  axios@1.15.0:
+  axios@1.15.0(debug@4.4.3):
     dependencies:
       follow-redirects: 1.15.11(debug@4.4.3)
       form-data: 4.0.5
@@ -10779,7 +10647,8 @@ snapshots:
 
   caniuse-lite@1.0.30001770: {}
 
-  caseless@0.12.0: {}
+  caseless@0.12.0:
+    optional: true
 
   ccount@2.0.1: {}
 
@@ -10944,6 +10813,7 @@ snapshots:
       inherits: 2.0.4
       readable-stream: 3.6.2
       typedarray: 0.0.6
+    optional: true
 
   conf@15.1.0:
     dependencies:
@@ -11122,7 +10992,7 @@ snapshots:
 
   dingtalk-stream@2.1.4:
     dependencies:
-      axios: 1.13.6(debug@4.4.3)
+      axios: 1.15.0(debug@4.4.3)
       debug: 4.4.3
       ws: 8.20.0
     transitivePeerDependencies:
@@ -11622,6 +11492,7 @@ snapshots:
       progress: 2.0.3
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   file-entry-cache@8.0.0:
     dependencies:
@@ -12119,6 +11990,7 @@ snapshots:
   http-response-object@3.0.2:
     dependencies:
       '@types/node': 10.17.60
+    optional: true
 
   http2-wrapper@1.0.3:
     dependencies:
@@ -12131,6 +12003,7 @@ snapshots:
       debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   https-proxy-agent@7.0.6:
     dependencies:
@@ -13474,7 +13347,8 @@ snapshots:
       xml-parse-from-string: 1.0.1
       xml2js: 0.5.0
 
-  parse-cache-control@1.0.1: {}
+  parse-cache-control@1.0.1:
+    optional: true
 
   parse-entities@4.0.2:
     dependencies:
@@ -14559,7 +14433,8 @@ snapshots:
       media-typer: 1.1.0
       mime-types: 3.0.2
 
-  typedarray@0.0.6: {}
+  typedarray@0.0.6:
+    optional: true
 
   typescript@5.9.3: {}
 

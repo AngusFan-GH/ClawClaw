@@ -495,7 +495,8 @@ exports.default = async function afterPack(context) {
   //       directory doesn't exist (build/openclaw-plugins/ may not be pre-generated)
   //     - node_modules/ is excluded by .gitignore so the deps copy must be manual
   const BUNDLED_PLUGINS = [
-    { npmName: '@openclaw-china/channels', pluginId: 'channels' },
+    { npmName: '@openclaw-china/dingtalk', pluginId: 'dingtalk' },
+    { npmName: '@openclaw-china/wecom', pluginId: 'wecom' },
     { npmName: '@tencent-weixin/openclaw-weixin', pluginId: 'openclaw-weixin' },
   ];
 

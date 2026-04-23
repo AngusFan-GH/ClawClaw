@@ -979,7 +979,10 @@ describe('channel config lifecycle', () => {
     await expect(repairChannelConfigConsistency()).resolves.toEqual({ repaired: true });
 
     const config = await readOpenClawJson();
-    expect(config.plugins).toBeUndefined();
+    expect(config.plugins).toEqual({
+      enabled: true,
+      allow: ['qqbot'],
+    });
     await expect(access(staleMirrorDir)).rejects.toThrow();
   });
 

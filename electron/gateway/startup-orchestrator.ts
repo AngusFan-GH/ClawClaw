@@ -17,6 +17,7 @@ type StartupHooks = {
   assertLifecycle: (phase: string) => void;
   findExistingGateway: (port: number, ownedPid?: number) => Promise<ExistingGatewayInfo | null>;
   connect: (port: number, externalToken?: string) => Promise<void>;
+  onConnectingToExistingGateway: () => void;
   onConnectedToExistingGateway: () => void;
   waitForPortFree: (port: number) => Promise<void>;
   startProcess: () => Promise<void>;
@@ -45,6 +46,7 @@ export async function runGatewayStartupSequence(hooks: StartupHooks): Promise<vo
       hooks.assertLifecycle('start/find-existing');
       if (existing) {
         logger.debug(`Found existing Gateway on port ${existing.port}`);
+        hooks.onConnectingToExistingGateway();
         await hooks.connect(existing.port, existing.externalToken);
         hooks.assertLifecycle('start/connect-existing');
         hooks.onConnectedToExistingGateway();

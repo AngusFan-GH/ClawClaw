@@ -27,6 +27,7 @@ const CONNECT_ERROR_CODES = {
   AUTH_DEVICE_TOKEN_MISMATCH: 'AUTH_DEVICE_TOKEN_MISMATCH',
 } as const;
 const DEFAULT_GATEWAY_HANDSHAKE_TIMEOUT_MS = 20_000;
+const GATEWAY_LOOPBACK_HOST = '127.0.0.1';
 
 type GatewayHelloOk = {
   auth?: {
@@ -92,77 +93,38 @@ function canRetryWithDeviceToken(details: unknown): boolean {
 async function isPortListening(port: number): Promise<boolean> {
   const net = await import('node:net');
   return await new Promise<boolean>((resolve) => {
-    const server = net.createServer();
-    server.once('error', () => resolve(false));
-    server.once('listening', () => {
-      server.close(() => resolve(true));
-    });
-    server.listen(port, '127.0.0.1');
-  });
-}
-
-/**
- * Probe whether the OpenClaw Gateway is ready to accept connections.
- *
- * OpenClaw sends `connect.challenge` immediately on WebSocket connection
- * (see openclaw/src/gateway/server/ws-connection.ts:247-249), so a 300ms
- * timeout is plenty. We first do a cheap TCP check to avoid the WS
- * handshake overhead when the port isn't even open yet.
- *
- * @param port  Gateway port
- * @param timeoutMs  Max time to wait for connect.challenge (default 300ms)
- */
-export async function probeGatewayReady(port: number, timeoutMs = 300): Promise<boolean> {
-  // Fast path: if the port isn't open yet, don't bother spinning up a WebSocket.
-  if (!(await isPortListening(port))) {
-    return false;
-  }
-
-  return await new Promise<boolean>((resolve) => {
-    const testWs = new WebSocket(`ws://localhost:${port}/ws`);
+    const socket = net.createConnection({ port, host: GATEWAY_LOOPBACK_HOST });
     let settled = false;
 
     const resolveOnce = (value: boolean) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeoutId);
       try {
-        testWs.close();
+        socket.destroy();
       } catch {
         // ignore
       }
       resolve(value);
     };
 
-    const timeoutId = setTimeout(() => {
-      resolveOnce(false);
-    }, timeoutMs);
-
-    testWs.on('open', () => {
-      // Do not resolve on plain socket open. The gateway can accept the TCP/WebSocket
-      // connection before it is ready to issue protocol challenges, which previously
-      // caused a false "ready" result and then a full connect() stall.
-    });
-
-    testWs.on('message', (data) => {
-      try {
-        const message = JSON.parse(data.toString()) as { type?: string; event?: string };
-        if (message.type === 'event' && message.event === 'connect.challenge') {
-          resolveOnce(true);
-        }
-      } catch {
-        // ignore malformed probe payloads
-      }
-    });
-
-    testWs.on('error', () => {
-      resolveOnce(false);
-    });
-
-    testWs.on('close', () => {
-      resolveOnce(false);
-    });
+    socket.once('connect', () => resolveOnce(true));
+    socket.once('error', () => resolveOnce(false));
+    socket.setTimeout(250, () => resolveOnce(false));
   });
+}
+
+/**
+ * Probe whether the OpenClaw Gateway is ready to accept connections.
+ *
+ * Keep this as a cheap TCP check. Opening a throwaway WebSocket and closing it
+ * before sending `connect` makes OpenClaw log a noisy "closed before connect"
+ * warning. The real protocol readiness is verified by connectGatewaySocket(),
+ * which has its own challenge/handshake timeout.
+ *
+ * @param port  Gateway port
+ */
+export async function probeGatewayReady(port: number): Promise<boolean> {
+  return isPortListening(port);
 }
 
 export async function waitForGatewayReady(options: {
@@ -181,14 +143,16 @@ export async function waitForGatewayReady(options: {
       throw new Error(`Gateway process exited before becoming ready (status=${exitCode})`);
     }
 
+    let ready = false;
     try {
-      const ready = await probeGatewayReady(options.port);
-      if (ready) {
-        logger.debug(`Gateway ready after ${i + 1} attempt(s)`);
-        return;
-      }
+      ready = await probeGatewayReady(options.port);
     } catch {
       // Gateway not ready yet.
+    }
+
+    if (ready) {
+      logger.debug(`Gateway ready after ${i + 1} attempt(s)`);
+      return;
     }
 
     if (i > 0 && i % 10 === 0) {
@@ -278,10 +242,10 @@ export async function connectGatewaySocket(options: {
   onMessage: (message: unknown) => void;
   onCloseAfterHandshake: () => void;
 }): Promise<WebSocket> {
-  logger.debug(`Connecting Gateway WebSocket (ws://localhost:${options.port}/ws)`);
+  logger.debug(`Connecting Gateway WebSocket (ws://${GATEWAY_LOOPBACK_HOST}:${options.port}/ws)`);
 
   return await new Promise<WebSocket>((resolve, reject) => {
-    const wsUrl = `ws://localhost:${options.port}/ws`;
+    const wsUrl = `ws://${GATEWAY_LOOPBACK_HOST}:${options.port}/ws`;
     const ws = new WebSocket(wsUrl);
     const handshakeTimeoutMs = resolveGatewayHandshakeTimeoutMs();
     let handshakeComplete = false;

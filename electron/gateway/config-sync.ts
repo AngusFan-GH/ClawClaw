@@ -1,15 +1,16 @@
 import { createHash } from 'crypto';
 import { app } from 'electron';
 import path from 'path';
-import { existsSync, mkdirSync, readdirSync, symlinkSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, symlinkSync, writeFileSync } from 'fs';
 import { getAllSettings, getProviderSyncHash, setProviderSyncHash } from '../utils/store';
 import { getApiKey, getDefaultProvider, getProvider } from '../utils/secure-storage';
 import { getKeyableProviderTypes, getProviderEnvVar } from '../utils/provider-registry';
-import { getOpenClawConfigDir, getOpenClawDir, getOpenClawEntryPath, getPortableDataDir, isOpenClawPresent } from '../utils/paths';
+import { getOpenClawConfigDir, getOpenClawDir, getOpenClawEntryPath, getPortableDataDir, isOpenClawPresent, resolveOpenClawDir } from '../utils/paths';
 import { validateBundledOpenClawRuntime } from '../utils/openclaw-runtime-integrity';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import {
   cleanupDanglingWeChatPluginState,
+  cleanupInvalidManagedChannelPlugins,
   cleanupLegacyChannelPlugins,
   listConfiguredChannels,
   repairChannelConfigConsistency,
@@ -39,14 +40,14 @@ import type { GatewayConfigRecovery } from '../../src/types/gateway';
 
 const CHANNEL_PLUGIN_INSTALL_MAP: Partial<Record<string, { pluginId: string; displayName: string }>> = {
   feishu: { pluginId: 'feishu', displayName: 'Feishu / Lark' },
-  dingtalk: { pluginId: 'channels', displayName: 'China Channels' },
+  dingtalk: { pluginId: 'dingtalk', displayName: 'DingTalk' },
   wecom: { pluginId: 'wecom', displayName: 'WeCom' },
   wechat: { pluginId: 'openclaw-weixin', displayName: 'WeChat' },
 };
 
 const MANAGED_CHANNEL_PLUGIN_MIRRORS = [
   { pluginId: 'feishu', displayName: 'Feishu / Lark' },
-  { pluginId: 'channels', displayName: 'China Channels' },
+  { pluginId: 'dingtalk', displayName: 'DingTalk' },
   { pluginId: 'openclaw-weixin', displayName: 'WeChat' },
   { pluginId: 'wecom', displayName: 'WeCom' },
 ] as const;
@@ -67,6 +68,9 @@ const CHANNELS_REQUIRING_DIRECT_WEBSOCKET = new Set([
   'wecom',
   'qqbot',
 ]);
+
+const OPENCLAW_PLUGIN_MANIFEST = 'openclaw.plugin.json';
+const INVALID_PLUGIN_QUARANTINE_DIR = '.quarantine-invalid-manifests';
 
 function resolveGatewayProxyBypassRules(configuredChannels: string[]): string[] {
   const merged = new Set<string>();
@@ -158,6 +162,181 @@ function ensureExtensionDepsResolvable(openclawDir: string): void {
       logger.info(`[plugin] Linked ${linkedCount} built-in extension runtime dependencies into openclaw/node_modules`);
     }
   }
+}
+
+function hasObjectConfigSchema(manifest: unknown): boolean {
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
+    return false;
+  }
+  const configSchema = (manifest as Record<string, unknown>).configSchema;
+  return !!configSchema && typeof configSchema === 'object' && !Array.isArray(configSchema);
+}
+
+function readPluginManifest(manifestPath: string): { id: string | null; hasConfigSchema: boolean } | null {
+  try {
+    const parsed = JSON.parse(readFileSync(manifestPath, 'utf-8')) as unknown;
+    const id =
+      parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>).id
+        : null;
+    return {
+      id: typeof id === 'string' && id.trim() ? id.trim() : null,
+      hasConfigSchema: hasObjectConfigSchema(parsed),
+    };
+  } catch {
+    return { id: null, hasConfigSchema: false };
+  }
+}
+
+function cleanupQuarantinedPluginConfig(pluginIds: string[]): boolean {
+  if (pluginIds.length === 0) return false;
+
+  const configPath = path.join(resolveOpenClawDir(), 'openclaw.json');
+  if (!existsSync(configPath)) return false;
+
+  try {
+    const config = JSON.parse(readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
+    const plugins = config.plugins;
+    if (!plugins || typeof plugins !== 'object' || Array.isArray(plugins)) {
+      return false;
+    }
+
+    const pluginSet = new Set(pluginIds);
+    const pluginRecord = plugins as Record<string, unknown>;
+    let modified = false;
+
+    if (Array.isArray(pluginRecord.allow)) {
+      const nextAllow = pluginRecord.allow.filter((id) => {
+        const keep = typeof id !== 'string' || !pluginSet.has(id);
+        if (!keep) modified = true;
+        return keep;
+      });
+      pluginRecord.allow = nextAllow;
+    }
+
+    const entries = pluginRecord.entries;
+    if (entries && typeof entries === 'object' && !Array.isArray(entries)) {
+      for (const id of pluginSet) {
+        if (Object.prototype.hasOwnProperty.call(entries, id)) {
+          delete (entries as Record<string, unknown>)[id];
+          modified = true;
+        }
+      }
+    }
+
+    if (modified) {
+      writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+    }
+    return modified;
+  } catch (err) {
+    logger.warn('[plugin-preflight] Failed to clean quarantined plugin config entries:', err);
+    return false;
+  }
+}
+
+function quarantineInvalidUserExtensionManifests(): { quarantinedPluginIds: string[]; quarantinedDirs: string[] } {
+  const extensionsDir = path.join(resolveOpenClawDir(), 'extensions');
+  const quarantinedPluginIds: string[] = [];
+  const quarantinedDirs: string[] = [];
+
+  if (!existsSync(extensionsDir)) {
+    return { quarantinedPluginIds, quarantinedDirs };
+  }
+
+  let entries: ReturnType<typeof readdirSync>;
+  try {
+    entries = readdirSync(extensionsDir, { withFileTypes: true });
+  } catch (err) {
+    logger.warn('[plugin-preflight] Failed to scan OpenClaw extensions directory:', err);
+    return { quarantinedPluginIds, quarantinedDirs };
+  }
+
+  const quarantineRoot = path.join(extensionsDir, INVALID_PLUGIN_QUARANTINE_DIR);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+
+    const pluginDir = path.join(extensionsDir, entry.name);
+    const manifestPath = path.join(pluginDir, OPENCLAW_PLUGIN_MANIFEST);
+    if (!existsSync(manifestPath)) continue;
+
+    const manifest = readPluginManifest(manifestPath);
+    if (manifest?.hasConfigSchema) continue;
+
+    const pluginId = manifest?.id ?? entry.name;
+    const destination = path.join(quarantineRoot, `${entry.name}-${timestamp}`);
+    try {
+      mkdirSync(quarantineRoot, { recursive: true });
+      renameSync(pluginDir, destination);
+      quarantinedPluginIds.push(pluginId, entry.name);
+      quarantinedDirs.push(destination);
+      logger.warn(
+        `[plugin-preflight] Quarantined invalid OpenClaw plugin manifest: ${entry.name} (${pluginId}) → ${destination}`,
+      );
+    } catch (err) {
+      logger.warn(`[plugin-preflight] Failed to quarantine invalid plugin manifest at ${pluginDir}:`, err);
+    }
+  }
+
+  const uniqueIds = Array.from(new Set(quarantinedPluginIds));
+  cleanupQuarantinedPluginConfig(uniqueIds);
+  return { quarantinedPluginIds: uniqueIds, quarantinedDirs };
+}
+
+async function repairStartupPluginManifests(): Promise<{ repaired: boolean }> {
+  let repaired = false;
+
+  const configuredChannels = await withTimeout(
+    listConfiguredChannels({ includeCli: false }),
+    1500,
+    'listConfiguredChannelsForPluginPreflight',
+    [],
+  );
+  const pluginIds = resolveManagedPluginIdsForStartup(configuredChannels);
+  for (const pluginId of pluginIds) {
+    const plugin = MANAGED_CHANNEL_PLUGIN_MIRRORS.find((p) => p.pluginId === pluginId);
+    if (!plugin) continue;
+    const result = ensureBundledPluginInstalled(plugin.pluginId, plugin.displayName, { forceReinstall: true });
+    if (result.warning) {
+      logger.warn(`[plugin-preflight] ${result.warning}`);
+    } else if (result.changed) {
+      repaired = true;
+      logger.info(`[plugin-preflight] Repaired ${plugin.displayName} plugin mirror`);
+    }
+  }
+
+  const invalidManaged = await withTimeout(
+    cleanupInvalidManagedChannelPlugins(),
+    3000,
+    'cleanupInvalidManagedChannelPlugins',
+    { cleaned: false, removedPluginIds: [] },
+  );
+  if (invalidManaged.cleaned) {
+    repaired = true;
+    logger.warn(
+      `[plugin-preflight] Removed invalid managed plugin mirrors: ${invalidManaged.removedPluginIds.join(', ')}`,
+    );
+  }
+
+  for (const pluginId of pluginIds) {
+    const plugin = MANAGED_CHANNEL_PLUGIN_MIRRORS.find((p) => p.pluginId === pluginId);
+    if (!plugin) continue;
+    const result = ensureBundledPluginInstalled(plugin.pluginId, plugin.displayName);
+    if (result.warning) {
+      logger.warn(`[plugin-preflight] ${result.warning}`);
+    } else if (result.changed) {
+      repaired = true;
+      logger.info(`[plugin-preflight] Repaired ${plugin.displayName} plugin mirror`);
+    }
+  }
+
+  const quarantined = quarantineInvalidUserExtensionManifests();
+  if (quarantined.quarantinedDirs.length > 0) {
+    repaired = true;
+  }
+
+  return { repaired };
 }
 
 /**
@@ -410,9 +589,24 @@ export async function runOpenClawStartupPreflightRepair(): Promise<void> {
     },
   };
 
-  // ── Phase 2: Config + channel repair (parallel, non-fatal) ─────────
+  // ── Phase 2: Plugin manifest repair (non-fatal, sequential) ─────────
+  // OpenClaw 2026.4.15 validates extension manifests and channel ids before
+  // the Gateway becomes ready. Keep this before config repair so sanitizer or
+  // doctor does not strip plugin entries for configured external channels.
+  const PHASE_2_PLUGIN_REPAIR: GatewayStartupPreflightStep = {
+    id: 'repair-plugin-manifests',
+    label: 'repairStartupPluginManifests',
+    run: async () => {
+      const result = await repairStartupPluginManifests();
+      if (result.repaired) {
+        recoveryTopics.push('plugins');
+      }
+    },
+  };
+
+  // ── Phase 3: Config + channel repair (parallel, non-fatal) ─────────
   // These two are independent and can run concurrently.
-  const PHASE_2_REPAIR: GatewayStartupPreflightStep[] = [
+  const PHASE_3_REPAIR: GatewayStartupPreflightStep[] = [
     {
       id: 'repair-openclaw-config',
       label: 'repairOpenClawConfigFile',
@@ -440,10 +634,8 @@ export async function runOpenClawStartupPreflightRepair(): Promise<void> {
     },
   ];
 
-  // ── Phase 3: Cleanup + sync (parallel, non-fatal) ───────────────────
-  // NOTE: `sync-managed-channel-plugin-mirrors` is DEFERRED to post-startup
-  // (see `runDeferredManagedPluginSync`) — it is omitted here.
-  const PHASE_3_CLEANUP_SYNC: GatewayStartupPreflightStep[] = [
+  // ── Phase 4: Cleanup + sync (parallel, non-fatal) ───────────────────
+  const PHASE_4_CLEANUP_SYNC: GatewayStartupPreflightStep[] = [
     {
       id: 'cleanup-dangling-wechat-plugin-state',
       label: 'cleanupDanglingWeChatPluginState',
@@ -552,8 +744,9 @@ export async function runOpenClawStartupPreflightRepair(): Promise<void> {
   const result = await runGatewayStartupPreflight({
     phases: [
       { id: 'phase-1-runtime', label: 'Runtime validation (fatal)', steps: [PHASE_1_FATAL] },
-      { id: 'phase-2-repair', label: 'Config & channel repair', steps: PHASE_2_REPAIR },
-      { id: 'phase-3-cleanup-sync', label: 'Cleanup & sync', steps: PHASE_3_CLEANUP_SYNC },
+      { id: 'phase-2-plugin-repair', label: 'Plugin manifest repair', steps: [PHASE_2_PLUGIN_REPAIR] },
+      { id: 'phase-3-repair', label: 'Config & channel repair', steps: PHASE_3_REPAIR },
+      { id: 'phase-4-cleanup-sync', label: 'Cleanup & sync', steps: PHASE_4_CLEANUP_SYNC },
     ],
     onStepError: (step, error) => {
       logger.warn(`Startup preflight step failed: ${step.label}`, error);
@@ -696,7 +889,16 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     throw new Error(`OpenClaw entry script not found at: ${entryScript}`);
   }
 
-  const gatewayArgs = ['gateway', '--port', String(port), '--token', appSettings.gatewayToken, '--allow-unconfigured'];
+  const gatewayArgs = [
+    'gateway',
+    '--port',
+    String(port),
+    '--bind',
+    'loopback',
+    '--token',
+    appSettings.gatewayToken,
+    '--allow-unconfigured',
+  ];
   const mode = app.isPackaged ? 'packaged' : 'dev';
 
   const platform = process.platform;
@@ -791,6 +993,8 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
       : {}),
     OPENCLAW_GATEWAY_TOKEN: appSettings.gatewayToken,
     OPENCLAW_HANDSHAKE_TIMEOUT_MS: process.env.OPENCLAW_HANDSHAKE_TIMEOUT_MS || '20000',
+    OPENCLAW_DISABLE_BONJOUR: '1',
+    NODE_NO_WARNINGS: '1',
     OPENCLAW_SKIP_CHANNELS: skipChannels ? '1' : '',
     CLAWDBOT_SKIP_CHANNELS: skipChannels ? '1' : '',
     OPENCLAW_NO_RESPAWN: '1',

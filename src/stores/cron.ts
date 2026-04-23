@@ -22,6 +22,18 @@ interface CronState {
   setJobs: (jobs: CronJob[]) => void;
 }
 
+let fetchJobsInFlight: Promise<CronJob[]> | null = null;
+
+function fetchCronJobs(): Promise<CronJob[]> {
+  if (!fetchJobsInFlight) {
+    fetchJobsInFlight = hostApiFetch<CronJob[]>('/api/cron/jobs')
+      .finally(() => {
+        fetchJobsInFlight = null;
+      });
+  }
+  return fetchJobsInFlight;
+}
+
 export const useCronStore = create<CronState>((set) => ({
   jobs: [],
   loading: false,
@@ -36,7 +48,7 @@ export const useCronStore = create<CronState>((set) => ({
     }
     
     try {
-      const result = await hostApiFetch<CronJob[]>('/api/cron/jobs');
+      const result = await fetchCronJobs();
       const resultIds = new Set(result.map((job) => job.id));
       const extraJobs = currentJobs.filter((job) => !resultIds.has(job.id));
       set({ jobs: [...result, ...extraJobs], loading: false });
@@ -116,7 +128,7 @@ export const useCronStore = create<CronState>((set) => ({
       });
       // Refresh jobs after trigger to update lastRun/nextRun state
       try {
-        const jobs = await hostApiFetch<CronJob[]>('/api/cron/jobs');
+        const jobs = await fetchCronJobs();
         set({ jobs });
       } catch {
         // Ignore refresh error

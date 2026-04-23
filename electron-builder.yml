@@ -21,6 +21,10 @@ extraResources:
     to: resources/
     filter:
       - '**/*'
+      - '!README Portable.txt'
+      - '!Start ClawClaw.bat'
+      - '!Start ClawClaw.vbs'
+      - '!Start ClawClaw.command'
       - '!icons/*.md'
       - '!icons/*.svg'
       - '!bin/**'

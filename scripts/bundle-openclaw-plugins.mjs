@@ -5,7 +5,8 @@
  *
  * Build a self-contained mirror of OpenClaw third-party plugins for packaging.
  * Current plugins:
- *   - @openclaw-china/channels -> build/openclaw-plugins/channels
+ *   - @openclaw-china/dingtalk -> build/openclaw-plugins/dingtalk
+ *   - @openclaw-china/wecom -> build/openclaw-plugins/wecom
  *   - @tencent-weixin/openclaw-weixin -> build/openclaw-plugins/openclaw-weixin
  *
  * The output plugin directory contains:
@@ -38,7 +39,8 @@ function normWin(p) {
 }
 
 const PLUGINS = [
-  { npmName: '@openclaw-china/channels', pluginId: 'channels' },
+  { npmName: '@openclaw-china/dingtalk', pluginId: 'dingtalk' },
+  { npmName: '@openclaw-china/wecom', pluginId: 'wecom' },
   { npmName: '@tencent-weixin/openclaw-weixin', pluginId: 'openclaw-weixin' },
 ];
 

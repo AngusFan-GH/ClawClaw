@@ -506,6 +506,7 @@ export function Chat() {
       if (attachments && attachments.length > 0) {
         await hostApiFetch('/api/chat/send-with-media', {
           method: 'POST',
+          timeoutMs: 125_000,
           body: JSON.stringify({
             sessionKey: currentSessionKey,
             message: trimmed,

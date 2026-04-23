@@ -415,6 +415,15 @@ export class GatewayManager extends EventEmitter {
           connect: async (port, externalToken) => {
             await this.connect(port, externalToken);
           },
+          onConnectingToExistingGateway: () => {
+            this.setStatus({
+              state: 'reconnecting',
+              error: undefined,
+              reconnectAttempts: 0,
+              pid: undefined,
+              restartExpectedMs: undefined,
+            });
+          },
           onConnectedToExistingGateway: () => {
             this.ownsProcess = false;
             this.setStatus({ pid: undefined });
@@ -590,7 +599,7 @@ export class GatewayManager extends EventEmitter {
       this.shouldReconnect = true;
       this.reconnectAttempts = 0;
       this.setStatus({
-        state: 'starting',
+        state: 'reconnecting',
         error: undefined,
         reconnectAttempts: 0,
         pid: undefined,

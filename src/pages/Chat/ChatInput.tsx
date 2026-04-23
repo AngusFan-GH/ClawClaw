@@ -367,7 +367,9 @@ export function ChatInput({
       }
 
       // Stage all files via IPC
-      console.log('[pickFiles] Staging files:', result.filePaths);
+      if (import.meta.env.DEV) {
+        console.debug('[pickFiles] Staging files:', result.filePaths);
+      }
       const staged = await hostApiFetch<
         Array<{
           id: string;
@@ -381,17 +383,19 @@ export function ChatInput({
         method: 'POST',
         body: JSON.stringify({ filePaths: result.filePaths }),
       });
-      console.log(
-        '[pickFiles] Stage result:',
-        staged?.map((s) => ({
-          id: s?.id,
-          fileName: s?.fileName,
-          mimeType: s?.mimeType,
-          fileSize: s?.fileSize,
-          stagedPath: s?.stagedPath,
-          hasPreview: !!s?.preview,
-        }))
-      );
+      if (import.meta.env.DEV) {
+        console.debug(
+          '[pickFiles] Stage result:',
+          staged?.map((s) => ({
+            id: s?.id,
+            fileName: s?.fileName,
+            mimeType: s?.mimeType,
+            fileSize: s?.fileSize,
+            stagedPath: s?.stagedPath,
+            hasPreview: !!s?.preview,
+          }))
+        );
+      }
 
       // Update each placeholder with real data
       setAttachments((prev) => {
@@ -443,9 +447,13 @@ export function ChatInput({
       ]);
 
       try {
-        console.log(`[stageBuffer] Reading file: ${file.name} (${file.type}, ${file.size} bytes)`);
+        if (import.meta.env.DEV) {
+          console.debug(`[stageBuffer] Reading file: ${file.name} (${file.type}, ${file.size} bytes)`);
+        }
         const base64 = await readFileAsBase64(file);
-        console.log(`[stageBuffer] Base64 length: ${base64?.length ?? 'null'}`);
+        if (import.meta.env.DEV) {
+          console.debug(`[stageBuffer] Base64 length: ${base64?.length ?? 'null'}`);
+        }
         const staged = await hostApiFetch<{
           id: string;
           fileName: string;
@@ -461,9 +469,11 @@ export function ChatInput({
             mimeType: file.type || 'application/octet-stream',
           }),
         });
-        console.log(
-          `[stageBuffer] Staged: id=${staged?.id}, path=${staged?.stagedPath}, size=${staged?.fileSize}`
-        );
+        if (import.meta.env.DEV) {
+          console.debug(
+            `[stageBuffer] Staged: id=${staged?.id}, path=${staged?.stagedPath}, size=${staged?.fileSize}`
+          );
+        }
         setAttachments((prev) =>
           prev.map((a) => (a.id === tempId ? { ...staged, status: 'ready' as const } : a))
         );
@@ -502,22 +512,26 @@ export function ChatInput({
     // but keep attachments available for the async send
     const textToSend = input.trim();
     const attachmentsToSend = readyAttachments.length > 0 ? readyAttachments : undefined;
-    console.log(
-      `[handleSend] text="${textToSend.substring(0, 50)}", attachments=${attachments.length}, ready=${readyAttachments.length}, sending=${!!attachmentsToSend}`
-    );
-    if (attachmentsToSend) {
-      console.log(
-        '[handleSend] Attachment details:',
-        attachmentsToSend.map((a) => ({
-          id: a.id,
-          fileName: a.fileName,
-          mimeType: a.mimeType,
-          fileSize: a.fileSize,
-          stagedPath: a.stagedPath,
-          status: a.status,
-          hasPreview: !!a.preview,
-        }))
+    if (import.meta.env.DEV) {
+      console.debug(
+        `[handleSend] text="${textToSend.substring(0, 50)}", attachments=${attachments.length}, ready=${readyAttachments.length}, sending=${!!attachmentsToSend}`
       );
+    }
+    if (attachmentsToSend) {
+      if (import.meta.env.DEV) {
+        console.debug(
+          '[handleSend] Attachment details:',
+          attachmentsToSend.map((a) => ({
+            id: a.id,
+            fileName: a.fileName,
+            mimeType: a.mimeType,
+            fileSize: a.fileSize,
+            stagedPath: a.stagedPath,
+            status: a.status,
+            hasPreview: !!a.preview,
+          }))
+        );
+      }
     }
     setInput('');
     setAttachments([]);

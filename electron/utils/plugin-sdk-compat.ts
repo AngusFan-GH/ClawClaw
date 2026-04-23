@@ -5,8 +5,19 @@ const ROOT_PLUGIN_SDK_SPEC = 'openclaw/plugin-sdk';
 const COMPAT_PLUGIN_SDK_SPEC = 'openclaw/plugin-sdk/compat';
 
 const MOVED_ROOT_PLUGIN_SDK_EXPORTS: Record<string, string> = {
+  DEFAULT_ACCOUNT_ID: 'openclaw/plugin-sdk/account-id',
+  addWildcardAllowFrom: 'openclaw/plugin-sdk/setup',
+  emptyPluginConfigSchema: 'openclaw/plugin-sdk/channel-plugin-common',
+  formatPairingApproveHint: 'openclaw/plugin-sdk/channel-plugin-common',
+  readJsonFileWithFallback: 'openclaw/plugin-sdk/json-store',
   resolvePreferredOpenClawTmpDir: 'openclaw/plugin-sdk/infra-runtime',
+  withFileLock: 'openclaw/plugin-sdk/file-lock',
+  writeJsonFileAtomically: 'openclaw/plugin-sdk/json-store',
 };
+
+const COMMON_ROOT_PLUGIN_SDK_COMPAT_SUBPATHS = Array.from(
+  new Set(Object.values(MOVED_ROOT_PLUGIN_SDK_EXPORTS)),
+);
 
 const JS_LIKE_EXTENSIONS = new Set(['.ts', '.js', '.mjs', '.cjs']);
 
@@ -99,6 +110,24 @@ function rewriteRootPluginSdkImports(
   return { nextContent, changed };
 }
 
+function rewriteCommonJsRootPluginSdkRequire(content: string): { nextContent: string; changed: boolean } {
+  const requirePattern = /require\(\s*["']openclaw\/plugin-sdk(?:\/compat)?["']\s*\)/g;
+  if (!requirePattern.test(content)) {
+    return { nextContent: content, changed: false };
+  }
+
+  requirePattern.lastIndex = 0;
+  const compatRequire = [
+    'Object.assign({}, require("openclaw/plugin-sdk")',
+    ...COMMON_ROOT_PLUGIN_SDK_COMPAT_SUBPATHS.map((subpath) => `require("${subpath}")`),
+  ].join(', ') + ')';
+
+  return {
+    nextContent: content.replace(requirePattern, compatRequire),
+    changed: true,
+  };
+}
+
 function fileContainsIncompatibleRootImports(filePath: string): boolean {
   const content = readFileSync(filePath, 'utf8');
   const namedImportPattern = /import\s+\{([^}]+)\}\s+from\s+["'](openclaw\/plugin-sdk(?:\/compat)?)["']/g;
@@ -166,8 +195,9 @@ export function repairManagedPluginSdkImports(rootDir: string): { repaired: bool
     const source = readFileSync(filePath, 'utf8');
     const rootRewrite = rewriteRootPluginSdkImports(source, ROOT_PLUGIN_SDK_SPEC);
     const compatRewrite = rewriteRootPluginSdkImports(rootRewrite.nextContent, COMPAT_PLUGIN_SDK_SPEC);
-    const nextContent = compatRewrite.nextContent;
-    const changed = rootRewrite.changed || compatRewrite.changed;
+    const commonJsRewrite = rewriteCommonJsRootPluginSdkRequire(compatRewrite.nextContent);
+    const nextContent = commonJsRewrite.nextContent;
+    const changed = rootRewrite.changed || compatRewrite.changed || commonJsRewrite.changed;
     if (!changed || nextContent === source) continue;
     writeFileSync(filePath, nextContent, 'utf8');
     changedFiles.push(filePath);

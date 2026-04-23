@@ -99,7 +99,7 @@ async function sanitizeConfig(filePath: string): Promise<boolean> {
     const allow = Array.isArray(pluginsObj.allow) ? (pluginsObj.allow as string[]) : undefined;
 
     if (allow) {
-      const nextAllow = allow.filter((pluginId) => pluginId !== 'qqbot' && pluginId !== 'openclaw-qqbot');
+      const nextAllow = allow.filter((pluginId) => pluginId !== 'openclaw-qqbot');
       if (nextAllow.length !== allow.length) {
         pluginsObj.allow = nextAllow;
         modified = true;
@@ -388,7 +388,7 @@ describe('sanitizeOpenClawConfig (blocklist approach)', () => {
     expect(result.agents).toEqual({ defaults: { model: { primary: 'gpt-4' } } });
   });
 
-  it('removes legacy qqbot plugin entries because qqbot is built-in', async () => {
+  it('keeps qqbot in plugins.allow but removes stale qqbot plugin entries', async () => {
     await writeConfig({
       channels: {
         qqbot: { enabled: true },
@@ -408,7 +408,7 @@ describe('sanitizeOpenClawConfig (blocklist approach)', () => {
 
     const result = await readConfig();
     expect(result.plugins).toEqual({
-      allow: ['channels'],
+      allow: ['channels', 'qqbot'],
       entries: {
         channels: { enabled: true },
       },

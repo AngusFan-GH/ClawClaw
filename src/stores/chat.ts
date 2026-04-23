@@ -31,6 +31,7 @@ export interface RawMessage {
   content: unknown; // string | ContentBlock[]
   timestamp?: number;
   id?: string;
+  idempotencyKey?: string;
   toolCallId?: string;
   toolName?: string;
   model?: string;
@@ -754,6 +755,14 @@ function isLikelySameUserMessage(
     return false;
   }
 
+  if (
+    typeof historyMessage.idempotencyKey === 'string'
+    && historyMessage.idempotencyKey.length > 0
+    && historyMessage.idempotencyKey === optimisticMessage.idempotencyKey
+  ) {
+    return true;
+  }
+
   const historyText = normalizeComparableMessageText(historyMessage.content);
   const optimisticText = normalizeComparableMessageText(optimisticMessage.content);
   if (historyText !== optimisticText) {
@@ -784,7 +793,20 @@ function authoritativeHistoryContainsPendingUser(
   pendingUserMessage: RawMessage | null,
   lastUserMessageAt: number | null,
 ): boolean {
-  if (!pendingUserMessage || !lastUserMessageAt) {
+  if (!pendingUserMessage) {
+    return false;
+  }
+
+  if (typeof pendingUserMessage.idempotencyKey === 'string' && pendingUserMessage.idempotencyKey.length > 0) {
+    const exactMatch = enrichedMessages.some(
+      (message) => message.role === 'user' && message.idempotencyKey === pendingUserMessage.idempotencyKey,
+    );
+    if (exactMatch) {
+      return true;
+    }
+  }
+
+  if (!lastUserMessageAt) {
     return false;
   }
 
@@ -1266,6 +1288,41 @@ function isAssistantSilentReply(message: RawMessage | undefined): boolean {
   if (typeof msg.text === 'string') return isSilentReplyText(msg.text);
   const text = extractTextFromContent(msg.content);
   return typeof text === 'string' && isSilentReplyText(text);
+}
+
+function isRuntimeSystemInjection(text: string): boolean {
+  const normalized = text.trim();
+  if (!normalized) return false;
+  if (/^System\s*\(untrusted\)\s*:/i.test(normalized)) return true;
+  if (
+    /An async command you ran earlier has completed/i.test(normalized)
+    && /Do not relay it to the user unless explicitly requested/i.test(normalized)
+  ) {
+    return true;
+  }
+  if (
+    /^Current time\s*:/i.test(normalized)
+    && /^Current time\s*:[^\n]*\/\s*\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+UTC\s*$/i.test(normalized)
+  ) {
+    return true;
+  }
+  if (/Handle the result internally\. Do not relay it to the user/i.test(normalized)) {
+    return true;
+  }
+  return false;
+}
+
+function isInternalHistoryMessage(message: RawMessage | undefined): boolean {
+  if (!message || typeof message !== 'object') return false;
+  const role = typeof message.role === 'string' ? message.role.toLowerCase() : '';
+  if (role === 'system') return true;
+  if (isAssistantSilentReply(message)) return true;
+  if (role === 'user' || role === 'assistant') {
+    const msg = message as unknown as Record<string, unknown>;
+    const text = typeof msg.text === 'string' ? msg.text : getMessageText(message.content);
+    return isRuntimeSystemInjection(text);
+  }
+  return false;
 }
 
 function isToolOnlyMessage(message: RawMessage | undefined): boolean {
@@ -2584,7 +2641,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       if (data) {
         const rawMessages = (Array.isArray(data.messages) ? (data.messages as RawMessage[]) : [])
-          .filter((message) => !isAssistantSilentReply(message));
+          .filter((message) => !isInternalHistoryMessage(message));
         const stateBeforeCommit = get();
         const hasExistingAuthoritativeMessages = stateBeforeCommit.messages.length > 0;
 
@@ -2767,7 +2824,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
-    const anchorMessage = messages.find((message) => !isAssistantSilentReply(message));
+    const anchorMessage = messages.find((message) => !isInternalHistoryMessage(message));
     const before = toHistoryAnchor(anchorMessage);
     if (!before) {
       set({ hasEarlierHistory: false, loadingEarlierHistory: false });
@@ -2797,7 +2854,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       const rawMessages = (Array.isArray(data.messages) ? data.messages : [])
-        .filter((message) => !isAssistantSilentReply(message));
+        .filter((message) => !isInternalHistoryMessage(message));
       const enrichedMessages = enrichWithCachedImages(rawMessages);
 
       let prependedAny = false;
@@ -2909,6 +2966,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
 
+    const idempotencyKey = crypto.randomUUID();
+
     // Add user message optimistically (with local file metadata for UI display)
     const nowMs = Date.now();
     const userMsg: RawMessage = {
@@ -2916,6 +2975,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       content: trimmed || (attachments?.length ? '(file attached)' : ''),
       timestamp: nowMs / 1000,
       id: crypto.randomUUID(),
+      idempotencyKey,
       _attachedFiles: attachments?.map((a) => ({
         fileName: a.fileName,
         mimeType: a.mimeType,
@@ -2992,10 +3052,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     setTimeout(checkStuck, 30_000);
 
     try {
-      const createIdempotencyKey = () => crypto.randomUUID();
       const hasMedia = attachments && attachments.length > 0;
-      if (hasMedia) {
-        console.log(
+      if (hasMedia && import.meta.env.DEV) {
+        console.debug(
           '[sendMessage] Media paths:',
           attachments!.map((a) => a.stagedPath)
         );
@@ -3029,6 +3088,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             error?: string;
           }>('/api/chat/send-with-media', {
             method: 'POST',
+            timeoutMs: CHAT_SEND_TIMEOUT_MS + 5000,
             body: JSON.stringify({
               sessionKey: currentSessionKey,
               message: trimmed || 'Process the attached file(s).',
@@ -3056,7 +3116,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return { success: true, result: rpcResult } as { success: boolean; result?: { runId?: string }; error?: string };
       };
 
-      result = await executeSend(createIdempotencyKey());
+      result = await executeSend(idempotencyKey);
 
       const modelNotAllowed = !result.success && /model not allowed/i.test(result.error || '');
       if (modelNotAllowed) {
@@ -3085,15 +3145,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
             )),
           }));
 
-          result = await executeSend(createIdempotencyKey());
+          result = await executeSend(idempotencyKey);
         } catch {
           // Keep the original error handling below if fallback patch/retry fails.
         }
       }
 
-      console.log(
-        `[sendMessage] RPC result: success=${result.success}, runId=${result.result?.runId || 'none'}`
-      );
+      if (import.meta.env.DEV) {
+        console.debug(
+          `[sendMessage] RPC result: success=${result.success}, runId=${result.result?.runId || 'none'}`
+        );
+      }
 
       if (!result.success) {
         clearHistoryPoll();
@@ -3250,9 +3312,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (!sending && runId) {
         set({ sending: true, activeRunId: runId, error: null });
       }
-      if (get().pendingUserMessage) {
-        set({ pendingUserMessage: null });
-      }
+      // Keep the optimistic user message until chat.history confirms it exists.
+      // Gateway delta/final events often arrive before the authoritative history
+      // includes the user's turn, so clearing it here causes a visible flash-out.
     }
 
     switch (resolvedState) {

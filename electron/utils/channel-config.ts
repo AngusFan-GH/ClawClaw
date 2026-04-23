@@ -35,14 +35,19 @@ const OPENCLAW_DIR = resolveOpenClawDir();
 const EXTENSIONS_DIR = join(OPENCLAW_DIR, 'extensions');
 const CONFIG_FILE = join(OPENCLAW_DIR, 'openclaw.json');
 const FEISHU_PLUGIN_ID_CANDIDATES = ['feishu', 'openclaw-lark', 'feishu-openclaw-plugin'] as const;
-const CHINA_CHANNEL_PLUGIN_ID = 'channels';
+const LEGACY_CHINA_CHANNEL_PLUGIN_ID = 'channels';
 const CHINA_CHANNEL_TYPES = ['dingtalk', 'wecom'] as const;
-const QQBOT_LEGACY_PLUGIN_IDS = ['qqbot', 'openclaw-qqbot'] as const;
+const QQBOT_LEGACY_PLUGIN_IDS = ['openclaw-qqbot'] as const;
 const CHINA_CHANNEL_LEGACY_PLUGIN_IDS: Record<(typeof CHINA_CHANNEL_TYPES)[number], string[]> = {
-    dingtalk: ['dingtalk'],
-    wecom: ['wecom', 'wecom-openclaw-plugin'],
+    dingtalk: [LEGACY_CHINA_CHANNEL_PLUGIN_ID],
+    wecom: [LEGACY_CHINA_CHANNEL_PLUGIN_ID, 'wecom-openclaw-plugin'],
+};
+const CHINA_CHANNEL_PLUGIN_IDS: Record<(typeof CHINA_CHANNEL_TYPES)[number], string> = {
+    dingtalk: 'dingtalk',
+    wecom: 'wecom',
 };
 const CHANNEL_PLUGIN_ALLOWLIST_IDS: Partial<Record<string, string>> = {
+    qqbot: 'qqbot',
     [WECHAT_RUNTIME_CHANNEL_ID]: WECHAT_RUNTIME_CHANNEL_ID,
 };
 const SUPPORTED_CHANNEL_IDS = [
@@ -69,17 +74,15 @@ const LEGACY_CHANNEL_PLUGIN_IDS = [
     'openclaw-lark',
     'feishu-openclaw-plugin',
     'wecom-openclaw-plugin',
-    'wecom',
-    'qqbot',
     'openclaw-qqbot',
-    'dingtalk',
 ] as const;
 const OFFICIAL_BUNDLED_PLUGIN_MIRROR_IDS = ['feishu'] as const;
 const MANAGED_CHANNEL_PLUGIN_IDS = [
     ...new Set<string>([
         ...LEGACY_CHANNEL_PLUGIN_IDS,
         ...OFFICIAL_BUNDLED_PLUGIN_MIRROR_IDS,
-        CHINA_CHANNEL_PLUGIN_ID,
+        LEGACY_CHINA_CHANNEL_PLUGIN_ID,
+        ...Object.values(CHINA_CHANNEL_PLUGIN_IDS),
         WECHAT_RUNTIME_CHANNEL_ID,
     ]),
 ] as const;
@@ -192,7 +195,7 @@ function getLegacyChannelPluginIds(channelType: string): string[] {
 
 function getChannelPluginAllowIds(channelType: string): string[] {
     if (isChinaChannelsManagedChannel(channelType)) {
-        return [CHINA_CHANNEL_PLUGIN_ID];
+        return [CHINA_CHANNEL_PLUGIN_IDS[channelType]];
     }
     return getLegacyChannelPluginIds(channelType);
 }
@@ -1026,7 +1029,7 @@ export async function saveChannelConfig(
     migrateLegacyWechatSection(currentConfig);
 
     if (isChinaChannelsManagedChannel(runtimeChannelType)) {
-        ensurePluginEnabled(currentConfig, CHINA_CHANNEL_PLUGIN_ID, { createEntry: true });
+        ensurePluginEnabled(currentConfig, CHINA_CHANNEL_PLUGIN_IDS[runtimeChannelType], { createEntry: true });
         removePluginIds(currentConfig, getLegacyChannelPluginIds(runtimeChannelType));
     }
 
@@ -1433,7 +1436,7 @@ export async function deleteChannelConfig(
             changed = true;
         }
         if (!hasConfiguredChinaManagedChannel(currentConfig)) {
-            if (removePluginIds(currentConfig, [CHINA_CHANNEL_PLUGIN_ID])) {
+            if (removePluginIds(currentConfig, [LEGACY_CHINA_CHANNEL_PLUGIN_ID, ...Object.values(CHINA_CHANNEL_PLUGIN_IDS)])) {
                 changed = true;
             }
             removeChinaManagedPluginMirror = true;
@@ -1463,7 +1466,7 @@ export async function deleteChannelConfig(
     }
 
     if (removeChinaManagedPluginMirror) {
-        const pluginDir = join(EXTENSIONS_DIR, CHINA_CHANNEL_PLUGIN_ID);
+        const pluginDir = join(EXTENSIONS_DIR, LEGACY_CHINA_CHANNEL_PLUGIN_ID);
         try {
             if (await fileExists(pluginDir)) {
                 await rm(pluginDir, { recursive: true, force: true });
@@ -1778,17 +1781,17 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
             }
         }
 
-        if (!hasConfiguredChinaManagedChannel(currentConfig)) {
-            staleAllowIds.add(CHINA_CHANNEL_PLUGIN_ID);
-        }
-
         for (const channelType of CHINA_CHANNEL_TYPES) {
             if (!hasConfiguredChannelState(channelType, currentConfig.channels?.[channelType] as AccountScopedChannelSection | undefined)) {
+                for (const pluginId of getChannelPluginAllowIds(channelType)) {
+                    staleAllowIds.add(pluginId);
+                }
                 for (const pluginId of getLegacyChannelPluginIds(channelType)) {
                     staleAllowIds.add(pluginId);
                 }
             }
         }
+        staleAllowIds.add(LEGACY_CHINA_CHANNEL_PLUGIN_ID);
 
         if (staleAllowIds.size > 0 && Array.isArray(currentConfig.plugins?.allow)) {
             const nextAllow = (currentConfig.plugins.allow as string[]).filter((pluginId) => !staleAllowIds.has(pluginId));
@@ -1822,18 +1825,43 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
             repaired = true;
         }
 
-        if (removePluginIds(currentConfig, QQBOT_LEGACY_PLUGIN_IDS)) {
+        if (hasConfiguredChannelState('qqbot', currentConfig.channels?.qqbot as AccountScopedChannelSection | undefined)) {
+            const beforeAllow = JSON.stringify(currentConfig.plugins?.allow ?? null);
+            const beforeEntry = JSON.stringify(currentConfig.plugins?.entries?.qqbot ?? null);
+            ensurePluginEnabled(currentConfig, 'qqbot');
+            if (currentConfig.plugins?.entries?.qqbot) {
+                delete currentConfig.plugins.entries.qqbot;
+            }
+            const afterAllow = JSON.stringify(currentConfig.plugins?.allow ?? null);
+            const afterEntry = JSON.stringify(currentConfig.plugins?.entries?.qqbot ?? null);
+            if (beforeAllow !== afterAllow || beforeEntry !== afterEntry) {
+                repaired = true;
+            }
+        } else if (removePluginIds(currentConfig, ['qqbot', ...QQBOT_LEGACY_PLUGIN_IDS])) {
             repaired = true;
         }
 
         if (hasConfiguredChinaManagedChannel(currentConfig)) {
-            ensurePluginEnabled(currentConfig, CHINA_CHANNEL_PLUGIN_ID, { createEntry: true });
             for (const channelType of CHINA_CHANNEL_TYPES) {
+                if (hasConfiguredChannelState(channelType, currentConfig.channels?.[channelType] as AccountScopedChannelSection | undefined)) {
+                    const beforeAllow = JSON.stringify(currentConfig.plugins?.allow ?? null);
+                    const beforeEntry = JSON.stringify(currentConfig.plugins?.entries?.[CHINA_CHANNEL_PLUGIN_IDS[channelType]] ?? null);
+                    ensurePluginEnabled(currentConfig, CHINA_CHANNEL_PLUGIN_IDS[channelType], { createEntry: true });
+                    const afterAllow = JSON.stringify(currentConfig.plugins?.allow ?? null);
+                    const afterEntry = JSON.stringify(currentConfig.plugins?.entries?.[CHINA_CHANNEL_PLUGIN_IDS[channelType]] ?? null);
+                    if (beforeAllow !== afterAllow || beforeEntry !== afterEntry) {
+                        repaired = true;
+                    }
+                }
                 if (removePluginIds(currentConfig, getLegacyChannelPluginIds(channelType))) {
                     repaired = true;
                 }
             }
-        } else if (removePluginIds(currentConfig, [CHINA_CHANNEL_PLUGIN_ID, ...CHINA_CHANNEL_TYPES.flatMap((channelType) => getLegacyChannelPluginIds(channelType))])) {
+        } else if (removePluginIds(currentConfig, [
+            LEGACY_CHINA_CHANNEL_PLUGIN_ID,
+            ...Object.values(CHINA_CHANNEL_PLUGIN_IDS),
+            ...CHINA_CHANNEL_TYPES.flatMap((channelType) => getLegacyChannelPluginIds(channelType)),
+        ])) {
             repaired = true;
             removeChinaManagedPluginMirror = true;
         }
@@ -1844,7 +1872,7 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
     });
 
     if (removeChinaManagedPluginMirror) {
-        const pluginDir = join(EXTENSIONS_DIR, CHINA_CHANNEL_PLUGIN_ID);
+        const pluginDir = join(EXTENSIONS_DIR, LEGACY_CHINA_CHANNEL_PLUGIN_ID);
         try {
             if (await fileExists(pluginDir)) {
                 await rm(pluginDir, { recursive: true, force: true });

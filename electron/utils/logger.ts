@@ -80,8 +80,12 @@ function flushBufferSync(): void {
   writeBuffer = [];
 }
 
-// Ensure all buffered data reaches disk before the process exits.
-process.on('exit', flushBufferSync);
+// Ensure all buffered data reaches disk before the process exits. Vitest
+// repeatedly reloads this module with vi.resetModules(), which would stack
+// process exit listeners and emit MaxListenersExceededWarning.
+if (!process.env.VITEST) {
+  process.on('exit', flushBufferSync);
+}
 
 // ── Initialisation ───────────────────────────────────────────────
 

@@ -32,7 +32,8 @@ import {
 const AUTH_STORE_VERSION = 1;
 const AUTH_PROFILE_FILENAME = 'auth-profiles.json';
 const FEISHU_PLUGIN_ID_CANDIDATES = ['feishu', 'openclaw-lark', 'feishu-openclaw-plugin'] as const;
-const QQBOT_LEGACY_PLUGIN_ID_CANDIDATES = ['qqbot', 'openclaw-qqbot'] as const;
+const QQBOT_STALE_PLUGIN_ENTRY_IDS = ['qqbot', 'openclaw-qqbot'] as const;
+const QQBOT_STALE_PLUGIN_ALLOW_IDS = ['openclaw-qqbot'] as const;
 
 function getOAuthPluginId(provider: string): string {
   if (provider === 'minimax-portal' || provider === 'minimax-portal-cn') {
@@ -962,7 +963,31 @@ export async function batchSyncConfigFields(token: string): Promise<void> {
       gateway.mode = 'local';
       modified = true;
     }
+    if (gateway.bind !== 'loopback') {
+      gateway.bind = 'loopback';
+      modified = true;
+    }
     config.gateway = gateway;
+
+    // ClawClaw owns a local desktop Gateway and connects through 127.0.0.1.
+    // Disable mDNS advertising to avoid LAN exposure warnings and noisy Bonjour
+    // re-advertise watchdog logs during desktop startup.
+    const discovery = (
+      config.discovery && typeof config.discovery === 'object'
+        ? { ...(config.discovery as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    const mdns = (
+      discovery.mdns && typeof discovery.mdns === 'object'
+        ? { ...(discovery.mdns as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    if (mdns.mode !== 'off') {
+      mdns.mode = 'off';
+      discovery.mdns = mdns;
+      config.discovery = discovery;
+      modified = true;
+    }
 
     // ── Browser config ──
     const browser = (
@@ -1399,7 +1424,7 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
     }
 
     const normalizedAllowWithoutLegacyQqbot = allowArr.filter(
-      (id) => !QQBOT_LEGACY_PLUGIN_ID_CANDIDATES.includes(id as typeof QQBOT_LEGACY_PLUGIN_ID_CANDIDATES[number]),
+      (id) => !QQBOT_STALE_PLUGIN_ALLOW_IDS.includes(id as typeof QQBOT_STALE_PLUGIN_ALLOW_IDS[number]),
     );
     if (normalizedAllowWithoutLegacyQqbot.length !== allowArr.length) {
       pluginsObj.allow = normalizedAllowWithoutLegacyQqbot;
@@ -1407,7 +1432,7 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
       console.log('[sanitize] Removed legacy qqbot plugin allowlist entries (qqbot is now built-in)');
     }
 
-    for (const pluginId of QQBOT_LEGACY_PLUGIN_ID_CANDIDATES) {
+    for (const pluginId of QQBOT_STALE_PLUGIN_ENTRY_IDS) {
       if (pEntries[pluginId]) {
         delete pEntries[pluginId];
         modified = true;
@@ -1427,7 +1452,7 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
       && (config.channels as Record<string, unknown>).feishu,
     );
 
-    if (hasFeishuChannelConfig || existingFeishuEntry || configuredFeishuId || installedFeishuId) {
+    if (hasFeishuChannelConfig) {
       if (Array.isArray(pluginsObj.allow)) {
         const normalizedAllow = allowArr.filter(
           (id) => !FEISHU_PLUGIN_ID_CANDIDATES.includes(id as typeof FEISHU_PLUGIN_ID_CANDIDATES[number]),
@@ -1459,6 +1484,25 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
           pEntries.feishu.enabled = false;
           modified = true;
           console.log('[sanitize] Disabled bare plugins.entries.feishu (canonical plugin is configured)');
+        }
+      }
+    } else {
+      if (Array.isArray(pluginsObj.allow)) {
+        const normalizedAllow = allowArr.filter(
+          (id) => !FEISHU_PLUGIN_ID_CANDIDATES.includes(id as typeof FEISHU_PLUGIN_ID_CANDIDATES[number]),
+        );
+        if (normalizedAllow.length !== allowArr.length) {
+          pluginsObj.allow = normalizedAllow;
+          modified = true;
+          console.log('[sanitize] Removed feishu plugin allowlist entries because feishu channel is not configured');
+        }
+      }
+
+      for (const id of FEISHU_PLUGIN_ID_CANDIDATES) {
+        if (pEntries[id]) {
+          delete pEntries[id];
+          modified = true;
+          console.log(`[sanitize] Removed plugins.entries.${id} because feishu channel is not configured`);
         }
       }
     }

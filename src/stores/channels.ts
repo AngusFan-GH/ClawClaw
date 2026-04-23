@@ -73,6 +73,8 @@ function normalizeGroups(groups: ChannelGroup[]): ChannelGroup[] {
   }));
 }
 
+const channelGroupsInFlight = new Map<string, Promise<ChannelGroup[]>>();
+
 async function fetchChannelGroups(probe = false, options?: { includeRuntime?: boolean }): Promise<ChannelGroup[]> {
   const search = new URLSearchParams();
   if (probe) {
@@ -83,11 +85,20 @@ async function fetchChannelGroups(probe = false, options?: { includeRuntime?: bo
   }
   const query = search.toString();
   const path = query ? `/api/channels/accounts?${query}` : '/api/channels/accounts';
-  const result = await hostApiFetch<{
+  const inFlightKey = path;
+  const existing = channelGroupsInFlight.get(inFlightKey);
+  if (existing) return existing;
+
+  const request = hostApiFetch<{
     success: boolean;
     channels?: ChannelGroup[];
-  }>(path);
-  return result.success && Array.isArray(result.channels) ? normalizeGroups(result.channels) : [];
+  }>(path).then((result) => (
+    result.success && Array.isArray(result.channels) ? normalizeGroups(result.channels) : []
+  )).finally(() => {
+    channelGroupsInFlight.delete(inFlightKey);
+  });
+  channelGroupsInFlight.set(inFlightKey, request);
+  return request;
 }
 
 export const useChannelsStore = create<ChannelsState>((set, get) => ({

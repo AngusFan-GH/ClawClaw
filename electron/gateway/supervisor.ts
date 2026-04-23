@@ -9,6 +9,9 @@ import { getUvMirrorEnv } from '../utils/uv-env';
 import { isPythonReady, setupManagedPython } from '../utils/uv-setup';
 import { logger } from '../utils/logger';
 
+const GATEWAY_LOOPBACK_HOST = '127.0.0.1';
+const EXISTING_GATEWAY_PROBE_TIMEOUT_MS = 1500;
+
 export function warmupManagedPythonReadiness(): void {
   void isPythonReady().then((pythonReady) => {
     if (!pythonReady) {
@@ -232,7 +235,7 @@ export async function findExistingGatewayProcess(options: {
   try {
     const probeExistingGateway = async (): Promise<{ port: number; externalToken?: string } | null> => {
       return await new Promise<{ port: number; externalToken?: string } | null>((resolve) => {
-        const testWs = new WebSocket(`ws://localhost:${port}/ws`);
+        const testWs = new WebSocket(`ws://${GATEWAY_LOOPBACK_HOST}:${port}/ws`);
         const timeout = setTimeout(() => {
           try {
             testWs.close();
@@ -240,7 +243,7 @@ export async function findExistingGatewayProcess(options: {
             // ignore
           }
           resolve(null);
-        }, 500);
+        }, EXISTING_GATEWAY_PROBE_TIMEOUT_MS);
 
         testWs.on('message', (data) => {
           try {
@@ -308,11 +311,11 @@ export interface DetectedGateway {
  */
 async function probeGateway(port: number): Promise<boolean> {
   return await new Promise<boolean>((resolve) => {
-    const testWs = new WebSocket(`ws://localhost:${port}/ws`);
+    const testWs = new WebSocket(`ws://${GATEWAY_LOOPBACK_HOST}:${port}/ws`);
     const timeout = setTimeout(() => {
       try { testWs.close(); } catch { /* ignore */ }
       resolve(false);
-    }, 500);
+    }, EXISTING_GATEWAY_PROBE_TIMEOUT_MS);
 
     testWs.on('message', (data) => {
       try {

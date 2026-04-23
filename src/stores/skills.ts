@@ -73,6 +73,8 @@ interface SkillsState {
   updateSkill: (skillId: string, updates: Partial<Skill>) => void;
 }
 
+const fetchSkillsInFlight = new Map<string, Promise<void>>();
+
 export const useSkillsStore = create<SkillsState>((set, get) => ({
   skills: [],
   currentAgentId: null,
@@ -94,7 +96,15 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
     const requestPath = resolvedAgentId
       ? `/api/skills/list?agentId=${encodeURIComponent(resolvedAgentId)}`
       : '/api/skills/list';
-    try {
+    const includeRuntime = options?.includeRuntime !== false;
+    const inFlightKey = `${resolvedAgentId ?? ''}:${includeRuntime ? 'runtime' : 'snapshot'}`;
+    const existing = fetchSkillsInFlight.get(inFlightKey);
+    if (existing) {
+      await existing;
+      return;
+    }
+
+    const request = (async () => {
       const result = await hostApiFetch<{
         success: boolean;
         results?: Skill[];
@@ -117,7 +127,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
       });
 
       if (
-        options?.includeRuntime !== false
+        includeRuntime
         && useGatewayStore.getState().status.state === 'running'
       ) {
         const runtimePath = resolvedAgentId
@@ -144,6 +154,10 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
           // Keep snapshot data when runtime enrichment is unavailable.
         }
       }
+    })();
+    fetchSkillsInFlight.set(inFlightKey, request);
+    try {
+      await request;
     } catch (error) {
       console.error('Failed to fetch skills:', error);
       const appError = normalizeAppError(error, { module: 'skills', operation: 'fetch' });
@@ -151,6 +165,10 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
         loading: false,
         error: mapErrorCodeToSkillErrorKey(appError.code, 'fetch') || appError.message,
       });
+    } finally {
+      if (fetchSkillsInFlight.get(inFlightKey) === request) {
+        fetchSkillsInFlight.delete(inFlightKey);
+      }
     }
   },
 

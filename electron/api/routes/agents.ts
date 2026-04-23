@@ -54,7 +54,7 @@ export async function handleAgentRoutes(
     try {
       const body = await parseJsonBody<{ name: string }>(req);
       const snapshot = await createAgent(body.name);
-      scheduleGatewayRestart(ctx, 'create-agent');
+      scheduleGatewayReload(ctx, 'create-agent');
       sendJson(res, 200, { success: true, ...snapshot });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -92,7 +92,7 @@ export async function handleAgentRoutes(
         }
 
         const snapshot = await updateAgentSettings(agentId, body);
-        scheduleGatewayRestart(ctx, 'update-agent');
+        scheduleGatewayReload(ctx, 'update-agent');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {
         sendJson(res, 500, { success: false, error: String(error) });
@@ -117,7 +117,7 @@ export async function handleAgentRoutes(
         }
 
         const snapshot = await assignChannelToAgent(agentId, channelType, accountId);
-        scheduleGatewayRestart(ctx, 'assign-channel');
+        scheduleGatewayReload(ctx, 'assign-channel');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {
         sendJson(res, 500, { success: false, error: String(error) });
@@ -164,7 +164,7 @@ export async function handleAgentRoutes(
         }
 
         const snapshot = await clearChannelBinding(channelType, agentId, accountId);
-        scheduleGatewayRestart(ctx, 'remove-agent-channel');
+        scheduleGatewayReload(ctx, 'remove-agent-channel');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {
         sendJson(res, 500, { success: false, error: String(error) });
