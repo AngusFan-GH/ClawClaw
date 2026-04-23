@@ -97,7 +97,7 @@ export async function isPythonReady(): Promise<boolean> {
   const env: Record<string, string | undefined> = {
     ...process.env,
     ...uvEnv,
-    ...(managedPythonHome ? { UV_PYTHON_HOME: managedPythonHome } : {}),
+    ...(managedPythonHome ? { UV_PYTHON_INSTALL_DIR: managedPythonHome } : {}),
     ...(managedUvCache ? { UV_CACHE_DIR: managedUvCache } : {}),
   };
 
@@ -187,7 +187,7 @@ function shouldRepairWindowsPythonLinkError(error: unknown): boolean {
 }
 
 function repairManagedPythonState(env: Record<string, string | undefined>): void {
-  const pythonHome = env.UV_PYTHON_HOME;
+  const pythonHome = env.UV_PYTHON_INSTALL_DIR;
   const cacheDir = env.UV_CACHE_DIR;
   if (!pythonHome && !cacheDir) {
     return;
@@ -233,7 +233,7 @@ export async function setupManagedPython(): Promise<void> {
   );
 
   const baseEnv: Record<string, string | undefined> = { ...process.env };
-  if (managedPythonHome) baseEnv.UV_PYTHON_HOME = managedPythonHome;
+  if (managedPythonHome) baseEnv.UV_PYTHON_INSTALL_DIR = managedPythonHome;
   if (managedUvCache) baseEnv.UV_CACHE_DIR = managedUvCache;
   let installCompleted = false;
 
@@ -275,7 +275,7 @@ export async function setupManagedPython(): Promise<void> {
   const verifyEnv: Record<string, string | undefined> = {
     ...process.env,
     ...uvEnv,
-    ...(managedPythonHome ? { UV_PYTHON_HOME: managedPythonHome } : {}),
+    ...(managedPythonHome ? { UV_PYTHON_INSTALL_DIR: managedPythonHome } : {}),
     ...(managedUvCache ? { UV_CACHE_DIR: managedUvCache } : {}),
   };
   try {
