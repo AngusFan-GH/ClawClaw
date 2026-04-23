@@ -4,7 +4,6 @@
  */
 import { ipcMain, BrowserWindow, shell, dialog, app, nativeImage } from 'electron';
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join, extname, basename, resolve } from 'node:path';
 import crypto from 'node:crypto';
 import { GatewayManager } from '../gateway/manager';
@@ -30,20 +29,16 @@ import { getOpenClawCliCommand } from '../utils/openclaw-cli';
 import {
   getAllSettings,
   getSetting,
-  resetSettings,
-  setSetting,
   type AppSettings,
 } from '../utils/store';
 import { saveProviderKeyToOpenClaw, removeProviderFromOpenClaw } from '../utils/openclaw-auth';
 import { logger } from '../utils/logger';
-import { syncMemorySettingsToOpenClaw } from '../utils/openclaw-auth';
 import { checkUvInstalled, installUv, setupManagedPython } from '../utils/uv-setup';
 import { updateSkillConfig, getSkillConfig, getAllSkillConfigs } from '../utils/skill-config';
 import { whatsAppLoginManager } from '../utils/whatsapp-login';
 import { getProviderConfig } from '../utils/provider-registry';
 import { deviceOAuthManager, OAuthProviderType } from '../utils/device-oauth';
 import { browserOAuthManager, type BrowserOAuthProviderType } from '../utils/browser-oauth';
-import { applyProxySettings } from './proxy';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { getRecentTokenUsageHistory } from '../utils/token-usage';
 import { getProviderService } from '../services/providers/provider-service';
@@ -58,7 +53,6 @@ import {
 } from '../services/providers/provider-runtime-sync';
 import { validateApiKeyWithProvider } from '../services/providers/provider-validation';
 import { appUpdater } from './updater';
-import { PORTS } from '../utils/config';
 import { quitApp, relaunchApp } from './quit';
 import { getHostApiPort } from '../api/server';
 
@@ -953,7 +947,7 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
         delete patch.message;
       }
       const current = await getCronJobById(gatewayManager, id);
-      if (current && isEditableUiJob(current)) {
+      if (current && isUiManagedAgentTurn(current)) {
         patch.delivery = { mode: current.delivery?.mode ?? 'none' };
       }
       const result = await gatewayManager.rpc('cron.update', { id, patch });

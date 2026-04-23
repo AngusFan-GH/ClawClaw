@@ -209,8 +209,9 @@ describe('Chat Store', () => {
     await useChatStore.getState().sendMessage('hello after disconnect');
 
     const state = useChatStore.getState();
-    expect(state.messages).toHaveLength(1);
-    expect(state.messages[0].role).toBe('user');
+    expect(state.messages).toHaveLength(0);
+    expect(state.pendingUserMessage?.role).toBe('user');
+    expect(state.pendingUserMessage?.content).toBe('hello after disconnect');
     expect(state.sending).toBe(false);
     expect(state.activeRunId).toBeNull();
     expect(state.error).toContain('message was kept locally');
@@ -252,7 +253,7 @@ describe('Chat Store', () => {
 
     const state = useChatStore.getState();
     expect(state.sessionLabels['agent:main:session-1']).toBe('Customer Follow-up');
-    expect(state.sessionLastActivity['agent:main:session-1']).toBe(200);
+    expect(state.sessionLastActivity['agent:main:session-1']).toBe(200000);
     expect(state.sessions.find((session) => session.key === 'agent:main:session-1')?.lastMessagePreview)
       .toBe('Latest reply');
 
@@ -320,7 +321,7 @@ describe('Chat Store', () => {
               content: [
                 {
                   type: 'text',
-                  text: 'Conversation info (untrusted metadata):\n```json\n{\"message_id\":\"123\"}\n```\n\nSender (untrusted metadata):\n```json\n{\"name\":\"alice\"}\n```\n\nActual customer request',
+                  text: 'Conversation info (untrusted metadata):\n```json\n{"message_id":"123"}\n```\n\nSender (untrusted metadata):\n```json\n{"name":"alice"}\n```\n\nActual customer request',
                 },
               ],
               timestamp: 350,
@@ -543,7 +544,7 @@ describe('Chat Store', () => {
     expect(useChatStore.getState().pendingSessionModelRefresh).toBe(false);
   });
 
-  it('clears the optimistic user message as soon as the active run starts producing events', () => {
+  it('keeps the optimistic user message until authoritative history catches up', () => {
     useChatStore.setState({
       currentSessionKey: 'agent:main:main',
       sending: true,
@@ -567,7 +568,10 @@ describe('Chat Store', () => {
       },
     });
 
-    expect(useChatStore.getState().pendingUserMessage).toBeNull();
+    expect(useChatStore.getState().pendingUserMessage).toMatchObject({
+      role: 'user',
+      content: '创建一个定时任务，每10分钟告诉我一次几点了。',
+    });
   });
 
   it('should abort the active run when policy changes require immediate effect', async () => {
@@ -623,7 +627,7 @@ describe('Chat Store', () => {
       method: 'POST',
       body: JSON.stringify({
         sessionKey: 'agent:main:main',
-        limit: 1000,
+        limit: 200,
         before: {
           role: 'user',
           timestamp: 200,

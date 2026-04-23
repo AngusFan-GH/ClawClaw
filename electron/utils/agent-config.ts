@@ -1,7 +1,7 @@
 import { access, copyFile, mkdir, readdir, rm } from 'fs/promises';
 import { constants } from 'fs';
 import { join, normalize } from 'path';
-import { listConfiguredChannelGroupsFromConfig, readOpenClawConfig, readOpenClawConfigSnapshot, updateOpenClawConfig } from './channel-config';
+import { listConfiguredChannelGroupsFromConfig, readOpenClawConfigSnapshot, updateOpenClawConfig } from './channel-config';
 import { expandPath, getOpenClawConfigDir } from './paths';
 import * as logger from './logger';
 import {

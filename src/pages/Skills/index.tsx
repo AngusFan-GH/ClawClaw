@@ -2,7 +2,7 @@
  * Skills Page
  * Browse and manage AI skills
  */
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search,
   Puzzle,
@@ -204,7 +204,7 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, canToggle, onUnin
       value: String(configEnv[key] ?? ''),
     }));
     setEnvVars(vars);
-  }, [skill]);
+  }, [extraEnvKeys, skill]);
 
   const handleOpenClawhub = async () => {
     if (!skill?.slug) return;
@@ -767,12 +767,15 @@ export function Skills() {
   const isGatewayRunning = gatewayStatus.state === 'running';
   const [showGatewayWarning, setShowGatewayWarning] = useState(false);
   const preferredAgentId = chatAgentId || defaultAgentId || skillsAgentId || 'main';
-  const agentOptions = agents.length > 0
-    ? agents.map((agent) => ({
-        id: agent.gateway.id,
-        name: agent.gateway.name,
-      }))
-    : [{ id: preferredAgentId, name: preferredAgentId === 'main' ? 'Main' : preferredAgentId }];
+  const agentOptions = useMemo(
+    () => agents.length > 0
+      ? agents.map((agent) => ({
+          id: agent.gateway.id,
+          name: agent.gateway.name,
+        }))
+      : [{ id: preferredAgentId, name: preferredAgentId === 'main' ? 'Main' : preferredAgentId }],
+    [agents, preferredAgentId]
+  );
   const managedSkillsDirPath =
     sourceDirs.find((dir) => dir.key === 'managed')?.path || '~/.openclaw/skills';
   const agentSelect = (

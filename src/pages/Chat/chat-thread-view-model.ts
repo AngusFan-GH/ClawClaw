@@ -492,7 +492,6 @@ export function buildChatItems(params: {
   }
 
   if (params.streamingMessage) {
-    hasLiveActivity = true;
     const text = extractText(params.streamingMessage);
     const key = `stream:${params.sessionKey}`;
     if (text.trim().length > 0) {

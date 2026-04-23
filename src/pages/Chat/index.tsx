@@ -248,12 +248,16 @@ export function Chat() {
 
   useEffect(() => {
     if (!isGatewayRunning) {
-      setChatModelsLoading(false);
+      queueMicrotask(() => setChatModelsLoading(false));
       return;
     }
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    setChatModelsLoading(true);
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setChatModelsLoading(true);
+      }
+    });
     void useGatewayStore.getState().rpc<{ models?: ChatModelCatalogEntry[] }>('models.list', {}, 30_000)
       .then((result) => {
         if (cancelled) return;
@@ -293,14 +297,17 @@ export function Chat() {
   // Always scroll to bottom when the user sends a message, regardless of scroll position.
   // This uses queueMicrotask (runs after DOM update) to ensure the user's own
   // message is visible immediately after send.
-  const prevSendingRef = useRef(false);
-  const sendingJustStarted = sending && !prevSendingRef.current;
-  prevSendingRef.current = sending;
-  if (sendingJustStarted) {
+  const prevSendingRef = useRef(sending);
+  useEffect(() => {
+    const wasSending = prevSendingRef.current;
+    prevSendingRef.current = sending;
+    if (!sending || wasSending) {
+      return;
+    }
     queueMicrotask(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
     });
-  }
+  }, [sending]);
 
   // Auto-scroll on new messages, streaming, or activity changes when the user is already near the bottom.
   useEffect(() => {
@@ -351,11 +358,13 @@ export function Chat() {
 
   // Update timestamp when sending starts
   useEffect(() => {
-    if (sending && streamingTimestamp === 0) {
-      setStreamingTimestamp(Date.now() / 1000);
-    } else if (!sending && streamingTimestamp !== 0) {
-      setStreamingTimestamp(0);
-    }
+    queueMicrotask(() => {
+      if (sending && streamingTimestamp === 0) {
+        setStreamingTimestamp(Date.now() / 1000);
+      } else if (!sending && streamingTimestamp !== 0) {
+        setStreamingTimestamp(0);
+      }
+    });
   }, [sending, streamingTimestamp]);
 
   // Gateway not running block has been completely removed so the UI always renders.
@@ -474,7 +483,7 @@ export function Chat() {
         : t('toolbar.gatewayStopped', '网关未连接');
 
   useEffect(() => {
-    setQueuedMessages([]);
+    queueMicrotask(() => setQueuedMessages([]));
   }, [currentSessionKey]);
 
   useEffect(() => {
@@ -482,8 +491,10 @@ export function Chat() {
       return;
     }
     const [next, ...rest] = queuedMessages;
-    setQueuedMessages(rest);
-    void sendMessage(next.text, next.attachments);
+    queueMicrotask(() => {
+      setQueuedMessages(rest);
+      void sendMessage(next.text, next.attachments);
+    });
   }, [queuedMessages, sendMessage, sending]);
 
   const handleRemoveQueuedMessage = (id: string): void => {

@@ -27,6 +27,8 @@ const CONNECT_ERROR_CODES = {
   AUTH_DEVICE_TOKEN_MISMATCH: 'AUTH_DEVICE_TOKEN_MISMATCH',
 } as const;
 const DEFAULT_GATEWAY_HANDSHAKE_TIMEOUT_MS = 20_000;
+const DEFAULT_GATEWAY_READY_RETRIES = 600;
+const DEFAULT_GATEWAY_READY_INTERVAL_MS = 200;
 const GATEWAY_LOOPBACK_HOST = '127.0.0.1';
 
 type GatewayHelloOk = {
@@ -133,8 +135,8 @@ export async function waitForGatewayReady(options: {
   retries?: number;
   intervalMs?: number;
 }): Promise<void> {
-  const retries = options.retries ?? 2400;
-  const intervalMs = options.intervalMs ?? 200;
+  const retries = options.retries ?? DEFAULT_GATEWAY_READY_RETRIES;
+  const intervalMs = options.intervalMs ?? DEFAULT_GATEWAY_READY_INTERVAL_MS;
 
   for (let i = 0; i < retries; i++) {
     const exitCode = options.getProcessExitCode();

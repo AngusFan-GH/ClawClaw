@@ -532,9 +532,8 @@ export async function handleSettingsRoutes(
   }
 
   if (url.pathname === '/api/settings' && req.method === 'PUT') {
-    let patch: Partial<AppSettings> = {};
     try {
-      patch = await parseJsonBody<Partial<AppSettings>>(req);
+      const patch = await parseJsonBody<Partial<AppSettings>>(req);
       const entries = Object.entries(patch) as Array<[keyof AppSettings, AppSettings[keyof AppSettings]]>;
       for (const [key, value] of entries) {
         await setSetting(key, value);

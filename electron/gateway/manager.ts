@@ -605,7 +605,7 @@ export class GatewayManager extends EventEmitter {
         pid: undefined,
         restartExpectedMs: undefined,
       });
-      await this.connect(existing.port, existing.token);
+      await this.connect(existing.port, existing.externalToken);
       this.ownsProcess = false;
       this.process = null;
       this.processExitStatus = null;

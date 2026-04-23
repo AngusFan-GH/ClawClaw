@@ -38,6 +38,7 @@ import { extractSessionRecords } from '../../utils/session-util';
 import type { ChannelType } from '../../../src/types/channel';
 
 const WECHAT_QR_TIMEOUT_MS = 8 * 60 * 1000;
+const NULL_CHAR = String.fromCharCode(0);
 const activeQrLogins = new Map<string, string>();
 const WECHAT_PLUGIN_SPEC = '@tencent-weixin/openclaw-weixin';
 const WECHAT_PLUGIN_NPM_ONLY_SPEC = `npm:${WECHAT_PLUGIN_SPEC}`;
@@ -154,15 +155,15 @@ function looksLikeUtf16Le(buffer: Buffer): boolean {
 
 export function decodeCliInstallOutput(chunk: Buffer | string): string {
   if (typeof chunk === 'string') {
-    return chunk.replace(/\u0000/g, '');
+    return chunk.split(NULL_CHAR).join('');
   }
 
   const decoded = looksLikeUtf16Le(chunk) ? chunk.toString('utf16le') : chunk.toString('utf8');
-  return decoded.replace(/\u0000/g, '');
+  return decoded.split(NULL_CHAR).join('');
 }
 
 export function formatWeChatPluginInstallError(raw: string): string {
-  const trimmed = raw.replace(/\u0000/g, '').trim();
+  const trimmed = raw.split(NULL_CHAR).join('').trim();
   if (!trimmed) {
     return 'WeChat plugin install failed.';
   }
@@ -937,13 +938,6 @@ export async function handleChannelRoutes(
       await whatsAppLoginManager.start(body.accountId);
       sendJson(res, 200, { success: true });
     } catch (error) {
-      emitGatewayLifecycleEvent(ctx, {
-        phase: 'failed',
-        action: 'restart',
-        source: 'channel:config',
-        reason: 'channel:config',
-        error: String(error),
-      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;
@@ -954,13 +948,6 @@ export async function handleChannelRoutes(
       await whatsAppLoginManager.stop();
       sendJson(res, 200, { success: true });
     } catch (error) {
-      emitGatewayLifecycleEvent(ctx, {
-        phase: 'failed',
-        action: 'restart',
-        source: 'channel:setEnabled',
-        reason: 'channel:setEnabled',
-        error: String(error),
-      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;
@@ -1064,13 +1051,6 @@ export async function handleChannelRoutes(
       }
       sendJson(res, 200, { success: true });
     } catch (error) {
-      emitGatewayLifecycleEvent(ctx, {
-        phase: 'failed',
-        action: 'restart',
-        source: 'channel:delete',
-        reason: 'channel:delete',
-        error: String(error),
-      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;

@@ -11,7 +11,6 @@ async function buildSkillsSnapshotResponse(agentId?: string) {
   const {
     configs,
     localInstalledSlugs,
-    projectBundledSlugs,
     metadataMap,
     workspaceDir,
     managedSkillsDir,

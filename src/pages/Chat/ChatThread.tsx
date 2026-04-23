@@ -875,7 +875,7 @@ export const ChatThread = memo(function ChatThread({
     return latest;
   }, [btwMessages, dismissedBtwAt]);
   useEffect(() => {
-    setDismissedBtwAt(null);
+    queueMicrotask(() => setDismissedBtwAt(null));
   }, [sessionKey]);
   const hiddenGroups = useMemo(() => getHiddenGroups(sessionKey), [sessionKey]);
   const deletedGroupOrder = useMemo(() => getDeletedGroupOrder(sessionKey), [sessionKey]);
@@ -934,7 +934,6 @@ export const ChatThread = memo(function ChatThread({
     contextNotice,
     hasCompactionSummary,
     historyWindowLimited,
-    items,
     labels.historyCompacted,
     labels.historyWindowLimited,
     labels.loadingEarlier,

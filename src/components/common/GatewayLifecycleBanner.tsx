@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AlertCircle, ChevronDown, ChevronUp, Copy, LifeBuoy, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { GatewayLifecycle } from '@/types/gateway';
@@ -33,7 +33,10 @@ function getSourceLabel(t: (key: string) => string, source?: string): string {
 
 export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecycle }) {
   const { t } = useTranslation('common');
-  const [showDetails, setShowDetails] = useState(false);
+  const [detailsState, setDetailsState] = useState<{ key: string; show: boolean }>({
+    key: '',
+    show: false,
+  });
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
 
   const bannerKey = useMemo(
@@ -49,10 +52,7 @@ export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecy
     [lifecycle],
   );
 
-  useEffect(() => {
-    setShowDetails(false);
-  }, [bannerKey]);
-
+  const showDetails = detailsState.key === bannerKey ? detailsState.show : false;
   const recovery = getGatewayRecoveryPresentation(lifecycle.recovery);
   const showRecoverySuccess = lifecycle.state === 'completed' && Boolean(recovery);
   if (lifecycle.state !== 'failed' && !showRecoverySuccess) return null;
@@ -193,7 +193,7 @@ export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecy
             <div className="mt-3">
               <button
                 type="button"
-                onClick={() => setShowDetails((value) => !value)}
+                onClick={() => setDetailsState({ key: bannerKey, show: !showDetails })}
                 className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
               >
                 {showDetails ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}

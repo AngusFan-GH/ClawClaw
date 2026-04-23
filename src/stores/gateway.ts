@@ -17,6 +17,8 @@ let lastPassiveGatewayStatusRefreshAt = 0;
 
 const GATEWAY_ACTIVE_POLL_MS = 2000;
 const GATEWAY_IDLE_POLL_MS = 10000;
+const GATEWAY_START_RECONCILE_TIMEOUT_MS = 130_000;
+const GATEWAY_STOP_RECONCILE_TIMEOUT_MS = 5_000;
 
 interface GatewayHealth {
   ok: boolean;
@@ -330,6 +332,22 @@ async function reconcileGatewayStatus(
 
     await new Promise((resolve) => setTimeout(resolve, 350));
   }
+
+  const timeoutMessage =
+    target === 'running'
+      ? 'Timed out waiting for Gateway to become ready. Restart the Gateway if it is still not available.'
+      : 'Timed out waiting for Gateway to stop.';
+  set((state) => ({
+    lifecycle: isLifecyclePending(state.lifecycle)
+      ? {
+          ...state.lifecycle,
+          state: 'failed',
+          error: timeoutMessage,
+          at: Date.now(),
+        }
+      : state.lifecycle,
+    lastError: target === 'running' ? timeoutMessage : state.lastError,
+  }));
 }
 
 export const useGatewayStore = create<GatewayState>((set, get) => ({
@@ -533,7 +551,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
         });
         return;
       }
-      void reconcileGatewayStatus(set, 'running');
+      void reconcileGatewayStatus(set, 'running', GATEWAY_START_RECONCILE_TIMEOUT_MS);
     } catch (error) {
       const message = formatGatewayConnectError(error);
       set({
@@ -552,7 +570,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
         lastError: null,
         lifecycle: { state: 'idle' },
       });
-      void reconcileGatewayStatus(set, 'stopped', 5000);
+      void reconcileGatewayStatus(set, 'stopped', GATEWAY_STOP_RECONCILE_TIMEOUT_MS);
     } catch (error) {
       console.error('Failed to stop Gateway:', error);
       set({ lastError: formatGatewayConnectError(error) });
@@ -591,7 +609,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
               }
             : state.lifecycle,
       }));
-      void reconcileGatewayStatus(set, 'running');
+      void reconcileGatewayStatus(set, 'running', GATEWAY_START_RECONCILE_TIMEOUT_MS);
     } catch (error) {
       const message = formatGatewayConnectError(error);
       set({

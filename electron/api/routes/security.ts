@@ -24,7 +24,6 @@ import {
 import { normalizeReminders, type ReminderItem } from '../../shared/reminders';
 import {
   readOpenClawConfigRecordRaw,
-  readOpenClawConfigRecord,
   updateOpenClawConfigRecord,
 } from '../../utils/openclaw-config';
 

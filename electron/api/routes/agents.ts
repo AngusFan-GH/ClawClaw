@@ -4,6 +4,7 @@ import {
   clearChannelBinding,
   createAgent,
   deleteAgentConfig,
+  listAgentsSnapshot,
   updateAgentSettings,
 } from '../../utils/agent-config';
 import { getAgentsConfigSnapshot } from '../../services/config-snapshot';
@@ -158,7 +159,10 @@ export async function handleAgentRoutes(
           ? snapshotBeforeUpdate.channelAccountOwners[`${runtimeChannelType}:${accountId.trim() || 'default'}`]
           : snapshotBeforeUpdate.channelOwners[runtimeChannelType];
 
-        if (!existingOwner) {
+        if (
+          !existingOwner ||
+          normalizeComparableAgentId(existingOwner) !== normalizeComparableAgentId(agentId)
+        ) {
           sendJson(res, 200, { success: true, noChange: true, ...snapshotBeforeUpdate });
           return true;
         }

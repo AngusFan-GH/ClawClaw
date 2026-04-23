@@ -2,7 +2,7 @@
  * Settings Page
  * Application configuration
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Copy,
   ExternalLink,
@@ -715,7 +715,7 @@ export function Settings() {
     }
   };
 
-  const handleSaveProxySettings = async () => {
+  const handleSaveProxySettings = useCallback(async () => {
     setSavingProxy(true);
     setProxySaveError(null);
     setProxySaveDoneAt(null);
@@ -760,7 +760,22 @@ export function Settings() {
     } finally {
       setSavingProxy(false);
     }
-  };
+  }, [
+    proxyAllServerDraft,
+    proxyBypassRulesDraft,
+    proxyHttpServerDraft,
+    proxyHttpsServerDraft,
+    proxyModeDraft,
+    proxyServerDraft,
+    setProxyAllServer,
+    setProxyBypassRules,
+    setProxyEnabled,
+    setProxyHttpServer,
+    setProxyHttpsServer,
+    setProxyMode,
+    setProxyServer,
+    t,
+  ]);
 
   // Proxy auto-save: persist draft → store when draft differs from current Zustand state.
   // We compare against getState() rather than persistedProxyState (localStorage) because
@@ -804,7 +819,18 @@ export function Settings() {
     }
     console.debug('[settings:proxy] auto-save triggered: draft differs from store state, calling handleSaveProxySettings');
     void handleSaveProxySettings();
-  }, [draftProxyState, persistedProxyState, proxyModeDraft, savingProxy]);
+  }, [
+    draftProxyState,
+    handleSaveProxySettings,
+    persistedProxyState,
+    proxyAllServerDraft,
+    proxyBypassRulesDraft,
+    proxyHttpServerDraft,
+    proxyHttpsServerDraft,
+    proxyModeDraft,
+    proxyServerDraft,
+    savingProxy,
+  ]);
 
   useEffect(() => {
     if (!proxySaveDoneAt) return;

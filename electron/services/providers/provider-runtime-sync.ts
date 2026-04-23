@@ -741,8 +741,6 @@ export async function syncDefaultProviderToRuntime(
   if (!provider) {
     return;
   }
-  const account = await getProviderAccount(providerId);
-
   const ock = await resolveRuntimeProviderKey(provider);
   const providerKey = await getApiKey(providerId);
   const fallbackModels = await getProviderFallbackModelRefs(provider);

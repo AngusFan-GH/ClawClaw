@@ -6,11 +6,8 @@
  */
 import { access, readFile, readdir, rm, writeFile } from 'fs/promises';
 import { constants } from 'fs';
-import { existsSync } from 'node:fs';
-import { spawn } from 'node:child_process';
-import { dirname, join } from 'path';
-import { app, utilityProcess } from 'electron';
-import { getOpenClawEntryPath, getOpenClawResolvedDir, getOpenClawDir, resolveOpenClawDir } from './paths';
+import { join } from 'path';
+import { resolveOpenClawDir } from './paths';
 import * as logger from './logger';
 import {
     readOpenClawConfigRecord,
@@ -21,7 +18,6 @@ import {
 } from './openclaw-config';
 import { hasIncompatibleManagedPluginSdkImports } from './plugin-sdk-compat';
 import { proxyAwareFetch } from './proxy-fetch';
-import { prepareWinSpawn } from './win-shell';
 import {
     normalizeOpenClawAccountId,
     WECHAT_RUNTIME_CHANNEL_ID,
@@ -50,24 +46,6 @@ const CHANNEL_PLUGIN_ALLOWLIST_IDS: Partial<Record<string, string>> = {
     qqbot: 'qqbot',
     [WECHAT_RUNTIME_CHANNEL_ID]: WECHAT_RUNTIME_CHANNEL_ID,
 };
-const SUPPORTED_CHANNEL_IDS = [
-    'whatsapp',
-    'dingtalk',
-    'telegram',
-    'discord',
-    'signal',
-    'feishu',
-    'wecom',
-    'imessage',
-    'matrix',
-    'line',
-    'msteams',
-    'googlechat',
-    'mattermost',
-    'qqbot',
-    WECHAT_RUNTIME_CHANNEL_ID,
-] as const;
-
 // Channels that are managed as plugins (config goes under plugins.entries, not channels)
 const PLUGIN_CHANNELS = ['whatsapp'];
 const LEGACY_CHANNEL_PLUGIN_IDS = [
@@ -493,155 +471,6 @@ async function removeQQBotAccountState(accountId?: string): Promise<void> {
 
     await compactDirectoryIfEmpty(sessionsDir);
     await compactDirectoryIfEmpty(qqbotDir);
-}
-
-function extractTrailingJsonObject(raw: string): Record<string, unknown> | null {
-    const trimmed = raw.trim();
-    if (!trimmed) return null;
-
-    const directMatch = trimmed.match(/(\{[\s\S]*\})\s*$/);
-    if (directMatch) {
-        try {
-            return JSON.parse(directMatch[1]) as Record<string, unknown>;
-        } catch {
-            // fall through
-        }
-    }
-
-    const lastObjectStart = trimmed.lastIndexOf('\n{');
-    const candidate = lastObjectStart >= 0 ? trimmed.slice(lastObjectStart + 1) : trimmed;
-    try {
-        return JSON.parse(candidate) as Record<string, unknown>;
-    } catch {
-        return null;
-    }
-}
-
-function getOpenClawCliSpawnConfig(): { command: string; args: string[]; env: NodeJS.ProcessEnv; cwd: string } {
-    const cwd = getOpenClawResolvedDir();
-    const entryPath = getOpenClawEntryPath();
-
-    if (process.platform === 'win32') {
-        return {
-            command: process.execPath,
-            args: [entryPath, 'channels', 'list', '--json', '--no-usage'],
-            env: {
-                ...process.env,
-                ELECTRON_RUN_AS_NODE: '1',
-                OPENCLAW_NO_RESPAWN: '1',
-                OPENCLAW_EMBEDDED_IN: 'ClawClaw',
-            },
-            cwd,
-        };
-    }
-
-    if (!app.isPackaged) {
-        const openclawDir = getOpenClawDir();
-        const binName = process.platform === 'win32' ? 'openclaw.cmd' : 'openclaw';
-        const binPath = join(dirname(openclawDir), '.bin', binName);
-        if (existsSync(binPath)) {
-            return {
-                command: binPath,
-                args: ['channels', 'list', '--json', '--no-usage'],
-                env: {
-                    ...process.env,
-                    OPENCLAW_NO_RESPAWN: '1',
-                    OPENCLAW_EMBEDDED_IN: 'ClawClaw',
-                },
-                cwd,
-            };
-        }
-    }
-
-    const packagedCli =
-        process.platform === 'win32'
-            ? join(process.resourcesPath, 'cli', 'openclaw.cmd')
-            : join(process.resourcesPath, 'cli', 'openclaw');
-    if (app.isPackaged && existsSync(packagedCli)) {
-        return {
-            command: packagedCli,
-            args: ['channels', 'list', '--json', '--no-usage'],
-            env: {
-                ...process.env,
-                OPENCLAW_NO_RESPAWN: '1',
-                OPENCLAW_EMBEDDED_IN: 'ClawClaw',
-            },
-            cwd,
-        };
-    }
-
-    return {
-        command: process.execPath,
-        args: [entryPath, 'channels', 'list', '--json', '--no-usage'],
-        env: {
-            ...process.env,
-            ELECTRON_RUN_AS_NODE: '1',
-            OPENCLAW_NO_RESPAWN: '1',
-            OPENCLAW_EMBEDDED_IN: 'ClawClaw',
-        },
-        cwd,
-    };
-}
-
-async function listConfiguredChannelsFromCli(): Promise<string[]> {
-    const supported = new Set<string>(SUPPORTED_CHANNEL_IDS);
-    const { command, args, env, cwd } = getOpenClawCliSpawnConfig();
-
-    return await new Promise((resolve) => {
-        const child = process.platform === 'win32'
-            ? utilityProcess.fork(args[0] ?? '', args.slice(1), {
-                cwd,
-                env,
-                stdio: 'pipe',
-                serviceName: 'OpenClaw Channels List',
-            })
-            : (() => {
-                const prepared = prepareWinSpawn(command, args);
-                return spawn(prepared.command, prepared.args, {
-                    cwd,
-                    env,
-                    stdio: ['ignore', 'pipe', 'pipe'],
-                    shell: prepared.shell,
-                    windowsHide: true,
-                });
-            })();
-
-        let stdout = '';
-        let stderr = '';
-
-        child.stdout.on('data', (chunk) => {
-            stdout += chunk.toString();
-        });
-
-        child.stderr.on('data', (chunk) => {
-            stderr += chunk.toString();
-        });
-
-        child.on('error', (error) => {
-            logger.warn('Failed to execute openclaw channels list:', error);
-            resolve([]);
-        });
-
-        child.on(process.platform === 'win32' ? 'exit' : 'close', () => {
-            const parsed = extractTrailingJsonObject(`${stdout}\n${stderr}`);
-            if (!parsed) {
-                resolve([]);
-                return;
-            }
-
-            const configured = new Set<string>();
-            const chat = parsed.chat;
-            if (chat && typeof chat === 'object') {
-                for (const key of Object.keys(chat as Record<string, unknown>)) {
-                    if (supported.has(key)) {
-                        configured.add(key);
-                    }
-                }
-            }
-
-            resolve(Array.from(configured));
-        });
-    });
 }
 
 // ── Types ────────────────────────────────────────────────────────

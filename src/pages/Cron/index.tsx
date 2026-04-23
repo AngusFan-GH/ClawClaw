@@ -1484,8 +1484,11 @@ function CronRunHistoryDialog({ job, onClose }: CronRunHistoryDialogProps) {
   useEffect(() => {
     let cancelled = false;
     const sessionKey = `agent:${job.agentId || 'main'}:cron:${job.id}`;
-    setLoading(true);
-    setError(null);
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLoading(true);
+      setError(null);
+    });
     void hostApiFetch<{ messages?: CronHistoryMessage[] }>(
       `/api/cron/session-history?${new URLSearchParams({ sessionKey, limit: '50' }).toString()}`,
     ).then((result) => {

@@ -35,7 +35,7 @@ export function GatewayPortsSettings({ currentPort, currentPid }: GatewayPortsSe
       } else {
         toast.success(t('gatewayPorts.scanComplete', { count: result.length }));
       }
-    } catch (error) {
+    } catch {
       toast.error(t('gatewayPorts.scanFailed'));
     } finally {
       setScanning(false);

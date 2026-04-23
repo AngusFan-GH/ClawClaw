@@ -2955,20 +2955,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const state = get();
       if (!state.sending) return;
       if (state.streamingMessage || state.streamingText) return;
-      if (state.pendingFinal) {
+      const idleMs = Date.now() - _lastChatEventAt;
+      if (state.pendingFinal && idleMs < SAFETY_TIMEOUT_MS) {
         setTimeout(checkStuck, 10_000);
         return;
       }
-      if (Date.now() - _lastChatEventAt < SAFETY_TIMEOUT_MS) {
+      if (!state.pendingFinal && idleMs < SAFETY_TIMEOUT_MS) {
         setTimeout(checkStuck, 10_000);
         return;
       }
       clearHistoryPoll();
+      void state.loadHistory(true);
       set({
         error:
-          'No response received from the model. The provider may be unavailable or the API key may have insufficient quota. Please check your provider settings.',
+          state.pendingFinal
+            ? 'Response finalization timed out after the Gateway stopped sending updates. Refresh the conversation or restart the Gateway if it remains unavailable.'
+            : 'No response received from the model. The provider may be unavailable or the API key may have insufficient quota. Please check your provider settings.',
         sending: false,
         activeRunId: null,
+        pendingFinal: false,
+        pendingSessionModelRefresh: false,
+        pendingAssistantMessage: null,
+        streamingText: '',
+        streamingMessage: null,
+        streamingTools: [],
+        pendingToolImages: [],
         lastUserMessageAt: null,
         ...resetToolStreamState(get()),
       });
@@ -3091,7 +3102,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
             activeRunId: null,
             pendingFinal: false,
             lastUserMessageAt: null,
-            pendingUserMessage: null,
             pendingAssistantMessage: null,
             ...resetToolStreamState(s),
           }));
@@ -3118,7 +3128,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
           activeRunId: null,
           pendingFinal: false,
           lastUserMessageAt: null,
-          pendingUserMessage: null,
           pendingAssistantMessage: null,
           ...resetToolStreamState(s),
         }));

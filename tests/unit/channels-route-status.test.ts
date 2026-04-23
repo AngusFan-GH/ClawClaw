@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   mapAccountStatus,
   normalizeAccountStatusForUi,
-  promoteConnectedAccountFromSummary,
   resolveGroupStatus,
 } from '@electron/api/routes/channels';
 

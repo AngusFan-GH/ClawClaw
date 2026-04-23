@@ -3,7 +3,7 @@
  * Navigation sidebar with menu items.
  * No longer fixed - sits inside the flex layout below the title bar.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   MessageCircleMore,
@@ -243,7 +243,36 @@ export function Sidebar() {
     navigate('/', { state: { createNewSession: true, agentId } });
   };
 
-  const getSessionLabel = (
+  const [sessionToDelete, setSessionToDelete] = useState<{ key: string; label: string } | null>(
+    null
+  );
+  const [nowMs, setNowMs] = useState(() => Date.now()); // lazy init: computed at mount time, not module-load time
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+  const [backgroundExpanded, setBackgroundExpanded] = useState(false);
+  const [showCronBackground, setShowCronBackground] = useState(false);
+  const [expandedTaskParents, setExpandedTaskParents] = useState<Record<string, boolean>>({});
+  const settingsMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    void fetchAgents();
+  }, [fetchAgents]);
+
+  const agentNameMap = useMemo(
+    () => new Map((agents ?? []).map((agent) => [agent.gateway.id, resolveAgentDisplayName(agent)])),
+    [agents]
+  );
+  const sessionByKey = useMemo(
+    () => new Map((sessions ?? []).map((session) => [session.key, session])),
+    [sessions]
+  );
+
+  const getSessionAgentLabel = useCallback((key: string) => {
+    const parts = key.split(':');
+    const agentId = parts[1] || 'main';
+    return agentNameMap.get(agentId) || agentId;
+  }, [agentNameMap]);
+
+  const getSessionLabel = useCallback((
     key: string,
     displayName?: string,
     label?: string,
@@ -269,36 +298,7 @@ export function Sidebar() {
       return t('chat:history.backgroundKindSubagent', 'Subagent');
     }
     return key;
-  };
-
-  const [sessionToDelete, setSessionToDelete] = useState<{ key: string; label: string } | null>(
-    null
-  );
-  const [nowMs, setNowMs] = useState(() => Date.now()); // lazy init: computed at mount time, not module-load time
-  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
-  const [backgroundExpanded, setBackgroundExpanded] = useState(false);
-  const [showCronBackground, setShowCronBackground] = useState(false);
-  const [expandedTaskParents, setExpandedTaskParents] = useState<Record<string, boolean>>({});
-  const settingsMenuRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    void fetchAgents();
-  }, [fetchAgents]);
-
-  const agentNameMap = useMemo(
-    () => new Map((agents ?? []).map((agent) => [agent.gateway.id, resolveAgentDisplayName(agent)])),
-    [agents]
-  );
-  const sessionByKey = useMemo(
-    () => new Map((sessions ?? []).map((session) => [session.key, session])),
-    [sessions]
-  );
-
-  const getSessionAgentLabel = (key: string) => {
-    const parts = key.split(':');
-    const agentId = parts[1] || 'main';
-    return agentNameMap.get(agentId) || agentId;
-  };
+  }, [getSessionAgentLabel, pendingLocalSessionKeys, sessionLabels, t]);
 
   const handleDeleteSessionClick = async (key: string, label: string) => {
     const isBlankPendingSession =
@@ -393,10 +393,13 @@ export function Sidebar() {
     sessionBucketMap[bucketKey].sessions.push(session);
   }
 
-  const getParentSessionKey = (session: { spawnedBy?: string; parentSessionKey?: string }) =>
-    session.spawnedBy?.trim() || session.parentSessionKey?.trim() || '';
+  const getParentSessionKey = useCallback(
+    (session: { spawnedBy?: string; parentSessionKey?: string }) =>
+      session.spawnedBy?.trim() || session.parentSessionKey?.trim() || '',
+    []
+  );
 
-  const getParentSessionLabel = (session: { spawnedBy?: string; parentSessionKey?: string }) => {
+  const getParentSessionLabel = useCallback((session: { spawnedBy?: string; parentSessionKey?: string }) => {
     const parentKey = getParentSessionKey(session);
     if (!parentKey) return '';
     const parent = sessionByKey.get(parentKey);
@@ -404,14 +407,14 @@ export function Sidebar() {
       return getSessionLabel(parent.key, parent.displayName, parent.label, parent.derivedTitle, parent.subagentRole);
     }
     return parentKey;
-  };
+  }, [getParentSessionKey, getSessionLabel, sessionByKey]);
 
   const conversationSessionKeys = useMemo(
     () => new Set(conversationSessions.map((session) => session.key)),
     [conversationSessions]
   );
 
-  const resolveConversationParentKey = (session: { key: string; spawnedBy?: string; parentSessionKey?: string }) => {
+  const resolveConversationParentKey = useCallback((session: { key: string; spawnedBy?: string; parentSessionKey?: string }) => {
     const seen = new Set<string>();
     let currentParentKey = getParentSessionKey(session);
 
@@ -427,11 +430,11 @@ export function Sidebar() {
     }
 
     return '';
-  };
+  }, [conversationSessionKeys, getParentSessionKey, sessionByKey]);
 
   const nestedBackgroundSessions = useMemo(
     () => nonCronBackgroundSessions.filter((session) => Boolean(resolveConversationParentKey(session))),
-    [nonCronBackgroundSessions, conversationSessionKeys, sessionByKey]
+    [nonCronBackgroundSessions, resolveConversationParentKey]
   );
 
   const nestedBackgroundSessionMap = useMemo(() => {
@@ -453,13 +456,22 @@ export function Sidebar() {
     }
 
     return groups;
-  }, [nestedBackgroundSessions, sessionLastActivity, conversationSessionKeys, sessionByKey]);
+  }, [nestedBackgroundSessions, resolveConversationParentKey, sessionLastActivity]);
 
-  const sortedBackgroundSessions = [
-    ...nonCronBackgroundSessions.filter((session) => !resolveConversationParentKey(session)),
-    ...(showCronBackground ? cronBackgroundSessions : []),
-  ].sort(
-    (a, b) => (sessionLastActivity[b.key] ?? 0) - (sessionLastActivity[a.key] ?? 0)
+  const sortedBackgroundSessions = useMemo(
+    () => [
+      ...nonCronBackgroundSessions.filter((session) => !resolveConversationParentKey(session)),
+      ...(showCronBackground ? cronBackgroundSessions : []),
+    ].sort(
+      (a, b) => (sessionLastActivity[b.key] ?? 0) - (sessionLastActivity[a.key] ?? 0)
+    ),
+    [
+      cronBackgroundSessions,
+      nonCronBackgroundSessions,
+      resolveConversationParentKey,
+      sessionLastActivity,
+      showCronBackground,
+    ]
   );
 
   const backgroundSessionGroups = useMemo(() => {
@@ -495,7 +507,7 @@ export function Sidebar() {
     }
 
     return [...groups.values()].sort((a, b) => b.latestActivity - a.latestActivity);
-  }, [getParentSessionLabel, sessionLastActivity, sortedBackgroundSessions, t]);
+  }, [getParentSessionKey, getParentSessionLabel, sessionLastActivity, sortedBackgroundSessions, t]);
 
   const shortcutIds = new Set<MenuItemId>(shortcutMenuItems);
   const shortcutItems = shortcutMenuItems
