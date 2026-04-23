@@ -508,6 +508,8 @@ export function Sidebar() {
 
     return [...groups.values()].sort((a, b) => b.latestActivity - a.latestActivity);
   }, [getParentSessionKey, getParentSessionLabel, sessionLastActivity, sortedBackgroundSessions, t]);
+  const showBackgroundGroupHeaders = backgroundSessionGroups.length > 1
+    || backgroundSessionGroups.some((group) => Boolean(group.parentSessionKey));
 
   const shortcutIds = new Set<MenuItemId>(shortcutMenuItems);
   const shortcutItems = shortcutMenuItems
@@ -595,33 +597,34 @@ export function Sidebar() {
 
       {/* Session list 鈥?below Settings, only when expanded */}
       {!sidebarCollapsed && (sessionsLoading || !sessionsHydrated || visibleSessions.length > 0) && (
-        <div className="mt-5 mb-20 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-3 pr-1">
-          <div className="px-2.5 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/55">
+        <div className="mt-5 mb-20 flex min-h-0 flex-1 flex-col px-2">
+          <div className="shrink-0 px-2.5 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/55">
             {t('chat:history.title')}
           </div>
-          {sessionsLoading || !sessionsHydrated ? (
-            <div className="px-2.5 pt-2">
-              <div className="rounded-[14px] border border-black/6 bg-white/55 px-3 py-3 text-[13px] text-muted-foreground shadow-[0_6px_16px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
-                {isGatewayRunning
-                  ? t('chat:history.loading', '正在恢复最近对话…')
-                  : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
-                    ? t('chat:history.connectingGateway', '网关正在恢复连接')
-                    : t('chat:history.waitingForGateway', '网关未连接，请启动或重启网关后再试')}
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3 pr-1">
+            {sessionsLoading || !sessionsHydrated ? (
+              <div className="px-2.5 pt-2">
+                <div className="rounded-[14px] border border-black/6 bg-white/55 px-3 py-3 text-[13px] text-muted-foreground shadow-[0_6px_16px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
+                  {isGatewayRunning
+                    ? t('chat:history.loading', '正在恢复最近对话…')
+                    : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
+                      ? t('chat:history.connectingGateway', '网关正在恢复连接')
+                      : t('chat:history.waitingForGateway', '网关未连接，请启动或重启网关后再试')}
+                </div>
               </div>
-            </div>
-          ) : (
-            <>
-              {sessionBuckets.map((bucket) =>
-                bucket.sessions.length > 0 ? (
-                  <div key={bucket.key} className="pt-3 first:pt-1">
-                    <div className="flex items-center gap-2 px-2.5 pb-2">
-                      <span className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground/70">
-                        {bucket.label}
-                      </span>
-                      <div className="h-px flex-1 bg-black/6 dark:bg-white/10" />
-                    </div>
-                    <div className="space-y-1">
-                      {bucket.sessions.map((s) => {
+            ) : (
+              <>
+                {sessionBuckets.map((bucket) =>
+                  bucket.sessions.length > 0 ? (
+                    <div key={bucket.key} className="pt-3 first:pt-1">
+                      <div className="sticky top-0 z-20 -mx-2 flex items-center gap-2 bg-[#eceff3]/95 px-4 pb-2 pt-2 backdrop-blur-md dark:bg-[#16181c]/95">
+                        <span className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground/70">
+                          {bucket.label}
+                        </span>
+                        <div className="h-px flex-1 bg-black/6 dark:bg-white/10" />
+                      </div>
+                      <div className="space-y-1">
+                        {bucket.sessions.map((s) => {
                         const canDeleteSession = !isMainSessionKey(s.key);
                         const childSessions = nestedBackgroundSessionMap.get(s.key) ?? [];
                         const childTasksVisible = isOnChat
@@ -833,29 +836,31 @@ export function Sidebar() {
                     <div className="space-y-3">
                       {backgroundSessionGroups.map((group) => (
                         <div key={group.id} className="space-y-1">
-                          <div className="flex items-center gap-2 px-2.5 pb-1">
-                            <span className="truncate text-[11px] font-semibold tracking-[0.06em] text-muted-foreground/70">
-                              {group.label}
-                            </span>
-                            <Badge
-                              variant="secondary"
-                              className="rounded-full px-1.5 py-0 text-[10px] font-medium text-muted-foreground"
-                            >
-                              {group.sessions.length}
-                            </Badge>
-                            <div className="h-px flex-1 bg-black/6 dark:bg-white/10" />
-                            {group.parentSessionKey && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  openSession(group.parentSessionKey!);
-                                }}
-                                className="shrink-0 rounded-full bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-black/8 hover:text-foreground dark:bg-white/8 dark:hover:bg-white/12"
+                          {showBackgroundGroupHeaders && (
+                            <div className="flex items-center gap-2 px-2.5 pb-1">
+                              <span className="truncate text-[11px] font-semibold tracking-[0.06em] text-muted-foreground/70">
+                                {group.label}
+                              </span>
+                              <Badge
+                                variant="secondary"
+                                className="rounded-full px-1.5 py-0 text-[10px] font-medium text-muted-foreground"
                               >
-                                {t('chat:history.openParentSession', 'Open')}
-                              </button>
-                            )}
-                          </div>
+                                {group.sessions.length}
+                              </Badge>
+                              <div className="h-px flex-1 bg-black/6 dark:bg-white/10" />
+                              {group.parentSessionKey && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    openSession(group.parentSessionKey!);
+                                  }}
+                                  className="shrink-0 rounded-full bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-black/8 hover:text-foreground dark:bg-white/8 dark:hover:bg-white/12"
+                                >
+                                  {t('chat:history.openParentSession', 'Open')}
+                                </button>
+                              )}
+                            </div>
+                          )}
                           <div className="space-y-1">
                             {group.sessions.map((s) => {
                               const canDeleteSession = !s.key.endsWith(':main');
@@ -949,6 +954,7 @@ export function Sidebar() {
               )}
             </>
           )}
+        </div>
         </div>
       )}
 
