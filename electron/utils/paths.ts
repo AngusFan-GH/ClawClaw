@@ -135,6 +135,38 @@ export function getPortableUvCacheDir(): string | null {
   return join(dataDir, 'cache');
 }
 
+/**
+ * Returns the managed Python runtime directory ClawClaw should use for uv.
+ *
+ * - Portable mode: portable/python
+ * - Packaged Windows installs: app userData/python (isolated from global %APPDATA%/uv)
+ * - Other environments: null (let uv use its defaults)
+ */
+export function getManagedPythonHome(): string | null {
+  const portable = getPortablePythonHome();
+  if (portable) return portable;
+  if (process.platform === 'win32' && app.isPackaged) {
+    return join(getDataDir(), 'python');
+  }
+  return null;
+}
+
+/**
+ * Returns the managed uv cache directory ClawClaw should use.
+ *
+ * - Portable mode: portable/cache
+ * - Packaged Windows installs: app userData/uv-cache
+ * - Other environments: null (let uv use its defaults)
+ */
+export function getManagedUvCacheDir(): string | null {
+  const portable = getPortableUvCacheDir();
+  if (portable) return portable;
+  if (process.platform === 'win32' && app.isPackaged) {
+    return join(getDataDir(), 'uv-cache');
+  }
+  return null;
+}
+
 export type ExportCategory = 'general' | 'images' | 'settings';
 
 /**

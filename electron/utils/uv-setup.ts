@@ -1,10 +1,10 @@
 import { app } from 'electron';
 import { execSync, spawn } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, rmSync } from 'fs';
 import { join } from 'path';
 import { getUvMirrorEnv } from './uv-env';
 import { logger } from './logger';
-import { quoteForCmd, needsWinShell, getPortablePythonHome, getPortableUvCacheDir } from './paths';
+import { quoteForCmd, needsWinShell, getManagedPythonHome, getManagedUvCacheDir } from './paths';
 
 /**
  * Get the path to the bundled uv binary
@@ -91,14 +91,14 @@ export async function isPythonReady(): Promise<boolean> {
   const { bin: uvBin } = resolveUvBin();
   const useShell = needsWinShell(uvBin);
   const uvEnv = await getUvMirrorEnv();
-  const portablePythonHome = getPortablePythonHome();
-  const portableUvCache = getPortableUvCacheDir();
+  const managedPythonHome = getManagedPythonHome();
+  const managedUvCache = getManagedUvCacheDir();
 
   const env: Record<string, string | undefined> = {
     ...process.env,
     ...uvEnv,
-    ...(portablePythonHome ? { UV_PYTHON_HOME: portablePythonHome } : {}),
-    ...(portableUvCache ? { UV_CACHE_DIR: portableUvCache } : {}),
+    ...(managedPythonHome ? { UV_PYTHON_HOME: managedPythonHome } : {}),
+    ...(managedUvCache ? { UV_CACHE_DIR: managedUvCache } : {}),
   };
 
   return new Promise<boolean>((resolve) => {
@@ -178,6 +178,32 @@ async function runPythonInstall(
   });
 }
 
+function shouldRepairWindowsPythonLinkError(error: unknown): boolean {
+  if (process.platform !== 'win32') return false;
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('os error 4390')
+    || message.includes('not a reparse point')
+    || message.includes('此文件或目录不是一个重分析点');
+}
+
+function repairManagedPythonState(env: Record<string, string | undefined>): void {
+  const pythonHome = env.UV_PYTHON_HOME;
+  const cacheDir = env.UV_CACHE_DIR;
+  if (!pythonHome && !cacheDir) {
+    return;
+  }
+
+  for (const target of [pythonHome, cacheDir]) {
+    if (!target) continue;
+    try {
+      rmSync(target, { recursive: true, force: true });
+      logger.warn(`[python-setup] Removed corrupted managed uv state at ${target}`);
+    } catch (error) {
+      logger.warn(`[python-setup] Failed to remove managed uv state at ${target}:`, error);
+    }
+  }
+}
+
 /**
  * Use bundled uv to install a managed Python version (default 3.12).
  *
@@ -192,38 +218,54 @@ export async function setupManagedPython(): Promise<void> {
   const uvEnv = await getUvMirrorEnv();
   const hasMirror = Object.keys(uvEnv).length > 0;
 
-  // In portable mode, redirect Python and cache to the USB drive.
-  const portablePythonHome = getPortablePythonHome();
-  const portableUvCache = getPortableUvCacheDir();
+  // In portable mode, or in packaged Windows installs, redirect Python and
+  // uv cache to ClawClaw-managed directories so we don't depend on a possibly
+  // broken global %APPDATA%\\uv state.
+  const managedPythonHome = getManagedPythonHome();
+  const managedUvCache = getManagedUvCacheDir();
 
   logger.info(
     `Setting up managed Python 3.12 ` +
     `(uv=${uvBin}, source=${source}, arch=${process.arch}, mirror=${hasMirror}` +
-    (portablePythonHome ? `, pythonHome=${portablePythonHome}` : '') +
-    (portableUvCache ? `, cache=${portableUvCache}` : '') +
+    (managedPythonHome ? `, pythonHome=${managedPythonHome}` : '') +
+    (managedUvCache ? `, cache=${managedUvCache}` : '') +
     `)`
   );
 
   const baseEnv: Record<string, string | undefined> = { ...process.env };
-  if (portablePythonHome) baseEnv.UV_PYTHON_HOME = portablePythonHome;
-  if (portableUvCache) baseEnv.UV_CACHE_DIR = portableUvCache;
+  if (managedPythonHome) baseEnv.UV_PYTHON_HOME = managedPythonHome;
+  if (managedUvCache) baseEnv.UV_CACHE_DIR = managedUvCache;
+  let installCompleted = false;
 
   // Attempt 1: with mirror (if applicable)
   try {
     await runPythonInstall(uvBin, { ...baseEnv, ...uvEnv }, hasMirror ? 'mirror' : 'default');
+    installCompleted = true;
   } catch (firstError) {
     logger.warn('Python install attempt 1 failed:', firstError);
 
-    if (hasMirror) {
+    if (shouldRepairWindowsPythonLinkError(firstError)) {
+      logger.warn('Detected corrupted Windows uv Python link state, repairing managed directories and retrying...');
+      repairManagedPythonState(baseEnv);
+      try {
+        await runPythonInstall(uvBin, { ...baseEnv, ...uvEnv }, hasMirror ? 'mirror-repair' : 'default-repair');
+        installCompleted = true;
+      } catch (repairError) {
+        logger.warn('Python install retry after managed-state repair failed:', repairError);
+      }
+    }
+
+    if (!installCompleted && hasMirror) {
       // Attempt 2: retry without mirror to rule out mirror issues
       logger.info('Retrying Python install without mirror...');
       try {
         await runPythonInstall(uvBin, baseEnv, 'no-mirror');
+        installCompleted = true;
       } catch (secondError) {
         logger.error('Python install attempt 2 (no mirror) also failed:', secondError);
         throw secondError;
       }
-    } else {
+    } else if (!installCompleted) {
       throw firstError;
     }
   }
@@ -233,8 +275,8 @@ export async function setupManagedPython(): Promise<void> {
   const verifyEnv: Record<string, string | undefined> = {
     ...process.env,
     ...uvEnv,
-    ...(portablePythonHome ? { UV_PYTHON_HOME: portablePythonHome } : {}),
-    ...(portableUvCache ? { UV_CACHE_DIR: portableUvCache } : {}),
+    ...(managedPythonHome ? { UV_PYTHON_HOME: managedPythonHome } : {}),
+    ...(managedUvCache ? { UV_CACHE_DIR: managedUvCache } : {}),
   };
   try {
     const findPath = await new Promise<string>((resolve) => {
