@@ -149,6 +149,8 @@ LangString installLogUninstallShortcut 1033 "Creating explicit Start Menu uninst
 LangString installLogUninstallShortcut 2052 "正在创建开始菜单卸载快捷方式..."
 LangString installLogFinalizeDone 1033 "Post-install system configuration completed."
 LangString installLogFinalizeDone 2052 "安装后的系统配置已完成。"
+LangString uninstallShortcutTitle 1033 "Uninstall ${PRODUCT_NAME}"
+LangString uninstallShortcutTitle 2052 "卸载 ${PRODUCT_NAME}"
 
 !macro customWelcomePage
   ; customWelcomePage is expanded at compile-time in assistedInstaller.nsh.
@@ -459,7 +461,7 @@ FunctionEnd
   ${else}
     StrCpy $3 "/currentuser"
   ${endIf}
-  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\卸载 ${PRODUCT_NAME}.lnk" "$INSTDIR\${UNINSTALL_FILENAME}" "$3"
+  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\$(uninstallShortcutTitle).lnk" "$INSTDIR\${UNINSTALL_FILENAME}" "$3"
 
   DetailPrint "$(installLogFinalizeDone)"
 !macroend

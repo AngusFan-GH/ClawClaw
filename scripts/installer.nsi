@@ -18,7 +18,6 @@ Var oldMenuDirectory
 !ifdef BUILD_UNINSTALLER
   !include "${PROJECT_DIR}\scripts\uninstaller.nsh"
   !ifmacrodef customUnInstallSection
-    !define MUI_COMPONENTSPAGE_NODESC
     !insertmacro MUI_UNPAGE_COMPONENTS
   !endif
 !endif

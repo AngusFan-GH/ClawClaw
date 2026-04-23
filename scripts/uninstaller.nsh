@@ -125,7 +125,7 @@ LangString uninstallLogRemoveOpenClawData 2052 "正在删除 OpenClaw 用户数�
   Delete "$DESKTOP\${PRODUCT_NAME}.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
-  Delete "$SMPROGRAMS\${PRODUCT_NAME}\卸载 ${PRODUCT_NAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCT_NAME}\$(uninstallShortcutTitle).lnk"
   RMDir "$SMPROGRAMS\${PRODUCT_NAME}"
 
   !insertmacro KillInstallDirProcesses
