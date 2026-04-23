@@ -1225,18 +1225,20 @@ function patchBrokenModules(nodeModulesDir) {
   };
   const replacePatches = [
     {
-      rel: '@mariozechner/pi-coding-agent/dist/core/bash-executor.js',
-      search: `        const child = spawn(shell, [...args, command], {
-            detached: true,
-            env: getShellEnv(),
-            stdio: ["ignore", "pipe", "pipe"],
-        });`,
-      replace: `        const child = spawn(shell, [...args, command], {
-            detached: true,
-            env: getShellEnv(),
-            stdio: ["ignore", "pipe", "pipe"],
-            windowsHide: true,
-        });`,
+      rel: '@mariozechner/pi-coding-agent/dist/core/tools/bash.js',
+      search: `                const child = spawn(shell, [...args, command], {
+                    cwd,
+                    detached: true,
+                    env: env ?? getShellEnv(),
+                    stdio: ["ignore", "pipe", "pipe"],
+                });`,
+      replace: `                const child = spawn(shell, [...args, command], {
+                    cwd,
+                    detached: true,
+                    env: env ?? getShellEnv(),
+                    stdio: ["ignore", "pipe", "pipe"],
+                    windowsHide: true,
+                });`,
     },
     {
       rel: '@mariozechner/pi-coding-agent/dist/core/exec.js',
@@ -1268,6 +1270,7 @@ function patchBrokenModules(nodeModulesDir) {
     if (!fs.existsSync(target)) continue;
 
     const current = fs.readFileSync(target, 'utf8');
+    if (current.includes(replace)) continue;
     if (!current.includes(search)) {
       echo`   ⚠️  Skipped patch for ${rel}: expected source snippet not found`;
       continue;
@@ -1406,99 +1409,31 @@ function findFilesByName(rootDir, matcher) {
 function patchBundledRuntime(outputDir) {
   const replacePatches = [
     {
-      label: 'workspace command runner',
-      target: () => findFirstFileByName(path.join(outputDir, 'dist'), /^workspace-.*\.js$/),
-      search: `\tconst child = spawn(resolvedCommand, finalArgv.slice(1), {
-\t\tstdio,
-\t\tcwd,
-\t\tenv: resolvedEnv,
-\t\twindowsVerbatimArguments,
-\t\t...shouldSpawnWithShell({
-\t\t\tresolvedCommand,
-\t\t\tplatform: process$1.platform
-\t\t}) ? { shell: true } : {}
-\t});`,
-      replace: `\tconst child = spawn(resolvedCommand, finalArgv.slice(1), {
-\t\tstdio,
-\t\tcwd,
-\t\tenv: resolvedEnv,
-\t\twindowsVerbatimArguments,
-\t\twindowsHide: true,
-\t\t...shouldSpawnWithShell({
-\t\t\tresolvedCommand,
-\t\t\tplatform: process$1.platform
-\t\t}) ? { shell: true } : {}
-\t});`,
-    },
-    {
-      label: 'agent scope command runner',
-      target: () => findFirstFileByName(path.join(outputDir, 'dist', 'plugin-sdk'), /^agent-scope-.*\.js$/),
-      search: `\tconst child = spawn(resolvedCommand, finalArgv.slice(1), {
-\t\tstdio,
-\t\tcwd,
-\t\tenv: resolvedEnv,
-\t\twindowsVerbatimArguments,
-\t\t...shouldSpawnWithShell({
-\t\t\tresolvedCommand,
-\t\t\tplatform: process$1.platform
-\t\t}) ? { shell: true } : {}
-\t});`,
-      replace: `\tconst child = spawn(resolvedCommand, finalArgv.slice(1), {
-\t\tstdio,
-\t\tcwd,
-\t\tenv: resolvedEnv,
-\t\twindowsVerbatimArguments,
-\t\twindowsHide: true,
-\t\t...shouldSpawnWithShell({
-\t\t\tresolvedCommand,
-\t\t\tplatform: process$1.platform
-\t\t}) ? { shell: true } : {}
-\t});`,
-    },
-    {
       label: 'chrome launcher',
-      target: () => findFirstFileByName(path.join(outputDir, 'dist', 'plugin-sdk'), /^chrome-.*\.js$/),
+      target: () => findFirstFileByName(path.join(outputDir, 'dist'), /^chrome-.*\.js$/),
       search: `\t\treturn spawn(exe.path, args, {
-\t\t\tstdio: "pipe",
+\t\t\tstdio: [
+\t\t\t\t"ignore",
+\t\t\t\t"ignore",
+\t\t\t\t"pipe"
+\t\t\t],
 \t\t\tenv: {
 \t\t\t\t...process.env,
 \t\t\t\tHOME: os.homedir()
 \t\t\t}
 \t\t});`,
       replace: `\t\treturn spawn(exe.path, args, {
-\t\t\tstdio: "pipe",
+\t\t\tstdio: [
+\t\t\t\t"ignore",
+\t\t\t\t"ignore",
+\t\t\t\t"pipe"
+\t\t\t],
 \t\t\twindowsHide: true,
 \t\t\tenv: {
 \t\t\t\t...process.env,
 \t\t\t\tHOME: os.homedir()
 \t\t\t}
 \t\t});`,
-    },
-    {
-      label: 'qmd runner',
-      target: () => findFirstFileByName(path.join(outputDir, 'dist', 'plugin-sdk'), /^qmd-manager-.*\.js$/),
-      search: `\t\t\tconst child = spawn(resolveWindowsCommandShim(this.qmd.command), args, {
-\t\t\t\tenv: this.env,
-\t\t\t\tcwd: this.workspaceDir
-\t\t\t});`,
-      replace: `\t\t\tconst child = spawn(resolveWindowsCommandShim(this.qmd.command), args, {
-\t\t\t\tenv: this.env,
-\t\t\t\tcwd: this.workspaceDir,
-\t\t\t\twindowsHide: true
-\t\t\t});`,
-    },
-    {
-      label: 'mcporter runner',
-      target: () => findFirstFileByName(path.join(outputDir, 'dist', 'plugin-sdk'), /^qmd-manager-.*\.js$/),
-      search: `\t\t\tconst child = spawn(resolveWindowsCommandShim("mcporter"), args, {
-\t\t\t\tenv: this.env,
-\t\t\t\tcwd: this.workspaceDir
-\t\t\t});`,
-      replace: `\t\t\tconst child = spawn(resolveWindowsCommandShim("mcporter"), args, {
-\t\t\t\tenv: this.env,
-\t\t\t\tcwd: this.workspaceDir,
-\t\t\t\twindowsHide: true
-\t\t\t});`,
     },
   ];
 
@@ -1511,6 +1446,7 @@ function patchBundledRuntime(outputDir) {
     }
 
     const current = fs.readFileSync(target, 'utf8');
+    if (current.includes(patch.replace)) continue;
     if (!current.includes(patch.search)) {
       echo`   ⚠️  Skipped patch for ${patch.label}: expected source snippet not found`;
       continue;
@@ -1529,7 +1465,7 @@ function patchBundledRuntime(outputDir) {
 
   const ptyTargets = findFilesByName(
     path.join(outputDir, 'dist'),
-    /^(subagent-registry|reply|pi-embedded)-.*\.js$/,
+    /^(bash-tools|subagent-registry|reply|pi-embedded|supervisor)-.*\.js$/,
   );
   const ptyPatches = [
     {
@@ -1567,6 +1503,10 @@ function patchBundledRuntime(outputDir) {
     let matchedAny = false;
     for (const target of ptyTargets) {
       const current = fs.readFileSync(target, 'utf8');
+      if (current.includes(patch.replace)) {
+        matchedAny = true;
+        continue;
+      }
       if (!current.includes(patch.search)) continue;
       matchedAny = true;
       const next = current.replaceAll(patch.search, patch.replace);
