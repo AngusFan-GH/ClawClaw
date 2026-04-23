@@ -20,10 +20,34 @@ LangString uninstallOptionAppDataDesc 2052 "删除 $APPDATA 和 $LOCALAPPDATA �
 
 LangString uninstallOptionOpenClawTitle 1033 "Also delete OpenClaw user data (~/.openclaw)"
 LangString uninstallOptionOpenClawTitle 2052 "同时删除 OpenClaw 用户数据（~/.openclaw）"
-LangString uninstallOptionOpenClawDesc 1033 "Removes all OpenClaw data: agents, channels, providers, and credentials stored in your home directory. This cannot be undone."
-LangString uninstallOptionOpenClawDesc 2052 "删除所有 OpenClaw 数据：保存在主目录中的 agents、channels、providers 和 credentials。此操作无法撤销。"
+LangString uninstallOptionOpenClawDesc 1033 "Removes all OpenClaw data from ~/.openclaw, including agents, channels, providers, credentials, local runtime state, and session data. This cannot be undone."
+LangString uninstallOptionOpenClawDesc 2052 "删除 ~/.openclaw 中的所有 OpenClaw 数据，包括 agents、channels、providers、credentials、本地运行时状态和会话数据。此操作无法撤销。"
 LangString uninstallComponentsTop 1033 "Choose the additional data you want to remove."
 LangString uninstallComponentsTop 2052 "选择你希望额外删除的数据。"
+LangString uninstallConfirmOpenClawDelete 1033 "You chose to delete ~/.openclaw.$\r$\n$\r$\nThis will permanently remove agents, channels, providers, credentials, local runtime state, and session data.$\r$\n$\r$\nContinue?"
+LangString uninstallConfirmOpenClawDelete 2052 "你选择删除 ~/.openclaw。$\r$\n$\r$\n这会永久删除 agents、channels、providers、credentials、本地运行时状态和会话数据。$\r$\n$\r$\n是否继续？"
+LangString uninstallLogGatewayCleanup 1033 "Stopping and cleaning up the OpenClaw Gateway service..."
+LangString uninstallLogGatewayCleanup 2052 "正在停止并清理 OpenClaw Gateway 服务..."
+LangString uninstallLogGatewayStopExit 1033 "Warning: openclaw gateway stop exited with code $0."
+LangString uninstallLogGatewayStopExit 2052 "警告：openclaw gateway stop 的退出码为 $0。"
+LangString uninstallLogGatewayUninstallExit 1033 "Warning: openclaw gateway uninstall exited with code $0."
+LangString uninstallLogGatewayUninstallExit 2052 "警告：openclaw gateway uninstall 的退出码为 $0。"
+LangString uninstallLogGatewayMissing 1033 "Warning: bundled openclaw CLI wrapper not found, skipping gateway cleanup."
+LangString uninstallLogGatewayMissing 2052 "警告：未找到内置 openclaw CLI 包装脚本，跳过 Gateway 清理。"
+LangString uninstallLogCliCleanup 1033 "Cleaning up the OpenClaw CLI command-line environment..."
+LangString uninstallLogCliCleanup 2052 "正在清理 OpenClaw CLI 命令行环境..."
+LangString uninstallLogPathLaunchFailed 1033 "Warning: Failed to launch PowerShell while removing PATH entry."
+LangString uninstallLogPathLaunchFailed 2052 "警告：启动 PowerShell 移除 PATH 失败。"
+LangString uninstallLogPathTimeout 1033 "Warning: PowerShell PATH removal timed out."
+LangString uninstallLogPathTimeout 2052 "警告：PowerShell 移除 PATH 超时。"
+LangString uninstallLogPathExitCode 1033 "Warning: PowerShell PATH removal exited with code $0."
+LangString uninstallLogPathExitCode 2052 "警告：PowerShell 移除 PATH 的退出码为 $0。"
+LangString uninstallLogCliCleanupDone 1033 "Command-line environment cleanup completed."
+LangString uninstallLogCliCleanupDone 2052 "命令行环境清理已完成。"
+LangString uninstallLogRemoveAppData 1033 "Removing local ClawClaw data..."
+LangString uninstallLogRemoveAppData 2052 "正在删除 ClawClaw 本地数据..."
+LangString uninstallLogRemoveOpenClawData 1033 "Removing OpenClaw user data..."
+LangString uninstallLogRemoveOpenClawData 2052 "正在删除 OpenClaw 用户数据..."
 
 !define MUI_COMPONENTSPAGE_SMALLDESC
 !define MUI_COMPONENTSPAGE_TEXT_TOP "$(uninstallComponentsTop)"
@@ -68,21 +92,21 @@ LangString uninstallComponentsTop 2052 "选择你希望额外删除的数据。"
 !macro customUnInstall
   SetDetailsPrint both
   !insertmacro KillInstallDirProcesses
-  DetailPrint "正在停止并清理 OpenClaw Gateway 服务..."
+  DetailPrint "$(uninstallLogGatewayCleanup)"
 
   ${If} ${FileExists} "$INSTDIR\resources\cli\openclaw.cmd"
     !insertmacro RunOpenClawCli "gateway stop"
     StrCmp $0 "0" +2 0
-      DetailPrint "Warning: openclaw gateway stop exited with code $0."
+      DetailPrint "$(uninstallLogGatewayStopExit)"
 
     !insertmacro RunOpenClawCli "gateway uninstall"
     StrCmp $0 "0" +2 0
-      DetailPrint "Warning: openclaw gateway uninstall exited with code $0."
+      DetailPrint "$(uninstallLogGatewayUninstallExit)"
   ${Else}
-    DetailPrint "Warning: bundled openclaw CLI wrapper not found, skipping gateway cleanup."
+    DetailPrint "$(uninstallLogGatewayMissing)"
   ${EndIf}
 
-  DetailPrint "正在清理 OpenClaw CLI 命令行环境..."
+  DetailPrint "$(uninstallLogCliCleanup)"
   InitPluginsDir
   ClearErrors
   File "/oname=$PLUGINSDIR\update-user-path.ps1" "${PROJECT_DIR}\resources\cli\win32\update-user-path.ps1"
@@ -90,12 +114,12 @@ LangString uninstallComponentsTop 2052 "选择你希望额外删除的数据。"
   Pop $0
   Pop $1
   StrCmp $0 "error" 0 +2
-    DetailPrint "Warning: Failed to launch PowerShell while removing PATH entry."
+    DetailPrint "$(uninstallLogPathLaunchFailed)"
   StrCmp $0 "timeout" 0 +2
-    DetailPrint "Warning: PowerShell PATH removal timed out."
+    DetailPrint "$(uninstallLogPathTimeout)"
   StrCmp $0 "0" 0 +2
     Goto _cu_pathDone
-  DetailPrint "Warning: PowerShell PATH removal exited with code $0."
+  DetailPrint "$(uninstallLogPathExitCode)"
 
   _cu_pathDone:
   Delete "$DESKTOP\${PRODUCT_NAME}.lnk"
@@ -105,14 +129,14 @@ LangString uninstallComponentsTop 2052 "选择你希望额外删除的数据。"
   RMDir "$SMPROGRAMS\${PRODUCT_NAME}"
 
   !insertmacro KillInstallDirProcesses
-  DetailPrint "命令行环境清理已完成。"
+  DetailPrint "$(uninstallLogCliCleanupDone)"
 !macroend
 
 ; Keep optional data cleanup in dedicated uninstall sections so electron-builder's
 ; standard silent uninstall path remains compatible with older installers.
 !macro customUnInstallSection
   Section /o "$(uninstallOptionAppDataTitle)" un.RemoveClawClawData
-    DetailPrint "正在删除 ClawClaw 本地数据..."
+    DetailPrint "$(uninstallLogRemoveAppData)"
     RMDir /r "$APPDATA\${APP_FILENAME}"
     !ifdef APP_PRODUCT_FILENAME
       RMDir /r "$APPDATA\${APP_PRODUCT_FILENAME}"
@@ -130,7 +154,9 @@ LangString uninstallComponentsTop 2052 "选择你希望额外删除的数据。"
   SectionEnd
 
   Section /o "$(uninstallOptionOpenClawTitle)" un.RemoveOpenClawData
-    DetailPrint "正在删除 OpenClaw 用户数据..."
+    MessageBox MB_YESNO|MB_ICONEXCLAMATION "$(uninstallConfirmOpenClawDelete)" /SD IDNO IDYES +2
+    Abort
+    DetailPrint "$(uninstallLogRemoveOpenClawData)"
     RMDir /r "$PROFILE\.openclaw"
   SectionEnd
 

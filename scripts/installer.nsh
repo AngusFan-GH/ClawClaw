@@ -18,6 +18,21 @@ ShowUnInstDetails show
 Var /GLOBAL shouldRunLegacyUninstaller
 Var /GLOBAL isLegacyInstalledVersion
 
+!macro SetInstallPhase phaseText
+  ${IfNot} ${Silent}
+    SetDetailsPrint both
+    ; 1006 is the standard NSIS/MUI instfiles status label above the details
+    ; pane. If a future template changes it, DetailPrint still keeps the
+    ; details log useful.
+    GetDlgItem $R9 $HWNDPARENT 1006
+    ${If} $R9 <> 0
+      SendMessage $R9 ${WM_SETTEXT} 0 "STR:${phaseText}"
+    ${EndIf}
+    DetailPrint ""
+    DetailPrint "=== ${phaseText} ==="
+  ${EndIf}
+!macroend
+
 ; assistedInstaller.nsh calls MUI_PAGE_DIRECTORY (when allowToChangeInstallationDirectory
 ; is true), which sets MUI_PAGE_CUSTOMFUNCTION_PRE="instFilesPre".  MUI_PAGE_INSTFILES
 ; then reuses that value.  Override it here via customPageAfterChangeDir, which
@@ -43,6 +58,7 @@ Var /GLOBAL isLegacyInstalledVersion
 
   Function customInstFilesPre-custom
     SetDetailsPrint both
+    !insertmacro SetInstallPhase "$(installPhasePrepare)"
   FunctionEnd
 
   Function customInstFilesShow-custom
@@ -50,7 +66,7 @@ Var /GLOBAL isLegacyInstalledVersion
     ; built-in toggle can leave the details control visible but detached from
     ; the actual installer output on some Windows builds.
     SetDetailsPrint both
-    DetailPrint "$(installPhasePrepare)"
+    !insertmacro SetInstallPhase "$(installPhasePrepare)"
   FunctionEnd
 
   Function customInstFilesLeave-custom
@@ -99,6 +115,40 @@ LangString installRuntimeValidationFailed 1033 "The bundled OpenClaw runtime fai
 LangString installRuntimeValidationFailed 2052 "安装完成后，内置 OpenClaw 运行时校验失败。$\r$\n$\r$\n请重新运行安装包，或联系支持。"
 LangString installFilesLocked 1033 "Files from the previous installation are still in use.$\r$\n$\r$\nClose the related ClawClaw or runtime process, then click Retry."
 LangString installFilesLocked 2052 "旧版本安装中的文件仍被占用。$\r$\n$\r$\n请关闭相关的 ClawClaw 或运行时进程，然后单击“重试”。"
+LangString installLogGatewayStopExit 1033 "Gateway stop exited with code $R6."
+LangString installLogGatewayStopExit 2052 "Gateway 停止命令退出码：$R6。"
+LangString installLogGatewayUninstallExit 1033 "Gateway uninstall exited with code $R6."
+LangString installLogGatewayUninstallExit 2052 "Gateway 卸载命令退出码：$R6。"
+LangString installLogOldUninstallContinue 1033 "Old uninstaller exited with code $R0 during a silent update. Continuing with managed overwrite cleanup."
+LangString installLogOldUninstallContinue 2052 "静默更新期间旧卸载器退出码为 $R0，继续执行受控覆盖清理。"
+LangString installLogOldUninstallFallback 1033 "Silent uninstall failed with code $R0. Falling back to interactive old uninstaller."
+LangString installLogOldUninstallFallback 2052 "静默卸载失败，退出码为 $R0。正在回退到交互式旧卸载器。"
+LangString installLogOldUninstallLaunchFailed 1033 "Old uninstaller could not be launched. Continuing with managed overwrite cleanup."
+LangString installLogOldUninstallLaunchFailed 2052 "无法启动旧卸载器，继续执行受控覆盖清理。"
+LangString installLogOldUninstallFailed 1033 "Old uninstall was not successful. Uninstaller error code: $R0."
+LangString installLogOldUninstallFailed 2052 "旧卸载未成功完成。卸载器错误码：$R0。"
+LangString installLogFinalize 1033 "Finalizing post-install system configuration."
+LangString installLogFinalize 2052 "正在完成安装后的系统配置。"
+LangString installLogStartMenuShortcut 1033 "Creating Start Menu shortcut folder and app shortcut..."
+LangString installLogStartMenuShortcut 2052 "正在创建开始菜单文件夹和应用快捷方式..."
+LangString installLogDesktopShortcutRebuild 1033 "Rebuilding desktop shortcut for upgrade..."
+LangString installLogDesktopShortcutRebuild 2052 "正在为升级重建桌面快捷方式..."
+LangString installLogCliPathUpdate 1033 "Updating user PATH for the bundled OpenClaw CLI..."
+LangString installLogCliPathUpdate 2052 "正在更新内置 OpenClaw CLI 的用户 PATH..."
+LangString installLogPathLaunchFailed 1033 "Warning: Failed to launch PowerShell while updating PATH entry."
+LangString installLogPathLaunchFailed 2052 "警告：启动 PowerShell 更新 PATH 失败。"
+LangString installLogPathTimeout 1033 "Warning: PowerShell PATH update timed out."
+LangString installLogPathTimeout 2052 "警告：PowerShell 更新 PATH 超时。"
+LangString installLogPathExitCode 1033 "Warning: PowerShell PATH update exited with code $0."
+LangString installLogPathExitCode 2052 "警告：PowerShell 更新 PATH 的退出码为 $0。"
+LangString installLogRuntimeValidationPassed 1033 "OpenClaw runtime validation passed."
+LangString installLogRuntimeValidationPassed 2052 "OpenClaw 运行时校验通过。"
+LangString installLogRuntimeValidationFailedCode 1033 "Bundled runtime validation failed with exit code $0."
+LangString installLogRuntimeValidationFailedCode 2052 "内置运行时校验失败，退出码为 $0。"
+LangString installLogUninstallShortcut 1033 "Creating explicit Start Menu uninstall shortcut..."
+LangString installLogUninstallShortcut 2052 "正在创建开始菜单卸载快捷方式..."
+LangString installLogFinalizeDone 1033 "Post-install system configuration completed."
+LangString installLogFinalizeDone 2052 "安装后的系统配置已完成。"
 
 !macro customWelcomePage
   ; customWelcomePage is expanded at compile-time in assistedInstaller.nsh.
@@ -123,19 +173,20 @@ LangString installFilesLocked 2052 "旧版本安装中的文件仍被占用。$\
 !macroend
 
 !macro RunManagedUpgradeCleanup
+  !insertmacro SetInstallPhase "$(installPhaseCheckRunning)"
   !insertmacro KillInstallDirProcesses
   InitPluginsDir
   ClearErrors
   File "/oname=$PLUGINSDIR\run-gateway-cmd.ps1" "${PROJECT_DIR}\scripts\run-gateway-cmd.ps1"
   ${If} ${FileExists} "$INSTDIR\resources\cli\openclaw.cmd"
-    DetailPrint "$(installPhaseStopGateway)"
-    nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\run-gateway-cmd.ps1" -InstallDir "$INSTDIR" -Command "gateway stop"'
+    !insertmacro SetInstallPhase "$(installPhaseStopGateway)"
+    nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\run-gateway-cmd.ps1" -InstallDir "$INSTDIR" -Command "gateway stop"'
     Pop $R6
-    Pop $R7
-    DetailPrint "$(installPhaseUninstallGatewayService)"
-    nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\run-gateway-cmd.ps1" -InstallDir "$INSTDIR" -Command "gateway uninstall"'
+    DetailPrint "$(installLogGatewayStopExit)"
+    !insertmacro SetInstallPhase "$(installPhaseUninstallGatewayService)"
+    nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\run-gateway-cmd.ps1" -InstallDir "$INSTDIR" -Command "gateway uninstall"'
     Pop $R6
-    Pop $R7
+    DetailPrint "$(installLogGatewayUninstallExit)"
   ${EndIf}
   !insertmacro KillInstallDirProcesses
 !macroend
@@ -148,7 +199,7 @@ LangString installFilesLocked 2052 "旧版本安装中的文件仍被占用。$\
   !insertmacro DetectInstallDirLocks $R0
 
   ${if} $R0 == 2
-    DetailPrint "$(installPhaseClosingRunning)"
+    !insertmacro SetInstallPhase "$(installPhaseClosingRunning)"
     !insertmacro KillInstallDirProcesses
 
     ; KillInstallDirProcesses already waits 1.5s internally for handle release.
@@ -168,7 +219,7 @@ LangString installFilesLocked 2052 "旧版本安装中的文件仍被占用。$\
         !insertmacro KillInstallDirProcesses
         !insertmacro DetectInstallDirLocks $R0
         ${If} $R0 == 2
-          DetailPrint "$(installPhaseWaitRunning)"
+          !insertmacro SetInstallPhase "$(installPhaseWaitRunning)"
           Sleep 5000
         ${else}
           Goto not_running
@@ -257,47 +308,85 @@ FunctionEnd
   ${EndIf}
 !macroend
 
+!macro ContinueWithManagedOverwriteCleanup
+  DetailPrint "$(installLogOldUninstallContinue)"
+  ${if} $installationDir != ""
+    !insertmacro LegacyManagedCleanup "$installationDir"
+  ${else}
+    !insertmacro RunManagedUpgradeCleanup
+  ${endif}
+  ClearErrors
+  Return
+!macroend
+
 !macro FallbackInteractiveOldUninstall
-  ${If} ${isUpdated}
-  ${andIf} $R0 != 0
-    MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION \
-      "The installed ClawClaw version could not be removed silently.$\r$\n$\r$\nClawClaw will now open the old uninstaller. Complete that uninstall, then setup will continue automatically." \
-      /SD IDCANCEL IDOK +2
-    Abort
+  MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION \
+    "The installed ClawClaw version could not be removed silently.$\r$\n$\r$\nClawClaw will now open the old uninstaller. Complete that uninstall, then setup will continue automatically." \
+    /SD IDCANCEL IDOK +2
+  Abort
 
-    DetailPrint `Silent uninstall failed with code $R0. Falling back to interactive old uninstaller.`
-    !insertmacro KillInstallDirProcesses
+  DetailPrint "$(installLogOldUninstallFallback)"
+  !insertmacro KillInstallDirProcesses
 
-    StrCpy $R8 ""
-    ${if} $installMode == "CurrentUser"
-    ${orIf} $rootKey == "HKEY_CURRENT_USER"
-      StrCpy $R8 "/currentuser"
-    ${else}
-      StrCpy $R8 "/allusers"
-    ${endif}
+  StrCpy $R8 ""
+  ${if} $installMode == "CurrentUser"
+  ${orIf} $rootKey == "HKEY_CURRENT_USER"
+    StrCpy $R8 "/currentuser"
+  ${else}
+    StrCpy $R8 "/allusers"
+  ${endif}
 
-    ExecWait '"$uninstallerFileName" $R8 _?=$installationDir' $R0
-    !insertmacro KillInstallDirProcesses
-    ${If} $R0 == 0
-      ClearErrors
-      Return
-    ${EndIf}
+  ExecWait '"$uninstallerFileName" $R8 _?=$installationDir' $R0
+  !insertmacro KillInstallDirProcesses
+  ${If} $R0 == 0
+    ClearErrors
+    Return
   ${EndIf}
 !macroend
 
+!macro HandleOldUninstallResult
+  IfErrors 0 +4
+    DetailPrint "$(installLogOldUninstallLaunchFailed)"
+    !insertmacro ContinueWithManagedOverwriteCleanup
+
+  ${if} $R0 == 0
+    Return
+  ${endif}
+
+  ${If} ${isUpdated}
+    ${If} ${Silent}
+      !insertmacro ContinueWithManagedOverwriteCleanup
+    ${Else}
+      !insertmacro FallbackInteractiveOldUninstall
+    ${EndIf}
+  ${EndIf}
+
+  MessageBox MB_OK|MB_ICONEXCLAMATION "$(uninstallFailed): $R0"
+  DetailPrint "$(installLogOldUninstallFailed)"
+  SetErrorLevel 2
+  Quit
+!macroend
+
 !macro customUnInstallCheck
-  !insertmacro FallbackInteractiveOldUninstall
+  !insertmacro HandleOldUninstallResult
 !macroend
 
 !macro customUnInstallCheckCurrentUser
-  !insertmacro FallbackInteractiveOldUninstall
+  !insertmacro HandleOldUninstallResult
 !macroend
 
 !macro customInstall
   ; Keep detail output fully enabled so the status line and details pane stay
   ; in sync during post-install steps.
   SetDetailsPrint both
-  DetailPrint "正在完成安装后的系统配置..."
+  !insertmacro SetInstallPhase "$(installPhaseFinalize)"
+  DetailPrint "$(installLogFinalize)"
+
+  ; If a late copy retry had to move the previous install directory out of the
+  ; way, clean those stale directories asynchronously after first launch
+  ; pressure has passed.
+  IfFileExists "$INSTDIR._stale_0\" 0 +2
+    ExecShell "" "cmd.exe" `/c ping -n 61 127.0.0.1 >nul & cd /d "$INSTDIR\.." & for /d %D in ("$INSTDIR._stale_*") do rd /s /q "%D"` SW_HIDE
 
   ; Always normalize Start Menu entries into a single folder.  electron-builder's
   ; default shortcut creation can leave the app shortcut at
@@ -305,7 +394,7 @@ FunctionEnd
   ; "$SMPROGRAMS\${PRODUCT_NAME}\".  On some Windows installs this causes Start Menu
   ; results to surface only the uninstall entry.  We explicitly recreate the app
   ; shortcut in the product folder on every install and remove the legacy flat link.
-  DetailPrint "正在创建开始菜单快捷方式..."
+  DetailPrint "$(installLogStartMenuShortcut)"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}.lnk"
   CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
   CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
@@ -315,7 +404,7 @@ FunctionEnd
   ; createDesktopShortcut only fires on fresh installs; differential
   ; (incremental) updates skip desktop shortcut creation.
   ${if} ${isUpdated}
-    DetailPrint "正在重建快捷方式..."
+    DetailPrint "$(installLogDesktopShortcutRebuild)"
     CreateShortCut "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
   ${endIf}
 
@@ -327,29 +416,27 @@ FunctionEnd
 
   ; Use PowerShell to update the current user's PATH.
   ; This avoids NSIS string-buffer limits and preserves long PATH values.
-  DetailPrint "正在配置 OpenClaw CLI 命令行环境..."
+  DetailPrint "$(installLogCliPathUpdate)"
   InitPluginsDir
   ClearErrors
   File "/oname=$PLUGINSDIR\update-user-path.ps1" "${PROJECT_DIR}\resources\cli\win32\update-user-path.ps1"
-  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\update-user-path.ps1" -Action add -CliDir "$INSTDIR\resources\cli"'
+  nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\update-user-path.ps1" -Action add -CliDir "$INSTDIR\resources\cli"'
   Pop $0
-  Pop $1
   StrCmp $0 "error" 0 +2
-    DetailPrint "Warning: Failed to launch PowerShell while updating PATH entry."
+    DetailPrint "$(installLogPathLaunchFailed)"
   StrCmp $0 "timeout" 0 +2
-    DetailPrint "Warning: PowerShell PATH update timed out."
+    DetailPrint "$(installLogPathTimeout)"
   StrCmp $0 "0" 0 +2
     Goto _ci_done
-  DetailPrint "Warning: PowerShell PATH update exited with code $0."
+  DetailPrint "$(installLogPathExitCode)"
 
   _ci_done:
-  DetailPrint "$(installPhaseValidateRuntime)"
+  !insertmacro SetInstallPhase "$(installPhaseValidateRuntime)"
   ClearErrors
   InitPluginsDir
   File "/oname=$PLUGINSDIR\run-runtime-validation.ps1" "${PROJECT_DIR}\scripts\run-runtime-validation.ps1"
-  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\run-runtime-validation.ps1" -InstallDir "$INSTDIR"'
+  nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\run-runtime-validation.ps1" -InstallDir "$INSTDIR"'
   Pop $0
-  Pop $1
   StrCmp $0 "error" 0 +3
     MessageBox MB_OK|MB_ICONSTOP "$(installRuntimeValidationFailed)"
     Abort
@@ -357,16 +444,16 @@ FunctionEnd
     MessageBox MB_OK|MB_ICONSTOP "$(installRuntimeValidationFailed)"
     Abort
   StrCmp $0 "0" 0 +4
-    DetailPrint "OpenClaw runtime validation passed."
+    DetailPrint "$(installLogRuntimeValidationPassed)"
     Goto _runtime_validation_done
-  DetailPrint "Bundled runtime validation failed: $1"
+  DetailPrint "$(installLogRuntimeValidationFailedCode)"
   MessageBox MB_OK|MB_ICONSTOP "$(installRuntimeValidationFailed)"
   Abort
 
   _runtime_validation_done:
   ; Add an explicit Start Menu uninstall shortcut so users have a visible
   ; uninstall entry even when Windows doesn't surface one prominently.
-  DetailPrint "正在创建卸载快捷方式..."
+  DetailPrint "$(installLogUninstallShortcut)"
   ${if} $installMode == "all"
     StrCpy $3 "/allusers"
   ${else}
@@ -374,5 +461,5 @@ FunctionEnd
   ${endIf}
   CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\卸载 ${PRODUCT_NAME}.lnk" "$INSTDIR\${UNINSTALL_FILENAME}" "$3"
 
-  DetailPrint "安装后的系统配置已完成。"
+  DetailPrint "$(installLogFinalizeDone)"
 !macroend
