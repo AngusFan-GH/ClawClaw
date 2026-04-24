@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, symlinkSy
 import { getAllSettings, getProviderSyncHash, setProviderSyncHash } from '../utils/store';
 import { getApiKey, getDefaultProvider, getProvider } from '../utils/secure-storage';
 import { getKeyableProviderTypes, getProviderEnvVar } from '../utils/provider-registry';
-import { getOpenClawConfigDir, getOpenClawDir, getOpenClawEntryPath, getPortableDataDir, isOpenClawPresent, resolveOpenClawDir } from '../utils/paths';
+import { getManagedPythonHome, getManagedUvCacheDir, getOpenClawConfigDir, getOpenClawDir, getOpenClawEntryPath, getPortableDataDir, isOpenClawPresent, resolveOpenClawDir } from '../utils/paths';
 import { validateBundledOpenClawRuntime } from '../utils/openclaw-runtime-integrity';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import {
@@ -983,6 +983,8 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     ...providerEnv,
     ...uvEnv,
     ...proxyEnv,
+    ...(getManagedPythonHome() ? { UV_PYTHON_INSTALL_DIR: getManagedPythonHome()! } : {}),
+    ...(getManagedUvCacheDir() ? { UV_CACHE_DIR: getManagedUvCacheDir()! } : {}),
     ...(portableDataDir
       ? {
           // Portable: parent data dir (portable/), state dir (portable/.openclaw/), config

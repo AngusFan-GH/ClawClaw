@@ -6,14 +6,22 @@
 ; Add scripts dir to include search path so our patched installSection.nsh
 ; (which sets SetDetailsPrint both instead of none) is found before
 ; electron-builder's templates version.
-!addincludedir "${PROJECT_DIR}\scripts"
+!addincludedir "${PROJECT_DIR}/scripts"
 !include "WordFunc.nsh"
 
 !define MUI_INSTFILESPAGE_SHOWDETAILS show
 !define MUI_UNINSTFILESPAGE_SHOWDETAILS show
+!define MUI_FINISHPAGE_RUN_CHECKED
 
 ShowInstDetails show
 ShowUnInstDetails show
+
+!macro customHeader
+  ; Restore visible install/uninstall details panes under electron-builder's
+  ; standard include-based NSIS template.
+  ShowInstDetails show
+  ShowUninstDetails show
+!macroend
 
 Var /GLOBAL shouldRunLegacyUninstaller
 Var /GLOBAL isLegacyInstalledVersion
@@ -310,6 +318,35 @@ FunctionEnd
   ${EndIf}
 !macroend
 
+!macro LegacyKillInstallDirProcesses INSTALL_DIR
+  InitPluginsDir
+  ClearErrors
+  File "/oname=$PLUGINSDIR\kill-install-dir-processes.ps1" "${PROJECT_DIR}\scripts\kill-install-dir-processes.ps1"
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\kill-install-dir-processes.ps1" -InstallDir "${INSTALL_DIR}"'
+  Pop $R6
+  Pop $R7
+!macroend
+
+!macro LegacyRunGatewayCmd INSTALL_DIR COMMAND
+  InitPluginsDir
+  ClearErrors
+  File "/oname=$PLUGINSDIR\run-gateway-cmd.ps1" "${PROJECT_DIR}\scripts\run-gateway-cmd.ps1"
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\run-gateway-cmd.ps1" -InstallDir "${INSTALL_DIR}" -Command "${COMMAND}"'
+  Pop $R6
+  Pop $R7
+!macroend
+
+!macro LegacyManagedCleanup INSTALL_DIR
+  !insertmacro LegacyKillInstallDirProcesses "${INSTALL_DIR}"
+  ${If} ${FileExists} "${INSTALL_DIR}\resources\cli\openclaw.cmd"
+    DetailPrint "Stopping bundled Gateway from the previous installation..."
+    !insertmacro LegacyRunGatewayCmd "${INSTALL_DIR}" "gateway stop"
+    DetailPrint "Removing bundled Gateway service/task from the previous installation..."
+    !insertmacro LegacyRunGatewayCmd "${INSTALL_DIR}" "gateway uninstall"
+  ${EndIf}
+  !insertmacro LegacyKillInstallDirProcesses "${INSTALL_DIR}"
+!macroend
+
 !macro ContinueWithManagedOverwriteCleanup
   DetailPrint "$(installLogOldUninstallContinue)"
   ${if} $installationDir != ""
@@ -390,17 +427,11 @@ FunctionEnd
   IfFileExists "$INSTDIR._stale_0\" 0 +2
     ExecShell "" "cmd.exe" `/c ping -n 61 127.0.0.1 >nul & cd /d "$INSTDIR\.." & for /d %D in ("$INSTDIR._stale_*") do rd /s /q "%D"` SW_HIDE
 
-  ; Always normalize Start Menu entries into a single folder.  electron-builder's
-  ; default shortcut creation can leave the app shortcut at
-  ; "$SMPROGRAMS\${PRODUCT_NAME}.lnk", while our custom uninstall shortcut lives in
-  ; "$SMPROGRAMS\${PRODUCT_NAME}\".  On some Windows installs this causes Start Menu
-  ; results to surface only the uninstall entry.  We explicitly recreate the app
-  ; shortcut in the product folder on every install and remove the legacy flat link.
+  ; Start Menu application shortcut is now owned by electron-builder's
+  ; native MENU_FILENAME flow so Windows search indexing stays aligned with
+  ; the registered menu directory.
   DetailPrint "$(installLogStartMenuShortcut)"
-  Delete "$SMPROGRAMS\${PRODUCT_NAME}.lnk"
-  CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
-  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
-  StrCpy $launchLink "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
+  StrCpy $launchLink "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
 
   ; Re-create the desktop shortcut when upgrading.  electron-builder's
   ; createDesktopShortcut only fires on fresh installs; differential

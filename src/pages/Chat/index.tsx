@@ -21,7 +21,12 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { hostApiFetch } from '@/lib/host-api';
-import { buildChatCatalogModelOptions, type ChatModelCatalogEntry } from './chat-model-catalog';
+import { buildChatRuntimeModelOptions } from './chat-model-catalog';
+import {
+  dedupeModelOptions,
+  getProviderDisplayName,
+  resolveAccountModelOptions,
+} from './chat-model-options';
 import {
   buildAgentOptions,
   buildChatRuntimeViewModel,
@@ -95,13 +100,14 @@ export function Chat() {
   const defaultAgentId = useAgentsStore((s) => s.defaultAgentId);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const providerAccounts = useProviderStore((s) => s.accounts);
+  const providerVendors = useProviderStore((s) => s.vendors);
   const refreshProviderSnapshot = useProviderStore((s) => s.refreshProviderSnapshot);
-  const [chatModelCatalog, setChatModelCatalog] = useState<ChatModelCatalogEntry[]>([]);
+  const [chatRuntimeModelRefs, setChatRuntimeModelRefs] = useState<string[]>([]);
   const [chatModelsLoading, setChatModelsLoading] = useState(false);
   const [chatModelsRetryNonce, setChatModelsRetryNonce] = useState(0);
   const [queuedMessages, setQueuedMessages] = useState<QueuedChatItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const chatModelCatalogRef = useRef<ChatModelCatalogEntry[]>([]);
+  const chatRuntimeModelRefsRef = useRef<string[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
@@ -243,8 +249,8 @@ export function Chat() {
   }, [providerAccounts]);
 
   useEffect(() => {
-    chatModelCatalogRef.current = chatModelCatalog;
-  }, [chatModelCatalog]);
+    chatRuntimeModelRefsRef.current = chatRuntimeModelRefs;
+  }, [chatRuntimeModelRefs]);
 
   useEffect(() => {
     if (!isGatewayRunning) {
@@ -258,12 +264,22 @@ export function Chat() {
         setChatModelsLoading(true);
       }
     });
-    void useGatewayStore.getState().rpc<{ models?: ChatModelCatalogEntry[] }>('models.list', {}, 30_000)
+    void hostApiFetch<{ refs?: string[]; models?: string[] }>('/api/runtime-model-refs', {
+      method: 'GET',
+      timeoutMs: 30_000,
+    })
       .then((result) => {
         if (cancelled) return;
-        const nextModels = Array.isArray(result?.models) ? result.models : [];
-        if (nextModels.length > 0 || chatModelCatalogRef.current.length === 0) {
-          setChatModelCatalog(nextModels);
+        const rawRefs = Array.isArray(result?.refs)
+          ? result.refs
+          : Array.isArray(result?.models)
+            ? result.models
+            : [];
+        const nextRefs = rawRefs.filter(
+          (value): value is string => typeof value === 'string' && value.trim().length > 0,
+        );
+        if (nextRefs.length > 0 || chatRuntimeModelRefsRef.current.length === 0) {
+          setChatRuntimeModelRefs(nextRefs);
           return;
         }
         retryTimer = setTimeout(() => {
@@ -274,7 +290,7 @@ export function Chat() {
       })
       .catch((error) => {
         if (cancelled) return;
-        console.warn('[chat] Failed to load models.list for chat picker:', error);
+        console.warn('[chat] Failed to load runtime model refs for chat picker:', error);
         retryTimer = setTimeout(() => {
           if (!cancelled && useGatewayStore.getState().status.state === 'running') {
             setChatModelsRetryNonce((value) => value + 1);
@@ -408,8 +424,17 @@ export function Chat() {
     isGatewayRunning,
   ]);
   const modelOptions = useMemo<ChatToolbarModelOption[]>(() => {
-    return buildChatCatalogModelOptions(chatModelCatalog, providerDisplayOverrides);
-  }, [chatModelCatalog, providerDisplayOverrides]);
+    const configuredOptions = providerAccounts
+      .filter((account) => account.enabled)
+      .flatMap((account) => {
+        const vendor = providerVendors.find((entry) => entry.id === account.vendorId);
+        const providerDisplayName = getProviderDisplayName(account, vendor);
+        return resolveAccountModelOptions(account, vendor, providerDisplayName);
+      });
+
+    const runtimeOptions = buildChatRuntimeModelOptions(chatRuntimeModelRefs, providerDisplayOverrides);
+    return dedupeModelOptions([...configuredOptions, ...runtimeOptions]);
+  }, [chatRuntimeModelRefs, providerAccounts, providerDisplayOverrides, providerVendors]);
   const normalizedSelectedModel = useMemo(
     () => normalizeSelectedModelValue(currentSession, modelOptions),
     [currentSession, modelOptions]

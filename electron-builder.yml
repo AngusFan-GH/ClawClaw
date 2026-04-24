@@ -135,6 +135,7 @@ nsis:
   warningsAsErrors: false
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
+  menuCategory: ${productName}
   # Differential updates stay enabled on Windows, but the installer now
   # force-cleans managed runtime directories (OpenClaw + bundled plugins)
   # before copying files so incremental upgrades do not keep stale runtime
@@ -145,7 +146,7 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   license: resources/legal/EULA.rtf
-  script: scripts/installer.nsi
+  include: scripts/installer.nsh
   installerIcon: resources/icons/icon.ico
   uninstallerIcon: resources/icons/icon.ico
 

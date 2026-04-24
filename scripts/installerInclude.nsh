@@ -1,7 +1,7 @@
 # Based on app-builder-lib/templates/nsis/include/installer.nsh.
-# ClawClaw uses a custom nsis.script entrypoint, so electron-builder no longer
-# pre-builds an external uninstaller file. Keep the upstream install helpers,
-# but let the installer generate the uninstaller itself at install time.
+# ClawClaw now hooks in through electron-builder's `nsis.include`, so the
+# upstream build once again pre-builds the external uninstaller and signs/copies
+# it using the standard NSIS flow.
 
 !include "${PROJECT_DIR}\scripts\extractAppPackage.nsh"
 
@@ -94,6 +94,8 @@
       ${endif}
     !endif
   !endif
+
+  File "/oname=${UNINSTALL_FILENAME}" "${UNINSTALLER_OUT_FILE}"
 !macroend
 
 !macro registryAddInstallInfo

@@ -55,13 +55,6 @@ export type ChatItem =
   | { kind: 'stream'; key: string; text: string; startedAt: number }
   | { kind: 'reading-indicator'; key: string };
 
-type TimedLiveItem = {
-  item: ChatItem;
-  timestamp: number;
-  sourceOrder: number;
-  priority: number;
-};
-
 export type MessageGroup = {
   kind: 'group';
   key: string;
@@ -306,53 +299,6 @@ function groupMessages(items: ChatItem[]): Array<ChatItem | MessageGroup> {
   return result;
 }
 
-function buildTimedLiveItems(params: {
-  toolMessages: RawMessage[];
-  streamSegments: StreamSegment[];
-  showThinking: boolean;
-  sessionKey: string;
-}): TimedLiveItem[] {
-  const items: TimedLiveItem[] = [];
-  const tools = params.showThinking && Array.isArray(params.toolMessages) ? params.toolMessages : [];
-
-  params.streamSegments.forEach((segment, index) => {
-    if (segment.text.trim().length === 0) return;
-    items.push({
-      item: {
-        kind: 'stream',
-        key: `stream-seg:${params.sessionKey}:${index}`,
-        text: segment.text,
-        startedAt: segment.ts,
-      },
-      timestamp: segment.ts,
-      sourceOrder: index,
-      priority: 0,
-    });
-  });
-
-  tools.forEach((message, index) => {
-    const normalized = normalizeMessage(message);
-    items.push({
-      item: {
-        kind: 'message',
-        key: getMessageKey(message),
-        message,
-      },
-      timestamp: normalized.timestamp || Date.now(),
-      sourceOrder: index,
-      priority: 1,
-    });
-  });
-
-  items.sort((a, b) => {
-    if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
-    if (a.priority !== b.priority) return a.priority - b.priority;
-    return a.sourceOrder - b.sourceOrder;
-  });
-
-  return items;
-}
-
 function isSameCalendarDay(left: number, right: number): boolean {
   const a = new Date(left);
   const b = new Date(right);
@@ -445,7 +391,6 @@ export function buildChatItems(params: {
   const transcriptItems: ChatItem[] = [];
   const liveItems: ChatItem[] = [];
   const history = Array.isArray(params.messages) ? params.messages : [];
-  let hasLiveActivity = false;
 
   for (let i = 0; i < history.length; i += 1) {
     if (history[i].role === 'compactionSummary') {
@@ -470,44 +415,10 @@ export function buildChatItems(params: {
     });
   }
 
-  liveItems.push(
-    ...buildTimedLiveItems({
-      toolMessages: params.toolMessages,
-      streamSegments: params.streamSegments,
-      showThinking: params.showThinking,
-      sessionKey: params.sessionKey,
-    }).map((entry) => {
-      hasLiveActivity = true;
-      return entry.item;
-    }),
-  );
-
-  if (params.pendingAssistantMessage) {
-    hasLiveActivity = true;
-    liveItems.push({
-      kind: 'message',
-      key: `final:${params.pendingAssistantMessage.id ?? params.sessionKey}`,
-      message: params.pendingAssistantMessage,
-    });
-  }
-
-  if (params.streamingMessage) {
-    const text = extractText(params.streamingMessage);
-    const key = `stream:${params.sessionKey}`;
-    if (text.trim().length > 0) {
-      liveItems.push({
-        kind: 'stream',
-        key,
-        text,
-        startedAt: params.streamingStartedAt
-          || (params.streamingMessage.timestamp
-            ? toDisplayTimestampMs(params.streamingMessage.timestamp)
-            : Date.now()),
-      });
-    } else {
-      liveItems.push({ kind: 'reading-indicator', key });
-    }
-  } else if (params.sending && (params.pendingFinal || !hasLiveActivity)) {
+  // Keep the thread aligned with the Dashboard's authoritative transcript view:
+  // render confirmed history plus an optional optimistic user turn, but do not
+  // synthesize assistant/tool streaming content on the frontend.
+  if (params.sending || params.pendingFinal) {
     liveItems.push({ kind: 'reading-indicator', key: `reading:${params.sessionKey}` });
   }
 

@@ -360,9 +360,32 @@ function compareProviderModelOptions(
 }
 
 export async function listRuntimeModelRefs(ctx: HostApiContext): Promise<string[]> {
-  const { models } = shouldDeferRuntimeModelQueries(ctx)
-    ? await getStaticOpenClawModelListFallback('runtime')
-    : await getOpenClawModelListWithFallback('runtime');
+  let models: OpenClawModelEntry[] = [];
+
+  if (shouldDeferRuntimeModelQueries(ctx)) {
+    models = getStaleCachedOpenClawModelList('runtime');
+  } else {
+    try {
+      models = await Promise.race<OpenClawModelEntry[]>([
+        getOpenClawModelList('runtime'),
+        new Promise<OpenClawModelEntry[]>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error(`openclaw models list timed out after ${OPENCLAW_MODEL_LIST_TIMEOUT_MS}ms`));
+          }, OPENCLAW_MODEL_LIST_TIMEOUT_MS);
+        }),
+      ]);
+    } catch (error) {
+      const staleCachedModels = getStaleCachedOpenClawModelList('runtime');
+      if (staleCachedModels.length > 0) {
+        logger.info('[providers] Serving stale cached runtime model refs after runtime query failure');
+        models = staleCachedModels;
+      } else {
+        logger.info('[providers] Runtime model refs unavailable; returning an empty runtime-only list', error);
+        models = [];
+      }
+    }
+  }
+
   const refs = models
     .filter((model) => model.available !== false)
     .map((model) => (typeof model.key === 'string' ? model.key : ''))

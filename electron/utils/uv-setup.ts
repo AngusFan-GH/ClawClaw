@@ -4,6 +4,8 @@ import { existsSync, rmSync } from 'fs';
 import { join } from 'path';
 import { getUvMirrorEnv } from './uv-env';
 import { logger } from './logger';
+import { buildProxyEnvAsync } from './proxy';
+import { getAllSettings } from './store';
 import { quoteForCmd, needsWinShell, getManagedPythonHome, getManagedUvCacheDir } from './paths';
 
 /**
@@ -178,6 +180,40 @@ async function runPythonInstall(
   });
 }
 
+function clearProxyEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
+  return {
+    ...env,
+    HTTP_PROXY: '',
+    HTTPS_PROXY: '',
+    ALL_PROXY: '',
+    http_proxy: '',
+    https_proxy: '',
+    all_proxy: '',
+    NO_PROXY: env.NO_PROXY || env.no_proxy || '',
+    no_proxy: env.no_proxy || env.NO_PROXY || '',
+  };
+}
+
+function hasConfiguredProxy(env: Record<string, string | undefined>): boolean {
+  return Boolean(
+    env.HTTP_PROXY
+    || env.HTTPS_PROXY
+    || env.ALL_PROXY
+    || env.http_proxy
+    || env.https_proxy
+    || env.all_proxy
+  );
+}
+
+function isProxyTunnelError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('tunnel error')
+    || message.includes('failed to create underlying connection')
+    || message.includes('tcp connect error')
+    || message.includes('os error 10061')
+    || message.includes('由于目标计算机积极拒绝，无法连接');
+}
+
 function shouldRepairWindowsPythonLinkError(error: unknown): boolean {
   if (process.platform !== 'win32') return false;
   const message = error instanceof Error ? error.message : String(error);
@@ -217,6 +253,8 @@ export async function setupManagedPython(): Promise<void> {
   const { bin: uvBin, source } = resolveUvBin();
   const uvEnv = await getUvMirrorEnv();
   const hasMirror = Object.keys(uvEnv).length > 0;
+  const settings = await getAllSettings();
+  const proxyEnv = await buildProxyEnvAsync(settings);
 
   // In portable mode, or in packaged Windows installs, redirect Python and
   // uv cache to ClawClaw-managed directories so we don't depend on a possibly
@@ -227,12 +265,13 @@ export async function setupManagedPython(): Promise<void> {
   logger.info(
     `Setting up managed Python 3.12 ` +
     `(uv=${uvBin}, source=${source}, arch=${process.arch}, mirror=${hasMirror}` +
+    `, proxy=${hasConfiguredProxy(proxyEnv) ? 'configured' : 'direct'}` +
     (managedPythonHome ? `, pythonHome=${managedPythonHome}` : '') +
     (managedUvCache ? `, cache=${managedUvCache}` : '') +
     `)`
   );
 
-  const baseEnv: Record<string, string | undefined> = { ...process.env };
+  const baseEnv: Record<string, string | undefined> = { ...process.env, ...proxyEnv };
   if (managedPythonHome) baseEnv.UV_PYTHON_INSTALL_DIR = managedPythonHome;
   if (managedUvCache) baseEnv.UV_CACHE_DIR = managedUvCache;
   let installCompleted = false;
@@ -255,6 +294,20 @@ export async function setupManagedPython(): Promise<void> {
       }
     }
 
+    if (!installCompleted && hasConfiguredProxy(baseEnv) && isProxyTunnelError(firstError)) {
+      logger.warn('Detected proxy tunnel failure during Python install, retrying without proxy...');
+      try {
+        await runPythonInstall(
+          uvBin,
+          { ...clearProxyEnv(baseEnv), ...uvEnv },
+          hasMirror ? 'mirror-direct' : 'default-direct'
+        );
+        installCompleted = true;
+      } catch (directError) {
+        logger.warn('Python install retry without proxy failed:', directError);
+      }
+    }
+
     if (!installCompleted && hasMirror) {
       // Attempt 2: retry without mirror to rule out mirror issues
       logger.info('Retrying Python install without mirror...');
@@ -262,8 +315,19 @@ export async function setupManagedPython(): Promise<void> {
         await runPythonInstall(uvBin, baseEnv, 'no-mirror');
         installCompleted = true;
       } catch (secondError) {
-        logger.error('Python install attempt 2 (no mirror) also failed:', secondError);
-        throw secondError;
+        if (hasConfiguredProxy(baseEnv) && isProxyTunnelError(secondError)) {
+          logger.warn('No-mirror install also hit proxy tunnel failure, retrying without proxy...');
+          try {
+            await runPythonInstall(uvBin, clearProxyEnv(baseEnv), 'no-mirror-direct');
+            installCompleted = true;
+          } catch (directNoMirrorError) {
+            logger.error('Python install retry without mirror and without proxy also failed:', directNoMirrorError);
+            throw directNoMirrorError;
+          }
+        } else {
+          logger.error('Python install attempt 2 (no mirror) also failed:', secondError);
+          throw secondError;
+        }
       }
     } else if (!installCompleted) {
       throw firstError;

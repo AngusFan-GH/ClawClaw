@@ -53,8 +53,11 @@ if (installerNsi.includes('!insertmacro installApplicationFiles')) {
 }
 
 const builderConfig = requireText(resolve(repoRoot, 'electron-builder.yml'));
-if (!builderConfig.includes('script: scripts/installer.nsi')) {
-  fail('electron-builder.yml must use nsis.script: scripts/installer.nsi so local NSIS shadow files become the actual compile entry.');
+if (!builderConfig.includes('include: scripts/installer.nsh')) {
+  fail('electron-builder.yml must use nsis.include: scripts/installer.nsh so electron-builder can pre-build the Windows uninstaller.');
+}
+if (builderConfig.includes('script: scripts/installer.nsi')) {
+  fail('electron-builder.yml must not use nsis.script: scripts/installer.nsi because that bypasses electron-builder uninstaller generation/signing.');
 }
 
 const installSection = requireText(resolve(scriptsDir, 'installSection.nsh'));
@@ -102,7 +105,7 @@ for (const requiredSnippet of [
 
 const installerNsh = requireText(resolve(scriptsDir, 'installer.nsh'));
 for (const requiredSnippet of [
-  '!addincludedir "${PROJECT_DIR}\\scripts"',
+  '!addincludedir "${PROJECT_DIR}/scripts"',
   '!macro customCheckAppRunning',
   '$(installFilesLocked)',
   '!macro ResolveUpgradeStrategy',

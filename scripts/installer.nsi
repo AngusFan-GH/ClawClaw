@@ -9,7 +9,7 @@ Var oldMenuDirectory
 ; Keep this file as a thin wrapper over the upstream template. Any install-flow
 ; customization belongs in scripts/installer.nsh or scripts/installSection.nsh.
 
-!addincludedir "${PROJECT_DIR}\scripts"
+!addincludedir "${PROJECT_DIR}/scripts"
 
 !include "common.nsh"
 !include "MUI2.nsh"

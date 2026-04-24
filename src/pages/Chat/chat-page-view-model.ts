@@ -102,14 +102,14 @@ export function resolveChatModelState(params: {
   if (modelCatalogSyncing && modelOptions.length === 0) {
     return 'syncing';
   }
-  if ((currentSessionHasModel || hasFallbackModel) && modelOptions.length === 0) {
-    return 'syncing';
-  }
   if (currentModelInvalid) {
     return 'invalid';
   }
   if (modelOptions.length > 0) {
     return 'ready';
+  }
+  if (currentSessionHasModel || hasFallbackModel) {
+    return 'invalid';
   }
   return 'unconfigured';
 }

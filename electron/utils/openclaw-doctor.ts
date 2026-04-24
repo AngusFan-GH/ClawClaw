@@ -2,10 +2,12 @@ import { app } from 'electron';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'fs';
 import path from 'path';
-import { getOpenClawDir, getOpenClawEntryPath } from './paths';
+import { getManagedPythonHome, getManagedUvCacheDir, getOpenClawDir, getOpenClawEntryPath } from './paths';
 import { logger } from './logger';
 import { getUvMirrorEnv } from './uv-env';
 import { getOpenClawCliSpawnConfig } from './openclaw-cli';
+import { buildProxyEnvAsync } from './proxy';
+import { getAllSettings } from './store';
 
 const OPENCLAW_DOCTOR_TIMEOUT_MS = 60_000;
 export const OPENCLAW_DOCTOR_FIX_TIMEOUT_MS = 120_000;
@@ -158,6 +160,9 @@ async function runDoctorCommandWithArgs(
     ? `${binPath}${path.delimiter}${process.env.PATH || ''}`
     : process.env.PATH || '';
   const uvEnv = await getUvMirrorEnv();
+  const proxyEnv = await buildProxyEnvAsync(await getAllSettings());
+  const managedPythonHome = getManagedPythonHome();
+  const managedUvCache = getManagedUvCacheDir();
 
   logger.info(
     `Running OpenClaw doctor (mode=${mode}, entry="${entryScript}", args="${args.join(' ')}", cwd="${openclawDir}", bundledBin=${binPathExists ? 'yes' : 'no'})`,
@@ -172,7 +177,10 @@ async function runDoctorCommandWithArgs(
         ...spawnConfig.env,
         ...process.env,
         ...uvEnv,
+        ...proxyEnv,
         PATH: finalPath,
+        ...(managedPythonHome ? { UV_PYTHON_INSTALL_DIR: managedPythonHome } : {}),
+        ...(managedUvCache ? { UV_CACHE_DIR: managedUvCache } : {}),
         OPENCLAW_NO_RESPAWN: '1',
       } as NodeJS.ProcessEnv,
       windowsHide: true,

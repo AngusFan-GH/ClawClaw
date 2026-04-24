@@ -157,8 +157,8 @@ export async function handleProviderRoutes(
 
   if (url.pathname === '/api/runtime-model-refs' && req.method === 'GET') {
     try {
-      const models = await listRuntimeModelRefs(ctx);
-      sendJson(res, 200, { models });
+      const refs = await listRuntimeModelRefs(ctx);
+      sendJson(res, 200, { refs });
     } catch (error) {
       logger.warn('[providers] Failed to list runtime model refs:', error);
       sendJson(res, 500, { error: String(error) });

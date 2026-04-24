@@ -160,3 +160,34 @@ export function buildChatCatalogModelOptions(
     }];
   });
 }
+
+export function buildChatRuntimeModelOptions(
+  refs: string[],
+  providerDisplayOverrides?: ReadonlyMap<string, string>,
+): ChatToolbarModelOption[] {
+  const seen = new Set<string>();
+
+  return refs.flatMap((rawRef) => {
+    const trimmedRef = rawRef.trim();
+    if (!trimmedRef) {
+      return [];
+    }
+
+    const normalizedKey = trimmedRef.toLowerCase();
+    if (seen.has(normalizedKey)) {
+      return [];
+    }
+    seen.add(normalizedKey);
+
+    const slashIndex = trimmedRef.indexOf('/');
+    const provider = slashIndex > 0 ? trimmedRef.slice(0, slashIndex) : '';
+    const modelName = slashIndex > 0 ? trimmedRef.slice(slashIndex + 1) : trimmedRef;
+    const providerDisplayName = resolveProviderDisplayName(provider, providerDisplayOverrides);
+
+    return [{
+      value: trimmedRef,
+      label: providerDisplayName ? `${modelName} · ${providerDisplayName}` : modelName,
+      shortLabel: modelName,
+    }];
+  });
+}

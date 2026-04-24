@@ -142,7 +142,7 @@ export function ChatInput({
   const showConfigureModels = !showModelPicker && modelState !== 'syncing' && !!onConfigureModels;
   const modelButtonLabel = modelState === 'syncing'
     ? t('composer.modelsSyncing')
-    : modelState === 'unconfigured'
+    : modelState === 'unconfigured' || modelState === 'invalid'
       ? t('composer.configureModels')
       : currentModelShortLabel;
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);

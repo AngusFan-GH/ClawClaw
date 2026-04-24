@@ -69,8 +69,7 @@ $trackedPaths = @(
   (Join-Path $normalizedInstallDir 'Uninstall ClawClaw.exe'),
   (Join-Path $normalizedInstallDir 'resources\bin\node.exe'),
   (Join-Path $normalizedInstallDir 'resources\bin\uv.exe'),
-  (Join-Path $normalizedInstallDir 'resources\openclaw\package.json'),
-  (Join-Path $normalizedInstallDir 'resources\app.asar')
+  (Join-Path $normalizedInstallDir 'resources\cli\openclaw.cmd')
 ) | Where-Object { Test-Path $_ }
 
 $lockedPaths = @()
