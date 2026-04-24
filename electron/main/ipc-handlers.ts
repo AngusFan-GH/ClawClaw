@@ -4,10 +4,10 @@
  */
 import { ipcMain, BrowserWindow, shell, dialog, app, nativeImage } from 'electron';
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join, extname, basename, resolve } from 'node:path';
 import crypto from 'node:crypto';
 import { GatewayManager } from '../gateway/manager';
+import { getDataDir, getLogsDir, getPortableDataDir } from '../utils/paths';
 import {
   ClawHubService,
   ClawHubSearchParams,
@@ -20,27 +20,25 @@ import {
   getOpenClawDir,
   getOpenClawConfigDir,
   getOpenClawSkillsDir,
+  getDefaultExportDir,
   ensureDir,
   expandPath,
+  resolveOpenClawDir,
 } from '../utils/paths';
 import { getOpenClawCliCommand } from '../utils/openclaw-cli';
 import {
   getAllSettings,
   getSetting,
-  resetSettings,
-  setSetting,
   type AppSettings,
 } from '../utils/store';
 import { saveProviderKeyToOpenClaw, removeProviderFromOpenClaw } from '../utils/openclaw-auth';
 import { logger } from '../utils/logger';
-import { syncMemorySettingsToOpenClaw } from '../utils/openclaw-auth';
 import { checkUvInstalled, installUv, setupManagedPython } from '../utils/uv-setup';
 import { updateSkillConfig, getSkillConfig, getAllSkillConfigs } from '../utils/skill-config';
 import { whatsAppLoginManager } from '../utils/whatsapp-login';
 import { getProviderConfig } from '../utils/provider-registry';
 import { deviceOAuthManager, OAuthProviderType } from '../utils/device-oauth';
 import { browserOAuthManager, type BrowserOAuthProviderType } from '../utils/browser-oauth';
-import { applyProxySettings } from './proxy';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { getRecentTokenUsageHistory } from '../utils/token-usage';
 import { getProviderService } from '../services/providers/provider-service';
@@ -55,8 +53,8 @@ import {
 } from '../services/providers/provider-runtime-sync';
 import { validateApiKeyWithProvider } from '../services/providers/provider-validation';
 import { appUpdater } from './updater';
-import { PORTS } from '../utils/config';
 import { quitApp, relaunchApp } from './quit';
+import { getHostApiPort } from '../api/server';
 
 type AppRequest = {
   id?: string;
@@ -158,10 +156,15 @@ type HostApiFetchRequest = {
   method?: string;
   headers?: Record<string, string>;
   body?: unknown;
+  timeoutMs?: number;
 };
+
+const DEFAULT_HOST_API_FETCH_TIMEOUT_MS = 15000;
+const MAX_HOST_API_FETCH_TIMEOUT_MS = 180000;
 
 function registerHostApiProxyHandlers(): void {
   ipcMain.handle('hostapi:fetch', async (_, request: HostApiFetchRequest) => {
+    const startedAt = Date.now();
     try {
       const path = typeof request?.path === 'string' ? request.path : '';
       if (!path || !path.startsWith('/')) {
@@ -183,11 +186,30 @@ function registerHostApiProxyHandlers(): void {
         }
       }
 
-      const response = await proxyAwareFetch(`http://127.0.0.1:${PORTS.CLAWX_HOST_API}${path}`, {
-        method,
-        headers,
-        body,
-      });
+      const hostApiPort = getHostApiPort();
+      const url = `http://127.0.0.1:${hostApiPort}${path}`;
+      logger.debug(`[hostapi:fetch] -> ${request.method || 'GET'} ${url}`);
+
+      const timeoutMs =
+        typeof request.timeoutMs === 'number' && Number.isFinite(request.timeoutMs) && request.timeoutMs > 0
+          ? Math.min(Math.floor(request.timeoutMs), MAX_HOST_API_FETCH_TIMEOUT_MS)
+          : DEFAULT_HOST_API_FETCH_TIMEOUT_MS;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort(new Error(`Host API fetch timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      let response: Response;
+      try {
+        response = await proxyAwareFetch(url, {
+          method,
+          headers,
+          body,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       const data: { status: number; ok: boolean; json?: unknown; text?: string } = {
         status: response.status,
@@ -203,8 +225,15 @@ function registerHostApiProxyHandlers(): void {
         }
       }
 
+      logger.debug(
+        `[hostapi:fetch] <- ${method} ${path} status=${response.status} durationMs=${Date.now() - startedAt}`,
+      );
       return { ok: true, data };
     } catch (error) {
+      const path = typeof request?.path === 'string' ? request.path : '<invalid>';
+      logger.warn(
+        `[hostapi:fetch] !! ${request.method || 'GET'} ${path} durationMs=${Date.now() - startedAt} error=${error instanceof Error ? error.stack || error.message : String(error)}`,
+      );
       return {
         ok: false,
         error: {
@@ -918,7 +947,7 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
         delete patch.message;
       }
       const current = await getCronJobById(gatewayManager, id);
-      if (current && isEditableUiJob(current)) {
+      if (current && isUiManagedAgentTurn(current)) {
         patch.delivery = { mode: current.delivery?.mode ?? 'none' };
       }
       const result = await gatewayManager.rpc('cron.update', { id, patch });
@@ -1096,7 +1125,8 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
     }
   });
 
-  // Restart Gateway
+  // Restart Gateway — force=true so it always stops/starts immediately regardless
+  // of startup lock, governor cooldown, or deferred-restart queue.
   ipcMain.handle('gateway:restart', async () => {
     try {
       emitGatewayLifecycle({
@@ -1105,7 +1135,7 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
         source: 'gateway.manualRestart',
         reason: 'gateway.manualRestart',
       });
-      void gatewayManager.restart({ strategy: 'auto' }).catch((error) => {
+      void gatewayManager.restart({ force: true }).catch((error) => {
         emitGatewayLifecycle({
           phase: 'failed',
           action: 'restart',
@@ -1125,6 +1155,19 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
       });
       return { success: false, error: String(error) };
     }
+  });
+
+  // Scan ports 18789–18799 for all running OpenClaw Gateway instances.
+  ipcMain.handle('gateway:scanPorts', async () => {
+    const { scanGatewayPorts } = await import('../gateway/supervisor');
+    return await scanGatewayPorts();
+  });
+
+  // Kill the gateway process listening on a specific port.
+  // Resets the restart governor so the local instance can restart cleanly.
+  ipcMain.handle('gateway:killPort', async (_, port: number) => {
+    const { killGatewayOnPort } = await import('../gateway/supervisor');
+    return await killGatewayOnPort(port, gatewayManager);
   });
 
   // Gateway RPC call
@@ -1901,7 +1944,13 @@ function registerDialogHandlers(): void {
 
   // Show save dialog
   ipcMain.handle('dialog:save', async (_, options: Electron.SaveDialogOptions) => {
-    const result = await dialog.showSaveDialog(options);
+    const nextOptions = { ...options };
+    if (!nextOptions.defaultPath) {
+      const exportDir = getDefaultExportDir('general');
+      ensureDir(exportDir);
+      nextOptions.defaultPath = exportDir;
+    }
+    const result = await dialog.showSaveDialog(nextOptions);
     return result;
   });
 
@@ -1926,12 +1975,19 @@ function registerAppHandlers(): void {
     return app.getName();
   });
 
-  // Get app path
+  // Get app path — portable-aware overrides for user-facing paths
   ipcMain.handle('app:getPath', (_, name: Parameters<typeof app.getPath>[0]) => {
+    if (name === 'userData') return getDataDir();
+    if (name === 'logs') return getLogsDir();
+    if (name === 'home') return getOpenClawConfigDir(); // maps to .openclaw for renderer
     return app.getPath(name);
   });
 
   // Get platform
+  ipcMain.handle('app:isPortable', () => {
+    return getPortableDataDir() !== null;
+  });
+
   ipcMain.handle('app:platform', () => {
     return process.platform;
   });
@@ -2048,7 +2104,7 @@ function mimeToExt(mimeType: string): string {
   return '';
 }
 
-const OUTBOUND_DIR = join(homedir(), '.openclaw', 'media', 'outbound');
+const OUTBOUND_DIR = join(resolveOpenClawDir(), 'media', 'outbound');
 
 /**
  * Generate a preview data URL for image files.
@@ -2161,8 +2217,10 @@ function registerFileHandlers(): void {
         const ext = params.defaultFileName.includes('.')
           ? params.defaultFileName.split('.').pop()!
           : params.mimeType?.split('/')[1] || 'png';
+        const exportDir = getDefaultExportDir('images');
+        ensureDir(exportDir);
         const result = await dialog.showSaveDialog({
-          defaultPath: join(homedir(), 'Downloads', params.defaultFileName),
+          defaultPath: join(exportDir, params.defaultFileName),
           filters: [
             { name: 'Images', extensions: [ext, 'png', 'jpg', 'jpeg', 'webp', 'gif'] },
             { name: 'All Files', extensions: ['*'] },

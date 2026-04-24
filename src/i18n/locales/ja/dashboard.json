@@ -12,6 +12,15 @@
   "models": {
     "title": "モデル",
     "subtitle": "AI プロバイダーを管理し、トークン使用量を監視します。",
+    "description": "プロバイダー設定、デフォルトモデル、最近のモデル使用傾向をまとめて確認できます。",
+    "providersTitle": "AI プロバイダー",
+    "providersSubtitle": "API キー、デフォルトアカウント、利用可能なモデルソースを設定します。",
+    "stats": {
+      "records": "レコード",
+      "models": "モデル",
+      "tokens": "トークン",
+      "cost": "コスト"
+    },
     "loadingDescription": "モデルと使用量データを同期しています。しばらくお待ちください。"
   },
   "quickActions": {

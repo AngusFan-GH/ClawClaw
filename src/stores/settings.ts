@@ -49,6 +49,7 @@ interface SettingsState {
   // Memory
   sessionMemoryEnabled: boolean;
   memorySearchEnabled: boolean;
+  localModelLean: boolean;
 
   // Setup
   initialized: boolean;
@@ -79,6 +80,7 @@ interface SettingsState {
   setReminders: (value: ReminderItem[]) => void;
   setSessionMemoryEnabled: (value: boolean) => void;
   setMemorySearchEnabled: (value: boolean) => void;
+  setLocalModelLean: (value: boolean) => void;
   markSetupComplete: () => void;
   resetSettings: () => void;
 }
@@ -107,6 +109,7 @@ const defaultSettings = {
   reminders: [] as ReminderItem[],
   sessionMemoryEnabled: true,
   memorySearchEnabled: true,
+  localModelLean: false,
   setupComplete: false,
   initialized: false,
 };
@@ -269,6 +272,12 @@ export const useSettingsStore = create<SettingsState>()(
       setMemorySearchEnabled: (memorySearchEnabled) => {
         set({ memorySearchEnabled });
         void persistMainSettings({ memorySearchEnabled }).catch(() => {
+          void syncFromMain().catch(() => {});
+        });
+      },
+      setLocalModelLean: (localModelLean) => {
+        set({ localModelLean });
+        void persistMainSettings({ localModelLean }).catch(() => {
           void syncFromMain().catch(() => {});
         });
       },

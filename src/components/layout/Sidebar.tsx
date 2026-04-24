@@ -3,7 +3,7 @@
  * Navigation sidebar with menu items.
  * No longer fixed - sits inside the flex layout below the title bar.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   MessageCircleMore,
@@ -225,32 +225,22 @@ export function Sidebar() {
   const location = useLocation();
   const isOnChat = location.pathname === '/';
 
-  const getSessionLabel = (
-    key: string,
-    displayName?: string,
-    label?: string,
-    derivedTitle?: string,
-    subagentRole?: string,
-  ) => {
-    const derivedLabel = sessionLabels[key] ?? derivedTitle ?? label;
-    if (derivedLabel) return derivedLabel;
-    const normalizedDisplayName = displayName?.trim();
-    const agentLabel = getSessionAgentLabel(key).trim();
-    if (
-      normalizedDisplayName
-      && normalizedDisplayName !== key
-      && normalizedDisplayName !== agentLabel
-    ) {
-      return normalizedDisplayName;
+  const openSession = (sessionKey: string) => {
+    if (isOnChat) {
+      if (currentSessionKey !== sessionKey) {
+        switchSession(sessionKey);
+      }
+      return;
     }
-    const normalizedRole = subagentRole?.trim();
-    if (normalizedRole) return normalizedRole;
-    if (pendingLocalSessionKeys[key]) return t('common:sidebar.newChat');
-    if (key === DEFAULT_SESSION_KEY) return t('common:sidebar.newChat');
-    if (key.includes(':subagent:') || key.includes(':acp:')) {
-      return t('chat:history.backgroundKindSubagent', 'Subagent');
+    navigate('/', { state: { forceSessionKey: sessionKey } });
+  };
+
+  const openNewChat = (agentId?: string) => {
+    if (isOnChat) {
+      newSession(agentId);
+      return;
     }
-    return key;
+    navigate('/', { state: { createNewSession: true, agentId } });
   };
 
   const [sessionToDelete, setSessionToDelete] = useState<{ key: string; label: string } | null>(
@@ -276,11 +266,39 @@ export function Sidebar() {
     [sessions]
   );
 
-  const getSessionAgentLabel = (key: string) => {
+  const getSessionAgentLabel = useCallback((key: string) => {
     const parts = key.split(':');
     const agentId = parts[1] || 'main';
     return agentNameMap.get(agentId) || agentId;
-  };
+  }, [agentNameMap]);
+
+  const getSessionLabel = useCallback((
+    key: string,
+    displayName?: string,
+    label?: string,
+    derivedTitle?: string,
+    subagentRole?: string,
+  ) => {
+    const derivedLabel = sessionLabels[key] ?? derivedTitle ?? label;
+    if (derivedLabel) return derivedLabel;
+    const normalizedDisplayName = displayName?.trim();
+    const agentLabel = getSessionAgentLabel(key).trim();
+    if (
+      normalizedDisplayName
+      && normalizedDisplayName !== key
+      && normalizedDisplayName !== agentLabel
+    ) {
+      return normalizedDisplayName;
+    }
+    const normalizedRole = subagentRole?.trim();
+    if (normalizedRole) return normalizedRole;
+    if (pendingLocalSessionKeys[key]) return t('common:sidebar.newChat');
+    if (key === DEFAULT_SESSION_KEY) return t('common:sidebar.newChat');
+    if (key.includes(':subagent:') || key.includes(':acp:')) {
+      return t('chat:history.backgroundKindSubagent', 'Subagent');
+    }
+    return key;
+  }, [getSessionAgentLabel, pendingLocalSessionKeys, sessionLabels, t]);
 
   const handleDeleteSessionClick = async (key: string, label: string) => {
     const isBlankPendingSession =
@@ -375,10 +393,13 @@ export function Sidebar() {
     sessionBucketMap[bucketKey].sessions.push(session);
   }
 
-  const getParentSessionKey = (session: { spawnedBy?: string; parentSessionKey?: string }) =>
-    session.spawnedBy?.trim() || session.parentSessionKey?.trim() || '';
+  const getParentSessionKey = useCallback(
+    (session: { spawnedBy?: string; parentSessionKey?: string }) =>
+      session.spawnedBy?.trim() || session.parentSessionKey?.trim() || '',
+    []
+  );
 
-  const getParentSessionLabel = (session: { spawnedBy?: string; parentSessionKey?: string }) => {
+  const getParentSessionLabel = useCallback((session: { spawnedBy?: string; parentSessionKey?: string }) => {
     const parentKey = getParentSessionKey(session);
     if (!parentKey) return '';
     const parent = sessionByKey.get(parentKey);
@@ -386,14 +407,14 @@ export function Sidebar() {
       return getSessionLabel(parent.key, parent.displayName, parent.label, parent.derivedTitle, parent.subagentRole);
     }
     return parentKey;
-  };
+  }, [getParentSessionKey, getSessionLabel, sessionByKey]);
 
   const conversationSessionKeys = useMemo(
     () => new Set(conversationSessions.map((session) => session.key)),
     [conversationSessions]
   );
 
-  const resolveConversationParentKey = (session: { key: string; spawnedBy?: string; parentSessionKey?: string }) => {
+  const resolveConversationParentKey = useCallback((session: { key: string; spawnedBy?: string; parentSessionKey?: string }) => {
     const seen = new Set<string>();
     let currentParentKey = getParentSessionKey(session);
 
@@ -409,11 +430,11 @@ export function Sidebar() {
     }
 
     return '';
-  };
+  }, [conversationSessionKeys, getParentSessionKey, sessionByKey]);
 
   const nestedBackgroundSessions = useMemo(
     () => nonCronBackgroundSessions.filter((session) => Boolean(resolveConversationParentKey(session))),
-    [nonCronBackgroundSessions, conversationSessionKeys, sessionByKey]
+    [nonCronBackgroundSessions, resolveConversationParentKey]
   );
 
   const nestedBackgroundSessionMap = useMemo(() => {
@@ -435,13 +456,22 @@ export function Sidebar() {
     }
 
     return groups;
-  }, [nestedBackgroundSessions, sessionLastActivity, conversationSessionKeys, sessionByKey]);
+  }, [nestedBackgroundSessions, resolveConversationParentKey, sessionLastActivity]);
 
-  const sortedBackgroundSessions = [
-    ...nonCronBackgroundSessions.filter((session) => !resolveConversationParentKey(session)),
-    ...(showCronBackground ? cronBackgroundSessions : []),
-  ].sort(
-    (a, b) => (sessionLastActivity[b.key] ?? 0) - (sessionLastActivity[a.key] ?? 0)
+  const sortedBackgroundSessions = useMemo(
+    () => [
+      ...nonCronBackgroundSessions.filter((session) => !resolveConversationParentKey(session)),
+      ...(showCronBackground ? cronBackgroundSessions : []),
+    ].sort(
+      (a, b) => (sessionLastActivity[b.key] ?? 0) - (sessionLastActivity[a.key] ?? 0)
+    ),
+    [
+      cronBackgroundSessions,
+      nonCronBackgroundSessions,
+      resolveConversationParentKey,
+      sessionLastActivity,
+      showCronBackground,
+    ]
   );
 
   const backgroundSessionGroups = useMemo(() => {
@@ -477,7 +507,9 @@ export function Sidebar() {
     }
 
     return [...groups.values()].sort((a, b) => b.latestActivity - a.latestActivity);
-  }, [getParentSessionLabel, sessionLastActivity, sortedBackgroundSessions, t]);
+  }, [getParentSessionKey, getParentSessionLabel, sessionLastActivity, sortedBackgroundSessions, t]);
+  const showBackgroundGroupHeaders = backgroundSessionGroups.length > 1
+    || backgroundSessionGroups.some((group) => Boolean(group.parentSessionKey));
 
   const shortcutIds = new Set<MenuItemId>(shortcutMenuItems);
   const shortcutItems = shortcutMenuItems
@@ -534,9 +566,7 @@ export function Sidebar() {
       <nav className="flex flex-col px-2 gap-0.5">
         <button
           onClick={() => {
-            newSession();
-            const forcedSessionKey = useChatStore.getState().currentSessionKey;
-            navigate('/', { state: { forceSessionKey: forcedSessionKey } });
+            openNewChat();
           }}
           className={cn(
             'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-[14px] font-medium transition-colors mb-2',
@@ -567,33 +597,34 @@ export function Sidebar() {
 
       {/* Session list 鈥?below Settings, only when expanded */}
       {!sidebarCollapsed && (sessionsLoading || !sessionsHydrated || visibleSessions.length > 0) && (
-        <div className="mt-5 mb-20 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-3 pr-1">
-          <div className="px-2.5 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/55">
+        <div className="mt-5 mb-20 flex min-h-0 flex-1 flex-col px-2">
+          <div className="shrink-0 px-2.5 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/55">
             {t('chat:history.title')}
           </div>
-          {sessionsLoading || !sessionsHydrated ? (
-            <div className="px-2.5 pt-2">
-              <div className="rounded-[14px] border border-black/6 bg-white/55 px-3 py-3 text-[13px] text-muted-foreground shadow-[0_6px_16px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
-                {isGatewayRunning
-                  ? t('chat:history.loading', '正在恢复最近对话…')
-                  : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
-                    ? t('chat:history.connectingGateway', '网关正在恢复连接')
-                    : t('chat:history.waitingForGateway', '网关未连接，请启动或重启网关后再试')}
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3 pr-1">
+            {sessionsLoading || !sessionsHydrated ? (
+              <div className="px-2.5 pt-2">
+                <div className="rounded-[14px] border border-black/6 bg-white/55 px-3 py-3 text-[13px] text-muted-foreground shadow-[0_6px_16px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
+                  {isGatewayRunning
+                    ? t('chat:history.loading', '正在恢复最近对话…')
+                    : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
+                      ? t('chat:history.connectingGateway', '网关正在恢复连接')
+                      : t('chat:history.waitingForGateway', '网关未连接，请启动或重启网关后再试')}
+                </div>
               </div>
-            </div>
-          ) : (
-            <>
-              {sessionBuckets.map((bucket) =>
-                bucket.sessions.length > 0 ? (
-                  <div key={bucket.key} className="pt-3 first:pt-1">
-                    <div className="flex items-center gap-2 px-2.5 pb-2">
-                      <span className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground/70">
-                        {bucket.label}
-                      </span>
-                      <div className="h-px flex-1 bg-black/6 dark:bg-white/10" />
-                    </div>
-                    <div className="space-y-1">
-                      {bucket.sessions.map((s) => {
+            ) : (
+              <>
+                {sessionBuckets.map((bucket) =>
+                  bucket.sessions.length > 0 ? (
+                    <div key={bucket.key} className="pt-3 first:pt-1">
+                      <div className="sticky top-0 z-20 -mx-2 flex items-center gap-2 bg-[#eceff3]/95 px-4 pb-2 pt-2 backdrop-blur-md dark:bg-[#16181c]/95">
+                        <span className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground/70">
+                          {bucket.label}
+                        </span>
+                        <div className="h-px flex-1 bg-black/6 dark:bg-white/10" />
+                      </div>
+                      <div className="space-y-1">
+                        {bucket.sessions.map((s) => {
                         const canDeleteSession = !isMainSessionKey(s.key);
                         const childSessions = nestedBackgroundSessionMap.get(s.key) ?? [];
                         const childTasksVisible = isOnChat
@@ -613,8 +644,7 @@ export function Sidebar() {
                             <div className="relative flex items-center">
                               <button
                                 onClick={() => {
-                                  switchSession(s.key);
-                                  navigate('/');
+                                  openSession(s.key);
                                 }}
                                 className={cn(
                                   'w-full text-left px-3 py-2.5 pr-8 transition-all',
@@ -711,8 +741,7 @@ export function Sidebar() {
                                               <button
                                                 type="button"
                                                 onClick={() => {
-                                                  switchSession(child.key);
-                                                  navigate('/');
+                                                  openSession(child.key);
                                                 }}
                                                 className="w-full text-left"
                                               >
@@ -807,30 +836,31 @@ export function Sidebar() {
                     <div className="space-y-3">
                       {backgroundSessionGroups.map((group) => (
                         <div key={group.id} className="space-y-1">
-                          <div className="flex items-center gap-2 px-2.5 pb-1">
-                            <span className="truncate text-[11px] font-semibold tracking-[0.06em] text-muted-foreground/70">
-                              {group.label}
-                            </span>
-                            <Badge
-                              variant="secondary"
-                              className="rounded-full px-1.5 py-0 text-[10px] font-medium text-muted-foreground"
-                            >
-                              {group.sessions.length}
-                            </Badge>
-                            <div className="h-px flex-1 bg-black/6 dark:bg-white/10" />
-                            {group.parentSessionKey && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  switchSession(group.parentSessionKey!);
-                                  navigate('/');
-                                }}
-                                className="shrink-0 rounded-full bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-black/8 hover:text-foreground dark:bg-white/8 dark:hover:bg-white/12"
+                          {showBackgroundGroupHeaders && (
+                            <div className="flex items-center gap-2 px-2.5 pb-1">
+                              <span className="truncate text-[11px] font-semibold tracking-[0.06em] text-muted-foreground/70">
+                                {group.label}
+                              </span>
+                              <Badge
+                                variant="secondary"
+                                className="rounded-full px-1.5 py-0 text-[10px] font-medium text-muted-foreground"
                               >
-                                {t('chat:history.openParentSession', 'Open')}
-                              </button>
-                            )}
-                          </div>
+                                {group.sessions.length}
+                              </Badge>
+                              <div className="h-px flex-1 bg-black/6 dark:bg-white/10" />
+                              {group.parentSessionKey && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    openSession(group.parentSessionKey!);
+                                  }}
+                                  className="shrink-0 rounded-full bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-black/8 hover:text-foreground dark:bg-white/8 dark:hover:bg-white/12"
+                                >
+                                  {t('chat:history.openParentSession', 'Open')}
+                                </button>
+                              )}
+                            </div>
+                          )}
                           <div className="space-y-1">
                             {group.sessions.map((s) => {
                               const canDeleteSession = !s.key.endsWith(':main');
@@ -850,8 +880,7 @@ export function Sidebar() {
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        switchSession(s.key);
-                                        navigate('/');
+                                        openSession(s.key);
                                       }}
                                       className="w-full text-left"
                                     >
@@ -881,8 +910,7 @@ export function Sidebar() {
                                         <button
                                           type="button"
                                           onClick={() => {
-                                            switchSession(parentSessionKey);
-                                            navigate('/');
+                                            openSession(parentSessionKey);
                                           }}
                                           className="truncate text-left hover:text-foreground"
                                           title={parentSessionLabel}
@@ -926,6 +954,7 @@ export function Sidebar() {
               )}
             </>
           )}
+        </div>
         </div>
       )}
 

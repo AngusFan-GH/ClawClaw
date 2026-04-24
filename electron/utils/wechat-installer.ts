@@ -1,10 +1,10 @@
 import { EventEmitter } from 'node:events';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { getOpenClawCliSpawnConfig } from './openclaw-cli';
 import { ensureBundledPluginInstalled } from './bundled-plugin-installer';
+import { resolveOpenClawDir } from './paths';
 
 type WeChatInstallerEvents = {
   output: [{ stream: 'stdout' | 'stderr'; text: string }];
@@ -108,7 +108,7 @@ export class WeChatInstallerManager extends EventEmitter {
     try {
       this.emit('output', { stream: 'stdout', text: 'Preparing WeChat plugin setup...\n' });
 
-      const pluginManifest = join(homedir(), '.openclaw', 'extensions', WECHAT_CHANNEL_ID, 'openclaw.plugin.json');
+      const pluginManifest = join(resolveOpenClawDir(), 'extensions', WECHAT_CHANNEL_ID, 'openclaw.plugin.json');
       if (installBundledWeChatPlugin()) {
         this.emit('output', {
           stream: 'stdout',

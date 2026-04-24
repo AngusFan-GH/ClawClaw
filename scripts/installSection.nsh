@@ -7,9 +7,8 @@
 InitPluginsDir
 
 ${IfNot} ${Silent}
-  SetDetailsPrint both
-  DetailPrint "$(installPhasePrepare)"
-  DetailPrint "$(installPhaseCheckRunning)"
+  !insertmacro SetInstallPhase "$(installPhasePrepare)"
+  !insertmacro SetInstallPhase "$(installPhaseCheckRunning)"
 ${endif}
 
 StrCpy $appExe "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
@@ -56,10 +55,10 @@ ${if} $isTryToKeepShortcuts == "true"
 ${endif}
 
 ${IfNot} ${Silent}
-  SetDetailsPrint both
-  DetailPrint "$(installPhaseRemovePrevious)"
+  !insertmacro SetInstallPhase "$(installPhaseRemovePrevious)"
 ${endif}
 !insertmacro ResolveUpgradeStrategy
+!insertmacro ResolveInstalledVersionCompatibility
 !insertmacro RunManagedUpgradeCleanup
 ${if} $shouldRunLegacyUninstaller == "false"
   ${IfNot} ${Silent}
@@ -84,11 +83,31 @@ ${endif}
 ; resources\, so old nested dependencies must be removed before the new files
 ; are copied.
 ${IfNot} ${Silent}
-  SetDetailsPrint both
-  DetailPrint "$(installPhaseCleanRuntime)"
+  !insertmacro SetInstallPhase "$(installPhaseCleanRuntime)"
+${endif}
+${if} $isLegacyInstalledVersion == "true"
+  ${IfNot} ${Silent}
+    DetailPrint "Detected an installed ClawClaw version at or below 0.1.15; running expanded runtime cleanup."
+  ${endif}
 ${endif}
 RMDir /r "$INSTDIR\resources\openclaw"
+${IfNot} ${Silent}
+  DetailPrint "Removed stale runtime directory: $INSTDIR\resources\openclaw"
+${endif}
 RMDir /r "$INSTDIR\resources\openclaw-plugins"
+${IfNot} ${Silent}
+  DetailPrint "Removed stale plugin mirror directory: $INSTDIR\resources\openclaw-plugins"
+${endif}
+${if} $isLegacyInstalledVersion == "true"
+  RMDir /r "$INSTDIR\resources\bin"
+  ${IfNot} ${Silent}
+    DetailPrint "Removed legacy bundled binary directory: $INSTDIR\resources\bin"
+  ${endif}
+  RMDir /r "$INSTDIR\resources\cli"
+  ${IfNot} ${Silent}
+    DetailPrint "Removed legacy CLI wrapper directory: $INSTDIR\resources\cli"
+  ${endif}
+${endif}
 
 SetOutPath $INSTDIR
 
@@ -97,20 +116,17 @@ SetOutPath $INSTDIR
 !endif
 
 ${IfNot} ${Silent}
-  SetDetailsPrint both
-  DetailPrint "$(installPhaseCopyFiles)"
+  !insertmacro SetInstallPhase "$(installPhaseCopyFiles)"
 ${endif}
 !insertmacro installApplicationFiles
 
 ${IfNot} ${Silent}
-  SetDetailsPrint both
-  DetailPrint "$(installPhaseRegister)"
+  !insertmacro SetInstallPhase "$(installPhaseRegister)"
 ${endif}
 !insertmacro registryAddInstallInfo
 
 ${IfNot} ${Silent}
-  SetDetailsPrint both
-  DetailPrint "$(installPhaseShortcuts)"
+  !insertmacro SetInstallPhase "$(installPhaseShortcuts)"
 ${endif}
 !insertmacro addStartMenuLink $keepShortcuts
 !insertmacro addDesktopLink $keepShortcuts
@@ -123,17 +139,12 @@ ${endIf}
 
 !ifmacrodef registerFileAssociations
   ${IfNot} ${Silent}
-    SetDetailsPrint both
-    DetailPrint "$(installPhaseAssociations)"
+    !insertmacro SetInstallPhase "$(installPhaseAssociations)"
   ${endif}
   !insertmacro registerFileAssociations
 !endif
 
 !ifmacrodef customInstall
-  ${IfNot} ${Silent}
-    SetDetailsPrint both
-    DetailPrint "$(installPhaseFinalize)"
-  ${endif}
   !insertmacro customInstall
 !endif
 

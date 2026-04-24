@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { execSync, spawnSync } from 'node:child_process';
-import { existsSync, rmSync } from 'node:fs';
-import { delimiter, dirname, resolve } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { platform } from 'node:os';
 
 const hostPlatform = platform();
@@ -56,6 +56,59 @@ const cleanBuildDirs = () => {
   removeDirIfExists(resolve(process.cwd(), 'release', 'win-unpacked'));
   removeDirIfExists(resolve(process.cwd(), 'release', 'win-arm64-unpacked'));
   removeDirIfExists(resolve(process.cwd(), 'release', 'win-ia32-unpacked'));
+};
+
+const getUnpackedDirForArch = (arch) => {
+  if (arch === 'arm64') return resolve(process.cwd(), 'release', 'win-arm64-unpacked');
+  if (arch === 'ia32') return resolve(process.cwd(), 'release', 'win-ia32-unpacked');
+  return resolve(process.cwd(), 'release', 'win-unpacked');
+};
+
+const createPortableDataLayout = (portableDir) => {
+  for (const subDir of ['.openclaw', 'cache', 'python', 'logs', 'exports']) {
+    mkdirSync(join(portableDir, subDir), { recursive: true });
+  }
+};
+
+const validatePortableSupportFiles = (unpackedDir, arch) => {
+  const requiredPaths = [
+    join(unpackedDir, 'resources', 'resources', 'portable-updater-win.cjs'),
+    join(unpackedDir, 'resources', 'bin', 'node.exe'),
+  ];
+
+  for (const requiredPath of requiredPaths) {
+    if (!existsSync(requiredPath)) {
+      throw new Error(
+        `[package:win] Portable updater support file missing for ${arch}: ${requiredPath}`,
+      );
+    }
+  }
+};
+
+const stagePortableLaunchers = (archs) => {
+  const resourcesDir = resolve(process.cwd(), 'resources');
+  const portableLaunchers = ['Start ClawClaw.bat', 'Start ClawClaw.vbs', 'README Portable.txt'];
+
+  for (const arch of archs) {
+    const unpackedDir = getUnpackedDirForArch(arch);
+    if (!existsSync(unpackedDir)) {
+      console.warn(`[package:win] Expected unpacked output missing for ${arch}: ${unpackedDir}`);
+      continue;
+    }
+
+    const portableDir = join(unpackedDir, 'portable');
+    createPortableDataLayout(portableDir);
+    validatePortableSupportFiles(unpackedDir, arch);
+
+    for (const launcher of portableLaunchers) {
+      const source = join(resourcesDir, launcher);
+      const destination = join(unpackedDir, launcher);
+      if (!existsSync(source)) continue;
+      copyFileSync(source, destination);
+    }
+
+    console.log(`[package:win] Portable layout prepared for ${arch} at ${unpackedDir}`);
+  }
 };
 
 const resolveWinArchTargets = (argv) => {
@@ -178,15 +231,27 @@ const nsisPath = isWindowsHost
     ].find((candidate) => candidate && existsSync(candidate))
   : null;
 
-if (isWindowsHost && !nsisPath) {
+const args = process.argv.slice(2);
+const hasDirTarget = args.includes('--dir');
+const hasArchArg = args.some((arg) => arg === '--x64' || arg === '--arm64' || arg === '--ia32' || arg.startsWith('--arch'));
+const archArgs = hasArchArg ? [] : ['--x64', '--arm64'];
+
+// Only require NSIS for non-dir builds on Windows
+if (!hasDirTarget && isWindowsHost && !nsisPath) {
   console.error('[package:win] NSIS is required for Windows packaging. Please install makensis first.');
   process.exit(1);
 }
 
-const args = process.argv.slice(2);
-const hasArchArg = args.some((arg) => arg === '--x64' || arg === '--arm64' || arg === '--ia32' || arg.startsWith('--arch'));
-const archArgs = hasArchArg ? [] : ['--x64', '--arm64'];
-const builderArgs = ['--win', 'nsis', ...archArgs, ...args];
+// --dir produces portable directory only (no NSIS/Wine required on macOS)
+const builderArgs = hasDirTarget
+  ? [
+      '--win',
+      'dir',
+      '-c.win.signAndEditExecutable=false',
+      ...archArgs,
+      ...args.filter((a) => a !== '--dir'),
+    ]
+  : ['--win', 'nsis', ...archArgs, ...args];
 
 const builderEnv = { ...process.env };
 if (nsisPath) {
@@ -228,12 +293,14 @@ const runBuild = () => {
   return result;
 };
 
-if (isWindowsHost) {
+if (hasDirTarget) {
+  console.log('[package:win] Building portable directory (dir target, no NSIS required).');
+} else if (isWindowsHost) {
   console.log(`[package:win] Found NSIS at ${nsisPath}.`);
 } else {
   console.log('[package:win] Running cross-platform Windows NSIS build.');
 }
-console.log(`[package:win] Building NSIS for ${archArgs.length > 0 ? 'x64 and arm64' : 'specified'} architectures.`);
+console.log(`[package:win] Building ${hasDirTarget ? 'dir' : 'NSIS'} for ${archArgs.length > 0 ? 'x64 and arm64' : 'specified'} architectures.`);
 
 killPackagingProcesses();
 cleanBuildDirs();
@@ -256,6 +323,10 @@ if (result.status !== 0) {
 if (result.error) {
   console.error('[package:win] Failed to start electron-builder:', result.error.message);
   process.exit(1);
+}
+
+if ((result.status ?? 1) === 0 && hasDirTarget) {
+  stagePortableLaunchers(winArchTargets);
 }
 
 process.exit(result.status ?? 0);

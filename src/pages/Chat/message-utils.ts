@@ -38,6 +38,8 @@ const FINAL_TAG_RE = /<\s*\/?\s*final\b[^<>]*>/gi;
 const THINKING_TAG_RE = /<\s*(\/?)\s*(?:think(?:ing)?|thought|antthinking)\b[^<>]*>/gi;
 const MEMORY_TAG_RE = /<\s*(\/?)\s*relevant[-_]memories\b[^<>]*>/gi;
 const MEMORY_TAG_QUICK_RE = /<\s*\/?\s*relevant[-_]memories\b/i;
+const LEADING_TIMESTAMP_PREFIX_RE = /^(?:\[[^\]]+\]\s*)+/;
+const LEADING_SYSTEM_EVENT_LINE_RE = /^(?:\s*System(?:\s+\(untrusted\))?:\s+.+(?:\n|$))+/i;
 
 type CodeRegion = { start: number; end: number };
 
@@ -67,9 +69,12 @@ function shouldStripTrailingUntrustedContext(lines: string[], index: number): bo
 }
 
 function stripInboundMetadata(text: string): string {
-  if (!text || !SENTINEL_FAST_RE.test(text)) return text;
+  if (!text) return text;
 
-  const lines = text.split('\n');
+  const withoutTimestamp = text.replace(LEADING_TIMESTAMP_PREFIX_RE, '');
+  if (!SENTINEL_FAST_RE.test(withoutTimestamp)) return withoutTimestamp;
+
+  const lines = withoutTimestamp.split('\n');
   const result: string[] = [];
   let inMetaBlock = false;
   let inFencedJson = false;
@@ -109,6 +114,28 @@ function stripInboundMetadata(text: string): string {
   }
 
   return result.join('\n').replace(/^\n+/, '').replace(/\n+$/, '');
+}
+
+function stripLeadingSystemEventLines(text: string): string {
+  if (!text) return text;
+  return text.replace(LEADING_SYSTEM_EVENT_LINE_RE, '').replace(/^\n+/, '').trimStart();
+}
+
+function stripLeadingUserVisibleMetadata(text: string): string {
+  if (!text) return text;
+  let cleaned = text;
+
+  for (let i = 0; i < 3; i += 1) {
+    const next = stripLeadingSystemEventLines(
+      cleaned.replace(LEADING_TIMESTAMP_PREFIX_RE, '').replace(/^\n+/, '').trimStart(),
+    );
+    if (next === cleaned) {
+      break;
+    }
+    cleaned = next;
+  }
+
+  return cleaned;
 }
 
 function findCodeRegions(text: string): CodeRegion[] {
@@ -255,9 +282,19 @@ function processMessageText(text: string, role: string): string {
   if (role === 'assistant') {
     return stripAssistantInternalScaffolding(text);
   }
-  return role.toLowerCase() === 'user'
-    ? stripInboundMetadata(stripEnvelope(text))
-    : stripEnvelope(text);
+  if (role.toLowerCase() === 'user') {
+    return stripMediaAttachmentRefs(
+      stripLeadingUserVisibleMetadata(stripInboundMetadata(stripEnvelope(text))),
+    );
+  }
+  return stripEnvelope(text);
+}
+
+function stripMediaAttachmentRefs(text: string): string {
+  return text
+    .replace(/\[media attached:\s*([^\s(]+)\s*\(([^)]+)\)\s*\|[^\]]*\]/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /**

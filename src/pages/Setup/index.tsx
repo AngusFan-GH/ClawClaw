@@ -20,6 +20,7 @@ import { TitleBar } from '@/components/layout/TitleBar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { RefreshButton } from '@/components/common/RefreshButton';
@@ -51,10 +52,19 @@ type SetupProviderModelOption = {
   id: string;
   name: string;
   category?: string;
+  typeLabel?: string;
   input?: string;
   contextWindow?: number | null;
   tags?: string[];
 };
+
+function isPrimarySetupModelOption(option: SetupProviderModelOption): boolean {
+  const value = option.category?.trim().toLowerCase();
+  if (!value) {
+    return true;
+  }
+  return value === 'chat' || value === 'reasoning' || value === 'code' || value === 'vision';
+}
 
 type ResolvedProviderModelResponse = {
   runtimeProviderId?: string;
@@ -680,7 +690,7 @@ export function AutoConfiguredLocalModelContent({
   );
 }
 
-const OPENAI_OAUTH_PREFERRED_MODEL_ID = 'gpt-5.4';
+const OPENAI_OAUTH_PREFERRED_MODEL_IDS = ['gpt-5.4-pro', 'gpt-5.4'] as const;
 
 function normalizeOAuthSelectedModel(vendorId: string, modelId?: string | null): string {
   const normalized = modelId?.trim() || '';
@@ -688,7 +698,7 @@ function normalizeOAuthSelectedModel(vendorId: string, modelId?: string | null):
     return '';
   }
   if (vendorId === 'openai' && (normalized === 'gpt-5.2' || normalized === 'gpt-5.3-codex')) {
-    return OPENAI_OAUTH_PREFERRED_MODEL_ID;
+    return OPENAI_OAUTH_PREFERRED_MODEL_IDS[1];
   }
   return normalized;
 }
@@ -709,8 +719,12 @@ function pickOAuthModelSelection(
     return normalizedFallback;
   }
 
-  if (vendorId === 'openai' && options.some((option) => option.id === OPENAI_OAUTH_PREFERRED_MODEL_ID)) {
-    return OPENAI_OAUTH_PREFERRED_MODEL_ID;
+  if (vendorId === 'openai') {
+    for (const preferredId of OPENAI_OAUTH_PREFERRED_MODEL_IDS) {
+      if (options.some((option) => option.id === preferredId)) {
+        return preferredId;
+      }
+    }
   }
 
   return options[0]?.id || normalizedFallback || normalizedPreferred || '';
@@ -1380,14 +1394,14 @@ export function ProviderContent({
           {useOpenAIOAuthModelPicker && oauthAuthedAccountId && (
             <div className="space-y-2">
               <Label htmlFor="oauthModelId">{t('settings:aiProviders.dialog.model')}</Label>
-              <select
+              <Select
                 id="oauthModelId"
                 value={modelId}
                 onChange={(e) => {
                   setModelId(normalizeOAuthSelectedModel(selectedProvider, e.target.value));
                   onConfiguredChange(false);
                 }}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="w-full bg-background text-sm"
                 disabled={loadingOAuthModels}
               >
                 {oauthModelOptions.map((option) => (
@@ -1395,7 +1409,7 @@ export function ProviderContent({
                     {option.name}
                   </option>
                 ))}
-              </select>
+              </Select>
               <p className="text-xs text-muted-foreground">{t('settings:aiProviders.oauth.modelAfterLogin')}</p>
             </div>
           )}
@@ -1859,7 +1873,7 @@ function ModelSetupContent({
         baseUrl: nextBaseUrl,
         apiProtocol: nextProtocol,
       });
-      const options = Array.isArray(response.models) ? response.models : [];
+      const options = (Array.isArray(response.models) ? response.models : []).filter(isPrimarySetupModelOption);
       setModelOptions(options);
       if (options.length > 0) {
         setManualMode(false);
@@ -2156,7 +2170,10 @@ function ModelSetupContent({
               {modelOptions.length > 0 ? (
                 <div className="space-y-2 lg:col-span-6">
                   <Label htmlFor="setup-local-model-option">{t('modelSetup.model')}</Label>
-                  <select
+                  {(() => {
+                    return (
+                      <>
+                  <Select
                     id="setup-local-model-option"
                     value={modelId}
                     onChange={(event) => {
@@ -2165,14 +2182,21 @@ function ModelSetupContent({
                       setModelId(selectedId);
                       setModelName(selected?.name || selectedId);
                     }}
-                    className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-primary"
+                    className="h-11 rounded-xl border-border bg-background/80"
                   >
                     {modelOptions.map((option) => (
-                      <option key={option.id} value={option.id}>
+                      <option
+                        key={option.id}
+                        value={option.id}
+                        data-badge-label={option.typeLabel?.trim() || undefined}
+                      >
                         {option.name || option.id}
                       </option>
                     ))}
-                  </select>
+                  </Select>
+                      </>
+                    );
+                  })()}
                 </div>
               ) : null}
               <div className={cn('space-y-2', modelOptions.length > 0 ? 'lg:col-span-4' : 'lg:col-span-5')}>

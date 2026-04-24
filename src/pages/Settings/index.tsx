@@ -2,7 +2,7 @@
  * Settings Page
  * Application configuration
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Copy,
   ExternalLink,
@@ -62,6 +62,8 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { RefreshButton } from '@/components/common/RefreshButton';
 import { UpdateSettings } from '@/components/settings/UpdateSettings';
+import { GatewayPortsSettings } from '@/components/settings/GatewayPortsSettings';
+import { BackupRestoreSettings } from '@/components/settings/BackupRestoreSettings';
 import type { GatewayStatus } from '@/types/gateway';
 import { ALL_MENU_ITEMS, type MenuItemId } from '@/shared/menu-items';
 
@@ -232,6 +234,7 @@ export function Settings() {
     return () => console.debug('[settings] Settings component unmounted');
   }, []);
   const { t } = useTranslation(['settings', 'common']);
+  const [isPortable, setIsPortable] = useState(false);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -267,6 +270,8 @@ export function Settings() {
     setSessionMemoryEnabled,
     memorySearchEnabled,
     setMemorySearchEnabled,
+    localModelLean,
+    setLocalModelLean,
     initialized,
   } = useSettingsStore();
 
@@ -306,6 +311,22 @@ export function Settings() {
   useEffect(() => {
     void initGateway();
   }, [initGateway]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void invokeIpc<boolean>('app:isPortable')
+      .then((value) => {
+        if (!cancelled) setIsPortable(Boolean(value));
+      })
+      .catch(() => {
+        if (!cancelled) setIsPortable(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -694,7 +715,7 @@ export function Settings() {
     }
   };
 
-  const handleSaveProxySettings = async () => {
+  const handleSaveProxySettings = useCallback(async () => {
     setSavingProxy(true);
     setProxySaveError(null);
     setProxySaveDoneAt(null);
@@ -739,7 +760,22 @@ export function Settings() {
     } finally {
       setSavingProxy(false);
     }
-  };
+  }, [
+    proxyAllServerDraft,
+    proxyBypassRulesDraft,
+    proxyHttpServerDraft,
+    proxyHttpsServerDraft,
+    proxyModeDraft,
+    proxyServerDraft,
+    setProxyAllServer,
+    setProxyBypassRules,
+    setProxyEnabled,
+    setProxyHttpServer,
+    setProxyHttpsServer,
+    setProxyMode,
+    setProxyServer,
+    t,
+  ]);
 
   // Proxy auto-save: persist draft → store when draft differs from current Zustand state.
   // We compare against getState() rather than persistedProxyState (localStorage) because
@@ -783,7 +819,18 @@ export function Settings() {
     }
     console.debug('[settings:proxy] auto-save triggered: draft differs from store state, calling handleSaveProxySettings');
     void handleSaveProxySettings();
-  }, [draftProxyState, persistedProxyState, proxyModeDraft, savingProxy]);
+  }, [
+    draftProxyState,
+    handleSaveProxySettings,
+    persistedProxyState,
+    proxyAllServerDraft,
+    proxyBypassRulesDraft,
+    proxyHttpServerDraft,
+    proxyHttpsServerDraft,
+    proxyModeDraft,
+    proxyServerDraft,
+    savingProxy,
+  ]);
 
   useEffect(() => {
     if (!proxySaveDoneAt) return;
@@ -1251,6 +1298,16 @@ export function Settings() {
                   </div>
                 </div>
               </SubCard>
+
+              <SubCard
+                title={t('gatewayPorts.title')}
+                description={t('gatewayPorts.description')}
+              >
+                <GatewayPortsSettings
+                  currentPort={gatewayStatus.port}
+                  currentPid={gatewayStatus.pid}
+                />
+              </SubCard>
             </div>
           </SectionCard>
 
@@ -1276,11 +1333,31 @@ export function Settings() {
                   />
                 }
               />
+              <SettingRow
+                label={t('memory.localModelLean')}
+                description={t('memory.localModelLeanDesc')}
+                control={
+                  <Switch
+                    checked={localModelLean}
+                    onCheckedChange={setLocalModelLean}
+                  />
+                }
+              />
             </div>
           </SectionCard>
 
-          <SectionCard title={t('updates.title')} description={t('updates.description')}>
-            <UpdateSettings />
+          <SectionCard
+            title={t('dataManagement.title')}
+            description={t('dataManagement.description')}
+          >
+            <BackupRestoreSettings />
+          </SectionCard>
+
+          <SectionCard
+            title={isPortable ? t('about.title') : t('updates.title')}
+            description={isPortable ? undefined : t('updates.description')}
+          >
+            <UpdateSettings versionOnly={isPortable} />
           </SectionCard>
 
           <SectionCard title={t('advanced.title')} description={t('advanced.description')}>

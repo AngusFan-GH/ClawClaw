@@ -2,15 +2,15 @@
  * Gateway Process Manager
  * Manages the OpenClaw Gateway process lifecycle
  */
-import { app } from 'electron';
 import path from 'path';
 import { EventEmitter } from 'events';
 import type { ChildProcess } from 'node:child_process';
 import WebSocket from 'ws';
-import { PORTS } from '../utils/config';
+import { PORTS, findAvailablePort, isPortAvailable } from '../utils/config';
 import { JsonRpcNotification, isNotification, isResponse } from './protocol';
 import { logger } from '../utils/logger';
 import { loadOrCreateDeviceIdentity, type DeviceIdentity } from '../utils/device-identity';
+import { getDataDir } from '../utils/paths';
 import {
   DEFAULT_RECONNECT_CONFIG,
   type ReconnectConfig,
@@ -29,6 +29,7 @@ import { GatewayStateController } from './state';
 import {
   getLastStartupPreflightRecovery,
   prepareGatewayLaunchContext,
+  runDeferredManagedPluginSync,
   runOpenClawStartupPreflightRepair,
 } from './config-sync';
 import { connectGatewaySocket, waitForGatewayReady } from './ws-client';
@@ -65,6 +66,10 @@ export interface GatewayStatus {
 
 export interface GatewayRestartOptions {
   strategy?: 'auto' | 'stop-start';
+  /** Force immediate restart, bypassing startup lock, governor cooldown, and
+   * any deferred-restart queue.  Use this when the user explicitly requests a
+   * restart from the Settings UI. */
+  force?: boolean;
 }
 
 /**
@@ -114,6 +119,8 @@ export class GatewayManager extends EventEmitter {
   private attachProbeInFlight: Promise<boolean> | null = null;
   private lastAttachProbeAt = 0;
   private lastAttachProbeFoundGateway = false;
+  /** Pre-computed launch context from a prior warmup call. Cleared on each start. */
+  private cachedLaunchContext: { context: import('./config-sync').GatewayLaunchContext; port: number } | null = null;
 
   constructor(config?: Partial<ReconnectConfig>) {
     super();
@@ -156,7 +163,7 @@ export class GatewayManager extends EventEmitter {
   private async initDeviceIdentity(): Promise<void> {
     if (this.deviceIdentity) return; // already loaded
     try {
-      const identityPath = path.join(app.getPath('userData'), 'clawclaw-device-identity.json');
+      const identityPath = path.join(getDataDir(), 'clawclaw-device-identity.json');
       this.deviceIdentity = await loadOrCreateDeviceIdentity(identityPath);
       logger.debug(`Device identity loaded (deviceId=${this.deviceIdentity.deviceId})`);
     } catch (err) {
@@ -307,6 +314,30 @@ export class GatewayManager extends EventEmitter {
   }
 
   /**
+   * Resolve the port to start the Gateway on.
+   *
+   * Tries the preferred port (this.status.port) first.  If it is already in use
+   * by another process, scans 18789–18899 for the first available port.
+   * This enables multiple ClawClaw instances (installed + portable) to coexist
+   * on the same machine without manual port configuration.
+   */
+  private async resolveStartPort(): Promise<void> {
+    const preferred = this.status.port;
+    if (await isPortAvailable(preferred)) {
+      return;
+    }
+    // Port is occupied — scan for the first free one.
+    const resolved = await findAvailablePort(PORTS.OPENCLAW_GATEWAY);
+    if (resolved !== preferred) {
+      logger.warn(
+        `[Gateway] Preferred port ${preferred} is in use; falling back to port ${resolved}`
+      );
+    }
+    this.status.port = resolved;
+    this.setStatus({ port: resolved });
+  }
+
+  /**
    * Start Gateway process
    */
   async start(): Promise<void> {
@@ -326,6 +357,10 @@ export class GatewayManager extends EventEmitter {
       this.lastStartupRecovery = null;
       this.resetAttachProbeState();
       const startEpoch = this.lifecycleController.bump('start');
+
+      // Resolve an available port before starting — allows multiple instances
+      // (installed + portable) to coexist on the same machine.
+      await this.resolveStartPort();
       logger.info(`Gateway start requested (port=${this.status.port})`);
       this.lastSpawnSummary = null;
       this.shouldReconnect = true;
@@ -380,6 +415,15 @@ export class GatewayManager extends EventEmitter {
           connect: async (port, externalToken) => {
             await this.connect(port, externalToken);
           },
+          onConnectingToExistingGateway: () => {
+            this.setStatus({
+              state: 'reconnecting',
+              error: undefined,
+              reconnectAttempts: 0,
+              pid: undefined,
+              restartExpectedMs: undefined,
+            });
+          },
           onConnectedToExistingGateway: () => {
             this.ownsProcess = false;
             this.setStatus({ pid: undefined });
@@ -400,6 +444,10 @@ export class GatewayManager extends EventEmitter {
           onConnectedToManagedGateway: () => {
             this.startHealthCheck();
             logger.debug('Gateway started successfully');
+            // Deferred: sync managed channel plugin mirrors after Gateway is up.
+            // Blocking plugin copy during preflight would delay startup; these
+            // plugins are optional China-channel extensions — non-fatal if absent.
+            runDeferredManagedPluginSync();
           },
           recoverMalformedConfig: async () => {
             try {
@@ -551,13 +599,13 @@ export class GatewayManager extends EventEmitter {
       this.shouldReconnect = true;
       this.reconnectAttempts = 0;
       this.setStatus({
-        state: 'starting',
+        state: 'reconnecting',
         error: undefined,
         reconnectAttempts: 0,
         pid: undefined,
         restartExpectedMs: undefined,
       });
-      await this.connect(existing.port, existing.token);
+      await this.connect(existing.port, existing.externalToken);
       this.ownsProcess = false;
       this.process = null;
       this.processExitStatus = null;
@@ -620,9 +668,15 @@ export class GatewayManager extends EventEmitter {
       }
     }
 
-    // Close WebSocket
+    // Close WebSocket — terminate() forcefully closes the TCP connection
+    // without waiting for the WebSocket close handshake, which is
+    // appropriate when the Gateway process itself is being stopped.
     if (this.ws) {
-      this.ws.close(1000, 'Gateway stopped by user');
+      try {
+        this.ws.terminate();
+      } catch {
+        // ignore — the connection may already be dead
+      }
       this.ws = null;
     }
 
@@ -654,6 +708,14 @@ export class GatewayManager extends EventEmitter {
    * Restart Gateway process
    */
   async restart(options?: GatewayRestartOptions): Promise<void> {
+    // ── Force restart: bypasses all deferral/governor logic and stops/starts
+    // immediately.  Used when the user explicitly requests a restart from the
+    // Settings UI — it must work regardless of gateway state.
+    if (options?.force) {
+      await this.forceRestart();
+      return;
+    }
+
     if (
       this.restartController.isRestartDeferred({
         state: this.status.state,
@@ -742,6 +804,67 @@ export class GatewayManager extends EventEmitter {
           },
         }
       );
+    }
+  }
+
+  /**
+   * Force immediate restart — stops the gateway right now and starts a new one,
+   * ignoring startup locks, governor suppression, and deferred queues.  Any in-flight
+   * stop/start operations are abandoned.
+   */
+  private async forceRestart(): Promise<void> {
+    logger.info('Force Gateway restart requested');
+
+    // 1. Reset all barriers
+    this.startLock = false;
+    this.restartGovernor.reset();
+    this.restartController.resetDeferredRestart();
+    this.restartController.clearDebounceTimer();
+
+    // 2. Abandon any in-flight stop/start so we don't wait on them
+    this.startInFlight = null;
+    this.restartInFlight = null;
+
+    // 3. Clear all timers so nothing fires during the transition
+    this.clearAllTimers();
+
+    // 4. Stop immediately (synchronously-set flags only; no awaits on previous ops)
+    // Re-enable reconnect for the upcoming start
+    this.shouldReconnect = true;
+    await this.stop();
+
+    // 5. Start fresh
+    await this.start();
+  }
+
+  /**
+   * Reset the restart governor — clears restart budget, cooldown, and circuit-breaker
+   * state.  Used by the port-scanner kill API so killing an external gateway
+   * doesn't get suppressed by the governor on the next restart.
+   */
+  public resetGovernor(): void {
+    this.restartGovernor.reset();
+  }
+
+  /**
+   * Pre-warm the launch context in the background — runs `prepareGatewayLaunchContext`
+   * while the window is loading so `startProcess()` can reuse the result without
+   * recomputing (saving ~8 s of keychain reads on the critical path).
+   *
+   * This is called fire-and-forget from `initialize()` in the main process.
+   * If `start()` is called before warmup finishes, it falls through to computing
+   * the context normally (no correctness impact, just no speedup).
+   */
+  public async prewarmLaunchContext(): Promise<void> {
+    try {
+      const targetPort = this.status.port || PORTS.OPENCLAW_GATEWAY;
+      logger.debug(`[warmup] Pre-computing Gateway launch context for port ${targetPort}…`);
+      const context = await prepareGatewayLaunchContext(targetPort);
+      this.cachedLaunchContext = { context, port: targetPort };
+      logger.debug('[warmup] Gateway launch context ready and cached');
+    } catch (err) {
+      logger.debug('[warmup] Could not pre-warm launch context (non-fatal):', err);
+      this.cachedLaunchContext = null;
     }
   }
 
@@ -933,8 +1056,19 @@ export class GatewayManager extends EventEmitter {
    * Uses OpenClaw npm package from node_modules (dev) or resources (production)
    */
   private async startProcess(): Promise<void> {
-    logger.debug('Preparing Gateway launch context...');
-    const launchContext = await prepareGatewayLaunchContext(this.status.port);
+    const cachedCtx = this.cachedLaunchContext;
+    const useCached = Boolean(cachedCtx) && cachedCtx.port === this.status.port;
+    const launchContext: import('./config-sync').GatewayLaunchContext = useCached
+      ? cachedCtx.context
+      : await prepareGatewayLaunchContext(this.status.port);
+    // Always clear after use (or if stale) — TypeScript type narrowing on the
+    // local `cachedCtx` const prevents ESLint from flagging this as a no-op.
+    this.cachedLaunchContext = null;
+    if (useCached) {
+      logger.debug('Using pre-warmed Gateway launch context');
+    } else {
+      logger.debug('Preparing Gateway launch context…');
+    }
     this.lastStartupRecovery = getLastStartupPreflightRecovery();
     logger.debug('Gateway launch context ready');
     logger.debug('Ensuring legacy launchctl Gateway service is unloaded...');

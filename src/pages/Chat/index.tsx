@@ -7,242 +7,37 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertCircle, Brain, Check, ChevronDown, Loader2 } from 'lucide-react';
-import { DEFAULT_SESSION_KEY, useChatStore, type RawMessage } from '@/stores/chat';
+import { DEFAULT_SESSION_KEY, useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { useAgentsStore } from '@/stores/agents';
+import type { ProviderAccount } from '@/lib/providers';
 import { PageLoader } from '@/components/common/LoadingSpinner';
 import { ChatThread } from './ChatThread';
 import { ChatInput, type ChatAgentOption, type FileAttachment } from './ChatInput';
 import { ChatToolbar, type ChatToolbarModelOption } from './ChatToolbar';
 import { parseSlashCommand } from './slash-commands';
-import { extractImages, extractText, extractThinking, extractToolUse } from './message-utils';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import {
-  isMultiInstanceProviderType,
-  PROVIDER_TYPE_INFO,
-  type ProviderAccount,
-  type ProviderVendorInfo,
-} from '@/lib/providers';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { hostApiFetch } from '@/lib/host-api';
-import i18n from '@/i18n';
-
-function getRuntimeProviderFallbackKey(account: ProviderAccount): string | undefined {
-  if (account.vendorId === 'google' && account.authMode === 'oauth_browser') {
-    return 'google-gemini-cli';
-  }
-  if (
-    account.vendorId === 'openai' &&
-    (account.authMode === 'oauth_browser' || account.authMode === 'oauth_device')
-  ) {
-    return 'openai-codex';
-  }
-  if (account.vendorId === 'minimax-portal-cn') {
-    return 'minimax-portal';
-  }
-  if (isMultiInstanceProviderType(account.vendorId)) {
-    return undefined;
-  }
-  return account.vendorId;
-}
-
-function normalizeAccountModel(account: ProviderAccount, model?: string): string | undefined {
-  if (
-    account.vendorId === 'openai'
-    && (account.authMode === 'oauth_browser' || account.authMode === 'oauth_device')
-    && (model === 'gpt-5.2' || model === 'gpt-5.3-codex')
-  ) {
-    return 'gpt-5.4';
-  }
-  return model;
-}
-
-function resolveAccountModelLabel(
-  account: ProviderAccount,
-  vendor: ProviderVendorInfo | undefined,
-  runtimeProviderId?: string,
-): { modelRef?: string; modelName?: string } {
-  const runtimeProviderKey = runtimeProviderId || getRuntimeProviderFallbackKey(account);
-  const fallbackVendor = PROVIDER_TYPE_INFO.find((item) => item.id === account.vendorId);
-  const rawModel = normalizeAccountModel(
-    account,
-    account.model || vendor?.defaultModelId || fallbackVendor?.defaultModelId,
-  );
-
-  if (!rawModel) {
-    return {
-      modelName: vendor?.model || fallbackVendor?.model || account.label,
-    };
-  }
-
-  return {
-    modelRef: runtimeProviderKey
-      ? (rawModel.startsWith(`${runtimeProviderKey}/`) ? rawModel : `${runtimeProviderKey}/${rawModel}`)
-      : rawModel,
-    modelName: rawModel.split('/').pop() || rawModel,
-  };
-}
-
-function resolveAccountModelOptions(
-  account: ProviderAccount,
-  vendor: ProviderVendorInfo | undefined,
-  providerDisplayName: string,
-  runtimeProviderId?: string,
-): ChatToolbarModelOption[] {
-  const runtimeProviderKey = runtimeProviderId || getRuntimeProviderFallbackKey(account);
-  const fallbackVendor = PROVIDER_TYPE_INFO.find((item) => item.id === account.vendorId);
-  const primaryModel = normalizeAccountModel(
-    account,
-    account.model || vendor?.defaultModelId || fallbackVendor?.defaultModelId,
-  );
-  const candidates = [primaryModel, ...(account.fallbackModels ?? [])]
-    .map((value) => value?.trim())
-    .filter((value): value is string => Boolean(value));
-  const seen = new Set<string>();
-
-  return candidates.flatMap((candidate) => {
-    const normalizedRef = runtimeProviderKey
-      ? (candidate.startsWith(`${runtimeProviderKey}/`) ? candidate : `${runtimeProviderKey}/${candidate}`)
-      : candidate;
-    if (seen.has(normalizedRef)) {
-      return [];
-    }
-    seen.add(normalizedRef);
-    const modelName = normalizedRef.split('/').pop() || normalizedRef;
-    return [{
-      value: normalizedRef,
-      label: `${providerDisplayName} · ${modelName}`,
-      shortLabel: modelName,
-    }];
-  });
-}
-
-function isMultiInstanceRuntimeVendor(vendorId: ProviderAccount['vendorId']): boolean {
-  return isMultiInstanceProviderType(vendorId);
-}
-
-function isLocalModelProviderAccount(account: Pick<ProviderAccount, 'vendorId' | 'metadata'>): boolean {
-  return account.vendorId === 'local-model' && account.metadata?.localModelProvider === true;
-}
-
-function getProviderDisplayName(account: ProviderAccount, vendor?: ProviderVendorInfo): string {
-  if (
-    account.vendorId === 'local-model'
-    || account.metadata?.localModel
-    || account.metadata?.managedBy === 'preset-local-model'
-  ) {
-    return i18n.t('chat:composer.localModelProvider', '本地模型');
-  }
-  return account.label || vendor?.name || account.vendorId;
-}
-
-type ProviderCatalogModelOption = {
-  id: string;
-  name: string;
-};
-
-type ProviderCatalogResponse = {
-  runtimeProviderId?: string;
-  models: ProviderCatalogModelOption[];
-  resolved?: boolean;
-  source?: 'runtime' | 'models_json_fallback' | 'direct';
-};
-
-function isStrictRuntimeCatalogAccount(account: ProviderAccount): boolean {
-  return (
-    (account.vendorId === 'openai' && (account.authMode === 'oauth_browser' || account.authMode === 'oauth_device'))
-    || (account.vendorId === 'google' && account.authMode === 'oauth_browser')
-  );
-}
-
-function resolveAccountCatalogModelOptions(
-  account: ProviderAccount,
-  providerDisplayName: string,
-  catalog: ProviderCatalogResponse | undefined,
-): ChatToolbarModelOption[] {
-  const runtimeProviderKey = catalog?.runtimeProviderId || getRuntimeProviderFallbackKey(account);
-  const seen = new Set<string>();
-  const models = catalog?.models ?? [];
-
-  return models.flatMap((candidate) => {
-    const normalizedId = normalizeAccountModel(account, candidate.id)?.trim();
-    if (!normalizedId) {
-      return [];
-    }
-
-    const normalizedRef = runtimeProviderKey
-      ? (normalizedId.startsWith(`${runtimeProviderKey}/`) ? normalizedId : `${runtimeProviderKey}/${normalizedId}`)
-      : normalizedId;
-    if (seen.has(normalizedRef)) {
-      return [];
-    }
-    seen.add(normalizedRef);
-
-    const displayName = candidate.name?.trim() || normalizedId.split('/').pop() || normalizedId;
-    return [{
-      value: normalizedRef,
-      label: `${providerDisplayName} · ${displayName}`,
-      shortLabel: displayName,
-    }];
-  });
-}
-
-function normalizeSessionModelValue(
-  session: { model?: string; modelProvider?: string } | undefined,
-  options: ChatToolbarModelOption[]
-): string | undefined {
-  const currentModel = session?.model?.trim();
-  if (!currentModel) return undefined;
-  const exact = options.find((option) => option.value === currentModel);
-  if (exact) return exact.value;
-
-  const provider = session?.modelProvider?.trim();
-  if (provider && !currentModel.includes('/')) {
-    const withProvider = `${provider}/${currentModel}`;
-    const byProvider = options.find((option) => option.value === withProvider);
-    if (byProvider) return byProvider.value;
-  }
-
-  const suffixMatches = options.filter((option) => option.value.split('/').pop() === currentModel);
-  if (suffixMatches.length === 1) {
-    return suffixMatches[0].value;
-  }
-
-  return undefined;
-}
-
-function normalizeModelRefValue(
-  modelRef: string | undefined,
-  options: ChatToolbarModelOption[],
-): string | undefined {
-  if (!modelRef?.trim()) return undefined;
-  return normalizeSessionModelValue({ model: modelRef }, options);
-}
-
-function dedupeModelOptions(options: ChatToolbarModelOption[]): ChatToolbarModelOption[] {
-  const seenValues = new Set<string>();
-
-  return options.filter((option) => {
-    const valueKey = option.value.trim().toLowerCase();
-    if (seenValues.has(valueKey)) {
-      return false;
-    }
-    seenValues.add(valueKey);
-    return true;
-  });
-}
+import { buildChatCatalogModelOptions, type ChatModelCatalogEntry } from './chat-model-catalog';
+import {
+  buildAgentOptions,
+  buildChatRuntimeViewModel,
+  normalizeAgentModelValue,
+  resolveFallbackModelValue,
+  normalizeSelectedModelValue,
+  resolveChatModelState,
+  resolveCurrentAgentLabel,
+  resolveEffectiveAgentModelRef,
+} from './chat-page-view-model';
 
 function getAgentIdFromSessionKey(sessionKey: string | undefined): string | undefined {
   const key = sessionKey?.trim();
   if (!key || !key.startsWith('agent:')) return undefined;
   const parts = key.split(':');
   return parts[1]?.trim() || undefined;
-}
-
-function resolveAgentDisplayName(agent: { gateway: { id: string; name?: string; identity?: { name?: string } } }): string {
-  return agent.gateway.name?.trim() || agent.gateway.identity?.name?.trim() || agent.gateway.id;
 }
 
 type QueuedChatItem = {
@@ -252,10 +47,6 @@ type QueuedChatItem = {
 };
 
 export function Chat() {
-  useEffect(() => {
-    console.debug('[chat] Chat component mounted');
-    return () => console.debug('[chat] Chat component unmounted');
-  }, []);
   const { t } = useTranslation('chat');
   const navigate = useNavigate();
   const location = useLocation();
@@ -265,6 +56,8 @@ export function Chat() {
   const isGatewayRunning = displayGatewayState === 'running';
 
   const messages = useChatStore((s) => s.messages);
+  const pendingUserMessage = useChatStore((s) => s.pendingUserMessage);
+  const pendingAssistantMessage = useChatStore((s) => s.pendingAssistantMessage);
   const btwMessages = useChatStore((s) => s.btwMessages);
   const loading = useChatStore((s) => s.loading);
   const sending = useChatStore((s) => s.sending);
@@ -302,14 +95,13 @@ export function Chat() {
   const defaultAgentId = useAgentsStore((s) => s.defaultAgentId);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const providerAccounts = useProviderStore((s) => s.accounts);
-  const providerStatuses = useProviderStore((s) => s.statuses);
-  const providerVendors = useProviderStore((s) => s.vendors);
-  const defaultAccountId = useProviderStore((s) => s.defaultAccountId);
   const refreshProviderSnapshot = useProviderStore((s) => s.refreshProviderSnapshot);
-  const [providerCatalogMap, setProviderCatalogMap] = useState<Record<string, ProviderCatalogResponse>>({});
-  const [runtimeModelRefs, setRuntimeModelRefs] = useState<string[] | null>(null);
+  const [chatModelCatalog, setChatModelCatalog] = useState<ChatModelCatalogEntry[]>([]);
+  const [chatModelsLoading, setChatModelsLoading] = useState(false);
+  const [chatModelsRetryNonce, setChatModelsRetryNonce] = useState(0);
   const [queuedMessages, setQueuedMessages] = useState<QueuedChatItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const chatModelCatalogRef = useRef<ChatModelCatalogEntry[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
@@ -321,14 +113,6 @@ export function Chat() {
     () => getAgentIdFromSessionKey(currentSessionKey) || getAgentIdFromSessionKey(currentSession?.key),
     [currentSession?.key, currentSessionKey]
   );
-  const providerStatusMap = useMemo(
-    () => new Map((providerStatuses ?? []).map((status) => [status.id, status])),
-    [providerStatuses]
-  );
-  const vendorMap = useMemo(
-    () => new Map((providerVendors ?? []).map((vendor) => [vendor.id, vendor])),
-    [providerVendors]
-  );
   const forceSessionKeyFromRoute = useMemo(() => {
     const state = location.state as { forceSessionKey?: string } | null;
     const candidate = state?.forceSessionKey;
@@ -337,6 +121,10 @@ export function Chat() {
   const createNewSessionFromRoute = useMemo(() => {
     const state = location.state as { createNewSession?: boolean } | null;
     return state?.createNewSession === true;
+  }, [location.state]);
+  const routeAgentId = useMemo(() => {
+    const state = location.state as { agentId?: string } | null;
+    return typeof state?.agentId === 'string' && state.agentId.trim() ? state.agentId : undefined;
   }, [location.state]);
 
   // Load data when gateway is running.
@@ -349,7 +137,7 @@ export function Chat() {
     let cancelled = false;
     (async () => {
       if (createNewSessionFromRoute) {
-        newSession();
+        newSession(routeAgentId);
         navigate(location.pathname, { replace: true, state: null });
         if (!cancelled) {
           void loadSessions({ preserveCurrent: true });
@@ -362,7 +150,7 @@ export function Chat() {
           switchSession(forceSessionKeyFromRoute);
         }
         navigate(location.pathname, { replace: true, state: null });
-        await loadHistory(false);
+        await loadHistory(messages.length > 0);
         if (!cancelled) {
           void loadSessions({ preserveCurrent: true });
         }
@@ -372,7 +160,7 @@ export function Chat() {
       if (!sessionsHydrated) {
         await restoreSessionsAfterGatewayReady();
       } else {
-        await loadHistory(false);
+        await loadHistory(messages.length > 0);
       }
     })();
     return () => {
@@ -385,7 +173,9 @@ export function Chat() {
     newSession,
     restoreSessionsAfterGatewayReady,
     sessionsHydrated,
+    messages.length,
     createNewSessionFromRoute,
+    routeAgentId,
     forceSessionKeyFromRoute,
     switchSession,
     navigate,
@@ -400,102 +190,124 @@ export function Chat() {
     void fetchAgents();
   }, [fetchAgents]);
 
-  useEffect(() => {
-    if (!isGatewayRunning) {
-      queueMicrotask(() => {
-        setRuntimeModelRefs(null);
-      });
-      return;
-    }
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (!cancelled) {
-        setRuntimeModelRefs(null);
-      }
-    });
-    hostApiFetch<{ models?: string[] }>('/api/runtime-model-refs')
-      .then((response) => {
-        if (cancelled) return;
-        setRuntimeModelRefs(Array.isArray(response.models) ? response.models : []);
-      })
-      .catch((error) => {
-        console.warn('Failed to load runtime model refs:', error);
-        if (!cancelled) setRuntimeModelRefs([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isGatewayRunning, providerAccounts, providerStatuses]);
-
-  const eligibleAccounts = useMemo(
-    () => providerAccounts.filter((account) => account.enabled)
-      .filter((account) => !isLocalModelProviderAccount(account))
-      .filter(
-        (account) =>
-          account.authMode === 'local'
-          || account.authMode === 'oauth_device'
-          || account.authMode === 'oauth_browser'
-          || Boolean(providerStatusMap.get(account.id)?.hasKey),
-      ),
-    [providerAccounts, providerStatusMap]
+  const providerCatalogReloadKey = useMemo(
+    () => providerAccounts
+      .map((account) => [account.id, account.vendorId, account.model, account.enabled, account.updatedAt].join(':'))
+      .sort()
+      .join('|'),
+    [providerAccounts],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    const requestKeys = eligibleAccounts.map((account) => account.id);
+  const providerDisplayOverrides = useMemo(() => {
+    const candidates = new Map<string, Set<string>>();
+    const enabledAccounts = providerAccounts.filter((account) => account.enabled);
+    const runtimeKeyForAccount = (account: ProviderAccount): string | undefined => {
+      if (account.vendorId === 'google' && account.authMode === 'oauth_browser') {
+        return 'google-gemini-cli';
+      }
+      if (
+        account.vendorId === 'openai'
+        && (account.authMode === 'oauth_browser' || account.authMode === 'oauth_device')
+      ) {
+        return 'openai-codex';
+      }
+      if (account.vendorId === 'minimax-portal-cn') {
+        return 'minimax-portal';
+      }
+      if (account.vendorId === 'custom' || account.vendorId === 'ollama' || account.vendorId === 'vllm' || account.vendorId === 'sglang') {
+        const suffix = account.id.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'default';
+        return `${account.vendorId}-${suffix}`;
+      }
+      return account.vendorId;
+    };
 
-    if (requestKeys.length === 0) {
-      queueMicrotask(() => {
-        if (!cancelled) {
-          setProviderCatalogMap({});
-        }
-      });
-      return;
+    for (const account of enabledAccounts) {
+      const runtimeKey = runtimeKeyForAccount(account);
+      const label = account.label?.trim();
+      if (!runtimeKey || !label) continue;
+      const labels = candidates.get(runtimeKey) ?? new Set<string>();
+      labels.add(label);
+      candidates.set(runtimeKey, labels);
     }
 
-    Promise.all(requestKeys.map(async (accountId) => {
-      const account = eligibleAccounts.find((item) => item.id === accountId);
-      if (!account) {
-        return [accountId, { runtimeProviderId: undefined, models: [] }] as const;
+    const map = new Map<string, string>();
+    for (const [runtimeKey, labels] of candidates) {
+      if (labels.size === 1) {
+        const [label] = [...labels];
+        if (label) {
+          map.set(runtimeKey, label);
+        }
       }
-      try {
-        const response = await hostApiFetch<ProviderCatalogResponse>(
-          `/api/provider-model-options?vendorId=${encodeURIComponent(account.vendorId)}&authMode=${encodeURIComponent(account.authMode)}&accountId=${encodeURIComponent(account.id)}&scope=runtime`,
-        );
-        return [accountId, {
-          runtimeProviderId: response.runtimeProviderId,
-          models: response.models ?? [],
-          resolved: true,
-        }] as const;
-      } catch (error) {
-        console.warn(`Failed to load provider model options for ${accountId}:`, error);
-        return [accountId, {
-          runtimeProviderId: getRuntimeProviderFallbackKey(account),
-          models: [],
-          resolved: false,
-        }] as const;
-      }
-    })).then((entries) => {
-      if (cancelled) return;
-      setProviderCatalogMap(Object.fromEntries(entries));
-    });
+    }
+    return map;
+  }, [providerAccounts]);
 
+  useEffect(() => {
+    chatModelCatalogRef.current = chatModelCatalog;
+  }, [chatModelCatalog]);
+
+  useEffect(() => {
+    if (!isGatewayRunning) {
+      queueMicrotask(() => setChatModelsLoading(false));
+      return;
+    }
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setChatModelsLoading(true);
+      }
+    });
+    void useGatewayStore.getState().rpc<{ models?: ChatModelCatalogEntry[] }>('models.list', {}, 30_000)
+      .then((result) => {
+        if (cancelled) return;
+        const nextModels = Array.isArray(result?.models) ? result.models : [];
+        if (nextModels.length > 0 || chatModelCatalogRef.current.length === 0) {
+          setChatModelCatalog(nextModels);
+          return;
+        }
+        retryTimer = setTimeout(() => {
+          if (!cancelled && useGatewayStore.getState().status.state === 'running') {
+            setChatModelsRetryNonce((value) => value + 1);
+          }
+        }, 2_000);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.warn('[chat] Failed to load models.list for chat picker:', error);
+        retryTimer = setTimeout(() => {
+          if (!cancelled && useGatewayStore.getState().status.state === 'running') {
+            setChatModelsRetryNonce((value) => value + 1);
+          }
+        }, 2_000);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setChatModelsLoading(false);
+        }
+      });
     return () => {
       cancelled = true;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
     };
-  }, [eligibleAccounts]);
+  }, [chatModelsRetryNonce, isGatewayRunning, providerCatalogReloadKey]);
 
   // Always scroll to bottom when the user sends a message, regardless of scroll position.
   // This uses queueMicrotask (runs after DOM update) to ensure the user's own
   // message is visible immediately after send.
-  const prevSendingRef = useRef(false);
-  const sendingJustStarted = sending && !prevSendingRef.current;
-  prevSendingRef.current = sending;
-  if (sendingJustStarted) {
+  const prevSendingRef = useRef(sending);
+  useEffect(() => {
+    const wasSending = prevSendingRef.current;
+    prevSendingRef.current = sending;
+    if (!sending || wasSending) {
+      return;
+    }
     queueMicrotask(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
     });
-  }
+  }, [sending]);
 
   // Auto-scroll on new messages, streaming, or activity changes when the user is already near the bottom.
   useEffect(() => {
@@ -546,181 +358,98 @@ export function Chat() {
 
   // Update timestamp when sending starts
   useEffect(() => {
-    if (sending && streamingTimestamp === 0) {
-      setStreamingTimestamp(Date.now() / 1000);
-    } else if (!sending && streamingTimestamp !== 0) {
-      setStreamingTimestamp(0);
-    }
+    queueMicrotask(() => {
+      if (sending && streamingTimestamp === 0) {
+        setStreamingTimestamp(Date.now() / 1000);
+      } else if (!sending && streamingTimestamp !== 0) {
+        setStreamingTimestamp(0);
+      }
+    });
   }, [sending, streamingTimestamp]);
 
   // Gateway not running block has been completely removed so the UI always renders.
 
-  const streamMsg =
-    streamingMessage && typeof streamingMessage === 'object'
-      ? (streamingMessage as unknown as { role?: string; content?: unknown; timestamp?: number })
-      : null;
-  const streamText = streamMsg
-    ? extractText(streamMsg)
-    : typeof streamingMessage === 'string'
-      ? streamingMessage
-      : '';
-  const hasStreamText = streamText.trim().length > 0;
-  const streamThinking = streamMsg ? extractThinking(streamMsg) : null;
-  const hasStreamThinking = showThinking && !!streamThinking && streamThinking.trim().length > 0;
-  const streamTools = streamMsg ? extractToolUse(streamMsg) : [];
-  const hasStreamTools = streamTools.length > 0;
-  const streamImages = streamMsg ? extractImages(streamMsg) : [];
-  const hasStreamImages = streamImages.length > 0;
-  const shouldRenderStreaming =
-    sending &&
-    (hasStreamText ||
-      hasStreamThinking ||
-      hasStreamTools ||
-      hasStreamImages);
-  const liveStreamingMessage = shouldRenderStreaming
-    ? ((streamMsg
-        ? {
-            ...(streamMsg as Record<string, unknown>),
-            role: (typeof streamMsg.role === 'string'
-              ? streamMsg.role
-              : 'assistant') as RawMessage['role'],
-            content: streamMsg.content ?? streamText,
-            timestamp: streamMsg.timestamp ?? streamingTimestamp,
-          }
-        : {
-            role: 'assistant',
-            content: streamText,
-            timestamp: streamingTimestamp,
-          }) as RawMessage)
-    : null;
-
-  const isRestoringSessions = isGatewayRunning && (sessionsLoading || !sessionsHydrated);
-  const isEmpty = messages.length === 0 && !loading && !sending && !isRestoringSessions;
-  const currentSessionIsPlaceholder =
-    Boolean(pendingLocalSessionKeys[currentSessionKey])
-    || (isEmpty && currentSessionKey === DEFAULT_SESSION_KEY);
-  const shouldShowWelcome = isEmpty && (!currentSession || currentSessionIsPlaceholder);
-  const configuredModelOptions = useMemo<ChatToolbarModelOption[]>(() => {
-    return eligibleAccounts
-      .flatMap((account) => {
-        const vendor = vendorMap.get(account.vendorId);
-        const providerDisplayName = getProviderDisplayName(account, vendor);
-        const catalog = providerCatalogMap[account.id];
-        const strictRuntimeCatalog = isStrictRuntimeCatalogAccount(account);
-        if (isMultiInstanceRuntimeVendor(account.vendorId)) {
-          if (!catalog?.resolved || !catalog.runtimeProviderId) {
-            return [];
-          }
-          return resolveAccountCatalogModelOptions(account, providerDisplayName, catalog);
-        }
-        const catalogOptions = resolveAccountCatalogModelOptions(account, providerDisplayName, catalog);
-        const explicitOptions = resolveAccountModelOptions(
-          account,
-          vendor,
-          providerDisplayName,
-          catalog?.runtimeProviderId,
-        );
-        if (strictRuntimeCatalog) {
-          return catalogOptions.length > 0 ? catalogOptions : explicitOptions;
-        }
-        if (catalog?.resolved) {
-          return catalogOptions;
-        }
-        return explicitOptions;
-      })
-      .sort((left, right) => left.label.localeCompare(right.label));
-  }, [eligibleAccounts, providerCatalogMap, vendorMap]);
-
+  const {
+    liveStreamingMessage,
+    isRestoringSessions,
+    isEmpty,
+    currentSessionIsPlaceholder,
+    shouldShowWelcome,
+  } = useMemo(() => buildChatRuntimeViewModel({
+    messages,
+    pendingUserMessage,
+    pendingAssistantMessage,
+    sending,
+    showThinking,
+    streamingMessage,
+    streamingTimestamp,
+    currentSessionKey,
+    currentSession,
+    pendingLocalSessionKeys,
+    loading,
+    sessionsLoading,
+    sessionsHydrated,
+    isGatewayRunning,
+    defaultSessionKey: DEFAULT_SESSION_KEY,
+  }), [
+    messages,
+    pendingUserMessage,
+    pendingAssistantMessage,
+    sending,
+    showThinking,
+    streamingMessage,
+    streamingTimestamp,
+    currentSessionKey,
+    currentSession,
+    pendingLocalSessionKeys,
+    loading,
+    sessionsLoading,
+    sessionsHydrated,
+    isGatewayRunning,
+  ]);
   const modelOptions = useMemo<ChatToolbarModelOption[]>(() => {
-    const deduped = dedupeModelOptions(configuredModelOptions);
-    if (runtimeModelRefs === null) {
-      return deduped;
-    }
-    const runtimeSet = new Set(runtimeModelRefs);
-    const runtimeFiltered = deduped.filter((option) => runtimeSet.has(option.value));
-    if (runtimeFiltered.length === 0) {
-      return deduped;
-    }
-    const merged = [
-      ...runtimeFiltered,
-      ...deduped.filter((option) => !runtimeSet.has(option.value)),
-    ];
-    return dedupeModelOptions(merged);
-  }, [configuredModelOptions, runtimeModelRefs]);
+    return buildChatCatalogModelOptions(chatModelCatalog, providerDisplayOverrides);
+  }, [chatModelCatalog, providerDisplayOverrides]);
   const normalizedSelectedModel = useMemo(
-    () => normalizeSessionModelValue(currentSession, modelOptions),
+    () => normalizeSelectedModelValue(currentSession, modelOptions),
     [currentSession, modelOptions]
   );
   const effectiveAgentModelRef = useMemo(() => {
-    const resolvedAgentId = sessionAgentId || currentAgentId || defaultAgentId;
-    return agents.find((agent) => agent.gateway.id === resolvedAgentId)?.local.modelRef;
+    return resolveEffectiveAgentModelRef({
+      agents,
+      sessionAgentId,
+      currentAgentId,
+      defaultAgentId,
+    });
   }, [agents, currentAgentId, defaultAgentId, sessionAgentId]);
   const normalizedAgentModelValue = useMemo(
-    () => normalizeModelRefValue(effectiveAgentModelRef, modelOptions),
+    () => normalizeAgentModelValue(effectiveAgentModelRef, modelOptions),
     [effectiveAgentModelRef, modelOptions],
   );
-  const defaultModelMeta = useMemo(() => {
-    const defaultAccount = providerAccounts.find((account) => account.id === defaultAccountId);
-    if (!defaultAccount) {
-      return {
-        label: modelOptions[0]?.label,
-        value: modelOptions[0]?.value,
-      };
-    }
-
-    const vendor = vendorMap.get(defaultAccount.vendorId);
-    const providerDisplayName = getProviderDisplayName(defaultAccount, vendor);
-    const defaultCatalog = providerCatalogMap[defaultAccount.id];
-    const { modelName, modelRef } = resolveAccountModelLabel(
-      defaultAccount,
-      vendor,
-      defaultCatalog?.runtimeProviderId,
-    );
-    return {
-      label: `${providerDisplayName} · ${modelName || modelRef || providerDisplayName}`,
-      shortLabel: modelName || modelRef || defaultAccount.label,
-        value: modelRef,
-      };
-  }, [defaultAccountId, modelOptions, providerAccounts, providerCatalogMap, vendorMap]);
   const normalizedDefaultModelValue = useMemo(
-    () => normalizedAgentModelValue || normalizeSessionModelValue(
-      defaultModelMeta.value ? { model: defaultModelMeta.value } : undefined,
+    () => resolveFallbackModelValue({
+      normalizedAgentModelValue,
+      normalizedSelectedModel,
       modelOptions,
-    ),
-    [defaultModelMeta.value, modelOptions, normalizedAgentModelValue]
+    }),
+    [modelOptions, normalizedAgentModelValue, normalizedSelectedModel]
+  );
+  const defaultModelShortLabel = useMemo(
+    () => modelOptions.find((option) => option.value === normalizedDefaultModelValue)?.shortLabel,
+    [modelOptions, normalizedDefaultModelValue]
   );
   const agentOptions = useMemo<ChatAgentOption[]>(() => {
-    const sorted = [...agents].sort((left, right) => {
-      if (left.gateway.isDefault) return -1;
-      if (right.gateway.isDefault) return 1;
-      return resolveAgentDisplayName(left).localeCompare(resolveAgentDisplayName(right));
-    });
-    return sorted.map((agent) => ({
-      id: agent.gateway.id,
-      label: resolveAgentDisplayName(agent),
-    }));
+    return buildAgentOptions(agents);
   }, [agents]);
   const canSwitchAgent = currentSessionIsPlaceholder;
   const currentAgentLabel = useMemo(
-    () => {
-      const resolveAgentName = (agentId?: string) => {
-        if (!agentId) return undefined;
-        const normalizedId = agentId === 'main' ? defaultAgentId : agentId;
-        return (
-          agentOptions.find((option) => option.id === normalizedId)?.label
-          || agents.find((agent) => agent.gateway.id === normalizedId)?.gateway.name
-        );
-      };
-
-      return (
-        resolveAgentName(sessionAgentId)
-        || resolveAgentName(currentAgentId)
-        || (sessionAgentId && sessionAgentId !== 'main' ? sessionAgentId : undefined)
-        || (currentAgentId && currentAgentId !== 'main' ? currentAgentId : undefined)
-        || resolveAgentName(defaultAgentId)
-        || 'Main'
-      );
-    },
+    () => resolveCurrentAgentLabel({
+      agentOptions,
+      agents,
+      currentAgentId,
+      sessionAgentId,
+      defaultAgentId,
+    }),
     [agentOptions, agents, currentAgentId, sessionAgentId, defaultAgentId]
   );
 
@@ -732,26 +461,14 @@ export function Chat() {
     setModelGuard(allowed, normalizedDefaultModelValue);
   }, [modelOptions, normalizedDefaultModelValue, setModelGuard]);
 
-  const modelCatalogSyncing = isGatewayRunning
-    && eligibleAccounts.length > 0
-    && (
-      runtimeModelRefs === null
-      || eligibleAccounts.some((account) => !providerCatalogMap[account.id])
-    );
-  const hasAnyConfiguredModels = configuredModelOptions.length > 0;
-  const currentSessionHasModel = Boolean(currentSession?.model?.trim());
-  const currentModelInvalid = currentSessionHasModel && !normalizedSelectedModel && modelOptions.length > 0;
-  const modelState = !isGatewayRunning
-    ? 'disabled'
-    : modelCatalogSyncing && !hasAnyConfiguredModels
-      ? 'syncing'
-      : currentModelInvalid
-        ? 'invalid'
-        : modelOptions.length > 0
-          ? 'ready'
-          : eligibleAccounts.length > 0
-            ? 'syncing'
-            : 'unconfigured';
+  const modelState = resolveChatModelState({
+    isGatewayRunning,
+    currentSessionModel: currentSession?.model,
+    normalizedSelectedModel,
+    defaultModelValue: normalizedDefaultModelValue,
+    modelOptions,
+    modelCatalogSyncing: chatModelsLoading,
+  });
   const loadingDescription = isGatewayRunning
     ? t('history.loading', '正在恢复最近对话')
     : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
@@ -766,7 +483,7 @@ export function Chat() {
         : t('toolbar.gatewayStopped', '网关未连接');
 
   useEffect(() => {
-    setQueuedMessages([]);
+    queueMicrotask(() => setQueuedMessages([]));
   }, [currentSessionKey]);
 
   useEffect(() => {
@@ -774,8 +491,10 @@ export function Chat() {
       return;
     }
     const [next, ...rest] = queuedMessages;
-    setQueuedMessages(rest);
-    void sendMessage(next.text, next.attachments);
+    queueMicrotask(() => {
+      setQueuedMessages(rest);
+      void sendMessage(next.text, next.attachments);
+    });
   }, [queuedMessages, sendMessage, sending]);
 
   const handleRemoveQueuedMessage = (id: string): void => {
@@ -794,6 +513,7 @@ export function Chat() {
       if (attachments && attachments.length > 0) {
         await hostApiFetch('/api/chat/send-with-media', {
           method: 'POST',
+          timeoutMs: 125_000,
           body: JSON.stringify({
             sessionKey: currentSessionKey,
             message: trimmed,
@@ -944,6 +664,8 @@ export function Chat() {
 
               <ChatThread
                 messages={messages}
+                pendingUserMessage={pendingUserMessage}
+                pendingAssistantMessage={pendingAssistantMessage}
                 btwMessages={btwMessages}
                 toolMessages={chatToolMessages}
                 streamSegments={chatStreamSegments}
@@ -1024,7 +746,7 @@ export function Chat() {
         modelOptions={modelOptions}
         selectedModel={normalizedSelectedModel || normalizedAgentModelValue}
         defaultModelValue={normalizedDefaultModelValue}
-        defaultModelShortLabel={defaultModelMeta.shortLabel}
+        defaultModelShortLabel={defaultModelShortLabel}
         onModelChange={setSessionModel}
         onConfigureModels={() => navigate('/models')}
         modelDisabled={!isGatewayRunning}

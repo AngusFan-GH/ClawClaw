@@ -14,6 +14,7 @@ import { createMenu } from './menu';
 import { appUpdater, registerUpdateHandlers } from './updater';
 import { logger } from '../utils/logger';
 import { warmupNetworkOptimization } from '../utils/uv-env';
+import { getPortableDataDir, getPortableRootDir, getDataDir, getLogsDir, getOpenClawConfigDir, ensureDir } from '../utils/paths';
 
 import { ClawHubService } from '../gateway/clawhub';
 import { ensureClawXContext, repairClawXOnlyBootstrapFiles } from '../utils/openclaw-workspace';
@@ -25,7 +26,8 @@ import {
 } from '../utils/openclaw-cli';
 import { isQuitting, setQuitting } from './app-state';
 import { applyProxySettings } from './proxy';
-import { getAllSettings, getSetting } from '../utils/store';
+import { getAllSettings, getSetting, setSetting } from '../utils/store';
+import { PORTS, isPortAvailable, findAvailablePort } from '../utils/config';
 import { ensureBuiltinSkillsInstalled } from '../utils/skill-config';
 import { performUpgradeMaintenanceIfNeeded } from '../utils/upgrade-maintenance';
 import { startHostApiServer } from '../api/server';
@@ -205,8 +207,37 @@ async function initialize(): Promise<void> {
   // Initialize logger first
   logger.init();
   logger.info('=== ClawClaw Application Starting ===');
+
+  // ── Portable mode ───────────────────────────────────────────────────────────
+  const portableRootDir = getPortableRootDir();
+  const portableDataDir = getPortableDataDir();
+  if (portableDataDir) {
+    const portableData = getDataDir();
+    logger.info(`[portable] Running in portable mode — root=${portableRootDir} data=${portableData}`);
+
+    // Ensure all portable data directories exist before anything else tries to use them.
+    ensureDir(portableData);                       // portable/
+    ensureDir(getLogsDir());                       // portable/logs
+    ensureDir(getOpenClawConfigDir());             // portable/.openclaw
+
+    // Auto-detect: if default port 18789 is already in use (likely by a
+    // normally-installed ClawClaw on the same machine), automatically switch
+    // to the next available port so both instances can run simultaneously.
+    const defaultPort = PORTS.OPENCLAW_GATEWAY;
+    const currentSettings = await getAllSettings();
+    const currentPort = currentSettings.gatewayPort;
+
+    if (currentPort === defaultPort) {
+      // Port is set to default — check if it's available
+      if (!(await isPortAvailable(defaultPort))) {
+        const newPort = await findAvailablePort(PORTS.OPENCLAW_GATEWAY_PORTABLE);
+        await setSetting('gatewayPort', newPort);
+        logger.info(`[portable] Port ${defaultPort} is in use, switched to ${newPort}`);
+      }
+    }
+  }
   logger.debug(
-    `Runtime: platform=${process.platform}/${process.arch}, electron=${process.versions.electron}, node=${process.versions.node}, packaged=${app.isPackaged}`
+    `Runtime: platform=${process.platform}/${process.arch}, electron=${process.versions.electron}, node=${process.versions.node}, packaged=${app.isPackaged}${portableDataDir ? `, portableRoot=${portableRootDir}, portableData=${portableDataDir}` : ''}`
   );
 
   // Warm up network optimization (non-blocking)
@@ -214,6 +245,11 @@ async function initialize(): Promise<void> {
 
   // Apply persisted proxy settings before creating windows or network requests.
   await applyProxySettings();
+
+  // Pre-warm the Gateway launch context in the background while the window loads.
+  // The 8-second keychain read for provider credentials runs here, so by the
+  // time the user triggers Gateway start the context is already cached.
+  void gatewayManager.prewarmLaunchContext();
 
   if (isDev) {
     await session.defaultSession.clearCache().catch((error: unknown) => {
@@ -282,14 +318,20 @@ async function initialize(): Promise<void> {
   registerIpcHandlers(gatewayManager, clawHubService, mainWindow);
 
   registerGatewayRefreshScheduler((request) => {
-    if (
-      request.source === 'provider.runtimeSync'
-      && gatewayManager.isInStartupStabilizationWindow()
-    ) {
-      logger.debug(
-        `Suppressing provider runtime Gateway refresh during startup stabilization (mode=${request.mode ?? 'reload'})`,
-      );
-      return;
+    if (request.source === 'provider.runtimeSync') {
+      const gatewayState = gatewayManager.getStatus().state;
+      if (gatewayState !== 'running') {
+        logger.debug(
+          `Suppressing provider runtime Gateway refresh while Gateway is ${gatewayState} (mode=${request.mode ?? 'reload'})`,
+        );
+        return;
+      }
+      if (gatewayManager.isInStartupStabilizationWindow()) {
+        logger.debug(
+          `Suppressing provider runtime Gateway refresh during startup stabilization (mode=${request.mode ?? 'reload'})`,
+        );
+        return;
+      }
     }
 
     const requires = request.mode === 'restart' ? 'restart' : 'reload';
@@ -302,7 +344,7 @@ async function initialize(): Promise<void> {
     });
   });
 
-  hostApiServer = startHostApiServer({
+  hostApiServer = await startHostApiServer({
     gatewayManager,
     gatewayApplyCoordinator,
     clawHubService,
@@ -315,13 +357,6 @@ async function initialize(): Promise<void> {
 
   // Register update handlers
   registerUpdateHandlers(appUpdater, mainWindow);
-
-  const { autoCheckUpdate } = currentSettings;
-  if (autoCheckUpdate && appUpdater.isSupported()) {
-    void appUpdater.checkForUpdates().catch((error) => {
-      logger.warn('Startup auto-update check failed:', error);
-    });
-  }
 
   // Minimize to tray on close instead of quitting (macOS & Windows)
   mainWindow.on('close', (event) => {
@@ -353,11 +388,18 @@ async function initialize(): Promise<void> {
     const upgradeMaintenance = await performUpgradeMaintenanceIfNeeded();
     if (upgradeMaintenance.triggered) {
       logger.info(
-        `Upgrade maintenance completed (app ${upgradeMaintenance.previousAppVersion ?? 'none'} -> ${upgradeMaintenance.currentAppVersion}, openclaw ${upgradeMaintenance.previousOpenClawVersion ?? 'none'} -> ${upgradeMaintenance.currentOpenClawVersion ?? 'unknown'}, preflightTopics=${upgradeMaintenance.preflightRecoveredTopics.length}, doctorFix=${upgradeMaintenance.doctorFixStatus ?? 'skipped'}, doctorWarnings=${upgradeMaintenance.doctorFixWarningCount})`,
+        `Upgrade maintenance completed (app ${upgradeMaintenance.previousAppVersion ?? 'none'} -> ${upgradeMaintenance.currentAppVersion}, openclaw ${upgradeMaintenance.previousOpenClawVersion ?? 'none'} -> ${upgradeMaintenance.currentOpenClawVersion ?? 'unknown'}, legacyUpgrade=${upgradeMaintenance.legacyUpgradeRan}, preflightTopics=${upgradeMaintenance.preflightRecoveredTopics.length}, doctorFix=${upgradeMaintenance.doctorFixStatus ?? 'skipped'}, doctorWarnings=${upgradeMaintenance.doctorFixWarningCount})`,
       );
     }
   } catch (error) {
     logger.warn('Upgrade maintenance failed:', error);
+  }
+
+  const { autoCheckUpdate } = currentSettings;
+  if (autoCheckUpdate && appUpdater.isSupported()) {
+    void appUpdater.checkForUpdates().catch((error) => {
+      logger.warn('Startup auto-update check failed:', error);
+    });
   }
 
   // Bridge gateway and host-side events before any auto-start logic runs, so

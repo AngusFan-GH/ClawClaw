@@ -1,93 +1,37 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { AlertCircle, Bot, Check, Copy, RotateCcw, Search, Trash2, User, X, Zap } from 'lucide-react';
+import { AlertCircle, Bot, Check, Copy, FileText, RotateCcw, Search, Trash2, User, X, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invokeIpc } from '@/lib/api-client';
-import { getHostApiBase } from '@/lib/host-api';
 import { cn } from '@/lib/utils';
 import type { RawMessage, StreamSegment } from '@/stores/chat';
-import { extractImages, extractText, extractThinking } from './message-utils';
+import { extractImages, extractText } from './message-utils';
 import { toSanitizedMarkdownHtml } from './markdown';
 import { detectTextDirection } from './text-direction';
-
-
-type ToolCard = {
-  kind: 'call' | 'result';
-  name: string;
-  args?: unknown;
-  text?: string;
-};
-
-type ToolDisplay = {
-  label: string;
-  detail?: string;
-};
-
-type ChatThreadLabels = {
-  codeCopy: string;
-  codeCopied: string;
-  json: string;
-  reasoning: string;
-  you: string;
-  assistant: string;
-  tool: string;
-  toolOutput: string;
-  tokenInputPrefix: string;
-  tokenOutputPrefix: string;
-  cacheReadPrefix: string;
-  cacheWritePrefix: string;
-  contextSuffix: string;
-  completed: string;
-  view: string;
-  collapse: string;
-  toolCount: (count: number) => string;
-  process: string;
-  read: string;
-  exec: string;
-  historyWindowLimited: string;
-  historyCompacted: string;
-  loadingEarlier: string;
-  btw: string;
-  btwEphemeral: string;
-  dismiss: string;
-  delete: string;
-  searchPlaceholder: string;
-  noResults: string;
-  deletedHidden: string;
-  restore: string;
-};
-
-type ChatItem =
-  | { kind: 'message'; key: string; message: RawMessage }
-  | { kind: 'divider'; key: string; label: string; timestamp: number }
-  | { kind: 'stream'; key: string; text: string; startedAt: number }
-  | { kind: 'reading-indicator'; key: string };
-
-type TimedLiveItem = {
-  item: ChatItem;
-  timestamp: number;
-  sourceOrder: number;
-  priority: number;
-};
-
-type MessageGroup = {
-  kind: 'group';
-  key: string;
-  role: string;
-  senderLabel?: string | null;
-  messages: Array<{ key: string; message: RawMessage }>;
-  timestamp: number;
-  isStreaming: boolean;
-  hasReadingIndicator?: boolean;
-};
-
-type TranscriptEntry =
-  | { kind: 'notice'; key: string; tone?: 'default' | 'warning'; icon?: 'alert'; message: string; detail?: string }
-  | { kind: 'side-result'; key: string; message: RawMessage }
-  | { kind: 'divider'; key: string; label: string; timestamp: number }
-  | MessageGroup
-  | Extract<ChatItem, { kind: 'stream' | 'reading-indicator' }>;
-
-type TranscriptFlowItem = Exclude<ChatItem, { kind: 'message' }> | MessageGroup;
+import {
+  type ToolCard,
+  type ChatThreadLabels,
+  type GroupMeta,
+  type MessageGroup,
+  type NormalizedContentItem,
+  type TranscriptEntry,
+  buildAssistantAttachmentUrl,
+  buildChatItems,
+  detectJson,
+  extractGroupMeta,
+  extractGroupSearchText,
+  extractToolCards,
+  formatArgs,
+  formatChatTime,
+  getReasoningMarkdown,
+  hasVisibleMessageContent,
+  jsonSummaryLabel,
+  makeStreamMessage,
+  normalizeMessage,
+  normalizeRoleForGrouping,
+  previewText,
+  resolveToolDisplay,
+  toDisplayTimestampMs,
+} from './chat-thread-view-model';
 
 const hiddenGroupsBySession = new Map<string, Set<string>>();
 const deletedGroupOrderBySession = new Map<string, string[]>();
@@ -126,441 +70,10 @@ function getDeletedGroupOrder(sessionKey: string): string[] {
   return next;
 }
 
-type GroupMeta = {
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-  cost: number;
-  model: string | null;
-  contextPercent: number | null;
-};
-
-type NormalizedContentItem = {
-  type: string;
-  text?: string;
-  name?: string;
-  args?: unknown;
-  arguments?: unknown;
-  attachment?: {
-    url: string;
-    kind: 'image' | 'audio' | 'video' | 'document';
-    label: string;
-    mimeType?: string;
-    isVoiceNote?: boolean;
-  };
-  preview?: {
-    kind?: string;
-    url?: string;
-    viewId?: string;
-    title?: string;
-  };
-  rawText?: string | null;
-};
-
-type NormalizedMessage = {
-  role: string;
-  content: NormalizedContentItem[];
-  timestamp: number;
-  id?: string;
-  senderLabel?: string | null;
-};
-
-function toDisplayTimestampMs(timestamp: number): number {
-  return timestamp < 1e12 ? timestamp * 1000 : timestamp;
-}
-
-function getMessageKey(message: RawMessage): string {
-  const toolCallId = typeof message.toolCallId === 'string' ? message.toolCallId : '';
-  if (toolCallId) return `tool:${toolCallId}`;
-  const id = typeof message.id === 'string' ? message.id : '';
-  if (id) return `msg:${id}`;
-  const timestamp = typeof message.timestamp === 'number' ? message.timestamp : null;
-  const role = typeof message.role === 'string' ? message.role : 'unknown';
-  if (timestamp != null) return `msg:${role}:${timestamp}`;
-  return `msg:${role}`;
-}
-
-function makeStreamMessage(text: string, ts: number): RawMessage {
-  return {
-    role: 'assistant',
-    content: [{ type: 'text', text }],
-    timestamp: ts,
-  };
-}
-
-function normalizeMessage(message: RawMessage): NormalizedMessage {
-  const m = message as unknown as Record<string, unknown>;
-  let role = typeof m.role === 'string' ? m.role : 'unknown';
-
-  const hasToolId = typeof m.toolCallId === 'string' || typeof m.tool_call_id === 'string';
-  const contentRaw = m.content;
-  const contentItems = Array.isArray(contentRaw) ? contentRaw : null;
-  const hasToolContent =
-    Array.isArray(contentItems)
-    && contentItems.some((item) => {
-      const x = item as Record<string, unknown>;
-      const t = (typeof x.type === 'string' ? x.type : '').toLowerCase();
-      return t === 'toolresult' || t === 'tool_result';
-    });
-  const hasToolName = typeof m.toolName === 'string' || typeof m.tool_name === 'string';
-
-  if (hasToolId || hasToolContent || hasToolName) {
-    role = 'toolResult';
-  }
-
-  let content: NormalizedContentItem[] = [];
-  if (typeof m.content === 'string') {
-    content = [{ type: 'text', text: m.content }];
-  } else if (Array.isArray(m.content)) {
-    content = (m.content as Array<Record<string, unknown>>).flatMap((item) => {
-      if (
-        item.type === 'attachment'
-        && item.attachment
-        && typeof item.attachment === 'object'
-        && !Array.isArray(item.attachment)
-      ) {
-        const attachment = item.attachment as Record<string, unknown>;
-        const url = typeof attachment.url === 'string' ? attachment.url.trim() : '';
-        const label = typeof attachment.label === 'string' ? attachment.label.trim() : '';
-        const kind = attachment.kind;
-        if (
-          url
-          && label
-          && (kind === 'image' || kind === 'audio' || kind === 'video' || kind === 'document')
-        ) {
-          return [{
-            type: 'attachment',
-            attachment: {
-              url,
-              kind,
-              label,
-              mimeType: typeof attachment.mimeType === 'string' ? attachment.mimeType : undefined,
-              isVoiceNote: attachment.isVoiceNote === true,
-            },
-          }];
-        }
-        return [];
-      }
-      if (
-        item.type === 'canvas'
-        && item.preview
-        && typeof item.preview === 'object'
-        && !Array.isArray(item.preview)
-      ) {
-        const preview = item.preview as Record<string, unknown>;
-        return [{
-          type: 'canvas',
-          preview: {
-            kind: typeof preview.kind === 'string' ? preview.kind : undefined,
-            url: typeof preview.url === 'string' ? preview.url : undefined,
-            viewId: typeof preview.viewId === 'string' ? preview.viewId : undefined,
-            title: typeof preview.title === 'string' ? preview.title : undefined,
-          },
-          rawText: typeof item.rawText === 'string' ? item.rawText : null,
-        }];
-      }
-      return [{
-        type: (item.type as string) || 'text',
-        text: item.text as string | undefined,
-        name: item.name as string | undefined,
-        args: item.args,
-        arguments: item.arguments,
-      }];
-    });
-  } else if (typeof m.text === 'string') {
-    content = [{ type: 'text', text: m.text }];
-  }
-
-  return {
-    role,
-    content,
-    timestamp: typeof m.timestamp === 'number' ? toDisplayTimestampMs(m.timestamp) : Date.now(),
-    id: typeof m.id === 'string' ? m.id : undefined,
-    senderLabel:
-      typeof m.senderLabel === 'string' && m.senderLabel.trim() ? m.senderLabel.trim() : null,
-  };
-}
-
-function buildAssistantAttachmentUrl(source: string): string {
-  const url = new URL('/api/chat/assistant-media', getHostApiBase());
-  url.searchParams.set('source', source);
-  return url.toString();
-}
-
-function normalizeRoleForGrouping(roleOrMessage: string | RawMessage): string {
-  const role =
-    typeof roleOrMessage === 'string'
-      ? roleOrMessage
-      : normalizeMessage(roleOrMessage).role;
-  const lower = role.toLowerCase();
-  if (role === 'user' || role === 'User') return 'user';
-  if (role === 'assistant') return 'assistant';
-  if (role === 'system') return 'system';
-  if (lower === 'toolresult' || lower === 'tool_result' || lower === 'tool' || lower === 'function') {
-    return 'tool';
-  }
-  return role;
-}
-
-function groupMessages(items: ChatItem[]): Array<ChatItem | MessageGroup> {
-  const result: Array<ChatItem | MessageGroup> = [];
-  let currentGroup: MessageGroup | null = null;
-
-  for (const item of items) {
-    if (item.kind !== 'message') {
-      if (item.kind === 'reading-indicator' && currentGroup?.role === 'assistant') {
-        currentGroup.hasReadingIndicator = true;
-        continue;
-      }
-      if (currentGroup) {
-        result.push(currentGroup);
-        currentGroup = null;
-      }
-      result.push(item);
-      continue;
-    }
-
-    const normalized = normalizeMessage(item.message);
-    const role = normalizeRoleForGrouping(normalized.role);
-    const senderLabel = role.toLowerCase() === 'user' ? (normalized.senderLabel ?? null) : null;
-    const timestamp = normalized.timestamp || Date.now();
-
-    if (
-      !currentGroup
-      || currentGroup.role !== role
-      || (role.toLowerCase() === 'user' && currentGroup.senderLabel !== senderLabel)
-    ) {
-      if (currentGroup) result.push(currentGroup);
-      currentGroup = {
-        kind: 'group',
-        key: `group:${role}:${item.key}`,
-        role,
-        senderLabel,
-        messages: [{ key: item.key, message: item.message }],
-        timestamp,
-        isStreaming: false,
-      };
-    } else {
-      currentGroup.messages.push({ key: item.key, message: item.message });
-    }
-  }
-
-  if (currentGroup) result.push(currentGroup);
-  return result;
-}
-
-function buildTimedLiveItems(params: {
-  toolMessages: RawMessage[];
-  streamSegments: StreamSegment[];
-  showThinking: boolean;
-  sessionKey: string;
-}): TimedLiveItem[] {
-  const items: TimedLiveItem[] = [];
-  const tools = params.showThinking && Array.isArray(params.toolMessages) ? params.toolMessages : [];
-
-  params.streamSegments.forEach((segment, index) => {
-    if (segment.text.trim().length === 0) return;
-    items.push({
-      item: {
-        kind: 'stream',
-        key: `stream-seg:${params.sessionKey}:${index}`,
-        text: segment.text,
-        startedAt: segment.ts,
-      },
-      timestamp: segment.ts,
-      sourceOrder: index,
-      priority: 0,
-    });
-  });
-
-  tools.forEach((message, index) => {
-    const normalized = normalizeMessage(message);
-    items.push({
-      item: {
-        kind: 'message',
-        key: getMessageKey(message),
-        message,
-      },
-      timestamp: normalized.timestamp || Date.now(),
-      sourceOrder: index,
-      priority: 1,
-    });
-  });
-
-  items.sort((a, b) => {
-    if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
-    if (a.priority !== b.priority) return a.priority - b.priority;
-    return a.sourceOrder - b.sourceOrder;
-  });
-
-  return items;
-}
-
-function isSameCalendarDay(left: number, right: number): boolean {
-  const a = new Date(left);
-  const b = new Date(right);
-  return (
-    a.getFullYear() === b.getFullYear()
-    && a.getMonth() === b.getMonth()
-    && a.getDate() === b.getDate()
-  );
-}
-
-function formatDividerLabel(timestamp: number, locale: string): string {
-  const date = new Date(timestamp);
-  return date.toLocaleDateString(locale, {
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-function withDateDividers(items: TranscriptFlowItem[], locale: string): TranscriptFlowItem[] {
-  const result: TranscriptFlowItem[] = [];
-  let lastTimestamp: number | null = null;
-
-  for (const item of items) {
-    const timestamp =
-      item.kind === 'group'
-        ? item.timestamp
-        : item.kind === 'stream'
-          ? item.startedAt
-          : item.kind === 'divider'
-              ? item.timestamp
-              : null;
-
-    if (timestamp != null && (!lastTimestamp || !isSameCalendarDay(lastTimestamp, timestamp))) {
-      result.push({
-        kind: 'divider',
-        key: `divider:${new Date(timestamp).toDateString()}`,
-        label: formatDividerLabel(timestamp, locale),
-        timestamp,
-      });
-      lastTimestamp = timestamp;
-    } else if (timestamp != null) {
-      lastTimestamp = timestamp;
-    }
-
-    result.push(item);
-  }
-
-  return result;
-}
-
-export function buildChatItems(params: {
-  messages: RawMessage[];
-  toolMessages: RawMessage[];
-  streamSegments: StreamSegment[];
-  streamingMessage: RawMessage | null;
-  streamingStartedAt: number;
-  sessionKey: string;
-  sending: boolean;
-  pendingFinal: boolean;
-  showThinking: boolean;
-  locale: string;
-}): TranscriptFlowItem[] {
-  const items: ChatItem[] = [];
-  const history = Array.isArray(params.messages) ? params.messages : [];
-  let hasLiveActivity = false;
-
-  for (let i = 0; i < history.length; i += 1) {
-    if (history[i].role === 'compactionSummary') {
-      continue;
-    }
-    const normalizedRole = normalizeRoleForGrouping(history[i]);
-    if (!params.showThinking && normalizedRole === 'tool') {
-      continue;
-    }
-    items.push({
-      kind: 'message',
-      key: getMessageKey(history[i]),
-      message: history[i],
-    });
-  }
-
-  items.push(
-    ...buildTimedLiveItems({
-      toolMessages: params.toolMessages,
-      streamSegments: params.streamSegments,
-      showThinking: params.showThinking,
-      sessionKey: params.sessionKey,
-    }).map((entry) => {
-      hasLiveActivity = true;
-      return entry.item;
-    })
-  );
-
-  if (params.streamingMessage) {
-    hasLiveActivity = true;
-    const text = extractText(params.streamingMessage);
-    const key = `stream:${params.sessionKey}`;
-    if (text.trim().length > 0) {
-      items.push({
-        kind: 'stream',
-        key,
-        text,
-        startedAt: params.streamingStartedAt
-          || (params.streamingMessage.timestamp
-            ? toDisplayTimestampMs(params.streamingMessage.timestamp)
-            : Date.now()),
-      });
-    } else {
-      items.push({ kind: 'reading-indicator', key });
-    }
-  } else if (params.sending && (params.pendingFinal || !hasLiveActivity)) {
-    items.push({ kind: 'reading-indicator', key: `reading:${params.sessionKey}` });
-  }
-
-  return withDateDividers(groupMessages(items) as TranscriptFlowItem[], params.locale);
-}
-
-function extractGroupMeta(group: MessageGroup, contextWindow: number | null): GroupMeta | null {
-  let input = 0;
-  let output = 0;
-  let cacheRead = 0;
-  let cacheWrite = 0;
-  let cost = 0;
-  let model: string | null = null;
-  let hasUsage = false;
-
-  for (const { message } of group.messages) {
-    const msg = message as unknown as Record<string, unknown>;
-    if (msg.role !== 'assistant') continue;
-    const usage = msg.usage as Record<string, number> | undefined;
-    if (usage) {
-      hasUsage = true;
-      input += usage.input ?? usage.inputTokens ?? 0;
-      output += usage.output ?? usage.outputTokens ?? 0;
-      cacheRead += usage.cacheRead ?? usage.cache_read_input_tokens ?? 0;
-      cacheWrite += usage.cacheWrite ?? usage.cache_creation_input_tokens ?? 0;
-    }
-    const messageCost = msg.cost as Record<string, number> | undefined;
-    if (messageCost?.total) cost += messageCost.total;
-    if (typeof msg.model === 'string' && msg.model !== 'gateway-injected') {
-      model = msg.model;
-    }
-  }
-
-  if (!hasUsage && !model) return null;
-
-  const contextPercent =
-    contextWindow && input > 0 ? Math.min(Math.round((input / contextWindow) * 100), 100) : null;
-
-  return { input, output, cacheRead, cacheWrite, cost, model, contextPercent };
-}
-
 function fmtTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
   return String(n);
-}
-
-function extractGroupSearchText(group: MessageGroup): string {
-  return group.messages
-    .map(({ message }) => extractText(message)?.trim() ?? '')
-    .filter(Boolean)
-    .join('\n')
-    .toLowerCase();
 }
 
 const MessageMeta = memo(function MessageMeta({ meta, labels }: { meta: GroupMeta | null; labels: ChatThreadLabels }) {
@@ -584,151 +97,6 @@ const MessageMeta = memo(function MessageMeta({ meta, labels }: { meta: GroupMet
   if (parts.length === 0) return null;
   return <span className="msg-meta">{parts}</span>;
 });
-
-function formatChatTime(timestamp: number, locale: string): string {
-  return new Date(timestamp).toLocaleTimeString(locale, {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: false,
-  });
-}
-
-function formatArgs(value: unknown): string {
-  if (value == null) return '';
-  if (typeof value === 'string') return value;
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
-
-function defaultToolTitle(name: string): string {
-  const cleaned = name.replace(/_/g, ' ').trim();
-  if (!cleaned) return 'Tool';
-  return cleaned
-    .split(/\s+/)
-    .map((part) => `${part.at(0)?.toUpperCase() ?? ''}${part.slice(1)}`)
-    .join(' ');
-}
-
-function lookupValueByPath(args: unknown, path: string): unknown {
-  if (!args || typeof args !== 'object') return undefined;
-  let current: unknown = args;
-  for (const segment of path.split('.')) {
-    if (!segment || !current || typeof current !== 'object') return undefined;
-    current = (current as Record<string, unknown>)[segment];
-  }
-  return current;
-}
-
-function resolvePathArg(args: unknown): string | undefined {
-  for (const key of ['path', 'file_path', 'filePath']) {
-    const value = lookupValueByPath(args, key);
-    if (typeof value === 'string' && value.trim()) return value.trim();
-  }
-  return undefined;
-}
-
-function resolveReadDetail(args: unknown): string | undefined {
-  const path = resolvePathArg(args);
-  if (!path) return undefined;
-  const offset = lookupValueByPath(args, 'offset');
-  const limit = lookupValueByPath(args, 'limit');
-  const offsetNum = typeof offset === 'number' && Number.isFinite(offset) ? Math.max(1, Math.floor(offset)) : undefined;
-  const limitNum = typeof limit === 'number' && Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : undefined;
-  if (offsetNum !== undefined && limitNum !== undefined) {
-    const unit = limitNum === 1 ? 'line' : 'lines';
-    return `${unit} ${offsetNum}-${offsetNum + limitNum - 1} from ${path}`;
-  }
-  if (offsetNum !== undefined) return `from line ${offsetNum} in ${path}`;
-  if (limitNum !== undefined) return `first ${limitNum} ${limitNum === 1 ? 'line' : 'lines'} of ${path}`;
-  return `from ${path}`;
-}
-
-function resolveWriteDetail(toolName: string, args: unknown): string | undefined {
-  const path = resolvePathArg(args) ?? (typeof lookupValueByPath(args, 'url') === 'string' ? String(lookupValueByPath(args, 'url')).trim() : undefined);
-  if (!path) return undefined;
-  const destinationPrefix = toolName === 'edit' ? 'in' : 'to';
-  const content = ['content', 'newText', 'new_string']
-    .map((key) => lookupValueByPath(args, key))
-    .find((value): value is string => typeof value === 'string' && value.length > 0);
-  if (content) return `${destinationPrefix} ${path} (${content.length} chars)`;
-  return `${destinationPrefix} ${path}`;
-}
-
-function resolveExecDetail(args: unknown): string | undefined {
-  if (!args || typeof args !== 'object') return undefined;
-  const command = lookupValueByPath(args, 'command');
-  const workdir = lookupValueByPath(args, 'workdir');
-  if (typeof command !== 'string' || !command.trim()) return undefined;
-  const firstLine = command.trim().split(/\r?\n/)[0] ?? '';
-  if (typeof workdir === 'string' && workdir.trim()) {
-    return `${firstLine} (in ${workdir.trim()})`;
-  }
-  return firstLine;
-}
-
-function resolveToolDisplay(name: string, args: unknown, labels: ChatThreadLabels): ToolDisplay {
-  const normalized = name.trim().toLowerCase() || 'tool';
-  if (normalized === 'process') {
-    const sessionId = lookupValueByPath(args, 'sessionId');
-    return {
-      label: labels.process,
-      detail: typeof sessionId === 'string' && sessionId.trim() ? `with session ${sessionId.trim()}` : undefined,
-    };
-  }
-  if (normalized === 'read') {
-    return { label: labels.read, detail: resolveReadDetail(args) };
-  }
-  if (normalized === 'write' || normalized === 'edit' || normalized === 'attach') {
-    return { label: defaultToolTitle(normalized), detail: resolveWriteDetail(normalized, args) };
-  }
-  if (normalized === 'exec') {
-    return { label: labels.exec, detail: resolveExecDetail(args) };
-  }
-  return { label: defaultToolTitle(normalized) };
-}
-
-function previewText(text: string): string {
-  const lines = text.split('\n');
-  const preview = lines.slice(0, 2).join('\n');
-  return preview.length > 100 ? `${preview.slice(0, 100)}...` : (lines.length > 2 ? `${preview}...` : preview);
-}
-
-function formatReasoningMarkdown(text: string, labels: ChatThreadLabels): string {
-  const trimmed = text.trim();
-  if (!trimmed) return '';
-  const lines = trimmed
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => `_${line}_`);
-  return lines.length ? [`_${labels.reasoning}:_`, ...lines].join('\n') : '';
-}
-
-function detectJson(text: string): { parsed: unknown; pretty: string } | null {
-  const trimmed = text.trim();
-  if (trimmed.length > 20000) return null;
-  if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      return { parsed, pretty: JSON.stringify(parsed, null, 2) };
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
-function jsonSummaryLabel(parsed: unknown): string {
-  if (Array.isArray(parsed)) return `Array (${parsed.length} items)`;
-  if (parsed && typeof parsed === 'object') {
-    const keys = Object.keys(parsed as Record<string, unknown>);
-    return keys.length <= 4 ? `{ ${keys.join(', ')} }` : `Object (${keys.length} keys)`;
-  }
-  return 'JSON';
-}
 
 const MessageMarkdown = memo(function MessageMarkdown({ text, labels }: { text: string; labels: ChatThreadLabels }) {
   const html = toSanitizedMarkdownHtml(text)
@@ -783,90 +151,6 @@ const CopyButton = memo(function CopyButton({ text }: { text: string }) {
     </button>
   );
 });
-
-
-function extractToolCards(message: RawMessage): ToolCard[] {
-  const m = message as unknown as Record<string, unknown>;
-  const content = Array.isArray(m.content) ? (m.content.filter(Boolean) as Array<Record<string, unknown>>) : [];
-  const cards: ToolCard[] = [];
-
-  for (const item of content) {
-    const kind = (typeof item.type === 'string' ? item.type : '').toLowerCase();
-    const isToolCall =
-      ['toolcall', 'tool_call', 'tooluse', 'tool_use'].includes(kind)
-      || (typeof item.name === 'string' && item.arguments != null);
-    if (isToolCall) {
-      let args: unknown = item.arguments ?? item.args;
-      if (typeof args === 'string') {
-        const trimmed = args.trim();
-        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-          try {
-            args = JSON.parse(trimmed);
-          } catch {
-            args = trimmed;
-          }
-        }
-      }
-      cards.push({
-        kind: 'call',
-        name: (item.name as string) ?? 'tool',
-        args,
-      });
-    }
-  }
-
-  for (const item of content) {
-    const kind = (typeof item.type === 'string' ? item.type : '').toLowerCase();
-    if (kind !== 'toolresult' && kind !== 'tool_result') continue;
-    const text =
-      typeof item.text === 'string'
-        ? item.text
-        : typeof item.content === 'string'
-          ? item.content
-          : undefined;
-    const name = typeof item.name === 'string' ? item.name : 'tool';
-    cards.push({ kind: 'result', name, text });
-  }
-
-  const lowerRole = typeof m.role === 'string' ? m.role.toLowerCase() : '';
-  if ((lowerRole === 'toolresult' || lowerRole === 'tool_result') && !cards.some((card) => card.kind === 'result')) {
-    const name =
-      (typeof m.toolName === 'string' && m.toolName)
-      || (typeof m.tool_name === 'string' && m.tool_name)
-      || 'tool';
-    const text = extractText(message) || undefined;
-    cards.push({ kind: 'result', name, text });
-  }
-
-  return cards;
-}
-
-function hasVisibleMessageContent(message: RawMessage, showThinking: boolean): boolean {
-  const m = message as unknown as Record<string, unknown>;
-  const role = typeof m.role === 'string' ? m.role : 'unknown';
-  const normalizedRole = normalizeRoleForGrouping(role);
-  const isToolResult =
-    String(role).toLowerCase() === 'toolresult'
-    || String(role).toLowerCase() === 'tool_result'
-    || typeof m.toolCallId === 'string'
-    || typeof m.tool_call_id === 'string';
-  const toolCards = extractToolCards(message);
-  const hasToolCards = toolCards.length > 0;
-  const hasImages = extractImages(message).length > 0;
-  const markdown = extractText(message)?.trim() ? extractText(message) : '';
-  const visibleToolCards = showThinking && hasToolCards;
-
-  if (!showThinking && (normalizedRole === 'tool' || isToolResult) && !markdown.trim()) {
-    return false;
-  }
-  if (!markdown && visibleToolCards && isToolResult) {
-    return true;
-  }
-  if (!markdown && !visibleToolCards && !hasImages) {
-    return false;
-  }
-  return true;
-}
 
 const ToolCards = memo(function ToolCards({
   cards,
@@ -996,6 +280,32 @@ const MessageImages = memo(function MessageImages({ message }: { message: RawMes
   );
 });
 
+const UserFileAttachments = memo(function UserFileAttachments({ message }: { message: RawMessage }) {
+  const files = (message._attachedFiles || []).filter((file) => !file.mimeType.startsWith('image/'));
+  if (files.length === 0) return null;
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {files.map((file, index) => (
+        <div
+          key={`${file.filePath || file.fileName}:${index}`}
+          className="flex max-w-[220px] items-center gap-2 rounded-[12px] border border-black/8 bg-black/4 px-2.5 py-2 dark:border-white/10 dark:bg-white/5"
+        >
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-black/6 text-muted-foreground dark:bg-white/8">
+            <FileText className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-xs font-medium">{file.fileName}</div>
+            <div className="text-[10px] text-muted-foreground">
+              {file.fileSize > 0 ? `${(file.fileSize / 1024).toFixed(file.fileSize >= 10240 ? 0 : 1)} KB` : file.mimeType}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+});
+
 const AssistantAttachments = memo(function AssistantAttachments({ message }: { message: RawMessage }) {
   const normalized = normalizeMessage(message);
   const attachments = normalized.content
@@ -1097,8 +407,9 @@ const GroupedMessage = memo(function GroupedMessage({
   const images = extractImages(message);
   const hasImages = images.length > 0;
   const markdown = extractText(message)?.trim() ? extractText(message) : '';
-  const extractedThinking = showThinking && role === 'assistant' ? extractThinking(message) : null;
-  const reasoningMarkdown = extractedThinking ? formatReasoningMarkdown(extractedThinking, labels) : null;
+  const reasoningMarkdown = role === 'assistant'
+    ? getReasoningMarkdown(message, showThinking, labels)
+    : null;
   const canCopyMarkdown = role === 'assistant' && Boolean(markdown.trim());
   const jsonResult = markdown && !isStreaming ? detectJson(markdown) : null;
   const visibleToolCards = showThinking && hasToolCards;
@@ -1154,6 +465,7 @@ const GroupedMessage = memo(function GroupedMessage({
           {toolMessageExpanded ? (
             <div className="chat-tool-msg-body">
               <MessageImages message={message} />
+              {normalizedRole === 'user' ? <UserFileAttachments message={message} /> : null}
               <AssistantAttachments message={message} />
               {reasoningMarkdown ? <div className="chat-thinking"><MessageMarkdown text={reasoningMarkdown} labels={labels} /></div> : null}
               {jsonResult ? (
@@ -1180,6 +492,7 @@ const GroupedMessage = memo(function GroupedMessage({
       ) : (
         <>
           <MessageImages message={message} />
+          {normalizedRole === 'user' ? <UserFileAttachments message={message} /> : null}
           <AssistantAttachments message={message} />
           {reasoningMarkdown ? <div className="chat-thinking"><MessageMarkdown text={reasoningMarkdown} labels={labels} /></div> : null}
           {jsonResult ? (
@@ -1346,7 +659,14 @@ const ReadingIndicator = memo(function ReadingIndicator({ inline = false }: { in
     <div className={cn(!inline && 'chat-group assistant')}>
       {!inline ? <Avatar role="assistant" /> : null}
       <div className={cn(!inline && 'chat-group-messages')}>
-        <div className={cn('chat-reading-indicator', inline && 'chat-reading-indicator--inline')} aria-hidden="true">
+        <div
+          className={cn(
+            'chat-bubble',
+            !inline && 'streaming',
+            'chat-bubble--reading'
+          )}
+          aria-hidden="true"
+        >
           <span className="chat-reading-indicator__dots">
             <span />
             <span />
@@ -1423,6 +743,8 @@ const BtwBubble = memo(function BtwBubble({
 
 export const ChatThread = memo(function ChatThread({
   messages,
+  pendingUserMessage,
+  pendingAssistantMessage,
   btwMessages,
   toolMessages,
   streamSegments,
@@ -1442,6 +764,8 @@ export const ChatThread = memo(function ChatThread({
   hideSearch,
 }: {
   messages: RawMessage[];
+  pendingUserMessage: RawMessage | null;
+  pendingAssistantMessage: RawMessage | null;
   btwMessages: RawMessage[];
   toolMessages: RawMessage[];
   streamSegments: StreamSegment[];
@@ -1507,6 +831,8 @@ export const ChatThread = memo(function ChatThread({
 
   const items = useMemo(() => buildChatItems({
     messages,
+    pendingUserMessage,
+    pendingAssistantMessage,
     toolMessages,
     streamSegments,
     streamingMessage,
@@ -1516,7 +842,7 @@ export const ChatThread = memo(function ChatThread({
     pendingFinal,
     showThinking,
     locale,
-  }), [locale, messages, toolMessages, streamSegments, streamingMessage, streamingStartedAt, sessionKey, sending, pendingFinal, showThinking]);
+  }), [locale, messages, pendingUserMessage, pendingAssistantMessage, toolMessages, streamSegments, streamingMessage, streamingStartedAt, sessionKey, sending, pendingFinal, showThinking]);
 
   // Context usage notice (>= 85% threshold)
   const contextNotice = useMemo<{ pct: number; used: number; limit: number } | null>(() => {
@@ -1549,7 +875,7 @@ export const ChatThread = memo(function ChatThread({
     return latest;
   }, [btwMessages, dismissedBtwAt]);
   useEffect(() => {
-    setDismissedBtwAt(null);
+    queueMicrotask(() => setDismissedBtwAt(null));
   }, [sessionKey]);
   const hiddenGroups = useMemo(() => getHiddenGroups(sessionKey), [sessionKey]);
   const deletedGroupOrder = useMemo(() => getDeletedGroupOrder(sessionKey), [sessionKey]);
@@ -1568,8 +894,8 @@ export const ChatThread = memo(function ChatThread({
   };
   void uiVersion;
 
-  const transcriptEntries = useMemo<TranscriptEntry[]>(() => {
-    const entries: TranscriptEntry[] = [];
+  const systemEntries = useMemo<Array<Extract<TranscriptEntry, { kind: 'notice' | 'side-result' }>>>(() => {
+    const entries: Array<Extract<TranscriptEntry, { kind: 'notice' | 'side-result' }>> = [];
     if (contextNotice) {
       entries.push({
         kind: 'notice',
@@ -1602,20 +928,27 @@ export const ChatThread = memo(function ChatThread({
         message: latestBtwMessage,
       });
     }
-    entries.push(...items);
     return entries;
   }, [
     canLoadEarlier,
     contextNotice,
     hasCompactionSummary,
     historyWindowLimited,
-    items,
     labels.historyCompacted,
     labels.historyWindowLimited,
     labels.loadingEarlier,
     latestBtwMessage,
     loadingEarlierHistory,
   ]);
+
+  const transcriptEntries = useMemo<TranscriptEntry[]>(
+    () => items.filter((item) => item.kind !== 'stream' && item.kind !== 'reading-indicator'),
+    [items],
+  );
+  const liveActivityEntries = useMemo<Array<Extract<TranscriptEntry, { kind: 'stream' | 'reading-indicator' }>>>(
+    () => items.filter((item) => item.kind === 'stream' || item.kind === 'reading-indicator'),
+    [items],
+  );
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const filteredEntries = useMemo(() => {
     if (!normalizedSearchQuery) {
@@ -1634,7 +967,7 @@ export const ChatThread = memo(function ChatThread({
       return false;
     });
   }, [normalizedSearchQuery, transcriptEntries]);
-  const visibleEntries = useMemo(() => {
+  const visibleTranscriptEntries = useMemo(() => {
     if (!normalizedSearchQuery) {
       return transcriptEntries;
     }
@@ -1692,23 +1025,23 @@ export const ChatThread = memo(function ChatThread({
           </button>
         </div>
       ) : null}
-      {normalizedSearchQuery && visibleEntries.length === 0 ? (
+      {normalizedSearchQuery && visibleTranscriptEntries.length === 0 ? (
         <div className="chat-thread-empty-search">{labels.noResults}</div>
       ) : null}
-      {visibleEntries.map((item) => {
+      {!normalizedSearchQuery ? systemEntries.map((item) => {
         if (item.kind === 'notice') {
           return <TranscriptNotice key={item.key} message={item.message} detail={item.detail} icon={item.icon} />;
         }
-        if (item.kind === 'side-result') {
-          return (
-            <BtwBubble
-              key={item.key}
-              message={item.message}
-              labels={labels}
-              onDismiss={() => setDismissedBtwAt(toDisplayTimestampMs(item.message.timestamp ?? Date.now()))}
-            />
-          );
-        }
+        return (
+          <BtwBubble
+            key={item.key}
+            message={item.message}
+            labels={labels}
+            onDismiss={() => setDismissedBtwAt(toDisplayTimestampMs(item.message.timestamp ?? Date.now()))}
+          />
+        );
+      }) : null}
+      {visibleTranscriptEntries.map((item) => {
         if (item.kind === 'divider') {
           return <TranscriptDivider key={item.key} label={item.label} />;
         }
@@ -1736,6 +1069,9 @@ export const ChatThread = memo(function ChatThread({
             />
           );
         }
+        return null;
+      })}
+      {!normalizedSearchQuery ? liveActivityEntries.map((item) => {
         if (item.kind === 'stream') {
           return (
             <StreamingGroup
@@ -1748,7 +1084,7 @@ export const ChatThread = memo(function ChatThread({
           );
         }
         return <ReadingIndicator key={item.key} />;
-      })}
+      }) : null}
     </div>
   );
 });

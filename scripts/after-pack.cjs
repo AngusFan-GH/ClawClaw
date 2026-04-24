@@ -19,8 +19,8 @@
  *      @mariozechner/clipboard).
  */
 
-const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync } = require('fs');
-const { join } = require('path');
+const { cpSync, existsSync, readFileSync, readdirSync, rmSync, mkdirSync, writeFileSync, statSync } = require('fs');
+const { join, dirname, sep, relative } = require('path');
 const {
   validateBundledNodeModules,
   formatValidationIssues,
@@ -163,16 +163,52 @@ function cleanupKoffi(nodeModulesDir, platform, arch) {
 // ── Platform-specific: scoped native packages ────────────────────────────────
 // Packages like @napi-rs/canvas-darwin-arm64, @img/sharp-linux-x64, etc.
 // Only the variant matching the target platform should survive.
+//
+// Some packages use non-standard platform names:
+//   - @node-llama-cpp: "mac" instead of "darwin", "win" instead of "win32"
+//   - sqlite-vec: "windows" instead of "win32" (unscoped, handled separately)
+// We normalise them before comparison.
 
+const PLATFORM_ALIASES = {
+  darwin: 'darwin', mac: 'darwin',
+  linux: 'linux', linuxmusl: 'linux',
+  win32: 'win32', win: 'win32', windows: 'win32',
+};
+
+// Each regex MUST have capture group 1 = platform name and group 2 = arch name.
+// Compound arch suffixes (e.g. "x64-msvc", "arm64-gnu", "arm64-metal") are OK —
+// we strip the suffix after the first dash to get the base arch.
 const PLATFORM_NATIVE_SCOPES = {
   '@napi-rs': /^canvas-(darwin|linux|win32)-(x64|arm64)/,
-  '@img': /^sharp(?:-libvips)?-(darwin|linux|win32)-(x64|arm64)/,
+  '@img': /^sharp(?:-libvips)?-(darwin|linux|win32)-(x64|arm64|arm|ppc64|riscv64|s390x)/,
   '@mariozechner': /^clipboard-(darwin|linux|win32)-(x64|arm64|universal)/,
+  '@snazzah': /^davey-(darwin|linux|android|freebsd|win32|wasm32)-(x64|arm64|arm|ia32|arm64-gnu|arm64-musl|x64-gnu|x64-musl|x64-msvc|arm64-msvc|ia32-msvc|arm-eabi|arm-gnueabihf|wasi)/,
+  '@lydell': /^node-pty-(darwin|linux|win32)-(x64|arm64)/,
+  '@reflink': /^reflink-(darwin|linux|win32)-(x64|arm64|x64-gnu|x64-musl|arm64-gnu|arm64-musl|x64-msvc|arm64-msvc)/,
+  '@node-llama-cpp': /^(mac|linux|win)-(arm64|x64|armv7l)(-metal|-cuda|-cuda-ext|-vulkan)?$/,
+  '@esbuild': /^(darwin|linux|win32|android|freebsd|netbsd|openbsd|sunos|aix|openharmony)-(x64|arm64|arm|ia32|loong64|mips64el|ppc64|riscv64|s390x)/,
 };
+
+// Unscoped packages that follow a <name>-<platform>-<arch> convention.
+// Each entry: { prefix, pattern } where pattern captures (platform, arch).
+const UNSCOPED_NATIVE_PACKAGES = [
+  // sqlite-vec uses "windows" instead of "win32"
+  { pattern: /^sqlite-vec-(darwin|linux|windows)-(x64|arm64)$/ },
+];
+
+/**
+ * Normalise the base arch from a potentially compound value.
+ * e.g. "x64-msvc" → "x64", "arm64-gnu" → "arm64", "arm64-metal" → "arm64"
+ */
+function baseArch(rawArch) {
+  const dash = rawArch.indexOf('-');
+  return dash > 0 ? rawArch.slice(0, dash) : rawArch;
+}
 
 function cleanupNativePlatformPackages(nodeModulesDir, platform, arch) {
   let removed = 0;
 
+  // 1. Scoped packages (e.g. @snazzah/davey-darwin-arm64)
   for (const [scope, pattern] of Object.entries(PLATFORM_NATIVE_SCOPES)) {
     const scopeDir = join(nodeModulesDir, scope);
     if (!existsSync(scopeDir)) continue;
@@ -181,8 +217,8 @@ function cleanupNativePlatformPackages(nodeModulesDir, platform, arch) {
       const match = entry.match(pattern);
       if (!match) continue; // not a platform-specific package, leave it
 
-      const pkgPlatform = match[1];
-      const pkgArch = match[2];
+      const pkgPlatform = PLATFORM_ALIASES[match[1]] || match[1];
+      const pkgArch = baseArch(match[2]);
 
       const isMatch =
         pkgPlatform === platform &&
@@ -191,6 +227,31 @@ function cleanupNativePlatformPackages(nodeModulesDir, platform, arch) {
       if (!isMatch) {
         try {
           rmSync(join(scopeDir, entry), { recursive: true, force: true });
+          removed++;
+        } catch { /* */ }
+      }
+    }
+  }
+
+  // 2. Unscoped packages (e.g. sqlite-vec-darwin-arm64)
+  for (const { pattern } of UNSCOPED_NATIVE_PACKAGES) {
+    let entries;
+    try { entries = readdirSync(nodeModulesDir); } catch { continue; }
+
+    for (const entry of entries) {
+      const match = entry.match(pattern);
+      if (!match) continue;
+
+      const pkgPlatform = PLATFORM_ALIASES[match[1]] || match[1];
+      const pkgArch = baseArch(match[2]);
+
+      const isMatch =
+        pkgPlatform === platform &&
+        (pkgArch === arch || pkgArch === 'universal');
+
+      if (!isMatch) {
+        try {
+          rmSync(join(nodeModulesDir, entry), { recursive: true, force: true });
           removed++;
         } catch { /* */ }
       }
@@ -234,9 +295,90 @@ function patchBrokenModules(nodeModulesDir) {
     }
   }
   count += patchKnownDependencyMetadata(nodeModulesDir);
+
+  // ── lru-cache CJS/ESM interop fix ──────────────────────────────────────────
+  // Multiple versions of lru-cache may exist in the output tree — not just
+  // at node_modules/lru-cache/ but also nested inside other packages.
+  // Older CJS versions (v5, v6) export the class via `module.exports = LRUCache`
+  // without a named `LRUCache` property, so `import { LRUCache } from 'lru-cache'`
+  // fails in Node.js 22+ ESM interop (used by Electron 40+).
+  // We recursively scan the entire output for ALL lru-cache installations and
+  // patch each CJS entry to ensure `exports.LRUCache` always exists.
+  count += patchAllLruCacheInstances(nodeModulesDir);
+
   if (count > 0) {
     console.log(`[after-pack] 🩹 Patched ${count} broken module(s) in ${nodeModulesDir}`);
   }
+}
+
+// ── lru-cache recursive patcher ───────────────────────────────────────────────
+
+function patchAllLruCacheInstances(rootDir) {
+  let lruCount = 0;
+  const stack = [rootDir];
+  while (stack.length > 0) {
+    const dir = stack.pop();
+    let entries;
+    try { entries = readdirSync(normWin(dir), { withFileTypes: true }); } catch { continue; }
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      let isDirectory = entry.isDirectory();
+      if (!isDirectory) {
+        // pnpm layout may contain symlink/junction directories on Windows.
+        try { isDirectory = statSync(normWin(fullPath)).isDirectory(); } catch { isDirectory = false; }
+      }
+      if (!isDirectory) continue;
+      if (entry.name === 'lru-cache') {
+        const pkgPath = join(fullPath, 'package.json');
+        if (!existsSync(normWin(pkgPath))) { stack.push(fullPath); continue; }
+        try {
+          const pkg = JSON.parse(readFileSync(normWin(pkgPath), 'utf8'));
+          if (pkg.type === 'module') continue; // ESM version — already has named exports
+          const mainFile = pkg.main || 'index.js';
+          const entryFile = join(fullPath, mainFile);
+          if (!existsSync(normWin(entryFile))) continue;
+          const original = readFileSync(normWin(entryFile), 'utf8');
+          if (!original.includes('exports.LRUCache')) {
+            const patched = [
+              original,
+              '',
+              '// ClawClaw patch: add LRUCache named export for Node.js 22+ ESM interop',
+              'if (typeof module.exports === "function" && !module.exports.LRUCache) {',
+              '  module.exports.LRUCache = module.exports;',
+              '}',
+              '',
+            ].join('\n');
+            writeFileSync(normWin(entryFile), patched, 'utf8');
+            lruCount++;
+            console.log(`[after-pack] 🩹 Patched lru-cache CJS (v${pkg.version}) at ${relative(rootDir, fullPath)}`);
+          }
+
+          // lru-cache v7 ESM entry exports default only; add named export.
+          const moduleFile = typeof pkg.module === 'string' ? pkg.module : null;
+          if (moduleFile) {
+            const esmEntry = join(fullPath, moduleFile);
+            if (existsSync(normWin(esmEntry))) {
+              const esmOriginal = readFileSync(normWin(esmEntry), 'utf8');
+              if (
+                esmOriginal.includes('export default LRUCache') &&
+                !esmOriginal.includes('export { LRUCache')
+              ) {
+                const esmPatched = [esmOriginal, '', 'export { LRUCache }', ''].join('\n');
+                writeFileSync(normWin(esmEntry), esmPatched, 'utf8');
+                lruCount++;
+                console.log(`[after-pack] 🩹 Patched lru-cache ESM (v${pkg.version}) at ${relative(rootDir, fullPath)}`);
+              }
+            }
+          }
+        } catch (err) {
+          console.warn(`[after-pack] ⚠️ Failed to patch lru-cache at ${fullPath}:`, err.message);
+        }
+      } else {
+        stack.push(fullPath);
+      }
+    }
+  }
+  return lruCount;
 }
 
 function patchKnownDependencyMetadata(nodeModulesDir) {
@@ -353,7 +495,8 @@ exports.default = async function afterPack(context) {
   //       directory doesn't exist (build/openclaw-plugins/ may not be pre-generated)
   //     - node_modules/ is excluded by .gitignore so the deps copy must be manual
   const BUNDLED_PLUGINS = [
-    { npmName: '@openclaw-china/channels', pluginId: 'channels' },
+    { npmName: '@openclaw-china/dingtalk', pluginId: 'dingtalk' },
+    { npmName: '@openclaw-china/wecom', pluginId: 'wecom' },
     { npmName: '@tencent-weixin/openclaw-weixin', pluginId: 'openclaw-weixin' },
   ];
 
@@ -413,4 +556,87 @@ exports.default = async function afterPack(context) {
 
     console.log('[after-pack] ✅ Windows CLI runtime validated (node.exe + wrapper + entry script).');
   }
+
+  // 6. Patch lru-cache in app.asar.unpacked.
+  //
+  // Production dependencies (electron-updater → semver → lru-cache@6,
+  // posthog-node → proxy agents → lru-cache@7, etc.) end up inside app.asar.
+  // Older CJS versions lack the `LRUCache` named export, breaking
+  // `import { LRUCache }` in Electron 40+ (Node.js 22+ ESM interop).
+  //
+  // electron-builder.yml lists `**/node_modules/lru-cache/**` in asarUnpack,
+  // which extracts those files to app.asar.unpacked/.  We patch them here so
+  // Electron's transparent asar fs layer serves the fixed version at runtime.
+  const asarUnpackedDir = join(resourcesDir, 'app.asar.unpacked');
+  if (existsSync(asarUnpackedDir)) {
+    const { readFileSync: readFS, writeFileSync: writeFS } = require('fs');
+    let asarLruCount = 0;
+    const lruStack = [asarUnpackedDir];
+    while (lruStack.length > 0) {
+      const dir = lruStack.pop();
+      let entries;
+      try { entries = readdirSync(normWin(dir), { withFileTypes: true }); } catch { continue; }
+      for (const entry of entries) {
+        const fullPath = join(dir, entry.name);
+        let isDirectory = entry.isDirectory();
+        if (!isDirectory) {
+          // pnpm layout may contain symlink/junction directories on Windows.
+          try { isDirectory = statSync(normWin(fullPath)).isDirectory(); } catch { isDirectory = false; }
+        }
+        if (!isDirectory) continue;
+        if (entry.name === 'lru-cache') {
+          const pkgPath = join(fullPath, 'package.json');
+          if (!existsSync(normWin(pkgPath))) { lruStack.push(fullPath); continue; }
+          try {
+            const pkg = JSON.parse(readFS(normWin(pkgPath), 'utf8'));
+            if (pkg.type === 'module') continue; // ESM — already exports LRUCache
+            const mainFile = pkg.main || 'index.js';
+            const entryFile = join(fullPath, mainFile);
+            if (!existsSync(normWin(entryFile))) continue;
+            const original = readFS(normWin(entryFile), 'utf8');
+            if (!original.includes('exports.LRUCache')) {
+              const patched = [
+                original,
+                '',
+                '// ClawClaw patch: add LRUCache named export for Node.js 22+ ESM interop',
+                'if (typeof module.exports === "function" && !module.exports.LRUCache) {',
+                '  module.exports.LRUCache = module.exports;',
+                '}',
+                '',
+              ].join('\n');
+              writeFS(normWin(entryFile), patched, 'utf8');
+              asarLruCount++;
+              console.log(`[after-pack] 🩹 Patched lru-cache CJS (v${pkg.version}) in app.asar.unpacked at ${relative(asarUnpackedDir, fullPath)}`);
+            }
+
+            // lru-cache v7 ESM entry exports default only; add named export.
+            const moduleFile = typeof pkg.module === 'string' ? pkg.module : null;
+            if (moduleFile) {
+              const esmEntry = join(fullPath, moduleFile);
+              if (existsSync(normWin(esmEntry))) {
+                const esmOriginal = readFS(normWin(esmEntry), 'utf8');
+                if (
+                  esmOriginal.includes('export default LRUCache') &&
+                  !esmOriginal.includes('export { LRUCache')
+                ) {
+                  const esmPatched = [esmOriginal, '', 'export { LRUCache }', ''].join('\n');
+                  writeFS(normWin(esmEntry), esmPatched, 'utf8');
+                  asarLruCount++;
+                  console.log(`[after-pack] 🩹 Patched lru-cache ESM (v${pkg.version}) in app.asar.unpacked at ${relative(asarUnpackedDir, fullPath)}`);
+                }
+              }
+            }
+          } catch (err) {
+            console.warn(`[after-pack] ⚠️ Failed to patch lru-cache in asar.unpacked at ${fullPath}:`, err.message);
+          }
+        } else {
+          lruStack.push(fullPath);
+        }
+      }
+    }
+    if (asarLruCount > 0) {
+      console.log(`[after-pack] 🩹 Patched ${asarLruCount} lru-cache instance(s) in app.asar.unpacked`);
+    }
+  }
+
 };

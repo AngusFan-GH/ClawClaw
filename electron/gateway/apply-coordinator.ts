@@ -40,6 +40,25 @@ type PendingApplyTask = {
 
 const DEFAULT_RELOAD_DELAY_MS = 1500;
 const DEFAULT_RESTART_DELAY_MS = 5000;
+const IN_FLIGHT_APPLY_WAIT_TIMEOUT_MS = 60_000;
+
+async function waitForInFlightApply(inFlight: Promise<void>): Promise<void> {
+  let timeout: NodeJS.Timeout | null = null;
+  try {
+    await Promise.race([
+      inFlight,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error('Timed out waiting for the current Gateway apply operation to finish'));
+        }, IN_FLIGHT_APPLY_WAIT_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
 
 function requirementSeverity(requirement: GatewayApplyRequirement): number {
   switch (requirement) {
@@ -147,7 +166,7 @@ export class GatewayApplyCoordinator {
     this.pendingTask = null;
 
     if (this.inFlight) {
-      await this.inFlight;
+      await waitForInFlightApply(this.inFlight);
     }
 
     return await this.executeTask({

@@ -2,9 +2,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createRequire } from 'node:module';
 
+const require = createRequire(import.meta.url);
 const {
   validateBundledNodeModules,
+  verifyBundledRuntimeResolutions,
 } = require('../../scripts/openclaw-bundle-validator.cjs');
 
 function writeJson(filePath: string, value: unknown) {
@@ -90,5 +93,24 @@ describe('openclaw bundle validator', () => {
     });
 
     expect(validateBundledNodeModules(nodeModulesRoot)).toEqual([]);
+  });
+
+  it('verifies required runtime specifiers resolve from the bundled root', () => {
+    const root = mkdtempSync(join(tmpdir(), 'clawx-bundle-validator-'));
+    tempDirs.push(root);
+    const nodeModulesRoot = join(root, 'node_modules');
+
+    writeJson(join(root, 'package.json'), { name: 'openclaw-bundle-test', version: '0.0.0' });
+    writeJson(join(nodeModulesRoot, 'https-proxy-agent', 'package.json'), {
+      name: 'https-proxy-agent',
+      version: '7.0.6',
+      main: './index.js',
+    });
+    writeFileSync(join(nodeModulesRoot, 'https-proxy-agent', 'index.js'), 'module.exports = {};');
+
+    expect(verifyBundledRuntimeResolutions(root, ['https-proxy-agent'])).toEqual([]);
+    expect(verifyBundledRuntimeResolutions(root, ['@slack/bolt'])).toEqual([
+      expect.objectContaining({ specifier: '@slack/bolt' }),
+    ]);
   });
 });

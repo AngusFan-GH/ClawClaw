@@ -270,7 +270,7 @@ export function ChannelConfigModal({
           token: meta?.configFields[0]?.key ? configValues[meta.configFields[0].key] : undefined,
         });
       } else {
-        await fetchChannels();
+        await fetchChannels(false, { includeRuntime: true });
       }
 
       await onChannelSaved?.(channelType, savedAccountId);

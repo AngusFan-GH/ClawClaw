@@ -1,19 +1,137 @@
 import { app } from 'electron';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { toFsPath } from './fs-path';
-import { getOpenClawDir } from './paths';
+import { getOpenClawDir, resolveOpenClawDir } from './paths';
 import {
   hasIncompatibleManagedPluginSdkImports,
   repairManagedPluginSdkImports,
 } from './plugin-sdk-compat';
+import { logger } from './logger';
+
+// ── Known plugin-ID corrections ─────────────────────────────────────────────
+// Some npm packages ship with an openclaw.plugin.json whose "id" field
+// doesn't match the ID the plugin code actually exports.  After copying we
+// patch both the manifest AND the compiled JS so the Gateway accepts them.
+const MANIFEST_ID_FIXES: Record<string, string> = {
+  'wecom-openclaw-plugin': 'wecom',
+  'openclaw-lark': 'feishu',
+};
 
 export interface BundledPluginInstallResult {
   installed: boolean;
   changed?: boolean;
   warning?: string;
   sourceDir?: string;
+}
+
+// ── Manifest ID fixup ────────────────────────────────────────────────────────
+
+/**
+ * After a plugin has been copied to ~/.openclaw/extensions/<dir>, fix any
+ * known manifest-ID mismatches so the Gateway can load the plugin.
+ * Also patches package.json fields that the Gateway uses as "entry hints".
+ */
+function fixupPluginManifest(targetDir: string): void {
+  // 1. Fix openclaw.plugin.json id
+  const manifestPath = join(targetDir, 'openclaw.plugin.json');
+  try {
+    const raw = readFileSync(manifestPath, 'utf-8');
+    const manifest = JSON.parse(raw) as Record<string, unknown>;
+    const oldId = manifest.id as string | undefined;
+    if (oldId && MANIFEST_ID_FIXES[oldId]) {
+      const newId = MANIFEST_ID_FIXES[oldId];
+      manifest.id = newId;
+      writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
+      logger.info(`[plugin] Fixed manifest ID: ${oldId} → ${newId}`);
+    }
+  } catch {
+    // manifest may not exist yet — ignore
+  }
+
+  // 2. Fix package.json fields that Gateway uses as "entry hints"
+  const pkgPath = join(targetDir, 'package.json');
+  try {
+    const raw = readFileSync(pkgPath, 'utf-8');
+    const pkg = JSON.parse(raw) as Record<string, unknown>;
+    let modified = false;
+
+    for (const [oldId, newId] of Object.entries(MANIFEST_ID_FIXES)) {
+      if (typeof pkg.name === 'string' && pkg.name.includes(oldId)) {
+        pkg.name = pkg.name.replace(oldId, newId);
+        modified = true;
+      }
+      const openclaw = pkg.openclaw as Record<string, unknown> | undefined;
+      if (openclaw) {
+        if (typeof openclaw.install === 'object' && openclaw.install !== null) {
+          const install = openclaw.install as Record<string, unknown>;
+          if (typeof install.npmSpec === 'string' && install.npmSpec.includes(oldId)) {
+            install.npmSpec = install.npmSpec.replace(oldId, newId);
+            modified = true;
+          }
+          if (typeof install.localPath === 'string' && install.localPath.includes(oldId)) {
+            install.localPath = install.localPath.replace(oldId, newId);
+            modified = true;
+          }
+        }
+      }
+    }
+
+    if (modified) {
+      writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
+      logger.info(`[plugin] Fixed package.json entry hints in ${targetDir}`);
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Fix hardcoded plugin IDs in compiled JS entry files.
+  patchPluginEntryIds(targetDir);
+}
+
+/**
+ * Patch compiled JS entry files so the hardcoded `id` field in the
+ * plugin export matches the manifest.  Without this, the Gateway rejects
+ * the plugin with "plugin id mismatch".
+ */
+function patchPluginEntryIds(targetDir: string): void {
+  const pkgPath = join(targetDir, 'package.json');
+  let pkg: Record<string, unknown>;
+  try {
+    pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+  } catch {
+    return;
+  }
+
+  const entryFiles = [pkg.main, pkg.module].filter(Boolean) as string[];
+
+  for (const entry of entryFiles) {
+    const entryPath = join(targetDir, entry);
+    if (!existsSync(entryPath)) continue;
+
+    let content: string;
+    try {
+      content = readFileSync(entryPath, 'utf-8');
+    } catch {
+      continue;
+    }
+
+    let patched = false;
+    for (const [wrongId, correctId] of Object.entries(MANIFEST_ID_FIXES)) {
+      const escapedWrongId = wrongId.replace(/-/g, '\\-');
+      const pattern = new RegExp(`(\\bid\\s*:\\s*)(["'])${escapedWrongId}\\2`, 'g');
+      const replaced = content.replace(pattern, `$1$2${correctId}$2`);
+      if (replaced !== content) {
+        content = replaced;
+        patched = true;
+        logger.info(`[plugin] Patched plugin ID in ${entry}: "${wrongId}" → "${correctId}"`);
+      }
+    }
+
+    if (patched) {
+      writeFileSync(entryPath, content, 'utf-8');
+    }
+  }
 }
 
 function finalizeInstalledManagedPlugin(
@@ -23,6 +141,8 @@ function finalizeInstalledManagedPlugin(
   displayName: string,
   sourceDir: string,
 ): BundledPluginInstallResult {
+  // Fix manifest ID, package.json entry hints, and compiled JS IDs.
+  fixupPluginManifest(targetDir);
   repairManagedPluginSdkImports(targetDir);
 
   if (!existsSync(targetManifest)) {
@@ -169,7 +289,7 @@ export function ensureBundledPluginInstalled(
   displayName: string,
   options?: { forceReinstall?: boolean },
 ): BundledPluginInstallResult {
-  const targetDir = join(homedir(), '.openclaw', 'extensions', pluginId);
+  const targetDir = join(resolveOpenClawDir(), 'extensions', pluginId);
   const targetManifest = join(targetDir, 'openclaw.plugin.json');
   const sourceDir = findBundledPluginMirror(pluginId);
   const forceReinstall = options?.forceReinstall === true;
@@ -207,7 +327,7 @@ export function ensureBundledPluginInstalled(
   }
 
   try {
-    mkdirSync(toFsPath(join(homedir(), '.openclaw', 'extensions')), { recursive: true });
+    mkdirSync(toFsPath(join(resolveOpenClawDir(), 'extensions')), { recursive: true });
     rmSync(toFsPath(targetDir), { recursive: true, force: true });
     cpSync(toFsPath(sourceDir), toFsPath(targetDir), { recursive: true, dereference: true });
     return finalizeInstalledManagedPlugin(targetDir, targetManifest, pluginId, displayName, sourceDir);

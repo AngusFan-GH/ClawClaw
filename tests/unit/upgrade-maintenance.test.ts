@@ -8,6 +8,10 @@ const mockFns = vi.hoisted(() => ({
   ensureProviderStoreMigrated: vi.fn(async () => undefined),
   runOpenClawStartupPreflightRepair: vi.fn(async () => undefined),
   getLastStartupPreflightRecovery: vi.fn(() => ({ kind: 'preflight', topics: ['config'] })),
+  cleanupDanglingWeChatPluginState: vi.fn(async () => ({ cleanedDanglingState: false })),
+  cleanupLegacyChannelPlugins: vi.fn(async () => ({ cleaned: false })),
+  migrateLegacyLocalModelAccounts: vi.fn(async () => undefined),
+  cleanupOrphanLocalModelRuntimeAccounts: vi.fn(async () => ({ removedAccountIds: [] })),
   runOpenClawDoctorFix: vi.fn(async () => ({
     mode: 'fix',
     status: 'success_with_warnings',
@@ -20,7 +24,7 @@ const mockFns = vi.hoisted(() => ({
     durationMs: 10,
     warnings: ['warning'],
   })),
-  readFile: vi.fn(async () => JSON.stringify({ version: '2026.4.2' })),
+  readFile: vi.fn(async () => JSON.stringify({ version: '2026.4.15' })),
 }));
 
 vi.mock('electron', () => ({
@@ -59,8 +63,23 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return {
     ...actual,
-    default: actual,
     readFile: mockFns.readFile,
+    default: {
+      ...actual,
+      readFile: mockFns.readFile,
+    },
+  };
+});
+
+vi.mock('fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs/promises')>();
+  return {
+    ...actual,
+    readFile: mockFns.readFile,
+    default: {
+      ...actual,
+      readFile: mockFns.readFile,
+    },
   };
 });
 
@@ -73,6 +92,16 @@ vi.mock('@electron/gateway/config-sync', () => ({
   getLastStartupPreflightRecovery: mockFns.getLastStartupPreflightRecovery,
 }));
 
+vi.mock('@electron/utils/channel-config', () => ({
+  cleanupDanglingWeChatPluginState: mockFns.cleanupDanglingWeChatPluginState,
+  cleanupLegacyChannelPlugins: mockFns.cleanupLegacyChannelPlugins,
+}));
+
+vi.mock('@electron/services/providers/local-model-presets', () => ({
+  migrateLegacyLocalModelAccounts: mockFns.migrateLegacyLocalModelAccounts,
+  cleanupOrphanLocalModelRuntimeAccounts: mockFns.cleanupOrphanLocalModelRuntimeAccounts,
+}));
+
 vi.mock('@electron/utils/openclaw-doctor', () => ({
   OPENCLAW_DOCTOR_FIX_TIMEOUT_MS: 120_000,
   runOpenClawDoctorFix: mockFns.runOpenClawDoctorFix,
@@ -83,7 +112,7 @@ describe('upgrade maintenance', () => {
     vi.resetModules();
     vi.clearAllMocks();
     storeState.stores.clear();
-    mockFns.readFile.mockResolvedValue(JSON.stringify({ version: '2026.4.2' }));
+    mockFns.readFile.mockResolvedValue(JSON.stringify({ version: '2026.4.15' }));
   });
 
   it('runs once when current versions have not been recorded yet', async () => {
@@ -103,8 +132,8 @@ describe('upgrade maintenance', () => {
     expect(mockFns.runOpenClawDoctorFix).toHaveBeenCalledWith({ timeoutMs: 120_000 });
 
     const persisted = storeState.stores.get('upgrade-state') || {};
-    expect(persisted.lastPreflightOpenClawVersion).toBe('2026.4.2');
-    expect(persisted.lastDoctorFixOpenClawVersion).toBe('2026.4.2');
+    expect(persisted.lastPreflightOpenClawVersion).toBe('2026.4.15');
+    expect(persisted.lastDoctorFixOpenClawVersion).toBe('2026.4.15');
     expect(persisted.lastDoctorFixStatus).toBe('success_with_warnings');
     expect(persisted.lastDoctorFixWarningCount).toBe(1);
   });
@@ -112,7 +141,7 @@ describe('upgrade maintenance', () => {
   it('does not rerun when recorded versions already match the current app and openclaw', async () => {
     storeState.stores.set('upgrade-state', {
       lastAppVersion: '0.1.16',
-      lastOpenClawVersion: '2026.4.2',
+      lastOpenClawVersion: '2026.4.15',
     });
 
     const { performUpgradeMaintenanceIfNeeded } = await import('@electron/utils/upgrade-maintenance');
@@ -125,5 +154,32 @@ describe('upgrade maintenance', () => {
     expect(mockFns.ensureProviderStoreMigrated).not.toHaveBeenCalled();
     expect(mockFns.runOpenClawStartupPreflightRepair).not.toHaveBeenCalled();
     expect(mockFns.runOpenClawDoctorFix).not.toHaveBeenCalled();
+  });
+
+  it('runs legacy cleanup and forces doctor fix for upgrades from 0.1.15 and earlier', async () => {
+    storeState.stores.set('upgrade-state', {
+      lastAppVersion: '0.1.15',
+      lastOpenClawVersion: '2026.4.15',
+    });
+
+    const { performUpgradeMaintenanceIfNeeded, isLegacyInstallUpgradeVersion } = await import('@electron/utils/upgrade-maintenance');
+
+    expect(isLegacyInstallUpgradeVersion('0.1.15')).toBe(true);
+    expect(isLegacyInstallUpgradeVersion('0.1.16')).toBe(false);
+
+    const result = await performUpgradeMaintenanceIfNeeded();
+
+    expect(result.triggered).toBe(true);
+    expect(result.legacyUpgradeRan).toBe(true);
+    expect(result.doctorFixRan).toBe(true);
+    expect(mockFns.migrateLegacyLocalModelAccounts).toHaveBeenCalledTimes(1);
+    expect(mockFns.cleanupDanglingWeChatPluginState).toHaveBeenCalledTimes(1);
+    expect(mockFns.cleanupLegacyChannelPlugins).toHaveBeenCalledTimes(1);
+    expect(mockFns.cleanupOrphanLocalModelRuntimeAccounts).toHaveBeenCalledTimes(1);
+    expect(mockFns.runOpenClawDoctorFix).toHaveBeenCalledTimes(1);
+
+    const persisted = storeState.stores.get('upgrade-state') || {};
+    expect(persisted.lastLegacyUpgradeFromVersion).toBe('0.1.15');
+    expect(typeof persisted.lastLegacyUpgradeAt).toBe('string');
   });
 });

@@ -74,6 +74,7 @@ type RuntimeProviderSyncContext = {
   meta: ReturnType<typeof getProviderConfig>;
   api: string;
   disableTools: boolean;
+  allowPrivateNetwork: boolean;
 };
 
 type GatewayRefreshMode = 'reload' | 'restart';
@@ -88,6 +89,30 @@ type GatewayRefreshRequest = {
 };
 
 let gatewayRefreshScheduler: ((request: GatewayRefreshRequest) => void) | null = null;
+
+function resolveProviderGatewayRefreshMode(
+  config: ProviderConfig,
+  runtimeProviderKey?: string,
+): GatewayRefreshMode {
+  // Mirror OpenClaw's gateway reload plan:
+  // - `models.*` and `agents.defaults.model` are hot-reloadable
+  // - `plugins.*` requires a full gateway restart
+  //
+  // Our provider sync writes `plugins.entries.*` only for the OAuth plugin-backed
+  // portal providers. Everything else should stay on reload so model/provider
+  // edits do not force unnecessary restarts.
+  if (
+    config.type === 'qwen-portal'
+    || config.type === 'minimax-portal'
+    || config.type === 'minimax-portal-cn'
+    || runtimeProviderKey === 'qwen-portal'
+    || runtimeProviderKey === 'minimax-portal'
+  ) {
+    return 'restart';
+  }
+
+  return 'reload';
+}
 
 function buildAgentProviderModels(
   providerType: string,
@@ -503,6 +528,7 @@ async function resolveRuntimeSyncContext(config: ProviderConfig): Promise<Runtim
     meta,
     api,
     disableTools: config.type === 'vllm',
+    allowPrivateNetwork: account?.metadata?.allowPrivateNetwork === true,
   };
 }
 
@@ -520,6 +546,7 @@ async function syncRuntimeProviderConfig(
     apiKeyEnv: context.meta?.apiKeyEnv,
     headers: context.meta?.headers,
     disableTools: context.disableTools,
+    allowPrivateNetwork: context.allowPrivateNetwork,
   });
 }
 
@@ -588,9 +615,11 @@ export async function syncSavedProviderToRuntime(
   await rebuildOpenClawModelAllowlistFromAccounts();
   await reconcileRuntimeProvidersFromAccounts();
 
+  const refreshMode = resolveProviderGatewayRefreshMode(config, context.runtimeProviderKey);
   scheduleGatewayRefresh(
     gatewayManager,
-    `Scheduling Gateway restart after saving provider "${context.runtimeProviderKey}" config`,
+    `Scheduling Gateway ${refreshMode} after saving provider "${context.runtimeProviderKey}" config`,
+    { mode: refreshMode },
   );
 }
 
@@ -626,6 +655,7 @@ export async function syncUpdatedProviderToRuntime(
           api: context.api,
           apiKeyEnv: context.meta?.apiKeyEnv,
           headers: context.meta?.headers,
+          allowPrivateNetwork: context.allowPrivateNetwork,
         }, fallbackModels);
       } else {
         await setOpenClawDefaultModel(ock, modelOverride, fallbackModels);
@@ -635,6 +665,7 @@ export async function syncUpdatedProviderToRuntime(
         baseUrl: config.baseUrl,
         api: config.apiProtocol || 'openai-completions',
         disableTools: context.disableTools,
+        allowPrivateNetwork: context.allowPrivateNetwork,
       }, fallbackModels);
     }
   }
@@ -642,9 +673,11 @@ export async function syncUpdatedProviderToRuntime(
   await rebuildOpenClawModelAllowlistFromAccounts();
   await reconcileRuntimeProvidersFromAccounts();
 
+  const refreshMode = resolveProviderGatewayRefreshMode(config, ock);
   scheduleGatewayRefresh(
     gatewayManager,
-    `Scheduling Gateway restart after updating provider "${ock}" config`,
+    `Scheduling Gateway ${refreshMode} after updating provider "${ock}" config`,
+    { mode: refreshMode },
   );
 }
 
@@ -668,9 +701,11 @@ export async function syncDeletedProviderToRuntime(
   await rebuildOpenClawModelAllowlistFromAccounts();
   await reconcileRuntimeProvidersFromAccounts();
 
+  const refreshMode = resolveProviderGatewayRefreshMode(provider, ock);
   scheduleGatewayRefresh(
     gatewayManager,
-    `Scheduling Gateway restart after deleting provider "${ock}"`,
+    `Scheduling Gateway ${refreshMode} after deleting provider "${ock}"`,
+    { mode: refreshMode },
   );
 }
 
@@ -706,8 +741,6 @@ export async function syncDefaultProviderToRuntime(
   if (!provider) {
     return;
   }
-  const account = await getProviderAccount(providerId);
-
   const ock = await resolveRuntimeProviderKey(provider);
   const providerKey = await getApiKey(providerId);
   const fallbackModels = await getProviderFallbackModelRefs(provider);
@@ -763,10 +796,11 @@ export async function syncDefaultProviderToRuntime(
       await setOpenClawDefaultModel(GOOGLE_OAUTH_RUNTIME_PROVIDER, modelOverride, fallbackModels);
       logger.info(`Configured openclaw.json for Google browser OAuth provider "${provider.id}"`);
       if (!suppressRefresh) {
+        const refreshMode = resolveProviderGatewayRefreshMode(provider, GOOGLE_OAUTH_RUNTIME_PROVIDER);
         scheduleGatewayRefresh(
           gatewayManager,
-          `Scheduling Gateway restart after provider switch to "${GOOGLE_OAUTH_RUNTIME_PROVIDER}"`,
-          { mode: 'restart' },
+          `Scheduling Gateway ${refreshMode} after provider switch to "${GOOGLE_OAUTH_RUNTIME_PROVIDER}"`,
+          { mode: refreshMode },
         );
       }
       return;
@@ -792,10 +826,11 @@ export async function syncDefaultProviderToRuntime(
       await setOpenClawDefaultModel(OPENAI_OAUTH_RUNTIME_PROVIDER, modelOverride, fallbackModels);
       logger.info(`Configured openclaw.json for OpenAI OAuth provider "${provider.id}"`);
       if (!suppressRefresh) {
+        const refreshMode = resolveProviderGatewayRefreshMode(provider, OPENAI_OAUTH_RUNTIME_PROVIDER);
         scheduleGatewayRefresh(
           gatewayManager,
-          `Scheduling Gateway restart after provider switch to "${OPENAI_OAUTH_RUNTIME_PROVIDER}"`,
-          { mode: 'restart' },
+          `Scheduling Gateway ${refreshMode} after provider switch to "${OPENAI_OAUTH_RUNTIME_PROVIDER}"`,
+          { mode: refreshMode },
         );
       }
       return;
@@ -863,10 +898,11 @@ export async function syncDefaultProviderToRuntime(
   await reconcileRuntimeProvidersFromAccounts();
 
   if (!suppressRefresh) {
+    const refreshMode = resolveProviderGatewayRefreshMode(provider, ock);
     scheduleGatewayRefresh(
       gatewayManager,
-      `Scheduling Gateway restart after provider switch to "${ock}"`,
-      { onlyIfRunning: true },
+      `Scheduling Gateway ${refreshMode} after provider switch to "${ock}"`,
+      { onlyIfRunning: true, mode: refreshMode },
     );
   }
 }

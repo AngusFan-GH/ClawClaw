@@ -3,11 +3,14 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'path';
 import { existsSync } from 'fs';
 import WebSocket from 'ws';
-import { getOpenClawDir, getOpenClawEntryPath } from '../utils/paths';
+import { getOpenClawDir, getOpenClawEntryPath, getPortableDataDir } from '../utils/paths';
 import { getOpenClawCliSpawnConfig } from '../utils/openclaw-cli';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { isPythonReady, setupManagedPython } from '../utils/uv-setup';
 import { logger } from '../utils/logger';
+
+const GATEWAY_LOOPBACK_HOST = '127.0.0.1';
+const EXISTING_GATEWAY_PROBE_TIMEOUT_MS = 1500;
 
 export function warmupManagedPythonReadiness(): void {
   void isPythonReady().then((pythonReady) => {
@@ -64,6 +67,8 @@ export async function terminateOwnedGatewayProcess(
 
 export async function unloadLaunchctlGatewayService(): Promise<void> {
   if (process.platform !== 'darwin') return;
+  // Portable builds should not modify host LaunchAgents.
+  if (getPortableDataDir()) return;
 
   try {
     const uid = process.getuid?.();
@@ -222,6 +227,7 @@ async function terminateOrphanedProcessIds(port: number, pids: string[]): Promis
 export async function findExistingGatewayProcess(options: {
   port: number;
   ownedPid?: number;
+  /** When true, terminate any process occupying the port that is not owned by us. */
   terminateUnexpected?: boolean;
 }): Promise<{ port: number; externalToken?: string } | null> {
   const { port, ownedPid, terminateUnexpected = true } = options;
@@ -229,7 +235,7 @@ export async function findExistingGatewayProcess(options: {
   try {
     const probeExistingGateway = async (): Promise<{ port: number; externalToken?: string } | null> => {
       return await new Promise<{ port: number; externalToken?: string } | null>((resolve) => {
-        const testWs = new WebSocket(`ws://localhost:${port}/ws`);
+        const testWs = new WebSocket(`ws://${GATEWAY_LOOPBACK_HOST}:${port}/ws`);
         const timeout = setTimeout(() => {
           try {
             testWs.close();
@@ -237,7 +243,7 @@ export async function findExistingGatewayProcess(options: {
             // ignore
           }
           resolve(null);
-        }, 2000);
+        }, EXISTING_GATEWAY_PROBE_TIMEOUT_MS);
 
         testWs.on('message', (data) => {
           try {
@@ -271,6 +277,8 @@ export async function findExistingGatewayProcess(options: {
     try {
       const pids = await getListeningProcessIds(port);
       if (pids.length > 0) {
+        // Probe with WebSocket first — if a real Gateway is running on this port,
+        // return it immediately instead of terminating it.
         const existingGateway = await probeExistingGateway();
         if (existingGateway) {
           return existingGateway;
@@ -288,6 +296,92 @@ export async function findExistingGatewayProcess(options: {
     return await probeExistingGateway();
   } catch {
     return null;
+  }
+}
+
+// ── Port Scanner ────────────────────────────────────────────────
+
+export interface DetectedGateway {
+  port: number;
+  pids: number[];
+}
+
+/**
+ * Probe a single port — returns true if an OpenClaw Gateway is listening.
+ */
+async function probeGateway(port: number): Promise<boolean> {
+  return await new Promise<boolean>((resolve) => {
+    const testWs = new WebSocket(`ws://${GATEWAY_LOOPBACK_HOST}:${port}/ws`);
+    const timeout = setTimeout(() => {
+      try { testWs.close(); } catch { /* ignore */ }
+      resolve(false);
+    }, EXISTING_GATEWAY_PROBE_TIMEOUT_MS);
+
+    testWs.on('message', (data) => {
+      try {
+        const message = JSON.parse(data.toString()) as { type?: string; event?: string };
+        if (message.type === 'event' && message.event === 'connect.challenge') {
+          clearTimeout(timeout);
+          try { testWs.close(); } catch { /* ignore */ }
+          resolve(true);
+        }
+      } catch { /* ignore malformed */ }
+    });
+    testWs.on('error', () => { clearTimeout(timeout); resolve(false); });
+    testWs.on('close', () => { clearTimeout(timeout); resolve(false); });
+  });
+}
+
+/**
+ * Scan ports 18789–18799 for all OpenClaw Gateway instances.
+ * Returns a list of detected gateways with their port and PIDs.
+ * Does NOT kill anything — use killGatewayOnPort() for that.
+ */
+export async function scanGatewayPorts(): Promise<DetectedGateway[]> {
+  const BASE_PORT = 18789;
+  const MAX_PORT = 18799;
+  const results: DetectedGateway[] = [];
+
+  for (let port = BASE_PORT; port <= MAX_PORT; port++) {
+    const pids = await getListeningProcessIds(port);
+    if (pids.length === 0) continue;
+
+    const isGateway = await probeGateway(port);
+    if (!isGateway) continue;
+
+    results.push({
+      port,
+      pids: [...new Set(pids.map((p) => parseInt(p, 10)))],
+    });
+  }
+
+  return results;
+}
+
+/**
+ * Kill all processes listening on a specific port.
+ * After killing, resets the restart governor so the local ClawClaw instance
+ * can cleanly restart its own gateway without suppression.
+ */
+export async function killGatewayOnPort(
+  port: number,
+  gatewayManager: import('./manager').GatewayManager,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const pids = await getListeningProcessIds(port);
+    if (pids.length === 0) {
+      return { success: false, error: `No process found on port ${port}` };
+    }
+
+    await terminateOrphanedProcessIds(port, pids);
+
+    // Reset the restart governor so the local instance can restart without
+    // being suppressed after killing an external gateway on the same port.
+    gatewayManager.resetGovernor();
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: String(error) };
   }
 }
 

@@ -26,6 +26,8 @@ export type UpdateStatus =
   | 'not-available'
   | 'downloading'
   | 'downloaded'
+  | 'installing'
+  | 'migration-required'
   | 'error';
 
 interface UpdateState {
@@ -36,6 +38,7 @@ interface UpdateState {
   error: string | null;
   isInitialized: boolean;
   isSupported: boolean;
+  isPortable: boolean;
   hasCheckedOnce: boolean;
   /** Seconds remaining before auto-install, or null if inactive. */
   autoInstallCountdown: number | null;
@@ -59,6 +62,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   error: null,
   isInitialized: false,
   isSupported: false,
+  isPortable: false,
   hasCheckedOnce: false,
   autoInstallCountdown: null,
 
@@ -78,6 +82,13 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
       set({ isSupported: Boolean(supported) });
     } catch (error) {
       console.error('Failed to get update support state:', error);
+    }
+
+    try {
+      const portable = await invokeIpc<boolean>('app:isPortable');
+      set({ isPortable: Boolean(portable) });
+    } catch (error) {
+      console.error('Failed to get portable state:', error);
     }
 
     // Get current status

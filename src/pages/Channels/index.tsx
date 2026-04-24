@@ -115,7 +115,7 @@ export function Channels() {
                 label={t('refresh')}
                 loading={loading}
                 mode="compact"
-                onClick={() => void fetchChannels(true)}
+                onClick={() => void fetchChannels(true, { includeRuntime: true })}
               />
             </div>
           )}

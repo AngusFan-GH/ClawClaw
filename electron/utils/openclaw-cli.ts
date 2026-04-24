@@ -14,7 +14,7 @@ import {
 import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { getOpenClawDir, getOpenClawEntryPath } from './paths';
+import { getOpenClawDir, getOpenClawEntryPath, getPortableDataDir } from './paths';
 import { logger } from './logger';
 
 // ── Quoting helpers ──────────────────────────────────────────────────────────
@@ -144,6 +144,23 @@ export function getOpenClawCliSpawnConfig(args: string[]): {
 
   const packagedCli = getPackagedCliWrapperPath();
   if (packagedCli) {
+    // On macOS, spawning the shell script wrapper via spawn() causes the OS to
+    // allocate a TTY / Terminal window for each invocation.  Avoid this by
+    // invoking the Electron binary directly in ELECTRON_RUN_AS_NODE mode, which
+    // is equivalent to what the wrapper does but without the shell intermediary.
+    if (platform === 'darwin') {
+      return {
+        command: process.execPath,
+        args: [entryPath, ...args],
+        env: {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: '1',
+          OPENCLAW_NO_RESPAWN: '1',
+          OPENCLAW_EMBEDDED_IN: 'ClawClaw',
+        },
+        cwd,
+      };
+    }
     return {
       command: packagedCli,
       args,
@@ -356,6 +373,8 @@ function ensureLocalBinInPath(): void {
 }
 
 export async function autoInstallCliIfNeeded(notify?: (path: string) => void): Promise<void> {
+  // Skip CLI auto-install in portable mode — don't write to host's ~/.local/bin/
+  if (getPortableDataDir()) return;
   if (!app.isPackaged) return;
   if (process.platform === 'win32') {
     try {
@@ -464,6 +483,8 @@ export function verifyWindowsBundledCliRuntime(): void {
 }
 
 export function installCompletionToProfile(): void {
+  // Skip in portable mode — don't modify host's shell profile
+  if (getPortableDataDir()) return;
   if (!app.isPackaged) return;
   if (process.platform === 'win32') return;
 

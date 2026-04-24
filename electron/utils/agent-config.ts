@@ -1,7 +1,7 @@
 import { access, copyFile, mkdir, readdir, rm } from 'fs/promises';
 import { constants } from 'fs';
 import { join, normalize } from 'path';
-import { listConfiguredChannelGroupsFromConfig, readOpenClawConfig, updateOpenClawConfig } from './channel-config';
+import { listConfiguredChannelGroupsFromConfig, readOpenClawConfigSnapshot, updateOpenClawConfig } from './channel-config';
 import { expandPath, getOpenClawConfigDir } from './paths';
 import * as logger from './logger';
 import {
@@ -544,12 +544,12 @@ async function buildSnapshotFromConfig(
 }
 
 export async function listAgentsSnapshot(): Promise<AgentsSnapshot> {
-  const config = await readOpenClawConfig() as AgentConfigDocument;
+  const config = await readOpenClawConfigSnapshot() as AgentConfigDocument;
   return buildSnapshotFromConfig(config, { includeCli: false });
 }
 
 export async function listConfiguredAgentIds(): Promise<string[]> {
-  const config = await readOpenClawConfig() as AgentConfigDocument;
+  const config = await readOpenClawConfigSnapshot() as AgentConfigDocument;
   const { entries } = await getEffectiveAgentEntries(config, { includeDisk: false });
   const ids = [...new Set(entries.map((entry) => entry.id.trim()).filter(Boolean))];
   return ids.length > 0 ? ids : [MAIN_AGENT_ID];

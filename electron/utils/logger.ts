@@ -8,7 +8,7 @@
  * guarantee the last few messages are flushed before the process exits.
  */
 import { app } from 'electron';
-import { join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { existsSync, mkdirSync, appendFileSync } from 'fs';
 import { appendFile, readFile, readdir, stat } from 'fs/promises';
 
@@ -80,13 +80,39 @@ function flushBufferSync(): void {
   writeBuffer = [];
 }
 
-// Ensure all buffered data reaches disk before the process exits.
-process.on('exit', flushBufferSync);
+// Ensure all buffered data reaches disk before the process exits. Vitest
+// repeatedly reloads this module with vi.resetModules(), which would stack
+// process exit listeners and emit MaxListenersExceededWarning.
+if (!process.env.VITEST) {
+  process.on('exit', flushBufferSync);
+}
 
 // ── Initialisation ───────────────────────────────────────────────
 
 /**
- * Initialize logger — safe to call before app.isReady()
+ * Detect the portable data directory (mirrors paths.ts logic, inlined to avoid circular import).
+ * Returns null when not in portable mode.
+ */
+function detectPortableLogDir(): string | null {
+  try {
+    if (!app.isPackaged) return null;
+    const resourcesDir =
+      typeof process.resourcesPath === 'string' && process.resourcesPath.length > 0
+        ? resolve(process.resourcesPath)
+        : dirname(resolve(app.getAppPath()));
+    const portableDataDir =
+      process.platform === 'darwin'
+        ? join(resourcesDir, 'portable')
+        : join(dirname(resourcesDir), 'portable');
+    if (existsSync(portableDataDir)) {
+      return join(portableDataDir, 'logs');
+    }
+  } catch { /* best-effort */ }
+  return null;
+}
+
+/**
+ * Initialize logger — safe to call after app.whenReady()
  */
 export function initLogger(): void {
   try {
@@ -95,7 +121,7 @@ export function initLogger(): void {
       currentLevel = LogLevel.INFO;
     }
 
-    logDir = join(app.getPath('userData'), 'logs');
+    logDir = detectPortableLogDir() ?? join(app.getPath('userData'), 'logs');
 
     if (!existsSync(logDir)) {
       mkdirSync(logDir, { recursive: true });

@@ -1,11 +1,12 @@
 import { access, mkdir, readFile, rename, writeFile } from 'fs/promises';
 import { constants } from 'fs';
 import { randomBytes } from 'crypto';
-import { homedir } from 'os';
 import { dirname, join } from 'path';
 import JSON5 from 'json5';
+import { resolveOpenClawDir } from './paths';
+import { logger } from './logger';
 
-const OPENCLAW_CONFIG_PATH = join(homedir(), '.openclaw', 'openclaw.json');
+const OPENCLAW_CONFIG_PATH = join(resolveOpenClawDir(), 'openclaw.json');
 
 let configWriteChain: Promise<unknown> = Promise.resolve();
 
@@ -271,16 +272,47 @@ export async function updateOpenClawConfigRecord<T>(
   updater: (config: Record<string, unknown>) => Promise<T> | T,
 ): Promise<T> {
   const run = async (): Promise<T> => {
+    const startedAt = Date.now();
+    logger.debug('[openclaw-config] updateOpenClawConfigRecord:start');
     // Read the file directly inside the serialized writer to avoid waiting on
     // the very promise chain entry we are currently executing.
     const config = await readOpenClawConfigRecordRaw();
     const result = await updater(config);
     await writeOpenClawConfigRecord(config);
+    logger.debug(
+      `[openclaw-config] updateOpenClawConfigRecord:done durationMs=${Date.now() - startedAt}`,
+    );
     return result;
   };
 
   const pending = configWriteChain.catch(() => undefined);
   const next = pending.then(run);
+  configWriteChain = next.then(() => undefined, () => undefined);
+  return await next;
+}
+
+/**
+ * Serialize concurrent writes to openclaw.json via a promise chain.
+ * Every call waits for the previous write to finish before executing,
+ * preventing concurrent writes from racing.
+ *
+ * NOTE: functions passed to withConfigLock should use readOpenClawJson /
+ * writeOpenClawJson directly (not updateOpenClawConfigRecord which would
+ * attempt to re-serialize the return value as a config).
+ */
+export async function withConfigLock<T>(fn: () => Promise<T>): Promise<T> {
+  const pending = configWriteChain.catch(() => undefined);
+  const next = pending.then(async () => {
+    const startedAt = Date.now();
+    logger.debug('[openclaw-config] withConfigLock:start');
+    try {
+      return await fn();
+    } finally {
+      logger.debug(
+        `[openclaw-config] withConfigLock:done durationMs=${Date.now() - startedAt}`,
+      );
+    }
+  });
   configWriteChain = next.then(() => undefined, () => undefined);
   return await next;
 }

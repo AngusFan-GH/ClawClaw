@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildChatItems } from '@/pages/Chat/ChatThread';
+import { buildChatItems } from '@/pages/Chat/chat-thread-view-model';
 import { toSanitizedMarkdownHtml } from '@/pages/Chat/markdown';
 import { detectTextDirection } from '@/pages/Chat/text-direction';
 
@@ -50,9 +50,10 @@ describe('chat render alignment', () => {
       showThinking: true,
     });
 
-    expect(items).toHaveLength(2);
-    expect(items[0]).toMatchObject({ kind: 'stream', text: 'Checking the file first.' });
-    expect(items[1]).toMatchObject({ kind: 'group', role: 'tool' });
+    const flowItems = items.filter((item) => item.kind !== 'divider');
+    expect(flowItems).toHaveLength(2);
+    expect(flowItems[0]).toMatchObject({ kind: 'stream', text: 'Checking the file first.' });
+    expect(flowItems[1]).toMatchObject({ kind: 'group', role: 'tool' });
   });
 
   it('merges pending assistant loading into a single assistant group', () => {
@@ -75,8 +76,9 @@ describe('chat render alignment', () => {
       showThinking: true,
     });
 
-    expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ kind: 'group', role: 'assistant', hasReadingIndicator: true });
+    const flowItems = items.filter((item) => item.kind !== 'divider');
+    expect(flowItems).toHaveLength(1);
+    expect(flowItems[0]).toMatchObject({ kind: 'group', role: 'assistant', hasReadingIndicator: true });
   });
 
   it('shows assistant loading immediately after send before any stream events arrive', () => {
@@ -94,5 +96,67 @@ describe('chat render alignment', () => {
 
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ kind: 'reading-indicator' });
+  });
+
+  it('does not inject date dividers for live-only items', () => {
+    const items = buildChatItems({
+      messages: [],
+      pendingUserMessage: {
+        role: 'user',
+        timestamp: 2_000,
+        content: 'hello',
+      },
+      pendingAssistantMessage: null,
+      toolMessages: [],
+      streamSegments: [],
+      streamingMessage: null,
+      streamingStartedAt: 0,
+      sessionKey: 'agent:main',
+      sending: true,
+      pendingFinal: false,
+      showThinking: true,
+      locale: 'en',
+    });
+
+    expect(items.some((item) => item.kind === 'divider')).toBe(false);
+    expect(items[0]).toMatchObject({ kind: 'group', role: 'user' });
+  });
+
+  it('does not append a duplicate pending user message after history catches up', () => {
+    const items = buildChatItems({
+      messages: [
+        {
+          role: 'user',
+          timestamp: 2_000,
+          content: 'hello',
+          id: 'history-user-1',
+        },
+        {
+          role: 'assistant',
+          timestamp: 2_001,
+          content: 'hi',
+          id: 'history-assistant-1',
+        },
+      ],
+      pendingUserMessage: {
+        role: 'user',
+        timestamp: 1_999,
+        content: 'hello',
+        id: 'pending-user-1',
+      },
+      pendingAssistantMessage: null,
+      toolMessages: [],
+      streamSegments: [],
+      streamingMessage: null,
+      streamingStartedAt: 0,
+      sessionKey: 'agent:main',
+      sending: false,
+      pendingFinal: false,
+      showThinking: true,
+      locale: 'en',
+    });
+
+    const userGroups = items.filter((item) => item.kind === 'group' && item.role === 'user');
+    expect(userGroups).toHaveLength(1);
   });
 });

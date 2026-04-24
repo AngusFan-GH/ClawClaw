@@ -89,7 +89,7 @@ Building AI agents shouldn't require mastering the command line. ClawClaw was de
 ClawClaw is built directly upon the official **OpenClaw** core. Instead of requiring a separate installation, we embed the runtime within the application to provide a seamless "battery-included" experience.
 
 We are committed to maintaining strict alignment with the upstream OpenClaw project, ensuring that you always have access to the latest capabilities, stability improvements, and ecosystem compatibility provided by the official releases.
-The bundled stable runtime is now aligned to **OpenClaw 2026.4.2**, which keeps ClawClaw on the current upstream stable release track while preserving the packaged desktop integration.
+The bundled stable runtime is now aligned to **OpenClaw 2026.4.15**, which keeps ClawClaw on the current upstream stable release track while preserving the packaged desktop integration.
 
 ---
 
@@ -119,7 +119,7 @@ Extend your AI agents with pre-built skills. Browse, install, and manage skills 
 
 ### 🔐 Secure Provider Integration
 
-Connect to multiple AI providers (OpenAI, Anthropic, OpenCode Go, and more) with API keys or supported OAuth flows. OpenAI Codex sign-in follows OpenClaw's native browser OAuth flow and chooses the model from OpenClaw's available Codex model list after sign-in. Other provider accounts now prefer verified model lists resolved from the upstream endpoint when available, while still allowing manual model IDs if a provider cannot enumerate models. Model-type filters are shown only when the upstream source explicitly returns category metadata; otherwise the picker falls back to search-only, with no heuristic guessing in the UI. Self-hosted OpenAI-compatible runtimes such as Ollama, vLLM, and SGLang remain available as first-class providers, while the dedicated local-model center continues to handle the project-specific local model workflow. Credentials are stored securely in your system's native keychain.
+Connect to multiple AI providers (OpenAI, Anthropic, OpenCode Go, and more) with API keys or supported OAuth flows. OpenAI Codex sign-in follows OpenClaw's native browser OAuth flow and now prefers newer upstream Codex models such as `gpt-5.4-pro` when that model is actually available, while keeping existing accounts on their saved model until you change them. Other provider accounts now prefer verified model lists resolved from the upstream endpoint when available, while still allowing manual model IDs if a provider cannot enumerate models. Model-type filters are shown only when the upstream source explicitly returns category metadata; otherwise the picker falls back to search-only, with no heuristic guessing in the UI. Self-hosted OpenAI-compatible runtimes such as Ollama, vLLM, and SGLang remain available as first-class providers, and each self-hosted account can now explicitly allow private-network endpoints when your OpenClaw request path must reach LAN or localhost services. The dedicated local-model center continues to handle the project-specific local model workflow. Credentials are stored securely in your system's native keychain.
 
 > vLLM note: ClawClaw defaults vLLM models to `supportsTools: false` to avoid the common `400 "auto" tool choice` server error. You can now enable vLLM tool calling explicitly in provider settings, but your vLLM server must be started with `--enable-auto-tool-choice` and `--tool-call-parser`.
 
@@ -180,7 +180,7 @@ Model configuration is now manual. You can jump to **Models** from setup to add 
 ### Bundled Project Skills
 
 ClawClaw also preinstalls any project-local skill placed under `resources/skills/<slug>/SKILL.md`.
-On startup, those directories are copied into `~/.openclaw/skills/<slug>/` if they are not already installed.
+On startup, those directories are copied into the managed OpenClaw skills directory if they are not already installed.
 
 Minimal example:
 
@@ -230,21 +230,23 @@ Open **Settings → Memory** to control how ClawClaw and OpenClaw preserve and r
 
 - **Auto-archive session memory** enables OpenClaw's bundled `session-memory` hook. On `/new` or `/reset`, OpenClaw writes a memory summary for the finished conversation into the workspace `memory/` folder.
 - **Enable memory search** enables OpenClaw's `memorySearch` runtime configuration so later conversations can recall `MEMORY.md` and `memory/*.md` through the upstream `memory_search` and `memory_get` tools.
+- **Lean local model runtime** enables OpenClaw's `agents.defaults.experimental.localModelLean` switch so local-model execution paths can prefer the lighter upstream runtime mode.
 
 Notes:
 
 - The current conversation still relies on the normal OpenClaw session transcript. `session-memory` is an additional cross-session archive, not the primary source of in-session context.
-- Changing either memory toggle updates `~/.openclaw/openclaw.json` and restarts the Gateway automatically so the upstream runtime picks up the new setting.
+- Changing either memory toggle updates the managed OpenClaw config and restarts the Gateway automatically so the upstream runtime picks up the new setting.
 - Runtime-backed settings now apply through the same background coordinator used by channel and agent edits, which reduces restart churn during rapid configuration changes.
 
 ### Settings Backup and Cleanup
 
-Open **Settings → Data & Uninstall** to export a JSON backup of your current configuration before removing data or uninstalling the app. The same section can stop the Gateway, clean managed ClawClaw/OpenClaw data from a fixed allowlist, and prepare a full uninstall flow before you remove the app itself from the OS uninstaller. On Windows, ClawClaw's own cache, storage, and logs are queued for post-exit cleanup so locked Chromium files can be removed safely after the app quits.
+Open **Settings → Data & Uninstall** to export a JSON backup of your current configuration before removing data or uninstalling the app. Portable builds now default user-initiated exports into `portable/exports/settings`, `portable/exports/images`, or `portable/exports/general` as appropriate. The same section can stop the Gateway, clean managed ClawClaw/OpenClaw data from a fixed allowlist, and prepare a full uninstall flow before you remove the app itself from the OS uninstaller. On Windows, ClawClaw's own cache, storage, and logs are queued for post-exit cleanup so locked Chromium files can be removed safely after the app quits.
 
 Open **Settings → Updates** to control auto-check / auto-download behavior and manually trigger update checks from the packaged app. ClawClaw currently follows the stable release feed only.
 On Windows, packaged updates continue to use NSIS differential packages, but the installer now force-cleans the managed `resources/openclaw` and `resources/openclaw-plugins` directories before copying files. The upgrade flow also checks only processes tied to the target install directory, so unrelated `ClawClaw.exe` copies elsewhere no longer trigger false "app is still running" prompts. It also runs a post-copy OpenClaw runtime validation step and aborts before finishing if the bundled CLI tree is unhealthy.
 The installer status text is now split into concrete upgrade steps such as checking old processes, stopping the bundled Gateway, cleaning the old runtime, copying files, and validating the bundled runtime.
-On the first launch after upgrading from an older ClawClaw or bundled OpenClaw version, ClawClaw now runs a one-time maintenance pass before normal Gateway startup so legacy provider records, managed plugin mirrors, and older `openclaw.json` shapes are repaired proactively instead of waiting for a startup failure.
+On the first launch after upgrading from an older ClawClaw or bundled OpenClaw version, ClawClaw now runs a one-time maintenance pass before normal Gateway startup and before any automatic update re-check so legacy provider records, managed plugin mirrors, and older `openclaw.json` shapes are repaired proactively instead of waiting for a startup failure.
+Windows installed-build upgrades from `0.1.15` and earlier also trigger an expanded compatibility path: the installer clears legacy bundled runtime and CLI directories before copying new files, and the first launch forces a heavier OpenClaw repair pass for older plugin, channel, and runtime layouts.
 In **Settings → Developer**, you can run **OpenClaw Doctor** and **OpenClaw Doctor Fix** directly against the bundled runtime to inspect or repair migration issues without leaving the app.
 
 ---
@@ -385,20 +387,28 @@ pnpm run package:prepare  # Shared packaging prep (vite + bundled OpenClaw + cle
 pnpm build                # Prepare production packaging assets
 pnpm package              # Package for current platform
 pnpm package:mac          # Package for macOS
-pnpm package:win          # Build Windows NSIS with the helper packager (also bundles node.exe for openclaw CLI)
+pnpm package:win          # Build Windows NSIS installer with the helper packager (also bundles node.exe for openclaw CLI)
+pnpm package:win:portable # Build Windows portable directory (win-unpacked / win-arm64-unpacked)
+pnpm package:mac:portable # Build macOS portable zip (ClawClaw.app + launcher + embedded portable/ data dir)
 pnpm package:desktop      # Package macOS, Windows, and Linux in one serial workflow
 pnpm run package:organize # Re-home staged artifacts under release/v<version>/windows|mac|linux|metadata
 pnpm package:linux        # Package for Linux
 pnpm run upload:update    # Upload release/v<version>/windows/latest.yml and referenced Windows update artifacts
+pnpm run upload:update:portable # Upload portable zips + per-platform JSON manifests under updates-portable/stable
 ```
 
 Notes:
 
-- `pnpm package:win` is the single Windows packaging entrypoint and uses `scripts/package-win.mjs`.
+- `pnpm package:win` builds the Windows NSIS installer via `scripts/package-win.mjs`.
+- `pnpm package:win:portable` builds the Windows portable directory target via `scripts/package-win.mjs --dir`.
+- `pnpm package:mac:portable` builds the macOS portable zip via `scripts/package-mac.mjs --build`. It runs electron-builder for macOS (zip), then assembles a portable directory with `Start ClawClaw.command` (launcher + Gatekeeper quarantine-clear script) plus an embedded `portable/` data directory inside the app bundle. Output: `release/v<version>/mac/ClawClaw-v<version>-mac-{arch}-portable.zip`.
+- `pnpm package:portable` builds both Windows and macOS portable artifacts.
 - `pnpm package:prepare` is the shared pre-packaging step used by `build`, `package`, and all platform package commands. It only cleans root-level builder staging output and leaves existing versioned release directories untouched.
 - `pnpm package:organize` moves root-level builder output into `release/v<package.json version>/windows`, `release/v<package.json version>/mac`, `release/v<package.json version>/linux`, and `release/v<package.json version>/metadata`.
 - `pnpm package:desktop` runs macOS, Windows, and Linux packaging serially. Keep it serial; do not run platform packaging in parallel because they share `dist`, `dist-electron`, and `build/openclaw`.
 - `release/` now uses versioned directories. Existing versions are preserved; only artifacts inside the same version directory are replaced. The updater uploader reads from `release/v<package.json version>/windows/latest.yml`.
+- `pnpm run upload:update` is intentionally kept as the Windows installed-build uploader. It preserves the legacy `latest.yml` contract for older installed versions.
+- `pnpm run upload:update:portable` is the separate portable update publisher. It uploads portable artifacts and generates per-target JSON manifests such as `win32-x64.json` and `darwin-arm64.json` under `updates-portable/stable/`.
 - Bundled OpenClaw plugin mirrors are copied during `after-pack`, so packaging does not require a separate `bundle:openclaw-plugins` step.
 
 ### Release Gate

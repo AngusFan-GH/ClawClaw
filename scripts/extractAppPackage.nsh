@@ -118,10 +118,35 @@
       Goto RetryExtract7za
     ${endif}
 
-    ${if} $R1 < 5
+    ${if} $R1 < 4
       Goto RetryExtract7za
     ${else}
-      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(installFilesLocked)" /SD IDRETRY IDCANCEL AbortExtract7za
+      ; Final fallback: move the current install directory out of the way so
+      ; CopyFiles can target a fresh directory. This handles antivirus/indexer
+      ; read locks that still allow rename via FILE_SHARE_DELETE.
+      SetOutPath $TEMP
+      IfFileExists "$INSTDIR\" 0 RetryExtract7za
+        StrCpy $R2 0
+      _find_free_stale:
+        IfFileExists "$INSTDIR._stale_$R2\" 0 _found_free_stale
+        IntOp $R2 $R2 + 1
+        Goto _find_free_stale
+
+      _found_free_stale:
+        DetailPrint `Retry fallback: moving "$INSTDIR" to "$INSTDIR._stale_$R2".`
+        ClearErrors
+        Rename "$INSTDIR" "$INSTDIR._stale_$R2"
+        IfErrors 0 _retry_with_fresh_dir
+          DetailPrint `Rename fallback failed; install directory is still blocked.`
+          MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(installFilesLocked)" /SD IDRETRY IDCANCEL AbortExtract7za
+
+      _retry_with_fresh_dir:
+        CreateDirectory "$INSTDIR"
+        ClearErrors
+        CopyFiles /SILENT "$PLUGINSDIR\7z-out\*" $OUTDIR
+        IfErrors 0 DoneExtract7za
+        DetailPrint `Fresh-directory copy still failed after rename fallback.`
+        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(installFilesLocked)" /SD IDRETRY IDCANCEL AbortExtract7za
     ${endIf}
 
     RMDir /r "$PLUGINSDIR\7z-out"

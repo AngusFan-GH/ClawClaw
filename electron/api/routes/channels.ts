@@ -1,14 +1,14 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { readFile, readdir } from 'node:fs/promises';
 import { Buffer } from 'node:buffer';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { getOpenClawConfigDir, resolveOpenClawDir } from '../../utils/paths';
+import { getChannelsConfigSnapshot } from '../../services/config-snapshot';
 import {
   deleteChannelConfig,
   getChannelFormValues,
-  listConfiguredChannelAccounts,
-  listConfiguredChannelGroups,
   saveChannelConfig,
   setChannelEnabled,
   validateChannelConfig,
@@ -17,6 +17,7 @@ import {
 import { whatsAppLoginManager } from '../../utils/whatsapp-login';
 import {
   buildQrChannelEventName,
+  toUiChannelType,
   toRuntimeChannelType,
   WECHAT_RUNTIME_CHANNEL_ID,
   WECHAT_UI_CHANNEL_ID,
@@ -33,9 +34,11 @@ import { ensureBundledPluginInstalled } from '../../utils/bundled-plugin-install
 import { getOpenClawCliSpawnConfig } from '../../utils/openclaw-cli';
 import { clearAllChannelBindings, clearChannelBinding } from '../../utils/agent-config';
 import { repairManagedPluginSdkImports } from '../../utils/plugin-sdk-compat';
+import { extractSessionRecords } from '../../utils/session-util';
 import type { ChannelType } from '../../../src/types/channel';
 
 const WECHAT_QR_TIMEOUT_MS = 8 * 60 * 1000;
+const NULL_CHAR = String.fromCharCode(0);
 const activeQrLogins = new Map<string, string>();
 const WECHAT_PLUGIN_SPEC = '@tencent-weixin/openclaw-weixin';
 const WECHAT_PLUGIN_NPM_ONLY_SPEC = `npm:${WECHAT_PLUGIN_SPEC}`;
@@ -95,6 +98,14 @@ type ChannelGroupView = {
   error?: string;
 };
 
+type JsonRecord = Record<string, unknown>;
+
+type ChannelTargetOptionView = {
+  value: string;
+  label: string;
+  kind: 'user' | 'group' | 'channel';
+};
+
 export function mapAccountStatus(account: {
   connected?: boolean;
   linked?: boolean;
@@ -144,15 +155,15 @@ function looksLikeUtf16Le(buffer: Buffer): boolean {
 
 export function decodeCliInstallOutput(chunk: Buffer | string): string {
   if (typeof chunk === 'string') {
-    return chunk.replace(/\u0000/g, '');
+    return chunk.split(NULL_CHAR).join('');
   }
 
   const decoded = looksLikeUtf16Le(chunk) ? chunk.toString('utf16le') : chunk.toString('utf8');
-  return decoded.replace(/\u0000/g, '');
+  return decoded.split(NULL_CHAR).join('');
 }
 
 export function formatWeChatPluginInstallError(raw: string): string {
-  const trimmed = raw.replace(/\u0000/g, '').trim();
+  const trimmed = raw.split(NULL_CHAR).join('').trim();
   if (!trimmed) {
     return 'WeChat plugin install failed.';
   }
@@ -343,17 +354,127 @@ export function resolveGroupStatus(group: ChannelGroupView): ChannelGroupView['s
   return 'unknown';
 }
 
+function buildChannelTargetLabel(baseLabel: string, value: string): string {
+  const trimmed = baseLabel.trim();
+  return trimmed && trimmed !== value ? `${trimmed} (${value})` : value;
+}
+
+function readNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function inferTargetKindFromValue(
+  channelType: string,
+  target: string,
+  chatType?: string,
+): ChannelTargetOptionView['kind'] {
+  const normalizedChatType = chatType?.trim().toLowerCase();
+  if (normalizedChatType === 'group') return 'group';
+  if (normalizedChatType === 'channel') return 'channel';
+  if (target.startsWith('chat:') || target.includes(':group:')) return 'group';
+  if (target.includes(':channel:')) return 'channel';
+  if (channelType === 'dingtalk' && target.startsWith('cid')) return 'group';
+  return 'user';
+}
+
+async function listSessionDerivedTargetOptions(params: {
+  channelType: string;
+  accountId?: string;
+  query?: string;
+}): Promise<ChannelTargetOptionView[]> {
+  const storedChannelType = toRuntimeChannelType(params.channelType);
+  const agentsDir = join(getOpenClawConfigDir(), 'agents');
+  const agentDirs = await readdir(agentsDir, { withFileTypes: true }).catch(() => []);
+  const q = params.query?.trim().toLowerCase() || '';
+  const candidates: Array<ChannelTargetOptionView & { updatedAt: number }> = [];
+  const seen = new Set<string>();
+
+  for (const entry of agentDirs) {
+    if (!entry.isDirectory()) continue;
+    const sessionsPath = join(agentsDir, entry.name, 'sessions', 'sessions.json');
+    const raw = await readFile(sessionsPath, 'utf8').catch(() => '');
+    if (!raw.trim()) continue;
+
+    let parsed: JsonRecord;
+    try {
+      parsed = JSON.parse(raw) as JsonRecord;
+    } catch {
+      continue;
+    }
+
+    for (const session of extractSessionRecords(parsed)) {
+      const deliveryContext = session.deliveryContext && typeof session.deliveryContext === 'object'
+        ? session.deliveryContext as JsonRecord
+        : undefined;
+      const origin = session.origin && typeof session.origin === 'object'
+        ? session.origin as JsonRecord
+        : undefined;
+      const sessionChannelType = readNonEmptyString(deliveryContext?.channel)
+        || readNonEmptyString(session.lastChannel)
+        || readNonEmptyString(session.channel)
+        || readNonEmptyString(origin?.provider)
+        || readNonEmptyString(origin?.surface);
+      if (!sessionChannelType || toRuntimeChannelType(sessionChannelType) !== storedChannelType) {
+        continue;
+      }
+
+      const sessionAccountId = readNonEmptyString(deliveryContext?.accountId)
+        || readNonEmptyString(session.lastAccountId)
+        || readNonEmptyString(origin?.accountId);
+      if (params.accountId && sessionAccountId && sessionAccountId !== params.accountId) {
+        continue;
+      }
+      if (params.accountId && !sessionAccountId) {
+        continue;
+      }
+
+      const value = readNonEmptyString(deliveryContext?.to)
+        || readNonEmptyString(session.lastTo)
+        || readNonEmptyString(origin?.to);
+      if (!value || seen.has(value)) continue;
+
+      const labelBase = readNonEmptyString(session.displayName)
+        || readNonEmptyString(session.subject)
+        || readNonEmptyString(origin?.label)
+        || value;
+      const label = buildChannelTargetLabel(labelBase, value);
+      if (q && !label.toLowerCase().includes(q) && !value.toLowerCase().includes(q)) {
+        continue;
+      }
+
+      seen.add(value);
+      candidates.push({
+        value,
+        label,
+        kind: inferTargetKindFromValue(
+          storedChannelType,
+          value,
+          readNonEmptyString(session.chatType) || readNonEmptyString(origin?.chatType),
+        ),
+        updatedAt: typeof session.updatedAt === 'number' ? session.updatedAt : 0,
+      });
+    }
+  }
+
+  return candidates
+    .sort((left, right) => right.updatedAt - left.updatedAt || left.label.localeCompare(right.label))
+    .map(({ updatedAt: _updatedAt, ...option }) => option);
+}
+
 async function buildChannelAccountsView(
   ctx: HostApiContext,
   options?: { includeRuntime?: boolean; probe?: boolean },
 ): Promise<ChannelGroupView[]> {
-  const [configuredGroups, configuredAccountsByType] = await Promise.all([
-    listConfiguredChannelGroups({ includeCli: false }),
-    listConfiguredChannelAccounts({ includeCli: false }),
-  ]);
+  const { groups: configuredGroups, accountsByType: configuredAccountsByType } = await getChannelsConfigSnapshot();
 
   let runtimeSnapshot: ChannelsStatusSnapshot | undefined;
-  if (options?.includeRuntime !== false && ctx.gatewayManager.getStatus().state === 'running') {
+  if (
+    options?.includeRuntime !== false
+    && ctx.gatewayManager.getStatus().state === 'running'
+    && !ctx.gatewayManager.isInStartupStabilizationWindow()
+  ) {
     try {
       runtimeSnapshot = await ctx.gatewayManager.rpc<ChannelsStatusSnapshot>(
         'channels.status',
@@ -582,7 +703,7 @@ function isSameConfigValues(
 }
 
 async function ensureDingTalkPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  return ensureBundledPluginInstalled('channels', 'China Channels', { forceReinstall: true });
+  return ensureBundledPluginInstalled('dingtalk', 'DingTalk', { forceReinstall: true });
 }
 
 async function ensureFeishuPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
@@ -590,7 +711,7 @@ async function ensureFeishuPluginInstalled(): Promise<{ installed: boolean; warn
 }
 
 async function ensureQQBotPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  return ensureBundledPluginInstalled('channels', 'China Channels', { forceReinstall: true });
+  return { installed: true };
 }
 
 async function ensureWeChatPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
@@ -599,7 +720,7 @@ async function ensureWeChatPluginInstalled(): Promise<{ installed: boolean; warn
     return bundledResult;
   }
 
-  const pluginManifest = join(homedir(), '.openclaw', 'extensions', 'openclaw-weixin', 'openclaw.plugin.json');
+  const pluginManifest = join(resolveOpenClawDir(), 'extensions', 'openclaw-weixin', 'openclaw.plugin.json');
   const cliAttempts = existsSync(pluginManifest)
     ? [
         ['plugins', 'update', 'openclaw-weixin'],
@@ -626,7 +747,7 @@ async function ensureWeChatPluginInstalled(): Promise<{ installed: boolean; warn
     }
 
     if (existsSync(pluginManifest)) {
-      repairManagedPluginSdkImports(join(homedir(), '.openclaw', 'extensions', 'openclaw-weixin'));
+      repairManagedPluginSdkImports(join(resolveOpenClawDir(), 'extensions', 'openclaw-weixin'));
       return {
         installed: true,
         warning: bundledResult.warning,
@@ -768,6 +889,29 @@ export async function handleChannelRoutes(
     return true;
   }
 
+  if (url.pathname === '/api/channels/targets' && req.method === 'GET') {
+    try {
+      const channelType = url.searchParams.get('channelType')?.trim() || '';
+      const accountId = url.searchParams.get('accountId')?.trim() || undefined;
+      const query = url.searchParams.get('query')?.trim() || undefined;
+      if (!channelType) {
+        sendJson(res, 400, { success: false, error: 'channelType is required' });
+        return true;
+      }
+
+      const targets = await listSessionDerivedTargetOptions({ channelType, accountId, query });
+      sendJson(res, 200, {
+        success: true,
+        channelType: toUiChannelType(channelType),
+        accountId,
+        targets,
+      });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/channels/config/validate' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ channelType: string }>(req);
@@ -794,13 +938,6 @@ export async function handleChannelRoutes(
       await whatsAppLoginManager.start(body.accountId);
       sendJson(res, 200, { success: true });
     } catch (error) {
-      emitGatewayLifecycleEvent(ctx, {
-        phase: 'failed',
-        action: 'restart',
-        source: 'channel:config',
-        reason: 'channel:config',
-        error: String(error),
-      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;
@@ -811,13 +948,6 @@ export async function handleChannelRoutes(
       await whatsAppLoginManager.stop();
       sendJson(res, 200, { success: true });
     } catch (error) {
-      emitGatewayLifecycleEvent(ctx, {
-        phase: 'failed',
-        action: 'restart',
-        source: 'channel:setEnabled',
-        reason: 'channel:setEnabled',
-        error: String(error),
-      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;
@@ -921,13 +1051,6 @@ export async function handleChannelRoutes(
       }
       sendJson(res, 200, { success: true });
     } catch (error) {
-      emitGatewayLifecycleEvent(ctx, {
-        phase: 'failed',
-        action: 'restart',
-        source: 'channel:delete',
-        reason: 'channel:delete',
-        error: String(error),
-      });
       sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;

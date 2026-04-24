@@ -4,6 +4,7 @@
  */
 import { create } from 'zustand';
 import { hostApiFetch } from '@/lib/host-api';
+import { useChatStore } from './chat';
 import type { CronJob, CronJobCreateInput, CronJobUpdateInput } from '../types/cron';
 
 interface CronState {
@@ -21,17 +22,36 @@ interface CronState {
   setJobs: (jobs: CronJob[]) => void;
 }
 
+let fetchJobsInFlight: Promise<CronJob[]> | null = null;
+
+function fetchCronJobs(): Promise<CronJob[]> {
+  if (!fetchJobsInFlight) {
+    fetchJobsInFlight = hostApiFetch<CronJob[]>('/api/cron/jobs')
+      .finally(() => {
+        fetchJobsInFlight = null;
+      });
+  }
+  return fetchJobsInFlight;
+}
+
 export const useCronStore = create<CronState>((set) => ({
   jobs: [],
   loading: false,
   error: null,
   
   fetchJobs: async () => {
-    set({ loading: true, error: null });
+    const currentJobs = useCronStore.getState().jobs;
+    if (currentJobs.length === 0) {
+      set({ loading: true, error: null });
+    } else {
+      set({ error: null });
+    }
     
     try {
-      const result = await hostApiFetch<CronJob[]>('/api/cron/jobs');
-      set({ jobs: result, loading: false });
+      const result = await fetchCronJobs();
+      const resultIds = new Set(result.map((job) => job.id));
+      const extraJobs = currentJobs.filter((job) => !resultIds.has(job.id));
+      set({ jobs: [...result, ...extraJobs], loading: false });
     } catch (error) {
       set({ error: String(error), loading: false });
     }
@@ -39,9 +59,10 @@ export const useCronStore = create<CronState>((set) => ({
   
   createJob: async (input) => {
     try {
+      const agentId = input.agentId ?? useChatStore.getState().currentAgentId;
       const job = await hostApiFetch<CronJob>('/api/cron/jobs', {
         method: 'POST',
-        body: JSON.stringify(input),
+        body: JSON.stringify({ ...input, agentId }),
       });
       set((state) => ({ jobs: [...state.jobs, job] }));
       return job;
@@ -53,13 +74,13 @@ export const useCronStore = create<CronState>((set) => ({
   
   updateJob: async (id, input) => {
     try {
-      await hostApiFetch(`/api/cron/jobs/${encodeURIComponent(id)}`, {
+      const updatedJob = await hostApiFetch<CronJob>(`/api/cron/jobs/${encodeURIComponent(id)}`, {
         method: 'PUT',
         body: JSON.stringify(input),
       });
       set((state) => ({
         jobs: state.jobs.map((job) =>
-          job.id === id ? { ...job, ...input, updatedAt: new Date().toISOString() } : job
+          job.id === id ? updatedJob : job
         ),
       }));
     } catch (error) {
@@ -84,13 +105,13 @@ export const useCronStore = create<CronState>((set) => ({
   
   toggleJob: async (id, enabled) => {
     try {
-      await hostApiFetch('/api/cron/toggle', {
+      const updatedJob = await hostApiFetch<CronJob>('/api/cron/toggle', {
         method: 'POST',
         body: JSON.stringify({ id, enabled }),
       });
       set((state) => ({
         jobs: state.jobs.map((job) =>
-          job.id === id ? { ...job, enabled } : job
+          job.id === id ? updatedJob : job
         ),
       }));
     } catch (error) {
@@ -101,14 +122,13 @@ export const useCronStore = create<CronState>((set) => ({
   
   triggerJob: async (id) => {
     try {
-      const result = await hostApiFetch('/api/cron/trigger', {
+      await hostApiFetch('/api/cron/trigger', {
         method: 'POST',
         body: JSON.stringify({ id }),
       });
-      console.log('Cron trigger result:', result);
       // Refresh jobs after trigger to update lastRun/nextRun state
       try {
-        const jobs = await hostApiFetch<CronJob[]>('/api/cron/jobs');
+        const jobs = await fetchCronJobs();
         set({ jobs });
       } catch {
         // Ignore refresh error

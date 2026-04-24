@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { PORTS } from '../utils/config';
+import { findAvailablePort } from '../utils/config';
 import { logger } from '../utils/logger';
 import type { HostApiContext } from './context';
 import { handleAppRoutes } from './routes/app';
@@ -40,7 +41,24 @@ const routeHandlers: RouteHandler[] = [
   handleUsageRoutes,
 ];
 
-export function startHostApiServer(ctx: HostApiContext, port = PORTS.CLAWX_HOST_API): Server {
+let currentHostApiPort = PORTS.CLAWX_HOST_API;
+
+export function getHostApiPort(): number {
+  return currentHostApiPort;
+}
+
+export async function startHostApiServer(
+  ctx: HostApiContext,
+  preferredPort = PORTS.CLAWX_HOST_API,
+): Promise<Server> {
+  const port = await findAvailablePort(preferredPort);
+  currentHostApiPort = port;
+  if (port !== preferredPort) {
+    logger.warn(
+      `Host API port ${preferredPort} is unavailable, using ${port} instead`,
+    );
+  }
+
   const server = createServer(async (req, res) => {
     try {
       const requestUrl = new URL(req.url || '/', `http://127.0.0.1:${port}`);
@@ -56,8 +74,20 @@ export function startHostApiServer(ctx: HostApiContext, port = PORTS.CLAWX_HOST_
     }
   });
 
-  server.listen(port, '127.0.0.1', () => {
-    logger.info(`Host API server listening on http://127.0.0.1:${port}`);
+  await new Promise<void>((resolve, reject) => {
+    const handleListening = () => {
+      server.off('error', handleError);
+      logger.info(`Host API server listening on http://127.0.0.1:${port}`);
+      resolve();
+    };
+    const handleError = (error: Error) => {
+      server.off('listening', handleListening);
+      reject(error);
+    };
+
+    server.once('listening', handleListening);
+    server.once('error', handleError);
+    server.listen(port, '127.0.0.1');
   });
 
   return server;

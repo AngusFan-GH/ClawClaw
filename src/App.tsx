@@ -3,28 +3,33 @@
  * Handles routing and global providers
  */
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { Component, useEffect, useRef } from 'react';
+import { Component, lazy, Suspense, useEffect, useRef } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { Toaster } from 'sonner';
 import i18n from './i18n';
 import { MainLayout } from './components/layout/MainLayout';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { Models } from './pages/Models';
-import { Chat } from './pages/Chat';
-import { Agents } from './pages/Agents';
-import { Channels } from './pages/Channels';
-import { Skills } from './pages/Skills';
-import { Cron } from './pages/Cron';
-import { Settings } from './pages/Settings';
-import { Security } from './pages/Security';
-import { Reminders } from './pages/Reminders';
-import { Setup } from './pages/Setup';
+import { PageLoader } from '@/components/common/LoadingSpinner';
 import { useSettingsStore } from './stores/settings';
 import { useGatewayStore } from './stores/gateway';
 import { useChatStore } from './stores/chat';
 import { applyGatewayTransportPreference } from './lib/api-client';
 import { GatewayLifecycleOverlay } from './components/common/GatewayLifecycleOverlay';
 
+const Models = lazy(() => import('./pages/Models'));
+const Chat = lazy(() => import('./pages/Chat'));
+const Agents = lazy(() => import('./pages/Agents'));
+const Channels = lazy(() => import('./pages/Channels'));
+const Skills = lazy(() => import('./pages/Skills'));
+const Cron = lazy(() => import('./pages/Cron'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Security = lazy(() => import('./pages/Security'));
+const Reminders = lazy(() => import('./pages/Reminders').then((module) => ({ default: module.Reminders })));
+const Setup = lazy(() => import('./pages/Setup'));
+
+function RouteLoader() {
+  return <PageLoader compact className="min-h-[calc(100vh-8rem)]" />;
+}
 
 /**
  * Error Boundary to catch and display React rendering errors
@@ -199,23 +204,25 @@ function App() {
   return (
     <ErrorBoundary>
       <TooltipProvider delayDuration={300}>
-        <Routes>
-          {/* Setup wizard (shown on first launch) */}
-          <Route path="/setup/*" element={<Setup />} />
+        <Suspense fallback={<RouteLoader />}>
+          <Routes>
+            {/* Setup wizard (shown on first launch) */}
+            <Route path="/setup/*" element={<Setup />} />
 
-          {/* Main application routes */}
-          <Route element={<MainLayout />}>
-            <Route path="/" element={<Chat />} />
-            <Route path="/models" element={<Models />} />
-            <Route path="/agents" element={<Agents />} />
-            <Route path="/channels" element={<Channels />} />
-            <Route path="/skills" element={<Skills />} />
-            <Route path="/cron" element={<Cron />} />
-            <Route path="/security" element={<Security />} />
-            <Route path="/reminders" element={<Reminders />} />
-            <Route path="/settings/*" element={<Settings />} />
-          </Route>
-        </Routes>
+            {/* Main application routes */}
+            <Route element={<MainLayout />}>
+              <Route path="/" element={<Chat />} />
+              <Route path="/models" element={<Models />} />
+              <Route path="/agents" element={<Agents />} />
+              <Route path="/channels" element={<Channels />} />
+              <Route path="/skills" element={<Skills />} />
+              <Route path="/cron" element={<Cron />} />
+              <Route path="/security" element={<Security />} />
+              <Route path="/reminders" element={<Reminders />} />
+              <Route path="/settings/*" element={<Settings />} />
+            </Route>
+          </Routes>
+        </Suspense>
 
         {!suppressGlobalGatewayLifecycle && !gatewayOverlaySuppressed && (
           <GatewayLifecycleOverlay lifecycle={gatewayLifecycle} />

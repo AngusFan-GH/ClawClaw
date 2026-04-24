@@ -15,6 +15,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useGatewayStore } from '@/stores/gateway';
 import { useSettingsStore } from '@/stores/settings';
 import { useProviderStore } from '@/stores/providers';
@@ -48,13 +50,12 @@ type UsageGroupBy = 'model' | 'day';
 type ProviderModelOption = {
   id: string;
   name: string;
-  category?: ProviderModelCategory;
+  category?: string;
+  typeLabel?: string;
   input?: string;
   contextWindow?: number | null;
   tags?: string[];
 };
-
-type ProviderModelCategory = 'all' | 'chat' | 'reasoning' | 'code' | 'vision' | 'audio' | 'embedding' | 'other';
 
 type ResolvedProviderModelResponse = {
   runtimeProviderId?: string;
@@ -92,20 +93,33 @@ async function resolveLocalProviderModels(payload: {
   });
 }
 
+function formatModelOptionLabel(option: ProviderModelOption): string {
+  return option.name || option.id;
+}
+
+function isPrimaryLocalModelOption(option: ProviderModelOption): boolean {
+  const value = option.category?.trim().toLowerCase();
+  if (!value) {
+    return true;
+  }
+  return value === 'chat' || value === 'reasoning' || value === 'code' || value === 'vision';
+}
+
 function filterProviderModelOptions(
   options: ProviderModelOption[],
   query: string,
-  category: ProviderModelCategory,
 ): ProviderModelOption[] {
   const normalizedQuery = query.trim().toLowerCase();
   return options.filter((option) => {
-    if (category !== 'all' && option.category !== category) {
+    if (!isPrimaryLocalModelOption(option)) {
       return false;
     }
     if (!normalizedQuery) {
       return true;
     }
-    return option.id.toLowerCase().includes(normalizedQuery) || option.name.toLowerCase().includes(normalizedQuery);
+    return option.id.toLowerCase().includes(normalizedQuery)
+      || option.name.toLowerCase().includes(normalizedQuery)
+      || option.category?.toLowerCase().includes(normalizedQuery);
   });
 }
 
@@ -133,12 +147,17 @@ export function Models() {
   );
 
   const [usageHistory, setUsageHistory] = useState<UsageHistoryEntry[]>([]);
+  const [stableUsageHistory, setStableUsageHistory] = useState<UsageHistoryEntry[]>([]);
+  const [usageLoading, setUsageLoading] = useState(false);
   const [usageGroupBy, setUsageGroupBy] = useState<UsageGroupBy>('model');
   const [usageWindow, setUsageWindow] = useState<UsageWindow>('7d');
   const [usagePage, setUsagePage] = useState(1);
   const [selectedUsageEntry, setSelectedUsageEntry] = useState<UsageHistoryEntry | null>(null);
   const [showLocalProviderDialog, setShowLocalProviderDialog] = useState(false);
   const [showAddLocalModelDialog, setShowAddLocalModelDialog] = useState(false);
+  const [confirmDeleteModelId, setConfirmDeleteModelId] = useState<string | null>(null);
+  const [confirmClearProviderOpen, setConfirmClearProviderOpen] = useState(false);
+  const [confirmPending, setConfirmPending] = useState(false);
 
   useEffect(() => {
     trackUiEvent('models.page_viewed');
@@ -149,26 +168,48 @@ export function Models() {
   }, [refreshProviderSnapshot]);
 
   useEffect(() => {
-    if (isGatewayRunning) {
-      hostApiFetch<UsageHistoryEntry[]>('/api/usage/recent-token-history')
-        .then((entries) => {
-          setUsageHistory(Array.isArray(entries) ? entries : []);
-          setUsagePage(1);
-        })
-        .catch(() => {
-          setUsageHistory([]);
-        });
+    if (!isGatewayRunning) {
+      setUsageLoading(false);
+      return;
     }
-  }, [isGatewayRunning]);
 
-  const visibleUsageHistory = isGatewayRunning ? usageHistory : [];
+    let cancelled = false;
+    setUsageLoading(true);
+    hostApiFetch<UsageHistoryEntry[]>('/api/usage/recent-token-history')
+      .then((entries) => {
+        if (cancelled) return;
+        const normalized = Array.isArray(entries) ? entries : [];
+        setUsageHistory(normalized);
+        if (normalized.length > 0 || stableUsageHistory.length === 0) {
+          setStableUsageHistory(normalized);
+        }
+        setUsagePage(1);
+      })
+      .catch(() => {
+        if (cancelled) return;
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setUsageLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isGatewayRunning, gatewayStatus.connectedAt, gatewayStatus.pid, stableUsageHistory.length]);
+
+  const visibleUsageHistory = useMemo(() => {
+    if (usageHistory.length > 0) return usageHistory;
+    return stableUsageHistory;
+  }, [stableUsageHistory, usageHistory]);
   const filteredUsageHistory = filterUsageHistoryByWindow(visibleUsageHistory, usageWindow);
   const usageGroups = groupUsageHistory(filteredUsageHistory, usageGroupBy);
   const usagePageSize = 5;
   const usageTotalPages = Math.max(1, Math.ceil(filteredUsageHistory.length / usagePageSize));
   const safeUsagePage = Math.min(usagePage, usageTotalPages);
   const pagedUsageHistory = filteredUsageHistory.slice((safeUsagePage - 1) * usagePageSize, safeUsagePage * usagePageSize);
-  const usageLoading = isGatewayRunning && visibleUsageHistory.length === 0;
+  const shouldShowUsageLoading = isGatewayRunning && usageLoading && visibleUsageHistory.length === 0;
   const totalTokensInWindow = filteredUsageHistory.reduce((sum, entry) => sum + entry.totalTokens, 0);
   const totalCostInWindow = filteredUsageHistory.reduce((sum, entry) => sum + (entry.costUsd || 0), 0);
 
@@ -193,11 +234,29 @@ export function Models() {
     [accounts],
   );
   const handleDeleteLocalModel = async (accountId: string) => {
+    setConfirmPending(true);
     try {
       await removeAccount(accountId);
-      toast.success('已删除本地模型');
+      setConfirmDeleteModelId(null);
+      toast.success('已删除本地模型，正在同步网关配置');
     } catch (error) {
       toast.error(`删除失败: ${String(error)}`);
+    } finally {
+      setConfirmPending(false);
+    }
+  };
+
+  const handleClearLocalProvider = async () => {
+    if (!localProviderAccount) return;
+    setConfirmPending(true);
+    try {
+      await removeAccount(localProviderAccount.id);
+      setConfirmClearProviderOpen(false);
+      toast.success('本地模型提供商配置已清除，正在同步网关配置');
+    } catch (error) {
+      toast.error(`清除失败: ${String(error)}`);
+    } finally {
+      setConfirmPending(false);
     }
   };
 
@@ -373,14 +432,7 @@ export function Models() {
                   variant="outline"
                   size="sm"
                   className="h-8 shrink-0 rounded-[10px] border-red-500/25 bg-transparent px-3 text-red-600 hover:bg-red-500/5 hover:text-red-600 dark:border-red-400/20 dark:text-red-300 dark:hover:bg-red-400/10 dark:hover:text-red-300"
-                  onClick={() => void (async () => {
-                    try {
-                      await removeAccount(localProviderAccount.id);
-                      toast.success('本地模型提供商配置已清除，本地模型已同步清空');
-                    } catch (error) {
-                      toast.error(`清除失败: ${String(error)}`);
-                    }
-                  })()}
+                  onClick={() => setConfirmClearProviderOpen(true)}
                 >
                   清除配置
                 </Button>
@@ -448,7 +500,7 @@ export function Models() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 rounded-[10px] text-muted-foreground hover:bg-black/5 hover:text-red-500 dark:hover:bg-white/5"
-                            onClick={() => void handleDeleteLocalModel(account.id)}
+                            onClick={() => setConfirmDeleteModelId(account.id)}
                             aria-label="删除本地模型"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -511,7 +563,7 @@ export function Models() {
               </div>
             </div>
             <div>
-              {usageLoading ? (
+              {shouldShowUsageLoading ? (
                 <div className="flex items-center justify-center rounded-[10px] border border-dashed border-border/80 bg-muted/35 py-12 text-muted-foreground">
                   <PageLoader
                     compact
@@ -668,6 +720,41 @@ export function Models() {
           }}
         />
       ) : null}
+      <ConfirmDialog
+        open={Boolean(confirmDeleteModelId)}
+        title="删除本地模型"
+        message="删除后会立即同步网关运行时模型列表。当前使用该模型的会话会在下一次模型刷新后切换到可用模型。"
+        confirmLabel="删除并同步"
+        confirmPendingLabel="正在删除..."
+        cancelLabel="取消"
+        variant="destructive"
+        confirmPending={confirmPending}
+        onCancel={() => {
+          if (confirmPending) return;
+          setConfirmDeleteModelId(null);
+        }}
+        onConfirm={() => {
+          if (!confirmDeleteModelId) return;
+          void handleDeleteLocalModel(confirmDeleteModelId);
+        }}
+      />
+      <ConfirmDialog
+        open={confirmClearProviderOpen}
+        title="清除本地模型提供商"
+        message="清除后会同时移除关联的本地模型，并同步网关运行时配置。当前使用这些模型的会话在下一次刷新后将不再可用。"
+        confirmLabel="清除并同步"
+        confirmPendingLabel="正在清除..."
+        cancelLabel="取消"
+        variant="destructive"
+        confirmPending={confirmPending}
+        onCancel={() => {
+          if (confirmPending) return;
+          setConfirmClearProviderOpen(false);
+        }}
+        onConfirm={() => {
+          void handleClearLocalProvider();
+        }}
+      />
     </div>
   );
 }
@@ -999,10 +1086,8 @@ function AddLocalModelDialog({
   const [selectedModelId, setSelectedModelId] = useState('');
   const [manualModelId, setManualModelId] = useState('');
   const [label, setLabel] = useState('');
-  const [labelDirty, setLabelDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<ProviderModelCategory>('all');
 
   useEffect(() => {
     let cancelled = false;
@@ -1022,7 +1107,8 @@ function AddLocalModelDialog({
         }
         const availableModels = Array.isArray(result.models) ? result.models : [];
         const filteredModels = availableModels.filter((option) => (
-          !existingModels.some((account) => account.model?.trim() === option.id.trim())
+          isPrimaryLocalModelOption(option)
+          && !existingModels.some((account) => account.model?.trim() === option.id.trim())
         ));
         setModelOptions(filteredModels);
         if (filteredModels[0]?.id) {
@@ -1045,16 +1131,12 @@ function AddLocalModelDialog({
     return () => {
       cancelled = true;
     };
-  }, [existingModels, getAccountApiKey, labelDirty, providerAccount.apiProtocol, providerAccount.baseUrl, providerAccount.id]);
+  }, [existingModels, getAccountApiKey, providerAccount.apiProtocol, providerAccount.baseUrl, providerAccount.id]);
 
   const usingResolvedModels = modelOptions.length > 0;
   const filteredModelOptions = useMemo(
-    () => filterProviderModelOptions(modelOptions, query, category),
-    [modelOptions, query, category],
-  );
-  const hasUpstreamCategories = useMemo(
-    () => modelOptions.some((option) => Boolean(option.category && option.category !== 'other')),
-    [modelOptions],
+    () => filterProviderModelOptions(modelOptions, query),
+    [modelOptions, query],
   );
   const hasSelectedFilteredModel = usingResolvedModels
     ? filteredModelOptions.some((option) => option.id === selectedModelId)
@@ -1068,15 +1150,6 @@ function AddLocalModelDialog({
   const effectiveLabel = label.trim()
     || selectedModelOption?.name?.trim()
     || effectiveModelId;
-  const categories: Array<{ id: ProviderModelCategory; label: string }> = [
-    { id: 'all', label: t('aiProviders.dialog.modelFilterAll', '全部') },
-    { id: 'chat', label: t('aiProviders.dialog.modelFilterChat', '对话') },
-    { id: 'reasoning', label: t('aiProviders.dialog.modelFilterReasoning', '推理') },
-    { id: 'code', label: t('aiProviders.dialog.modelFilterCode', '代码') },
-    { id: 'vision', label: t('aiProviders.dialog.modelFilterVision', '视觉') },
-    { id: 'audio', label: t('aiProviders.dialog.modelFilterAudio', '音频') },
-    { id: 'embedding', label: t('aiProviders.dialog.modelFilterEmbedding', 'Embedding') },
-  ];
 
   useEffect(() => {
     if (!usingResolvedModels) {
@@ -1141,54 +1214,35 @@ function AddLocalModelDialog({
                     <Input
                       value={query}
                       onChange={(event) => setQuery(event.target.value)}
-                      placeholder={t('aiProviders.dialog.searchModels', '搜索模型 ID 或名称')}
+                      placeholder={t('aiProviders.dialog.searchModels', '搜索模型 ID、名称或类型')}
                       className="h-12 rounded-xl border-black/10 bg-background/80 pl-9 dark:border-white/10"
                     />
                   </div>
-                  {hasUpstreamCategories ? (
-                    <div className="flex flex-wrap gap-2">
-                      {categories.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => setCategory(item.id)}
-                          className={
-                            category === item.id
-                              ? 'rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[12px] font-medium text-primary'
-                              : 'rounded-full border border-black/8 bg-background/80 px-3 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-black/[0.03] dark:border-white/10 dark:hover:bg-white/[0.04]'
-                          }
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                  <select
+                  <Select
                     id="local-model-select"
-                    className="h-12 w-full rounded-xl border border-input bg-background px-3 text-sm"
-                    value={selectedModelId}
+                    className="h-12 rounded-xl border-black/10 bg-background/80 dark:border-white/10"
+                    value={hasSelectedFilteredModel ? selectedModelId : (filteredModelOptions[0]?.id ?? '')}
                     onChange={(event) => {
                       setSelectedModelId(event.target.value);
                     }}
+                    disabled={filteredModelOptions.length === 0}
                   >
                     {filteredModelOptions.length > 0 ? (
                       filteredModelOptions.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.name || option.id}
+                        <option
+                          key={option.id}
+                          value={option.id}
+                          data-badge-label={option.typeLabel?.trim() || undefined}
+                        >
+                          {formatModelOptionLabel(option)}
                         </option>
                       ))
                     ) : (
-                      <option value={selectedModelId}>
+                      <option value="">
                         {t('aiProviders.dialog.noFilteredModels', '没有匹配当前筛选条件的模型')}
                       </option>
                     )}
-                  </select>
-                  <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
-                    <span>已从当前本地模型提供商读取到 {modelOptions.length} 个模型。</span>
-                    <span className="shrink-0">
-                      {t('aiProviders.dialog.filteredModelCount', { count: filteredModelOptions.length, defaultValue: `${filteredModelOptions.length} 个可选模型` })}
-                    </span>
-                  </div>
+                  </Select>
                 </div>
               </div>
               <div className="space-y-2">
@@ -1197,10 +1251,7 @@ function AddLocalModelDialog({
                   id="local-model-label"
                   className="h-12 rounded-xl"
                   value={label}
-                  onChange={(event) => {
-                    setLabelDirty(true);
-                    setLabel(event.target.value);
-                  }}
+                  onChange={(event) => setLabel(event.target.value)}
                   placeholder={selectedModelOption?.name || selectedModelOption?.id || '默认跟随所选模型名称'}
                 />
                 <p className="text-sm text-muted-foreground">
@@ -1231,10 +1282,7 @@ function AddLocalModelDialog({
                   id="local-model-label"
                   className="h-12 rounded-xl"
                   value={label}
-                  onChange={(event) => {
-                    setLabelDirty(true);
-                    setLabel(event.target.value);
-                  }}
+                  onChange={(event) => setLabel(event.target.value)}
                   placeholder={manualModelId.trim() || '默认跟随模型 ID'}
                 />
                 <p className="text-sm text-muted-foreground">

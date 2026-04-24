@@ -63,7 +63,7 @@ interface SkillsState {
   error: string | null;
 
   // Actions
-  fetchSkills: (agentId?: string) => Promise<void>;
+  fetchSkills: (agentId?: string, options?: { includeRuntime?: boolean; silent?: boolean }) => Promise<void>;
   searchSkills: (query: string) => Promise<void>;
   installSkill: (slug: string, version?: string) => Promise<void>;
   uninstallSkill: (slug: string) => Promise<void>;
@@ -72,6 +72,8 @@ interface SkillsState {
   setSkills: (skills: Skill[]) => void;
   updateSkill: (skillId: string, updates: Partial<Skill>) => void;
 }
+
+const fetchSkillsInFlight = new Map<string, Promise<void>>();
 
 export const useSkillsStore = create<SkillsState>((set, get) => ({
   skills: [],
@@ -85,16 +87,24 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
   installing: {},
   error: null,
 
-  fetchSkills: async (agentId) => {
-    // Only show loading state if we have no skills yet (initial load)
-    if (get().skills.length === 0) {
+  fetchSkills: async (agentId, options) => {
+    const shouldShowLoading = !options?.silent && get().skills.length === 0;
+    if (shouldShowLoading) {
       set({ loading: true, error: null });
     }
-    try {
-      const resolvedAgentId = agentId ?? get().currentAgentId ?? undefined;
-      const requestPath = resolvedAgentId
-        ? `/api/skills/list?agentId=${encodeURIComponent(resolvedAgentId)}`
-        : '/api/skills/list';
+    const resolvedAgentId = agentId ?? get().currentAgentId ?? undefined;
+    const requestPath = resolvedAgentId
+      ? `/api/skills/list?agentId=${encodeURIComponent(resolvedAgentId)}`
+      : '/api/skills/list';
+    const includeRuntime = options?.includeRuntime !== false;
+    const inFlightKey = `${resolvedAgentId ?? ''}:${includeRuntime ? 'runtime' : 'snapshot'}`;
+    const existing = fetchSkillsInFlight.get(inFlightKey);
+    if (existing) {
+      await existing;
+      return;
+    }
+
+    const request = (async () => {
       const result = await hostApiFetch<{
         success: boolean;
         results?: Skill[];
@@ -113,7 +123,41 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
         sourceStats: result.sourceStats || [],
         sourceDirs: result.sourceDirs || [],
         loading: false,
+        error: null,
       });
+
+      if (
+        includeRuntime
+        && useGatewayStore.getState().status.state === 'running'
+      ) {
+        const runtimePath = resolvedAgentId
+          ? `/api/skills/runtime?agentId=${encodeURIComponent(resolvedAgentId)}`
+          : '/api/skills/runtime';
+        try {
+          const runtimeResult = await hostApiFetch<{
+            success: boolean;
+            results?: Skill[];
+            sourceStats?: SkillSourceStat[];
+            sourceDirs?: SkillSourceDir[];
+            error?: string;
+          }>(runtimePath);
+          if (runtimeResult.success) {
+            set((state) => ({
+              skills: runtimeResult.results || state.skills,
+              currentAgentId: resolvedAgentId ?? state.currentAgentId,
+              sourceStats: runtimeResult.sourceStats || state.sourceStats,
+              sourceDirs: runtimeResult.sourceDirs || state.sourceDirs,
+              loading: false,
+            }));
+          }
+        } catch {
+          // Keep snapshot data when runtime enrichment is unavailable.
+        }
+      }
+    })();
+    fetchSkillsInFlight.set(inFlightKey, request);
+    try {
+      await request;
     } catch (error) {
       console.error('Failed to fetch skills:', error);
       const appError = normalizeAppError(error, { module: 'skills', operation: 'fetch' });
@@ -121,6 +165,10 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
         loading: false,
         error: mapErrorCodeToSkillErrorKey(appError.code, 'fetch') || appError.message,
       });
+    } finally {
+      if (fetchSkillsInFlight.get(inFlightKey) === request) {
+        fetchSkillsInFlight.delete(inFlightKey);
+      }
     }
   },
 
@@ -173,7 +221,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
         throw new Error(result.error || appError.message || 'Install failed');
       }
       // Refresh skills after install
-      await get().fetchSkills();
+      await get().fetchSkills(undefined, { includeRuntime: true });
     } catch (error) {
       console.error('Install error:', error);
       throw error;
@@ -197,7 +245,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
         throw new Error(result.error || 'Uninstall failed');
       }
       // Refresh skills after uninstall
-      await get().fetchSkills();
+      await get().fetchSkills(undefined, { includeRuntime: true });
     } catch (error) {
       console.error('Uninstall error:', error);
       throw error;
@@ -219,7 +267,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
 
     try {
       await useGatewayStore.getState().rpc('skills.update', { skillKey: skillId, enabled: true });
-      await get().fetchSkills(get().currentAgentId ?? undefined);
+      await get().fetchSkills(get().currentAgentId ?? undefined, { includeRuntime: true });
     } catch (error) {
       console.error('Failed to enable skill:', error);
       throw error;
@@ -240,7 +288,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
 
     try {
       await useGatewayStore.getState().rpc('skills.update', { skillKey: skillId, enabled: false });
-      await get().fetchSkills(get().currentAgentId ?? undefined);
+      await get().fetchSkills(get().currentAgentId ?? undefined, { includeRuntime: true });
     } catch (error) {
       console.error('Failed to disable skill:', error);
       throw error;

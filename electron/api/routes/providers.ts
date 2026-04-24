@@ -1,8 +1,4 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { spawn } from 'node:child_process';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { readFile } from 'node:fs/promises';
 import {
   type ProviderConfig,
 } from '../../utils/secure-storage';
@@ -24,95 +20,19 @@ import {
 import { listModelsWithProvider, validateApiKeyWithProvider } from '../../services/providers/provider-validation';
 import { getProviderService } from '../../services/providers/provider-service';
 import { providerAccountToConfig } from '../../services/providers/provider-store';
+import {
+  invalidateOpenClawModelListCache,
+  listProviderModelOptions,
+  listProviderModelOptionsWithRuntimeFallback,
+  listRuntimeModelRefs,
+} from '../../services/providers/provider-model-catalog';
+import {
+  resolveLocalModelRuntimeConfig,
+  resolveProviderRuntime,
+} from '../../services/providers/provider-runtime-resolver';
 import type { ProviderAccount } from '../../shared/providers/types';
 import { logger } from '../../utils/logger';
-import { getOpenClawCliSpawnConfig } from '../../utils/openclaw-cli';
-import { prepareWinSpawn } from '../../utils/win-shell';
 import { applyPresetLocalModelSelection, readLocalModelPresets } from '../../services/providers/local-model-presets';
-import { getOpenClawProviderKeyForType } from '../../utils/provider-keys';
-
-type OpenClawModelListResponse = {
-  count?: number;
-  models?: Array<{
-    key?: string;
-    name?: string;
-    input?: string;
-    contextWindow?: number | null;
-    tags?: string[];
-    category?: string;
-    local?: boolean | null;
-    available?: boolean;
-  }>;
-};
-
-type OpenClawModelScope = 'catalog' | 'runtime';
-type ProviderModelOptionsSource = 'runtime' | 'models_json_fallback' | 'direct';
-type OpenClawModelEntry = NonNullable<OpenClawModelListResponse['models']>[number];
-type OpenClawModelCacheEntry = {
-  expiresAt: number;
-  promise?: Promise<OpenClawModelEntry[]>;
-  value?: OpenClawModelEntry[];
-};
-
-const OPENCLAW_MODEL_LIST_CACHE_TTL_MS = 10_000;
-const openClawModelListCache = new Map<OpenClawModelScope, OpenClawModelCacheEntry>();
-let openClawModelListQueue: Promise<void> = Promise.resolve();
-
-const WINDOWS_MODELS_JSON_RENAME_RETRY_DELAYS_MS = [120, 250, 500];
-
-function isWindowsModelsJsonRenameError(error: unknown): boolean {
-  const text = String(error);
-  return (
-    process.platform === 'win32'
-    && text.includes('EPERM:')
-    && text.includes('models.json')
-    && text.includes('.tmp')
-  );
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function readMainAgentModelsJsonEntries(): Promise<OpenClawModelEntry[]> {
-  const modelsPath = join(homedir(), '.openclaw', 'agents', 'main', 'agent', 'models.json');
-  try {
-    const raw = await readFile(modelsPath, 'utf8');
-    const parsed = JSON.parse(raw) as {
-      providers?: Record<string, { models?: Array<{ id?: string; name?: string }> }>;
-    };
-    const providers = parsed?.providers ?? {};
-    const entries: OpenClawModelEntry[] = [];
-    for (const [providerKey, provider] of Object.entries(providers)) {
-      for (const model of provider?.models ?? []) {
-        if (!model?.id) continue;
-        entries.push({
-          key: `${providerKey}/${model.id}`,
-          name: model.name || model.id,
-          available: true,
-        });
-      }
-    }
-    return entries;
-  } catch {
-    return [];
-  }
-}
-
-async function runSerializedOpenClawModelList<T>(task: () => Promise<T>): Promise<T> {
-  const previous = openClawModelListQueue;
-  let release!: () => void;
-  openClawModelListQueue = new Promise((resolve) => {
-    release = resolve;
-  });
-
-  await previous.catch(() => {});
-  try {
-    return await task();
-  } finally {
-    release();
-  }
-}
 
 function isLocalModelProviderConfig(account: Pick<ProviderAccount, 'vendorId' | 'metadata'> | null | undefined): boolean {
   return account?.vendorId === 'local-model' && account.metadata?.localModelProvider === true;
@@ -120,399 +40,6 @@ function isLocalModelProviderConfig(account: Pick<ProviderAccount, 'vendorId' | 
 
 function isLocalModelRuntimeAccount(account: Pick<ProviderAccount, 'vendorId' | 'metadata'> | null | undefined): boolean {
   return account?.vendorId === 'local-model' && account.metadata?.localModelProvider !== true;
-}
-
-function invalidateOpenClawModelListCache(): void {
-  openClawModelListCache.clear();
-}
-
-function extractJsonObjectFromMixedOutput(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-
-  let start = -1;
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-
-  for (let index = 0; index < trimmed.length; index += 1) {
-    const char = trimmed[index];
-
-    if (start === -1) {
-      if (char === '{') {
-        start = index;
-        depth = 1;
-      }
-      continue;
-    }
-
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === '\\') {
-        escaped = true;
-      } else if (char === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === '"') {
-      inString = true;
-      continue;
-    }
-
-    if (char === '{') {
-      depth += 1;
-      continue;
-    }
-
-    if (char === '}') {
-      depth -= 1;
-      if (depth === 0) {
-        return trimmed.slice(start, index + 1);
-      }
-    }
-  }
-
-  return null;
-}
-
-function parseOpenClawModelListOutput(raw: string): OpenClawModelListResponse {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    throw new Error('openclaw models list returned empty output');
-  }
-
-  try {
-    return JSON.parse(trimmed) as OpenClawModelListResponse;
-  } catch {
-    const jsonSlice = extractJsonObjectFromMixedOutput(trimmed);
-    if (!jsonSlice) {
-      throw new Error(`openclaw models list did not contain a JSON object. Output preview: ${trimmed.slice(0, 240)}`);
-    }
-    return JSON.parse(jsonSlice) as OpenClawModelListResponse;
-  }
-}
-
-async function fetchOpenClawModelListOnce(scope: OpenClawModelScope): Promise<OpenClawModelEntry[]> {
-  const cliArgs = scope === 'runtime'
-    ? ['models', 'list', '--json']
-    : ['models', 'list', '--all', '--json'];
-  const { command, args, env, cwd } = getOpenClawCliSpawnConfig(cliArgs);
-  const prepared = prepareWinSpawn(command, args);
-
-  return await new Promise((resolve, reject) => {
-    const child = spawn(prepared.command, prepared.args, {
-      cwd,
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-      shell: prepared.shell,
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-
-    child.on('error', (error) => reject(error));
-    child.on('close', (code) => {
-      if (code !== 0) {
-        reject(new Error(stderr.trim() || `openclaw models list exited with code ${code}`));
-        return;
-      }
-      try {
-        const parsed = parseOpenClawModelListOutput(stdout);
-        resolve(parsed.models ?? []);
-      } catch (error) {
-        reject(error);
-      }
-    });
-  });
-}
-
-async function fetchOpenClawModelList(scope: OpenClawModelScope): Promise<OpenClawModelEntry[]> {
-  let attempt = 0;
-  for (;;) {
-    try {
-      return await runSerializedOpenClawModelList(() => fetchOpenClawModelListOnce(scope));
-    } catch (error) {
-      if (
-        !isWindowsModelsJsonRenameError(error)
-        || attempt >= WINDOWS_MODELS_JSON_RENAME_RETRY_DELAYS_MS.length
-      ) {
-        throw error;
-      }
-
-      const delayMs = WINDOWS_MODELS_JSON_RENAME_RETRY_DELAYS_MS[attempt];
-      attempt += 1;
-      logger.warn(
-        `[providers] openclaw models list hit Windows models.json rename lock; retrying in ${delayMs}ms (attempt ${attempt})`,
-      );
-      await sleep(delayMs);
-    }
-  }
-}
-
-async function getOpenClawModelList(scope: OpenClawModelScope): Promise<OpenClawModelEntry[]> {
-  const now = Date.now();
-  const cached = openClawModelListCache.get(scope);
-  if (cached?.value && cached.expiresAt > now) {
-    return cached.value;
-  }
-  if (cached?.promise) {
-    return await cached.promise;
-  }
-
-  const promise = fetchOpenClawModelList(scope)
-    .then((models) => {
-      openClawModelListCache.set(scope, {
-        value: models,
-        expiresAt: Date.now() + OPENCLAW_MODEL_LIST_CACHE_TTL_MS,
-      });
-      return models;
-    })
-    .catch((error) => {
-      openClawModelListCache.delete(scope);
-      throw error;
-    });
-
-  openClawModelListCache.set(scope, {
-    promise,
-    expiresAt: now + OPENCLAW_MODEL_LIST_CACHE_TTL_MS,
-  });
-
-  return await promise;
-}
-
-async function listRuntimeModelRefs(): Promise<string[]> {
-  // Renderer model queries run on Chat remount, so this path must stay read-only.
-  const models = await getOpenClawModelList('runtime');
-  const refs = models
-    .filter((model) => model.available !== false)
-    .map((model) => (typeof model.key === 'string' ? model.key : ''))
-    .filter((value): value is string => Boolean(value));
-  return Array.from(new Set(refs));
-}
-
-const OPENAI_OAUTH_RUNTIME_PROVIDER = 'openai-codex';
-const OPENAI_OAUTH_PREFERRED_MODEL = 'gpt-5.4';
-
-function normalizeProviderModelId(runtimeProviderId: string, modelId: string): string {
-  if (
-    runtimeProviderId === OPENAI_OAUTH_RUNTIME_PROVIDER
-    && (modelId === 'gpt-5.2' || modelId === 'gpt-5.3-codex')
-  ) {
-    return OPENAI_OAUTH_PREFERRED_MODEL;
-  }
-  return modelId;
-}
-
-function compareProviderModelOptions(
-  runtimeProviderId: string,
-  left: { id: string; name: string },
-  right: { id: string; name: string },
-): number {
-  if (runtimeProviderId === OPENAI_OAUTH_RUNTIME_PROVIDER) {
-    if (left.id === OPENAI_OAUTH_PREFERRED_MODEL && right.id !== OPENAI_OAUTH_PREFERRED_MODEL) {
-      return -1;
-    }
-    if (right.id === OPENAI_OAUTH_PREFERRED_MODEL && left.id !== OPENAI_OAUTH_PREFERRED_MODEL) {
-      return 1;
-    }
-  }
-
-  return left.name.localeCompare(right.name, 'en', { sensitivity: 'base' });
-}
-
-function getRuntimeProviderId(vendorId: string, authMode?: string | null): string {
-  if (vendorId === 'openai' && (authMode === 'oauth_browser' || authMode === 'oauth_device')) {
-    return OPENAI_OAUTH_RUNTIME_PROVIDER;
-  }
-  if (vendorId === 'google' && authMode === 'oauth_browser') {
-    return 'google-gemini-cli';
-  }
-  return vendorId;
-}
-
-async function resolveRuntimeProviderId(
-  providerService: ReturnType<typeof getProviderService>,
-  vendorId: string,
-  authMode?: string | null,
-  accountId?: string | null,
-): Promise<string> {
-  if (!accountId) {
-    return getRuntimeProviderId(vendorId, authMode);
-  }
-
-  const account = await providerService.getAccount(accountId);
-  if (!account) {
-    return getRuntimeProviderId(vendorId, authMode);
-  }
-
-  if (
-    account.vendorId === 'openai'
-    && (account.authMode === 'oauth_browser' || account.authMode === 'oauth_device')
-  ) {
-    return OPENAI_OAUTH_RUNTIME_PROVIDER;
-  }
-
-  if (account.vendorId === 'google' && account.authMode === 'oauth_browser') {
-    return 'google-gemini-cli';
-  }
-
-  return getOpenClawProviderKeyForType(account.vendorId, account.id);
-}
-
-async function listProviderModelOptions(
-  runtimeProviderId: string,
-  scope: 'catalog' | 'runtime' = 'catalog',
-  options?: { allowModelsJsonFallback?: boolean },
-): Promise<{
-  models: Array<{
-    id: string;
-    name: string;
-    input?: string;
-    contextWindow?: number | null;
-    tags?: string[];
-    category?: string;
-  }>;
-  source: ProviderModelOptionsSource;
-}> {
-  let parsedModels: OpenClawModelEntry[];
-  let source: ProviderModelOptionsSource = 'runtime';
-
-  try {
-    parsedModels = await getOpenClawModelList(scope);
-  } catch (error) {
-    const allowModelsJsonFallback = options?.allowModelsJsonFallback
-      && process.platform === 'win32'
-      && scope === 'runtime';
-    if (!allowModelsJsonFallback) {
-      throw error;
-    }
-
-    logger.warn(
-      `[providers] Falling back to main agent models.json for ${runtimeProviderId} after OpenClaw model listing failed:`,
-      error,
-    );
-    parsedModels = await readMainAgentModelsJsonEntries();
-    source = 'models_json_fallback';
-  }
-
-  const models = parsedModels
-    .filter((model) => typeof model.key === 'string' && model.key.startsWith(`${runtimeProviderId}/`))
-    .filter((model) => model.available !== false)
-    .map((model) => ({
-      id: normalizeProviderModelId(
-        runtimeProviderId,
-        String(model.key).slice(runtimeProviderId.length + 1),
-      ),
-      name:
-        normalizeProviderModelId(
-          runtimeProviderId,
-          model.name || String(model.key).slice(runtimeProviderId.length + 1),
-        ),
-      input: typeof model.input === 'string' ? model.input : undefined,
-      contextWindow: typeof model.contextWindow === 'number' ? model.contextWindow : undefined,
-      tags: Array.isArray(model.tags)
-        ? model.tags.filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0)
-        : undefined,
-      category: typeof model.category === 'string' && model.category.trim().length > 0
-        ? model.category.trim()
-        : undefined,
-    }));
-
-  return {
-    models: Array.from(
-    new Map(models.map((model) => [model.id, model])).values(),
-    ).sort((left, right) => compareProviderModelOptions(runtimeProviderId, left, right)),
-    source,
-  };
-}
-
-async function listProviderModelOptionsWithRuntimeFallback(
-  runtimeProviderId: string,
-  scope: 'catalog' | 'runtime',
-  options?: { allowModelsJsonFallback?: boolean },
-): Promise<{
-  models: Array<{
-    id: string;
-    name: string;
-    input?: string;
-    contextWindow?: number | null;
-    tags?: string[];
-    category?: string;
-  }>;
-  source: ProviderModelOptionsSource;
-}> {
-  const primary = await listProviderModelOptions(runtimeProviderId, scope, options);
-  if (scope !== 'catalog' || primary.models.length > 0) {
-    return primary;
-  }
-
-  return await listProviderModelOptions(runtimeProviderId, 'runtime', {
-    allowModelsJsonFallback: false,
-  });
-}
-
-function isRuntimeOnlyModelCatalog(vendorId: string, authMode?: string | null): boolean {
-  return (
-    (vendorId === 'openai' && (authMode === 'oauth_browser' || authMode === 'oauth_device'))
-    || (vendorId === 'google' && authMode === 'oauth_browser')
-  );
-}
-
-async function resolveRuntimeOnlyModelCatalog(
-  providerService: ReturnType<typeof getProviderService>,
-  vendorId: string,
-  authMode?: string | null,
-  accountId?: string | null,
-): Promise<boolean> {
-  if (!accountId) {
-    return isRuntimeOnlyModelCatalog(vendorId, authMode);
-  }
-
-  const account = await providerService.getAccount(accountId);
-  if (!account) {
-    return isRuntimeOnlyModelCatalog(vendorId, authMode);
-  }
-
-  return isRuntimeOnlyModelCatalog(account.vendorId, account.authMode);
-}
-
-async function resolveLocalModelRuntimeConfig(
-  providerService: ReturnType<typeof getProviderService>,
-): Promise<{ baseUrl?: string; apiProtocol?: string } | null> {
-  const accounts = await providerService.listAccounts();
-  const localAccount = accounts.find((account) => (
-    account.vendorId === 'custom'
-    && (account.metadata?.localModel || account.metadata?.managedBy === 'preset-local-model')
-    && account.baseUrl
-  ));
-  if (localAccount?.baseUrl) {
-    return {
-      baseUrl: localAccount.baseUrl,
-      apiProtocol: localAccount.apiProtocol || 'openai-completions',
-    };
-  }
-
-  const presets = await readLocalModelPresets().catch(() => []);
-  const primaryPreset = presets[0];
-  if (!primaryPreset?.baseUrl) {
-    return null;
-  }
-
-  return {
-    baseUrl: primaryPreset.baseUrl,
-    apiProtocol: primaryPreset.apiProtocol || 'openai-completions',
-  };
 }
 
 const legacyProviderRoutesWarned = new Set<string>();
@@ -561,22 +88,17 @@ export async function handleProviderRoutes(
         sendJson(res, 400, { error: 'vendorId is required' });
         return true;
       }
-      const runtimeProviderId = await resolveRuntimeProviderId(
+      const { runtimeProviderId, runtimeOnlyCatalog } = await resolveProviderRuntime(
         providerService,
         vendorId,
         authMode,
         accountId,
       );
-      const runtimeOnlyCatalog = await resolveRuntimeOnlyModelCatalog(
-        providerService,
-        vendorId,
-        authMode,
-        accountId,
-      );
-      const { models, source } = await listProviderModelOptionsWithRuntimeFallback(runtimeProviderId, scope, {
+      const effectiveScope: 'catalog' | 'runtime' = runtimeOnlyCatalog ? 'runtime' : scope;
+      const { models, source } = await listProviderModelOptionsWithRuntimeFallback(runtimeProviderId, effectiveScope, ctx, {
         allowModelsJsonFallback: !runtimeOnlyCatalog,
       });
-      sendJson(res, 200, { runtimeProviderId, models, source });
+      sendJson(res, 200, { runtimeProviderId, models, source, scope: effectiveScope });
     } catch (error) {
       logger.warn('[providers] Failed to list provider model options:', error);
       sendJson(res, 500, { error: String(error) });
@@ -599,7 +121,7 @@ export async function handleProviderRoutes(
         return true;
       }
 
-      const runtimeProviderId = await resolveRuntimeProviderId(
+      const { runtimeProviderId } = await resolveProviderRuntime(
         providerService,
         body.vendorId,
         body.authMode,
@@ -610,7 +132,7 @@ export async function handleProviderRoutes(
         body.authMode === 'oauth_browser'
         || body.authMode === 'oauth_device'
       ) {
-        const { models, source } = await listProviderModelOptions(runtimeProviderId, 'runtime', {
+        const { models, source } = await listProviderModelOptions(runtimeProviderId, 'runtime', ctx, {
           allowModelsJsonFallback: false,
         });
         sendJson(res, 200, { runtimeProviderId, models, resolved: true, source });
@@ -635,7 +157,7 @@ export async function handleProviderRoutes(
 
   if (url.pathname === '/api/runtime-model-refs' && req.method === 'GET') {
     try {
-      const models = await listRuntimeModelRefs();
+      const models = await listRuntimeModelRefs(ctx);
       sendJson(res, 200, { models });
     } catch (error) {
       logger.warn('[providers] Failed to list runtime model refs:', error);

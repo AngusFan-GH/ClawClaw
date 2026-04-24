@@ -1,5 +1,6 @@
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { getProviderConfig } from '../../utils/provider-registry';
+import { logger } from '../../utils/logger';
 
 type ValidationProfile =
   | 'openai-compatible'
@@ -7,6 +8,16 @@ type ValidationProfile =
   | 'anthropic-header'
   | 'openrouter'
   | 'none';
+
+type ProviderModelOption = {
+  id: string;
+  name: string;
+  category?: string;
+  typeLabel?: string;
+  input?: string;
+  contextWindow?: number | null;
+  tags?: string[];
+};
 
 function logValidationStatus(provider: string, status: number): void {
   console.log(`[clawclaw-validate] ${provider} HTTP ${status}`);
@@ -53,16 +64,43 @@ function logValidationRequest(
   provider: string,
   method: string,
   url: string,
-  headers: Record<string, string>
+  headers: Record<string, string>,
 ): void {
   console.log(
-    `[clawclaw-validate] ${provider} request ${method} ${sanitizeValidationUrl(url)} headers=${JSON.stringify(sanitizeHeaders(headers))}`
+    `[clawclaw-validate] ${provider} request ${method} ${sanitizeValidationUrl(url)} headers=${JSON.stringify(sanitizeHeaders(headers))}`,
+  );
+}
+
+function logModelDiscoveryStart(
+  providerType: string,
+  profile: ValidationProfile,
+  options?: { baseUrl?: string; apiProtocol?: string },
+): void {
+  logger.info(
+    `[provider-model-discovery] start provider=${providerType} profile=${profile} baseUrl=${options?.baseUrl?.trim() || 'default'} apiProtocol=${options?.apiProtocol || 'default'}`,
+  );
+}
+
+function logModelDiscoveryResult(
+  providerType: string,
+  profile: ValidationProfile,
+  result: { models: ProviderModelOption[]; error?: string },
+): void {
+  if (result.error) {
+    logger.warn(
+      `[provider-model-discovery] failed provider=${providerType} profile=${profile} error=${result.error}`,
+    );
+    return;
+  }
+
+  logger.info(
+    `[provider-model-discovery] success provider=${providerType} profile=${profile} count=${result.models.length}`,
   );
 }
 
 function getValidationProfile(
   providerType: string,
-  options?: { apiProtocol?: string }
+  options?: { apiProtocol?: string },
 ): ValidationProfile {
   const providerApi = options?.apiProtocol || getProviderConfig(providerType)?.api;
   if (providerApi === 'anthropic-messages') {
@@ -89,7 +127,7 @@ function getValidationProfile(
 async function performProviderValidationRequest(
   providerLabel: string,
   url: string,
-  headers: Record<string, string>
+  headers: Record<string, string>,
 ): Promise<{ valid: boolean; error?: string }> {
   try {
     logValidationRequest(providerLabel, 'GET', url, headers);
@@ -123,7 +161,7 @@ function extractErrorMessage(status: number, data: unknown): string {
 async function validateOpenAiCompatibleKey(
   providerType: string,
   apiKey: string,
-  baseUrl?: string
+  baseUrl?: string,
 ): Promise<{ valid: boolean; error?: string }> {
   const trimmedBaseUrl = baseUrl?.trim();
   if (!trimmedBaseUrl) {
@@ -139,7 +177,7 @@ async function validateOpenAiCompatibleKey(
 
   if (modelsResult.error?.includes('API error: 404')) {
     console.log(
-      `[clawclaw-validate] ${providerType} /models returned 404, falling back to /chat/completions probe`
+      `[clawclaw-validate] ${providerType} /models returned 404, falling back to /chat/completions probe`,
     );
     const base = normalizeBaseUrl(trimmedBaseUrl);
     const chatUrl = `${base}/chat/completions`;
@@ -149,8 +187,48 @@ async function validateOpenAiCompatibleKey(
   return modelsResult;
 }
 
-function mapOpenAiModelList(data: unknown): Array<{ id: string; name: string }> {
-  const payload = data as { data?: Array<{ id?: string; name?: string }> } | null;
+function normalizeModelCategory(raw: unknown): string | undefined {
+  const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (!value) return undefined;
+  if (value.includes('embed')) return 'embedding';
+  if (
+    value.includes('vision')
+    || value.includes('image')
+    || value.includes('multimodal')
+    || value.includes('multi-modal')
+    || value.includes('vl')
+  ) return 'vision';
+  if (value.includes('audio') || value.includes('speech') || value.includes('tts') || value.includes('asr')) return 'audio';
+  if (value.includes('reason')) return 'reasoning';
+  if (value.includes('code')) return 'code';
+  if (value.includes('chat') || value.includes('instruct') || value.includes('text') || value.includes('llm')) return 'chat';
+  return 'other';
+}
+
+function extractStringArray(values: unknown): string[] | undefined {
+  if (!Array.isArray(values)) return undefined;
+  const items = values
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter(Boolean);
+  return items.length > 0 ? items : undefined;
+}
+
+function mapOpenAiModelList(data: unknown): ProviderModelOption[] {
+  const payload = data as {
+    data?: Array<{
+      id?: string;
+      name?: string;
+      type_code?: string;
+      typeCode?: string;
+      contextWindow?: number;
+      max_model_len?: number;
+      maxModelLen?: number;
+      gpu_models?: string[];
+      gpuModels?: string[];
+      owned_by?: string;
+      ownedBy?: string;
+    }>;
+  } | null;
   const raw = Array.isArray(payload?.data) ? payload.data : [];
   return raw
     .map((item) => ({
@@ -158,11 +236,27 @@ function mapOpenAiModelList(data: unknown): Array<{ id: string; name: string }> 
       name: typeof item?.name === 'string' && item.name.trim()
         ? item.name.trim()
         : (typeof item?.id === 'string' ? item.id.trim() : ''),
+      category: normalizeModelCategory(item?.typeCode ?? item?.type_code),
+      typeLabel:
+        typeof item?.typeCode === 'string' && item.typeCode.trim()
+          ? item.typeCode.trim()
+          : (typeof item?.type_code === 'string' && item.type_code.trim() ? item.type_code.trim() : undefined),
+      contextWindow:
+        typeof item?.contextWindow === 'number'
+          ? item.contextWindow
+          : (typeof item?.max_model_len === 'number'
+            ? item.max_model_len
+            : (typeof item?.maxModelLen === 'number' ? item.maxModelLen : undefined)),
+      tags: Array.from(new Set([
+        ...(extractStringArray(item?.gpuModels) ?? extractStringArray(item?.gpu_models) ?? []),
+        ...(typeof item?.owned_by === 'string' && item.owned_by.trim() ? [item.owned_by.trim()] : []),
+        ...(typeof item?.ownedBy === 'string' && item.ownedBy.trim() ? [item.ownedBy.trim()] : []),
+      ])),
     }))
     .filter((item) => Boolean(item.id));
 }
 
-function mapGoogleModelList(data: unknown): Array<{ id: string; name: string }> {
+function mapGoogleModelList(data: unknown): ProviderModelOption[] {
   const payload = data as { models?: Array<{ name?: string; displayName?: string }> } | null;
   const raw = Array.isArray(payload?.models) ? payload.models : [];
   return raw
@@ -183,7 +277,8 @@ async function fetchModelListRequest(
   providerLabel: string,
   url: string,
   headers: Record<string, string>,
-): Promise<{ models: Array<{ id: string; name: string }>; error?: string }> {
+  mapper: (data: unknown) => ProviderModelOption[] = mapOpenAiModelList,
+): Promise<{ models: ProviderModelOption[]; error?: string }> {
   try {
     logValidationRequest(providerLabel, 'GET', url, headers);
     const response = await proxyAwareFetch(url, { headers });
@@ -192,7 +287,7 @@ async function fetchModelListRequest(
     if (response.status < 200 || response.status >= 300) {
       return { models: [], error: extractErrorMessage(response.status, data) };
     }
-    return { models: mapOpenAiModelList(data) };
+    return { models: mapper(data) };
   } catch (error) {
     return {
       models: [],
@@ -205,21 +300,21 @@ async function listOpenAiCompatibleModels(
   providerType: string,
   apiKey: string | undefined,
   baseUrl?: string,
-): Promise<{ models: Array<{ id: string; name: string }>; error?: string }> {
+): Promise<{ models: ProviderModelOption[]; error?: string }> {
   const trimmedBaseUrl = baseUrl?.trim();
   if (!trimmedBaseUrl) {
     return { models: [], error: `Base URL is required for provider "${providerType}"` };
   }
   const headers = apiKey?.trim() ? { Authorization: `Bearer ${apiKey.trim()}` } : {};
   const modelsUrl = buildOpenAiModelsUrl(trimmedBaseUrl);
-  return await fetchModelListRequest(providerType, modelsUrl, headers);
+  return await fetchModelListRequest(providerType, modelsUrl, headers, mapOpenAiModelList);
 }
 
 async function listAnthropicCompatibleModels(
   providerType: string,
   apiKey: string | undefined,
   baseUrl?: string,
-): Promise<{ models: Array<{ id: string; name: string }>; error?: string }> {
+): Promise<{ models: ProviderModelOption[]; error?: string }> {
   const trimmedKey = apiKey?.trim();
   if (!trimmedKey) {
     return { models: [], error: 'API key is required' };
@@ -231,42 +326,27 @@ async function listAnthropicCompatibleModels(
     'x-api-key': trimmedKey,
     'anthropic-version': '2023-06-01',
   };
-  const result = await fetchModelListRequest(providerType, url, headers);
-  return { ...result, models: result.models };
+  return await fetchModelListRequest(providerType, url, headers, mapOpenAiModelList);
 }
 
 async function listGoogleModels(
   providerType: string,
   apiKey: string | undefined,
   baseUrl?: string,
-): Promise<{ models: Array<{ id: string; name: string }>; error?: string }> {
+): Promise<{ models: ProviderModelOption[]; error?: string }> {
   const trimmedKey = apiKey?.trim();
   if (!trimmedKey) {
     return { models: [], error: 'API key is required' };
   }
   const base = normalizeBaseUrl(baseUrl || 'https://generativelanguage.googleapis.com/v1beta');
   const url = `${base}/models?pageSize=200&key=${encodeURIComponent(trimmedKey)}`;
-  try {
-    logValidationRequest(providerType, 'GET', url, {});
-    const response = await proxyAwareFetch(url, { headers: {} });
-    logValidationStatus(providerType, response.status);
-    const data = await response.json().catch(() => ({}));
-    if (response.status < 200 || response.status >= 300) {
-      return { models: [], error: extractErrorMessage(response.status, data) };
-    }
-    return { models: mapGoogleModelList(data) };
-  } catch (error) {
-    return {
-      models: [],
-      error: `Connection error: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
+  return await fetchModelListRequest(providerType, url, {}, mapGoogleModelList);
 }
 
 async function performChatCompletionsProbe(
   providerLabel: string,
   url: string,
-  headers: Record<string, string>
+  headers: Record<string, string>,
 ): Promise<{ valid: boolean; error?: string }> {
   try {
     logValidationRequest(providerLabel, 'POST', url, headers);
@@ -286,9 +366,9 @@ async function performChatCompletionsProbe(
       return { valid: false, error: 'Invalid API key' };
     }
     if (
-      (response.status >= 200 && response.status < 300) ||
-      response.status === 400 ||
-      response.status === 429
+      (response.status >= 200 && response.status < 300)
+      || response.status === 400
+      || response.status === 429
     ) {
       return { valid: true };
     }
@@ -304,7 +384,7 @@ async function performChatCompletionsProbe(
 async function performAnthropicMessagesProbe(
   providerLabel: string,
   url: string,
-  headers: Record<string, string>
+  headers: Record<string, string>,
 ): Promise<{ valid: boolean; error?: string }> {
   try {
     logValidationRequest(providerLabel, 'POST', url, headers);
@@ -324,9 +404,9 @@ async function performAnthropicMessagesProbe(
       return { valid: false, error: 'Invalid API key' };
     }
     if (
-      (response.status >= 200 && response.status < 300) ||
-      response.status === 400 ||
-      response.status === 429
+      (response.status >= 200 && response.status < 300)
+      || response.status === 400
+      || response.status === 429
     ) {
       return { valid: true };
     }
@@ -342,7 +422,7 @@ async function performAnthropicMessagesProbe(
 async function validateGoogleQueryKey(
   providerType: string,
   apiKey: string,
-  baseUrl?: string
+  baseUrl?: string,
 ): Promise<{ valid: boolean; error?: string }> {
   const base = normalizeBaseUrl(baseUrl || 'https://generativelanguage.googleapis.com/v1beta');
   const url = `${base}/models?pageSize=1&key=${encodeURIComponent(apiKey)}`;
@@ -352,7 +432,7 @@ async function validateGoogleQueryKey(
 async function validateAnthropicHeaderKey(
   providerType: string,
   apiKey: string,
-  baseUrl?: string
+  baseUrl?: string,
 ): Promise<{ valid: boolean; error?: string }> {
   const rawBase = normalizeBaseUrl(baseUrl || 'https://api.anthropic.com/v1');
   const base = rawBase.endsWith('/v1') ? rawBase : `${rawBase}/v1`;
@@ -364,13 +444,12 @@ async function validateAnthropicHeaderKey(
 
   const modelsResult = await performProviderValidationRequest(providerType, url, headers);
 
-  // If the endpoint doesn't implement /models (like Minimax Anthropic compatibility), fallback to a /messages probe.
   if (
-    modelsResult.error?.includes('API error: 404') ||
-    modelsResult.error?.includes('API error: 400')
+    modelsResult.error?.includes('API error: 404')
+    || modelsResult.error?.includes('API error: 400')
   ) {
     console.log(
-      `[clawclaw-validate] ${providerType} /models returned error, falling back to /messages probe`
+      `[clawclaw-validate] ${providerType} /models returned error, falling back to /messages probe`,
     );
     const messagesUrl = `${base}/messages`;
     return await performAnthropicMessagesProbe(providerType, messagesUrl, headers);
@@ -381,7 +460,7 @@ async function validateAnthropicHeaderKey(
 
 async function validateOpenRouterKey(
   providerType: string,
-  apiKey: string
+  apiKey: string,
 ): Promise<{ valid: boolean; error?: string }> {
   const url = 'https://openrouter.ai/api/v1/auth/key';
   const headers = { Authorization: `Bearer ${apiKey}` };
@@ -391,7 +470,7 @@ async function validateOpenRouterKey(
 export async function validateApiKeyWithProvider(
   providerType: string,
   apiKey: string,
-  options?: { baseUrl?: string; apiProtocol?: string }
+  options?: { baseUrl?: string; apiProtocol?: string },
 ): Promise<{ valid: boolean; error?: string }> {
   const profile = getValidationProfile(providerType, options);
   const resolvedBaseUrl = options?.baseUrl || getProviderConfig(providerType)?.baseUrl;
@@ -431,25 +510,40 @@ export async function listModelsWithProvider(
   providerType: string,
   apiKey?: string,
   options?: { baseUrl?: string; apiProtocol?: string },
-): Promise<{ models: Array<{ id: string; name: string }>; error?: string }> {
+): Promise<{ models: ProviderModelOption[]; error?: string }> {
   const profile = getValidationProfile(providerType, options);
   const resolvedBaseUrl = options?.baseUrl || getProviderConfig(providerType)?.baseUrl;
+  logModelDiscoveryStart(providerType, profile, {
+    baseUrl: resolvedBaseUrl,
+    apiProtocol: options?.apiProtocol,
+  });
 
+  let result: { models: ProviderModelOption[]; error?: string };
   switch (profile) {
     case 'openai-compatible':
-      return await listOpenAiCompatibleModels(providerType, apiKey, resolvedBaseUrl);
+      result = await listOpenAiCompatibleModels(providerType, apiKey, resolvedBaseUrl);
+      break;
     case 'google-query-key':
-      return await listGoogleModels(providerType, apiKey, resolvedBaseUrl);
+      result = await listGoogleModels(providerType, apiKey, resolvedBaseUrl);
+      break;
     case 'anthropic-header':
-      return await listAnthropicCompatibleModels(providerType, apiKey, resolvedBaseUrl);
+      result = await listAnthropicCompatibleModels(providerType, apiKey, resolvedBaseUrl);
+      break;
     case 'openrouter':
-      return await listOpenAiCompatibleModels(providerType, apiKey, 'https://openrouter.ai/api/v1');
+      result = await listOpenAiCompatibleModels(providerType, apiKey, 'https://openrouter.ai/api/v1');
+      break;
     case 'none':
       if (providerType === 'ollama') {
-        return await listOpenAiCompatibleModels(providerType, undefined, resolvedBaseUrl);
+        result = await listOpenAiCompatibleModels(providerType, undefined, resolvedBaseUrl);
+        break;
       }
-      return { models: [] };
+      result = { models: [] };
+      break;
     default:
-      return { models: [] };
+      result = { models: [] };
+      break;
   }
+
+  logModelDiscoveryResult(providerType, profile, result);
+  return result;
 }

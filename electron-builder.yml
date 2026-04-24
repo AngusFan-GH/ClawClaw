@@ -21,6 +21,10 @@ extraResources:
     to: resources/
     filter:
       - '**/*'
+      - '!README Portable.txt'
+      - '!Start ClawClaw.bat'
+      - '!Start ClawClaw.vbs'
+      - '!Start ClawClaw.command'
       - '!icons/*.md'
       - '!icons/*.svg'
       - '!bin/**'
@@ -114,6 +118,12 @@ win:
   icon: resources/icons/icon.ico
   target:
     - target: nsis
+      arch:
+        - x64
+        - arm64
+    # Portable directory target — produces release/win-unpacked/ which can be
+    # copied directly to a USB drive and run without installation.
+    - target: dir
       arch:
         - x64
         - arm64

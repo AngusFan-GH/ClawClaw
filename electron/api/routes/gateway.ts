@@ -194,5 +194,19 @@ export async function handleGatewayRoutes(
     return true;
   }
 
+  if (url.pathname.startsWith('/api/gateway/ports') && req.method === 'GET') {
+    const { scanGatewayPorts } = await import('../../gateway/supervisor');
+    sendJson(res, 200, await scanGatewayPorts());
+    return true;
+  }
+
+  const killPortMatch = url.pathname.match(/^\/api\/gateway\/ports\/(\d+)\/kill$/);
+  if (killPortMatch && req.method === 'POST') {
+    const port = parseInt(killPortMatch[1], 10);
+    const { killGatewayOnPort } = await import('../../gateway/supervisor');
+    sendJson(res, 200, await killGatewayOnPort(port, ctx.gatewayManager));
+    return true;
+  }
+
   return false;
 }

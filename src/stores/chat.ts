@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import { hostApiFetch } from '@/lib/host-api';
 import { extractText } from '@/pages/Chat/message-utils';
+import { historyContainsPendingUserMessage } from '@/pages/Chat/pending-user-message';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 
@@ -31,6 +32,7 @@ export interface RawMessage {
   content: unknown; // string | ContentBlock[]
   timestamp?: number;
   id?: string;
+  idempotencyKey?: string;
   toolCallId?: string;
   toolName?: string;
   model?: string;
@@ -151,6 +153,8 @@ interface LoadSessionsOptions {
 interface ChatState {
   // Messages
   messages: RawMessage[];
+  pendingUserMessage: RawMessage | null;
+  pendingAssistantMessage: RawMessage | null;
   btwMessages: RawMessage[];
   loading: boolean;
   error: string | null;
@@ -255,7 +259,13 @@ let _sessionRestoreRetryTimer: ReturnType<typeof setTimeout> | null = null;
 const HISTORY_POLL_START_DELAY_MS = 3000;
 const HISTORY_POLL_INTERVAL_MS = 4000;
 const CHAT_HISTORY_PAGE_LIMIT = 200;
-const SESSION_RESTORE_RETRY_DELAY_MS = 2000;
+// Session restore retry backoff
+const SESSION_RESTORE_INITIAL_DELAY_MS = 1000;
+const SESSION_RESTORE_MAX_DELAY_MS = 15_000;
+// Hard timeouts (ms) — prevent indefinite hangs
+const SESSIONS_LIST_TIMEOUT_MS = 10_000;
+const HISTORY_LOAD_TIMEOUT_MS = 15_000;
+const RESTORE_SAFETY_TIMEOUT_MS = 20_000;
 
 function getRawMessageKey(message: Partial<RawMessage>): string {
   const toolCallId = typeof message.toolCallId === 'string' ? message.toolCallId : '';
@@ -347,6 +357,30 @@ function getGatewayStatusErrorMessage(state: 'stopped' | 'starting' | 'running' 
   }
 }
 
+function shouldPollHistoryForAuthoritativeUpdates(
+  state: Pick<
+    ChatState,
+    'sending'
+    | 'pendingFinal'
+    | 'streamingMessage'
+    | 'streamingText'
+    | 'chatToolMessages'
+    | 'chatStreamSegments'
+    | 'streamingTools'
+  >,
+): boolean {
+  if (!state.sending) return false;
+  if (state.pendingFinal) return true;
+  const hasLiveActivity = Boolean(
+    state.streamingMessage
+    || state.streamingText
+    || state.chatToolMessages.length > 0
+    || state.chatStreamSegments.length > 0
+    || state.streamingTools.length > 0,
+  );
+  return !hasLiveActivity;
+}
+
 function ensureHistoryPollRunning(getState: () => ChatState): void {
   if (_historyPollTimer) return;
 
@@ -356,7 +390,9 @@ function ensureHistoryPollRunning(getState: () => ChatState): void {
       clearHistoryPoll();
       return;
     }
-    void state.loadHistory(true);
+    if (shouldPollHistoryForAuthoritativeUpdates(state)) {
+      void state.loadHistory(true);
+    }
     _historyPollTimer = setTimeout(pollHistory, HISTORY_POLL_INTERVAL_MS);
   };
 
@@ -505,9 +541,16 @@ function removeSessionArtifacts<
 function isEmptyEphemeralSession(
   sessionKey: string,
   messages: RawMessage[],
-  pendingLocalSessionKeys: Record<string, true>
+  pendingLocalSessionKeys: Record<string, true>,
+  pendingUserMessage?: RawMessage | null,
+  pendingAssistantMessage?: RawMessage | null,
 ): boolean {
-  return Boolean(pendingLocalSessionKeys[sessionKey]) && messages.length === 0;
+  return (
+    Boolean(pendingLocalSessionKeys[sessionKey])
+    && messages.length === 0
+    && !pendingUserMessage
+    && !pendingAssistantMessage
+  );
 }
 
 function normalizeModelRefs(values: string[]): string[] {
@@ -585,6 +628,56 @@ function resolveSessionSidebarTitle(session: Pick<ChatSession, 'derivedTitle' | 
   return undefined;
 }
 
+function normalizeSidebarTitleForMatch(value?: string): string {
+  return (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function isRecentSessionMaterialization(
+  pendingActivityMs: number | undefined,
+  candidateActivityMs: number | undefined,
+): boolean {
+  if (!pendingActivityMs || !candidateActivityMs) return false;
+  return Math.abs(candidateActivityMs - pendingActivityMs) <= 5 * 60 * 1000;
+}
+
+function findMaterializedSessionKey(params: {
+  pendingKey: string;
+  pendingLabel?: string;
+  pendingActivityMs?: number;
+  sessions: ChatSession[];
+  sessionLabels: Record<string, string>;
+  sessionLastActivity: Record<string, number>;
+}): string | undefined {
+  const { pendingKey, pendingLabel, pendingActivityMs, sessions, sessionLabels, sessionLastActivity } = params;
+  const pendingAgentId = getAgentIdFromSessionKey(pendingKey);
+  const normalizedPendingLabel = normalizeSidebarTitleForMatch(pendingLabel);
+  const candidates = sessions.filter((session) => (
+    session.key !== pendingKey
+    && getAgentIdFromSessionKey(session.key) === pendingAgentId
+    && isRecentSessionMaterialization(pendingActivityMs, sessionLastActivity[session.key] ?? session.updatedAt)
+  ));
+
+  if (candidates.length === 0) return undefined;
+
+  const exactLabelMatches = normalizedPendingLabel
+    ? candidates.filter((session) => {
+        const label = sessionLabels[session.key] ?? resolveSessionSidebarTitle(session) ?? session.label ?? session.displayName;
+        return normalizeSidebarTitleForMatch(label) === normalizedPendingLabel;
+      })
+    : [];
+
+  const rankedCandidates = (exactLabelMatches.length > 0 ? exactLabelMatches : candidates)
+    .sort((left, right) => (sessionLastActivity[right.key] ?? right.updatedAt ?? 0) - (sessionLastActivity[left.key] ?? left.updatedAt ?? 0));
+
+  if (rankedCandidates.length === 1) {
+    return rankedCandidates[0].key;
+  }
+
+  const topActivity = sessionLastActivity[rankedCandidates[0].key] ?? rankedCandidates[0].updatedAt ?? 0;
+  const runnerUpActivity = sessionLastActivity[rankedCandidates[1].key] ?? rankedCandidates[1].updatedAt ?? 0;
+  return topActivity > runnerUpActivity ? rankedCandidates[0].key : undefined;
+}
+
 // ── Local image cache ─────────────────────────────────────────
 // The Gateway doesn't store image attachments in session content blocks,
 // so we cache them locally keyed by staged file path (which appears in the
@@ -638,6 +731,16 @@ function getMessageText(content: unknown): string {
       .join('\n');
   }
   return '';
+}
+
+function authoritativeHistoryContainsPendingUser(
+  enrichedMessages: RawMessage[],
+  pendingUserMessage: RawMessage | null,
+  lastUserMessageAt: number | null,
+): boolean {
+  return historyContainsPendingUserMessage(enrichedMessages, pendingUserMessage, {
+    optimisticTimestampMs: lastUserMessageAt ? toMs(lastUserMessageAt) : undefined,
+  });
 }
 
 const SESSION_TITLE_NOISE_PREFIXES = [
@@ -1111,6 +1214,41 @@ function isAssistantSilentReply(message: RawMessage | undefined): boolean {
   return typeof text === 'string' && isSilentReplyText(text);
 }
 
+function isRuntimeSystemInjection(text: string): boolean {
+  const normalized = text.trim();
+  if (!normalized) return false;
+  if (/^System\s*\(untrusted\)\s*:/i.test(normalized)) return true;
+  if (
+    /An async command you ran earlier has completed/i.test(normalized)
+    && /Do not relay it to the user unless explicitly requested/i.test(normalized)
+  ) {
+    return true;
+  }
+  if (
+    /^Current time\s*:/i.test(normalized)
+    && /^Current time\s*:[^\n]*\/\s*\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+UTC\s*$/i.test(normalized)
+  ) {
+    return true;
+  }
+  if (/Handle the result internally\. Do not relay it to the user/i.test(normalized)) {
+    return true;
+  }
+  return false;
+}
+
+function isInternalHistoryMessage(message: RawMessage | undefined): boolean {
+  if (!message || typeof message !== 'object') return false;
+  const role = typeof message.role === 'string' ? message.role.toLowerCase() : '';
+  if (role === 'system') return true;
+  if (isAssistantSilentReply(message)) return true;
+  if (role === 'user' || role === 'assistant') {
+    const msg = message as unknown as Record<string, unknown>;
+    const text = typeof msg.text === 'string' ? msg.text : getMessageText(message.content);
+    return isRuntimeSystemInjection(text);
+  }
+  return false;
+}
+
 function isToolOnlyMessage(message: RawMessage | undefined): boolean {
   if (!message) return false;
   if (isToolResultRole(message.role)) return true;
@@ -1239,6 +1377,44 @@ function resetToolStreamState(_state: Pick<ChatState, 'toolStreamById' | 'toolSt
     toolStreamOrder: [],
     chatToolMessages: [],
     chatStreamSegments: [],
+  };
+}
+
+function clearPendingMessageState(): Pick<ChatState, 'pendingUserMessage' | 'pendingAssistantMessage'> {
+  return {
+    pendingUserMessage: null,
+    pendingAssistantMessage: null,
+  };
+}
+
+function resetStreamingPresentationState(): Pick<ChatState, 'streamingText' | 'streamingMessage' | 'streamingTools' | 'pendingToolImages'> {
+  return {
+    streamingText: '',
+    streamingMessage: null,
+    streamingTools: [],
+    pendingToolImages: [],
+  };
+}
+
+function resetChatRuntimeActivity(
+  state: Pick<ChatState, 'toolStreamById' | 'toolStreamOrder'>,
+): Pick<
+  ChatState,
+  | 'pendingUserMessage'
+  | 'pendingAssistantMessage'
+  | 'streamingText'
+  | 'streamingMessage'
+  | 'streamingTools'
+  | 'pendingToolImages'
+  | 'toolStreamById'
+  | 'toolStreamOrder'
+  | 'chatToolMessages'
+  | 'chatStreamSegments'
+> {
+  return {
+    ...clearPendingMessageState(),
+    ...resetStreamingPresentationState(),
+    ...resetToolStreamState(state),
   };
 }
 
@@ -1616,6 +1792,8 @@ function hasNonToolAssistantContent(message: RawMessage | undefined): boolean {
 
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
+  pendingUserMessage: null,
+  pendingAssistantMessage: null,
   btwMessages: [],
   loading: false,
   error: null,
@@ -1675,12 +1853,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { preferMostRecent, preserveCurrent, warmLabels } = normalizeLoadSessionsOptions(options);
     set({ sessionsLoading: true });
     try {
-      const data = await useGatewayStore
-        .getState()
-        .rpc<Record<string, unknown>>('sessions.list', {
-          includeDerivedTitles: true,
-          includeLastMessage: true,
-        });
+      // Timeout guard: prevents indefinite hang if Gateway is degraded and
+      // doesn't respond to sessions.list (e.g. during context merge or overload).
+      const data = await Promise.race([
+        useGatewayStore
+          .getState()
+          .rpc<Record<string, unknown>>('sessions.list', {
+            includeDerivedTitles: true,
+            includeLastMessage: true,
+          }),
+        new Promise<null>((_, reject) =>
+          setTimeout(() => reject(new Error('sessions.list timed out')), SESSIONS_LIST_TIMEOUT_MS)
+        ),
+      ]);
       if (data) {
         const rawSessions = Array.isArray(data.sessions) ? data.sessions : [];
         const sessions: ChatSession[] = rawSessions
@@ -1761,7 +1946,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
           },
           { ...sessionLastActivity }
         );
+        const materializedSessionKeyMap = new Map<string, string>();
+        for (const pendingKey of Object.keys(pendingLocalSessionKeys)) {
+          if (realSessionKeys.has(pendingKey)) continue;
+          const materializedKey = findMaterializedSessionKey({
+            pendingKey,
+            pendingLabel: hydratedSessionLabels[pendingKey],
+            pendingActivityMs: hydratedSessionLastActivity[pendingKey],
+            sessions: dedupedSessions,
+            sessionLabels: hydratedSessionLabels,
+            sessionLastActivity: hydratedSessionLastActivity,
+          });
+          if (!materializedKey) continue;
+          materializedSessionKeyMap.set(pendingKey, materializedKey);
+          if (!hydratedSessionLabels[materializedKey] && hydratedSessionLabels[pendingKey]) {
+            hydratedSessionLabels[materializedKey] = hydratedSessionLabels[pendingKey];
+          }
+          if (!hydratedSessionLastActivity[materializedKey] && hydratedSessionLastActivity[pendingKey]) {
+            hydratedSessionLastActivity[materializedKey] = hydratedSessionLastActivity[pendingKey];
+          }
+          delete hydratedSessionLabels[pendingKey];
+          delete hydratedSessionLastActivity[pendingKey];
+        }
         let nextSessionKey = currentSessionKey || DEFAULT_SESSION_KEY;
+        nextSessionKey = materializedSessionKeyMap.get(nextSessionKey) || nextSessionKey;
         if (!nextSessionKey.startsWith('agent:')) {
           const canonicalMatch = canonicalBySuffix.get(nextSessionKey);
           if (canonicalMatch) {
@@ -1816,7 +2024,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             : dedupedSessions;
 
         const nextPendingLocalSessionKeys = Object.fromEntries(
-          Object.entries(pendingLocalSessionKeys).filter(([key]) => !realSessionKeys.has(key))
+          Object.entries(pendingLocalSessionKeys).filter(([key]) => (
+            !realSessionKeys.has(key) && !materializedSessionKeyMap.has(key)
+          ))
         ) as Record<string, true>;
 
         set({
@@ -1900,25 +2110,91 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     _sessionRestorePromise = (async () => {
+      // Early exit: gateway must still be running when we actually start.
+      // This prevents a stale restore attempt from running after the gateway
+      // has gone down (e.g. a deferred restart fired just before a real restart).
+      if (useGatewayStore.getState().status.state !== 'running') {
+        return;
+      }
+
+      // Safety timeout: if everything hangs, give up after RESTORE_SAFETY_TIMEOUT_MS
+      // so the retry path gets unblocked and the UI can show a useful state.
+      let safetyTimedOut = false;
+      const safetyTimer = setTimeout(() => {
+        safetyTimedOut = true;
+        // Mark sessions as not hydrated so scheduleRetry will fire a retry.
+        // Also clear loading flags so the UI is not stuck.
+        set({ sessionsLoading: false, loading: false, sessionsHydrated: false });
+      }, RESTORE_SAFETY_TIMEOUT_MS);
+
+      let attempt = 0;
+
       try {
-        // Cold start should eagerly hydrate sidebar labels so recent conversations
-        // do not temporarily fall back to the agent displayName ("ClawClaw")
-        // until the user clicks into each session.
-        await get().loadSessions({ preserveCurrent: true, warmLabels: true });
-        if (!get().sessionsHydrated) {
-          clearSessionRestoreRetry();
-          _sessionRestoreRetryTimer = setTimeout(() => {
-            _sessionRestoreRetryTimer = null;
-            if (useGatewayStore.getState().status.state === 'running' && !get().sessionsHydrated) {
-              void get().restoreSessionsAfterGatewayReady();
+        while (true) {
+          attempt++;
+          if (safetyTimedOut) break;
+
+          // Check gateway is still running before each attempt.
+          if (useGatewayStore.getState().status.state !== 'running') break;
+
+          try {
+            // ── Step 1: Load session list (with per-attempt timeout) ────────
+            const sessionsOk = await Promise.race([
+              get().loadSessions({ preserveCurrent: true, warmLabels: true }),
+              new Promise<false>((_, reject) =>
+                setTimeout(() => reject(new Error('sessions.list timeout')), SESSIONS_LIST_TIMEOUT_MS * 2)
+              ),
+            ]).then(() => true).catch(() => false);
+
+            if (!sessionsOk || safetyTimedOut) {
+              scheduleRetry(attempt);
+              break;
             }
-          }, SESSION_RESTORE_RETRY_DELAY_MS);
-          return;
+
+            // sessionsHydrated is now true if loadSessions succeeded.
+            // ── Step 2: Load history for current session ───────────────────────
+            // (warm-label fetching already runs in parallel inside loadSessions).
+            // If history times out, sessions are still shown — scheduleRetry
+            // will continue retrying history in the background.
+            await Promise.race([
+              get().loadHistory(get().messages.length > 0),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('chat.history timeout')), HISTORY_LOAD_TIMEOUT_MS)
+              ),
+            ]).catch(() => { /* timeout → scheduleRetry will retry */ });
+
+            clearSessionRestoreRetry();
+            break; // success or partial — either way we're done here
+          } catch {
+            scheduleRetry(attempt);
+            break;
+          }
         }
-        clearSessionRestoreRetry();
-        await get().loadHistory(false);
       } finally {
+        clearTimeout(safetyTimer);
         _sessionRestorePromise = null;
+      }
+
+      function scheduleRetry(currentAttempt: number): void {
+        if (useGatewayStore.getState().status.state !== 'running') return;
+        // Partial success: if we have sessions (even without history), stop retrying.
+        if (get().sessionsHydrated && get().messages.length > 0) return;
+
+        clearSessionRestoreRetry();
+        // Exponential backoff: 1s, 2s, 4s, 8s … capped at MAX_DELAY.
+        const delay = Math.min(
+          SESSION_RESTORE_INITIAL_DELAY_MS * Math.pow(2, currentAttempt - 1),
+          SESSION_RESTORE_MAX_DELAY_MS
+        );
+        _sessionRestoreRetryTimer = setTimeout(() => {
+          _sessionRestoreRetryTimer = null;
+          if (
+            useGatewayStore.getState().status.state === 'running'
+            && (!get().sessionsHydrated || get().messages.length === 0)
+          ) {
+            void get().restoreSessionsAfterGatewayReady();
+          }
+        }, delay);
       }
     })();
 
@@ -1928,14 +2204,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ── Switch session ──
 
   switchSession: (key: string) => {
-    const { currentSessionKey, messages, pendingLocalSessionKeys } = get();
+    const {
+      currentSessionKey,
+      messages,
+      pendingLocalSessionKeys,
+      pendingUserMessage,
+      pendingAssistantMessage,
+    } = get();
     const leavingEmpty =
       !currentSessionKey.endsWith(':main')
-      && isEmptyEphemeralSession(currentSessionKey, messages, pendingLocalSessionKeys);
+      && isEmptyEphemeralSession(
+        currentSessionKey,
+        messages,
+        pendingLocalSessionKeys,
+        pendingUserMessage,
+        pendingAssistantMessage,
+      );
     set((s) => ({
       currentSessionKey: key,
       currentAgentId: getAgentIdFromSessionKey(key),
       messages: [],
+      pendingUserMessage: null,
+      pendingAssistantMessage: null,
       btwMessages: [],
       historyWindowLimited: false,
       hasEarlierHistory: false,
@@ -1996,6 +2286,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((s) => ({
         ...removeSessionArtifacts(s, key),
         messages: [],
+        pendingUserMessage: null,
+        pendingAssistantMessage: null,
         btwMessages: [],
         historyWindowLimited: false,
         hasEarlierHistory: false,
@@ -2025,11 +2317,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ── New session ──
 
   newSession: (targetAgentId) => {
-    const { currentSessionKey, messages, pendingLocalSessionKeys } = get();
+    const {
+      currentSessionKey,
+      messages,
+      pendingLocalSessionKeys,
+      pendingUserMessage,
+      pendingAssistantMessage,
+    } = get();
     const nextAgentId = targetAgentId || get().currentAgentId || useAgentsStore.getState().defaultAgentId || 'main';
     const isCurrentEmptyEphemeral =
       !currentSessionKey.endsWith(':main')
-      && isEmptyEphemeralSession(currentSessionKey, messages, pendingLocalSessionKeys);
+      && isEmptyEphemeralSession(
+        currentSessionKey,
+        messages,
+        pendingLocalSessionKeys,
+        pendingUserMessage,
+        pendingAssistantMessage,
+      );
     const prefix = `agent:${nextAgentId}`;
     const newKey = `${prefix}:session-${Date.now()}`;
     const newSessionEntry: ChatSession = { key: newKey, displayName: newKey };
@@ -2052,6 +2356,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         [newKey]: true,
       },
       messages: [],
+      pendingUserMessage: null,
+      pendingAssistantMessage: null,
       btwMessages: [],
       historyWindowLimited: false,
       hasEarlierHistory: false,
@@ -2073,14 +2379,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ── Cleanup empty session on navigate away ──
 
   cleanupEmptySession: () => {
-    const { currentSessionKey, messages, pendingLocalSessionKeys } = get();
+    const {
+      currentSessionKey,
+      messages,
+      pendingLocalSessionKeys,
+      pendingUserMessage,
+      pendingAssistantMessage,
+    } = get();
     // Only remove non-main sessions that were never used (no messages sent).
     // This mirrors the "leavingEmpty" logic in switchSession so that creating
     // a new session and immediately navigating away doesn't leave a ghost entry
     // in the sidebar.
     const isEmptyNonMain =
       !currentSessionKey.endsWith(':main')
-      && isEmptyEphemeralSession(currentSessionKey, messages, pendingLocalSessionKeys);
+      && isEmptyEphemeralSession(
+        currentSessionKey,
+        messages,
+        pendingLocalSessionKeys,
+        pendingUserMessage,
+        pendingAssistantMessage,
+      );
     if (!isEmptyNonMain) return;
     set((s) => removeSessionArtifacts(s, currentSessionKey));
   },
@@ -2132,8 +2450,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         attempts.add(trimmed);
       };
 
-      if (targetProvider && !isCrossProvider) {
-        queueAttempt(targetModelId);
+      if (targetProvider) {
         queueAttempt(modelForPatch);
       } else {
         queueAttempt(modelForPatch);
@@ -2143,7 +2460,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (isCrossProvider) {
         queueAttempt(providerDefaultRef);
         queueAttempt(providerDefaultId);
-        queueAttempt(targetModelId);
         queueAttempt(modelForPatch);
       }
 
@@ -2210,11 +2526,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // for them can fall back to an older real transcript, which makes "New chat"
     // appear to jump back into a previous conversation. Keep them empty until the
     // first user message materializes the session in Gateway.
-    if (isEmptyEphemeralSession(requestSessionKey, get().messages, pendingLocalSessionKeys)) {
+    if (isEmptyEphemeralSession(
+      requestSessionKey,
+      get().messages,
+      pendingLocalSessionKeys,
+      get().pendingUserMessage,
+      get().pendingAssistantMessage,
+    )) {
       set({
         ...(quiet ? {} : { loading: false }),
         error: null,
         messages: [],
+        pendingUserMessage: null,
+        pendingAssistantMessage: null,
         btwMessages: [],
         historyWindowLimited: false,
         hasEarlierHistory: false,
@@ -2224,18 +2548,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     try {
-      const data = await useGatewayStore
-        .getState()
-        .rpc<
-          Record<string, unknown>
-        >('chat.history', { sessionKey: requestSessionKey, limit: CHAT_HISTORY_PAGE_LIMIT });
+      // Timeout guard: prevents indefinite hang if Gateway is degraded.
+      const data = await Promise.race([
+        useGatewayStore
+          .getState()
+          .rpc<
+            Record<string, unknown>
+          >('chat.history', { sessionKey: requestSessionKey, limit: CHAT_HISTORY_PAGE_LIMIT }),
+        new Promise<null>((_, reject) =>
+          setTimeout(() => reject(new Error('chat.history timed out')), HISTORY_LOAD_TIMEOUT_MS)
+        ),
+      ]);
       if (isStale()) {
         clearLoadingIfLatest();
         return;
       }
       if (data) {
         const rawMessages = (Array.isArray(data.messages) ? (data.messages as RawMessage[]) : [])
-          .filter((message) => !isAssistantSilentReply(message));
+          .filter((message) => !isInternalHistoryMessage(message));
+        const stateBeforeCommit = get();
+        const hasExistingAuthoritativeMessages = stateBeforeCommit.messages.length > 0;
+
+        if (rawMessages.length === 0 && hasExistingAuthoritativeMessages) {
+          set({
+            loading: false,
+            loadingEarlierHistory: false,
+          });
+          return;
+        }
 
         // Keep transcript ordering as close to Gateway history as possible.
         // Only enrich cached file/image previews for display.
@@ -2245,26 +2585,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // Preserve the optimistic user message during an active send.
         // The Gateway may not include the user's message in chat.history
         // until the run completes, causing it to flash out of the UI.
-        let finalMessages = enrichedMessages;
-        const userMsgAt = get().lastUserMessageAt;
-        if (get().sending && userMsgAt) {
-          const userMsMs = toMs(userMsgAt);
-          const hasRecentUser = enrichedMessages.some(
-            (m) => m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsMs) < 5000
-          );
-          if (!hasRecentUser) {
-            const currentMsgs = get().messages;
-            const optimistic = [...currentMsgs]
-              .reverse()
-              .find(
-                (m) =>
-                  m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsMs) < 5000
-              );
-            if (optimistic) {
-              finalMessages = [...enrichedMessages, optimistic];
-            }
-          }
-        }
+        const pendingUserMessage = get().pendingUserMessage;
+        const finalMessages = enrichedMessages;
+        const hasEquivalentAuthoritativeUserMessage = authoritativeHistoryContainsPendingUser(
+          enrichedMessages,
+          pendingUserMessage,
+          get().lastUserMessageAt,
+        );
 
         // Extract first user message text as a session label for display in the toolbar.
         // Skip main sessions (key ends with ":main") — they rely on the Gateway-provided
@@ -2305,29 +2632,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
             });
           }
         });
-        const stateBeforeCommit = get();
-        const { pendingFinal, lastUserMessageAt, sending: isSendingNow } = stateBeforeCommit;
+        const { pendingFinal, lastUserMessageAt } = stateBeforeCommit;
         if (isStale()) {
           clearLoadingIfLatest();
           return;
         }
 
-        // If we're sending but haven't received streaming events, check
-        // whether the loaded history reveals intermediate tool-call activity.
-        // This surfaces progress via the pendingFinal → ActivityIndicator path.
         const userMsTs = lastUserMessageAt ? toMs(lastUserMessageAt) : 0;
         const isAfterUserMsg = (msg: RawMessage): boolean => {
           if (!userMsTs || !msg.timestamp) return true;
           return toMs(msg.timestamp) >= userMsTs;
         };
-        const hasRecentAssistantActivity = [...enrichedMessages].reverse().some((msg) => {
-          if (msg.role !== 'assistant' && msg.role !== 'toolresult') return false;
-          return isAfterUserMsg(msg);
-        });
 
         const shouldResetLiveState = !stateBeforeCommit.sending;
         set((s) => ({
           messages: finalMessages,
+          pendingUserMessage: hasEquivalentAuthoritativeUserMessage ? null : s.pendingUserMessage,
+          pendingAssistantMessage: null,
           btwMessages: [],
           thinkingLevel,
           historyWindowLimited: rawMessages.length >= CHAT_HISTORY_PAGE_LIMIT,
@@ -2337,12 +2658,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ...(shouldResetLiveState ? resetToolStreamState(s) : {}),
           ...(shouldResetLiveState ? { streamingText: '', streamingMessage: null, streamingTools: [] as ToolStatus[] } : {}),
         }));
-
-        if (isSendingNow && !pendingFinal) {
-          if (hasRecentAssistantActivity) {
-            set({ pendingFinal: true });
-          }
-        }
 
         // If pendingFinal, check whether the AI produced a final text response.
         if (pendingFinal || get().pendingFinal) {
@@ -2369,7 +2684,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
           clearLoadingIfLatest();
           return;
         }
-        set({ messages: [], btwMessages: [], loading: false, historyWindowLimited: false, hasEarlierHistory: false, loadingEarlierHistory: false });
+        set((state) => ({
+          loading: false,
+          loadingEarlierHistory: false,
+          ...(state.messages.length === 0
+            ? {
+                messages: [],
+                pendingUserMessage: null,
+                pendingAssistantMessage: null,
+                btwMessages: [],
+                historyWindowLimited: false,
+                hasEarlierHistory: false,
+              }
+            : {}),
+        }));
       }
     } catch (err) {
       if (isStale()) {
@@ -2377,7 +2705,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return;
       }
       console.warn('Failed to load chat history:', err);
-      set({ messages: [], btwMessages: [], loading: false, historyWindowLimited: false, hasEarlierHistory: false, loadingEarlierHistory: false });
+      set((state) => ({
+        loading: false,
+        loadingEarlierHistory: false,
+        ...(state.messages.length === 0
+          ? {
+              messages: [],
+              pendingUserMessage: null,
+              pendingAssistantMessage: null,
+              btwMessages: [],
+              historyWindowLimited: false,
+              hasEarlierHistory: false,
+            }
+          : {}),
+      }));
     }
   },
 
@@ -2386,6 +2727,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       currentSessionKey,
       messages,
       pendingLocalSessionKeys,
+      pendingUserMessage,
+      pendingAssistantMessage,
       loadingEarlierHistory,
       hasEarlierHistory,
     } = get();
@@ -2394,12 +2737,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
-    if (isEmptyEphemeralSession(currentSessionKey, messages, pendingLocalSessionKeys)) {
+    if (isEmptyEphemeralSession(
+      currentSessionKey,
+      messages,
+      pendingLocalSessionKeys,
+      pendingUserMessage,
+      pendingAssistantMessage,
+    )) {
       set({ hasEarlierHistory: false, loadingEarlierHistory: false });
       return;
     }
 
-    const anchorMessage = messages.find((message) => !isAssistantSilentReply(message));
+    const anchorMessage = messages.find((message) => !isInternalHistoryMessage(message));
     const before = toHistoryAnchor(anchorMessage);
     if (!before) {
       set({ hasEarlierHistory: false, loadingEarlierHistory: false });
@@ -2429,7 +2778,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       const rawMessages = (Array.isArray(data.messages) ? data.messages : [])
-        .filter((message) => !isAssistantSilentReply(message));
+        .filter((message) => !isInternalHistoryMessage(message));
       const enrichedMessages = enrichWithCachedImages(rawMessages);
 
       let prependedAny = false;
@@ -2491,18 +2840,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { currentSessionKey, sessions, allowedModelRefs, defaultModelRef, currentAgentId } = get();
     const currentSession = sessions.find((session) => session.key === currentSessionKey);
     const currentAgent = useAgentsStore.getState().agents.find((agent) => agent.gateway.id === currentAgentId);
+    const normalizedAgentModelRef = currentAgent?.local.modelRef?.trim();
+    const agentModelAllowed =
+      !normalizedAgentModelRef
+      || allowedModelRefs.length === 0
+      || allowedModelRefs.includes(normalizedAgentModelRef);
     const shouldApplyAgentModel =
       !currentSession?.model?.trim()
-      && Boolean(currentAgent?.local.modelRef)
-      && !currentAgent?.local.inheritedModel;
+      && Boolean(normalizedAgentModelRef)
+      && currentAgent?.local.inheritedModel !== true
+      && agentModelAllowed;
 
-    if (shouldApplyAgentModel && currentAgent?.local.modelRef) {
+    if (shouldApplyAgentModel && normalizedAgentModelRef) {
       try {
-        await get().setSessionModel(currentAgent.local.modelRef);
+        await get().setSessionModel(normalizedAgentModelRef);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         set({
-          error: `Failed to initialize session model for agent ${currentAgent.gateway.id}: ${message}`,
+          error: `Failed to initialize session model for agent ${currentAgent?.gateway.id ?? currentAgentId}: ${message}`,
         });
         return;
       }
@@ -2535,6 +2890,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
 
+    const idempotencyKey = crypto.randomUUID();
+
     // Add user message optimistically (with local file metadata for UI display)
     const nowMs = Date.now();
     const userMsg: RawMessage = {
@@ -2542,6 +2899,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       content: trimmed || (attachments?.length ? '(file attached)' : ''),
       timestamp: nowMs / 1000,
       id: crypto.randomUUID(),
+      idempotencyKey,
       _attachedFiles: attachments?.map((a) => ({
         fileName: a.fileName,
         mimeType: a.mimeType,
@@ -2550,8 +2908,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         filePath: a.stagedPath,
       })),
     };
-    set((s) => ({
-      messages: [...s.messages, userMsg],
+    set(() => ({
+      pendingUserMessage: userMsg,
+      pendingAssistantMessage: null,
       sending: true,
       error: null,
       streamingText: '',
@@ -2568,7 +2927,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Update session label with first user message text as soon as it's sent
     const { sessionLabels, messages } = get();
-    const isFirstMessage = !messages.slice(0, -1).some((m) => m.role === 'user');
+    const isFirstMessage = !messages.some((m) => m.role === 'user');
     if (
       !currentSessionKey.endsWith(':main') &&
       isFirstMessage &&
@@ -2596,20 +2955,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const state = get();
       if (!state.sending) return;
       if (state.streamingMessage || state.streamingText) return;
-      if (state.pendingFinal) {
+      const idleMs = Date.now() - _lastChatEventAt;
+      if (state.pendingFinal && idleMs < SAFETY_TIMEOUT_MS) {
         setTimeout(checkStuck, 10_000);
         return;
       }
-      if (Date.now() - _lastChatEventAt < SAFETY_TIMEOUT_MS) {
+      if (!state.pendingFinal && idleMs < SAFETY_TIMEOUT_MS) {
         setTimeout(checkStuck, 10_000);
         return;
       }
       clearHistoryPoll();
+      void state.loadHistory(true);
       set({
         error:
-          'No response received from the model. The provider may be unavailable or the API key may have insufficient quota. Please check your provider settings.',
+          state.pendingFinal
+            ? 'Response finalization timed out after the Gateway stopped sending updates. Refresh the conversation or restart the Gateway if it remains unavailable.'
+            : 'No response received from the model. The provider may be unavailable or the API key may have insufficient quota. Please check your provider settings.',
         sending: false,
         activeRunId: null,
+        pendingFinal: false,
+        pendingSessionModelRefresh: false,
+        pendingAssistantMessage: null,
+        streamingText: '',
+        streamingMessage: null,
+        streamingTools: [],
+        pendingToolImages: [],
         lastUserMessageAt: null,
         ...resetToolStreamState(get()),
       });
@@ -2617,10 +2987,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     setTimeout(checkStuck, 30_000);
 
     try {
-      const createIdempotencyKey = () => crypto.randomUUID();
       const hasMedia = attachments && attachments.length > 0;
-      if (hasMedia) {
-        console.log(
+      if (hasMedia && import.meta.env.DEV) {
+        console.debug(
           '[sendMessage] Media paths:',
           attachments!.map((a) => a.stagedPath)
         );
@@ -2654,6 +3023,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             error?: string;
           }>('/api/chat/send-with-media', {
             method: 'POST',
+            timeoutMs: CHAT_SEND_TIMEOUT_MS + 5000,
             body: JSON.stringify({
               sessionKey: currentSessionKey,
               message: trimmed || 'Process the attached file(s).',
@@ -2681,7 +3051,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return { success: true, result: rpcResult } as { success: boolean; result?: { runId?: string }; error?: string };
       };
 
-      result = await executeSend(createIdempotencyKey());
+      result = await executeSend(idempotencyKey);
 
       const modelNotAllowed = !result.success && /model not allowed/i.test(result.error || '');
       if (modelNotAllowed) {
@@ -2710,15 +3080,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
             )),
           }));
 
-          result = await executeSend(createIdempotencyKey());
+          result = await executeSend(idempotencyKey);
         } catch {
           // Keep the original error handling below if fallback patch/retry fails.
         }
       }
 
-      console.log(
-        `[sendMessage] RPC result: success=${result.success}, runId=${result.result?.runId || 'none'}`
-      );
+      if (import.meta.env.DEV) {
+        console.debug(
+          `[sendMessage] RPC result: success=${result.success}, runId=${result.result?.runId || 'none'}`
+        );
+      }
 
       if (!result.success) {
         clearHistoryPoll();
@@ -2730,12 +3102,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
             activeRunId: null,
             pendingFinal: false,
             lastUserMessageAt: null,
+            pendingAssistantMessage: null,
             ...resetToolStreamState(s),
           }));
         } else {
-          // ✅ Fix HR-1: Roll back the optimistically-added user message on failure.
           set((s) => ({
-            messages: s.messages.filter((m) => m.id !== userMsg.id),
+            pendingUserMessage: s.pendingUserMessage?.id === userMsg.id ? null : s.pendingUserMessage,
+            pendingAssistantMessage: null,
             error: errorMessage,
             sending: false,
             activeRunId: null,
@@ -2755,12 +3128,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
           activeRunId: null,
           pendingFinal: false,
           lastUserMessageAt: null,
+          pendingAssistantMessage: null,
           ...resetToolStreamState(s),
         }));
       } else {
-        // ✅ Fix HR-1: Roll back the optimistically-added user message on error.
         set((s) => ({
-          messages: s.messages.filter((m) => m.id !== userMsg.id),
+          pendingUserMessage: s.pendingUserMessage?.id === userMsg.id ? null : s.pendingUserMessage,
+          pendingAssistantMessage: null,
           error: errorMessage,
           sending: false,
           activeRunId: null,
@@ -2779,14 +3153,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       sending: false,
       activeRunId: null,
-      streamingText: '',
-      streamingMessage: null,
       pendingFinal: false,
       lastUserMessageAt: null,
-      pendingToolImages: [],
-      ...resetToolStreamState(get()),
+      ...resetChatRuntimeActivity(get()),
     });
-    set({ streamingTools: [] });
 
     try {
       await useGatewayStore.getState().rpc('chat.abort', { sessionKey: currentSessionKey });
@@ -2806,15 +3176,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       sending: false,
       activeRunId: null,
-      streamingText: '',
-      streamingMessage: null,
       pendingFinal: false,
       lastUserMessageAt: null,
-      pendingToolImages: [],
       error: message,
-      ...resetToolStreamState(get()),
+      ...resetChatRuntimeActivity(get()),
     });
-    set({ streamingTools: [] });
 
     try {
       await useGatewayStore.getState().rpc('chat.abort', { sessionKey: currentSessionKey });
@@ -2843,10 +3209,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // See https://github.com/openclaw/openclaw/issues/1909
     if (activeRunId && runId && runId !== activeRunId) {
       if (eventState === 'final') {
-        const finalMsg = event.message as RawMessage | undefined;
-        if (finalMsg && !isAssistantSilentReply(finalMsg)) {
-          set((s) => ({ messages: [...s.messages, finalMsg] }));
-        }
+        void get().loadHistory(true);
       }
       return;
     }
@@ -2882,6 +3245,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (!sending && runId) {
         set({ sending: true, activeRunId: runId, error: null });
       }
+      // Keep the optimistic user message until chat.history confirms it exists.
+      // Gateway delta/final events often arrive before the authoritative history
+      // includes the user's turn, so clearing it here causes a visible flash-out.
     }
 
     switch (resolvedState) {
@@ -2925,7 +3291,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // clear sending to exit the loading spinner. This must be checked before `if (finalMsg)`
         // because BTW's `event.message` is undefined (payload is { state: 'final', runId, sessionKey }).
         if (!finalMsg?.role && !finalMsg?.content && !finalMsg?.toolCallId) {
-          set({ sending: false, activeRunId: null, pendingFinal: false });
+          set({ sending: false, activeRunId: null, pendingFinal: false, pendingUserMessage: null, pendingAssistantMessage: null });
           break;
         }
         if (finalMsg) {
@@ -2963,6 +3329,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               streamingText: '',
               streamingMessage: null,
               pendingFinal: true,
+              pendingAssistantMessage: null,
               pendingToolImages:
                 toolFiles.length > 0
                   ? [...s.pendingToolImages, ...toolFiles]
@@ -3009,6 +3376,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     streamingText: '',
                     streamingMessage: null,
                     pendingFinal: true,
+                    pendingUserMessage: null,
+                    pendingAssistantMessage: null,
                     streamingTools,
                     ...clearPendingImages,
                     ...resetToolStreamState(s),
@@ -3019,6 +3388,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     sending: hasOutput ? false : s.sending,
                     activeRunId: hasOutput ? null : s.activeRunId,
                     pendingFinal: hasOutput ? false : true,
+                    pendingUserMessage: hasOutput ? null : s.pendingUserMessage,
+                    pendingAssistantMessage: null,
                     pendingSessionModelRefresh: hasOutput ? false : s.pendingSessionModelRefresh,
                     streamingTools,
                     ...clearPendingImages,
@@ -3027,21 +3398,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
             return toolOnly
               ? {
-                  messages: [...s.messages, msgWithImages],
                   streamingText: '',
                   streamingMessage: null,
                   pendingFinal: true,
+                  pendingUserMessage: null,
+                  pendingAssistantMessage: null,
                   streamingTools,
                   ...clearPendingImages,
                   ...resetToolStreamState(s),
                 }
               : {
-                  messages: [...s.messages, msgWithImages],
                   streamingText: '',
                   streamingMessage: null,
                   sending: hasOutput ? false : s.sending,
                   activeRunId: hasOutput ? null : s.activeRunId,
-                  pendingFinal: hasOutput ? false : true,
+                  pendingFinal: true,
+                  pendingUserMessage: hasOutput ? null : s.pendingUserMessage,
+                  pendingAssistantMessage: hasOutput ? msgWithImages : null,
                   pendingSessionModelRefresh: hasOutput ? false : s.pendingSessionModelRefresh,
                   streamingTools,
                   ...clearPendingImages,
@@ -3064,6 +3437,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             streamingText: '',
             streamingMessage: null,
             pendingFinal: true,
+            pendingAssistantMessage: null,
             pendingSessionModelRefresh: false,
             ...resetToolStreamState(s),
           }));
@@ -3078,25 +3452,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const errorMsg = String(event.errorMessage || 'An error occurred');
         const wasSending = get().sending;
 
-        // Snapshot the current streaming message into messages[] so partial
-        // content ("Let me get that written down...") is preserved in the UI
-        // rather than being silently discarded.
         const currentStream = get().streamingMessage as RawMessage | null;
-        if (
+        const errorAssistantSnapshot =
           currentStream &&
           (currentStream.role === 'assistant' || currentStream.role === undefined)
-        ) {
-          const snapId = (currentStream as RawMessage).id || `error-snap-${Date.now()}`;
-          const alreadyExists = get().messages.some((m) => m.id === snapId);
-          if (!alreadyExists) {
-            set((s) => ({
-              messages: [
-                ...s.messages,
-                { ...currentStream, role: 'assistant' as const, id: snapId },
-              ],
-            }));
-          }
-        }
+            ? {
+                ...currentStream,
+                role: 'assistant' as const,
+                id: (currentStream as RawMessage).id || `error-snap-${Date.now()}`,
+              }
+            : null;
 
         set({
           error: errorMsg,
@@ -3104,6 +3469,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           streamingMessage: null,
           streamingTools: [],
           pendingFinal: false,
+          pendingAssistantMessage: errorAssistantSnapshot,
           pendingSessionModelRefresh: false,
           pendingToolImages: [],
           ...resetToolStreamState(get()),
@@ -3126,6 +3492,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 sending: false,
                 activeRunId: null,
                 lastUserMessageAt: null,
+                pendingUserMessage: null,
+                pendingAssistantMessage: null,
                 ...resetToolStreamState(state),
               });
               // One final history reload in case the Gateway completed in the
@@ -3135,7 +3503,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }, ERROR_RECOVERY_GRACE_MS);
         } else {
           clearHistoryPoll();
-          set((s) => ({ sending: false, activeRunId: null, lastUserMessageAt: null, ...resetToolStreamState(s) }));
+          set((s) => ({ sending: false, activeRunId: null, lastUserMessageAt: null, pendingUserMessage: null, pendingAssistantMessage: null, ...resetToolStreamState(s) }));
         }
         break;
       }
@@ -3145,14 +3513,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set({
           sending: false,
           activeRunId: null,
-          streamingText: '',
-          streamingMessage: null,
-          streamingTools: [],
           pendingFinal: false,
           pendingSessionModelRefresh: false,
           lastUserMessageAt: null,
-          pendingToolImages: [],
-          ...resetToolStreamState(get()),
+          ...resetChatRuntimeActivity(get()),
         });
         break;
       }
@@ -3402,14 +3766,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       error: nextError,
       sending: false,
       activeRunId: null,
-      streamingText: '',
-      streamingMessage: null,
-      streamingTools: [],
       pendingFinal: false,
       pendingSessionModelRefresh: false,
       lastUserMessageAt: null,
-      pendingToolImages: [],
-      ...resetToolStreamState(s),
+      ...resetChatRuntimeActivity(s),
     }));
   },
 

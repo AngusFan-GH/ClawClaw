@@ -64,6 +64,15 @@ export interface GatewayNotification {
 }
 
 /**
+ * Scanned Gateway instance detected on the local machine.
+ * Returned by gateway:scanPorts.
+ */
+export interface DetectedGateway {
+  port: number;
+  pids: number[];
+}
+
+/**
  * Provider configuration
  */
 export interface ProviderConfig {

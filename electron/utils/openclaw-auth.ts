@@ -11,7 +11,7 @@
 import { access, mkdir, readFile, writeFile } from 'fs/promises';
 import { constants } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
+import { resolveOpenClawDir } from './paths';
 import { listConfiguredAgentIds } from './agent-config';
 import { toFsPath } from './fs-path';
 import { getProviderDefaultModel, getProviderConfig } from './provider-registry';
@@ -19,6 +19,7 @@ import {
   readOpenClawConfigRecord,
   readOpenClawConfigRecordRaw,
   sanitizeKnownInvalidOpenClawKeys,
+  updateOpenClawConfigRecord,
   writeOpenClawConfigRecord,
 } from './openclaw-config';
 import { logger } from './logger';
@@ -31,7 +32,8 @@ import {
 const AUTH_STORE_VERSION = 1;
 const AUTH_PROFILE_FILENAME = 'auth-profiles.json';
 const FEISHU_PLUGIN_ID_CANDIDATES = ['feishu', 'openclaw-lark', 'feishu-openclaw-plugin'] as const;
-const QQBOT_LEGACY_PLUGIN_ID_CANDIDATES = ['qqbot', 'openclaw-qqbot'] as const;
+const QQBOT_STALE_PLUGIN_ENTRY_IDS = ['qqbot', 'openclaw-qqbot'] as const;
+const QQBOT_STALE_PLUGIN_ALLOW_IDS = ['openclaw-qqbot'] as const;
 
 function getOAuthPluginId(provider: string): string {
   if (provider === 'minimax-portal' || provider === 'minimax-portal-cn') {
@@ -64,6 +66,10 @@ function ensurePluginEntryEnabled(
   config.plugins = plugins;
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 // ── Helpers ──────────────────────────────────────────────────────
 
 /** Non-throwing async existence check (replaces existsSync). */
@@ -84,7 +90,7 @@ async function ensureDir(dir: string): Promise<void> {
 }
 
 async function resolveInstalledFeishuPluginId(): Promise<string | null> {
-  const extensionRoot = join(homedir(), '.openclaw', 'extensions');
+  const extensionRoot = join(resolveOpenClawDir(), 'extensions');
   for (const dirName of FEISHU_PLUGIN_ID_CANDIDATES) {
     const manifestPath = join(extensionRoot, dirName, 'openclaw.plugin.json');
     try {
@@ -145,7 +151,7 @@ interface AuthProfilesStore {
 // ── Auth Profiles I/O ────────────────────────────────────────────
 
 function getAuthProfilesPath(agentId = 'main'): string {
-  return join(homedir(), '.openclaw', 'agents', agentId, 'agent', AUTH_PROFILE_FILENAME);
+  return join(resolveOpenClawDir(), 'agents', agentId, 'agent', AUTH_PROFILE_FILENAME);
 }
 
 async function readAuthProfiles(agentId = 'main'): Promise<AuthProfilesStore> {
@@ -168,7 +174,7 @@ async function writeAuthProfiles(store: AuthProfilesStore, agentId = 'main'): Pr
 // ── Agent Discovery ──────────────────────────────────────────────
 
 async function discoverAgentIds(): Promise<string[]> {
-  const agentsDir = join(homedir(), '.openclaw', 'agents');
+  const agentsDir = join(resolveOpenClawDir(), 'agents');
   try {
     if (!(await fileExists(agentsDir))) return ['main'];
     return await listConfiguredAgentIds();
@@ -432,7 +438,7 @@ export async function removeProviderFromOpenClaw(provider: string): Promise<void
 
   // 2. Remove from models.json (per-agent model registry used by pi-ai directly)
   for (const id of agentIds) {
-    const modelsPath = join(homedir(), '.openclaw', 'agents', id, 'agent', 'models.json');
+    const modelsPath = join(resolveOpenClawDir(), 'agents', id, 'agent', 'models.json');
     try {
       if (await fileExists(modelsPath)) {
         const raw = await readFile(modelsPath, 'utf-8');
@@ -557,6 +563,7 @@ interface RuntimeProviderConfigOverride {
   headers?: Record<string, string>;
   authHeader?: boolean;
   disableTools?: boolean;
+  allowPrivateNetwork?: boolean;
 }
 
 type ProviderEntryBuildOptions = {
@@ -566,6 +573,7 @@ type ProviderEntryBuildOptions = {
   headers?: Record<string, string>;
   authHeader?: boolean;
   disableTools?: boolean;
+  allowPrivateNetwork?: boolean;
   providerId?: string;
   modelIds?: string[];
   includeRegistryModels?: boolean;
@@ -667,6 +675,25 @@ function upsertOpenClawProviderEntry(
   } else {
     delete nextProvider.authHeader;
   }
+  if (options.allowPrivateNetwork !== undefined) {
+    const request = (
+      existingProvider.request && typeof existingProvider.request === 'object'
+        ? { ...(existingProvider.request as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    request.allowPrivateNetwork = options.allowPrivateNetwork;
+    nextProvider.request = request;
+  } else if (existingProvider.request && typeof existingProvider.request === 'object') {
+    const request = { ...(existingProvider.request as Record<string, unknown>) };
+    delete request.allowPrivateNetwork;
+    if (Object.keys(request).length > 0) {
+      nextProvider.request = request;
+    } else {
+      delete nextProvider.request;
+    }
+  } else {
+    delete nextProvider.request;
+  }
 
   providers[provider] = nextProvider;
   models.providers = providers;
@@ -679,21 +706,48 @@ function ensureMoonshotKimiWebSearchCnBaseUrl(
 ): void {
   if (provider !== OPENCLAW_PROVIDER_KEY_MOONSHOT) return;
 
-  const tools = (config.tools || {}) as Record<string, unknown>;
-  const web = (tools.web || {}) as Record<string, unknown>;
-  const search = (web.search || {}) as Record<string, unknown>;
-  const kimi =
-    search.kimi && typeof search.kimi === 'object' && !Array.isArray(search.kimi)
-      ? (search.kimi as Record<string, unknown>)
-      : {};
+  const tools = isPlainRecord(config.tools) ? config.tools : null;
+  const web = tools && isPlainRecord(tools.web) ? tools.web : null;
+  const search = web && isPlainRecord(web.search) ? web.search : null;
+  const legacyKimi = search && isPlainRecord(search.kimi) ? { ...search.kimi } : undefined;
+
+  const plugins = isPlainRecord(config.plugins)
+    ? config.plugins
+    : (Array.isArray(config.plugins) ? { load: [...config.plugins] } : {});
+  const entries = isPlainRecord(plugins.entries) ? plugins.entries : {};
+  const moonshot = isPlainRecord(entries[OPENCLAW_PROVIDER_KEY_MOONSHOT])
+    ? { ...(entries[OPENCLAW_PROVIDER_KEY_MOONSHOT] as Record<string, unknown>) }
+    : {};
+  const moonshotConfig = isPlainRecord(moonshot.config)
+    ? { ...(moonshot.config as Record<string, unknown>) }
+    : {};
+  const currentWebSearch = isPlainRecord(moonshotConfig.webSearch)
+    ? { ...(moonshotConfig.webSearch as Record<string, unknown>) }
+    : {};
+  const nextWebSearch = { ...(legacyKimi || {}), ...currentWebSearch };
 
   // Prefer env/auth-profiles for key resolution; stale inline kimi.apiKey can cause persistent 401.
-  delete kimi.apiKey;
-  kimi.baseUrl = 'https://api.moonshot.cn/v1';
-  search.kimi = kimi;
-  web.search = search;
-  tools.web = web;
-  config.tools = tools;
+  delete nextWebSearch.apiKey;
+  nextWebSearch.baseUrl = 'https://api.moonshot.cn/v1';
+
+  moonshotConfig.webSearch = nextWebSearch;
+  moonshot.config = moonshotConfig;
+  entries[OPENCLAW_PROVIDER_KEY_MOONSHOT] = moonshot;
+  plugins.entries = entries;
+  config.plugins = plugins;
+
+  if (search && 'kimi' in search) {
+    delete search.kimi;
+    if (Object.keys(search).length === 0 && web) {
+      delete web.search;
+    }
+    if (web && Object.keys(web).length === 0 && tools) {
+      delete tools.web;
+    }
+    if (tools && Object.keys(tools).length === 0) {
+      delete config.tools;
+    }
+  }
 }
 
 function ensureAgentsDefaultModelsAllowlist(
@@ -738,6 +792,7 @@ export async function syncProviderConfigToOpenClaw(
       api: override.api,
       apiKeyEnv: override.apiKeyEnv,
       headers: override.headers,
+      allowPrivateNetwork: override.allowPrivateNetwork,
       disableTools: override.disableTools,
       providerId: provider,
       modelIds: modelId ? [modelId] : [],
@@ -791,6 +846,7 @@ export async function setOpenClawDefaultModelWithOverride(
       apiKeyEnv: override.apiKeyEnv,
       headers: override.headers,
       authHeader: override.authHeader,
+      allowPrivateNetwork: override.allowPrivateNetwork,
       disableTools: override.disableTools,
       providerId: provider,
       modelIds: [modelId, ...fallbackModelIds],
@@ -848,7 +904,149 @@ export async function getActiveOpenClawProviders(): Promise<Set<string>> {
 }
 
 /**
+ * Batch-sync gateway token, browser config, and session idle to openclaw.json
+ * in a single serialized config write (replaces separate syncGatewayTokenToConfig
+ * + syncBrowserConfigToOpenClaw calls, reducing file I/O on Windows + Defender).
+ *
+ * Also sets browser.ssrfPolicy.dangerouslyAllowPrivateNetwork for enterprise
+ * internal network access.
+ */
+export async function batchSyncConfigFields(token: string): Promise<void> {
+  const DEFAULT_IDLE_MINUTES = 10_080; // 7 days
+
+  let modified = false;
+  await updateOpenClawConfigRecord((config) => {
+
+    // ── Gateway token + controlUi ──
+    const gateway = (
+      config.gateway && typeof config.gateway === 'object'
+        ? { ...(config.gateway as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+
+    const auth = (
+      gateway.auth && typeof gateway.auth === 'object'
+        ? { ...(gateway.auth as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+
+    // Only write if the token actually changed — avoids overwriting gateway.tailscale
+    // (and other externally-added gateway fields) and suppresses spurious restarts.
+    if (auth.token === token && auth.mode === 'token') {
+      // still need to ensure browser + session are correct, so don't early-return
+    } else {
+      auth.mode = 'token';
+      auth.token = token;
+      gateway.auth = auth;
+      modified = true;
+    }
+
+    // Packaged ClawClaw loads the renderer from file://, so the gateway must allow
+    // that origin for the chat WebSocket handshake.
+    const controlUi = (
+      gateway.controlUi && typeof gateway.controlUi === 'object'
+        ? { ...(gateway.controlUi as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    const allowedOrigins = Array.isArray(controlUi.allowedOrigins)
+      ? (controlUi.allowedOrigins as unknown[]).filter(
+          (value): value is string => typeof value === 'string'
+        )
+      : [];
+    if (!allowedOrigins.includes('file://')) {
+      controlUi.allowedOrigins = [...allowedOrigins, 'file://'];
+      gateway.controlUi = controlUi;
+      modified = true;
+    }
+
+    if (!gateway.mode) {
+      gateway.mode = 'local';
+      modified = true;
+    }
+    if (gateway.bind !== 'loopback') {
+      gateway.bind = 'loopback';
+      modified = true;
+    }
+    config.gateway = gateway;
+
+    // ClawClaw owns a local desktop Gateway and connects through 127.0.0.1.
+    // Disable mDNS advertising to avoid LAN exposure warnings and noisy Bonjour
+    // re-advertise watchdog logs during desktop startup.
+    const discovery = (
+      config.discovery && typeof config.discovery === 'object'
+        ? { ...(config.discovery as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    const mdns = (
+      discovery.mdns && typeof discovery.mdns === 'object'
+        ? { ...(discovery.mdns as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    if (mdns.mode !== 'off') {
+      mdns.mode = 'off';
+      discovery.mdns = mdns;
+      config.discovery = discovery;
+      modified = true;
+    }
+
+    // ── Browser config ──
+    const browser = (
+      config.browser && typeof config.browser === 'object'
+        ? { ...(config.browser as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    let browserModified = false;
+
+    if (browser.enabled === undefined) {
+      browser.enabled = true;
+      browserModified = true;
+    }
+    if (browser.defaultProfile === undefined) {
+      browser.defaultProfile = 'openclaw';
+      browserModified = true;
+    }
+    // Default ssrfPolicy to allow private network access for enterprise/internal use.
+    if (browser.ssrfPolicy == null) {
+      browser.ssrfPolicy = { dangerouslyAllowPrivateNetwork: true };
+      browserModified = true;
+    } else if (
+      typeof browser.ssrfPolicy === 'object' &&
+      (browser.ssrfPolicy as Record<string, unknown>).dangerouslyAllowPrivateNetwork === undefined
+    ) {
+      (browser.ssrfPolicy as Record<string, unknown>).dangerouslyAllowPrivateNetwork = true;
+      browserModified = true;
+    }
+    if (browserModified) {
+      config.browser = browser;
+      modified = true;
+    }
+
+    // ── Session idle minutes ──
+    const session = (
+      config.session && typeof config.session === 'object'
+        ? { ...(config.session as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    const hasExplicitSessionConfig =
+      session.idleMinutes !== undefined
+      || session.reset !== undefined
+      || session.resetByType !== undefined
+      || session.resetByChannel !== undefined;
+    if (!hasExplicitSessionConfig) {
+      session.idleMinutes = DEFAULT_IDLE_MINUTES;
+      config.session = session;
+      modified = true;
+    }
+
+    if (modified) {
+      console.log('Synced gateway token, browser config, and session idle to openclaw.json');
+    }
+  });
+}
+
+/**
  * Write the ClawClaw gateway token into ~/.openclaw/openclaw.json.
+ * @deprecated Use batchSyncConfigFields instead (single-lock for token + browser + session).
  */
 export async function syncGatewayTokenToConfig(token: string): Promise<void> {
   const config = await readOpenClawJson();
@@ -902,6 +1100,7 @@ export async function syncGatewayTokenToConfig(token: string): Promise<void> {
 
 /**
  * Ensure browser automation is enabled in ~/.openclaw/openclaw.json.
+ * @deprecated Use batchSyncConfigFields instead (single-lock for token + browser + session).
  */
 export async function syncBrowserConfigToOpenClaw(): Promise<void> {
   const config = await readOpenClawJson();
@@ -935,64 +1134,112 @@ export async function syncMemorySettingsToOpenClaw(params: {
   sessionMemoryEnabled: boolean;
   memorySearchEnabled: boolean;
 }): Promise<void> {
-  const config = await readOpenClawJson();
+  let modified = false;
+  await updateOpenClawConfigRecord((config) => {
+    const hooks = (
+      config.hooks && typeof config.hooks === 'object'
+        ? { ...(config.hooks as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
 
-  const hooks = (
-    config.hooks && typeof config.hooks === 'object'
-      ? { ...(config.hooks as Record<string, unknown>) }
-      : {}
-  ) as Record<string, unknown>;
+    const internal = (
+      hooks.internal && typeof hooks.internal === 'object'
+        ? { ...(hooks.internal as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
 
-  const internal = (
-    hooks.internal && typeof hooks.internal === 'object'
-      ? { ...(hooks.internal as Record<string, unknown>) }
-      : {}
-  ) as Record<string, unknown>;
+    const entries = (
+      internal.entries && typeof internal.entries === 'object'
+        ? { ...(internal.entries as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
 
-  const entries = (
-    internal.entries && typeof internal.entries === 'object'
-      ? { ...(internal.entries as Record<string, unknown>) }
-      : {}
-  ) as Record<string, unknown>;
+    const sessionMemoryEntry = (
+      entries['session-memory'] && typeof entries['session-memory'] === 'object'
+        ? { ...(entries['session-memory'] as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    if (sessionMemoryEntry.enabled !== params.sessionMemoryEnabled) {
+      modified = true;
+    }
+    sessionMemoryEntry.enabled = params.sessionMemoryEnabled;
+    entries['session-memory'] = sessionMemoryEntry;
+    internal.entries = entries;
+    if (params.sessionMemoryEnabled) {
+      if (internal.enabled !== true) {
+        modified = true;
+      }
+      internal.enabled = true;
+    }
+    hooks.internal = internal;
+    config.hooks = hooks;
 
-  const sessionMemoryEntry = (
-    entries['session-memory'] && typeof entries['session-memory'] === 'object'
-      ? { ...(entries['session-memory'] as Record<string, unknown>) }
-      : {}
-  ) as Record<string, unknown>;
-  sessionMemoryEntry.enabled = params.sessionMemoryEnabled;
-  entries['session-memory'] = sessionMemoryEntry;
-  internal.entries = entries;
-  if (params.sessionMemoryEnabled) {
-    internal.enabled = true;
+    const agents = (
+      config.agents && typeof config.agents === 'object'
+        ? { ...(config.agents as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+
+    const defaults = (
+      agents.defaults && typeof agents.defaults === 'object'
+        ? { ...(agents.defaults as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+
+    const memorySearch = (
+      defaults.memorySearch && typeof defaults.memorySearch === 'object'
+        ? { ...(defaults.memorySearch as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    if (memorySearch.enabled !== params.memorySearchEnabled) {
+      modified = true;
+    }
+    memorySearch.enabled = params.memorySearchEnabled;
+    defaults.memorySearch = memorySearch;
+    agents.defaults = defaults;
+    config.agents = agents;
+  });
+
+  if (modified) {
+    console.log('Synced memory settings to openclaw.json');
   }
-  hooks.internal = internal;
-  config.hooks = hooks;
+}
 
-  const agents = (
-    config.agents && typeof config.agents === 'object'
-      ? { ...(config.agents as Record<string, unknown>) }
-      : {}
-  ) as Record<string, unknown>;
+export async function syncModelRuntimeSettingsToOpenClaw(params: {
+  localModelLean: boolean;
+}): Promise<void> {
+  let modified = false;
+  await updateOpenClawConfigRecord((config) => {
+    const agents = (
+      config.agents && typeof config.agents === 'object'
+        ? { ...(config.agents as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
 
-  const defaults = (
-    agents.defaults && typeof agents.defaults === 'object'
-      ? { ...(agents.defaults as Record<string, unknown>) }
-      : {}
-  ) as Record<string, unknown>;
+    const defaults = (
+      agents.defaults && typeof agents.defaults === 'object'
+        ? { ...(agents.defaults as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
 
-  const memorySearch = (
-    defaults.memorySearch && typeof defaults.memorySearch === 'object'
-      ? { ...(defaults.memorySearch as Record<string, unknown>) }
-      : {}
-  ) as Record<string, unknown>;
-  memorySearch.enabled = params.memorySearchEnabled;
-  defaults.memorySearch = memorySearch;
-  agents.defaults = defaults;
-  config.agents = agents;
+    const experimental = (
+      defaults.experimental && typeof defaults.experimental === 'object'
+        ? { ...(defaults.experimental as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
 
-  await writeOpenClawJson(config);
-  console.log('Synced memory settings to openclaw.json');
+    if (experimental.localModelLean !== params.localModelLean) {
+      modified = true;
+    }
+    experimental.localModelLean = params.localModelLean;
+    defaults.experimental = experimental;
+    agents.defaults = defaults;
+    config.agents = agents;
+  });
+
+  if (modified) {
+    console.log('Synced model runtime settings to openclaw.json');
+  }
 }
 
 /**
@@ -1011,7 +1258,7 @@ export async function updateAgentModelProvider(
 ): Promise<void> {
   const agentIds = await discoverAgentIds();
   for (const agentId of agentIds) {
-    const modelsPath = join(homedir(), '.openclaw', 'agents', agentId, 'agent', 'models.json');
+    const modelsPath = join(resolveOpenClawDir(), 'agents', agentId, 'agent', 'models.json');
     let data: Record<string, unknown> = {};
     try {
       data = (await readJsonFile<Record<string, unknown>>(modelsPath)) ?? {};
@@ -1177,7 +1424,7 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
     }
 
     const normalizedAllowWithoutLegacyQqbot = allowArr.filter(
-      (id) => !QQBOT_LEGACY_PLUGIN_ID_CANDIDATES.includes(id as typeof QQBOT_LEGACY_PLUGIN_ID_CANDIDATES[number]),
+      (id) => !QQBOT_STALE_PLUGIN_ALLOW_IDS.includes(id as typeof QQBOT_STALE_PLUGIN_ALLOW_IDS[number]),
     );
     if (normalizedAllowWithoutLegacyQqbot.length !== allowArr.length) {
       pluginsObj.allow = normalizedAllowWithoutLegacyQqbot;
@@ -1185,7 +1432,7 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
       console.log('[sanitize] Removed legacy qqbot plugin allowlist entries (qqbot is now built-in)');
     }
 
-    for (const pluginId of QQBOT_LEGACY_PLUGIN_ID_CANDIDATES) {
+    for (const pluginId of QQBOT_STALE_PLUGIN_ENTRY_IDS) {
       if (pEntries[pluginId]) {
         delete pEntries[pluginId];
         modified = true;
@@ -1205,7 +1452,7 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
       && (config.channels as Record<string, unknown>).feishu,
     );
 
-    if (hasFeishuChannelConfig || existingFeishuEntry || configuredFeishuId || installedFeishuId) {
+    if (hasFeishuChannelConfig) {
       if (Array.isArray(pluginsObj.allow)) {
         const normalizedAllow = allowArr.filter(
           (id) => !FEISHU_PLUGIN_ID_CANDIDATES.includes(id as typeof FEISHU_PLUGIN_ID_CANDIDATES[number]),
@@ -1239,6 +1486,25 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
           console.log('[sanitize] Disabled bare plugins.entries.feishu (canonical plugin is configured)');
         }
       }
+    } else {
+      if (Array.isArray(pluginsObj.allow)) {
+        const normalizedAllow = allowArr.filter(
+          (id) => !FEISHU_PLUGIN_ID_CANDIDATES.includes(id as typeof FEISHU_PLUGIN_ID_CANDIDATES[number]),
+        );
+        if (normalizedAllow.length !== allowArr.length) {
+          pluginsObj.allow = normalizedAllow;
+          modified = true;
+          console.log('[sanitize] Removed feishu plugin allowlist entries because feishu channel is not configured');
+        }
+      }
+
+      for (const id of FEISHU_PLUGIN_ID_CANDIDATES) {
+        if (pEntries[id]) {
+          delete pEntries[id];
+          modified = true;
+          console.log(`[sanitize] Removed plugins.entries.${id} because feishu channel is not configured`);
+        }
+      }
     }
 
   }
@@ -1249,6 +1515,44 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
   // compares content before vs after sanitization and sets restart=true only
   // when the actual config content changed. Setting it here unconditionally
   // would always trigger a write (and restart) even when nothing changed.
+
+  // ── tools section (OpenClaw 3.8+) ──────────────────────────────
+  // ClawClaw is a local desktop app where the user is the trusted operator.
+  // Set tools.profile = 'full' for full tool integration.
+  // Set tools.sessions.visibility = 'all' so session history is accessible.
+  // Set tools.exec.security = 'full' and ask = 'off' to disable exec approval
+  // prompts — they add unnecessary friction in a desktop context where the
+  // user already trusts all commands they run.  If a user has manually
+  // configured a stricter exec-approvals.json, OpenClaw's minSecurity/maxAsk
+  // merge will still respect their intent.
+  const toolsConfig = (config.tools as Record<string, unknown> | undefined) || {};
+  let toolsModified = false;
+
+  if (toolsConfig.profile !== 'full') {
+    toolsConfig.profile = 'full';
+    toolsModified = true;
+  }
+
+  const sessions = (toolsConfig.sessions as Record<string, unknown> | undefined) || {};
+  if (sessions.visibility !== 'all') {
+    sessions.visibility = 'all';
+    toolsConfig.sessions = sessions;
+    toolsModified = true;
+  }
+
+  const execConfig = (toolsConfig.exec as Record<string, unknown> | undefined) || {};
+  if (execConfig.security !== 'full' || execConfig.ask !== 'off') {
+    execConfig.security = 'full';
+    execConfig.ask = 'off';
+    toolsConfig.exec = execConfig;
+    toolsModified = true;
+    console.log('[sanitize] Set tools.exec.security="full" and tools.exec.ask="off"');
+  }
+
+  if (toolsModified) {
+    config.tools = toolsConfig;
+    modified = true;
+  }
 
   // ── tools.web.search.kimi ─────────────────────────────────────
   // OpenClaw web_search(kimi) prioritizes tools.web.search.kimi.apiKey over

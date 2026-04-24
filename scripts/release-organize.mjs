@@ -16,13 +16,14 @@ const GROUPS = [
       /^latest\.yml$/i,
       /^ClawClaw-Setup-v.+\.exe(?:\.blockmap)?$/i,
       /^clawclaw-.+\.nsis\.7z$/i,
+      /^win(?:-.+)?-unpacked\.zip$/i,
     ],
   },
   {
     name: 'mac',
     dirMatchers: [/^mac(?:-.+)?$/i],
     fileMatchers: [
-      /^ClawClaw-v.+\.(?:zip|dmg|pkg)$/i,
+      /^ClawClaw-v.+\.(?:zip|tar\.gz|dmg|pkg)$/i,
       /^ClawClaw-v.+\.(?:zip|dmg|pkg)\.blockmap$/i,
     ],
   },
@@ -46,6 +47,9 @@ function ensureDir(dirPath) {
 }
 
 function mergeDirectoryContents(sourceDir, targetDir, label) {
+  if (existsSync(targetDir)) {
+    rmSync(targetDir, { recursive: true, force: true });
+  }
   ensureDir(targetDir);
 
   for (const child of readdirSync(sourceDir)) {
@@ -88,7 +92,14 @@ if (!existsSync(releaseDir)) {
 }
 
 const reservedNames = new Set(['current', 'archive', `v${packageJson.version}`]);
-for (const entry of readdirSync(releaseDir, { withFileTypes: true })) {
+const entries = readdirSync(releaseDir, { withFileTypes: true }).sort((a, b) => {
+  if (a.isDirectory() !== b.isDirectory()) {
+    return a.isDirectory() ? -1 : 1;
+  }
+  return a.name.localeCompare(b.name);
+});
+
+for (const entry of entries) {
   if (reservedNames.has(entry.name)) continue;
   if (entry.name === '.DS_Store') continue;
 

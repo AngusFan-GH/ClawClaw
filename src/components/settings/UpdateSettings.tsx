@@ -17,9 +17,10 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-export function UpdateSettings() {
+export function UpdateSettings({ versionOnly = false }: { versionOnly?: boolean }) {
   const { t } = useTranslation('settings');
   const [openclawVersion, setOpenclawVersion] = useState<string | null>(null);
+  const [appVersion, setAppVersion] = useState<string>('0.0.0');
   const {
     autoCheckUpdate,
     autoDownloadUpdate,
@@ -34,6 +35,7 @@ export function UpdateSettings() {
     error,
     isInitialized,
     isSupported,
+    isPortable,
     hasCheckedOnce,
     autoInstallCountdown,
     init,
@@ -47,8 +49,25 @@ export function UpdateSettings() {
   } = useUpdateStore();
 
   useEffect(() => {
+    let cancelled = false;
+
+    void invokeIpc<string>('update:version')
+      .then((version) => {
+        if (!cancelled) setAppVersion(version);
+      })
+      .catch(() => {
+        if (!cancelled) setAppVersion('0.0.0');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (versionOnly) return;
     void init();
-  }, [init]);
+  }, [init, versionOnly]);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,19 +91,23 @@ export function UpdateSettings() {
   }, []);
 
   useEffect(() => {
+    if (versionOnly) return;
     void setChannel('stable');
-  }, [setChannel]);
+  }, [setChannel, versionOnly]);
 
   useEffect(() => {
+    if (versionOnly) return;
+    if (isPortable) return;
     void setAutoDownload(autoDownloadUpdate);
-  }, [autoDownloadUpdate, setAutoDownload]);
+  }, [autoDownloadUpdate, isPortable, setAutoDownload, versionOnly]);
 
   useEffect(() => {
+    if (versionOnly) return;
     if (!isInitialized || !isSupported || !autoCheckUpdate || hasCheckedOnce || status !== 'idle') {
       return;
     }
     void checkForUpdates();
-  }, [autoCheckUpdate, checkForUpdates, hasCheckedOnce, isInitialized, isSupported, status]);
+  }, [autoCheckUpdate, checkForUpdates, hasCheckedOnce, isInitialized, isSupported, status, versionOnly]);
 
   const handleCheckForUpdates = useCallback(async () => {
     clearError();
@@ -111,6 +134,9 @@ export function UpdateSettings() {
     if (!isSupported) {
       return t('updates.unsupported');
     }
+    if (status === 'migration-required') {
+      return error || t('updates.status.migrationRequired');
+    }
     if (status === 'downloaded' && autoInstallCountdown != null && autoInstallCountdown >= 0) {
       return t('updates.status.autoInstalling', { seconds: autoInstallCountdown });
     }
@@ -123,6 +149,8 @@ export function UpdateSettings() {
         return t('updates.status.available', { version: updateInfo?.version });
       case 'downloaded':
         return t('updates.status.downloaded', { version: updateInfo?.version });
+      case 'installing':
+        return t('updates.status.installing');
       case 'error':
         return error || t('updates.status.failed');
       case 'not-available':
@@ -164,6 +192,14 @@ export function UpdateSettings() {
           </Button>
         );
       case 'downloaded':
+        if (isPortable) {
+          return (
+            <Button onClick={installUpdate} size="sm">
+              <Rocket className="mr-2 h-4 w-4" />
+              {t('updates.action.installAndRestart')}
+            </Button>
+          );
+        }
         if (autoInstallCountdown != null && autoInstallCountdown >= 0) {
           return (
             <Button onClick={cancelAutoInstall} size="sm" variant="outline">
@@ -185,6 +221,12 @@ export function UpdateSettings() {
             {t('updates.action.retry')}
           </Button>
         );
+      case 'migration-required':
+        return (
+          <Button disabled variant="outline" size="sm">
+            {t('updates.action.manualMigration')}
+          </Button>
+        );
       default:
         return (
           <Button onClick={handleCheckForUpdates} variant="outline" size="sm">
@@ -195,11 +237,32 @@ export function UpdateSettings() {
     }
   };
 
-  if (!isInitialized) {
+  if (!versionOnly && !isInitialized) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
         <LoadingIcon className="h-4 w-4" />
         <span>{t('common:status.loading')}</span>
+      </div>
+    );
+  }
+
+  if (versionOnly) {
+    return (
+      <div className="rounded-[10px] border border-black/10 bg-card/80 p-5 dark:border-white/10 dark:bg-card/50">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-muted-foreground">{t('updates.currentVersion')}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <p className="text-4xl font-bold tracking-tight">v{appVersion}</p>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
+              <span className="font-medium">{t('updates.openclawVersionLabel')}</span>
+              <span className="rounded-full border border-black/10 bg-black/[0.03] px-2.5 py-1 font-mono dark:border-white/10 dark:bg-white/[0.03]">
+                {openclawVersion ? `v${openclawVersion}` : t('updates.openclawVersionUnavailable')}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -248,7 +311,9 @@ export function UpdateSettings() {
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-sm font-medium">{t('updates.autoCheck')}</p>
-                <p className="mt-1 text-[13px] text-muted-foreground">{t('updates.autoCheckDesc')}</p>
+                <p className="mt-1 text-[13px] text-muted-foreground">
+                  {isPortable ? t('updates.portableAutoCheckDesc') : t('updates.autoCheckDesc')}
+                </p>
               </div>
               <Switch checked={autoCheckUpdate} onCheckedChange={setAutoCheckUpdate} />
             </div>
@@ -258,9 +323,11 @@ export function UpdateSettings() {
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-sm font-medium">{t('updates.autoDownload')}</p>
-                <p className="mt-1 text-[13px] text-muted-foreground">{t('updates.autoDownloadDesc')}</p>
+                <p className="mt-1 text-[13px] text-muted-foreground">
+                  {isPortable ? t('updates.portableAutoDownloadDesc') : t('updates.autoDownloadDesc')}
+                </p>
               </div>
-              <Switch checked={autoDownloadUpdate} onCheckedChange={setAutoDownloadUpdate} />
+              <Switch checked={autoDownloadUpdate} onCheckedChange={setAutoDownloadUpdate} disabled={isPortable} />
             </div>
           </div>
         </div>

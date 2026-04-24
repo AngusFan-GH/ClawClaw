@@ -6,12 +6,8 @@
  */
 import { access, readFile, readdir, rm, writeFile } from 'fs/promises';
 import { constants } from 'fs';
-import { existsSync } from 'node:fs';
-import { spawn } from 'node:child_process';
-import { dirname, join } from 'path';
-import { homedir } from 'os';
-import { app, utilityProcess } from 'electron';
-import { getOpenClawEntryPath, getOpenClawResolvedDir, getOpenClawDir } from './paths';
+import { join } from 'path';
+import { resolveOpenClawDir } from './paths';
 import * as logger from './logger';
 import {
     readOpenClawConfigRecord,
@@ -22,7 +18,6 @@ import {
 } from './openclaw-config';
 import { hasIncompatibleManagedPluginSdkImports } from './plugin-sdk-compat';
 import { proxyAwareFetch } from './proxy-fetch';
-import { prepareWinSpawn } from './win-shell';
 import {
     normalizeOpenClawAccountId,
     WECHAT_RUNTIME_CHANNEL_ID,
@@ -32,55 +27,40 @@ import {
     toUiChannelType,
 } from './channel-alias';
 
-const OPENCLAW_DIR = join(homedir(), '.openclaw');
+const OPENCLAW_DIR = resolveOpenClawDir();
 const EXTENSIONS_DIR = join(OPENCLAW_DIR, 'extensions');
 const CONFIG_FILE = join(OPENCLAW_DIR, 'openclaw.json');
 const FEISHU_PLUGIN_ID_CANDIDATES = ['feishu', 'openclaw-lark', 'feishu-openclaw-plugin'] as const;
-const CHINA_CHANNEL_PLUGIN_ID = 'channels';
+const LEGACY_CHINA_CHANNEL_PLUGIN_ID = 'channels';
 const CHINA_CHANNEL_TYPES = ['dingtalk', 'wecom'] as const;
-const QQBOT_LEGACY_PLUGIN_IDS = ['qqbot', 'openclaw-qqbot'] as const;
+const QQBOT_LEGACY_PLUGIN_IDS = ['openclaw-qqbot'] as const;
 const CHINA_CHANNEL_LEGACY_PLUGIN_IDS: Record<(typeof CHINA_CHANNEL_TYPES)[number], string[]> = {
-    dingtalk: ['dingtalk'],
-    wecom: ['wecom', 'wecom-openclaw-plugin'],
+    dingtalk: [LEGACY_CHINA_CHANNEL_PLUGIN_ID],
+    wecom: [LEGACY_CHINA_CHANNEL_PLUGIN_ID, 'wecom-openclaw-plugin'],
+};
+const CHINA_CHANNEL_PLUGIN_IDS: Record<(typeof CHINA_CHANNEL_TYPES)[number], string> = {
+    dingtalk: 'dingtalk',
+    wecom: 'wecom',
 };
 const CHANNEL_PLUGIN_ALLOWLIST_IDS: Partial<Record<string, string>> = {
+    qqbot: 'qqbot',
     [WECHAT_RUNTIME_CHANNEL_ID]: WECHAT_RUNTIME_CHANNEL_ID,
 };
-const SUPPORTED_CHANNEL_IDS = [
-    'whatsapp',
-    'dingtalk',
-    'telegram',
-    'discord',
-    'signal',
-    'feishu',
-    'wecom',
-    'imessage',
-    'matrix',
-    'line',
-    'msteams',
-    'googlechat',
-    'mattermost',
-    'qqbot',
-    WECHAT_RUNTIME_CHANNEL_ID,
-] as const;
-
 // Channels that are managed as plugins (config goes under plugins.entries, not channels)
 const PLUGIN_CHANNELS = ['whatsapp'];
 const LEGACY_CHANNEL_PLUGIN_IDS = [
     'openclaw-lark',
     'feishu-openclaw-plugin',
     'wecom-openclaw-plugin',
-    'wecom',
-    'qqbot',
     'openclaw-qqbot',
-    'dingtalk',
 ] as const;
 const OFFICIAL_BUNDLED_PLUGIN_MIRROR_IDS = ['feishu'] as const;
 const MANAGED_CHANNEL_PLUGIN_IDS = [
     ...new Set<string>([
         ...LEGACY_CHANNEL_PLUGIN_IDS,
         ...OFFICIAL_BUNDLED_PLUGIN_MIRROR_IDS,
-        CHINA_CHANNEL_PLUGIN_ID,
+        LEGACY_CHINA_CHANNEL_PLUGIN_ID,
+        ...Object.values(CHINA_CHANNEL_PLUGIN_IDS),
         WECHAT_RUNTIME_CHANNEL_ID,
     ]),
 ] as const;
@@ -193,7 +173,7 @@ function getLegacyChannelPluginIds(channelType: string): string[] {
 
 function getChannelPluginAllowIds(channelType: string): string[] {
     if (isChinaChannelsManagedChannel(channelType)) {
-        return [CHINA_CHANNEL_PLUGIN_ID];
+        return [CHINA_CHANNEL_PLUGIN_IDS[channelType]];
     }
     return getLegacyChannelPluginIds(channelType);
 }
@@ -297,7 +277,7 @@ function hasConfiguredChinaManagedChannel(currentConfig: OpenClawConfig): boolea
 }
 
 async function resolveFeishuPluginId(): Promise<string> {
-    const extensionRoot = join(homedir(), '.openclaw', 'extensions');
+    const extensionRoot = join(resolveOpenClawDir(), 'extensions');
     for (const dirName of FEISHU_PLUGIN_ID_CANDIDATES) {
         const manifestPath = join(extensionRoot, dirName, 'openclaw.plugin.json');
         try {
@@ -315,7 +295,7 @@ async function resolveFeishuPluginId(): Promise<string> {
 
 async function removeWeChatAccountState(accountId: string): Promise<void> {
     const normalizedAccountId = normalizeOpenClawAccountId(accountId);
-    const weChatStateDir = join(homedir(), '.openclaw', WECHAT_RUNTIME_CHANNEL_ID);
+    const weChatStateDir = join(resolveOpenClawDir(), WECHAT_RUNTIME_CHANNEL_ID);
     const weChatAccountsDir = join(weChatStateDir, 'accounts');
     const accountFilePrefixes = [
         `${normalizedAccountId}.json`,
@@ -360,7 +340,7 @@ async function removeWeChatAccountState(accountId: string): Promise<void> {
     }
 
     try {
-        const credentialsDir = join(homedir(), '.openclaw', 'credentials');
+        const credentialsDir = join(resolveOpenClawDir(), 'credentials');
         if (await fileExists(credentialsDir)) {
             const candidates = await readdir(credentialsDir);
             await Promise.all(
@@ -384,7 +364,7 @@ async function removeWeChatAccountState(accountId: string): Promise<void> {
     }
 
     try {
-        const scopedCredentialsDir = join(homedir(), '.openclaw', 'credentials', WECHAT_RUNTIME_CHANNEL_ID);
+        const scopedCredentialsDir = join(resolveOpenClawDir(), 'credentials', WECHAT_RUNTIME_CHANNEL_ID);
         if (await fileExists(scopedCredentialsDir)) {
             const candidates = await readdir(scopedCredentialsDir);
             await Promise.all(
@@ -422,7 +402,7 @@ async function removeWeChatAccountState(accountId: string): Promise<void> {
 }
 
 async function hasPersistedWeChatAccountState(): Promise<boolean> {
-    const weChatStateDir = join(homedir(), '.openclaw', WECHAT_RUNTIME_CHANNEL_ID);
+    const weChatStateDir = join(resolveOpenClawDir(), WECHAT_RUNTIME_CHANNEL_ID);
     const weChatAccountsDir = join(weChatStateDir, 'accounts');
     const accountIndexPath = join(weChatStateDir, 'accounts.json');
 
@@ -472,7 +452,7 @@ async function compactDirectoryIfEmpty(targetDir: string): Promise<void> {
 }
 
 async function removeQQBotAccountState(accountId?: string): Promise<void> {
-    const qqbotDir = join(homedir(), '.openclaw', 'qqbot');
+    const qqbotDir = join(resolveOpenClawDir(), 'qqbot');
     const sessionsDir = join(qqbotDir, 'sessions');
 
     try {
@@ -491,155 +471,6 @@ async function removeQQBotAccountState(accountId?: string): Promise<void> {
 
     await compactDirectoryIfEmpty(sessionsDir);
     await compactDirectoryIfEmpty(qqbotDir);
-}
-
-function extractTrailingJsonObject(raw: string): Record<string, unknown> | null {
-    const trimmed = raw.trim();
-    if (!trimmed) return null;
-
-    const directMatch = trimmed.match(/(\{[\s\S]*\})\s*$/);
-    if (directMatch) {
-        try {
-            return JSON.parse(directMatch[1]) as Record<string, unknown>;
-        } catch {
-            // fall through
-        }
-    }
-
-    const lastObjectStart = trimmed.lastIndexOf('\n{');
-    const candidate = lastObjectStart >= 0 ? trimmed.slice(lastObjectStart + 1) : trimmed;
-    try {
-        return JSON.parse(candidate) as Record<string, unknown>;
-    } catch {
-        return null;
-    }
-}
-
-function getOpenClawCliSpawnConfig(): { command: string; args: string[]; env: NodeJS.ProcessEnv; cwd: string } {
-    const cwd = getOpenClawResolvedDir();
-    const entryPath = getOpenClawEntryPath();
-
-    if (process.platform === 'win32') {
-        return {
-            command: process.execPath,
-            args: [entryPath, 'channels', 'list', '--json', '--no-usage'],
-            env: {
-                ...process.env,
-                ELECTRON_RUN_AS_NODE: '1',
-                OPENCLAW_NO_RESPAWN: '1',
-                OPENCLAW_EMBEDDED_IN: 'ClawClaw',
-            },
-            cwd,
-        };
-    }
-
-    if (!app.isPackaged) {
-        const openclawDir = getOpenClawDir();
-        const binName = process.platform === 'win32' ? 'openclaw.cmd' : 'openclaw';
-        const binPath = join(dirname(openclawDir), '.bin', binName);
-        if (existsSync(binPath)) {
-            return {
-                command: binPath,
-                args: ['channels', 'list', '--json', '--no-usage'],
-                env: {
-                    ...process.env,
-                    OPENCLAW_NO_RESPAWN: '1',
-                    OPENCLAW_EMBEDDED_IN: 'ClawClaw',
-                },
-                cwd,
-            };
-        }
-    }
-
-    const packagedCli =
-        process.platform === 'win32'
-            ? join(process.resourcesPath, 'cli', 'openclaw.cmd')
-            : join(process.resourcesPath, 'cli', 'openclaw');
-    if (app.isPackaged && existsSync(packagedCli)) {
-        return {
-            command: packagedCli,
-            args: ['channels', 'list', '--json', '--no-usage'],
-            env: {
-                ...process.env,
-                OPENCLAW_NO_RESPAWN: '1',
-                OPENCLAW_EMBEDDED_IN: 'ClawClaw',
-            },
-            cwd,
-        };
-    }
-
-    return {
-        command: process.execPath,
-        args: [entryPath, 'channels', 'list', '--json', '--no-usage'],
-        env: {
-            ...process.env,
-            ELECTRON_RUN_AS_NODE: '1',
-            OPENCLAW_NO_RESPAWN: '1',
-            OPENCLAW_EMBEDDED_IN: 'ClawClaw',
-        },
-        cwd,
-    };
-}
-
-async function listConfiguredChannelsFromCli(): Promise<string[]> {
-    const supported = new Set<string>(SUPPORTED_CHANNEL_IDS);
-    const { command, args, env, cwd } = getOpenClawCliSpawnConfig();
-
-    return await new Promise((resolve) => {
-        const child = process.platform === 'win32'
-            ? utilityProcess.fork(args[0] ?? '', args.slice(1), {
-                cwd,
-                env,
-                stdio: 'pipe',
-                serviceName: 'OpenClaw Channels List',
-            })
-            : (() => {
-                const prepared = prepareWinSpawn(command, args);
-                return spawn(prepared.command, prepared.args, {
-                    cwd,
-                    env,
-                    stdio: ['ignore', 'pipe', 'pipe'],
-                    shell: prepared.shell,
-                    windowsHide: true,
-                });
-            })();
-
-        let stdout = '';
-        let stderr = '';
-
-        child.stdout.on('data', (chunk) => {
-            stdout += chunk.toString();
-        });
-
-        child.stderr.on('data', (chunk) => {
-            stderr += chunk.toString();
-        });
-
-        child.on('error', (error) => {
-            logger.warn('Failed to execute openclaw channels list:', error);
-            resolve([]);
-        });
-
-        child.on(process.platform === 'win32' ? 'exit' : 'close', () => {
-            const parsed = extractTrailingJsonObject(`${stdout}\n${stderr}`);
-            if (!parsed) {
-                resolve([]);
-                return;
-            }
-
-            const configured = new Set<string>();
-            const chat = parsed.chat;
-            if (chat && typeof chat === 'object') {
-                for (const key of Object.keys(chat as Record<string, unknown>)) {
-                    if (supported.has(key)) {
-                        configured.add(key);
-                    }
-                }
-            }
-
-            resolve(Array.from(configured));
-        });
-    });
 }
 
 // ── Types ────────────────────────────────────────────────────────
@@ -947,6 +778,16 @@ export async function readOpenClawConfig(): Promise<OpenClawConfig> {
     }
 }
 
+export async function readOpenClawConfigSnapshot(): Promise<OpenClawConfig> {
+    try {
+        return await readOpenClawConfigRecordRaw<OpenClawConfig>();
+    } catch (error) {
+        logger.error('Failed to read OpenClaw config snapshot', error);
+        console.error('Failed to read OpenClaw config snapshot:', error);
+        return {};
+    }
+}
+
 export async function writeOpenClawConfig(config: OpenClawConfig): Promise<void> {
     try {
         // Read current content BEFORE sanitization so we can compare the true before/after.
@@ -1017,7 +858,7 @@ export async function saveChannelConfig(
     migrateLegacyWechatSection(currentConfig);
 
     if (isChinaChannelsManagedChannel(runtimeChannelType)) {
-        ensurePluginEnabled(currentConfig, CHINA_CHANNEL_PLUGIN_ID, { createEntry: true });
+        ensurePluginEnabled(currentConfig, CHINA_CHANNEL_PLUGIN_IDS[runtimeChannelType], { createEntry: true });
         removePluginIds(currentConfig, getLegacyChannelPluginIds(runtimeChannelType));
     }
 
@@ -1424,7 +1265,7 @@ export async function deleteChannelConfig(
             changed = true;
         }
         if (!hasConfiguredChinaManagedChannel(currentConfig)) {
-            if (removePluginIds(currentConfig, [CHINA_CHANNEL_PLUGIN_ID])) {
+            if (removePluginIds(currentConfig, [LEGACY_CHINA_CHANNEL_PLUGIN_ID, ...Object.values(CHINA_CHANNEL_PLUGIN_IDS)])) {
                 changed = true;
             }
             removeChinaManagedPluginMirror = true;
@@ -1439,7 +1280,7 @@ export async function deleteChannelConfig(
     // Special handling for WhatsApp credentials
     if (configChanged && runtimeChannelType === 'whatsapp') {
         try {
-            const whatsappDir = join(homedir(), '.openclaw', 'credentials', 'whatsapp');
+            const whatsappDir = join(resolveOpenClawDir(), 'credentials', 'whatsapp');
             if (await fileExists(whatsappDir)) {
                 await rm(whatsappDir, { recursive: true, force: true });
                 console.log('Deleted WhatsApp credentials directory');
@@ -1454,7 +1295,7 @@ export async function deleteChannelConfig(
     }
 
     if (removeChinaManagedPluginMirror) {
-        const pluginDir = join(EXTENSIONS_DIR, CHINA_CHANNEL_PLUGIN_ID);
+        const pluginDir = join(EXTENSIONS_DIR, LEGACY_CHINA_CHANNEL_PLUGIN_ID);
         try {
             if (await fileExists(pluginDir)) {
                 await rm(pluginDir, { recursive: true, force: true });
@@ -1469,10 +1310,10 @@ export async function deleteChannelConfig(
     // files and the connection appears to "come back" after refresh/restart.
     if (isWeChatRuntimeChannel(runtimeChannelType) && clearAllWeChatState) {
         const cleanupTargets = [
-            join(homedir(), '.openclaw', 'openclaw-weixin'),
-            join(homedir(), '.openclaw', 'credentials', 'openclaw-weixin'),
-            join(homedir(), '.openclaw', 'agents', 'default', 'sessions', '.openclaw-weixin-sync'),
-            join(homedir(), '.openclaw', 'extensions', 'openclaw-weixin'),
+            join(resolveOpenClawDir(), 'openclaw-weixin'),
+            join(resolveOpenClawDir(), 'credentials', 'openclaw-weixin'),
+            join(resolveOpenClawDir(), 'agents', 'default', 'sessions', '.openclaw-weixin-sync'),
+            join(resolveOpenClawDir(), 'extensions', 'openclaw-weixin'),
         ];
 
         for (const target of cleanupTargets) {
@@ -1486,7 +1327,7 @@ export async function deleteChannelConfig(
         }
 
         try {
-            const credentialsDir = join(homedir(), '.openclaw', 'credentials');
+            const credentialsDir = join(resolveOpenClawDir(), 'credentials');
             if (await fileExists(credentialsDir)) {
                 const candidates = await readdir(credentialsDir);
                 await Promise.all(
@@ -1565,10 +1406,10 @@ export async function cleanupDanglingWeChatPluginState(): Promise<{ cleanedDangl
 
     if (cleanedDanglingState) {
         const cleanupTargets = [
-            join(homedir(), '.openclaw', 'openclaw-weixin'),
-            join(homedir(), '.openclaw', 'credentials', 'openclaw-weixin'),
-            join(homedir(), '.openclaw', 'agents', 'default', 'sessions', '.openclaw-weixin-sync'),
-            join(homedir(), '.openclaw', 'extensions', 'openclaw-weixin'),
+            join(resolveOpenClawDir(), 'openclaw-weixin'),
+            join(resolveOpenClawDir(), 'credentials', 'openclaw-weixin'),
+            join(resolveOpenClawDir(), 'agents', 'default', 'sessions', '.openclaw-weixin-sync'),
+            join(resolveOpenClawDir(), 'extensions', 'openclaw-weixin'),
         ];
 
         for (const target of cleanupTargets) {
@@ -1769,17 +1610,17 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
             }
         }
 
-        if (!hasConfiguredChinaManagedChannel(currentConfig)) {
-            staleAllowIds.add(CHINA_CHANNEL_PLUGIN_ID);
-        }
-
         for (const channelType of CHINA_CHANNEL_TYPES) {
             if (!hasConfiguredChannelState(channelType, currentConfig.channels?.[channelType] as AccountScopedChannelSection | undefined)) {
+                for (const pluginId of getChannelPluginAllowIds(channelType)) {
+                    staleAllowIds.add(pluginId);
+                }
                 for (const pluginId of getLegacyChannelPluginIds(channelType)) {
                     staleAllowIds.add(pluginId);
                 }
             }
         }
+        staleAllowIds.add(LEGACY_CHINA_CHANNEL_PLUGIN_ID);
 
         if (staleAllowIds.size > 0 && Array.isArray(currentConfig.plugins?.allow)) {
             const nextAllow = (currentConfig.plugins.allow as string[]).filter((pluginId) => !staleAllowIds.has(pluginId));
@@ -1813,18 +1654,43 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
             repaired = true;
         }
 
-        if (removePluginIds(currentConfig, QQBOT_LEGACY_PLUGIN_IDS)) {
+        if (hasConfiguredChannelState('qqbot', currentConfig.channels?.qqbot as AccountScopedChannelSection | undefined)) {
+            const beforeAllow = JSON.stringify(currentConfig.plugins?.allow ?? null);
+            const beforeEntry = JSON.stringify(currentConfig.plugins?.entries?.qqbot ?? null);
+            ensurePluginEnabled(currentConfig, 'qqbot');
+            if (currentConfig.plugins?.entries?.qqbot) {
+                delete currentConfig.plugins.entries.qqbot;
+            }
+            const afterAllow = JSON.stringify(currentConfig.plugins?.allow ?? null);
+            const afterEntry = JSON.stringify(currentConfig.plugins?.entries?.qqbot ?? null);
+            if (beforeAllow !== afterAllow || beforeEntry !== afterEntry) {
+                repaired = true;
+            }
+        } else if (removePluginIds(currentConfig, ['qqbot', ...QQBOT_LEGACY_PLUGIN_IDS])) {
             repaired = true;
         }
 
         if (hasConfiguredChinaManagedChannel(currentConfig)) {
-            ensurePluginEnabled(currentConfig, CHINA_CHANNEL_PLUGIN_ID, { createEntry: true });
             for (const channelType of CHINA_CHANNEL_TYPES) {
+                if (hasConfiguredChannelState(channelType, currentConfig.channels?.[channelType] as AccountScopedChannelSection | undefined)) {
+                    const beforeAllow = JSON.stringify(currentConfig.plugins?.allow ?? null);
+                    const beforeEntry = JSON.stringify(currentConfig.plugins?.entries?.[CHINA_CHANNEL_PLUGIN_IDS[channelType]] ?? null);
+                    ensurePluginEnabled(currentConfig, CHINA_CHANNEL_PLUGIN_IDS[channelType], { createEntry: true });
+                    const afterAllow = JSON.stringify(currentConfig.plugins?.allow ?? null);
+                    const afterEntry = JSON.stringify(currentConfig.plugins?.entries?.[CHINA_CHANNEL_PLUGIN_IDS[channelType]] ?? null);
+                    if (beforeAllow !== afterAllow || beforeEntry !== afterEntry) {
+                        repaired = true;
+                    }
+                }
                 if (removePluginIds(currentConfig, getLegacyChannelPluginIds(channelType))) {
                     repaired = true;
                 }
             }
-        } else if (removePluginIds(currentConfig, [CHINA_CHANNEL_PLUGIN_ID, ...CHINA_CHANNEL_TYPES.flatMap((channelType) => getLegacyChannelPluginIds(channelType))])) {
+        } else if (removePluginIds(currentConfig, [
+            LEGACY_CHINA_CHANNEL_PLUGIN_ID,
+            ...Object.values(CHINA_CHANNEL_PLUGIN_IDS),
+            ...CHINA_CHANNEL_TYPES.flatMap((channelType) => getLegacyChannelPluginIds(channelType)),
+        ])) {
             repaired = true;
             removeChinaManagedPluginMirror = true;
         }
@@ -1835,7 +1701,7 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
     });
 
     if (removeChinaManagedPluginMirror) {
-        const pluginDir = join(EXTENSIONS_DIR, CHINA_CHANNEL_PLUGIN_ID);
+        const pluginDir = join(EXTENSIONS_DIR, LEGACY_CHINA_CHANNEL_PLUGIN_ID);
         try {
             if (await fileExists(pluginDir)) {
                 await rm(pluginDir, { recursive: true, force: true });
@@ -1850,7 +1716,7 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
 }
 
 export async function listConfiguredChannels(options?: { includeCli?: boolean }): Promise<string[]> {
-    const config = await readOpenClawConfig();
+    const config = await readOpenClawConfigSnapshot();
     migrateLegacyWechatSection(config);
     return listConfiguredChannelsFromConfig(config, options);
 }
@@ -1886,11 +1752,18 @@ export function listConfiguredChannelsFromConfig(
 }
 
 export async function listConfiguredChannelAccounts(options?: { includeCli?: boolean }): Promise<Record<string, string[]>> {
-    const config = await readOpenClawConfig();
+    const config = await readOpenClawConfigSnapshot();
     migrateLegacyWechatSection(config);
+    return listConfiguredChannelAccountsFromConfig(config, options);
+}
+
+export function listConfiguredChannelAccountsFromConfig(
+    config: Record<string, unknown>,
+    options?: { includeCli?: boolean },
+): Record<string, string[]> {
     const result: Record<string, string[]> = {};
 
-    for (const channelType of await listConfiguredChannels(options)) {
+    for (const channelType of listConfiguredChannelsFromConfig(config, options)) {
         const runtimeChannelType = toRuntimeChannelType(channelType);
         const section = config.channels?.[runtimeChannelType] as AccountScopedChannelSection | undefined;
         const normalizedSection = normalizeChannelSectionForRuntime(runtimeChannelType, section);
@@ -1936,7 +1809,7 @@ export interface ConfiguredChannelGroupSnapshot {
 }
 
 export async function listConfiguredChannelGroups(options?: { includeCli?: boolean }): Promise<ConfiguredChannelGroupSnapshot[]> {
-    const config = await readOpenClawConfig();
+    const config = await readOpenClawConfigSnapshot();
     migrateLegacyWechatSection(config);
     return listConfiguredChannelGroupsFromConfig(config, options);
 }

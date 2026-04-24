@@ -20,6 +20,7 @@ import 'zx/globals';
 import semver from 'semver';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import bundleValidator from './openclaw-bundle-validator.cjs';
 
@@ -28,6 +29,7 @@ const {
   isCheckableRange,
   validateBundledNodeModules,
   formatValidationIssues,
+  verifyBundledRuntimeResolutions,
 } = bundleValidator;
 
 const ROOT = path.resolve(__dirname, '..');
@@ -39,6 +41,18 @@ const BUNDLED_PLUGIN_REGISTRY =
   process.env.OPENCLAW_BUNDLED_PLUGIN_REGISTRY || 'https://registry.npmjs.org/';
 const NODE_MODULES = path.join(ROOT, 'node_modules');
 const FORCE_REBUILD = process.argv.includes('--force') || process.env.OPENCLAW_BUNDLE_FORCE === '1';
+const BUNDLED_RUNTIME_RESOLVE_SPECIFIERS = [
+  'https-proxy-agent',
+  '@slack/bolt',
+  '@slack/web-api',
+  '@google/genai',
+  '@whiskeysockets/baileys',
+  'fake-indexeddb',
+  'grammy',
+  'matrix-js-sdk',
+  'music-metadata',
+  '@aws-sdk/client-bedrock-runtime',
+];
 
 // On Windows, pnpm virtual store paths can exceed MAX_PATH (260 chars).
 function normWin(p) {
@@ -81,6 +95,56 @@ function outputBundleLooksReusable() {
     && fs.existsSync(path.join(OUTPUT, 'openclaw.mjs'))
     && fs.existsSync(path.join(OUTPUT, 'dist', 'entry.js'))
     && fs.existsSync(path.join(OUTPUT, 'node_modules'));
+}
+
+function verifyBundledRuntimeResolves(bundleRoot) {
+  const issues = verifyBundledRuntimeResolutions(bundleRoot, BUNDLED_RUNTIME_RESOLVE_SPECIFIERS);
+  if (issues.length > 0) {
+    echo`❌ Bundled runtime resolution validation failed:`;
+    for (const issue of issues) {
+      echo`   - ${issue.specifier}: ${issue.error}`;
+    }
+    process.exit(1);
+  }
+
+  const bundleRequire = createRequire(path.join(bundleRoot, 'package.json'));
+  const resolvedProxyAgentEntry = bundleRequire.resolve('https-proxy-agent');
+  const resolvedProxyAgentPkg = path.join(path.dirname(path.dirname(resolvedProxyAgentEntry)), 'package.json');
+  const resolvedProxyAgent = JSON.parse(fs.readFileSync(resolvedProxyAgentPkg, 'utf8'));
+  if (!semver.satisfies(resolvedProxyAgent.version, '^9.0.0', { includePrerelease: true })) {
+    echo`❌ Bundled runtime resolved https-proxy-agent@${resolvedProxyAgent.version}; expected ^9.0.0`;
+    process.exit(1);
+  }
+
+  const pierreDiffsPkgPath = path.join(bundleRoot, 'node_modules', '@pierre', 'diffs', 'package.json');
+  if (!fs.existsSync(pierreDiffsPkgPath)) {
+    echo`❌ Bundled runtime is missing @pierre/diffs/package.json`;
+    process.exit(1);
+  }
+  const pierreDiffsPkg = JSON.parse(fs.readFileSync(pierreDiffsPkgPath, 'utf8'));
+  const pierreDiffImport = pierreDiffsPkg?.exports?.['.']?.import;
+  const pierreDiffSsrImport = pierreDiffsPkg?.exports?.['./ssr']?.import;
+  if (
+    typeof pierreDiffImport !== 'string'
+    || !fs.existsSync(path.join(path.dirname(pierreDiffsPkgPath), pierreDiffImport))
+    || typeof pierreDiffSsrImport !== 'string'
+    || !fs.existsSync(path.join(path.dirname(pierreDiffsPkgPath), pierreDiffSsrImport))
+  ) {
+    echo`❌ Bundled runtime has an incomplete @pierre/diffs ESM export layout`;
+    process.exit(1);
+  }
+
+  const openShellPkgPath = path.join(bundleRoot, 'node_modules', 'openshell', 'package.json');
+  if (!fs.existsSync(openShellPkgPath)) {
+    echo`❌ Bundled runtime is missing openshell/package.json`;
+    process.exit(1);
+  }
+  const openShellPkg = JSON.parse(fs.readFileSync(openShellPkgPath, 'utf8'));
+  const openShellBin = typeof openShellPkg?.bin === 'string' ? openShellPkg.bin : openShellPkg?.bin?.openshell;
+  if (typeof openShellBin !== 'string' || !fs.existsSync(path.join(path.dirname(openShellPkgPath), openShellBin))) {
+    echo`❌ Bundled runtime has an incomplete openshell CLI layout`;
+    process.exit(1);
+  }
 }
 
 echo`📦 Bundling openclaw for electron-builder...`;
@@ -1161,18 +1225,20 @@ function patchBrokenModules(nodeModulesDir) {
   };
   const replacePatches = [
     {
-      rel: '@mariozechner/pi-coding-agent/dist/core/bash-executor.js',
-      search: `        const child = spawn(shell, [...args, command], {
-            detached: true,
-            env: getShellEnv(),
-            stdio: ["ignore", "pipe", "pipe"],
-        });`,
-      replace: `        const child = spawn(shell, [...args, command], {
-            detached: true,
-            env: getShellEnv(),
-            stdio: ["ignore", "pipe", "pipe"],
-            windowsHide: true,
-        });`,
+      rel: '@mariozechner/pi-coding-agent/dist/core/tools/bash.js',
+      search: `                const child = spawn(shell, [...args, command], {
+                    cwd,
+                    detached: true,
+                    env: env ?? getShellEnv(),
+                    stdio: ["ignore", "pipe", "pipe"],
+                });`,
+      replace: `                const child = spawn(shell, [...args, command], {
+                    cwd,
+                    detached: true,
+                    env: env ?? getShellEnv(),
+                    stdio: ["ignore", "pipe", "pipe"],
+                    windowsHide: true,
+                });`,
     },
     {
       rel: '@mariozechner/pi-coding-agent/dist/core/exec.js',
@@ -1204,6 +1270,7 @@ function patchBrokenModules(nodeModulesDir) {
     if (!fs.existsSync(target)) continue;
 
     const current = fs.readFileSync(target, 'utf8');
+    if (current.includes(replace)) continue;
     if (!current.includes(search)) {
       echo`   ⚠️  Skipped patch for ${rel}: expected source snippet not found`;
       continue;
@@ -1247,7 +1314,7 @@ function patchKnownDependencyMetadata(nodeModulesDir) {
       continue;
     }
 
-    // openclaw@2026.4.2 bundles slack runtime deps with p-queue@6.6.2 but only
+    // openclaw stable builds currently bundle slack runtime deps with p-queue@6.6.2 but only
     // ships p-timeout@4.x. Runtime works with that tree, but the upstream
     // package.json dependency range is still ^3.2.0, so we normalize the
     // bundled metadata to the actually shipped compatible layout.
@@ -1342,99 +1409,31 @@ function findFilesByName(rootDir, matcher) {
 function patchBundledRuntime(outputDir) {
   const replacePatches = [
     {
-      label: 'workspace command runner',
-      target: () => findFirstFileByName(path.join(outputDir, 'dist'), /^workspace-.*\.js$/),
-      search: `\tconst child = spawn(resolvedCommand, finalArgv.slice(1), {
-\t\tstdio,
-\t\tcwd,
-\t\tenv: resolvedEnv,
-\t\twindowsVerbatimArguments,
-\t\t...shouldSpawnWithShell({
-\t\t\tresolvedCommand,
-\t\t\tplatform: process$1.platform
-\t\t}) ? { shell: true } : {}
-\t});`,
-      replace: `\tconst child = spawn(resolvedCommand, finalArgv.slice(1), {
-\t\tstdio,
-\t\tcwd,
-\t\tenv: resolvedEnv,
-\t\twindowsVerbatimArguments,
-\t\twindowsHide: true,
-\t\t...shouldSpawnWithShell({
-\t\t\tresolvedCommand,
-\t\t\tplatform: process$1.platform
-\t\t}) ? { shell: true } : {}
-\t});`,
-    },
-    {
-      label: 'agent scope command runner',
-      target: () => findFirstFileByName(path.join(outputDir, 'dist', 'plugin-sdk'), /^agent-scope-.*\.js$/),
-      search: `\tconst child = spawn(resolvedCommand, finalArgv.slice(1), {
-\t\tstdio,
-\t\tcwd,
-\t\tenv: resolvedEnv,
-\t\twindowsVerbatimArguments,
-\t\t...shouldSpawnWithShell({
-\t\t\tresolvedCommand,
-\t\t\tplatform: process$1.platform
-\t\t}) ? { shell: true } : {}
-\t});`,
-      replace: `\tconst child = spawn(resolvedCommand, finalArgv.slice(1), {
-\t\tstdio,
-\t\tcwd,
-\t\tenv: resolvedEnv,
-\t\twindowsVerbatimArguments,
-\t\twindowsHide: true,
-\t\t...shouldSpawnWithShell({
-\t\t\tresolvedCommand,
-\t\t\tplatform: process$1.platform
-\t\t}) ? { shell: true } : {}
-\t});`,
-    },
-    {
       label: 'chrome launcher',
-      target: () => findFirstFileByName(path.join(outputDir, 'dist', 'plugin-sdk'), /^chrome-.*\.js$/),
+      target: () => findFirstFileByName(path.join(outputDir, 'dist'), /^chrome-.*\.js$/),
       search: `\t\treturn spawn(exe.path, args, {
-\t\t\tstdio: "pipe",
+\t\t\tstdio: [
+\t\t\t\t"ignore",
+\t\t\t\t"ignore",
+\t\t\t\t"pipe"
+\t\t\t],
 \t\t\tenv: {
 \t\t\t\t...process.env,
 \t\t\t\tHOME: os.homedir()
 \t\t\t}
 \t\t});`,
       replace: `\t\treturn spawn(exe.path, args, {
-\t\t\tstdio: "pipe",
+\t\t\tstdio: [
+\t\t\t\t"ignore",
+\t\t\t\t"ignore",
+\t\t\t\t"pipe"
+\t\t\t],
 \t\t\twindowsHide: true,
 \t\t\tenv: {
 \t\t\t\t...process.env,
 \t\t\t\tHOME: os.homedir()
 \t\t\t}
 \t\t});`,
-    },
-    {
-      label: 'qmd runner',
-      target: () => findFirstFileByName(path.join(outputDir, 'dist', 'plugin-sdk'), /^qmd-manager-.*\.js$/),
-      search: `\t\t\tconst child = spawn(resolveWindowsCommandShim(this.qmd.command), args, {
-\t\t\t\tenv: this.env,
-\t\t\t\tcwd: this.workspaceDir
-\t\t\t});`,
-      replace: `\t\t\tconst child = spawn(resolveWindowsCommandShim(this.qmd.command), args, {
-\t\t\t\tenv: this.env,
-\t\t\t\tcwd: this.workspaceDir,
-\t\t\t\twindowsHide: true
-\t\t\t});`,
-    },
-    {
-      label: 'mcporter runner',
-      target: () => findFirstFileByName(path.join(outputDir, 'dist', 'plugin-sdk'), /^qmd-manager-.*\.js$/),
-      search: `\t\t\tconst child = spawn(resolveWindowsCommandShim("mcporter"), args, {
-\t\t\t\tenv: this.env,
-\t\t\t\tcwd: this.workspaceDir
-\t\t\t});`,
-      replace: `\t\t\tconst child = spawn(resolveWindowsCommandShim("mcporter"), args, {
-\t\t\t\tenv: this.env,
-\t\t\t\tcwd: this.workspaceDir,
-\t\t\t\twindowsHide: true
-\t\t\t});`,
     },
   ];
 
@@ -1447,6 +1446,7 @@ function patchBundledRuntime(outputDir) {
     }
 
     const current = fs.readFileSync(target, 'utf8');
+    if (current.includes(patch.replace)) continue;
     if (!current.includes(patch.search)) {
       echo`   ⚠️  Skipped patch for ${patch.label}: expected source snippet not found`;
       continue;
@@ -1465,7 +1465,7 @@ function patchBundledRuntime(outputDir) {
 
   const ptyTargets = findFilesByName(
     path.join(outputDir, 'dist'),
-    /^(subagent-registry|reply|pi-embedded)-.*\.js$/,
+    /^(bash-tools|subagent-registry|reply|pi-embedded|supervisor)-.*\.js$/,
   );
   const ptyPatches = [
     {
@@ -1503,6 +1503,10 @@ function patchBundledRuntime(outputDir) {
     let matchedAny = false;
     for (const target of ptyTargets) {
       const current = fs.readFileSync(target, 'utf8');
+      if (current.includes(patch.replace)) {
+        matchedAny = true;
+        continue;
+      }
       if (!current.includes(patch.search)) continue;
       matchedAny = true;
       const next = current.replaceAll(patch.search, patch.replace);
@@ -1569,6 +1573,9 @@ if (dependencyIssues.length > 0) {
 }
 
 echo`   Dependency validation: ✓`;
+
+verifyBundledRuntimeResolves(OUTPUT);
+echo`   Runtime resolution validation: ✓`;
 
 fs.writeFileSync(
   BUNDLE_META_PATH,
