@@ -185,7 +185,6 @@ function handleGatewayChatMessage(data: unknown): void {
 function notifyChatStoreOfGatewayStatus(
   state: GatewayStatus['state'],
 ): void {
-  if (state === 'running') return;
   import('./chat')
     .then(({ useChatStore }) => {
       useChatStore.getState().handleGatewayStatusChange(state);

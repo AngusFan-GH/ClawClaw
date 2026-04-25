@@ -148,6 +148,7 @@ interface LoadSessionsOptions {
   preferMostRecent?: boolean;
   preserveCurrent?: boolean;
   warmLabels?: boolean;
+  silent?: boolean;
 }
 
 interface ChatState {
@@ -256,12 +257,20 @@ let _historyPollTimer: ReturnType<typeof setTimeout> | null = null;
 let _historyLoadSeq = 0;
 let _sessionRestorePromise: Promise<void> | null = null;
 let _sessionRestoreRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let _sessionTitleRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let _sessionTitleRefreshAttempts = 0;
+let _initialHistoryRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let _initialHistoryRefreshAttempts = 0;
 const HISTORY_POLL_START_DELAY_MS = 3000;
 const HISTORY_POLL_INTERVAL_MS = 4000;
 const CHAT_HISTORY_PAGE_LIMIT = 200;
 // Session restore retry backoff
 const SESSION_RESTORE_INITIAL_DELAY_MS = 1000;
 const SESSION_RESTORE_MAX_DELAY_MS = 15_000;
+const SESSION_TITLE_REFRESH_DELAY_MS = 2500;
+const SESSION_TITLE_REFRESH_MAX_ATTEMPTS = 3;
+const INITIAL_HISTORY_REFRESH_DELAY_MS = 1500;
+const INITIAL_HISTORY_REFRESH_MAX_ATTEMPTS = 4;
 // Hard timeouts (ms) — prevent indefinite hangs
 const SESSIONS_LIST_TIMEOUT_MS = 10_000;
 const HISTORY_LOAD_TIMEOUT_MS = 15_000;
@@ -332,6 +341,26 @@ function clearSessionRestoreRetry(): void {
   }
 }
 
+function clearSessionTitleRefreshRetry(resetAttempts = false): void {
+  if (_sessionTitleRefreshTimer) {
+    clearTimeout(_sessionTitleRefreshTimer);
+    _sessionTitleRefreshTimer = null;
+  }
+  if (resetAttempts) {
+    _sessionTitleRefreshAttempts = 0;
+  }
+}
+
+function clearInitialHistoryRefreshRetry(resetAttempts = false): void {
+  if (_initialHistoryRefreshTimer) {
+    clearTimeout(_initialHistoryRefreshTimer);
+    _initialHistoryRefreshTimer = null;
+  }
+  if (resetAttempts) {
+    _initialHistoryRefreshAttempts = 0;
+  }
+}
+
 function isGatewayDisconnectErrorMessage(message: string): boolean {
   const normalized = message.toLowerCase();
   return normalized.includes('gateway not connected')
@@ -345,9 +374,9 @@ function isGatewayDisconnectErrorMessage(message: string): boolean {
 function getGatewayStatusErrorMessage(state: 'stopped' | 'starting' | 'running' | 'error' | 'reconnecting'): string | null {
   switch (state) {
     case 'reconnecting':
-      return 'Gateway is reconnecting. This response may resume after the Gateway comes back.';
+      return 'Gateway is reconnecting. The current response state is being preserved and will refresh when the Gateway is back.';
     case 'starting':
-      return 'Gateway is starting. Wait for it to finish reconnecting, then refresh the conversation.';
+      return 'Gateway is starting. The current response state is being preserved and will refresh when the Gateway is back.';
     case 'stopped':
       return 'Gateway went offline while the response was in progress. Restart it and refresh the conversation.';
     case 'error':
@@ -508,6 +537,7 @@ function normalizeLoadSessionsOptions(
       preferMostRecent: options,
       preserveCurrent: false,
       warmLabels: true,
+      silent: false,
     };
   }
 
@@ -515,6 +545,7 @@ function normalizeLoadSessionsOptions(
     preferMostRecent: Boolean(options?.preferMostRecent),
     preserveCurrent: Boolean(options?.preserveCurrent),
     warmLabels: options?.warmLabels ?? true,
+    silent: Boolean(options?.silent),
   };
 }
 
@@ -618,7 +649,7 @@ function getMostRecentSessionKey(
   return sorted[0]?.key;
 }
 
-function resolveSessionSidebarTitle(session: Pick<ChatSession, 'derivedTitle' | 'label' | 'displayName' | 'key'>): string | undefined {
+export function resolveSessionSidebarTitle(session: Pick<ChatSession, 'derivedTitle' | 'label' | 'displayName' | 'key'>): string | undefined {
   const title = normalizeSessionTitleCandidate(session.derivedTitle || session.label || '');
   if (title) return title;
   const displayName = normalizeSessionTitleCandidate(session.displayName || '');
@@ -676,6 +707,23 @@ function findMaterializedSessionKey(params: {
   const topActivity = sessionLastActivity[rankedCandidates[0].key] ?? rankedCandidates[0].updatedAt ?? 0;
   const runnerUpActivity = sessionLastActivity[rankedCandidates[1].key] ?? rankedCandidates[1].updatedAt ?? 0;
   return topActivity > runnerUpActivity ? rankedCandidates[0].key : undefined;
+}
+
+function hasResolvableSessionTitle(
+  session: Pick<ChatSession, 'key' | 'label' | 'displayName' | 'derivedTitle'>,
+  sessionLabels: Record<string, string>,
+): boolean {
+  return Boolean(sessionLabels[session.key] || resolveSessionSidebarTitle(session));
+}
+
+function shouldRetryInitialHistory(state: ChatState): boolean {
+  if (useGatewayStore.getState().status.state !== 'running') return false;
+  if (!state.sessionsHydrated || state.loading || state.sending || state.messages.length > 0) {
+    return false;
+  }
+  if (state.pendingUserMessage || state.pendingAssistantMessage) return false;
+  if (state.pendingLocalSessionKeys[state.currentSessionKey]) return false;
+  return state.sessions.some((session) => session.key === state.currentSessionKey);
 }
 
 // ── Local image cache ─────────────────────────────────────────
@@ -1850,8 +1898,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   loadSessions: async (options) => {
-    const { preferMostRecent, preserveCurrent, warmLabels } = normalizeLoadSessionsOptions(options);
-    set({ sessionsLoading: true });
+    const { preferMostRecent, preserveCurrent, warmLabels, silent } = normalizeLoadSessionsOptions(options);
+    if (!silent) {
+      set({ sessionsLoading: true });
+    }
     try {
       // Timeout guard: prevents indefinite hang if Gateway is degraded and
       // doesn't respond to sessions.list (e.g. during context merge or overload).
@@ -2029,9 +2079,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ))
         ) as Record<string, true>;
 
-        set({
+        set((state) => ({
           sessions: sessionsWithCurrent,
-          sessionsLoading: false,
+          sessionsLoading: silent ? state.sessionsLoading : false,
           sessionsHydrated: true,
           currentSessionKey: nextSessionKey,
           currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
@@ -2041,31 +2091,68 @@ export const useChatStore = create<ChatState>((set, get) => ({
           loadingEarlierHistory: false,
           sessionLabels: hydratedSessionLabels,
           sessionLastActivity: hydratedSessionLastActivity,
-        });
+        }));
         persistCurrentSessionKey(nextSessionKey);
 
-        if (currentSessionKey !== nextSessionKey) {
-          get().loadHistory();
+        const unresolvedTitleCount = sessionsWithCurrent.filter((session) => (
+          realSessionKeys.has(session.key)
+          && !pendingLocalSessionKeys[session.key]
+          && !hasResolvableSessionTitle(session, hydratedSessionLabels)
+        )).length;
+        if (warmLabels && unresolvedTitleCount > 0) {
+          if (
+            !_sessionTitleRefreshTimer
+            && _sessionTitleRefreshAttempts < SESSION_TITLE_REFRESH_MAX_ATTEMPTS
+          ) {
+            _sessionTitleRefreshTimer = setTimeout(() => {
+              _sessionTitleRefreshTimer = null;
+              if (useGatewayStore.getState().status.state !== 'running') return;
+              _sessionTitleRefreshAttempts += 1;
+              void get().loadSessions({ preserveCurrent: true, warmLabels: true, silent: true });
+            }, SESSION_TITLE_REFRESH_DELAY_MS);
+          }
+        } else {
+          clearSessionTitleRefreshRetry(true);
         }
 
-        // Background: fetch first user message for every non-main session to populate labels upfront.
-        // Uses a small limit so it's cheap; runs in parallel and doesn't block anything.
+        // Background: fetch first user message for sessions whose authoritative
+        // entry still lacks a usable title. This covers startup races where
+        // Gateway-side derived titles are not ready yet.
         const sessionsToLabel = sessionsWithCurrent.filter((session) => {
-          if (session.key.endsWith(':main')) return false;
           if (!realSessionKeys.has(session.key)) return false;
           return !resolveSessionSidebarTitle(session);
         });
         if (warmLabels && sessionsToLabel.length > 0) {
-          void Promise.all(
-            sessionsToLabel.map(async (session) => {
-              try {
-                const r = await useGatewayStore
-                  .getState()
-                  .rpc<
-                    Record<string, unknown>
-                  >('chat.history', { sessionKey: session.key, limit: 1000 });
-                const msgs = Array.isArray(r.messages) ? (r.messages as RawMessage[]) : [];
-                const lastMsg = msgs[msgs.length - 1];
+          void (async () => {
+            let remaining = sessionsToLabel;
+
+            for (const delayMs of [0, 1500]) {
+              if (remaining.length === 0) break;
+              if (delayMs > 0) {
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
+              }
+
+              const results = await Promise.allSettled(
+                remaining.map(async (session) => {
+                  const r = await useGatewayStore
+                    .getState()
+                    .rpc<
+                      Record<string, unknown>
+                    >('chat.history', { sessionKey: session.key, limit: 1000 });
+                  const msgs = Array.isArray(r.messages) ? (r.messages as RawMessage[]) : [];
+                  const lastMsg = msgs[msgs.length - 1];
+                  const labelText = findSessionTitleCandidate(msgs);
+                  return { session, msgs, lastMsg, labelText };
+                })
+              );
+
+              const unresolved: typeof remaining = [];
+              for (const result of results) {
+                if (result.status !== 'fulfilled') {
+                  continue;
+                }
+
+                const { session, msgs, lastMsg, labelText } = result.value;
                 set((s) => {
                   const next: Partial<typeof s> = {};
                   const isEmptyEphemeral =
@@ -2076,7 +2163,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     Object.assign(next, removeSessionArtifacts(s, session.key));
                     return next;
                   }
-                  const labelText = findSessionTitleCandidate(msgs);
                   if (labelText) {
                     const truncated =
                       labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
@@ -2090,16 +2176,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   }
                   return next;
                 });
-              } catch {
-                /* ignore per-session errors */
+
+                if (!labelText) {
+                  unresolved.push(session);
+                }
               }
-            })
-          );
+
+              remaining = unresolved;
+            }
+          })();
         }
       }
     } catch (err) {
       console.warn('Failed to load sessions:', err);
-      set({ sessionsLoading: false, sessionsHydrated: false });
+      set((state) => ({
+        sessionsLoading: silent ? state.sessionsLoading : false,
+        sessionsHydrated: silent ? state.sessionsHydrated : false,
+      }));
     }
   },
 
@@ -2163,6 +2256,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ),
             ]).catch(() => { /* timeout → scheduleRetry will retry */ });
 
+            if (shouldRetryInitialHistory(get())) {
+              scheduleInitialHistoryRetry();
+            } else {
+              clearInitialHistoryRefreshRetry(true);
+            }
+
             clearSessionRestoreRetry();
             break; // success or partial — either way we're done here
           } catch {
@@ -2195,6 +2294,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
             void get().restoreSessionsAfterGatewayReady();
           }
         }, delay);
+      }
+
+      function scheduleInitialHistoryRetry(): void {
+        if (_initialHistoryRefreshTimer) return;
+        if (_initialHistoryRefreshAttempts >= INITIAL_HISTORY_REFRESH_MAX_ATTEMPTS) return;
+
+        _initialHistoryRefreshTimer = setTimeout(() => {
+          _initialHistoryRefreshTimer = null;
+          if (!shouldRetryInitialHistory(get())) {
+            clearInitialHistoryRefreshRetry(true);
+            return;
+          }
+
+          _initialHistoryRefreshAttempts += 1;
+          void get().loadHistory(true).finally(() => {
+            if (shouldRetryInitialHistory(get())) {
+              scheduleInitialHistoryRetry();
+            } else {
+              clearInitialHistoryRefreshRetry(true);
+            }
+          });
+        }, INITIAL_HISTORY_REFRESH_DELAY_MS);
       }
     })();
 
@@ -2593,18 +2714,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
           get().lastUserMessageAt,
         );
 
-        // Extract first user message text as a session label for display in the toolbar.
-        // Skip main sessions (key ends with ":main") — they rely on the Gateway-provided
-        // displayName (e.g. the configured agent name "ClawClaw") instead.
-        const isMainSession = requestSessionKey.endsWith(':main');
-        if (!isMainSession) {
-          const labelText = findSessionTitleCandidate(finalMessages);
-          if (labelText) {
-            const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
-            set((s) => ({
-              sessionLabels: { ...s.sessionLabels, [requestSessionKey]: truncated },
-            }));
-          }
+        // Derive a sidebar title from the first user message when the session
+        // entry itself still lacks a usable title. This includes main sessions,
+        // which can be visible before Gateway-side derived titles finish loading.
+        const labelText = findSessionTitleCandidate(finalMessages);
+        if (labelText) {
+          const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
+          set((s) => ({
+            sessionLabels: { ...s.sessionLabels, [requestSessionKey]: truncated },
+          }));
         }
 
         // Record last activity time from the last message in history
@@ -2925,11 +3043,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       toolStreamOrder: [],
     }));
 
-    // Update session label with first user message text as soon as it's sent
+    // Update session label with first user message text as soon as it's sent,
+    // including main sessions before the Gateway derives a title.
     const { sessionLabels, messages } = get();
     const isFirstMessage = !messages.some((m) => m.role === 'user');
     if (
-      !currentSessionKey.endsWith(':main') &&
       isFirstMessage &&
       !sessionLabels[currentSessionKey] &&
       trimmed
@@ -3291,7 +3409,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // clear sending to exit the loading spinner. This must be checked before `if (finalMsg)`
         // because BTW's `event.message` is undefined (payload is { state: 'final', runId, sessionKey }).
         if (!finalMsg?.role && !finalMsg?.content && !finalMsg?.toolCallId) {
-          set({ sending: false, activeRunId: null, pendingFinal: false, pendingUserMessage: null, pendingAssistantMessage: null });
+          set({ sending: false, activeRunId: null, pendingFinal: false, pendingAssistantMessage: null });
           break;
         }
         if (finalMsg) {
@@ -3372,11 +3490,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const alreadyExists = s.messages.some((m) => m.id === msgId);
             if (alreadyExists) {
               return toolOnly
-                  ? {
+                ? {
                     streamingText: '',
                     streamingMessage: null,
                     pendingFinal: true,
-                    pendingUserMessage: null,
                     pendingAssistantMessage: null,
                     streamingTools,
                     ...clearPendingImages,
@@ -3388,7 +3505,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     sending: hasOutput ? false : s.sending,
                     activeRunId: hasOutput ? null : s.activeRunId,
                     pendingFinal: hasOutput ? false : true,
-                    pendingUserMessage: hasOutput ? null : s.pendingUserMessage,
+                    pendingUserMessage: s.pendingUserMessage,
                     pendingAssistantMessage: null,
                     pendingSessionModelRefresh: hasOutput ? false : s.pendingSessionModelRefresh,
                     streamingTools,
@@ -3401,7 +3518,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   streamingText: '',
                   streamingMessage: null,
                   pendingFinal: true,
-                  pendingUserMessage: null,
                   pendingAssistantMessage: null,
                   streamingTools,
                   ...clearPendingImages,
@@ -3413,7 +3529,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   sending: hasOutput ? false : s.sending,
                   activeRunId: hasOutput ? null : s.activeRunId,
                   pendingFinal: true,
-                  pendingUserMessage: hasOutput ? null : s.pendingUserMessage,
+                  pendingUserMessage: s.pendingUserMessage,
                   pendingAssistantMessage: hasOutput ? msgWithImages : null,
                   pendingSessionModelRefresh: hasOutput ? false : s.pendingSessionModelRefresh,
                   streamingTools,
@@ -3752,16 +3868,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   handleGatewayStatusChange: (gatewayState) => {
-    const nextError = getGatewayStatusErrorMessage(gatewayState);
-    if (!nextError) return;
-
     const state = get();
-    if (!state.sending && !state.activeRunId && !state.pendingFinal) {
+    const responseInProgress = state.sending || Boolean(state.activeRunId) || state.pendingFinal;
+
+    if (gatewayState === 'running') {
+      if (responseInProgress || state.error?.startsWith('Gateway is reconnecting') || state.error?.startsWith('Gateway is starting')) {
+        ensureHistoryPollRunning(get);
+        void state.loadHistory(true);
+        set({ error: null });
+      }
+      return;
+    }
+
+    const nextError = getGatewayStatusErrorMessage(gatewayState);
+    if (!nextError || !responseInProgress) return;
+
+    clearErrorRecoveryTimer();
+
+    if (gatewayState === 'reconnecting' || gatewayState === 'starting') {
+      ensureHistoryPollRunning(get);
+      set({ error: nextError });
       return;
     }
 
     clearHistoryPoll();
-    clearErrorRecoveryTimer();
     set((s) => ({
       error: nextError,
       sending: false,

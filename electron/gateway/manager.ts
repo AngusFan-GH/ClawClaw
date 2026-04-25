@@ -402,6 +402,7 @@ export class GatewayManager extends EventEmitter {
           port: this.status.port,
           ownedPid: this.process?.pid,
           shouldWaitForPortFree: process.platform === 'win32',
+          maxStartAttempts: 90,
           resetStartupStderrLines: () => {
             this.recentStartupStderrLines = [];
           },

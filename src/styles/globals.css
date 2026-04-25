@@ -536,8 +536,10 @@
   box-shadow: none;
   width: fit-content;
   max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   word-wrap: break-word;
+  overflow-wrap: anywhere;
   transition:
     background 120ms ease-out,
     border-color 120ms ease-out;
@@ -720,7 +722,7 @@
   font-size: 14px;
   line-height: 1.5;
   word-wrap: break-word;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
   color: hsl(var(--foreground));
 }
 
@@ -765,6 +767,7 @@
 
 .chat-text .markdown-plain-text-fallback {
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
@@ -786,8 +789,9 @@
   border-radius: 4px;
   border: 1px solid hsl(var(--border));
   background: hsl(var(--muted) / 0.75);
-  overflow-wrap: normal;
-  word-break: keep-all;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .chat-code-block,

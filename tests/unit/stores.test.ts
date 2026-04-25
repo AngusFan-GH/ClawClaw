@@ -181,7 +181,7 @@ describe('Chat Store', () => {
     await vi.runOnlyPendingTimersAsync();
   });
 
-  it('should stop a stuck send when the gateway reports reconnecting', () => {
+  it('should preserve an in-flight response while the gateway is reconnecting', () => {
     useChatStore.setState({
       messages: [{ role: 'user', content: 'hello', id: 'u1' }],
       sending: true,
@@ -194,11 +194,28 @@ describe('Chat Store', () => {
     useChatStore.getState().handleGatewayStatusChange('reconnecting');
 
     const state = useChatStore.getState();
-    expect(state.sending).toBe(false);
-    expect(state.activeRunId).toBeNull();
-    expect(state.pendingFinal).toBe(false);
+    expect(state.sending).toBe(true);
+    expect(state.activeRunId).toBe('run-1');
+    expect(state.pendingFinal).toBe(true);
     expect(state.messages).toHaveLength(1);
     expect(state.error).toContain('Gateway is reconnecting');
+  });
+
+  it('should refresh and clear reconnecting errors when the gateway is running again', () => {
+    const loadHistoryMock = vi.fn().mockResolvedValue(undefined);
+    useChatStore.setState({
+      messages: [{ role: 'user', content: 'hello', id: 'u1' }],
+      sending: true,
+      activeRunId: 'run-1',
+      pendingFinal: true,
+      error: 'Gateway is reconnecting. The current response state is being preserved and will refresh when the Gateway is back.',
+      loadHistory: loadHistoryMock,
+    });
+
+    useChatStore.getState().handleGatewayStatusChange('running');
+
+    expect(loadHistoryMock).toHaveBeenCalledWith(true);
+    expect(useChatStore.getState().error).toBeNull();
   });
 
   it('should keep the optimistic user message when chat.send fails due to gateway disconnect', async () => {
@@ -572,6 +589,44 @@ describe('Chat Store', () => {
       role: 'user',
       content: '创建一个定时任务，每10分钟告诉我一次几点了。',
     });
+  });
+
+  it('keeps the optimistic user message when assistant final arrives before history catches up', () => {
+    const loadHistoryMock = vi.fn().mockResolvedValue(undefined);
+
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      sending: true,
+      activeRunId: 'run-final-before-history',
+      pendingUserMessage: {
+        role: 'user',
+        content: '数据已验证准确！现在生成PPT',
+        id: 'pending-user-before-history',
+        timestamp: 1_000,
+      },
+      loadHistory: loadHistoryMock,
+    });
+
+    useChatStore.getState().handleChatEvent({
+      runId: 'run-final-before-history',
+      sessionKey: 'agent:main:main',
+      state: 'final',
+      message: {
+        role: 'assistant',
+        content: '好的，我现在生成 PPT。',
+        id: 'assistant-final-before-history',
+      },
+    });
+
+    expect(useChatStore.getState().pendingUserMessage).toMatchObject({
+      role: 'user',
+      content: '数据已验证准确！现在生成PPT',
+    });
+    expect(useChatStore.getState().pendingAssistantMessage).toMatchObject({
+      role: 'assistant',
+      content: '好的，我现在生成 PPT。',
+    });
+    expect(loadHistoryMock).toHaveBeenCalledWith(true);
   });
 
   it('should abort the active run when policy changes require immediate effect', async () => {

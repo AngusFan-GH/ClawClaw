@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
-import { DEFAULT_SESSION_KEY, isBackgroundSession, useChatStore } from '@/stores/chat';
+import { DEFAULT_SESSION_KEY, isBackgroundSession, resolveSessionSidebarTitle, useChatStore } from '@/stores/chat';
 import { useAgentsStore } from '@/stores/agents';
 import { useGatewayStore } from '@/stores/gateway';
 import { Button } from '@/components/ui/button';
@@ -203,7 +203,6 @@ export function Sidebar() {
   const shortcutMenuItems = useSettingsStore((state) => state.shortcutMenuItems);
 
   const sessions = useChatStore((s) => s.sessions);
-  const sessionsLoading = useChatStore((s) => s.sessionsLoading);
   const sessionsHydrated = useChatStore((s) => s.sessionsHydrated);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const messages = useChatStore((s) => s.messages);
@@ -279,9 +278,17 @@ export function Sidebar() {
     derivedTitle?: string,
     subagentRole?: string,
   ) => {
-    const derivedLabel = sessionLabels[key] ?? derivedTitle ?? label;
+    const derivedLabel = sessionLabels[key] ?? resolveSessionSidebarTitle({
+      key,
+      displayName,
+      label,
+      derivedTitle,
+    });
     if (derivedLabel) return derivedLabel;
-    const normalizedDisplayName = displayName?.trim();
+    const normalizedDisplayName = resolveSessionSidebarTitle({
+      key,
+      displayName,
+    });
     const agentLabel = getSessionAgentLabel(key).trim();
     if (
       normalizedDisplayName
@@ -596,13 +603,13 @@ export function Sidebar() {
       </nav>
 
       {/* Session list 鈥?below Settings, only when expanded */}
-      {!sidebarCollapsed && (sessionsLoading || !sessionsHydrated || visibleSessions.length > 0) && (
+      {!sidebarCollapsed && (!sessionsHydrated || visibleSessions.length > 0) && (
         <div className="mt-5 mb-20 flex min-h-0 flex-1 flex-col px-2">
           <div className="shrink-0 px-2.5 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/55">
             {t('chat:history.title')}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3 pr-1">
-            {sessionsLoading || !sessionsHydrated ? (
+            {!sessionsHydrated ? (
               <div className="px-2.5 pt-2">
                 <div className="rounded-[14px] border border-black/6 bg-white/55 px-3 py-3 text-[13px] text-muted-foreground shadow-[0_6px_16px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
                   {isGatewayRunning

@@ -278,6 +278,78 @@ function extractRawText(message: RawMessage | unknown): string | null {
   return null;
 }
 
+function normalizeAssistantPhase(value: unknown): 'commentary' | 'final_answer' | undefined {
+  return value === 'commentary' || value === 'final_answer' ? value : undefined;
+}
+
+function parseAssistantTextSignature(value: unknown): { phase?: 'commentary' | 'final_answer' } | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  if (!value.startsWith('{')) return null;
+  try {
+    const parsed = JSON.parse(value) as { v?: unknown; phase?: unknown };
+    if (parsed.v !== 1) return null;
+    const phase = normalizeAssistantPhase(parsed.phase);
+    return phase ? { phase } : {};
+  } catch {
+    return null;
+  }
+}
+
+function extractAssistantTextForPhase(
+  message: RawMessage | unknown,
+  options?: { phase?: 'commentary' | 'final_answer' }
+): string | null {
+  if (!message || typeof message !== 'object') return null;
+  const msg = message as Record<string, unknown>;
+  const messagePhase = normalizeAssistantPhase(msg.phase);
+  const requestedPhase = options?.phase;
+  const shouldInclude = (phase: 'commentary' | 'final_answer' | undefined) => (
+    requestedPhase ? phase === requestedPhase : phase === undefined
+  );
+  const normalize = (text: string): string | null => {
+    const processed = processMessageText(text, 'assistant').trim();
+    return processed ? processed : null;
+  };
+
+  if (typeof msg.text === 'string') {
+    if (!shouldInclude(messagePhase)) return null;
+    return normalize(msg.text);
+  }
+  if (typeof msg.content === 'string') {
+    if (!shouldInclude(messagePhase)) return null;
+    return normalize(msg.content);
+  }
+  if (!Array.isArray(msg.content)) return null;
+
+  const hasExplicitPhasedTextBlocks = msg.content.some((block) => {
+    if (!block || typeof block !== 'object') return false;
+    const item = block as Record<string, unknown>;
+    return item.type === 'text' && Boolean(parseAssistantTextSignature(item.textSignature)?.phase);
+  });
+  if (!requestedPhase && hasExplicitPhasedTextBlocks) return null;
+
+  const parts = msg.content
+    .map((block) => {
+      if (!block || typeof block !== 'object') return null;
+      const item = block as Record<string, unknown>;
+      if (item.type !== 'text' || typeof item.text !== 'string') return null;
+      const blockPhase =
+        parseAssistantTextSignature(item.textSignature)?.phase
+        ?? (hasExplicitPhasedTextBlocks ? undefined : messagePhase);
+      if (!shouldInclude(blockPhase)) return null;
+      const processed = processMessageText(item.text, 'assistant').trim();
+      return processed ? processed : null;
+    })
+    .filter((value): value is string => typeof value === 'string');
+
+  return parts.length > 0 ? parts.join(requestedPhase ? '' : '\n').trim() || null : null;
+}
+
+function extractAssistantVisibleText(message: RawMessage | unknown): string | null {
+  return extractAssistantTextForPhase(message, { phase: 'final_answer' })
+    ?? extractAssistantTextForPhase(message);
+}
+
 function processMessageText(text: string, role: string): string {
   if (role === 'assistant') {
     return stripAssistantInternalScaffolding(text);
@@ -306,6 +378,9 @@ export function extractText(message: RawMessage | unknown): string {
   if (!message || typeof message !== 'object') return '';
   const msg = message as Record<string, unknown>;
   const role = typeof msg.role === 'string' ? msg.role : '';
+  if (role === 'assistant') {
+    return extractAssistantVisibleText(message) ?? '';
+  }
   const raw = extractRawText(message);
   if (!raw) return '';
   return processMessageText(raw, role);

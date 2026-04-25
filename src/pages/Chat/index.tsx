@@ -69,7 +69,6 @@ export function Chat() {
   const error = useChatStore((s) => s.error);
   const showThinking = useChatStore((s) => s.showThinking);
   const sessions = useChatStore((s) => s.sessions);
-  const sessionsLoading = useChatStore((s) => s.sessionsLoading);
   const sessionsHydrated = useChatStore((s) => s.sessionsHydrated);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const switchSession = useChatStore((s) => s.switchSession);
@@ -88,7 +87,6 @@ export function Chat() {
   const loadHistory = useChatStore((s) => s.loadHistory);
   const loadEarlierHistory = useChatStore((s) => s.loadEarlierHistory);
   const loadSessions = useChatStore((s) => s.loadSessions);
-  const restoreSessionsAfterGatewayReady = useChatStore((s) => s.restoreSessionsAfterGatewayReady);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
@@ -156,18 +154,13 @@ export function Chat() {
           switchSession(forceSessionKeyFromRoute);
         }
         navigate(location.pathname, { replace: true, state: null });
-        await loadHistory(messages.length > 0);
+        await loadHistory(useChatStore.getState().messages.length > 0);
         if (!cancelled) {
           void loadSessions({ preserveCurrent: true });
         }
         return;
       }
 
-      if (!sessionsHydrated) {
-        await restoreSessionsAfterGatewayReady();
-      } else {
-        await loadHistory(messages.length > 0);
-      }
     })();
     return () => {
       cancelled = true;
@@ -177,9 +170,6 @@ export function Chat() {
     loadHistory,
     loadSessions,
     newSession,
-    restoreSessionsAfterGatewayReady,
-    sessionsHydrated,
-    messages.length,
     createNewSessionFromRoute,
     routeAgentId,
     forceSessionKeyFromRoute,
@@ -403,7 +393,6 @@ export function Chat() {
     currentSession,
     pendingLocalSessionKeys,
     loading,
-    sessionsLoading,
     sessionsHydrated,
     isGatewayRunning,
     defaultSessionKey: DEFAULT_SESSION_KEY,
@@ -419,7 +408,6 @@ export function Chat() {
     currentSession,
     pendingLocalSessionKeys,
     loading,
-    sessionsLoading,
     sessionsHydrated,
     isGatewayRunning,
   ]);

@@ -149,7 +149,6 @@ export function buildChatRuntimeViewModel(params: {
   currentSession: ChatSession | undefined;
   pendingLocalSessionKeys: Record<string, true>;
   loading: boolean;
-  sessionsLoading: boolean;
   sessionsHydrated: boolean;
   isGatewayRunning: boolean;
   defaultSessionKey: string;
@@ -172,7 +171,6 @@ export function buildChatRuntimeViewModel(params: {
     currentSession,
     pendingLocalSessionKeys,
     loading,
-    sessionsLoading,
     sessionsHydrated,
     isGatewayRunning,
     defaultSessionKey,
@@ -213,7 +211,7 @@ export function buildChatRuntimeViewModel(params: {
           }) as RawMessage)
     : null;
 
-  const isRestoringSessions = isGatewayRunning && (sessionsLoading || !sessionsHydrated);
+  const isRestoringSessions = isGatewayRunning && !sessionsHydrated;
   const hasOptimisticContent = Boolean(
     pendingUserMessage
     || pendingAssistantMessage

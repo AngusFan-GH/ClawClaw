@@ -415,10 +415,61 @@ export function buildChatItems(params: {
     });
   }
 
-  // Keep the thread aligned with the Dashboard's authoritative transcript view:
-  // render confirmed history plus an optional optimistic user turn, but do not
-  // synthesize assistant/tool streaming content on the frontend.
-  if (params.sending || params.pendingFinal) {
+  if (params.pendingAssistantMessage && hasVisibleMessageContent(params.pendingAssistantMessage, params.showThinking)) {
+    liveItems.push({
+      kind: 'message',
+      key: `pending-assistant:${params.pendingAssistantMessage.id ?? params.sessionKey}`,
+      message: params.pendingAssistantMessage,
+    });
+  }
+
+  for (const segment of params.streamSegments) {
+    const text = segment.text.trim();
+    if (!text) continue;
+    liveItems.push({
+      kind: 'stream',
+      key: `stream-segment:${segment.ts}:${text.length}`,
+      text,
+      startedAt: segment.ts,
+    });
+  }
+
+  if (params.showThinking) {
+    for (const message of params.toolMessages) {
+      if (!hasVisibleMessageContent(message, params.showThinking)) continue;
+      liveItems.push({
+        kind: 'message',
+        key: `tool-live:${getMessageKey(message)}`,
+        message,
+      });
+    }
+  }
+
+  const streamingText = params.streamingMessage ? extractText(params.streamingMessage).trim() : '';
+  const streamingHasToolOrMedia =
+    params.streamingMessage
+    && params.showThinking
+    && hasVisibleMessageContent(params.streamingMessage, params.showThinking);
+  if (streamingText) {
+    liveItems.push({
+      kind: 'stream',
+      key: `stream-live:${params.streamingStartedAt}:${streamingText.length}`,
+      text: streamingText,
+      startedAt: params.streamingStartedAt,
+    });
+  } else if (streamingHasToolOrMedia) {
+    liveItems.push({
+      kind: 'message',
+      key: `stream-live-message:${getMessageKey(params.streamingMessage!)}`,
+      message: params.streamingMessage!,
+    });
+  }
+
+  const hasLiveAssistantContent = liveItems.some((item) => (
+    item.kind === 'stream'
+    || (item.kind === 'message' && normalizeRoleForGrouping(item.message) !== 'user')
+  ));
+  if ((params.sending || params.pendingFinal) && !hasLiveAssistantContent) {
     liveItems.push({ kind: 'reading-indicator', key: `reading:${params.sessionKey}` });
   }
 

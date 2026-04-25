@@ -291,18 +291,18 @@ async function initialize(): Promise<void> {
 
   if (isDev) {
     const devCsp = [
-      "default-src 'self' http://localhost:5173 ws://localhost:5173",
+      "default-src 'self' http://localhost:5173 http://127.0.0.1:5173 ws://localhost:5173 ws://127.0.0.1:5173",
       // Vite + React Fast Refresh injects inline preamble scripts in dev.
-      "script-src 'self' 'unsafe-inline' http://localhost:5173",
-      "style-src 'self' 'unsafe-inline' http://localhost:5173",
-      "img-src 'self' data: blob: http://localhost:5173",
-      "font-src 'self' data: http://localhost:5173",
-      "connect-src 'self' ws://localhost:5173 http://localhost:5173 http://127.0.0.1:18789 http://localhost:18789",
+      "script-src 'self' 'unsafe-inline' http://localhost:5173 http://127.0.0.1:5173",
+      "style-src 'self' 'unsafe-inline' http://localhost:5173 http://127.0.0.1:5173",
+      "img-src 'self' data: blob: http://localhost:5173 http://127.0.0.1:5173",
+      "font-src 'self' data: http://localhost:5173 http://127.0.0.1:5173",
+      "connect-src 'self' ws://localhost:5173 ws://127.0.0.1:5173 http://localhost:5173 http://127.0.0.1:5173 http://127.0.0.1:18789 http://localhost:18789",
       "worker-src 'self' blob:",
     ].join('; ');
 
     session.defaultSession.webRequest.onHeadersReceived(
-      { urls: ['http://localhost:5173/*'] },
+      { urls: ['http://localhost:5173/*', 'http://127.0.0.1:5173/*'] },
       (details, callback) => {
         callback({
           responseHeaders: {

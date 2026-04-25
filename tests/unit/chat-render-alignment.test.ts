@@ -56,6 +56,54 @@ describe('chat render alignment', () => {
     expect(flowItems[1]).toMatchObject({ kind: 'group', role: 'tool' });
   });
 
+  it('renders a live streaming assistant snapshot instead of a blank loading state', () => {
+    const items = buildChatItems({
+      messages: [],
+      pendingUserMessage: null,
+      pendingAssistantMessage: null,
+      toolMessages: [],
+      streamSegments: [],
+      streamingMessage: {
+        role: 'assistant',
+        timestamp: 2_000,
+        content: [{ type: 'text', text: '正在查询并下载可蓝矿业资料...' }],
+      },
+      streamingStartedAt: 2_000,
+      sessionKey: 'agent:main',
+      sending: true,
+      pendingFinal: false,
+      showThinking: true,
+      locale: 'en',
+    });
+
+    const flowItems = items.filter((item) => item.kind !== 'divider');
+    expect(flowItems).toHaveLength(1);
+    expect(flowItems[0]).toMatchObject({
+      kind: 'stream',
+      text: '正在查询并下载可蓝矿业资料...',
+    });
+  });
+
+  it('does not show a duplicate loading indicator while live stream content is visible', () => {
+    const items = buildChatItems({
+      messages: [],
+      pendingUserMessage: null,
+      pendingAssistantMessage: null,
+      toolMessages: [],
+      streamSegments: [{ text: 'Streaming answer.', ts: 2_000 }],
+      streamingMessage: null,
+      streamingStartedAt: 0,
+      sessionKey: 'agent:main',
+      sending: true,
+      pendingFinal: false,
+      showThinking: true,
+      locale: 'en',
+    });
+
+    expect(items.some((item) => item.kind === 'reading-indicator')).toBe(false);
+    expect(items.some((item) => item.kind === 'stream')).toBe(true);
+  });
+
   it('merges pending assistant loading into a single assistant group', () => {
     const items = buildChatItems({
       messages: [

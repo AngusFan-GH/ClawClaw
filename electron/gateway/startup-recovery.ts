@@ -26,6 +26,7 @@ const TRANSIENT_START_ERROR_PATTERNS: RegExp[] = [
   /Gateway process exited before becoming ready/i,
   /Timed out waiting for connect\.challenge/i,
   /Connect handshake timeout/i,
+  /Unexpected server response:\s*503/i,
 ];
 
 function normalizeLogLine(value: string): string {

@@ -38,4 +38,49 @@ describe('chat message sanitize', () => {
 
     expect(extractText(message)).toBe('分析');
   });
+
+  it('renders only assistant final_answer text from OpenClaw phased blocks', () => {
+    const message: RawMessage = {
+      role: 'assistant',
+      content: [
+        {
+          type: 'text',
+          text: 'I will inspect the file.',
+          textSignature: JSON.stringify({ v: 1, phase: 'commentary' }),
+        },
+        {
+          type: 'text',
+          text: '这是最终回答。',
+          textSignature: JSON.stringify({ v: 1, phase: 'final_answer' }),
+        },
+      ],
+    };
+
+    expect(extractText(message)).toBe('这是最终回答。');
+  });
+
+  it('hides commentary-only assistant messages like OpenClaw dashboard history', () => {
+    const message: RawMessage = {
+      role: 'assistant',
+      content: [
+        {
+          type: 'text',
+          text: 'I will inspect the file.',
+          textSignature: JSON.stringify({ v: 1, phase: 'commentary' }),
+        },
+      ],
+    };
+
+    expect(extractText(message)).toBe('');
+  });
+
+  it('hides assistant messages explicitly marked as commentary', () => {
+    const message: RawMessage = {
+      role: 'assistant',
+      phase: 'commentary',
+      content: 'Checking context before answering.',
+    };
+
+    expect(extractText(message)).toBe('');
+  });
 });

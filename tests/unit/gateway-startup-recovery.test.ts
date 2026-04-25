@@ -5,6 +5,7 @@ import {
   hasInvalidConfigFailureSignal,
   isInvalidConfigSignal,
   isMalformedConfigSignal,
+  isTransientGatewayStartError,
   shouldAttemptConfigAutoRepair,
 } from '@electron/gateway/startup-recovery';
 
@@ -71,6 +72,17 @@ describe('gateway startup recovery heuristics', () => {
     expect(isMalformedConfigSignal('Failed to read config at ~/.openclaw/openclaw.json')).toBe(true);
     expect(isMalformedConfigSignal('SyntaxError: JSON5: invalid character \';\' at 10:1')).toBe(true);
     expect(isMalformedConfigSignal('Gateway ready after 3 attempts')).toBe(false);
+  });
+
+  it('treats Gateway WebSocket 503 during startup as transient', () => {
+    expect(isTransientGatewayStartError(new Error('Unexpected server response: 503'))).toBe(true);
+    expect(getGatewayStartupRecoveryAction({
+      startupError: new Error('Unexpected server response: 503'),
+      startupStderrLines: [],
+      configRepairAttempted: false,
+      attempt: 1,
+      maxAttempts: 90,
+    })).toBe('retry');
   });
 
   it('prefers reset-config for malformed config failures', () => {
