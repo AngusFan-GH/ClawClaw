@@ -599,10 +599,12 @@ export function Chat() {
 
   const setSessionThinkingLevel = useCallback(async (level?: string): Promise<void> => {
     const normalizedLevel = level?.trim() || undefined;
-    await useGatewayStore.getState().rpc('sessions.patch', {
-      key: currentSessionKey,
-      thinkingLevel: normalizedLevel ?? null,
-    });
+    const previousState = useChatStore.getState();
+    const previousStoreLevel = previousState.thinkingLevel;
+    const previousSessionLevel = previousState.sessions.find(
+      (session) => session.key === currentSessionKey
+    )?.thinkingLevel;
+
     useChatStore.setState((state) => ({
       thinkingLevel: normalizedLevel ?? null,
       sessions: state.sessions.map((session) => (
@@ -610,8 +612,30 @@ export function Chat() {
           ? { ...session, thinkingLevel: normalizedLevel }
           : session
       )),
+      error: null,
     }));
-    void loadSessions({ preserveCurrent: true, warmLabels: true });
+
+    try {
+      await useGatewayStore.getState().rpc('sessions.patch', {
+        key: currentSessionKey,
+        thinkingLevel: normalizedLevel ?? null,
+      });
+      void loadSessions({ preserveCurrent: true, warmLabels: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      useChatStore.setState((state) => ({
+        thinkingLevel: state.currentSessionKey === currentSessionKey
+          ? previousStoreLevel
+          : state.thinkingLevel,
+        sessions: state.sessions.map((session) => (
+          session.key === currentSessionKey
+            ? { ...session, thinkingLevel: previousSessionLevel }
+            : session
+        )),
+        error: message,
+      }));
+      throw err;
+    }
   }, [currentSessionKey, loadSessions]);
 
   const executeLocalSlashCommand = useCallback(async (

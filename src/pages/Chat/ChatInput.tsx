@@ -235,10 +235,7 @@ export function ChatInput({
   );
   const effectiveThinkingLevel = currentThinkingLevel || thinkingDefaultLabel;
   const thinkingButtonLabel =
-    (currentThinkingLevel ? formatThinkingLevelLabel(t, currentThinkingLevel) : '') ||
-    t('composer.defaultThinkingLevel', 'Default ({{level}})', {
-      level: localizedThinkingDefaultLabel,
-    });
+    formatThinkingLevelLabel(t, effectiveThinkingLevel) || localizedThinkingDefaultLabel;
   const currentModelValue = selectedModel || defaultModelValue;
   const selectedOption = modelOptions.find((option) => option.value === currentModelValue);
   const currentModelShortLabel =
