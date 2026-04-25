@@ -25,12 +25,6 @@ LangString uninstallOptionOpenClawDesc 1033 "Removes all OpenClaw data from ~/.o
 LangString uninstallOptionOpenClawDesc 2052 "删除 ~/.openclaw 中的所有 OpenClaw 数据，包括 agents、channels、providers、credentials、本地运行时状态和会话数据。此操作无法撤销。"
 LangString uninstallComponentsTop 1033 "Choose the additional data you want to remove."
 LangString uninstallComponentsTop 2052 "选择你希望额外删除的数据。"
-LangString uninstallConfirmOpenClawDelete 1033 "You chose to delete ~/.openclaw.$\r$\n$\r$\nThis will permanently remove agents, channels, providers, credentials, local runtime state, and session data.$\r$\n$\r$\nContinue?"
-LangString uninstallConfirmOpenClawDelete 2052 "你选择删除 ~/.openclaw。$\r$\n$\r$\n这会永久删除 agents、channels、providers、credentials、本地运行时状态和会话数据。$\r$\n$\r$\n是否继续？"
-LangString uninstallPromptRemoveAppData 1033 "Also remove ClawClaw settings, cache, logs, and local chat history?"
-LangString uninstallPromptRemoveAppData 2052 "是否同时删除 ClawClaw 的设置、缓存、日志和本地聊天记录？"
-LangString uninstallPromptRemoveOpenClaw 1033 "Also remove OpenClaw user data (~/.openclaw)? This deletes agents, channels, providers, credentials, local runtime state, and session data."
-LangString uninstallPromptRemoveOpenClaw 2052 "是否同时删除 OpenClaw 用户数据（~/.openclaw）？这会删除 agents、channels、providers、credentials、本地运行时状态和会话数据。"
 LangString uninstallLogGatewayCleanup 1033 "Stopping and cleaning up the OpenClaw Gateway service..."
 LangString uninstallLogGatewayCleanup 2052 "正在停止并清理 OpenClaw Gateway 服务..."
 LangString uninstallLogGatewayStopExit 1033 "Warning: openclaw gateway stop exited with code $0."
@@ -62,29 +56,15 @@ LangString uninstallLogRemoveOpenClawData 2052 "正在删除 OpenClaw 用户数�
   !define MUI_UNWELCOMEPAGE_TITLE "$(uninstallWelcomeTitle)"
   !define MUI_UNWELCOMEPAGE_TEXT "$(uninstallWelcomeText)"
   !insertmacro MUI_UNPAGE_WELCOME
+  !insertmacro MUI_UNPAGE_COMPONENTS
 !macroend
 
 !macro customUnInit
-  ${If} ${Silent}
-    Return
-  ${EndIf}
-
-  ; Keep the section-based cleanup path for compatibility, but ask explicitly
-  ; here as well so uninstall still offers the data-deletion choice even if the
-  ; component page is hidden by template changes.
+  ; Optional data deletion is selected exclusively through the uninstall
+  ; components page. Keep both sections opt-in by default for interactive and
+  ; silent uninstalls.
   !insertmacro UnselectSection ${un.RemoveClawClawData}
   !insertmacro UnselectSection ${un.RemoveOpenClawData}
-
-  MessageBox MB_YESNO|MB_ICONQUESTION "$(uninstallPromptRemoveAppData)" /SD IDNO IDYES +2
-    Goto _skipAppDataSelection
-  !insertmacro SelectSection ${un.RemoveClawClawData}
-
-  _skipAppDataSelection:
-  MessageBox MB_YESNO|MB_ICONEXCLAMATION "$(uninstallPromptRemoveOpenClaw)" /SD IDNO IDYES +2
-    Goto _skipOpenClawSelection
-  !insertmacro SelectSection ${un.RemoveOpenClawData}
-
-  _skipOpenClawSelection:
 !macroend
 
 !macro RunOpenClawCli commandLine
@@ -182,8 +162,6 @@ LangString uninstallLogRemoveOpenClawData 2052 "正在删除 OpenClaw 用户数�
   SectionEnd
 
   Section /o "$(uninstallOptionOpenClawTitle)" un.RemoveOpenClawData
-    MessageBox MB_YESNO|MB_ICONEXCLAMATION "$(uninstallConfirmOpenClawDelete)" /SD IDNO IDYES +2
-    Abort
     DetailPrint "$(uninstallLogRemoveOpenClawData)"
     RMDir /r "$PROFILE\.openclaw"
   SectionEnd

@@ -17,9 +17,6 @@ Var oldMenuDirectory
 !include "${PROJECT_DIR}\scripts\allowOnlyOneInstallerInstance.nsh"
 !ifdef BUILD_UNINSTALLER
   !include "${PROJECT_DIR}\scripts\uninstaller.nsh"
-  !ifmacrodef customUnInstallSection
-    !insertmacro MUI_UNPAGE_COMPONENTS
-  !endif
 !endif
 
 !ifdef INSTALL_MODE_PER_ALL_USERS
