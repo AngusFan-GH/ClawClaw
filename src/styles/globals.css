@@ -748,6 +748,14 @@
   padding-left: 1.5em;
 }
 
+.chat-text :where(ul) {
+  list-style: disc outside;
+}
+
+.chat-text :where(ol) {
+  list-style: decimal outside;
+}
+
 .chat-text :where(li + li) {
   margin-top: 0.25em;
 }
