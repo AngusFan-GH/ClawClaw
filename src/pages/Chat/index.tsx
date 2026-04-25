@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertCircle, ArrowDown, Brain, Check, ChevronDown, Loader2 } from 'lucide-react';
-import { DEFAULT_SESSION_KEY, useChatStore, type RawMessage } from '@/stores/chat';
+import { DEFAULT_SESSION_KEY, useChatStore, type QueuedChatMessage, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { useAgentsStore } from '@/stores/agents';
@@ -15,7 +15,7 @@ import { useSettingsStore } from '@/stores/settings';
 import type { ProviderAccount } from '@/lib/providers';
 import { PageLoader } from '@/components/common/LoadingSpinner';
 import { ChatThread } from './ChatThread';
-import { ChatInput, type ChatAgentOption, type FileAttachment } from './ChatInput';
+import { ChatInput, type ChatAgentOption } from './ChatInput';
 import { ChatToolbar, type ChatToolbarModelOption } from './ChatToolbar';
 import { parseSlashCommand } from './slash-commands';
 import { useTranslation } from 'react-i18next';
@@ -46,13 +46,6 @@ function getAgentIdFromSessionKey(sessionKey: string | undefined): string | unde
   const parts = key.split(':');
   return parts[1]?.trim() || undefined;
 }
-
-type QueuedChatItem = {
-  id: string;
-  text: string;
-  attachments?: FileAttachment[];
-  pendingRunId?: string;
-};
 
 function buildChatMarkdown(messages: RawMessage[], assistantName: string): string | null {
   if (messages.length === 0) return null;
@@ -123,7 +116,7 @@ export function Chat() {
   const pendingFinal = useChatStore((s) => s.pendingFinal);
   const terminalHistoryReconciling = useChatStore((s) => s.terminalHistoryReconciling);
   const queueFlushToken = useChatStore((s) => s.queueFlushToken);
-  const lastTerminalRunId = useChatStore((s) => s.lastTerminalRunId);
+  const queuedMessages = useChatStore((s) => s.chatQueue);
   const compactionStatus = useChatStore((s) => s.compactionStatus);
   const fallbackStatus = useChatStore((s) => s.fallbackStatus);
   const loadHistory = useChatStore((s) => s.loadHistory);
@@ -132,6 +125,9 @@ export function Chat() {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
+  const enqueueChatMessage = useChatStore((s) => s.enqueueChatMessage);
+  const removeQueuedMessage = useChatStore((s) => s.removeQueuedMessage);
+  const clearChatQueue = useChatStore((s) => s.clearChatQueue);
   const setSessionModel = useChatStore((s) => s.setSessionModel);
   const setModelGuard = useChatStore((s) => s.setModelGuard);
   const toggleThinking = useChatStore((s) => s.toggleThinking);
@@ -147,7 +143,6 @@ export function Chat() {
   const [chatRuntimeModelRefs, setChatRuntimeModelRefs] = useState<string[]>([]);
   const [chatModelsLoading, setChatModelsLoading] = useState(false);
   const [chatModelsRetryNonce, setChatModelsRetryNonce] = useState(0);
-  const [queuedMessages, setQueuedMessages] = useState<QueuedChatItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewMessages, setShowNewMessages] = useState(false);
   const chatRuntimeModelRefsRef = useRef<string[]>([]);
@@ -562,12 +557,8 @@ export function Chat() {
         : t('toolbar.gatewayStopped', '网关未连接');
 
   useEffect(() => {
-    queueMicrotask(() => setQueuedMessages([]));
-  }, [currentSessionKey]);
-
-  const handleRemoveQueuedMessage = (id: string): void => {
-    setQueuedMessages((items) => items.filter((item) => item.id !== id));
-  };
+    queueMicrotask(() => clearChatQueue());
+  }, [clearChatQueue, currentSessionKey]);
 
   const appendSystemMessage = useCallback((content: string): void => {
     const message: RawMessage = {
@@ -712,14 +703,10 @@ export function Chat() {
           idempotencyKey: crypto.randomUUID(),
         }, 120_000);
         if (activeRunId) {
-          setQueuedMessages((items) => [
-            ...items,
-            {
-              id: crypto.randomUUID(),
-              text: `/steer ${trimmedArgs}`,
-              pendingRunId: activeRunId,
-            },
-          ]);
+          enqueueChatMessage({
+            text: `/steer ${trimmedArgs}`,
+            pendingRunId: activeRunId,
+          });
         }
         return true;
       }
@@ -756,6 +743,7 @@ export function Chat() {
     loadSessions,
     messages,
     newSession,
+    enqueueChatMessage,
     normalizedAgentModelValue,
     normalizedDefaultModelValue,
     normalizedSelectedModel,
@@ -769,7 +757,7 @@ export function Chat() {
 
   const handleDetachedBtwSend = useCallback(async (
     text: string,
-    attachments?: FileAttachment[],
+    attachments?: QueuedChatMessage['attachments'],
   ): Promise<void> => {
     const trimmed = text.trim();
     if (!trimmed || !isGatewayRunning) {
@@ -807,7 +795,7 @@ export function Chat() {
     }
   }, [currentSessionKey, isGatewayRunning]);
 
-  const handleChatSend = useCallback(async (text: string, attachments?: FileAttachment[]): Promise<void> => {
+  const handleChatSend = useCallback(async (text: string, attachments?: QueuedChatMessage['attachments']): Promise<void> => {
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) {
       return;
@@ -828,14 +816,10 @@ export function Chat() {
       && (sending || activeRunId)
       && !['focus', 'unfocus', 'export-session', 'steer', 'redirect'].includes(commandName)
     ) {
-      setQueuedMessages((items) => [
-        ...items,
-        {
-          id: crypto.randomUUID(),
-          text: trimmed,
-          attachments,
-        },
-      ]);
+      enqueueChatMessage({
+        text: trimmed,
+        attachments,
+      });
       return;
     }
     if (commandName) {
@@ -855,14 +839,10 @@ export function Chat() {
     }
 
     if (sending || activeRunId) {
-      setQueuedMessages((items) => [
-        ...items,
-        {
-          id: crypto.randomUUID(),
-          text: trimmed,
-          attachments,
-        },
-      ]);
+      enqueueChatMessage({
+        text: trimmed,
+        attachments,
+      });
       return;
     }
 
@@ -870,6 +850,7 @@ export function Chat() {
   }, [
     abortRun,
     activeRunId,
+    enqueueChatMessage,
     executeLocalSlashCommand,
     handleDetachedBtwSend,
     sendMessage,
@@ -884,36 +865,24 @@ export function Chat() {
       return;
     }
 
-    const queueAfterTerminalCleanup = lastTerminalRunId
-      ? queuedMessages.filter((item) => item.pendingRunId !== lastTerminalRunId)
-      : queuedMessages;
-    const nextIndex = queueAfterTerminalCleanup.findIndex((item) => !item.pendingRunId);
+    const nextIndex = queuedMessages.findIndex((item) => !item.pendingRunId);
     if (nextIndex < 0) {
       processedQueueFlushTokenRef.current = queueFlushToken;
-      if (queueAfterTerminalCleanup.length !== queuedMessages.length) {
-        setQueuedMessages((items) => (
-          lastTerminalRunId ? items.filter((item) => item.pendingRunId !== lastTerminalRunId) : items
-        ));
-      }
       return;
     }
-    const next = queueAfterTerminalCleanup[nextIndex];
+    const next = queuedMessages[nextIndex];
     processedQueueFlushTokenRef.current = queueFlushToken;
     queueMicrotask(() => {
-      setQueuedMessages((items) => items.filter((item) => {
-        if (item.id === next.id) return false;
-        if (lastTerminalRunId && item.pendingRunId === lastTerminalRunId) return false;
-        return true;
-      }));
+      removeQueuedMessage(next.id);
       void handleChatSend(next.text, next.attachments);
     });
   }, [
     activeRunId,
     handleChatSend,
-    lastTerminalRunId,
     pendingFinal,
     queueFlushToken,
     queuedMessages,
+    removeQueuedMessage,
     sending,
     terminalHistoryReconciling,
   ]);
@@ -1092,7 +1061,7 @@ export function Chat() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleRemoveQueuedMessage(item.id)}
+                    onClick={() => removeQueuedMessage(item.id)}
                     className="shrink-0 text-xs text-muted-foreground underline hover:text-foreground"
                   >
                     {t('common:actions.remove', '移除')}
@@ -1232,7 +1201,7 @@ function WelcomeScreen({
           type="button"
           aria-label={t('composer.agentAriaLabel')}
           className={cn(
-            'flex w-full items-center gap-3 rounded-[14px] border border-black/10 bg-white/80 px-4 py-3.5 text-left transition-colors hover:border-black/20 hover:bg-white/90 dark:border-white/10 dark:bg-white/[0.05] dark:hover:border-white/20 dark:hover:bg-white/[0.08] sm:gap-4 sm:px-5 sm:py-4',
+            'group flex w-full items-center gap-3 rounded-[16px] border border-black/10 bg-gradient-to-b from-white/95 to-white/70 px-4 py-3.5 text-left shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-px hover:border-black/15 hover:bg-white hover:shadow-[0_8px_22px_rgba(15,23,42,0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 dark:border-white/10 dark:from-white/[0.09] dark:to-white/[0.04] dark:hover:border-white/15 dark:hover:bg-white/[0.10] sm:gap-4 sm:px-5 sm:py-4',
             agentMenuOpen && agentMenuPosition?.compact && 'invisible'
           )}
           onClick={() => {
@@ -1252,13 +1221,13 @@ function WelcomeScreen({
               </div>
             </div>
           </div>
-          {canSwitchAgent ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : null}
+          {canSwitchAgent ? <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:scale-110', agentMenuOpen && 'rotate-180')} /> : null}
         </button>
         {agentMenuOpen && canSwitchAgent && agentMenuPosition
           ? createPortal(
               <div
                 ref={agentMenuRef}
-                className="fixed z-[120] overflow-hidden rounded-[14px] border border-black/10 bg-card/95 p-1.5 text-left shadow-lg dark:border-white/10 dark:bg-card/95"
+                className="fixed z-[120] overflow-hidden rounded-[18px] border border-black/10 bg-card/95 p-1.5 text-left shadow-[0_18px_48px_rgba(15,23,42,0.18)] ring-1 ring-white/60 backdrop-blur-xl dark:border-white/10 dark:bg-card/95 dark:ring-white/10"
                 style={{
                   top: agentMenuPosition.top,
                   left: agentMenuPosition.left,
@@ -1269,12 +1238,17 @@ function WelcomeScreen({
                   maxHeight: agentMenuPosition.maxHeight,
                 }}
               >
-                <div className="max-h-[inherit] overflow-y-auto">
+                <div className="max-h-[inherit] overflow-y-auto pr-0.5">
                   {agentOptions.map((option) => (
                     <button
                       key={option.id}
                       type="button"
-                      className="flex w-full items-center gap-3 rounded-[10px] px-3 py-2.5 text-left text-[13px] text-foreground hover:bg-black/5 dark:hover:bg-white/5"
+                      className={cn(
+                        'flex w-full items-center gap-3 rounded-[12px] px-3 py-2 text-left text-[13px] transition-colors',
+                        currentAgentId === option.id
+                          ? 'bg-primary/10 font-semibold text-primary'
+                          : 'text-foreground hover:bg-black/5 dark:hover:bg-white/5'
+                      )}
                       onClick={() => {
                         setAgentMenuOpen(false);
                         if (option.id !== currentAgentId) {
@@ -1286,7 +1260,9 @@ function WelcomeScreen({
                         <div className="truncate font-medium">{option.label}</div>
                       </div>
                       {currentAgentId === option.id ? (
-                        <Check className="h-4 w-4 shrink-0 text-primary" />
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                          <Check className="h-3 w-3" />
+                        </span>
                       ) : null}
                     </button>
                   ))}

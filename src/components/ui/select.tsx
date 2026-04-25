@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { ChevronDown } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type OptionItem = {
@@ -196,7 +196,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
           onFocus={onFocus as React.FocusEventHandler<HTMLButtonElement> | undefined}
           onBlur={onBlur as React.FocusEventHandler<HTMLButtonElement> | undefined}
           className={cn(
-            'flex h-10 w-full items-center justify-between gap-3 rounded-xl border border-input/80 bg-card/80 px-3.5 py-2 text-left text-sm ring-offset-background backdrop-blur-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45',
+            'group flex h-10 w-full items-center justify-between gap-3 rounded-[14px] border border-black/10 bg-gradient-to-b from-white/95 to-white/70 px-3.5 py-2 text-left text-sm font-medium text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-offset-background backdrop-blur-sm transition-all hover:border-black/15 hover:bg-white hover:shadow-[0_8px_22px_rgba(15,23,42,0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-45 dark:border-white/10 dark:from-white/[0.09] dark:to-white/[0.04] dark:hover:border-white/15 dark:hover:bg-white/[0.10]',
             className,
           )}
         >
@@ -210,7 +210,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
           </span>
           <ChevronDown
             className={cn(
-              'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+              'h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:scale-110',
               open && 'rotate-180',
             )}
           />
@@ -219,7 +219,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
           <div
             id={listboxId}
             role="listbox"
-            className="absolute left-0 right-0 z-50 mt-2 max-h-72 overflow-auto rounded-xl border border-border/80 bg-popover/95 p-1 shadow-xl backdrop-blur"
+            className="absolute left-0 right-0 z-[90] mt-2 max-h-72 overflow-auto rounded-[16px] border border-black/10 bg-card/95 p-1.5 shadow-[0_18px_48px_rgba(15,23,42,0.18)] ring-1 ring-white/60 backdrop-blur-xl dark:border-white/10 dark:ring-white/10"
           >
             {options.map((option) => {
               const active = option.value === selectedValue;
@@ -232,10 +232,10 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
                   disabled={disabled || option.disabled}
                   onClick={() => handleSelect(option.value)}
                   className={cn(
-                    'flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                    'flex w-full items-center justify-between gap-3 rounded-[12px] px-3 py-2 text-left text-sm transition-colors',
                     active
-                      ? 'bg-primary/10 text-foreground'
-                      : 'text-foreground hover:bg-muted/70',
+                      ? 'bg-primary/10 font-semibold text-primary'
+                      : 'text-foreground hover:bg-black/5 dark:hover:bg-white/5',
                     (disabled || option.disabled) && 'cursor-not-allowed opacity-45',
                   )}
                 >
@@ -254,6 +254,11 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
                       </span>
                     ) : null}
                   </span>
+                  {active ? (
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      <Check className="h-3 w-3" />
+                    </span>
+                  ) : null}
                 </button>
               );
             })}

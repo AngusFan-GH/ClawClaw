@@ -19,12 +19,12 @@ import {
   Settings2,
   TerminalSquare,
   ChevronDown,
+  Check,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Select } from '@/components/ui/select';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
@@ -763,6 +763,8 @@ export function Skills() {
   const [selectedAgentId, setSelectedAgentId] = useState(chatAgentId || defaultAgentId || 'main');
   const [folderMenuOpen, setFolderMenuOpen] = useState(false);
   const folderMenuRef = useRef<HTMLDivElement | null>(null);
+  const [agentMenuOpen, setAgentMenuOpen] = useState(false);
+  const agentMenuRef = useRef<HTMLDivElement | null>(null);
 
   const isGatewayRunning = gatewayStatus.state === 'running';
   const [showGatewayWarning, setShowGatewayWarning] = useState(false);
@@ -776,25 +778,71 @@ export function Skills() {
       : [{ id: preferredAgentId, name: preferredAgentId === 'main' ? 'Main' : preferredAgentId }],
     [agents, preferredAgentId]
   );
+  const selectedAgentName =
+    agentOptions.find((agent) => agent.id === selectedAgentId)?.name
+    || selectedAgentId
+    || preferredAgentId;
   const managedSkillsDirPath =
     sourceDirs.find((dir) => dir.key === 'managed')?.path || '~/.openclaw/skills';
   const agentSelect = (
-    <div className="inline-flex min-w-[220px] items-center gap-2 rounded-[16px] border border-border/70 bg-card/85 px-3 py-2 shadow-sm backdrop-blur-sm lg:min-w-[250px]">
-      <span className="shrink-0 rounded-[10px] bg-muted px-2.5 py-1 text-[12px] font-medium text-muted-foreground">
-        {t('agentLabel')}
-      </span>
-      <div className="min-w-0 flex-1">
-        <Select
-          value={selectedAgentId}
-          onChange={(event) => setSelectedAgentId(event.target.value)}
-          aria-label={t('agentLabel')}
-          className="h-9 border-0 bg-transparent px-2 pr-1 text-[15px] font-semibold text-foreground shadow-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+    <div ref={agentMenuRef} className="relative min-w-[220px] lg:min-w-[250px]">
+      <button
+        type="button"
+        onClick={() => setAgentMenuOpen((open) => !open)}
+        aria-haspopup="menu"
+        aria-expanded={agentMenuOpen}
+        aria-label={t('agentLabel')}
+        className={cn(
+          'inline-flex h-[54px] w-full items-center gap-3 rounded-[16px] border border-border/70 bg-card/90 px-3 shadow-sm backdrop-blur-sm transition-all',
+          'hover:-translate-y-px hover:border-primary/20 hover:bg-card hover:shadow-[0_10px_28px_rgba(15,23,42,0.10)]',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25'
+        )}
+      >
+        <span className="shrink-0 rounded-[10px] bg-muted px-2.5 py-1 text-[12px] font-medium text-muted-foreground">
+          {t('agentLabel')}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-left text-[15px] font-semibold text-foreground">
+          {selectedAgentName}
+        </span>
+        <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', agentMenuOpen && 'rotate-180')} />
+      </button>
+      {agentMenuOpen ? (
+        <div
+          role="menu"
+          className="absolute right-0 top-[calc(100%+6px)] z-[90] w-full overflow-hidden rounded-[16px] border border-black/10 bg-card/95 p-1.5 shadow-[0_18px_48px_rgba(15,23,42,0.18)] ring-1 ring-white/60 backdrop-blur-xl dark:border-white/10 dark:ring-white/10"
         >
-          {agentOptions.map((agent) => (
-            <option key={agent.id} value={agent.id}>{agent.name}</option>
-          ))}
-        </Select>
-      </div>
+          <div className="max-h-56 overflow-y-auto pr-0.5">
+            {agentOptions.map((agent) => {
+              const selected = agent.id === selectedAgentId;
+              return (
+                <button
+                  key={agent.id}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={selected}
+                  onClick={() => {
+                    setSelectedAgentId(agent.id);
+                    setAgentMenuOpen(false);
+                  }}
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-[13px] transition-colors',
+                    selected
+                      ? 'bg-primary/10 font-semibold text-primary'
+                      : 'text-foreground hover:bg-black/5 dark:hover:bg-white/5'
+                  )}
+                >
+                  <span className="min-w-0 flex-1 truncate">{agent.name}</span>
+                  {selected ? (
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      <Check className="h-3 w-3" />
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 
@@ -848,6 +896,29 @@ export function Skills() {
       document.removeEventListener('keydown', handleEscape);
     };
   }, [folderMenuOpen]);
+
+  useEffect(() => {
+    if (!agentMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!agentMenuRef.current?.contains(event.target as Node)) {
+        setAgentMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setAgentMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [agentMenuOpen]);
 
   // Fetch skills for the selected agent view
   useEffect(() => {
@@ -1086,14 +1157,14 @@ export function Skills() {
                     aria-haspopup="menu"
                     aria-expanded={folderMenuOpen}
                     disabled={!hasFolderEntries}
-                    className="inline-flex h-10 items-center rounded-[12px] border border-border/70 px-4 text-[13px] font-medium text-foreground/80 transition-colors hover:bg-accent/70 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                    className="group inline-flex h-10 items-center rounded-[14px] border border-black/10 bg-gradient-to-b from-white/95 to-white/70 px-4 text-[13px] font-semibold text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-px hover:border-black/15 hover:bg-white hover:shadow-[0_8px_22px_rgba(15,23,42,0.10)] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:from-white/[0.09] dark:to-white/[0.04] dark:hover:border-white/15 dark:hover:bg-white/[0.10]"
                   >
                     <FolderOpen className="mr-2 h-4 w-4" />
                     {t('openFolder')}
-                    <ChevronDown className={cn('ml-2 h-4 w-4 transition-transform', folderMenuOpen && 'rotate-180')} />
+                    <ChevronDown className={cn('ml-2 h-4 w-4 text-muted-foreground transition-transform group-hover:scale-110', folderMenuOpen && 'rotate-180')} />
                   </button>
                   {folderMenuOpen && (
-                    <div className="absolute right-0 z-40 mt-2 w-[360px] max-w-[min(28rem,calc(100vw-2rem))] overflow-hidden rounded-[14px] border border-border/70 bg-card/95 p-1.5 shadow-xl backdrop-blur-md">
+                    <div className="absolute right-0 z-[90] mt-2 w-[360px] max-w-[min(28rem,calc(100vw-2rem))] overflow-hidden rounded-[18px] border border-black/10 bg-card/95 p-1.5 shadow-[0_18px_48px_rgba(15,23,42,0.18)] ring-1 ring-white/60 backdrop-blur-xl dark:border-white/10 dark:ring-white/10">
                       <div className="px-3 pb-2 pt-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">
                         {t('folderMenu.title')}
                       </div>
@@ -1102,7 +1173,7 @@ export function Skills() {
                           key={`${dir.key}:${dir.path}`}
                           type="button"
                           onClick={() => void handleOpenSkillsFolder(dir.path)}
-                          className="flex w-full items-start gap-3 rounded-[10px] px-3 py-2.5 text-left transition-colors hover:bg-accent/70"
+                          className="flex w-full items-start gap-3 rounded-[12px] px-3 py-2 text-left transition-colors hover:bg-black/5 dark:hover:bg-white/5"
                         >
                           <FolderOpen className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                           <span className="min-w-0 flex-1 overflow-hidden">

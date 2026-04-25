@@ -109,6 +109,19 @@ export interface StreamSegment {
   ts: number;
 }
 
+export interface QueuedChatMessage {
+  id: string;
+  text: string;
+  attachments?: Array<{
+    fileName: string;
+    mimeType: string;
+    fileSize: number;
+    stagedPath: string;
+    preview: string | null;
+  }>;
+  pendingRunId?: string;
+}
+
 export interface CompactionStatus {
   phase: 'active' | 'retrying' | 'complete';
   runId: string | null;
@@ -175,6 +188,7 @@ interface ChatState {
   terminalHistoryReconciling: boolean;
   queueFlushToken: number;
   lastTerminalRunId: string | null;
+  chatQueue: QueuedChatMessage[];
   lastUserMessageAt: number | null;
   /** Images collected from tool results, attached to the next assistant message */
   pendingToolImages: AttachedFileMeta[];
@@ -234,6 +248,10 @@ interface ChatState {
   handleBtwEvent: (btw: { question: string; text: string; isError?: boolean }) => void;
   handleGatewayStatusChange: (state: 'stopped' | 'starting' | 'running' | 'error' | 'reconnecting') => void;
   requestQueueFlush: (runId?: string | null) => void;
+  enqueueChatMessage: (item: Omit<QueuedChatMessage, 'id'> & { id?: string }) => void;
+  removeQueuedMessage: (id: string) => void;
+  clearChatQueue: () => void;
+  clearPendingQueueItemsForRun: (runId?: string | null) => void;
   toggleThinking: () => void;
   refresh: () => Promise<void>;
   clearError: () => void;
@@ -305,21 +323,10 @@ function toHistoryAnchor(message: RawMessage | undefined): HistoryAnchor | null 
   };
 }
 
-// Timer for delayed error finalization. When the Gateway reports a mid-stream
-// error (e.g. "terminated"), it may retry internally and recover. We wait
-// before committing the error to give the recovery path a chance.
-let _errorRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
 let _compactionClearTimer: ReturnType<typeof setTimeout> | null = null;
 let _fallbackClearTimer: ReturnType<typeof setTimeout> | null = null;
 const COMPACTION_TOAST_DURATION_MS = 5000;
 const FALLBACK_TOAST_DURATION_MS = 8000;
-
-function clearErrorRecoveryTimer(): void {
-  if (_errorRecoveryTimer) {
-    clearTimeout(_errorRecoveryTimer);
-    _errorRecoveryTimer = null;
-  }
-}
 
 function clearCompactionTimer(): void {
   if (_compactionClearTimer) {
@@ -1892,6 +1899,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   terminalHistoryReconciling: false,
   queueFlushToken: 0,
   lastTerminalRunId: null,
+  chatQueue: [],
   lastUserMessageAt: null,
   pendingToolImages: [],
   toolStreamById: new Map<string, ToolStreamEntry>(),
@@ -1934,9 +1942,45 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   requestQueueFlush: (runId) => {
+    get().clearPendingQueueItemsForRun(runId);
     set((s) => ({
       queueFlushToken: s.queueFlushToken + 1,
       lastTerminalRunId: runId?.trim() || null,
+    }));
+  },
+
+  enqueueChatMessage: (item) => {
+    const text = item.text.trim();
+    if (!text && (!item.attachments || item.attachments.length === 0)) {
+      return;
+    }
+    set((s) => ({
+      chatQueue: [
+        ...s.chatQueue,
+        {
+          ...item,
+          id: item.id || crypto.randomUUID(),
+          text,
+        },
+      ],
+    }));
+  },
+
+  removeQueuedMessage: (id) => {
+    set((s) => ({ chatQueue: s.chatQueue.filter((item) => item.id !== id) }));
+  },
+
+  clearChatQueue: () => {
+    set({ chatQueue: [] });
+  },
+
+  clearPendingQueueItemsForRun: (runId) => {
+    const normalizedRunId = runId?.trim();
+    if (!normalizedRunId) {
+      return;
+    }
+    set((s) => ({
+      chatQueue: s.chatQueue.filter((item) => item.pendingRunId !== normalizedRunId),
     }));
   },
 
@@ -3139,7 +3183,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // snapshot can erase optimistic user text and streaming assistant output.
     _lastChatEventAt = Date.now();
     clearHistoryPoll();
-    clearErrorRecoveryTimer();
 
     const SAFETY_TIMEOUT_MS = 90_000;
     const checkStuck = () => {
@@ -3341,7 +3384,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   abortRun: async () => {
     clearHistoryPoll();
-    clearErrorRecoveryTimer();
     const { currentSessionKey } = get();
     set({
       sending: false,
@@ -3366,7 +3408,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     clearHistoryPoll();
-    clearErrorRecoveryTimer();
     set({
       sending: false,
       activeRunId: null,
@@ -3479,13 +3520,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         break;
       }
       case 'delta': {
-        // If we're receiving new deltas, the Gateway has recovered from any
-        // prior error — cancel the error finalization timer and clear the
-        // stale error banner so the user sees the live stream again.
-        if (_errorRecoveryTimer) {
-          clearErrorRecoveryTimer();
-          set({ error: null });
-        }
         const updates = collectToolUpdates(event.message, resolvedState);
         set((s) => ({
           streamingMessage: (() => {
@@ -3501,7 +3535,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         break;
       }
       case 'final': {
-        clearErrorRecoveryTimer();
         if (get().error) set({ error: null });
         // Match OpenClaw dashboard terminal handling: only tool-backed runs
         // need an authoritative history reload before queued messages resume,
@@ -3696,7 +3729,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       case 'error': {
         const errorMsg = String(event.errorMessage || 'An error occurred');
-        clearErrorRecoveryTimer();
 
         const currentStream = get().streamingMessage as RawMessage | null;
         const errorAssistantSnapshot =
@@ -3731,7 +3763,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       case 'aborted': {
         clearHistoryPoll();
-        clearErrorRecoveryTimer();
         const abortedMessage = event.message as RawMessage | undefined;
         const currentStream = get().streamingMessage as RawMessage | null;
         const streamedText =
@@ -4063,7 +4094,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const nextError = getGatewayStatusErrorMessage(gatewayState);
     if (!nextError || !responseInProgress) return;
 
-    clearErrorRecoveryTimer();
 
     if (gatewayState === 'reconnecting' || gatewayState === 'starting') {
       set({ error: nextError });

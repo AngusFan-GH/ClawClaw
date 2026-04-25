@@ -120,6 +120,7 @@ describe('Chat Store', () => {
       terminalHistoryReconciling: false,
       queueFlushToken: 0,
       lastTerminalRunId: null,
+      chatQueue: [],
       compactionStatus: null,
       fallbackStatus: null,
       sessions: [{ key: 'agent:main:main', displayName: 'Main' }],
@@ -264,6 +265,30 @@ describe('Chat Store', () => {
     expect(useChatStore.getState().terminalHistoryReconciling).toBe(false);
     expect(useChatStore.getState().queueFlushToken).toBe(1);
     expect(useChatStore.getState().lastTerminalRunId).toBe('run-final-1');
+  });
+
+  it('should clear queued pending-run messages when requesting a queue flush for that run', () => {
+    useChatStore.setState({
+      chatQueue: [],
+      queueFlushToken: 0,
+      lastTerminalRunId: null,
+    });
+
+    useChatStore.getState().enqueueChatMessage({ text: 'next message' });
+    useChatStore.getState().enqueueChatMessage({
+      text: '/steer follow up',
+      pendingRunId: 'run-pending',
+    });
+
+    expect(useChatStore.getState().chatQueue).toHaveLength(2);
+
+    useChatStore.getState().requestQueueFlush('run-pending');
+
+    const state = useChatStore.getState();
+    expect(state.chatQueue).toHaveLength(1);
+    expect(state.chatQueue[0].text).toBe('next message');
+    expect(state.queueFlushToken).toBe(1);
+    expect(state.lastTerminalRunId).toBe('run-pending');
   });
 
   it('should delay queue flush for terminal final with tool events until history reconciliation finishes', async () => {

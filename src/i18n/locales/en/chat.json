@@ -34,6 +34,15 @@
     "modelAriaLabel": "Switch model for current conversation",
     "thinkingLevelAriaLabel": "Set thinking level for current conversation",
     "defaultThinkingLevel": "Default ({{level}})",
+    "defaultBadge": "Default",
+    "thinkingLevels": {
+      "off": "Off",
+      "minimal": "Minimal",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "xhigh": "Extra high"
+    },
     "agentAriaLabel": "Switch agent for this new conversation",
     "configureModels": "Configure models",
     "modelsSyncing": "Syncing models",

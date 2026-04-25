@@ -34,6 +34,15 @@
     "modelAriaLabel": "現在の会話モデルを切り替える",
     "thinkingLevelAriaLabel": "現在の会話の思考レベルを設定",
     "defaultThinkingLevel": "デフォルト（{{level}}）",
+    "defaultBadge": "デフォルト",
+    "thinkingLevels": {
+      "off": "オフ",
+      "minimal": "最小",
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "xhigh": "最高"
+    },
     "agentAriaLabel": "新しい会話の分身を切り替える",
     "configureModels": "モデルを設定",
     "modelsSyncing": "モデルを同期中",

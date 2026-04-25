@@ -1088,7 +1088,7 @@ function AgentSettingsModal({
                     variant="outline"
                     onClick={() => setModelMenuOpen((open) => !open)}
                     disabled={savingModel}
-                    className="h-[44px] w-full justify-between rounded-xl border-black/10 bg-background px-3.5 text-[13px] font-medium text-foreground shadow-sm hover:bg-background dark:border-white/10 dark:bg-background"
+                    className="group h-[44px] w-full justify-between rounded-[14px] border-black/10 bg-gradient-to-b from-white/95 to-white/70 px-3.5 text-[13px] font-semibold text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-px hover:border-black/15 hover:bg-white hover:shadow-[0_8px_22px_rgba(15,23,42,0.10)] focus-visible:ring-2 focus-visible:ring-primary/25 disabled:translate-y-0 disabled:opacity-55 dark:border-white/10 dark:from-white/[0.09] dark:to-white/[0.04] dark:hover:border-white/15 dark:hover:bg-white/[0.10]"
                   >
                     <span className="truncate text-left">
                       {selectedModelRef === '__inherit__'
@@ -1105,7 +1105,7 @@ function AgentSettingsModal({
                     {savingModel ? (
                       <LoadingIcon className="h-4 w-4 shrink-0" />
                     ) : (
-                      <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', modelMenuOpen && 'rotate-180')} />
+                      <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:scale-110', modelMenuOpen && 'rotate-180')} />
                     )}
                   </Button>
                 </div>
@@ -1286,7 +1286,7 @@ function AgentSettingsModal({
         ? createPortal(
             <div
               ref={modelMenuRef}
-              className="fixed z-[130] overflow-hidden rounded-[16px] border border-black/10 bg-card shadow-[0_18px_44px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-card"
+              className="fixed z-[130] overflow-hidden rounded-[18px] border border-black/10 bg-card/95 p-1.5 shadow-[0_18px_48px_rgba(15,23,42,0.18)] ring-1 ring-white/60 backdrop-blur-xl dark:border-white/10 dark:bg-card/95 dark:ring-white/10"
               style={{
                 top: modelMenuPosition.top,
                 left: modelMenuPosition.left,
@@ -1295,26 +1295,45 @@ function AgentSettingsModal({
                 transform: modelMenuPosition.top > (modelTriggerRef.current?.getBoundingClientRect().top ?? 0) ? 'none' : 'translateY(-100%)',
               }}
             >
-              <div className="max-h-[inherit] overflow-y-auto p-1.5">
+              <div className="max-h-[inherit] overflow-y-auto pr-0.5">
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2.5 text-left text-[13px] text-foreground transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-[13px] transition-colors',
+                    selectedModelRef === '__inherit__'
+                      ? 'bg-primary/10 font-semibold text-primary'
+                      : 'text-foreground hover:bg-black/5 dark:hover:bg-white/5'
+                  )}
                   onClick={() => void handleSelectModel('__inherit__')}
                 >
                   <span className="flex-1 truncate">{defaultModelOption?.label ?? agent.local.modelDisplay}</span>
                   <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
                     {t('defaultBadge')}
                   </span>
-                  {selectedModelRef === '__inherit__' ? <Check className="h-4 w-4 shrink-0 text-primary" /> : null}
+                  {selectedModelRef === '__inherit__' ? (
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      <Check className="h-3 w-3" />
+                    </span>
+                  ) : null}
                 </button>
                 {selectableModelOptions.map((option) => (
                   <button
                     key={option.value}
                     type="button"
-                    className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2.5 text-left text-[13px] text-foreground transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-[13px] transition-colors',
+                      selectedModelRef === option.value
+                        ? 'bg-primary/10 font-semibold text-primary'
+                        : 'text-foreground hover:bg-black/5 dark:hover:bg-white/5'
+                    )}
                     onClick={() => void handleSelectModel(option.value)}
                   >
                     <span className="flex-1 truncate">{option.label}</span>
+                    {selectedModelRef === option.value ? (
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                        <Check className="h-3 w-3" />
+                      </span>
+                    ) : null}
                   </button>
                 ))}
               </div>

@@ -101,6 +101,21 @@ function readFileAsBase64(file: globalThis.File): Promise<string> {
 }
 
 const INPUT_HISTORY_LIMIT = 50;
+const selectorTriggerClass =
+  'group w-full justify-between gap-2 border border-black/10 bg-gradient-to-b from-white/95 to-white/70 px-3 text-[13px] font-semibold text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-px hover:border-black/15 hover:bg-white hover:shadow-[0_8px_22px_rgba(15,23,42,0.10)] focus-visible:ring-2 focus-visible:ring-primary/25 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-55 dark:border-white/10 dark:from-white/[0.09] dark:to-white/[0.04] dark:hover:border-white/15 dark:hover:bg-white/[0.10] sm:w-auto';
+const selectorTriggerSizeClass = (isEmpty: boolean) =>
+  isEmpty ? 'h-10 min-w-[128px] rounded-[16px]' : 'h-11 min-w-[136px] rounded-[16px]';
+
+function formatThinkingLevelLabel(
+  t: ReturnType<typeof useTranslation>['t'],
+  level: string,
+): string {
+  const normalized = level.trim();
+  if (!normalized) return normalized;
+  return t(`composer.thinkingLevels.${normalized}`, {
+    defaultValue: normalized,
+  });
+}
 
 class InputHistory {
   private items: string[] = [];
@@ -207,22 +222,22 @@ export function ChatInput({
   }, [currentThinkingLevel, thinkingOptions]);
   const canChangeThinkingLevel = Boolean(onThinkingLevelChange) && normalizedThinkingOptions.length > 0;
   const thinkingDefaultLabel = thinkingDefault?.trim() || 'off';
+  const localizedThinkingDefaultLabel = formatThinkingLevelLabel(t, thinkingDefaultLabel);
   const thinkingMenuOptions = useMemo(
-    () => [
-      {
-        value: '',
-        label: t('composer.defaultThinkingLevel', 'Default ({{level}})', {
-          level: thinkingDefaultLabel,
-        }),
-      },
-      ...normalizedThinkingOptions.map((option) => ({ value: option, label: option })),
-    ],
+    () => normalizedThinkingOptions.map((option) => ({
+      value: option,
+      label: formatThinkingLevelLabel(t, option),
+      badge: option === thinkingDefaultLabel
+        ? t('composer.defaultBadge', 'Default')
+        : undefined,
+    })),
     [normalizedThinkingOptions, t, thinkingDefaultLabel]
   );
+  const effectiveThinkingLevel = currentThinkingLevel || thinkingDefaultLabel;
   const thinkingButtonLabel =
-    currentThinkingLevel ||
+    (currentThinkingLevel ? formatThinkingLevelLabel(t, currentThinkingLevel) : '') ||
     t('composer.defaultThinkingLevel', 'Default ({{level}})', {
-      level: thinkingDefaultLabel,
+      level: localizedThinkingDefaultLabel,
     });
   const currentModelValue = selectedModel || defaultModelValue;
   const selectedOption = modelOptions.find((option) => option.value === currentModelValue);
@@ -987,14 +1002,14 @@ export function ChatInput({
                     type="button"
                     variant="ghost"
                     className={cn(
-                      'w-full border border-black/10 bg-white/70 px-3 text-[13px] font-medium text-foreground shadow-none hover:bg-black/5 dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/10 sm:w-auto',
-                      isEmpty ? 'h-10 min-w-[112px] rounded-[14px] sm:min-w-[124px]' : 'h-11 min-w-[120px] rounded-[14px] sm:min-w-[132px]'
+                      selectorTriggerClass,
+                      selectorTriggerSizeClass(isEmpty)
                     )}
                     disabled={sending || modelDisabled}
                     onClick={() => setModelMenuOpen((open) => !open)}
                   >
                     <span className="truncate">{modelButtonLabel}</span>
-                    <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-hover:scale-110" />
                   </Button>
                 </div>
               ) : modelState === 'syncing' ? (
@@ -1002,8 +1017,8 @@ export function ChatInput({
                   type="button"
                   variant="ghost"
                   className={cn(
-                    'w-full border border-black/10 bg-white/70 px-3 text-[13px] font-medium text-foreground shadow-none dark:border-white/10 dark:bg-white/[0.05] sm:w-auto',
-                    isEmpty ? 'h-10 rounded-[14px]' : 'h-11 rounded-[14px]'
+                    selectorTriggerClass,
+                    selectorTriggerSizeClass(isEmpty)
                   )}
                   disabled
                 >
@@ -1015,8 +1030,8 @@ export function ChatInput({
                   type="button"
                   variant="ghost"
                   className={cn(
-                    'w-full border border-black/10 bg-white/70 px-3 text-[13px] font-medium text-foreground shadow-none hover:bg-black/5 dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/10 sm:w-auto',
-                    isEmpty ? 'h-10 rounded-[14px]' : 'h-11 rounded-[14px]'
+                    selectorTriggerClass,
+                    selectorTriggerSizeClass(isEmpty)
                   )}
                   onClick={onConfigureModels}
                 >
@@ -1030,17 +1045,17 @@ export function ChatInput({
                     type="button"
                     variant="ghost"
                     className={cn(
-                      'w-full border border-black/10 bg-white/70 px-3 text-[13px] font-medium text-foreground shadow-none hover:bg-black/5 dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/10 sm:w-auto',
-                      isEmpty ? 'h-10 min-w-[112px] rounded-[14px] sm:min-w-[124px]' : 'h-11 min-w-[120px] rounded-[14px] sm:min-w-[132px]'
+                      selectorTriggerClass,
+                      selectorTriggerSizeClass(isEmpty)
                     )}
                     disabled={sending || thinkingDisabled || disabled}
                     onClick={() => setThinkingMenuOpen((open) => !open)}
                     title={t('composer.thinkingLevelAriaLabel', 'Set thinking level for current conversation')}
                     aria-label={t('composer.thinkingLevelAriaLabel', 'Set thinking level for current conversation')}
                   >
-                    <Brain className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <Brain className="h-3.5 w-3.5 shrink-0 text-primary/80" />
                     <span className="truncate">{thinkingButtonLabel}</span>
-                    <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-hover:scale-110" />
                   </Button>
                 </div>
               ) : null}
@@ -1127,10 +1142,12 @@ export function ChatInput({
           open={thinkingMenuOpen}
           position={thinkingMenuPosition}
           options={thinkingMenuOptions}
-          currentValue={currentThinkingLevel}
+          currentValue={effectiveThinkingLevel}
+          minWidth={156}
+          maxWidth={190}
           onSelect={(value) => {
             setThinkingMenuOpen(false);
-            void onThinkingLevelChange?.(value || undefined);
+            void onThinkingLevelChange?.(value === thinkingDefaultLabel ? undefined : value);
           }}
         />
       </div>

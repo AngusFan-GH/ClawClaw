@@ -34,6 +34,15 @@
     "modelAriaLabel": "切换当前对话模型",
     "thinkingLevelAriaLabel": "设置当前对话的思考级别",
     "defaultThinkingLevel": "默认（{{level}}）",
+    "defaultBadge": "默认",
+    "thinkingLevels": {
+      "off": "关闭",
+      "minimal": "极简",
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "xhigh": "极高"
+    },
     "agentAriaLabel": "切换新对话分身",
     "configureModels": "未配置模型",
     "modelsSyncing": "模型列表同步中",
