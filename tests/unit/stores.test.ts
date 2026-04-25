@@ -222,6 +222,48 @@ describe('Chat Store', () => {
     rpcMock.mockRestore();
   });
 
+  it('should persist a locally selected thinking level before first send', async () => {
+    const rpcMock = vi
+      .spyOn(useGatewayStore.getState(), 'rpc')
+      .mockImplementation(async (method) => {
+        if (method === 'sessions.patch') return {};
+        if (method === 'chat.send') return {};
+        throw new Error(`Unexpected RPC method: ${String(method)}`);
+      });
+    useChatStore.setState({
+      sessions: [{ key: 'agent:main:session-local', displayName: 'session-local', thinkingLevel: 'high' }],
+      currentSessionKey: 'agent:main:session-local',
+      pendingLocalSessionKeys: { 'agent:main:session-local': true },
+      sending: false,
+      activeRunId: null,
+      allowedModelRefs: [],
+      defaultModelRef: undefined,
+    });
+
+    await useChatStore.getState().sendMessage('hello');
+
+    expect(rpcMock).toHaveBeenNthCalledWith(
+      1,
+      'sessions.patch',
+      {
+        key: 'agent:main:session-local',
+        thinkingLevel: 'high',
+      },
+    );
+    expect(rpcMock).toHaveBeenNthCalledWith(
+      2,
+      'chat.send',
+      expect.objectContaining({
+        sessionKey: 'agent:main:session-local',
+        message: 'hello',
+      }),
+      120_000,
+    );
+
+    useChatStore.setState({ sending: false, activeRunId: null });
+    rpcMock.mockRestore();
+  });
+
   it('should emit queue flush immediately for terminal final without tool events', async () => {
     let resolveHistory: (() => void) | undefined;
     const loadHistoryMock = vi.fn().mockImplementation(

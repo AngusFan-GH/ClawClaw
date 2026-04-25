@@ -3124,6 +3124,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
 
+    const sessionThinkingLevel = refreshedSession?.thinkingLevel?.trim();
+    if (sessionThinkingLevel) {
+      try {
+        await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.patch', {
+          key: currentSessionKey,
+          thinkingLevel: sessionThinkingLevel,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        set({
+          error: `Failed to initialize session thinking level: ${message}`,
+        });
+        return;
+      }
+    }
+
     const runId = crypto.randomUUID();
     const idempotencyKey = runId;
 

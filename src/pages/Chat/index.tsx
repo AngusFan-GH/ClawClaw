@@ -428,6 +428,13 @@ export function Chat() {
   }, [sending, streamingTimestamp]);
 
   // Gateway not running block has been completely removed so the UI always renders.
+  const effectiveThinkingLevel = (
+    currentSession?.thinkingLevel?.trim()
+    || currentSession?.thinkingDefault?.trim()
+    || 'off'
+  ).toLowerCase();
+  const canShowThinkingDetails = effectiveThinkingLevel !== 'off';
+  const showThinkingDetails = showThinking && canShowThinkingDetails;
 
   const {
     liveStreamingMessage,
@@ -440,7 +447,7 @@ export function Chat() {
     pendingUserMessage,
     pendingAssistantMessage,
     sending,
-    showThinking,
+    showThinking: showThinkingDetails,
     streamingMessage,
     streamingTimestamp,
     currentSessionKey,
@@ -455,7 +462,7 @@ export function Chat() {
     pendingUserMessage,
     pendingAssistantMessage,
     sending,
-    showThinking,
+    showThinkingDetails,
     streamingMessage,
     streamingTimestamp,
     currentSessionKey,
@@ -614,6 +621,16 @@ export function Chat() {
       )),
       error: null,
     }));
+
+    const isEmptyLocalSession =
+      !currentSessionKey.endsWith(':main') &&
+      Boolean(previousState.pendingLocalSessionKeys[currentSessionKey]) &&
+      previousState.messages.length === 0 &&
+      !previousState.pendingUserMessage &&
+      !previousState.pendingAssistantMessage;
+    if (isEmptyLocalSession) {
+      return;
+    }
 
     try {
       await useGatewayStore.getState().rpc('sessions.patch', {
@@ -1035,7 +1052,7 @@ export function Chat() {
                 streamingStartedAt={streamingTimestamp}
                 sending={sending}
                 pendingFinal={pendingFinal}
-                showThinking={showThinking}
+                showThinking={showThinkingDetails}
                 sessionKey={currentSessionKey}
                 contextWindow={currentSession?.contextTokens ?? null}
                 assistantName={resolvedAssistantName}
@@ -1119,7 +1136,7 @@ export function Chat() {
       <ChatInput
         onSend={handleChatSend}
         onStop={abortRun}
-        onToggleThinking={toggleThinking}
+        onToggleThinking={canShowThinkingDetails ? toggleThinking : undefined}
         resetKey={`${currentSessionKey || 'no-session'}:${shouldShowWelcome ? 'welcome' : isEmpty ? 'empty' : 'active'}`}
         modelOptions={modelOptions}
         selectedModel={normalizedSelectedModel || normalizedAgentModelValue}
@@ -1137,7 +1154,7 @@ export function Chat() {
         disabled={!isGatewayRunning}
         sending={sending}
         isEmpty={shouldShowWelcome}
-        showThinking={showThinking}
+        showThinking={showThinkingDetails}
       />
     </div>
   );
