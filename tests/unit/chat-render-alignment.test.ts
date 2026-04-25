@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildChatItems } from '@/pages/Chat/chat-thread-view-model';
+import { buildChatItems, extractToolCards, normalizeMessage } from '@/pages/Chat/chat-thread-view-model';
 import { toSanitizedMarkdownHtml } from '@/pages/Chat/markdown';
 import { detectTextDirection } from '@/pages/Chat/text-direction';
 
@@ -54,6 +54,145 @@ describe('chat render alignment', () => {
     expect(flowItems).toHaveLength(2);
     expect(flowItems[0]).toMatchObject({ kind: 'stream', text: 'Checking the file first.' });
     expect(flowItems[1]).toMatchObject({ kind: 'group', role: 'tool' });
+  });
+
+  it('interleaves multiple live stream segments with tool cards like OpenClaw dashboard', () => {
+    const items = buildChatItems({
+      messages: [],
+      pendingUserMessage: null,
+      pendingAssistantMessage: null,
+      toolMessages: [
+        {
+          role: 'assistant',
+          timestamp: 2_000,
+          toolCallId: 'tool-1',
+          content: [{ type: 'tool_use', name: 'read_file', arguments: { path: 'README.md' } }],
+        },
+        {
+          role: 'assistant',
+          timestamp: 3_000,
+          toolCallId: 'tool-2',
+          content: [{ type: 'tool_use', name: 'write_file', arguments: { path: 'out.md' } }],
+        },
+      ],
+      streamSegments: [
+        { text: 'First thought.', ts: 2_000 },
+        { text: 'Second thought.', ts: 3_000 },
+      ],
+      streamingMessage: null,
+      streamingStartedAt: 0,
+      sessionKey: 'agent:main',
+      sending: true,
+      pendingFinal: false,
+      showThinking: true,
+      locale: 'en',
+    });
+
+    const flowItems = items.filter((item) => item.kind !== 'divider');
+    expect(flowItems).toHaveLength(4);
+    expect(flowItems[0]).toMatchObject({ kind: 'stream', text: 'First thought.' });
+    expect(flowItems[1]).toMatchObject({ kind: 'group', role: 'tool' });
+    expect(flowItems[2]).toMatchObject({ kind: 'stream', text: 'Second thought.' });
+    expect(flowItems[3]).toMatchObject({ kind: 'group', role: 'tool' });
+  });
+
+  it('merges tool call and result blocks into one OpenClaw-style tool card', () => {
+    const cards = extractToolCards({
+      role: 'assistant',
+      timestamp: 2_000,
+      content: [
+        { type: 'tool_use', id: 'tool-1', name: 'read_file', input: { path: 'README.md' } },
+        { type: 'tool_result', id: 'tool-1', name: 'read_file', text: 'file contents' },
+      ],
+    });
+
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({
+      id: 'tool:tool-1',
+      name: 'read_file',
+      inputText: '{\n  "path": "README.md"\n}',
+      outputText: 'file contents',
+    });
+  });
+
+  it('lifts canvas preview from tool output onto nearest assistant message', () => {
+    const items = buildChatItems({
+      messages: [
+        {
+          role: 'assistant',
+          timestamp: 2_000,
+          content: 'Here is the chart.',
+        },
+      ],
+      pendingUserMessage: null,
+      pendingAssistantMessage: null,
+      toolMessages: [
+        {
+          role: 'toolresult',
+          timestamp: 2_001,
+          toolName: 'canvas',
+          content: JSON.stringify({
+            kind: 'canvas',
+            view: { url: '/__openclaw__/canvas/documents/doc-1/index.html', id: 'doc-1' },
+            presentation: { title: 'Chart' },
+          }),
+        },
+      ],
+      streamSegments: [],
+      streamingMessage: null,
+      streamingStartedAt: 0,
+      sessionKey: 'agent:main',
+      sending: false,
+      pendingFinal: false,
+      showThinking: true,
+      locale: 'en',
+    });
+
+    const assistantGroup = items.find((item) => item.kind === 'group' && item.role === 'assistant');
+    expect(assistantGroup).toBeTruthy();
+    const content = assistantGroup?.kind === 'group'
+      ? assistantGroup.messages[0].message.content
+      : null;
+    expect(content).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'canvas',
+        preview: expect.objectContaining({ kind: 'canvas', viewId: 'doc-1', title: 'Chart' }),
+      }),
+    ]));
+  });
+
+  it('expands assistant MEDIA references into attachments like OpenClaw dashboard', () => {
+    const normalized = normalizeMessage({
+      role: 'assistant',
+      content: 'Audio ready MEDIA:/tmp/answer.mp3',
+    });
+
+    expect(normalized.content).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'text', text: 'Audio ready' }),
+      expect.objectContaining({
+        type: 'attachment',
+        attachment: expect.objectContaining({
+          url: '/tmp/answer.mp3',
+          kind: 'audio',
+          label: 'answer.mp3',
+          mimeType: 'audio/mpeg',
+        }),
+      }),
+    ]));
+  });
+
+  it('preserves relative assistant MEDIA references as text like OpenClaw dashboard', () => {
+    const normalized = normalizeMessage({
+      role: 'assistant',
+      content: 'Created MEDIA:reports/answer.pdf',
+    });
+
+    expect(normalized.content).toEqual([
+      expect.objectContaining({
+        type: 'text',
+        text: 'Created MEDIA:reports/answer.pdf',
+      }),
+    ]);
   });
 
   it('renders a live streaming assistant snapshot instead of a blank loading state', () => {

@@ -83,4 +83,46 @@ describe('chat message sanitize', () => {
 
     expect(extractText(message)).toBe('');
   });
+
+  it('does not fall back to unphased legacy text when final_answer is empty', () => {
+    const message: RawMessage = {
+      role: 'assistant',
+      content: [
+        { type: 'text', text: 'Legacy answer' },
+        {
+          type: 'text',
+          text: '   ',
+          textSignature: JSON.stringify({ v: 1, id: 'msg_final', phase: 'final_answer' }),
+        },
+      ],
+    };
+
+    expect(extractText(message)).toBe('');
+  });
+
+  it('falls back to unphased legacy assistant text', () => {
+    const message: RawMessage = {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Legacy answer' }],
+    };
+
+    expect(extractText(message)).toBe('Legacy answer');
+  });
+
+  it('does not mix unphased legacy text into final_answer output', () => {
+    const message: RawMessage = {
+      role: 'assistant',
+      phase: 'final_answer',
+      content: [
+        { type: 'text', text: 'Legacy answer' },
+        {
+          type: 'text',
+          text: 'Actual final answer',
+          textSignature: JSON.stringify({ v: 1, id: 'msg_final', phase: 'final_answer' }),
+        },
+      ],
+    };
+
+    expect(extractText(message)).toBe('Actual final answer');
+  });
 });

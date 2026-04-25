@@ -7,6 +7,8 @@ import { useSettingsStore } from '@/stores/settings';
 import { useGatewayStore } from '@/stores/gateway';
 import * as hostApi from '@/lib/host-api';
 
+const actualLoadHistory = useChatStore.getState().loadHistory;
+
 describe('Settings Store', () => {
   beforeEach(() => {
     // Reset store to default state
@@ -120,6 +122,7 @@ describe('Chat Store', () => {
       sessions: [{ key: 'agent:main:main', displayName: 'Main' }],
       sessionLabels: {},
       sessionLastActivity: {},
+      loadHistory: actualLoadHistory,
     });
   });
 
@@ -627,6 +630,184 @@ describe('Chat Store', () => {
       content: '好的，我现在生成 PPT。',
     });
     expect(loadHistoryMock).toHaveBeenCalledWith(true);
+  });
+
+  it('keeps the pending assistant final when authoritative history has not caught up', async () => {
+    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockResolvedValue({
+      messages: [
+        {
+          role: 'user',
+          content: '数据已验证准确！现在生成PPT',
+          id: 'history-user-before-final',
+          timestamp: 1_000,
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'tool_use', name: 'write', input: { path: 'deck.pptx' } }],
+          id: 'history-tool-before-final',
+          timestamp: 1_500,
+        },
+      ],
+    });
+
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      messages: [{ role: 'user', content: '数据已验证准确！现在生成PPT', id: 'existing-user' }],
+      sending: false,
+      activeRunId: null,
+      pendingFinal: true,
+      lastUserMessageAt: 1_000,
+      pendingAssistantMessage: {
+        role: 'assistant',
+        content: '好的，我现在生成 PPT。',
+        id: 'assistant-final-before-history',
+        timestamp: 2_000,
+      },
+    });
+
+    await useChatStore.getState().loadHistory(true);
+
+    expect(useChatStore.getState().pendingAssistantMessage).toMatchObject({
+      role: 'assistant',
+      content: '好的，我现在生成 PPT。',
+    });
+
+    rpcMock.mockRestore();
+  });
+
+  it('clears the pending assistant final once authoritative history catches up', async () => {
+    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockResolvedValue({
+      messages: [
+        {
+          role: 'user',
+          content: '数据已验证准确！现在生成PPT',
+          id: 'history-user-with-final',
+          timestamp: 1_000,
+        },
+        {
+          role: 'assistant',
+          content: '好的，我现在生成 PPT。',
+          id: 'assistant-final-before-history',
+          timestamp: 2_000,
+        },
+      ],
+    });
+
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      messages: [{ role: 'user', content: '数据已验证准确！现在生成PPT', id: 'existing-user' }],
+      sending: false,
+      activeRunId: null,
+      pendingFinal: true,
+      lastUserMessageAt: 1_000,
+      pendingAssistantMessage: {
+        role: 'assistant',
+        content: '好的，我现在生成 PPT。',
+        id: 'assistant-final-before-history',
+        timestamp: 2_000,
+      },
+    });
+
+    await useChatStore.getState().loadHistory(true);
+
+    expect(useChatStore.getState().pendingAssistantMessage).toBeNull();
+    expect(useChatStore.getState().pendingFinal).toBe(false);
+
+    rpcMock.mockRestore();
+  });
+
+  it('hides synthetic transcript repair tool results from chat history', async () => {
+    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockResolvedValue({
+      messages: [
+        {
+          role: 'user',
+          content: 'hello',
+          id: 'history-user-visible',
+          timestamp: 1_000,
+        },
+        {
+          role: 'toolresult',
+          content:
+            '[openclaw] missing tool result in session history; inserted synthetic error result for transcript repair.',
+          id: 'synthetic-repair-result',
+          timestamp: 1_500,
+        },
+        {
+          role: 'assistant',
+          content: 'hi',
+          id: 'history-assistant-visible',
+          timestamp: 2_000,
+        },
+      ],
+    });
+
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      messages: [{ role: 'user', content: 'existing', id: 'existing-user' }],
+    });
+
+    await useChatStore.getState().loadHistory(true);
+
+    expect(useChatStore.getState().messages.map((message) => message.id)).toEqual([
+      'history-user-visible',
+      'history-assistant-visible',
+    ]);
+
+    rpcMock.mockRestore();
+  });
+
+  it('appends final messages from another run on the current session like OpenClaw dashboard', () => {
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      messages: [{ role: 'user', content: 'start', id: 'user-1' }],
+      sending: true,
+      activeRunId: 'run-current',
+    });
+
+    useChatStore.getState().handleChatEvent({
+      runId: 'run-other',
+      sessionKey: 'agent:main:main',
+      state: 'final',
+      message: {
+        role: 'assistant',
+        content: 'Sub-agent finished.',
+        id: 'assistant-other-run',
+      },
+    });
+
+    expect(useChatStore.getState().messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'assistant-other-run',
+        role: 'assistant',
+        content: 'Sub-agent finished.',
+      }),
+    ]));
+    expect(useChatStore.getState().activeRunId).toBe('run-current');
+  });
+
+  it('keeps streamed assistant text when a run is aborted', () => {
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      sending: true,
+      activeRunId: 'run-abort-1',
+      streamingMessage: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Partial answer before abort.' }],
+      },
+    });
+
+    useChatStore.getState().handleChatEvent({
+      runId: 'run-abort-1',
+      sessionKey: 'agent:main:main',
+      state: 'aborted',
+    });
+
+    expect(useChatStore.getState().pendingAssistantMessage).toMatchObject({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Partial answer before abort.' }],
+    });
+    expect(useChatStore.getState().sending).toBe(false);
+    expect(useChatStore.getState().activeRunId).toBeNull();
   });
 
   it('should abort the active run when policy changes require immediate effect', async () => {

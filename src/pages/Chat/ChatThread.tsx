@@ -166,8 +166,8 @@ const ToolCards = memo(function ToolCards({
   onToggle: (toolCardId: string) => void;
 }) {
   if (cards.length === 0) return null;
-  const calls = cards.filter((card) => card.kind === 'call');
-  const results = cards.filter((card) => card.kind === 'result');
+  const calls = cards.filter((card) => card.kind === 'call' || card.inputText);
+  const results = cards.filter((card) => card.kind === 'result' || card.outputText || card.preview);
   const totalTools = Math.max(calls.length, results.length) || cards.length;
   const toolNames = [...new Set(cards.map((card) => card.name))];
   const summaryLabel =
@@ -185,11 +185,11 @@ const ToolCards = memo(function ToolCards({
       <div className="chat-tools-collapse__body">
         {cards.map((card, index) => (
           <ToolCardItem
-            key={`${card.kind}:${card.name}:${index}`}
+            key={card.id || `${card.kind}:${card.name}:${index}`}
             card={card}
             labels={labels}
-            expanded={isExpanded(`${messageKey}:toolcard:${index}`)}
-            onToggle={() => onToggle(`${messageKey}:toolcard:${index}`)}
+            expanded={isExpanded(`${messageKey}:toolcard:${card.id || index}`)}
+            onToggle={() => onToggle(`${messageKey}:toolcard:${card.id || index}`)}
           />
         ))}
       </div>
@@ -209,19 +209,21 @@ const ToolCardItem = memo(function ToolCardItem({
   onToggle: () => void;
 }) {
   const display = resolveToolDisplay(card.name, card.args, labels);
-  const hasText = Boolean(card.text?.trim());
-  const inline = hasText && (card.text?.length ?? 0) <= 80;
+  const outputText = card.outputText ?? card.text ?? '';
+  const hasText = Boolean(outputText.trim());
+  const inline = hasText && outputText.length <= 80;
+  const hasPreview = card.preview?.kind === 'canvas' && Boolean(card.preview.url);
 
   return (
     <div className={cn('chat-tool-card', expanded && 'chat-tool-card--expanded')}>
       <div className="chat-tool-card__header">
         <div className="chat-tool-card__title">
           <span className="chat-tool-card__icon">
-            {card.kind === 'call' ? <Zap className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
+            {card.outputText || card.preview ? <Check className="h-3.5 w-3.5" /> : <Zap className="h-3.5 w-3.5" />}
           </span>
           <span>{display.label}</span>
         </div>
-        {card.kind === 'result' && hasText ? (
+        {(hasText || hasPreview) ? (
           <button
             type="button"
             className="chat-tool-card__action"
@@ -230,28 +232,78 @@ const ToolCardItem = memo(function ToolCardItem({
             {expanded ? labels.collapse : labels.view}
           </button>
         ) : null}
-        {card.kind === 'result' && !hasText ? <span className="chat-tool-card__status"><Check className="h-3.5 w-3.5" /></span> : null}
+        {!hasText && !hasPreview && card.outputText !== undefined ? <span className="chat-tool-card__status"><Check className="h-3.5 w-3.5" /></span> : null}
       </div>
       {display.detail ? <div className="chat-tool-card__detail">{display.detail}</div> : null}
-      {card.kind === 'call' && !display.detail && card.args ? (
+      {!display.detail && card.args ? (
         <div className="chat-tool-card__detail">{previewText(formatArgs(card.args))}</div>
       ) : null}
-      {card.kind === 'result' && !hasText ? (
+      {card.inputText && expanded ? (
+        <pre className="chat-tool-card__full mono"><code>{card.inputText}</code></pre>
+      ) : null}
+      {card.outputText !== undefined && !hasText && !hasPreview ? (
         <div className="chat-tool-card__status-text muted">{labels.completed}</div>
       ) : null}
-      {card.kind === 'result' && hasText && !inline ? (
+      {hasPreview ? (
+        <div className="chat-tool-card__preview" data-kind="canvas">
+          <div className="chat-tool-card__preview-header">
+            <span>{card.preview?.title?.trim() || 'Canvas'}</span>
+          </div>
+          {expanded ? (
+            <iframe
+              className="chat-tool-card__preview-frame"
+              title={card.preview?.title?.trim() || 'Canvas'}
+              src={card.preview?.url ? buildAssistantAttachmentUrl(card.preview.url) : undefined}
+              style={{ height: card.preview?.preferredHeight ? `${card.preview.preferredHeight}px` : undefined }}
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            />
+          ) : null}
+        </div>
+      ) : null}
+      {hasText && !inline ? (
         <>
           {!expanded ? (
-            <div className="chat-tool-card__preview mono">{previewText(card.text!)}</div>
+            <div className="chat-tool-card__preview mono">{previewText(outputText)}</div>
           ) : null}
           {expanded ? (
-            <pre className="chat-tool-card__full mono"><code>{card.text}</code></pre>
+            <pre className="chat-tool-card__full mono"><code>{outputText}</code></pre>
           ) : null}
         </>
       ) : null}
-      {card.kind === 'result' && inline ? (
-        <div className="chat-tool-card__inline mono">{card.text}</div>
+      {inline ? (
+        <div className="chat-tool-card__inline mono">{outputText}</div>
       ) : null}
+    </div>
+  );
+});
+
+const AssistantCanvasPreviews = memo(function AssistantCanvasPreviews({ message }: { message: RawMessage }) {
+  const normalized = normalizeMessage(message);
+  const previews = normalized.content
+    .filter((item): item is NormalizedContentItem & { preview: NonNullable<NormalizedContentItem['preview']> } => (
+      item.type === 'canvas' && item.preview?.kind === 'canvas' && Boolean(item.preview.url)
+    ))
+    .map((item) => item.preview);
+  if (previews.length === 0) return null;
+  return (
+    <div className="chat-assistant-attachments">
+      {previews.map((preview, index) => {
+        const src = preview.url ? buildAssistantAttachmentUrl(preview.url) : undefined;
+        return (
+          <div key={`${preview.url}:${index}`} className="chat-assistant-attachment-card chat-tool-card__preview" data-kind="canvas">
+            <div className="chat-tool-card__preview-header">
+              <span>{preview.title?.trim() || 'Canvas'}</span>
+            </div>
+            <iframe
+              className="chat-tool-card__preview-frame"
+              title={preview.title?.trim() || 'Canvas'}
+              src={src}
+              style={{ height: preview.preferredHeight ? `${preview.preferredHeight}px` : undefined }}
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            />
+          </div>
+        );
+      })}
     </div>
   );
 });
@@ -467,6 +519,7 @@ const GroupedMessage = memo(function GroupedMessage({
               <MessageImages message={message} />
               {normalizedRole === 'user' ? <UserFileAttachments message={message} /> : null}
               <AssistantAttachments message={message} />
+              <AssistantCanvasPreviews message={message} />
               {reasoningMarkdown ? <div className="chat-thinking"><MessageMarkdown text={reasoningMarkdown} labels={labels} /></div> : null}
               {jsonResult ? (
                 <details className="chat-json-collapse">
@@ -494,6 +547,7 @@ const GroupedMessage = memo(function GroupedMessage({
           <MessageImages message={message} />
           {normalizedRole === 'user' ? <UserFileAttachments message={message} /> : null}
           <AssistantAttachments message={message} />
+          <AssistantCanvasPreviews message={message} />
           {reasoningMarkdown ? <div className="chat-thinking"><MessageMarkdown text={reasoningMarkdown} labels={labels} /></div> : null}
           {jsonResult ? (
             <details className="chat-json-collapse">
@@ -942,11 +996,7 @@ export const ChatThread = memo(function ChatThread({
   ]);
 
   const transcriptEntries = useMemo<TranscriptEntry[]>(
-    () => items.filter((item) => item.kind !== 'stream' && item.kind !== 'reading-indicator'),
-    [items],
-  );
-  const liveActivityEntries = useMemo<Array<Extract<TranscriptEntry, { kind: 'stream' | 'reading-indicator' }>>>(
-    () => items.filter((item) => item.kind === 'stream' || item.kind === 'reading-indicator'),
+    () => items,
     [items],
   );
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
@@ -1045,6 +1095,20 @@ export const ChatThread = memo(function ChatThread({
         if (item.kind === 'divider') {
           return <TranscriptDivider key={item.key} label={item.label} />;
         }
+        if (item.kind === 'stream') {
+          return (
+            <StreamingGroup
+              key={item.key}
+              text={item.text}
+              startedAt={item.startedAt}
+              labels={labels}
+              locale={locale}
+            />
+          );
+        }
+        if (item.kind === 'reading-indicator') {
+          return <ReadingIndicator key={item.key} />;
+        }
         if (item.kind === 'group') {
           if (hiddenGroups.has(item.key)) {
             return null;
@@ -1071,20 +1135,6 @@ export const ChatThread = memo(function ChatThread({
         }
         return null;
       })}
-      {!normalizedSearchQuery ? liveActivityEntries.map((item) => {
-        if (item.kind === 'stream') {
-          return (
-            <StreamingGroup
-              key={item.key}
-              text={item.text}
-              startedAt={item.startedAt}
-              labels={labels}
-              locale={locale}
-            />
-          );
-        }
-        return <ReadingIndicator key={item.key} />;
-      }) : null}
     </div>
   );
 });

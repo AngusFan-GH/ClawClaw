@@ -1308,6 +1308,21 @@
   overflow: hidden;
 }
 
+.chat-tool-card__preview-header {
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.chat-tool-card__preview-frame {
+  width: 100%;
+  min-height: 220px;
+  border: 0;
+  border-radius: 6px;
+  background: hsl(var(--background));
+}
+
 .chat-tool-card__full {
   margin-top: 8px;
   padding: 10px 12px;

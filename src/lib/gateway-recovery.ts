@@ -8,10 +8,19 @@ export interface GatewayRecoveryPresentation {
   badgeKey: string;
 }
 
+function isPluginOnlyPreflightRecovery(recovery: GatewayConfigRecovery): boolean {
+  return recovery.kind === 'preflight'
+    && Array.isArray(recovery.topics)
+    && recovery.topics.length > 0
+    && recovery.topics.every((topic) => topic === 'plugins');
+}
+
 export function getGatewayRecoveryPresentation(
   recovery?: GatewayConfigRecovery,
 ): GatewayRecoveryPresentation | null {
   if (!recovery) return null;
+  // Managed plugin mirror repairs are routine startup maintenance and are not user-actionable.
+  if (isPluginOnlyPreflightRecovery(recovery)) return null;
 
   const strategyLabel = recovery.strategy === 'normalize'
     ? 'normalize'

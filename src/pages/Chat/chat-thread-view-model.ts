@@ -4,10 +4,24 @@ import { extractImages, extractText, extractThinking } from './message-utils';
 import { historyContainsPendingUserMessage } from './pending-user-message';
 
 export type ToolCard = {
-  kind: 'call' | 'result';
+  kind?: 'call' | 'result';
+  id: string;
   name: string;
   args?: unknown;
+  inputText?: string;
+  outputText?: string;
   text?: string;
+  preview?: {
+    kind: 'canvas';
+    surface?: 'assistant_message';
+    render?: 'url';
+    url?: string;
+    viewId?: string;
+    title?: string;
+    preferredHeight?: number;
+    className?: string;
+    style?: string;
+  };
 };
 
 export type ToolDisplay = {
@@ -100,9 +114,14 @@ export type NormalizedContentItem = {
   };
   preview?: {
     kind?: string;
+    surface?: string;
+    render?: string;
     url?: string;
     viewId?: string;
     title?: string;
+    preferredHeight?: number;
+    className?: string;
+    style?: string;
   };
   rawText?: string | null;
 };
@@ -138,6 +157,252 @@ export function makeStreamMessage(text: string, ts: number): RawMessage {
   };
 }
 
+const MIME_BY_EXT: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  ogg: 'audio/ogg',
+  oga: 'audio/ogg',
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  flac: 'audio/flac',
+  aac: 'audio/aac',
+  opus: 'audio/opus',
+  m4a: 'audio/mp4',
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+  pdf: 'application/pdf',
+  txt: 'text/plain',
+  md: 'text/markdown',
+  csv: 'text/csv',
+  json: 'application/json',
+  zip: 'application/zip',
+};
+
+function getFileExtension(url: string): string | undefined {
+  const trimmed = url.trim();
+  if (!trimmed) return undefined;
+  const source = (() => {
+    try {
+      if (/^https?:\/\//i.test(trimmed)) return new URL(trimmed).pathname;
+    } catch {
+      // Fall back to the raw path.
+    }
+    return trimmed;
+  })();
+  return source.split(/[\\/]/).pop()?.match(/\.([a-zA-Z0-9]+)$/)?.[1]?.toLowerCase();
+}
+
+function mediaKindFromMime(mimeType?: string): 'image' | 'audio' | 'video' | 'document' {
+  if (mimeType?.startsWith('image/')) return 'image';
+  if (mimeType?.startsWith('audio/')) return 'audio';
+  if (mimeType?.startsWith('video/')) return 'video';
+  return 'document';
+}
+
+function inferAttachment(url: string): NonNullable<NormalizedContentItem['attachment']> {
+  const mimeType = MIME_BY_EXT[getFileExtension(url) ?? ''];
+  const label = (() => {
+    try {
+      if (/^https?:\/\//i.test(url)) {
+        const parsed = new URL(url);
+        return parsed.pathname.split('/').pop()?.trim() || parsed.hostname || url;
+      }
+    } catch {
+      // Fall back to path parsing.
+    }
+    return url.split(/[\\/]/).pop()?.trim() || url;
+  })();
+  return {
+    url,
+    kind: mediaKindFromMime(mimeType),
+    label,
+    mimeType,
+  };
+}
+
+function isRenderableAssistantAttachment(url: string): boolean {
+  const trimmed = url.trim();
+  return (
+    /^https?:\/\//i.test(trimmed)
+    || /^data:(?:image|audio|video)\//i.test(trimmed)
+    || /^\/(?:__openclaw__|media)\//.test(trimmed)
+    || trimmed.startsWith('file://')
+    || trimmed.startsWith('~')
+    || trimmed.startsWith('/')
+    || /^[a-zA-Z]:[\\/]/.test(trimmed)
+  );
+}
+
+function shouldPreserveRelativeAssistantAttachment(url: string): boolean {
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  return (
+    !/^https?:\/\//i.test(trimmed)
+    && !/^data:(?:image|audio|video)\//i.test(trimmed)
+    && !/^\/(?:__openclaw__|media)\//.test(trimmed)
+    && !trimmed.startsWith('file://')
+    && !trimmed.startsWith('~')
+    && !trimmed.startsWith('/')
+    && !/^[a-zA-Z]:[\\/]/.test(trimmed)
+  );
+}
+
+function parseMediaSegments(text: string): { text: string; attachments: NonNullable<NormalizedContentItem['attachment']>[] } {
+  const attachments: NonNullable<NormalizedContentItem['attachment']>[] = [];
+  const cleaned = text
+    .replace(/MEDIA:([^\s]+)/g, (_match, rawUrl: string) => {
+      const url = rawUrl.trim();
+      if (url && isRenderableAssistantAttachment(url)) attachments.push(inferAttachment(url));
+      if (url && shouldPreserveRelativeAssistantAttachment(url)) return `MEDIA:${url}`;
+      return '';
+    })
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return { text: cleaned, attachments };
+}
+
+function parseJsonRecord(value: string | undefined): Record<string, unknown> | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function nestedRecord(record: Record<string, unknown> | undefined, key: string): Record<string, unknown> | undefined {
+  const value = record?.[key];
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function recordString(record: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = record?.[key];
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function recordNumber(record: Record<string, unknown> | undefined, key: string): number | undefined {
+  const value = record?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeCanvasHeight(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 160
+    ? Math.min(Math.trunc(value), 1200)
+    : undefined;
+}
+
+function coerceCanvasPreview(record: Record<string, unknown> | undefined): ToolCard['preview'] | undefined {
+  if (!record) return undefined;
+  const kind = recordString(record, 'kind')?.toLowerCase();
+  if (kind !== 'canvas') return undefined;
+  const presentation = nestedRecord(record, 'presentation');
+  const view = nestedRecord(record, 'view');
+  const source = nestedRecord(record, 'source');
+  const target = recordString(presentation, 'target') ?? recordString(record, 'target');
+  if (target && target !== 'assistant_message') return undefined;
+  const title = recordString(presentation, 'title') ?? recordString(view, 'title') ?? recordString(record, 'title');
+  const preferredHeight = normalizeCanvasHeight(
+    recordNumber(presentation, 'preferred_height')
+    ?? recordNumber(presentation, 'preferredHeight')
+    ?? recordNumber(view, 'preferred_height')
+    ?? recordNumber(view, 'preferredHeight')
+    ?? recordNumber(record, 'preferredHeight'),
+  );
+  const viewUrl = recordString(view, 'url') ?? recordString(view, 'entryUrl') ?? recordString(record, 'url');
+  const viewId = recordString(view, 'id') ?? recordString(view, 'docId') ?? recordString(record, 'viewId');
+  if (viewUrl) {
+    return {
+      kind: 'canvas',
+      surface: 'assistant_message',
+      render: 'url',
+      url: viewUrl,
+      viewId,
+      title,
+      preferredHeight,
+      className: recordString(presentation, 'class_name') ?? recordString(presentation, 'className') ?? recordString(record, 'className'),
+      style: recordString(presentation, 'style') ?? recordString(record, 'style'),
+    };
+  }
+  if (recordString(source, 'type')?.toLowerCase() === 'url') {
+    const url = recordString(source, 'url');
+    if (!url) return undefined;
+    return {
+      kind: 'canvas',
+      surface: 'assistant_message',
+      render: 'url',
+      url,
+      title,
+      preferredHeight,
+    };
+  }
+  return undefined;
+}
+
+export function extractToolPreview(outputText: string | undefined): ToolCard['preview'] | undefined {
+  return coerceCanvasPreview(parseJsonRecord(outputText));
+}
+
+function parseEmbedAttributes(raw: string): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  const re = /([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(raw))) {
+    const key = match[1]?.trim().toLowerCase();
+    const value = (match[2] ?? match[3] ?? '').trim();
+    if (key && value) attrs[key] = value;
+  }
+  return attrs;
+}
+
+function canvasPreviewFromEmbed(attrs: Record<string, string>): ToolCard['preview'] | undefined {
+  if (attrs.target && attrs.target !== 'assistant_message') return undefined;
+  const ref = attrs.ref?.trim();
+  const url = attrs.url?.trim() || (ref ? `/__openclaw__/canvas/documents/${encodeURIComponent(ref)}/index.html` : undefined);
+  if (!url) return undefined;
+  const height = attrs.height && Number.isFinite(Number(attrs.height)) ? normalizeCanvasHeight(Number(attrs.height)) : undefined;
+  return {
+    kind: 'canvas',
+    surface: 'assistant_message',
+    render: 'url',
+    url,
+    viewId: ref,
+    title: attrs.title?.trim() || undefined,
+    preferredHeight: height,
+    className: attrs.class?.trim() || attrs.class_name?.trim() || undefined,
+    style: attrs.style?.trim() || undefined,
+  };
+}
+
+function extractCanvasShortcodes(text: string): { text: string; previews: NonNullable<ToolCard['preview']>[] } {
+  if (!text.toLowerCase().includes('[embed')) return { text, previews: [] };
+  const previews: NonNullable<ToolCard['preview']>[] = [];
+  const stripped = text.replace(/\[embed\s+([^\]]*?)(?:\/\]|]([\s\S]*?)\[\/embed\])/gi, (match, rawAttrs: string) => {
+    const preview = canvasPreviewFromEmbed(parseEmbedAttributes(rawAttrs));
+    if (!preview) return match;
+    previews.push(preview);
+    return '';
+  });
+  return { text: stripped.replace(/\n{3,}/g, '\n\n').trim(), previews };
+}
+
+function expandAssistantTextContent(text: string): NormalizedContentItem[] {
+  const extracted = extractCanvasShortcodes(text);
+  const parsed = parseMediaSegments(extracted.text);
+  const items: NormalizedContentItem[] = [];
+  if (parsed.text.trim()) items.push({ type: 'text', text: parsed.text });
+  for (const attachment of parsed.attachments) items.push({ type: 'attachment', attachment });
+  for (const preview of extracted.previews) items.push({ type: 'canvas', preview, rawText: null });
+  return items;
+}
+
 export function normalizeMessage(message: RawMessage): NormalizedMessage {
   const m = message as unknown as Record<string, unknown>;
   let role = typeof m.role === 'string' ? m.role : 'unknown';
@@ -160,7 +425,9 @@ export function normalizeMessage(message: RawMessage): NormalizedMessage {
 
   let content: NormalizedContentItem[] = [];
   if (typeof m.content === 'string') {
-    content = [{ type: 'text', text: m.content }];
+    content = role === 'assistant'
+      ? expandAssistantTextContent(m.content)
+      : [{ type: 'text', text: m.content }];
   } else if (Array.isArray(m.content)) {
     content = (m.content as Array<Record<string, unknown>>).flatMap((item): NormalizedContentItem[] => {
       if (
@@ -197,28 +464,38 @@ export function normalizeMessage(message: RawMessage): NormalizedMessage {
         && typeof item.preview === 'object'
         && !Array.isArray(item.preview)
       ) {
-        const preview = item.preview as Record<string, unknown>;
+        const preview = coerceCanvasPreview(item.preview as Record<string, unknown>) ?? item.preview as Record<string, unknown>;
         return [{
           type: 'canvas',
           preview: {
             kind: typeof preview.kind === 'string' ? preview.kind : undefined,
+            surface: typeof preview.surface === 'string' ? preview.surface : undefined,
+            render: typeof preview.render === 'string' ? preview.render : undefined,
             url: typeof preview.url === 'string' ? preview.url : undefined,
             viewId: typeof preview.viewId === 'string' ? preview.viewId : undefined,
             title: typeof preview.title === 'string' ? preview.title : undefined,
+            preferredHeight: typeof preview.preferredHeight === 'number' ? preview.preferredHeight : undefined,
+            className: typeof preview.className === 'string' ? preview.className : undefined,
+            style: typeof preview.style === 'string' ? preview.style : undefined,
           },
           rawText: typeof item.rawText === 'string' ? item.rawText : null,
         }];
+      }
+      if (item.type === 'text' && typeof item.text === 'string' && role === 'assistant') {
+        return expandAssistantTextContent(item.text);
       }
       return [{
         type: (item.type as string) || 'text',
         text: item.text as string | undefined,
         name: item.name as string | undefined,
-        args: item.args,
+        args: item.args ?? item.input,
         arguments: item.arguments,
       }];
     });
   } else if (typeof m.text === 'string') {
-    content = [{ type: 'text', text: m.text }];
+    content = role === 'assistant'
+      ? expandAssistantTextContent(m.text)
+      : [{ type: 'text', text: m.text }];
   }
 
   return {
@@ -374,6 +651,103 @@ function mergeTrailingReadingIndicatorIntoAssistantGroup(
   ];
 }
 
+function appendCanvasBlockToAssistantMessage(
+  message: RawMessage,
+  preview: NonNullable<ToolCard['preview']>,
+  rawText: string | null,
+): RawMessage {
+  const raw = message as unknown as Record<string, unknown>;
+  const existingContent = Array.isArray(raw.content)
+    ? [...raw.content]
+    : typeof raw.content === 'string'
+      ? [{ type: 'text', text: raw.content }]
+      : typeof raw.text === 'string'
+        ? [{ type: 'text', text: raw.text }]
+        : [];
+  const alreadyHasArtifact = existingContent.some((block) => {
+    if (!block || typeof block !== 'object') return false;
+    const typed = block as {
+      type?: unknown;
+      preview?: { kind?: unknown; viewId?: unknown; url?: unknown };
+    };
+    return (
+      typed.type === 'canvas'
+      && typed.preview?.kind === 'canvas'
+      && ((preview.viewId && typed.preview.viewId === preview.viewId)
+        || (preview.url && typed.preview.url === preview.url))
+    );
+  });
+  if (alreadyHasArtifact) return message;
+  return {
+    ...raw,
+    content: [
+      ...existingContent,
+      {
+        type: 'canvas',
+        preview,
+        ...(rawText ? { rawText } : {}),
+      },
+    ],
+  } as unknown as RawMessage;
+}
+
+function extractChatMessagePreview(toolMessage: RawMessage): {
+  preview: NonNullable<ToolCard['preview']>;
+  text: string | null;
+  timestamp: number | null;
+} | null {
+  const cards = extractToolCards(toolMessage, 'preview');
+  for (let index = cards.length - 1; index >= 0; index -= 1) {
+    const card = cards[index];
+    if (card?.preview?.kind === 'canvas') {
+      return {
+        preview: card.preview,
+        text: card.outputText ?? null,
+        timestamp: normalizeMessage(toolMessage).timestamp ?? null,
+      };
+    }
+  }
+  const text = extractText(toolMessage) || undefined;
+  const preview = extractToolPreview(text);
+  if (preview?.kind !== 'canvas') return null;
+  return { preview, text: text ?? null, timestamp: normalizeMessage(toolMessage).timestamp ?? null };
+}
+
+function findNearestAssistantMessageIndex(
+  items: ChatItem[],
+  toolTimestamp: number | null,
+): number | null {
+  const assistantEntries = items
+    .map((item, index) => {
+      if (item.kind !== 'message') return null;
+      const role = typeof item.message.role === 'string' ? item.message.role.toLowerCase() : '';
+      if (role !== 'assistant') return null;
+      return { index, timestamp: normalizeMessage(item.message).timestamp ?? null };
+    })
+    .filter(Boolean) as Array<{ index: number; timestamp: number | null }>;
+  if (assistantEntries.length === 0) return null;
+  if (toolTimestamp == null) return assistantEntries[assistantEntries.length - 1]?.index ?? null;
+  let previous: { index: number; timestamp: number } | null = null;
+  let next: { index: number; timestamp: number } | null = null;
+  for (const entry of assistantEntries) {
+    if (entry.timestamp == null) continue;
+    if (entry.timestamp <= toolTimestamp) {
+      previous = { index: entry.index, timestamp: entry.timestamp };
+      continue;
+    }
+    next = { index: entry.index, timestamp: entry.timestamp };
+    break;
+  }
+  if (previous && next) {
+    const previousDelta = toolTimestamp - previous.timestamp;
+    const nextDelta = next.timestamp - toolTimestamp;
+    return nextDelta < previousDelta ? next.index : previous.index;
+  }
+  if (previous) return previous.index;
+  if (next) return next.index;
+  return assistantEntries[assistantEntries.length - 1]?.index ?? null;
+}
+
 export function buildChatItems(params: {
   messages: RawMessage[];
   pendingUserMessage: RawMessage | null;
@@ -407,6 +781,24 @@ export function buildChatItems(params: {
     });
   }
 
+  const liftedCanvasSources = params.toolMessages
+    .map((tool) => extractChatMessagePreview(tool))
+    .filter((entry): entry is NonNullable<ReturnType<typeof extractChatMessagePreview>> => Boolean(entry));
+  for (const liftedCanvasSource of liftedCanvasSources) {
+    const assistantIndex = findNearestAssistantMessageIndex(transcriptItems, liftedCanvasSource.timestamp);
+    if (assistantIndex == null) continue;
+    const item = transcriptItems[assistantIndex];
+    if (!item || item.kind !== 'message') continue;
+    transcriptItems[assistantIndex] = {
+      ...item,
+      message: appendCanvasBlockToAssistantMessage(
+        item.message,
+        liftedCanvasSource.preview,
+        liftedCanvasSource.text,
+      ),
+    };
+  }
+
   if (params.pendingUserMessage && !historyContainsPendingUserMessage(history, params.pendingUserMessage)) {
     liveItems.push({
       kind: 'message',
@@ -423,19 +815,25 @@ export function buildChatItems(params: {
     });
   }
 
-  for (const segment of params.streamSegments) {
-    const text = segment.text.trim();
-    if (!text) continue;
-    liveItems.push({
-      kind: 'stream',
-      key: `stream-segment:${segment.ts}:${text.length}`,
-      text,
-      startedAt: segment.ts,
-    });
-  }
+  const streamSegments = Array.isArray(params.streamSegments) ? params.streamSegments : [];
+  const toolMessages = params.showThinking && Array.isArray(params.toolMessages) ? params.toolMessages : [];
+  const liveCount = Math.max(streamSegments.length, toolMessages.length);
+  for (let i = 0; i < liveCount; i += 1) {
+    const segment = streamSegments[i];
+    if (segment) {
+      const text = segment.text.trim();
+      if (text) {
+        liveItems.push({
+          kind: 'stream',
+          key: `stream-segment:${params.sessionKey}:${i}`,
+          text,
+          startedAt: segment.ts,
+        });
+      }
+    }
 
-  if (params.showThinking) {
-    for (const message of params.toolMessages) {
+    const message = toolMessages[i];
+    if (message) {
       if (!hasVisibleMessageContent(message, params.showThinking)) continue;
       liveItems.push({
         kind: 'message',
@@ -546,6 +944,70 @@ function defaultToolTitle(name: string): string {
     .split(/\s+/)
     .map((part) => `${part.at(0)?.toUpperCase() ?? ''}${part.slice(1)}`)
     .join(' ');
+}
+
+function normalizeContent(content: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(content) ? content.filter(Boolean) as Array<Record<string, unknown>> : [];
+}
+
+function coerceToolArgs(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function serializeToolInput(args: unknown): string | undefined {
+  if (args == null) return undefined;
+  if (typeof args === 'string') return args;
+  try {
+    return JSON.stringify(args, null, 2);
+  } catch {
+    if (typeof args === 'number' || typeof args === 'boolean' || typeof args === 'bigint') return String(args);
+    if (typeof args === 'symbol') return args.description ? `Symbol(${args.description})` : 'Symbol()';
+    return Object.prototype.toString.call(args);
+  }
+}
+
+function extractToolText(item: Record<string, unknown>): string | undefined {
+  if (typeof item.text === 'string') return item.text;
+  if (typeof item.content === 'string') return item.content;
+  return undefined;
+}
+
+function resolveToolCardId(
+  item: Record<string, unknown>,
+  message: Record<string, unknown>,
+  index: number,
+  prefix = 'tool',
+): string {
+  const explicitId =
+    (typeof item.id === 'string' && item.id.trim())
+    || (typeof item.toolCallId === 'string' && item.toolCallId.trim())
+    || (typeof item.tool_call_id === 'string' && item.tool_call_id.trim())
+    || (typeof item.callId === 'string' && item.callId.trim())
+    || (typeof message.toolCallId === 'string' && message.toolCallId.trim())
+    || (typeof message.tool_call_id === 'string' && message.tool_call_id.trim())
+    || '';
+  if (explicitId) return `${prefix}:${explicitId}`;
+  const name =
+    (typeof item.name === 'string' && item.name.trim())
+    || (typeof message.toolName === 'string' && message.toolName.trim())
+    || (typeof message.tool_name === 'string' && message.tool_name.trim())
+    || 'tool';
+  return `${prefix}:${name}:${index}`;
+}
+
+function findLatestToolCard(cards: ToolCard[], id: string, name: string): ToolCard | undefined {
+  for (let i = cards.length - 1; i >= 0; i -= 1) {
+    const card = cards[i];
+    if (card?.id === id || (card?.name === name && !card.outputText)) return card;
+  }
+  return undefined;
 }
 
 function lookupValueByPath(args: unknown, path: string): unknown {
@@ -666,57 +1128,68 @@ export function jsonSummaryLabel(parsed: unknown): string {
   return 'JSON';
 }
 
-export function extractToolCards(message: RawMessage): ToolCard[] {
+export function extractToolCards(message: RawMessage, prefix = 'tool'): ToolCard[] {
   const m = message as unknown as Record<string, unknown>;
-  const content = Array.isArray(m.content) ? (m.content.filter(Boolean) as Array<Record<string, unknown>>) : [];
+  const content = normalizeContent(m.content);
   const cards: ToolCard[] = [];
 
-  for (const item of content) {
+  for (let index = 0; index < content.length; index += 1) {
+    const item = content[index] ?? {};
     const kind = (typeof item.type === 'string' ? item.type : '').toLowerCase();
     const isToolCall =
       ['toolcall', 'tool_call', 'tooluse', 'tool_use'].includes(kind)
-      || (typeof item.name === 'string' && item.arguments != null);
+      || (typeof item.name === 'string' && (item.arguments != null || item.args != null || item.input != null));
     if (isToolCall) {
-      let args: unknown = item.arguments ?? item.args;
-      if (typeof args === 'string') {
-        const trimmed = args.trim();
-        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-          try {
-            args = JSON.parse(trimmed);
-          } catch {
-            args = trimmed;
-          }
-        }
-      }
+      const args = coerceToolArgs(item.arguments ?? item.args ?? item.input);
       cards.push({
+        id: resolveToolCardId(item, m, index, prefix),
         kind: 'call',
         name: (item.name as string) ?? 'tool',
         args,
+        inputText: serializeToolInput(args),
       });
+      continue;
+    }
+
+    if (kind === 'toolresult' || kind === 'tool_result') {
+      const name = typeof item.name === 'string' ? item.name : 'tool';
+      const id = resolveToolCardId(item, m, index, prefix);
+      const existing = findLatestToolCard(cards, id, name);
+      const text = extractToolText(item);
+      const preview = extractToolPreview(text);
+      if (existing) {
+        existing.kind = existing.kind ?? 'result';
+        existing.outputText = text;
+        existing.text = text;
+        existing.preview = preview;
+        continue;
+      }
+      cards.push({ id, kind: 'result', name, outputText: text, text, preview });
     }
   }
 
-  for (const item of content) {
-    const kind = (typeof item.type === 'string' ? item.type : '').toLowerCase();
-    if (kind !== 'toolresult' && kind !== 'tool_result') continue;
-    const text =
-      typeof item.text === 'string'
-        ? item.text
-        : typeof item.content === 'string'
-          ? item.content
-          : undefined;
-    const name = typeof item.name === 'string' ? item.name : 'tool';
-    cards.push({ kind: 'result', name, text });
-  }
-
   const lowerRole = typeof m.role === 'string' ? m.role.toLowerCase() : '';
-  if ((lowerRole === 'toolresult' || lowerRole === 'tool_result') && !cards.some((card) => card.kind === 'result')) {
+  const isStandaloneToolMessage =
+    lowerRole === 'toolresult'
+    || lowerRole === 'tool_result'
+    || lowerRole === 'tool'
+    || lowerRole === 'function'
+    || typeof m.toolName === 'string'
+    || typeof m.tool_name === 'string';
+  if (isStandaloneToolMessage && cards.length === 0) {
     const name =
       (typeof m.toolName === 'string' && m.toolName)
       || (typeof m.tool_name === 'string' && m.tool_name)
       || 'tool';
     const text = extractText(message) || undefined;
-    cards.push({ kind: 'result', name, text });
+    cards.push({
+      id: resolveToolCardId({}, m, 0, prefix),
+      kind: 'result',
+      name,
+      outputText: text,
+      text,
+      preview: extractToolPreview(text),
+    });
   }
 
   return cards;

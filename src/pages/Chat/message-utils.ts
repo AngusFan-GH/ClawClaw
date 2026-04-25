@@ -282,14 +282,17 @@ function normalizeAssistantPhase(value: unknown): 'commentary' | 'final_answer' 
   return value === 'commentary' || value === 'final_answer' ? value : undefined;
 }
 
-function parseAssistantTextSignature(value: unknown): { phase?: 'commentary' | 'final_answer' } | null {
+function parseAssistantTextSignature(value: unknown): { id?: string; phase?: 'commentary' | 'final_answer' } | null {
   if (typeof value !== 'string' || !value.trim()) return null;
-  if (!value.startsWith('{')) return null;
+  if (!value.startsWith('{')) return { id: value };
   try {
-    const parsed = JSON.parse(value) as { v?: unknown; phase?: unknown };
+    const parsed = JSON.parse(value) as { id?: unknown; v?: unknown; phase?: unknown };
     if (parsed.v !== 1) return null;
     const phase = normalizeAssistantPhase(parsed.phase);
-    return phase ? { phase } : {};
+    return {
+      ...(typeof parsed.id === 'string' ? { id: parsed.id } : {}),
+      ...(phase ? { phase } : {}),
+    };
   } catch {
     return null;
   }
@@ -297,18 +300,19 @@ function parseAssistantTextSignature(value: unknown): { phase?: 'commentary' | '
 
 function extractAssistantTextForPhase(
   message: RawMessage | unknown,
-  options?: { phase?: 'commentary' | 'final_answer' }
+  options?: { phase?: 'commentary' | 'final_answer'; joinWith?: string }
 ): string | null {
   if (!message || typeof message !== 'object') return null;
   const msg = message as Record<string, unknown>;
   const messagePhase = normalizeAssistantPhase(msg.phase);
   const requestedPhase = options?.phase;
+  const joinWith = options?.joinWith ?? '\n';
   const shouldInclude = (phase: 'commentary' | 'final_answer' | undefined) => (
     requestedPhase ? phase === requestedPhase : phase === undefined
   );
   const normalize = (text: string): string | null => {
-    const processed = processMessageText(text, 'assistant').trim();
-    return processed ? processed : null;
+    const normalized = text.trim();
+    return normalized || null;
   };
 
   if (typeof msg.text === 'string') {
@@ -337,12 +341,11 @@ function extractAssistantTextForPhase(
         parseAssistantTextSignature(item.textSignature)?.phase
         ?? (hasExplicitPhasedTextBlocks ? undefined : messagePhase);
       if (!shouldInclude(blockPhase)) return null;
-      const processed = processMessageText(item.text, 'assistant').trim();
-      return processed ? processed : null;
+      return item.text.trim() ? item.text : null;
     })
     .filter((value): value is string => typeof value === 'string');
 
-  return parts.length > 0 ? parts.join(requestedPhase ? '' : '\n').trim() || null : null;
+  return parts.length > 0 ? normalize(parts.join(joinWith)) : null;
 }
 
 function extractAssistantVisibleText(message: RawMessage | unknown): string | null {

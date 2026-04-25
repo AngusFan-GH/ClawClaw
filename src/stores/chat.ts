@@ -275,6 +275,9 @@ const INITIAL_HISTORY_REFRESH_MAX_ATTEMPTS = 4;
 const SESSIONS_LIST_TIMEOUT_MS = 10_000;
 const HISTORY_LOAD_TIMEOUT_MS = 15_000;
 const RESTORE_SAFETY_TIMEOUT_MS = 20_000;
+const STARTUP_CHAT_HISTORY_RETRY_TIMEOUT_MS = 60_000;
+const STARTUP_CHAT_HISTORY_DEFAULT_RETRY_MS = 500;
+const STARTUP_CHAT_HISTORY_MAX_RETRY_MS = 5_000;
 
 function getRawMessageKey(message: Partial<RawMessage>): string {
   const toolCallId = typeof message.toolCallId === 'string' ? message.toolCallId : '';
@@ -791,6 +794,36 @@ function authoritativeHistoryContainsPendingUser(
   });
 }
 
+function normalizeComparableAssistantText(message: RawMessage | null | undefined): string {
+  if (!message || message.role !== 'assistant') return '';
+  if (!hasNonToolAssistantContent(message)) return '';
+  return extractText(message).replace(/\s+/g, ' ').trim();
+}
+
+function authoritativeHistoryContainsPendingAssistant(
+  enrichedMessages: RawMessage[],
+  pendingAssistantMessage: RawMessage | null,
+  lastUserMessageAt: number | null,
+): boolean {
+  const pendingText = normalizeComparableAssistantText(pendingAssistantMessage);
+  if (!pendingAssistantMessage || !pendingText) return false;
+
+  const userMsTs = lastUserMessageAt ? toMs(lastUserMessageAt) : 0;
+  return enrichedMessages.some((message) => {
+    if (message.role !== 'assistant') return false;
+    if (userMsTs && message.timestamp && toMs(message.timestamp) < userMsTs) return false;
+    const text = normalizeComparableAssistantText(message);
+    if (!text) return false;
+    if (pendingAssistantMessage.id && message.id === pendingAssistantMessage.id) return true;
+    if (text === pendingText) return true;
+
+    const shorter = Math.min(text.length, pendingText.length);
+    const longer = Math.max(text.length, pendingText.length);
+    if (shorter < 80 || longer === 0 || shorter / longer < 0.75) return false;
+    return text.includes(pendingText) || pendingText.includes(text);
+  });
+}
+
 const SESSION_TITLE_NOISE_PREFIXES = [
   'A new session was started via /new or /reset.',
   'Conversation info (untrusted metadata):',
@@ -1247,6 +1280,8 @@ function sessionKeysMatch(currentKey: string, incomingKey: string, sessions: Cha
 
 /** Detect assistant messages whose text is purely NO_REPLY sentinel — filter from history display. */
 const SILENT_REPLY_PATTERN = /^\s*NO_REPLY\s*$/;
+const SYNTHETIC_TRANSCRIPT_REPAIR_RESULT =
+  '[openclaw] missing tool result in session history; inserted synthetic error result for transcript repair.';
 
 function isSilentReplyText(text: string): boolean {
   return SILENT_REPLY_PATTERN.test(text);
@@ -1260,6 +1295,13 @@ function isAssistantSilentReply(message: RawMessage | undefined): boolean {
   if (typeof msg.text === 'string') return isSilentReplyText(msg.text);
   const text = extractTextFromContent(msg.content);
   return typeof text === 'string' && isSilentReplyText(text);
+}
+
+function isSyntheticTranscriptRepairToolResult(message: RawMessage | undefined): boolean {
+  if (!message || typeof message !== 'object') return false;
+  const role = typeof message.role === 'string' ? message.role.toLowerCase() : '';
+  if (!isToolResultRole(role)) return false;
+  return extractTextFromContent(message.content).trim() === SYNTHETIC_TRANSCRIPT_REPAIR_RESULT;
 }
 
 function isRuntimeSystemInjection(text: string): boolean {
@@ -1289,12 +1331,40 @@ function isInternalHistoryMessage(message: RawMessage | undefined): boolean {
   const role = typeof message.role === 'string' ? message.role.toLowerCase() : '';
   if (role === 'system') return true;
   if (isAssistantSilentReply(message)) return true;
+  if (isSyntheticTranscriptRepairToolResult(message)) return true;
   if (role === 'user' || role === 'assistant') {
     const msg = message as unknown as Record<string, unknown>;
     const text = typeof msg.text === 'string' ? msg.text : getMessageText(message.content);
     return isRuntimeSystemInjection(text);
   }
   return false;
+}
+
+function isRetryableStartupHistoryError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  const normalized = message.toLowerCase();
+  if (!normalized.includes('chat.history')) return false;
+  return (
+    normalized.includes('unavailable')
+    || normalized.includes('gateway startup')
+    || normalized.includes('during gateway startup')
+    || normalized.includes('retryable')
+  );
+}
+
+function resolveStartupRetryDelayMs(err: unknown): number {
+  const message = err instanceof Error ? err.message : String(err);
+  const retryAfterMatch = message.match(/retryAfterMs["':=\s]+(\d+)/i)
+    ?? message.match(/retry[- ]after["':=\s]+(\d+)/i);
+  const retryAfterMs = retryAfterMatch ? Number(retryAfterMatch[1]) : STARTUP_CHAT_HISTORY_DEFAULT_RETRY_MS;
+  return Math.min(
+    Math.max(Number.isFinite(retryAfterMs) ? retryAfterMs : STARTUP_CHAT_HISTORY_DEFAULT_RETRY_MS, 100),
+    STARTUP_CHAT_HISTORY_MAX_RETRY_MS,
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isToolOnlyMessage(message: RawMessage | undefined): boolean {
@@ -2669,17 +2739,37 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     try {
+      const startedAt = Date.now();
+      const requestHistory = async (): Promise<Record<string, unknown> | null> => {
+        for (;;) {
+          try {
+            return await Promise.race([
+              useGatewayStore
+                .getState()
+                .rpc<
+                  Record<string, unknown>
+                >('chat.history', { sessionKey: requestSessionKey, limit: CHAT_HISTORY_PAGE_LIMIT }),
+              new Promise<null>((_, reject) =>
+                setTimeout(() => reject(new Error('chat.history timed out')), HISTORY_LOAD_TIMEOUT_MS)
+              ),
+            ]);
+          } catch (err) {
+            const withinStartupRetryWindow =
+              Date.now() - startedAt < STARTUP_CHAT_HISTORY_RETRY_TIMEOUT_MS;
+            if (
+              !isStale()
+              && withinStartupRetryWindow
+              && isRetryableStartupHistoryError(err)
+            ) {
+              await sleep(resolveStartupRetryDelayMs(err));
+              continue;
+            }
+            throw err;
+          }
+        }
+      };
       // Timeout guard: prevents indefinite hang if Gateway is degraded.
-      const data = await Promise.race([
-        useGatewayStore
-          .getState()
-          .rpc<
-            Record<string, unknown>
-          >('chat.history', { sessionKey: requestSessionKey, limit: CHAT_HISTORY_PAGE_LIMIT }),
-        new Promise<null>((_, reject) =>
-          setTimeout(() => reject(new Error('chat.history timed out')), HISTORY_LOAD_TIMEOUT_MS)
-        ),
-      ]);
+      const data = await requestHistory();
       if (isStale()) {
         clearLoadingIfLatest();
         return;
@@ -2707,10 +2797,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // The Gateway may not include the user's message in chat.history
         // until the run completes, causing it to flash out of the UI.
         const pendingUserMessage = get().pendingUserMessage;
+        const pendingAssistantMessage = get().pendingAssistantMessage;
         const finalMessages = enrichedMessages;
         const hasEquivalentAuthoritativeUserMessage = authoritativeHistoryContainsPendingUser(
           enrichedMessages,
           pendingUserMessage,
+          get().lastUserMessageAt,
+        );
+        const hasEquivalentAuthoritativeAssistantMessage = authoritativeHistoryContainsPendingAssistant(
+          enrichedMessages,
+          pendingAssistantMessage,
           get().lastUserMessageAt,
         );
 
@@ -2766,7 +2862,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set((s) => ({
           messages: finalMessages,
           pendingUserMessage: hasEquivalentAuthoritativeUserMessage ? null : s.pendingUserMessage,
-          pendingAssistantMessage: null,
+          pendingAssistantMessage: hasEquivalentAuthoritativeAssistantMessage ? null : s.pendingAssistantMessage,
           btwMessages: [],
           thinkingLevel,
           historyWindowLimited: rawMessages.length >= CHAT_HISTORY_PAGE_LIMIT,
@@ -2790,6 +2886,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               sending: false,
               activeRunId: null,
               pendingFinal: false,
+              pendingAssistantMessage: hasEquivalentAuthoritativeAssistantMessage ? null : s.pendingAssistantMessage,
               ...resetToolStreamState(s),
               streamingText: '',
               streamingMessage: null,
@@ -2805,7 +2902,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set((state) => ({
           loading: false,
           loadingEarlierHistory: false,
-          ...(state.messages.length === 0
+          ...(state.messages.length === 0 && !state.pendingUserMessage && !state.pendingAssistantMessage
             ? {
                 messages: [],
                 pendingUserMessage: null,
@@ -2826,7 +2923,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((state) => ({
         loading: false,
         loadingEarlierHistory: false,
-        ...(state.messages.length === 0
+        ...(state.messages.length === 0 && !state.pendingUserMessage && !state.pendingAssistantMessage
           ? {
               messages: [],
               pendingUserMessage: null,
@@ -3327,7 +3424,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // See https://github.com/openclaw/openclaw/issues/1909
     if (activeRunId && runId && runId !== activeRunId) {
       if (eventState === 'final') {
-        void get().loadHistory(true);
+        const finalMessage = event.message as RawMessage | undefined;
+        if (
+          finalMessage
+          && !isAssistantSilentReply(finalMessage)
+          && hasNonToolAssistantContent(finalMessage)
+        ) {
+          set((s) => {
+            const id = finalMessage.id || `run-${runId}`;
+            if (s.messages.some((message) => (message.id && message.id === id) || message === finalMessage)) {
+              return {};
+            }
+            return {
+              messages: [
+                ...s.messages,
+                {
+                  ...finalMessage,
+                  role: (finalMessage.role || 'assistant') as RawMessage['role'],
+                  id,
+                  timestamp: finalMessage.timestamp ?? Date.now(),
+                },
+              ],
+            };
+          });
+        } else {
+          void get().loadHistory(true);
+        }
       }
       return;
     }
@@ -3626,14 +3748,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
       case 'aborted': {
         clearHistoryPoll();
         clearErrorRecoveryTimer();
-        set({
+        const abortedMessage = event.message as RawMessage | undefined;
+        const currentStream = get().streamingMessage as RawMessage | null;
+        const streamedText =
+          currentStream && typeof currentStream === 'object'
+            ? extractTextFromContent(currentStream.content)
+            : '';
+        const pendingAssistantSnapshot =
+          abortedMessage
+          && (abortedMessage.role === 'assistant' || abortedMessage.role === undefined)
+          && !isAssistantSilentReply(abortedMessage)
+          && hasNonToolAssistantContent(abortedMessage)
+            ? {
+                ...abortedMessage,
+                role: 'assistant' as const,
+                id: abortedMessage.id || `aborted-${runId || Date.now()}`,
+                timestamp: abortedMessage.timestamp ?? Date.now(),
+              }
+            : streamedText.trim() && !isSilentReplyText(streamedText)
+              ? {
+                  role: 'assistant' as const,
+                  id: `aborted-stream-${runId || Date.now()}`,
+                  content: [{ type: 'text' as const, text: streamedText }],
+                  timestamp: Date.now(),
+                }
+              : null;
+        set((s) => ({
+          ...resetChatRuntimeActivity(s),
           sending: false,
           activeRunId: null,
           pendingFinal: false,
+          pendingAssistantMessage: pendingAssistantSnapshot,
           pendingSessionModelRefresh: false,
           lastUserMessageAt: null,
-          ...resetChatRuntimeActivity(get()),
-        });
+        }));
         break;
       }
       default: {

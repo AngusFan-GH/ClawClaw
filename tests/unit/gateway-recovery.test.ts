@@ -28,6 +28,13 @@ describe('getGatewayRecoveryPresentation', () => {
     });
   });
 
+  it('suppresses plugin-only startup maintenance recovery', () => {
+    expect(getGatewayRecoveryPresentation({
+      kind: 'preflight',
+      topics: ['plugins'],
+    })).toBeNull();
+  });
+
   it('returns repaired presentation for conservative config repair', () => {
     expect(getGatewayRecoveryPresentation({
       kind: 'config-repaired',
