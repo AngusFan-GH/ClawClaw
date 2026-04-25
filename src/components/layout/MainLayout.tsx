@@ -8,10 +8,13 @@ import { Sidebar } from './Sidebar';
 import { TitleBar } from './TitleBar';
 import { GatewayLifecycleBanner } from '@/components/common/GatewayLifecycleBanner';
 import { useGatewayStore } from '@/stores/gateway';
+import { useSettingsStore } from '@/stores/settings';
 
 export function MainLayout() {
   const location = useLocation();
   const gatewayLifecycle = useGatewayStore((state) => state.lifecycle);
+  const chatFocusMode = useSettingsStore((state) => state.chatFocusMode);
+  const isChatRoute = location.pathname === '/';
   const bannerLifecycle =
     location.pathname === '/security'
     && gatewayLifecycle.state === 'completed'
@@ -26,7 +29,7 @@ export function MainLayout() {
 
       {/* Below the title bar: sidebar + content */}
       <div className="flex flex-1 overflow-hidden gap-3 p-3">
-        <Sidebar />
+        {isChatRoute && chatFocusMode ? null : <Sidebar />}
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
           <GatewayLifecycleBanner lifecycle={bannerLifecycle} />
           <main className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card/88 p-6 shadow-[0_12px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">

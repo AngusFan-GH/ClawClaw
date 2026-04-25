@@ -59,7 +59,7 @@ describe('chat message sanitize', () => {
     expect(extractText(message)).toBe('这是最终回答。');
   });
 
-  it('hides commentary-only assistant messages like OpenClaw dashboard history', () => {
+  it('renders commentary-only assistant messages before tool calls', () => {
     const message: RawMessage = {
       role: 'assistant',
       content: [
@@ -71,17 +71,17 @@ describe('chat message sanitize', () => {
       ],
     };
 
-    expect(extractText(message)).toBe('');
+    expect(extractText(message)).toBe('I will inspect the file.');
   });
 
-  it('hides assistant messages explicitly marked as commentary', () => {
+  it('renders assistant messages explicitly marked as commentary', () => {
     const message: RawMessage = {
       role: 'assistant',
       phase: 'commentary',
       content: 'Checking context before answering.',
     };
 
-    expect(extractText(message)).toBe('');
+    expect(extractText(message)).toBe('Checking context before answering.');
   });
 
   it('does not fall back to unphased legacy text when final_answer is empty', () => {

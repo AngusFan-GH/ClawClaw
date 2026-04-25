@@ -24,12 +24,16 @@
     "gatewayReconnecting": "ゲートウェイ再接続中",
     "gatewayStopped": "ゲートウェイ未接続",
     "gatewayError": "ゲートウェイエラー",
+    "exportChat": "チャットをエクスポート",
+    "exitFocusMode": "フォーカスモードを終了",
     "showThinking": "思考を表示",
     "hideThinking": "思考を非表示"
   },
   "composer": {
     "defaultModel": "デフォルトモデル",
     "modelAriaLabel": "現在の会話モデルを切り替える",
+    "thinkingLevelAriaLabel": "現在の会話の思考レベルを設定",
+    "defaultThinkingLevel": "デフォルト（{{level}}）",
     "agentAriaLabel": "新しい会話の分身を切り替える",
     "configureModels": "モデルを設定",
     "modelsSyncing": "モデルを同期中",
@@ -60,6 +64,8 @@
   },
   "status": {
     "processingToolResults": "ツール結果を処理中",
+    "compactionRetrying": "コンテキストを圧縮済み、実行を再試行中",
+    "newMessages": "新着メッセージ",
     "queuedMessages": "キュー済み",
     "queuedAttachmentOnly": "添付のみのメッセージ"
   },

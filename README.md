@@ -407,7 +407,7 @@ Notes:
 - `pnpm package:organize` moves root-level builder output into `release/v<package.json version>/windows`, `release/v<package.json version>/mac`, `release/v<package.json version>/linux`, and `release/v<package.json version>/metadata`.
 - `pnpm package:desktop` runs macOS, Windows, and Linux packaging serially. Keep it serial; do not run platform packaging in parallel because they share `dist`, `dist-electron`, and `build/openclaw`.
 - `release/` now uses versioned directories. Existing versions are preserved; only artifacts inside the same version directory are replaced. The updater uploader reads from `release/v<package.json version>/windows/latest.yml`.
-- `pnpm run upload:update` is intentionally kept as the Windows installed-build uploader. It preserves the legacy `latest.yml` contract for older installed versions.
+- `pnpm run upload:update` is intentionally kept as the Windows installed-build uploader. It preserves the legacy `latest.yml` contract for older installed versions and fails if `latest.yml` does not match `package.json`'s version.
 - `pnpm run upload:update:portable` is the separate portable update publisher. It uploads portable artifacts and generates per-target JSON manifests such as `win32-x64.json` and `darwin-arm64.json` under `updates-portable/stable/`.
 - Bundled OpenClaw plugin mirrors are copied during `after-pack`, so packaging does not require a separate `bundle:openclaw-plugins` step.
 

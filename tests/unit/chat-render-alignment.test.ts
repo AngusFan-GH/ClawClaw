@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildChatItems, extractToolCards, normalizeMessage } from '@/pages/Chat/chat-thread-view-model';
+import { extractText } from '@/pages/Chat/message-utils';
 import { toSanitizedMarkdownHtml } from '@/pages/Chat/markdown';
 import { detectTextDirection } from '@/pages/Chat/text-direction';
 
@@ -221,6 +222,49 @@ describe('chat render alignment', () => {
       kind: 'stream',
       text: '正在查询并下载可蓝矿业资料...',
     });
+  });
+
+  it('keeps commentary text visible after history reload for tool-use turns', () => {
+    const items = buildChatItems({
+      messages: [
+        {
+          role: 'assistant',
+          timestamp: 2_000,
+          content: [
+            {
+              type: 'text',
+              text: 'I will inspect the file first.',
+              textSignature: JSON.stringify({ v: 1, phase: 'commentary' }),
+            },
+            {
+              type: 'toolCall',
+              id: 'tool-1',
+              name: 'read',
+              arguments: { path: 'README.md' },
+            },
+          ],
+        },
+      ],
+      pendingUserMessage: null,
+      pendingAssistantMessage: null,
+      toolMessages: [],
+      streamSegments: [],
+      streamingMessage: null,
+      streamingStartedAt: 0,
+      sessionKey: 'agent:main',
+      sending: true,
+      pendingFinal: false,
+      showThinking: true,
+      locale: 'en',
+    });
+
+    const assistantGroup = items.find((item) => item.kind === 'group' && item.role === 'assistant');
+    expect(assistantGroup).toBeTruthy();
+    const message = assistantGroup && assistantGroup.kind === 'group'
+      ? assistantGroup.messages[0].message
+      : null;
+    expect(message).toMatchObject({ role: 'assistant' });
+    expect(extractText(message)).toBe('I will inspect the file first.');
   });
 
   it('does not show a duplicate loading indicator while live stream content is visible', () => {

@@ -24,12 +24,16 @@
     "gatewayReconnecting": "Gateway reconnecting",
     "gatewayStopped": "Gateway offline",
     "gatewayError": "Gateway error",
+    "exportChat": "Export chat",
+    "exitFocusMode": "Exit focus mode",
     "showThinking": "Show thinking",
     "hideThinking": "Hide thinking"
   },
   "composer": {
     "defaultModel": "Default model",
     "modelAriaLabel": "Switch model for current conversation",
+    "thinkingLevelAriaLabel": "Set thinking level for current conversation",
+    "defaultThinkingLevel": "Default ({{level}})",
     "agentAriaLabel": "Switch agent for this new conversation",
     "configureModels": "Configure models",
     "modelsSyncing": "Syncing models",
@@ -60,6 +64,8 @@
   },
   "status": {
     "processingToolResults": "Processing tool results",
+    "compactionRetrying": "Context compacted; retrying run",
+    "newMessages": "New messages",
     "queuedMessages": "Queued",
     "queuedAttachmentOnly": "Attachment-only message"
   },

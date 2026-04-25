@@ -348,8 +348,33 @@ function extractAssistantTextForPhase(
   return parts.length > 0 ? normalize(parts.join(joinWith)) : null;
 }
 
+function hasAssistantTextPhase(
+  message: RawMessage | unknown,
+  phase: 'commentary' | 'final_answer',
+): boolean {
+  if (!message || typeof message !== 'object') return false;
+  const msg = message as Record<string, unknown>;
+  if (normalizeAssistantPhase(msg.phase) === phase) return true;
+  if (!Array.isArray(msg.content)) return false;
+
+  return msg.content.some((block) => {
+    if (!block || typeof block !== 'object') return false;
+    const item = block as Record<string, unknown>;
+    if (item.type !== 'text') return false;
+    return parseAssistantTextSignature(item.textSignature)?.phase === phase;
+  });
+}
+
 function extractAssistantVisibleText(message: RawMessage | unknown): string | null {
-  return extractAssistantTextForPhase(message, { phase: 'final_answer' })
+  const finalAnswer = extractAssistantTextForPhase(message, { phase: 'final_answer' });
+  if (finalAnswer !== null) return finalAnswer;
+
+  // If a final-answer text block exists but is empty, do not fall back to
+  // commentary or legacy text. This preserves explicit "no visible answer"
+  // semantics for completed final turns.
+  if (hasAssistantTextPhase(message, 'final_answer')) return null;
+
+  return extractAssistantTextForPhase(message, { phase: 'commentary' })
     ?? extractAssistantTextForPhase(message);
 }
 

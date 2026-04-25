@@ -86,6 +86,8 @@ export interface ChatSession {
   forkedFromParent?: boolean;
   subagentRole?: string;
   thinkingLevel?: string;
+  thinkingOptions?: string[];
+  thinkingDefault?: string;
   model?: string;
   modelProvider?: string;
   contextTokens?: number;
@@ -108,7 +110,8 @@ export interface StreamSegment {
 }
 
 export interface CompactionStatus {
-  active: boolean;
+  phase: 'active' | 'retrying' | 'complete';
+  runId: string | null;
   startedAt: number | null;
   completedAt: number | null;
 }
@@ -169,6 +172,9 @@ interface ChatState {
   chatToolMessages: RawMessage[];
   chatStreamSegments: StreamSegment[];
   pendingFinal: boolean;
+  terminalHistoryReconciling: boolean;
+  queueFlushToken: number;
+  lastTerminalRunId: string | null;
   lastUserMessageAt: number | null;
   /** Images collected from tool results, attached to the next assistant message */
   pendingToolImages: AttachedFileMeta[];
@@ -227,6 +233,7 @@ interface ChatState {
   handleAgentEvent: (event: AgentStreamEvent) => void;
   handleBtwEvent: (btw: { question: string; text: string; isError?: boolean }) => void;
   handleGatewayStatusChange: (state: 'stopped' | 'starting' | 'running' | 'error' | 'reconnecting') => void;
+  requestQueueFlush: (runId?: string | null) => void;
   toggleThinking: () => void;
   refresh: () => Promise<void>;
   clearError: () => void;
@@ -250,9 +257,9 @@ function toMs(ts: unknown): number {
   return n < 1e12 ? n * 1000 : n;
 }
 
-// Timer for fallback history polling during active sends.
-// If no streaming events arrive within a few seconds, we periodically
-// poll chat.history to surface intermediate tool-call turns.
+// Timer for terminal-state history reconciliation. OpenClaw's dashboard does
+// not poll chat.history while the active run is streaming; chat events own the
+// live transcript and history is reloaded after terminal events.
 let _historyPollTimer: ReturnType<typeof setTimeout> | null = null;
 let _historyLoadSeq = 0;
 let _sessionRestorePromise: Promise<void> | null = null;
@@ -261,8 +268,6 @@ let _sessionTitleRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 let _sessionTitleRefreshAttempts = 0;
 let _initialHistoryRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 let _initialHistoryRefreshAttempts = 0;
-const HISTORY_POLL_START_DELAY_MS = 3000;
-const HISTORY_POLL_INTERVAL_MS = 4000;
 const CHAT_HISTORY_PAGE_LIMIT = 200;
 // Session restore retry backoff
 const SESSION_RESTORE_INITIAL_DELAY_MS = 1000;
@@ -387,48 +392,6 @@ function getGatewayStatusErrorMessage(state: 'stopped' | 'starting' | 'running' 
     default:
       return null;
   }
-}
-
-function shouldPollHistoryForAuthoritativeUpdates(
-  state: Pick<
-    ChatState,
-    'sending'
-    | 'pendingFinal'
-    | 'streamingMessage'
-    | 'streamingText'
-    | 'chatToolMessages'
-    | 'chatStreamSegments'
-    | 'streamingTools'
-  >,
-): boolean {
-  if (!state.sending) return false;
-  if (state.pendingFinal) return true;
-  const hasLiveActivity = Boolean(
-    state.streamingMessage
-    || state.streamingText
-    || state.chatToolMessages.length > 0
-    || state.chatStreamSegments.length > 0
-    || state.streamingTools.length > 0,
-  );
-  return !hasLiveActivity;
-}
-
-function ensureHistoryPollRunning(getState: () => ChatState): void {
-  if (_historyPollTimer) return;
-
-  const pollHistory = () => {
-    const state = getState();
-    if (!state.sending) {
-      clearHistoryPoll();
-      return;
-    }
-    if (shouldPollHistoryForAuthoritativeUpdates(state)) {
-      void state.loadHistory(true);
-    }
-    _historyPollTimer = setTimeout(pollHistory, HISTORY_POLL_INTERVAL_MS);
-  };
-
-  _historyPollTimer = setTimeout(pollHistory, HISTORY_POLL_START_DELAY_MS);
 }
 
 function toTrimmedString(value: unknown): string | null {
@@ -1926,6 +1889,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   compactionStatus: null,
   fallbackStatus: null,
   pendingFinal: false,
+  terminalHistoryReconciling: false,
+  queueFlushToken: 0,
+  lastTerminalRunId: null,
   lastUserMessageAt: null,
   pendingToolImages: [],
   toolStreamById: new Map<string, ToolStreamEntry>(),
@@ -1965,6 +1931,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const targetKey = sessionKey || currentSessionKey;
     const session = sessions.find((item) => item.key === targetKey);
     return resolveSessionModelRef(session, allowedModelRefs);
+  },
+
+  requestQueueFlush: (runId) => {
+    set((s) => ({
+      queueFlushToken: s.queueFlushToken + 1,
+      lastTerminalRunId: runId?.trim() || null,
+    }));
   },
 
   loadSessions: async (options) => {
@@ -2428,6 +2401,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       activeRunId: null,
       error: null,
       pendingFinal: false,
+      terminalHistoryReconciling: false,
       lastUserMessageAt: null,
       pendingToolImages: [],
       ...resetToolStreamState(s),
@@ -2490,6 +2464,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         activeRunId: null,
         error: null,
         pendingFinal: false,
+        terminalHistoryReconciling: false,
         lastUserMessageAt: null,
         pendingToolImages: [],
         ...resetToolStreamState(s),
@@ -3105,7 +3080,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
 
-    const idempotencyKey = crypto.randomUUID();
+    const runId = crypto.randomUUID();
+    const idempotencyKey = runId;
 
     // Add user message optimistically (with local file metadata for UI display)
     const nowMs = Date.now();
@@ -3127,6 +3103,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       pendingUserMessage: userMsg,
       pendingAssistantMessage: null,
       sending: true,
+      activeRunId: runId,
       error: null,
       streamingText: '',
       streamingMessage: null,
@@ -3134,6 +3111,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       chatToolMessages: [],
       chatStreamSegments: [],
       pendingFinal: false,
+      terminalHistoryReconciling: false,
       lastUserMessageAt: nowMs,
       pendingSessionModelRefresh: isSlashModelCommandText(trimmed),
       toolStreamById: new Map<string, ToolStreamEntry>(),
@@ -3156,14 +3134,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Mark this session as most recently active
     set((s) => ({ sessionLastActivity: { ...s.sessionLastActivity, [currentSessionKey]: nowMs } }));
 
-    // Start the history poll and safety timeout IMMEDIATELY (before the
-    // RPC await) because the gateway's chat.send RPC may block until the
-    // entire agentic conversation finishes — the poll must run in parallel.
+    // Match OpenClaw dashboard: live chat events own the active transcript.
+    // Do not poll chat.history mid-run, because an incomplete authoritative
+    // snapshot can erase optimistic user text and streaming assistant output.
     _lastChatEventAt = Date.now();
     clearHistoryPoll();
     clearErrorRecoveryTimer();
-
-    ensureHistoryPollRunning(get);
 
     const SAFETY_TIMEOUT_MS = 90_000;
     const checkStuck = () => {
@@ -3303,7 +3279,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (import.meta.env.DEV) {
         console.debug(
-          `[sendMessage] RPC result: success=${result.success}, runId=${result.result?.runId || 'none'}`
+          `[sendMessage] RPC result: success=${result.success}, localRunId=${runId}, gatewayRunId=${result.result?.runId || 'none'}`
         );
       }
 
@@ -3316,6 +3292,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             sending: false,
             activeRunId: null,
             pendingFinal: false,
+            terminalHistoryReconciling: false,
             lastUserMessageAt: null,
             pendingAssistantMessage: null,
             ...resetToolStreamState(s),
@@ -3327,11 +3304,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
             error: errorMessage,
             sending: false,
             activeRunId: null,
+            terminalHistoryReconciling: false,
             ...resetToolStreamState(s),
           }));
         }
-      } else if (result.result?.runId) {
-        set({ activeRunId: result.result.runId });
       }
     } catch (err) {
       clearHistoryPoll();
@@ -3342,6 +3318,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           sending: false,
           activeRunId: null,
           pendingFinal: false,
+          terminalHistoryReconciling: false,
           lastUserMessageAt: null,
           pendingAssistantMessage: null,
           ...resetToolStreamState(s),
@@ -3353,6 +3330,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           error: errorMessage,
           sending: false,
           activeRunId: null,
+          terminalHistoryReconciling: false,
           ...resetToolStreamState(s),
         }));
       }
@@ -3369,6 +3347,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sending: false,
       activeRunId: null,
       pendingFinal: false,
+      terminalHistoryReconciling: false,
       lastUserMessageAt: null,
       ...resetChatRuntimeActivity(get()),
     });
@@ -3392,6 +3371,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sending: false,
       activeRunId: null,
       pendingFinal: false,
+      terminalHistoryReconciling: false,
       lastUserMessageAt: null,
       error: message,
       ...resetChatRuntimeActivity(get()),
@@ -3470,9 +3450,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
 
-    // Keep the history poll running during sends even when live events arrive.
-    // Some intermediate transcript turns only become visible via chat.history,
-    // so cancelling the poll here can leave the UI stuck until manual refresh.
+    // Match OpenClaw dashboard: chat events drive the live run, and
+    // authoritative history is reloaded only after terminal chat events.
     const hasUsefulData =
       resolvedState === 'delta' ||
       resolvedState === 'final' ||
@@ -3497,7 +3476,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (!currentSending && runId) {
           set({ sending: true, activeRunId: runId, error: null });
         }
-        ensureHistoryPollRunning(get);
         break;
       }
       case 'delta': {
@@ -3525,6 +3503,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       case 'final': {
         clearErrorRecoveryTimer();
         if (get().error) set({ error: null });
+        // Match OpenClaw dashboard terminal handling: only tool-backed runs
+        // need an authoritative history reload before queued messages resume,
+        // because resetting the live tool stream would otherwise drop persisted
+        // tool results from the visible transcript.
+        const hadToolEventsBeforeTerminal =
+          get().toolStreamOrder.length > 0
+          || get().chatToolMessages.length > 0
+          || get().chatStreamSegments.length > 0;
         // Message complete - add to history and clear streaming
         const finalMsg = event.message as RawMessage | undefined;
         // BTW emits a `chat.final` with no role/content — skip the empty message but
@@ -3532,6 +3518,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // because BTW's `event.message` is undefined (payload is { state: 'final', runId, sessionKey }).
         if (!finalMsg?.role && !finalMsg?.content && !finalMsg?.toolCallId) {
           set({ sending: false, activeRunId: null, pendingFinal: false, pendingAssistantMessage: null });
+          get().requestQueueFlush(runId || null);
           break;
         }
         if (finalMsg) {
@@ -3627,6 +3614,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     sending: hasOutput ? false : s.sending,
                     activeRunId: hasOutput ? null : s.activeRunId,
                     pendingFinal: hasOutput ? false : true,
+                    terminalHistoryReconciling: false,
                     pendingUserMessage: s.pendingUserMessage,
                     pendingAssistantMessage: null,
                     pendingSessionModelRefresh: hasOutput ? false : s.pendingSessionModelRefresh,
@@ -3640,6 +3628,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   streamingText: '',
                   streamingMessage: null,
                   pendingFinal: true,
+                  terminalHistoryReconciling: false,
                   pendingAssistantMessage: null,
                   streamingTools,
                   ...clearPendingImages,
@@ -3650,7 +3639,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   streamingMessage: null,
                   sending: hasOutput ? false : s.sending,
                   activeRunId: hasOutput ? null : s.activeRunId,
-                  pendingFinal: true,
+                  pendingFinal: hasOutput ? false : true,
                   pendingUserMessage: s.pendingUserMessage,
                   pendingAssistantMessage: hasOutput ? msgWithImages : null,
                   pendingSessionModelRefresh: hasOutput ? false : s.pendingSessionModelRefresh,
@@ -3666,7 +3655,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
             if (shouldRefreshSessionModel) {
               void get().loadSessions({ preserveCurrent: true, warmLabels: true });
             }
-            void get().loadHistory(true);
+            if (hadToolEventsBeforeTerminal) {
+              set({ terminalHistoryReconciling: true });
+              void get().loadHistory(true).finally(() => {
+                set({ terminalHistoryReconciling: false });
+                get().requestQueueFlush(runId || null);
+              });
+            } else {
+              get().requestQueueFlush(runId || null);
+              void get().loadHistory(true);
+            }
           }
         } else {
           // No message in final event - reload history to get complete data
@@ -3675,6 +3673,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             streamingText: '',
             streamingMessage: null,
             pendingFinal: true,
+            terminalHistoryReconciling: false,
             pendingAssistantMessage: null,
             pendingSessionModelRefresh: false,
             ...resetToolStreamState(s),
@@ -3682,13 +3681,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
           if (shouldRefreshSessionModel) {
             void get().loadSessions({ preserveCurrent: true, warmLabels: true });
           }
-          get().loadHistory();
+          if (hadToolEventsBeforeTerminal) {
+            set({ terminalHistoryReconciling: true });
+            get().loadHistory().finally(() => {
+              set({ terminalHistoryReconciling: false });
+              get().requestQueueFlush(runId || null);
+            });
+          } else {
+            get().requestQueueFlush(runId || null);
+            void get().loadHistory();
+          }
         }
         break;
       }
       case 'error': {
         const errorMsg = String(event.errorMessage || 'An error occurred');
-        const wasSending = get().sending;
+        clearErrorRecoveryTimer();
 
         const currentStream = get().streamingMessage as RawMessage | null;
         const errorAssistantSnapshot =
@@ -3710,39 +3718,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
           pendingAssistantMessage: errorAssistantSnapshot,
           pendingSessionModelRefresh: false,
           pendingToolImages: [],
+          sending: false,
+          activeRunId: null,
+          lastUserMessageAt: null,
+          pendingUserMessage: null,
+          terminalHistoryReconciling: false,
           ...resetToolStreamState(get()),
         });
-
-        // Don't immediately give up: the Gateway often retries internally
-        // after transient API failures (e.g. "terminated"). Keep `sending`
-        // true for a grace period so that recovery events are processed and
-        // the agent-phase-completion handler can still trigger loadHistory.
-        if (wasSending) {
-          clearErrorRecoveryTimer();
-          const ERROR_RECOVERY_GRACE_MS = 15_000;
-          _errorRecoveryTimer = setTimeout(() => {
-            _errorRecoveryTimer = null;
-            const state = get();
-            if (state.sending && !state.streamingMessage) {
-              clearHistoryPoll();
-              // Grace period expired with no recovery — finalize the error
-              set({
-                sending: false,
-                activeRunId: null,
-                lastUserMessageAt: null,
-                pendingUserMessage: null,
-                pendingAssistantMessage: null,
-                ...resetToolStreamState(state),
-              });
-              // One final history reload in case the Gateway completed in the
-              // background and we just missed the event.
-              state.loadHistory(true);
-            }
-          }, ERROR_RECOVERY_GRACE_MS);
-        } else {
-          clearHistoryPoll();
-          set((s) => ({ sending: false, activeRunId: null, lastUserMessageAt: null, pendingUserMessage: null, pendingAssistantMessage: null, ...resetToolStreamState(s) }));
-        }
+        clearHistoryPoll();
+        get().requestQueueFlush(runId || null);
         break;
       }
       case 'aborted': {
@@ -3782,6 +3766,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           pendingSessionModelRefresh: false,
           lastUserMessageAt: null,
         }));
+        get().requestQueueFlush(runId || null);
         break;
       }
       default: {
@@ -3828,24 +3813,47 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (eventSessionKey && !sessionKeysMatch(currentSessionKey, eventSessionKey, sessions)) return;
 
     const incomingRunId = typeof event.runId === 'string' ? event.runId : '';
-    if (activeRunId && incomingRunId && incomingRunId !== activeRunId) return;
+    // Match OpenClaw dashboard tool-stream handling: tool events are scoped by
+    // session, not by chatRunId. Some runtimes emit tool events with an engine
+    // run id that differs from the chat.send run/idempotency id, so filtering
+    // tool events by activeRunId drops live tool cards and can make replies
+    // appear incomplete.
+    if (event.stream !== 'tool' && activeRunId && incomingRunId && incomingRunId !== activeRunId) return;
 
     if (event.stream === 'compaction') {
       const data = event.data && typeof event.data === 'object' ? event.data : {};
       const phase = typeof data.phase === 'string' ? data.phase : '';
+      const completed = data.completed === true;
       clearCompactionTimer();
       if (phase === 'start') {
         set({
           compactionStatus: {
-            active: true,
+            phase: 'active',
+            runId: incomingRunId || null,
             startedAt: Date.now(),
             completedAt: null,
           },
         });
       } else if (phase === 'end') {
+        if (data.willRetry === true && completed) {
+          set((s) => ({
+            compactionStatus: {
+              phase: 'retrying',
+              runId: incomingRunId || s.compactionStatus?.runId || null,
+              startedAt: s.compactionStatus?.startedAt ?? Date.now(),
+              completedAt: null,
+            },
+          }));
+          return;
+        }
+        if (!completed) {
+          set({ compactionStatus: null });
+          return;
+        }
         set((s) => ({
           compactionStatus: {
-            active: false,
+            phase: 'complete',
+            runId: incomingRunId || s.compactionStatus?.runId || null,
             startedAt: s.compactionStatus?.startedAt ?? null,
             completedAt: Date.now(),
           },
@@ -3856,6 +3864,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }, COMPACTION_TOAST_DURATION_MS);
       }
       return;
+    }
+
+    if (event.stream === 'lifecycle') {
+      const data = event.data && typeof event.data === 'object' ? event.data : {};
+      const phase = toTrimmedString(data.phase);
+      if (phase === 'end' || phase === 'error') {
+        const currentCompaction = get().compactionStatus;
+        if (
+          currentCompaction?.phase === 'retrying'
+          && (!currentCompaction.runId || !incomingRunId || currentCompaction.runId === incomingRunId)
+        ) {
+          clearCompactionTimer();
+          set((s) => ({
+            compactionStatus: {
+              phase: 'complete',
+              runId: incomingRunId || s.compactionStatus?.runId || null,
+              startedAt: s.compactionStatus?.startedAt ?? null,
+              completedAt: Date.now(),
+            },
+          }));
+          _compactionClearTimer = setTimeout(() => {
+            _compactionClearTimer = null;
+            set({ compactionStatus: null });
+          }, COMPACTION_TOAST_DURATION_MS);
+        }
+      }
     }
 
     if (event.stream === 'lifecycle' || event.stream === 'fallback') {
@@ -3923,7 +3957,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         activeRunId: s.activeRunId || incomingRunId,
         error: null,
       }));
-      ensureHistoryPollRunning(get);
     }
 
     const data = event.data && typeof event.data === 'object' ? event.data : {};
@@ -4021,7 +4054,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     if (gatewayState === 'running') {
       if (responseInProgress || state.error?.startsWith('Gateway is reconnecting') || state.error?.startsWith('Gateway is starting')) {
-        ensureHistoryPollRunning(get);
         void state.loadHistory(true);
         set({ error: null });
       }
@@ -4034,7 +4066,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     clearErrorRecoveryTimer();
 
     if (gatewayState === 'reconnecting' || gatewayState === 'starting') {
-      ensureHistoryPollRunning(get);
       set({ error: nextError });
       return;
     }
@@ -4045,6 +4076,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sending: false,
       activeRunId: null,
       pendingFinal: false,
+      terminalHistoryReconciling: false,
       pendingSessionModelRefresh: false,
       lastUserMessageAt: null,
       ...resetChatRuntimeActivity(s),

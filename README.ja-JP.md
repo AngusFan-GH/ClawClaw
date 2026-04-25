@@ -404,7 +404,7 @@ pnpm run upload:update:portable # ポータブル zip と updates-portable/stabl
 - `pnpm package:organize` は builder が一時的に release 直下へ出力した成果物を `release/v<package.json version>/windows`、`release/v<package.json version>/mac`、`release/v<package.json version>/linux`、`release/v<package.json version>/metadata` へ振り分けます。
 - `pnpm package:desktop` は macOS、Windows、Linux の順にパッケージングを実行します。`dist`、`dist-electron`、`build/openclaw` を共有するため、各プラットフォームのパッケージングは並列実行しないでください。
 - `release/` はバージョン別ディレクトリで運用します。既存バージョンは保持され、同じバージョンの成果物だけが上書きされます。更新アップロードスクリプトは `release/v<package.json version>/windows/latest.yml` を参照します。
-- `pnpm run upload:update` は引き続き Windows インストール版専用です。古いインストール版が依存する `latest.yml` 契約を維持するため、この挙動は分離したままにしています。
+- `pnpm run upload:update` は引き続き Windows インストール版専用です。古いインストール版が依存する `latest.yml` 契約を維持し、`latest.yml` 内のバージョンが `package.json` と一致しない場合は失敗します。
 - `pnpm run upload:update:portable` はポータブル版専用の公開スクリプトで、ポータブル成果物と `win32-x64.json`・`darwin-arm64.json` のようなターゲット別 manifest を `updates-portable/stable/` に配置します。
 - 同梱 OpenClaw プラグインミラーは `after-pack` 段階でコピーされるため、パッケージ化時に別途 `bundle:openclaw-plugins` を実行する必要はありません。
 

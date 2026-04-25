@@ -41,6 +41,7 @@ interface SettingsState {
 
   // UI State
   sidebarCollapsed: boolean;
+  chatFocusMode: boolean;
   shortcutMenuItems: MenuItemId[];
   devModeUnlocked: boolean;
   slashCommandHintsEnabled: boolean;
@@ -74,6 +75,7 @@ interface SettingsState {
   setAutoCheckUpdate: (value: boolean) => void;
   setAutoDownloadUpdate: (value: boolean) => void;
   setSidebarCollapsed: (value: boolean) => void;
+  setChatFocusMode: (value: boolean) => void;
   setShortcutMenuItems: (value: MenuItemId[]) => void;
   setDevModeUnlocked: (value: boolean) => void;
   setSlashCommandHintsEnabled: (value: boolean) => void;
@@ -103,6 +105,7 @@ const defaultSettings = {
   autoCheckUpdate: true,
   autoDownloadUpdate: false,
   sidebarCollapsed: false,
+  chatFocusMode: false,
   shortcutMenuItems: DEFAULT_SHORTCUT_MENU_IDS,
   devModeUnlocked: false,
   slashCommandHintsEnabled: false,
@@ -237,6 +240,9 @@ export const useSettingsStore = create<SettingsState>()(
         void persistMainSettings({ sidebarCollapsed }).catch(() => {
           void syncFromMain().catch(() => {});
         });
+      },
+      setChatFocusMode: (chatFocusMode) => {
+        set({ chatFocusMode });
       },
       setShortcutMenuItems: (shortcutMenuItems) => {
         set({ shortcutMenuItems });

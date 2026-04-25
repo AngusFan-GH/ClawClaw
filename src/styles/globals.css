@@ -252,6 +252,12 @@
   color: hsl(var(--primary));
 }
 
+.compaction-indicator--retrying {
+  border-color: hsl(38 92% 58% / 0.32);
+  background: hsl(38 92% 58% / 0.12);
+  color: hsl(30 84% 32%);
+}
+
 .compaction-indicator--complete {
   border-color: hsl(148 45% 58% / 0.28);
   background: hsl(148 45% 58% / 0.1);
@@ -279,6 +285,10 @@
 }
 
 .dark .compaction-indicator--fallback {
+  color: hsl(38 95% 73%);
+}
+
+.dark .compaction-indicator--retrying {
   color: hsl(38 95% 73%);
 }
 

@@ -24,12 +24,16 @@
     "gatewayReconnecting": "网关重连中",
     "gatewayStopped": "网关未连接",
     "gatewayError": "网关异常",
+    "exportChat": "导出对话",
+    "exitFocusMode": "退出专注模式",
     "showThinking": "显示思考过程",
     "hideThinking": "隐藏思考过程"
   },
   "composer": {
     "defaultModel": "默认模型",
     "modelAriaLabel": "切换当前对话模型",
+    "thinkingLevelAriaLabel": "设置当前对话的思考级别",
+    "defaultThinkingLevel": "默认（{{level}}）",
     "agentAriaLabel": "切换新对话分身",
     "configureModels": "未配置模型",
     "modelsSyncing": "模型列表同步中",
@@ -60,6 +64,8 @@
   },
   "status": {
     "processingToolResults": "正在处理工具结果",
+    "compactionRetrying": "上下文已压缩，正在重试运行",
+    "newMessages": "新消息",
     "queuedMessages": "已排队",
     "queuedAttachmentOnly": "仅附件消息"
   },

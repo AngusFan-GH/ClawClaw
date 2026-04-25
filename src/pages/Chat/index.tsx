@@ -4,13 +4,14 @@
  * via gateway:rpc IPC. Session selector, thinking toggle, and refresh
  * are in the toolbar; messages render with markdown + streaming.
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, Brain, Check, ChevronDown, Loader2 } from 'lucide-react';
-import { DEFAULT_SESSION_KEY, useChatStore } from '@/stores/chat';
+import { AlertCircle, ArrowDown, Brain, Check, ChevronDown, Loader2 } from 'lucide-react';
+import { DEFAULT_SESSION_KEY, useChatStore, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { useAgentsStore } from '@/stores/agents';
+import { useSettingsStore } from '@/stores/settings';
 import type { ProviderAccount } from '@/lib/providers';
 import { PageLoader } from '@/components/common/LoadingSpinner';
 import { ChatThread } from './ChatThread';
@@ -27,6 +28,7 @@ import {
   getProviderDisplayName,
   resolveAccountModelOptions,
 } from './chat-model-options';
+import { extractText } from './message-utils';
 import {
   buildAgentOptions,
   buildChatRuntimeViewModel,
@@ -49,7 +51,43 @@ type QueuedChatItem = {
   id: string;
   text: string;
   attachments?: FileAttachment[];
+  pendingRunId?: string;
 };
+
+function buildChatMarkdown(messages: RawMessage[], assistantName: string): string | null {
+  if (messages.length === 0) return null;
+  const lines: string[] = [`# Chat with ${assistantName}`, ''];
+  for (const message of messages) {
+    const role =
+      message.role === 'user'
+        ? 'You'
+        : message.role === 'assistant'
+          ? assistantName
+          : message.role === 'system'
+            ? 'System'
+            : 'Tool';
+    const timestamp =
+      typeof message.timestamp === 'number'
+        ? ` (${new Date(message.timestamp < 1e12 ? message.timestamp * 1000 : message.timestamp).toISOString()})`
+        : '';
+    lines.push(`## ${role}${timestamp}`, '', extractText(message), '');
+  }
+  return lines.join('\n');
+}
+
+function exportChatMarkdown(messages: RawMessage[], assistantName: string): boolean {
+  const markdown = buildChatMarkdown(messages, assistantName);
+  if (!markdown) return false;
+  const safeName = assistantName.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'assistant';
+  const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `chat-${safeName}-${Date.now()}.md`;
+  link.click();
+  URL.revokeObjectURL(url);
+  return true;
+}
 
 export function Chat() {
   const { t } = useTranslation('chat');
@@ -66,6 +104,7 @@ export function Chat() {
   const btwMessages = useChatStore((s) => s.btwMessages);
   const loading = useChatStore((s) => s.loading);
   const sending = useChatStore((s) => s.sending);
+  const activeRunId = useChatStore((s) => s.activeRunId);
   const error = useChatStore((s) => s.error);
   const showThinking = useChatStore((s) => s.showThinking);
   const sessions = useChatStore((s) => s.sessions);
@@ -82,6 +121,9 @@ export function Chat() {
   const chatToolMessages = useChatStore((s) => s.chatToolMessages);
   const chatStreamSegments = useChatStore((s) => s.chatStreamSegments);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
+  const terminalHistoryReconciling = useChatStore((s) => s.terminalHistoryReconciling);
+  const queueFlushToken = useChatStore((s) => s.queueFlushToken);
+  const lastTerminalRunId = useChatStore((s) => s.lastTerminalRunId);
   const compactionStatus = useChatStore((s) => s.compactionStatus);
   const fallbackStatus = useChatStore((s) => s.fallbackStatus);
   const loadHistory = useChatStore((s) => s.loadHistory);
@@ -93,6 +135,8 @@ export function Chat() {
   const setSessionModel = useChatStore((s) => s.setSessionModel);
   const setModelGuard = useChatStore((s) => s.setModelGuard);
   const toggleThinking = useChatStore((s) => s.toggleThinking);
+  const chatFocusMode = useSettingsStore((s) => s.chatFocusMode);
+  const setChatFocusMode = useSettingsStore((s) => s.setChatFocusMode);
 
   const agents = useAgentsStore((s) => s.agents);
   const defaultAgentId = useAgentsStore((s) => s.defaultAgentId);
@@ -105,12 +149,14 @@ export function Chat() {
   const [chatModelsRetryNonce, setChatModelsRetryNonce] = useState(0);
   const [queuedMessages, setQueuedMessages] = useState<QueuedChatItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showNewMessages, setShowNewMessages] = useState(false);
   const chatRuntimeModelRefsRef = useRef<string[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const shouldStickToBottomRef = useRef(true);
   const pendingPrependScrollRef = useRef<{ height: number; top: number } | null>(null);
+  const processedQueueFlushTokenRef = useRef(0);
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
   const currentSession = sessions.find((session) => session.key === currentSessionKey);
   const sessionAgentId = useMemo(
@@ -318,12 +364,22 @@ export function Chat() {
   // Auto-scroll on new messages, streaming, or activity changes when the user is already near the bottom.
   useEffect(() => {
     if (loadingEarlierHistory || !shouldStickToBottomRef.current) {
+      if (!loadingEarlierHistory && !shouldStickToBottomRef.current) {
+        setShowNewMessages(true);
+      }
       return;
     }
     messagesEndRef.current?.scrollIntoView({
       behavior: streamingMessage ? 'auto' : 'smooth',
     });
+    setShowNewMessages(false);
   }, [messages, streamingMessage, sending, pendingFinal, loadingEarlierHistory]);
+
+  const scrollToBottom = useCallback(() => {
+    shouldStickToBottomRef.current = true;
+    setShowNewMessages(false);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
 
   useLayoutEffect(() => {
     const pending = pendingPrependScrollRef.current;
@@ -348,6 +404,9 @@ export function Chat() {
 
     const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
     shouldStickToBottomRef.current = distanceFromBottom < 120;
+    if (shouldStickToBottomRef.current) {
+      setShowNewMessages(false);
+    }
 
     if (
       viewport.scrollTop <= 96
@@ -468,6 +527,9 @@ export function Chat() {
 
   const resolvedAgentLabel = currentAgentLabel?.trim() || 'Main';
   const resolvedAssistantName = resolvedAgentLabel;
+  const handleExportChat = useCallback(() => {
+    exportChatMarkdown(messages, resolvedAssistantName);
+  }, [messages, resolvedAssistantName]);
 
   useEffect(() => {
     const allowed = modelOptions.map((option) => option.value);
@@ -482,6 +544,10 @@ export function Chat() {
     modelOptions,
     modelCatalogSyncing: chatModelsLoading,
   });
+  const thinkingOptions = useMemo(
+    () => currentSession?.thinkingOptions?.filter((option) => option.trim()) ?? [],
+    [currentSession?.thinkingOptions]
+  );
   const loadingDescription = isGatewayRunning
     ? t('history.loading', '正在恢复最近对话')
     : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
@@ -499,22 +565,209 @@ export function Chat() {
     queueMicrotask(() => setQueuedMessages([]));
   }, [currentSessionKey]);
 
-  useEffect(() => {
-    if (sending || queuedMessages.length === 0) {
-      return;
-    }
-    const [next, ...rest] = queuedMessages;
-    queueMicrotask(() => {
-      setQueuedMessages(rest);
-      void sendMessage(next.text, next.attachments);
-    });
-  }, [queuedMessages, sendMessage, sending]);
-
   const handleRemoveQueuedMessage = (id: string): void => {
     setQueuedMessages((items) => items.filter((item) => item.id !== id));
   };
 
-  const handleDetachedBtwSend = async (
+  const appendSystemMessage = useCallback((content: string): void => {
+    const message: RawMessage = {
+      role: 'system',
+      content,
+      timestamp: Date.now(),
+      id: `local-command-${crypto.randomUUID()}`,
+    };
+    useChatStore.setState((state) => ({ messages: [...state.messages, message] }));
+  }, []);
+
+  const resetCurrentChatHistory = useCallback(async (): Promise<void> => {
+    await useGatewayStore.getState().rpc('sessions.reset', { key: currentSessionKey });
+    useChatStore.setState((state) => ({
+      messages: [],
+      pendingUserMessage: null,
+      pendingAssistantMessage: null,
+      btwMessages: [],
+      pendingFinal: false,
+      terminalHistoryReconciling: false,
+      sending: false,
+      activeRunId: null,
+      error: null,
+      chatToolMessages: [],
+      chatStreamSegments: [],
+      streamingText: '',
+      streamingMessage: null,
+      streamingTools: [],
+      toolStreamById: new Map(),
+      toolStreamOrder: [],
+      pendingLocalSessionKeys: {
+        ...state.pendingLocalSessionKeys,
+        [currentSessionKey]: true,
+      },
+    }));
+    await loadHistory(false);
+  }, [currentSessionKey, loadHistory]);
+
+  const setSessionThinkingLevel = useCallback(async (level?: string): Promise<void> => {
+    const normalizedLevel = level?.trim() || undefined;
+    await useGatewayStore.getState().rpc('sessions.patch', {
+      key: currentSessionKey,
+      thinkingLevel: normalizedLevel ?? null,
+    });
+    useChatStore.setState((state) => ({
+      thinkingLevel: normalizedLevel ?? null,
+      sessions: state.sessions.map((session) => (
+        session.key === currentSessionKey
+          ? { ...session, thinkingLevel: normalizedLevel }
+          : session
+      )),
+    }));
+    void loadSessions({ preserveCurrent: true, warmLabels: true });
+  }, [currentSessionKey, loadSessions]);
+
+  const executeLocalSlashCommand = useCallback(async (
+    commandName: string,
+    args: string,
+  ): Promise<boolean> => {
+    const trimmedArgs = args.trim();
+
+    switch (commandName) {
+      case 'new': {
+        newSession(currentAgentId);
+        return true;
+      }
+      case 'reset':
+      case 'clear': {
+        await resetCurrentChatHistory();
+        return true;
+      }
+      case 'model': {
+        if (!trimmedArgs) {
+          const label = normalizedSelectedModel || normalizedAgentModelValue || normalizedDefaultModelValue || 'default';
+          appendSystemMessage(`Current model: \`${label}\`.`);
+          return true;
+        }
+        await setSessionModel(trimmedArgs);
+        appendSystemMessage(`Model set to \`${trimmedArgs}\`.`);
+        void loadSessions({ preserveCurrent: true, warmLabels: true });
+        return true;
+      }
+      case 'think':
+      case 'thinking': {
+        if (!trimmedArgs) {
+          appendSystemMessage(`Current thinking level: ${currentSession?.thinkingLevel || 'default'}.`);
+          return true;
+        }
+        await setSessionThinkingLevel(trimmedArgs);
+        appendSystemMessage(`Thinking level set to **${trimmedArgs}**.`);
+        return true;
+      }
+      case 'compact': {
+        const result = await useGatewayStore.getState().rpc<{
+          compacted?: boolean;
+          reason?: string;
+          result?: { tokensBefore?: number; tokensAfter?: number };
+        }>('sessions.compact', { key: currentSessionKey });
+        if (result?.compacted) {
+          const before = result.result?.tokensBefore;
+          const after = result.result?.tokensAfter;
+          const tokenSummary =
+            typeof before === 'number' && typeof after === 'number'
+              ? ` (${before.toLocaleString()} -> ${after.toLocaleString()} tokens)`
+              : '';
+          appendSystemMessage(`Context compacted successfully${tokenSummary}.`);
+        } else if (typeof result?.reason === 'string' && result.reason.trim()) {
+          appendSystemMessage(`Compaction skipped: ${result.reason}`);
+        } else {
+          appendSystemMessage('Compaction skipped.');
+        }
+        await loadHistory(true);
+        return true;
+      }
+      case 'focus': {
+        setChatFocusMode(true);
+        appendSystemMessage('Focus mode enabled.');
+        return true;
+      }
+      case 'unfocus': {
+        setChatFocusMode(false);
+        appendSystemMessage('Focus mode disabled.');
+        return true;
+      }
+      case 'export-session': {
+        exportChatMarkdown(messages, resolvedAssistantName);
+        return true;
+      }
+      case 'steer': {
+        if (!trimmedArgs) {
+          appendSystemMessage('Usage: `/steer <message>`');
+          return true;
+        }
+        if (!sending && !activeRunId) {
+          appendSystemMessage('No active run. Use the chat input or `/redirect` instead.');
+          return true;
+        }
+        await useGatewayStore.getState().rpc('chat.send', {
+          sessionKey: currentSessionKey,
+          message: trimmedArgs,
+          deliver: false,
+          idempotencyKey: crypto.randomUUID(),
+        }, 120_000);
+        if (activeRunId) {
+          setQueuedMessages((items) => [
+            ...items,
+            {
+              id: crypto.randomUUID(),
+              text: `/steer ${trimmedArgs}`,
+              pendingRunId: activeRunId,
+            },
+          ]);
+        }
+        return true;
+      }
+      case 'redirect': {
+        if (!trimmedArgs) {
+          appendSystemMessage('Usage: `/redirect <message>`');
+          return true;
+        }
+        const result = await useGatewayStore.getState().rpc<{ runId?: string }>('sessions.steer', {
+          key: currentSessionKey,
+          message: trimmedArgs,
+        });
+        const runId = typeof result?.runId === 'string' ? result.runId : null;
+        useChatStore.setState({
+          sending: Boolean(runId),
+          activeRunId: runId,
+          pendingFinal: false,
+          terminalHistoryReconciling: false,
+          error: null,
+        });
+        appendSystemMessage('Redirected.');
+        return true;
+      }
+      default:
+        return false;
+    }
+  }, [
+    activeRunId,
+    appendSystemMessage,
+    currentAgentId,
+    currentSession?.thinkingLevel,
+    currentSessionKey,
+    loadHistory,
+    loadSessions,
+    messages,
+    newSession,
+    normalizedAgentModelValue,
+    normalizedDefaultModelValue,
+    normalizedSelectedModel,
+    resetCurrentChatHistory,
+    resolvedAssistantName,
+    sending,
+    setChatFocusMode,
+    setSessionThinkingLevel,
+    setSessionModel,
+  ]);
+
+  const handleDetachedBtwSend = useCallback(async (
     text: string,
     attachments?: FileAttachment[],
   ): Promise<void> => {
@@ -552,22 +805,56 @@ export function Chat() {
         error: err instanceof Error ? err.message : String(err),
       });
     }
-  };
+  }, [currentSessionKey, isGatewayRunning]);
 
-  const handleChatSend = async (text: string, attachments?: FileAttachment[]): Promise<void> => {
+  const handleChatSend = useCallback(async (text: string, attachments?: FileAttachment[]): Promise<void> => {
     const trimmed = text.trim();
+    if (!trimmed && (!attachments || attachments.length === 0)) {
+      return;
+    }
     const parsed = parseSlashCommand(trimmed);
     const commandName = parsed?.command.name;
 
-    if (sending) {
-      if (commandName === 'stop') {
-        await abortRun();
+    if (commandName === 'stop') {
+      await abortRun();
+      return;
+    }
+    if (commandName === 'btw') {
+      await handleDetachedBtwSend(trimmed, attachments);
+      return;
+    }
+    if (
+      commandName
+      && (sending || activeRunId)
+      && !['focus', 'unfocus', 'export-session', 'steer', 'redirect'].includes(commandName)
+    ) {
+      setQueuedMessages((items) => [
+        ...items,
+        {
+          id: crypto.randomUUID(),
+          text: trimmed,
+          attachments,
+        },
+      ]);
+      return;
+    }
+    if (commandName) {
+      try {
+        const handled = await executeLocalSlashCommand(commandName, parsed?.args ?? '');
+        if (handled) {
+          const state = useChatStore.getState();
+          if (!state.sending && !state.activeRunId && !state.pendingFinal && !state.terminalHistoryReconciling) {
+            state.requestQueueFlush(null);
+          }
+          return;
+        }
+      } catch (err) {
+        useChatStore.setState({ error: err instanceof Error ? err.message : String(err) });
         return;
       }
-      if (commandName === 'btw') {
-        await handleDetachedBtwSend(trimmed, attachments);
-        return;
-      }
+    }
+
+    if (sending || activeRunId) {
       setQueuedMessages((items) => [
         ...items,
         {
@@ -580,14 +867,75 @@ export function Chat() {
     }
 
     await sendMessage(trimmed, attachments);
-  };
+  }, [
+    abortRun,
+    activeRunId,
+    executeLocalSlashCommand,
+    handleDetachedBtwSend,
+    sendMessage,
+    sending,
+  ]);
+
+  useEffect(() => {
+    if (queueFlushToken <= processedQueueFlushTokenRef.current) {
+      return;
+    }
+    if (sending || activeRunId || pendingFinal || terminalHistoryReconciling || queuedMessages.length === 0) {
+      return;
+    }
+
+    const queueAfterTerminalCleanup = lastTerminalRunId
+      ? queuedMessages.filter((item) => item.pendingRunId !== lastTerminalRunId)
+      : queuedMessages;
+    const nextIndex = queueAfterTerminalCleanup.findIndex((item) => !item.pendingRunId);
+    if (nextIndex < 0) {
+      processedQueueFlushTokenRef.current = queueFlushToken;
+      if (queueAfterTerminalCleanup.length !== queuedMessages.length) {
+        setQueuedMessages((items) => (
+          lastTerminalRunId ? items.filter((item) => item.pendingRunId !== lastTerminalRunId) : items
+        ));
+      }
+      return;
+    }
+    const next = queueAfterTerminalCleanup[nextIndex];
+    processedQueueFlushTokenRef.current = queueFlushToken;
+    queueMicrotask(() => {
+      setQueuedMessages((items) => items.filter((item) => {
+        if (item.id === next.id) return false;
+        if (lastTerminalRunId && item.pendingRunId === lastTerminalRunId) return false;
+        return true;
+      }));
+      void handleChatSend(next.text, next.attachments);
+    });
+  }, [
+    activeRunId,
+    handleChatSend,
+    lastTerminalRunId,
+    pendingFinal,
+    queueFlushToken,
+    queuedMessages,
+    sending,
+    terminalHistoryReconciling,
+  ]);
 
   return (
     <div
       className={cn(
-        'flex min-h-0 flex-1 flex-col -m-6 overflow-hidden transition-colors duration-500 dark:bg-background'
+        'relative flex min-h-0 flex-1 flex-col -m-6 overflow-hidden transition-colors duration-500 dark:bg-background'
       )}
     >
+      {chatFocusMode ? (
+        <button
+          type="button"
+          className="absolute right-4 top-4 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 bg-card/90 text-lg leading-none text-muted-foreground shadow-lg backdrop-blur transition-colors hover:text-foreground dark:border-white/10"
+          onClick={() => setChatFocusMode(false)}
+          aria-label={t('toolbar.exitFocusMode', 'Exit focus mode')}
+          title={t('toolbar.exitFocusMode', 'Exit focus mode')}
+        >
+          ×
+        </button>
+      ) : null}
+
       {/* Toolbar */}
       <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-2">
         <ChatToolbar
@@ -595,6 +943,8 @@ export function Chat() {
           showAgentLabel={!shouldShowWelcome && !canSwitchAgent}
           searchQuery={shouldShowWelcome ? undefined : searchQuery}
           onSearchChange={shouldShowWelcome ? undefined : setSearchQuery}
+          canExport={messages.length > 0}
+          onExport={handleExportChat}
         />
       </div>
 
@@ -629,18 +979,24 @@ export function Chat() {
                 <div
                   className={cn(
                     'compaction-indicator',
-                    compactionStatus.active ? 'compaction-indicator--active' : 'compaction-indicator--complete'
+                    compactionStatus.phase === 'complete'
+                      ? 'compaction-indicator--complete'
+                      : compactionStatus.phase === 'retrying'
+                        ? 'compaction-indicator--retrying'
+                        : 'compaction-indicator--active'
                   )}
                 >
-                  {compactionStatus.active ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
+                  {compactionStatus.phase === 'complete' ? (
                     <Check className="h-4 w-4" />
+                  ) : (
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   )}
                   <span>
-                    {compactionStatus.active
-                      ? t('status.compactingContext', 'Compacting context')
-                      : t('status.contextCompacted', 'Context compacted')}
+                    {compactionStatus.phase === 'complete'
+                      ? t('status.contextCompacted', 'Context compacted')
+                      : compactionStatus.phase === 'retrying'
+                        ? t('status.compactionRetrying', 'Context compacted; retrying run')
+                        : t('status.compactingContext', 'Compacting context')}
                   </span>
                 </div>
               )}
@@ -697,31 +1053,18 @@ export function Chat() {
                 onSearchChange={setSearchQuery}
                 hideSearch
               />
-              {queuedMessages.length > 0 ? (
-                <div className="rounded-[16px] border border-black/10 bg-card/80 p-3 shadow-sm dark:border-white/10">
-                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    {t('status.queuedMessages', '已排队')} ({queuedMessages.length})
-                  </div>
-                  <div className="space-y-2">
-                    {queuedMessages.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center gap-3 rounded-[12px] bg-black/5 px-3 py-2 text-sm dark:bg-white/5"
-                      >
-                        <div className="min-w-0 flex-1 truncate">
-                          {item.text || t('status.queuedAttachmentOnly', '仅附件消息')}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveQueuedMessage(item.id)}
-                          className="text-xs text-muted-foreground underline hover:text-foreground"
-                        >
-                          {t('common:actions.remove', '移除')}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              {showNewMessages ? (
+                <button
+                  type="button"
+                  className={cn(
+                    'fixed left-1/2 z-20 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border border-black/10 bg-card/95 px-3 py-2 text-xs font-medium text-foreground shadow-lg backdrop-blur hover:bg-card dark:border-white/10',
+                    queuedMessages.length > 0 ? 'bottom-48' : 'bottom-28'
+                  )}
+                  onClick={scrollToBottom}
+                >
+                  <ArrowDown className="h-3.5 w-3.5" />
+                  {t('status.newMessages', 'New messages')}
+                </button>
               ) : null}
 
             </>
@@ -731,6 +1074,35 @@ export function Chat() {
           <div ref={messagesEndRef} />
         </div>
       </div>
+
+      {queuedMessages.length > 0 ? (
+        <div className="pointer-events-none absolute inset-x-4 bottom-28 z-20 flex justify-center">
+          <div className="pointer-events-auto w-full max-w-4xl rounded-[18px] border border-black/10 bg-card/95 p-3 shadow-[0_18px_50px_rgba(15,23,42,0.16)] backdrop-blur-xl dark:border-white/10">
+            <div className="mb-2 flex items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <span>{t('status.queuedMessages', '已排队')} ({queuedMessages.length})</span>
+            </div>
+            <div className="max-h-28 space-y-2 overflow-y-auto pr-1">
+              {queuedMessages.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 rounded-[12px] bg-black/5 px-3 py-2 text-sm dark:bg-white/5"
+                >
+                  <div className="min-w-0 flex-1 truncate">
+                    {item.text || t('status.queuedAttachmentOnly', '仅附件消息')}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveQueuedMessage(item.id)}
+                    className="shrink-0 text-xs text-muted-foreground underline hover:text-foreground"
+                  >
+                    {t('common:actions.remove', '移除')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* Error bar */}
       {error && (
@@ -764,6 +1136,11 @@ export function Chat() {
         onConfigureModels={() => navigate('/models')}
         modelDisabled={!isGatewayRunning}
         modelState={modelState}
+        thinkingLevel={currentSession?.thinkingLevel ?? null}
+        thinkingOptions={thinkingOptions}
+        thinkingDefault={currentSession?.thinkingDefault ?? null}
+        onThinkingLevelChange={setSessionThinkingLevel}
+        thinkingDisabled={!isGatewayRunning || sending || Boolean(activeRunId) || loading}
         disabled={!isGatewayRunning}
         sending={sending}
         isEmpty={shouldShowWelcome}

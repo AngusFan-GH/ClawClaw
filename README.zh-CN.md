@@ -407,7 +407,7 @@ pnpm run upload:update:portable # 上传便携包及 updates-portable/stable 下
 - `pnpm package:organize` 会把 builder 暂存到 release 根目录的产物整理到 `release/v<package.json version>/windows`、`release/v<package.json version>/mac`、`release/v<package.json version>/linux`、`release/v<package.json version>/metadata`。
 - `pnpm package:desktop` 会依次打 macOS、Windows、Linux。请保持串行执行，不要并行打各平台，因为它们共享 `dist`、`dist-electron` 和 `build/openclaw`。
 - `release/` 现在采用按版本分目录模式。旧版本会保留不动，只有同版本目录下的产物会被覆盖；更新上传脚本读取 `release/v<package.json version>/windows/latest.yml`。
-- `pnpm run upload:update` 会继续只负责 Windows 安装版更新发布，用来保持旧安装版依赖的 `latest.yml` 协议不变。
+- `pnpm run upload:update` 会继续只负责 Windows 安装版更新发布，用来保持旧安装版依赖的 `latest.yml` 协议不变；如果 `latest.yml` 里的版本和 `package.json` 不一致，脚本会直接失败。
 - `pnpm run upload:update:portable` 则是独立的便携版更新发布脚本，会上传便携包，并生成 `win32-x64.json`、`darwin-arm64.json` 这类按平台区分的 manifest 到 `updates-portable/stable/`。
 - OpenClaw 受管插件镜像是在 `after-pack` 阶段复制进安装包，因此打包时不需要额外执行独立的 `bundle:openclaw-plugins`。
 

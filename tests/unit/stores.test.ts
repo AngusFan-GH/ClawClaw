@@ -117,6 +117,9 @@ describe('Chat Store', () => {
       hasEarlierHistory: false,
       loadingEarlierHistory: false,
       pendingFinal: false,
+      terminalHistoryReconciling: false,
+      queueFlushToken: 0,
+      lastTerminalRunId: null,
       compactionStatus: null,
       fallbackStatus: null,
       sessions: [{ key: 'agent:main:main', displayName: 'Main' }],
@@ -152,7 +155,7 @@ describe('Chat Store', () => {
     rpcMock.mockRestore();
   });
 
-  it('should start history polling when an external agent run begins on the current session', async () => {
+  it('should adopt an external agent run without polling history mid-run', async () => {
     vi.useFakeTimers();
 
     const loadHistoryMock = vi.fn().mockResolvedValue(undefined);
@@ -178,10 +181,134 @@ describe('Chat Store', () => {
 
     await vi.advanceTimersByTimeAsync(3000);
 
-    expect(loadHistoryMock).toHaveBeenCalledWith(true);
+    expect(loadHistoryMock).not.toHaveBeenCalled();
 
     useChatStore.setState({ sending: false });
     await vi.runOnlyPendingTimersAsync();
+  });
+
+  it('should bind a local run id before chat.send returns gateway metadata', async () => {
+    const rpcMock = vi
+      .spyOn(useGatewayStore.getState(), 'rpc')
+      .mockResolvedValueOnce({});
+    useChatStore.setState({
+      sessions: [{ key: 'agent:main:main', displayName: 'Main' }],
+      currentSessionKey: 'agent:main:main',
+      sending: false,
+      activeRunId: null,
+      allowedModelRefs: [],
+      defaultModelRef: undefined,
+    });
+
+    await useChatStore.getState().sendMessage('hello');
+
+    const state = useChatStore.getState();
+    expect(state.sending).toBe(true);
+    expect(state.activeRunId).toBeTruthy();
+    expect(state.pendingUserMessage?.idempotencyKey).toBe(state.activeRunId);
+    expect(rpcMock).toHaveBeenCalledWith(
+      'chat.send',
+      expect.objectContaining({
+        sessionKey: 'agent:main:main',
+        message: 'hello',
+        deliver: false,
+        idempotencyKey: state.activeRunId,
+      }),
+      120_000,
+    );
+
+    useChatStore.setState({ sending: false, activeRunId: null });
+    rpcMock.mockRestore();
+  });
+
+  it('should emit queue flush immediately for terminal final without tool events', async () => {
+    let resolveHistory: (() => void) | undefined;
+    const loadHistoryMock = vi.fn().mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveHistory = resolve;
+        }),
+    );
+    useChatStore.setState({
+      loadHistory: loadHistoryMock,
+      sessions: [{ key: 'agent:main:main', displayName: 'Main' }],
+      currentSessionKey: 'agent:main:main',
+      sending: true,
+      activeRunId: 'run-final-1',
+      pendingFinal: false,
+      queueFlushToken: 0,
+      lastTerminalRunId: null,
+    });
+
+    useChatStore.getState().handleChatEvent({
+      state: 'final',
+      runId: 'run-final-1',
+      sessionKey: 'agent:main:main',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'done' }],
+      },
+    });
+
+    expect(useChatStore.getState().sending).toBe(false);
+    expect(useChatStore.getState().activeRunId).toBeNull();
+    expect(useChatStore.getState().pendingFinal).toBe(false);
+    expect(useChatStore.getState().terminalHistoryReconciling).toBe(false);
+    expect(useChatStore.getState().queueFlushToken).toBe(1);
+    expect(useChatStore.getState().lastTerminalRunId).toBe('run-final-1');
+    expect(loadHistoryMock).toHaveBeenCalledWith(true);
+
+    resolveHistory?.();
+    await Promise.resolve();
+
+    expect(useChatStore.getState().terminalHistoryReconciling).toBe(false);
+    expect(useChatStore.getState().queueFlushToken).toBe(1);
+    expect(useChatStore.getState().lastTerminalRunId).toBe('run-final-1');
+  });
+
+  it('should delay queue flush for terminal final with tool events until history reconciliation finishes', async () => {
+    let resolveHistory: (() => void) | undefined;
+    const loadHistoryMock = vi.fn().mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveHistory = resolve;
+        }),
+    );
+    useChatStore.setState({
+      loadHistory: loadHistoryMock,
+      sessions: [{ key: 'agent:main:main', displayName: 'Main' }],
+      currentSessionKey: 'agent:main:main',
+      sending: true,
+      activeRunId: 'run-final-tools',
+      pendingFinal: false,
+      queueFlushToken: 0,
+      lastTerminalRunId: null,
+      toolStreamOrder: ['tool-1'],
+    });
+
+    useChatStore.getState().handleChatEvent({
+      state: 'final',
+      runId: 'run-final-tools',
+      sessionKey: 'agent:main:main',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'done' }],
+      },
+    });
+
+    expect(useChatStore.getState().sending).toBe(false);
+    expect(useChatStore.getState().activeRunId).toBeNull();
+    expect(useChatStore.getState().pendingFinal).toBe(false);
+    expect(useChatStore.getState().terminalHistoryReconciling).toBe(true);
+    expect(useChatStore.getState().queueFlushToken).toBe(0);
+    expect(loadHistoryMock).toHaveBeenCalledWith(true);
+
+    resolveHistory?.();
+    await Promise.resolve();
+
+    expect(useChatStore.getState().terminalHistoryReconciling).toBe(false);
+    expect(useChatStore.getState().queueFlushToken).toBe(1);
+    expect(useChatStore.getState().lastTerminalRunId).toBe('run-final-tools');
   });
 
   it('should preserve an in-flight response while the gateway is reconnecting', () => {
@@ -464,7 +591,8 @@ describe('Chat Store', () => {
     });
 
     expect(useChatStore.getState().compactionStatus).toMatchObject({
-      active: true,
+      phase: 'active',
+      runId: 'run-compaction',
       completedAt: null,
     });
 
@@ -472,11 +600,49 @@ describe('Chat Store', () => {
       runId: 'run-compaction',
       sessionKey: 'agent:main:main',
       stream: 'compaction',
+      data: { phase: 'end', completed: true },
+    });
+
+    expect(useChatStore.getState().compactionStatus).toMatchObject({
+      phase: 'complete',
+    });
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(useChatStore.getState().compactionStatus).toBeNull();
+  });
+
+  it('should keep compaction retrying until matching lifecycle end', async () => {
+    vi.useFakeTimers();
+
+    useChatStore.getState().handleAgentEvent({
+      runId: 'run-compaction-retry',
+      sessionKey: 'agent:main:main',
+      stream: 'compaction',
+      data: { phase: 'start' },
+    });
+    useChatStore.getState().handleAgentEvent({
+      runId: 'run-compaction-retry',
+      sessionKey: 'agent:main:main',
+      stream: 'compaction',
+      data: { phase: 'end', completed: true, willRetry: true },
+    });
+
+    expect(useChatStore.getState().compactionStatus).toMatchObject({
+      phase: 'retrying',
+      runId: 'run-compaction-retry',
+      completedAt: null,
+    });
+
+    useChatStore.getState().handleAgentEvent({
+      runId: 'run-compaction-retry',
+      sessionKey: 'agent:main:main',
+      stream: 'lifecycle',
       data: { phase: 'end' },
     });
 
     expect(useChatStore.getState().compactionStatus).toMatchObject({
-      active: false,
+      phase: 'complete',
+      runId: 'run-compaction-retry',
     });
 
     await vi.advanceTimersByTimeAsync(5000);
@@ -808,6 +974,37 @@ describe('Chat Store', () => {
     });
     expect(useChatStore.getState().sending).toBe(false);
     expect(useChatStore.getState().activeRunId).toBeNull();
+  });
+
+  it('should terminate the active run and flush queue on chat error', () => {
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      sessions: [{ key: 'agent:main:main', displayName: 'Main' }],
+      sending: true,
+      activeRunId: 'run-error-1',
+      pendingFinal: true,
+      queueFlushToken: 0,
+      lastTerminalRunId: null,
+      streamingMessage: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Partial answer before error.' }],
+      },
+    });
+
+    useChatStore.getState().handleChatEvent({
+      runId: 'run-error-1',
+      sessionKey: 'agent:main:main',
+      state: 'error',
+      errorMessage: 'provider failed',
+    });
+
+    const state = useChatStore.getState();
+    expect(state.error).toBe('provider failed');
+    expect(state.sending).toBe(false);
+    expect(state.activeRunId).toBeNull();
+    expect(state.pendingFinal).toBe(false);
+    expect(state.queueFlushToken).toBe(1);
+    expect(state.lastTerminalRunId).toBe('run-error-1');
   });
 
   it('should abort the active run when policy changes require immediate effect', async () => {

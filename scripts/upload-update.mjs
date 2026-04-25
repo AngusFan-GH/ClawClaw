@@ -7,7 +7,9 @@ import { resolve } from "node:path";
 const cwd = process.cwd();
 const releaseDir = resolve(cwd, "release");
 const packageJson = JSON.parse(readFileSync(resolve(cwd, "package.json"), "utf8"));
-const windowsReleaseDir = resolve(releaseDir, `v${packageJson.version}`, "windows");
+const version = packageJson.version;
+const versionDir = resolve(releaseDir, `v${version}`);
+const windowsReleaseDir = resolve(versionDir, "windows");
 const latestYmlPath = resolve(windowsReleaseDir, "latest.yml");
 
 const config = {
@@ -16,6 +18,7 @@ const config = {
   port: process.env.UPDATE_PORT || "22",
   remoteDir: process.env.UPDATE_REMOTE_DIR || "/var/www/xzinfra/updates/stable",
   password: process.env.UPDATE_PASSWORD || "",
+  dryRun: process.env.UPDATE_DRY_RUN === "1",
 };
 
 function run(command, args) {
@@ -81,6 +84,7 @@ function runRemote(command, args) {
 function parseLatestYml(filePath) {
   const content = readFileSync(filePath, "utf8");
   const urls = [];
+  const versionMatch = content.match(/^version:\s*['"]?([^'"\r\n]+)['"]?\s*$/m);
 
   for (const line of content.split(/\r?\n/)) {
     const match = line.match(/^\s*-\s+url:\s+(.+)\s*$/) || line.match(/^\s*url:\s+(.+)\s*$/);
@@ -94,7 +98,10 @@ function parseLatestYml(filePath) {
     }
   }
 
-  return [...new Set(urls)];
+  return {
+    version: versionMatch?.[1]?.trim() || null,
+    urls: [...new Set(urls)],
+  };
 }
 
 function collectArtifacts() {
@@ -102,9 +109,16 @@ function collectArtifacts() {
     throw new Error(`latest.yml not found: ${latestYmlPath}`);
   }
 
+  const metadata = parseLatestYml(latestYmlPath);
+  if (metadata.version !== version) {
+    throw new Error(
+      `latest.yml version mismatch: expected ${version}, got ${metadata.version || "unknown"} (${latestYmlPath})`,
+    );
+  }
+
   const files = [latestYmlPath];
 
-  for (const url of parseLatestYml(latestYmlPath)) {
+  for (const url of metadata.urls) {
     const artifactPath = resolve(windowsReleaseDir, url);
     if (!existsSync(artifactPath)) {
       throw new Error(`artifact referenced by latest.yml not found: ${artifactPath}`);
@@ -128,6 +142,11 @@ function main() {
   console.log("[upload-update] files to upload:");
   for (const file of files) {
     console.log(`  - ${file}`);
+  }
+
+  if (config.dryRun) {
+    console.log("[upload-update] dry run complete; no files uploaded");
+    return;
   }
 
   runRemote("ssh", [

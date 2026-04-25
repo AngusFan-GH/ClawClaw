@@ -65,6 +65,11 @@ interface ChatInputProps {
   onConfigureModels?: () => void;
   modelDisabled?: boolean;
   modelState?: 'disabled' | 'ready' | 'syncing' | 'invalid' | 'unconfigured';
+  thinkingLevel?: string | null;
+  thinkingOptions?: string[];
+  thinkingDefault?: string | null;
+  onThinkingLevelChange?: (level?: string) => void | Promise<void>;
+  thinkingDisabled?: boolean;
   disabled?: boolean;
   sending?: boolean;
   isEmpty?: boolean;
@@ -95,6 +100,43 @@ function readFileAsBase64(file: globalThis.File): Promise<string> {
   });
 }
 
+const INPUT_HISTORY_LIMIT = 50;
+
+class InputHistory {
+  private items: string[] = [];
+  private cursor = -1;
+
+  push(text: string): void {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (this.items[this.items.length - 1] === trimmed) return;
+    this.items.push(trimmed);
+    if (this.items.length > INPUT_HISTORY_LIMIT) this.items.shift();
+    this.cursor = -1;
+  }
+
+  up(): string | null {
+    if (this.items.length === 0) return null;
+    if (this.cursor < 0) this.cursor = this.items.length - 1;
+    else if (this.cursor > 0) this.cursor -= 1;
+    return this.items[this.cursor] ?? null;
+  }
+
+  down(): string | null {
+    if (this.cursor < 0) return null;
+    this.cursor += 1;
+    if (this.cursor >= this.items.length) {
+      this.cursor = -1;
+      return null;
+    }
+    return this.items[this.cursor] ?? null;
+  }
+
+  reset(): void {
+    this.cursor = -1;
+  }
+}
+
 // 鈹€鈹€ Component 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 export function ChatInput({
@@ -110,6 +152,11 @@ export function ChatInput({
   onConfigureModels,
   modelDisabled = false,
   modelState = 'ready',
+  thinkingLevel,
+  thinkingOptions = [],
+  thinkingDefault,
+  onThinkingLevelChange,
+  thinkingDisabled = false,
   disabled = false,
   sending = false,
   isEmpty = false,
@@ -126,6 +173,9 @@ export function ChatInput({
   const isComposingRef = useRef(false);
   const commandMenuRef = useRef<HTMLDivElement>(null);
   const slashItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const inputHistoryRef = useRef(new InputHistory());
+  const thinkingMenuRef = useRef<HTMLDivElement>(null);
+  const thinkingTriggerRef = useRef<HTMLButtonElement>(null);
   const [modelMenuPosition, setModelMenuPosition] = useState<{
     top: number;
     left: number;
@@ -133,7 +183,47 @@ export function ChatInput({
     compact: boolean;
     maxHeight: number;
   } | null>(null);
+  const [thinkingMenuOpen, setThinkingMenuOpen] = useState(false);
+  const [thinkingMenuPosition, setThinkingMenuPosition] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    compact: boolean;
+    maxHeight: number;
+  } | null>(null);
   const hasModelOptions = modelOptions.length > 0;
+  const currentThinkingLevel = thinkingLevel?.trim() || '';
+  const normalizedThinkingOptions = useMemo(() => {
+    const fallback = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'];
+    const source = thinkingOptions.length > 0 ? thinkingOptions : fallback;
+    const seen = new Set<string>();
+    return [...source, currentThinkingLevel]
+      .map((option) => option.trim())
+      .filter((option) => {
+        if (!option || seen.has(option)) return false;
+        seen.add(option);
+        return true;
+      });
+  }, [currentThinkingLevel, thinkingOptions]);
+  const canChangeThinkingLevel = Boolean(onThinkingLevelChange) && normalizedThinkingOptions.length > 0;
+  const thinkingDefaultLabel = thinkingDefault?.trim() || 'off';
+  const thinkingMenuOptions = useMemo(
+    () => [
+      {
+        value: '',
+        label: t('composer.defaultThinkingLevel', 'Default ({{level}})', {
+          level: thinkingDefaultLabel,
+        }),
+      },
+      ...normalizedThinkingOptions.map((option) => ({ value: option, label: option })),
+    ],
+    [normalizedThinkingOptions, t, thinkingDefaultLabel]
+  );
+  const thinkingButtonLabel =
+    currentThinkingLevel ||
+    t('composer.defaultThinkingLevel', 'Default ({{level}})', {
+      level: thinkingDefaultLabel,
+    });
   const currentModelValue = selectedModel || defaultModelValue;
   const selectedOption = modelOptions.find((option) => option.value === currentModelValue);
   const currentModelShortLabel =
@@ -257,7 +347,9 @@ export function ChatInput({
     setInput('');
     setAttachments([]);
     setModelMenuOpen(false);
+    setThinkingMenuOpen(false);
     setDragOver(false);
+    inputHistoryRef.current.reset();
     resetSlashMenu();
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -304,6 +396,47 @@ export function ChatInput({
       window.removeEventListener('scroll', updatePosition, true);
     };
   }, [modelMenuOpen]);
+
+  useEffect(() => {
+    if (!thinkingMenuOpen) return;
+
+    const updatePosition = () => {
+      const rect = thinkingTriggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const compact = window.innerWidth < 640;
+      setThinkingMenuPosition({
+        top: compact ? rect.top : rect.top - 8,
+        left: compact ? rect.left : rect.right,
+        width: rect.width,
+        compact,
+        maxHeight: compact ? Math.max(220, window.innerHeight - rect.top - 16) : Math.max(180, rect.top - 16),
+      });
+    };
+
+    updatePosition();
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!thinkingMenuRef.current?.contains(event.target as Node)) {
+        setThinkingMenuOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setThinkingMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('keydown', handleEscape);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('keydown', handleEscape);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [thinkingMenuOpen]);
 
   useEffect(() => {
     if (!slashCommandHintsEnabled) {
@@ -540,6 +673,9 @@ export function ChatInput({
       textareaRef.current.style.height = 'auto';
     }
     onSend(textToSend, attachmentsToSend);
+    if (textToSend) {
+      inputHistoryRef.current.push(textToSend);
+    }
   }, [attachments, canSubmit, input, onSend, resetSlashMenu]);
 
   const handleStop = useCallback(() => {
@@ -597,9 +733,27 @@ export function ChatInput({
         } else if (canStop) {
           handleStop();
         }
+        return;
+      }
+
+      if (!input.trim() && e.key === 'ArrowUp') {
+        const previous = inputHistoryRef.current.up();
+        if (previous !== null) {
+          e.preventDefault();
+          setInput(previous);
+          updateSlashMenu(previous);
+        }
+        return;
+      }
+
+      if (!input.trim() && e.key === 'ArrowDown') {
+        const next = inputHistoryRef.current.down();
+        e.preventDefault();
+        setInput(next ?? '');
+        updateSlashMenu(next ?? '');
       }
     },
-    [applySlashArg, applySlashCommand, canStop, canSubmit, handleSend, handleStop, resetSlashMenu, slashArgItems, slashMenuIndex, slashMenuItems, slashMenuMode, slashMenuOpen]
+    [applySlashArg, applySlashCommand, canStop, canSubmit, handleSend, handleStop, input, resetSlashMenu, slashArgItems, slashMenuIndex, slashMenuItems, slashMenuMode, slashMenuOpen, updateSlashMenu]
   );
 
   // Handle paste (Ctrl/Cmd+V with files)
@@ -770,6 +924,7 @@ export function ChatInput({
               onChange={(e) => {
                 const nextValue = e.target.value;
                 setInput(nextValue);
+                inputHistoryRef.current.reset();
                 updateSlashMenu(nextValue);
               }}
               onKeyDown={handleKeyDown}
@@ -868,6 +1023,27 @@ export function ChatInput({
                   {modelButtonLabel}
                 </Button>
               ) : null}
+              {canChangeThinkingLevel ? (
+                <div className="relative" ref={thinkingMenuRef}>
+                  <Button
+                    ref={thinkingTriggerRef}
+                    type="button"
+                    variant="ghost"
+                    className={cn(
+                      'w-full border border-black/10 bg-white/70 px-3 text-[13px] font-medium text-foreground shadow-none hover:bg-black/5 dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/10 sm:w-auto',
+                      isEmpty ? 'h-10 min-w-[112px] rounded-[14px] sm:min-w-[124px]' : 'h-11 min-w-[120px] rounded-[14px] sm:min-w-[132px]'
+                    )}
+                    disabled={sending || thinkingDisabled || disabled}
+                    onClick={() => setThinkingMenuOpen((open) => !open)}
+                    title={t('composer.thinkingLevelAriaLabel', 'Set thinking level for current conversation')}
+                    aria-label={t('composer.thinkingLevelAriaLabel', 'Set thinking level for current conversation')}
+                  >
+                    <Brain className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="truncate">{thinkingButtonLabel}</span>
+                    <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  </Button>
+                </div>
+              ) : null}
               {onToggleThinking ? (
                 <Button
                   variant="ghost"
@@ -944,6 +1120,17 @@ export function ChatInput({
           onSelect={(value) => {
             setModelMenuOpen(false);
             void onModelChange?.(value);
+          }}
+        />
+        <ChatModelMenu
+          menuRef={thinkingMenuRef}
+          open={thinkingMenuOpen}
+          position={thinkingMenuPosition}
+          options={thinkingMenuOptions}
+          currentValue={currentThinkingLevel}
+          onSelect={(value) => {
+            setThinkingMenuOpen(false);
+            void onThinkingLevelChange?.(value || undefined);
           }}
         />
       </div>

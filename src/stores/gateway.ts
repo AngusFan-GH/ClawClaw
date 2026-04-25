@@ -14,6 +14,7 @@ let lifecycleClearTimer: ReturnType<typeof setTimeout> | null = null;
 let gatewayStatusPollTimer: ReturnType<typeof setInterval> | null = null;
 let gatewayVisibilityCleanup: (() => void) | null = null;
 let lastPassiveGatewayStatusRefreshAt = 0;
+let pendingSessionMessageReloadSessionKey: string | null = null;
 
 const GATEWAY_ACTIVE_POLL_MS = 2000;
 const GATEWAY_IDLE_POLL_MS = 10000;
@@ -73,6 +74,91 @@ function handleBtwEventFromGateway(params: Record<string, unknown>): void {
     .catch(() => {});
 }
 
+function normalizeSessionKeyForCompare(key: string, fallbackAgentId = 'main'): string {
+  const trimmed = key.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed.startsWith('agent:')) return trimmed;
+  return `agent:${fallbackAgentId}:${trimmed}`;
+}
+
+function getAgentIdFromSessionKey(key: string): string {
+  const trimmed = key.trim();
+  if (!trimmed.startsWith('agent:')) return 'main';
+  return trimmed.split(':')[1]?.trim() || 'main';
+}
+
+function sessionKeysEquivalent(currentKey: string, incomingKey: string): boolean {
+  if (!currentKey || !incomingKey) return currentKey === incomingKey;
+  if (currentKey === incomingKey) return true;
+  const fallbackAgentId = getAgentIdFromSessionKey(currentKey);
+  return (
+    normalizeSessionKeyForCompare(currentKey, fallbackAgentId) ===
+    normalizeSessionKeyForCompare(incomingKey, fallbackAgentId)
+  );
+}
+
+function isTerminalChatState(state: unknown): boolean {
+  return state === 'final' || state === 'aborted' || state === 'error';
+}
+
+function maybeReplayDeferredSessionMessageReload(
+  chatStore: {
+    getState: () => {
+      currentSessionKey: string;
+      activeRunId: string | null;
+      sending: boolean;
+      terminalHistoryReconciling: boolean;
+      loadHistory: (quiet?: boolean) => Promise<void>;
+    };
+  },
+  payload: Record<string, unknown>,
+): void {
+  const deferredSessionKey = pendingSessionMessageReloadSessionKey?.trim();
+  const payloadSessionKey = typeof payload.sessionKey === 'string' ? payload.sessionKey.trim() : '';
+  if (!deferredSessionKey || !payloadSessionKey || deferredSessionKey !== payloadSessionKey) {
+    return;
+  }
+
+  if (isTerminalChatState(payload.state)) {
+    pendingSessionMessageReloadSessionKey = null;
+  }
+
+  const state = chatStore.getState();
+  if (
+    isTerminalChatState(payload.state)
+    && sessionKeysEquivalent(state.currentSessionKey, payloadSessionKey)
+    && !state.activeRunId
+    && !state.sending
+    && !state.terminalHistoryReconciling
+  ) {
+    void state.loadHistory(true);
+  }
+}
+
+function handleSessionMessageNotification(params: Record<string, unknown>): void {
+  const sessionKey = typeof params.sessionKey === 'string' ? params.sessionKey.trim() : '';
+  if (!sessionKey) {
+    return;
+  }
+
+  import('./chat')
+    .then(({ useChatStore }) => {
+      const state = useChatStore.getState();
+      if (!sessionKeysEquivalent(state.currentSessionKey, sessionKey)) {
+        return;
+      }
+      // OpenClaw dashboard defers same-session history reload while a run is
+      // active; terminal chat events will do the authoritative reconciliation.
+      if (state.activeRunId || state.sending) {
+        pendingSessionMessageReloadSessionKey = sessionKey;
+        return;
+      }
+      pendingSessionMessageReloadSessionKey = null;
+      void state.loadHistory(true);
+    })
+    .catch(() => {});
+}
+
 function handleGatewayNotification(notification: { method?: string; params?: Record<string, unknown> } | undefined): void {
   const payload = notification;
   if (!payload || !payload.method) {
@@ -81,6 +167,11 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
 
   if (payload.method === 'chat.side_result' && payload.params) {
     handleBtwEventFromGateway(payload.params as Record<string, unknown>);
+    return;
+  }
+
+  if (payload.method === 'session.message' && payload.params) {
+    handleSessionMessageNotification(payload.params as Record<string, unknown>);
     return;
   }
 
@@ -119,6 +210,7 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
     import('./chat')
       .then(({ useChatStore }) => {
         useChatStore.getState().handleChatEvent(normalizedEvent);
+        maybeReplayDeferredSessionMessageReload(useChatStore, normalizedEvent);
       })
       .catch(() => {});
   }
@@ -137,22 +229,9 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
       .catch(() => {});
   }
 
-  if (phase === 'completed' || phase === 'done' || phase === 'finished' || phase === 'end') {
-    import('./chat')
-      .then(({ useChatStore }) => {
-        const state = useChatStore.getState();
-        state.loadHistory(true);
-        if (state.sending) {
-          useChatStore.setState({
-            sending: false,
-            activeRunId: null,
-            pendingFinal: false,
-            lastUserMessageAt: null,
-          });
-        }
-      })
-      .catch(() => {});
-  }
+  // Keep chat transcript state owned by `chat` terminal events. OpenClaw's
+  // dashboard does not clear active chat state from generic agent lifecycle
+  // completion because that can arrive before the final chat payload.
 }
 
 function handleGatewayChatMessage(data: unknown): void {
@@ -165,20 +244,24 @@ function handleGatewayChatMessage(data: unknown): void {
     if (payload.state) {
       // ✅ Fix CR-3: Always spread all top-level fields so sessionKey is preserved.
       // OpenClaw chat:message event: sessionKey lives at payload top level, same as runId.
-      useChatStore.getState().handleChatEvent({
+      const normalizedEvent = {
         ...payload,
         runId: chatData.runId ?? payload.runId,
         sessionKey: chatData.sessionKey ?? payload.sessionKey,
-      });
+      };
+      useChatStore.getState().handleChatEvent(normalizedEvent);
+      maybeReplayDeferredSessionMessageReload(useChatStore, normalizedEvent);
       return;
     }
 
-    useChatStore.getState().handleChatEvent({
+    const normalizedEvent = {
       state: 'final',
       message: payload,
       runId: chatData.runId ?? payload.runId,
       sessionKey: chatData.sessionKey ?? payload.sessionKey,
-    });
+    };
+    useChatStore.getState().handleChatEvent(normalizedEvent);
+    maybeReplayDeferredSessionMessageReload(useChatStore, normalizedEvent);
   }).catch(() => {});
 }
 

@@ -6,7 +6,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RefreshButton } from '@/components/common/RefreshButton';
-import { Search, X } from 'lucide-react';
+import { Download, Search, X } from 'lucide-react';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
@@ -24,11 +24,15 @@ export function ChatToolbar({
   showAgentLabel = false,
   searchQuery,
   onSearchChange,
+  canExport = false,
+  onExport,
 }: {
   currentAgentLabel?: string;
   showAgentLabel?: boolean;
   searchQuery?: string;
   onSearchChange?: (q: string) => void;
+  canExport?: boolean;
+  onExport?: () => void;
 }) {
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const modelMenuRef = useRef<HTMLDivElement>(null);
@@ -156,6 +160,24 @@ export function ChatToolbar({
           </TooltipTrigger>
           <TooltipContent>
             <p>{t('toolbar.refresh')}</p>
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-white/10"
+              onClick={onExport}
+              disabled={!canExport}
+              aria-label={t('toolbar.exportChat', 'Export chat')}
+              title={t('toolbar.exportChat', 'Export chat')}
+            >
+              <Download className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{t('toolbar.exportChat', 'Export chat')}</p>
           </TooltipContent>
         </Tooltip>
 
