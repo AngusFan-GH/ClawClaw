@@ -166,6 +166,8 @@ LangString installLogRuntimeValidationTimedOut 1033 "Bundled runtime validation 
 LangString installLogRuntimeValidationTimedOut 2052 "内置运行时校验超时。"
 LangString installLogUninstallShortcut 1033 "Creating explicit Start Menu uninstall shortcut..."
 LangString installLogUninstallShortcut 2052 "正在创建开始菜单卸载快捷方式..."
+LangString installLogUninstallShortcutSkipped 1033 "Warning: Start Menu uninstall shortcut could not be created. Continuing because the Windows Apps entry can still uninstall ClawClaw."
+LangString installLogUninstallShortcutSkipped 2052 "警告：无法创建开始菜单卸载快捷方式。安装将继续，仍可通过 Windows 应用列表卸载 ClawClaw。"
 LangString installLogFinalizeDone 1033 "Post-install system configuration completed."
 LangString installLogFinalizeDone 2052 "安装后的系统配置已完成。"
 LangString uninstallShortcutTitle 1033 "Uninstall ${PRODUCT_NAME}"
@@ -457,6 +459,7 @@ FunctionEnd
   ; Writing to HKLM requires admin privileges; on per-user installs without
   ; elevation this call silently fails.
   WriteRegDWORD HKLM "SYSTEM\CurrentControlSet\Control\FileSystem" "LongPathsEnabled" 1
+  ClearErrors
 
   ; Use PowerShell to update the current user's PATH.
   ; This avoids NSIS string-buffer limits and preserves long PATH values.
@@ -505,7 +508,13 @@ FunctionEnd
   ${else}
     StrCpy $3 "/currentuser"
   ${endIf}
+  ClearErrors
+  CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
   CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\$(uninstallShortcutTitle).lnk" "$INSTDIR\${UNINSTALL_FILENAME}" "$3"
+  ${If} ${Errors}
+    DetailPrint "$(installLogUninstallShortcutSkipped)"
+    ClearErrors
+  ${EndIf}
 
   DetailPrint "$(installLogFinalizeDone)"
 !macroend
