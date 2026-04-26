@@ -111,9 +111,6 @@ for (const requiredSnippet of [
   '!addincludedir "${PROJECT_DIR}/scripts"',
   '!macro customInstallMode',
   'StrCpy $isForceCurrentInstall "1"',
-  '$(installRuntimeValidationFailed)',
-  '$(installLogRuntimeValidationLaunchFailed)',
-  '$(installLogRuntimeValidationTimedOut)',
   'SetErrorLevel 0',
   '!macro customCheckAppRunning',
   '$(installFilesLocked)',
@@ -123,22 +120,22 @@ for (const requiredSnippet of [
     fail(`scripts/installer.nsh is missing expected snippet: ${requiredSnippet}`);
   }
 }
-if (installerNsh.includes('$(installRuntimeValidationWarning)')) {
-  fail('scripts/installer.nsh must not downgrade OpenClaw runtime validation failures to warnings.');
+for (const forbiddenSnippet of [
+  'run-runtime-validation.ps1',
+  'installRuntimeValidationFailed',
+  'installLogRuntimeValidation',
+  'installPhaseValidateRuntime',
+  '!insertmacro quitSuccess',
+]) {
+  if (installerNsh.includes(forbiddenSnippet)) {
+    fail(`scripts/installer.nsh must not run post-install runtime validation inside NSIS: ${forbiddenSnippet}`);
+  }
 }
-const validationDoneIndex = installerNsh.indexOf('_runtime_validation_done:');
-const finalizeDoneIndex = installerNsh.indexOf('DetailPrint "$(installLogFinalizeDone)"', validationDoneIndex);
+const finalizeDoneIndex = installerNsh.indexOf('DetailPrint "$(installLogFinalizeDone)"');
 const finalClearErrorsIndex = installerNsh.indexOf('ClearErrors', finalizeDoneIndex);
 const finalSetErrorLevelIndex = installerNsh.indexOf('SetErrorLevel 0', finalClearErrorsIndex);
-const finalQuitSuccessIndex = installerNsh.indexOf('!insertmacro quitSuccess', finalSetErrorLevelIndex);
-if (
-  validationDoneIndex === -1 ||
-  finalizeDoneIndex === -1 ||
-  finalClearErrorsIndex === -1 ||
-  finalSetErrorLevelIndex === -1 ||
-  finalQuitSuccessIndex === -1
-) {
-  fail('scripts/installer.nsh must end the runtime-validation success path with DetailPrint, ClearErrors, SetErrorLevel 0, and quitSuccess.');
+if (finalizeDoneIndex === -1 || finalClearErrorsIndex === -1 || finalSetErrorLevelIndex === -1) {
+  fail('scripts/installer.nsh must end customInstall with DetailPrint, ClearErrors, and SetErrorLevel 0.');
 }
 
 for (const requiredSnippet of [
@@ -167,6 +164,17 @@ if (runtimeValidation.includes('-ArgumentList')) {
 }
 if (runtimeValidation.includes('& $nodeExe')) {
   fail('scripts/run-runtime-validation.ps1 must use ProcessStartInfo so Windows PowerShell does not reinterpret validation arguments.');
+}
+
+const afterPack = requireText(resolve(scriptsDir, 'after-pack.cjs'));
+for (const requiredSnippet of [
+  'validate-openclaw-runtime.cjs',
+  'validateOpenClawRuntime(openclawRoot)',
+  'Windows OpenClaw runtime validated',
+]) {
+  if (!afterPack.includes(requiredSnippet)) {
+    fail(`scripts/after-pack.cjs is missing expected build-time runtime validation snippet: ${requiredSnippet}`);
+  }
 }
 
 const uninstallerNsh = requireText(resolve(scriptsDir, 'uninstaller.nsh'));

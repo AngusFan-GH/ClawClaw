@@ -20,6 +20,7 @@
  */
 
 const { cpSync, existsSync, readFileSync, readdirSync, rmSync, mkdirSync, writeFileSync, statSync } = require('fs');
+const { spawnSync } = require('child_process');
 const { join, dirname, sep, relative } = require('path');
 const {
   validateBundledNodeModules,
@@ -440,6 +441,34 @@ function bundlePlugin(nodeModulesRoot, npmName, destDir) {
   return true;
 }
 
+function validateOpenClawRuntime(openclawRoot) {
+  const validator = join(__dirname, '..', 'resources', 'scripts', 'validate-openclaw-runtime.cjs');
+  if (!existsSync(validator)) {
+    throw new Error(`[after-pack] Missing OpenClaw runtime validator: ${validator}`);
+  }
+
+  const result = spawnSync(process.execPath, [
+    '--disable-warning=ExperimentalWarning',
+    validator,
+    openclawRoot,
+  ], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  if (result.stdout?.trim()) {
+    console.log(`[after-pack] OpenClaw runtime validator stdout: ${result.stdout.trim()}`);
+  }
+  if (result.stderr?.trim()) {
+    console.warn(`[after-pack] OpenClaw runtime validator stderr: ${result.stderr.trim()}`);
+  }
+  if (result.error || result.status !== 0) {
+    throw new Error(
+      `[after-pack] OpenClaw runtime validation failed with exit code ${result.status ?? 'unknown'}: ${result.error?.message ?? 'see validator output above'}`
+    );
+  }
+}
+
 // ── Main hook ────────────────────────────────────────────────────────────────
 
 exports.default = async function afterPack(context) {
@@ -537,7 +566,10 @@ exports.default = async function afterPack(context) {
     console.log(`[after-pack] ✅ Removed ${nativeRemoved} non-target native platform packages.`);
   }
 
-  // 5. Windows CLI runtime validation
+  // 5. Windows CLI/runtime validation. Keep this as a build-time hard gate:
+  // the NSIS installer must not run post-install PowerShell/Node probes inside
+  // MUI_PAGE_INSTFILES because those child processes can leave the page in an
+  // aborted state even when the dependency probe itself exits successfully.
   if (platform === 'win32') {
     const bundledNode = join(resourcesDir, 'bin', 'node.exe');
     const cliWrapper = join(resourcesDir, 'cli', 'openclaw.cmd');
@@ -554,7 +586,8 @@ exports.default = async function afterPack(context) {
       );
     }
 
-    console.log('[after-pack] ✅ Windows CLI runtime validated (node.exe + wrapper + entry script).');
+    validateOpenClawRuntime(openclawRoot);
+    console.log('[after-pack] ✅ Windows OpenClaw runtime validated (node.exe + wrapper + entry script + dependency probe).');
   }
 
   // 6. Patch lru-cache in app.asar.unpacked.

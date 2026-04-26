@@ -124,10 +124,6 @@ LangString installPhaseAssociations 1033 "Registering file associations..."
 LangString installPhaseAssociations 2052 "正在注册文件关联..."
 LangString installPhaseFinalize 1033 "Applying post-install system configuration..."
 LangString installPhaseFinalize 2052 "正在执行安装后的系统配置..."
-LangString installPhaseValidateRuntime 1033 "Validating bundled OpenClaw runtime..."
-LangString installPhaseValidateRuntime 2052 "正在验证内置 OpenClaw 运行时..."
-LangString installRuntimeValidationFailed 1033 "The bundled OpenClaw runtime did not pass the post-install check, so setup cannot finish safely.$\r$\n$\r$\nOpen the installer details above for the exact missing file or dependency, then rebuild or reinstall the latest package."
-LangString installRuntimeValidationFailed 2052 "内置 OpenClaw 运行时未通过安装后检查，因此安装器无法安全完成。$\r$\n$\r$\n请展开上方安装详情，查看具体缺失的文件或依赖，然后重新构建或安装最新安装包。"
 LangString installFilesLocked 1033 "Files from the previous installation are still in use.$\r$\n$\r$\nClose the related ClawClaw or runtime process, then click Retry."
 LangString installFilesLocked 2052 "旧版本安装中的文件仍被占用。$\r$\n$\r$\n请关闭相关的 ClawClaw 或运行时进程，然后单击“重试”。"
 LangString installLogGatewayStopExit 1033 "Gateway stop exited with code $R6."
@@ -156,14 +152,6 @@ LangString installLogPathTimeout 1033 "Warning: PowerShell PATH update timed out
 LangString installLogPathTimeout 2052 "警告：PowerShell 更新 PATH 超时。"
 LangString installLogPathExitCode 1033 "Warning: PowerShell PATH update exited with code $0."
 LangString installLogPathExitCode 2052 "警告：PowerShell 更新 PATH 的退出码为 $0。"
-LangString installLogRuntimeValidationPassed 1033 "OpenClaw runtime validation passed."
-LangString installLogRuntimeValidationPassed 2052 "OpenClaw 运行时校验通过。"
-LangString installLogRuntimeValidationFailedCode 1033 "Bundled runtime validation failed with exit code $0."
-LangString installLogRuntimeValidationFailedCode 2052 "内置运行时校验失败，退出码为 $0。"
-LangString installLogRuntimeValidationLaunchFailed 1033 "Bundled runtime validation could not be launched. Check that PowerShell and bundled node.exe are available."
-LangString installLogRuntimeValidationLaunchFailed 2052 "无法启动内置运行时校验。请检查 PowerShell 和随包 node.exe 是否可用。"
-LangString installLogRuntimeValidationTimedOut 1033 "Bundled runtime validation timed out."
-LangString installLogRuntimeValidationTimedOut 2052 "内置运行时校验超时。"
 LangString installLogFinalizeDone 1033 "Post-install system configuration completed."
 LangString installLogFinalizeDone 2052 "安装后的系统配置已完成。"
 
@@ -472,33 +460,7 @@ FunctionEnd
   DetailPrint "$(installLogPathExitCode)"
 
   _ci_done:
-  !insertmacro SetInstallPhase "$(installPhaseValidateRuntime)"
-  ClearErrors
-  InitPluginsDir
-  File "/oname=$PLUGINSDIR\run-runtime-validation.ps1" "${PROJECT_DIR}\scripts\run-runtime-validation.ps1"
-  nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\run-runtime-validation.ps1" -InstallDir "$INSTDIR"'
-  Pop $0
-  StrCmp $0 "error" 0 +3
-    DetailPrint "$(installLogRuntimeValidationLaunchFailed)"
-    MessageBox MB_OK|MB_ICONSTOP "$(installRuntimeValidationFailed)"
-    Abort
-  StrCmp $0 "timeout" 0 +3
-    DetailPrint "$(installLogRuntimeValidationTimedOut)"
-    MessageBox MB_OK|MB_ICONSTOP "$(installRuntimeValidationFailed)"
-    Abort
-  StrCmp $0 "0" 0 +4
-    DetailPrint "$(installLogRuntimeValidationPassed)"
-    Goto _runtime_validation_done
-  DetailPrint "$(installLogRuntimeValidationFailedCode)"
-  MessageBox MB_OK|MB_ICONSTOP "$(installRuntimeValidationFailed)"
-  Abort
-
-  _runtime_validation_done:
-  ; Keep the post-validation path side-effect free. Uninstall entry ownership
-  ; stays with electron-builder's registry/uninstaller flow so optional
-  ; shortcut failures cannot turn a valid install into an aborted install.
   DetailPrint "$(installLogFinalizeDone)"
   ClearErrors
   SetErrorLevel 0
-  !insertmacro quitSuccess
 !macroend
