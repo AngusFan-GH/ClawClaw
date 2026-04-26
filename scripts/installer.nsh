@@ -497,8 +497,7 @@ FunctionEnd
   ; Keep the post-validation path side-effect free. Uninstall entry ownership
   ; stays with electron-builder's registry/uninstaller flow so optional
   ; shortcut failures cannot turn a valid install into an aborted install.
+  DetailPrint "$(installLogFinalizeDone)"
   ClearErrors
   SetErrorLevel 0
-
-  DetailPrint "$(installLogFinalizeDone)"
 !macroend

@@ -126,6 +126,18 @@ for (const requiredSnippet of [
 if (installerNsh.includes('$(installRuntimeValidationWarning)')) {
   fail('scripts/installer.nsh must not downgrade OpenClaw runtime validation failures to warnings.');
 }
+const validationDoneIndex = installerNsh.indexOf('_runtime_validation_done:');
+const finalizeDoneIndex = installerNsh.indexOf('DetailPrint "$(installLogFinalizeDone)"', validationDoneIndex);
+const finalClearErrorsIndex = installerNsh.indexOf('ClearErrors', finalizeDoneIndex);
+const finalSetErrorLevelIndex = installerNsh.indexOf('SetErrorLevel 0', finalClearErrorsIndex);
+if (
+  validationDoneIndex === -1 ||
+  finalizeDoneIndex === -1 ||
+  finalClearErrorsIndex === -1 ||
+  finalSetErrorLevelIndex === -1
+) {
+  fail('scripts/installer.nsh must end the runtime-validation success path with DetailPrint, ClearErrors, and SetErrorLevel 0.');
+}
 
 for (const requiredSnippet of [
   '!ifmacrodef customUnInstallSection',
