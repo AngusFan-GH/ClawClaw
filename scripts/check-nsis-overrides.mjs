@@ -140,7 +140,8 @@ for (const requiredSnippet of [
   '[OpenClaw validation] Install directory:',
   '[OpenClaw validation] ERROR:',
   '[OpenClaw validation] Dependency probe failed',
-  '& $nodeExe',
+  'System.Diagnostics.ProcessStartInfo',
+  "RedirectStandardError = $true",
 ]) {
   if (!runtimeValidation.includes(requiredSnippet)) {
     fail(`scripts/run-runtime-validation.ps1 is missing expected snippet: ${requiredSnippet}`);
@@ -148,6 +149,9 @@ for (const requiredSnippet of [
 }
 if (runtimeValidation.includes('-ArgumentList')) {
   fail('scripts/run-runtime-validation.ps1 must invoke bundled node.exe directly so paths with spaces are preserved.');
+}
+if (runtimeValidation.includes('& $nodeExe')) {
+  fail('scripts/run-runtime-validation.ps1 must use ProcessStartInfo so Windows PowerShell does not reinterpret validation arguments.');
 }
 
 const uninstallerNsh = requireText(resolve(scriptsDir, 'uninstaller.nsh'));

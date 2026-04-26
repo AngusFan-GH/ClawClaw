@@ -34,33 +34,88 @@ if (-not (Test-Path -LiteralPath $openclawDir)) {
   exit 1
 }
 
-$stdoutPath = Join-Path ([System.IO.Path]::GetTempPath()) ("clawclaw-runtime-validate-" + [System.Guid]::NewGuid().ToString("N") + ".out.log")
-$stderrPath = Join-Path ([System.IO.Path]::GetTempPath()) ("clawclaw-runtime-validate-" + [System.Guid]::NewGuid().ToString("N") + ".err.log")
+function ConvertTo-ProcessArgument {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Value
+  )
+
+  if ($Value.Length -eq 0) {
+    return '""'
+  }
+
+  if ($Value -notmatch '[\s"]') {
+    return $Value
+  }
+
+  $result = '"'
+  $backslashes = 0
+  foreach ($char in $Value.ToCharArray()) {
+    if ($char -eq '\') {
+      $backslashes += 1
+      continue
+    }
+
+    if ($char -eq '"') {
+      $result += ('\' * (($backslashes * 2) + 1))
+      $result += '"'
+      $backslashes = 0
+      continue
+    }
+
+    if ($backslashes -gt 0) {
+      $result += ('\' * $backslashes)
+      $backslashes = 0
+    }
+    $result += $char
+  }
+
+  if ($backslashes -gt 0) {
+    $result += ('\' * ($backslashes * 2))
+  }
+
+  $result += '"'
+  return $result
+}
 
 try {
-  $previousEmbeddedIn = [Environment]::GetEnvironmentVariable('OPENCLAW_EMBEDDED_IN', 'Process')
-  [Environment]::SetEnvironmentVariable('OPENCLAW_EMBEDDED_IN', 'ClawClaw', 'Process')
   Write-Output "[OpenClaw validation] Running dependency probe with bundled Node..."
-  Push-Location $openclawDir
-  try {
-    # Use PowerShell's native invocation so each path remains a distinct
-    # argument. Process-launch helpers flatten arrays into a command line and
-    # can split paths such as "C:\Program Files\ClawClaw\...".
-    & $nodeExe '--disable-warning=ExperimentalWarning' $scriptPath $openclawDir 1> $stdoutPath 2> $stderrPath
-    $exitCode = if ($null -eq $LASTEXITCODE) { 1 } else { $LASTEXITCODE }
-  } finally {
-    Pop-Location
+
+  $arguments = @(
+    '--disable-warning=ExperimentalWarning',
+    $scriptPath,
+    $openclawDir
+  ) | ForEach-Object { ConvertTo-ProcessArgument $_ }
+
+  $processInfo = New-Object System.Diagnostics.ProcessStartInfo
+  $processInfo.FileName = $nodeExe
+  $processInfo.WorkingDirectory = $openclawDir
+  $processInfo.Arguments = ($arguments -join ' ')
+  $processInfo.UseShellExecute = $false
+  $processInfo.CreateNoWindow = $true
+  $processInfo.RedirectStandardOutput = $true
+  $processInfo.RedirectStandardError = $true
+  $processInfo.EnvironmentVariables['OPENCLAW_EMBEDDED_IN'] = 'ClawClaw'
+
+  $process = New-Object System.Diagnostics.Process
+  $process.StartInfo = $processInfo
+  [void]$process.Start()
+  $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+  $stderrTask = $process.StandardError.ReadToEndAsync()
+  $process.WaitForExit()
+  $stdout = $stdoutTask.Result
+  $stderr = $stderrTask.Result
+  $exitCode = $process.ExitCode
+
+  if (-not [string]::IsNullOrWhiteSpace($stdout)) {
+    $stdout -split "\r?\n" | Where-Object { $_ -ne '' } | ForEach-Object { Write-Output $_ }
   }
 
-  if (Test-Path -LiteralPath $stdoutPath) {
-    Get-Content -LiteralPath $stdoutPath | ForEach-Object { Write-Output $_ }
-  }
-
-  if (Test-Path -LiteralPath $stderrPath) {
+  if (-not [string]::IsNullOrWhiteSpace($stderr)) {
     if ($exitCode -eq 0) {
-      Get-Content -LiteralPath $stderrPath | ForEach-Object { Write-Output "[OpenClaw validation] stderr: $_" }
+      $stderr -split "\r?\n" | Where-Object { $_ -ne '' } | ForEach-Object { Write-Output "[OpenClaw validation] stderr: $_" }
     } else {
-      Get-Content -LiteralPath $stderrPath | ForEach-Object { Write-Output "[OpenClaw validation] ERROR: $_" }
+      $stderr -split "\r?\n" | Where-Object { $_ -ne '' } | ForEach-Object { Write-Output "[OpenClaw validation] ERROR: $_" }
     }
   }
 
@@ -70,8 +125,7 @@ try {
     Write-Output "[OpenClaw validation] Dependency probe failed with exit code $exitCode."
   }
   exit $exitCode
-} finally {
-  [Environment]::SetEnvironmentVariable('OPENCLAW_EMBEDDED_IN', $previousEmbeddedIn, 'Process')
-  Remove-Item -LiteralPath $stdoutPath -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
+} catch {
+  Write-Output "[OpenClaw validation] ERROR: Failed to launch dependency probe: $($_.Exception.Message)"
+  exit 1
 }
