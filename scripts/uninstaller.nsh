@@ -56,7 +56,6 @@ LangString uninstallLogRemoveOpenClawData 2052 "正在删除 OpenClaw 用户数�
   !define MUI_UNWELCOMEPAGE_TITLE "$(uninstallWelcomeTitle)"
   !define MUI_UNWELCOMEPAGE_TEXT "$(uninstallWelcomeText)"
   !insertmacro MUI_UNPAGE_WELCOME
-  !insertmacro MUI_UNPAGE_COMPONENTS
 !macroend
 
 !macro customUnInit

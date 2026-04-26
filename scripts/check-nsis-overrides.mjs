@@ -111,7 +111,7 @@ for (const requiredSnippet of [
   '!addincludedir "${PROJECT_DIR}/scripts"',
   '!macro customInstallMode',
   'StrCpy $isForceCurrentInstall "1"',
-  '$(installRuntimeValidationWarning)',
+  '$(installRuntimeValidationFailed)',
   '$(installLogRuntimeValidationLaunchFailed)',
   '$(installLogRuntimeValidationTimedOut)',
   '!macro customCheckAppRunning',
@@ -122,8 +122,17 @@ for (const requiredSnippet of [
     fail(`scripts/installer.nsh is missing expected snippet: ${requiredSnippet}`);
   }
 }
-if (installerNsh.includes('$(installRuntimeValidationFailed)')) {
-  fail('scripts/installer.nsh must not show the old blocking runtime validation failure message.');
+if (installerNsh.includes('$(installRuntimeValidationWarning)')) {
+  fail('scripts/installer.nsh must not downgrade OpenClaw runtime validation failures to warnings.');
+}
+
+for (const requiredSnippet of [
+  '!ifmacrodef customUnInstallSection',
+  '!insertmacro MUI_UNPAGE_COMPONENTS',
+]) {
+  if (!installerNsi.includes(requiredSnippet)) {
+    fail(`scripts/installer.nsi is missing expected uninstall component page snippet: ${requiredSnippet}`);
+  }
 }
 
 const runtimeValidation = requireText(resolve(scriptsDir, 'run-runtime-validation.ps1'));
@@ -131,13 +140,20 @@ for (const requiredSnippet of [
   '[OpenClaw validation] Install directory:',
   '[OpenClaw validation] ERROR:',
   '[OpenClaw validation] Dependency probe failed',
+  '& $nodeExe',
 ]) {
   if (!runtimeValidation.includes(requiredSnippet)) {
     fail(`scripts/run-runtime-validation.ps1 is missing expected snippet: ${requiredSnippet}`);
   }
 }
+if (runtimeValidation.includes('-ArgumentList')) {
+  fail('scripts/run-runtime-validation.ps1 must invoke bundled node.exe directly so paths with spaces are preserved.');
+}
 
 const uninstallerNsh = requireText(resolve(scriptsDir, 'uninstaller.nsh'));
+if (uninstallerNsh.includes('!insertmacro MUI_UNPAGE_COMPONENTS')) {
+  fail('scripts/uninstaller.nsh must not insert the uninstall components page from customUnWelcomePage; installer.nsi owns that page order.');
+}
 for (const requiredSnippet of [
   '!macro DetectInstallDirLocks',
   '!macro KillInstallDirProcesses',
@@ -146,6 +162,19 @@ for (const requiredSnippet of [
   if (!uninstallerNsh.includes(requiredSnippet)) {
     fail(`scripts/uninstaller.nsh is missing expected snippet: ${requiredSnippet}`);
   }
+}
+
+const killInstallDirProcesses = requireText(resolve(scriptsDir, 'kill-install-dir-processes.ps1'));
+for (const requiredSnippet of [
+  "$processName -like 'Uninstall*.exe'",
+  'return $false',
+]) {
+  if (!killInstallDirProcesses.includes(requiredSnippet)) {
+    fail(`scripts/kill-install-dir-processes.ps1 is missing expected self-uninstaller protection: ${requiredSnippet}`);
+  }
+}
+if (killInstallDirProcesses.includes("'Uninstall ClawClaw.exe'")) {
+  fail('scripts/kill-install-dir-processes.ps1 must not target the running uninstaller by process name.');
 }
 
 const upstreamInstaller = requireText(resolve(upstreamDir, 'installer.nsi'));

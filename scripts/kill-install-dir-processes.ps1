@@ -25,7 +25,6 @@ if ([string]::IsNullOrWhiteSpace($normalizedInstallDir)) {
 $escapedInstallDir = [Regex]::Escape($normalizedInstallDir)
 $commandLineOnlyProcessNames = @(
   'ClawClaw.exe',
-  'Uninstall ClawClaw.exe',
   'node.exe',
   'uv.exe'
 )
@@ -35,12 +34,16 @@ $matchingProcesses = Get-CimInstance Win32_Process | Where-Object {
     return $false
   }
 
+  $processName = [string]$_.Name
+  if ($processName -like 'Uninstall*.exe') {
+    return $false
+  }
+
   $exePath = Normalize-Path $_.ExecutablePath
   if ($exePath -and $exePath.StartsWith($normalizedInstallDir, [System.StringComparison]::OrdinalIgnoreCase)) {
     return $true
   }
 
-  $processName = [string]$_.Name
   if (
     $_.CommandLine -and
     $_.CommandLine -match $escapedInstallDir -and

@@ -41,34 +41,35 @@ try {
   $previousEmbeddedIn = [Environment]::GetEnvironmentVariable('OPENCLAW_EMBEDDED_IN', 'Process')
   [Environment]::SetEnvironmentVariable('OPENCLAW_EMBEDDED_IN', 'ClawClaw', 'Process')
   Write-Output "[OpenClaw validation] Running dependency probe with bundled Node..."
-  $child = Start-Process `
-    -FilePath $nodeExe `
-    -ArgumentList @('--disable-warning=ExperimentalWarning', $scriptPath, $openclawDir) `
-    -WorkingDirectory $openclawDir `
-    -WindowStyle Hidden `
-    -Wait `
-    -PassThru `
-    -RedirectStandardOutput $stdoutPath `
-    -RedirectStandardError $stderrPath
+  Push-Location $openclawDir
+  try {
+    # Use PowerShell's native invocation so each path remains a distinct
+    # argument. Process-launch helpers flatten arrays into a command line and
+    # can split paths such as "C:\Program Files\ClawClaw\...".
+    & $nodeExe '--disable-warning=ExperimentalWarning' $scriptPath $openclawDir 1> $stdoutPath 2> $stderrPath
+    $exitCode = if ($null -eq $LASTEXITCODE) { 1 } else { $LASTEXITCODE }
+  } finally {
+    Pop-Location
+  }
 
   if (Test-Path -LiteralPath $stdoutPath) {
     Get-Content -LiteralPath $stdoutPath | ForEach-Object { Write-Output $_ }
   }
 
   if (Test-Path -LiteralPath $stderrPath) {
-    if ($child.ExitCode -eq 0) {
+    if ($exitCode -eq 0) {
       Get-Content -LiteralPath $stderrPath | ForEach-Object { Write-Output "[OpenClaw validation] stderr: $_" }
     } else {
       Get-Content -LiteralPath $stderrPath | ForEach-Object { Write-Output "[OpenClaw validation] ERROR: $_" }
     }
   }
 
-  if ($child.ExitCode -eq 0) {
+  if ($exitCode -eq 0) {
     Write-Output "[OpenClaw validation] Dependency probe passed."
   } else {
-    Write-Output "[OpenClaw validation] Dependency probe failed with exit code $($child.ExitCode)."
+    Write-Output "[OpenClaw validation] Dependency probe failed with exit code $exitCode."
   }
-  exit $child.ExitCode
+  exit $exitCode
 } finally {
   [Environment]::SetEnvironmentVariable('OPENCLAW_EMBEDDED_IN', $previousEmbeddedIn, 'Process')
   Remove-Item -LiteralPath $stdoutPath -Force -ErrorAction SilentlyContinue
