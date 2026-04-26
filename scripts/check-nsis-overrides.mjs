@@ -114,7 +114,7 @@ for (const requiredSnippet of [
   '$(installRuntimeValidationFailed)',
   '$(installLogRuntimeValidationLaunchFailed)',
   '$(installLogRuntimeValidationTimedOut)',
-  '$(installLogUninstallShortcutSkipped)',
+  'SetErrorLevel 0',
   '!macro customCheckAppRunning',
   '$(installFilesLocked)',
   '!macro ResolveUpgradeStrategy',

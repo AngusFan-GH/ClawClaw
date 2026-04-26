@@ -164,14 +164,8 @@ LangString installLogRuntimeValidationLaunchFailed 1033 "Bundled runtime validat
 LangString installLogRuntimeValidationLaunchFailed 2052 "无法启动内置运行时校验。请检查 PowerShell 和随包 node.exe 是否可用。"
 LangString installLogRuntimeValidationTimedOut 1033 "Bundled runtime validation timed out."
 LangString installLogRuntimeValidationTimedOut 2052 "内置运行时校验超时。"
-LangString installLogUninstallShortcut 1033 "Creating explicit Start Menu uninstall shortcut..."
-LangString installLogUninstallShortcut 2052 "正在创建开始菜单卸载快捷方式..."
-LangString installLogUninstallShortcutSkipped 1033 "Warning: Start Menu uninstall shortcut could not be created. Continuing because the Windows Apps entry can still uninstall ClawClaw."
-LangString installLogUninstallShortcutSkipped 2052 "警告：无法创建开始菜单卸载快捷方式。安装将继续，仍可通过 Windows 应用列表卸载 ClawClaw。"
 LangString installLogFinalizeDone 1033 "Post-install system configuration completed."
 LangString installLogFinalizeDone 2052 "安装后的系统配置已完成。"
-LangString uninstallShortcutTitle 1033 "Uninstall ${PRODUCT_NAME}"
-LangString uninstallShortcutTitle 2052 "卸载 ${PRODUCT_NAME}"
 
 !macro customWelcomePage
   ; customWelcomePage is expanded at compile-time in assistedInstaller.nsh.
@@ -500,21 +494,11 @@ FunctionEnd
   Abort
 
   _runtime_validation_done:
-  ; Add an explicit Start Menu uninstall shortcut so users have a visible
-  ; uninstall entry even when Windows doesn't surface one prominently.
-  DetailPrint "$(installLogUninstallShortcut)"
-  ${if} $installMode == "all"
-    StrCpy $3 "/allusers"
-  ${else}
-    StrCpy $3 "/currentuser"
-  ${endIf}
+  ; Keep the post-validation path side-effect free. Uninstall entry ownership
+  ; stays with electron-builder's registry/uninstaller flow so optional
+  ; shortcut failures cannot turn a valid install into an aborted install.
   ClearErrors
-  CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
-  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\$(uninstallShortcutTitle).lnk" "$INSTDIR\${UNINSTALL_FILENAME}" "$3"
-  ${If} ${Errors}
-    DetailPrint "$(installLogUninstallShortcutSkipped)"
-    ClearErrors
-  ${EndIf}
+  SetErrorLevel 0
 
   DetailPrint "$(installLogFinalizeDone)"
 !macroend
