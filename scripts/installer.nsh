@@ -500,4 +500,5 @@ FunctionEnd
   DetailPrint "$(installLogFinalizeDone)"
   ClearErrors
   SetErrorLevel 0
+  !insertmacro quitSuccess
 !macroend

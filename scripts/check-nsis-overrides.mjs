@@ -130,13 +130,15 @@ const validationDoneIndex = installerNsh.indexOf('_runtime_validation_done:');
 const finalizeDoneIndex = installerNsh.indexOf('DetailPrint "$(installLogFinalizeDone)"', validationDoneIndex);
 const finalClearErrorsIndex = installerNsh.indexOf('ClearErrors', finalizeDoneIndex);
 const finalSetErrorLevelIndex = installerNsh.indexOf('SetErrorLevel 0', finalClearErrorsIndex);
+const finalQuitSuccessIndex = installerNsh.indexOf('!insertmacro quitSuccess', finalSetErrorLevelIndex);
 if (
   validationDoneIndex === -1 ||
   finalizeDoneIndex === -1 ||
   finalClearErrorsIndex === -1 ||
-  finalSetErrorLevelIndex === -1
+  finalSetErrorLevelIndex === -1 ||
+  finalQuitSuccessIndex === -1
 ) {
-  fail('scripts/installer.nsh must end the runtime-validation success path with DetailPrint, ClearErrors, and SetErrorLevel 0.');
+  fail('scripts/installer.nsh must end the runtime-validation success path with DetailPrint, ClearErrors, SetErrorLevel 0, and quitSuccess.');
 }
 
 for (const requiredSnippet of [
