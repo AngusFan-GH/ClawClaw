@@ -126,8 +126,8 @@ LangString installPhaseFinalize 1033 "Applying post-install system configuration
 LangString installPhaseFinalize 2052 "正在执行安装后的系统配置..."
 LangString installPhaseValidateRuntime 1033 "Validating bundled OpenClaw runtime..."
 LangString installPhaseValidateRuntime 2052 "正在验证内置 OpenClaw 运行时..."
-LangString installRuntimeValidationFailed 1033 "The bundled OpenClaw runtime did not pass the post-install check, so setup cannot finish safely.$\r$\n$\r$\nOpen the installer details above for the exact missing file or dependency, then rebuild or reinstall the latest package."
-LangString installRuntimeValidationFailed 2052 "内置 OpenClaw 运行时未通过安装后检查，因此安装器无法安全完成。$\r$\n$\r$\n请展开上方安装详情，查看具体缺失的文件或依赖，然后重新构建或安装最新安装包。"
+LangString installRuntimeValidationWarning 1033 "Setup finished installing ${PRODUCT_NAME}, but the bundled OpenClaw runtime did not pass the post-install check.$\r$\n$\r$\nOpen the installer details above for the exact missing file or dependency. You can still launch ${PRODUCT_NAME}; the setup page will show runtime diagnostics if OpenClaw cannot start."
+LangString installRuntimeValidationWarning 2052 "${PRODUCT_NAME} 已完成安装，但内置 OpenClaw 运行时未通过安装后检查。$\r$\n$\r$\n请展开上方安装详情，查看具体缺失的文件或依赖。你仍然可以启动 ${PRODUCT_NAME}；如果 OpenClaw 无法启动，设置页会显示运行时诊断信息。"
 LangString installFilesLocked 1033 "Files from the previous installation are still in use.$\r$\n$\r$\nClose the related ClawClaw or runtime process, then click Retry."
 LangString installFilesLocked 2052 "旧版本安装中的文件仍被占用。$\r$\n$\r$\n请关闭相关的 ClawClaw 或运行时进程，然后单击“重试”。"
 LangString installLogGatewayStopExit 1033 "Gateway stop exited with code $R6."
@@ -483,18 +483,17 @@ FunctionEnd
   Pop $0
   StrCmp $0 "error" 0 +3
     DetailPrint "$(installLogRuntimeValidationLaunchFailed)"
-    MessageBox MB_OK|MB_ICONSTOP "$(installRuntimeValidationFailed)"
-    Abort
+    MessageBox MB_OK|MB_ICONEXCLAMATION "$(installRuntimeValidationWarning)"
+    Goto _runtime_validation_done
   StrCmp $0 "timeout" 0 +3
     DetailPrint "$(installLogRuntimeValidationTimedOut)"
-    MessageBox MB_OK|MB_ICONSTOP "$(installRuntimeValidationFailed)"
-    Abort
+    MessageBox MB_OK|MB_ICONEXCLAMATION "$(installRuntimeValidationWarning)"
+    Goto _runtime_validation_done
   StrCmp $0 "0" 0 +4
     DetailPrint "$(installLogRuntimeValidationPassed)"
     Goto _runtime_validation_done
   DetailPrint "$(installLogRuntimeValidationFailedCode)"
-  MessageBox MB_OK|MB_ICONSTOP "$(installRuntimeValidationFailed)"
-  Abort
+  MessageBox MB_OK|MB_ICONEXCLAMATION "$(installRuntimeValidationWarning)"
 
   _runtime_validation_done:
   ; Add an explicit Start Menu uninstall shortcut so users have a visible

@@ -111,6 +111,7 @@ for (const requiredSnippet of [
   '!addincludedir "${PROJECT_DIR}/scripts"',
   '!macro customInstallMode',
   'StrCpy $isForceCurrentInstall "1"',
+  '$(installRuntimeValidationWarning)',
   '$(installLogRuntimeValidationLaunchFailed)',
   '$(installLogRuntimeValidationTimedOut)',
   '!macro customCheckAppRunning',
@@ -120,6 +121,9 @@ for (const requiredSnippet of [
   if (!installerNsh.includes(requiredSnippet)) {
     fail(`scripts/installer.nsh is missing expected snippet: ${requiredSnippet}`);
   }
+}
+if (installerNsh.includes('$(installRuntimeValidationFailed)')) {
+  fail('scripts/installer.nsh must not show the old blocking runtime validation failure message.');
 }
 
 const runtimeValidation = requireText(resolve(scriptsDir, 'run-runtime-validation.ps1'));
