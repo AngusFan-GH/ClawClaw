@@ -1,4 +1,5 @@
 import { getHostApiBase } from '@/lib/host-api';
+import { normalizeChatTimestampForKey, normalizeChatTimestampMs } from '@/lib/chat-timestamps';
 import type { RawMessage, StreamSegment } from '@/stores/chat';
 import { extractImages, extractText, extractThinking } from './message-utils';
 import { historyContainsPendingUserMessage } from './pending-user-message';
@@ -134,8 +135,8 @@ type NormalizedMessage = {
   senderLabel?: string | null;
 };
 
-export function toDisplayTimestampMs(timestamp: number): number {
-  return timestamp < 1e12 ? timestamp * 1000 : timestamp;
+export function toDisplayTimestampMs(timestamp: unknown): number {
+  return normalizeChatTimestampMs(timestamp) ?? Date.now();
 }
 
 export function getMessageKey(message: RawMessage): string {
@@ -143,7 +144,7 @@ export function getMessageKey(message: RawMessage): string {
   if (toolCallId) return `tool:${toolCallId}`;
   const id = typeof message.id === 'string' ? message.id : '';
   if (id) return `msg:${id}`;
-  const timestamp = typeof message.timestamp === 'number' ? message.timestamp : null;
+  const timestamp = normalizeChatTimestampForKey(message.timestamp);
   const role = typeof message.role === 'string' ? message.role : 'unknown';
   if (timestamp != null) return `msg:${role}:${timestamp}`;
   return `msg:${role}`;
@@ -501,7 +502,7 @@ export function normalizeMessage(message: RawMessage): NormalizedMessage {
   return {
     role,
     content,
-    timestamp: typeof m.timestamp === 'number' ? toDisplayTimestampMs(m.timestamp) : Date.now(),
+    timestamp: toDisplayTimestampMs(m.timestamp),
     id: typeof m.id === 'string' ? m.id : undefined,
     senderLabel:
       typeof m.senderLabel === 'string' && m.senderLabel.trim() ? m.senderLabel.trim() : null,

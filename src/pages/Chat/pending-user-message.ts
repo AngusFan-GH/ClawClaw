@@ -1,3 +1,4 @@
+import { normalizeChatTimestampMs } from '@/lib/chat-timestamps';
 import type { RawMessage } from '@/stores/chat';
 import { extractText } from './message-utils';
 
@@ -43,9 +44,8 @@ function isLikelySamePendingUserMessage(
   }
 
   if (optimisticTimestampMs && historyMessage.timestamp) {
-    const historyTimestampMs = historyMessage.timestamp < 1e12
-      ? historyMessage.timestamp * 1000
-      : historyMessage.timestamp;
+    const historyTimestampMs = normalizeChatTimestampMs(historyMessage.timestamp);
+    if (!historyTimestampMs) return false;
     if (Math.abs(historyTimestampMs - optimisticTimestampMs) > 5 * 60_000) {
       return false;
     }
@@ -66,8 +66,8 @@ export function historyContainsPendingUserMessage(
   }
 
   const latestHistoryTimestampMs = history.reduce((latest, message) => {
-    if (!message.timestamp) return latest;
-    const ts = message.timestamp < 1e12 ? message.timestamp * 1000 : message.timestamp;
+    const ts = normalizeChatTimestampMs(message.timestamp);
+    if (!ts) return latest;
     return ts > latest ? ts : latest;
   }, 0);
   if (

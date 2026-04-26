@@ -1,5 +1,6 @@
 import type { RawMessage, ContentBlock } from '@/stores/chat';
 import i18n from '@/i18n';
+import { normalizeChatTimestampMs } from '@/lib/chat-timestamps';
 
 const ENVELOPE_PREFIX = /^\[([^\]]+)\]\s*/;
 const ENVELOPE_CHANNELS = [
@@ -565,11 +566,8 @@ export function extractToolUse(message: RawMessage | unknown): Array<{ id: strin
  */
 export function formatTimestamp(timestamp: unknown): string {
   if (!timestamp) return '';
-  const ts = typeof timestamp === 'number' ? timestamp : Number(timestamp);
-  if (!ts || isNaN(ts)) return '';
-
-  // OpenClaw timestamps can be in seconds or milliseconds
-  const ms = ts > 1e12 ? ts : ts * 1000;
+  const ms = normalizeChatTimestampMs(timestamp);
+  if (!ms) return '';
   const date = new Date(ms);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();

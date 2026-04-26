@@ -6,13 +6,14 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { getOpenClawDir } from '../../utils/paths';
+import { normalizeChatTimestampForKey, type ChatTimestamp } from '../../../src/lib/chat-timestamps';
 
 type SessionHistoryBody = {
   sessionKey?: string;
   limit?: number;
   before?: {
     role?: string;
-    timestamp?: number;
+    timestamp?: ChatTimestamp;
     id?: string;
     toolCallId?: string;
   };
@@ -55,7 +56,7 @@ function resolveHistoryMessageKey(message: {
   if (id) return `msg:${id}`;
 
   const role = typeof message.role === 'string' ? message.role : 'unknown';
-  const timestamp = typeof message.timestamp === 'number' ? message.timestamp : null;
+  const timestamp = normalizeChatTimestampForKey(message.timestamp);
   if (timestamp != null) return `msg:${role}:${timestamp}`;
   return `msg:${role}`;
 }

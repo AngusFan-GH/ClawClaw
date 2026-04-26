@@ -1,6 +1,7 @@
 import type { ChatAgentOption } from './ChatInput';
 import type { ChatToolbarModelOption } from './ChatToolbar';
 import type { ChatSession, RawMessage } from '@/stores/chat';
+import type { ChatTimestamp } from '@/lib/chat-timestamps';
 import {
   normalizeModelRefValue,
   normalizeSessionModelValue,
@@ -178,7 +179,7 @@ export function buildChatRuntimeViewModel(params: {
 
   const streamMsg =
     streamingMessage && typeof streamingMessage === 'object'
-      ? (streamingMessage as { role?: string; content?: unknown; timestamp?: number })
+      ? (streamingMessage as { role?: string; content?: unknown; timestamp?: ChatTimestamp })
       : null;
   const streamText = streamMsg
     ? extractText(streamMsg)

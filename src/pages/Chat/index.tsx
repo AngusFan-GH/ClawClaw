@@ -13,6 +13,7 @@ import { useProviderStore } from '@/stores/providers';
 import { useAgentsStore } from '@/stores/agents';
 import { useSettingsStore } from '@/stores/settings';
 import type { ProviderAccount } from '@/lib/providers';
+import { normalizeChatTimestampMs } from '@/lib/chat-timestamps';
 import { PageLoader } from '@/components/common/LoadingSpinner';
 import { ChatThread } from './ChatThread';
 import { ChatInput, type ChatAgentOption } from './ChatInput';
@@ -65,10 +66,8 @@ function buildChatMarkdown(messages: RawMessage[], assistantName: string): strin
           : message.role === 'system'
             ? 'System'
             : 'Tool';
-    const timestamp =
-      typeof message.timestamp === 'number'
-        ? ` (${new Date(message.timestamp < 1e12 ? message.timestamp * 1000 : message.timestamp).toISOString()})`
-        : '';
+    const timestampMs = normalizeChatTimestampMs(message.timestamp);
+    const timestamp = timestampMs ? ` (${new Date(timestampMs).toISOString()})` : '';
     lines.push(`## ${role}${timestamp}`, '', extractText(message), '');
   }
   return lines.join('\n');

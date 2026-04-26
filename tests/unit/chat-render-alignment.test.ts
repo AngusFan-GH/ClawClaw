@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildChatItems, extractToolCards, normalizeMessage } from '@/pages/Chat/chat-thread-view-model';
 import { extractText } from '@/pages/Chat/message-utils';
 import { toSanitizedMarkdownHtml } from '@/pages/Chat/markdown';
 import { detectTextDirection } from '@/pages/Chat/text-direction';
 
 describe('chat render alignment', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('detects rtl text direction like OpenClaw dashboard', () => {
     expect(detectTextDirection('**שלום')).toBe('rtl');
     expect(detectTextDirection('- hello')).toBe('ltr');
@@ -222,6 +226,20 @@ describe('chat render alignment', () => {
       kind: 'stream',
       text: '正在查询并下载可蓝矿业资料...',
     });
+  });
+
+  it('matches OpenClaw dashboard by ignoring non-numeric chat timestamps', () => {
+    const now = Date.UTC(2026, 3, 26, 1, 20, 0);
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    const normalized = normalizeMessage({
+      role: 'assistant',
+      timestamp: '2026-04-26T01:20:00-04:00',
+      content: 'working...',
+    });
+
+    expect(normalized.timestamp).toBe(now);
   });
 
   it('keeps commentary text visible after history reload for tool-use turns', () => {

@@ -4,6 +4,7 @@
  * Communicates with OpenClaw Gateway via renderer WebSocket RPC.
  */
 import { create } from 'zustand';
+import { normalizeChatTimestampForKey, normalizeChatTimestampMs, type ChatTimestamp } from '@/lib/chat-timestamps';
 import { hostApiFetch } from '@/lib/host-api';
 import { extractText } from '@/pages/Chat/message-utils';
 import { historyContainsPendingUserMessage } from '@/pages/Chat/pending-user-message';
@@ -30,7 +31,7 @@ export interface BtwInfo {
 export interface RawMessage {
   role: 'user' | 'assistant' | 'system' | 'toolresult' | 'compactionSummary';
   content: unknown; // string | ContentBlock[]
-  timestamp?: number;
+  timestamp?: ChatTimestamp;
   id?: string;
   idempotencyKey?: string;
   toolCallId?: string;
@@ -48,7 +49,7 @@ export interface RawMessage {
 
 type HistoryAnchor = {
   role?: string;
-  timestamp?: number;
+  timestamp?: ChatTimestamp;
   id?: string;
   toolCallId?: string;
 };
@@ -266,13 +267,9 @@ interface ChatState {
 // between tool-result finals and the next delta.
 let _lastChatEventAt = 0;
 
-/** Normalize a timestamp to milliseconds. Handles string seconds, numeric seconds, and ms. */
+/** Normalize a timestamp to milliseconds. Handles numeric seconds and milliseconds. */
 function toMs(ts: unknown): number {
-  // Coerce strings (including ISO "2026-04-14T...") to a number first
-  const n = typeof ts === 'string' || typeof ts === 'number' ? Number(ts) : 0;
-  if (!n || Number.isNaN(n)) return 0;
-  // Timestamps < 1e12 are in seconds (before ~2033); >= 1e12 are milliseconds
-  return n < 1e12 ? n * 1000 : n;
+  return normalizeChatTimestampMs(ts) ?? 0;
 }
 
 // Timer for terminal-state history reconciliation. OpenClaw's dashboard does
@@ -307,7 +304,7 @@ function getRawMessageKey(message: Partial<RawMessage>): string {
   if (toolCallId) return `tool:${toolCallId}`;
   const id = typeof message.id === 'string' ? message.id : '';
   if (id) return `msg:${id}`;
-  const timestamp = typeof message.timestamp === 'number' ? message.timestamp : null;
+  const timestamp = normalizeChatTimestampForKey(message.timestamp);
   const role = typeof message.role === 'string' ? message.role : 'unknown';
   if (timestamp != null) return `msg:${role}:${timestamp}`;
   return `msg:${role}`;
