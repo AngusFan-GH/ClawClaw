@@ -243,9 +243,9 @@ ClawClaw 内置了代理设置，适用于需要通过本地代理客户端访�
 打开 **设置 → 数据与卸载**，可以在清理数据或卸载前先导出当前配置的 JSON 备份。便携版现在会按用途默认保存到 `portable/exports/settings`、`portable/exports/images` 或 `portable/exports/general`。同一处也能先停止 Gateway，再按白名单清理受管的 ClawClaw / OpenClaw 本地数据，并在真正从系统卸载器移除应用本体之前完成“完全卸载准备”。在 Windows 上，ClawClaw 自身的缓存、存储和日志会排队到应用退出后继续清理，避免被 Chromium 文件锁占用而删除失败。
 
 打开 **设置 → 更新**，可以控制自动检查 / 自动下载，并在打包版应用里手动触发更新检查。ClawClaw 当前只跟随稳定版发布源。
-在 Windows 上，打包更新继续使用 NSIS 差分更新，但安装器现在会在复制文件前强制清理受管的 `resources/openclaw` 和 `resources/openclaw-plugins` 目录，避免升级时保留旧运行时残留。升级阶段现在也只检查目标安装目录关联的进程，因此其他目录里的 `ClawClaw.exe` 副本不再误触发“应用仍在运行”的提示。安装器在复制完成后还会额外执行一次 OpenClaw 运行时自检，如果内置 CLI 树不健康，会在安装完成前直接中止。
+在 Windows 上，打包更新继续使用 NSIS 差分更新，但安装器现在会在复制文件前强制清理受管的 `resources/openclaw` 和 `resources/openclaw-plugins` 目录，避免升级时保留旧运行时残留。升级阶段现在也只检查目标安装目录关联的进程，因此其他目录里的 `ClawClaw.exe` 副本不再误触发“应用仍在运行”的提示。内置 OpenClaw 运行时会在打包阶段作为硬性构建门禁完成校验，因此安装器不再在 NSIS 进度页内执行复制后的 PowerShell/Node 自检。
 Windows 安装版现在会固定使用“仅为当前用户”安装，不再提供不受支持的“为所有用户安装”模式。
-安装器状态文案也已细化为更具体的升级步骤，例如检查旧进程、停止内置 Gateway、清理旧运行时、复制文件和验证内置运行时。
+安装器状态文案也已细化为更具体的升级步骤，例如检查旧进程、停止内置 Gateway、清理旧运行时、复制文件和执行安装后的配置。
 现在从旧版 ClawClaw 或旧版随包 OpenClaw 升级后的第一次启动，会在正常 Gateway 启动前、以及自动重新检查更新前，自动执行一次性的升级维护：主动迁移旧版 provider 存储、修复受管插件镜像和较旧的 `openclaw.json` 结构，尽量避免等到启动失败后才被动修复。
 Windows 安装版从 `0.1.15` 及更早版本升级时，还会走一条额外的兼容路径：安装器会在复制新文件前清理旧的内置 runtime 和 CLI 目录，首次启动也会强制执行更重的一轮 OpenClaw 修复，以兼容旧插件、旧 channel 和旧 runtime 布局。
 在 **设置 → 开发者** 中，现在可以直接运行 **OpenClaw Doctor** 和 **OpenClaw Doctor Fix**，对随包运行时执行诊断或修复迁移问题，而不必离开应用。
