@@ -13,19 +13,24 @@ $scriptCandidates = @(
 )
 $openclawDir = Join-Path $installDir 'resources\openclaw'
 
+Write-Output "[OpenClaw validation] Install directory: $installDir"
+Write-Output "[OpenClaw validation] Checking bundled node.exe: $nodeExe"
 if (-not (Test-Path -LiteralPath $nodeExe)) {
-  Write-Error "Missing bundled node.exe: $nodeExe"
+  Write-Output "[OpenClaw validation] ERROR: Missing bundled node.exe: $nodeExe"
   exit 1
 }
 
+Write-Output "[OpenClaw validation] Locating validation script..."
 $scriptPath = $scriptCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if ([string]::IsNullOrWhiteSpace($scriptPath) -or -not (Test-Path -LiteralPath $scriptPath)) {
-  Write-Error "Missing runtime validation script. Tried: $($scriptCandidates -join '; ')"
+  Write-Output "[OpenClaw validation] ERROR: Missing runtime validation script. Tried: $($scriptCandidates -join '; ')"
   exit 1
 }
+Write-Output "[OpenClaw validation] Validation script: $scriptPath"
 
+Write-Output "[OpenClaw validation] Checking OpenClaw runtime directory: $openclawDir"
 if (-not (Test-Path -LiteralPath $openclawDir)) {
-  Write-Error "Missing bundled OpenClaw directory: $openclawDir"
+  Write-Output "[OpenClaw validation] ERROR: Missing bundled OpenClaw directory: $openclawDir"
   exit 1
 }
 
@@ -35,6 +40,7 @@ $stderrPath = Join-Path ([System.IO.Path]::GetTempPath()) ("clawclaw-runtime-val
 try {
   $previousEmbeddedIn = [Environment]::GetEnvironmentVariable('OPENCLAW_EMBEDDED_IN', 'Process')
   [Environment]::SetEnvironmentVariable('OPENCLAW_EMBEDDED_IN', 'ClawClaw', 'Process')
+  Write-Output "[OpenClaw validation] Running dependency probe with bundled Node..."
   $child = Start-Process `
     -FilePath $nodeExe `
     -ArgumentList @('--disable-warning=ExperimentalWarning', $scriptPath, $openclawDir) `
@@ -51,12 +57,17 @@ try {
 
   if (Test-Path -LiteralPath $stderrPath) {
     if ($child.ExitCode -eq 0) {
-      Get-Content -LiteralPath $stderrPath | ForEach-Object { Write-Output "[stderr] $_" }
+      Get-Content -LiteralPath $stderrPath | ForEach-Object { Write-Output "[OpenClaw validation] stderr: $_" }
     } else {
-      Get-Content -LiteralPath $stderrPath | ForEach-Object { Write-Error $_ }
+      Get-Content -LiteralPath $stderrPath | ForEach-Object { Write-Output "[OpenClaw validation] ERROR: $_" }
     }
   }
 
+  if ($child.ExitCode -eq 0) {
+    Write-Output "[OpenClaw validation] Dependency probe passed."
+  } else {
+    Write-Output "[OpenClaw validation] Dependency probe failed with exit code $($child.ExitCode)."
+  }
   exit $child.ExitCode
 } finally {
   [Environment]::SetEnvironmentVariable('OPENCLAW_EMBEDDED_IN', $previousEmbeddedIn, 'Process')

@@ -41,6 +41,7 @@
       "low": "Low",
       "medium": "Medium",
       "high": "High",
+      "adaptive": "Adaptive",
       "xhigh": "Extra high"
     },
     "agentAriaLabel": "Switch agent for this new conversation",

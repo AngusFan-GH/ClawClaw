@@ -25,6 +25,7 @@ import { Brain } from 'lucide-react';
 import { ChatAttachmentPreview } from './ChatAttachmentPreview';
 import { ChatModelMenu } from './ChatModelMenu';
 import { ChatSlashMenu } from './ChatSlashMenu';
+import { DEFAULT_THINKING_LEVELS, normalizeThinkingLevel } from './thinking-levels';
 import {
   CATEGORY_I18N_KEYS,
   CATEGORY_LABELS,
@@ -209,13 +210,13 @@ export function ChatInput({
   const hasModelOptions = modelOptions.length > 0;
   const currentThinkingLevel = thinkingLevel?.trim() || '';
   const normalizedThinkingOptions = useMemo(() => {
-    const fallback = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'];
+    const fallback = ['', ...DEFAULT_THINKING_LEVELS];
     const source = thinkingOptions.length > 0 ? thinkingOptions : fallback;
     const seen = new Set<string>();
     return [...source, currentThinkingLevel]
-      .map((option) => option.trim())
+      .map((option) => normalizeThinkingLevel(option) ?? option.trim())
       .filter((option) => {
-        if (!option || seen.has(option)) return false;
+        if (seen.has(option)) return false;
         seen.add(option);
         return true;
       });
@@ -226,16 +227,21 @@ export function ChatInput({
   const thinkingMenuOptions = useMemo(
     () => normalizedThinkingOptions.map((option) => ({
       value: option,
-      label: formatThinkingLevelLabel(t, option),
-      badge: option === thinkingDefaultLabel
-        ? t('composer.defaultBadge', 'Default')
-        : undefined,
+      label: option
+        ? formatThinkingLevelLabel(t, option)
+        : t('composer.defaultThinkingLevel', 'Default ({{level}})', {
+            level: localizedThinkingDefaultLabel,
+          }),
     })),
-    [normalizedThinkingOptions, t, thinkingDefaultLabel]
+    [normalizedThinkingOptions, t, localizedThinkingDefaultLabel]
   );
-  const effectiveThinkingLevel = currentThinkingLevel || thinkingDefaultLabel;
+  const effectiveThinkingLevel = normalizeThinkingLevel(currentThinkingLevel) ?? currentThinkingLevel;
   const thinkingButtonLabel =
-    formatThinkingLevelLabel(t, effectiveThinkingLevel) || localizedThinkingDefaultLabel;
+    effectiveThinkingLevel
+      ? formatThinkingLevelLabel(t, effectiveThinkingLevel)
+      : t('composer.defaultThinkingLevel', 'Default ({{level}})', {
+          level: localizedThinkingDefaultLabel,
+        });
   const currentModelValue = selectedModel || defaultModelValue;
   const selectedOption = modelOptions.find((option) => option.value === currentModelValue);
   const currentModelShortLabel =
@@ -1141,10 +1147,10 @@ export function ChatInput({
           options={thinkingMenuOptions}
           currentValue={effectiveThinkingLevel}
           minWidth={156}
-          maxWidth={190}
+          maxWidth={220}
           onSelect={(value) => {
             setThinkingMenuOpen(false);
-            void onThinkingLevelChange?.(value === thinkingDefaultLabel ? undefined : value);
+            void onThinkingLevelChange?.(value || undefined);
           }}
         />
       </div>

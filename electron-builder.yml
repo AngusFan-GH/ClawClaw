@@ -132,6 +132,7 @@ nsis:
   oneClick: false
   runAfterFinish: true
   perMachine: false
+  allowElevation: false
   warningsAsErrors: false
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false

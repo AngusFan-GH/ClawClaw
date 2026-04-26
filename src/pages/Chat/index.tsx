@@ -22,7 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { hostApiFetch } from '@/lib/host-api';
-import { buildChatRuntimeModelOptions } from './chat-model-catalog';
+import { buildChatRuntimeModelOptions, type ChatModelCatalogEntry } from './chat-model-catalog';
 import {
   dedupeModelOptions,
   getProviderDisplayName,
@@ -39,6 +39,12 @@ import {
   resolveCurrentAgentLabel,
   resolveEffectiveAgentModelRef,
 } from './chat-page-view-model';
+import {
+  listThinkingLevelsForModel,
+  normalizeThinkingLevel,
+  parseModelRef,
+  resolveDefaultThinkingLevel,
+} from './thinking-levels';
 
 function getAgentIdFromSessionKey(sessionKey: string | undefined): string | undefined {
   const key = sessionKey?.trim();
@@ -141,6 +147,7 @@ export function Chat() {
   const providerVendors = useProviderStore((s) => s.vendors);
   const refreshProviderSnapshot = useProviderStore((s) => s.refreshProviderSnapshot);
   const [chatRuntimeModelRefs, setChatRuntimeModelRefs] = useState<string[]>([]);
+  const [chatModelCatalog, setChatModelCatalog] = useState<ChatModelCatalogEntry[]>([]);
   const [chatModelsLoading, setChatModelsLoading] = useState(false);
   const [chatModelsRetryNonce, setChatModelsRetryNonce] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -333,6 +340,50 @@ export function Chat() {
           setChatModelsLoading(false);
         }
       });
+
+    void useGatewayStore.getState().rpc<{ models?: Array<Record<string, unknown>> }>('models.list', {})
+      .then((result) => {
+        if (cancelled) return;
+        const catalog = Array.isArray(result?.models)
+          ? result.models.flatMap((entry): ChatModelCatalogEntry[] => {
+              const key = typeof entry.key === 'string' ? entry.key : undefined;
+              const id = typeof entry.id === 'string'
+                ? entry.id
+                : key?.includes('/')
+                  ? key.slice(key.indexOf('/') + 1)
+                  : key;
+              const provider = typeof entry.provider === 'string'
+                ? entry.provider
+                : key?.includes('/')
+                  ? key.slice(0, key.indexOf('/'))
+                  : '';
+              if (!id || !provider) return [];
+              const tags = Array.isArray(entry.tags)
+                ? entry.tags.filter((tag): tag is string => typeof tag === 'string')
+                : [];
+              const category = typeof entry.category === 'string' ? entry.category : '';
+              return [{
+                id,
+                provider,
+                name: typeof entry.name === 'string' ? entry.name : id,
+                alias: typeof entry.alias === 'string' ? entry.alias : undefined,
+                contextWindow: typeof entry.contextWindow === 'number' ? entry.contextWindow : undefined,
+                reasoning:
+                  entry.reasoning === true
+                  || category.toLowerCase() === 'reasoning'
+                  || tags.some((tag) => tag.toLowerCase() === 'reasoning'),
+                input: ['text'],
+              }];
+            })
+          : [];
+        setChatModelCatalog(catalog);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.warn('[chat] Failed to load runtime model catalog for thinking picker:', error);
+          setChatModelCatalog([]);
+        }
+      });
     return () => {
       cancelled = true;
       if (retryTimer) {
@@ -427,10 +478,72 @@ export function Chat() {
     });
   }, [sending, streamingTimestamp]);
 
+  const modelOptions = useMemo<ChatToolbarModelOption[]>(() => {
+    const configuredOptions = providerAccounts
+      .filter((account) => account.enabled)
+      .flatMap((account) => {
+        const vendor = providerVendors.find((entry) => entry.id === account.vendorId);
+        const providerDisplayName = getProviderDisplayName(account, vendor);
+        return resolveAccountModelOptions(account, vendor, providerDisplayName);
+      });
+
+    const runtimeOptions = buildChatRuntimeModelOptions(chatRuntimeModelRefs, providerDisplayOverrides);
+    return dedupeModelOptions([...configuredOptions, ...runtimeOptions]);
+  }, [chatRuntimeModelRefs, providerAccounts, providerDisplayOverrides, providerVendors]);
+  const normalizedSelectedModel = useMemo(
+    () => normalizeSelectedModelValue(currentSession, modelOptions),
+    [currentSession, modelOptions]
+  );
+  const effectiveAgentModelRef = useMemo(() => {
+    return resolveEffectiveAgentModelRef({
+      agents,
+      sessionAgentId,
+      currentAgentId,
+      defaultAgentId,
+    });
+  }, [agents, currentAgentId, defaultAgentId, sessionAgentId]);
+  const normalizedAgentModelValue = useMemo(
+    () => normalizeAgentModelValue(effectiveAgentModelRef, modelOptions),
+    [effectiveAgentModelRef, modelOptions],
+  );
+  const normalizedDefaultModelValue = useMemo(
+    () => resolveFallbackModelValue({
+      normalizedAgentModelValue,
+      normalizedSelectedModel,
+      modelOptions,
+    }),
+    [modelOptions, normalizedAgentModelValue, normalizedSelectedModel]
+  );
+  const defaultModelShortLabel = useMemo(
+    () => modelOptions.find((option) => option.value === normalizedDefaultModelValue)?.shortLabel,
+    [modelOptions, normalizedDefaultModelValue]
+  );
+  const thinkingModelIdentity = useMemo(() => {
+    const sessionProvider = currentSession?.modelProvider?.trim();
+    const sessionModel = currentSession?.model?.trim();
+    if (sessionProvider && sessionModel) {
+      return { provider: sessionProvider, model: sessionModel };
+    }
+    return parseModelRef(normalizedSelectedModel || normalizedDefaultModelValue);
+  }, [
+    currentSession?.model,
+    currentSession?.modelProvider,
+    normalizedDefaultModelValue,
+    normalizedSelectedModel,
+  ]);
+  const thinkingDefault = useMemo(
+    () => resolveDefaultThinkingLevel({
+      provider: thinkingModelIdentity.provider,
+      model: thinkingModelIdentity.model,
+      catalog: chatModelCatalog,
+    }),
+    [chatModelCatalog, thinkingModelIdentity.model, thinkingModelIdentity.provider],
+  );
+
   // Gateway not running block has been completely removed so the UI always renders.
   const effectiveThinkingLevel = (
     currentSession?.thinkingLevel?.trim()
-    || currentSession?.thinkingDefault?.trim()
+    || thinkingDefault
     || 'off'
   ).toLowerCase();
   const canShowThinkingDetails = effectiveThinkingLevel !== 'off';
@@ -472,46 +585,6 @@ export function Chat() {
     sessionsHydrated,
     isGatewayRunning,
   ]);
-  const modelOptions = useMemo<ChatToolbarModelOption[]>(() => {
-    const configuredOptions = providerAccounts
-      .filter((account) => account.enabled)
-      .flatMap((account) => {
-        const vendor = providerVendors.find((entry) => entry.id === account.vendorId);
-        const providerDisplayName = getProviderDisplayName(account, vendor);
-        return resolveAccountModelOptions(account, vendor, providerDisplayName);
-      });
-
-    const runtimeOptions = buildChatRuntimeModelOptions(chatRuntimeModelRefs, providerDisplayOverrides);
-    return dedupeModelOptions([...configuredOptions, ...runtimeOptions]);
-  }, [chatRuntimeModelRefs, providerAccounts, providerDisplayOverrides, providerVendors]);
-  const normalizedSelectedModel = useMemo(
-    () => normalizeSelectedModelValue(currentSession, modelOptions),
-    [currentSession, modelOptions]
-  );
-  const effectiveAgentModelRef = useMemo(() => {
-    return resolveEffectiveAgentModelRef({
-      agents,
-      sessionAgentId,
-      currentAgentId,
-      defaultAgentId,
-    });
-  }, [agents, currentAgentId, defaultAgentId, sessionAgentId]);
-  const normalizedAgentModelValue = useMemo(
-    () => normalizeAgentModelValue(effectiveAgentModelRef, modelOptions),
-    [effectiveAgentModelRef, modelOptions],
-  );
-  const normalizedDefaultModelValue = useMemo(
-    () => resolveFallbackModelValue({
-      normalizedAgentModelValue,
-      normalizedSelectedModel,
-      modelOptions,
-    }),
-    [modelOptions, normalizedAgentModelValue, normalizedSelectedModel]
-  );
-  const defaultModelShortLabel = useMemo(
-    () => modelOptions.find((option) => option.value === normalizedDefaultModelValue)?.shortLabel,
-    [modelOptions, normalizedDefaultModelValue]
-  );
   const agentOptions = useMemo<ChatAgentOption[]>(() => {
     return buildAgentOptions(agents);
   }, [agents]);
@@ -547,8 +620,16 @@ export function Chat() {
     modelCatalogSyncing: chatModelsLoading,
   });
   const thinkingOptions = useMemo(
-    () => currentSession?.thinkingOptions?.filter((option) => option.trim()) ?? [],
-    [currentSession?.thinkingOptions]
+    () => [
+      '',
+      ...listThinkingLevelsForModel({
+        provider: thinkingModelIdentity.provider,
+        model: thinkingModelIdentity.model,
+        catalog: chatModelCatalog,
+        currentLevel: currentSession?.thinkingLevel,
+      }),
+    ],
+    [chatModelCatalog, currentSession?.thinkingLevel, thinkingModelIdentity.model, thinkingModelIdentity.provider]
   );
   const loadingDescription = isGatewayRunning
     ? t('history.loading', '正在恢复最近对话')
@@ -605,7 +686,7 @@ export function Chat() {
   }, [currentSessionKey, loadHistory]);
 
   const setSessionThinkingLevel = useCallback(async (level?: string): Promise<void> => {
-    const normalizedLevel = level?.trim() || undefined;
+    const normalizedLevel = (normalizeThinkingLevel(level) ?? level?.trim()) || undefined;
     const previousState = useChatStore.getState();
     const previousStoreLevel = previousState.thinkingLevel;
     const previousSessionLevel = previousState.sessions.find(
@@ -1148,7 +1229,7 @@ export function Chat() {
         modelState={modelState}
         thinkingLevel={currentSession?.thinkingLevel ?? null}
         thinkingOptions={thinkingOptions}
-        thinkingDefault={currentSession?.thinkingDefault ?? null}
+        thinkingDefault={thinkingDefault}
         onThinkingLevelChange={setSessionThinkingLevel}
         thinkingDisabled={!isGatewayRunning || sending || Boolean(activeRunId) || loading}
         disabled={!isGatewayRunning}

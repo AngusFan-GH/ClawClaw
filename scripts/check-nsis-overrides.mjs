@@ -56,6 +56,9 @@ const builderConfig = requireText(resolve(repoRoot, 'electron-builder.yml'));
 if (!builderConfig.includes('include: scripts/installer.nsh')) {
   fail('electron-builder.yml must use nsis.include: scripts/installer.nsh so electron-builder can pre-build the Windows uninstaller.');
 }
+if (!builderConfig.includes('allowElevation: false')) {
+  fail('electron-builder.yml must keep nsis.allowElevation disabled so assisted installs cannot enter the unsupported all-users path.');
+}
 if (builderConfig.includes('script: scripts/installer.nsi')) {
   fail('electron-builder.yml must not use nsis.script: scripts/installer.nsi because that bypasses electron-builder uninstaller generation/signing.');
 }
@@ -106,12 +109,27 @@ for (const requiredSnippet of [
 const installerNsh = requireText(resolve(scriptsDir, 'installer.nsh'));
 for (const requiredSnippet of [
   '!addincludedir "${PROJECT_DIR}/scripts"',
+  '!macro customInstallMode',
+  'StrCpy $isForceCurrentInstall "1"',
+  '$(installLogRuntimeValidationLaunchFailed)',
+  '$(installLogRuntimeValidationTimedOut)',
   '!macro customCheckAppRunning',
   '$(installFilesLocked)',
   '!macro ResolveUpgradeStrategy',
 ]) {
   if (!installerNsh.includes(requiredSnippet)) {
     fail(`scripts/installer.nsh is missing expected snippet: ${requiredSnippet}`);
+  }
+}
+
+const runtimeValidation = requireText(resolve(scriptsDir, 'run-runtime-validation.ps1'));
+for (const requiredSnippet of [
+  '[OpenClaw validation] Install directory:',
+  '[OpenClaw validation] ERROR:',
+  '[OpenClaw validation] Dependency probe failed',
+]) {
+  if (!runtimeValidation.includes(requiredSnippet)) {
+    fail(`scripts/run-runtime-validation.ps1 is missing expected snippet: ${requiredSnippet}`);
   }
 }
 

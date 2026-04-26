@@ -41,6 +41,7 @@
       "low": "低",
       "medium": "中",
       "high": "高",
+      "adaptive": "自動調整",
       "xhigh": "最高"
     },
     "agentAriaLabel": "新しい会話の分身を切り替える",

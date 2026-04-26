@@ -41,6 +41,7 @@
       "low": "低",
       "medium": "中",
       "high": "高",
+      "adaptive": "自适应",
       "xhigh": "极高"
     },
     "agentAriaLabel": "切换新对话分身",
