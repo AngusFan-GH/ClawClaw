@@ -42,7 +42,7 @@ type ProviderModelOption = {
 };
 
 const OPENCLAW_MODEL_LIST_CACHE_TTL_MS = 10_000;
-const OPENCLAW_MODEL_LIST_TIMEOUT_MS = 4_000;
+const OPENCLAW_MODEL_LIST_TIMEOUT_MS = 12_000;
 const WINDOWS_MODELS_JSON_RENAME_RETRY_DELAYS_MS = [120, 250, 500];
 const OPENAI_OAUTH_RUNTIME_PROVIDER = 'openai-codex';
 const OPENAI_OAUTH_PREFERRED_MODELS = ['gpt-5.4-pro', 'gpt-5.4'] as const;
@@ -213,6 +213,24 @@ async function fetchOpenClawModelList(scope: OpenClawModelScope): Promise<OpenCl
   }
 }
 
+async function getOpenClawModelListWithTimeout(scope: OpenClawModelScope): Promise<OpenClawModelEntry[]> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race<OpenClawModelEntry[]>([
+      getOpenClawModelList(scope),
+      new Promise<OpenClawModelEntry[]>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`openclaw models list timed out after ${OPENCLAW_MODEL_LIST_TIMEOUT_MS}ms`));
+        }, OPENCLAW_MODEL_LIST_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 async function getOpenClawModelList(scope: OpenClawModelScope): Promise<OpenClawModelEntry[]> {
   const now = Date.now();
   const cached = openClawModelListCache.get(scope);
@@ -285,14 +303,7 @@ async function getOpenClawModelListWithFallback(scope: OpenClawModelScope): Prom
   const staleCachedModels = getStaleCachedOpenClawModelList(scope);
 
   try {
-    const models = await Promise.race<OpenClawModelEntry[]>([
-      getOpenClawModelList(scope),
-      new Promise<OpenClawModelEntry[]>((_, reject) => {
-        setTimeout(() => {
-          reject(new Error(`openclaw models list timed out after ${OPENCLAW_MODEL_LIST_TIMEOUT_MS}ms`));
-        }, OPENCLAW_MODEL_LIST_TIMEOUT_MS);
-      }),
-    ]);
+    const models = await getOpenClawModelListWithTimeout(scope);
     return { models, source: 'runtime' };
   } catch (error) {
     logger.warn(`[providers] openclaw models list (${scope}) unavailable; falling back`, error);
@@ -366,14 +377,7 @@ export async function listRuntimeModelRefs(ctx: HostApiContext): Promise<string[
     models = getStaleCachedOpenClawModelList('runtime');
   } else {
     try {
-      models = await Promise.race<OpenClawModelEntry[]>([
-        getOpenClawModelList('runtime'),
-        new Promise<OpenClawModelEntry[]>((_, reject) => {
-          setTimeout(() => {
-            reject(new Error(`openclaw models list timed out after ${OPENCLAW_MODEL_LIST_TIMEOUT_MS}ms`));
-          }, OPENCLAW_MODEL_LIST_TIMEOUT_MS);
-        }),
-      ]);
+      models = await getOpenClawModelListWithTimeout('runtime');
     } catch (error) {
       const staleCachedModels = getStaleCachedOpenClawModelList('runtime');
       if (staleCachedModels.length > 0) {
