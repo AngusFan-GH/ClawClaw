@@ -151,105 +151,79 @@ const hasBundledPythonForArch = (arch) => {
   return existsSync(pythonPath);
 };
 
-const ensureBundledUvForWin = (archs, env) => {
-  const missingArchs = archs.filter((arch) => !hasBundledUvForArch(arch));
+const ensureBundledRuntimeForWin = ({
+  archs,
+  env,
+  hasRuntime,
+  label,
+  downloadScript,
+  downloadMessage,
+  startErrorMessage,
+}) => {
+  const missingArchs = archs.filter((arch) => !hasRuntime(arch));
   if (missingArchs.length === 0) {
     return;
   }
 
-  console.log(`[package:win] Missing bundled uv for ${missingArchs.join(', ')}. Downloading Windows uv binaries...`);
+  console.log(`[package:win] Missing bundled ${label} for ${missingArchs.join(', ')}. ${downloadMessage}`);
 
   const pnpmCmd = isWindowsHost ? 'pnpm.cmd' : 'pnpm';
-  const result = spawnSync(pnpmCmd, ['run', 'uv:download:win'], {
+  const result = spawnSync(pnpmCmd, ['run', downloadScript], {
     stdio: 'inherit',
     env,
   });
 
   if (result.error) {
-    console.error('[package:win] Failed to start uv download:', result.error.message);
+    console.error(`[package:win] ${startErrorMessage}:`, result.error.message);
     process.exit(1);
   }
 
   if ((result.status ?? 1) !== 0) {
-    console.error('[package:win] uv:download:win failed.');
+    console.error(`[package:win] ${downloadScript} failed.`);
     process.exit(result.status ?? 1);
   }
 
-  const stillMissing = missingArchs.filter((arch) => !hasBundledUvForArch(arch));
+  const stillMissing = missingArchs.filter((arch) => !hasRuntime(arch));
   if (stillMissing.length > 0) {
-    console.error(`[package:win] Bundled uv is still missing after download for: ${stillMissing.join(', ')}`);
+    console.error(`[package:win] Bundled ${label} is still missing after download for: ${stillMissing.join(', ')}`);
     process.exit(1);
   }
+};
+
+const ensureBundledUvForWin = (archs, env) => {
+  ensureBundledRuntimeForWin({
+    archs,
+    env,
+    hasRuntime: hasBundledUvForArch,
+    label: 'uv',
+    downloadScript: 'uv:download:win',
+    downloadMessage: 'Downloading Windows uv binaries...',
+    startErrorMessage: 'Failed to start uv download',
+  });
 };
 
 const ensureBundledNodeForWin = (archs, env) => {
-  const missingArchs = archs.filter((arch) => !hasBundledNodeForArch(arch));
-  if (missingArchs.length === 0) {
-    return;
-  }
-
-  console.log(
-    `[package:win] Missing bundled node.exe for ${missingArchs.join(', ')}. Downloading Windows Node.js binaries...`
-  );
-
-  const pnpmCmd = isWindowsHost ? 'pnpm.cmd' : 'pnpm';
-  const result = spawnSync(pnpmCmd, ['run', 'node:download:win'], {
-    stdio: 'inherit',
+  ensureBundledRuntimeForWin({
+    archs,
     env,
+    hasRuntime: hasBundledNodeForArch,
+    label: 'node.exe',
+    downloadScript: 'node:download:win',
+    downloadMessage: 'Downloading Windows Node.js binaries...',
+    startErrorMessage: 'Failed to start node download',
   });
-
-  if (result.error) {
-    console.error('[package:win] Failed to start node download:', result.error.message);
-    process.exit(1);
-  }
-
-  if ((result.status ?? 1) !== 0) {
-    console.error('[package:win] node:download:win failed.');
-    process.exit(result.status ?? 1);
-  }
-
-  const stillMissing = missingArchs.filter((arch) => !hasBundledNodeForArch(arch));
-  if (stillMissing.length > 0) {
-    console.error(
-      `[package:win] Bundled node.exe is still missing after download for: ${stillMissing.join(', ')}`
-    );
-    process.exit(1);
-  }
 };
 
 const ensureBundledPythonForWin = (archs, env) => {
-  const missingArchs = archs.filter((arch) => !hasBundledPythonForArch(arch));
-  if (missingArchs.length === 0) {
-    return;
-  }
-
-  console.log(
-    `[package:win] Missing bundled Python runtime for ${missingArchs.join(', ')}. Downloading Windows Python runtimes...`
-  );
-
-  const pnpmCmd = isWindowsHost ? 'pnpm.cmd' : 'pnpm';
-  const result = spawnSync(pnpmCmd, ['run', 'python:download:win'], {
-    stdio: 'inherit',
+  ensureBundledRuntimeForWin({
+    archs,
     env,
+    hasRuntime: hasBundledPythonForArch,
+    label: 'Python runtime',
+    downloadScript: 'python:download:win',
+    downloadMessage: 'Downloading Windows Python runtimes...',
+    startErrorMessage: 'Failed to start Python runtime download',
   });
-
-  if (result.error) {
-    console.error('[package:win] Failed to start Python runtime download:', result.error.message);
-    process.exit(1);
-  }
-
-  if ((result.status ?? 1) !== 0) {
-    console.error('[package:win] python:download:win failed.');
-    process.exit(result.status ?? 1);
-  }
-
-  const stillMissing = missingArchs.filter((arch) => !hasBundledPythonForArch(arch));
-  if (stillMissing.length > 0) {
-    console.error(
-      `[package:win] Bundled Python runtime is still missing after download for: ${stillMissing.join(', ')}`
-    );
-    process.exit(1);
-  }
 };
 
 const killPackagingProcesses = () => {

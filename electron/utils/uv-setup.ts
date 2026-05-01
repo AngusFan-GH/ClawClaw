@@ -349,9 +349,8 @@ export async function setupManagedPython(): Promise<void> {
   const settings = await getAllSettings();
   const proxyEnv = await buildProxyEnvAsync(settings);
 
-  // In portable mode, or in packaged Windows installs, redirect Python and
-  // uv cache to ClawClaw-managed directories so we don't depend on a possibly
-  // broken global %APPDATA%\\uv state.
+  // Fallback path for development or recovery builds that do not ship bundled
+  // Python. Packaged Windows releases should return early above.
   const managedPythonHome = getManagedPythonHome();
   const managedUvCache = getManagedUvCacheDir();
 
@@ -406,8 +405,7 @@ export async function setupManagedPython(): Promise<void> {
   const verifyEnv: Record<string, string | undefined> = {
     ...process.env,
     ...uvEnv,
-    ...(managedPythonHome ? { UV_PYTHON_INSTALL_DIR: managedPythonHome } : {}),
-    ...(managedUvCache ? { UV_CACHE_DIR: managedUvCache } : {}),
+    ...getManagedPythonEnv(),
   };
   try {
     const findPath = await new Promise<string>((resolve) => {
