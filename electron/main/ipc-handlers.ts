@@ -1003,17 +1003,21 @@ function registerUvHandlers(): void {
 
   // Install uv and setup managed Python
   ipcMain.handle('uv:install-all', async () => {
+    let uvInstalled = false;
+    let pythonReady = false;
     try {
       const isInstalled = await checkUvInstalled();
       if (!isInstalled) {
         await installUv();
       }
+      uvInstalled = true;
       // Always run python setup to ensure it exists in uv's cache
       await setupManagedPython();
-      return { success: true };
+      pythonReady = true;
+      return { success: true, uvInstalled, pythonReady };
     } catch (error) {
       console.error('Failed to setup uv/python:', error);
-      return { success: false, error: String(error) };
+      return { success: false, error: String(error), uvInstalled, pythonReady };
     }
   });
 }

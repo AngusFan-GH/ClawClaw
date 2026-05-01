@@ -1699,6 +1699,8 @@ function InstallingContent({ dependencies, onComplete }: InstallingContentProps)
         const result = (await invokeIpc('uv:install-all')) as {
           success: boolean;
           error?: string;
+          uvInstalled?: boolean;
+          pythonReady?: boolean;
         };
 
         if (result.success) {
@@ -1707,7 +1709,15 @@ function InstallingContent({ dependencies, onComplete }: InstallingContentProps)
           await new Promise((resolve) => setTimeout(resolve, 800));
           onComplete(dependencies.map((dependency) => dependency.id));
         } else {
-          setSkillStates((prev) => prev.map((s) => ({ ...s, status: 'failed' })));
+          setSkillStates((prev) => prev.map((s) => {
+            if (s.id === 'uv') {
+              return { ...s, status: result.uvInstalled ? 'completed' : 'failed' };
+            }
+            if (s.id === 'managed-python') {
+              return { ...s, status: result.pythonReady ? 'completed' : 'failed' };
+            }
+            return { ...s, status: 'failed' };
+          }));
           setErrorMessage(result.error || 'Unknown error during installation');
           toast.error('Environment setup failed');
         }

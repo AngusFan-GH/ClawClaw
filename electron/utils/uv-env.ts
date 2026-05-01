@@ -2,7 +2,7 @@ import { app } from 'electron';
 import { request } from 'https';
 import { logger } from './logger';
 
-const UV_MIRROR_ENV: Record<string, string> = {
+export const UV_MIRROR_ENV: Record<string, string> = {
   UV_PYTHON_INSTALL_MIRROR: 'https://registry.npmmirror.com/-/binary/python-build-standalone/',
   UV_INDEX_URL: 'https://pypi.tuna.tsinghua.edu.cn/simple/',
 };

@@ -2,7 +2,7 @@ import { app } from 'electron';
 import { execSync, spawn } from 'child_process';
 import { existsSync, rmSync } from 'fs';
 import { join } from 'path';
-import { getUvMirrorEnv } from './uv-env';
+import { UV_MIRROR_ENV, getUvMirrorEnv } from './uv-env';
 import { logger } from './logger';
 import { buildProxyEnvAsync } from './proxy';
 import { getAllSettings } from './store';
@@ -131,8 +131,9 @@ async function runPythonInstall(
   return new Promise<void>((resolve, reject) => {
     const stderrChunks: string[] = [];
     const stdoutChunks: string[] = [];
+    const args = ['python', 'install', '3.12', '--native-tls'];
 
-    const child = spawn(useShell ? quoteForCmd(uvBin) : uvBin, ['python', 'install', '3.12'], {
+    const child = spawn(useShell ? quoteForCmd(uvBin) : uvBin, args, {
       shell: useShell,
       env,
       windowsHide: true,
@@ -165,6 +166,7 @@ async function runPythonInstall(
           `Python installation failed with code ${code} [${label}]\n` +
           `  uv binary: ${uvBin}\n` +
           `  platform: ${process.platform}/${process.arch}\n` +
+          `  source: ${env.UV_PYTHON_INSTALL_MIRROR ? env.UV_PYTHON_INSTALL_MIRROR : 'official'}\n` +
           `  output: ${detail}`
         ));
       }
@@ -180,6 +182,42 @@ async function runPythonInstall(
   });
 }
 
+async function runPythonInstallWithRecovery(
+  uvBin: string,
+  env: Record<string, string | undefined>,
+  label: string,
+): Promise<void> {
+  try {
+    await runPythonInstall(uvBin, env, label);
+    return;
+  } catch (firstError) {
+    logger.warn(`Python install attempt failed [${label}]:`, firstError);
+
+    if (shouldRepairWindowsPythonLinkError(firstError)) {
+      logger.warn('Detected corrupted Windows uv Python link state, repairing managed directories and retrying...');
+      repairManagedPythonState(env);
+      try {
+        await runPythonInstall(uvBin, env, `${label}-repair`);
+        return;
+      } catch (repairError) {
+        logger.warn(`Python install retry after managed-state repair failed [${label}]:`, repairError);
+      }
+    }
+
+    if (hasConfiguredProxy(env) && isProxyTunnelError(firstError)) {
+      logger.warn(`Detected proxy tunnel failure during Python install [${label}], retrying without proxy...`);
+      try {
+        await runPythonInstall(uvBin, clearProxyEnv(env), `${label}-direct`);
+        return;
+      } catch (directError) {
+        logger.warn(`Python install retry without proxy failed [${label}]:`, directError);
+      }
+    }
+
+    throw firstError;
+  }
+}
+
 function clearProxyEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
   return {
     ...env,
@@ -191,6 +229,13 @@ function clearProxyEnv(env: Record<string, string | undefined>): Record<string, 
     all_proxy: '',
     NO_PROXY: env.NO_PROXY || env.no_proxy || '',
     no_proxy: env.no_proxy || env.NO_PROXY || '',
+  };
+}
+
+function clearPythonInstallMirrorEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
+  return {
+    ...env,
+    UV_PYTHON_INSTALL_MIRROR: '',
   };
 }
 
@@ -271,67 +316,41 @@ export async function setupManagedPython(): Promise<void> {
     `)`
   );
 
-  const baseEnv: Record<string, string | undefined> = { ...process.env, ...proxyEnv };
+  const baseEnv: Record<string, string | undefined> = {
+    ...process.env,
+    ...proxyEnv,
+    UV_NATIVE_TLS: 'true',
+    UV_NO_PROGRESS: 'true',
+  };
   if (managedPythonHome) baseEnv.UV_PYTHON_INSTALL_DIR = managedPythonHome;
   if (managedUvCache) baseEnv.UV_CACHE_DIR = managedUvCache;
-  let installCompleted = false;
 
-  // Attempt 1: with mirror (if applicable)
-  try {
-    await runPythonInstall(uvBin, { ...baseEnv, ...uvEnv }, hasMirror ? 'mirror' : 'default');
-    installCompleted = true;
-  } catch (firstError) {
-    logger.warn('Python install attempt 1 failed:', firstError);
+  const officialEnv = clearPythonInstallMirrorEnv(baseEnv);
+  const installRoutes = hasMirror
+    ? [
+        { label: 'mirror', env: { ...baseEnv, ...uvEnv } },
+        { label: 'official-fallback', env: officialEnv },
+      ]
+    : [
+        { label: 'official', env: officialEnv },
+        { label: 'mirror-fallback', env: { ...baseEnv, ...UV_MIRROR_ENV } },
+      ];
 
-    if (shouldRepairWindowsPythonLinkError(firstError)) {
-      logger.warn('Detected corrupted Windows uv Python link state, repairing managed directories and retrying...');
-      repairManagedPythonState(baseEnv);
-      try {
-        await runPythonInstall(uvBin, { ...baseEnv, ...uvEnv }, hasMirror ? 'mirror-repair' : 'default-repair');
-        installCompleted = true;
-      } catch (repairError) {
-        logger.warn('Python install retry after managed-state repair failed:', repairError);
-      }
+  let installError: unknown = null;
+  for (const route of installRoutes) {
+    try {
+      await runPythonInstallWithRecovery(uvBin, route.env, route.label);
+      installError = null;
+      break;
+    } catch (error) {
+      installError = error;
+      logger.warn(`Python install route failed [${route.label}], trying next route if available:`, error);
     }
+  }
 
-    if (!installCompleted && hasConfiguredProxy(baseEnv) && isProxyTunnelError(firstError)) {
-      logger.warn('Detected proxy tunnel failure during Python install, retrying without proxy...');
-      try {
-        await runPythonInstall(
-          uvBin,
-          { ...clearProxyEnv(baseEnv), ...uvEnv },
-          hasMirror ? 'mirror-direct' : 'default-direct'
-        );
-        installCompleted = true;
-      } catch (directError) {
-        logger.warn('Python install retry without proxy failed:', directError);
-      }
-    }
-
-    if (!installCompleted && hasMirror) {
-      // Attempt 2: retry without mirror to rule out mirror issues
-      logger.info('Retrying Python install without mirror...');
-      try {
-        await runPythonInstall(uvBin, baseEnv, 'no-mirror');
-        installCompleted = true;
-      } catch (secondError) {
-        if (hasConfiguredProxy(baseEnv) && isProxyTunnelError(secondError)) {
-          logger.warn('No-mirror install also hit proxy tunnel failure, retrying without proxy...');
-          try {
-            await runPythonInstall(uvBin, clearProxyEnv(baseEnv), 'no-mirror-direct');
-            installCompleted = true;
-          } catch (directNoMirrorError) {
-            logger.error('Python install retry without mirror and without proxy also failed:', directNoMirrorError);
-            throw directNoMirrorError;
-          }
-        } else {
-          logger.error('Python install attempt 2 (no mirror) also failed:', secondError);
-          throw secondError;
-        }
-      }
-    } else if (!installCompleted) {
-      throw firstError;
-    }
+  if (installError) {
+    logger.error('All Python install routes failed:', installError);
+    throw installError;
   }
 
   // After installation, verify and log the Python path

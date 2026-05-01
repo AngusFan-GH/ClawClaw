@@ -175,6 +175,8 @@ When you launch ClawClaw for the first time, the **startup flow** keeps the welc
 3. automatic installation of the default skills
 4. an optional model-configuration step
 
+Python runtime preparation uses the bundled `uv` binary and automatically falls back between the official Python source and the China mirror, with per-step setup status shown in the first-launch UI.
+
 Model configuration is now manual. You can jump to **Models** from setup to add a local model or a cloud provider, or skip that step and finish it later.
 
 ### Bundled Project Skills
