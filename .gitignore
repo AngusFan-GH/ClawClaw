@@ -52,6 +52,7 @@ coverage/
 *.rpm
 
 resources/bin
+resources/python
 
 # Secrets
 *.p12

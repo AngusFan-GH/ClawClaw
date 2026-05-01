@@ -52,6 +52,8 @@
     "uv:download:win": "zx scripts/download-bundled-uv.mjs --platform=win",
     "uv:download:linux": "zx scripts/download-bundled-uv.mjs --platform=linux",
     "uv:download:all": "zx scripts/download-bundled-uv.mjs --all",
+    "python:download:win": "zx scripts/download-bundled-python.mjs --platform=win",
+    "python:download:all": "zx scripts/download-bundled-python.mjs --all",
     "node:download:win": "zx scripts/download-bundled-node.mjs --platform=win",
     "node:download:all": "zx scripts/download-bundled-node.mjs --all",
     "icons": "zx scripts/generate-icons.mjs",

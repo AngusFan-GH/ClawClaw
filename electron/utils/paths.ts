@@ -136,16 +136,75 @@ export function getPortableUvCacheDir(): string | null {
 }
 
 /**
+ * Returns the bundled Python runtime directory when a packaged Windows build
+ * ships Python in resources/python.
+ */
+export function getBundledPythonHome(): string | null {
+  if (process.platform !== 'win32') return null;
+
+  const target = `${process.platform}-${process.arch}`;
+  const candidates = app.isPackaged
+    ? [join(process.resourcesPath, 'python')]
+    : [join(process.cwd(), 'resources', 'python', target)];
+
+  for (const candidate of candidates) {
+    if (existsSync(join(candidate, 'python.exe'))) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+/**
+ * Returns the bundled Python executable path for Windows builds, if present.
+ */
+export function getBundledPythonExecutable(): string | null {
+  const home = getBundledPythonHome();
+  if (!home) return null;
+  return join(home, 'python.exe');
+}
+
+/**
+ * Environment variables shared by uv/OpenClaw child processes.
+ *
+ * Packaged Windows builds prefer the read-only bundled Python executable, so
+ * first launch does not need to download Python. If the bundle is missing, we
+ * keep the managed uv install directory fallback for development and recovery.
+ */
+export function getManagedPythonEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  const bundledPython = getBundledPythonExecutable();
+  const managedUvCache = getManagedUvCacheDir();
+
+  if (bundledPython) {
+    env.UV_PYTHON = bundledPython;
+    env.UV_MANAGED_PYTHON = 'false';
+  } else {
+    const managedPythonHome = getManagedPythonHome();
+    if (managedPythonHome) {
+      env.UV_PYTHON_INSTALL_DIR = managedPythonHome;
+    }
+  }
+
+  if (managedUvCache) {
+    env.UV_CACHE_DIR = managedUvCache;
+  }
+
+  return env;
+}
+
+/**
  * Returns the managed Python runtime directory ClawClaw should use for uv.
  *
  * - Portable mode: portable/python
- * - Packaged Windows installs: app userData/python (isolated from global %APPDATA%/uv)
+ * - Packaged Windows installs without bundled Python: app userData/python
  * - Other environments: null (let uv use its defaults)
  */
 export function getManagedPythonHome(): string | null {
   const portable = getPortablePythonHome();
   if (portable) return portable;
   if (process.platform === 'win32' && app.isPackaged) {
+    if (getBundledPythonExecutable()) return null;
     return join(getDataDir(), 'python');
   }
   return null;

@@ -572,11 +572,15 @@ exports.default = async function afterPack(context) {
   // aborted state even when the dependency probe itself exits successfully.
   if (platform === 'win32') {
     const bundledNode = join(resourcesDir, 'bin', 'node.exe');
+    const bundledUv = join(resourcesDir, 'bin', 'uv.exe');
+    const bundledPython = join(resourcesDir, 'python', 'python.exe');
     const cliWrapper = join(resourcesDir, 'cli', 'openclaw.cmd');
     const cliEntry = join(resourcesDir, 'openclaw', 'openclaw.mjs');
 
     const missing = [];
     if (!existsSync(bundledNode)) missing.push(bundledNode);
+    if (!existsSync(bundledUv)) missing.push(bundledUv);
+    if (!existsSync(bundledPython)) missing.push(bundledPython);
     if (!existsSync(cliWrapper)) missing.push(cliWrapper);
     if (!existsSync(cliEntry)) missing.push(cliEntry);
 
@@ -587,7 +591,7 @@ exports.default = async function afterPack(context) {
     }
 
     validateOpenClawRuntime(openclawRoot);
-    console.log('[after-pack] ✅ Windows OpenClaw runtime validated (node.exe + wrapper + entry script + dependency probe).');
+    console.log('[after-pack] ✅ Windows OpenClaw runtime validated (node.exe + uv.exe + python.exe + wrapper + entry script + dependency probe).');
   }
 
   // 6. Patch lru-cache in app.asar.unpacked.

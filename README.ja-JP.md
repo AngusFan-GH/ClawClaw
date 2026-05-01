@@ -175,7 +175,7 @@ ClawClaw を初めて起動すると、**ガイド付きの初回セットアッ
 3. 既定スキルの自動インストール
 4. 任意のモデル設定ステップ
 
-Python ランタイムの準備には同梱の `uv` を使用し、公式 Python ソースと中国向けミラーの間で自動的にフォールバックします。初回セットアップ UI では `uv` と Python の状態をステップごとに表示します。
+Windows ビルドには Python 3.12 ランタイムを同梱し、`UV_PYTHON` で OpenClaw/uv にその実行ファイルを指すため、初回起動時にユーザー環境で Python をダウンロードしません。開発ビルドでこのランタイムがない場合だけ、セットアップは `uv python install` に戻り、公式ソースとミラーで再試行します。
 
 モデル設定は手動に変わりました。セットアップ中に **モデル** 画面へ移動してローカルモデルやクラウドプロバイダーを追加することも、いったんスキップして後から設定することもできます。
 
@@ -371,6 +371,7 @@ AI を開発ワークフローに統合できます。エージェントを使�
 ```bash
 # 開発
 pnpm run init             # 依存関係のインストール + uvのダウンロード
+pnpm run python:download:win # Windows パッケージ用の同梱 Python ランタイムをダウンロード
 pnpm dev                  # ホットリロードで起動（管理プラグインミラーも更新）
 
 # コード品質
@@ -387,7 +388,7 @@ pnpm run package:prepare  # 共通パッケージ前処理（vite + OpenClaw bun
 pnpm build                # 本番パッケージ用アセットを準備
 pnpm package              # 現在のプラットフォーム向けにパッケージ化
 pnpm package:mac          # macOS向けにパッケージ化
-pnpm package:win          # 補助パッケージャーで Windows NSIS インストーラーをビルド（openclaw CLI 用の node.exe も同梱）
+pnpm package:win          # node.exe、uv.exe、Python を同梱した Windows NSIS インストーラーをビルド
 pnpm package:win:portable # Windows ポータブルディレクトリ版をビルド（win-unpacked / win-arm64-unpacked）
 pnpm package:mac:portable # macOS ポータブル zip をビルド（起動スクリプト + 内蔵 portable/ データディレクトリ付き）
 pnpm package:desktop      # macOS・Windows・Linux を直列でまとめてパッケージ化
@@ -399,7 +400,7 @@ pnpm run upload:update:portable # ポータブル zip と updates-portable/stabl
 
 注記:
 
-- `pnpm package:win` は Windows NSIS インストーラーをビルドし、内部では `scripts/package-win.mjs` を使います。
+- `pnpm package:win` は Windows NSIS インストーラーをビルドし、内部では `scripts/package-win.mjs` を使います。このスクリプトは electron-builder の前に Windows の `node.exe`、`uv.exe`、Python ランタイムを検証またはダウンロードします。
 - `pnpm package:win:portable` は Windows ポータブルディレクトリ版をビルドし、内部では `scripts/package-win.mjs --dir` を使います。
 - `pnpm package:mac:portable` は macOS ポータブル zip をビルドし、内部では `scripts/package-mac.mjs --build` を使います。electron-builder で macOS zip を生成後、`Start ClawClaw.command`（Gatekeeper 隔離属性を自動解除する起動スクリプト）と、アプリバンドル内に組み込まれた `portable/` データディレクトリを含むポータブルディレクトリを組み立て、`release/v<version>/mac/ClawClaw-v<version>-mac-{arch}-portable.zip` を出力します。
 - `pnpm package:portable` は Windows と macOS のポータブルアーティファクトを両方ビルドします。

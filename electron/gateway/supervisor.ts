@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'path';
 import { existsSync } from 'fs';
 import WebSocket from 'ws';
-import { getManagedPythonHome, getManagedUvCacheDir, getOpenClawDir, getOpenClawEntryPath, getPortableDataDir } from '../utils/paths';
+import { getManagedPythonEnv, getOpenClawDir, getOpenClawEntryPath, getPortableDataDir } from '../utils/paths';
 import { getOpenClawCliSpawnConfig } from '../utils/openclaw-cli';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { isPythonReady, setupManagedPython } from '../utils/uv-setup';
@@ -408,8 +408,7 @@ export async function runOpenClawDoctorRepair(): Promise<boolean> {
 
   const uvEnv = await getUvMirrorEnv();
   const proxyEnv = await buildProxyEnvAsync(await getAllSettings());
-  const managedPythonHome = getManagedPythonHome();
-  const managedUvCache = getManagedUvCacheDir();
+  const pythonEnv = getManagedPythonEnv();
   const doctorArgs = ['doctor', '--fix', '--yes', '--non-interactive'];
   logger.info(
     `Running OpenClaw doctor repair (entry="${entryScript}", args="${doctorArgs.join(' ')}", cwd="${openclawDir}", bundledBin=${binPathExists ? 'yes' : 'no'})`,
@@ -421,8 +420,7 @@ export async function runOpenClawDoctorRepair(): Promise<boolean> {
       PATH: finalPath,
       ...uvEnv,
       ...proxyEnv,
-      ...(managedPythonHome ? { UV_PYTHON_INSTALL_DIR: managedPythonHome } : {}),
-      ...(managedUvCache ? { UV_CACHE_DIR: managedUvCache } : {}),
+      ...pythonEnv,
       OPENCLAW_NO_RESPAWN: '1',
     };
 

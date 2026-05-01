@@ -6,7 +6,14 @@ import { UV_MIRROR_ENV, getUvMirrorEnv } from './uv-env';
 import { logger } from './logger';
 import { buildProxyEnvAsync } from './proxy';
 import { getAllSettings } from './store';
-import { quoteForCmd, needsWinShell, getManagedPythonHome, getManagedUvCacheDir } from './paths';
+import {
+  quoteForCmd,
+  needsWinShell,
+  getBundledPythonExecutable,
+  getManagedPythonEnv,
+  getManagedPythonHome,
+  getManagedUvCacheDir,
+} from './paths';
 
 /**
  * Get the path to the bundled uv binary
@@ -90,17 +97,20 @@ export async function installUv(): Promise<void> {
  * Check if a managed Python 3.12 is ready and accessible
  */
 export async function isPythonReady(): Promise<boolean> {
+  const bundledPython = getBundledPythonExecutable();
+  if (bundledPython) {
+    return await verifyBundledPython(bundledPython);
+  }
+
   const { bin: uvBin } = resolveUvBin();
   const useShell = needsWinShell(uvBin);
   const uvEnv = await getUvMirrorEnv();
-  const managedPythonHome = getManagedPythonHome();
-  const managedUvCache = getManagedUvCacheDir();
+  const pythonEnv = getManagedPythonEnv();
 
   const env: Record<string, string | undefined> = {
     ...process.env,
     ...uvEnv,
-    ...(managedPythonHome ? { UV_PYTHON_INSTALL_DIR: managedPythonHome } : {}),
-    ...(managedUvCache ? { UV_CACHE_DIR: managedUvCache } : {}),
+    ...pythonEnv,
   };
 
   return new Promise<boolean>((resolve) => {
@@ -113,6 +123,34 @@ export async function isPythonReady(): Promise<boolean> {
       child.on('close', (code) => resolve(code === 0));
       child.on('error', () => resolve(false));
     } catch {
+      resolve(false);
+    }
+  });
+}
+
+async function verifyBundledPython(pythonExe: string): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    try {
+      const child = spawn(pythonExe, ['--version'], {
+        env: { ...process.env },
+        windowsHide: true,
+      });
+      let output = '';
+      child.stdout?.on('data', (data) => { output += data.toString(); });
+      child.stderr?.on('data', (data) => { output += data.toString(); });
+      child.on('close', (code) => {
+        const ok = code === 0 && output.includes('Python 3.12');
+        if (!ok) {
+          logger.warn(`Bundled Python validation failed (code=${code}, output=${output.trim() || '<empty>'})`);
+        }
+        resolve(ok);
+      });
+      child.on('error', (error) => {
+        logger.warn(`Bundled Python spawn failed: ${error.message}`);
+        resolve(false);
+      });
+    } catch (error) {
+      logger.warn('Bundled Python validation threw:', error);
       resolve(false);
     }
   });
@@ -295,6 +333,16 @@ function repairManagedPythonState(env: Record<string, string | undefined>): void
  * if the first attempt fails, to rule out mirror-specific issues.
  */
 export async function setupManagedPython(): Promise<void> {
+  const bundledPython = getBundledPythonExecutable();
+  if (bundledPython) {
+    const ok = await verifyBundledPython(bundledPython);
+    if (!ok) {
+      throw new Error(`Bundled Python runtime is invalid: ${bundledPython}`);
+    }
+    logger.info(`Bundled Python runtime is ready: ${bundledPython}`);
+    return;
+  }
+
   const { bin: uvBin, source } = resolveUvBin();
   const uvEnv = await getUvMirrorEnv();
   const hasMirror = Object.keys(uvEnv).length > 0;

@@ -175,7 +175,7 @@ When you launch ClawClaw for the first time, the **startup flow** keeps the welc
 3. automatic installation of the default skills
 4. an optional model-configuration step
 
-Python runtime preparation uses the bundled `uv` binary and automatically falls back between the official Python source and the China mirror, with per-step setup status shown in the first-launch UI.
+Windows builds ship a bundled Python 3.12 runtime and use `UV_PYTHON` to point OpenClaw/uv at that executable, so first launch no longer downloads Python on the user's machine. If a developer build is missing that runtime, the setup code can still fall back to `uv python install` with official/mirror retries.
 
 Model configuration is now manual. You can jump to **Models** from setup to add a local model or a cloud provider, or skip that step and finish it later.
 
@@ -374,6 +374,7 @@ Chain multiple skills together to create sophisticated automation pipelines. Pro
 ```bash
 # Development
 pnpm run init             # Install dependencies + download uv
+pnpm run python:download:win # Download bundled Windows Python runtimes for packaging
 pnpm dev                  # Start with hot reload (also refreshes managed plugin mirrors)
 
 # Quality
@@ -390,7 +391,7 @@ pnpm run package:prepare  # Shared packaging prep (vite + bundled OpenClaw + cle
 pnpm build                # Prepare production packaging assets
 pnpm package              # Package for current platform
 pnpm package:mac          # Package for macOS
-pnpm package:win          # Build Windows NSIS installer with the helper packager (also bundles node.exe for openclaw CLI)
+pnpm package:win          # Build Windows NSIS installer with bundled node.exe, uv.exe, and Python
 pnpm package:win:portable # Build Windows portable directory (win-unpacked / win-arm64-unpacked)
 pnpm package:mac:portable # Build macOS portable zip (ClawClaw.app + launcher + embedded portable/ data dir)
 pnpm package:desktop      # Package macOS, Windows, and Linux in one serial workflow
@@ -402,7 +403,7 @@ pnpm run upload:update:portable # Upload portable zips + per-platform JSON manif
 
 Notes:
 
-- `pnpm package:win` builds the Windows NSIS installer via `scripts/package-win.mjs`.
+- `pnpm package:win` builds the Windows NSIS installer via `scripts/package-win.mjs`; it verifies or downloads the Windows `node.exe`, `uv.exe`, and Python runtime before invoking electron-builder.
 - `pnpm package:win:portable` builds the Windows portable directory target via `scripts/package-win.mjs --dir`.
 - `pnpm package:mac:portable` builds the macOS portable zip via `scripts/package-mac.mjs --build`. It runs electron-builder for macOS (zip), then assembles a portable directory with `Start ClawClaw.command` (launcher + Gatekeeper quarantine-clear script) plus an embedded `portable/` data directory inside the app bundle. Output: `release/v<version>/mac/ClawClaw-v<version>-mac-{arch}-portable.zip`.
 - `pnpm package:portable` builds both Windows and macOS portable artifacts.

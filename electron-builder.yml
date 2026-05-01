@@ -28,6 +28,7 @@ extraResources:
       - '!icons/*.md'
       - '!icons/*.svg'
       - '!bin/**'
+      - '!python/**'
       - '!screenshot/**'
   # OpenClaw package (node_modules copied separately by afterPack hook
   # because electron-builder respects .gitignore which excludes node_modules/)
@@ -113,6 +114,8 @@ win:
   extraResources:
     - from: resources/bin/win32-${arch}
       to: bin
+    - from: resources/python/win32-${arch}
+      to: python
     - from: resources/cli/win32/
       to: cli/
   icon: resources/icons/icon.ico

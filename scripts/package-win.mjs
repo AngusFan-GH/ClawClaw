@@ -145,6 +145,12 @@ const hasBundledNodeForArch = (arch) => {
   return existsSync(nodePath);
 };
 
+const hasBundledPythonForArch = (arch) => {
+  if (arch === 'ia32') return true;
+  const pythonPath = resolve(process.cwd(), 'resources', 'python', `win32-${arch}`, 'python.exe');
+  return existsSync(pythonPath);
+};
+
 const ensureBundledUvForWin = (archs, env) => {
   const missingArchs = archs.filter((arch) => !hasBundledUvForArch(arch));
   if (missingArchs.length === 0) {
@@ -211,6 +217,41 @@ const ensureBundledNodeForWin = (archs, env) => {
   }
 };
 
+const ensureBundledPythonForWin = (archs, env) => {
+  const missingArchs = archs.filter((arch) => !hasBundledPythonForArch(arch));
+  if (missingArchs.length === 0) {
+    return;
+  }
+
+  console.log(
+    `[package:win] Missing bundled Python runtime for ${missingArchs.join(', ')}. Downloading Windows Python runtimes...`
+  );
+
+  const pnpmCmd = isWindowsHost ? 'pnpm.cmd' : 'pnpm';
+  const result = spawnSync(pnpmCmd, ['run', 'python:download:win'], {
+    stdio: 'inherit',
+    env,
+  });
+
+  if (result.error) {
+    console.error('[package:win] Failed to start Python runtime download:', result.error.message);
+    process.exit(1);
+  }
+
+  if ((result.status ?? 1) !== 0) {
+    console.error('[package:win] python:download:win failed.');
+    process.exit(result.status ?? 1);
+  }
+
+  const stillMissing = missingArchs.filter((arch) => !hasBundledPythonForArch(arch));
+  if (stillMissing.length > 0) {
+    console.error(
+      `[package:win] Bundled Python runtime is still missing after download for: ${stillMissing.join(', ')}`
+    );
+    process.exit(1);
+  }
+};
+
 const killPackagingProcesses = () => {
   if (!isWindowsHost) return;
   tryExec('taskkill /IM ClawClaw.exe /F /T');
@@ -266,6 +307,7 @@ if (pnpmPath) {
 const winArchTargets = resolveWinArchTargets(args);
 ensureBundledUvForWin(winArchTargets, builderEnv);
 ensureBundledNodeForWin(winArchTargets, builderEnv);
+ensureBundledPythonForWin(winArchTargets, builderEnv);
 
 const electronBuilderCli = resolve(process.cwd(), 'node_modules', 'electron-builder', 'cli.js');
 const electronBuilderBin = resolve(process.cwd(), 'node_modules', '.bin', isWindowsHost ? 'electron-builder.cmd' : 'electron-builder');

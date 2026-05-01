@@ -175,7 +175,7 @@ pnpm dev
 3. 自动安装默认技能
 4. 可选的模型配置步骤
 
-Python 运行时准备会使用内置的 `uv`，并在官方 Python 源和国内镜像源之间自动回退；首启界面会按步骤显示 `uv` 和 Python 的真实状态。
+Windows 包会随包内置 Python 3.12 运行时，并通过 `UV_PYTHON` 让 OpenClaw/uv 直接使用该可执行文件，因此用户首次启动时不再下载 Python。开发构建如果缺少该运行时，设置逻辑仍可回退到 `uv python install`，并在官方源和镜像源之间重试。
 
 模型配置现在改为手动完成。你可以在向导中跳转到 **模型** 页面添加本地模型或云端提供商，也可以先跳过，稍后再配置。
 
@@ -374,6 +374,7 @@ ClawClaw 采用 **双进程 + Host API 统一接入架构**。渲染进程只调
 ```bash
 # 开发
 pnpm run init             # 安装依赖并下载 uv
+pnpm run python:download:win # 下载 Windows 打包用的内置 Python 运行时
 pnpm dev                  # 以热重载模式启动（同时刷新受管插件镜像）
 
 # 代码质量
@@ -390,7 +391,7 @@ pnpm run package:prepare  # 共享打包前置步骤（vite + OpenClaw bundle + 
 pnpm build                # 准备生产打包资产
 pnpm package              # 为当前平台打包
 pnpm package:mac          # 为 macOS 打包
-pnpm package:win          # 使用辅助打包脚本构建 Windows NSIS 安装包（同时内置 openclaw CLI 所需的 node.exe）
+pnpm package:win          # 构建 Windows NSIS 安装包（内置 node.exe、uv.exe 和 Python）
 pnpm package:win:portable # 构建 Windows 便携目录版（win-unpacked / win-arm64-unpacked）
 pnpm package:mac:portable # 构建 macOS 便携 zip（含启动脚本 + 内嵌 portable/ 数据目录）
 pnpm package:desktop      # 串行打包 macOS、Windows、Linux
@@ -402,7 +403,7 @@ pnpm run upload:update:portable # 上传便携包及 updates-portable/stable 下
 
 说明：
 
-- `pnpm package:win` 用于构建 Windows NSIS 安装包，内部走 `scripts/package-win.mjs`。
+- `pnpm package:win` 用于构建 Windows NSIS 安装包，内部走 `scripts/package-win.mjs`；该脚本会在调用 electron-builder 前校验或下载 Windows `node.exe`、`uv.exe` 和 Python 运行时。
 - `pnpm package:win:portable` 用于构建 Windows 便携目录版，内部走 `scripts/package-win.mjs --dir`。
 - `pnpm package:mac:portable` 用于构建 macOS 便携 zip，内部走 `scripts/package-mac.mjs --build`。会先调用 electron-builder 生成 macOS zip，再组装包含 `Start ClawClaw.command`（启动脚本，自动清除 Gatekeeper 隔离标记）和应用包内嵌 `portable/` 数据目录的便携目录，输出 `release/v<version>/mac/ClawClaw-v<version>-mac-{arch}-portable.zip`。
 - `pnpm package:portable` 同时构建 Windows 和 macOS 便携包。
