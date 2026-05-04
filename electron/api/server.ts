@@ -13,6 +13,7 @@ import { handleLogRoutes } from './routes/logs';
 import { handleUsageRoutes } from './routes/usage';
 import { handleSkillRoutes } from './routes/skills';
 import { handleSecurityRoutes } from './routes/security';
+import { handleRuntimeApplyRoutes } from './routes/runtime-apply';
 import { handleFileRoutes } from './routes/files';
 import { handleSessionRoutes } from './routes/sessions';
 import { handleCronRoutes } from './routes/cron';
@@ -30,6 +31,7 @@ const routeHandlers: RouteHandler[] = [
   handleGatewayRoutes,
   handleSettingsRoutes,
   handleSecurityRoutes,
+  handleRuntimeApplyRoutes,
   handleProviderRoutes,
   handleAgentRoutes,
   handleChannelRoutes,

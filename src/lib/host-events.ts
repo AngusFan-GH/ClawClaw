@@ -1,7 +1,3 @@
-import { createHostEventSource } from './host-api';
-
-let eventSource: EventSource | null = null;
-
 const HOST_EVENT_TO_IPC_CHANNEL: Record<string, string> = {
   'gateway:status': 'gateway:status-changed',
   'gateway:error': 'gateway:error',
@@ -22,21 +18,6 @@ const HOST_EVENT_TO_IPC_CHANNEL: Record<string, string> = {
   'channel:wechat-error': 'channel:wechat-error',
 };
 
-function getEventSource(): EventSource {
-  if (!eventSource) {
-    eventSource = createHostEventSource();
-  }
-  return eventSource;
-}
-
-function allowSseFallback(): boolean {
-  try {
-    return window.localStorage.getItem('clawclaw:allow-sse-fallback') === '1';
-  } catch {
-    return false;
-  }
-}
-
 export function subscribeHostEvent<T = unknown>(
   eventName: string,
   handler: (payload: T) => void
@@ -56,18 +37,6 @@ export function subscribeHostEvent<T = unknown>(
     };
   }
 
-  if (!allowSseFallback()) {
-    console.warn(`[host-events] no IPC mapping for event "${eventName}", SSE fallback disabled`);
-    return () => {};
-  }
-
-  const source = getEventSource();
-  const listener = (event: Event) => {
-    const payload = JSON.parse((event as MessageEvent).data) as T;
-    handler(payload);
-  };
-  source.addEventListener(eventName, listener);
-  return () => {
-    source.removeEventListener(eventName, listener);
-  };
+  console.warn(`[host-events] no IPC mapping for event "${eventName}"`);
+  return () => {};
 }

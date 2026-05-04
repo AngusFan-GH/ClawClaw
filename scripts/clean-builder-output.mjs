@@ -34,7 +34,6 @@ if (existsSync(releaseDir)) {
     const isRootPlatformArtifact =
       /^latest\.yml$/i.test(entry.name) ||
       /^ClawClaw-Setup-v.+\.exe(?:\.blockmap)?$/i.test(entry.name) ||
-      /^clawclaw-.+\.nsis\.7z$/i.test(entry.name) ||
       /^ClawClaw-v.+\.(?:zip|dmg|pkg|AppImage|deb|rpm)(?:\.blockmap)?$/i.test(entry.name);
 
     if (!isMacDmgBackgroundArtifact && !isDebugArtifact && !isMacTempArchive && !isRootPlatformArtifact) {

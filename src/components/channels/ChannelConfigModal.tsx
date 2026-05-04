@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { useChannelsStore } from '@/stores/channels';
 import { useGatewayStore } from '@/stores/gateway';
+import { useRuntimeApplyStore } from '@/stores/runtime-apply';
 import { hostApiFetch } from '@/lib/host-api';
 import { subscribeHostEvent } from '@/lib/host-events';
 import { buildQrChannelEventName, usesPluginManagedQrAccounts } from '@/lib/channel-alias';
@@ -312,6 +313,7 @@ export function ChannelConfigModal({
           if (!saveResult?.success) {
             throw new Error(saveResult?.error || 'Failed to save WhatsApp config');
           }
+          await useRuntimeApplyStore.getState().refreshPlan();
         }
         if (savedAccountId) {
           setSelectedAccountId(savedAccountId);
@@ -485,6 +487,7 @@ export function ChannelConfigModal({
         toast.warning(saveResult.warning);
       }
 
+      await useRuntimeApplyStore.getState().refreshPlan();
       toast.success(t('toast.channelSaved', { name: meta.name }));
       toast.success(t('toast.channelConnecting', { name: meta.name }));
       void finishSave(selectedType);

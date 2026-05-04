@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, symlinkSy
 import { getAllSettings, getProviderSyncHash, setProviderSyncHash } from '../utils/store';
 import { getApiKey, getDefaultProvider, getProvider } from '../utils/secure-storage';
 import { getKeyableProviderTypes, getProviderEnvVar } from '../utils/provider-registry';
-import { getManagedPythonEnv, getOpenClawConfigDir, getOpenClawDir, getOpenClawEntryPath, getPortableDataDir, isOpenClawPresent, resolveOpenClawDir } from '../utils/paths';
+import { getManagedPythonEnv, getOpenClawDir, getOpenClawEntryPath, isOpenClawPresent, resolveOpenClawDir } from '../utils/paths';
 import { validateBundledOpenClawRuntime } from '../utils/openclaw-runtime-integrity';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import {
@@ -92,6 +92,13 @@ function resolveManagedPluginIdsForStartup(configuredChannels: string[]): string
   for (const channelType of configuredChannels) {
     const plugin = CHANNEL_PLUGIN_INSTALL_MAP[channelType];
     if (plugin) {
+      pluginIds.add(plugin.pluginId);
+    }
+  }
+
+  const extensionsDir = path.join(resolveOpenClawDir(), 'extensions');
+  for (const plugin of MANAGED_CHANNEL_PLUGIN_MIRRORS) {
+    if (existsSync(path.join(extensionsDir, plugin.pluginId, OPENCLAW_PLUGIN_MANIFEST))) {
       pluginIds.add(plugin.pluginId);
     }
   }
@@ -589,11 +596,25 @@ export async function runOpenClawStartupPreflightRepair(): Promise<void> {
     },
   };
 
-  // ── Phase 2: Plugin manifest repair (non-fatal, sequential) ─────────
+  // ── Phase 2: Config repair (non-fatal, sequential) ─────────────────
+  // This must run before any step that reads openclaw.json. Older releases can
+  // leave a malformed file, and parallel readers would otherwise race the
+  // repair and skip upgrade convergence.
+  const PHASE_2_CONFIG_REPAIR: GatewayStartupPreflightStep = {
+    id: 'repair-openclaw-config',
+    label: 'repairOpenClawConfigFile',
+    run: async () => {
+      configRecovery = await repairOpenClawConfigFile();
+      if (configRecovery?.topics) {
+        recoveryTopics.push(...configRecovery.topics);
+      }
+    },
+  };
+
+  // ── Phase 3: Plugin manifest repair (non-fatal, sequential) ─────────
   // OpenClaw 2026.4.15 validates extension manifests and channel ids before
-  // the Gateway becomes ready. Keep this before config repair so sanitizer or
-  // doctor does not strip plugin entries for configured external channels.
-  const PHASE_2_PLUGIN_REPAIR: GatewayStartupPreflightStep = {
+  // the Gateway becomes ready.
+  const PHASE_3_PLUGIN_REPAIR: GatewayStartupPreflightStep = {
     id: 'repair-plugin-manifests',
     label: 'repairStartupPluginManifests',
     run: async () => {
@@ -604,19 +625,8 @@ export async function runOpenClawStartupPreflightRepair(): Promise<void> {
     },
   };
 
-  // ── Phase 3: Config + channel repair (parallel, non-fatal) ─────────
-  // These two are independent and can run concurrently.
-  const PHASE_3_REPAIR: GatewayStartupPreflightStep[] = [
-    {
-      id: 'repair-openclaw-config',
-      label: 'repairOpenClawConfigFile',
-      run: async () => {
-        configRecovery = await repairOpenClawConfigFile();
-        if (configRecovery?.topics) {
-          recoveryTopics.push(...configRecovery.topics);
-        }
-      },
-    },
+  // ── Phase 4: Channel config repair (non-fatal, sequential) ──────────
+  const PHASE_4_CHANNEL_REPAIR: GatewayStartupPreflightStep =
     {
       id: 'repair-channel-config-consistency',
       label: 'repairChannelConfigConsistency',
@@ -631,11 +641,10 @@ export async function runOpenClawStartupPreflightRepair(): Promise<void> {
           recoveryTopics.push('channels');
         }
       },
-    },
-  ];
+    };
 
-  // ── Phase 4: Cleanup + sync (parallel, non-fatal) ───────────────────
-  const PHASE_4_CLEANUP_SYNC: GatewayStartupPreflightStep[] = [
+  // ── Phase 5: Cleanup (parallel, non-fatal) ──────────────────────────
+  const PHASE_5_CLEANUP: GatewayStartupPreflightStep[] = [
     {
       id: 'cleanup-dangling-wechat-plugin-state',
       label: 'cleanupDanglingWeChatPluginState',
@@ -683,70 +692,72 @@ export async function runOpenClawStartupPreflightRepair(): Promise<void> {
         }
       },
     },
-    {
-      id: 'sync-default-provider',
-      label: 'syncDefaultProviderToRuntime',
-      run: async () => {
-        const defaultProviderId = await withTimeout(
-          getDefaultProvider(),
-          1500,
-          'getDefaultProviderForRuntimeSync',
-          null,
-        );
-        if (!defaultProviderId) {
-          return;
-        }
-        await withTimeout(
-          syncDefaultProviderToRuntime(defaultProviderId, { suppressRefresh: true }),
-          3000,
-          'syncDefaultProviderToRuntime',
-          undefined,
-        );
-      },
-    },
-    {
-      id: 'sync-provider-configs',
-      label: 'syncAllProvidersToRuntimeBeforeLaunch',
-      run: async () => {
-        if (await shouldSkipProviderSync()) {
-          await recordProviderSyncHash();
-          return;
-        }
-        await withTimeout(
-          syncAllProvidersToRuntime(),
-          4000,
-          'syncAllProvidersToRuntimeBeforeLaunch',
-          undefined,
-        );
-        await recordProviderSyncHash();
-      },
-    },
-    {
-      id: 'sync-provider-auth',
-      label: 'syncAllProviderAuthToRuntimeBeforeLaunch',
-      run: async () => {
-        // Auth sync also guarded by the same hash — if the provider account list
-        // hasn't changed, credentials are unchanged too.
-        if (await shouldSkipProviderSync()) {
-          return;
-        }
-        await withTimeout(
-          syncAllProviderAuthToRuntime(),
-          4000,
-          'syncAllProviderAuthToRuntimeBeforeLaunch',
-          undefined,
-        );
-      },
-    },
   ];
 
-  // Phases run sequentially; steps within phases 2 and 3 run in parallel.
+  const PHASE_6_SYNC_PROVIDERS: GatewayStartupPreflightStep = {
+    id: 'sync-provider-configs',
+    label: 'syncAllProvidersToRuntimeBeforeLaunch',
+    run: async () => {
+      if (await shouldSkipProviderSync()) {
+        await recordProviderSyncHash();
+        return;
+      }
+      await withTimeout(
+        syncAllProvidersToRuntime(),
+        4000,
+        'syncAllProvidersToRuntimeBeforeLaunch',
+        undefined,
+      );
+    },
+  };
+
+  const PHASE_7_SYNC_DEFAULT_PROVIDER: GatewayStartupPreflightStep = {
+    id: 'sync-default-provider',
+    label: 'syncDefaultProviderToRuntime',
+    run: async () => {
+      const defaultProviderId = await withTimeout(
+        getDefaultProvider(),
+        1500,
+        'getDefaultProviderForRuntimeSync',
+        null,
+      );
+      if (!defaultProviderId) {
+        return;
+      }
+      await withTimeout(
+        syncDefaultProviderToRuntime(defaultProviderId, { suppressRefresh: true }),
+        3000,
+        'syncDefaultProviderToRuntime',
+        undefined,
+      );
+    },
+  };
+
+  const PHASE_8_SYNC_AUTH: GatewayStartupPreflightStep = {
+    id: 'sync-provider-auth',
+    label: 'syncAllProviderAuthToRuntimeBeforeLaunch',
+    run: async () => {
+      await withTimeout(
+        syncAllProviderAuthToRuntime(),
+        4000,
+        'syncAllProviderAuthToRuntimeBeforeLaunch',
+        undefined,
+      );
+      await recordProviderSyncHash();
+    },
+  };
+
+  // Phases run sequentially to avoid openclaw.json repair/read races during upgrades.
   const result = await runGatewayStartupPreflight({
     phases: [
       { id: 'phase-1-runtime', label: 'Runtime validation (fatal)', steps: [PHASE_1_FATAL] },
-      { id: 'phase-2-plugin-repair', label: 'Plugin manifest repair', steps: [PHASE_2_PLUGIN_REPAIR] },
-      { id: 'phase-3-repair', label: 'Config & channel repair', steps: PHASE_3_REPAIR },
-      { id: 'phase-4-cleanup-sync', label: 'Cleanup & sync', steps: PHASE_4_CLEANUP_SYNC },
+      { id: 'phase-2-config-repair', label: 'Config repair', steps: [PHASE_2_CONFIG_REPAIR] },
+      { id: 'phase-3-plugin-repair', label: 'Plugin manifest repair', steps: [PHASE_3_PLUGIN_REPAIR] },
+      { id: 'phase-4-channel-repair', label: 'Channel repair', steps: [PHASE_4_CHANNEL_REPAIR] },
+      { id: 'phase-5-cleanup', label: 'Cleanup', steps: PHASE_5_CLEANUP },
+      { id: 'phase-6-sync-providers', label: 'Provider config sync', steps: [PHASE_6_SYNC_PROVIDERS] },
+      { id: 'phase-7-sync-default-provider', label: 'Default provider sync', steps: [PHASE_7_SYNC_DEFAULT_PROVIDER] },
+      { id: 'phase-8-sync-auth', label: 'Provider auth sync', steps: [PHASE_8_SYNC_AUTH] },
     ],
     onStepError: (step, error) => {
       logger.warn(`Startup preflight step failed: ${step.label}`, error);
@@ -967,16 +978,6 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
         : `${proxyMode}: none`;
 
   const { NODE_OPTIONS: _nodeOptions, ...baseEnv } = process.env;
-  // Follows the same pattern as u-claw:
-  //   OPENCLAW_HOME        = parent data dir (portable/ or unset for default)
-  //   OPENCLAW_STATE_DIR   = actual state dir (portable/.openclaw/ or ~/.openclaw/)
-  //   OPENCLAW_CONFIG_PATH = state dir + openclaw.json
-  // In dev/installed mode these are all omitted so OpenClaw uses its defaults.
-  // In portable mode they redirect everything to the USB drive.
-  // NOTE: OPENCLAW_HOME must NOT be set to a .openclaw path directly —
-  // OpenClaw appends ".openclaw" to it, causing ~/.openclaw/.openclaw duplication.
-  const portableDataDir = getPortableDataDir();    // null in dev/installed
-  const openclawStateDir = getOpenClawConfigDir(); // null in dev; portable/.openclaw in portable
   const forkEnv: Record<string, string | undefined> = {
     ...baseEnv,
     PATH: finalPath,
@@ -984,14 +985,6 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     ...uvEnv,
     ...proxyEnv,
     ...getManagedPythonEnv(),
-    ...(portableDataDir
-      ? {
-          // Portable: parent data dir (portable/), state dir (portable/.openclaw/), config
-          OPENCLAW_HOME: portableDataDir,
-          OPENCLAW_STATE_DIR: openclawStateDir,
-          OPENCLAW_CONFIG_PATH: path.join(openclawStateDir!, 'openclaw.json'),
-        }
-      : {}),
     OPENCLAW_GATEWAY_TOKEN: appSettings.gatewayToken,
     OPENCLAW_HANDSHAKE_TIMEOUT_MS: process.env.OPENCLAW_HANDSHAKE_TIMEOUT_MS || '20000',
     OPENCLAW_DISABLE_BONJOUR: '1',

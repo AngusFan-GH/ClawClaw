@@ -9,8 +9,6 @@ export async function getClawXProviderStore() {
     const Store = (await import('electron-store')).default;
     providerStore = new Store({
       name: 'clawclaw-providers',
-      // Keep provider accounts and secrets on the portable drive when the app
-      // runs from a USB unpacked build.
       cwd: getDataDir(),
       defaults: {
         schemaVersion: 0,
@@ -18,8 +16,6 @@ export async function getClawXProviderStore() {
         providerAccounts: {} as Record<string, unknown>,
         apiKeys: {} as Record<string, string>,
         providerSecrets: {} as Record<string, unknown>,
-        defaultProvider: null as string | null,
-        defaultProviderAccountId: null as string | null,
       },
     });
   }

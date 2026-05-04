@@ -129,13 +129,15 @@ const MessageMarkdown = memo(function MessageMarkdown({ text, labels }: { text: 
   return <div ref={containerRef} className="chat-text" dangerouslySetInnerHTML={{ __html: html }} />;
 });
 
-const CopyButton = memo(function CopyButton({ text }: { text: string }) {
+const CopyButton = memo(function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
   if (!text.trim()) return null;
   return (
     <button
       type="button"
       className="chat-copy-button"
+      title={label}
+      aria-label={label}
       onClick={async (e) => {
         e.stopPropagation();
         try {
@@ -462,7 +464,7 @@ const GroupedMessage = memo(function GroupedMessage({
   const reasoningMarkdown = role === 'assistant'
     ? getReasoningMarkdown(message, showThinking, labels)
     : null;
-  const canCopyMarkdown = role === 'assistant' && Boolean(markdown.trim());
+  const canCopyMarkdown = (normalizedRole === 'assistant' || normalizedRole === 'user') && Boolean(markdown.trim());
   const jsonResult = markdown && !isStreaming ? detectJson(markdown) : null;
   const visibleToolCards = showThinking && hasToolCards;
 
@@ -497,7 +499,7 @@ const GroupedMessage = memo(function GroupedMessage({
     <div className={cn('chat-bubble', 'fade-in', isStreaming && 'streaming', canCopyMarkdown && 'has-copy')}>
       {canCopyMarkdown ? (
         <div className="chat-bubble-actions">
-          <CopyButton text={markdown!} />
+          <CopyButton text={markdown!} label={labels.codeCopy} />
         </div>
       ) : null}
       {isToolMessage ? (

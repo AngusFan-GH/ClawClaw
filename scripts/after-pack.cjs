@@ -566,10 +566,9 @@ exports.default = async function afterPack(context) {
     console.log(`[after-pack] ✅ Removed ${nativeRemoved} non-target native platform packages.`);
   }
 
-  // 5. Windows CLI/runtime validation. Keep this as a build-time hard gate:
-  // the NSIS installer must not run post-install PowerShell/Node probes inside
-  // MUI_PAGE_INSTFILES because those child processes can leave the page in an
-  // aborted state even when the dependency probe itself exits successfully.
+  // 5. Windows CLI/runtime validation. Keep this as a build-time hard gate so
+  // the installer core never needs to run post-copy dependency probes on the
+  // user's machine.
   if (platform === 'win32') {
     const bundledNode = join(resourcesDir, 'bin', 'node.exe');
     const bundledUv = join(resourcesDir, 'bin', 'uv.exe');

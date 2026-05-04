@@ -44,29 +44,6 @@ describe('host-api', () => {
     expect(result.ok).toBe(1);
   });
 
-  it('falls back to browser fetch when hostapi handler is not registered', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ fallback: true }),
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    invokeIpcMock.mockResolvedValueOnce({
-      ok: false,
-      error: { message: 'No handler registered for hostapi:fetch' },
-    });
-
-    const { hostApiFetch } = await import('@/lib/host-api');
-    const result = await hostApiFetch<{ fallback: boolean }>('/api/test');
-
-    expect(result.fallback).toBe(true);
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://127.0.0.1:3210/api/test',
-      expect.objectContaining({ headers: expect.any(Object) }),
-    );
-  });
-
   it('throws message from legacy non-ok envelope', async () => {
     invokeIpcMock.mockResolvedValueOnce({
       success: true,
@@ -79,23 +56,23 @@ describe('host-api', () => {
     await expect(hostApiFetch('/api/test')).rejects.toThrow('Invalid Authentication');
   });
 
-  it('falls back to browser fetch only when IPC channel is unavailable', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ fallback: true }),
-    });
+  it('does not fall back to browser fetch when IPC channel is unavailable', async () => {
+    const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-
     invokeIpcMock.mockRejectedValueOnce(new Error('Invalid IPC channel: hostapi:fetch'));
 
     const { hostApiFetch } = await import('@/lib/host-api');
-    const result = await hostApiFetch<{ fallback: boolean }>('/api/test');
 
-    expect(result.fallback).toBe(true);
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://127.0.0.1:3210/api/test',
-      expect.objectContaining({ headers: expect.any(Object) }),
-    );
+    await expect(hostApiFetch('/api/test')).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('refreshes the Host API base URL from main process', async () => {
+    invokeIpcMock.mockResolvedValueOnce('http://127.0.0.1:3217');
+
+    const { getHostApiBase, refreshHostApiBase } = await import('@/lib/host-api');
+    await refreshHostApiBase();
+
+    expect(getHostApiBase()).toBe('http://127.0.0.1:3217');
   });
 });

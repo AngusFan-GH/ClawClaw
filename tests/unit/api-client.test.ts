@@ -1,34 +1,17 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  AppError,
   invokeIpc,
   invokeIpcWithRetry,
-  AppError,
   toUserMessage,
-  configureApiClient,
-  registerTransportInvoker,
-  unregisterTransportInvoker,
-  clearTransportBackoff,
-  getApiClientConfig,
-  applyGatewayTransportPreference,
-  createGatewayHttpTransportInvoker,
-  getGatewayWsDiagnosticEnabled,
-  setGatewayWsDiagnosticEnabled,
 } from '@/lib/api-client';
 
 describe('api-client', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    window.localStorage.removeItem('clawclaw:gateway-ws-diagnostic');
-    configureApiClient({
-      enabled: { ws: false, http: false },
-      rules: [{ matcher: /.*/, order: ['ipc'] }],
-    });
-    clearTransportBackoff();
-    unregisterTransportInvoker('ws');
-    unregisterTransportInvoker('http');
   });
 
-  it('forwards invoke arguments and returns result', async () => {
+  it('forwards unified channels through app:request', async () => {
     const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
     invoke.mockResolvedValueOnce({ ok: true, data: { ok: true } });
 
@@ -44,47 +27,14 @@ describe('api-client', () => {
     );
   });
 
-  it('normalizes timeout errors', async () => {
-    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
-    invoke.mockRejectedValueOnce(new Error('Gateway Timeout'));
-
-    await expect(invokeIpc('gateway:status')).rejects.toMatchObject({ code: 'TIMEOUT' });
-  });
-
-  it('retries once for retryable errors', async () => {
-    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
-    invoke
-      .mockResolvedValueOnce({ ok: false, error: { code: 'TIMEOUT', message: 'network timeout' } })
-      .mockResolvedValueOnce({ ok: true, data: { success: true } });
-
-    const result = await invokeIpcWithRetry<{ success: boolean }>('provider:list', [], 1);
-
-    expect(result.success).toBe(true);
-    expect(invoke).toHaveBeenCalledTimes(2);
-  });
-
-  it('returns user-facing message for permission error', () => {
-    const msg = toUserMessage(new AppError('PERMISSION', 'forbidden'));
-    expect(msg).toContain('Permission denied');
-  });
-
-  it('returns user-facing message for auth invalid error', () => {
-    const msg = toUserMessage(new AppError('AUTH_INVALID', 'Invalid Authentication'));
-    expect(msg).toContain('Authentication failed');
-  });
-
-  it('returns user-facing message for channel unavailable error', () => {
-    const msg = toUserMessage(new AppError('CHANNEL_UNAVAILABLE', 'Invalid IPC channel'));
-    expect(msg).toContain('Service channel unavailable');
-  });
-
-  it('falls back to legacy channel when unified route is unsupported', async () => {
+  it('falls back to a legacy channel when app:request is unsupported', async () => {
     const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
     invoke
       .mockRejectedValueOnce(new Error('APP_REQUEST_UNSUPPORTED:settings.getAll'))
       .mockResolvedValueOnce({ foo: 'bar' });
 
     const result = await invokeIpc<{ foo: string }>('settings:getAll');
+
     expect(result.foo).toBe('bar');
     expect(invoke).toHaveBeenNthCalledWith(2, 'settings:getAll');
   });
@@ -106,142 +56,46 @@ describe('api-client', () => {
     );
   });
 
-  it('falls through ws/http and succeeds via ipc when advanced transports fail', async () => {
+  it('uses IPC directly for gateway RPC', async () => {
     const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
-    invoke.mockResolvedValueOnce({ ok: true, data: { ok: true } });
+    invoke.mockResolvedValueOnce({ success: true, result: { rows: [] } });
 
-    registerTransportInvoker('ws', async () => {
-      throw new Error('ws unavailable');
-    });
-    registerTransportInvoker('http', async () => {
-      throw new Error('http unavailable');
-    });
-    configureApiClient({
-      enabled: { ws: true, http: true },
-      rules: [{ matcher: 'gateway:rpc', order: ['ws', 'http', 'ipc'] }],
-    });
+    const result = await invokeIpc<{ success: boolean; result: { rows: unknown[] } }>(
+      'gateway:rpc',
+      'chat.history',
+      {}
+    );
 
-    const result = await invokeIpc<{ ok: boolean }>('gateway:rpc', 'chat.history', {});
-    expect(result.ok).toBe(true);
+    expect(result.success).toBe(true);
     expect(invoke).toHaveBeenCalledWith('gateway:rpc', 'chat.history', {});
   });
 
-  it('backs off failed ws transport and skips it on immediate retry', async () => {
+  it('normalizes timeout errors', async () => {
     const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
-    invoke.mockResolvedValue({ ok: true });
-    const wsInvoker = vi.fn(async () => {
-      throw new Error('ws unavailable');
-    });
+    invoke.mockRejectedValueOnce(new Error('Gateway Timeout'));
 
-    registerTransportInvoker('ws', wsInvoker);
-    configureApiClient({
-      enabled: { ws: true, http: false },
-      rules: [{ matcher: 'gateway:rpc', order: ['ws', 'ipc'] }],
-    });
+    await expect(invokeIpc('gateway:status')).rejects.toMatchObject({ code: 'TIMEOUT' });
+  });
 
-    await invokeIpc('gateway:rpc', 'chat.history', {});
-    await invokeIpc('gateway:rpc', 'chat.history', {});
+  it('retries once for retryable unified errors', async () => {
+    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
+    invoke
+      .mockResolvedValueOnce({ ok: false, error: { code: 'TIMEOUT', message: 'network timeout' } })
+      .mockResolvedValueOnce({ ok: true, data: { success: true } });
 
-    expect(wsInvoker).toHaveBeenCalledTimes(1);
+    const result = await invokeIpcWithRetry<{ success: boolean }>('provider:list', [], 1);
+
+    expect(result.success).toBe(true);
     expect(invoke).toHaveBeenCalledTimes(2);
   });
 
-  it('retries ws transport after backoff is cleared', async () => {
-    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
-    invoke.mockResolvedValue({ ok: true });
-    const wsInvoker = vi.fn(async () => {
-      throw new Error('ws unavailable');
-    });
-
-    registerTransportInvoker('ws', wsInvoker);
-    configureApiClient({
-      enabled: { ws: true, http: false },
-      rules: [{ matcher: 'gateway:rpc', order: ['ws', 'ipc'] }],
-    });
-
-    await invokeIpc('gateway:rpc', 'chat.history', {});
-    clearTransportBackoff('ws');
-    await invokeIpc('gateway:rpc', 'chat.history', {});
-
-    expect(wsInvoker).toHaveBeenCalledTimes(2);
-    expect(invoke).toHaveBeenCalledTimes(2);
-  });
-
-  it('defaults transport preference to ipc-only', () => {
-    applyGatewayTransportPreference();
-    const config = getApiClientConfig();
-    expect(config.enabled.ws).toBe(false);
-    expect(config.enabled.http).toBe(false);
-    expect(config.rules[0]).toEqual({ matcher: /^gateway:rpc$/, order: ['ipc'] });
-  });
-
-  it('enables ws->http->ipc order when ws diagnostic is on', () => {
-    setGatewayWsDiagnosticEnabled(true);
-    expect(getGatewayWsDiagnosticEnabled()).toBe(true);
-
-    const config = getApiClientConfig();
-    expect(config.enabled.ws).toBe(true);
-    expect(config.enabled.http).toBe(true);
-    expect(config.rules[0]).toEqual({ matcher: /^gateway:rpc$/, order: ['ws', 'http', 'ipc'] });
-  });
-
-  it('parses gateway:httpProxy unified envelope response', async () => {
-    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
-    invoke.mockResolvedValueOnce({
-      ok: true,
-      data: {
-        status: 200,
-        ok: true,
-        json: { type: 'res', ok: true, payload: { rows: [1, 2] } },
-      },
-    });
-
-    const invoker = createGatewayHttpTransportInvoker();
-    const result = await invoker<{ success: boolean; result: { rows: number[] } }>('gateway:rpc', [
-      'chat.history',
-      { sessionKey: 's1' },
-    ]);
-
-    expect(result.success).toBe(true);
-    expect(result.result.rows).toEqual([1, 2]);
-    expect(invoke).toHaveBeenCalledWith(
-      'gateway:httpProxy',
-      expect.objectContaining({
-        path: '/rpc',
-        method: 'POST',
-      })
+  it('returns user-facing messages for normalized errors', () => {
+    expect(toUserMessage(new AppError('PERMISSION', 'forbidden'))).toContain('Permission denied');
+    expect(toUserMessage(new AppError('AUTH_INVALID', 'Invalid Authentication'))).toContain(
+      'Authentication failed'
     );
-  });
-
-  it('throws meaningful error when gateway:httpProxy unified envelope fails', async () => {
-    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
-    invoke.mockResolvedValueOnce({
-      ok: false,
-      error: { message: 'proxy unavailable' },
-    });
-
-    const invoker = createGatewayHttpTransportInvoker();
-    await expect(invoker('gateway:rpc', ['chat.history', {}])).rejects.toThrow('proxy unavailable');
-  });
-
-  it('normalizes raw gateway:httpProxy payload into ipc-style envelope', async () => {
-    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
-    invoke.mockResolvedValueOnce({
-      ok: true,
-      data: {
-        status: 200,
-        ok: true,
-        json: { channels: [{ id: 'telegram-default' }] },
-      },
-    });
-
-    const invoker = createGatewayHttpTransportInvoker();
-    const result = await invoker<{ success: boolean; result: { channels: Array<{ id: string }> } }>(
-      'gateway:rpc',
-      ['channels.status', { probe: false }]
+    expect(toUserMessage(new AppError('CHANNEL_UNAVAILABLE', 'Invalid IPC channel'))).toContain(
+      'Service channel unavailable'
     );
-
-    expect(result.success).toBe(true);
-    expect(result.result.channels[0].id).toBe('telegram-default');
   });
 });

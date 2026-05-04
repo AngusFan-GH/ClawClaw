@@ -42,14 +42,8 @@ import { useTranslation } from 'react-i18next';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { useSettingsStore } from '@/stores/settings';
 import { useGatewayStore } from '@/stores/gateway';
-import {
-  getGatewayWsDiagnosticEnabled,
-  invokeIpc,
-  setGatewayWsDiagnosticEnabled,
-  toUserMessage,
-} from '@/lib/api-client';
+import { invokeIpc, toUserMessage } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
-import { formatGatewayConnectError } from '@/lib/gateway-connect-error';
 import {
   clearUiTelemetry,
   getUiTelemetrySnapshot,
@@ -60,21 +54,9 @@ import {
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
-import { RefreshButton } from '@/components/common/RefreshButton';
 import { UpdateSettings } from '@/components/settings/UpdateSettings';
-import { GatewayPortsSettings } from '@/components/settings/GatewayPortsSettings';
 import { BackupRestoreSettings } from '@/components/settings/BackupRestoreSettings';
-import type { GatewayStatus } from '@/types/gateway';
 import { ALL_MENU_ITEMS, type MenuItemId } from '@/shared/menu-items';
-
-type ControlUiInfo = {
-  url: string;
-  token: string;
-  port: number;
-  ready: boolean;
-  state?: GatewayStatus['state'];
-  error?: string;
-};
 
 type OpenClawDoctorResult = {
   mode: 'diagnose' | 'fix';
@@ -234,7 +216,6 @@ export function Settings() {
     return () => console.debug('[settings] Settings component unmounted');
   }, []);
   const { t } = useTranslation(['settings', 'common']);
-  const [isPortable, setIsPortable] = useState(false);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -284,10 +265,8 @@ export function Settings() {
 
   const [showLogs, setShowLogs] = useState(false);
   const [logContent, setLogContent] = useState('');
-  const [controlUiInfo, setControlUiInfo] = useState<ControlUiInfo | null>(null);
   const [openclawCliCommand, setOpenclawCliCommand] = useState('');
   const [openclawCliError, setOpenclawCliError] = useState<string | null>(null);
-  const [wsDiagnosticEnabled, setWsDiagnosticEnabled] = useState(false);
   const [doctorRunningMode, setDoctorRunningMode] = useState<OpenClawDoctorResult['mode'] | null>(null);
   const [doctorResult, setDoctorResult] = useState<OpenClawDoctorResult | null>(null);
   const [showTelemetryViewer, setShowTelemetryViewer] = useState(false);
@@ -311,22 +290,6 @@ export function Settings() {
   useEffect(() => {
     void initGateway();
   }, [initGateway]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void invokeIpc<boolean>('app:isPortable')
-      .then((value) => {
-        if (!cancelled) setIsPortable(Boolean(value));
-      })
-      .catch(() => {
-        if (!cancelled) setIsPortable(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -358,10 +321,6 @@ export function Settings() {
   }, [t]);
 
   useEffect(() => {
-    setWsDiagnosticEnabled(getGatewayWsDiagnosticEnabled());
-  }, []);
-
-  useEffect(() => {
     if (!devModeUnlocked) return;
     setTelemetryEntries(getUiTelemetrySnapshot(200));
     return subscribeUiTelemetry((entry) => {
@@ -374,43 +333,6 @@ export function Settings() {
       });
     });
   }, [devModeUnlocked]);
-
-  useEffect(() => {
-    if (!devModeUnlocked) return;
-    let cancelled = false;
-    void hostApiFetch<{
-      success: boolean;
-      url?: string;
-      token?: string;
-      port?: number;
-      ready?: boolean;
-      state?: GatewayStatus['state'];
-      error?: string;
-    }>('/api/gateway/control-ui')
-      .then((result) => {
-        if (
-          cancelled ||
-          !result.success ||
-          !result.url ||
-          !result.token ||
-          typeof result.port !== 'number'
-        ) {
-          return;
-        }
-        setControlUiInfo({
-          url: result.url,
-          token: result.token,
-          port: result.port,
-          ready: result.ready === true,
-          state: result.state,
-          error: result.error,
-        });
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [devModeUnlocked, gatewayStatus.state]);
 
   useEffect(() => {
     setProxyModeDraft(proxyMode || (proxyEnabled ? 'custom' : 'system'));
@@ -561,32 +483,6 @@ export function Settings() {
     return draftProxyState !== persistedProxyState;
   }, [draftProxyState, persistedProxyState, proxyModeDraft]);
 
-  const refreshControlUiInfo = async () => {
-    try {
-      const result = await hostApiFetch<{
-        success: boolean;
-        url?: string;
-        token?: string;
-        port?: number;
-        ready?: boolean;
-        state?: GatewayStatus['state'];
-        error?: string;
-      }>('/api/gateway/control-ui');
-      if (result.success && result.url && result.token && typeof result.port === 'number') {
-        setControlUiInfo({
-          url: result.url,
-          token: result.token,
-          port: result.port,
-          ready: result.ready === true,
-          state: result.state,
-          error: result.error,
-        });
-      }
-    } catch {
-      // ignore
-    }
-  };
-
   const handleShowLogs = async () => {
     try {
       const logs = await hostApiFetch<{ content: string }>('/api/logs?tailLines=100');
@@ -609,27 +505,23 @@ export function Settings() {
     }
   };
 
-  const handleCopyGatewayToken = async () => {
-    if (!controlUiInfo?.token) return;
+  const handleOpenGatewayControlUi = async () => {
     try {
-      await navigator.clipboard.writeText(controlUiInfo.token);
-      toast.success(t('developer.tokenCopied'));
+      const result = await hostApiFetch<{
+        success: boolean;
+        url?: string;
+        ready?: boolean;
+        state?: string;
+        error?: string;
+      }>('/api/gateway/control-ui');
+      if (!result.ready || !result.url) {
+        toast.warning(result.error || t('developer.controlUiUnavailable', { state: result.state || gatewayStatus.state }));
+        return;
+      }
+      await invokeIpc('shell:openExternal', result.url);
     } catch (error) {
       toast.error(toUserMessage(error));
     }
-  };
-
-  const handleOpenControlUi = () => {
-    if (!controlUiInfo?.url) return;
-    if (!controlUiInfo.ready) {
-      const stateLabel = controlUiInfo.state || gatewayStatus.state;
-      const detail = controlUiInfo.error
-        ? `: ${formatGatewayConnectError({ message: controlUiInfo.error })}`
-        : '';
-      toast.error(`Gateway not ready (${stateLabel})${detail}`);
-      return;
-    }
-    void invokeIpc('shell:openExternal', controlUiInfo.url);
   };
 
   const handleCopyCliCommand = async () => {
@@ -657,14 +549,6 @@ export function Settings() {
     clearUiTelemetry();
     setTelemetryEntries([]);
     toast.success(t('developer.telemetryCleared'));
-  };
-
-  const handleWsDiagnosticToggle = (enabled: boolean) => {
-    setGatewayWsDiagnosticEnabled(enabled);
-    setWsDiagnosticEnabled(enabled);
-    toast.success(
-      enabled ? t('developer.wsDiagnosticEnabled') : t('developer.wsDiagnosticDisabled')
-    );
   };
 
   const handleRunOpenClawDoctor = async (mode: OpenClawDoctorResult['mode']) => {
@@ -1299,15 +1183,6 @@ export function Settings() {
                 </div>
               </SubCard>
 
-              <SubCard
-                title={t('gatewayPorts.title')}
-                description={t('gatewayPorts.description')}
-              >
-                <GatewayPortsSettings
-                  currentPort={gatewayStatus.port}
-                  currentPid={gatewayStatus.pid}
-                />
-              </SubCard>
             </div>
           </SectionCard>
 
@@ -1354,10 +1229,10 @@ export function Settings() {
           </SectionCard>
 
           <SectionCard
-            title={isPortable ? t('about.title') : t('updates.title')}
-            description={isPortable ? undefined : t('updates.description')}
+            title={t('updates.title')}
+            description={t('updates.description')}
           >
-            <UpdateSettings versionOnly={isPortable} />
+            <UpdateSettings />
           </SectionCard>
 
           <SectionCard title={t('advanced.title')} description={t('advanced.description')}>
@@ -1383,64 +1258,6 @@ export function Settings() {
           {devModeUnlocked ? (
             <SectionCard title={t('developer.title')} description={t('developer.description')}>
               <div className="space-y-4">
-                <SubCard
-                  title={t('developer.console')}
-                  description={t('developer.consoleDesc')}
-                >
-                  <div className="space-y-4">
-                    <div className="rounded-[10px] border border-black/10 bg-white/75 p-4 dark:border-white/10 dark:bg-white/[0.04]">
-                      <div className="space-y-1">
-                        <p className="text-[14px] font-medium text-foreground">
-                          {t('developer.gatewayToken')}
-                        </p>
-                        <p className="text-[13px] text-muted-foreground">
-                          {t('developer.gatewayTokenDesc')}
-                        </p>
-                      </div>
-
-                      <div className="mt-4 flex flex-col gap-3 lg:flex-row">
-                        <Input
-                          readOnly
-                          value={controlUiInfo?.token || ''}
-                          placeholder={t('developer.tokenUnavailable')}
-                          className="h-10 flex-1 rounded-[10px] border-black/10 bg-white font-mono text-[13px] dark:border-white/10 dark:bg-white/[0.03]"
-                        />
-
-                        <div className="flex flex-wrap gap-2">
-                          <RefreshButton
-                            type="button"
-                            label={t('common:actions.refresh')}
-                            onClick={refreshControlUiInfo}
-                            className="h-10 rounded-[10px] px-4"
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={handleCopyGatewayToken}
-                            disabled={!controlUiInfo?.token}
-                            className="h-10 rounded-[10px] border-black/10 bg-transparent px-4 dark:border-white/10 dark:hover:bg-white/5"
-                          >
-                            <Copy className="mr-1.5 h-3.5 w-3.5" />
-                            {t('common:actions.copy')}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={!controlUiInfo?.url}
-                            className="h-10 rounded-[10px] border-black/10 bg-transparent px-4 dark:border-white/10 dark:hover:bg-white/5"
-                            onClick={handleOpenControlUi}
-                          >
-                            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                            {t('developer.openConsole')}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </SubCard>
-
                 <SubCard title={t('developer.cli')} description={t('developer.cliDesc')}>
                   <div className="space-y-3">
                     {isWindows ? (
@@ -1467,17 +1284,39 @@ export function Settings() {
                   </div>
                 </SubCard>
 
-                <SubCard title={t('developer.wsDiagnostic')} description={t('developer.wsDiagnosticDesc')}>
-                  <SettingRow
-                    label={t('developer.wsDiagnostic')}
-                    description={t('developer.wsDiagnosticDesc')}
-                    control={
-                      <Switch
-                        checked={wsDiagnosticEnabled}
-                        onCheckedChange={handleWsDiagnosticToggle}
-                      />
-                    }
-                  />
+                <SubCard title={t('developer.controlUi')} description={t('developer.controlUiDesc')}>
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            'rounded-[10px] px-3 py-1',
+                            gatewayStatus.state === 'running'
+                              ? 'bg-green-500/10 text-green-600 dark:text-green-500'
+                              : gatewayStatus.state === 'error'
+                                ? 'bg-red-500/10 text-red-600 dark:text-red-500'
+                              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                          )}
+                        >
+                          {gatewayStateLabel}
+                        </Badge>
+                        <span className="text-[12px] text-muted-foreground">
+                          {t('gateway.port')}: {gatewayStatus.port || 18789}
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 rounded-[10px] border-black/10 bg-transparent px-4 dark:border-white/10 dark:hover:bg-white/5"
+                      disabled={gatewayStatus.state !== 'running'}
+                      onClick={() => void handleOpenGatewayControlUi()}
+                    >
+                      <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                      {t('developer.openControlUi')}
+                    </Button>
+                  </div>
                 </SubCard>
 
                 <SubCard title={t('developer.doctor')} description={t('developer.doctorDesc')}>
@@ -1546,25 +1385,6 @@ export function Settings() {
                           </span>
                         </div>
 
-                        <div className="grid gap-3 lg:grid-cols-2">
-                          <div className="rounded-[10px] border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/[0.03]">
-                            <p className="mb-2 text-[12px] font-semibold text-muted-foreground">
-                              {t('developer.doctorCommand')}
-                            </p>
-                            <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">
-                              {doctorResult.command}
-                            </pre>
-                          </div>
-                          <div className="rounded-[10px] border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/[0.03]">
-                            <p className="mb-2 text-[12px] font-semibold text-muted-foreground">
-                              {t('developer.doctorWorkingDir')}
-                            </p>
-                            <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">
-                              {doctorResult.cwd || '-'}
-                            </pre>
-                          </div>
-                        </div>
-
                         {doctorResult.error ? (
                           <div className="rounded-[10px] border border-red-500/20 bg-red-500/10 p-3 text-[12px] text-red-600 dark:text-red-400">
                             {doctorResult.error}
@@ -1584,24 +1404,45 @@ export function Settings() {
                           </div>
                         ) : null}
 
-                        <div className="grid gap-3 lg:grid-cols-2">
-                          <div className="rounded-[10px] border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/[0.03]">
-                            <p className="mb-2 text-[12px] font-semibold text-muted-foreground">
-                              STDOUT
-                            </p>
-                            <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">
-                              {doctorResult.stdout || '-'}
-                            </pre>
+                        <details className="rounded-[10px] border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                          <summary className="cursor-pointer text-[12px] font-semibold text-muted-foreground">
+                            {t('developer.doctorDetails')}
+                          </summary>
+                          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                            <div>
+                              <p className="mb-2 text-[12px] font-semibold text-muted-foreground">
+                                {t('developer.doctorCommand')}
+                              </p>
+                              <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">
+                                {doctorResult.command}
+                              </pre>
+                            </div>
+                            <div>
+                              <p className="mb-2 text-[12px] font-semibold text-muted-foreground">
+                                {t('developer.doctorWorkingDir')}
+                              </p>
+                              <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">
+                                {doctorResult.cwd || '-'}
+                              </pre>
+                            </div>
+                            <div>
+                              <p className="mb-2 text-[12px] font-semibold text-muted-foreground">
+                                STDOUT
+                              </p>
+                              <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">
+                                {doctorResult.stdout || '-'}
+                              </pre>
+                            </div>
+                            <div>
+                              <p className="mb-2 text-[12px] font-semibold text-muted-foreground">
+                                STDERR
+                              </p>
+                              <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">
+                                {doctorResult.stderr || '-'}
+                              </pre>
+                            </div>
                           </div>
-                          <div className="rounded-[10px] border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/[0.03]">
-                            <p className="mb-2 text-[12px] font-semibold text-muted-foreground">
-                              STDERR
-                            </p>
-                            <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">
-                              {doctorResult.stderr || '-'}
-                            </pre>
-                          </div>
-                        </div>
+                        </details>
                       </div>
                     ) : null}
                   </div>

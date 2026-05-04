@@ -18,6 +18,12 @@ export function classifyGatewayStderrMessage(message: string): GatewayStderrClas
   if (msg.includes('closed before connect') && msg.includes('token mismatch')) {
     return { level: 'drop', normalized: msg };
   }
+  if (msg.includes('[telegram]') && msg.includes('getUpdates conflict')) {
+    return { level: 'debug', normalized: msg };
+  }
+  if (msg.includes('[skills]') && msg.includes('reason=symlink-escape')) {
+    return { level: 'debug', normalized: msg };
+  }
 
   // Downgrade frequent non-fatal noise.
   if (msg.includes('ExperimentalWarning')) return { level: 'debug', normalized: msg };

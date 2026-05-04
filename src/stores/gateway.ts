@@ -1,6 +1,6 @@
 /**
  * Gateway State Store
- * Uses Host API + SSE for lifecycle/status and a direct renderer WebSocket for runtime RPC.
+ * Uses Electron IPC for lifecycle/status events and Gateway RPC.
  */
 import { create } from 'zustand';
 import { invokeIpc } from '@/lib/api-client';

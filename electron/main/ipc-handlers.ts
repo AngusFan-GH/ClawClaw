@@ -7,7 +7,7 @@ import { existsSync } from 'node:fs';
 import { join, extname, basename, resolve } from 'node:path';
 import crypto from 'node:crypto';
 import { GatewayManager } from '../gateway/manager';
-import { getDataDir, getLogsDir, getPortableDataDir } from '../utils/paths';
+import { getDataDir, getLogsDir } from '../utils/paths';
 import {
   ClawHubService,
   ClawHubSearchParams,
@@ -163,6 +163,10 @@ const DEFAULT_HOST_API_FETCH_TIMEOUT_MS = 15000;
 const MAX_HOST_API_FETCH_TIMEOUT_MS = 180000;
 
 function registerHostApiProxyHandlers(): void {
+  ipcMain.handle('hostapi:getBaseUrl', () => {
+    return `http://127.0.0.1:${getHostApiPort()}`;
+  });
+
   ipcMain.handle('hostapi:fetch', async (_, request: HostApiFetchRequest) => {
     const startedAt = Date.now();
     try {
@@ -1091,14 +1095,6 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
     return gatewayManager.getStatus();
   };
 
-  type GatewayHttpProxyRequest = {
-    path?: string;
-    method?: string;
-    headers?: Record<string, string>;
-    body?: unknown;
-    timeoutMs?: number;
-  };
-
   // Get Gateway status
   ipcMain.handle('gateway:status', async () => {
     return await resolveGatewayStatus();
@@ -1161,19 +1157,6 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
     }
   });
 
-  // Scan ports 18789–18799 for all running OpenClaw Gateway instances.
-  ipcMain.handle('gateway:scanPorts', async () => {
-    const { scanGatewayPorts } = await import('../gateway/supervisor');
-    return await scanGatewayPorts();
-  });
-
-  // Kill the gateway process listening on a specific port.
-  // Resets the restart governor so the local instance can restart cleanly.
-  ipcMain.handle('gateway:killPort', async (_, port: number) => {
-    const { killGatewayOnPort } = await import('../gateway/supervisor');
-    return await killGatewayOnPort(port, gatewayManager);
-  });
-
   // Gateway RPC call
   ipcMain.handle('gateway:rpc', async (_, method: string, params?: unknown, timeoutMs?: number) => {
     try {
@@ -1181,70 +1164,6 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
       return { success: true, result };
     } catch (error) {
       return { success: false, error: String(error) };
-    }
-  });
-
-  // Gateway HTTP proxy
-  // Renderer must not call gateway HTTP directly (CORS); all HTTP traffic
-  // should go through this main-process proxy.
-  ipcMain.handle('gateway:httpProxy', async (_, request: GatewayHttpProxyRequest) => {
-    try {
-      const status = gatewayManager.getStatus();
-      const port = status.port || 18789;
-      const path = request?.path && request.path.startsWith('/') ? request.path : '/';
-      const method = (request?.method || 'GET').toUpperCase();
-      const timeoutMs =
-        typeof request?.timeoutMs === 'number' && request.timeoutMs > 0 ? request.timeoutMs : 15000;
-
-      const token = await getSetting('gatewayToken');
-      const headers: Record<string, string> = {
-        ...(request?.headers ?? {}),
-      };
-      if (!headers.Authorization && !headers.authorization && token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-
-      let body: string | undefined;
-      if (request?.body !== undefined && request?.body !== null) {
-        body = typeof request.body === 'string' ? request.body : JSON.stringify(request.body);
-        if (!headers['Content-Type'] && !headers['content-type']) {
-          headers['Content-Type'] = 'application/json';
-        }
-      }
-
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-      const response = await proxyAwareFetch(`http://127.0.0.1:${port}${path}`, {
-        method,
-        headers,
-        body,
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
-
-      const contentType = (response.headers.get('content-type') || '').toLowerCase();
-      if (contentType.includes('application/json')) {
-        const json = await response.json();
-        return {
-          success: true,
-          status: response.status,
-          ok: response.ok,
-          json,
-        };
-      }
-
-      const text = await response.text();
-      return {
-        success: true,
-        status: response.status,
-        ok: response.ok,
-        text,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: String(error),
-      };
     }
   });
 
@@ -1343,20 +1262,6 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
       }
     }
   );
-
-  // Get the Control UI URL with token for embedding
-  ipcMain.handle('gateway:getControlUiUrl', async () => {
-    try {
-      const status = gatewayManager.getStatus();
-      const token = await getSetting('gatewayToken');
-      const port = status.port || 18789;
-      // Pass token as query param - Control UI will store it in localStorage
-      const url = `http://127.0.0.1:${port}/?token=${encodeURIComponent(token)}`;
-      return { success: true, url, port, token };
-    } catch (error) {
-      return { success: false, error: String(error) };
-    }
-  });
 
   // Health check
   ipcMain.handle('gateway:health', async () => {
@@ -1979,17 +1884,12 @@ function registerAppHandlers(): void {
     return app.getName();
   });
 
-  // Get app path — portable-aware overrides for user-facing paths
+  // Get app path overrides for user-facing paths
   ipcMain.handle('app:getPath', (_, name: Parameters<typeof app.getPath>[0]) => {
     if (name === 'userData') return getDataDir();
     if (name === 'logs') return getLogsDir();
     if (name === 'home') return getOpenClawConfigDir(); // maps to .openclaw for renderer
     return app.getPath(name);
-  });
-
-  // Get platform
-  ipcMain.handle('app:isPortable', () => {
-    return getPortableDataDir() !== null;
   });
 
   ipcMain.handle('app:platform', () => {

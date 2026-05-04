@@ -28,18 +28,6 @@ export async function handleGatewayRoutes(
     return ctx.gatewayManager.getStatus();
   };
 
-  if (url.pathname === '/api/app/gateway-info' && req.method === 'GET') {
-    const status = await resolveGatewayStatus();
-    const token = await getSetting('gatewayToken');
-    const port = status.port || PORTS.OPENCLAW_GATEWAY;
-    sendJson(res, 200, {
-      wsUrl: `ws://127.0.0.1:${port}/ws`,
-      token,
-      port,
-    });
-    return true;
-  }
-
   if (url.pathname === '/api/gateway/status' && req.method === 'GET') {
     sendJson(res, 200, await resolveGatewayStatus());
     return true;
@@ -89,13 +77,11 @@ export async function handleGatewayRoutes(
   if (url.pathname === '/api/gateway/control-ui' && req.method === 'GET') {
     try {
       const status = await resolveGatewayStatus();
-      const token = await getSetting('gatewayToken');
       const port = status.port || PORTS.OPENCLAW_GATEWAY;
-      const urlValue = buildOpenClawControlUiUrl(port, token);
+      const token = await getSetting('gatewayToken');
       sendJson(res, 200, {
         success: true,
-        url: urlValue,
-        token,
+        url: buildOpenClawControlUiUrl(port, token),
         port,
         ready: status.state === 'running',
         state: status.state,
@@ -191,20 +177,6 @@ export async function handleGatewayRoutes(
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }
-    return true;
-  }
-
-  if (url.pathname.startsWith('/api/gateway/ports') && req.method === 'GET') {
-    const { scanGatewayPorts } = await import('../../gateway/supervisor');
-    sendJson(res, 200, await scanGatewayPorts());
-    return true;
-  }
-
-  const killPortMatch = url.pathname.match(/^\/api\/gateway\/ports\/(\d+)\/kill$/);
-  if (killPortMatch && req.method === 'POST') {
-    const port = parseInt(killPortMatch[1], 10);
-    const { killGatewayOnPort } = await import('../../gateway/supervisor');
-    sendJson(res, 200, await killGatewayOnPort(port, ctx.gatewayManager));
     return true;
   }
 

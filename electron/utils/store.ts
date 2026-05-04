@@ -131,7 +131,6 @@ const defaults: AppSettings = {
 
 /**
  * Get the settings store instance (lazy initialization)
- * Uses getDataDir() so it respects portable mode automatically.
  */
 async function getSettingsStore() {
   if (!settingsStoreInstance) {
@@ -173,7 +172,11 @@ export async function getSetting<K extends keyof AppSettings>(key: K): Promise<A
     const legacyEnabled = Boolean(store.get('proxyEnabled'));
     return (legacyEnabled ? 'custom' : 'system') as AppSettings[K];
   }
-  return normalizeSettings(store.store)[key];
+  const rawStore =
+    store.store && typeof store.store === 'object'
+      ? store.store
+      : ((store.get() ?? {}) as Partial<AppSettings>);
+  return normalizeSettings(rawStore)[key];
 }
 
 /**
@@ -192,7 +195,11 @@ export async function setSetting<K extends keyof AppSettings>(
  */
 export async function getAllSettings(): Promise<AppSettings> {
   const store = await getSettingsStore();
-  return normalizeSettings(store.store);
+  const rawStore =
+    store.store && typeof store.store === 'object'
+      ? store.store
+      : ((store.get() ?? {}) as Partial<AppSettings>);
+  return normalizeSettings(rawStore);
 }
 
 /**

@@ -440,7 +440,7 @@ describe('upgrade compatibility baseline', () => {
     expect(JSON.parse(targetDepPkg)).toMatchObject({ name: 'dep', version: '1.0.0' });
   });
 
-  it('cleans invalid managed channel plugin manifests before sanitizing config and reinstalls the bundled plugin', async () => {
+  it('removes invalid legacy channel plugin manifests before sanitizing config', async () => {
     await writeOpenClawJson({
       channels: {
         wecom: {
@@ -521,14 +521,12 @@ describe('upgrade compatibility baseline', () => {
     });
     await flushBackgroundWork();
 
-    const manifest = JSON.parse(await readFile(join(targetDir, 'openclaw.plugin.json'), 'utf8')) as Record<string, unknown>;
-    expect(manifest.configSchema).toEqual({ type: 'object' });
+    await expect(readFile(join(targetDir, 'openclaw.plugin.json'), 'utf8')).rejects.toThrow();
     const config = await readOpenClawJson();
     expect(config.plugins).toEqual({
-      allow: ['channels'],
       enabled: true,
       entries: {
-        channels: { enabled: true },
+        wecom: { enabled: true },
       },
     });
   });

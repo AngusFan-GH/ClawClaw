@@ -864,11 +864,8 @@ export function buildChatItems(params: {
     });
   }
 
-  const hasLiveAssistantContent = liveItems.some((item) => (
-    item.kind === 'stream'
-    || (item.kind === 'message' && normalizeRoleForGrouping(item.message) !== 'user')
-  ));
-  if ((params.sending || params.pendingFinal) && !hasLiveAssistantContent) {
+  const hasLiveAssistantText = liveItems.some((item) => item.kind === 'stream');
+  if ((params.sending || params.pendingFinal) && !hasLiveAssistantText) {
     liveItems.push({ kind: 'reading-indicator', key: `reading:${params.sessionKey}` });
   }
 

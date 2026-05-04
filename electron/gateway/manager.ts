@@ -318,8 +318,8 @@ export class GatewayManager extends EventEmitter {
    *
    * Tries the preferred port (this.status.port) first.  If it is already in use
    * by another process, scans 18789–18899 for the first available port.
-   * This enables multiple ClawClaw instances (installed + portable) to coexist
-   * on the same machine without manual port configuration.
+   * This avoids startup failure when another local Gateway already owns the
+   * preferred port.
    */
   private async resolveStartPort(): Promise<void> {
     const preferred = this.status.port;
@@ -358,8 +358,7 @@ export class GatewayManager extends EventEmitter {
       this.resetAttachProbeState();
       const startEpoch = this.lifecycleController.bump('start');
 
-      // Resolve an available port before starting — allows multiple instances
-      // (installed + portable) to coexist on the same machine.
+      // Resolve an available port before starting.
       await this.resolveStartPort();
       logger.info(`Gateway start requested (port=${this.status.port})`);
       this.lastSpawnSummary = null;

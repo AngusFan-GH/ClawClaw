@@ -7,6 +7,7 @@ import type { Server } from 'node:http';
 import { join } from 'path';
 import { GatewayManager } from '../gateway/manager';
 import { GatewayApplyCoordinator } from '../gateway/apply-coordinator';
+import { RuntimeApplyPlan } from '../gateway/runtime-apply-plan';
 import { registerIpcHandlers } from './ipc-handlers';
 import { createTray } from './tray';
 import { createMenu } from './menu';
@@ -14,7 +15,6 @@ import { createMenu } from './menu';
 import { appUpdater, registerUpdateHandlers } from './updater';
 import { logger } from '../utils/logger';
 import { warmupNetworkOptimization } from '../utils/uv-env';
-import { getPortableDataDir, getPortableRootDir, getDataDir, getLogsDir, getOpenClawConfigDir, ensureDir } from '../utils/paths';
 
 import { ClawHubService } from '../gateway/clawhub';
 import { ensureClawXContext, repairClawXOnlyBootstrapFiles } from '../utils/openclaw-workspace';
@@ -26,8 +26,7 @@ import {
 } from '../utils/openclaw-cli';
 import { isQuitting, setQuitting } from './app-state';
 import { applyProxySettings } from './proxy';
-import { getAllSettings, getSetting, setSetting } from '../utils/store';
-import { PORTS, isPortAvailable, findAvailablePort } from '../utils/config';
+import { getAllSettings, getSetting } from '../utils/store';
 import { ensureBuiltinSkillsInstalled } from '../utils/skill-config';
 import { performUpgradeMaintenanceIfNeeded } from '../utils/upgrade-maintenance';
 import { startHostApiServer } from '../api/server';
@@ -126,6 +125,7 @@ const gatewayApplyCoordinator = new GatewayApplyCoordinator({
     });
   },
 });
+const runtimeApplyPlan = new RuntimeApplyPlan({ gatewayApplyCoordinator });
 let hostApiServer: Server | null = null;
 
 /**
@@ -208,36 +208,8 @@ async function initialize(): Promise<void> {
   logger.init();
   logger.info('=== ClawClaw Application Starting ===');
 
-  // ── Portable mode ───────────────────────────────────────────────────────────
-  const portableRootDir = getPortableRootDir();
-  const portableDataDir = getPortableDataDir();
-  if (portableDataDir) {
-    const portableData = getDataDir();
-    logger.info(`[portable] Running in portable mode — root=${portableRootDir} data=${portableData}`);
-
-    // Ensure all portable data directories exist before anything else tries to use them.
-    ensureDir(portableData);                       // portable/
-    ensureDir(getLogsDir());                       // portable/logs
-    ensureDir(getOpenClawConfigDir());             // portable/.openclaw
-
-    // Auto-detect: if default port 18789 is already in use (likely by a
-    // normally-installed ClawClaw on the same machine), automatically switch
-    // to the next available port so both instances can run simultaneously.
-    const defaultPort = PORTS.OPENCLAW_GATEWAY;
-    const currentSettings = await getAllSettings();
-    const currentPort = currentSettings.gatewayPort;
-
-    if (currentPort === defaultPort) {
-      // Port is set to default — check if it's available
-      if (!(await isPortAvailable(defaultPort))) {
-        const newPort = await findAvailablePort(PORTS.OPENCLAW_GATEWAY_PORTABLE);
-        await setSetting('gatewayPort', newPort);
-        logger.info(`[portable] Port ${defaultPort} is in use, switched to ${newPort}`);
-      }
-    }
-  }
   logger.debug(
-    `Runtime: platform=${process.platform}/${process.arch}, electron=${process.versions.electron}, node=${process.versions.node}, packaged=${app.isPackaged}${portableDataDir ? `, portableRoot=${portableRootDir}, portableData=${portableDataDir}` : ''}`
+    `Runtime: platform=${process.platform}/${process.arch}, electron=${process.versions.electron}, node=${process.versions.node}, packaged=${app.isPackaged}`
   );
 
   // Warm up network optimization (non-blocking)
@@ -335,18 +307,19 @@ async function initialize(): Promise<void> {
     }
 
     const requires = request.mode === 'restart' ? 'restart' : 'reload';
-    gatewayApplyCoordinator.enqueue({
+    runtimeApplyPlan.record({
+      domain: 'providers',
+      label: '模型配置',
       source: request.source ?? 'provider.runtimeSync',
       reason: request.reason ?? request.source ?? 'provider.runtimeSync',
       requires,
-      delayMs: request.delayMs,
-      skipIfStopped: request.onlyIfRunning !== true,
     });
   });
 
   hostApiServer = await startHostApiServer({
     gatewayManager,
     gatewayApplyCoordinator,
+    runtimeApplyPlan,
     clawHubService,
     eventBus: hostEventBus,
     mainWindow,

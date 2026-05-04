@@ -2,9 +2,6 @@ import { invokeIpc } from '@/lib/api-client';
 import { trackUiEvent } from './telemetry';
 import { normalizeAppError } from './error-model';
 
-const HOST_API_PORT = 3210;
-const HOST_API_BASE = `http://127.0.0.1:${HOST_API_PORT}`;
-
 type HostApiProxyResponse = {
   ok?: boolean;
   data?: {
@@ -32,35 +29,24 @@ type HostApiProxyData = {
   text?: string;
 };
 
+let hostApiBase = 'http://127.0.0.1:3210';
+
+export async function refreshHostApiBase(): Promise<void> {
+  const baseUrl = await invokeIpc<string>('hostapi:getBaseUrl');
+  if (typeof baseUrl === 'string' && baseUrl.startsWith('http://127.0.0.1:')) {
+    hostApiBase = baseUrl;
+  }
+}
+
+export function getHostApiBase(): string {
+  return hostApiBase;
+}
+
 function headersToRecord(headers?: HeadersInit): Record<string, string> {
   if (!headers) return {};
   if (headers instanceof Headers) return Object.fromEntries(headers.entries());
   if (Array.isArray(headers)) return Object.fromEntries(headers);
   return { ...headers };
-}
-
-async function parseResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    let message = `${response.status} ${response.statusText}`;
-    try {
-      const payload = await response.json() as { error?: string };
-      if (payload?.error) {
-        message = payload.error;
-      }
-    } catch {
-      // ignore body parse failure
-    }
-    throw normalizeAppError(new Error(message), {
-      source: 'browser-fallback',
-      status: response.status,
-    });
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return await response.json() as T;
 }
 
 function resolveProxyErrorMessage(error: HostApiProxyResponse['error']): string {
@@ -139,15 +125,6 @@ function parseLegacyProxyResponse<T>(
   return response.text as T;
 }
 
-function shouldFallbackToBrowser(message: string): boolean {
-  const normalized = message.toLowerCase();
-  return normalized.includes('invalid ipc channel: hostapi:fetch')
-    || normalized.includes("no handler registered for 'hostapi:fetch'")
-    || normalized.includes('no handler registered for "hostapi:fetch"')
-    || normalized.includes('no handler registered for hostapi:fetch')
-    || normalized.includes('window is not defined');
-}
-
 export async function hostApiFetch<T>(path: string, init?: HostApiFetchInit): Promise<T> {
   const startedAt = Date.now();
   const method = init?.method || 'GET';
@@ -177,37 +154,6 @@ export async function hostApiFetch<T>(path: string, init?: HostApiFetchInit): Pr
       message,
       code: normalized.code,
     });
-    if (!shouldFallbackToBrowser(message)) {
-      throw normalized;
-    }
+    throw normalized;
   }
-
-  // Browser-only fallback (non-Electron environments).
-  const response = await fetch(`${HOST_API_BASE}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
-  });
-  trackUiEvent('hostapi.fetch', {
-    path,
-    method,
-    source: 'browser-fallback',
-    durationMs: Date.now() - startedAt,
-    status: response.status,
-  });
-  try {
-    return await parseResponse<T>(response);
-  } catch (error) {
-    throw normalizeAppError(error, { source: 'browser-fallback', path, method });
-  }
-}
-
-export function createHostEventSource(path = '/api/events'): EventSource {
-  return new EventSource(`${HOST_API_BASE}${path}`);
-}
-
-export function getHostApiBase(): string {
-  return HOST_API_BASE;
 }

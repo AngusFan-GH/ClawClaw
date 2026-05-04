@@ -25,6 +25,7 @@ import { ProvidersSettings } from '@/components/settings/ProvidersSettings';
 import { FeedbackState } from '@/components/common/FeedbackState';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { PageLoader } from '@/components/common/LoadingSpinner';
+import { RuntimeApplyBanner } from '@/components/common/RuntimeApplyBanner';
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
 import { type ProviderAccount } from '@/lib/providers';
@@ -365,6 +366,11 @@ export function Models() {
         />
 
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-1 pb-10">
+          <RuntimeApplyBanner
+            domains={['providers']}
+            onApplied={refreshProviderSnapshot}
+          />
+
           {isSetupFlow ? (
             <section className="rounded-[10px] border border-blue-500/15 bg-blue-500/[0.04] p-4 sm:p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

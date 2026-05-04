@@ -107,7 +107,7 @@ ClawClawは公式の**OpenClaw**コアを直接ベースに構築されていま
 
 複数のAIチャネルを同時に設定・監視できます。各チャネルは独立して動作するため、異なるタスクに特化したエージェントを実行できます。
 チャンネル画面は OpenClaw と同じ「タイプ優先」の構造に寄せてあり、各チャンネルタイプを 1 枚のカードとして表示し、その中でアカウント単位の設定・削除・状態確認を行えます。なお、「アカウント追加」を表示するかどうかは、そのチャンネルの上流プラグインが本当に複数アカウントを実装しているかに従います。運用フローも明確化されており、まず Connections 画面で具体的なアカウントを作成・編集し、その後 Agents 画面でそのアカウントを Agent にバインドします。複数アカウントの接続でも、同じ所有先を強制されません。
-WeChat については、Connections 画面で「プラグイン管理の QR セッション」として扱うようになりました。同梱の OpenClaw プラグインミラーを優先して利用し、必要な場合のみ公式の導入フローへフォールバックしたうえで、アプリ内で直接 QR コードを取得し、期限切れのセッションは自動で更新し、ログイン成功後は返却されたアカウントを自動保存して Gateway を更新します。
+WeChat については、Connections 画面で「プラグイン管理の QR セッション」として扱うようになりました。同梱の OpenClaw プラグインミラーを優先して利用し、必要な場合のみ公式の導入フローへフォールバックしたうえで、アプリ内で直接 QR コードを取得し、期限切れのセッションは自動で更新し、ログイン成功後は返却されたアカウントを自動保存します。モデル、Agent、Connection の設定変更はまず保存され、共通の未適用変更バナーからまとめて適用されるため、連続した設定中の Gateway reload や短い再起動を減らせます。
 
 ### ⏰ Cronベースの自動化
 
@@ -129,7 +129,7 @@ AIタスクを自動的に実行するようスケジュール設定できます
 
 ### 💻 柔軟なモデル設定
 
-ClawClaw は初回起動時に既定モデルを強制的に同梱しません。ランタイムの準備が完了した後で、**モデル** 画面からローカルエンドポイントやクラウドプロバイダーを追加し、使用するモデルを選択できます。必要なら後で設定することもできます。クラウドおよびセルフホスト型 Provider は OpenClaw に近い provider-first の導線を使い、専用のローカルモデルセンターは現在のローカルモデル体験をそのまま維持します。ローカルモデル提供元の設定を消去すると、その提供元に依存していたローカルモデルも同時に削除されるため、手動削除や UI 上の削除後に無効なローカルモデル項目が残りません。
+ClawClaw は初回起動時に既定モデルを強制的に同梱しません。ランタイムの準備が完了した後で、**モデル** 画面からローカルエンドポイントやクラウドプロバイダーを追加し、使用するモデルを選択できます。必要なら後で設定することもできます。クラウドおよびセルフホスト型 Provider は OpenClaw に近い provider-first の導線を使い、専用のローカルモデルセンターは現在のローカルモデル体験をそのまま維持します。ローカルモデル提供元の設定を消去すると、その提供元に依存していたローカルモデルも同時に削除されるため、手動削除や UI 上の削除後に無効なローカルモデル項目が残りません。保存済みのモデル編集は未適用のランタイム変更として表示され、複数の設定を終えてから一度に適用できます。
 
 ### 🌙 アダプティブテーマ
 
@@ -219,7 +219,7 @@ ClawClawには、Electron、OpenClaw Gateway、またはTelegramなどのチャ�
 - `host:port`のみの値はHTTPとして扱われます。
 - 高度なプロキシフィールドが空の場合、ClawClawは`プロキシサーバー`にフォールバックします。
 - プロキシ設定を保存すると、Electron のネットワーク設定は即座に再適用され、必要な場合は Gateway も自動的に再起動されます。
-- いまはランタイム設定の適用をバックグラウンドで統合しているため、連続した編集で Gateway が何度も再起動されることは減り、通常の reload ではアプリ全体をブロックしません。
+- モデル、Agent、Connection の変更は未適用のランタイム変更として保存され、まとめて適用できるため、連続したセットアップで Gateway の再起動が何度も発生しにくくなっています。
 - `システム設定を使用` モードでは、ClawClaw は OS のプロキシも解決し、自動起動された OpenClaw Gateway 子プロセスへ渡します。
 - ClawClawはTelegramが有効な場合、プロキシをOpenClawのTelegramチャネル設定にも同期します。
 
@@ -235,19 +235,17 @@ ClawClawには、Electron、OpenClaw Gateway、またはTelegramなどのチャ�
 
 - 現在の会話の継続コンテキストは、引き続き OpenClaw の session transcript に依存します。`session-memory` は追加のクロスセッションアーカイブであり、現在の会話コンテキストの主ソースではありません。
 - どちらかのメモリ設定を変更すると、ClawClaw は管理対象の OpenClaw 設定を更新し、新しい設定を上流ランタイムへ反映させるために Gateway を自動再起動します。
-- この種のランタイム設定は、チャネルや Agent の変更と同じバックグラウンド適用コーディネータを通るため、短時間に複数の設定を変更しても再起動回数が増えにくくなっています。
+- モデル、Agent、Connection の編集は共通の未適用変更フローを使います。メモリ設定は現在のランタイム動作に直接影響するため、引き続き即時適用されます。
 
 ### 設定のバックアップとデータクリーンアップ
 
-**設定 → データとアンインストール** を開くと、データ削除やアンインストールの前に現在の設定を JSON バックアップとしてエクスポートできます。ポータブル版では、用途に応じて既定で `portable/exports/settings`、`portable/exports/images`、`portable/exports/general` に保存します。同じ画面で Gateway を停止し、管理対象の ClawClaw / OpenClaw ローカルデータを許可リスト方式でクリーンアップし、その後 OS のアンインストーラからアプリ本体を削除するための完全アンインストール準備も行えます。Windows では、ClawClaw 自身のキャッシュ、ストレージ、ログはアプリ終了後に続けて削除され、Chromium のファイルロックが残っていても安全にクリーンアップできます。
+**設定 → データとアンインストール** を開くと、データ削除やアンインストールの前に現在の設定を JSON バックアップとしてエクスポートできます。同じ画面で Gateway を停止し、管理対象の ClawClaw / OpenClaw ローカルデータを許可リスト方式でクリーンアップし、その後 OS のアンインストーラからアプリ本体を削除するための完全アンインストール準備も行えます。Windows では、ClawClaw 自身のキャッシュ、ストレージ、ログはアプリ終了後に続けて削除され、Chromium のファイルロックが残っていても安全にクリーンアップできます。
 
 **設定 → アップデート** では、自動確認 / 自動ダウンロードの制御と、パッケージ版アプリでの手動更新確認が行えます。ClawClaw は現在、安定版フィードのみを利用します。
-Windows では、パッケージ更新は引き続き NSIS の差分更新を使用しますが、インストーラーがコピー前に `resources/openclaw` と `resources/openclaw-plugins` を強制的にクリーンアップするようになり、旧ランタイムの残骸がアップグレード後に残らないようにしています。アップグレード時の実行中チェックも、対象のインストール先ディレクトリに紐づくプロセスだけを見るようになったため、別フォルダにある `ClawClaw.exe` のコピーで誤って「まだ起動中」と判定されにくくなりました。同梱 OpenClaw ランタイムはパッケージ作成時のハードゲートとして検証されるため、インストーラーは NSIS の進行ページ内でコピー後の PowerShell/Node 検証を実行しなくなりました。
-Windows のインストール版は現在、現在のユーザー向けインストールに固定され、未対応の「すべてのユーザー」インストールモードは表示されません。
-インストーラーの状態表示も、旧プロセスの確認、同梱 Gateway の停止、旧ランタイムのクリーンアップ、ファイルコピー、インストール後設定といった具体的な段階に分けて表示するようになりました。
+Windows パッケージングでは unpacked アプリ payload を生成し、新しい ClawClaw Windows インストーラー UI と installer-core manifest を `release/windows-installer` にステージします。旧 NSIS インストールは移行入力として扱い、新しい計画が旧インストール先、実行中の ClawClaw/Gateway、古いランタイム構成を処理し、ユーザーデータは既定で保持します。
 また、旧バージョンの ClawClaw または同梱 OpenClaw から更新した直後の初回起動では、通常の Gateway 起動前、かつ自動更新の再チェック前に、一度だけアップグレード保守を実行し、旧 provider ストア、管理プラグインミラー、古い `openclaw.json` 形状を先回りして修復します。起動失敗後の後追い修復に頼りにくくするためです。
-Windows のインストール版を `0.1.15` 以前から更新する場合は、追加の互換経路も有効になります。インストーラは新しいファイルをコピーする前に旧バンドル runtime / CLI ディレクトリを削除し、初回起動では旧プラグイン・旧 channel・旧 runtime レイアウト向けの重めの OpenClaw 修復を強制します。
-**設定 → 開発者** から **OpenClaw Doctor** と **OpenClaw Doctor Fix** を直接実行できるようになり、同梱ランタイムに対する診断や移行修復をアプリ内で確認できます。
+Windows のインストール版を `0.1.15` 以前から更新する場合は、追加の互換経路も有効になります。installer-core は新しいファイルをコピーする前に旧バンドル runtime / CLI ディレクトリを削除し、初回起動では旧プラグイン・旧 channel・旧 runtime レイアウト向けの重めの OpenClaw 修復を強制します。
+**設定 → 開発者** の診断と修復では、OpenClaw のチェックや自動修復を簡潔な結果表示で確認でき、元のコマンド出力は既定で折りたたまれます。Gateway 実行中は、同じ場所から OpenClaw Control UI も開けます。
 
 ---
 
@@ -278,17 +276,16 @@ ClawClawは、**デュアルプロセス + Host API 統一アクセス**構成�
 └──────────────────────────────┬──────────────────────────────────┘
                                │
                                │ Main管理のトランスポート戦略
-                               │（WS優先、HTTP次点、IPCフォールバック）
+                               │（Main がゲートウェイのライフサイクルを管理）
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                Host API と Main プロキシ層                       │
 │                                                                  │
 │  • hostapi:fetch（Mainプロキシ、CORS回避）                       │
-│  • gateway:httpProxy（RendererはGateway HTTPに直アクセスしない） │
-│  • 統一エラーマッピングとリトライ/バックオフ                     │
+│  • 統一エラーマッピングとリクエスト計測                          │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
-                               │ WS / HTTP / IPC フォールバック
+                               │ Electron Main 経由の Gateway RPC
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                     OpenClaw ゲートウェイ                         │
@@ -372,7 +369,7 @@ AI を開発ワークフローに統合できます。エージェントを使�
 # 開発
 pnpm run init             # 依存関係のインストール + uvのダウンロード
 pnpm run python:download:win # Windows パッケージ用の同梱 Python ランタイムをダウンロード
-pnpm dev                  # ホットリロードで起動（管理プラグインミラーも更新）
+pnpm dev                  # ホットリロードで起動
 
 # コード品質
 pnpm lint                 # ESLintを実行
@@ -384,32 +381,25 @@ pnpm run release:check    # リリースゲートを実行（アップグレー�
 
 # ビルド＆パッケージ
 pnpm run build:vite       # フロントエンドのみビルド
+pnpm run installer:win:prepare # Windows インストーラー UI、Electron shell、runner をビルド
+pnpm run installer:win:shell:pack # Windows 上でインストーラー shell をパッケージ化
 pnpm run package:prepare  # 共通パッケージ前処理（vite + OpenClaw bundle + builder出力クリーン）
 pnpm build                # 本番パッケージ用アセットを準備
-pnpm package              # 現在のプラットフォーム向けにパッケージ化
 pnpm package:mac          # macOS向けにパッケージ化
-pnpm package:win          # node.exe、uv.exe、Python を同梱した Windows NSIS インストーラーをビルド
-pnpm package:win:portable # Windows ポータブルディレクトリ版をビルド（win-unpacked / win-arm64-unpacked）
-pnpm package:mac:portable # macOS ポータブル zip をビルド（起動スクリプト + 内蔵 portable/ データディレクトリ付き）
-pnpm package:desktop      # macOS・Windows・Linux を直列でまとめてパッケージ化
+pnpm package:win          # Windows payload と updater 互換 setup exe/latest.yml をビルド
 pnpm run package:organize # ルート出力を release/v<version>/windows|mac|linux|metadata に整理
 pnpm package:linux        # Linux向けにパッケージ化
 pnpm run upload:update    # release/v<version>/windows/latest.yml と参照される Windows 更新ファイルをアップロード
-pnpm run upload:update:portable # ポータブル zip と updates-portable/stable 配下のターゲット別 JSON manifest をアップロード
 ```
 
 注記:
 
-- `pnpm package:win` は Windows NSIS インストーラーをビルドし、内部では `scripts/package-win.mjs` を使います。このスクリプトは electron-builder の前に Windows の `node.exe`、`uv.exe`、Python ランタイムを検証またはダウンロードします。
-- `pnpm package:win:portable` は Windows ポータブルディレクトリ版をビルドし、内部では `scripts/package-win.mjs --dir` を使います。
-- `pnpm package:mac:portable` は macOS ポータブル zip をビルドし、内部では `scripts/package-mac.mjs --build` を使います。electron-builder で macOS zip を生成後、`Start ClawClaw.command`（Gatekeeper 隔離属性を自動解除する起動スクリプト）と、アプリバンドル内に組み込まれた `portable/` データディレクトリを含むポータブルディレクトリを組み立て、`release/v<version>/mac/ClawClaw-v<version>-mac-{arch}-portable.zip` を出力します。
-- `pnpm package:portable` は Windows と macOS のポータブルアーティファクトを両方ビルドします。
-- `pnpm package:prepare` は `build`、`package`、各プラットフォーム向けパッケージコマンドで共通利用する前処理で、release 直下の builder 一時出力だけを掃除し、既存のバージョン別成果物には触れません。
+- `pnpm package:win` は Windows unpacked payload をビルドし、その後新しい Windows インストーラー UI と、旧 updater 互換名の `ClawClaw-Setup-v<version>-<arch>.exe` および `latest.yml` をステージします。内部では `scripts/package-win.mjs` を使い、electron-builder の前に Windows の `node.exe`、`uv.exe`、Python ランタイムを検証またはダウンロードします。
+- `pnpm run installer:win:prepare` は、メインアプリの完全なパッケージングとは独立して新しい Windows インストーラーを検証します。
+- `pnpm package:prepare` は `build` と各プラットフォーム向けパッケージコマンドで共通利用する前処理で、release 直下の builder 一時出力だけを掃除し、既存のバージョン別成果物には触れません。
 - `pnpm package:organize` は builder が一時的に release 直下へ出力した成果物を `release/v<package.json version>/windows`、`release/v<package.json version>/mac`、`release/v<package.json version>/linux`、`release/v<package.json version>/metadata` へ振り分けます。
-- `pnpm package:desktop` は macOS、Windows、Linux の順にパッケージングを実行します。`dist`、`dist-electron`、`build/openclaw` を共有するため、各プラットフォームのパッケージングは並列実行しないでください。
 - `release/` はバージョン別ディレクトリで運用します。既存バージョンは保持され、同じバージョンの成果物だけが上書きされます。更新アップロードスクリプトは `release/v<package.json version>/windows/latest.yml` を参照します。
 - `pnpm run upload:update` は引き続き Windows インストール版専用です。古いインストール版が依存する `latest.yml` 契約を維持し、`latest.yml` 内のバージョンが `package.json` と一致しない場合は失敗します。
-- `pnpm run upload:update:portable` はポータブル版専用の公開スクリプトで、ポータブル成果物と `win32-x64.json`・`darwin-arm64.json` のようなターゲット別 manifest を `updates-portable/stable/` に配置します。
 - 同梱 OpenClaw プラグインミラーは `after-pack` 段階でコピーされるため、パッケージ化時に別途 `bundle:openclaw-plugins` を実行する必要はありません。
 
 ### Release Gate

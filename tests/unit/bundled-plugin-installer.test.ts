@@ -15,6 +15,11 @@ vi.mock('node:os', () => {
   return { ...mocked, default: mocked };
 });
 
+vi.mock('os', () => {
+  const mocked = { homedir: () => testHome };
+  return { ...mocked, default: mocked };
+});
+
 vi.mock('electron', () => ({
   app: {
     isPackaged: false,
@@ -88,7 +93,7 @@ describe('ensureBundledPluginInstalled', () => {
     await expect(readFile(join(targetDir, 'stale.txt'), 'utf8')).rejects.toThrow();
   });
 
-  it('rejects a bundled plugin mirror that still has incompatible plugin-sdk imports after repair', async () => {
+  it('repairs root plugin-sdk imports before installing a bundled plugin mirror', async () => {
     const pluginId = 'test-plugin-manifest-id';
     const sourceDir = join(process.cwd(), 'build', 'openclaw-plugins', pluginId);
     const targetDir = join(testHome, '.openclaw', 'extensions', pluginId);
@@ -106,8 +111,9 @@ describe('ensureBundledPluginInstalled', () => {
     const { ensureBundledPluginInstalled } = await import('@electron/utils/bundled-plugin-installer');
     const result = ensureBundledPluginInstalled(pluginId, 'Test Plugin', { forceReinstall: true });
 
-    expect(result.installed).toBe(false);
-    expect(result.warning).toContain('incompatible');
-    await expect(readFile(join(targetDir, 'openclaw.plugin.json'), 'utf8')).rejects.toThrow();
+    expect(result.installed).toBe(true);
+    await expect(readFile(join(targetDir, 'index.js'), 'utf8')).resolves.toContain(
+      'openclaw/plugin-sdk/infra-runtime',
+    );
   });
 });

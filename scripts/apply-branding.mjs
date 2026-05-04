@@ -28,15 +28,7 @@ replaceInFile(path.join(root, 'electron-builder.yml'), [
   ],
 ]);
 
-// 2) NSIS copy
-replaceInFile(path.join(root, 'scripts/installer.nsh'), [
-  [
-    /!define MUI_WELCOMEPAGE_TEXT ".*"/,
-    `!define MUI_WELCOMEPAGE_TEXT "Your desktop AI copilot by ${companyEn}"`,
-  ],
-]);
-
-// 3) EULA
+// 2) EULA
 replaceInFile(path.join(root, 'resources/legal/EULA.rtf'), [
   [
     /\\b .* End User License Agreement \(EULA\) \/ 最终用户许可协议\\b0\\par/,

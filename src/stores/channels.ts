@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { hostApiFetch } from '@/lib/host-api';
 import type { Channel, ChannelGroup, ChannelType } from '../types/channel';
 import { CHANNEL_NAMES } from '../types/channel';
+import { useRuntimeApplyStore } from './runtime-apply';
 
 interface AddChannelParams {
   type: ChannelType;
@@ -171,6 +172,7 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
       method: 'DELETE',
     });
 
+    await useRuntimeApplyStore.getState().refreshPlan();
     await get().fetchChannels(false, { includeRuntime: false });
   },
 

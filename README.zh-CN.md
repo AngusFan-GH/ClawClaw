@@ -107,7 +107,7 @@ ClawClaw 直接基于官方 **OpenClaw** 核心构建。无需单独安装，我
 
 同时配置和监控多个 AI 频道。每个频道独立运行，允许你为不同任务运行专门的智能体。
 连接页现在按 OpenClaw 的“类型优先”模型展示：每种连接类型只显示一张卡片，卡内再管理账户级配置、删除和运行状态，避免同类型多账户时页面碎裂或状态语义混乱。是否支持“新增账户”取决于上游该连接插件是否真的实现了多账户能力，而不是所有连接类型一律支持。连接配置的正确闭环是：先在连接页创建或编辑具体账户，再在分身页按账户绑定归属；多账户连接不会再被强制共享同一个分身。
-对于微信，ClawClaw 现在按“插件托管二维码会话”处理接入：连接页会优先使用随包提供的 OpenClaw 微信插件镜像，只有在必要时才回退到官方安装流程；随后在应用内直接请求二维码、自动刷新过期会话、在登录成功后自动保存返回的账号，并刷新 Gateway。
+对于微信，ClawClaw 现在按“插件托管二维码会话”处理接入：连接页会优先使用随包提供的 OpenClaw 微信插件镜像，只有在必要时才回退到官方安装流程；随后在应用内直接请求二维码、自动刷新过期会话、在登录成功后自动保存返回的账号。模型、分身、连接的配置变更会先保存，再通过统一的“待应用更改”提示一次性应用，减少连续配置时反复触发 Gateway reload 或短暂重启。
 
 ### ⏰ 定时任务自动化
 
@@ -129,7 +129,7 @@ ClawClaw 直接基于官方 **OpenClaw** 核心构建。无需单独安装，我
 
 ### 💻 灵活的模型配置
 
-ClawClaw 不再在首次启动时强行内置默认模型。运行环境准备完成后，你可以进入 **模型** 页面手动添加本地模型端点或云端提供商，选择具体模型；也可以先跳过，稍后再完成配置。云端和自托管 Provider 走更接近 OpenClaw 的 provider-first 接入链路，而独立的本地模型中心继续保留当前本地模型的使用方式。现在如果清除本地模型提供商配置，依赖该提供商的本地模型也会一并删除，避免手动清理配置后页面里残留失效的本地模型条目。
+ClawClaw 不再在首次启动时强行内置默认模型。运行环境准备完成后，你可以进入 **模型** 页面手动添加本地模型端点或云端提供商，选择具体模型；也可以先跳过，稍后再完成配置。云端和自托管 Provider 走更接近 OpenClaw 的 provider-first 接入链路，而独立的本地模型中心继续保留当前本地模型的使用方式。现在如果清除本地模型提供商配置，依赖该提供商的本地模型也会一并删除，避免手动清理配置后页面里残留失效的本地模型条目。已保存的模型变更会作为待应用运行时更改展示，用户可以在完成多项配置后一次性应用。
 
 ### 🌙 自适应主题
 
@@ -222,7 +222,7 @@ ClawClaw 内置了代理设置，适用于需要通过本地代理客户端访�
 - 只填写 `host:port` 时，会按 HTTP 代理处理。
 - 高级代理项留空时，会自动回退到“代理服务器”。
 - 保存代理设置后，Electron 网络层会立即重新应用代理；确实需要时，Gateway 仍会自动重启。
-- 现在运行时配置会在后台统一合并应用，所以连续编辑不会再反复触发多次 Gateway 重启，普通 reload 也不会再全局阻断界面。
+- 模型、分身和连接变更会先保存为待应用运行时更改，用户可以统一应用，因此连续配置时不会反复触发多次 Gateway 重启。
 - 在“跟随系统”模式下，ClawClaw 也会解析系统代理，并传给自动启动的 OpenClaw Gateway 子进程。
 - 如果启用了 Telegram，ClawClaw 还会把代理同步到 OpenClaw 的 Telegram 频道配置中。
 
@@ -238,19 +238,17 @@ ClawClaw 内置了代理设置，适用于需要通过本地代理客户端访�
 
 - 当前会话的连续上下文仍然主要依赖 OpenClaw 的 session transcript。`session-memory` 是额外的跨会话归档，不是当前会话上下文的主来源。
 - 修改任一记忆开关后，ClawClaw 会同步更新受管 OpenClaw 配置，并自动重启 Gateway，让上游运行时立即加载新配置。
-- 这类运行时设置现在会和频道、Agent 等配置共用同一套后台应用协调器，因此在短时间内连续调整多个设置时，重启次数会显著减少。
+- 模型、分身和连接现在使用统一的待应用流程；记忆开关仍会立即应用，因为它们会直接影响当前运行时行为。
 
 ### 配置备份与数据清理
 
-打开 **设置 → 数据与卸载**，可以在清理数据或卸载前先导出当前配置的 JSON 备份。便携版现在会按用途默认保存到 `portable/exports/settings`、`portable/exports/images` 或 `portable/exports/general`。同一处也能先停止 Gateway，再按白名单清理受管的 ClawClaw / OpenClaw 本地数据，并在真正从系统卸载器移除应用本体之前完成“完全卸载准备”。在 Windows 上，ClawClaw 自身的缓存、存储和日志会排队到应用退出后继续清理，避免被 Chromium 文件锁占用而删除失败。
+打开 **设置 → 数据与卸载**，可以在清理数据或卸载前先导出当前配置的 JSON 备份。同一处也能先停止 Gateway，再按白名单清理受管的 ClawClaw / OpenClaw 本地数据，并在真正从系统卸载器移除应用本体之前完成“完全卸载准备”。在 Windows 上，ClawClaw 自身的缓存、存储和日志会排队到应用退出后继续清理，避免被 Chromium 文件锁占用而删除失败。
 
 打开 **设置 → 更新**，可以控制自动检查 / 自动下载，并在打包版应用里手动触发更新检查。ClawClaw 当前只跟随稳定版发布源。
-在 Windows 上，打包更新继续使用 NSIS 差分更新，但安装器现在会在复制文件前强制清理受管的 `resources/openclaw` 和 `resources/openclaw-plugins` 目录，避免升级时保留旧运行时残留。升级阶段现在也只检查目标安装目录关联的进程，因此其他目录里的 `ClawClaw.exe` 副本不再误触发“应用仍在运行”的提示。内置 OpenClaw 运行时会在打包阶段作为硬性构建门禁完成校验，因此安装器不再在 NSIS 进度页内执行复制后的 PowerShell/Node 自检。
-Windows 安装版现在会固定使用“仅为当前用户”安装，不再提供不受支持的“为所有用户安装”模式。
-安装器状态文案也已细化为更具体的升级步骤，例如检查旧进程、停止内置 Gateway、清理旧运行时、复制文件和执行安装后的配置。
+Windows 打包现在会产出 unpacked 应用载荷，并把新的 ClawClaw Windows 安装器 UI 与 installer-core manifest 暂存到 `release/windows-installer`。旧 NSIS 安装只作为迁移输入处理：新计划会导入旧安装位置、停止旧 ClawClaw/Gateway 进程、清理旧运行时布局，并默认保留用户数据。
 现在从旧版 ClawClaw 或旧版随包 OpenClaw 升级后的第一次启动，会在正常 Gateway 启动前、以及自动重新检查更新前，自动执行一次性的升级维护：主动迁移旧版 provider 存储、修复受管插件镜像和较旧的 `openclaw.json` 结构，尽量避免等到启动失败后才被动修复。
-Windows 安装版从 `0.1.15` 及更早版本升级时，还会走一条额外的兼容路径：安装器会在复制新文件前清理旧的内置 runtime 和 CLI 目录，首次启动也会强制执行更重的一轮 OpenClaw 修复，以兼容旧插件、旧 channel 和旧 runtime 布局。
-在 **设置 → 开发者** 中，现在可以直接运行 **OpenClaw Doctor** 和 **OpenClaw Doctor Fix**，对随包运行时执行诊断或修复迁移问题，而不必离开应用。
+Windows 安装版从 `0.1.15` 及更早版本升级时，还会走一条额外的兼容路径：installer-core 会在复制新文件前清理旧的内置 runtime 和 CLI 目录，首次启动也会强制执行更重的一轮 OpenClaw 修复，以兼容旧插件、旧 channel 和旧 runtime 布局。
+在 **设置 → 开发者** 中，诊断与修复区可以对 OpenClaw 执行检查或自动修复，并默认只展示简洁结果；原始命令输出会折叠在详情里。Gateway 运行时，同一区域也会显示 OpenClaw 控制 UI 入口。
 
 ---
 
@@ -281,17 +279,16 @@ ClawClaw 采用 **双进程 + Host API 统一接入架构**。渲染进程只调
 └──────────────────────────────┬──────────────────────────────────┘
                                │
                                │ 主进程统一传输策略
-                               │（WS 优先，HTTP 次之，IPC 回退）
+                               │（主进程负责网关生命周期）
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                  Host API 与主进程代理层                          │
 │                                                                  │
 │  • hostapi:fetch（主进程代理，规避开发/生产 CORS）                │
-│  • gateway:httpProxy（渲染进程不直连 Gateway HTTP）               │
-│  • 统一错误映射与重试/退避策略                                     │
+│  • 统一错误映射与请求遥测                                          │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
-                               │ WS / HTTP / IPC 回退
+                               │ 通过 Electron 主进程执行 Gateway RPC
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                     OpenClaw 网关                                 │
@@ -375,7 +372,7 @@ ClawClaw 采用 **双进程 + Host API 统一接入架构**。渲染进程只调
 # 开发
 pnpm run init             # 安装依赖并下载 uv
 pnpm run python:download:win # 下载 Windows 打包用的内置 Python 运行时
-pnpm dev                  # 以热重载模式启动（同时刷新受管插件镜像）
+pnpm dev                  # 以热重载模式启动
 
 # 代码质量
 pnpm lint                 # 运行 ESLint 检查
@@ -387,32 +384,25 @@ pnpm run release:check    # 运行发版门禁（升级兼容与恢复检查）
 
 # 构建与打包
 pnpm run build:vite       # 仅构建前端
+pnpm run installer:win:prepare # 构建 Windows 安装器 UI、Electron 壳和 runner
+pnpm run installer:win:shell:pack # 在 Windows 上打包安装器壳
 pnpm run package:prepare  # 共享打包前置步骤（vite + OpenClaw bundle + builder 输出清理）
 pnpm build                # 准备生产打包资产
-pnpm package              # 为当前平台打包
 pnpm package:mac          # 为 macOS 打包
-pnpm package:win          # 构建 Windows NSIS 安装包（内置 node.exe、uv.exe 和 Python）
-pnpm package:win:portable # 构建 Windows 便携目录版（win-unpacked / win-arm64-unpacked）
-pnpm package:mac:portable # 构建 macOS 便携 zip（含启动脚本 + 内嵌 portable/ 数据目录）
-pnpm package:desktop      # 串行打包 macOS、Windows、Linux
+pnpm package:win          # 构建 Windows 载荷 + 兼容旧更新器的 setup exe/latest.yml
 pnpm run package:organize # 将根目录产物整理到 release/v<version>/windows|mac|linux|metadata
 pnpm package:linux        # 为 Linux 打包
 pnpm run upload:update    # 上传 release/v<version>/windows/latest.yml 及其引用的 Windows 更新文件
-pnpm run upload:update:portable # 上传便携包及 updates-portable/stable 下的按平台 JSON manifest
 ```
 
 说明：
 
-- `pnpm package:win` 用于构建 Windows NSIS 安装包，内部走 `scripts/package-win.mjs`；该脚本会在调用 electron-builder 前校验或下载 Windows `node.exe`、`uv.exe` 和 Python 运行时。
-- `pnpm package:win:portable` 用于构建 Windows 便携目录版，内部走 `scripts/package-win.mjs --dir`。
-- `pnpm package:mac:portable` 用于构建 macOS 便携 zip，内部走 `scripts/package-mac.mjs --build`。会先调用 electron-builder 生成 macOS zip，再组装包含 `Start ClawClaw.command`（启动脚本，自动清除 Gatekeeper 隔离标记）和应用包内嵌 `portable/` 数据目录的便携目录，输出 `release/v<version>/mac/ClawClaw-v<version>-mac-{arch}-portable.zip`。
-- `pnpm package:portable` 同时构建 Windows 和 macOS 便携包。
-- `pnpm package:prepare` 是 `build`、`package` 以及所有平台打包命令共用的前置步骤，只清理 release 根目录的 builder 暂存输出，不会触碰已存在的版本目录。
+- `pnpm package:win` 用于构建 Windows unpacked 载荷，随后构建新的 Windows 安装器 UI，并暂存兼容旧更新器命名的 `ClawClaw-Setup-v<version>-<arch>.exe` 与 `latest.yml`；内部走 `scripts/package-win.mjs`，会在调用 electron-builder 前校验或下载 Windows `node.exe`、`uv.exe` 和 Python 运行时。
+- `pnpm run installer:win:prepare` 用于在完整主应用打包之外独立验证新的 Windows 安装器。
+- `pnpm package:prepare` 是 `build` 以及所有平台打包命令共用的前置步骤，只清理 release 根目录的 builder 暂存输出，不会触碰已存在的版本目录。
 - `pnpm package:organize` 会把 builder 暂存到 release 根目录的产物整理到 `release/v<package.json version>/windows`、`release/v<package.json version>/mac`、`release/v<package.json version>/linux`、`release/v<package.json version>/metadata`。
-- `pnpm package:desktop` 会依次打 macOS、Windows、Linux。请保持串行执行，不要并行打各平台，因为它们共享 `dist`、`dist-electron` 和 `build/openclaw`。
 - `release/` 现在采用按版本分目录模式。旧版本会保留不动，只有同版本目录下的产物会被覆盖；更新上传脚本读取 `release/v<package.json version>/windows/latest.yml`。
 - `pnpm run upload:update` 会继续只负责 Windows 安装版更新发布，用来保持旧安装版依赖的 `latest.yml` 协议不变；如果 `latest.yml` 里的版本和 `package.json` 不一致，脚本会直接失败。
-- `pnpm run upload:update:portable` 则是独立的便携版更新发布脚本，会上传便携包，并生成 `win32-x64.json`、`darwin-arm64.json` 这类按平台区分的 manifest 到 `updates-portable/stable/`。
 - OpenClaw 受管插件镜像是在 `after-pack` 阶段复制进安装包，因此打包时不需要额外执行独立的 `bundle:openclaw-plugins`。
 
 ### 发版门禁

@@ -11,11 +11,10 @@ const versionDir = resolve(releaseDir, `v${packageJson.version}`);
 const GROUPS = [
   {
     name: 'windows',
-    dirMatchers: [/^win(?:-.+)?-unpacked$/i, /^github$/i],
+    dirMatchers: [/^win(?:-.+)?-unpacked$/i, /^windows-installer$/i, /^github$/i],
     fileMatchers: [
       /^latest\.yml$/i,
       /^ClawClaw-Setup-v.+\.exe(?:\.blockmap)?$/i,
-      /^clawclaw-.+\.nsis\.7z$/i,
       /^win(?:-.+)?-unpacked\.zip$/i,
     ],
   },

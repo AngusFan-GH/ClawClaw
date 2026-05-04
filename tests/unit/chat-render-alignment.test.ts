@@ -305,6 +305,35 @@ describe('chat render alignment', () => {
     expect(items.some((item) => item.kind === 'stream')).toBe(true);
   });
 
+  it('keeps assistant loading visible after live tool calls like OpenClaw dashboard', () => {
+    const items = buildChatItems({
+      messages: [],
+      pendingUserMessage: null,
+      pendingAssistantMessage: null,
+      toolMessages: [
+        {
+          role: 'assistant',
+          timestamp: 2_000,
+          toolCallId: 'tool-1',
+          content: [{ type: 'tool_use', name: 'read_file', arguments: { path: 'README.md' } }],
+        },
+      ],
+      streamSegments: [],
+      streamingMessage: null,
+      streamingStartedAt: 0,
+      sessionKey: 'agent:main',
+      sending: true,
+      pendingFinal: false,
+      showThinking: true,
+      locale: 'en',
+    });
+
+    const flowItems = items.filter((item) => item.kind !== 'divider');
+    expect(flowItems).toHaveLength(2);
+    expect(flowItems[0]).toMatchObject({ kind: 'group', role: 'tool' });
+    expect(flowItems[1]).toMatchObject({ kind: 'reading-indicator' });
+  });
+
   it('merges pending assistant loading into a single assistant group', () => {
     const items = buildChatItems({
       messages: [
