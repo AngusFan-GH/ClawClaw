@@ -223,7 +223,23 @@ const stageInstallerUpdateArtifacts = () => {
     console.log(`[package:win] Staged updater-compatible installer: release/${fileName}`);
   }
 
-  const primary = staged.find((artifact) => artifact.arch === process.arch) ??
+  const x64Artifact = staged.find((artifact) => artifact.arch === 'x64');
+  if (x64Artifact) {
+    const fileName = `ClawClaw-Setup-v${appVersion}.exe`;
+    const target = resolve(root, 'release', fileName);
+    cpSync(x64Artifact.path, target);
+    staged.push({
+      arch: 'x64',
+      fileName,
+      path: target,
+      size: statSync(target).size,
+      sha512: sha512Base64(target),
+    });
+    console.log(`[package:win] Staged stable installer alias: release/${fileName}`);
+  }
+
+  const primary = staged.find((artifact) => artifact.fileName === `ClawClaw-Setup-v${appVersion}.exe`) ??
+    staged.find((artifact) => artifact.arch === process.arch) ??
     staged.find((artifact) => artifact.arch === 'x64') ??
     staged[0];
   if (!primary) {
@@ -337,10 +353,11 @@ try {
 buildInstallerUi(builderEnv);
 stageInstallerUi();
 writeInstallerManifest();
-if (isWindowsHost) {
-  run(isWindowsHost ? 'pnpm.cmd' : 'pnpm', ['run', 'installer:win:shell:pack'], { env: builderEnv });
-  stageInstallerUpdateArtifacts();
-} else {
-  console.log('[package:win] Skipping installer shell packaging because this host is not Windows.');
-}
+run(isWindowsHost ? 'pnpm.cmd' : 'pnpm', ['run', 'installer:win:shell:pack'], {
+  env: {
+    ...builderEnv,
+    CLAWCLAW_WIN_ARCHS: winArchTargets.join(','),
+  },
+});
+stageInstallerUpdateArtifacts();
 console.log('[package:win] Windows installer assets staged at release/windows-installer.');

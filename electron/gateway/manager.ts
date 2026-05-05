@@ -91,6 +91,7 @@ export interface GatewayManagerEvents {
  */
 export class GatewayManager extends EventEmitter {
   private static readonly ATTACH_PROBE_COOLDOWN_MS = 8000;
+  private static readonly IN_PLACE_RESTART_READY_TIMEOUT_MS = 70_000;
   private process: ChildProcess | null = null;
   private processExitStatus: number | string | null = null;
   private ownsProcess = false;
@@ -231,9 +232,9 @@ export class GatewayManager extends EventEmitter {
       throw new Error('Cannot restart Gateway in-place without an owned process pid');
     }
 
-    const expectedDelayMs = this.pendingExpectedReconnectDelayMs ?? 1500;
-    const waitTimeoutMs = Math.max(8000, expectedDelayMs + 8000);
-    const waitForReconnect = this.waitForRunningStateAfterDisconnect(waitTimeoutMs);
+    const waitForReconnect = this.waitForRunningStateAfterDisconnect(
+      GatewayManager.IN_PLACE_RESTART_READY_TIMEOUT_MS,
+    );
 
     logger.info(`Requesting in-process Gateway restart via SIGUSR1 (pid=${child.pid})`);
     process.kill(child.pid, 'SIGUSR1');
@@ -760,7 +761,8 @@ export class GatewayManager extends EventEmitter {
           await this.restartOwnedGatewayInPlace();
           return;
         } catch (error) {
-          logger.warn('In-process Gateway restart failed, falling back to stop/start:', error);
+          const message = error instanceof Error ? error.message : String(error);
+          logger.info(`In-process Gateway restart did not settle; falling back to stop/start (${message})`);
           if (this.startInFlight) {
             logger.info('Waiting for in-flight Gateway start before stop/start fallback');
             try {

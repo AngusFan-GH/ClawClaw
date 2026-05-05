@@ -382,7 +382,7 @@ export async function handleSecurityRoutes(
       await setSetting('securityPolicy', policy);
       const reminders = normalizeReminders(await getSetting('reminders'));
       const syncResult = await syncSecurityPolicyArtifacts(config, policy, reminders);
-      const gatewayRestartResult = await ctx.gatewayApplyCoordinator.applyNow({
+      const gatewayRestartResult = ctx.gatewayApplyCoordinator.enqueue({
         source: 'security.apply',
         reason: 'security.apply',
         requires: 'restart_immediate',
@@ -394,7 +394,7 @@ export async function handleSecurityRoutes(
         snapshot: buildPolicySnapshot(policy, config),
         verify,
         sync: syncResult,
-        gatewayRestarted: gatewayRestartResult.triggered,
+        gatewayRestarted: gatewayRestartResult.accepted,
       });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -410,7 +410,7 @@ export async function handleSecurityRoutes(
       await setSetting('securityPolicy', DEFAULT_SECURITY_POLICY);
       const reminders = normalizeReminders(await getSetting('reminders'));
       const syncResult = await syncSecurityPolicyArtifacts(config, DEFAULT_SECURITY_POLICY, reminders);
-      const gatewayRestartResult = await ctx.gatewayApplyCoordinator.applyNow({
+      const gatewayRestartResult = ctx.gatewayApplyCoordinator.enqueue({
         source: 'security.reset',
         reason: 'security.reset',
         requires: 'restart_immediate',
@@ -422,7 +422,7 @@ export async function handleSecurityRoutes(
         snapshot: buildPolicySnapshot(DEFAULT_SECURITY_POLICY, config),
         verify,
         sync: syncResult,
-        gatewayRestarted: gatewayRestartResult.triggered,
+        gatewayRestarted: gatewayRestartResult.accepted,
       });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

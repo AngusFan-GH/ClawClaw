@@ -9,21 +9,26 @@ const currentDir = dirname(fileURLToPath(import.meta.url));
 const packageDir = resolve(currentDir, '..');
 const rootDir = resolve(packageDir, '..', '..');
 const rootPackage = JSON.parse(readFileSync(resolve(rootDir, 'package.json'), 'utf8'));
-const electronBuilderBin = resolve(
-  rootDir,
-  'node_modules',
-  '.bin',
-  process.platform === 'win32' ? 'electron-builder.cmd' : 'electron-builder',
-);
+const electronBuilderCli = resolve(rootDir, 'node_modules', 'electron-builder', 'cli.js');
+const electronVersion = String(rootPackage.devDependencies?.electron ?? rootPackage.dependencies?.electron ?? '')
+  .replace(/^[^\d]*/, '');
+const archFlags = String(process.env.CLAWCLAW_WIN_ARCHS || 'x64,arm64')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)
+  .map((arch) => `--${arch}`);
 
-const result = spawnSync(electronBuilderBin, [
+const result = spawnSync(process.execPath, [
+  electronBuilderCli,
   '--config',
   'electron-builder.yml',
   '--win',
   'portable',
+  ...archFlags,
   '--publish',
   'never',
   `-c.extraMetadata.version=${rootPackage.version}`,
+  `-c.electronVersion=${electronVersion}`,
 ], {
   cwd: packageDir,
   stdio: 'inherit',

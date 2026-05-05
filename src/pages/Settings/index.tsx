@@ -75,6 +75,8 @@ type OpenClawDoctorResult = {
 
 type ProxyMode = 'system' | 'custom' | 'direct';
 
+const OPENCLAW_DOCTOR_REQUEST_TIMEOUT_MS = 125_000;
+
 function SectionCard({
   title,
   description,
@@ -557,6 +559,7 @@ export function Settings() {
       const result = await hostApiFetch<OpenClawDoctorResult>('/api/app/openclaw-doctor', {
         method: 'POST',
         body: JSON.stringify({ mode }),
+        timeoutMs: OPENCLAW_DOCTOR_REQUEST_TIMEOUT_MS,
       });
       setDoctorResult(result);
       const toastMethod =
