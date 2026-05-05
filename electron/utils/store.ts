@@ -11,6 +11,7 @@ import {
 } from '../shared/security-policy';
 import type { ReminderItem } from '../shared/reminders';
 import { normalizeReminders } from '../shared/reminders';
+import { writeOpenClawConfigRecord } from './openclaw-config';
 import { getDataDir } from './paths';
 
 // Lazy-load electron-store (ESM module)
@@ -406,7 +407,6 @@ export async function applyBackupPayload(
 
   // 2. Apply OpenClaw config
   try {
-    const { writeOpenClawConfigRecord } = await import('./openclaw-config');
     await writeOpenClawConfigRecord(payload.openclawConfig);
     importedOpenClawConfig = true;
   } catch (err) {
