@@ -54,12 +54,29 @@ function isLikelySamePendingUserMessage(
   return haveSameComparableAttachments(historyMessage, pendingUserMessage);
 }
 
+function hasMatchingPendingUserMessageIdempotencyKey(
+  historyMessage: RawMessage,
+  pendingUserMessage: RawMessage,
+): boolean {
+  return (
+    historyMessage.role === 'user'
+    && pendingUserMessage.role === 'user'
+    && typeof historyMessage.idempotencyKey === 'string'
+    && historyMessage.idempotencyKey.length > 0
+    && historyMessage.idempotencyKey === pendingUserMessage.idempotencyKey
+  );
+}
+
 export function historyContainsPendingUserMessage(
   history: RawMessage[],
   pendingUserMessage: RawMessage | null,
-  options: { optimisticTimestampMs?: number } = {},
+  options: { optimisticTimestampMs?: number; requireIdempotencyKeyMatch?: boolean } = {},
 ): boolean {
   if (!pendingUserMessage) return false;
+
+  if (options.requireIdempotencyKeyMatch) {
+    return history.some((message) => hasMatchingPendingUserMessageIdempotencyKey(message, pendingUserMessage));
+  }
 
   if (history.some((message) => isLikelySamePendingUserMessage(message, pendingUserMessage, options.optimisticTimestampMs))) {
     return true;

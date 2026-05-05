@@ -800,7 +800,12 @@ export function buildChatItems(params: {
     };
   }
 
-  if (params.pendingUserMessage && !historyContainsPendingUserMessage(history, params.pendingUserMessage)) {
+  if (
+    params.pendingUserMessage
+    && !historyContainsPendingUserMessage(history, params.pendingUserMessage, {
+      requireIdempotencyKeyMatch: params.sending,
+    })
+  ) {
     liveItems.push({
       kind: 'message',
       key: `pending:${params.pendingUserMessage.id ?? params.sessionKey}`,

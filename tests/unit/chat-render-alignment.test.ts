@@ -437,4 +437,71 @@ describe('chat render alignment', () => {
     const userGroups = items.filter((item) => item.kind === 'group' && item.role === 'user');
     expect(userGroups).toHaveLength(1);
   });
+
+  it('keeps a newly sent duplicate-text pending user message visible before history can confirm the same send', () => {
+    const items = buildChatItems({
+      messages: [
+        {
+          role: 'user',
+          timestamp: 2_000,
+          content: '123',
+          id: 'history-user-1',
+        },
+      ],
+      pendingUserMessage: {
+        role: 'user',
+        timestamp: 2_001,
+        content: '123',
+        id: 'pending-user-1',
+        idempotencyKey: 'send-2',
+      },
+      pendingAssistantMessage: null,
+      toolMessages: [],
+      streamSegments: [],
+      streamingMessage: null,
+      streamingStartedAt: 0,
+      sessionKey: 'agent:main',
+      sending: true,
+      pendingFinal: false,
+      showThinking: true,
+      locale: 'en',
+    });
+
+    const userGroups = items.filter((item) => item.kind === 'group' && item.role === 'user');
+    expect(userGroups).toHaveLength(2);
+  });
+
+  it('hides the pending user message once history includes the same idempotency key', () => {
+    const items = buildChatItems({
+      messages: [
+        {
+          role: 'user',
+          timestamp: 2_000,
+          content: '123',
+          id: 'history-user-1',
+          idempotencyKey: 'send-1',
+        },
+      ],
+      pendingUserMessage: {
+        role: 'user',
+        timestamp: 1_999,
+        content: '123',
+        id: 'pending-user-1',
+        idempotencyKey: 'send-1',
+      },
+      pendingAssistantMessage: null,
+      toolMessages: [],
+      streamSegments: [],
+      streamingMessage: null,
+      streamingStartedAt: 0,
+      sessionKey: 'agent:main',
+      sending: true,
+      pendingFinal: false,
+      showThinking: true,
+      locale: 'en',
+    });
+
+    const userGroups = items.filter((item) => item.kind === 'group' && item.role === 'user');
+    expect(userGroups).toHaveLength(1);
+  });
 });
