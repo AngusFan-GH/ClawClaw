@@ -1,44 +1,42 @@
 #!/usr/bin/env node
 
-import { spawnSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
-import { delimiter, dirname, join, resolve } from 'node:path';
+import { cpSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { delimiter, dirname, resolve } from 'node:path';
 import { platform } from 'node:os';
 
-const root = process.cwd();
 const hostPlatform = platform();
 const isWindowsHost = hostPlatform === 'win32';
-const args = process.argv.slice(2);
-const rootPackage = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
-const appVersion = rootPackage.version;
+const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8'));
+const appVersion = packageJson.version;
 
 const sleep = (ms) => {
   const start = Date.now();
   while (Date.now() - start < ms) {
-    // short-lived packaging retry helper
+    // short-lived helper script
+  }
+};
+
+const tryExec = (command) => {
+  try {
+    execSync(command, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
   }
 };
 
 const findCommandPath = (name) => {
   const command = isWindowsHost ? `where.exe ${name}` : `command -v ${name}`;
-  const shell = isWindowsHost ? 'cmd.exe' : '/bin/sh';
-  const shellArgs = isWindowsHost ? ['/d', '/s', '/c', command] : ['-lc', command];
-  const result = spawnSync(shell, shellArgs, {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'ignore'],
-  });
-  if ((result.status ?? 1) !== 0) return null;
-  return result.stdout.split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? null;
+
+  try {
+    const output = execSync(command, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    const first = output.split(/\r?\n/).find((line) => line.trim());
+    return first ? first.trim() : null;
+  } catch {
+    return null;
+  }
 };
 
 const prependPath = (env, pathEntry) => {
@@ -50,43 +48,33 @@ const prependPath = (env, pathEntry) => {
 };
 
 const removeDirIfExists = (dirPath) => {
-  rmSync(dirPath, { recursive: true, force: true });
+  try {
+    rmSync(dirPath, { recursive: true, force: true });
+  } catch {
+    // best effort cleanup
+  }
 };
 
 const cleanBuildDirs = () => {
-  for (const dir of [
-    'release/win-unpacked',
-    'release/win-arm64-unpacked',
-    'release/win-ia32-unpacked',
-    'release/windows-installer',
-  ]) {
-    removeDirIfExists(resolve(root, dir));
-  }
-
-  const releaseDir = resolve(root, 'release');
-  if (!existsSync(releaseDir)) return;
-  for (const entry of readdirSync(releaseDir, { withFileTypes: true })) {
-    if (!entry.isFile()) continue;
-    if (/^latest\.yml$/i.test(entry.name) || /^ClawClaw-Setup-v.+\.exe(?:\.blockmap)?$/i.test(entry.name)) {
-      removeDirIfExists(resolve(releaseDir, entry.name));
-    }
-  }
-
-  const versionedWindowsDir = resolve(releaseDir, `v${appVersion}`, 'windows');
-  if (!existsSync(versionedWindowsDir)) return;
-  for (const entry of readdirSync(versionedWindowsDir, { withFileTypes: true })) {
-    if (!entry.isFile()) continue;
-    if (/^latest\.yml$/i.test(entry.name) || /^ClawClaw-Setup-v.+\.exe(?:\.blockmap)?$/i.test(entry.name)) {
-      removeDirIfExists(resolve(versionedWindowsDir, entry.name));
-    }
-  }
+  removeDirIfExists(resolve(process.cwd(), 'release', 'win-unpacked'));
+  removeDirIfExists(resolve(process.cwd(), 'release', 'win-arm64-unpacked'));
+  removeDirIfExists(resolve(process.cwd(), 'release', 'win-ia32-unpacked'));
+  removeDirIfExists(resolve(process.cwd(), 'release', 'windows-installer'));
+  removeDirIfExists(resolve(process.cwd(), 'release', `v${appVersion}`, 'windows', 'windows-installer'));
+  removeDirIfExists(resolve(process.cwd(), 'release', `v${appVersion}`, 'windows', `ClawClaw-Setup-v${appVersion}.exe`));
+  removeDirIfExists(resolve(process.cwd(), 'release', `v${appVersion}`, 'windows', `ClawClaw-Setup-v${appVersion}-x64.exe`));
+  removeDirIfExists(resolve(process.cwd(), 'release', `v${appVersion}`, 'windows', `ClawClaw-Setup-v${appVersion}-arm64.exe`));
+  removeDirIfExists(resolve(process.cwd(), 'release', `v${appVersion}`, 'windows', 'latest.yml'));
 };
 
 const resolveWinArchTargets = (argv) => {
   const hasExplicitArch = argv.some(
-    (arg) => arg === '--x64' || arg === '--arm64' || arg === '--ia32' || arg.startsWith('--arch='),
+    (arg) => arg === '--x64' || arg === '--arm64' || arg === '--ia32' || arg.startsWith('--arch')
   );
-  if (!hasExplicitArch) return ['x64', 'arm64'];
+
+  if (!hasExplicitArch) {
+    return ['x64', 'arm64'];
+  }
 
   const targets = new Set();
   for (const arg of argv) {
@@ -101,79 +89,313 @@ const resolveWinArchTargets = (argv) => {
   return [...targets];
 };
 
-const winArchTargets = resolveWinArchTargets(args);
-const archArgs = args.some((arg) => arg === '--x64' || arg === '--arm64' || arg === '--ia32' || arg.startsWith('--arch='))
-  ? args.filter((arg) => arg === '--x64' || arg === '--arm64' || arg === '--ia32' || arg.startsWith('--arch='))
-  : ['--x64', '--arm64'];
-
 const hasBundledUvForArch = (arch) => {
   if (arch === 'ia32') return true;
-  return existsSync(resolve(root, 'resources', 'bin', `win32-${arch}`, 'uv.exe'));
+  const uvPath = resolve(process.cwd(), 'resources', 'bin', `win32-${arch}`, 'uv.exe');
+  return existsSync(uvPath);
 };
 
 const hasBundledNodeForArch = (arch) => {
   if (arch === 'ia32') return true;
-  return existsSync(resolve(root, 'resources', 'bin', `win32-${arch}`, 'node.exe'));
+  const nodePath = resolve(process.cwd(), 'resources', 'bin', `win32-${arch}`, 'node.exe');
+  return existsSync(nodePath);
 };
 
 const hasBundledPythonForArch = (arch) => {
   if (arch === 'ia32') return true;
-  return existsSync(resolve(root, 'resources', 'python', `win32-${arch}`, 'python.exe'));
+  const pythonPath = resolve(process.cwd(), 'resources', 'python', `win32-${arch}`, 'python.exe');
+  return existsSync(pythonPath);
 };
 
-const run = (command, commandArgs, options = {}) => {
+const ensureBundledUvForWin = (archs, env) => {
+  const missingArchs = archs.filter((arch) => !hasBundledUvForArch(arch));
+  if (missingArchs.length === 0) {
+    return;
+  }
+
+  console.log(`[package:win] Missing bundled uv for ${missingArchs.join(', ')}. Downloading Windows uv binaries...`);
+
+  const pnpmCmd = isWindowsHost ? 'pnpm.cmd' : 'pnpm';
+  const result = spawnSync(pnpmCmd, ['run', 'uv:download:win'], {
+    stdio: 'inherit',
+    env,
+    shell: isWindowsHost,
+  });
+
+  if (result.error) {
+    console.error('[package:win] Failed to start uv download:', result.error.message);
+    process.exit(1);
+  }
+
+  if ((result.status ?? 1) !== 0) {
+    console.error('[package:win] uv:download:win failed.');
+    process.exit(result.status ?? 1);
+  }
+
+  const stillMissing = missingArchs.filter((arch) => !hasBundledUvForArch(arch));
+  if (stillMissing.length > 0) {
+    console.error(`[package:win] Bundled uv is still missing after download for: ${stillMissing.join(', ')}`);
+    process.exit(1);
+  }
+};
+
+const ensureBundledPythonForWin = (archs, env) => {
+  const missingArchs = archs.filter((arch) => !hasBundledPythonForArch(arch));
+  if (missingArchs.length === 0) {
+    return;
+  }
+
+  console.log(
+    `[package:win] Missing bundled Python runtime for ${missingArchs.join(', ')}. Downloading Windows Python runtime...`
+  );
+
+  const pnpmCmd = isWindowsHost ? 'pnpm.cmd' : 'pnpm';
+  const result = spawnSync(pnpmCmd, ['run', 'python:download:win'], {
+    stdio: 'inherit',
+    env,
+    shell: isWindowsHost,
+  });
+
+  if (result.error) {
+    console.error('[package:win] Failed to start Python download:', result.error.message);
+    process.exit(1);
+  }
+
+  if ((result.status ?? 1) !== 0) {
+    console.error('[package:win] python:download:win failed.');
+    process.exit(result.status ?? 1);
+  }
+
+  const stillMissing = missingArchs.filter((arch) => !hasBundledPythonForArch(arch));
+  if (stillMissing.length > 0) {
+    console.error(
+      `[package:win] Bundled Python runtime is still missing after download for: ${stillMissing.join(', ')}`
+    );
+    process.exit(1);
+  }
+};
+
+const ensureBundledNodeForWin = (archs, env) => {
+  const missingArchs = archs.filter((arch) => !hasBundledNodeForArch(arch));
+  if (missingArchs.length === 0) {
+    return;
+  }
+
+  console.log(
+    `[package:win] Missing bundled node.exe for ${missingArchs.join(', ')}. Downloading Windows Node.js binaries...`
+  );
+
+  const pnpmCmd = isWindowsHost ? 'pnpm.cmd' : 'pnpm';
+  const result = spawnSync(pnpmCmd, ['run', 'node:download:win'], {
+    stdio: 'inherit',
+    env,
+    shell: isWindowsHost,
+  });
+
+  if (result.error) {
+    console.error('[package:win] Failed to start node download:', result.error.message);
+    process.exit(1);
+  }
+
+  if ((result.status ?? 1) !== 0) {
+    console.error('[package:win] node:download:win failed.');
+    process.exit(result.status ?? 1);
+  }
+
+  const stillMissing = missingArchs.filter((arch) => !hasBundledNodeForArch(arch));
+  if (stillMissing.length > 0) {
+    console.error(
+      `[package:win] Bundled node.exe is still missing after download for: ${stillMissing.join(', ')}`
+    );
+    process.exit(1);
+  }
+};
+
+const killPackagingProcesses = () => {
+  if (!isWindowsHost) return;
+  tryExec('taskkill /IM ClawClaw.exe /F /T');
+  tryExec('taskkill /IM electron.exe /F /T');
+  tryExec('taskkill /IM app-builder.exe /F /T');
+  tryExec('taskkill /IM makensis.exe /F /T');
+  tryExec('taskkill /IM signtool.exe /F /T');
+};
+
+const nsisPath = isWindowsHost
+  ? [
+      findCommandPath('makensis'),
+      process.env['ProgramFiles'] ? `${process.env['ProgramFiles']}\\NSIS\\makensis.exe` : null,
+      process.env['ProgramFiles(x86)'] ? `${process.env['ProgramFiles(x86)']}\\NSIS\\makensis.exe` : null,
+      process.env['ProgramFiles(x86)'] ? `${process.env['ProgramFiles(x86)']}\\NSIS\\Bin\\makensis.exe` : null,
+      process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}\\electron-builder\\Cache\\nsis\\nsis-3.0.4.1-nsis-3.0.4.1\\makensis.exe` : null,
+      process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}\\electron-builder\\Cache\\nsis\\nsis-3.0.4.1-nsis-3.0.4.1\\Bin\\makensis.exe` : null,
+    ].find((candidate) => candidate && existsSync(candidate))
+  : null;
+
+if (isWindowsHost && !nsisPath) {
+  console.error('[package:win] NSIS is required for Windows packaging. Please install makensis first.');
+  process.exit(1);
+}
+
+const args = process.argv.slice(2);
+const hasArchArg = args.some((arg) => arg === '--x64' || arg === '--arm64' || arg === '--ia32' || arg.startsWith('--arch'));
+const archArgs = hasArchArg ? [] : ['--x64', '--arm64'];
+const builderArgs = ['--win', 'nsis', ...archArgs, ...args];
+
+const builderEnv = { ...process.env };
+if (nsisPath) {
+  prependPath(builderEnv, dirname(nsisPath));
+}
+
+const pnpmPath = findCommandPath('pnpm');
+if (pnpmPath) {
+  prependPath(builderEnv, dirname(pnpmPath));
+}
+
+const winArchTargets = resolveWinArchTargets(args);
+ensureBundledUvForWin(winArchTargets, builderEnv);
+ensureBundledNodeForWin(winArchTargets, builderEnv);
+ensureBundledPythonForWin(winArchTargets, builderEnv);
+
+const electronBuilderCli = resolve(process.cwd(), 'node_modules', 'electron-builder', 'cli.js');
+const electronBuilderBin = resolve(process.cwd(), 'node_modules', '.bin', isWindowsHost ? 'electron-builder.cmd' : 'electron-builder');
+const nsisTemplateDir = resolve(process.cwd(), 'node_modules', 'app-builder-lib', 'templates', 'nsis');
+
+let command = 'electron-builder';
+let commandArgs = builderArgs;
+
+if (existsSync(electronBuilderCli)) {
+  command = process.execPath;
+  commandArgs = [electronBuilderCli, ...builderArgs];
+} else if (existsSync(electronBuilderBin)) {
+  command = electronBuilderBin;
+}
+
+const runBuild = () => {
   const result = spawnSync(command, commandArgs, {
-    stdio: options.capture ? 'pipe' : 'inherit',
-    encoding: options.capture ? 'utf8' : undefined,
-    env: options.env,
+    stdio: 'pipe',
+    encoding: 'utf8',
+    env: builderEnv,
     shell: false,
   });
-  if (result.error) {
-    throw new Error(`Failed to start ${command}: ${result.error.message}`);
-  }
-  if ((result.status ?? 1) !== 0) {
-    const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim();
-    const error = new Error(`${command} ${commandArgs.join(' ')} failed with exit code ${result.status ?? 1}`);
-    error.output = output;
-    error.status = result.status ?? 1;
-    throw error;
-  }
+
+  if (result.stdout) process.stdout.write(result.stdout);
+  if (result.stderr) process.stderr.write(result.stderr);
   return result;
 };
 
-const ensureBundledRuntimeForWin = ({ archs, env, hasRuntime, label, downloadScript }) => {
-  const missingArchs = archs.filter((arch) => !hasRuntime(arch));
-  if (missingArchs.length === 0) return;
-
-  console.log(`[package:win] Missing bundled ${label} for ${missingArchs.join(', ')}. Downloading...`);
-  run(isWindowsHost ? 'pnpm.cmd' : 'pnpm', ['run', downloadScript], { env });
-
-  const stillMissing = missingArchs.filter((arch) => !hasRuntime(arch));
-  if (stillMissing.length > 0) {
-    throw new Error(`[package:win] Bundled ${label} is still missing for: ${stillMissing.join(', ')}`);
+const assertIncludes = (value, needle, label) => {
+  if (!value.includes(needle)) {
+    throw new Error(`[package:win] ${label} does not contain expected marker: ${needle}`);
   }
 };
 
-const buildInstallerUi = (env) => {
-  run(isWindowsHost ? 'pnpm.cmd' : 'pnpm', ['run', 'installer:win:prepare'], { env });
+const assertExcludes = (value, needle, label) => {
+  if (value.includes(needle)) {
+    throw new Error(`[package:win] ${label} still contains forbidden marker: ${needle}`);
+  }
 };
 
-const writeInstallerManifest = () => {
-  const outputDir = resolve(root, 'release', 'windows-installer');
-  mkdirSync(outputDir, { recursive: true });
-  const manifest = {
-    manifestVersion: 1,
-    productName: rootPackage.name,
-    displayName: 'ClawClaw',
-    version: appVersion,
-    backend: 'clawclaw-installer-core',
-    payloads: winArchTargets.map((arch) => ({
-      arch,
-      unpackedDir: arch === 'x64' ? 'win-unpacked' : `win-${arch}-unpacked`,
-    })),
+const patchNsisTemplate = (templateName, sourcePath, options = {}) => {
+  const templatePath = resolve(nsisTemplateDir, templateName);
+  if (!existsSync(templatePath)) {
+    throw new Error(`[package:win] electron-builder NSIS template not found: ${templatePath}`);
+  }
+  if (!existsSync(sourcePath)) {
+    throw new Error(`[package:win] ClawClaw NSIS template override not found: ${sourcePath}`);
+  }
+
+  const original = readFileSync(templatePath, 'utf8');
+  const replacement = readFileSync(sourcePath, 'utf8');
+  for (const marker of options.originalMustContain ?? []) {
+    assertIncludes(original, marker, templatePath);
+  }
+  for (const marker of options.replacementMustContain ?? []) {
+    assertIncludes(replacement, marker, sourcePath);
+  }
+  for (const marker of options.replacementMustNotContain ?? []) {
+    assertExcludes(replacement, marker, sourcePath);
+  }
+
+  writeFileSync(templatePath, replacement);
+
+  return () => {
+    writeFileSync(templatePath, original);
   };
-  writeFileSync(join(outputDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 };
+
+const withPatchedNsisTemplates = (fn) => {
+  const restores = [];
+  try {
+    restores.push(
+      patchNsisTemplate('assistedInstaller.nsh', resolve(process.cwd(), 'scripts', 'assistedInstaller.nsh'), {
+        originalMustContain: ['PAGE_INSTALL_MODE'],
+        replacementMustContain: ['!insertmacro setInstallModePerUser'],
+        replacementMustNotContain: ['PAGE_INSTALL_MODE'],
+      })
+    );
+    restores.push(
+      patchNsisTemplate('installSection.nsh', resolve(process.cwd(), 'scripts', 'installSection.nsh'), {
+        originalMustContain: ['SetDetailsPrint none'],
+        replacementMustContain: ['SetDetailsPrint both'],
+        replacementMustNotContain: ['SetDetailsPrint none'],
+      })
+    );
+    restores.push(
+      patchNsisTemplate('include/installUtil.nsh', resolve(process.cwd(), 'scripts', 'installUtil.nsh'), {
+        originalMustContain: ['MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)"'],
+        replacementMustContain: ['Preparing previous ClawClaw installation for upgrade'],
+        replacementMustNotContain: ['MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)"'],
+      })
+    );
+    console.log('[package:win] Patched electron-builder NSIS templates for ClawClaw per-user assisted upgrade flow.');
+    return fn();
+  } finally {
+    for (const restore of restores.reverse()) {
+      restore();
+    }
+    if (restores.length > 0) {
+      console.log('[package:win] Restored electron-builder NSIS templates.');
+    }
+  }
+};
+
+if (isWindowsHost) {
+  console.log(`[package:win] Found NSIS at ${nsisPath}.`);
+} else {
+  console.log('[package:win] Running cross-platform Windows NSIS build.');
+}
+console.log(`[package:win] Building NSIS for ${archArgs.length > 0 ? 'x64 and arm64' : 'specified'} architectures.`);
+
+killPackagingProcesses();
+cleanBuildDirs();
+
+let result = withPatchedNsisTemplates(() => {
+  let buildResult = runBuild();
+
+  if (buildResult.status !== 0) {
+    const output = `${buildResult.stdout ?? ''}\n${buildResult.stderr ?? ''}`;
+    const isLockedFile = output.includes('Access is denied') || output.includes('being used by another process');
+
+    if (isLockedFile) {
+      console.log('[package:win] Detected locked release files, cleaning up and retrying once...');
+      killPackagingProcesses();
+      cleanBuildDirs();
+      sleep(1500);
+      buildResult = runBuild();
+    }
+  }
+
+  return buildResult;
+});
+
+if (result.error) {
+  console.error('[package:win] Failed to start electron-builder:', result.error.message);
+  process.exit(1);
+}
+
+if ((result.status ?? 0) !== 0) {
+  process.exit(result.status ?? 1);
+}
 
 const sha512Base64 = (filePath) => {
   const hash = createHash('sha512');
@@ -181,69 +403,47 @@ const sha512Base64 = (filePath) => {
   return hash.digest('base64');
 };
 
-const findInstallerShellExe = (arch) => {
-  const shellDir = resolve(root, 'release', 'windows-installer', 'shell');
-  const expected = `ClawClaw-Setup-v${appVersion}-${arch}.exe`;
-  const direct = resolve(shellDir, expected);
-  if (existsSync(direct)) return direct;
-
-  const candidates = [];
-  const walk = (dir) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const entryPath = resolve(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(entryPath);
-      } else if (entry.isFile() && entry.name.endsWith('.exe') && entry.name.includes(`-${arch}.`)) {
-        candidates.push(entryPath);
-      }
-    }
-  };
-  walk(shellDir);
-
-  if (candidates.length === 0) {
-    throw new Error(`[package:win] Installer shell exe missing for ${arch} in ${shellDir}`);
-  }
-  return candidates[0];
-};
-
-const stageInstallerUpdateArtifacts = () => {
+const writeStableUpdaterArtifacts = () => {
+  const releaseDir = resolve(process.cwd(), 'release');
   const staged = [];
   for (const arch of winArchTargets) {
-    const source = findInstallerShellExe(arch);
     const fileName = `ClawClaw-Setup-v${appVersion}-${arch}.exe`;
-    const target = resolve(root, 'release', fileName);
-    cpSync(source, target);
+    const filePath = resolve(releaseDir, fileName);
+    if (!existsSync(filePath)) continue;
     staged.push({
       arch,
       fileName,
-      path: target,
-      size: statSync(target).size,
-      sha512: sha512Base64(target),
+      filePath,
+      size: statSync(filePath).size,
+      sha512: sha512Base64(filePath),
     });
-    console.log(`[package:win] Staged updater-compatible installer: release/${fileName}`);
   }
 
   const x64Artifact = staged.find((artifact) => artifact.arch === 'x64');
   if (x64Artifact) {
     const fileName = `ClawClaw-Setup-v${appVersion}.exe`;
-    const target = resolve(root, 'release', fileName);
-    cpSync(x64Artifact.path, target);
+    const filePath = resolve(releaseDir, fileName);
+    cpSync(x64Artifact.filePath, filePath);
+    const sourceBlockmap = `${x64Artifact.filePath}.blockmap`;
+    if (existsSync(sourceBlockmap)) {
+      cpSync(sourceBlockmap, `${filePath}.blockmap`);
+    }
     staged.push({
       arch: 'x64',
       fileName,
-      path: target,
-      size: statSync(target).size,
-      sha512: sha512Base64(target),
+      filePath,
+      size: statSync(filePath).size,
+      sha512: sha512Base64(filePath),
     });
     console.log(`[package:win] Staged stable installer alias: release/${fileName}`);
   }
 
   const primary = staged.find((artifact) => artifact.fileName === `ClawClaw-Setup-v${appVersion}.exe`) ??
     staged.find((artifact) => artifact.arch === process.arch) ??
-    staged.find((artifact) => artifact.arch === 'x64') ??
+    x64Artifact ??
     staged[0];
   if (!primary) {
-    throw new Error('[package:win] No installer exe was staged for latest.yml');
+    throw new Error('[package:win] No Windows installer was generated.');
   }
 
   const latestYml = [
@@ -259,105 +459,8 @@ const stageInstallerUpdateArtifacts = () => {
     `releaseDate: '${new Date().toISOString()}'`,
     '',
   ].join('\n');
-  writeFileSync(resolve(root, 'release', 'latest.yml'), latestYml);
+  writeFileSync(resolve(releaseDir, 'latest.yml'), latestYml);
   console.log('[package:win] Wrote updater metadata: release/latest.yml');
 };
 
-const stageInstallerUi = () => {
-  const source = resolve(root, 'packages', 'windows-installer', 'dist');
-  const target = resolve(root, 'release', 'windows-installer', 'ui');
-  const runnerSource = resolve(root, 'packages', 'windows-installer', 'dist-runner');
-  const runnerTarget = resolve(root, 'release', 'windows-installer', 'runner');
-  const shellSource = resolve(root, 'packages', 'windows-installer', 'dist-electron');
-  const shellTarget = resolve(root, 'release', 'windows-installer', 'electron');
-  if (!existsSync(source)) {
-    throw new Error(`[package:win] Windows installer UI build missing: ${source}`);
-  }
-  if (!existsSync(runnerSource)) {
-    throw new Error(`[package:win] Windows installer runner build missing: ${runnerSource}`);
-  }
-  if (!existsSync(shellSource)) {
-    throw new Error(`[package:win] Windows installer electron shell build missing: ${shellSource}`);
-  }
-  removeDirIfExists(target);
-  removeDirIfExists(runnerTarget);
-  removeDirIfExists(shellTarget);
-  mkdirSync(dirname(target), { recursive: true });
-  cpSync(source, target, { recursive: true });
-  cpSync(runnerSource, runnerTarget, { recursive: true });
-  cpSync(shellSource, shellTarget, { recursive: true });
-};
-
-const killPackagingProcesses = () => {
-  if (!isWindowsHost) return;
-  for (const image of ['ClawClaw.exe', 'electron.exe', 'app-builder.exe']) {
-    spawnSync('taskkill', ['/IM', image, '/F', '/T'], { stdio: 'ignore' });
-  }
-};
-
-const builderEnv = { ...process.env };
-const pnpmPath = findCommandPath('pnpm');
-if (pnpmPath) prependPath(builderEnv, dirname(pnpmPath));
-
-ensureBundledRuntimeForWin({
-  archs: winArchTargets,
-  env: builderEnv,
-  hasRuntime: hasBundledUvForArch,
-  label: 'uv',
-  downloadScript: 'uv:download:win',
-});
-ensureBundledRuntimeForWin({
-  archs: winArchTargets,
-  env: builderEnv,
-  hasRuntime: hasBundledNodeForArch,
-  label: 'node.exe',
-  downloadScript: 'node:download:win',
-});
-ensureBundledRuntimeForWin({
-  archs: winArchTargets,
-  env: builderEnv,
-  hasRuntime: hasBundledPythonForArch,
-  label: 'Python runtime',
-  downloadScript: 'python:download:win',
-});
-
-const electronBuilderCli = resolve(root, 'node_modules', 'electron-builder', 'cli.js');
-const electronBuilderBin = resolve(root, 'node_modules', '.bin', isWindowsHost ? 'electron-builder.cmd' : 'electron-builder');
-const command = existsSync(electronBuilderCli)
-  ? process.execPath
-  : electronBuilderBin;
-const commandArgs = existsSync(electronBuilderCli)
-  ? [electronBuilderCli, '--win', 'dir', ...archArgs]
-  : ['--win', 'dir', ...archArgs];
-
-console.log(`[package:win] Building Windows unpacked payload for ${winArchTargets.join(', ')}.`);
-cleanBuildDirs();
-killPackagingProcesses();
-
-try {
-  run(command, commandArgs, { env: builderEnv, capture: true });
-} catch (error) {
-  const output = error.output || '';
-  if (output.includes('Access is denied') || output.includes('being used by another process')) {
-    console.log('[package:win] Detected locked release files, cleaning up and retrying once...');
-    killPackagingProcesses();
-    cleanBuildDirs();
-    sleep(1500);
-    run(command, commandArgs, { env: builderEnv });
-  } else {
-    if (output) process.stderr.write(`${output}\n`);
-    throw error;
-  }
-}
-
-buildInstallerUi(builderEnv);
-stageInstallerUi();
-writeInstallerManifest();
-run(isWindowsHost ? 'pnpm.cmd' : 'pnpm', ['run', 'installer:win:shell:pack'], {
-  env: {
-    ...builderEnv,
-    CLAWCLAW_WIN_ARCHS: winArchTargets.join(','),
-  },
-});
-stageInstallerUpdateArtifacts();
-console.log('[package:win] Windows installer assets staged at release/windows-installer.');
+writeStableUpdaterArtifacts();

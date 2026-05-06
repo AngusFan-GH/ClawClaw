@@ -242,9 +242,9 @@ ClawClawには、Electron、OpenClaw Gateway、またはTelegramなどのチャ�
 **設定 → データとアンインストール** を開くと、データ削除やアンインストールの前に現在の設定を JSON バックアップとしてエクスポートできます。同じ画面で Gateway を停止し、管理対象の ClawClaw / OpenClaw ローカルデータを許可リスト方式でクリーンアップし、その後 OS のアンインストーラからアプリ本体を削除するための完全アンインストール準備も行えます。Windows では、ClawClaw 自身のキャッシュ、ストレージ、ログはアプリ終了後に続けて削除され、Chromium のファイルロックが残っていても安全にクリーンアップできます。
 
 **設定 → アップデート** では、自動確認 / 自動ダウンロードの制御と、パッケージ版アプリでの手動更新確認が行えます。ClawClaw は現在、安定版フィードのみを利用します。
-Windows パッケージングでは unpacked アプリ payload を生成し、新しい ClawClaw Windows インストーラー UI と installer-core manifest を `release/windows-installer` にステージします。旧 NSIS インストールは移行入力として扱い、新しい計画が旧インストール先、実行中の ClawClaw/Gateway、古いランタイム構成を処理し、ユーザーデータは既定で保持します。
+Windows パッケージングは NSIS assisted installer を使用し、常に現在の Windows ユーザー向けにインストールします。インストーラーは起動直後にネイティブウィザードを表示し、展開、ファイルコピー、レジストリ登録、ショートカット作成、CLI PATH 設定をインストール手順として実行します。アンインストーラーも NSIS を使用し、明示的なデータ削除オプションを引き続き提供します。
 また、旧バージョンの ClawClaw または同梱 OpenClaw から更新した直後の初回起動では、通常の Gateway 起動前、かつ自動更新の再チェック前に、一度だけアップグレード保守を実行し、旧 provider ストア、管理プラグインミラー、古い `openclaw.json` 形状を先回りして修復します。起動失敗後の後追い修復に頼りにくくするためです。
-Windows のインストール版を `0.1.15` 以前から更新する場合は、追加の互換経路も有効になります。installer-core は新しいファイルをコピーする前に旧バンドル runtime / CLI ディレクトリを削除し、初回起動では旧プラグイン・旧 channel・旧 runtime レイアウト向けの重めの OpenClaw 修復を強制します。
+Windows のインストール版を `0.1.15` 以前から更新する場合は、追加の互換経路も有効になります。NSIS インストーラーは新しいファイルをコピーする前に旧インストールを整理し、初回起動では旧プラグイン・旧 channel・旧 runtime レイアウト向けの重めの OpenClaw 修復を強制します。
 **設定 → 開発者** の診断と修復では、OpenClaw のチェックや自動修復を簡潔な結果表示で確認でき、元のコマンド出力は既定で折りたたまれます。Gateway 実行中は、同じ場所から OpenClaw Control UI も開けます。
 
 ---
@@ -381,12 +381,10 @@ pnpm run release:check    # リリースゲートを実行（アップグレー�
 
 # ビルド＆パッケージ
 pnpm run build:vite       # フロントエンドのみビルド
-pnpm run installer:win:prepare # Windows インストーラー UI、Electron shell、runner をビルド
-pnpm run installer:win:shell:pack # Windows 上でインストーラー shell をパッケージ化
 pnpm run package:prepare  # 共通パッケージ前処理（vite + OpenClaw bundle + builder出力クリーン）
 pnpm build                # 本番パッケージ用アセットを準備
 pnpm package:mac          # macOS向けにパッケージ化
-pnpm package:win          # Windows payload と updater 互換 setup exe/latest.yml をビルド
+pnpm package:win          # Windows NSIS インストーラーと updater 互換 setup exe/latest.yml をビルド
 pnpm run package:organize # ルート出力を release/v<version>/windows|mac|linux|metadata に整理
 pnpm package:linux        # Linux向けにパッケージ化
 pnpm run upload:update    # release/v<version>/windows/latest.yml と参照される Windows 更新ファイルをアップロード
@@ -394,8 +392,7 @@ pnpm run upload:update    # release/v<version>/windows/latest.yml と参照さ�
 
 注記:
 
-- `pnpm package:win` は Windows unpacked payload をビルドし、その後新しい Windows インストーラー UI と、旧 updater 互換名の `ClawClaw-Setup-v<version>-<arch>.exe` および `latest.yml` をステージします。内部では `scripts/package-win.mjs` を使い、electron-builder の前に Windows の `node.exe`、`uv.exe`、Python ランタイムを検証またはダウンロードします。
-- `pnpm run installer:win:prepare` は、メインアプリの完全なパッケージングとは独立して新しい Windows インストーラーを検証します。
+- `pnpm package:win` は Windows NSIS インストーラーをビルドし、旧 updater 互換名の `ClawClaw-Setup-v<version>-<arch>.exe`、安定別名 `ClawClaw-Setup-v<version>.exe`、および `latest.yml` をステージします。内部では `scripts/package-win.mjs` を使い、electron-builder の前に Windows の `node.exe`、`uv.exe`、Python ランタイムを検証またはダウンロードします。
 - `pnpm package:prepare` は `build` と各プラットフォーム向けパッケージコマンドで共通利用する前処理で、release 直下の builder 一時出力だけを掃除し、既存のバージョン別成果物には触れません。
 - `pnpm package:organize` は builder が一時的に release 直下へ出力した成果物を `release/v<package.json version>/windows`、`release/v<package.json version>/mac`、`release/v<package.json version>/linux`、`release/v<package.json version>/metadata` へ振り分けます。
 - `release/` はバージョン別ディレクトリで運用します。既存バージョンは保持され、同じバージョンの成果物だけが上書きされます。更新アップロードスクリプトは `release/v<package.json version>/windows/latest.yml` を参照します。

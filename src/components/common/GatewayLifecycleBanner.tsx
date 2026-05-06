@@ -1,35 +1,13 @@
 import { useMemo, useState } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, Copy, LifeBuoy, X } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Copy, LifeBuoy, Loader2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { GatewayLifecycle } from '@/types/gateway';
 import { cn } from '@/lib/utils';
 import { getGatewayRecoveryPresentation } from '@/lib/gateway-recovery';
-
-function getSourceLabel(t: (key: string) => string, source?: string): string {
-  if (source?.startsWith('channel:saveConfig:') || source?.startsWith('channel:setEnabled') || source?.startsWith('channel:delete')) {
-    return t('gateway.lifecycle.sources.channels');
-  }
-  if (source?.startsWith('create-agent') || source?.startsWith('update-agent') || source?.startsWith('assign-channel') || source?.startsWith('delete-agent') || source?.startsWith('remove-agent-channel')) {
-    return t('gateway.lifecycle.sources.agents');
-  }
-  if (source === 'provider.runtimeSync') {
-    return t('gateway.lifecycle.sources.models');
-  }
-
-  switch (source) {
-    case 'settings.proxy':
-      return t('gateway.lifecycle.sources.proxy');
-    case 'security.apply':
-    case 'security.reset':
-      return t('gateway.lifecycle.sources.security');
-    case 'gateway.manualRestart':
-      return t('gateway.lifecycle.sources.manual');
-    case 'gateway.autoStart':
-      return t('gateway.lifecycle.sources.startup');
-    default:
-      return t('gateway.lifecycle.sources.config');
-  }
-}
+import {
+  getGatewayLifecycleSourceLabel,
+  isManualGatewayRestartInProgress,
+} from '@/lib/gateway-lifecycle-presentation';
 
 export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecycle }) {
   const { t } = useTranslation('common');
@@ -55,13 +33,40 @@ export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecy
   const showDetails = detailsState.key === bannerKey ? detailsState.show : false;
   const recovery = getGatewayRecoveryPresentation(lifecycle.recovery);
   const showRecoverySuccess = lifecycle.state === 'completed' && Boolean(recovery);
+  const showManualRestartProgress = isManualGatewayRestartInProgress(lifecycle);
+  const sourceLabel = getGatewayLifecycleSourceLabel(t, lifecycle.source);
+
+  if (showManualRestartProgress) {
+    return (
+      <div className="mb-6 rounded-2xl border border-sky-500/25 bg-sky-500/10 px-4 py-3 transition-colors">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 shrink-0">
+            <Loader2 className="h-4.5 w-4.5 animate-spin text-sky-600 dark:text-sky-300" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-[13px] font-medium text-foreground">
+                {t('gateway.lifecycle.applyingRestartTitle')}
+              </div>
+              <span className="inline-flex items-center rounded-full bg-sky-500/12 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-300">
+                {sourceLabel}
+              </span>
+            </div>
+            <div className="mt-1 text-[12px] leading-[1.7] text-muted-foreground">
+              {t('gateway.lifecycle.applyingDescription', { source: sourceLabel })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (lifecycle.state !== 'failed' && !showRecoverySuccess) return null;
 
   if (dismissedKey === bannerKey) {
     return null;
   }
 
-  const sourceLabel = getSourceLabel(t, lifecycle.source);
   const title = showRecoverySuccess
     ? t('gateway.lifecycle.recovery.completedTitle')
     : t('gateway.lifecycle.failedTitle');

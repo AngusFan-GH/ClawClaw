@@ -245,9 +245,9 @@ ClawClaw 内置了代理设置，适用于需要通过本地代理客户端访�
 打开 **设置 → 数据与卸载**，可以在清理数据或卸载前先导出当前配置的 JSON 备份。同一处也能先停止 Gateway，再按白名单清理受管的 ClawClaw / OpenClaw 本地数据，并在真正从系统卸载器移除应用本体之前完成“完全卸载准备”。在 Windows 上，ClawClaw 自身的缓存、存储和日志会排队到应用退出后继续清理，避免被 Chromium 文件锁占用而删除失败。
 
 打开 **设置 → 更新**，可以控制自动检查 / 自动下载，并在打包版应用里手动触发更新检查。ClawClaw 当前只跟随稳定版发布源。
-Windows 打包现在会产出 unpacked 应用载荷，并把新的 ClawClaw Windows 安装器 UI 与 installer-core manifest 暂存到 `release/windows-installer`。旧 NSIS 安装只作为迁移输入处理：新计划会导入旧安装位置、停止旧 ClawClaw/Gateway 进程、清理旧运行时布局，并默认保留用户数据。
+Windows 打包使用 NSIS assisted installer，并固定为当前 Windows 用户安装。安装器启动后会立即显示原生安装向导，应用文件解压、复制、注册表写入、快捷方式创建和 CLI PATH 配置都作为安装步骤执行；卸载器同样使用 NSIS，并继续提供显式的数据删除选项。
 现在从旧版 ClawClaw 或旧版随包 OpenClaw 升级后的第一次启动，会在正常 Gateway 启动前、以及自动重新检查更新前，自动执行一次性的升级维护：主动迁移旧版 provider 存储、修复受管插件镜像和较旧的 `openclaw.json` 结构，尽量避免等到启动失败后才被动修复。
-Windows 安装版从 `0.1.15` 及更早版本升级时，还会走一条额外的兼容路径：installer-core 会在复制新文件前清理旧的内置 runtime 和 CLI 目录，首次启动也会强制执行更重的一轮 OpenClaw 修复，以兼容旧插件、旧 channel 和旧 runtime 布局。
+Windows 安装版从 `0.1.15` 及更早版本升级时，NSIS 安装流程会在复制新文件前清理旧安装并重新写入受管 runtime / CLI 资源；首次启动也会强制执行更重的一轮 OpenClaw 修复，以兼容旧插件、旧 channel 和旧 runtime 布局。
 在 **设置 → 开发者** 中，诊断与修复区可以对 OpenClaw 执行检查或自动修复，并默认只展示简洁结果；原始命令输出会折叠在详情里。Gateway 运行时，同一区域也会显示 OpenClaw 控制 UI 入口。
 
 ---
@@ -384,12 +384,10 @@ pnpm run release:check    # 运行发版门禁（升级兼容与恢复检查）
 
 # 构建与打包
 pnpm run build:vite       # 仅构建前端
-pnpm run installer:win:prepare # 构建 Windows 安装器 UI、Electron 壳和 runner
-pnpm run installer:win:shell:pack # 在 Windows 上打包安装器壳
 pnpm run package:prepare  # 共享打包前置步骤（vite + OpenClaw bundle + builder 输出清理）
 pnpm build                # 准备生产打包资产
 pnpm package:mac          # 为 macOS 打包
-pnpm package:win          # 构建 Windows 载荷 + 兼容旧更新器的 setup exe/latest.yml
+pnpm package:win          # 构建 Windows NSIS 安装包 + 兼容旧更新器的 setup exe/latest.yml
 pnpm run package:organize # 将根目录产物整理到 release/v<version>/windows|mac|linux|metadata
 pnpm package:linux        # 为 Linux 打包
 pnpm run upload:update    # 上传 release/v<version>/windows/latest.yml 及其引用的 Windows 更新文件
@@ -397,8 +395,7 @@ pnpm run upload:update    # 上传 release/v<version>/windows/latest.yml 及其�
 
 说明：
 
-- `pnpm package:win` 用于构建 Windows unpacked 载荷，随后构建新的 Windows 安装器 UI，并暂存兼容旧更新器命名的 `ClawClaw-Setup-v<version>-<arch>.exe` 与 `latest.yml`；内部走 `scripts/package-win.mjs`，会在调用 electron-builder 前校验或下载 Windows `node.exe`、`uv.exe` 和 Python 运行时。
-- `pnpm run installer:win:prepare` 用于在完整主应用打包之外独立验证新的 Windows 安装器。
+- `pnpm package:win` 用于构建 Windows NSIS 安装包，并暂存兼容旧更新器命名的 `ClawClaw-Setup-v<version>-<arch>.exe`、稳定别名 `ClawClaw-Setup-v<version>.exe` 与 `latest.yml`；内部走 `scripts/package-win.mjs`，会在调用 electron-builder 前校验或下载 Windows `node.exe`、`uv.exe` 和 Python 运行时。
 - `pnpm package:prepare` 是 `build` 以及所有平台打包命令共用的前置步骤，只清理 release 根目录的 builder 暂存输出，不会触碰已存在的版本目录。
 - `pnpm package:organize` 会把 builder 暂存到 release 根目录的产物整理到 `release/v<package.json version>/windows`、`release/v<package.json version>/mac`、`release/v<package.json version>/linux`、`release/v<package.json version>/metadata`。
 - `release/` 现在采用按版本分目录模式。旧版本会保留不动，只有同版本目录下的产物会被覆盖；更新上传脚本读取 `release/v<package.json version>/windows/latest.yml`。

@@ -245,9 +245,9 @@ Notes:
 Open **Settings → Data & Uninstall** to export a JSON backup of your current configuration before removing data or uninstalling the app. The same section can stop the Gateway, clean managed ClawClaw/OpenClaw data from a fixed allowlist, and prepare a full uninstall flow before you remove the app itself from the OS uninstaller. On Windows, ClawClaw's own cache, storage, and logs are queued for post-exit cleanup so locked Chromium files can be removed safely after the app quits.
 
 Open **Settings → Updates** to control auto-check / auto-download behavior and manually trigger update checks from the packaged app. ClawClaw currently follows the stable release feed only.
-Windows packaging now stages an unpacked app payload plus the new ClawClaw Windows installer UI and installer-core manifest under `release/windows-installer`. Old NSIS installations are treated as migration inputs: the new plan imports the old install location, stops old ClawClaw/Gateway processes, removes stale runtime layouts, and preserves user data by default.
+Windows packaging uses the NSIS assisted installer and always installs for the current Windows user. The installer shows its native wizard immediately, then performs extraction, file copy, registry registration, shortcut creation, and CLI PATH configuration as installation steps. The uninstaller also uses NSIS and continues to provide explicit data deletion choices.
 On the first launch after upgrading from an older ClawClaw or bundled OpenClaw version, ClawClaw now runs a one-time maintenance pass before normal Gateway startup and before any automatic update re-check so legacy provider records, managed plugin mirrors, and older `openclaw.json` shapes are repaired proactively instead of waiting for a startup failure.
-Windows installed-build upgrades from `0.1.15` and earlier also trigger an expanded compatibility path: the installer core clears legacy bundled runtime and CLI directories before copying new files, and the first launch forces a heavier OpenClaw repair pass for older plugin, channel, and runtime layouts.
+Windows installed-build upgrades from `0.1.15` and earlier also trigger an expanded compatibility path: the NSIS installer cleans the previous installation before copying the managed runtime / CLI resources, and the first launch forces a heavier OpenClaw repair pass for older plugin, channel, and runtime layouts.
 In **Settings → Developer**, the diagnostics section can run OpenClaw checks or repair with a compact status summary, while raw command output stays collapsed by default. The same section also exposes the OpenClaw Control UI entry when the Gateway is running.
 
 ---
@@ -383,12 +383,10 @@ pnpm run release:check    # Run the release gate (upgrade compatibility + recove
 
 # Build & Package
 pnpm run build:vite       # Build frontend only
-pnpm run installer:win:prepare # Build the Windows installer UI, Electron shell, and runner
-pnpm run installer:win:shell:pack # Package the Windows installer shell on Windows
 pnpm run package:prepare  # Shared packaging prep (vite + bundled OpenClaw + cleaned builder output)
 pnpm build                # Prepare production packaging assets
 pnpm package:mac          # Package for macOS
-pnpm package:win          # Build Windows payload + updater-compatible setup exe/latest.yml
+pnpm package:win          # Build Windows NSIS installers + updater-compatible setup exe/latest.yml
 pnpm run package:organize # Re-home staged artifacts under release/v<version>/windows|mac|linux|metadata
 pnpm package:linux        # Package for Linux
 pnpm run upload:update    # Upload release/v<version>/windows/latest.yml and referenced Windows update artifacts
@@ -396,8 +394,7 @@ pnpm run upload:update    # Upload release/v<version>/windows/latest.yml and ref
 
 Notes:
 
-- `pnpm package:win` builds the Windows unpacked payload via `scripts/package-win.mjs`, then builds the new Windows installer UI and stages updater-compatible `ClawClaw-Setup-v<version>-<arch>.exe` files plus `latest.yml`. It verifies or downloads the Windows `node.exe`, `uv.exe`, and Python runtime before invoking electron-builder.
-- `pnpm run installer:win:prepare` validates the new Windows installer independently from the main app packaging flow.
+- `pnpm package:win` builds the Windows NSIS installers and stages updater-compatible `ClawClaw-Setup-v<version>-<arch>.exe` files, the stable alias `ClawClaw-Setup-v<version>.exe`, and `latest.yml`. It verifies or downloads the Windows `node.exe`, `uv.exe`, and Python runtime before invoking electron-builder.
 - `pnpm package:prepare` is the shared pre-packaging step used by `build` and all platform package commands. It only cleans root-level builder staging output and leaves existing versioned release directories untouched.
 - `pnpm package:organize` moves root-level builder output into `release/v<package.json version>/windows`, `release/v<package.json version>/mac`, `release/v<package.json version>/linux`, and `release/v<package.json version>/metadata`.
 - `release/` now uses versioned directories. Existing versions are preserved; only artifacts inside the same version directory are replaced. The updater uploader reads from `release/v<package.json version>/windows/latest.yml`.

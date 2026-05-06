@@ -116,10 +116,27 @@ win:
       to: cli/
   icon: resources/icons/icon.ico
   target:
-    - target: dir
+    - target: nsis
       arch:
         - x64
         - arm64
+
+nsis:
+  oneClick: false
+  runAfterFinish: true
+  perMachine: false
+  warningsAsErrors: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  differentialPackage: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: ClawClaw
+  uninstallDisplayName: ClawClaw
+  license: resources/legal/EULA.rtf
+  include: scripts/installer.nsh
+  installerIcon: resources/icons/icon.ico
+  uninstallerIcon: resources/icons/icon.ico
 
 # Linux Configuration
 linux:
