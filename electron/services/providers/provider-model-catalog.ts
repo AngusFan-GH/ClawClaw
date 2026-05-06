@@ -43,12 +43,15 @@ type ProviderModelOption = {
 
 const OPENCLAW_MODEL_LIST_CACHE_TTL_MS = 10_000;
 const OPENCLAW_MODEL_LIST_TIMEOUT_MS = 12_000;
+const RUNTIME_MODEL_REFS_FAILURE_CACHE_TTL_MS = 30_000;
 const WINDOWS_MODELS_JSON_RENAME_RETRY_DELAYS_MS = [120, 250, 500];
 const OPENAI_OAUTH_RUNTIME_PROVIDER = 'openai-codex';
 const OPENAI_OAUTH_PREFERRED_MODELS = ['gpt-5.4-pro', 'gpt-5.4'] as const;
 
 const openClawModelListCache = new Map<OpenClawModelScope, OpenClawModelCacheEntry>();
 let openClawModelListQueue: Promise<void> = Promise.resolve();
+let runtimeModelRefsCache: { refs: string[]; expiresAt: number } | null = null;
+let runtimeModelRefsInFlight: Promise<string[]> | null = null;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -166,6 +169,21 @@ async function fetchOpenClawModelListOnce(scope: OpenClawModelScope): Promise<Op
 
     let stdout = '';
     let stderr = '';
+    let settled = false;
+
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill();
+      reject(new Error(`openclaw models list timed out after ${OPENCLAW_MODEL_LIST_TIMEOUT_MS}ms`));
+    }, OPENCLAW_MODEL_LIST_TIMEOUT_MS);
+
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      fn();
+    };
 
     child.stdout.on('data', (chunk) => {
       stdout += chunk.toString();
@@ -174,17 +192,19 @@ async function fetchOpenClawModelListOnce(scope: OpenClawModelScope): Promise<Op
       stderr += chunk.toString();
     });
 
-    child.on('error', (error) => reject(error));
+    child.on('error', (error) => {
+      settle(() => reject(error));
+    });
     child.on('close', (code) => {
       if (code !== 0) {
-        reject(new Error(stderr.trim() || `openclaw models list exited with code ${code}`));
+        settle(() => reject(new Error(stderr.trim() || `openclaw models list exited with code ${code}`)));
         return;
       }
       try {
         const parsed = parseOpenClawModelListOutput(stdout);
-        resolve(parsed.models ?? []);
+        settle(() => resolve(parsed.models ?? []));
       } catch (error) {
-        reject(error);
+        settle(() => reject(error));
       }
     });
   });
@@ -294,6 +314,8 @@ function getStaleCachedOpenClawModelList(scope: OpenClawModelScope): OpenClawMod
 
 export function invalidateOpenClawModelListCache(): void {
   openClawModelListCache.clear();
+  runtimeModelRefsCache = null;
+  runtimeModelRefsInFlight = null;
 }
 
 async function getOpenClawModelListWithFallback(scope: OpenClawModelScope): Promise<{
@@ -370,12 +392,58 @@ function compareProviderModelOptions(
   return left.name.localeCompare(right.name, 'en', { sensitivity: 'base' });
 }
 
+function refsFromModelEntries(models: OpenClawModelEntry[]): string[] {
+  return Array.from(new Set(
+    models
+      .filter((model) => model.available !== false)
+      .map((model) => (typeof model.key === 'string' ? model.key : ''))
+      .filter((value): value is string => Boolean(value)),
+  ));
+}
+
+async function listRuntimeModelRefsViaGateway(ctx: HostApiContext): Promise<string[]> {
+  const response = await ctx.gatewayManager.rpc<{ models?: OpenClawModelEntry[] }>(
+    'models.list',
+    {},
+    8000,
+  );
+  return refsFromModelEntries(Array.isArray(response?.models) ? response.models : []);
+}
+
 export async function listRuntimeModelRefs(ctx: HostApiContext): Promise<string[]> {
+  const now = Date.now();
+  if (runtimeModelRefsCache && runtimeModelRefsCache.expiresAt > now) {
+    return runtimeModelRefsCache.refs;
+  }
+  if (runtimeModelRefsInFlight) {
+    return await runtimeModelRefsInFlight;
+  }
+
+  runtimeModelRefsInFlight = resolveRuntimeModelRefs(ctx).finally(() => {
+    runtimeModelRefsInFlight = null;
+  });
+  return await runtimeModelRefsInFlight;
+}
+
+async function resolveRuntimeModelRefs(ctx: HostApiContext): Promise<string[]> {
   let models: OpenClawModelEntry[] = [];
 
   if (shouldDeferRuntimeModelQueries(ctx)) {
     models = getStaleCachedOpenClawModelList('runtime');
   } else {
+    try {
+      const refs = await listRuntimeModelRefsViaGateway(ctx);
+      runtimeModelRefsCache = {
+        refs,
+        expiresAt: Date.now() + (refs.length > 0
+          ? OPENCLAW_MODEL_LIST_CACHE_TTL_MS
+          : RUNTIME_MODEL_REFS_FAILURE_CACHE_TTL_MS),
+      };
+      return refs;
+    } catch {
+      // Fall back to the CLI path for older/incomplete Gateway builds.
+    }
+
     try {
       models = await getOpenClawModelListWithTimeout('runtime');
     } catch (error) {
@@ -384,17 +452,20 @@ export async function listRuntimeModelRefs(ctx: HostApiContext): Promise<string[
         logger.info('[providers] Serving stale cached runtime model refs after runtime query failure');
         models = staleCachedModels;
       } else {
-        logger.info('[providers] Runtime model refs unavailable; returning an empty runtime-only list', error);
+        logger.debug(`[providers] Runtime model refs unavailable; returning an empty runtime-only list (${error instanceof Error ? error.message : String(error)})`);
         models = [];
       }
     }
   }
 
-  const refs = models
-    .filter((model) => model.available !== false)
-    .map((model) => (typeof model.key === 'string' ? model.key : ''))
-    .filter((value): value is string => Boolean(value));
-  return Array.from(new Set(refs));
+  const uniqueRefs = refsFromModelEntries(models);
+  runtimeModelRefsCache = {
+    refs: uniqueRefs,
+    expiresAt: Date.now() + (uniqueRefs.length > 0
+      ? OPENCLAW_MODEL_LIST_CACHE_TTL_MS
+      : RUNTIME_MODEL_REFS_FAILURE_CACHE_TTL_MS),
+  };
+  return uniqueRefs;
 }
 
 export async function listProviderModelOptions(

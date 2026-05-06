@@ -1,51 +1,16 @@
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import type { GatewayLifecycle } from '@/types/gateway';
+import { getGatewayLifecycleSourceLabel } from '@/lib/gateway-lifecycle-presentation';
 import { LoadingIcon } from './LoadingSpinner';
 
-function getSourceLabel(t: (key: string) => string, source?: string): string {
-  if (
-    source?.startsWith('channel:saveConfig:') ||
-    source?.startsWith('channel:setEnabled') ||
-    source?.startsWith('channel:delete')
-  ) {
-    return t('gateway.lifecycle.sources.channels');
-  }
-  if (
-    source?.startsWith('create-agent') ||
-    source?.startsWith('update-agent') ||
-    source?.startsWith('assign-channel') ||
-    source?.startsWith('delete-agent') ||
-    source?.startsWith('remove-agent-channel')
-  ) {
-    return t('gateway.lifecycle.sources.agents');
-  }
-  if (source === 'provider.runtimeSync') {
-    return t('gateway.lifecycle.sources.models');
-  }
-
-  switch (source) {
-    case 'settings.proxy':
-      return t('gateway.lifecycle.sources.proxy');
-    case 'security.apply':
-    case 'security.reset':
-      return t('gateway.lifecycle.sources.security');
-    case 'gateway.manualRestart':
-      return t('gateway.lifecycle.sources.manual');
-    case 'gateway.autoStart':
-      return t('gateway.lifecycle.sources.startup');
-    default:
-      return t('gateway.lifecycle.sources.config');
-  }
-}
-
 function shouldBlockLifecycle(lifecycle: GatewayLifecycle, pathname: string): boolean {
-  if (pathname !== '/') return false;
   if (lifecycle.state !== 'applying' || lifecycle.action !== 'restart') return false;
 
+  if (pathname !== '/') return false;
+
   return (
-    lifecycle.source === 'gateway.manualRestart'
-    || lifecycle.source === 'security.apply'
+    lifecycle.source === 'security.apply'
     || lifecycle.source === 'security.reset'
   );
 }
@@ -59,7 +24,7 @@ export function GatewayLifecycleOverlay({ lifecycle }: { lifecycle: GatewayLifec
     return null;
   }
 
-  const sourceLabel = getSourceLabel(t, lifecycle.source);
+  const sourceLabel = getGatewayLifecycleSourceLabel(t, lifecycle.source);
   const title = t('gateway.lifecycle.applyingRestartTitle');
   const description = t('gateway.lifecycle.applyingDescription', { source: sourceLabel });
 

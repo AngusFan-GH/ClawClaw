@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { RefreshButton } from '@/components/common/RefreshButton';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { LoadingIcon } from '@/components/common/LoadingSpinner';
+import { RuntimeApplyBanner } from '@/components/common/RuntimeApplyBanner';
 import { ChannelLogo as SharedChannelLogo } from '@/components/channels/ChannelLogo';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAgentsStore } from '@/stores/agents';
@@ -109,6 +110,15 @@ export function Agents() {
         />
 
         <div className="flex-1 overflow-y-auto pr-2 pb-10 min-h-0 -mr-2">
+          <RuntimeApplyBanner
+            domains={['agents']}
+            className="mb-6"
+            onApplied={async () => {
+              await fetchAgents();
+              await fetchChannels(false, { includeRuntime: true });
+            }}
+          />
+
           {gatewayStatus.state !== 'running' && gatewayLifecycle.state === 'idle' && (
             <div className="mb-8 p-4 rounded-xl border border-yellow-500/50 bg-yellow-500/10 flex items-center gap-3">
               <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />

@@ -107,7 +107,7 @@ Communicate with AI agents through a modern chat experience. Support for multipl
 
 Configure and monitor multiple AI channels simultaneously. Each channel operates independently, allowing you to run specialized agents for different tasks.
 Channels now follow OpenClaw's type-first model: each channel type is shown as a single card with nested accounts, while account-level configuration, deletion, and status inspection stay aligned with the upstream runtime snapshot. Whether a channel exposes “Add account” depends on the upstream plugin's real multi-account capability, not on a blanket UI rule across all channel types. The intended flow is now explicit: create or edit concrete channel accounts on the Connections page first, then bind those accounts to agents on the Agents page so multi-account channels do not have to share one owner.
-For WeChat, ClawClaw now treats login as a plugin-managed QR session: it prefers the bundled OpenClaw plugin mirror from the Connections page, falls back to the official install flow only when needed, requests a QR code directly in-app, refreshes expired sessions, saves the returned account automatically, and refreshes the Gateway after login succeeds.
+For WeChat, ClawClaw now treats login as a plugin-managed QR session: it prefers the bundled OpenClaw plugin mirror from the Connections page, falls back to the official install flow only when needed, requests a QR code directly in-app, refreshes expired sessions, and saves the returned account automatically. Model, agent, and connection configuration changes are now saved first and then applied through a shared pending-changes banner, so multi-step setup usually results in one Gateway reload or short restart instead of several.
 
 ### ⏰ Cron-Based Automation
 
@@ -129,7 +129,7 @@ Configure denied directories and capability-level runtime restrictions separatel
 
 ### 💻 Flexible Model Setup
 
-ClawClaw no longer forces a bundled model during first launch. After the runtime is ready, you can open **Models** to add a local endpoint or a cloud provider, pick the model you want, or skip that step and finish it later. The cloud and self-hosted provider flows now stay closer to OpenClaw's provider-first onboarding, while the dedicated local-model center continues to preserve the existing local model workflow. Clearing the local-model provider now also removes any local models that depended on that provider, so stale local-model entries do not linger after the provider config is removed manually or from the UI.
+ClawClaw no longer forces a bundled model during first launch. After the runtime is ready, you can open **Models** to add a local endpoint or a cloud provider, pick the model you want, or skip that step and finish it later. The cloud and self-hosted provider flows now stay closer to OpenClaw's provider-first onboarding, while the dedicated local-model center continues to preserve the existing local model workflow. Clearing the local-model provider now also removes any local models that depended on that provider, so stale local-model entries do not linger after the provider config is removed manually or from the UI. Saved model edits appear as pending runtime changes until you apply them, which keeps provider setup responsive and reduces unnecessary Gateway restarts.
 
 ### 🌙 Adaptive Theming
 
@@ -222,7 +222,7 @@ Notes:
 - A bare `host:port` value is treated as HTTP.
 - If advanced proxy fields are left empty, ClawClaw falls back to `Proxy Server`.
 - Saving proxy settings reapplies Electron networking immediately and still restarts the Gateway automatically when required.
-- ClawClaw now coalesces runtime config changes in the background, so repeated edits no longer trigger multiple Gateway restarts in a row and ordinary reloads do not block the full UI.
+- Model, agent, and connection edits are saved as pending runtime changes and can be applied together, so repeated setup steps no longer trigger multiple Gateway restarts in a row.
 - In `Follow System` mode, ClawClaw also resolves the OS proxy and passes it to the auto-started OpenClaw Gateway process.
 - ClawClaw also syncs the proxy to OpenClaw's Telegram channel config when Telegram is enabled.
 
@@ -238,19 +238,17 @@ Notes:
 
 - The current conversation still relies on the normal OpenClaw session transcript. `session-memory` is an additional cross-session archive, not the primary source of in-session context.
 - Changing either memory toggle updates the managed OpenClaw config and restarts the Gateway automatically so the upstream runtime picks up the new setting.
-- Runtime-backed settings now apply through the same background coordinator used by channel and agent edits, which reduces restart churn during rapid configuration changes.
+- Model, agent, and connection edits now use a shared pending-apply flow; memory toggles still apply immediately because they affect active runtime behavior.
 
 ### Settings Backup and Cleanup
 
-Open **Settings → Data & Uninstall** to export a JSON backup of your current configuration before removing data or uninstalling the app. Portable builds now default user-initiated exports into `portable/exports/settings`, `portable/exports/images`, or `portable/exports/general` as appropriate. The same section can stop the Gateway, clean managed ClawClaw/OpenClaw data from a fixed allowlist, and prepare a full uninstall flow before you remove the app itself from the OS uninstaller. On Windows, ClawClaw's own cache, storage, and logs are queued for post-exit cleanup so locked Chromium files can be removed safely after the app quits.
+Open **Settings → Data & Uninstall** to export a JSON backup of your current configuration before removing data or uninstalling the app. The same section can stop the Gateway, clean managed ClawClaw/OpenClaw data from a fixed allowlist, and prepare a full uninstall flow before you remove the app itself from the OS uninstaller. On Windows, ClawClaw's own cache, storage, and logs are queued for post-exit cleanup so locked Chromium files can be removed safely after the app quits.
 
 Open **Settings → Updates** to control auto-check / auto-download behavior and manually trigger update checks from the packaged app. ClawClaw currently follows the stable release feed only.
-On Windows, packaged updates continue to use NSIS differential packages, but the installer now force-cleans the managed `resources/openclaw` and `resources/openclaw-plugins` directories before copying files. The upgrade flow also checks only processes tied to the target install directory, so unrelated `ClawClaw.exe` copies elsewhere no longer trigger false "app is still running" prompts. The bundled OpenClaw runtime is validated during packaging as a hard build gate, so the installer no longer runs a post-copy PowerShell/Node validation step inside the NSIS progress page.
-Windows installed builds now force current-user installation and no longer offer the unsupported "all users" install mode.
-The installer status text is now split into concrete upgrade steps such as checking old processes, stopping the bundled Gateway, cleaning the old runtime, copying files, and applying post-install configuration.
+Windows packaging uses the NSIS assisted installer and always installs for the current Windows user. The installer shows its native wizard immediately, then performs extraction, file copy, registry registration, shortcut creation, and CLI PATH configuration as installation steps. The uninstaller also uses NSIS and continues to provide explicit data deletion choices.
 On the first launch after upgrading from an older ClawClaw or bundled OpenClaw version, ClawClaw now runs a one-time maintenance pass before normal Gateway startup and before any automatic update re-check so legacy provider records, managed plugin mirrors, and older `openclaw.json` shapes are repaired proactively instead of waiting for a startup failure.
-Windows installed-build upgrades from `0.1.15` and earlier also trigger an expanded compatibility path: the installer clears legacy bundled runtime and CLI directories before copying new files, and the first launch forces a heavier OpenClaw repair pass for older plugin, channel, and runtime layouts.
-In **Settings → Developer**, you can run **OpenClaw Doctor** and **OpenClaw Doctor Fix** directly against the bundled runtime to inspect or repair migration issues without leaving the app.
+Windows installed-build upgrades from `0.1.15` and earlier also trigger an expanded compatibility path: the NSIS installer cleans the previous installation before copying the managed runtime / CLI resources, and the first launch forces a heavier OpenClaw repair pass for older plugin, channel, and runtime layouts.
+In **Settings → Developer**, the diagnostics section can run OpenClaw checks or repair with a compact status summary, while raw command output stays collapsed by default. The same section also exposes the OpenClaw Control UI entry when the Gateway is running.
 
 ---
 
@@ -280,18 +278,16 @@ ClawClaw employs a **dual-process architecture** with a unified host API layer. 
 │  └────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
-                               │ Main-owned transport strategy
-                               │ (WS first, HTTP then IPC fallback)
+                               │ Main-owned Gateway lifecycle
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                Host API & Main Process Proxies                  │
 │                                                                  │
 │  • hostapi:fetch (Main proxy, avoids CORS in dev/prod)          │
-│  • gateway:httpProxy (Renderer never calls Gateway HTTP direct)  │
-│  • Unified error mapping & retry/backoff                         │
+│  • Unified error mapping and request telemetry                   │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
-                               │ WS / HTTP / IPC fallback
+                               │ Gateway RPC via Electron Main
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                     OpenClaw Gateway                             │
@@ -307,7 +303,7 @@ ClawClaw employs a **dual-process architecture** with a unified host API layer. 
 
 - **Process Isolation**: The AI runtime operates in a separate process, ensuring UI responsiveness even during heavy computation
 - **Single Entry for Frontend Calls**: Renderer requests go through host-api/api-client; protocol details are hidden behind a stable interface
-- **Main-Process Transport Ownership**: Electron Main controls WS/HTTP usage and fallback to IPC for reliability
+- **Main-Process Runtime Ownership**: Electron Main owns Gateway startup, recovery, and RPC execution
 - **Graceful Recovery**: Built-in reconnect, timeout, and backoff logic handles transient failures automatically
 - **Secure Storage**: API keys and sensitive data leverage the operating system's native secure storage mechanisms
 - **CORS-Safe by Design**: Local HTTP access is proxied by Main, preventing renderer-side CORS issues
@@ -375,7 +371,7 @@ Chain multiple skills together to create sophisticated automation pipelines. Pro
 # Development
 pnpm run init             # Install dependencies + download uv
 pnpm run python:download:win # Download bundled Windows Python runtimes for packaging
-pnpm dev                  # Start with hot reload (also refreshes managed plugin mirrors)
+pnpm dev                  # Start with hot reload
 
 # Quality
 pnpm lint                 # Run ESLint
@@ -389,30 +385,20 @@ pnpm run release:check    # Run the release gate (upgrade compatibility + recove
 pnpm run build:vite       # Build frontend only
 pnpm run package:prepare  # Shared packaging prep (vite + bundled OpenClaw + cleaned builder output)
 pnpm build                # Prepare production packaging assets
-pnpm package              # Package for current platform
 pnpm package:mac          # Package for macOS
-pnpm package:win          # Build Windows NSIS installer with bundled node.exe, uv.exe, and Python
-pnpm package:win:portable # Build Windows portable directory (win-unpacked / win-arm64-unpacked)
-pnpm package:mac:portable # Build macOS portable zip (ClawClaw.app + launcher + embedded portable/ data dir)
-pnpm package:desktop      # Package macOS, Windows, and Linux in one serial workflow
+pnpm package:win          # Build Windows NSIS installers + updater-compatible setup exe/latest.yml
 pnpm run package:organize # Re-home staged artifacts under release/v<version>/windows|mac|linux|metadata
 pnpm package:linux        # Package for Linux
 pnpm run upload:update    # Upload release/v<version>/windows/latest.yml and referenced Windows update artifacts
-pnpm run upload:update:portable # Upload portable zips + per-platform JSON manifests under updates-portable/stable
 ```
 
 Notes:
 
-- `pnpm package:win` builds the Windows NSIS installer via `scripts/package-win.mjs`; it verifies or downloads the Windows `node.exe`, `uv.exe`, and Python runtime before invoking electron-builder.
-- `pnpm package:win:portable` builds the Windows portable directory target via `scripts/package-win.mjs --dir`.
-- `pnpm package:mac:portable` builds the macOS portable zip via `scripts/package-mac.mjs --build`. It runs electron-builder for macOS (zip), then assembles a portable directory with `Start ClawClaw.command` (launcher + Gatekeeper quarantine-clear script) plus an embedded `portable/` data directory inside the app bundle. Output: `release/v<version>/mac/ClawClaw-v<version>-mac-{arch}-portable.zip`.
-- `pnpm package:portable` builds both Windows and macOS portable artifacts.
-- `pnpm package:prepare` is the shared pre-packaging step used by `build`, `package`, and all platform package commands. It only cleans root-level builder staging output and leaves existing versioned release directories untouched.
+- `pnpm package:win` builds the Windows NSIS installers and stages updater-compatible `ClawClaw-Setup-v<version>-<arch>.exe` files, the stable alias `ClawClaw-Setup-v<version>.exe`, and `latest.yml`. It verifies or downloads the Windows `node.exe`, `uv.exe`, and Python runtime before invoking electron-builder.
+- `pnpm package:prepare` is the shared pre-packaging step used by `build` and all platform package commands. It only cleans root-level builder staging output and leaves existing versioned release directories untouched.
 - `pnpm package:organize` moves root-level builder output into `release/v<package.json version>/windows`, `release/v<package.json version>/mac`, `release/v<package.json version>/linux`, and `release/v<package.json version>/metadata`.
-- `pnpm package:desktop` runs macOS, Windows, and Linux packaging serially. Keep it serial; do not run platform packaging in parallel because they share `dist`, `dist-electron`, and `build/openclaw`.
 - `release/` now uses versioned directories. Existing versions are preserved; only artifacts inside the same version directory are replaced. The updater uploader reads from `release/v<package.json version>/windows/latest.yml`.
 - `pnpm run upload:update` is intentionally kept as the Windows installed-build uploader. It preserves the legacy `latest.yml` contract for older installed versions and fails if `latest.yml` does not match `package.json`'s version.
-- `pnpm run upload:update:portable` is the separate portable update publisher. It uploads portable artifacts and generates per-target JSON manifests such as `win32-x64.json` and `darwin-arm64.json` under `updates-portable/stable/`.
 - Bundled OpenClaw plugin mirrors are copied during `after-pack`, so packaging does not require a separate `bundle:openclaw-plugins` step.
 
 ### Release Gate

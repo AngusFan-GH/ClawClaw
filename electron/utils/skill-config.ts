@@ -9,7 +9,7 @@ import { access, cp, lstat, mkdir, readdir, realpath, rm } from 'fs/promises';
 import { existsSync } from 'fs';
 import { constants } from 'fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'path';
-import { getOpenClawDir, getOpenClawSkillsDir, getResourcesDir } from './paths';
+import { getOpenClawConfigDir, getOpenClawDir, getOpenClawSkillsDir, getResourcesDir } from './paths';
 import { logger } from './logger';
 import {
   readOpenClawConfigRecordRaw,
@@ -244,6 +244,58 @@ async function cleanupEscapedManagedSkillSymlinks(skillsRoot: string): Promise<v
   }
 }
 
+async function cleanupEscapedWorkspaceSkillSymlinks(): Promise<void> {
+  const workspaceDir = join(getOpenClawConfigDir(), 'workspace');
+  const workspaceSkillsRoot = join(workspaceDir, 'skills');
+  const workspaceAgentsSkillsRoot = join(workspaceDir, '.agents', 'skills');
+
+  if (!(await fileExists(workspaceSkillsRoot))) {
+    return;
+  }
+
+  let rootRealPath: string;
+  let agentsSkillsRealPath: string;
+  try {
+    rootRealPath = await realpath(workspaceSkillsRoot);
+    agentsSkillsRealPath = await realpath(workspaceAgentsSkillsRoot);
+  } catch {
+    return;
+  }
+
+  const entries = await readdir(workspaceSkillsRoot, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (!entry.isSymbolicLink()) {
+      continue;
+    }
+
+    const linkPath = join(workspaceSkillsRoot, entry.name);
+    try {
+      const targetRealPath = await realpath(linkPath);
+      if (isPathInside(rootRealPath, targetRealPath)) {
+        continue;
+      }
+
+      if (!isPathInside(agentsSkillsRealPath, targetRealPath)) {
+        continue;
+      }
+
+      if (!(await fileExists(join(targetRealPath, 'SKILL.md')))) {
+        continue;
+      }
+
+      const stat = await lstat(linkPath);
+      if (!stat.isSymbolicLink()) {
+        continue;
+      }
+
+      await rm(linkPath);
+      logger.info(`Removed escaped workspace skill symlink: ${linkPath} -> ${targetRealPath}`);
+    } catch (error) {
+      logger.warn(`Failed to inspect workspace skill symlink ${linkPath}:`, error);
+    }
+  }
+}
+
 /**
  * Ensure built-in skills are deployed to ~/.openclaw/skills/<slug>/.
  * Sources include packaged OpenClaw extension skills plus any first-party
@@ -255,6 +307,7 @@ async function cleanupEscapedManagedSkillSymlinks(skillsRoot: string): Promise<v
 export async function ensureBuiltinSkillsInstalled(): Promise<void> {
   const skillsRoot = getOpenClawSkillsDir();
   await cleanupEscapedManagedSkillSymlinks(skillsRoot);
+  await cleanupEscapedWorkspaceSkillSymlinks();
   const builtinSkills = await getBuiltinSkillCandidates();
 
   for (const { slug, sourceDir } of builtinSkills) {

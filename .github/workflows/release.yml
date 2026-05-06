@@ -116,15 +116,8 @@ jobs:
         with:
           name: release-${{ matrix.platform }}
           path: |
-            release/*.dmg
-            release/*.zip
-            release/*.blockmap
-            release/*.exe
-            release/*.AppImage
-            release/*.deb
-            release/*.rpm
-            release/*.yml
-            !release/builder-debug.yml
+            release/v*/**
+            !release/v*/metadata/builder-debug.yml
           retention-days: 7
 
   # ──────────────────────────────────────────────────────────────
@@ -164,6 +157,7 @@ jobs:
             release-artifacts/**/*.dmg
             release-artifacts/**/*.zip
             release-artifacts/**/*.exe
+            release-artifacts/**/windows-installer/**
             release-artifacts/**/*.AppImage
             release-artifacts/**/*.deb
             release-artifacts/**/*.rpm
@@ -182,12 +176,12 @@ jobs:
             Please select the appropriate installer for your operating system and architecture:
 
             #### macOS
-            - **Apple Silicon (M1/M2/M3/M4)**: `ClawClaw-*-mac-arm64.dmg`
-            - **Intel (x64)**: `ClawClaw-*-mac-x64.dmg`
+            - **Apple Silicon (M1/M2/M3/M4)**: `ClawClaw-v*-arm64.zip`
+            - **Intel (x64)**: `ClawClaw-v*-x64.zip`
 
             #### Windows
-            - **Installer (x64)**: `ClawClaw-*-win-x64.exe`
-            - **Installer (ARM64)**: `ClawClaw-*-win-arm64.exe`
+            - **Installer (x64)**: `ClawClaw-Setup-v*-x64.exe`
+            - **Installer (ARM64)**: `ClawClaw-Setup-v*-arm64.exe`
 
             #### Linux
             - **AppImage (x64)**: `ClawClaw-*-linux-x86_64.AppImage` (Universal format, recommended)
@@ -269,11 +263,21 @@ jobs:
           mkdir -p staging/${CHANNEL}
           mkdir -p staging/releases/${TAG}
 
-          # Flatten all platform artifacts into staging directories
+          # Flatten platform binaries, but preserve the custom Windows installer
+          # directory because its UI, runner, manifest, and shell assets are a
+          # structured bundle.
           find release-artifacts/ -type f | while read file; do
             filename=$(basename "$file")
-            cp "$file" "staging/${CHANNEL}/${filename}"
-            cp "$file" "staging/releases/${TAG}/${filename}"
+            if [[ "$file" == *"/windows-installer/"* ]]; then
+              rel="${file#*/windows-installer/}"
+              mkdir -p "staging/${CHANNEL}/windows-installer/$(dirname "$rel")"
+              mkdir -p "staging/releases/${TAG}/windows-installer/$(dirname "$rel")"
+              cp "$file" "staging/${CHANNEL}/windows-installer/${rel}"
+              cp "$file" "staging/releases/${TAG}/windows-installer/${rel}"
+            else
+              cp "$file" "staging/${CHANNEL}/${filename}"
+              cp "$file" "staging/releases/${TAG}/${filename}"
+            fi
           done
 
           echo "=== staging/${CHANNEL}/ ==="
@@ -309,12 +313,12 @@ jobs:
               releaseDate: $date,
               downloads: {
                 mac: {
-                  x64: ($base + "/ClawClaw-" + $version + "-mac-x64.dmg"),
-                  arm64: ($base + "/ClawClaw-" + $version + "-mac-arm64.dmg")
+                  x64: ($base + "/ClawClaw-v" + $version + "-x64.zip"),
+                  arm64: ($base + "/ClawClaw-v" + $version + "-arm64.zip")
                 },
                 win: {
-                  x64: ($base + "/ClawClaw-" + $version + "-win-x64.exe"),
-                  arm64: ($base + "/ClawClaw-" + $version + "-win-arm64.exe")
+                  x64: ($base + "/ClawClaw-Setup-v" + $version + "-x64.exe"),
+                  arm64: ($base + "/ClawClaw-Setup-v" + $version + "-arm64.exe")
                 },
                 linux: {
                   deb_amd64: ($base + "/ClawClaw-" + $version + "-linux-amd64.deb"),

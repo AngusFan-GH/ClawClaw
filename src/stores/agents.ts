@@ -9,6 +9,7 @@ import type {
 } from '@/types/agent';
 import type { ChannelType } from '@/types/channel';
 import { useGatewayStore } from './gateway';
+import { useRuntimeApplyStore } from './runtime-apply';
 
 type GatewayAgentIdentity = {
   name?: string;
@@ -233,6 +234,7 @@ export const useAgentsStore = create<AgentsState>((set) => ({
         method: 'POST',
         body: JSON.stringify({ name }),
       });
+      await useRuntimeApplyStore.getState().refreshPlan();
       await useAgentsStore.getState().fetchAgents();
     } catch (error) {
       set({ error: String(error) });
@@ -247,6 +249,7 @@ export const useAgentsStore = create<AgentsState>((set) => ({
         method: 'PUT',
         body: JSON.stringify(updates),
       });
+      await useRuntimeApplyStore.getState().refreshPlan();
       await useAgentsStore.getState().fetchAgents();
     } catch (error) {
       set({ error: String(error) });
@@ -258,6 +261,7 @@ export const useAgentsStore = create<AgentsState>((set) => ({
     set({ error: null });
     try {
       await hostApiFetch(`/api/agents/${encodeURIComponent(agentId)}`, { method: 'DELETE' });
+      await useRuntimeApplyStore.getState().refreshPlan();
       await useAgentsStore.getState().fetchAgents();
     } catch (error) {
       set({ error: String(error) });
@@ -273,6 +277,7 @@ export const useAgentsStore = create<AgentsState>((set) => ({
         `/api/agents/${encodeURIComponent(agentId)}/channels/${encodeURIComponent(channelType)}${query}`,
         { method: 'PUT' },
       );
+      await useRuntimeApplyStore.getState().refreshPlan();
       await useAgentsStore.getState().fetchAgents();
     } catch (error) {
       set({ error: String(error) });
@@ -288,6 +293,7 @@ export const useAgentsStore = create<AgentsState>((set) => ({
         `/api/agents/${encodeURIComponent(agentId)}/channels/${encodeURIComponent(channelType)}${query}`,
         { method: 'DELETE' },
       );
+      await useRuntimeApplyStore.getState().refreshPlan();
       await useAgentsStore.getState().fetchAgents();
     } catch (error) {
       set({ error: String(error) });

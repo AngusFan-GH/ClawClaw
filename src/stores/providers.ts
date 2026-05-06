@@ -13,6 +13,7 @@ import { hostApiFetch } from '@/lib/host-api';
 import {
   fetchProviderSnapshot,
 } from '@/lib/provider-accounts';
+import { useRuntimeApplyStore } from './runtime-apply';
 
 // Re-export types for consumers that imported from here
 export type {
@@ -112,6 +113,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
       }
       
       // Refresh the list
+      await useRuntimeApplyStore.getState().refreshPlan();
       await get().refreshProviderSnapshot();
     } catch (error) {
       console.error('Failed to add provider:', error);
@@ -130,6 +132,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
         throw new Error(result.error || 'Failed to create provider account');
       }
 
+      await useRuntimeApplyStore.getState().refreshPlan();
       await get().refreshProviderSnapshot();
     } catch (error) {
       console.error('Failed to add account:', error);
@@ -164,6 +167,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
       }
       
       // Refresh the list
+      await useRuntimeApplyStore.getState().refreshPlan();
       await get().refreshProviderSnapshot();
     } catch (error) {
       console.error('Failed to update provider:', error);
@@ -182,6 +186,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
         throw new Error(result.error || 'Failed to update provider account');
       }
 
+      await useRuntimeApplyStore.getState().refreshPlan();
       await get().refreshProviderSnapshot();
     } catch (error) {
       console.error('Failed to update account:', error);
@@ -200,6 +205,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
       }
       
       // Refresh the list
+      await useRuntimeApplyStore.getState().refreshPlan();
       await get().refreshProviderSnapshot();
     } catch (error) {
       console.error('Failed to delete provider:', error);
@@ -217,6 +223,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
         throw new Error(result.error || 'Failed to delete provider account');
       }
 
+      await useRuntimeApplyStore.getState().refreshPlan();
       await get().refreshProviderSnapshot();
     } catch (error) {
       console.error('Failed to delete account:', error);
@@ -238,6 +245,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
       }
       
       // Refresh the list
+      await useRuntimeApplyStore.getState().refreshPlan();
       await get().refreshProviderSnapshot();
     } catch (error) {
       console.error('Failed to set API key:', error);
@@ -256,6 +264,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
         throw new Error(result.error || 'Failed to update provider');
       }
 
+      await useRuntimeApplyStore.getState().refreshPlan();
       await get().refreshProviderSnapshot();
     } catch (error) {
       console.error('Failed to update provider with key:', error);
@@ -275,6 +284,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
       }
       
       // Refresh the list
+      await useRuntimeApplyStore.getState().refreshPlan();
       await get().refreshProviderSnapshot();
     } catch (error) {
       console.error('Failed to delete API key:', error);
@@ -293,6 +303,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
         throw new Error(result.error || 'Failed to set default provider');
       }
       
+      await useRuntimeApplyStore.getState().refreshPlan();
       await get().refreshProviderSnapshot();
     } catch (error) {
       console.error('Failed to set default provider:', error);
@@ -311,6 +322,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
         throw new Error(result.error || 'Failed to set default provider account');
       }
 
+      await useRuntimeApplyStore.getState().refreshPlan();
       await get().refreshProviderSnapshot();
     } catch (error) {
       console.error('Failed to set default account:', error);

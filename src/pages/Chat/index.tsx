@@ -156,6 +156,7 @@ export function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const shouldStickToBottomRef = useRef(true);
+  const bottomScrollFrameRef = useRef<number | null>(null);
   const pendingPrependScrollRef = useRef<{ height: number; top: number } | null>(null);
   const processedQueueFlushTokenRef = useRef(0);
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
@@ -391,6 +392,57 @@ export function Chat() {
     };
   }, [chatModelsRetryNonce, isGatewayRunning, providerCatalogReloadKey]);
 
+  const pinChatToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
+    const viewport = scrollViewportRef.current;
+    if (!viewport) return;
+
+    viewport.scrollTo({
+      top: viewport.scrollHeight,
+      behavior,
+    });
+  }, []);
+
+  const schedulePinChatToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
+    pinChatToBottom(behavior);
+    if (bottomScrollFrameRef.current != null) {
+      cancelAnimationFrame(bottomScrollFrameRef.current);
+    }
+    bottomScrollFrameRef.current = requestAnimationFrame(() => {
+      bottomScrollFrameRef.current = null;
+      pinChatToBottom('auto');
+    });
+  }, [pinChatToBottom]);
+
+  useEffect(() => {
+    return () => {
+      if (bottomScrollFrameRef.current != null) {
+        cancelAnimationFrame(bottomScrollFrameRef.current);
+        bottomScrollFrameRef.current = null;
+      }
+    };
+  }, []);
+
+  // Keep a restored or streaming thread pinned only while the user is already at the bottom.
+  useLayoutEffect(() => {
+    const viewport = scrollViewportRef.current;
+    if (!viewport || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const content = viewport.firstElementChild;
+    if (!content) return;
+
+    const observer = new ResizeObserver(() => {
+      if (!loadingEarlierHistory && shouldStickToBottomRef.current) {
+        pinChatToBottom('auto');
+        setShowNewMessages(false);
+      }
+    });
+    observer.observe(content);
+
+    return () => observer.disconnect();
+  }, [loadingEarlierHistory, pinChatToBottom]);
+
   // Always scroll to bottom when the user sends a message, regardless of scroll position.
   // This uses queueMicrotask (runs after DOM update) to ensure the user's own
   // message is visible immediately after send.
@@ -402,9 +454,9 @@ export function Chat() {
       return;
     }
     queueMicrotask(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+      schedulePinChatToBottom('auto');
     });
-  }, [sending]);
+  }, [schedulePinChatToBottom, sending]);
 
   // Auto-scroll on new messages, streaming, or activity changes when the user is already near the bottom.
   useEffect(() => {
@@ -414,17 +466,15 @@ export function Chat() {
       }
       return;
     }
-    messagesEndRef.current?.scrollIntoView({
-      behavior: streamingMessage ? 'auto' : 'smooth',
-    });
+    schedulePinChatToBottom(streamingMessage ? 'auto' : 'smooth');
     setShowNewMessages(false);
-  }, [messages, streamingMessage, sending, pendingFinal, loadingEarlierHistory]);
+  }, [messages, streamingMessage, sending, pendingFinal, loadingEarlierHistory, schedulePinChatToBottom]);
 
   const scrollToBottom = useCallback(() => {
     shouldStickToBottomRef.current = true;
     setShowNewMessages(false);
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, []);
+    schedulePinChatToBottom('smooth');
+  }, [schedulePinChatToBottom]);
 
   useLayoutEffect(() => {
     const pending = pendingPrependScrollRef.current;

@@ -1503,6 +1503,27 @@ function resetChatRuntimeActivity(
   };
 }
 
+function buildAssistantMessageFromStream(
+  state: Pick<ChatState, 'streamingText' | 'streamingMessage'>,
+  runId: string,
+): RawMessage | null {
+  const currentStream = state.streamingMessage as RawMessage | null;
+  const streamedText =
+    state.streamingText.trim()
+    || (currentStream && typeof currentStream === 'object'
+      ? extractTextFromContent(currentStream.content).trim()
+      : '');
+
+  if (!streamedText || isSilentReplyText(streamedText)) return null;
+
+  return {
+    role: 'assistant',
+    id: `stream-final-${runId || Date.now()}`,
+    content: [{ type: 'text', text: streamedText }],
+    timestamp: Date.now(),
+  };
+}
+
 function summarizeToolOutput(text: string): string | undefined {
   const trimmed = text.trim();
   if (!trimmed) return undefined;
@@ -3559,12 +3580,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
           || get().chatStreamSegments.length > 0;
         // Message complete - add to history and clear streaming
         const finalMsg = event.message as RawMessage | undefined;
-        // BTW emits a `chat.final` with no role/content — skip the empty message but
-        // clear sending to exit the loading spinner. This must be checked before `if (finalMsg)`
-        // because BTW's `event.message` is undefined (payload is { state: 'final', runId, sessionKey }).
+        // Some runtimes emit `chat.final` with no role/content. OpenClaw dashboard
+        // keeps any streamed assistant text as the final visible answer in this case.
         if (!finalMsg?.role && !finalMsg?.content && !finalMsg?.toolCallId) {
-          set({ sending: false, activeRunId: null, pendingFinal: false, pendingAssistantMessage: null });
+          const shouldRefreshSessionModel = get().pendingSessionModelRefresh;
+          const streamFallback = buildAssistantMessageFromStream(get(), runId);
+          set((s) => ({
+            streamingText: '',
+            streamingMessage: null,
+            streamingTools: [],
+            pendingToolImages: [],
+            sending: false,
+            activeRunId: null,
+            pendingFinal: false,
+            pendingAssistantMessage: streamFallback,
+            pendingSessionModelRefresh: false,
+            terminalHistoryReconciling: false,
+            ...(streamFallback ? resetToolStreamState(s) : {}),
+          }));
+          if (shouldRefreshSessionModel) {
+            void get().loadSessions({ preserveCurrent: true, warmLabels: true });
+          }
           get().requestQueueFlush(runId || null);
+          if (streamFallback) void get().loadHistory(true);
           break;
         }
         if (finalMsg) {
@@ -3617,6 +3655,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
           const toolOnly = isToolOnlyMessage(finalMsg);
           const hasOutput = hasNonToolAssistantContent(finalMsg);
           const shouldRefreshSessionModel = get().pendingSessionModelRefresh;
+          if (!toolOnly && !hasOutput) {
+            const streamFallback = buildAssistantMessageFromStream(get(), runId);
+            set((s) => ({
+              streamingText: '',
+              streamingMessage: null,
+              streamingTools: [],
+              pendingToolImages: [],
+              sending: false,
+              activeRunId: null,
+              pendingFinal: false,
+              pendingAssistantMessage: streamFallback,
+              pendingSessionModelRefresh: false,
+              terminalHistoryReconciling: false,
+              ...(streamFallback ? resetToolStreamState(s) : {}),
+            }));
+            if (shouldRefreshSessionModel) {
+              void get().loadSessions({ preserveCurrent: true, warmLabels: true });
+            }
+            get().requestQueueFlush(runId || null);
+            if (streamFallback) void get().loadHistory(true);
+            break;
+          }
           const msgId =
             finalMsg.id || (toolOnly ? `run-${runId}-tool-${Date.now()}` : `run-${runId}`);
           set((s) => {

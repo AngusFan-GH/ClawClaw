@@ -656,17 +656,17 @@ function scheduleGatewayChannelRefresh(
   ctx: HostApiContext,
   channelType: string,
   reason: string,
-  options?: { mode?: 'debounced' | 'immediate'; awaitCompletion?: boolean },
+  _options?: { mode?: 'debounced' | 'immediate'; awaitCompletion?: boolean },
 ): void {
   const requires = FORCE_RESTART_CHANNELS.has(channelType)
-    ? (options?.mode === 'immediate' ? 'restart_immediate' : 'restart')
+    ? 'restart'
     : 'reload';
-  ctx.gatewayApplyCoordinator.enqueue({
+  ctx.runtimeApplyPlan.record({
+    domain: 'channels',
+    label: '连接配置',
     source: reason,
     reason,
     requires,
-    delayMs: options?.mode === 'immediate' ? 0 : undefined,
-    skipIfStopped: true,
   });
 }
 
@@ -1092,11 +1092,12 @@ export async function handleChannelRoutes(
       } else {
         await clearAllChannelBindings(channelType).catch(() => undefined);
       }
-      await ctx.gatewayApplyCoordinator.applyNow({
+      ctx.runtimeApplyPlan.record({
+        domain: 'channels',
+        label: '连接配置',
         source: `channel:deleteConfig:${channelType}`,
         reason: `channel:deleteConfig:${channelType}`,
-        requires: FORCE_RESTART_CHANNELS.has(toRuntimeChannelType(channelType)) ? 'restart_immediate' : 'reload',
-        skipIfStopped: true,
+        requires: FORCE_RESTART_CHANNELS.has(toRuntimeChannelType(channelType)) ? 'restart' : 'reload',
       });
       sendJson(res, 200, { success: true });
     } catch (error) {

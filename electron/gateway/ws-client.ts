@@ -1,4 +1,5 @@
 import WebSocket from 'ws';
+import http from 'node:http';
 import type { DeviceIdentity } from '../utils/device-identity';
 import {
   buildDeviceAuthPayload,
@@ -27,9 +28,15 @@ const CONNECT_ERROR_CODES = {
   AUTH_DEVICE_TOKEN_MISMATCH: 'AUTH_DEVICE_TOKEN_MISMATCH',
 } as const;
 const DEFAULT_GATEWAY_HANDSHAKE_TIMEOUT_MS = 20_000;
-const DEFAULT_GATEWAY_READY_RETRIES = 600;
+const DEFAULT_GATEWAY_READY_TIMEOUT_MS = 60_000;
 const DEFAULT_GATEWAY_READY_INTERVAL_MS = 200;
 const GATEWAY_LOOPBACK_HOST = '127.0.0.1';
+const GATEWAY_READY_LOG_MILESTONES_MS = [5_000, 15_000, 30_000, 45_000] as const;
+
+function formatGatewayReadyTimeout(timeoutMs: number): string {
+  if (timeoutMs < 1000) return `${timeoutMs}ms`;
+  return `${Math.round(timeoutMs / 1000)}s`;
+}
 
 type GatewayHelloOk = {
   auth?: {
@@ -87,85 +94,116 @@ function canRetryWithDeviceToken(details: unknown): boolean {
   );
 }
 
-/**
- * Fast TCP check — returns immediately if the port is not listening.
- * This avoids the cost of spinning up a full WebSocket client when the
- * Gateway process hasn't even opened its port yet.
- */
-async function isPortListening(port: number): Promise<boolean> {
-  const net = await import('node:net');
+async function requestGatewayReadyz(port: number): Promise<boolean> {
   return await new Promise<boolean>((resolve) => {
-    const socket = net.createConnection({ port, host: GATEWAY_LOOPBACK_HOST });
     let settled = false;
-
     const resolveOnce = (value: boolean) => {
       if (settled) return;
       settled = true;
-      try {
-        socket.destroy();
-      } catch {
-        // ignore
-      }
       resolve(value);
     };
 
-    socket.once('connect', () => resolveOnce(true));
-    socket.once('error', () => resolveOnce(false));
-    socket.setTimeout(250, () => resolveOnce(false));
+    const req = http.request(
+      {
+        method: 'HEAD',
+        host: GATEWAY_LOOPBACK_HOST,
+        port,
+        path: '/readyz',
+        timeout: 500,
+      },
+      (res) => {
+        res.resume();
+        resolveOnce(res.statusCode != null && res.statusCode >= 200 && res.statusCode < 300);
+      },
+    );
+
+    req.once('error', () => resolveOnce(false));
+    req.once('timeout', () => {
+      try {
+        req.destroy();
+      } catch {
+        // ignore
+      }
+      resolveOnce(false);
+    });
+    req.end();
   });
 }
 
 /**
  * Probe whether the OpenClaw Gateway is ready to accept connections.
  *
- * Keep this as a cheap TCP check. Opening a throwaway WebSocket and closing it
- * before sending `connect` makes OpenClaw log a noisy "closed before connect"
- * warning. The real protocol readiness is verified by connectGatewaySocket(),
- * which has its own challenge/handshake timeout.
+ * OpenClaw exposes `/readyz` once the HTTP server is bound and reports 2xx only
+ * when the Gateway's startup sidecars have settled. This is more accurate than
+ * a bare TCP check, which can pass while the Gateway is still not usable.
  *
  * @param port  Gateway port
  */
 export async function probeGatewayReady(port: number): Promise<boolean> {
-  return isPortListening(port);
+  return requestGatewayReadyz(port);
 }
 
 export async function waitForGatewayReady(options: {
   port: number;
   getProcessExitCode: () => number | string | null;
+  probeReady?: (port: number) => Promise<boolean>;
+  timeoutMs?: number;
   retries?: number;
   intervalMs?: number;
 }): Promise<void> {
-  const retries = options.retries ?? DEFAULT_GATEWAY_READY_RETRIES;
   const intervalMs = options.intervalMs ?? DEFAULT_GATEWAY_READY_INTERVAL_MS;
+  const timeoutMs = options.timeoutMs ?? (
+    options.retries != null
+      ? options.retries * intervalMs
+      : DEFAULT_GATEWAY_READY_TIMEOUT_MS
+  );
+  const startedAt = Date.now();
+  const milestones = GATEWAY_READY_LOG_MILESTONES_MS.filter((ms) => ms < timeoutMs);
+  let nextMilestoneIndex = 0;
+  let attempts = 0;
 
-  for (let i = 0; i < retries; i++) {
+  while (true) {
+    attempts++;
     const exitCode = options.getProcessExitCode();
     if (exitCode !== null) {
       logger.error(`Gateway process exited before ready (status=${exitCode})`);
       throw new Error(`Gateway process exited before becoming ready (status=${exitCode})`);
     }
 
+    if (Date.now() - startedAt >= timeoutMs) {
+      break;
+    }
+
     let ready = false;
     try {
-      ready = await probeGatewayReady(options.port);
+      ready = await (options.probeReady ?? probeGatewayReady)(options.port);
     } catch {
       // Gateway not ready yet.
     }
 
     if (ready) {
-      logger.debug(`Gateway ready after ${i + 1} attempt(s)`);
+      logger.debug(`Gateway ready after ${attempts} attempt(s) in ${Date.now() - startedAt}ms`);
       return;
     }
 
-    if (i > 0 && i % 10 === 0) {
-      logger.debug(`Still waiting for Gateway... (attempt ${i + 1}/${retries})`);
+    const elapsedMs = Date.now() - startedAt;
+    while (
+      nextMilestoneIndex < milestones.length &&
+      elapsedMs >= milestones[nextMilestoneIndex]
+    ) {
+      logger.debug(
+        `Still waiting for Gateway port ${options.port} to open... (${Math.round(elapsedMs / 1000)}s elapsed)`,
+      );
+      nextMilestoneIndex++;
     }
 
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 
-  logger.error(`Gateway failed to become ready after ${retries} attempts on port ${options.port}`);
-  throw new Error(`Gateway failed to start after ${retries} retries (port ${options.port})`);
+  logger.error(
+    `Gateway failed to open port ${options.port} within ${timeoutMs}ms (${attempts} probe attempts)`,
+  );
+  throw new Error(`Gateway did not open port ${options.port} within ${formatGatewayReadyTimeout(timeoutMs)}`);
 }
 
 export function buildGatewayConnectFrame(options: {

@@ -584,6 +584,10 @@
   padding-right: 70px;
 }
 
+.chat-group.user .chat-bubble.has-copy {
+  padding-right: 14px;
+}
+
 .chat-bubble:hover {
   background: color-mix(in oklab, hsl(var(--muted)) 28%, hsl(var(--card)));
 }
@@ -598,6 +602,13 @@
   right: 8px;
   display: flex;
   gap: 4px;
+}
+
+.chat-group.user .chat-bubble-actions {
+  top: 50%;
+  right: auto;
+  left: -36px;
+  transform: translateY(-50%);
 }
 
 .chat-copy-button {

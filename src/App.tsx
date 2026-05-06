@@ -13,7 +13,6 @@ import { PageLoader } from '@/components/common/LoadingSpinner';
 import { useSettingsStore } from './stores/settings';
 import { useGatewayStore } from './stores/gateway';
 import { useChatStore } from './stores/chat';
-import { applyGatewayTransportPreference } from './lib/api-client';
 import { GatewayLifecycleOverlay } from './components/common/GatewayLifecycleOverlay';
 
 const Models = lazy(() => import('./pages/Models'));
@@ -196,10 +195,6 @@ function App() {
       root.classList.add(theme);
     }
   }, [theme]);
-
-  useEffect(() => {
-    applyGatewayTransportPreference();
-  }, []);
 
   return (
     <ErrorBoundary>

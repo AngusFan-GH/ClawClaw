@@ -8,32 +8,6 @@ import { homedir } from 'os';
 import { existsSync, mkdirSync, readFileSync, realpathSync } from 'fs';
 import { logger } from './logger';
 
-// ── Portable Mode ────────────────────────────────────────────────────────────
-
-type PortablePaths = {
-  rootDir: string;
-  dataDir: string;
-};
-
-/**
- * Detects whether the app is running in portable (USB) mode.
- *
- * Portable mode is enabled only when a bundled `portable/` data directory exists.
- * That keeps regular installed builds and portable builds on separate, explicit
- * packaging paths instead of relying on legacy marker files.
- *
- * Directory structure on USB drive:
- *   USB/
- *   ├── ClawClaw.exe              (Windows: next to portable/)
- *   ├── Start ClawClaw.bat/.vbs   (Windows portable launchers)
- *   ├── ClawClaw.app/             (macOS: portable/ inside the .app bundle)
- *   ├── Start ClawClaw.command    (macOS portable launcher)
- *   └── portable/                 ← data directory (all user data here)
- *       ├── .openclaw/            (OpenClaw state)
- *       ├── cache/
- *       ├── python/
- *       └── logs/
- */
 function getPackagedResourcesDir(): string {
   if (typeof process.resourcesPath === 'string' && process.resourcesPath.length > 0) {
     return resolve(process.resourcesPath);
@@ -54,85 +28,6 @@ function getPackagedResourcesDir(): string {
   }
 
   return resolve(appPath, 'resources');
-}
-
-function detectPortablePaths(): PortablePaths | null {
-  try {
-    const resourcesDir = getPackagedResourcesDir();
-    const isMac = process.platform === 'darwin';
-    const dataDir = isMac
-      ? join(resourcesDir, 'portable')
-      : join(dirname(resourcesDir), 'portable');
-    const rootDir = isMac ? dirname(dirname(resourcesDir)) : dirname(resourcesDir);
-
-    if (existsSync(dataDir)) {
-      logger.info(`[portable] Detected root=${rootDir} data=${dataDir}`);
-      return { rootDir, dataDir };
-    }
-  } catch {
-    // best-effort
-  }
-  return null;
-}
-
-// Cached portable paths (set once at startup — must be called after app.whenReady)
-let _portablePaths: PortablePaths | null | undefined = undefined;
-
-/**
- * Returns the portable bundle root if portable mode is active, otherwise null.
- * The result is cached after the first call.
- */
-export function getPortableRootDir(): string | null {
-  if (_portablePaths !== undefined) return _portablePaths?.rootDir ?? null;
-  if (!app?.isPackaged) {
-    _portablePaths = null;
-    return null;
-  }
-  _portablePaths = detectPortablePaths();
-  return _portablePaths?.rootDir ?? null;
-}
-
-/**
- * Returns the portable data directory if portable mode is active, otherwise null.
- */
-export function getPortableDataDir(): string | null {
-  if (_portablePaths === undefined) {
-    getPortableRootDir();
-  }
-  return _portablePaths?.dataDir ?? null;
-}
-
-/**
- * Returns the portable OpenClaw state directory.
- * In portable mode: <portable>/.openclaw
- * Returns null if not in portable mode.
- */
-export function getPortableOpenClawDir(): string | null {
-  const dataDir = getPortableDataDir();
-  if (!dataDir) return null;
-  return join(dataDir, '.openclaw');
-}
-
-/**
- * Returns the portable Python runtime directory.
- * In portable mode: <portable>/python/
- * Returns null if not in portable mode.
- */
-export function getPortablePythonHome(): string | null {
-  const dataDir = getPortableDataDir();
-  if (!dataDir) return null;
-  return join(dataDir, 'python');
-}
-
-/**
- * Returns the portable uv cache directory.
- * In portable mode: <portable>/cache/
- * Returns null if not in portable mode.
- */
-export function getPortableUvCacheDir(): string | null {
-  const dataDir = getPortableDataDir();
-  if (!dataDir) return null;
-  return join(dataDir, 'cache');
 }
 
 /**
@@ -196,13 +91,10 @@ export function getManagedPythonEnv(): Record<string, string> {
 /**
  * Returns the managed Python runtime directory ClawClaw should use for uv.
  *
- * - Portable mode: portable/python
  * - Packaged Windows installs without bundled Python: app userData/python
  * - Other environments: null (let uv use its defaults)
  */
 export function getManagedPythonHome(): string | null {
-  const portable = getPortablePythonHome();
-  if (portable) return portable;
   if (process.platform === 'win32' && app.isPackaged) {
     if (getBundledPythonExecutable()) return null;
     return join(getDataDir(), 'python');
@@ -213,13 +105,10 @@ export function getManagedPythonHome(): string | null {
 /**
  * Returns the managed uv cache directory ClawClaw should use.
  *
- * - Portable mode: portable/cache
  * - Packaged Windows installs: app userData/uv-cache
  * - Other environments: null (let uv use its defaults)
  */
 export function getManagedUvCacheDir(): string | null {
-  const portable = getPortableUvCacheDir();
-  if (portable) return portable;
   if (process.platform === 'win32' && app.isPackaged) {
     return join(getDataDir(), 'uv-cache');
   }
@@ -230,12 +119,9 @@ export type ExportCategory = 'general' | 'images' | 'settings';
 
 /**
  * Get the default directory for user-initiated exports/saves.
- * In portable mode: <portable>/exports/<category>
- * Otherwise: ~/Downloads
  */
 export function getDefaultExportDir(category: ExportCategory = 'general'): string {
-  const dataDir = getPortableDataDir();
-  if (dataDir) return join(dataDir, 'exports', category);
+  void category;
   return join(homedir(), 'Downloads');
 }
 
@@ -259,12 +145,8 @@ export function expandPath(path: string): string {
 
 /**
  * Get OpenClaw config directory.
- * In portable mode: <portable>/.openclaw
- * Otherwise: ~/.openclaw
  */
 export function getOpenClawConfigDir(): string {
-  const portable = getPortableOpenClawDir();
-  if (portable) return portable;
   return join(homedir(), '.openclaw');
 }
 
@@ -277,34 +159,22 @@ export function getOpenClawSkillsDir(): string {
 
 /**
  * Get ClawClaw config directory.
- * In portable mode: <portable>
- * Otherwise: ~/.clawclaw
  */
 export function getClawXConfigDir(): string {
-  const dataDir = getPortableDataDir();
-  if (dataDir) return dataDir;
   return join(homedir(), '.clawclaw');
 }
 
 /**
  * Get ClawClaw logs directory.
- * In portable mode: <portable>/logs
- * Otherwise: app.getPath('userData')/logs
  */
 export function getLogsDir(): string {
-  const dataDir = getPortableDataDir();
-  if (dataDir) return join(dataDir, 'logs');
   return join(app.getPath('userData'), 'logs');
 }
 
 /**
  * Get ClawClaw data directory.
- * In portable mode: <portable>
- * Otherwise: app.getPath('userData')
  */
 export function getDataDir(): string {
-  const dataDir = getPortableDataDir();
-  if (dataDir) return dataDir;
   return app.getPath('userData');
 }
 
@@ -349,12 +219,11 @@ export function getOpenClawDir(): string {
 
 /**
  * Resolve the OpenClaw config/state directory, respecting OpenClaw env vars
- * and portable mode.
+ * and falling back to the default user OpenClaw directory.
  *
  * Priority:
- *   1. OPENCLAW_STATE_DIR  — explicit state dir (used by portable mode)
- *   2. getPortableOpenClawDir() — portable USB mode
- *   3. ~/.openclaw          — default
+ *   1. OPENCLAW_STATE_DIR  — explicit state dir
+ *   2. ~/.openclaw         — default
  *
  * Note: OPENCLAW_HOME is NOT used. OpenClaw treats it as a home-directory
  * (and appends ".openclaw" internally), causing ~/.openclaw/.openclaw duplication.
@@ -362,8 +231,6 @@ export function getOpenClawDir(): string {
  */
 export function resolveOpenClawDir(): string {
   if (process.env.OPENCLAW_STATE_DIR) return process.env.OPENCLAW_STATE_DIR;
-  const portable = getPortableOpenClawDir();
-  if (portable) return portable;
   return join(homedir(), '.openclaw');
 }
 

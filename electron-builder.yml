@@ -21,10 +21,6 @@ extraResources:
     to: resources/
     filter:
       - '**/*'
-      - '!README Portable.txt'
-      - '!Start ClawClaw.bat'
-      - '!Start ClawClaw.vbs'
-      - '!Start ClawClaw.command'
       - '!icons/*.md'
       - '!icons/*.svg'
       - '!bin/**'
@@ -124,31 +120,19 @@ win:
       arch:
         - x64
         - arm64
-    # Portable directory target — produces release/win-unpacked/ which can be
-    # copied directly to a USB drive and run without installation.
-    - target: dir
-      arch:
-        - x64
-        - arm64
 
 nsis:
   oneClick: false
   runAfterFinish: true
   perMachine: false
-  allowElevation: false
   warningsAsErrors: false
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
-  menuCategory: ${productName}
-  # Differential updates stay enabled on Windows, but the installer now
-  # force-cleans managed runtime directories (OpenClaw + bundled plugins)
-  # before copying files so incremental upgrades do not keep stale runtime
-  # dependencies around.
   differentialPackage: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: ${productName}
-  uninstallDisplayName: ${productName}
+  shortcutName: ClawClaw
+  uninstallDisplayName: ClawClaw
   license: resources/legal/EULA.rtf
   include: scripts/installer.nsh
   installerIcon: resources/icons/icon.ico

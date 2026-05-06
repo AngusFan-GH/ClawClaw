@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { RefreshButton } from '@/components/common/RefreshButton';
+import { RuntimeApplyBanner } from '@/components/common/RuntimeApplyBanner';
 import { useChannelsStore } from '@/stores/channels';
 import { useAgentsStore } from '@/stores/agents';
 import { useGatewayStore } from '@/stores/gateway';
@@ -123,6 +124,15 @@ export function Channels() {
 
         <div className="flex-1 overflow-y-auto pr-2 pb-10 min-h-0 -mr-2">
           <>
+            <RuntimeApplyBanner
+              domains={['channels']}
+              className="mb-6"
+              onApplied={async () => {
+                await fetchChannels(true, { includeRuntime: true });
+                await fetchAgents();
+              }}
+            />
+
             {gatewayStatus.state !== 'running' && gatewayLifecycle.state === 'idle' && (
               <div className="mb-8 flex items-center gap-3 rounded-xl border border-yellow-500/50 bg-yellow-500/10 p-4">
                 <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />

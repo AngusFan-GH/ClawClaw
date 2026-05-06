@@ -2,33 +2,45 @@ import { describe, expect, it, vi } from 'vitest';
 import { runGatewayStartupPreflight } from '@electron/gateway/startup-preflight';
 
 describe('gateway startup preflight runner', () => {
-  it('runs steps in order and continues after a failed step', async () => {
+  it('runs phases in order and continues after a failed non-fatal step', async () => {
     const calls: string[] = [];
     const onStepError = vi.fn();
 
     const result = await runGatewayStartupPreflight({
-      steps: [
+      phases: [
         {
-          id: 'one',
-          label: 'stepOne',
-          run: async () => {
-            calls.push('one');
-          },
+          id: 'phase-one',
+          label: 'Phase one',
+          steps: [
+            {
+              id: 'one',
+              label: 'stepOne',
+              run: async () => {
+                calls.push('one');
+              },
+            },
+            {
+              id: 'two',
+              label: 'stepTwo',
+              run: async () => {
+                calls.push('two');
+                throw new Error('broken');
+              },
+            },
+          ],
         },
         {
-          id: 'two',
-          label: 'stepTwo',
-          run: async () => {
-            calls.push('two');
-            throw new Error('broken');
-          },
-        },
-        {
-          id: 'three',
-          label: 'stepThree',
-          run: async () => {
-            calls.push('three');
-          },
+          id: 'phase-two',
+          label: 'Phase two',
+          steps: [
+            {
+              id: 'three',
+              label: 'stepThree',
+              run: async () => {
+                calls.push('three');
+              },
+            },
+          ],
         },
       ],
       onStepError,
@@ -41,34 +53,46 @@ describe('gateway startup preflight runner', () => {
     expect(onStepError.mock.calls[0]?.[0]).toMatchObject({ id: 'two', label: 'stepTwo' });
   });
 
-  it('stops immediately when a fatal step fails', async () => {
+  it('stops subsequent phases when a fatal step fails', async () => {
     const calls: string[] = [];
     const onStepError = vi.fn();
 
     await expect(runGatewayStartupPreflight({
-      steps: [
+      phases: [
         {
-          id: 'one',
-          label: 'stepOne',
-          run: async () => {
-            calls.push('one');
-          },
+          id: 'phase-one',
+          label: 'Phase one',
+          steps: [
+            {
+              id: 'one',
+              label: 'stepOne',
+              run: async () => {
+                calls.push('one');
+              },
+            },
+            {
+              id: 'two',
+              label: 'stepTwo',
+              fatal: true,
+              run: async () => {
+                calls.push('two');
+                throw new Error('fatal');
+              },
+            },
+          ],
         },
         {
-          id: 'two',
-          label: 'stepTwo',
-          fatal: true,
-          run: async () => {
-            calls.push('two');
-            throw new Error('fatal');
-          },
-        },
-        {
-          id: 'three',
-          label: 'stepThree',
-          run: async () => {
-            calls.push('three');
-          },
+          id: 'phase-two',
+          label: 'Phase two',
+          steps: [
+            {
+              id: 'three',
+              label: 'stepThree',
+              run: async () => {
+                calls.push('three');
+              },
+            },
+          ],
         },
       ],
       onStepError,

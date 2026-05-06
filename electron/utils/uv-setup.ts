@@ -326,9 +326,6 @@ function repairManagedPythonState(env: Record<string, string | undefined>): void
 /**
  * Use bundled uv to install a managed Python version (default 3.12).
  *
- * In portable mode, Python and cache are redirected to the USB drive so nothing
- * is written to the host computer.
- *
  * Tries with mirror env first (for CN region), then retries without mirror
  * if the first attempt fails, to rule out mirror-specific issues.
  */

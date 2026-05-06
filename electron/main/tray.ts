@@ -5,9 +5,54 @@
 import { Tray, Menu, BrowserWindow, app, nativeImage } from 'electron';
 import { join } from 'path';
 import type { GatewayManager } from '../gateway/manager';
+import { getSetting } from '../utils/store';
 import { quitApp } from './quit';
 
 let tray: Tray | null = null;
+
+type TrayLanguage = 'zh' | 'en' | 'ja';
+
+const trayCopy = {
+  zh: {
+    tooltip: 'ClawClaw - AI 助手',
+    show: '显示 ClawClaw',
+    gatewayStatus: '网关状态',
+    running: '运行中',
+    quickActions: '快捷操作',
+    newChat: '新建对话',
+    restartGateway: '重启网关',
+    openSettings: '打开设置',
+    quit: '退出 ClawClaw',
+  },
+  en: {
+    tooltip: 'ClawClaw - AI Assistant',
+    show: 'Show ClawClaw',
+    gatewayStatus: 'Gateway Status',
+    running: 'Running',
+    quickActions: 'Quick Actions',
+    newChat: 'New Chat',
+    restartGateway: 'Restart Gateway',
+    openSettings: 'Open Settings',
+    quit: 'Quit ClawClaw',
+  },
+  ja: {
+    tooltip: 'ClawClaw - AI アシスタント',
+    show: 'ClawClaw を表示',
+    gatewayStatus: 'ゲートウェイ状態',
+    running: '実行中',
+    quickActions: 'クイック操作',
+    newChat: '新しいチャット',
+    restartGateway: 'ゲートウェイを再起動',
+    openSettings: '設定を開く',
+    quit: 'ClawClaw を終了',
+  },
+} as const;
+
+function normalizeLanguage(language: string | undefined): TrayLanguage {
+  if (language?.startsWith('en')) return 'en';
+  if (language?.startsWith('ja')) return 'ja';
+  return 'zh';
+}
 
 /**
  * Resolve the icons directory path (works in both dev and packaged mode)
@@ -58,30 +103,69 @@ export function createTray(mainWindow: BrowserWindow, gatewayManager: GatewayMan
 
   tray = new Tray(icon);
 
-  // Set tooltip
-  tray.setToolTip('ClawClaw - AI Assistant');
-
   const showWindow = () => {
     if (mainWindow.isDestroyed()) return;
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
     mainWindow.show();
     mainWindow.focus();
   };
 
-  // Create context menu
-  const contextMenu = Menu.buildFromTemplate([
+  const sendNavigation = (target: string | { path: string; state?: unknown }) => {
+    if (mainWindow.isDestroyed()) return;
+    showWindow();
+    const send = () => {
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('navigate', target);
+      }
+    };
+    if (mainWindow.webContents.isLoading()) {
+      mainWindow.webContents.once('did-finish-load', send);
+    } else {
+      queueMicrotask(send);
+    }
+  };
+
+  const sendGatewayLifecycle = (event: {
+    phase: 'scheduled' | 'failed';
+    action: 'restart';
+    source: 'gateway.manualRestart';
+    reason: 'gateway.manualRestart';
+    error?: string;
+    at: number;
+  }) => {
+    if (mainWindow.isDestroyed()) return;
+    const send = () => {
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('gateway:lifecycle-changed', event);
+      }
+    };
+    if (mainWindow.webContents.isLoading()) {
+      mainWindow.webContents.once('did-finish-load', send);
+    } else {
+      queueMicrotask(send);
+    }
+  };
+
+  const applyMenu = (language: TrayLanguage) => {
+    const copy = trayCopy[language];
+    if (!tray) return;
+    tray.setToolTip(copy.tooltip);
+    tray.setContextMenu(Menu.buildFromTemplate([
     {
-      label: 'Show ClawClaw',
+      label: copy.show,
       click: showWindow,
     },
     {
       type: 'separator',
     },
     {
-      label: 'Gateway Status',
+      label: copy.gatewayStatus,
       enabled: false,
     },
     {
-      label: '  Running',
+      label: `  ${copy.running}`,
       type: 'checkbox',
       checked: true,
       enabled: false,
@@ -90,22 +174,54 @@ export function createTray(mainWindow: BrowserWindow, gatewayManager: GatewayMan
       type: 'separator',
     },
     {
-      label: 'Quick Actions',
+      label: copy.quickActions,
       submenu: [
         {
-          label: 'Restart Gateway',
-          click: async () => {
+          label: copy.newChat,
+          click: () => {
             if (mainWindow.isDestroyed()) return;
-            showWindow();
-            await gatewayManager.restart({ strategy: 'auto' });
+            sendNavigation({
+              path: '/',
+              state: {
+                createNewSession: true,
+                requestedAt: Date.now(),
+              },
+            });
           },
         },
         {
-          label: 'Open Settings',
+          label: copy.openSettings,
+          click: () => {
+            if (mainWindow.isDestroyed()) return;
+            sendNavigation('/settings');
+          },
+        },
+        {
+          type: 'separator',
+        },
+        {
+          label: copy.restartGateway,
           click: () => {
             if (mainWindow.isDestroyed()) return;
             showWindow();
-            mainWindow.webContents.send('navigate', '/settings');
+            sendGatewayLifecycle({
+              phase: 'scheduled',
+              action: 'restart',
+              source: 'gateway.manualRestart',
+              reason: 'gateway.manualRestart',
+              at: Date.now(),
+            });
+            void gatewayManager.restart({ force: true }).catch((error) => {
+              if (mainWindow.isDestroyed()) return;
+              sendGatewayLifecycle({
+                phase: 'failed',
+                action: 'restart',
+                source: 'gateway.manualRestart',
+                reason: 'gateway.manualRestart',
+                error: String(error),
+                at: Date.now(),
+              });
+            });
           },
         },
       ],
@@ -114,14 +230,18 @@ export function createTray(mainWindow: BrowserWindow, gatewayManager: GatewayMan
       type: 'separator',
     },
     {
-      label: 'Quit ClawClaw',
+      label: copy.quit,
       click: () => {
         quitApp(app);
       },
     },
-  ]);
+  ]));
+  };
 
-  tray.setContextMenu(contextMenu);
+  applyMenu('zh');
+  void getSetting('language')
+    .then((language) => applyMenu(normalizeLanguage(language)))
+    .catch(() => applyMenu(normalizeLanguage(app.getLocale())));
 
   // Click to show window (Windows/Linux)
   tray.on('click', () => {

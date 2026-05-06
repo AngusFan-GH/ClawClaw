@@ -908,6 +908,67 @@ describe('Chat Store', () => {
     rpcMock.mockRestore();
   });
 
+  it('keeps streamed assistant text when the final event has no message like OpenClaw dashboard', () => {
+    const loadHistoryMock = vi.fn().mockResolvedValue(undefined);
+
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      sending: true,
+      activeRunId: 'run-empty-final',
+      streamingMessage: {
+        role: 'assistant',
+        content: [{ type: 'text', text: '我已经完成下载，并保存到了本地。' }],
+      },
+      loadHistory: loadHistoryMock,
+    });
+
+    useChatStore.getState().handleChatEvent({
+      runId: 'run-empty-final',
+      sessionKey: 'agent:main:main',
+      state: 'final',
+    });
+
+    expect(useChatStore.getState().pendingAssistantMessage).toMatchObject({
+      role: 'assistant',
+      content: [{ type: 'text', text: '我已经完成下载，并保存到了本地。' }],
+    });
+    expect(useChatStore.getState().sending).toBe(false);
+    expect(useChatStore.getState().activeRunId).toBeNull();
+    expect(loadHistoryMock).toHaveBeenCalledWith(true);
+  });
+
+  it('keeps streamed assistant text when the final assistant payload is empty', () => {
+    const loadHistoryMock = vi.fn().mockResolvedValue(undefined);
+
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      sending: true,
+      activeRunId: 'run-empty-assistant-final',
+      streamingMessage: {
+        role: 'assistant',
+        content: [{ type: 'text', text: '工具执行完成，结果已整理。' }],
+      },
+      loadHistory: loadHistoryMock,
+    });
+
+    useChatStore.getState().handleChatEvent({
+      runId: 'run-empty-assistant-final',
+      sessionKey: 'agent:main:main',
+      state: 'final',
+      message: {
+        role: 'assistant',
+        content: [],
+      },
+    });
+
+    expect(useChatStore.getState().pendingAssistantMessage).toMatchObject({
+      role: 'assistant',
+      content: [{ type: 'text', text: '工具执行完成，结果已整理。' }],
+    });
+    expect(useChatStore.getState().pendingFinal).toBe(false);
+    expect(loadHistoryMock).toHaveBeenCalledWith(true);
+  });
+
   it('clears the pending assistant final once authoritative history catches up', async () => {
     const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockResolvedValue({
       messages: [

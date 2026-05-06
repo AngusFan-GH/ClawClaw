@@ -19,11 +19,9 @@ describe('gateway restart governor', () => {
     }
   });
 
-  it('opens the circuit when restart budget is exceeded', () => {
+  it('keeps using cooldown instead of opening a circuit', () => {
     const governor = new GatewayRestartGovernor({
-      maxRestartsPerWindow: 2,
-      windowMs: 10000,
-      circuitOpenMs: 5000,
+      cooldownMs: 2500,
     });
 
     expect(governor.decide(0)).toEqual({ allow: true });
@@ -37,8 +35,9 @@ describe('gateway restart governor', () => {
     const decision = governor.decide(4000);
     expect(decision.allow).toBe(false);
     if (!decision.allow) {
-      expect(decision.reason).toBe('budget_exceeded');
-      expect(decision.retryAfterMs).toBe(5000);
+      expect(decision.reason).toBe('cooldown_active');
+      expect(decision.retryAfterMs).toBe(1500);
     }
+    expect(governor.getObservability().circuit_open_until).toBe(0);
   });
 });

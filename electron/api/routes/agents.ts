@@ -13,22 +13,22 @@ import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
 function scheduleGatewayReload(ctx: HostApiContext, reason: string): void {
-  ctx.gatewayApplyCoordinator.enqueue({
+  ctx.runtimeApplyPlan.record({
+    domain: 'agents',
+    label: '分身配置',
     source: reason,
     reason,
     requires: 'reload',
-    delayMs: 1500,
-    skipIfStopped: true,
   });
 }
 
 function scheduleGatewayRestart(ctx: HostApiContext, reason: string): void {
-  ctx.gatewayApplyCoordinator.enqueue({
+  ctx.runtimeApplyPlan.record({
+    domain: 'agents',
+    label: '分身配置',
     source: reason,
     reason,
     requires: 'restart',
-    delayMs: 1500,
-    skipIfStopped: true,
   });
 }
 

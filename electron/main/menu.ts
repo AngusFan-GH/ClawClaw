@@ -20,7 +20,7 @@ export function createMenu(): void {
               { role: 'about' as const },
               { type: 'separator' as const },
               {
-                label: 'Preferences...',
+                label: '偏好设置...',
                 accelerator: 'Cmd+,',
                 click: () => {
                   const win = BrowserWindow.getFocusedWindow();
@@ -42,15 +42,15 @@ export function createMenu(): void {
 
     // File menu
     {
-      label: 'File',
+      label: '文件',
       submenu: [
         {
-          label: 'New Chat',
+          label: '新建对话',
           accelerator: 'CmdOrCtrl+N',
           click: () => {
             const win = BrowserWindow.getFocusedWindow();
             win?.webContents.send('navigate', {
-              path: '/chat',
+              path: '/',
               state: {
                 createNewSession: true,
                 requestedAt: Date.now(),
@@ -65,7 +65,7 @@ export function createMenu(): void {
 
     // Edit menu
     {
-      label: 'Edit',
+      label: '编辑',
       submenu: [
         { role: 'undo' },
         { role: 'redo' },
@@ -89,7 +89,7 @@ export function createMenu(): void {
 
     // View menu
     {
-      label: 'View',
+      label: '视图',
       submenu: [
         { role: 'reload' },
         { role: 'forceReload' },
@@ -105,18 +105,18 @@ export function createMenu(): void {
 
     // Navigate menu
     {
-      label: 'Navigate',
+      label: '导航',
       submenu: [
         {
-          label: 'Chat',
+          label: '对话',
           accelerator: 'CmdOrCtrl+1',
           click: () => {
             const win = BrowserWindow.getFocusedWindow();
-            win?.webContents.send('navigate', '/chat');
+            win?.webContents.send('navigate', '/');
           },
         },
         {
-          label: 'Channels',
+          label: '连接',
           accelerator: 'CmdOrCtrl+2',
           click: () => {
             const win = BrowserWindow.getFocusedWindow();
@@ -124,7 +124,7 @@ export function createMenu(): void {
           },
         },
         {
-          label: 'Skills',
+          label: '技能',
           accelerator: 'CmdOrCtrl+3',
           click: () => {
             const win = BrowserWindow.getFocusedWindow();
@@ -132,7 +132,7 @@ export function createMenu(): void {
           },
         },
         {
-          label: 'Cron Tasks',
+          label: '定时任务',
           accelerator: 'CmdOrCtrl+4',
           click: () => {
             const win = BrowserWindow.getFocusedWindow();
@@ -140,7 +140,7 @@ export function createMenu(): void {
           },
         },
         {
-          label: 'Settings',
+          label: '设置',
           accelerator: isMac ? 'Cmd+,' : 'Ctrl+,',
           click: () => {
             const win = BrowserWindow.getFocusedWindow();
@@ -152,7 +152,7 @@ export function createMenu(): void {
 
     // Window menu
     {
-      label: 'Window',
+      label: '窗口',
       submenu: [
         { role: 'minimize' },
         { role: 'zoom' },
@@ -172,20 +172,20 @@ export function createMenu(): void {
       role: 'help',
       submenu: [
         {
-          label: 'Documentation',
+          label: '文档',
           click: async () => {
             await shell.openExternal('https://xzinfra.com');
           },
         },
         {
-          label: 'Report Issue',
+          label: '反馈问题',
           click: async () => {
             await shell.openExternal('https://github.com/Xzinfra/ClawClaw/issues');
           },
         },
         { type: 'separator' },
         {
-          label: 'OpenClaw Documentation',
+          label: 'OpenClaw 文档',
           click: async () => {
             await shell.openExternal('https://docs.openclaw.ai');
           },

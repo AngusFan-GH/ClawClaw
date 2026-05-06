@@ -30,7 +30,7 @@ describe('provider store instance', () => {
     storeCalls.options.length = 0;
   });
 
-  it('uses the portable-aware data directory as electron-store cwd', async () => {
+  it('uses the app data directory as electron-store cwd', async () => {
     const { getClawXProviderStore } = await import('@electron/services/providers/store-instance');
 
     await getClawXProviderStore();

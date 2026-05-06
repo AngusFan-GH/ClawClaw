@@ -9,8 +9,6 @@ import { logger } from '../utils/logger';
 import type { AppSettings } from '../utils/store';
 import { UPDATE_FEEDS, type UpdateChannel } from '../shared/update-feed';
 import { markAppQuitting } from './quit';
-import { getPortableDataDir } from '../utils/paths';
-import { portableUpdater } from './portable-updater';
 
 type FeedConfig = {
   channel: UpdateChannel;
@@ -48,7 +46,6 @@ export interface UpdateStatus {
     | 'downloading'
     | 'downloaded'
     | 'installing'
-    | 'migration-required'
     | 'error';
   info?: UpdateInfo;
   progress?: ProgressInfo;
@@ -136,7 +133,7 @@ export class AppUpdater extends EventEmitter {
   }
 
   isSupported(): boolean {
-    return app.isPackaged && getPortableDataDir() === null;
+    return app.isPackaged;
   }
 
   private setupListeners(): void {
@@ -287,36 +284,31 @@ export function registerUpdateHandlers(
   mainWindow: BrowserWindow,
 ): void {
   updater.setMainWindow(mainWindow);
-  portableUpdater.setMainWindow(mainWindow);
-
-  const getActiveUpdater = () => (portableUpdater.isSupported() ? portableUpdater : updater);
 
   const unsupportedResult = () => ({
     success: false,
     error: 'Automatic updates are not available in the current environment.',
-    status: getActiveUpdater().getStatus(),
+    status: updater.getStatus(),
   });
 
-  ipcMain.handle('update:status', () => getActiveUpdater().getStatus());
-  ipcMain.handle('update:version', () => getActiveUpdater().getCurrentVersion());
-  ipcMain.handle('update:isSupported', () => updater.isSupported() || portableUpdater.isSupported());
+  ipcMain.handle('update:status', () => updater.getStatus());
+  ipcMain.handle('update:version', () => updater.getCurrentVersion());
+  ipcMain.handle('update:isSupported', () => updater.isSupported());
 
   ipcMain.handle('update:check', async () => {
-    const activeUpdater = getActiveUpdater();
-    if (!(updater.isSupported() || portableUpdater.isSupported())) return unsupportedResult();
+    if (!updater.isSupported()) return unsupportedResult();
     try {
-      await activeUpdater.checkForUpdates();
-      return { success: true, status: activeUpdater.getStatus() };
+      await updater.checkForUpdates();
+      return { success: true, status: updater.getStatus() };
     } catch (error) {
-      return { success: false, error: String(error), status: activeUpdater.getStatus() };
+      return { success: false, error: String(error), status: updater.getStatus() };
     }
   });
 
   ipcMain.handle('update:download', async () => {
-    const activeUpdater = getActiveUpdater();
-    if (!(updater.isSupported() || portableUpdater.isSupported())) return unsupportedResult();
+    if (!updater.isSupported()) return unsupportedResult();
     try {
-      await activeUpdater.downloadUpdate();
+      await updater.downloadUpdate();
       return { success: true };
     } catch (error) {
       return { success: false, error: String(error) };
@@ -324,20 +316,14 @@ export function registerUpdateHandlers(
   });
 
   ipcMain.handle('update:install', () => {
-    const activeUpdater = getActiveUpdater();
-    if (!(updater.isSupported() || portableUpdater.isSupported())) return unsupportedResult();
-    if (activeUpdater === portableUpdater) {
-      portableUpdater.installUpdate();
-    } else {
-      updater.quitAndInstall();
-    }
+    if (!updater.isSupported()) return unsupportedResult();
+    updater.quitAndInstall();
     return { success: true };
   });
 
   ipcMain.handle('update:setChannel', (_, channel: UpdateChannel) => {
-    if (!(updater.isSupported() || portableUpdater.isSupported())) return unsupportedResult();
+    if (!updater.isSupported()) return unsupportedResult();
     updater.setChannel(channel);
-    portableUpdater.setChannel(channel);
     return { success: true };
   });
 

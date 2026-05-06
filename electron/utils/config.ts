@@ -20,9 +20,6 @@ export const PORTS = {
 
   /** OpenClaw Gateway port */
   OPENCLAW_GATEWAY: 18789,
-
-  /** Portable Gateway port (fallback when default is taken) */
-  OPENCLAW_GATEWAY_PORTABLE: 18790,
 } as const;
 
 const MAX_PORT = 18899;

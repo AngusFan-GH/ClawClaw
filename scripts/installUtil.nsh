@@ -1,12 +1,8 @@
-; Shadowed upstream template: app-builder-lib/templates/nsis/include/installUtil.nsh
-; Keep the upstream helpers intact except for legacy-uninstall handling, which
-; is routed through ClawClaw's own process cleanup scripts to avoid upstream's
-; generic "cannot be closed" dialog during upgrades.
-
 !macro moveFile FROM TO
   ClearErrors
   Rename `${FROM}` `${TO}`
   ${if} ${errors}
+    # not clear - can NSIS rename on another drive or not, so, in case of error, just copy
     ClearErrors
     !insertmacro copyFile `${FROM}` `${TO}`
     Delete `${FROM}`
@@ -86,6 +82,7 @@ Function GetFileParent
 FunctionEnd
 
 Var /GLOBAL isTryToKeepShortcuts
+Var /GLOBAL installationDir
 
 !macro setIsTryToKeepShortcuts
   StrCpy $isTryToKeepShortcuts "true"
@@ -96,6 +93,7 @@ Var /GLOBAL isTryToKeepShortcuts
   !endif
 !macroend
 
+# https://nsis-dev.github.io/NSIS-Forums/html/t-172971.html
 !macro readReg VAR ROOT_KEY SUB_KEY NAME
   ${if} "${ROOT_KEY}" == "SHELL_CONTEXT"
     ReadRegStr "${VAR}" SHELL_CONTEXT "${SUB_KEY}" "${NAME}"
@@ -107,6 +105,28 @@ Var /GLOBAL isTryToKeepShortcuts
     MessageBox MB_OK "Unsupported ${ROOT_KEY}"
   ${endif}
 !macroend
+
+Function prepareOldClawClawInstall
+  ${if} $installationDir == ""
+    Return
+  ${endif}
+
+  DetailPrint "Preparing previous ClawClaw installation for upgrade..."
+  InitPluginsDir
+  ClearErrors
+  File "/oname=$PLUGINSDIR\run-gateway-cmd.ps1" "${PROJECT_DIR}\scripts\run-gateway-cmd.ps1"
+  File "/oname=$PLUGINSDIR\kill-install-dir-processes.ps1" "${PROJECT_DIR}\scripts\kill-install-dir-processes.ps1"
+
+  nsExec::ExecToStack /TIMEOUT=20000 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\run-gateway-cmd.ps1" -InstallDir "$installationDir" -Command "gateway stop"'
+  Pop $R6
+  Pop $R7
+  nsExec::ExecToStack /TIMEOUT=20000 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\run-gateway-cmd.ps1" -InstallDir "$installationDir" -Command "gateway uninstall"'
+  Pop $R6
+  Pop $R7
+  nsExec::ExecToStack /TIMEOUT=20000 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\kill-install-dir-processes.ps1" -InstallDir "$installationDir"'
+  Pop $R6
+  Pop $R7
+FunctionEnd
 
 Function handleUninstallResult
   Var /GLOBAL rootKey_uninstallResult
@@ -141,48 +161,10 @@ FunctionEnd
   Call handleUninstallResult
 !macroend
 
-!macro LegacyKillInstallDirProcesses INSTALL_DIR
-  InitPluginsDir
-  ClearErrors
-  File "/oname=$PLUGINSDIR\kill-install-dir-processes.ps1" "${PROJECT_DIR}\scripts\kill-install-dir-processes.ps1"
-  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\kill-install-dir-processes.ps1" -InstallDir "${INSTALL_DIR}"'
-  Pop $R6
-  Pop $R7
-!macroend
-
-!macro LegacyRunGatewayCmd INSTALL_DIR COMMAND
-  InitPluginsDir
-  ClearErrors
-  File "/oname=$PLUGINSDIR\run-gateway-cmd.ps1" "${PROJECT_DIR}\scripts\run-gateway-cmd.ps1"
-  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\run-gateway-cmd.ps1" -InstallDir "${INSTALL_DIR}" -Command "${COMMAND}"'
-  Pop $R6
-  Pop $R7
-!macroend
-
-!macro LegacyDetectInstallDirLocks INSTALL_DIR RESULT_VAR OUTPUT_VAR
-  InitPluginsDir
-  ClearErrors
-  File "/oname=$PLUGINSDIR\check-install-dir-locks.ps1" "${PROJECT_DIR}\scripts\check-install-dir-locks.ps1"
-  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "$PLUGINSDIR\check-install-dir-locks.ps1" -InstallDir "${INSTALL_DIR}"'
-  Pop "${RESULT_VAR}"
-  Pop "${OUTPUT_VAR}"
-!macroend
-
-!macro LegacyManagedCleanup INSTALL_DIR
-  !insertmacro LegacyKillInstallDirProcesses "${INSTALL_DIR}"
-  ${If} ${FileExists} "${INSTALL_DIR}\resources\cli\openclaw.cmd"
-    DetailPrint "Stopping bundled Gateway from the previous installation..."
-    !insertmacro LegacyRunGatewayCmd "${INSTALL_DIR}" "gateway stop"
-    DetailPrint "Removing bundled Gateway service/task from the previous installation..."
-    !insertmacro LegacyRunGatewayCmd "${INSTALL_DIR}" "gateway uninstall"
-  ${EndIf}
-  !insertmacro LegacyKillInstallDirProcesses "${INSTALL_DIR}"
-!macroend
-
+# http://stackoverflow.com/questions/24595887/waiting-for-nsis-uninstaller-to-finish-in-nsis-installer-either-fails-or-the-uni
 Function uninstallOldVersion
   Var /GLOBAL uninstallerFileName
-  Var /GLOBAL uninstallerFileNameTemp
-  Var /GLOBAL installationDir
+  Var /Global uninstallerFileNameTemp
   Var /GLOBAL uninstallString
   Var /GLOBAL rootKey
 
@@ -203,11 +185,13 @@ Function uninstallOldVersion
     ${endif}
   ${endif}
 
+  # uninstaller should be copied out of app installation dir (because this dir will be deleted), so, extract uninstaller file name
   !insertmacro GetInQuotes $uninstallerFileName "$uninstallString"
 
   !insertmacro readReg $installationDir "$rootKey" "${INSTALL_REGISTRY_KEY}" InstallLocation
   ${if} $installationDir == ""
   ${andIf} $uninstallerFileName != ""
+    # https://github.com/electron-userland/electron-builder/issues/735#issuecomment-246918567
     Push $uninstallerFileName
     Call GetFileParent
     Pop $installationDir
@@ -226,10 +210,11 @@ Function uninstallOldVersion
     StrCpy $0 "/allusers"
   ${endif}
 
-  !insertmacro setIsTryToKeepShortcuts
+  !insertMacro setIsTryToKeepShortcuts
 
   ${if} $isTryToKeepShortcuts == "true"
     !insertmacro readReg $R5 "$rootKey" "${INSTALL_REGISTRY_KEY}" KeepShortcuts
+    # if true, it means that old uninstaller supports --keep-shortcuts flag
     ${if} $R5 == "true"
     ${andIf} ${FileExists} "$appExe"
       StrCpy $0 "$0 --keep-shortcuts"
@@ -239,51 +224,48 @@ Function uninstallOldVersion
   ${if} ${isDeleteAppData}
     StrCpy $0 "$0 --delete-app-data"
   ${else}
+    # always pass --updated flag - to ensure that if DELETE_APP_DATA_ON_UNINSTALL is defined, user data will be not removed
     StrCpy $0 "$0 --updated"
   ${endif}
+
+  Call prepareOldClawClawInstall
 
   StrCpy $uninstallerFileNameTemp "$PLUGINSDIR\old-uninstaller.exe"
   !insertmacro copyFile "$uninstallerFileName" "$uninstallerFileNameTemp"
 
+  # Retry counter
   StrCpy $R5 0
 
   UninstallLoop:
     IntOp $R5 $R5 + 1
 
-    ${if} $installationDir != ""
-      !insertmacro LegacyManagedCleanup "$installationDir"
-      Sleep 1500
-      !insertmacro LegacyDetectInstallDirLocks "$installationDir" $R8 $R9
-      ${if} $R8 == 2
-        DetailPrint `Legacy uninstall still sees locked files in "$installationDir": $R9`
-      ${endif}
-    ${endif}
+    ${if} $R5 > 2
+      DetailPrint "Previous uninstaller did not complete. Continuing with direct cleanup..."
+      SetOutPath "$TEMP"
+      Call prepareOldClawClawInstall
+      RMDir /r "$installationDir"
+      CreateDirectory "$installationDir"
+      ClearErrors
+      StrCpy $R0 0
+      Return
+    ${endIf}
 
+  OneMoreAttempt:
     ExecWait '"$uninstallerFileNameTemp" /S /KEEP_APP_DATA $0 _?=$installationDir' $R0
     ifErrors TryInPlace CheckResult
 
     TryInPlace:
+      # the execution failed - might have been caused by some group policy restrictions
+      # we try to execute the uninstaller in place
       ExecWait '"$uninstallerFileName" /S /KEEP_APP_DATA $0 _?=$installationDir' $R0
       ifErrors DoesNotExist
 
     CheckResult:
       ${if} $R0 == 0
         Return
-      ${endif}
+      ${endIf}
 
-    ${if} $installationDir != ""
-      !insertmacro LegacyManagedCleanup "$installationDir"
-      !insertmacro LegacyDetectInstallDirLocks "$installationDir" $R8 $R9
-      ${if} $R8 == 2
-        DetailPrint `Legacy uninstall remains blocked by files in use: $R9`
-      ${endif}
-    ${endif}
-
-    ${if} $R5 > 5
-      DetailPrint `Silent uninstall could not complete after repeated attempts. Leaving control to ClawClaw's custom upgrade fallback.`
-      Return
-    ${endif}
-
+    Call prepareOldClawClawInstall
     Sleep 1000
     Goto UninstallLoop
 

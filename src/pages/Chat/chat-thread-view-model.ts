@@ -800,7 +800,12 @@ export function buildChatItems(params: {
     };
   }
 
-  if (params.pendingUserMessage && !historyContainsPendingUserMessage(history, params.pendingUserMessage)) {
+  if (
+    params.pendingUserMessage
+    && !historyContainsPendingUserMessage(history, params.pendingUserMessage, {
+      requireIdempotencyKeyMatch: params.sending,
+    })
+  ) {
     liveItems.push({
       kind: 'message',
       key: `pending:${params.pendingUserMessage.id ?? params.sessionKey}`,
@@ -864,11 +869,8 @@ export function buildChatItems(params: {
     });
   }
 
-  const hasLiveAssistantContent = liveItems.some((item) => (
-    item.kind === 'stream'
-    || (item.kind === 'message' && normalizeRoleForGrouping(item.message) !== 'user')
-  ));
-  if ((params.sending || params.pendingFinal) && !hasLiveAssistantContent) {
+  const hasLiveAssistantText = liveItems.some((item) => item.kind === 'stream');
+  if ((params.sending || params.pendingFinal) && !hasLiveAssistantText) {
     liveItems.push({ kind: 'reading-indicator', key: `reading:${params.sessionKey}` });
   }
 

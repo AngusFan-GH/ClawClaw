@@ -91,6 +91,7 @@ export interface GatewayManagerEvents {
  */
 export class GatewayManager extends EventEmitter {
   private static readonly ATTACH_PROBE_COOLDOWN_MS = 8000;
+  private static readonly IN_PLACE_RESTART_READY_TIMEOUT_MS = 70_000;
   private process: ChildProcess | null = null;
   private processExitStatus: number | string | null = null;
   private ownsProcess = false;
@@ -231,9 +232,9 @@ export class GatewayManager extends EventEmitter {
       throw new Error('Cannot restart Gateway in-place without an owned process pid');
     }
 
-    const expectedDelayMs = this.pendingExpectedReconnectDelayMs ?? 1500;
-    const waitTimeoutMs = Math.max(8000, expectedDelayMs + 8000);
-    const waitForReconnect = this.waitForRunningStateAfterDisconnect(waitTimeoutMs);
+    const waitForReconnect = this.waitForRunningStateAfterDisconnect(
+      GatewayManager.IN_PLACE_RESTART_READY_TIMEOUT_MS,
+    );
 
     logger.info(`Requesting in-process Gateway restart via SIGUSR1 (pid=${child.pid})`);
     process.kill(child.pid, 'SIGUSR1');
@@ -318,8 +319,8 @@ export class GatewayManager extends EventEmitter {
    *
    * Tries the preferred port (this.status.port) first.  If it is already in use
    * by another process, scans 18789–18899 for the first available port.
-   * This enables multiple ClawClaw instances (installed + portable) to coexist
-   * on the same machine without manual port configuration.
+   * This avoids startup failure when another local Gateway already owns the
+   * preferred port.
    */
   private async resolveStartPort(): Promise<void> {
     const preferred = this.status.port;
@@ -358,8 +359,7 @@ export class GatewayManager extends EventEmitter {
       this.resetAttachProbeState();
       const startEpoch = this.lifecycleController.bump('start');
 
-      // Resolve an available port before starting — allows multiple instances
-      // (installed + portable) to coexist on the same machine.
+      // Resolve an available port before starting.
       await this.resolveStartPort();
       logger.info(`Gateway start requested (port=${this.status.port})`);
       this.lastSpawnSummary = null;
@@ -761,7 +761,8 @@ export class GatewayManager extends EventEmitter {
           await this.restartOwnedGatewayInPlace();
           return;
         } catch (error) {
-          logger.warn('In-process Gateway restart failed, falling back to stop/start:', error);
+          const message = error instanceof Error ? error.message : String(error);
+          logger.info(`In-process Gateway restart did not settle; falling back to stop/start (${message})`);
           if (this.startInFlight) {
             logger.info('Waiting for in-flight Gateway start before stop/start fallback');
             try {
