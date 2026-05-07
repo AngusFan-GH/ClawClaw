@@ -235,8 +235,8 @@ export async function handleSkillRoutes(
 
   if (url.pathname === '/api/clawhub/open-readme' && req.method === 'POST') {
     try {
-      const body = await parseJsonBody<{ slug: string }>(req);
-      await ctx.clawHubService.openSkillReadme(body.slug);
+      const body = await parseJsonBody<{ slug?: string; sourceFilePath?: string; sourcePath?: string }>(req);
+      await ctx.clawHubService.openSkillReadme(body);
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

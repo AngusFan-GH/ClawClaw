@@ -20,6 +20,9 @@ export const PORTS = {
 
   /** OpenClaw Gateway port */
   OPENCLAW_GATEWAY: 18789,
+
+  /** First fallback port reserved for ClawClaw-managed Gateway instances */
+  CLAWX_MANAGED_GATEWAY_START: 18820,
 } as const;
 
 const MAX_PORT = 18899;

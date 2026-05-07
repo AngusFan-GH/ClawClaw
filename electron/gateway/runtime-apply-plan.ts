@@ -1,4 +1,5 @@
 import type { GatewayApplyCoordinator } from './apply-coordinator';
+import type { GatewayStatus } from './manager';
 import {
   mergeRuntimeApplyRequirement,
   resolveRuntimeApplyAction,
@@ -23,6 +24,8 @@ export type RuntimeApplyResult = {
     action: RuntimeApplyPlanSnapshot['action'];
     triggered: boolean;
     accepted: boolean;
+    deferred?: boolean;
+    reason?: string;
   };
 };
 
@@ -32,6 +35,8 @@ export class RuntimeApplyPlan {
   constructor(
     private readonly deps: {
       gatewayApplyCoordinator: GatewayApplyCoordinator;
+      getGatewayStatus?: () => GatewayStatus;
+      beforeApply?: (snapshot: RuntimeApplyPlanSnapshot) => Promise<void>;
     },
   ) {}
 
@@ -91,6 +96,25 @@ export class RuntimeApplyPlan {
           accepted: false,
         },
       };
+    }
+
+    const gatewayStatus = this.deps.getGatewayStatus?.();
+    if (gatewayStatus && gatewayStatus.state !== 'running') {
+      return {
+        success: true,
+        snapshot: before,
+        applied: {
+          action: before.action,
+          triggered: false,
+          accepted: false,
+          deferred: true,
+          reason: `gateway:${gatewayStatus.state}`,
+        },
+      };
+    }
+
+    if (this.deps.beforeApply) {
+      await this.deps.beforeApply(before);
     }
 
     const result = await this.deps.gatewayApplyCoordinator.applyNow({

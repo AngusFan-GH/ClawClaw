@@ -27,6 +27,7 @@ import {
 import { isQuitting, setQuitting } from './app-state';
 import { applyProxySettings } from './proxy';
 import { getAllSettings, getSetting } from '../utils/store';
+import { getDefaultProvider } from '../utils/secure-storage';
 import { ensureBuiltinSkillsInstalled } from '../utils/skill-config';
 import { performUpgradeMaintenanceIfNeeded } from '../utils/upgrade-maintenance';
 import { startHostApiServer } from '../api/server';
@@ -125,7 +126,22 @@ const gatewayApplyCoordinator = new GatewayApplyCoordinator({
     });
   },
 });
-const runtimeApplyPlan = new RuntimeApplyPlan({ gatewayApplyCoordinator });
+const runtimeApplyPlan = new RuntimeApplyPlan({
+  gatewayApplyCoordinator,
+  getGatewayStatus: () => gatewayManager.getStatus(),
+  beforeApply: async (snapshot) => {
+    if (!snapshot.pending.some((change) => change.domain === 'providers')) {
+      return;
+    }
+
+    await syncAllProvidersToRuntime();
+    const defaultProviderId = await getDefaultProvider();
+    if (defaultProviderId) {
+      await syncDefaultProviderToRuntime(defaultProviderId, { suppressRefresh: true });
+    }
+    await syncAllProviderAuthToRuntime();
+  },
+});
 let hostApiServer: Server | null = null;
 
 /**

@@ -181,7 +181,7 @@ function getChannelPluginAllowIds(channelType: string): string[] {
 function ensurePluginEnabled(
     currentConfig: OpenClawConfig,
     pluginId: string,
-    options?: { createEntry?: boolean }
+    options?: { createEntry?: boolean; createAllowlist?: boolean }
 ): void {
     if (!currentConfig.plugins) {
         currentConfig.plugins = {};
@@ -192,6 +192,8 @@ function ensurePluginEnabled(
         if (!allow.includes(pluginId)) {
             currentConfig.plugins.allow = [...allow, pluginId];
         }
+    } else if (options?.createAllowlist) {
+        currentConfig.plugins.allow = [pluginId];
     }
 
     if (!options?.createEntry) {
@@ -858,7 +860,10 @@ export async function saveChannelConfig(
     migrateLegacyWechatSection(currentConfig);
 
     if (isChinaChannelsManagedChannel(runtimeChannelType)) {
-        ensurePluginEnabled(currentConfig, CHINA_CHANNEL_PLUGIN_IDS[runtimeChannelType], { createEntry: true });
+        ensurePluginEnabled(currentConfig, CHINA_CHANNEL_PLUGIN_IDS[runtimeChannelType], {
+            createEntry: true,
+            createAllowlist: true,
+        });
         removePluginIds(currentConfig, getLegacyChannelPluginIds(runtimeChannelType));
     }
 
@@ -868,11 +873,17 @@ export async function saveChannelConfig(
               currentConfig,
               FEISHU_PLUGIN_ID_CANDIDATES.filter((pluginId) => pluginId !== feishuPluginId),
           );
-          ensurePluginEnabled(currentConfig, feishuPluginId, { createEntry: true });
+          ensurePluginEnabled(currentConfig, feishuPluginId, {
+              createEntry: true,
+              createAllowlist: true,
+          });
       }
 
       if (runtimeChannelType === WECHAT_RUNTIME_CHANNEL_ID) {
-          ensurePluginEnabled(currentConfig, WECHAT_RUNTIME_CHANNEL_ID, { createEntry: true });
+          ensurePluginEnabled(currentConfig, WECHAT_RUNTIME_CHANNEL_ID, {
+              createEntry: true,
+              createAllowlist: true,
+          });
       }
 
     // Plugin-based channels (e.g. WhatsApp) go under plugins.entries, not channels
@@ -1644,7 +1655,10 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
         if (hasConfiguredChannelState(WECHAT_RUNTIME_CHANNEL_ID, currentConfig.channels?.[WECHAT_RUNTIME_CHANNEL_ID] as AccountScopedChannelSection | undefined)) {
             const beforeAllow = JSON.stringify(currentConfig.plugins?.allow ?? null);
             const beforeEntry = JSON.stringify(currentConfig.plugins?.entries?.[WECHAT_RUNTIME_CHANNEL_ID] ?? null);
-            ensurePluginEnabled(currentConfig, WECHAT_RUNTIME_CHANNEL_ID, { createEntry: true });
+            ensurePluginEnabled(currentConfig, WECHAT_RUNTIME_CHANNEL_ID, {
+                createEntry: true,
+                createAllowlist: true,
+            });
             const afterAllow = JSON.stringify(currentConfig.plugins?.allow ?? null);
             const afterEntry = JSON.stringify(currentConfig.plugins?.entries?.[WECHAT_RUNTIME_CHANNEL_ID] ?? null);
             if (beforeAllow !== afterAllow || beforeEntry !== afterEntry) {
@@ -1675,7 +1689,10 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
                 if (hasConfiguredChannelState(channelType, currentConfig.channels?.[channelType] as AccountScopedChannelSection | undefined)) {
                     const beforeAllow = JSON.stringify(currentConfig.plugins?.allow ?? null);
                     const beforeEntry = JSON.stringify(currentConfig.plugins?.entries?.[CHINA_CHANNEL_PLUGIN_IDS[channelType]] ?? null);
-                    ensurePluginEnabled(currentConfig, CHINA_CHANNEL_PLUGIN_IDS[channelType], { createEntry: true });
+                    ensurePluginEnabled(currentConfig, CHINA_CHANNEL_PLUGIN_IDS[channelType], {
+                        createEntry: true,
+                        createAllowlist: true,
+                    });
                     const afterAllow = JSON.stringify(currentConfig.plugins?.allow ?? null);
                     const afterEntry = JSON.stringify(currentConfig.plugins?.entries?.[CHINA_CHANNEL_PLUGIN_IDS[channelType]] ?? null);
                     if (beforeAllow !== afterAllow || beforeEntry !== afterEntry) {

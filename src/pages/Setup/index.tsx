@@ -74,6 +74,8 @@ type ResolvedProviderModelResponse = {
   error?: string;
 };
 
+const PROVIDER_MODEL_OPTIONS_TIMEOUT_MS = 60_000;
+
 const getSetupDependencies = (t: TFunction): SetupDependency[] => [
   {
     id: 'uv',
@@ -99,6 +101,7 @@ async function resolveLocalProviderModels(payload: {
 }): Promise<ResolvedProviderModelResponse> {
   return hostApiFetch<ResolvedProviderModelResponse>('/api/provider-model-options/resolve', {
     method: 'POST',
+    timeoutMs: PROVIDER_MODEL_OPTIONS_TIMEOUT_MS,
     body: JSON.stringify({
       vendorId: 'local-model',
       authMode: 'api_key',
@@ -775,7 +778,8 @@ export function ProviderContent({
     accountId?: string,
   ) => {
     const response = await hostApiFetch<{ models: SetupProviderModelOption[] }>(
-      `/api/provider-model-options?vendorId=${encodeURIComponent(vendorId)}&authMode=${encodeURIComponent(authModeValue)}${accountId ? `&accountId=${encodeURIComponent(accountId)}` : ''}`
+      `/api/provider-model-options?vendorId=${encodeURIComponent(vendorId)}&authMode=${encodeURIComponent(authModeValue)}${accountId ? `&accountId=${encodeURIComponent(accountId)}` : ''}`,
+      { timeoutMs: PROVIDER_MODEL_OPTIONS_TIMEOUT_MS },
     );
     return response.models ?? [];
   }, []);

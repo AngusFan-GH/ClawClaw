@@ -49,7 +49,7 @@ describe('waitForGatewayReady', () => {
     ).rejects.toThrow('Gateway process exited before becoming ready (status=SIGTERM)');
   });
 
-  it('times out with a port-focused startup error', async () => {
+  it('times out with a readiness-focused startup error', async () => {
     vi.useFakeTimers();
     const assertion = expect(waitForGatewayReady({
       port: 9,
@@ -57,7 +57,7 @@ describe('waitForGatewayReady', () => {
       probeReady: async () => false,
       timeoutMs: 20,
       intervalMs: 5,
-    })).rejects.toThrow('Gateway did not open port 9 within 20ms');
+    })).rejects.toThrow('Gateway did not become ready on port 9 within 20ms');
 
     await vi.advanceTimersByTimeAsync(40);
     await assertion;

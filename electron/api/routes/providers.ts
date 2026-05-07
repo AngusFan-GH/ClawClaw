@@ -10,12 +10,7 @@ import { browserOAuthManager, type BrowserOAuthProviderType } from '../../utils/
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import {
-  syncDefaultProviderToRuntime,
-  syncDeletedProviderApiKeyToRuntime,
-  syncDeletedProviderToRuntime,
-  syncProviderApiKeyToRuntime,
-  syncSavedProviderToRuntime,
-  syncUpdatedProviderToRuntime,
+  resolveProviderRuntimeApplyRequirement,
 } from '../../services/providers/provider-runtime-sync';
 import { listModelsWithProvider, validateApiKeyWithProvider } from '../../services/providers/provider-validation';
 import { getProviderService } from '../../services/providers/provider-service';
@@ -43,6 +38,21 @@ function isLocalModelRuntimeAccount(account: Pick<ProviderAccount, 'vendorId' | 
 }
 
 const legacyProviderRoutesWarned = new Set<string>();
+
+function scheduleProviderRuntimeApply(
+  ctx: HostApiContext,
+  config: ProviderConfig,
+  source: string,
+  reason = source,
+): void {
+  ctx.runtimeApplyPlan.record({
+    domain: 'providers',
+    label: '模型配置',
+    source,
+    reason,
+    requires: resolveProviderRuntimeApplyRequirement(config),
+  });
+}
 
 export async function handleProviderRoutes(
   req: IncomingMessage,
@@ -213,17 +223,12 @@ export async function handleProviderRoutes(
     try {
       const body = await parseJsonBody<{ account: ProviderAccount; apiKey?: string }>(req);
       const account = await providerService.createAccount(body.account, body.apiKey);
-      if (isLocalModelProviderConfig(account)) {
-        await syncDeletedProviderToRuntime(
-          providerAccountToConfig(account),
-          account.id,
-          ctx.gatewayManager,
-        );
-        invalidateOpenClawModelListCache();
-      } else {
-        await syncSavedProviderToRuntime(providerAccountToConfig(account), body.apiKey, ctx.gatewayManager);
-        invalidateOpenClawModelListCache();
-      }
+      scheduleProviderRuntimeApply(
+        ctx,
+        providerAccountToConfig(account),
+        `provider-account:create:${account.id}`,
+      );
+      invalidateOpenClawModelListCache();
       sendJson(res, 200, { success: true, account });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -245,7 +250,11 @@ export async function handleProviderRoutes(
         return true;
       }
       await providerService.setDefaultAccount(body.accountId);
-      await syncDefaultProviderToRuntime(body.accountId, ctx.gatewayManager);
+      scheduleProviderRuntimeApply(
+        ctx,
+        providerAccountToConfig(account),
+        `provider-account:set-default:${body.accountId}`,
+      );
       invalidateOpenClawModelListCache();
       sendJson(res, 200, { success: true });
     } catch (error) {
@@ -270,17 +279,12 @@ export async function handleProviderRoutes(
         return true;
       }
       const nextAccount = await providerService.updateAccount(accountId, body.updates, body.apiKey);
-      if (isLocalModelProviderConfig(nextAccount)) {
-        await syncDeletedProviderToRuntime(
-          providerAccountToConfig(nextAccount),
-          accountId,
-          ctx.gatewayManager,
-        );
-        invalidateOpenClawModelListCache();
-      } else {
-        await syncUpdatedProviderToRuntime(providerAccountToConfig(nextAccount), body.apiKey, ctx.gatewayManager);
-        invalidateOpenClawModelListCache();
-      }
+      scheduleProviderRuntimeApply(
+        ctx,
+        providerAccountToConfig(nextAccount),
+        `provider-account:update:${accountId}`,
+      );
+      invalidateOpenClawModelListCache();
       sendJson(res, 200, { success: true, account: nextAccount });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -298,38 +302,38 @@ export async function handleProviderRoutes(
             && isLocalModelRuntimeAccount(account)
           ))
         : [];
-      const runtimeProviderKey = existing?.vendorId === 'google' && existing.authMode === 'oauth_browser'
-        ? 'google-gemini-cli'
-        : existing?.vendorId === 'openai'
-            && (existing.authMode === 'oauth_browser' || existing.authMode === 'oauth_device')
-          ? 'openai-codex'
-        : undefined;
       if (url.searchParams.get('apiKeyOnly') === '1') {
         await providerService.deleteLegacyProviderApiKey(accountId);
-        await syncDeletedProviderApiKeyToRuntime(
-          existing ? providerAccountToConfig(existing) : null,
-          accountId,
-          runtimeProviderKey,
-        );
+        if (existing) {
+          scheduleProviderRuntimeApply(
+            ctx,
+            providerAccountToConfig(existing),
+            `provider-account:delete-api-key:${accountId}`,
+          );
+        }
         invalidateOpenClawModelListCache();
         sendJson(res, 200, { success: true });
         return true;
       }
       for (const localModelAccount of orphanedLocalModelAccounts) {
         await providerService.deleteAccount(localModelAccount.id);
-        await syncDeletedProviderToRuntime(
-          providerAccountToConfig(localModelAccount),
-          localModelAccount.id,
-          ctx.gatewayManager,
-        );
       }
       await providerService.deleteAccount(accountId);
-      await syncDeletedProviderToRuntime(
-        existing ? providerAccountToConfig(existing) : null,
-        accountId,
-        ctx.gatewayManager,
-        runtimeProviderKey,
-      );
+      const deletedConfig = existing ? providerAccountToConfig(existing) : null;
+      if (deletedConfig) {
+        scheduleProviderRuntimeApply(
+          ctx,
+          deletedConfig,
+          `provider-account:delete:${accountId}`,
+        );
+      }
+      for (const localModelAccount of orphanedLocalModelAccounts) {
+        scheduleProviderRuntimeApply(
+          ctx,
+          providerAccountToConfig(localModelAccount),
+          `provider-account:delete:${localModelAccount.id}`,
+        );
+      }
       invalidateOpenClawModelListCache();
       sendJson(res, 200, { success: true });
     } catch (error) {
@@ -354,8 +358,17 @@ export async function handleProviderRoutes(
     logLegacyProviderRoute('PUT /api/providers/default');
     try {
       const body = await parseJsonBody<{ providerId: string }>(req);
+      const provider = await providerService.getLegacyProvider(body.providerId);
+      if (!provider) {
+        sendJson(res, 404, { success: false, error: 'Provider not found' });
+        return true;
+      }
       await providerService.setDefaultLegacyProvider(body.providerId);
-      await syncDefaultProviderToRuntime(body.providerId, ctx.gatewayManager);
+      scheduleProviderRuntimeApply(
+        ctx,
+        provider,
+        `provider:set-default:${body.providerId}`,
+      );
       invalidateOpenClawModelListCache();
       sendJson(res, 200, { success: true });
     } catch (error) {
@@ -451,10 +464,13 @@ export async function handleProviderRoutes(
         const trimmedKey = body.apiKey.trim();
         if (trimmedKey) {
           await providerService.setLegacyProviderApiKey(config.id, trimmedKey);
-          await syncProviderApiKeyToRuntime(config.type, config.id, trimmedKey);
         }
       }
-      await syncSavedProviderToRuntime(config, body.apiKey, ctx.gatewayManager);
+      scheduleProviderRuntimeApply(
+        ctx,
+        config,
+        `provider:create:${config.id}`,
+      );
       invalidateOpenClawModelListCache();
       sendJson(res, 200, { success: true });
     } catch (error) {
@@ -496,13 +512,15 @@ export async function handleProviderRoutes(
         const trimmedKey = body.apiKey.trim();
         if (trimmedKey) {
           await providerService.setLegacyProviderApiKey(providerId, trimmedKey);
-          await syncProviderApiKeyToRuntime(nextConfig.type, providerId, trimmedKey);
         } else {
           await providerService.deleteLegacyProviderApiKey(providerId);
-          await syncDeletedProviderApiKeyToRuntime(existing, providerId);
         }
       }
-      await syncUpdatedProviderToRuntime(nextConfig, body.apiKey, ctx.gatewayManager);
+      scheduleProviderRuntimeApply(
+        ctx,
+        nextConfig,
+        `provider:update:${providerId}`,
+      );
       invalidateOpenClawModelListCache();
       sendJson(res, 200, { success: true });
     } catch (error) {
@@ -518,13 +536,25 @@ export async function handleProviderRoutes(
       const existing = await providerService.getLegacyProvider(providerId);
       if (url.searchParams.get('apiKeyOnly') === '1') {
         await providerService.deleteLegacyProviderApiKey(providerId);
-        await syncDeletedProviderApiKeyToRuntime(existing, providerId);
+        if (existing) {
+          scheduleProviderRuntimeApply(
+            ctx,
+            existing,
+            `provider:delete-api-key:${providerId}`,
+          );
+        }
         invalidateOpenClawModelListCache();
         sendJson(res, 200, { success: true });
         return true;
       }
       await providerService.deleteLegacyProvider(providerId);
-      await syncDeletedProviderToRuntime(existing, providerId, ctx.gatewayManager);
+      if (existing) {
+        scheduleProviderRuntimeApply(
+          ctx,
+          existing,
+          `provider:delete:${providerId}`,
+        );
+      }
       invalidateOpenClawModelListCache();
       sendJson(res, 200, { success: true });
     } catch (error) {

@@ -66,6 +66,8 @@ type ResolvedProviderModelResponse = {
   error?: string;
 };
 
+const PROVIDER_MODEL_OPTIONS_TIMEOUT_MS = 60_000;
+
 function isLocalModelAccount(account: { vendorId: string; metadata?: { localModel?: boolean; managedBy?: string } }): boolean {
   return account.vendorId === 'local-model'
     || (account.vendorId === 'custom' && (account.metadata?.localModel || account.metadata?.managedBy === 'preset-local-model'));
@@ -83,6 +85,7 @@ async function resolveLocalProviderModels(payload: {
 }): Promise<ResolvedProviderModelResponse> {
   return hostApiFetch<ResolvedProviderModelResponse>('/api/provider-model-options/resolve', {
     method: 'POST',
+    timeoutMs: PROVIDER_MODEL_OPTIONS_TIMEOUT_MS,
     body: JSON.stringify({
       vendorId: 'local-model',
       authMode: 'api_key',

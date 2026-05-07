@@ -29,13 +29,32 @@ const CONNECT_ERROR_CODES = {
 } as const;
 const DEFAULT_GATEWAY_HANDSHAKE_TIMEOUT_MS = 20_000;
 const DEFAULT_GATEWAY_READY_TIMEOUT_MS = 60_000;
+const DEFAULT_GATEWAY_READY_TIMEOUT_WINDOWS_MS = 120_000;
 const DEFAULT_GATEWAY_READY_INTERVAL_MS = 200;
 const GATEWAY_LOOPBACK_HOST = '127.0.0.1';
-const GATEWAY_READY_LOG_MILESTONES_MS = [5_000, 15_000, 30_000, 45_000] as const;
+const GATEWAY_READY_LOG_MILESTONES_MS = [5_000, 15_000, 30_000, 45_000, 60_000, 90_000] as const;
+const GATEWAY_READY_PROBE_TIMEOUT_MS = 1_000;
+const GATEWAY_READY_DIAGNOSTIC_BODY_LIMIT = 240;
 
 function formatGatewayReadyTimeout(timeoutMs: number): string {
   if (timeoutMs < 1000) return `${timeoutMs}ms`;
   return `${Math.round(timeoutMs / 1000)}s`;
+}
+
+function resolveGatewayReadyTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): number {
+  const raw = env.OPENCLAW_READY_TIMEOUT_MS;
+  if (raw) {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return platform === 'win32'
+    ? DEFAULT_GATEWAY_READY_TIMEOUT_WINDOWS_MS
+    : DEFAULT_GATEWAY_READY_TIMEOUT_MS;
 }
 
 type GatewayHelloOk = {
@@ -62,6 +81,12 @@ type GatewayResponseFrame = {
     message?: string;
     details?: unknown;
   };
+};
+
+type GatewayReadyProbeResult = {
+  ready: boolean;
+  statusCode?: number;
+  detail?: string;
 };
 
 function resolveGatewayHandshakeTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
@@ -94,10 +119,22 @@ function canRetryWithDeviceToken(details: unknown): boolean {
   );
 }
 
-async function requestGatewayReadyz(port: number): Promise<boolean> {
-  return await new Promise<boolean>((resolve) => {
+function formatGatewayReadyProbeDetail(result: GatewayReadyProbeResult | null): string {
+  if (!result) return 'no /readyz response';
+  const parts: string[] = [];
+  if (typeof result.statusCode === 'number') {
+    parts.push(`HTTP ${result.statusCode}`);
+  }
+  if (result.detail) {
+    parts.push(result.detail);
+  }
+  return parts.length > 0 ? parts.join(': ') : 'not ready';
+}
+
+async function requestGatewayReadyz(port: number): Promise<GatewayReadyProbeResult> {
+  return await new Promise<GatewayReadyProbeResult>((resolve) => {
     let settled = false;
-    const resolveOnce = (value: boolean) => {
+    const resolveOnce = (value: GatewayReadyProbeResult) => {
       if (settled) return;
       settled = true;
       resolve(value);
@@ -105,26 +142,44 @@ async function requestGatewayReadyz(port: number): Promise<boolean> {
 
     const req = http.request(
       {
-        method: 'HEAD',
+        method: 'GET',
         host: GATEWAY_LOOPBACK_HOST,
         port,
         path: '/readyz',
-        timeout: 500,
+        timeout: GATEWAY_READY_PROBE_TIMEOUT_MS,
       },
       (res) => {
-        res.resume();
-        resolveOnce(res.statusCode != null && res.statusCode >= 200 && res.statusCode < 300);
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer | string) => {
+          if (Buffer.concat(chunks).length >= GATEWAY_READY_DIAGNOSTIC_BODY_LIMIT) {
+            return;
+          }
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        res.on('end', () => {
+          const statusCode = res.statusCode;
+          const body = Buffer.concat(chunks)
+            .toString('utf8')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, GATEWAY_READY_DIAGNOSTIC_BODY_LIMIT);
+          resolveOnce({
+            ready: statusCode != null && statusCode >= 200 && statusCode < 300,
+            statusCode,
+            ...(body ? { detail: body } : {}),
+          });
+        });
       },
     );
 
-    req.once('error', () => resolveOnce(false));
+    req.once('error', (error) => resolveOnce({ ready: false, detail: error.message }));
     req.once('timeout', () => {
       try {
         req.destroy();
       } catch {
         // ignore
       }
-      resolveOnce(false);
+      resolveOnce({ ready: false, detail: `probe timed out after ${GATEWAY_READY_PROBE_TIMEOUT_MS}ms` });
     });
     req.end();
   });
@@ -140,7 +195,8 @@ async function requestGatewayReadyz(port: number): Promise<boolean> {
  * @param port  Gateway port
  */
 export async function probeGatewayReady(port: number): Promise<boolean> {
-  return requestGatewayReadyz(port);
+  const result = await requestGatewayReadyz(port);
+  return result.ready;
 }
 
 export async function waitForGatewayReady(options: {
@@ -155,12 +211,13 @@ export async function waitForGatewayReady(options: {
   const timeoutMs = options.timeoutMs ?? (
     options.retries != null
       ? options.retries * intervalMs
-      : DEFAULT_GATEWAY_READY_TIMEOUT_MS
+      : resolveGatewayReadyTimeoutMs()
   );
   const startedAt = Date.now();
   const milestones = GATEWAY_READY_LOG_MILESTONES_MS.filter((ms) => ms < timeoutMs);
   let nextMilestoneIndex = 0;
   let attempts = 0;
+  let lastProbeResult: GatewayReadyProbeResult | null = null;
 
   while (true) {
     attempts++;
@@ -176,7 +233,13 @@ export async function waitForGatewayReady(options: {
 
     let ready = false;
     try {
-      ready = await (options.probeReady ?? probeGatewayReady)(options.port);
+      if (options.probeReady) {
+        ready = await options.probeReady(options.port);
+        lastProbeResult = { ready };
+      } else {
+        lastProbeResult = await requestGatewayReadyz(options.port);
+        ready = lastProbeResult.ready;
+      }
     } catch {
       // Gateway not ready yet.
     }
@@ -192,7 +255,7 @@ export async function waitForGatewayReady(options: {
       elapsedMs >= milestones[nextMilestoneIndex]
     ) {
       logger.debug(
-        `Still waiting for Gateway port ${options.port} to open... (${Math.round(elapsedMs / 1000)}s elapsed)`,
+        `Still waiting for Gateway ${options.port} readiness... (${Math.round(elapsedMs / 1000)}s elapsed; ${formatGatewayReadyProbeDetail(lastProbeResult)})`,
       );
       nextMilestoneIndex++;
     }
@@ -201,9 +264,11 @@ export async function waitForGatewayReady(options: {
   }
 
   logger.error(
-    `Gateway failed to open port ${options.port} within ${timeoutMs}ms (${attempts} probe attempts)`,
+    `Gateway failed to become ready on port ${options.port} within ${timeoutMs}ms (${attempts} probe attempts; ${formatGatewayReadyProbeDetail(lastProbeResult)})`,
   );
-  throw new Error(`Gateway did not open port ${options.port} within ${formatGatewayReadyTimeout(timeoutMs)}`);
+  throw new Error(
+    `Gateway did not become ready on port ${options.port} within ${formatGatewayReadyTimeout(timeoutMs)} (${formatGatewayReadyProbeDetail(lastProbeResult)})`,
+  );
 }
 
 export function buildGatewayConnectFrame(options: {

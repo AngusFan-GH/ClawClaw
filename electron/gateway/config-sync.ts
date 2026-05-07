@@ -929,7 +929,7 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     'loadProviderEnv',
     { providerEnv: {}, loadedProviderKeyCount: 0 },
   );
-  const { skipChannels, channelStartupSummary, configuredChannels } = await withTimeout(
+  const channelPolicy = await withTimeout(
     resolveChannelStartupPolicy(),
     1500,
     'resolveChannelStartupPolicy',
@@ -939,6 +939,11 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
       configuredChannels: [],
     },
   );
+  const configuredChannels = channelPolicy.configuredChannels;
+  const skipChannels = true;
+  const channelStartupSummary = channelPolicy.configuredChannels.length > 0
+    ? `deferred(${channelPolicy.configuredChannels.join(',')})`
+    : channelPolicy.channelStartupSummary;
   const uvEnv = await withTimeout(getUvMirrorEnv(), 5000, 'getUvMirrorEnv', {});
   const proxyEnv = await withTimeout(buildProxyEnvAsync(appSettings), 5000, 'buildProxyEnvAsync', {});
   const resolvedProxy = await withTimeout(

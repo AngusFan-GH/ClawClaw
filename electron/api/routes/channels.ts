@@ -1,10 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
-import { Buffer } from 'node:buffer';
-import { join } from 'node:path';
-import { getOpenClawConfigDir, resolveOpenClawDir } from '../../utils/paths';
+import { getOpenClawConfigDir } from '../../utils/paths';
 import { getChannelsConfigSnapshot } from '../../services/config-snapshot';
 import {
   deleteChannelConfig,
@@ -31,17 +27,13 @@ import {
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { ensureBundledPluginInstalled } from '../../utils/bundled-plugin-installer';
-import { getOpenClawCliSpawnConfig } from '../../utils/openclaw-cli';
 import { clearAllChannelBindings, clearChannelBinding } from '../../utils/agent-config';
-import { repairManagedPluginSdkImports } from '../../utils/plugin-sdk-compat';
 import { extractSessionRecords } from '../../utils/session-util';
+import { ensureWeChatPluginInstalled } from '../../utils/wechat-installer';
 import type { ChannelType } from '../../../src/types/channel';
 
 const WECHAT_QR_TIMEOUT_MS = 8 * 60 * 1000;
-const NULL_CHAR = String.fromCharCode(0);
 const activeQrLogins = new Map<string, string>();
-const WECHAT_PLUGIN_SPEC = '@tencent-weixin/openclaw-weixin';
-const WECHAT_PLUGIN_NPM_ONLY_SPEC = `npm:${WECHAT_PLUGIN_SPEC}`;
 const FORCE_RESTART_CHANNELS = new Set([
   'feishu',
   'dingtalk',
@@ -131,98 +123,6 @@ export function mapAccountStatus(account: {
     return 'error';
   }
   return 'disconnected';
-}
-
-function looksLikeUtf16Le(buffer: Buffer): boolean {
-  if (buffer.length < 4 || buffer.length % 2 !== 0) {
-    return false;
-  }
-
-  let zeroBytes = 0;
-  let oddZeroBytes = 0;
-  for (let i = 0; i < buffer.length; i += 1) {
-    if (buffer[i] !== 0) {
-      continue;
-    }
-    zeroBytes += 1;
-    if (i % 2 === 1) {
-      oddZeroBytes += 1;
-    }
-  }
-
-  return zeroBytes >= Math.floor(buffer.length / 4) && oddZeroBytes >= Math.floor(zeroBytes * 0.8);
-}
-
-export function decodeCliInstallOutput(chunk: Buffer | string): string {
-  if (typeof chunk === 'string') {
-    return chunk.split(NULL_CHAR).join('');
-  }
-
-  const decoded = looksLikeUtf16Le(chunk) ? chunk.toString('utf16le') : chunk.toString('utf8');
-  return decoded.split(NULL_CHAR).join('');
-}
-
-export function formatWeChatPluginInstallError(raw: string): string {
-  const trimmed = raw.split(NULL_CHAR).join('').trim();
-  if (!trimmed) {
-    return 'WeChat plugin install failed.';
-  }
-
-  const pluginOnly = trimmed.replace(/\nAlso not a valid hook pack:.*$/s, '').trim();
-  if (/ClawHub\/api\/v1\/packages\/.+failed \(429\):/i.test(pluginOnly) || /Ratelimit exceeded/i.test(pluginOnly)) {
-    return 'ClawHub rate limit exceeded while resolving the WeChat plugin. Please retry in a moment.';
-  }
-
-  return pluginOnly;
-}
-
-async function runOpenClawPluginCommand(args: string[]): Promise<void> {
-  const spawnConfig = getOpenClawCliSpawnConfig(args);
-  const INSTALL_TIMEOUT_MS = 120_000;
-
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(spawnConfig.command, spawnConfig.args, {
-      cwd: spawnConfig.cwd,
-      env: spawnConfig.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-
-    const killTimer = setTimeout(() => {
-      console.warn('[runOpenClawPluginCommand] Installation timed out, killing child process');
-      child.kill('SIGTERM');
-    }, INSTALL_TIMEOUT_MS);
-
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-
-    child.stdout.on('data', (chunk: Buffer | string) => {
-      stdoutChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    });
-
-    child.stderr.on('data', (chunk: Buffer | string) => {
-      stderrChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    });
-
-    child.once('error', (err) => {
-      clearTimeout(killTimer);
-      reject(err);
-    });
-    child.once('close', (code, signal) => {
-      clearTimeout(killTimer);
-      if (code === 0) {
-        resolve();
-        return;
-      }
-
-      const stderr = decodeCliInstallOutput(Buffer.concat(stderrChunks)).trim();
-      const stdout = decodeCliInstallOutput(Buffer.concat(stdoutChunks)).trim();
-      const detail = formatWeChatPluginInstallError(stderr || stdout);
-      reject(new Error(
-        detail || `WeChat plugin install failed with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`,
-      ));
-    });
-  });
 }
 
 export function normalizeAccountStatusForUi(params: {
@@ -712,58 +612,6 @@ async function ensureFeishuPluginInstalled(): Promise<{ installed: boolean; warn
 
 async function ensureQQBotPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
   return { installed: true };
-}
-
-async function ensureWeChatPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  const bundledResult = ensureBundledPluginInstalled('openclaw-weixin', 'WeChat');
-  if (bundledResult.installed) {
-    return bundledResult;
-  }
-
-  const pluginManifest = join(resolveOpenClawDir(), 'extensions', 'openclaw-weixin', 'openclaw.plugin.json');
-  const cliAttempts = existsSync(pluginManifest)
-    ? [
-        ['plugins', 'update', 'openclaw-weixin'],
-        ['plugins', 'install', WECHAT_PLUGIN_NPM_ONLY_SPEC],
-      ]
-    : [
-        ['plugins', 'install', WECHAT_PLUGIN_NPM_ONLY_SPEC],
-      ];
-
-  try {
-    let lastError: unknown;
-    for (const cliArgs of cliAttempts) {
-      try {
-        await runOpenClawPluginCommand(cliArgs);
-        lastError = undefined;
-        break;
-      } catch (error) {
-        lastError = error;
-      }
-    }
-
-    if (lastError) {
-      throw lastError;
-    }
-
-    if (existsSync(pluginManifest)) {
-      repairManagedPluginSdkImports(join(resolveOpenClawDir(), 'extensions', 'openclaw-weixin'));
-      return {
-        installed: true,
-        warning: bundledResult.warning,
-      };
-    }
-
-    return {
-      installed: false,
-      warning: 'WeChat plugin install completed, but manifest was not found afterwards.',
-    };
-  } catch (error) {
-    return {
-      installed: false,
-      warning: formatWeChatPluginInstallError(error instanceof Error ? error.message : String(error)),
-    };
-  }
 }
 
 function buildQrLoginKey(channelType: string, accountId?: string): string {

@@ -87,7 +87,7 @@ describe('gateway process policy helpers', () => {
       ).toBe('wait');
     });
 
-    it('executes deferred restart when manager is idle and not running', () => {
+    it('drops deferred restart when startup settled into error', () => {
       expect(
         getDeferredRestartAction({
           hasPendingRestart: true,
@@ -95,7 +95,7 @@ describe('gateway process policy helpers', () => {
           startLock: false,
           shouldReconnect: true,
         })
-      ).toBe('execute');
+      ).toBe('drop');
     });
 
     it('drops deferred restart when reconnect is disabled', () => {

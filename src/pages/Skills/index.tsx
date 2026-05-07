@@ -171,16 +171,22 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, canToggle, onUnin
   const [envVars, setEnvVars] = useState<Array<{ key: string; value: string }>>([]);
   const [primaryCredential, setPrimaryCredential] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const requiredEnvKeys = getRequiredEnvKeys(skill);
+  const requiredEnvKeys = useMemo(() => getRequiredEnvKeys(skill), [skill]);
   const showPrimaryCredential = !skill?.isCore;
-  const extraEnvKeys = requiredEnvKeys.filter((key) => key !== skill?.primaryEnv);
+  const extraEnvKeys = useMemo(
+    () => requiredEnvKeys.filter((key) => key !== skill?.primaryEnv),
+    [requiredEnvKeys, skill?.primaryEnv],
+  );
   const showEnvSection = !skill?.isCore;
-  const requirementItems = [
-    ...(skill?.requirements?.bins?.map((item) => ({ label: t('detail.requiresBins'), value: item })) || []),
-    ...(skill?.requirements?.anyBins?.map((item) => ({ label: t('detail.requiresAnyBin'), value: item })) || []),
-    ...(skill?.requirements?.config?.map((item) => ({ label: t('detail.requiresGatewayConfig'), value: item })) || []),
-    ...(skill?.requirements?.os?.map((item) => ({ label: t('detail.supportedOs'), value: item })) || []),
-  ];
+  const requirementItems = useMemo(
+    () => [
+      ...(skill?.requirements?.bins?.map((item) => ({ label: t('detail.requiresBins'), value: item })) || []),
+      ...(skill?.requirements?.anyBins?.map((item) => ({ label: t('detail.requiresAnyBin'), value: item })) || []),
+      ...(skill?.requirements?.config?.map((item) => ({ label: t('detail.requiresGatewayConfig'), value: item })) || []),
+      ...(skill?.requirements?.os?.map((item) => ({ label: t('detail.supportedOs'), value: item })) || []),
+    ],
+    [skill, t],
+  );
 
   // Initialize config from skill
   useEffect(() => {
@@ -212,11 +218,15 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, canToggle, onUnin
   };
 
   const handleOpenEditor = async () => {
-    if (!skill?.slug) return;
+    if (!skill) return;
     try {
       const result = await hostApiFetch<{ success: boolean; error?: string }>('/api/clawhub/open-readme', {
         method: 'POST',
-        body: JSON.stringify({ slug: skill.slug }),
+        body: JSON.stringify({
+          slug: skill.slug,
+          sourceFilePath: skill.sourceFilePath,
+          sourcePath: skill.sourcePath,
+        }),
       });
       if (result.success) {
         toast.success(t('toast.openedEditor'));

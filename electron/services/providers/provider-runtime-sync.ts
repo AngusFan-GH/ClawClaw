@@ -1,4 +1,5 @@
 import type { GatewayManager } from '../../gateway/manager';
+import type { RuntimeApplyRequirement } from '../../../src/shared/runtime-apply';
 import { getProviderAccount, listProviderAccounts } from './provider-store';
 import { providerAccountToConfig } from './provider-store';
 import { getProviderSecret } from '../secrets/secret-store';
@@ -77,7 +78,7 @@ type RuntimeProviderSyncContext = {
   allowPrivateNetwork: boolean;
 };
 
-type GatewayRefreshMode = 'reload' | 'restart';
+export type GatewayRefreshMode = 'reload' | 'restart';
 
 type GatewayRefreshRequest = {
   source?: string;
@@ -90,7 +91,7 @@ type GatewayRefreshRequest = {
 
 let gatewayRefreshScheduler: ((request: GatewayRefreshRequest) => void) | null = null;
 
-function resolveProviderGatewayRefreshMode(
+export function resolveProviderGatewayRefreshMode(
   config: ProviderConfig,
   runtimeProviderKey?: string,
 ): GatewayRefreshMode {
@@ -112,6 +113,15 @@ function resolveProviderGatewayRefreshMode(
   }
 
   return 'reload';
+}
+
+export function resolveProviderRuntimeApplyRequirement(
+  config: ProviderConfig,
+  runtimeProviderKey?: string,
+): RuntimeApplyRequirement {
+  return resolveProviderGatewayRefreshMode(config, runtimeProviderKey) === 'restart'
+    ? 'restart'
+    : 'reload';
 }
 
 function buildAgentProviderModels(
@@ -386,8 +396,8 @@ function scheduleGatewayRefresh(
 ): void {
   if (gatewayRefreshScheduler) {
     gatewayRefreshScheduler({
-      source: options?.source,
-      reason: options?.reason,
+      source: options?.source ?? 'provider.runtimeSync',
+      reason: options?.reason ?? 'provider.runtimeSync',
       mode: options?.mode,
       delayMs: options?.delayMs,
       onlyIfRunning: options?.onlyIfRunning,

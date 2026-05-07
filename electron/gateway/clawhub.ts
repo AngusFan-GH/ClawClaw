@@ -23,6 +23,12 @@ export interface ClawHubUninstallParams {
     slug: string;
 }
 
+export interface OpenSkillReadmeParams {
+    slug?: string;
+    sourceFilePath?: string;
+    sourcePath?: string;
+}
+
 export interface ClawHubSkillResult {
     slug: string;
     name: string;
@@ -318,28 +324,53 @@ export class ClawHubService {
     /**
      * Open skill README/manual in default editor
      */
-    async openSkillReadme(slug: string): Promise<boolean> {
-        const skillDir = path.join(this.workDir, 'skills', slug);
-
-        // Try to find documentation file
+    async openSkillReadme(params: OpenSkillReadmeParams | string): Promise<boolean> {
+        const payload: OpenSkillReadmeParams = typeof params === 'string' ? { slug: params } : params;
         const possibleFiles = ['SKILL.md', 'README.md', 'skill.md', 'readme.md'];
         let targetFile = '';
 
-        for (const file of possibleFiles) {
-            const filePath = path.join(skillDir, file);
-            if (fs.existsSync(filePath)) {
-                targetFile = filePath;
-                break;
+        if (payload.sourceFilePath && fs.existsSync(payload.sourceFilePath)) {
+            targetFile = payload.sourceFilePath;
+        }
+
+        if (!targetFile && payload.sourcePath && fs.existsSync(payload.sourcePath)) {
+            const stat = fs.statSync(payload.sourcePath);
+            if (stat.isFile()) {
+                targetFile = payload.sourcePath;
+            } else {
+                for (const file of possibleFiles) {
+                    const filePath = path.join(payload.sourcePath, file);
+                    if (fs.existsSync(filePath)) {
+                        targetFile = filePath;
+                        break;
+                    }
+                }
+                if (!targetFile) {
+                    targetFile = payload.sourcePath;
+                }
             }
         }
 
         if (!targetFile) {
-            // If no md file, just open the directory
-            if (fs.existsSync(skillDir)) {
-                targetFile = skillDir;
-            } else {
-                throw new Error('Skill directory not found');
+            const slug = payload.slug?.trim();
+            if (slug) {
+                const skillDir = path.join(this.workDir, 'skills', slug);
+                for (const file of possibleFiles) {
+                    const filePath = path.join(skillDir, file);
+                    if (fs.existsSync(filePath)) {
+                        targetFile = filePath;
+                        break;
+                    }
+                }
+
+                if (!targetFile && fs.existsSync(skillDir)) {
+                    targetFile = skillDir;
+                }
             }
+        }
+
+        if (!targetFile) {
+            throw new Error('Skill directory not found');
         }
 
         try {

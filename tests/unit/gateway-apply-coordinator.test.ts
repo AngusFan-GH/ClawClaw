@@ -32,7 +32,7 @@ describe('GatewayApplyCoordinator', () => {
       'Timed out waiting for the current Gateway apply operation to finish',
     );
 
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(90_000);
     await expectation;
 
     vi.useRealTimers();

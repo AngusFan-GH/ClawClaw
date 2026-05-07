@@ -3,7 +3,7 @@ import { Buffer } from 'node:buffer';
 import {
   decodeCliInstallOutput,
   formatWeChatPluginInstallError,
-} from '../../electron/api/routes/channels';
+} from '../../electron/utils/wechat-installer';
 
 describe('wechat plugin install helpers', () => {
   it('decodes utf16le stderr emitted by Windows npm.cmd failures', () => {

@@ -660,6 +660,7 @@ describe('channel config lifecycle', () => {
       },
     });
     expect(config.plugins).toEqual({
+      allow: ['feishu'],
       enabled: true,
       entries: {
         feishu: { enabled: true },
@@ -861,6 +862,7 @@ describe('channel config lifecycle', () => {
       },
     });
     expect(config.plugins).toEqual({
+      allow: ['feishu'],
       enabled: true,
       entries: {
         feishu: { enabled: true },
@@ -986,7 +988,7 @@ describe('channel config lifecycle', () => {
     await expect(access(staleMirrorDir)).rejects.toThrow();
   });
 
-  it('re-enables the wechat managed plugin entry when wechat channel config exists', async () => {
+  it('re-enables the wechat managed plugin registration when wechat channel config exists', async () => {
     await writeOpenClawJson({
       channels: {
         'openclaw-weixin': {
@@ -1003,7 +1005,7 @@ describe('channel config lifecycle', () => {
     await expect(repairChannelConfigConsistency()).resolves.toEqual({ repaired: true });
 
     const config = await readOpenClawJson();
-    expect(config.plugins?.allow).toBeUndefined();
+    expect(config.plugins?.allow).toEqual(['openclaw-weixin']);
     expect(config.plugins?.entries?.['openclaw-weixin']).toMatchObject({ enabled: true });
   });
 

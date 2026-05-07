@@ -32,6 +32,7 @@ import {
   runDeferredManagedPluginSync,
   runOpenClawStartupPreflightRepair,
 } from './config-sync';
+import { listConfiguredChannelAccounts } from '../utils/channel-config';
 import { connectGatewaySocket, waitForGatewayReady } from './ws-client';
 import {
   findExistingGatewayProcess,
@@ -120,6 +121,7 @@ export class GatewayManager extends EventEmitter {
   private attachProbeInFlight: Promise<boolean> | null = null;
   private lastAttachProbeAt = 0;
   private lastAttachProbeFoundGateway = false;
+  private deferredChannelStartupUnsupported = false;
   /** Pre-computed launch context from a prior warmup call. Cleared on each start. */
   private cachedLaunchContext: { context: import('./config-sync').GatewayLaunchContext; port: number } | null = null;
 
@@ -184,6 +186,11 @@ export class GatewayManager extends EventEmitter {
   private isUnsupportedShutdownError(error: unknown): boolean {
     const message = error instanceof Error ? error.message : String(error);
     return /unknown method:\s*shutdown/i.test(message);
+  }
+
+  private isUnknownGatewayMethodError(error: unknown, method: string): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return new RegExp(`unknown method:\\s*${method.replace('.', '\\.')}`, 'i').test(message);
   }
 
   private waitForRunningStateAfterDisconnect(timeoutMs: number): Promise<void> {
@@ -327,8 +334,9 @@ export class GatewayManager extends EventEmitter {
     if (await isPortAvailable(preferred)) {
       return;
     }
-    // Port is occupied — scan for the first free one.
-    const resolved = await findAvailablePort(PORTS.OPENCLAW_GATEWAY);
+    // Port is occupied. Prefer a ClawClaw-managed fallback range instead of
+    // fighting a user-started OpenClaw Web UI/Gateway on the default port.
+    const resolved = await findAvailablePort(PORTS.CLAWX_MANAGED_GATEWAY_START);
     if (resolved !== preferred) {
       logger.warn(
         `[Gateway] Preferred port ${preferred} is in use; falling back to port ${resolved}`
@@ -336,6 +344,40 @@ export class GatewayManager extends EventEmitter {
     }
     this.status.port = resolved;
     this.setStatus({ port: resolved });
+  }
+
+  private startConfiguredChannelsInBackground(): void {
+    if (this.deferredChannelStartupUnsupported) {
+      logger.debug('Skipping deferred channel startup because Gateway does not support channels.start');
+      return;
+    }
+
+    void (async () => {
+      let accountsByChannel: Record<string, string[]>;
+      try {
+        accountsByChannel = await listConfiguredChannelAccounts({ includeCli: false });
+      } catch (error) {
+        logger.warn('Failed to list configured channels for deferred startup:', error);
+        return;
+      }
+
+      for (const [channel, accountIds] of Object.entries(accountsByChannel)) {
+        const targets = accountIds.length > 0 ? accountIds : ['default'];
+        for (const accountId of targets) {
+          try {
+            await this.rpc('channels.start', { channel, accountId }, 30_000);
+            logger.info(`Deferred channel startup requested (${channel}:${accountId})`);
+          } catch (error) {
+            if (this.isUnknownGatewayMethodError(error, 'channels.start')) {
+              this.deferredChannelStartupUnsupported = true;
+              logger.info('Gateway does not support channels.start; skipping deferred channel startup');
+              return;
+            }
+            logger.warn(`Deferred channel startup failed (${channel}:${accountId}):`, error);
+          }
+        }
+      }
+    })();
   }
 
   /**
@@ -449,6 +491,7 @@ export class GatewayManager extends EventEmitter {
             // Blocking plugin copy during preflight would delay startup; these
             // plugins are optional China-channel extensions — non-fatal if absent.
             runDeferredManagedPluginSync();
+            this.startConfiguredChannelsInBackground();
           },
           recoverMalformedConfig: async () => {
             try {

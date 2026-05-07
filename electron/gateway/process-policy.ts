@@ -115,6 +115,7 @@ export type DeferredRestartAction = 'none' | 'wait' | 'drop' | 'execute';
 export function getDeferredRestartAction(context: DeferredRestartActionContext): DeferredRestartAction {
   if (!context.hasPendingRestart) return 'none';
   if (shouldDeferRestart(context)) return 'wait';
+  if (context.state === 'error') return 'drop';
   if (!context.shouldReconnect) return 'drop';
   return 'execute';
 }

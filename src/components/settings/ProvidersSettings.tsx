@@ -58,6 +58,7 @@ import { LoadingIcon } from '@/components/common/LoadingSpinner';
 
 const inputClasses = 'h-[44px] rounded-xl font-mono text-[13px] bg-muted/70 dark:bg-muted/40 border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40';
 const labelClasses = 'text-[14px] text-foreground/80 font-bold';
+const PROVIDER_MODEL_OPTIONS_TIMEOUT_MS = 60_000;
 
 function getOpenClawRuntimeProviderKeyPreview(account: Pick<ProviderAccount, 'id' | 'vendorId' | 'authMode'>): string {
   if (account.vendorId === 'google' && account.authMode === 'oauth_browser') {
@@ -199,6 +200,7 @@ async function resolveProviderModelOptions(payload: {
 }): Promise<ResolvedProviderModelResponse> {
   return hostApiFetch<ResolvedProviderModelResponse>('/api/provider-model-options/resolve', {
     method: 'POST',
+    timeoutMs: PROVIDER_MODEL_OPTIONS_TIMEOUT_MS,
     body: JSON.stringify(payload),
   });
 }
@@ -694,7 +696,8 @@ function ProviderCard({
     setModelOptionsError(null);
     try {
       const response = await hostApiFetch<{ models: ProviderModelOption[] }>(
-        `/api/provider-model-options?vendorId=${encodeURIComponent(account.vendorId)}&authMode=${encodeURIComponent(account.authMode)}&accountId=${encodeURIComponent(account.id)}`
+        `/api/provider-model-options?vendorId=${encodeURIComponent(account.vendorId)}&authMode=${encodeURIComponent(account.authMode)}&accountId=${encodeURIComponent(account.id)}`,
+        { timeoutMs: PROVIDER_MODEL_OPTIONS_TIMEOUT_MS },
       );
       const options = response.models ?? [];
       setModelOptions(options);
@@ -1310,7 +1313,8 @@ function AddProviderDialog({
     accountId?: string,
   ) => {
     const response = await hostApiFetch<{ models: ProviderModelOption[] }>(
-      `/api/provider-model-options?vendorId=${encodeURIComponent(vendorId)}&authMode=${encodeURIComponent(authModeValue)}${accountId ? `&accountId=${encodeURIComponent(accountId)}` : ''}`
+      `/api/provider-model-options?vendorId=${encodeURIComponent(vendorId)}&authMode=${encodeURIComponent(authModeValue)}${accountId ? `&accountId=${encodeURIComponent(accountId)}` : ''}`,
+      { timeoutMs: PROVIDER_MODEL_OPTIONS_TIMEOUT_MS },
     );
     return response.models ?? [];
   };

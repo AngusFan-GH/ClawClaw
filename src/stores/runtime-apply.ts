@@ -8,7 +8,13 @@ interface RuntimeApplyState {
   applying: boolean;
   error: string | null;
   refreshPlan: () => Promise<void>;
-  applyPendingChanges: () => Promise<{ triggered: boolean; accepted: boolean; action: 'none' | 'reload' | 'restart' }>;
+  applyPendingChanges: () => Promise<{
+    triggered: boolean;
+    accepted: boolean;
+    action: 'none' | 'reload' | 'restart';
+    deferred?: boolean;
+    reason?: string;
+  }>;
   discardPendingChanges: () => Promise<void>;
 }
 
@@ -18,6 +24,8 @@ const EMPTY_PLAN: RuntimeApplyPlanSnapshot = {
   requires: 'none',
   action: 'none',
 };
+
+const RUNTIME_APPLY_TIMEOUT_MS = 180_000;
 
 export const useRuntimeApplyStore = create<RuntimeApplyState>((set) => ({
   plan: EMPTY_PLAN,
@@ -46,9 +54,15 @@ export const useRuntimeApplyStore = create<RuntimeApplyState>((set) => ({
       const result = await hostApiFetch<{
         success: boolean;
         snapshot?: RuntimeApplyPlanSnapshot;
-        applied?: { action: 'none' | 'reload' | 'restart'; triggered: boolean; accepted: boolean };
+        applied?: {
+          action: 'none' | 'reload' | 'restart';
+          triggered: boolean;
+          accepted: boolean;
+          deferred?: boolean;
+          reason?: string;
+        };
         error?: string;
-      }>('/api/runtime/apply', { method: 'POST' });
+      }>('/api/runtime/apply', { method: 'POST', timeoutMs: RUNTIME_APPLY_TIMEOUT_MS });
       if (!result.success) {
         throw new Error(result.error || 'Failed to apply pending changes');
       }

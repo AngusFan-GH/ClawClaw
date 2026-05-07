@@ -40,7 +40,7 @@ type PendingApplyTask = {
 
 const DEFAULT_RELOAD_DELAY_MS = 1500;
 const DEFAULT_RESTART_DELAY_MS = 5000;
-const IN_FLIGHT_APPLY_WAIT_TIMEOUT_MS = 60_000;
+const IN_FLIGHT_APPLY_WAIT_TIMEOUT_MS = 90_000;
 
 async function waitForInFlightApply(inFlight: Promise<void>): Promise<void> {
   let timeout: NodeJS.Timeout | null = null;
