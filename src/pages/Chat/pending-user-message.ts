@@ -2,6 +2,8 @@ import { normalizeChatTimestampMs } from '@/lib/chat-timestamps';
 import type { RawMessage } from '@/stores/chat';
 import { extractText } from './message-utils';
 
+const PENDING_USER_MESSAGE_HISTORY_BACKDATE_TOLERANCE_MS = 15_000;
+
 function normalizeComparableUserMessageText(message: RawMessage | null | undefined): string {
   return extractText(message).replace(/\s+/g, ' ').trim();
 }
@@ -43,10 +45,10 @@ function isLikelySamePendingUserMessage(
     return false;
   }
 
-  if (optimisticTimestampMs && historyMessage.timestamp) {
+  if (optimisticTimestampMs != null) {
     const historyTimestampMs = normalizeChatTimestampMs(historyMessage.timestamp);
     if (!historyTimestampMs) return false;
-    if (Math.abs(historyTimestampMs - optimisticTimestampMs) > 5 * 60_000) {
+    if (historyTimestampMs < optimisticTimestampMs - PENDING_USER_MESSAGE_HISTORY_BACKDATE_TOLERANCE_MS) {
       return false;
     }
   }
@@ -97,6 +99,10 @@ export function historyContainsPendingUserMessage(
 
   const latestHistoryUser = [...history].reverse().find((message) => message.role === 'user');
   return latestHistoryUser
-    ? isLikelySamePendingUserMessage(latestHistoryUser, pendingUserMessage)
+    ? isLikelySamePendingUserMessage(
+      latestHistoryUser,
+      pendingUserMessage,
+      options.optimisticTimestampMs,
+    )
     : false;
 }

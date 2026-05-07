@@ -85,6 +85,20 @@ describe('gateway startup recovery heuristics', () => {
     })).toBe('retry');
   });
 
+  it('treats EADDRINUSE gateway lock failures during startup as transient', () => {
+    const error = new Error(
+      'another gateway instance is already listening on ws://127.0.0.1:18789 | listen EADDRINUSE: address already in use 127.0.0.1:18789',
+    );
+    expect(isTransientGatewayStartError(error)).toBe(true);
+    expect(getGatewayStartupRecoveryAction({
+      startupError: error,
+      startupStderrLines: ['GatewayLockError: another gateway instance is already listening on ws://127.0.0.1:18789'],
+      configRepairAttempted: false,
+      attempt: 1,
+      maxAttempts: 90,
+    })).toBe('retry');
+  });
+
   it('prefers reset-config for malformed config failures', () => {
     const lines = [
       'Failed to read config at C:\\Users\\pc\\.openclaw\\openclaw.json SyntaxError: JSON5: invalid character \';\' at 10:1',

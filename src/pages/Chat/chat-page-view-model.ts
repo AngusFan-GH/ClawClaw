@@ -95,13 +95,21 @@ export function resolveChatModelState(params: {
 
   const currentSessionHasModel = Boolean(currentSessionModel?.trim());
   const hasFallbackModel = Boolean(defaultModelValue?.trim());
-  const currentModelInvalid = currentSessionHasModel && !normalizedSelectedModel && modelOptions.length > 0;
+  const hasResolvedAvailableModel = Boolean(normalizedSelectedModel || defaultModelValue);
+  const currentModelInvalid =
+    currentSessionHasModel
+    && !normalizedSelectedModel
+    && modelOptions.length > 0
+    && !hasResolvedAvailableModel;
 
   if (!isGatewayRunning) {
     return 'disabled';
   }
   if (modelCatalogSyncing && modelOptions.length === 0) {
     return 'syncing';
+  }
+  if (hasResolvedAvailableModel && modelOptions.length > 0) {
+    return 'ready';
   }
   if (currentModelInvalid) {
     return 'invalid';

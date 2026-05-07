@@ -1252,7 +1252,7 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
         );
 
         // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
-        const timeoutMs = 120000;
+        const timeoutMs = 135000;
         const result = await gatewayManager.rpc('chat.send', rpcParams, timeoutMs);
         logger.info(`[chat:sendWithMedia] RPC result: ${JSON.stringify(result)}`);
         return { success: true, result };

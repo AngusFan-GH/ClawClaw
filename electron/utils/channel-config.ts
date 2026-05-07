@@ -65,6 +65,12 @@ const MANAGED_CHANNEL_PLUGIN_IDS = [
     ]),
 ] as const;
 
+export type OpenClawConfigWriteOptions = {
+    requestRestart?: boolean;
+};
+
+export const NO_RESTART_CONFIG_WRITE = { requestRestart: false } as const;
+
 function collapseShadowDefaultAccount(
     section: AccountScopedChannelSection | undefined
 ): AccountScopedChannelSection | undefined {
@@ -496,6 +502,31 @@ export interface OpenClawConfig {
     [key: string]: unknown;
 }
 
+function cloneConfigCommands(config: OpenClawConfig): Record<string, unknown> {
+    return config.commands && typeof config.commands === 'object'
+        ? { ...(config.commands as Record<string, unknown>) }
+        : {};
+}
+
+function applyRestartCommand(
+    config: OpenClawConfig,
+    options?: OpenClawConfigWriteOptions,
+): void {
+    const commands = cloneConfigCommands(config);
+    if (options?.requestRestart === false) {
+        delete commands.restart;
+        if (Object.keys(commands).length > 0) {
+            config.commands = commands;
+        } else {
+            delete config.commands;
+        }
+        return;
+    }
+
+    commands.restart = true;
+    config.commands = commands;
+}
+
 interface AccountScopedChannelSection extends ChannelConfigData {
     accounts?: Record<string, ChannelConfigData>;
 }
@@ -801,15 +832,9 @@ export async function writeOpenClawConfig(config: OpenClawConfig): Promise<void>
         const nextContent = JSON.stringify(config, null, 2);
         const currentContent = currentConfig ? JSON.stringify(currentConfig, null, 2) : null;
 
-        const commands =
-            config.commands && typeof config.commands === 'object'
-                ? { ...(config.commands as Record<string, unknown>) }
-                : {};
-
         if (currentContent !== nextContent) {
-            commands.restart = true;
+            applyRestartCommand(config);
         }
-        config.commands = commands;
 
         await writeOpenClawConfigRecord(config as unknown as Record<string, unknown>);
     } catch (error) {
@@ -820,24 +845,20 @@ export async function writeOpenClawConfig(config: OpenClawConfig): Promise<void>
 }
 
 export async function updateOpenClawConfig<T>(
-    updater: (config: OpenClawConfig) => Promise<T> | T
+    updater: (config: OpenClawConfig) => Promise<T> | T,
+    options?: OpenClawConfigWriteOptions,
 ): Promise<T> {
     const result = await updateOpenClawConfigRecord(async (config) => {
         const typedConfig = config as OpenClawConfig;
         const updaterResult = await updater(typedConfig);
-        if (!updaterResult) {
+        if (updaterResult === false) {
             // No changes — skip writing commands.restart so the gateway is not
             // spuriously restarted on every preflight repair run.
             return updaterResult;
         }
 
         sanitizeKnownInvalidOpenClawKeys(typedConfig as unknown as Record<string, unknown>);
-        const commands =
-            typedConfig.commands && typeof typedConfig.commands === 'object'
-                ? { ...(typedConfig.commands as Record<string, unknown>) }
-                : {};
-        commands.restart = true;
-        typedConfig.commands = commands;
+        applyRestartCommand(typedConfig, options);
 
         return updaterResult;
     });
@@ -857,136 +878,126 @@ export async function saveChannelConfig(
             : undefined;
 
     await updateOpenClawConfig(async (currentConfig) => {
-    migrateLegacyWechatSection(currentConfig);
+        migrateLegacyWechatSection(currentConfig);
 
-    if (isChinaChannelsManagedChannel(runtimeChannelType)) {
-        ensurePluginEnabled(currentConfig, CHINA_CHANNEL_PLUGIN_IDS[runtimeChannelType], {
-            createEntry: true,
-            createAllowlist: true,
-        });
-        removePluginIds(currentConfig, getLegacyChannelPluginIds(runtimeChannelType));
-    }
-
-      if (runtimeChannelType === 'feishu') {
-          const feishuPluginId = await resolveFeishuPluginId();
-          removePluginIds(
-              currentConfig,
-              FEISHU_PLUGIN_ID_CANDIDATES.filter((pluginId) => pluginId !== feishuPluginId),
-          );
-          ensurePluginEnabled(currentConfig, feishuPluginId, {
-              createEntry: true,
-              createAllowlist: true,
-          });
-      }
-
-      if (runtimeChannelType === WECHAT_RUNTIME_CHANNEL_ID) {
-          ensurePluginEnabled(currentConfig, WECHAT_RUNTIME_CHANNEL_ID, {
-              createEntry: true,
-              createAllowlist: true,
-          });
-      }
-
-    // Plugin-based channels (e.g. WhatsApp) go under plugins.entries, not channels
-    if (PLUGIN_CHANNELS.includes(runtimeChannelType)) {
-        if (!currentConfig.plugins) {
-            currentConfig.plugins = {};
+        if (isChinaChannelsManagedChannel(runtimeChannelType)) {
+            ensurePluginEnabled(currentConfig, CHINA_CHANNEL_PLUGIN_IDS[runtimeChannelType], {
+                createEntry: true,
+                createAllowlist: true,
+            });
+            removePluginIds(currentConfig, getLegacyChannelPluginIds(runtimeChannelType));
         }
-        if (!currentConfig.plugins.entries) {
-            currentConfig.plugins.entries = {};
+
+        if (runtimeChannelType === 'feishu') {
+            const feishuPluginId = await resolveFeishuPluginId();
+            removePluginIds(
+                currentConfig,
+                FEISHU_PLUGIN_ID_CANDIDATES.filter((pluginId) => pluginId !== feishuPluginId),
+            );
+            ensurePluginEnabled(currentConfig, feishuPluginId, {
+                createEntry: true,
+                createAllowlist: true,
+            });
         }
-        currentConfig.plugins.entries[runtimeChannelType] = {
-            ...currentConfig.plugins.entries[runtimeChannelType],
-            enabled: config.enabled ?? true,
-        };
-        logger.info('Plugin channel config saved', {
-            channelType: runtimeChannelType,
-            configFile: CONFIG_FILE,
-            path: `plugins.entries.${runtimeChannelType}`,
-        });
-        console.log(`Saved plugin channel config for ${runtimeChannelType}`);
-        return;
-    }
 
-    if (!currentConfig.channels) {
-        currentConfig.channels = {};
-    }
+        if (runtimeChannelType === WECHAT_RUNTIME_CHANNEL_ID) {
+            ensurePluginEnabled(currentConfig, WECHAT_RUNTIME_CHANNEL_ID, {
+                createEntry: true,
+                createAllowlist: true,
+            });
+        }
 
-    // Transform config to match OpenClaw expected format
-    let transformedConfig: ChannelConfigData = { ...config };
-    delete transformedConfig.__accountId;
+        // Plugin-based channels (e.g. WhatsApp) go under plugins.entries, not channels.
+        if (PLUGIN_CHANNELS.includes(runtimeChannelType)) {
+            if (!currentConfig.plugins) {
+                currentConfig.plugins = {};
+            }
+            if (!currentConfig.plugins.entries) {
+                currentConfig.plugins.entries = {};
+            }
+            currentConfig.plugins.entries[runtimeChannelType] = {
+                ...currentConfig.plugins.entries[runtimeChannelType],
+                enabled: config.enabled ?? true,
+            };
+            logger.info('Plugin channel config saved', {
+                channelType: runtimeChannelType,
+                configFile: CONFIG_FILE,
+                path: `plugins.entries.${runtimeChannelType}`,
+            });
+            console.log(`Saved plugin channel config for ${runtimeChannelType}`);
+            return;
+        }
 
-    // Special handling for Discord: convert guildId/channelId to complete structure
-    if (runtimeChannelType === 'discord') {
-        const { guildId, channelId, ...restConfig } = config;
-        transformedConfig = { ...restConfig };
+        if (!currentConfig.channels) {
+            currentConfig.channels = {};
+        }
 
-        transformedConfig.groupPolicy = 'allowlist';
-        transformedConfig.dm = { enabled: false };
-        transformedConfig.retry = {
-            attempts: 3,
-            minDelayMs: 500,
-            maxDelayMs: 30000,
-            jitter: 0.1,
-        };
+        // Transform config to match OpenClaw expected format.
+        let transformedConfig: ChannelConfigData = { ...config };
+        delete transformedConfig.__accountId;
 
-        if (guildId && typeof guildId === 'string' && guildId.trim()) {
-            const guildConfig: Record<string, unknown> = {
-                users: ['*'],
-                requireMention: true,
+        if (runtimeChannelType === 'discord') {
+            const { guildId, channelId, ...restConfig } = config;
+            transformedConfig = { ...restConfig };
+
+            transformedConfig.groupPolicy = 'allowlist';
+            transformedConfig.dm = { enabled: false };
+            transformedConfig.retry = {
+                attempts: 3,
+                minDelayMs: 500,
+                maxDelayMs: 30000,
+                jitter: 0.1,
             };
 
-            if (channelId && typeof channelId === 'string' && channelId.trim()) {
-                guildConfig.channels = {
-                    [channelId.trim()]: { allow: true, requireMention: true }
+            if (guildId && typeof guildId === 'string' && guildId.trim()) {
+                const guildConfig: Record<string, unknown> = {
+                    users: ['*'],
+                    requireMention: true,
                 };
-            } else {
-                guildConfig.channels = {
-                    '*': { allow: true, requireMention: true }
+
+                guildConfig.channels = channelId && typeof channelId === 'string' && channelId.trim()
+                    ? { [channelId.trim()]: { allow: true, requireMention: true } }
+                    : { '*': { allow: true, requireMention: true } };
+
+                transformedConfig.guilds = {
+                    [guildId.trim()]: guildConfig,
                 };
             }
-
-            transformedConfig.guilds = {
-                [guildId.trim()]: guildConfig
-            };
         }
-    }
 
-    // Special handling for Telegram: convert allowedUsers string to allowlist array
-    if (runtimeChannelType === 'telegram') {
-        const { allowedUsers, ...restConfig } = config;
-        transformedConfig = { ...restConfig };
+        if (runtimeChannelType === 'telegram') {
+            const { allowedUsers, ...restConfig } = config;
+            transformedConfig = { ...restConfig };
 
-        if (allowedUsers && typeof allowedUsers === 'string') {
-            const users = allowedUsers.split(',')
-                .map(u => u.trim())
-                .filter(u => u.length > 0);
+            if (allowedUsers && typeof allowedUsers === 'string') {
+                const users = allowedUsers.split(',')
+                    .map((user) => user.trim())
+                    .filter((user) => user.length > 0);
 
-            if (users.length > 0) {
-                transformedConfig.allowFrom = users;
+                if (users.length > 0) {
+                    transformedConfig.allowFrom = users;
+                }
             }
         }
-    }
 
-    // Special handling for Feishu / WeCom: default to open DM policy with wildcard allowlist
-    if (runtimeChannelType === 'feishu' || runtimeChannelType === 'wecom') {
-        const existingConfig = currentConfig.channels[runtimeChannelType] || {};
-        const existingDmPolicy = existingConfig.dmPolicy === 'pairing' ? 'open' : existingConfig.dmPolicy;
-        transformedConfig.dmPolicy = transformedConfig.dmPolicy ?? existingDmPolicy ?? 'open';
+        if (runtimeChannelType === 'feishu' || runtimeChannelType === 'wecom') {
+            const existingConfig = currentConfig.channels[runtimeChannelType] || {};
+            const existingDmPolicy = existingConfig.dmPolicy === 'pairing' ? 'open' : existingConfig.dmPolicy;
+            transformedConfig.dmPolicy = transformedConfig.dmPolicy ?? existingDmPolicy ?? 'open';
 
-        let allowFrom = (transformedConfig.allowFrom ?? existingConfig.allowFrom ?? ['*']) as string[];
-        if (!Array.isArray(allowFrom)) {
-            allowFrom = [allowFrom] as string[];
+            let allowFrom = (transformedConfig.allowFrom ?? existingConfig.allowFrom ?? ['*']) as string[];
+            if (!Array.isArray(allowFrom)) {
+                allowFrom = [allowFrom] as string[];
+            }
+
+            if (transformedConfig.dmPolicy === 'open' && !allowFrom.includes('*')) {
+                allowFrom = [...allowFrom, '*'];
+            }
+
+            transformedConfig.allowFrom = allowFrom;
         }
 
-        if (transformedConfig.dmPolicy === 'open' && !allowFrom.includes('*')) {
-            allowFrom = [...allowFrom, '*'];
-        }
-
-        transformedConfig.allowFrom = allowFrom;
-    }
-
-    {
-        let existingSection = normalizeChannelSectionForRuntime(
+        const existingSection = normalizeChannelSectionForRuntime(
             runtimeChannelType,
             currentConfig.channels[runtimeChannelType] as AccountScopedChannelSection | undefined,
         ) || {};
@@ -1017,8 +1028,6 @@ export async function saveChannelConfig(
                 accounts,
             };
 
-            // If ClawX previously created a conflicting duplicated default account,
-            // remove top-level credentials so the plugin resolves the named account.
             if (
                 runtimeChannelType !== 'feishu'
                 && hasMeaningfulSectionConfig(existingSection)
@@ -1038,29 +1047,30 @@ export async function saveChannelConfig(
                 nextSection.defaultAccount = editableSource.accountId;
             }
 
-            currentConfig.channels[runtimeChannelType] = normalizeChannelSectionForRuntime(runtimeChannelType, nextSection) || nextSection;
+            currentConfig.channels[runtimeChannelType] =
+                normalizeChannelSectionForRuntime(runtimeChannelType, nextSection) || nextSection;
         } else {
-            currentConfig.channels[runtimeChannelType] = normalizeChannelSectionForRuntime(runtimeChannelType, {
-                ...existingSection,
-                ...transformedConfig,
-                enabled: transformedConfig.enabled ?? true,
-            }) || {
-                ...existingSection,
-                ...transformedConfig,
-                enabled: transformedConfig.enabled ?? true,
-            };
+            currentConfig.channels[runtimeChannelType] =
+                normalizeChannelSectionForRuntime(runtimeChannelType, {
+                    ...existingSection,
+                    ...transformedConfig,
+                    enabled: transformedConfig.enabled ?? true,
+                }) || {
+                    ...existingSection,
+                    ...transformedConfig,
+                    enabled: transformedConfig.enabled ?? true,
+                };
         }
-    }
 
         logger.info('Channel config saved', {
-        channelType: runtimeChannelType,
-        configFile: CONFIG_FILE,
-        rawKeys: Object.keys(config),
-        transformedKeys: Object.keys(transformedConfig),
-        enabled: currentConfig.channels[runtimeChannelType]?.enabled,
-    });
-    console.log(`Saved channel config for ${runtimeChannelType}`);
-    });
+            channelType: runtimeChannelType,
+            configFile: CONFIG_FILE,
+            rawKeys: Object.keys(config),
+            transformedKeys: Object.keys(transformedConfig),
+            enabled: currentConfig.channels[runtimeChannelType]?.enabled,
+        });
+        console.log(`Saved channel config for ${runtimeChannelType}`);
+    }, NO_RESTART_CONFIG_WRITE);
 }
 
 export async function getChannelConfig(
@@ -1286,7 +1296,7 @@ export async function deleteChannelConfig(
     pruneEmptyPluginsConfig(currentConfig);
 
     return changed;
-    });
+    }, NO_RESTART_CONFIG_WRITE);
 
     // Special handling for WhatsApp credentials
     if (configChanged && runtimeChannelType === 'whatsapp') {
@@ -1413,7 +1423,7 @@ export async function cleanupDanglingWeChatPluginState(): Promise<{ cleanedDangl
         pruneEmptyPluginsConfig(currentConfig);
 
         return cleanedDanglingState;
-    });
+    }, NO_RESTART_CONFIG_WRITE);
 
     if (cleanedDanglingState) {
         const cleanupTargets = [
@@ -1470,7 +1480,7 @@ export async function cleanupLegacyChannelPlugins(): Promise<{ cleaned: boolean 
         pruneEmptyPluginsConfig(currentConfig);
 
         return cleaned;
-    });
+    }, NO_RESTART_CONFIG_WRITE);
 
     for (const pluginId of LEGACY_CHANNEL_PLUGIN_IDS) {
         const pluginDir = join(EXTENSIONS_DIR, pluginId);
@@ -1715,7 +1725,7 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
         pruneEmptyPluginsConfig(currentConfig);
 
         return repaired;
-    });
+    }, NO_RESTART_CONFIG_WRITE);
 
     if (removeChinaManagedPluginMirror) {
         const pluginDir = join(EXTENSIONS_DIR, LEGACY_CHINA_CHANNEL_PLUGIN_ID);
@@ -1958,7 +1968,7 @@ export async function setChannelEnabled(
         } else {
             currentConfig.channels[runtimeChannelType].enabled = enabled;
         }
-    });
+    }, NO_RESTART_CONFIG_WRITE);
     console.log(`Set channel ${runtimeChannelType} enabled: ${enabled}`);
 }
 

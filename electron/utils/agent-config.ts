@@ -1,7 +1,12 @@
 import { access, copyFile, mkdir, readdir, rm } from 'fs/promises';
 import { constants } from 'fs';
 import { join, normalize } from 'path';
-import { listConfiguredChannelGroupsFromConfig, readOpenClawConfigSnapshot, updateOpenClawConfig } from './channel-config';
+import {
+  listConfiguredChannelGroupsFromConfig,
+  NO_RESTART_CONFIG_WRITE,
+  readOpenClawConfigSnapshot,
+  updateOpenClawConfig,
+} from './channel-config';
 import { expandPath, getOpenClawConfigDir } from './paths';
 import * as logger from './logger';
 import {
@@ -25,6 +30,7 @@ const AGENT_RUNTIME_FILES = [
   'auth-profiles.json',
   'models.json',
 ];
+
 interface AgentModelConfig {
   primary?: string;
   [key: string]: unknown;
@@ -589,7 +595,7 @@ export async function createAgent(name: string): Promise<AgentsSnapshot> {
       snapshot: buildSnapshotFromConfig(config, { includeCli: false }),
       agentId: nextId,
     };
-  });
+  }, NO_RESTART_CONFIG_WRITE);
   logger.info('Created agent config entry', { agentId: result.agentId });
   return result.snapshot;
 }
@@ -628,7 +634,7 @@ export async function updateAgentSettings(
     };
 
     return buildSnapshotFromConfig(config, { includeCli: false });
-  });
+  }, NO_RESTART_CONFIG_WRITE);
   logger.info('Updated agent settings', { agentId, name: normalizedName, model: normalizedModel });
   return snapshot;
 }
@@ -666,7 +672,7 @@ export async function deleteAgentConfig(agentId: string): Promise<AgentsSnapshot
       snapshot: buildSnapshotFromConfig(config, { includeDisk: false, includeCli: false }),
       removedEntry,
     };
-  });
+  }, NO_RESTART_CONFIG_WRITE);
   await removeAgentRuntimeDirectory(agentId);
   await removeAgentWorkspaceDirectory(result.removedEntry);
   logger.info('Deleted agent config entry', { agentId });
@@ -691,7 +697,7 @@ export async function assignChannelToAgent(agentId: string, channelType: string,
     // buildSnapshotFromConfig would call readOpenClawConfig(), which awaits
     // configWriteChain — but we are already holding it inside this callback.
     return buildSnapshotFromConfigWith(config, { includeCli: false });
-  });
+  }, NO_RESTART_CONFIG_WRITE);
   logger.info('Assigned channel to agent', { agentId, channelType: runtimeChannelType, accountId: normalizeBindingAccountId(accountId) });
   return snapshot;
 }
@@ -721,7 +727,7 @@ export async function clearChannelBinding(channelType: string, agentId?: string,
       snapshot: buildSnapshotFromConfig(config, { includeCli: false }),
       boundAgentId,
     };
-  });
+  }, NO_RESTART_CONFIG_WRITE);
   logger.info('Cleared simplified channel binding', {
     channelType: runtimeChannelType,
     accountId: accountId ? normalizeBindingAccountId(accountId) : undefined,
@@ -750,7 +756,7 @@ export async function clearAllChannelBindings(channelType: string): Promise<Agen
     return {
       snapshot: buildSnapshotFromConfig(config, { includeCli: false }),
     };
-  });
+  }, NO_RESTART_CONFIG_WRITE);
 
   logger.info('Cleared all simplified channel bindings', {
     channelType: runtimeChannelType,

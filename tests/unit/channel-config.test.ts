@@ -290,6 +290,78 @@ describe('channel config lifecycle', () => {
     });
   });
 
+  it('saves channel config without writing commands.restart into openclaw.json', async () => {
+    await writeOpenClawJson({
+      commands: {
+        restart: true,
+        custom: 'keep-me',
+      },
+    });
+
+    const { saveChannelConfig } = await import('@electron/utils/channel-config');
+    await saveChannelConfig('telegram', {
+      botToken: '123:abc',
+      chatId: '456',
+      enabled: true,
+    });
+
+    const config = await readOpenClawJson();
+    expect(config.commands).toEqual({ custom: 'keep-me' });
+  });
+
+  it('toggles channel enabled without writing commands.restart into openclaw.json', async () => {
+    await writeOpenClawJson({
+      commands: {
+        restart: true,
+        custom: 'keep-me',
+      },
+      channels: {
+        telegram: {
+          botToken: '123:abc',
+          chatId: '456',
+          enabled: true,
+        },
+      },
+    });
+
+    const { setChannelEnabled } = await import('@electron/utils/channel-config');
+    await setChannelEnabled('telegram', false);
+
+    const config = await readOpenClawJson();
+    expect(config.commands).toEqual({ custom: 'keep-me' });
+    expect(config.channels).toEqual({
+      telegram: {
+        botToken: '123:abc',
+        chatId: '456',
+        enabled: false,
+      },
+    });
+  });
+
+  it('deletes channel config without writing commands.restart into openclaw.json', async () => {
+    await writeOpenClawJson({
+      commands: {
+        restart: true,
+        custom: 'keep-me',
+      },
+      channels: {
+        telegram: {
+          botToken: '123:abc',
+          chatId: '456',
+          enabled: true,
+        },
+      },
+    });
+
+    const { deleteChannelConfig, listConfiguredChannels } = await import('@electron/utils/channel-config');
+    await deleteChannelConfig('telegram');
+
+    const config = await readOpenClawJson();
+    expect(config.commands).toEqual({ custom: 'keep-me' });
+    expect(config.channels ?? {}).not.toHaveProperty('telegram');
+    await expect(listConfiguredChannels({ includeCli: false })).resolves.toEqual([]);
+  });
+
   it('does not report wechat as configured when only runtime state remains', async () => {
     await writeOpenClawJson({});
     await mkdir(join(testHome, '.openclaw', 'extensions', 'openclaw-weixin'), { recursive: true });

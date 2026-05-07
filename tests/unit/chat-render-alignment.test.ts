@@ -471,6 +471,40 @@ describe('chat render alignment', () => {
     expect(userGroups).toHaveLength(2);
   });
 
+  it('keeps a duplicate-text pending user message visible after sending stops until history confirms the newer send', () => {
+    const items = buildChatItems({
+      messages: [
+        {
+          role: 'user',
+          timestamp: 2_000,
+          content: '123',
+          id: 'history-user-1',
+          idempotencyKey: 'send-1',
+        },
+      ],
+      pendingUserMessage: {
+        role: 'user',
+        timestamp: 2_030,
+        content: '123',
+        id: 'pending-user-2',
+        idempotencyKey: 'send-2',
+      },
+      pendingAssistantMessage: null,
+      toolMessages: [],
+      streamSegments: [],
+      streamingMessage: null,
+      streamingStartedAt: 0,
+      sessionKey: 'agent:main',
+      sending: false,
+      pendingFinal: false,
+      showThinking: true,
+      locale: 'en',
+    });
+
+    const userGroups = items.filter((item) => item.kind === 'group' && item.role === 'user');
+    expect(userGroups).toHaveLength(2);
+  });
+
   it('hides the pending user message once history includes the same idempotency key', () => {
     const items = buildChatItems({
       messages: [

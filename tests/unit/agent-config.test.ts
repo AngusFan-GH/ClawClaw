@@ -102,6 +102,38 @@ describe('agent config lifecycle', () => {
     ]);
   });
 
+  it('creates an agent without writing commands.restart into openclaw.json', async () => {
+    await writeOpenClawJson({
+      commands: {
+        restart: true,
+        custom: 'keep-me',
+      },
+      agents: {
+        list: [
+          {
+            id: 'main',
+            name: 'Main',
+            default: true,
+            workspace: '~/.openclaw/workspace',
+            agentDir: '~/.openclaw/agents/main/agent',
+          },
+        ],
+      },
+    });
+
+    await mkdir(join(testHome, '.openclaw', 'agents', 'main', 'agent'), { recursive: true });
+    await mkdir(join(testHome, '.openclaw', 'workspace'), { recursive: true });
+    await writeFile(join(testHome, '.openclaw', 'workspace', 'AGENTS.md'), '# main', 'utf8');
+
+    const { createAgent } = await import('@electron/utils/agent-config');
+
+    const snapshot = await createAgent('Helper');
+    expect(snapshot.agents.some((agent) => agent.id === 'helper')).toBe(true);
+
+    const config = await readOpenClawJson();
+    expect(config.commands).toEqual({ custom: 'keep-me' });
+  });
+
   it('deletes the config entry, bindings, runtime directory, and managed workspace for a removed agent', async () => {
     await writeOpenClawJson({
       agents: {

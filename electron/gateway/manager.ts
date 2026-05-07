@@ -686,6 +686,7 @@ export class GatewayManager extends EventEmitter {
     this.lifecycleController.bump('stop');
     // Disable auto-reconnect
     this.shouldReconnect = false;
+    let externalShutdownRequested = false;
 
     // Clear all timers
     this.clearAllTimers();
@@ -700,6 +701,7 @@ export class GatewayManager extends EventEmitter {
       try {
         await this.rpc('shutdown', undefined, 5000);
         this.externalShutdownSupported = true;
+        externalShutdownRequested = true;
       } catch (error) {
         if (this.isUnsupportedShutdownError(error)) {
           this.externalShutdownSupported = false;
@@ -722,6 +724,10 @@ export class GatewayManager extends EventEmitter {
         // ignore — the connection may already be dead
       }
       this.ws = null;
+    }
+
+    if (externalShutdownRequested) {
+      await waitForPortFree(this.status.port, 15000);
     }
 
     // Kill process

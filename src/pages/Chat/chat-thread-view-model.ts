@@ -803,6 +803,7 @@ export function buildChatItems(params: {
   if (
     params.pendingUserMessage
     && !historyContainsPendingUserMessage(history, params.pendingUserMessage, {
+      optimisticTimestampMs: normalizeChatTimestampMs(params.pendingUserMessage.timestamp) ?? undefined,
       requireIdempotencyKeyMatch: params.sending,
     })
   ) {

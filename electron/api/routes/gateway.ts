@@ -6,6 +6,8 @@ import { getSetting } from '../../utils/store';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendBuffer, sendJson } from '../route-utils';
 
+const CHAT_SEND_RPC_TIMEOUT_MS = 135_000;
+
 export async function handleGatewayRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -134,7 +136,7 @@ export async function handleGatewayRoutes(
       if (imageAttachments.length > 0) {
         rpcParams.attachments = imageAttachments;
       }
-      const result = await ctx.gatewayManager.rpc('chat.send', rpcParams, 120000);
+      const result = await ctx.gatewayManager.rpc('chat.send', rpcParams, CHAT_SEND_RPC_TIMEOUT_MS);
       sendJson(res, 200, { success: true, result });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

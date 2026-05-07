@@ -248,8 +248,11 @@ export function ChatInput({
     selectedOption?.shortLabel || defaultModelShortLabel || t('composer.defaultModel');
   const showModelPicker = hasModelOptions && modelState !== 'syncing';
   const showConfigureModels = !showModelPicker && modelState !== 'syncing' && !!onConfigureModels;
+  const hasResolvedCurrentModel = Boolean(selectedOption);
   const modelButtonLabel = modelState === 'syncing'
     ? t('composer.modelsSyncing')
+    : hasResolvedCurrentModel
+      ? currentModelShortLabel
     : modelState === 'unconfigured' || modelState === 'invalid'
       ? t('composer.configureModels')
       : currentModelShortLabel;

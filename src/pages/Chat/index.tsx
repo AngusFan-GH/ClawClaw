@@ -12,6 +12,7 @@ import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { useAgentsStore } from '@/stores/agents';
 import { useSettingsStore } from '@/stores/settings';
+import { useRuntimeApplyStore } from '@/stores/runtime-apply';
 import type { ProviderAccount } from '@/lib/providers';
 import { normalizeChatTimestampMs } from '@/lib/chat-timestamps';
 import { PageLoader } from '@/components/common/LoadingSpinner';
@@ -46,6 +47,9 @@ import {
   parseModelRef,
   resolveDefaultThinkingLevel,
 } from './thinking-levels';
+
+const CHAT_SEND_RPC_TIMEOUT_MS = 135_000;
+const CHAT_SEND_HTTP_TIMEOUT_MS = CHAT_SEND_RPC_TIMEOUT_MS + 5_000;
 
 function getAgentIdFromSessionKey(sessionKey: string | undefined): string | undefined {
   const key = sessionKey?.trim();
@@ -144,6 +148,7 @@ export function Chat() {
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const providerAccounts = useProviderStore((s) => s.accounts);
   const providerVendors = useProviderStore((s) => s.vendors);
+  const runtimeApplyPlan = useRuntimeApplyStore((state) => state.plan);
   const refreshProviderSnapshot = useProviderStore((s) => s.refreshProviderSnapshot);
   const [chatRuntimeModelRefs, setChatRuntimeModelRefs] = useState<string[]>([]);
   const [chatModelCatalog, setChatModelCatalog] = useState<ChatModelCatalogEntry[]>([]);
@@ -152,6 +157,7 @@ export function Chat() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewMessages, setShowNewMessages] = useState(false);
   const chatRuntimeModelRefsRef = useRef<string[]>([]);
+  const appliedProviderAccountsRef = useRef<ProviderAccount[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
@@ -234,17 +240,31 @@ export function Chat() {
     void fetchAgents();
   }, [fetchAgents]);
 
+  const hasPendingProviderChanges = useMemo(
+    () => runtimeApplyPlan.pending.some((change) => change.domain === 'providers'),
+    [runtimeApplyPlan.pending],
+  );
+  useEffect(() => {
+    if (!hasPendingProviderChanges) {
+      appliedProviderAccountsRef.current = providerAccounts;
+    }
+  }, [hasPendingProviderChanges, providerAccounts]);
+  const appliedProviderAccounts = useMemo(
+    () => (hasPendingProviderChanges ? appliedProviderAccountsRef.current : providerAccounts),
+    [hasPendingProviderChanges, providerAccounts],
+  );
+
   const providerCatalogReloadKey = useMemo(
-    () => providerAccounts
+    () => appliedProviderAccounts
       .map((account) => [account.id, account.vendorId, account.model, account.enabled, account.updatedAt].join(':'))
       .sort()
       .join('|'),
-    [providerAccounts],
+    [appliedProviderAccounts],
   );
 
   const providerDisplayOverrides = useMemo(() => {
     const candidates = new Map<string, Set<string>>();
-    const enabledAccounts = providerAccounts.filter((account) => account.enabled);
+    const enabledAccounts = appliedProviderAccounts.filter((account) => account.enabled);
     const runtimeKeyForAccount = (account: ProviderAccount): string | undefined => {
       if (account.vendorId === 'google' && account.authMode === 'oauth_browser') {
         return 'google-gemini-cli';
@@ -284,7 +304,7 @@ export function Chat() {
       }
     }
     return map;
-  }, [providerAccounts]);
+  }, [appliedProviderAccounts]);
 
   useEffect(() => {
     chatRuntimeModelRefsRef.current = chatRuntimeModelRefs;
@@ -528,7 +548,7 @@ export function Chat() {
   }, [sending, streamingTimestamp]);
 
   const modelOptions = useMemo<ChatToolbarModelOption[]>(() => {
-    const configuredOptions = providerAccounts
+    const configuredOptions = appliedProviderAccounts
       .filter((account) => account.enabled)
       .flatMap((account) => {
         const vendor = providerVendors.find((entry) => entry.id === account.vendorId);
@@ -538,7 +558,7 @@ export function Chat() {
 
     const runtimeOptions = buildChatRuntimeModelOptions(chatRuntimeModelRefs, providerDisplayOverrides);
     return dedupeModelOptions([...configuredOptions, ...runtimeOptions]);
-  }, [chatRuntimeModelRefs, providerAccounts, providerDisplayOverrides, providerVendors]);
+  }, [appliedProviderAccounts, chatRuntimeModelRefs, providerDisplayOverrides, providerVendors]);
   const normalizedSelectedModel = useMemo(
     () => normalizeSelectedModelValue(currentSession, modelOptions),
     [currentSession, modelOptions]
@@ -662,7 +682,7 @@ export function Chat() {
 
   const modelState = resolveChatModelState({
     isGatewayRunning,
-    currentSessionModel: currentSession?.model,
+    currentSessionModel: normalizedSelectedModel || currentSession?.model,
     normalizedSelectedModel,
     defaultModelValue: normalizedDefaultModelValue,
     modelOptions,
@@ -872,7 +892,7 @@ export function Chat() {
           message: trimmedArgs,
           deliver: false,
           idempotencyKey: crypto.randomUUID(),
-        }, 120_000);
+        }, CHAT_SEND_RPC_TIMEOUT_MS);
         if (activeRunId) {
           enqueueChatMessage({
             text: `/steer ${trimmedArgs}`,
@@ -938,7 +958,7 @@ export function Chat() {
       if (attachments && attachments.length > 0) {
         await hostApiFetch('/api/chat/send-with-media', {
           method: 'POST',
-          timeoutMs: 125_000,
+          timeoutMs: CHAT_SEND_HTTP_TIMEOUT_MS,
           body: JSON.stringify({
             sessionKey: currentSessionKey,
             message: trimmed,
@@ -957,7 +977,7 @@ export function Chat() {
           message: trimmed,
           deliver: false,
           idempotencyKey: crypto.randomUUID(),
-        }, 120_000);
+        }, CHAT_SEND_RPC_TIMEOUT_MS);
       }
     } catch (err) {
       useChatStore.setState({
@@ -1247,14 +1267,14 @@ export function Chat() {
       {/* Error bar */}
       {error && (
         <div className="px-4 py-2 bg-destructive/10 border-t border-destructive/20">
-          <div className="max-w-4xl mx-auto flex items-center justify-between">
-            <p className="text-sm text-destructive flex items-center gap-2">
-              <AlertCircle className="h-4 w-4" />
-              {error}
+          <div className="mx-auto flex max-w-4xl flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <p className="flex min-w-0 items-start gap-2 text-sm leading-6 text-destructive">
+              <AlertCircle className="mt-1 h-4 w-4 shrink-0" />
+              <span className="min-w-0 break-words">{error}</span>
             </p>
             <button
               onClick={clearError}
-              className="text-xs text-destructive/60 hover:text-destructive underline"
+              className="shrink-0 self-start whitespace-nowrap text-xs text-destructive/60 underline hover:text-destructive sm:mt-1"
             >
               {t('common:actions.dismiss')}
             </button>

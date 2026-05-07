@@ -298,6 +298,11 @@ const RESTORE_SAFETY_TIMEOUT_MS = 20_000;
 const STARTUP_CHAT_HISTORY_RETRY_TIMEOUT_MS = 60_000;
 const STARTUP_CHAT_HISTORY_DEFAULT_RETRY_MS = 500;
 const STARTUP_CHAT_HISTORY_MAX_RETRY_MS = 5_000;
+// OpenClaw defaults to a 120s LLM idle timeout when no explicit override is set.
+// Keep the UI watchdog and send RPC slightly higher so Gateway/provider errors
+// can surface before ClawClaw synthesizes its own timeout state.
+const CHAT_SEND_TIMEOUT_MS = 135_000;
+const CHAT_RESPONSE_WATCHDOG_TIMEOUT_MS = 135_000;
 
 function getRawMessageKey(message: Partial<RawMessage>): string {
   const toolCallId = typeof message.toolCallId === 'string' ? message.toolCallId : '';
@@ -3218,17 +3223,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     _lastChatEventAt = Date.now();
     clearHistoryPoll();
 
-    const SAFETY_TIMEOUT_MS = 90_000;
     const checkStuck = () => {
       const state = get();
       if (!state.sending) return;
       if (state.streamingMessage || state.streamingText) return;
       const idleMs = Date.now() - _lastChatEventAt;
-      if (state.pendingFinal && idleMs < SAFETY_TIMEOUT_MS) {
+      if (state.pendingFinal && idleMs < CHAT_RESPONSE_WATCHDOG_TIMEOUT_MS) {
         setTimeout(checkStuck, 10_000);
         return;
       }
-      if (!state.pendingFinal && idleMs < SAFETY_TIMEOUT_MS) {
+      if (!state.pendingFinal && idleMs < CHAT_RESPONSE_WATCHDOG_TIMEOUT_MS) {
         setTimeout(checkStuck, 10_000);
         return;
       }
@@ -3238,7 +3242,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         error:
           state.pendingFinal
             ? 'Response finalization timed out after the Gateway stopped sending updates. Refresh the conversation or restart the Gateway if it remains unavailable.'
-            : 'No response received from the model. The provider may be unavailable or the API key may have insufficient quota. Please check your provider settings.',
+            : 'The model did not produce a response before the waiting window expired. Please try again, or increase `agents.defaults.llm.idleTimeoutSeconds` in your OpenClaw config if the model is legitimately slow.',
         sending: false,
         activeRunId: null,
         pendingFinal: false,
@@ -3279,9 +3283,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       let result: { success: boolean; result?: { runId?: string }; error?: string };
-
-      // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
-      const CHAT_SEND_TIMEOUT_MS = 120_000;
 
       const executeSend = async (idempotencyKey: string) => {
         if (hasMedia) {
