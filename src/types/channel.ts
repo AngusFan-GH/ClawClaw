@@ -111,7 +111,6 @@ export interface ChannelMeta {
 }
 
 export const MULTI_ACCOUNT_CHANNEL_TYPES: ChannelType[] = [
-  'wechat',
   'feishu',
   'dingtalk',
   'wecom',
@@ -395,7 +394,7 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
       'channels:meta.wechat.instructions.2',
     ],
     isPlugin: true,
-    supportsMultipleAccounts: true,
+    supportsMultipleAccounts: false,
   },
   signal: {
     id: 'signal',
@@ -442,6 +441,23 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
         placeholder: 'channels:meta.feishu.fields.appSecret.placeholder',
         required: true,
         envVar: 'FEISHU_APP_SECRET',
+      },
+      {
+        key: 'domain',
+        label: 'channels:meta.feishu.fields.domain.label',
+        type: 'select',
+        required: false,
+        description: 'channels:meta.feishu.fields.domain.description',
+        options: [
+          {
+            value: 'feishu',
+            label: 'channels:meta.feishu.fields.domain.options.feishu',
+          },
+          {
+            value: 'lark',
+            label: 'channels:meta.feishu.fields.domain.options.lark',
+          },
+        ],
       },
     ],
     instructions: [

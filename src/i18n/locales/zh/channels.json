@@ -246,11 +246,19 @@
           "label": "应用 ID (App ID)",
           "placeholder": "cli_xxxxxx"
         },
-        "appSecret": {
-          "label": "应用密钥 (App Secret)",
-          "placeholder": "您的应用密钥"
-        }
-      },
+    "appSecret": {
+      "label": "应用密钥 (App Secret)",
+      "placeholder": "您的应用密钥"
+    },
+    "domain": {
+      "label": "服务域",
+      "description": "中国飞书请选择 Feishu，国际版 Lark 请选择 Lark。",
+      "options": {
+        "feishu": "Feishu（中国大陆）",
+        "lark": "Lark（国际版）"
+      }
+    }
+  },
       "instructions": [
         "阅读文档，前往飞书开放平台",
         "创建一个新应用",

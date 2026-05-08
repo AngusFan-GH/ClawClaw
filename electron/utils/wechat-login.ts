@@ -310,6 +310,16 @@ async function writeAccountIndex(accountIds: string[]): Promise<void> {
   await writeFile(WECHAT_ACCOUNT_INDEX_FILE, JSON.stringify(accountIds, null, 2), 'utf-8');
 }
 
+async function deleteWeChatAccountState(accountId: string): Promise<void> {
+  for (const fileName of [
+    `${accountId}.json`,
+    `${accountId}.sync.json`,
+    `${accountId}.context-tokens.json`,
+  ]) {
+    await rm(join(WECHAT_ACCOUNTS_DIR, fileName), { force: true }).catch(() => undefined);
+  }
+}
+
 export async function saveWeChatAccountState(rawAccountId: string, payload: {
   token: string;
   baseUrl?: string;
@@ -333,9 +343,11 @@ export async function saveWeChatAccountState(rawAccountId: string, payload: {
   }
 
   const existingAccountIds = await readAccountIndex();
-  if (!existingAccountIds.includes(accountId)) {
-    await writeAccountIndex([...existingAccountIds, accountId]);
+  const staleAccountIds = existingAccountIds.filter((existingAccountId) => existingAccountId !== accountId);
+  if (staleAccountIds.length > 0) {
+    await Promise.all(staleAccountIds.map((staleAccountId) => deleteWeChatAccountState(staleAccountId)));
   }
+  await writeAccountIndex([accountId]);
 
   return accountId;
 }

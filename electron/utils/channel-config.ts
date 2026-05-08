@@ -942,6 +942,7 @@ export async function saveChannelConfig(
 ): Promise<void> {
     await beginChannelDraftSession();
     const runtimeChannelType = toRuntimeChannelType(channelType);
+    const removedWeChatAccountIds = new Set<string>();
     const preferredAccountId =
         typeof config.__accountId === 'string' && config.__accountId.trim()
             ? config.__accountId.trim()
@@ -1090,12 +1091,26 @@ export async function saveChannelConfig(
                 ...transformedConfig,
                 enabled: transformedConfig.enabled ?? true,
             };
-            accounts[editableSource.accountId] = nextAccountConfig;
+            const nextAccounts =
+                isWeChatRuntimeChannel(runtimeChannelType)
+                    ? { [editableSource.accountId]: nextAccountConfig }
+                    : {
+                        ...accounts,
+                        [editableSource.accountId]: nextAccountConfig,
+                    };
+
+            if (isWeChatRuntimeChannel(runtimeChannelType)) {
+                for (const existingAccountId of Object.keys(accounts)) {
+                    if (existingAccountId !== editableSource.accountId) {
+                        removedWeChatAccountIds.add(existingAccountId);
+                    }
+                }
+            }
 
             let nextSection: AccountScopedChannelSection = {
                 ...existingSection,
                 enabled: transformedConfig.enabled ?? true,
-                accounts,
+                accounts: nextAccounts,
             };
 
             if (
@@ -1104,7 +1119,7 @@ export async function saveChannelConfig(
                 && configsShareComparableValues(existingSection, nextAccountConfig)
             ) {
                 nextSection = removeTopLevelCredentialFields(nextSection);
-                if (!nextSection.defaultAccount && Object.keys(accounts).length === 1) {
+                if (!nextSection.defaultAccount && Object.keys(nextAccounts).length === 1) {
                     nextSection.defaultAccount = editableSource.accountId;
                 }
             }
@@ -1112,8 +1127,12 @@ export async function saveChannelConfig(
             if (
                 !nextSection.defaultAccount
                 && !hasMeaningfulSectionConfig(existingSection)
-                && Object.keys(accounts).length === 1
+                && Object.keys(nextAccounts).length === 1
             ) {
+                nextSection.defaultAccount = editableSource.accountId;
+            }
+
+            if (isWeChatRuntimeChannel(runtimeChannelType)) {
                 nextSection.defaultAccount = editableSource.accountId;
             }
 
@@ -1141,6 +1160,17 @@ export async function saveChannelConfig(
         });
         console.log(`Saved channel config for ${runtimeChannelType}`);
     });
+
+    if (isWeChatRuntimeChannel(runtimeChannelType) && removedWeChatAccountIds.size > 0) {
+        const stagedCleanupTargets = new Set<string>();
+        for (const removedAccountId of removedWeChatAccountIds) {
+            const statePaths = await getWeChatAccountStatePaths(removedAccountId);
+            for (const filePath of statePaths) {
+                stagedCleanupTargets.add(filePath);
+            }
+        }
+        await stageChannelRemovedPaths(stagedCleanupTargets);
+    }
 }
 
 export async function getChannelConfig(
@@ -1403,7 +1433,10 @@ export async function deleteChannelConfig(
             console.error('Failed to enumerate WeChat allowFrom files for staged cleanup:', error);
         }
     } else if (isWeChatRuntimeChannel(runtimeChannelType) && deletedWeChatAccountId) {
-        stagedCleanupTargets.add(getWeChatAccountStatePath(deletedWeChatAccountId));
+        const statePaths = await getWeChatAccountStatePaths(deletedWeChatAccountId);
+        for (const filePath of statePaths) {
+            stagedCleanupTargets.add(filePath);
+        }
     }
 
     await stageChannelRemovedPaths(stagedCleanupTargets);
@@ -2030,6 +2063,8 @@ export async function validateChannelCredentials(
     config: Record<string, string>
 ): Promise<CredentialValidationResult> {
     switch (channelType) {
+        case 'feishu':
+            return validateFeishuCredentials(config);
         case 'wecom':
             return validateWeComCredentials(config);
         case 'qqbot':
@@ -2040,6 +2075,89 @@ export async function validateChannelCredentials(
             return validateTelegramCredentials(config);
         default:
             return { valid: true, errors: [], warnings: ['No online validation available for this channel type.'] };
+    }
+}
+
+function resolveFeishuOpenApiBase(domainValue: string | undefined): string {
+    const normalized = domainValue?.trim().toLowerCase();
+    if (normalized === 'lark') {
+        return 'https://open.larksuite.com';
+    }
+    if (normalized && /^https:\/\//.test(normalized)) {
+        return normalized.replace(/\/+$/, '');
+    }
+    return 'https://open.feishu.cn';
+}
+
+async function validateFeishuCredentials(
+    config: Record<string, string>
+): Promise<CredentialValidationResult> {
+    const appId = config.appId?.trim();
+    const appSecret = config.appSecret?.trim();
+    const domain = config.domain?.trim() || 'feishu';
+
+    if (!appId) {
+        return { valid: false, errors: ['App ID is required'], warnings: [] };
+    }
+
+    if (!appSecret) {
+        return { valid: false, errors: ['App Secret is required'], warnings: [] };
+    }
+
+    const apiBaseUrl = resolveFeishuOpenApiBase(domain);
+
+    try {
+        const response = await proxyAwareFetch(`${apiBaseUrl}/open-apis/auth/v3/tenant_access_token/internal`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                app_id: appId,
+                app_secret: appSecret,
+            }),
+        });
+
+        const data = (await response.json().catch(() => ({}))) as {
+            code?: number;
+            msg?: string;
+            tenant_access_token?: string;
+            expire?: number;
+        };
+
+        if (
+            response.ok
+            && data.code === 0
+            && typeof data.tenant_access_token === 'string'
+            && data.tenant_access_token.trim()
+        ) {
+            return {
+                valid: true,
+                errors: [],
+                warnings: [],
+                details: {
+                    appId,
+                    domain,
+                    tokenTtlSeconds: String(data.expire ?? ''),
+                },
+            };
+        }
+
+        return {
+            valid: false,
+            errors: [
+                typeof data.msg === 'string' && data.msg.trim()
+                    ? data.msg.trim()
+                    : `Feishu/Lark API returned ${response.status}`,
+            ],
+            warnings: [],
+        };
+    } catch (error) {
+        return {
+            valid: false,
+            errors: [`Unable to validate Feishu/Lark credentials online: ${error instanceof Error ? error.message : String(error)}`],
+            warnings: [],
+        };
     }
 }
 

@@ -246,11 +246,19 @@
           "label": "App ID",
           "placeholder": "cli_xxxxxx"
         },
-        "appSecret": {
-          "label": "App Secret",
-          "placeholder": "Your app secret"
-        }
-      },
+    "appSecret": {
+      "label": "App Secret",
+      "placeholder": "Your app secret"
+    },
+    "domain": {
+      "label": "Service domain",
+      "description": "Choose Feishu for mainland China workspaces, or Lark for global workspaces.",
+      "options": {
+        "feishu": "Feishu (Mainland China)",
+        "lark": "Lark (Global)"
+      }
+    }
+  },
       "instructions": [
         "Read the documentation, then go to Feishu Open Platform",
         "Create a new application",

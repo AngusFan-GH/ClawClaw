@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -242,6 +243,17 @@ export function ChannelConfigModal({
       cancelled = true;
     };
   }, [allowExistingConfig, configuredTypes, createNewAccount, selectedAccountId, selectedType, showChannelName, usesManagedQrAccounts]);
+
+  useEffect(() => {
+    if (selectedType !== 'feishu') {
+      return;
+    }
+    setConfigValues((current) => (
+      current.domain && current.domain.trim()
+        ? current
+        : { ...current, domain: 'feishu' }
+    ));
+  }, [selectedType]);
 
   useEffect(() => {
     setValidationResult((current) => (validatedSignature && current ? current : null));
@@ -885,6 +897,7 @@ function ChannelLogo({ type, branded = false }: { type: ChannelType; branded?: b
 function ConfigField({ field, value, onChange, showSecret, onToggleSecret }: ConfigFieldProps) {
   const { t } = useTranslation('channels');
   const isPassword = field.type === 'password';
+  const isSelect = field.type === 'select';
 
   return (
     <div className="space-y-2.5">
@@ -893,14 +906,31 @@ function ConfigField({ field, value, onChange, showSecret, onToggleSecret }: Con
         {field.required && <span className="text-destructive ml-1">*</span>}
       </Label>
       <div className="flex gap-2">
-        <Input
-          id={field.key}
-          type={isPassword && !showSecret ? 'password' : 'text'}
-          placeholder={field.placeholder ? t(field.placeholder) : undefined}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          className={inputClasses}
-        />
+        {isSelect ? (
+          <Select
+            id={field.key}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            className={cn(inputClasses, 'font-sans')}
+            placeholder={t('dialog.selectOption', '请选择')}
+          >
+            <option value="">{t('dialog.selectOption', '请选择')}</option>
+            {(field.options || []).map((option) => (
+              <option key={option.value} value={option.value}>
+                {t(option.label)}
+              </option>
+            ))}
+          </Select>
+        ) : (
+          <Input
+            id={field.key}
+            type={isPassword && !showSecret ? 'password' : 'text'}
+            placeholder={field.placeholder ? t(field.placeholder) : undefined}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            className={inputClasses}
+          />
+        )}
         {isPassword && (
           <Button
             type="button"
