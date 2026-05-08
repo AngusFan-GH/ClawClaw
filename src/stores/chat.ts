@@ -657,6 +657,13 @@ function findMaterializedSessionKey(params: {
   const { pendingKey, pendingLabel, pendingActivityMs, sessions, sessionLabels, sessionLastActivity } = params;
   const pendingAgentId = getAgentIdFromSessionKey(pendingKey);
   const normalizedPendingLabel = normalizeSidebarTitleForMatch(pendingLabel);
+  // Only materialize a synthetic local session when we have a stable user-visible
+  // title to match against. Empty "new chat" placeholders intentionally have no
+  // label yet; mapping them to the latest real session would snap the UI back to
+  // an older conversation when returning from another page.
+  if (!normalizedPendingLabel) {
+    return undefined;
+  }
   const candidates = sessions.filter((session) => (
     session.key !== pendingKey
     && getAgentIdFromSessionKey(session.key) === pendingAgentId
@@ -665,12 +672,10 @@ function findMaterializedSessionKey(params: {
 
   if (candidates.length === 0) return undefined;
 
-  const exactLabelMatches = normalizedPendingLabel
-    ? candidates.filter((session) => {
-        const label = sessionLabels[session.key] ?? resolveSessionSidebarTitle(session) ?? session.label ?? session.displayName;
-        return normalizeSidebarTitleForMatch(label) === normalizedPendingLabel;
-      })
-    : [];
+  const exactLabelMatches = candidates.filter((session) => {
+    const label = sessionLabels[session.key] ?? resolveSessionSidebarTitle(session) ?? session.label ?? session.displayName;
+    return normalizeSidebarTitleForMatch(label) === normalizedPendingLabel;
+  });
 
   const rankedCandidates = (exactLabelMatches.length > 0 ? exactLabelMatches : candidates)
     .sort((left, right) => (sessionLastActivity[right.key] ?? right.updatedAt ?? 0) - (sessionLastActivity[left.key] ?? left.updatedAt ?? 0));
@@ -3790,13 +3795,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
           if (hadToolEventsBeforeTerminal) {
             set({ terminalHistoryReconciling: true });
-            get().loadHistory().finally(() => {
+            get().loadHistory(true).finally(() => {
               set({ terminalHistoryReconciling: false });
               get().requestQueueFlush(runId || null);
             });
           } else {
             get().requestQueueFlush(runId || null);
-            void get().loadHistory();
+            void get().loadHistory(true);
           }
         }
         break;

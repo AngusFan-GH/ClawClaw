@@ -639,7 +639,7 @@ export function Chat() {
 
   const {
     liveStreamingMessage,
-    isRestoringSessions,
+    shouldShowLoadingState,
     isEmpty,
     currentSessionIsPlaceholder,
     shouldShowWelcome,
@@ -1134,7 +1134,7 @@ export function Chat() {
         onScroll={handleMessagesScroll}
       >
         <div className="max-w-4xl mx-auto space-y-4">
-          {(loading && !sending) || isRestoringSessions ? (
+          {shouldShowLoadingState ? (
             <PageLoader
               compact
               title={loadingTitle}

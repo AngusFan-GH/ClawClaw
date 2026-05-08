@@ -215,7 +215,7 @@ describe('Chat Store', () => {
         deliver: false,
         idempotencyKey: state.activeRunId,
       }),
-      120_000,
+      135_000,
     );
 
     useChatStore.setState({ sending: false, activeRunId: null });
@@ -257,7 +257,7 @@ describe('Chat Store', () => {
         sessionKey: 'agent:main:session-local',
         message: 'hello',
       }),
-      120_000,
+      135_000,
     );
 
     useChatStore.setState({ sending: false, activeRunId: null });
@@ -635,6 +635,55 @@ describe('Chat Store', () => {
     await Promise.resolve();
 
     expect(useChatStore.getState().sessionLabels['agent:main:session-5']).toBe('你好，请帮我整理今天的任务');
+
+    rpcMock.mockRestore();
+  });
+
+  it('should keep a brand-new unlabeled local session selected instead of remapping it to the latest real session', async () => {
+    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method) => {
+      if (method === 'sessions.list') {
+        return {
+          sessions: [
+            {
+              key: 'agent:main:main',
+              displayName: 'Main',
+              updatedAt: 100,
+            },
+            {
+              key: 'agent:main:session-existing',
+              displayName: 'Existing',
+              derivedTitle: 'Existing conversation',
+              updatedAt: 200,
+            },
+          ],
+        };
+      }
+      if (method === 'chat.history') {
+        return { messages: [] };
+      }
+      throw new Error(`Unexpected RPC method: ${String(method)}`);
+    });
+
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:session-local',
+      sessions: [
+        { key: 'agent:main:main', displayName: 'Main' },
+        { key: 'agent:main:session-existing', displayName: 'Existing' },
+        { key: 'agent:main:session-local', displayName: 'session-local' },
+      ],
+      pendingLocalSessionKeys: { 'agent:main:session-local': true },
+      sessionLabels: {},
+      sessionLastActivity: {
+        'agent:main:session-local': 205000,
+        'agent:main:session-existing': 200000,
+      },
+    });
+
+    await useChatStore.getState().loadSessions({ preserveCurrent: true, warmLabels: true });
+
+    const state = useChatStore.getState();
+    expect(state.currentSessionKey).toBe('agent:main:session-local');
+    expect(state.sessions.some((session) => session.key === 'agent:main:session-local')).toBe(true);
 
     rpcMock.mockRestore();
   });

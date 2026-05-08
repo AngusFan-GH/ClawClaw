@@ -163,7 +163,9 @@ export function buildChatRuntimeViewModel(params: {
   defaultSessionKey: string;
 }): {
   liveStreamingMessage: RawMessage | null;
+  hasRenderableContent: boolean;
   isRestoringSessions: boolean;
+  shouldShowLoadingState: boolean;
   isEmpty: boolean;
   currentSessionIsPlaceholder: boolean;
   shouldShowWelcome: boolean;
@@ -220,12 +222,14 @@ export function buildChatRuntimeViewModel(params: {
           }) as RawMessage)
     : null;
 
-  const isRestoringSessions = isGatewayRunning && !sessionsHydrated;
+  const hasRenderableContent = Boolean(messages.length > 0 || pendingUserMessage || pendingAssistantMessage || liveStreamingMessage);
+  const isRestoringSessions = isGatewayRunning && !sessionsHydrated && !hasRenderableContent;
   const hasOptimisticContent = Boolean(
     pendingUserMessage
     || pendingAssistantMessage
     || liveStreamingMessage,
   );
+  const shouldShowLoadingState = (!sending && loading && !hasRenderableContent) || isRestoringSessions;
   const isEmpty = messages.length === 0 && !hasOptimisticContent && !loading && !sending && !isRestoringSessions;
   const currentSessionIsPlaceholder =
     (Boolean(pendingLocalSessionKeys[currentSessionKey]) && !hasOptimisticContent)
@@ -234,7 +238,9 @@ export function buildChatRuntimeViewModel(params: {
 
   return {
     liveStreamingMessage,
+    hasRenderableContent,
     isRestoringSessions,
+    shouldShowLoadingState,
     isEmpty,
     currentSessionIsPlaceholder,
     shouldShowWelcome,

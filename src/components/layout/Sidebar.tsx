@@ -609,7 +609,7 @@ export function Sidebar() {
             {t('chat:history.title')}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3 pr-1">
-            {!sessionsHydrated ? (
+            {!sessionsHydrated && visibleSessions.length === 0 ? (
               <div className="px-2.5 pt-2">
                 <div className="rounded-[14px] border border-black/6 bg-white/55 px-3 py-3 text-[13px] text-muted-foreground shadow-[0_6px_16px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
                   {isGatewayRunning
