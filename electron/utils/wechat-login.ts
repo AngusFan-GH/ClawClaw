@@ -39,7 +39,7 @@ type QrCodeResponse = {
 };
 
 type QrStatusResponse = {
-  status: 'wait' | 'scaned' | 'confirmed' | 'expired';
+  status: 'wait' | 'scaned' | 'scanned' | 'confirmed' | 'expired';
   bot_token?: string;
   ilink_bot_id?: string;
   baseurl?: string;
@@ -279,6 +279,21 @@ async function pollWeChatQrStatus(apiBaseUrl: string, qrcode: string, accountId?
   }
 }
 
+function normalizeQrStatus(status: QrStatusResponse['status'] | string | undefined): QrStatusResponse['status'] {
+  const normalized = (status ?? '').trim().toLowerCase();
+  switch (normalized) {
+    case 'scanned':
+      return 'scaned';
+    case 'scaned':
+    case 'confirmed':
+    case 'expired':
+    case 'wait':
+      return normalized;
+    default:
+      return 'wait';
+  }
+}
+
 async function readAccountIndex(): Promise<string[]> {
   try {
     const raw = await readFile(WECHAT_ACCOUNT_INDEX_FILE, 'utf-8');
@@ -396,7 +411,7 @@ export async function waitForWeChatLoginSession(options: {
     }
 
     const statusResponse = await pollWeChatQrStatus(current.apiBaseUrl, current.qrcode, options.accountId);
-    switch (statusResponse.status) {
+    switch (normalizeQrStatus(statusResponse.status)) {
       case 'wait':
       case 'scaned':
         break;

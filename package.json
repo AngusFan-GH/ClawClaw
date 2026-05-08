@@ -31,7 +31,7 @@
   "scripts": {
     "init": "pnpm install && pnpm run uv:download",
     "dev": "vite",
-    "package:prepare": "vite build && zx scripts/bundle-openclaw.mjs && node scripts/clean-builder-output.mjs",
+    "package:prepare": "vite build && zx scripts/bundle-openclaw.mjs && pnpm run bundle:openclaw-plugins && node scripts/clean-builder-output.mjs",
     "package:organize": "node scripts/release-organize.mjs",
     "package:mac:raw": "electron-builder --mac",
     "package:win:raw": "node scripts/package-win.mjs",

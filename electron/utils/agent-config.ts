@@ -3,7 +3,9 @@ import { constants } from 'fs';
 import { join, normalize } from 'path';
 import {
   listConfiguredChannelGroupsFromConfig,
+  NO_RESTART_CONFIG_WRITE,
   readOpenClawConfigSnapshot,
+  updateOpenClawConfig,
 } from './channel-config';
 import { expandPath, getOpenClawConfigDir } from './paths';
 import * as logger from './logger';
@@ -17,6 +19,10 @@ import {
   stageRemovedAgentResources,
   updateAgentDraftConfig,
 } from '../services/agent-draft-session';
+import {
+  getChannelDraftConfigSnapshot,
+  updateChannelDraftConfig,
+} from '../services/channel-draft-session';
 
 const MAIN_AGENT_ID = 'main';
 const MAIN_AGENT_NAME = 'Main';
@@ -99,6 +105,8 @@ export interface AgentsSnapshot {
   channelOwners: Record<string, string>;
   channelAccountOwners: Record<string, string>;
 }
+
+type BindingUpdateMode = 'immediate' | 'channel-draft';
 
 function formatModelLabel(model: unknown): string | null {
   if (typeof model === 'string' && model.trim()) {
@@ -512,6 +520,54 @@ async function buildSnapshotFromConfigWith(
   };
 }
 
+async function updateBindingsConfig<T>(
+  updater: (config: AgentConfigDocument) => Promise<T> | T,
+  options?: { mode?: BindingUpdateMode },
+): Promise<{ result: T; snapshot: AgentsSnapshot }> {
+  const mode = options?.mode ?? 'immediate';
+  let updaterResult: T | undefined;
+
+  if (mode === 'channel-draft') {
+    await updateChannelDraftConfig(async (rawConfig) => {
+      const config = rawConfig as AgentConfigDocument;
+      updaterResult = await updater(config);
+      return true;
+    });
+  } else {
+    await updateOpenClawConfig(async (rawConfig) => {
+      const config = rawConfig as AgentConfigDocument;
+      updaterResult = await updater(config);
+      return true;
+    }, NO_RESTART_CONFIG_WRITE);
+  }
+
+  if (getAgentDraftConfigSnapshot<AgentConfigDocument>()) {
+    await updateAgentDraftConfig(async (rawConfig) => {
+      const config = rawConfig as AgentConfigDocument;
+      await updater(config);
+      return true;
+    });
+  }
+
+  if (mode !== 'channel-draft' && getChannelDraftConfigSnapshot<AgentConfigDocument>()) {
+    await updateChannelDraftConfig(async (rawConfig) => {
+      const config = rawConfig as AgentConfigDocument;
+      await updater(config);
+      return true;
+    });
+  }
+
+  const snapshotConfig = (
+    getAgentDraftConfigSnapshot<AgentConfigDocument>()
+    ?? getChannelDraftConfigSnapshot<AgentConfigDocument>()
+    ?? await readOpenClawConfigSnapshot() as AgentConfigDocument
+  );
+  return {
+    result: updaterResult as T,
+    snapshot: await buildSnapshotFromConfigWith(snapshotConfig, { includeCli: false }),
+  };
+}
+
 async function buildSnapshotFromConfig(
   config: AgentConfigDocument,
   options?: { includeDisk?: boolean; includeCli?: boolean },
@@ -665,36 +721,32 @@ export async function deleteAgentConfig(agentId: string): Promise<AgentsSnapshot
 }
 
 export async function assignChannelToAgent(agentId: string, channelType: string, accountId?: string): Promise<AgentsSnapshot> {
-  await beginAgentDraftSession();
   const runtimeChannelType = toRuntimeChannelType(channelType);
-  const snapshot = await updateAgentDraftConfig(async (rawConfig) => {
-    const config = rawConfig as AgentConfigDocument;
+  const { snapshot } = await updateBindingsConfig(async (config) => {
     const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
     if (!entries.some((entry) => entry.id === agentId)) {
       throw new Error(`Agent "${agentId}" not found`);
     }
-
     config.agents = {
       ...agentsConfig,
       list: entries,
     };
     config.bindings = upsertBindingsForChannel(config.bindings, runtimeChannelType, agentId, accountId);
-    // Use the already-modified config directly to avoid deadlock:
-    // buildSnapshotFromConfigWith avoids re-reading disk; the draft has not
-    // been applied to the watched runtime config yet.
-    return buildSnapshotFromConfigWith(config, { includeCli: false });
   });
   logger.info('Assigned channel to agent', { agentId, channelType: runtimeChannelType, accountId: normalizeBindingAccountId(accountId) });
   return snapshot;
 }
 
-export async function clearChannelBinding(channelType: string, agentId?: string, accountId?: string): Promise<AgentsSnapshot> {
-  await beginAgentDraftSession();
+export async function clearChannelBinding(
+  channelType: string,
+  agentId?: string,
+  accountId?: string,
+  options?: { mode?: BindingUpdateMode },
+): Promise<AgentsSnapshot> {
   const runtimeChannelType = toRuntimeChannelType(channelType);
   const normalizedRequestedAgentId =
     typeof agentId === 'string' && agentId.trim() ? normalizeAgentIdForBinding(agentId) : '';
-  const result = await updateAgentDraftConfig(async (rawConfig) => {
-    const config = rawConfig as AgentConfigDocument;
+  const { result, snapshot } = await updateBindingsConfig(async (config) => {
     const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
     const { typeOwners, accountOwners } = getSimpleChannelBindingMaps(config.bindings);
     const boundAgentId = accountId
@@ -710,24 +762,22 @@ export async function clearChannelBinding(channelType: string, agentId?: string,
       list: entries,
     };
     config.bindings = upsertBindingsForChannel(config.bindings, runtimeChannelType, null, accountId);
-    return {
-      snapshot: buildSnapshotFromConfig(config, { includeCli: false }),
-      boundAgentId,
-    };
-  });
+    return { boundAgentId };
+  }, options);
   logger.info('Cleared simplified channel binding', {
     channelType: runtimeChannelType,
     accountId: accountId ? normalizeBindingAccountId(accountId) : undefined,
     agentId: normalizedRequestedAgentId || result.boundAgentId,
   });
-  return result.snapshot;
+  return snapshot;
 }
 
-export async function clearAllChannelBindings(channelType: string): Promise<AgentsSnapshot> {
-  await beginAgentDraftSession();
+export async function clearAllChannelBindings(
+  channelType: string,
+  options?: { mode?: BindingUpdateMode },
+): Promise<AgentsSnapshot> {
   const runtimeChannelType = toRuntimeChannelType(channelType);
-  const result = await updateAgentDraftConfig(async (rawConfig) => {
-    const config = rawConfig as AgentConfigDocument;
+  const { snapshot } = await updateBindingsConfig(async (config) => {
     const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
 
     config.agents = {
@@ -741,13 +791,10 @@ export async function clearAllChannelBindings(channelType: string): Promise<Agen
       ))
       : undefined;
 
-    return {
-      snapshot: buildSnapshotFromConfig(config, { includeCli: false }),
-    };
-  });
+  }, options);
 
   logger.info('Cleared all simplified channel bindings', {
     channelType: runtimeChannelType,
   });
-  return result.snapshot;
+  return snapshot;
 }

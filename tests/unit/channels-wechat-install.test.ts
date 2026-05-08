@@ -3,6 +3,7 @@ import { Buffer } from 'node:buffer';
 import {
   decodeCliInstallOutput,
   formatWeChatPluginInstallError,
+  WECHAT_PLUGIN_SPEC,
 } from '../../electron/utils/wechat-installer';
 
 describe('wechat plugin install helpers', () => {
@@ -23,5 +24,10 @@ describe('wechat plugin install helpers', () => {
   it('maps ClawHub 429 errors to a concise retry message', () => {
     const raw = 'ClawHub/api/v1/packages/%40tencent-weixin%2Fopenclaw-weixin failed (429): Ratelimit exceeded';
     expect(formatWeChatPluginInstallError(raw)).toContain('ClawHub rate limit exceeded');
+  });
+
+  it('uses a plain npm registry spec accepted by current OpenClaw', () => {
+    expect(WECHAT_PLUGIN_SPEC).toBe('@tencent-weixin/openclaw-weixin');
+    expect(WECHAT_PLUGIN_SPEC.startsWith('npm:')).toBe(false);
   });
 });

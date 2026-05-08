@@ -13,9 +13,7 @@ export function getGatewayLifecycleSourceLabel(t: Translate, source?: string): s
   if (
     source?.startsWith('create-agent') ||
     source?.startsWith('update-agent') ||
-    source?.startsWith('assign-channel') ||
-    source?.startsWith('delete-agent') ||
-    source?.startsWith('remove-agent-channel')
+    source?.startsWith('delete-agent')
   ) {
     return t('gateway.lifecycle.sources.agents');
   }

@@ -108,7 +108,6 @@ export async function handleAgentRoutes(
         }
 
         const snapshot = await assignChannelToAgent(agentId, channelType, accountId);
-        scheduleGatewayReload(ctx, 'assign-channel');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {
         sendJson(res, 500, { success: false, error: String(error) });
@@ -153,7 +152,6 @@ export async function handleAgentRoutes(
         }
 
         const snapshot = await clearChannelBinding(channelType, agentId, accountId);
-        scheduleGatewayReload(ctx, 'remove-agent-channel');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {
         sendJson(res, 500, { success: false, error: String(error) });

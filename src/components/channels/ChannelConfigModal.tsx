@@ -99,6 +99,9 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
   ]);
 }
 
+const CHANNEL_VALIDATE_TIMEOUT_MS = 10_000;
+const CHANNEL_SETUP_TIMEOUT_MS = 60_000;
+
 const inputClasses = 'h-[44px] rounded-xl font-mono text-[13px] bg-muted/70 dark:bg-muted/40 border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40';
 const labelClasses = 'text-[14px] text-foreground/80 font-bold';
 const outlineButtonClasses = 'h-9 text-[13px] font-medium rounded-xl px-4 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none text-foreground/80 hover:text-foreground';
@@ -308,15 +311,13 @@ export function ChannelConfigModal({
           const saveResult = await hostApiFetch<{ success?: boolean; error?: string }>('/api/channels/config', {
             method: 'POST',
             body: JSON.stringify({ channelType: 'whatsapp', config: { enabled: true } }),
+            timeoutMs: CHANNEL_SETUP_TIMEOUT_MS,
           });
           if (!saveResult?.success) {
             throw new Error(saveResult?.error || 'Failed to save WhatsApp config');
           }
-          await useRuntimeApplyStore.getState().refreshPlan();
         }
-        if (savedAccountId) {
-          setSelectedAccountId(savedAccountId);
-        }
+        await useRuntimeApplyStore.getState().refreshPlan();
         await finishSave(channelType, savedAccountId);
         onClose();
       } catch (error) {
@@ -364,7 +365,8 @@ export function ChannelConfigModal({
       }>('/api/channels/credentials/validate', {
         method: 'POST',
         body: JSON.stringify({ channelType: selectedType, config: configValues }),
-      }), 10000, t('toast.validateTimedOut', '验证请求超时，请重试'));
+        timeoutMs: CHANNEL_VALIDATE_TIMEOUT_MS,
+      }), CHANNEL_VALIDATE_TIMEOUT_MS, t('toast.validateTimedOut', '验证请求超时，请重试'));
 
       const warnings = result.warnings || [];
       if (result.valid && result.details) {
@@ -414,6 +416,7 @@ export function ChannelConfigModal({
         await hostApiFetch('/api/channels/wechat/start', {
           method: 'POST',
           body: payload ? JSON.stringify(payload) : undefined,
+          timeoutMs: CHANNEL_SETUP_TIMEOUT_MS,
         });
         return;
       }
@@ -422,6 +425,7 @@ export function ChannelConfigModal({
         await hostApiFetch('/api/channels/whatsapp/start', {
           method: 'POST',
           body: JSON.stringify({ accountId: 'default' }),
+          timeoutMs: CHANNEL_SETUP_TIMEOUT_MS,
         });
         return;
       }
@@ -436,7 +440,8 @@ export function ChannelConfigModal({
         }>('/api/channels/credentials/validate', {
           method: 'POST',
           body: JSON.stringify({ channelType: selectedType, config: configValues }),
-        }), 10000, t('toast.validateTimedOut', '验证请求超时，请重试'));
+          timeoutMs: CHANNEL_VALIDATE_TIMEOUT_MS,
+        }), CHANNEL_VALIDATE_TIMEOUT_MS, t('toast.validateTimedOut', '验证请求超时，请重试'));
 
         if (!validationResponse.valid) {
           setValidationResult({
@@ -478,7 +483,8 @@ export function ChannelConfigModal({
       }>('/api/channels/config', {
         method: 'POST',
         body: JSON.stringify({ channelType: selectedType, config }),
-      }), 15000, t('toast.saveTimedOut', '保存请求超时，请稍后重试'));
+        timeoutMs: CHANNEL_SETUP_TIMEOUT_MS,
+      }), CHANNEL_SETUP_TIMEOUT_MS, t('toast.saveTimedOut', '保存请求超时，请稍后重试'));
       if (!saveResult?.success) {
         throw new Error(saveResult?.error || 'Failed to save channel config');
       }
@@ -488,7 +494,6 @@ export function ChannelConfigModal({
 
       await useRuntimeApplyStore.getState().refreshPlan();
       toast.success(t('toast.channelSaved', { name: meta.name }));
-      toast.success(t('toast.channelConnecting', { name: meta.name }));
       void finishSave(selectedType);
       onClose();
     } catch (error) {

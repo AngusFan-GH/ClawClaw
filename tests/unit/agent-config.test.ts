@@ -158,6 +158,44 @@ describe('agent config lifecycle', () => {
     await finalizeAgentDraftSession();
   });
 
+  it('assigns a channel binding immediately without requiring agent apply', async () => {
+    await writeOpenClawJson({
+      agents: {
+        list: [
+          { id: 'main', name: 'Main', default: true },
+          { id: 'helper', name: 'Helper' },
+        ],
+      },
+      channels: {
+        'openclaw-weixin': {
+          accounts: {
+            'corp-a': {
+              enabled: true,
+            },
+          },
+          defaultAccount: 'corp-a',
+        },
+      },
+      bindings: [],
+    });
+
+    const { assignChannelToAgent } = await import('@electron/utils/agent-config');
+
+    const snapshot = await assignChannelToAgent('helper', 'wechat', 'corp-a');
+    expect(snapshot.agents.some((agent) => agent.id === 'helper')).toBe(true);
+
+    const config = await readOpenClawJson();
+    expect(config.bindings).toEqual([
+      {
+        agentId: 'helper',
+        match: {
+          channel: 'openclaw-weixin',
+          accountId: 'corp-a',
+        },
+      },
+    ]);
+  });
+
   it('deletes the agent as a draft and defers config/resource changes until apply', async () => {
     await writeOpenClawJson({
       agents: {
@@ -412,10 +450,12 @@ describe('agent config lifecycle', () => {
 
     const { clearAllChannelBindings } = await import('@electron/utils/agent-config');
     const {
-      commitAgentDraftSession,
-      finalizeAgentDraftSession,
-    } = await import('@electron/services/agent-draft-session');
-    const snapshot = await clearAllChannelBindings('wecom');
+      beginChannelDraftSession: beginChannelsDraft,
+      commitChannelDraftSession,
+      finalizeChannelDraftSession,
+    } = await import('@electron/services/channel-draft-session');
+    await beginChannelsDraft();
+    const snapshot = await clearAllChannelBindings('wecom', { mode: 'channel-draft' });
 
     expect(snapshot.channelOwners.wecom).toBeUndefined();
     expect(snapshot.channelAccountOwners['wecom:corp-b']).toBeUndefined();
@@ -443,8 +483,8 @@ describe('agent config lifecycle', () => {
       },
     ]);
 
-    await commitAgentDraftSession();
-    await finalizeAgentDraftSession();
+    await commitChannelDraftSession();
+    await finalizeChannelDraftSession();
 
     const config = await readOpenClawJson();
     expect(config.bindings).toEqual([

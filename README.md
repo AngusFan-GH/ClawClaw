@@ -107,7 +107,7 @@ Communicate with AI agents through a modern chat experience. Support for multipl
 
 Configure and monitor multiple AI channels simultaneously. Each channel operates independently, allowing you to run specialized agents for different tasks.
 Channels now follow OpenClaw's type-first model: each channel type is shown as a single card with nested accounts, while account-level configuration, deletion, and status inspection stay aligned with the upstream runtime snapshot. Whether a channel exposes “Add account” depends on the upstream plugin's real multi-account capability, not on a blanket UI rule across all channel types. The intended flow is now explicit: create or edit concrete channel accounts on the Connections page first, then bind those accounts to agents on the Agents page so multi-account channels do not have to share one owner.
-For WeChat, ClawClaw now treats login as a plugin-managed QR session: it prefers the bundled OpenClaw plugin mirror from the Connections page, falls back to the official install flow only when needed, requests a QR code directly in-app, refreshes expired sessions, and saves the returned account automatically. Model, agent, and connection configuration changes are now saved first and then applied through a shared pending-changes banner, so multi-step setup usually results in one Gateway reload or short restart instead of several.
+For WeChat, ClawClaw now treats login as a plugin-managed QR session: it prefers the bundled OpenClaw plugin mirror from the Connections page, falls back to the official install flow only when needed, requests a QR code directly in-app, refreshes expired sessions, and saves the returned account automatically. Model, agent, and connection-account configuration changes are now saved first and then applied through a shared pending-changes banner, so multi-step setup usually results in one Gateway reload or short restart instead of several. The exception is agent-to-channel ownership bindings: OpenClaw resolves `bindings` live without a Gateway reload, so binding a channel account to an agent takes effect immediately.
 Gateway startup now prioritizes the core OpenClaw HTTP/WebSocket runtime first. Configured channel accounts are restored in the background after the managed Gateway is connected, so a channel login, network, or plugin-sidecar problem does not block model setup or the main desktop runtime.
 
 ### ⏰ Cron-Based Automation
@@ -223,7 +223,7 @@ Notes:
 - A bare `host:port` value is treated as HTTP.
 - If advanced proxy fields are left empty, ClawClaw falls back to `Proxy Server`.
 - Saving proxy settings reapplies Electron networking immediately and still restarts the Gateway automatically when required.
-- Model, agent, and connection edits are saved as pending runtime changes and can be applied together, so repeated setup steps no longer trigger multiple Gateway restarts in a row.
+- Model, agent, and connection-account edits are saved as pending runtime changes and can be applied together, so repeated setup steps no longer trigger multiple Gateway restarts in a row. Agent-to-channel ownership bindings remain immediate because upstream OpenClaw treats `bindings` as live config.
 - In `Follow System` mode, ClawClaw also resolves the OS proxy and passes it to the auto-started OpenClaw Gateway process.
 - ClawClaw also syncs the proxy to OpenClaw's Telegram channel config when Telegram is enabled.
 

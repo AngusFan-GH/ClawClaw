@@ -1,7 +1,9 @@
+import { app } from 'electron';
 import { EventEmitter } from 'node:events';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { Buffer } from 'node:buffer';
-import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { getOpenClawCliSpawnConfig } from './openclaw-cli';
 import { ensureBundledPluginInstalled } from './bundled-plugin-installer';
@@ -14,13 +16,72 @@ type WeChatInstallerEvents = {
   error: [string];
 };
 
-const WECHAT_PLUGIN_SPEC = '@tencent-weixin/openclaw-weixin';
+export const WECHAT_PLUGIN_SPEC = '@tencent-weixin/openclaw-weixin';
 const WECHAT_CHANNEL_ID = 'openclaw-weixin';
-const WECHAT_PLUGIN_NPM_ONLY_SPEC = `npm:${WECHAT_PLUGIN_SPEC}`;
 const NULL_CHAR = String.fromCharCode(0);
+const WECHAT_PLUGIN_INSTALL_TIMEOUT_MS = 120_000;
+const require = createRequire(import.meta.url);
 
 function installBundledWeChatPlugin(): boolean {
   return ensureBundledPluginInstalled(WECHAT_CHANNEL_ID, 'WeChat').installed;
+}
+
+function tryInstallLocalWeChatPluginMirror(): { installed: boolean; warning?: string } {
+  if (app.isPackaged) {
+    return { installed: false };
+  }
+
+  try {
+    const appRoot = app.getAppPath();
+    const bundlerPath = join(appRoot, 'scripts', 'openclaw-plugin-bundler.cjs');
+    const nodeModulesRoot = join(appRoot, 'node_modules');
+    const packageRoot = join(nodeModulesRoot, '@tencent-weixin', 'openclaw-weixin');
+    if (!existsSync(bundlerPath) || !existsSync(packageRoot)) {
+      return { installed: false };
+    }
+
+    const { bundlePluginMirror } = require(bundlerPath) as {
+      bundlePluginMirror: (options: {
+        nodeModulesRoot: string;
+        npmName: string;
+        destDir: string;
+        pluginLabel?: string;
+        missingPackageMode?: 'throw' | 'warn-return-false';
+      }) => boolean | { copiedCount?: number };
+    };
+
+    const openClawDir = resolveOpenClawDir();
+    const stagingDir = join(openClawDir, '.plugin-mirror-staging', WECHAT_CHANNEL_ID);
+    const targetDir = join(openClawDir, 'extensions', WECHAT_CHANNEL_ID);
+
+    rmSync(stagingDir, { recursive: true, force: true });
+    mkdirSync(join(openClawDir, '.plugin-mirror-staging'), { recursive: true });
+
+    const bundled = bundlePluginMirror({
+      nodeModulesRoot,
+      npmName: WECHAT_PLUGIN_SPEC,
+      destDir: stagingDir,
+      pluginLabel: WECHAT_CHANNEL_ID,
+      missingPackageMode: 'warn-return-false',
+    });
+
+    if (!bundled || !existsSync(join(stagingDir, 'openclaw.plugin.json'))) {
+      return { installed: false };
+    }
+
+    rmSync(targetDir, { recursive: true, force: true });
+    cpSync(stagingDir, targetDir, { recursive: true, dereference: true });
+    repairManagedPluginSdkImports(targetDir);
+
+    return existsSync(join(targetDir, 'openclaw.plugin.json'))
+      ? { installed: true }
+      : { installed: false, warning: 'Local WeChat plugin mirror was built, but manifest was missing after copy.' };
+  } catch (error) {
+    return {
+      installed: false,
+      warning: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 export function decodeCliInstallOutput(chunk: Buffer | string): string {
@@ -65,7 +126,7 @@ async function runOpenClawPluginCommand(args: string[]): Promise<void> {
       settled = true;
       child.kill('SIGTERM');
       reject(new Error('Timed out while installing the WeChat plugin'));
-    }, 30_000);
+    }, WECHAT_PLUGIN_INSTALL_TIMEOUT_MS);
 
     child.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(Buffer.from(chunk)));
     child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(Buffer.from(chunk)));
@@ -100,15 +161,23 @@ export async function ensureWeChatPluginInstalled(): Promise<{ installed: boolea
     return bundledResult;
   }
 
+  const localMirrorResult = tryInstallLocalWeChatPluginMirror();
+  if (localMirrorResult.installed) {
+    return {
+      installed: true,
+      warning: bundledResult.warning || localMirrorResult.warning,
+    };
+  }
+
   const pluginDir = join(resolveOpenClawDir(), 'extensions', WECHAT_CHANNEL_ID);
   const pluginManifest = join(pluginDir, 'openclaw.plugin.json');
   const cliAttempts = existsSync(pluginManifest)
     ? [
       ['plugins', 'update', WECHAT_CHANNEL_ID],
-      ['plugins', 'install', WECHAT_PLUGIN_NPM_ONLY_SPEC],
+      ['plugins', 'install', WECHAT_PLUGIN_SPEC],
     ]
     : [
-      ['plugins', 'install', WECHAT_PLUGIN_NPM_ONLY_SPEC],
+      ['plugins', 'install', WECHAT_PLUGIN_SPEC],
     ];
 
   try {

@@ -13,6 +13,8 @@ type ChannelDraftSnapshot = {
   channels?: unknown;
   hasPlugins: boolean;
   plugins?: unknown;
+  hasBindings: boolean;
+  bindings?: unknown;
 };
 
 type ChannelDraftState = {
@@ -102,6 +104,8 @@ export async function beginChannelDraftSession(): Promise<void> {
     channels: cloneJsonValue(config.channels),
     hasPlugins: Object.prototype.hasOwnProperty.call(config, 'plugins'),
     plugins: cloneJsonValue(config.plugins),
+    hasBindings: Object.prototype.hasOwnProperty.call(config, 'bindings'),
+    bindings: cloneJsonValue(config.bindings),
   };
 
   await rm(CHANNEL_DRAFT_BACKUP_ROOT, { recursive: true, force: true });
@@ -169,6 +173,12 @@ export async function commitChannelDraftSession(): Promise<void> {
       delete nextConfig.plugins;
     }
 
+    if (Object.prototype.hasOwnProperty.call(draftConfig, 'bindings')) {
+      nextConfig.bindings = cloneJsonValue(draftConfig.bindings);
+    } else {
+      delete nextConfig.bindings;
+    }
+
     await writeOpenClawConfigRecord(nextConfig);
   });
 }
@@ -190,6 +200,11 @@ export async function discardChannelDraftSession(): Promise<void> {
       config.plugins = cloneJsonValue(draft.snapshot.plugins);
     } else {
       delete config.plugins;
+    }
+    if (draft.snapshot.hasBindings) {
+      config.bindings = cloneJsonValue(draft.snapshot.bindings);
+    } else {
+      delete config.bindings;
     }
     await writeOpenClawConfigRecord(config);
 

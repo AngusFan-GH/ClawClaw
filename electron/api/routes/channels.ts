@@ -936,9 +936,9 @@ export async function handleChannelRoutes(
       const accountId = url.searchParams.get('accountId');
       await deleteChannelConfig(channelType, accountId);
       if (accountId) {
-        await clearChannelBinding(channelType, undefined, accountId).catch(() => undefined);
+        await clearChannelBinding(channelType, undefined, accountId, { mode: 'channel-draft' }).catch(() => undefined);
       } else {
-        await clearAllChannelBindings(channelType).catch(() => undefined);
+        await clearAllChannelBindings(channelType, { mode: 'channel-draft' }).catch(() => undefined);
       }
       ctx.runtimeApplyPlan.record({
         domain: 'channels',
