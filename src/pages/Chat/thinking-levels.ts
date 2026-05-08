@@ -4,6 +4,12 @@ export const DEFAULT_THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high
 
 const CLAUDE_46_MODEL_RE = /^claude-(?:opus|sonnet)-4(?:\.|-)6(?:$|[-.])/i;
 const BEDROCK_CLAUDE_46_MODEL_RE = /claude-(?:opus|sonnet)-4(?:\.|-)6(?:$|[-.])/i;
+const XHIGH_TAG_RE = /(?:^|[./:_-])xhigh(?:$|[./:_-])/i;
+
+export type ChatThinkingConfigSnapshot = {
+  globalDefault?: string;
+  perModelDefaults: Record<string, string>;
+};
 
 export function normalizeThinkingProvider(provider?: string | null): string {
   const key = provider?.trim().toLowerCase() ?? '';
@@ -39,26 +45,49 @@ export function parseModelRef(ref?: string | null): { provider?: string; model?:
   };
 }
 
+function buildThinkingModelKey(provider?: string | null, model?: string | null): string | undefined {
+  const normalizedProvider = normalizeThinkingProvider(provider);
+  const normalizedModel = model?.trim();
+  if (!normalizedProvider || !normalizedModel) return undefined;
+  return `${normalizedProvider}/${normalizedModel}`;
+}
+
+function supportsXHighThinking(params: {
+  provider?: string | null;
+  model?: string | null;
+  catalog?: ChatModelCatalogEntry[];
+}): boolean {
+  const provider = normalizeThinkingProvider(params.provider);
+  const model = params.model?.trim().toLowerCase() ?? '';
+  if (!provider || !model) return false;
+  return params.catalog?.some((entry) => {
+    if (normalizeThinkingProvider(entry.provider) !== provider) return false;
+    if (entry.id.trim().toLowerCase() !== model) return false;
+    if (entry.xhigh === true) return true;
+    return entry.alias?.trim() ? XHIGH_TAG_RE.test(entry.alias) : false;
+  }) === true;
+}
+
+function resolveConfiguredThinkingDefault(params: {
+  provider?: string | null;
+  model?: string | null;
+  config?: ChatThinkingConfigSnapshot | null;
+}): string | undefined {
+  const normalizedConfig = params.config;
+  const modelKey = buildThinkingModelKey(params.provider, params.model);
+  const perModel = modelKey ? normalizeThinkingLevel(normalizedConfig?.perModelDefaults[modelKey]) : undefined;
+  if (perModel) return perModel;
+  return normalizeThinkingLevel(normalizedConfig?.globalDefault);
+}
+
 export function listThinkingLevelsForModel(params: {
   provider?: string | null;
   model?: string | null;
   catalog?: ChatModelCatalogEntry[];
   currentLevel?: string | null;
 }): string[] {
-  const provider = normalizeThinkingProvider(params.provider);
-  const model = params.model?.trim() ?? '';
-  const levels = provider === 'zai'
-    ? ['off', 'low']
-    : [...DEFAULT_THINKING_LEVELS];
-
-  const supportsXHigh = params.catalog?.some((entry) => (
-    normalizeThinkingProvider(entry.provider) === provider
-    && entry.id.trim().toLowerCase() === model.toLowerCase()
-    && Array.isArray(entry.input)
-    && entry.input.includes('text')
-    && (entry as ChatModelCatalogEntry & { xhigh?: boolean }).xhigh === true
-  )) === true;
-  if (supportsXHigh) {
+  const levels: string[] = [...DEFAULT_THINKING_LEVELS];
+  if (supportsXHighThinking(params)) {
     levels.splice(levels.length - 1, 0, 'xhigh');
   }
 
@@ -73,10 +102,13 @@ export function resolveDefaultThinkingLevel(params: {
   provider?: string | null;
   model?: string | null;
   catalog?: ChatModelCatalogEntry[];
+  config?: ChatThinkingConfigSnapshot | null;
 }): string {
   const provider = normalizeThinkingProvider(params.provider);
   const model = params.model?.trim() ?? '';
   if (!provider || !model) return 'off';
+  const configuredDefault = resolveConfiguredThinkingDefault(params);
+  if (configuredDefault) return configuredDefault;
   if (provider === 'anthropic' && CLAUDE_46_MODEL_RE.test(model)) return 'adaptive';
   if (provider === 'amazon-bedrock' && BEDROCK_CLAUDE_46_MODEL_RE.test(model)) return 'adaptive';
   const normalizedModel = model.toLowerCase();

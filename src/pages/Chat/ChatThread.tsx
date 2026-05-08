@@ -466,11 +466,7 @@ const GroupedMessage = memo(function GroupedMessage({
     : null;
   const canCopyMarkdown = (normalizedRole === 'assistant' || normalizedRole === 'user') && Boolean(markdown.trim());
   const jsonResult = markdown && !isStreaming ? detectJson(markdown) : null;
-  const visibleToolCards = showThinking && hasToolCards;
-
-  if (!showThinking && (normalizedRole === 'tool' || isToolResult) && !markdown.trim()) {
-    return null;
-  }
+  const visibleToolCards = hasToolCards;
 
   if (!markdown && visibleToolCards && isToolResult) {
     return (
@@ -487,7 +483,7 @@ const GroupedMessage = memo(function GroupedMessage({
     return null;
   }
 
-  const isToolMessage = showThinking && (normalizedRole === 'tool' || isToolResult);
+  const isToolMessage = normalizedRole === 'tool' || isToolResult;
   const toolNames = [...new Set(toolCards.map((card) => card.name))];
   const toolSummaryLabel =
     toolNames.length <= 3

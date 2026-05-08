@@ -42,6 +42,7 @@ import {
   resolveEffectiveAgentModelRef,
 } from './chat-page-view-model';
 import {
+  type ChatThinkingConfigSnapshot,
   listThinkingLevelsForModel,
   normalizeThinkingLevel,
   parseModelRef,
@@ -152,6 +153,7 @@ export function Chat() {
   const refreshProviderSnapshot = useProviderStore((s) => s.refreshProviderSnapshot);
   const [chatRuntimeModelRefs, setChatRuntimeModelRefs] = useState<string[]>([]);
   const [chatModelCatalog, setChatModelCatalog] = useState<ChatModelCatalogEntry[]>([]);
+  const [chatThinkingConfig, setChatThinkingConfig] = useState<ChatThinkingConfigSnapshot | null>(null);
   const [chatModelsLoading, setChatModelsLoading] = useState(false);
   const [chatModelsRetryNonce, setChatModelsRetryNonce] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -392,6 +394,9 @@ export function Chat() {
                   entry.reasoning === true
                   || category.toLowerCase() === 'reasoning'
                   || tags.some((tag) => tag.toLowerCase() === 'reasoning'),
+                xhigh:
+                  entry.xhigh === true
+                  || tags.some((tag) => tag.toLowerCase() === 'xhigh' || tag.toLowerCase() === 'reasoning.xhigh'),
                 input: ['text'],
               }];
             })
@@ -402,6 +407,19 @@ export function Chat() {
         if (!cancelled) {
           console.warn('[chat] Failed to load runtime model catalog for thinking picker:', error);
           setChatModelCatalog([]);
+        }
+      });
+    void hostApiFetch<{
+      success?: boolean;
+      config?: ChatThinkingConfigSnapshot;
+    }>('/api/gateway/thinking-config')
+      .then((result) => {
+        if (cancelled) return;
+        setChatThinkingConfig(result?.success === false ? null : result?.config ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setChatThinkingConfig(null);
         }
       });
     return () => {
@@ -605,8 +623,9 @@ export function Chat() {
       provider: thinkingModelIdentity.provider,
       model: thinkingModelIdentity.model,
       catalog: chatModelCatalog,
+      config: chatThinkingConfig,
     }),
-    [chatModelCatalog, thinkingModelIdentity.model, thinkingModelIdentity.provider],
+    [chatModelCatalog, chatThinkingConfig, thinkingModelIdentity.model, thinkingModelIdentity.provider],
   );
 
   // Gateway not running block has been completely removed so the UI always renders.

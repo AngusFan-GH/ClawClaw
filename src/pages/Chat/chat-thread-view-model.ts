@@ -771,10 +771,6 @@ export function buildChatItems(params: {
     if (history[i].role === 'compactionSummary') {
       continue;
     }
-    const normalizedRole = normalizeRoleForGrouping(history[i]);
-    if (!params.showThinking && normalizedRole === 'tool') {
-      continue;
-    }
     transcriptItems.push({
       kind: 'message',
       key: getMessageKey(history[i]),
@@ -823,7 +819,7 @@ export function buildChatItems(params: {
   }
 
   const streamSegments = Array.isArray(params.streamSegments) ? params.streamSegments : [];
-  const toolMessages = params.showThinking && Array.isArray(params.toolMessages) ? params.toolMessages : [];
+  const toolMessages = Array.isArray(params.toolMessages) ? params.toolMessages : [];
   const liveCount = Math.max(streamSegments.length, toolMessages.length);
   for (let i = 0; i < liveCount; i += 1) {
     const segment = streamSegments[i];
@@ -1199,10 +1195,9 @@ export function extractToolCards(message: RawMessage, prefix = 'tool'): ToolCard
   return cards;
 }
 
-export function hasVisibleMessageContent(message: RawMessage, showThinking: boolean): boolean {
+export function hasVisibleMessageContent(message: RawMessage, _showThinking: boolean): boolean {
   const m = message as unknown as Record<string, unknown>;
   const role = typeof m.role === 'string' ? m.role : 'unknown';
-  const normalizedRole = normalizeRoleForGrouping(role);
   const isToolResult =
     String(role).toLowerCase() === 'toolresult'
     || String(role).toLowerCase() === 'tool_result'
@@ -1212,11 +1207,8 @@ export function hasVisibleMessageContent(message: RawMessage, showThinking: bool
   const hasToolCards = toolCards.length > 0;
   const hasImages = extractImages(message).length > 0;
   const markdown = extractText(message)?.trim() ? extractText(message) : '';
-  const visibleToolCards = showThinking && hasToolCards;
+  const visibleToolCards = hasToolCards;
 
-  if (!showThinking && (normalizedRole === 'tool' || isToolResult) && !markdown.trim()) {
-    return false;
-  }
   if (!markdown && visibleToolCards && isToolResult) {
     return true;
   }

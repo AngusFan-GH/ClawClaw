@@ -34,9 +34,9 @@ const SENTINEL_FAST_RE = new RegExp(
     .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     .join('|')
 );
-const QUICK_TAG_RE = /<\s*\/?\s*(?:think(?:ing)?|thought|antthinking|final)\b/i;
+const QUICK_TAG_RE = /<\s*\/?\s*(?:(?:antml:)?(?:think(?:ing)?|thought)|antthinking|final)\b/i;
 const FINAL_TAG_RE = /<\s*\/?\s*final\b[^<>]*>/gi;
-const THINKING_TAG_RE = /<\s*(\/?)\s*(?:think(?:ing)?|thought|antthinking)\b[^<>]*>/gi;
+const THINKING_TAG_RE = /<\s*(\/?)\s*(?:(?:antml:)?(?:think(?:ing)?|thought)|antthinking)\b[^<>]*>/gi;
 const MEMORY_TAG_RE = /<\s*(\/?)\s*relevant[-_]memories\b[^<>]*>/gi;
 const MEMORY_TAG_QUICK_RE = /<\s*\/?\s*relevant[-_]memories\b/i;
 const LEADING_TIMESTAMP_PREFIX_RE = /^(?:\[[^\]]+\]\s*)+/;
@@ -424,26 +424,26 @@ export function extractThinking(message: RawMessage | unknown): string | null {
   const msg = message as Record<string, unknown>;
   const content = msg.content;
 
-  if (!Array.isArray(content)) return null;
-
-  const parts: string[] = [];
-  for (const block of content as ContentBlock[]) {
-    if (block.type === 'thinking' && block.thinking) {
-      const cleaned = block.thinking.trim();
-      if (cleaned) {
-        parts.push(cleaned);
+  if (Array.isArray(content)) {
+    const parts: string[] = [];
+    for (const block of content as ContentBlock[]) {
+      if (block.type === 'thinking' && block.thinking) {
+        const cleaned = block.thinking.trim();
+        if (cleaned) {
+          parts.push(cleaned);
+        }
       }
     }
-  }
 
-  if (parts.length > 0) {
-    return parts.join('\n');
+    if (parts.length > 0) {
+      return parts.join('\n');
+    }
   }
 
   const rawText = extractRawText(message);
   if (!rawText) return null;
   const matches = [
-    ...rawText.matchAll(/<\s*think(?:ing)?\s*>([\s\S]*?)<\s*\/\s*think(?:ing)?\s*>/gi),
+    ...rawText.matchAll(/<\s*(?:(?:antml:)?(?:think(?:ing)?|thought)|antthinking)\s*>([\s\S]*?)<\s*\/\s*(?:(?:antml:)?(?:think(?:ing)?|thought)|antthinking)\s*>/gi),
   ];
   const extracted = matches.map((match) => (match[1] ?? '').trim()).filter(Boolean);
   return extracted.length > 0 ? extracted.join('\n') : null;

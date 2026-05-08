@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { PORTS } from '../../utils/config';
+import { readOpenClawConfigRecordRaw } from '../../utils/openclaw-config';
 import { buildOpenClawControlUiUrl } from '../../utils/openclaw-control-ui';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { getSetting } from '../../utils/store';
@@ -7,6 +8,36 @@ import type { HostApiContext } from '../context';
 import { parseJsonBody, sendBuffer, sendJson } from '../route-utils';
 
 const CHAT_SEND_RPC_TIMEOUT_MS = 135_000;
+
+function extractThinkingConfigSnapshot(config: Record<string, unknown>): {
+  globalDefault?: string;
+  perModelDefaults: Record<string, string>;
+} {
+  const agents = config.agents;
+  const defaults = agents && typeof agents === 'object' && !Array.isArray(agents)
+    ? (agents as Record<string, unknown>).defaults
+    : undefined;
+  const defaultsRecord = defaults && typeof defaults === 'object' && !Array.isArray(defaults)
+    ? defaults as Record<string, unknown>
+    : undefined;
+  const globalDefault = typeof defaultsRecord?.thinkingDefault === 'string'
+    ? defaultsRecord.thinkingDefault
+    : undefined;
+  const models = defaultsRecord?.models;
+  const perModelDefaults: Record<string, string> = {};
+  if (models && typeof models === 'object' && !Array.isArray(models)) {
+    for (const [key, entry] of Object.entries(models as Record<string, unknown>)) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+      const params = (entry as Record<string, unknown>).params;
+      if (!params || typeof params !== 'object' || Array.isArray(params)) continue;
+      const thinking = (params as Record<string, unknown>).thinking;
+      if (typeof thinking === 'string' && thinking.trim()) {
+        perModelDefaults[key.trim()] = thinking.trim();
+      }
+    }
+  }
+  return { globalDefault, perModelDefaults };
+}
 
 export async function handleGatewayRoutes(
   req: IncomingMessage,
@@ -88,6 +119,19 @@ export async function handleGatewayRoutes(
         ready: status.state === 'running',
         state: status.state,
         error: status.error,
+      });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/gateway/thinking-config' && req.method === 'GET') {
+    try {
+      const config = await readOpenClawConfigRecordRaw();
+      sendJson(res, 200, {
+        success: true,
+        config: extractThinkingConfigSnapshot(config),
       });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

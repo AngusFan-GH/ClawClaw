@@ -8,6 +8,7 @@ export type ChatModelCatalogEntry = {
   alias?: string;
   contextWindow?: number;
   reasoning?: boolean;
+  xhigh?: boolean;
   input?: Array<'text' | 'image' | 'document'>;
 };
 
