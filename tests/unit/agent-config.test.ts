@@ -102,7 +102,7 @@ describe('agent config lifecycle', () => {
     ]);
   });
 
-  it('creates an agent without writing commands.restart into openclaw.json', async () => {
+  it('creates an agent as a draft without mutating openclaw.json until apply', async () => {
     await writeOpenClawJson({
       commands: {
         restart: true,
@@ -126,15 +126,39 @@ describe('agent config lifecycle', () => {
     await writeFile(join(testHome, '.openclaw', 'workspace', 'AGENTS.md'), '# main', 'utf8');
 
     const { createAgent } = await import('@electron/utils/agent-config');
+    const {
+      commitAgentDraftSession,
+      finalizeAgentDraftSession,
+    } = await import('@electron/services/agent-draft-session');
 
     const snapshot = await createAgent('Helper');
     expect(snapshot.agents.some((agent) => agent.id === 'helper')).toBe(true);
 
-    const config = await readOpenClawJson();
-    expect(config.commands).toEqual({ custom: 'keep-me' });
+    const configBeforeApply = await readOpenClawJson();
+    expect(configBeforeApply.commands).toEqual({ restart: true, custom: 'keep-me' });
+    expect((configBeforeApply.agents as { list: Array<{ id: string }> }).list).toEqual([
+      {
+        id: 'main',
+        name: 'Main',
+        default: true,
+        workspace: '~/.openclaw/workspace',
+        agentDir: '~/.openclaw/agents/main/agent',
+      },
+    ]);
+
+    await commitAgentDraftSession();
+
+    const configAfterApply = await readOpenClawJson();
+    expect(configAfterApply.commands).toEqual({ restart: true, custom: 'keep-me' });
+    expect((configAfterApply.agents as { list: Array<{ id: string }> }).list.map((agent) => agent.id)).toEqual([
+      'main',
+      'helper',
+    ]);
+
+    await finalizeAgentDraftSession();
   });
 
-  it('deletes the config entry, bindings, runtime directory, and managed workspace for a removed agent', async () => {
+  it('deletes the agent as a draft and defers config/resource changes until apply', async () => {
     await writeOpenClawJson({
       agents: {
         defaults: {
@@ -194,21 +218,119 @@ describe('agent config lifecycle', () => {
 
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const { deleteAgentConfig } = await import('@electron/utils/agent-config');
+    const {
+      commitAgentDraftSession,
+      finalizeAgentDraftSession,
+    } = await import('@electron/services/agent-draft-session');
 
     const snapshot = await deleteAgentConfig('test2');
 
     expect(snapshot.agents.map((agent) => agent.id)).toEqual(['main', 'test3']);
     expect(snapshot.channelOwners.feishu).toBeUndefined();
 
-    const config = await readOpenClawJson();
+    const configBeforeApply = await readOpenClawJson();
     expect(
-      (config.agents as { list: Array<{ id: string }> }).list.map((agent) => agent.id)
+      (configBeforeApply.agents as { list: Array<{ id: string }> }).list.map((agent) => agent.id)
+    ).toEqual(['main', 'test2', 'test3']);
+    expect(configBeforeApply.bindings).toEqual([
+      {
+        agentId: 'test2',
+        match: {
+          channel: 'feishu',
+        },
+      },
+    ]);
+    await expect(access(test2RuntimeDir)).resolves.toBeUndefined();
+    await expect(access(test2WorkspaceDir)).resolves.toBeUndefined();
+
+    await commitAgentDraftSession();
+
+    const configAfterApply = await readOpenClawJson();
+    expect(
+      (configAfterApply.agents as { list: Array<{ id: string }> }).list.map((agent) => agent.id)
     ).toEqual(['main', 'test3']);
-    expect(config.bindings).toEqual([]);
+    expect(configAfterApply.bindings).toEqual([]);
+
+    await finalizeAgentDraftSession();
+
     await expect(access(test2RuntimeDir)).rejects.toThrow();
     await expect(access(test2WorkspaceDir)).rejects.toThrow();
 
     infoSpy.mockRestore();
+  });
+
+  it('restores the previous agent config and managed directories when discarding a draft session', async () => {
+    await writeOpenClawJson({
+      agents: {
+        list: [
+          {
+            id: 'main',
+            name: 'Main',
+            default: true,
+            workspace: '~/.openclaw/workspace',
+            agentDir: '~/.openclaw/agents/main/agent',
+          },
+          {
+            id: 'helper',
+            name: 'Helper',
+            workspace: '~/.openclaw/workspace-helper',
+            agentDir: '~/.openclaw/agents/helper/agent',
+          },
+        ],
+      },
+      bindings: [
+        {
+          agentId: 'helper',
+          match: {
+            channel: 'feishu',
+          },
+        },
+      ],
+    });
+
+    const helperRuntimeDir = join(testHome, '.openclaw', 'agents', 'helper');
+    const helperWorkspaceDir = join(testHome, '.openclaw', 'workspace-helper');
+    await mkdir(join(helperRuntimeDir, 'agent'), { recursive: true });
+    await mkdir(helperWorkspaceDir, { recursive: true });
+    await writeFile(join(helperWorkspaceDir, 'AGENTS.md'), '# helper', 'utf8');
+
+    const { beginAgentDraftSession, discardAgentDraftSession } = await import('@electron/services/agent-draft-session');
+    await beginAgentDraftSession();
+
+    const { updateAgentSettings, deleteAgentConfig } = await import('@electron/utils/agent-config');
+    await updateAgentSettings('helper', { name: 'Helper Draft', model: 'openai/gpt-5.5' });
+    await deleteAgentConfig('helper');
+
+    await discardAgentDraftSession();
+
+    const config = await readOpenClawJson();
+    expect(
+      (config.agents as { list: Array<{ id: string; name?: string; model?: string }> }).list
+    ).toEqual([
+      {
+        id: 'main',
+        name: 'Main',
+        default: true,
+        workspace: '~/.openclaw/workspace',
+        agentDir: '~/.openclaw/agents/main/agent',
+      },
+      {
+        id: 'helper',
+        name: 'Helper',
+        workspace: '~/.openclaw/workspace-helper',
+        agentDir: '~/.openclaw/agents/helper/agent',
+      },
+    ]);
+    expect(config.bindings).toEqual([
+      {
+        agentId: 'helper',
+        match: {
+          channel: 'feishu',
+        },
+      },
+    ]);
+    await expect(access(helperRuntimeDir)).resolves.toBeUndefined();
+    await expect(access(helperWorkspaceDir)).resolves.toBeUndefined();
   });
 
   it('preserves unmanaged custom workspaces when deleting an agent', async () => {
@@ -241,8 +363,14 @@ describe('agent config lifecycle', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const { deleteAgentConfig } = await import('@electron/utils/agent-config');
+    const {
+      commitAgentDraftSession,
+      finalizeAgentDraftSession,
+    } = await import('@electron/services/agent-draft-session');
 
     await deleteAgentConfig('test2');
+    await commitAgentDraftSession();
+    await finalizeAgentDraftSession();
 
     await expect(access(customWorkspaceDir)).resolves.toBeUndefined();
 
@@ -283,10 +411,40 @@ describe('agent config lifecycle', () => {
     });
 
     const { clearAllChannelBindings } = await import('@electron/utils/agent-config');
+    const {
+      commitAgentDraftSession,
+      finalizeAgentDraftSession,
+    } = await import('@electron/services/agent-draft-session');
     const snapshot = await clearAllChannelBindings('wecom');
 
     expect(snapshot.channelOwners.wecom).toBeUndefined();
     expect(snapshot.channelAccountOwners['wecom:corp-b']).toBeUndefined();
+
+    const configBeforeApply = await readOpenClawJson();
+    expect(configBeforeApply.bindings).toEqual([
+      {
+        agentId: 'alpha',
+        match: {
+          channel: 'wecom',
+        },
+      },
+      {
+        agentId: 'beta',
+        match: {
+          channel: 'wecom',
+          accountId: 'corp-b',
+        },
+      },
+      {
+        agentId: 'beta',
+        match: {
+          channel: 'telegram',
+        },
+      },
+    ]);
+
+    await commitAgentDraftSession();
+    await finalizeAgentDraftSession();
 
     const config = await readOpenClawJson();
     expect(config.bindings).toEqual([

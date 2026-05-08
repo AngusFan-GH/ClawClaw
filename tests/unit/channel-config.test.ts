@@ -37,6 +37,12 @@ async function readOpenClawJson(): Promise<Record<string, unknown>> {
   return JSON.parse(content) as Record<string, unknown>;
 }
 
+async function applyChannelDraft(): Promise<void> {
+  const { commitChannelDraftSession, finalizeChannelDraftSession } = await import('@electron/services/channel-draft-session');
+  await commitChannelDraftSession();
+  await finalizeChannelDraftSession();
+}
+
 describe('channel config lifecycle', () => {
   beforeEach(async () => {
     vi.resetModules();
@@ -191,6 +197,8 @@ describe('channel config lifecycle', () => {
     const { deleteChannelConfig, listConfiguredChannels } = await import('@electron/utils/channel-config');
     await deleteChannelConfig('wechat');
 
+    await applyChannelDraft();
+
     const config = await readOpenClawJson();
     expect(config.channels ?? {}).not.toHaveProperty('openclaw-weixin');
     expect(config.plugins).toEqual({
@@ -274,6 +282,8 @@ describe('channel config lifecycle', () => {
       },
     ]);
 
+    await applyChannelDraft();
+
     const config = await readOpenClawJson();
     expect(config.channels).toEqual({
       'openclaw-weixin': {
@@ -290,7 +300,7 @@ describe('channel config lifecycle', () => {
     });
   });
 
-  it('saves channel config without writing commands.restart into openclaw.json', async () => {
+  it('saves channel config as a draft without mutating openclaw.json until apply', async () => {
     await writeOpenClawJson({
       commands: {
         restart: true,
@@ -298,18 +308,38 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { saveChannelConfig } = await import('@electron/utils/channel-config');
+    const { saveChannelConfig, listConfiguredChannels } = await import('@electron/utils/channel-config');
+    const {
+      commitChannelDraftSession,
+      finalizeChannelDraftSession,
+    } = await import('@electron/services/channel-draft-session');
     await saveChannelConfig('telegram', {
       botToken: '123:abc',
       chatId: '456',
       enabled: true,
     });
 
+    await expect(listConfiguredChannels({ includeCli: false })).resolves.toEqual(['telegram']);
+
+    const configBeforeApply = await readOpenClawJson();
+    expect(configBeforeApply.commands).toEqual({ restart: true, custom: 'keep-me' });
+    expect(configBeforeApply.channels).toBeUndefined();
+
+    await commitChannelDraftSession();
+    await finalizeChannelDraftSession();
+
     const config = await readOpenClawJson();
-    expect(config.commands).toEqual({ custom: 'keep-me' });
+    expect(config.commands).toEqual({ restart: true, custom: 'keep-me' });
+    expect(config.channels).toEqual({
+      telegram: {
+        botToken: '123:abc',
+        chatId: '456',
+        enabled: true,
+      },
+    });
   });
 
-  it('toggles channel enabled without writing commands.restart into openclaw.json', async () => {
+  it('toggles channel enabled as a draft without mutating openclaw.json until apply', async () => {
     await writeOpenClawJson({
       commands: {
         restart: true,
@@ -324,11 +354,34 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { setChannelEnabled } = await import('@electron/utils/channel-config');
+    const { setChannelEnabled, getChannelConfig } = await import('@electron/utils/channel-config');
+    const {
+      commitChannelDraftSession,
+      finalizeChannelDraftSession,
+    } = await import('@electron/services/channel-draft-session');
     await setChannelEnabled('telegram', false);
 
+    await expect(getChannelConfig('telegram')).resolves.toMatchObject({
+      botToken: '123:abc',
+      chatId: '456',
+      enabled: false,
+    });
+
+    const configBeforeApply = await readOpenClawJson();
+    expect(configBeforeApply.commands).toEqual({ restart: true, custom: 'keep-me' });
+    expect(configBeforeApply.channels).toEqual({
+      telegram: {
+        botToken: '123:abc',
+        chatId: '456',
+        enabled: true,
+      },
+    });
+
+    await commitChannelDraftSession();
+    await finalizeChannelDraftSession();
+
     const config = await readOpenClawJson();
-    expect(config.commands).toEqual({ custom: 'keep-me' });
+    expect(config.commands).toEqual({ restart: true, custom: 'keep-me' });
     expect(config.channels).toEqual({
       telegram: {
         botToken: '123:abc',
@@ -338,7 +391,7 @@ describe('channel config lifecycle', () => {
     });
   });
 
-  it('deletes channel config without writing commands.restart into openclaw.json', async () => {
+  it('deletes channel config as a draft without mutating openclaw.json until apply', async () => {
     await writeOpenClawJson({
       commands: {
         restart: true,
@@ -354,12 +407,30 @@ describe('channel config lifecycle', () => {
     });
 
     const { deleteChannelConfig, listConfiguredChannels } = await import('@electron/utils/channel-config');
+    const {
+      commitChannelDraftSession,
+      finalizeChannelDraftSession,
+    } = await import('@electron/services/channel-draft-session');
     await deleteChannelConfig('telegram');
 
-    const config = await readOpenClawJson();
-    expect(config.commands).toEqual({ custom: 'keep-me' });
-    expect(config.channels ?? {}).not.toHaveProperty('telegram');
+    const configBeforeApply = await readOpenClawJson();
+    expect(configBeforeApply.commands).toEqual({ restart: true, custom: 'keep-me' });
+    expect(configBeforeApply.channels).toEqual({
+      telegram: {
+        botToken: '123:abc',
+        chatId: '456',
+        enabled: true,
+      },
+    });
+    expect(configBeforeApply.channels ?? {}).toHaveProperty('telegram');
     await expect(listConfiguredChannels({ includeCli: false })).resolves.toEqual([]);
+
+    await commitChannelDraftSession();
+    await finalizeChannelDraftSession();
+
+    const config = await readOpenClawJson();
+    expect(config.commands).toEqual({ restart: true, custom: 'keep-me' });
+    expect(config.channels ?? {}).not.toHaveProperty('telegram');
   });
 
   it('does not report wechat as configured when only runtime state remains', async () => {
@@ -388,6 +459,8 @@ describe('channel config lifecycle', () => {
 
     const { deleteChannelConfig, listConfiguredChannels, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
     await deleteChannelConfig('wecom');
+
+    await applyChannelDraft();
 
     const config = await readOpenClawJson();
     expect(config.channels ?? {}).not.toHaveProperty('wecom');
@@ -421,6 +494,8 @@ describe('channel config lifecycle', () => {
 
     const { deleteChannelConfig, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
     await deleteChannelConfig('wecom', 'corp-a');
+
+    await applyChannelDraft();
 
     const config = await readOpenClawJson();
     expect(config.channels).toEqual({
@@ -477,6 +552,8 @@ describe('channel config lifecycle', () => {
 
     const { deleteChannelConfig, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
     await deleteChannelConfig('wecom', 'default');
+
+    await applyChannelDraft();
 
     const config = await readOpenClawJson();
     expect(config.channels).toEqual({
@@ -651,6 +728,8 @@ describe('channel config lifecycle', () => {
     const { deleteChannelConfig } = await import('@electron/utils/channel-config');
     await deleteChannelConfig('qqbot');
 
+    await applyChannelDraft();
+
     const config = await readOpenClawJson();
     expect(config.channels ?? {}).not.toHaveProperty('qqbot');
     expect(config.plugins).toBeUndefined();
@@ -681,6 +760,8 @@ describe('channel config lifecycle', () => {
       enabled: true,
     });
 
+    await applyChannelDraft();
+
     const config = await readOpenClawJson();
     expect(config.plugins).toEqual({
       allow: ['feishu'],
@@ -707,6 +788,8 @@ describe('channel config lifecycle', () => {
       appSecret: 'secret-b',
       enabled: true,
     });
+
+    await applyChannelDraft();
 
     const config = await readOpenClawJson();
     expect(config.channels).toEqual({
@@ -786,6 +869,8 @@ describe('channel config lifecycle', () => {
       appSecret: 'secret-b',
       enabled: true,
     });
+
+    await applyChannelDraft();
 
     const config = await readOpenClawJson();
     expect(config.channels).toEqual({
@@ -916,6 +1001,8 @@ describe('channel config lifecycle', () => {
     });
 
     await deleteChannelConfig('feishu', 'team-b');
+
+    await applyChannelDraft();
 
     const config = await readOpenClawJson();
     expect(config.channels).toEqual({
@@ -1132,5 +1219,43 @@ describe('channel config lifecycle', () => {
     });
 
     await expect(access(wechatDir)).rejects.toThrow();
+  });
+
+  it('restores deleted channel config and runtime channel state when discarding a draft session', async () => {
+    await writeOpenClawJson({
+      channels: {
+        qqbot: {
+          enabled: true,
+          appId: 'app-1',
+          clientSecret: 'secret-1',
+        },
+      },
+      plugins: {
+        allow: ['qqbot'],
+      },
+    });
+
+    const qqbotSessionDir = join(testHome, '.openclaw', 'qqbot', 'sessions');
+    await mkdir(qqbotSessionDir, { recursive: true });
+    await writeFile(join(qqbotSessionDir, 'session-default.json'), '{"ok":true}', 'utf8');
+
+    const { deleteChannelConfig } = await import('@electron/utils/channel-config');
+    const { discardChannelDraftSession } = await import('@electron/services/channel-draft-session');
+
+    await deleteChannelConfig('qqbot');
+    await expect(access(join(qqbotSessionDir, 'session-default.json'))).resolves.toBeUndefined();
+
+    await discardChannelDraftSession();
+
+    const restored = await readOpenClawJson();
+    expect(restored.channels).toEqual({
+      qqbot: {
+        enabled: true,
+        appId: 'app-1',
+        clientSecret: 'secret-1',
+      },
+    });
+    expect((restored.plugins as { allow?: string[] } | undefined)?.allow).toEqual(['qqbot']);
+    await expect(access(join(qqbotSessionDir, 'session-default.json'))).resolves.toBeUndefined();
   });
 });

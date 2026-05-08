@@ -27,8 +27,9 @@ import {
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { DEFAULT_SESSION_KEY, isBackgroundSession, resolveSessionSidebarTitle, useChatStore } from '@/stores/chat';
-import { useAgentsStore } from '@/stores/agents';
+import { getAppliedAgentsSnapshotState, useAgentsStore } from '@/stores/agents';
 import { useGatewayStore } from '@/stores/gateway';
+import { useRuntimeApplyStore } from '@/stores/runtime-apply';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -214,6 +215,7 @@ export function Sidebar() {
   const deleteSession = useChatStore((s) => s.deleteSession);
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
+  const runtimeApplyPlan = useRuntimeApplyStore((state) => state.plan);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const gatewayInitialized = useGatewayStore((s) => s.isInitialized);
   const displayGatewayState = gatewayInitialized ? gatewayStatus.state : 'starting';
@@ -256,9 +258,14 @@ export function Sidebar() {
     void fetchAgents();
   }, [fetchAgents]);
 
+  const appliedAgents = useMemo(() => {
+    void runtimeApplyPlan.pending;
+    return getAppliedAgentsSnapshotState().agents;
+  }, [agents, runtimeApplyPlan.pending]);
+
   const agentNameMap = useMemo(
-    () => new Map((agents ?? []).map((agent) => [agent.gateway.id, resolveAgentDisplayName(agent)])),
-    [agents]
+    () => new Map((appliedAgents ?? []).map((agent) => [agent.gateway.id, resolveAgentDisplayName(agent)])),
+    [appliedAgents]
   );
   const sessionByKey = useMemo(
     () => new Map((sessions ?? []).map((session) => [session.key, session])),

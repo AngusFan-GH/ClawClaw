@@ -3,9 +3,7 @@ import { constants } from 'fs';
 import { join, normalize } from 'path';
 import {
   listConfiguredChannelGroupsFromConfig,
-  NO_RESTART_CONFIG_WRITE,
   readOpenClawConfigSnapshot,
-  updateOpenClawConfig,
 } from './channel-config';
 import { expandPath, getOpenClawConfigDir } from './paths';
 import * as logger from './logger';
@@ -13,6 +11,12 @@ import {
   toRuntimeChannelType,
   toUiChannelType,
 } from './channel-alias';
+import {
+  beginAgentDraftSession,
+  getAgentDraftConfigSnapshot,
+  stageRemovedAgentResources,
+  updateAgentDraftConfig,
+} from '../services/agent-draft-session';
 
 const MAIN_AGENT_ID = 'main';
 const MAIN_AGENT_NAME = 'Main';
@@ -374,19 +378,6 @@ async function getEffectiveAgentEntries(
   };
 }
 
-async function removeAgentRuntimeDirectory(agentId: string): Promise<void> {
-  const runtimeDir = join(getOpenClawConfigDir(), 'agents', agentId);
-  try {
-    await rm(runtimeDir, { recursive: true, force: true });
-  } catch (error) {
-    logger.warn('Failed to remove agent runtime directory', {
-      agentId,
-      runtimeDir,
-      error: String(error),
-    });
-  }
-}
-
 function trimTrailingSeparators(path: string): string {
   return path.replace(/[\\/]+$/, '');
 }
@@ -400,27 +391,6 @@ function getManagedWorkspaceDirectory(agent: AgentListEntry): string | null {
   const normalizedManaged = trimTrailingSeparators(normalize(managedWorkspace));
 
   return normalizedConfigured === normalizedManaged ? configuredWorkspace : null;
-}
-
-async function removeAgentWorkspaceDirectory(agent: AgentListEntry): Promise<void> {
-  const workspaceDir = getManagedWorkspaceDirectory(agent);
-  if (!workspaceDir) {
-    logger.warn('Skipping agent workspace deletion for unmanaged path', {
-      agentId: agent.id,
-      workspace: agent.workspace,
-    });
-    return;
-  }
-
-  try {
-    await rm(workspaceDir, { recursive: true, force: true });
-  } catch (error) {
-    logger.warn('Failed to remove agent workspace directory', {
-      agentId: agent.id,
-      workspaceDir,
-      error: String(error),
-    });
-  }
 }
 
 async function copyBootstrapFiles(sourceWorkspace: string, targetWorkspace: string): Promise<void> {
@@ -550,21 +520,28 @@ async function buildSnapshotFromConfig(
 }
 
 export async function listAgentsSnapshot(): Promise<AgentsSnapshot> {
-  const config = await readOpenClawConfigSnapshot() as AgentConfigDocument;
+  const config = (
+    getAgentDraftConfigSnapshot<AgentConfigDocument>()
+    ?? await readOpenClawConfigSnapshot()
+  ) as AgentConfigDocument;
   return buildSnapshotFromConfig(config, { includeCli: false });
 }
 
 export async function listConfiguredAgentIds(): Promise<string[]> {
-  const config = await readOpenClawConfigSnapshot() as AgentConfigDocument;
+  const config = (
+    getAgentDraftConfigSnapshot<AgentConfigDocument>()
+    ?? await readOpenClawConfigSnapshot()
+  ) as AgentConfigDocument;
   const { entries } = await getEffectiveAgentEntries(config, { includeDisk: false });
   const ids = [...new Set(entries.map((entry) => entry.id.trim()).filter(Boolean))];
   return ids.length > 0 ? ids : [MAIN_AGENT_ID];
 }
 
 export async function createAgent(name: string): Promise<AgentsSnapshot> {
+  await beginAgentDraftSession();
   const normalizedName = normalizeAgentName(name);
   const diskIds = await listExistingAgentIdsOnDisk();
-  const result = await updateOpenClawConfig(async (rawConfig) => {
+  const result = await updateAgentDraftConfig(async (rawConfig) => {
     const config = rawConfig as AgentConfigDocument;
     const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
     const existingIds = new Set(entries.map((entry) => entry.id));
@@ -595,7 +572,7 @@ export async function createAgent(name: string): Promise<AgentsSnapshot> {
       snapshot: buildSnapshotFromConfig(config, { includeCli: false }),
       agentId: nextId,
     };
-  }, NO_RESTART_CONFIG_WRITE);
+  });
   logger.info('Created agent config entry', { agentId: result.agentId });
   return result.snapshot;
 }
@@ -608,13 +585,14 @@ export async function updateAgentSettings(
   agentId: string,
   updates: { name?: string; model?: string | null },
 ): Promise<AgentsSnapshot> {
+  await beginAgentDraftSession();
   const hasName = typeof updates.name === 'string';
   const hasModel = Object.prototype.hasOwnProperty.call(updates, 'model');
   const normalizedName = hasName ? normalizeAgentName(updates.name ?? '') : undefined;
   const normalizedModel = typeof updates.model === 'string'
     ? updates.model.trim() || null
     : updates.model ?? null;
-  const snapshot = await updateOpenClawConfig(async (rawConfig) => {
+  const snapshot = await updateAgentDraftConfig(async (rawConfig) => {
     const config = rawConfig as AgentConfigDocument;
     const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
     const index = entries.findIndex((entry) => entry.id === agentId);
@@ -634,7 +612,7 @@ export async function updateAgentSettings(
     };
 
     return buildSnapshotFromConfig(config, { includeCli: false });
-  }, NO_RESTART_CONFIG_WRITE);
+  });
   logger.info('Updated agent settings', { agentId, name: normalizedName, model: normalizedModel });
   return snapshot;
 }
@@ -644,7 +622,8 @@ export async function deleteAgentConfig(agentId: string): Promise<AgentsSnapshot
     throw new Error('The main agent cannot be deleted');
   }
 
-  const result = await updateOpenClawConfig(async (rawConfig) => {
+  await beginAgentDraftSession();
+  const result = await updateAgentDraftConfig(async (rawConfig) => {
     const config = rawConfig as AgentConfigDocument;
     const { agentsConfig, entries, defaultAgentId } = await getEffectiveAgentEntries(config);
     const removedEntry = entries.find((entry) => entry.id === agentId);
@@ -672,16 +651,23 @@ export async function deleteAgentConfig(agentId: string): Promise<AgentsSnapshot
       snapshot: buildSnapshotFromConfig(config, { includeDisk: false, includeCli: false }),
       removedEntry,
     };
-  }, NO_RESTART_CONFIG_WRITE);
-  await removeAgentRuntimeDirectory(agentId);
-  await removeAgentWorkspaceDirectory(result.removedEntry);
+  });
+  const workspaceDir = getManagedWorkspaceDirectory(result.removedEntry);
+  if (!workspaceDir && result.removedEntry.workspace) {
+    logger.warn('Skipping agent workspace deletion for unmanaged path', {
+      agentId: result.removedEntry.id,
+      workspace: result.removedEntry.workspace,
+    });
+  }
+  await stageRemovedAgentResources(agentId, workspaceDir);
   logger.info('Deleted agent config entry', { agentId });
   return result.snapshot;
 }
 
 export async function assignChannelToAgent(agentId: string, channelType: string, accountId?: string): Promise<AgentsSnapshot> {
+  await beginAgentDraftSession();
   const runtimeChannelType = toRuntimeChannelType(channelType);
-  const snapshot = await updateOpenClawConfig(async (rawConfig) => {
+  const snapshot = await updateAgentDraftConfig(async (rawConfig) => {
     const config = rawConfig as AgentConfigDocument;
     const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
     if (!entries.some((entry) => entry.id === agentId)) {
@@ -694,19 +680,20 @@ export async function assignChannelToAgent(agentId: string, channelType: string,
     };
     config.bindings = upsertBindingsForChannel(config.bindings, runtimeChannelType, agentId, accountId);
     // Use the already-modified config directly to avoid deadlock:
-    // buildSnapshotFromConfig would call readOpenClawConfig(), which awaits
-    // configWriteChain — but we are already holding it inside this callback.
+    // buildSnapshotFromConfigWith avoids re-reading disk; the draft has not
+    // been applied to the watched runtime config yet.
     return buildSnapshotFromConfigWith(config, { includeCli: false });
-  }, NO_RESTART_CONFIG_WRITE);
+  });
   logger.info('Assigned channel to agent', { agentId, channelType: runtimeChannelType, accountId: normalizeBindingAccountId(accountId) });
   return snapshot;
 }
 
 export async function clearChannelBinding(channelType: string, agentId?: string, accountId?: string): Promise<AgentsSnapshot> {
+  await beginAgentDraftSession();
   const runtimeChannelType = toRuntimeChannelType(channelType);
   const normalizedRequestedAgentId =
     typeof agentId === 'string' && agentId.trim() ? normalizeAgentIdForBinding(agentId) : '';
-  const result = await updateOpenClawConfig(async (rawConfig) => {
+  const result = await updateAgentDraftConfig(async (rawConfig) => {
     const config = rawConfig as AgentConfigDocument;
     const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
     const { typeOwners, accountOwners } = getSimpleChannelBindingMaps(config.bindings);
@@ -727,7 +714,7 @@ export async function clearChannelBinding(channelType: string, agentId?: string,
       snapshot: buildSnapshotFromConfig(config, { includeCli: false }),
       boundAgentId,
     };
-  }, NO_RESTART_CONFIG_WRITE);
+  });
   logger.info('Cleared simplified channel binding', {
     channelType: runtimeChannelType,
     accountId: accountId ? normalizeBindingAccountId(accountId) : undefined,
@@ -737,8 +724,9 @@ export async function clearChannelBinding(channelType: string, agentId?: string,
 }
 
 export async function clearAllChannelBindings(channelType: string): Promise<AgentsSnapshot> {
+  await beginAgentDraftSession();
   const runtimeChannelType = toRuntimeChannelType(channelType);
-  const result = await updateOpenClawConfig(async (rawConfig) => {
+  const result = await updateAgentDraftConfig(async (rawConfig) => {
     const config = rawConfig as AgentConfigDocument;
     const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
 
@@ -756,7 +744,7 @@ export async function clearAllChannelBindings(channelType: string): Promise<Agen
     return {
       snapshot: buildSnapshotFromConfig(config, { includeCli: false }),
     };
-  }, NO_RESTART_CONFIG_WRITE);
+  });
 
   logger.info('Cleared all simplified channel bindings', {
     channelType: runtimeChannelType,

@@ -21,6 +21,7 @@ import {
   listProviderModelOptionsWithRuntimeFallback,
   listRuntimeModelRefs,
 } from '../../services/providers/provider-model-catalog';
+import { beginProviderDraftSession } from '../../services/provider-draft-session';
 import {
   resolveLocalModelRuntimeConfig,
   resolveProviderRuntime,
@@ -222,6 +223,7 @@ export async function handleProviderRoutes(
   if (url.pathname === '/api/provider-accounts' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ account: ProviderAccount; apiKey?: string }>(req);
+      await beginProviderDraftSession();
       const account = await providerService.createAccount(body.account, body.apiKey);
       scheduleProviderRuntimeApply(
         ctx,
@@ -249,6 +251,7 @@ export async function handleProviderRoutes(
         sendJson(res, 400, { success: false, error: 'Local model provider config cannot be set as default' });
         return true;
       }
+      await beginProviderDraftSession();
       await providerService.setDefaultAccount(body.accountId);
       scheduleProviderRuntimeApply(
         ctx,
@@ -278,6 +281,7 @@ export async function handleProviderRoutes(
         sendJson(res, 404, { success: false, error: 'Provider account not found' });
         return true;
       }
+      await beginProviderDraftSession();
       const nextAccount = await providerService.updateAccount(accountId, body.updates, body.apiKey);
       scheduleProviderRuntimeApply(
         ctx,
@@ -303,6 +307,7 @@ export async function handleProviderRoutes(
           ))
         : [];
       if (url.searchParams.get('apiKeyOnly') === '1') {
+        await beginProviderDraftSession();
         await providerService.deleteLegacyProviderApiKey(accountId);
         if (existing) {
           scheduleProviderRuntimeApply(
@@ -315,6 +320,7 @@ export async function handleProviderRoutes(
         sendJson(res, 200, { success: true });
         return true;
       }
+      await beginProviderDraftSession();
       for (const localModelAccount of orphanedLocalModelAccounts) {
         await providerService.deleteAccount(localModelAccount.id);
       }
@@ -363,6 +369,7 @@ export async function handleProviderRoutes(
         sendJson(res, 404, { success: false, error: 'Provider not found' });
         return true;
       }
+      await beginProviderDraftSession();
       await providerService.setDefaultLegacyProvider(body.providerId);
       scheduleProviderRuntimeApply(
         ctx,
@@ -459,6 +466,7 @@ export async function handleProviderRoutes(
     try {
       const body = await parseJsonBody<{ config: ProviderConfig; apiKey?: string }>(req);
       const config = body.config;
+      await beginProviderDraftSession();
       await providerService.saveLegacyProvider(config);
       if (body.apiKey !== undefined) {
         const trimmedKey = body.apiKey.trim();
@@ -506,6 +514,7 @@ export async function handleProviderRoutes(
         sendJson(res, 404, { success: false, error: 'Provider not found' });
         return true;
       }
+      await beginProviderDraftSession();
       const nextConfig: ProviderConfig = { ...existing, ...body.updates, updatedAt: new Date().toISOString() };
       await providerService.saveLegacyProvider(nextConfig);
       if (body.apiKey !== undefined) {
@@ -535,6 +544,7 @@ export async function handleProviderRoutes(
     try {
       const existing = await providerService.getLegacyProvider(providerId);
       if (url.searchParams.get('apiKeyOnly') === '1') {
+        await beginProviderDraftSession();
         await providerService.deleteLegacyProviderApiKey(providerId);
         if (existing) {
           scheduleProviderRuntimeApply(
@@ -547,6 +557,7 @@ export async function handleProviderRoutes(
         sendJson(res, 200, { success: true });
         return true;
       }
+      await beginProviderDraftSession();
       await providerService.deleteLegacyProvider(providerId);
       if (existing) {
         scheduleProviderRuntimeApply(

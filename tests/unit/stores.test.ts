@@ -5,6 +5,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { isBackgroundSession, useChatStore } from '@/stores/chat';
 import { useSettingsStore } from '@/stores/settings';
 import { useGatewayStore } from '@/stores/gateway';
+import { useAgentsStore } from '@/stores/agents';
+import { useRuntimeApplyStore } from '@/stores/runtime-apply';
 import * as hostApi from '@/lib/host-api';
 
 const actualLoadHistory = useChatStore.getState().loadHistory;
@@ -97,6 +99,93 @@ describe('Gateway Store', () => {
 
     expect(result.ok).toBe(true);
     expect(invoke).toHaveBeenCalledWith('gateway:rpc', 'chat.history', { limit: 10 }, 5000);
+  });
+});
+
+describe('Agents Store', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    useAgentsStore.setState({
+      agents: [],
+      defaultAgentId: 'main',
+      mainKey: 'main',
+      scope: null,
+      configuredChannelTypes: [],
+      channelOwners: {},
+      channelAccountOwners: {},
+      loading: false,
+      error: null,
+    });
+    useRuntimeApplyStore.setState({
+      plan: {
+        pending: [],
+        count: 0,
+        requires: 'none',
+        action: 'none',
+      },
+      loading: false,
+      applying: false,
+      error: null,
+    });
+    useGatewayStore.setState({
+      status: { state: 'running', port: 18789 },
+      lifecycle: { state: 'idle' },
+      health: null,
+      isInitialized: false,
+      lastError: null,
+      overlaySuppressed: false,
+    });
+  });
+
+  it('keeps the local agents snapshot when agent changes are pending apply', async () => {
+    vi.spyOn(hostApi, 'hostApiFetch').mockResolvedValueOnce({
+      success: true,
+      agents: [
+        {
+          id: 'main',
+          name: 'Main',
+          isDefault: true,
+          modelDisplay: 'Not configured',
+          workspace: '/tmp/main',
+          agentDir: '/tmp/main/agent',
+          inheritedModel: false,
+          channelTypes: [],
+          channelBindings: [],
+        },
+      ],
+      defaultAgentId: 'main',
+      configuredChannelTypes: [],
+      channelOwners: {},
+      channelAccountOwners: {},
+    });
+    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockResolvedValue({
+      defaultId: 'main',
+      agents: [
+        { id: 'main', name: 'Main' },
+        { id: 'ghost', name: 'Ghost Agent' },
+      ],
+    });
+    useRuntimeApplyStore.setState({
+      plan: {
+        pending: [
+          {
+            domain: 'agents',
+            label: '分身配置',
+            reason: 'delete-agent',
+            source: 'delete-agent',
+            requires: 'reload',
+          },
+        ],
+        count: 1,
+        requires: 'reload',
+        action: 'reload',
+      },
+    });
+
+    await useAgentsStore.getState().fetchAgents();
+
+    expect(useAgentsStore.getState().agents.map((agent) => agent.gateway.id)).toEqual(['main']);
+    expect(rpcMock).not.toHaveBeenCalled();
   });
 });
 

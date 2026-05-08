@@ -16,15 +16,13 @@ const DOMAIN_LABELS: Record<RuntimeApplyDomain, string> = {
 type RuntimeApplyBannerProps = {
   domains?: RuntimeApplyDomain[];
   className?: string;
-  compact?: boolean;
-  onApplied?: () => void | Promise<void>;
+  refreshAfterAction?: () => void | Promise<void>;
 };
 
 export function RuntimeApplyBanner({
   domains,
   className,
-  compact = false,
-  onApplied,
+  refreshAfterAction,
 }: RuntimeApplyBannerProps) {
   const plan = useRuntimeApplyStore((state) => state.plan);
   const applying = useRuntimeApplyStore((state) => state.applying);
@@ -55,7 +53,7 @@ export function RuntimeApplyBanner({
   const handleApply = async () => {
     try {
       const result = await applyPendingChanges();
-      await onApplied?.();
+      await refreshAfterAction?.();
       if (!result.accepted && !result.triggered) {
         toast.success('更改已保存，服务启动后生效');
         return;
@@ -69,6 +67,7 @@ export function RuntimeApplyBanner({
   const handleCancel = async () => {
     try {
       await discardPendingChanges();
+      await refreshAfterAction?.();
       toast.success('已取消本次待应用更改');
     } catch (error) {
       toast.error(`取消失败：${String(error)}`);
@@ -79,7 +78,7 @@ export function RuntimeApplyBanner({
     <div
       className={cn(
         'flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950 dark:border-amber-800 dark:bg-amber-950/35 dark:text-amber-100',
-        compact ? 'md:flex-row md:items-center md:justify-between' : 'md:flex-row md:items-center md:justify-between',
+        'md:flex-row md:items-center md:justify-between',
         className,
       )}
     >

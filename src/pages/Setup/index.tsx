@@ -26,6 +26,7 @@ import { LoadingIcon } from '@/components/common/LoadingSpinner';
 import { RefreshButton } from '@/components/common/RefreshButton';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
+import { useRuntimeApplyStore } from '@/stores/runtime-apply';
 import { useSettingsStore } from '@/stores/settings';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -161,7 +162,12 @@ export function Setup() {
     ? Math.min(Math.max(currentStep, STEP.RUNTIME), STEP.COMPLETE)
     : STEP.RUNTIME;
   const markSetupComplete = useSettingsStore((state) => state.markSetupComplete);
+  const refreshRuntimeApplyPlan = useRuntimeApplyStore((state) => state.refreshPlan);
+  const applyPendingChanges = useRuntimeApplyStore((state) => state.applyPendingChanges);
   const completingRef = useRef(false);
+  const modelStepTransitioningRef = useRef(false);
+  const [modelStepAdvancing, setModelStepAdvancing] = useState(false);
+  const [modelStepError, setModelStepError] = useState<string | null>(null);
 
   const refreshConfiguredModelStatus = useCallback(async () => {
     try {
@@ -202,12 +208,32 @@ export function Setup() {
     });
   }, [refreshConfiguredModelStatus, location.key]);
 
+  const completeModelSetupStep = useCallback(async () => {
+    if (modelStepTransitioningRef.current) {
+      return;
+    }
+    modelStepTransitioningRef.current = true;
+    setModelStepAdvancing(true);
+    setModelStepError(null);
+    try {
+      await refreshRuntimeApplyPlan();
+      const pendingPlan = useRuntimeApplyStore.getState().plan;
+      if (pendingPlan.pending.some((change) => change.domain === 'providers')) {
+        await applyPendingChanges();
+      }
+      setCurrentStep(STEP.COMPLETE);
+    } catch (error) {
+      modelStepTransitioningRef.current = false;
+      setModelStepError(String(error));
+    } finally {
+      setModelStepAdvancing(false);
+    }
+  }, [applyPendingChanges, refreshRuntimeApplyPlan]);
+
   useEffect(() => {
     if (safeStepIndex !== STEP.MODEL_CONFIG || !hasConfiguredModels) return;
-    queueMicrotask(() => {
-      setCurrentStep(STEP.COMPLETE);
-    });
-  }, [hasConfiguredModels, safeStepIndex]);
+    void completeModelSetupStep();
+  }, [completeModelSetupStep, hasConfiguredModels, safeStepIndex]);
 
   useEffect(() => {
     if (safeStepIndex !== STEP.COMPLETE || completingRef.current) return;
@@ -278,11 +304,15 @@ export function Setup() {
                 onComplete={handleInstallationComplete}
               />
             )}
-          {safeStepIndex === STEP.MODEL_CONFIG && (
+            {safeStepIndex === STEP.MODEL_CONFIG && (
               <ModelSetupContent
                 hasConfiguredModels={hasConfiguredModels}
                 onRefreshConfigured={refreshConfiguredModelStatus}
-                onSkip={() => queueMicrotask(() => setCurrentStep(STEP.COMPLETE))}
+                onSkip={() => {
+                  void completeModelSetupStep();
+                }}
+                advancing={modelStepAdvancing}
+                advanceError={modelStepError}
               />
             )}
             {safeStepIndex === STEP.COMPLETE && (
@@ -1805,10 +1835,14 @@ function ModelSetupContent({
   hasConfiguredModels,
   onRefreshConfigured,
   onSkip,
+  advancing,
+  advanceError,
 }: {
   hasConfiguredModels: boolean;
   onRefreshConfigured: () => Promise<boolean>;
   onSkip: () => void;
+  advancing: boolean;
+  advanceError: string | null;
 }) {
   const { t } = useTranslation('setup');
   const {
@@ -2048,6 +2082,16 @@ function ModelSetupContent({
             onClick={() => void handleRefresh()}
           />
         </div>
+        {advancing ? (
+          <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-3 text-center text-sm text-muted-foreground">
+            {t('modelSetup.applyingChanges', '正在应用模型配置...')}
+          </div>
+        ) : null}
+        {advanceError ? (
+          <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {advanceError}
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -2141,8 +2185,8 @@ function ModelSetupContent({
                   {(savingProvider || loadingModels) ? <LoadingIcon className="mr-2 h-4 w-4" /> : null}
                   {t('modelSetup.connectProvider')}
                 </Button>
-                <Button variant="outline" onClick={onSkip} className="h-10 rounded-xl px-5">
-                  {t('modelSetup.skip')}
+                <Button variant="outline" onClick={onSkip} disabled={advancing} className="h-10 rounded-xl px-5">
+                  {advancing ? t('modelSetup.applyingChanges', '正在应用模型配置...') : t('modelSetup.skip')}
                 </Button>
               </div>
             </div>
@@ -2173,6 +2217,17 @@ function ModelSetupContent({
             </div>
           </div>
         )}
+
+        {advancing ? (
+          <div className="mt-4 rounded-xl border border-border/70 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+            {t('modelSetup.applyingChanges', '正在应用模型配置...')}
+          </div>
+        ) : null}
+        {advanceError ? (
+          <div className="mt-4 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {advanceError}
+          </div>
+        ) : null}
 
         {providerReady && !editingProvider ? (
           <div className="mt-4 border-t border-border/60 pt-4">

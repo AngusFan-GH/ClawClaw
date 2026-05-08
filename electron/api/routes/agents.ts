@@ -22,16 +22,6 @@ function scheduleGatewayReload(ctx: HostApiContext, reason: string): void {
   });
 }
 
-function scheduleGatewayRestart(ctx: HostApiContext, reason: string): void {
-  ctx.runtimeApplyPlan.record({
-    domain: 'agents',
-    label: '分身配置',
-    source: reason,
-    reason,
-    requires: 'restart',
-  });
-}
-
 function normalizeComparableString(value: string | null | undefined): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -135,12 +125,7 @@ export async function handleAgentRoutes(
       try {
         const agentId = decodeURIComponent(parts[0]);
         const snapshot = await deleteAgentConfig(agentId);
-        // Deleting an agent still rewrites the shared OpenClaw config through the
-        // generic config writer. In current ClawClaw that can surface unrelated
-        // gateway.* diffs (for example tailscale) that OpenClaw refuses to hot-reload.
-        // Use a normal restart here instead of a reload to avoid 503 apply failures,
-        // while still coalescing with other pending changes.
-        scheduleGatewayRestart(ctx, 'delete-agent');
+        scheduleGatewayReload(ctx, 'delete-agent');
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {
         sendJson(res, 500, { success: false, error: String(error) });

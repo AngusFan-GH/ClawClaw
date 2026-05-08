@@ -100,4 +100,30 @@ describe('RuntimeApplyPlan', () => {
     expect(result.snapshot.count).toBe(1);
     expect(plan.snapshot().count).toBe(1);
   });
+
+  it('runs discard hooks before clearing pending changes', async () => {
+    const beforeDiscard = vi.fn(async () => undefined);
+    const { applyNow } = createPlan();
+    const plan = new RuntimeApplyPlan({
+      gatewayApplyCoordinator: {
+        applyNow,
+      } as unknown as ConstructorParameters<typeof RuntimeApplyPlan>[0]['gatewayApplyCoordinator'],
+      beforeDiscard,
+    });
+
+    plan.record({
+      domain: 'agents',
+      label: '分身配置',
+      source: 'agent.update',
+      requires: 'reload',
+    });
+
+    const result = await plan.discard();
+
+    expect(beforeDiscard).toHaveBeenCalledWith(expect.objectContaining({
+      count: 1,
+      pending: [expect.objectContaining({ domain: 'agents' })],
+    }));
+    expect(result.count).toBe(0);
+  });
 });

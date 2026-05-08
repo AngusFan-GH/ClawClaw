@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -20,11 +20,12 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useGatewayStore } from '@/stores/gateway';
 import { useSettingsStore } from '@/stores/settings';
 import { useProviderStore } from '@/stores/providers';
+import { useRuntimeApplyStore } from '@/stores/runtime-apply';
 import { trackUiEvent } from '@/lib/telemetry';
 import { ProvidersSettings } from '@/components/settings/ProvidersSettings';
 import { FeedbackState } from '@/components/common/FeedbackState';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { PageLoader } from '@/components/common/LoadingSpinner';
+import { LoadingIcon, PageLoader } from '@/components/common/LoadingSpinner';
 import { RuntimeApplyBanner } from '@/components/common/RuntimeApplyBanner';
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
@@ -144,6 +145,8 @@ export function Models() {
     setDefaultAccount,
     getAccountApiKey,
   } = useProviderStore();
+  const refreshRuntimeApplyPlan = useRuntimeApplyStore((state) => state.refreshPlan);
+  const applyPendingChanges = useRuntimeApplyStore((state) => state.applyPendingChanges);
   const isGatewayRunning = gatewayStatus.state === 'running';
   const isSetupFlow = useMemo(
     () => new URLSearchParams(location.search).get('fromSetup') === '1',
@@ -162,6 +165,7 @@ export function Models() {
   const [confirmDeleteModelId, setConfirmDeleteModelId] = useState<string | null>(null);
   const [confirmClearProviderOpen, setConfirmClearProviderOpen] = useState(false);
   const [confirmPending, setConfirmPending] = useState(false);
+  const [setupCompletionPending, setSetupCompletionPending] = useState(false);
 
   useEffect(() => {
     trackUiEvent('models.page_viewed');
@@ -359,6 +363,27 @@ export function Models() {
     }
   };
 
+  const refreshRuntimeApplyView = useCallback(async () => {
+    await refreshProviderSnapshot();
+  }, [refreshProviderSnapshot]);
+
+  const handleCompleteSetup = useCallback(async () => {
+    setSetupCompletionPending(true);
+    try {
+      await refreshRuntimeApplyPlan();
+      const pendingPlan = useRuntimeApplyStore.getState().plan;
+      if (pendingPlan.pending.some((change) => change.domain === 'providers')) {
+        await applyPendingChanges();
+        await refreshProviderSnapshot();
+      }
+      navigate('/setup?step=complete');
+    } catch (error) {
+      toast.error(`完成设置失败: ${String(error)}`);
+    } finally {
+      setSetupCompletionPending(false);
+    }
+  }, [applyPendingChanges, navigate, refreshProviderSnapshot, refreshRuntimeApplyPlan]);
+
   return (
     <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
       <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-5 pb-8 pt-10 sm:px-6 lg:px-8 lg:pt-12">
@@ -368,12 +393,13 @@ export function Models() {
           description={t('dashboard:models.description')}
         />
 
-        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-1 pb-10">
-          <RuntimeApplyBanner
-            domains={['providers']}
-            onApplied={refreshProviderSnapshot}
-          />
+        <RuntimeApplyBanner
+          domains={['providers']}
+          className="mb-6 shrink-0"
+          refreshAfterAction={refreshRuntimeApplyView}
+        />
 
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-1 pb-10">
           {isSetupFlow ? (
             <section className="rounded-[10px] border border-blue-500/15 bg-blue-500/[0.04] p-4 sm:p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -390,8 +416,10 @@ export function Models() {
                 {hasAnyConfiguredModels ? (
                   <Button
                     className="h-9 rounded-xl px-4"
-                    onClick={() => navigate('/setup?step=complete')}
+                    onClick={() => void handleCompleteSetup()}
+                    disabled={setupCompletionPending}
                   >
+                    {setupCompletionPending ? <LoadingIcon className="mr-2 h-4 w-4" /> : null}
                     完成设置
                   </Button>
                 ) : null}

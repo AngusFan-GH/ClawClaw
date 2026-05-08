@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { AlertCircle, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -71,6 +71,13 @@ export function Channels() {
     gatewayState: gatewayStatus.state,
     gatewayLifecycleState: gatewayLifecycle.state,
   });
+  const refreshLocalChannelConfigView = useCallback(async () => {
+    await fetchChannels(false, { includeRuntime: false });
+  }, [fetchChannels]);
+  const refreshRuntimeApplyView = useCallback(async () => {
+    await fetchChannels(true, { includeRuntime: true });
+    await fetchAgents();
+  }, [fetchAgents, fetchChannels]);
 
   const configuredGroups = useMemo(
     () =>
@@ -122,17 +129,14 @@ export function Channels() {
           )}
         />
 
+        <RuntimeApplyBanner
+          domains={['channels']}
+          className="mb-6 shrink-0"
+          refreshAfterAction={refreshRuntimeApplyView}
+        />
+
         <div className="flex-1 overflow-y-auto pr-2 pb-10 min-h-0 -mr-2">
           <>
-            <RuntimeApplyBanner
-              domains={['channels']}
-              className="mb-6"
-              onApplied={async () => {
-                await fetchChannels(true, { includeRuntime: true });
-                await fetchAgents();
-              }}
-            />
-
             {gatewayStatus.state !== 'running' && gatewayLifecycle.state === 'idle' && (
               <div className="mb-8 flex items-center gap-3 rounded-xl border border-yellow-500/50 bg-yellow-500/10 p-4">
                 <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
@@ -281,7 +285,7 @@ export function Channels() {
             setCreateNewAccount(false);
           }}
           onChannelSaved={async () => {
-            await fetchChannels(false, { includeRuntime: false });
+            await refreshLocalChannelConfigView();
             setShowConfigDialog(false);
             setSelectedChannelType(null);
             setSelectedAccountId(null);
@@ -316,7 +320,7 @@ export function Channels() {
           void (async () => {
             try {
               await deleteChannel(`${deleting.type}:${deleting.accountId}`, deleting.accountId);
-              await fetchChannels(false, { includeRuntime: false });
+              await refreshLocalChannelConfigView();
             } catch (error) {
               toast.error(
                 t('toast.deleteFailed', {

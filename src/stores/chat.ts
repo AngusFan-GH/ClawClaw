@@ -9,7 +9,7 @@ import { hostApiFetch } from '@/lib/host-api';
 import { extractText } from '@/pages/Chat/message-utils';
 import { historyContainsPendingUserMessage } from '@/pages/Chat/pending-user-message';
 import { useGatewayStore } from './gateway';
-import { useAgentsStore } from './agents';
+import { getAppliedAgentsSnapshotState } from './agents';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -2159,7 +2159,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           // older real session right after the user clicks "New chat".
           if (!hasLocalPendingSession) {
             if (preserveCurrent) {
-              const agentsState = useAgentsStore.getState();
+              const agentsState = getAppliedAgentsSnapshotState();
               const fallbackAgentId =
                 getAgentIdFromSessionKey(nextSessionKey)
                 || get().currentAgentId
@@ -2562,7 +2562,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       pendingUserMessage,
       pendingAssistantMessage,
     } = get();
-    const nextAgentId = targetAgentId || get().currentAgentId || useAgentsStore.getState().defaultAgentId || 'main';
+    const nextAgentId = targetAgentId
+      || get().currentAgentId
+      || getAppliedAgentsSnapshotState().defaultAgentId
+      || 'main';
     const isCurrentEmptyEphemeral =
       !currentSessionKey.endsWith(':main')
       && isEmptyEphemeralSession(
@@ -3101,7 +3104,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const { currentSessionKey, sessions, allowedModelRefs, defaultModelRef, currentAgentId } = get();
     const currentSession = sessions.find((session) => session.key === currentSessionKey);
-    const currentAgent = useAgentsStore.getState().agents.find((agent) => agent.gateway.id === currentAgentId);
+    const currentAgent = getAppliedAgentsSnapshotState().agents.find((agent) => agent.gateway.id === currentAgentId);
     const normalizedAgentModelRef = currentAgent?.local.modelRef?.trim();
     const agentModelAllowed =
       !normalizedAgentModelRef

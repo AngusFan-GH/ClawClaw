@@ -10,7 +10,7 @@ import { AlertCircle, ArrowDown, Brain, Check, ChevronDown, Loader2 } from 'luci
 import { DEFAULT_SESSION_KEY, useChatStore, type QueuedChatMessage, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
-import { useAgentsStore } from '@/stores/agents';
+import { getAppliedAgentsSnapshotState, useAgentsStore } from '@/stores/agents';
 import { useSettingsStore } from '@/stores/settings';
 import { useRuntimeApplyStore } from '@/stores/runtime-apply';
 import type { ProviderAccount } from '@/lib/providers';
@@ -186,6 +186,12 @@ export function Chat() {
     const state = location.state as { agentId?: string } | null;
     return typeof state?.agentId === 'string' && state.agentId.trim() ? state.agentId : undefined;
   }, [location.state]);
+  const appliedAgentsSnapshot = useMemo(() => {
+    void runtimeApplyPlan.pending;
+    return getAppliedAgentsSnapshotState();
+  }, [agents, defaultAgentId, runtimeApplyPlan.pending]);
+  const appliedAgents = appliedAgentsSnapshot.agents;
+  const appliedDefaultAgentId = appliedAgentsSnapshot.defaultAgentId;
 
   // Load data when gateway is running.
   // When the store already holds messages for this session (i.e. the user
@@ -197,7 +203,11 @@ export function Chat() {
     let cancelled = false;
     (async () => {
       if (createNewSessionFromRoute) {
-        newSession(routeAgentId);
+        const nextAgentId = routeAgentId
+          && appliedAgents.some((agent) => agent.gateway.id === routeAgentId)
+          ? routeAgentId
+          : undefined;
+        newSession(nextAgentId);
         navigate(location.pathname, { replace: true, state: null });
         if (!cancelled) {
           void loadSessions({ preserveCurrent: true });
@@ -228,6 +238,7 @@ export function Chat() {
     newSession,
     createNewSessionFromRoute,
     routeAgentId,
+    appliedAgents,
     forceSessionKeyFromRoute,
     switchSession,
     navigate,
@@ -583,12 +594,12 @@ export function Chat() {
   );
   const effectiveAgentModelRef = useMemo(() => {
     return resolveEffectiveAgentModelRef({
-      agents,
+      agents: appliedAgents,
       sessionAgentId,
       currentAgentId,
-      defaultAgentId,
+      defaultAgentId: appliedDefaultAgentId,
     });
-  }, [agents, currentAgentId, defaultAgentId, sessionAgentId]);
+  }, [appliedAgents, currentAgentId, appliedDefaultAgentId, sessionAgentId]);
   const normalizedAgentModelValue = useMemo(
     () => normalizeAgentModelValue(effectiveAgentModelRef, modelOptions),
     [effectiveAgentModelRef, modelOptions],
@@ -674,18 +685,18 @@ export function Chat() {
     isGatewayRunning,
   ]);
   const agentOptions = useMemo<ChatAgentOption[]>(() => {
-    return buildAgentOptions(agents);
-  }, [agents]);
+    return buildAgentOptions(appliedAgents);
+  }, [appliedAgents]);
   const canSwitchAgent = currentSessionIsPlaceholder;
   const currentAgentLabel = useMemo(
     () => resolveCurrentAgentLabel({
       agentOptions,
-      agents,
+      agents: appliedAgents,
       currentAgentId,
       sessionAgentId,
-      defaultAgentId,
+      defaultAgentId: appliedDefaultAgentId,
     }),
-    [agentOptions, agents, currentAgentId, sessionAgentId, defaultAgentId]
+    [agentOptions, appliedAgents, currentAgentId, sessionAgentId, appliedDefaultAgentId]
   );
 
   const resolvedAgentLabel = currentAgentLabel?.trim() || 'Main';

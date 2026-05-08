@@ -33,8 +33,9 @@ import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from '@/stores/gateway';
 import { useChannelsStore } from '@/stores/channels';
 import { useCronStore } from '@/stores/cron';
-import { useAgentsStore } from '@/stores/agents';
+import { getAppliedAgentsSnapshotState, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { useRuntimeApplyStore } from '@/stores/runtime-apply';
 import { CHANNEL_ICONS, CHANNEL_NAMES, type ChannelType } from '@/types/channel';
 import type { CronJob, CronJobCreateInput, CronJobUpdateInput, ScheduleType } from '@/types/cron';
 import { cn, formatRelativeTime } from '@/lib/utils';
@@ -478,18 +479,29 @@ function TaskDialog({ job, configuredChannels, onClose, onSave }: TaskDialogProp
   const [saving, setSaving] = useState(false);
   const readOnly = Boolean(job && job.uiManaged === false);
   const agents = useAgentsStore((state) => state.agents);
+  const runtimeApplyPlan = useRuntimeApplyStore((state) => state.plan);
   const currentAgentId = useChatStore((state) => state.currentAgentId);
+  const appliedAgentsSnapshot = useMemo(() => {
+    void runtimeApplyPlan.pending;
+    return getAppliedAgentsSnapshotState();
+  }, [agents, runtimeApplyPlan.pending]);
+  const appliedAgents = appliedAgentsSnapshot.agents;
+  const appliedDefaultAgentId = appliedAgentsSnapshot.defaultAgentId;
   const agentOptions = useMemo(
-    () => agents.map((agent) => ({
+    () => appliedAgents.map((agent) => ({
       id: agent.gateway.id,
       name: agent.gateway.name,
     })),
-    [agents],
+    [appliedAgents],
   );
 
   const [name, setName] = useState(job?.name || '');
   const [message, setMessage] = useState(job?.message || '');
-  const [agentId, setAgentId] = useState(job?.agentId || currentAgentId || 'main');
+  const [agentId, setAgentId] = useState(() => {
+    if (job?.agentId) return job.agentId;
+    const currentAgentExists = appliedAgents.some((agent) => agent.gateway.id === currentAgentId);
+    return (currentAgentExists ? currentAgentId : appliedDefaultAgentId) || 'main';
+  });
   const initialSchedule = normalizeScheduleExpr(job?.schedule) || '0 9 * * *';
   const initialBuilderState = parseScheduleBuilder(initialSchedule);
   const [scheduleMode, setScheduleMode] = useState<ScheduleBuilderMode>(initialBuilderState.mode);
@@ -579,6 +591,17 @@ function TaskDialog({ job, configuredChannels, onClose, onSave }: TaskDialogProp
     scheduleMode === 'custom' ? true : preset.type === scheduleMode
   );
   const selectedPresetValue = visiblePresets.some((preset) => preset.value === finalSchedule) ? finalSchedule : '__none';
+
+  useEffect(() => {
+    const selectedExists = agentOptions.some((agent) => agent.id === agentId);
+    if (!selectedExists) {
+      const fallbackAgentId = job?.agentId
+        || (agentOptions.some((agent) => agent.id === currentAgentId) ? currentAgentId : undefined)
+        || appliedDefaultAgentId
+        || 'main';
+      setAgentId(fallbackAgentId);
+    }
+  }, [agentId, agentOptions, appliedDefaultAgentId, currentAgentId, job?.agentId]);
 
   useEffect(() => {
     if (deliveryMode !== 'announce' || !effectiveDeliveryChannel) {

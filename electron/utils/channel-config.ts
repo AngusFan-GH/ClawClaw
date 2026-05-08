@@ -26,6 +26,12 @@ import {
     toRuntimeChannelType,
     toUiChannelType,
 } from './channel-alias';
+import {
+    beginChannelDraftSession,
+    getChannelDraftConfigSnapshot,
+    stageChannelRemovedPaths,
+    updateChannelDraftConfig,
+} from '../services/channel-draft-session';
 
 const OPENCLAW_DIR = resolveOpenClawDir();
 const EXTENSIONS_DIR = join(OPENCLAW_DIR, 'extensions');
@@ -301,6 +307,55 @@ async function resolveFeishuPluginId(): Promise<string> {
     return FEISHU_PLUGIN_ID_CANDIDATES[0];
 }
 
+async function getWeChatAccountStatePaths(accountId: string): Promise<string[]> {
+    const normalizedAccountId = normalizeOpenClawAccountId(accountId);
+    const weChatStateDir = join(resolveOpenClawDir(), WECHAT_RUNTIME_CHANNEL_ID);
+    const weChatAccountsDir = join(weChatStateDir, 'accounts');
+    const credentialsDir = join(resolveOpenClawDir(), 'credentials');
+    const scopedCredentialsDir = join(resolveOpenClawDir(), 'credentials', WECHAT_RUNTIME_CHANNEL_ID);
+    const paths = new Set<string>();
+
+    for (const fileName of [
+        `${normalizedAccountId}.json`,
+        `${normalizedAccountId}.sync.json`,
+        `${normalizedAccountId}.context-tokens.json`,
+    ]) {
+        paths.add(join(weChatAccountsDir, fileName));
+    }
+
+    try {
+        if (await fileExists(credentialsDir)) {
+            const candidates = await readdir(credentialsDir);
+            for (const name of candidates) {
+                if (
+                    name.startsWith('openclaw-weixin-')
+                    && name.endsWith('-allowFrom.json')
+                    && name.includes(normalizedAccountId)
+                ) {
+                    paths.add(join(credentialsDir, name));
+                }
+            }
+        }
+    } catch {
+        // Ignore staging enumeration failures.
+    }
+
+    try {
+        if (await fileExists(scopedCredentialsDir)) {
+            const candidates = await readdir(scopedCredentialsDir);
+            for (const name of candidates) {
+                if (name.includes(normalizedAccountId)) {
+                    paths.add(join(scopedCredentialsDir, name));
+                }
+            }
+        }
+    } catch {
+        // Ignore staging enumeration failures.
+    }
+
+    return [...paths];
+}
+
 async function removeWeChatAccountState(accountId: string): Promise<void> {
     const normalizedAccountId = normalizeOpenClawAccountId(accountId);
     const weChatStateDir = join(resolveOpenClawDir(), WECHAT_RUNTIME_CHANNEL_ID);
@@ -443,6 +498,12 @@ async function hasPersistedWeChatAccountState(): Promise<boolean> {
 function toQQBotSessionFileName(accountId: string): string {
     const safeId = accountId.replace(/[^a-zA-Z0-9_-]/g, '_');
     return `session-${safeId}.json`;
+}
+
+function getQQBotAccountStatePath(accountId?: string): string {
+    const qqbotDir = join(resolveOpenClawDir(), 'qqbot');
+    const sessionsDir = join(qqbotDir, 'sessions');
+    return accountId ? join(sessionsDir, toQQBotSessionFileName(accountId)) : sessionsDir;
 }
 
 async function compactDirectoryIfEmpty(targetDir: string): Promise<void> {
@@ -803,6 +864,10 @@ function clearTopLevelAccountFields(
 
 export async function readOpenClawConfig(): Promise<OpenClawConfig> {
     try {
+        const draftConfig = getChannelDraftConfigSnapshot<OpenClawConfig>();
+        if (draftConfig) {
+            return draftConfig;
+        }
         return await readOpenClawConfigRecord<OpenClawConfig>();
     } catch (error) {
         logger.error('Failed to read OpenClaw config', error);
@@ -813,6 +878,10 @@ export async function readOpenClawConfig(): Promise<OpenClawConfig> {
 
 export async function readOpenClawConfigSnapshot(): Promise<OpenClawConfig> {
     try {
+        const draftConfig = getChannelDraftConfigSnapshot<OpenClawConfig>();
+        if (draftConfig) {
+            return draftConfig;
+        }
         return await readOpenClawConfigRecordRaw<OpenClawConfig>();
     } catch (error) {
         logger.error('Failed to read OpenClaw config snapshot', error);
@@ -871,13 +940,14 @@ export async function saveChannelConfig(
     channelType: string,
     config: ChannelConfigData
 ): Promise<void> {
+    await beginChannelDraftSession();
     const runtimeChannelType = toRuntimeChannelType(channelType);
     const preferredAccountId =
         typeof config.__accountId === 'string' && config.__accountId.trim()
             ? config.__accountId.trim()
             : undefined;
 
-    await updateOpenClawConfig(async (currentConfig) => {
+    await updateChannelDraftConfig(async (currentConfig) => {
         migrateLegacyWechatSection(currentConfig);
 
         if (isChinaChannelsManagedChannel(runtimeChannelType)) {
@@ -1070,7 +1140,7 @@ export async function saveChannelConfig(
             enabled: currentConfig.channels[runtimeChannelType]?.enabled,
         });
         console.log(`Saved channel config for ${runtimeChannelType}`);
-    }, NO_RESTART_CONFIG_WRITE);
+    });
 }
 
 export async function getChannelConfig(
@@ -1161,11 +1231,12 @@ export async function deleteChannelConfig(
     channelType: string,
     preferredAccountId?: string | null
 ): Promise<void> {
+    await beginChannelDraftSession();
     const runtimeChannelType = toRuntimeChannelType(channelType);
     let deletedWeChatAccountId: string | undefined;
     let clearAllWeChatState = false;
     let removeChinaManagedPluginMirror = false;
-    const configChanged = await updateOpenClawConfig(async (currentConfig) => {
+    const configChanged = await updateChannelDraftConfig(async (currentConfig) => {
     migrateLegacyWechatSection(currentConfig);
     let changed = false;
     let removedScopedAccountId: string | undefined;
@@ -1296,80 +1367,46 @@ export async function deleteChannelConfig(
     pruneEmptyPluginsConfig(currentConfig);
 
     return changed;
-    }, NO_RESTART_CONFIG_WRITE);
+    });
 
-    // Special handling for WhatsApp credentials
+    const stagedCleanupTargets = new Set<string>();
+
     if (configChanged && runtimeChannelType === 'whatsapp') {
-        try {
-            const whatsappDir = join(resolveOpenClawDir(), 'credentials', 'whatsapp');
-            if (await fileExists(whatsappDir)) {
-                await rm(whatsappDir, { recursive: true, force: true });
-                console.log('Deleted WhatsApp credentials directory');
-            }
-        } catch (error) {
-            console.error('Failed to delete WhatsApp credentials:', error);
-        }
+        stagedCleanupTargets.add(join(resolveOpenClawDir(), 'credentials', 'whatsapp'));
     }
 
     if (configChanged && runtimeChannelType === 'qqbot') {
-        await removeQQBotAccountState(preferredAccountId ?? undefined);
+        stagedCleanupTargets.add(getQQBotAccountStatePath(preferredAccountId ?? undefined));
     }
 
     if (removeChinaManagedPluginMirror) {
-        const pluginDir = join(EXTENSIONS_DIR, LEGACY_CHINA_CHANNEL_PLUGIN_ID);
-        try {
-            if (await fileExists(pluginDir)) {
-                await rm(pluginDir, { recursive: true, force: true });
-            }
-        } catch (error) {
-            console.error(`Failed to delete stale managed channel plugin mirror at ${pluginDir}:`, error);
-        }
+        stagedCleanupTargets.add(join(EXTENSIONS_DIR, LEGACY_CHINA_CHANNEL_PLUGIN_ID));
     }
 
-    // WeChat login state is stored outside openclaw.json. Clearing only the
-    // channel config causes the plugin runtime to rediscover existing account
-    // files and the connection appears to "come back" after refresh/restart.
     if (isWeChatRuntimeChannel(runtimeChannelType) && clearAllWeChatState) {
-        const cleanupTargets = [
-            join(resolveOpenClawDir(), 'openclaw-weixin'),
-            join(resolveOpenClawDir(), 'credentials', 'openclaw-weixin'),
-            join(resolveOpenClawDir(), 'agents', 'default', 'sessions', '.openclaw-weixin-sync'),
-            join(resolveOpenClawDir(), 'extensions', 'openclaw-weixin'),
-        ];
-
-        for (const target of cleanupTargets) {
-            try {
-                if (await fileExists(target)) {
-                    await rm(target, { recursive: true, force: true });
-                }
-            } catch (error) {
-                console.error(`Failed to delete WeChat state at ${target}:`, error);
-            }
-        }
+        stagedCleanupTargets.add(join(resolveOpenClawDir(), 'openclaw-weixin'));
+        stagedCleanupTargets.add(join(resolveOpenClawDir(), 'credentials', 'openclaw-weixin'));
+        stagedCleanupTargets.add(join(resolveOpenClawDir(), 'agents', 'default', 'sessions', '.openclaw-weixin-sync'));
+        stagedCleanupTargets.add(join(resolveOpenClawDir(), 'extensions', 'openclaw-weixin'));
 
         try {
             const credentialsDir = join(resolveOpenClawDir(), 'credentials');
             if (await fileExists(credentialsDir)) {
                 const candidates = await readdir(credentialsDir);
-                await Promise.all(
-                    candidates
-                        .filter((name) => name.startsWith('openclaw-weixin-') && name.endsWith('-allowFrom.json'))
-                        .map(async (name) => {
-                            const fullPath = join(credentialsDir, name);
-                            try {
-                                await rm(fullPath, { force: true });
-                            } catch (error) {
-                                console.error(`Failed to delete WeChat allowFrom file ${fullPath}:`, error);
-                            }
-                        })
-                );
+                for (const name of candidates) {
+                    if (name.startsWith('openclaw-weixin-') && name.endsWith('-allowFrom.json')) {
+                        stagedCleanupTargets.add(join(credentialsDir, name));
+                    }
+                }
             }
         } catch (error) {
-            console.error('Failed to delete WeChat allowFrom files:', error);
+            console.error('Failed to enumerate WeChat allowFrom files for staged cleanup:', error);
         }
     } else if (isWeChatRuntimeChannel(runtimeChannelType) && deletedWeChatAccountId) {
-        await removeWeChatAccountState(deletedWeChatAccountId);
+        stagedCleanupTargets.add(getWeChatAccountStatePath(deletedWeChatAccountId));
     }
+
+    await stageChannelRemovedPaths(stagedCleanupTargets);
 }
 
 export async function cleanupDanglingWeChatPluginState(): Promise<{ cleanedDanglingState: boolean }> {
@@ -1940,8 +1977,9 @@ export async function setChannelEnabled(
     enabled: boolean,
     preferredAccountId?: string | null
 ): Promise<void> {
+    await beginChannelDraftSession();
     const runtimeChannelType = toRuntimeChannelType(channelType);
-    await updateOpenClawConfig(async (currentConfig) => {
+    await updateChannelDraftConfig(async (currentConfig) => {
         migrateLegacyWechatSection(currentConfig);
         if (PLUGIN_CHANNELS.includes(runtimeChannelType)) {
             if (!currentConfig.plugins) currentConfig.plugins = {};
@@ -1968,7 +2006,7 @@ export async function setChannelEnabled(
         } else {
             currentConfig.channels[runtimeChannelType].enabled = enabled;
         }
-    }, NO_RESTART_CONFIG_WRITE);
+    });
     console.log(`Set channel ${runtimeChannelType} enabled: ${enabled}`);
 }
 

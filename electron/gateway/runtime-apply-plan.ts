@@ -37,6 +37,8 @@ export class RuntimeApplyPlan {
       gatewayApplyCoordinator: GatewayApplyCoordinator;
       getGatewayStatus?: () => GatewayStatus;
       beforeApply?: (snapshot: RuntimeApplyPlanSnapshot) => Promise<void>;
+      beforeDiscard?: (snapshot: RuntimeApplyPlanSnapshot) => Promise<void>;
+      afterApply?: (snapshot: RuntimeApplyPlanSnapshot) => Promise<void>;
     },
   ) {}
 
@@ -79,7 +81,14 @@ export class RuntimeApplyPlan {
     };
   }
 
-  discard(): RuntimeApplyPlanSnapshot {
+  async discard(): Promise<RuntimeApplyPlanSnapshot> {
+    const before = this.snapshot();
+    if (before.count === 0) {
+      return before;
+    }
+    if (this.deps.beforeDiscard) {
+      await this.deps.beforeDiscard(before);
+    }
     this.pending.clear();
     return this.snapshot();
   }
@@ -125,6 +134,9 @@ export class RuntimeApplyPlan {
     });
 
     this.pending.clear();
+    if (this.deps.afterApply) {
+      await this.deps.afterApply(before);
+    }
     return {
       success: true,
       snapshot: this.snapshot(),

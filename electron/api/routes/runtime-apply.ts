@@ -24,7 +24,11 @@ export async function handleRuntimeApplyRoutes(
   }
 
   if (url.pathname === '/api/runtime/apply-plan' && req.method === 'DELETE') {
-    sendJson(res, 200, { success: true, plan: ctx.runtimeApplyPlan.discard() });
+    try {
+      sendJson(res, 200, { success: true, plan: await ctx.runtimeApplyPlan.discard() });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error), plan: ctx.runtimeApplyPlan.snapshot() });
+    }
     return true;
   }
 

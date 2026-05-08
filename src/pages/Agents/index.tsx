@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertCircle, Bot, Check, ChevronDown, FolderOpen, PencilLine, Plus, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -71,6 +71,10 @@ export function Agents() {
     fetchChannels,
     gatewayState: gatewayStatus.state,
   });
+  const refreshRuntimeApplyView = useCallback(async () => {
+    await fetchAgents();
+    await fetchChannels(false, { includeRuntime: true });
+  }, [fetchAgents, fetchChannels]);
   const activeAgent = useMemo(
     () => agents.find((agent) => agent.gateway.id === activeAgentId) ?? null,
     [activeAgentId, agents],
@@ -109,16 +113,13 @@ export function Agents() {
           )}
         />
 
-        <div className="flex-1 overflow-y-auto pr-2 pb-10 min-h-0 -mr-2">
-          <RuntimeApplyBanner
-            domains={['agents']}
-            className="mb-6"
-            onApplied={async () => {
-              await fetchAgents();
-              await fetchChannels(false, { includeRuntime: true });
-            }}
-          />
+        <RuntimeApplyBanner
+          domains={['agents']}
+          className="mb-6 shrink-0"
+          refreshAfterAction={refreshRuntimeApplyView}
+        />
 
+        <div className="flex-1 overflow-y-auto pr-2 pb-10 min-h-0 -mr-2">
           {gatewayStatus.state !== 'running' && gatewayLifecycle.state === 'idle' && (
             <div className="mb-8 p-4 rounded-xl border border-yellow-500/50 bg-yellow-500/10 flex items-center gap-3">
               <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
@@ -864,12 +865,16 @@ function AgentSettingsModal({
     }
   };
 
-  const handleChannelSaved = async (channelType: ChannelType, accountId: string) => {
+  const refreshLocalChannelConfigView = useCallback(async () => {
+    await fetchChannels(false, { includeRuntime: false });
+  }, [fetchChannels]);
+
+  const handleChannelSaved = useCallback(async (channelType: ChannelType, accountId: string) => {
     try {
       await assignChannel(agent.gateway.id, channelType, accountId);
       // Binding only changes local ownership metadata. Avoid blocking the modal on
       // a runtime channel-status probe while Gateway is reloading.
-      await fetchChannels(false, { includeRuntime: false });
+      await refreshLocalChannelConfigView();
       toast.success(
         t('toast.channelAssigned', {
           channel: `${CHANNEL_NAMES[channelType] || channelType} / ${accountId}`,
@@ -880,7 +885,7 @@ function AgentSettingsModal({
       toast.error(t('toast.channelAssignFailed', { error: String(error) }));
       throw error;
     }
-  };
+  }, [agent.gateway.id, assignChannel, refreshLocalChannelConfigView, t]);
 
   const runtimeChannelsByType = useMemo(
     () => Object.fromEntries((channelGroups ?? []).map((group) => [group.type, group])),

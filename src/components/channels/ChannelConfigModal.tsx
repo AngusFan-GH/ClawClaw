@@ -268,10 +268,9 @@ export function ChannelConfigModal({
         await addChannel({
           type: channelType,
           name: displayName,
-          token: meta?.configFields[0]?.key ? configValues[meta.configFields[0].key] : undefined,
         });
       } else {
-        await fetchChannels(false, { includeRuntime: true });
+        await fetchChannels(false, { includeRuntime: false });
       }
 
       await onChannelSaved?.(channelType, savedAccountId);
@@ -282,7 +281,7 @@ export function ChannelConfigModal({
         defaultValue: `${CHANNEL_NAMES[channelType]} 已保存，列表会在稍后自动同步`,
       }));
     }
-  }, [addChannel, channelName, channels, configValues, fetchChannels, meta?.configFields, onChannelSaved, showChannelName, t]);
+  }, [addChannel, channelName, channels, fetchChannels, onChannelSaved, showChannelName, t]);
 
   useEffect(() => {
     if (!selectedType || meta?.connectionType !== 'qr') return;

@@ -41,6 +41,22 @@ import {
   syncAllProvidersToRuntime,
   syncDefaultProviderToRuntime,
 } from '../services/providers/provider-runtime-sync';
+import {
+  commitAgentDraftSession,
+  clearAgentDraftSession,
+  discardAgentDraftSession,
+  finalizeAgentDraftSession,
+} from '../services/agent-draft-session';
+import {
+  commitChannelDraftSession,
+  clearChannelDraftSession,
+  discardChannelDraftSession,
+  finalizeChannelDraftSession,
+} from '../services/channel-draft-session';
+import {
+  clearProviderDraftSession,
+  discardProviderDraftSession,
+} from '../services/provider-draft-session';
 import { emitGatewayLifecycleEvent } from '../api/gateway-lifecycle';
 import { runGatewayRefresh } from '../api/gateway-refresh';
 import { getLastStartupPreflightFailedStepIds } from '../gateway/config-sync';
@@ -130,6 +146,14 @@ const runtimeApplyPlan = new RuntimeApplyPlan({
   gatewayApplyCoordinator,
   getGatewayStatus: () => gatewayManager.getStatus(),
   beforeApply: async (snapshot) => {
+    if (snapshot.pending.some((change) => change.domain === 'channels')) {
+      await commitChannelDraftSession();
+    }
+
+    if (snapshot.pending.some((change) => change.domain === 'agents')) {
+      await commitAgentDraftSession();
+    }
+
     if (!snapshot.pending.some((change) => change.domain === 'providers')) {
       return;
     }
@@ -140,6 +164,36 @@ const runtimeApplyPlan = new RuntimeApplyPlan({
       await syncDefaultProviderToRuntime(defaultProviderId, { suppressRefresh: true });
     }
     await syncAllProviderAuthToRuntime();
+  },
+  beforeDiscard: async (snapshot) => {
+    const hasAgentChanges = snapshot.pending.some((change) => change.domain === 'agents');
+    const hasChannelChanges = snapshot.pending.some((change) => change.domain === 'channels');
+    const hasProviderChanges = snapshot.pending.some((change) => change.domain === 'providers');
+
+    if (hasChannelChanges) {
+      await discardChannelDraftSession();
+    }
+    if (hasAgentChanges || hasChannelChanges) {
+      await discardAgentDraftSession();
+    }
+    if (hasProviderChanges) {
+      await discardProviderDraftSession();
+    }
+  },
+  afterApply: async (snapshot) => {
+    const hasAgentChanges = snapshot.pending.some((change) => change.domain === 'agents');
+    const hasChannelChanges = snapshot.pending.some((change) => change.domain === 'channels');
+    const hasProviderChanges = snapshot.pending.some((change) => change.domain === 'providers');
+
+    if (hasChannelChanges) {
+      await finalizeChannelDraftSession();
+    }
+    if (hasAgentChanges || hasChannelChanges) {
+      await finalizeAgentDraftSession();
+    }
+    if (hasProviderChanges) {
+      await clearProviderDraftSession();
+    }
   },
 });
 let hostApiServer: Server | null = null;

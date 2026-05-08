@@ -48,10 +48,24 @@ interface AgentsState {
   deleteAgent: (agentId: string) => Promise<void>;
   assignChannel: (agentId: string, channelType: ChannelType, accountId?: string) => Promise<void>;
   removeChannel: (agentId: string, channelType: ChannelType, accountId?: string) => Promise<void>;
-  clearError: () => void;
 }
 
+type AgentsSnapshotState = Pick<
+  AgentsState,
+  'agents' | 'defaultAgentId' | 'mainKey' | 'scope' | 'configuredChannelTypes' | 'channelOwners' | 'channelAccountOwners'
+>;
+
 const AGENTS_LIST_RPC_TIMEOUT_MS = 3000;
+const EMPTY_AGENTS_SNAPSHOT_STATE: AgentsSnapshotState = {
+  agents: [],
+  defaultAgentId: 'main',
+  mainKey: 'main',
+  scope: null,
+  configuredChannelTypes: [],
+  channelOwners: {},
+  channelAccountOwners: {},
+};
+let appliedAgentsSnapshotState: AgentsSnapshotState = EMPTY_AGENTS_SNAPSHOT_STATE;
 
 function humanizeAgentId(agentId: string): string {
   if (agentId === 'main') return 'Main';
@@ -106,15 +120,7 @@ function buildLocalExtras(localAgent?: LocalAgentSnapshot): LocalAgentExtras {
 function mergeAgentSnapshots(
   gatewaySnapshot: GatewayAgentsListResult | undefined,
   localSnapshot: AgentsSnapshot | undefined,
-): {
-  agents: AgentSummary[];
-  defaultAgentId: string;
-  mainKey: string;
-  scope: string | null;
-  configuredChannelTypes: string[];
-  channelOwners: Record<string, string>;
-  channelAccountOwners: Record<string, string>;
-} {
+): AgentsSnapshotState {
   const defaultAgentId = gatewaySnapshot?.defaultId ?? localSnapshot?.defaultAgentId ?? 'main';
   const localById = new Map((localSnapshot?.agents ?? []).map((agent) => [agent.id, agent]));
   const mergedAgents: AgentSummary[] = [];
@@ -160,6 +166,42 @@ function mergeAgentSnapshots(
   };
 }
 
+function hasPendingAgentChanges(): boolean {
+  const plan = useRuntimeApplyStore.getState().plan;
+  return Array.isArray(plan.pending) && plan.pending.some((entry) => entry.domain === 'agents');
+}
+
+function rememberAppliedAgentsSnapshot(snapshot: AgentsSnapshotState): void {
+  appliedAgentsSnapshotState = {
+    ...snapshot,
+    agents: [...snapshot.agents],
+    configuredChannelTypes: [...snapshot.configuredChannelTypes],
+    channelOwners: { ...snapshot.channelOwners },
+    channelAccountOwners: { ...snapshot.channelAccountOwners },
+  };
+}
+
+export function getAppliedAgentsSnapshotState(): AgentsSnapshotState {
+  if (!hasPendingAgentChanges()) {
+    const state = useAgentsStore.getState();
+    return {
+      agents: state.agents,
+      defaultAgentId: state.defaultAgentId,
+      mainKey: state.mainKey,
+      scope: state.scope,
+      configuredChannelTypes: state.configuredChannelTypes,
+      channelOwners: state.channelOwners,
+      channelAccountOwners: state.channelAccountOwners,
+    };
+  }
+  return appliedAgentsSnapshotState;
+}
+
+async function refreshAgentsAfterMutation(): Promise<void> {
+  await useRuntimeApplyStore.getState().refreshPlan();
+  await useAgentsStore.getState().fetchAgents();
+}
+
 export const useAgentsStore = create<AgentsState>((set) => ({
   agents: [],
   defaultAgentId: 'main',
@@ -181,6 +223,9 @@ export const useAgentsStore = create<AgentsState>((set) => ({
     try {
       localSnapshot = await hostApiFetch<AgentsSnapshot & { success?: boolean }>('/api/agents');
       const mergedLocal = mergeAgentSnapshots(undefined, localSnapshot);
+      if (!hasPendingAgentChanges()) {
+        rememberAppliedAgentsSnapshot(mergedLocal);
+      }
       set({
         ...mergedLocal,
         loading: false,
@@ -205,6 +250,7 @@ export const useAgentsStore = create<AgentsState>((set) => ({
       const gatewayState = useGatewayStore.getState();
       const shouldIncludeRuntime =
         gatewayState.status.state === 'running' &&
+        !hasPendingAgentChanges() &&
         gatewayState.lifecycle.state !== 'scheduled' &&
         gatewayState.lifecycle.state !== 'applying';
 
@@ -218,6 +264,7 @@ export const useAgentsStore = create<AgentsState>((set) => ({
         AGENTS_LIST_RPC_TIMEOUT_MS,
       );
       const merged = mergeAgentSnapshots(gatewaySnapshot, localSnapshot);
+      rememberAppliedAgentsSnapshot(merged);
       set({
         ...merged,
         loading: false,
@@ -234,8 +281,7 @@ export const useAgentsStore = create<AgentsState>((set) => ({
         method: 'POST',
         body: JSON.stringify({ name }),
       });
-      await useRuntimeApplyStore.getState().refreshPlan();
-      await useAgentsStore.getState().fetchAgents();
+      await refreshAgentsAfterMutation();
     } catch (error) {
       set({ error: String(error) });
       throw error;
@@ -249,8 +295,7 @@ export const useAgentsStore = create<AgentsState>((set) => ({
         method: 'PUT',
         body: JSON.stringify(updates),
       });
-      await useRuntimeApplyStore.getState().refreshPlan();
-      await useAgentsStore.getState().fetchAgents();
+      await refreshAgentsAfterMutation();
     } catch (error) {
       set({ error: String(error) });
       throw error;
@@ -261,8 +306,7 @@ export const useAgentsStore = create<AgentsState>((set) => ({
     set({ error: null });
     try {
       await hostApiFetch(`/api/agents/${encodeURIComponent(agentId)}`, { method: 'DELETE' });
-      await useRuntimeApplyStore.getState().refreshPlan();
-      await useAgentsStore.getState().fetchAgents();
+      await refreshAgentsAfterMutation();
     } catch (error) {
       set({ error: String(error) });
       throw error;
@@ -277,8 +321,7 @@ export const useAgentsStore = create<AgentsState>((set) => ({
         `/api/agents/${encodeURIComponent(agentId)}/channels/${encodeURIComponent(channelType)}${query}`,
         { method: 'PUT' },
       );
-      await useRuntimeApplyStore.getState().refreshPlan();
-      await useAgentsStore.getState().fetchAgents();
+      await refreshAgentsAfterMutation();
     } catch (error) {
       set({ error: String(error) });
       throw error;
@@ -293,13 +336,10 @@ export const useAgentsStore = create<AgentsState>((set) => ({
         `/api/agents/${encodeURIComponent(agentId)}/channels/${encodeURIComponent(channelType)}${query}`,
         { method: 'DELETE' },
       );
-      await useRuntimeApplyStore.getState().refreshPlan();
-      await useAgentsStore.getState().fetchAgents();
+      await refreshAgentsAfterMutation();
     } catch (error) {
       set({ error: String(error) });
       throw error;
     }
   },
-
-  clearError: () => set({ error: null }),
 }));

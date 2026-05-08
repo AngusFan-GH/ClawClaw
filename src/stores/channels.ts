@@ -7,7 +7,6 @@ import { useRuntimeApplyStore } from './runtime-apply';
 interface AddChannelParams {
   type: ChannelType;
   name: string;
-  token?: string;
 }
 
 interface ChannelsState {
@@ -18,8 +17,6 @@ interface ChannelsState {
   fetchChannels: (probe?: boolean, options?: { includeRuntime?: boolean }) => Promise<void>;
   addChannel: (params: AddChannelParams) => Promise<Channel>;
   deleteChannel: (channelId: string, accountId?: string) => Promise<void>;
-  setChannelGroups: (groups: ChannelGroup[]) => void;
-  clearError: () => void;
 }
 
 function normalizeChannelId(channelId: string): string {
@@ -175,8 +172,4 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
     await useRuntimeApplyStore.getState().refreshPlan();
     await get().fetchChannels(false, { includeRuntime: false });
   },
-
-  setChannelGroups: (groups) => set({ channelGroups: groups, channels: flattenGroups(groups) }),
-
-  clearError: () => set({ error: null }),
 }));
