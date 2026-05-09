@@ -63,6 +63,54 @@ describe('waitForGatewayReady', () => {
     await assertion;
     vi.useRealTimers();
   });
+
+  it('continues when /readyz only reports tolerated channel failures', async () => {
+    const server = http.createServer((req, res) => {
+      if (req.url === '/readyz') {
+        res.writeHead(503, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ ready: false, failing: ['openclaw-weixin'] }));
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', resolve);
+    });
+
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Expected TCP test server address');
+      }
+      await expect(waitForGatewayReady({
+        port: address.port,
+        getProcessExitCode: () => null,
+        toleratedFailingChannels: ['openclaw-weixin'],
+        timeoutMs: 100,
+        intervalMs: 5,
+      })).resolves.toBeUndefined();
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('does not continue when /readyz reports an untolerated failure', async () => {
+    vi.useFakeTimers();
+    const assertion = expect(waitForGatewayReady({
+      port: 9,
+      getProcessExitCode: () => null,
+      probeReady: async () => false,
+      toleratedFailingChannels: ['openclaw-weixin'],
+      timeoutMs: 20,
+      intervalMs: 5,
+    })).rejects.toThrow('Gateway did not become ready on port 9 within 20ms');
+
+    await vi.advanceTimersByTimeAsync(40);
+    await assertion;
+    vi.useRealTimers();
+  });
 });
 
 describe('probeGatewayReady', () => {

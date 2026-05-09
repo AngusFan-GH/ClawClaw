@@ -87,6 +87,7 @@ type GatewayReadyProbeResult = {
   ready: boolean;
   statusCode?: number;
   detail?: string;
+  failing?: string[];
 };
 
 function resolveGatewayHandshakeTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
@@ -158,15 +159,22 @@ async function requestGatewayReadyz(port: number): Promise<GatewayReadyProbeResu
         });
         res.on('end', () => {
           const statusCode = res.statusCode;
-          const body = Buffer.concat(chunks)
-            .toString('utf8')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .slice(0, GATEWAY_READY_DIAGNOSTIC_BODY_LIMIT);
+          const rawBody = Buffer.concat(chunks).toString('utf8');
+          const body = rawBody.replace(/\s+/g, ' ').trim().slice(0, GATEWAY_READY_DIAGNOSTIC_BODY_LIMIT);
+          let failing: string[] | undefined;
+          try {
+            const parsed = JSON.parse(rawBody) as { failing?: unknown };
+            if (Array.isArray(parsed.failing)) {
+              failing = parsed.failing.filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+            }
+          } catch {
+            // Non-JSON diagnostics are still useful in detail.
+          }
           resolveOnce({
             ready: statusCode != null && statusCode >= 200 && statusCode < 300,
             statusCode,
             ...(body ? { detail: body } : {}),
+            ...(failing && failing.length > 0 ? { failing } : {}),
           });
         });
       },
@@ -203,6 +211,7 @@ export async function waitForGatewayReady(options: {
   port: number;
   getProcessExitCode: () => number | string | null;
   probeReady?: (port: number) => Promise<boolean>;
+  toleratedFailingChannels?: string[];
   timeoutMs?: number;
   retries?: number;
   intervalMs?: number;
@@ -242,6 +251,17 @@ export async function waitForGatewayReady(options: {
       }
     } catch {
       // Gateway not ready yet.
+    }
+
+    if (!ready && lastProbeResult?.statusCode === 503 && lastProbeResult.failing?.length) {
+      const toleratedFailures = new Set(options.toleratedFailingChannels ?? []);
+      const onlyToleratedFailures = lastProbeResult.failing.every((channel) => toleratedFailures.has(channel));
+      if (onlyToleratedFailures) {
+        logger.warn(
+          `Gateway /readyz reported only deferred channel failures (${lastProbeResult.failing.join(', ')}); continuing startup`,
+        );
+        ready = true;
+      }
     }
 
     if (ready) {

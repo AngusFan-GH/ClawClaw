@@ -52,8 +52,13 @@ const CHANNEL_PLUGIN_ALLOWLIST_IDS: Partial<Record<string, string>> = {
     qqbot: 'qqbot',
     [WECHAT_RUNTIME_CHANNEL_ID]: WECHAT_RUNTIME_CHANNEL_ID,
 };
-// Channels that are managed as plugins (config goes under plugins.entries, not channels)
-const PLUGIN_CHANNELS = ['whatsapp'];
+const BUILTIN_CHANNEL_ALLOWLIST_IDS = new Set(['discord', 'telegram', 'qqbot', 'whatsapp']);
+const TOP_LEVEL_DEFAULT_ACCOUNT_MIRROR_CHANNELS = new Set(['discord', 'telegram', 'qqbot', 'whatsapp']);
+const CHANNELS_OMIT_DEFAULT_ACCOUNT_KEY = new Set(['dingtalk']);
+// OpenClaw channel runtime configuration is stored under channels.<id>.
+// Keep the set empty so older plugin-entry code paths can be retired without
+// removing the defensive migration/delete branches below.
+const PLUGIN_CHANNELS: string[] = [];
 const LEGACY_CHANNEL_PLUGIN_IDS = [
     'openclaw-lark',
     'feishu-openclaw-plugin',
@@ -140,6 +145,19 @@ function normalizeAccountScopedChannelSections(currentConfig: OpenClawConfig): v
 }
 
 function migrateLegacyWechatSection(currentConfig: OpenClawConfig): void {
+    const legacyWhatsAppEntry = currentConfig.plugins?.entries?.whatsapp;
+    if (legacyWhatsAppEntry && typeof legacyWhatsAppEntry === 'object') {
+        if (!currentConfig.channels) {
+            currentConfig.channels = {};
+        }
+        currentConfig.channels.whatsapp = {
+            ...(currentConfig.channels.whatsapp || {}),
+            ...(legacyWhatsAppEntry as ChannelConfigData),
+        };
+        delete currentConfig.plugins?.entries?.whatsapp;
+        pruneEmptyPluginsConfig(currentConfig);
+    }
+
     if (!currentConfig.channels?.[WECHAT_UI_CHANNEL_ID]) {
         normalizeAccountScopedChannelSections(currentConfig);
         return;
@@ -282,6 +300,117 @@ function pruneEmptyPluginsConfig(currentConfig: OpenClawConfig): void {
     if (!hasMeaningfulKeys) {
         delete currentConfig.plugins;
     }
+}
+
+function resolveDefaultAgentId(currentConfig: OpenClawConfig): string | null {
+    const entries = Array.isArray(currentConfig.agents?.list) ? currentConfig.agents.list : [];
+    const defaultEntry = entries.find((entry) => entry?.id && entry.default === true);
+    if (typeof defaultEntry?.id === 'string' && defaultEntry.id.trim()) {
+        return defaultEntry.id.trim();
+    }
+    const mainEntry = entries.find((entry) => entry?.id === 'main');
+    if (typeof mainEntry?.id === 'string' && mainEntry.id.trim()) {
+        return mainEntry.id.trim();
+    }
+    const firstEntry = entries.find((entry) => typeof entry?.id === 'string' && entry.id.trim());
+    if (typeof firstEntry?.id === 'string' && firstEntry.id.trim()) {
+        return firstEntry.id.trim();
+    }
+    return 'main';
+}
+
+function isSimpleChannelBinding(binding: unknown): binding is NonNullable<OpenClawConfig['bindings']>[number] {
+    if (!binding || typeof binding !== 'object') return false;
+    const candidate = binding as NonNullable<OpenClawConfig['bindings']>[number];
+    if (typeof candidate.agentId !== 'string' || !candidate.agentId.trim()) return false;
+    if (!candidate.match || typeof candidate.match !== 'object' || Array.isArray(candidate.match)) return false;
+    const keys = Object.keys(candidate.match);
+    return keys.every((key) => key === 'channel' || key === 'accountId')
+        && typeof candidate.match.channel === 'string'
+        && Boolean(candidate.match.channel.trim())
+        && (
+            candidate.match.accountId === undefined
+            || (typeof candidate.match.accountId === 'string' && Boolean(candidate.match.accountId.trim()))
+        );
+}
+
+function makeBindingAccountKey(channelType: string, accountId?: string | null): string {
+    const normalizedAccountId = typeof accountId === 'string' && accountId.trim() ? accountId.trim() : 'default';
+    return `${toRuntimeChannelType(channelType)}:${normalizedAccountId}`;
+}
+
+function ensureDefaultBindingsForConfiguredChannels(currentConfig: OpenClawConfig): boolean {
+    const defaultAgentId = resolveDefaultAgentId(currentConfig);
+    if (!defaultAgentId) {
+        return false;
+    }
+
+    const bindings = Array.isArray(currentConfig.bindings) ? [...currentConfig.bindings] : [];
+    const typeOwners = new Set<string>();
+    const accountOwners = new Set<string>();
+    for (const binding of bindings) {
+        if (!isSimpleChannelBinding(binding)) continue;
+        const channelType = toRuntimeChannelType(binding.match?.channel || '');
+        if (!channelType) continue;
+        if (typeof binding.match?.accountId === 'string' && binding.match.accountId.trim()) {
+            accountOwners.add(makeBindingAccountKey(channelType, binding.match.accountId));
+        } else {
+            typeOwners.add(channelType);
+        }
+    }
+
+    let changed = false;
+    const groups = listConfiguredChannelGroupsFromConfig(currentConfig, { includeCli: false });
+    for (const group of groups) {
+        const runtimeChannelType = toRuntimeChannelType(group.type);
+        if (typeOwners.has(runtimeChannelType)) {
+            continue;
+        }
+        for (const account of group.accounts) {
+            if (!account.configured) continue;
+            const accountKey = makeBindingAccountKey(runtimeChannelType, account.accountId);
+            if (accountOwners.has(accountKey)) {
+                continue;
+            }
+            bindings.push({
+                agentId: defaultAgentId,
+                match: {
+                    channel: runtimeChannelType,
+                    accountId: account.accountId || 'default',
+                },
+            });
+            accountOwners.add(accountKey);
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        currentConfig.bindings = bindings;
+    }
+    return changed;
+}
+
+function ensureConfiguredBuiltInChannelsAllowed(currentConfig: OpenClawConfig): boolean {
+    if (!currentConfig.plugins || !Array.isArray(currentConfig.plugins.allow)) {
+        return false;
+    }
+
+    const allow = currentConfig.plugins.allow as string[];
+    const nextAllow = [...allow];
+    for (const channelType of BUILTIN_CHANNEL_ALLOWLIST_IDS) {
+        if (!hasConfiguredChannelState(channelType, currentConfig.channels?.[channelType] as AccountScopedChannelSection | undefined)) {
+            continue;
+        }
+        if (!nextAllow.includes(channelType)) {
+            nextAllow.push(channelType);
+        }
+    }
+
+    if (nextAllow.length === allow.length) {
+        return false;
+    }
+    currentConfig.plugins.allow = nextAllow;
+    return true;
 }
 
 function hasConfiguredChinaManagedChannel(currentConfig: OpenClawConfig): boolean {
@@ -500,10 +629,164 @@ function toQQBotSessionFileName(accountId: string): string {
     return `session-${safeId}.json`;
 }
 
-function getQQBotAccountStatePath(accountId?: string): string {
-    const qqbotDir = join(resolveOpenClawDir(), 'qqbot');
-    const sessionsDir = join(qqbotDir, 'sessions');
-    return accountId ? join(sessionsDir, toQQBotSessionFileName(accountId)) : sessionsDir;
+function decodeQQBotSessionFileAccountId(fileName: string): string | null {
+    if (!fileName.startsWith('session-') || !fileName.endsWith('.json')) {
+        return null;
+    }
+    const rawId = fileName.slice('session-'.length, -'.json'.length);
+    if (!rawId) {
+        return null;
+    }
+    try {
+        const decoded = Buffer.from(rawId, 'base64').toString('utf8').trim();
+        if (/^[a-zA-Z0-9_-]+$/.test(decoded)) {
+            return decoded;
+        }
+    } catch {
+        // Fall back to the file-name id below.
+    }
+    return rawId;
+}
+
+async function discoverQQBotSessionAccountIds(): Promise<string[]> {
+    const sessionsDir = join(resolveOpenClawDir(), 'qqbot', 'sessions');
+    const accountIds = new Set<string>();
+    try {
+        if (!(await fileExists(sessionsDir))) {
+            return [];
+        }
+        const entries = await readdir(sessionsDir);
+        for (const entry of entries) {
+            if (!entry.endsWith('.json')) continue;
+            const filePath = join(sessionsDir, entry);
+            try {
+                const raw = await readFile(filePath, 'utf8');
+                const parsed = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+                const accountId = typeof parsed.accountId === 'string' && parsed.accountId.trim()
+                    ? parsed.accountId.trim()
+                    : decodeQQBotSessionFileAccountId(entry);
+                if (accountId) {
+                    accountIds.add(accountId);
+                }
+            } catch {
+                const accountId = decodeQQBotSessionFileAccountId(entry);
+                if (accountId) {
+                    accountIds.add(accountId);
+                }
+            }
+        }
+    } catch {
+        return [];
+    }
+    return Array.from(accountIds).sort();
+}
+
+async function getQQBotAccountStatePaths(accountId?: string): Promise<string[]> {
+    if (!accountId) {
+        return [join(resolveOpenClawDir(), 'qqbot', 'sessions')];
+    }
+    const sessionsDir = join(resolveOpenClawDir(), 'qqbot', 'sessions');
+    const paths = new Set<string>([join(sessionsDir, toQQBotSessionFileName(accountId))]);
+    try {
+        if (!(await fileExists(sessionsDir))) {
+            return Array.from(paths);
+        }
+        const entries = await readdir(sessionsDir);
+        for (const entry of entries) {
+            if (!entry.endsWith('.json')) continue;
+            const filePath = join(sessionsDir, entry);
+            const decodedId = decodeQQBotSessionFileAccountId(entry);
+            if (decodedId === accountId) {
+                paths.add(filePath);
+                continue;
+            }
+            try {
+                const raw = await readFile(filePath, 'utf8');
+                const parsed = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+                if (parsed.accountId === accountId) {
+                    paths.add(filePath);
+                }
+            } catch {
+                // Ignore malformed session files while still deleting known paths.
+            }
+        }
+    } catch {
+        // Ignore scan failures while still deleting the deterministic path.
+    }
+    return Array.from(paths);
+}
+
+export async function migrateQQBotSessionAccountsToConfig(): Promise<boolean> {
+    const sessionAccountIds = await discoverQQBotSessionAccountIds();
+    if (sessionAccountIds.length === 0) {
+        return false;
+    }
+
+    let changed = false;
+    await updateOpenClawConfig(async (currentConfig) => {
+        migrateLegacyWechatSection(currentConfig);
+        const section = normalizeChannelSectionForRuntime(
+            'qqbot',
+            currentConfig.channels?.qqbot as AccountScopedChannelSection | undefined,
+        );
+        if (!section || section.enabled === false || !hasMeaningfulSectionConfig(section)) {
+            return false;
+        }
+
+        const topLevelConfig = extractAccountScopedTopLevelConfig('qqbot', section);
+        if (!hasMeaningfulSectionConfig(topLevelConfig)) {
+            return false;
+        }
+
+        const accounts = { ...(section.accounts || {}) };
+        for (const accountId of sessionAccountIds) {
+            const existingAccount = accounts[accountId] as ChannelConfigData | undefined;
+            if (hasConfiguredAccountConfig('qqbot', existingAccount)) {
+                continue;
+            }
+            accounts[accountId] = {
+                ...topLevelConfig,
+                enabled: true,
+            };
+            changed = true;
+        }
+
+        if (!changed) {
+            return false;
+        }
+
+        currentConfig.channels = {
+            ...(currentConfig.channels || {}),
+            qqbot: normalizeChannelSectionForRuntime('qqbot', {
+                ...section,
+                accounts,
+                defaultAccount: section.defaultAccount || (accounts.default ? 'default' : sessionAccountIds[0]),
+            }) || {
+                ...section,
+                accounts,
+                defaultAccount: section.defaultAccount || (accounts.default ? 'default' : sessionAccountIds[0]),
+            },
+        };
+        return true;
+    }, NO_RESTART_CONFIG_WRITE);
+
+    return changed;
+}
+
+export async function ensureDefaultChannelBindings(): Promise<boolean> {
+    const snapshot = await readOpenClawConfigSnapshot();
+    migrateLegacyWechatSection(snapshot);
+    if (!ensureDefaultBindingsForConfiguredChannels(snapshot)) {
+        return false;
+    }
+
+    let changed = false;
+    await updateOpenClawConfig(async (currentConfig) => {
+        migrateLegacyWechatSection(currentConfig);
+        changed = ensureDefaultBindingsForConfiguredChannels(currentConfig);
+        return changed;
+    }, NO_RESTART_CONFIG_WRITE);
+    return changed;
 }
 
 async function compactDirectoryIfEmpty(targetDir: string): Promise<void> {
@@ -560,6 +843,23 @@ export interface OpenClawConfig {
     channels?: Record<string, ChannelConfigData>;
     plugins?: PluginsConfig;
     commands?: Record<string, unknown>;
+    agents?: {
+        list?: Array<{
+            id?: string;
+            default?: boolean;
+            [key: string]: unknown;
+        }>;
+        [key: string]: unknown;
+    };
+    bindings?: Array<{
+        agentId?: string;
+        match?: {
+            channel?: string;
+            accountId?: string;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    }>;
     [key: string]: unknown;
 }
 
@@ -636,7 +936,7 @@ function hasConfiguredAccountConfig(
         return false;
     }
 
-    if (isWeChatRuntimeChannel(channelType)) {
+    if (isWeChatRuntimeChannel(channelType) || channelType === 'whatsapp') {
         return true;
     }
 
@@ -647,7 +947,7 @@ function isImplicitlyConfiguredChannel(
     channelType: string,
     section: AccountScopedChannelSection | undefined
 ): boolean {
-    return channelType === WECHAT_RUNTIME_CHANNEL_ID && section?.enabled !== false;
+    return (channelType === WECHAT_RUNTIME_CHANNEL_ID || channelType === 'whatsapp') && section?.enabled !== false;
 }
 
 function configsShareComparableValues(
@@ -765,6 +1065,43 @@ function extractAccountScopedTopLevelConfig(
     );
 }
 
+function mirrorDefaultAccountConfigToTopLevel(
+    channelType: string,
+    section: AccountScopedChannelSection
+): AccountScopedChannelSection {
+    if (!TOP_LEVEL_DEFAULT_ACCOUNT_MIRROR_CHANNELS.has(channelType)) {
+        return section;
+    }
+
+    const accounts = section.accounts;
+    if (!accounts || typeof accounts !== 'object') {
+        return section;
+    }
+
+    const defaultAccountId =
+        typeof section.defaultAccount === 'string' && section.defaultAccount.trim()
+            ? section.defaultAccount.trim()
+            : 'default';
+    const defaultAccountConfig = accounts[defaultAccountId] || accounts.default;
+    if (!defaultAccountConfig || typeof defaultAccountConfig !== 'object') {
+        return section;
+    }
+
+    let changed = false;
+    const nextSection: AccountScopedChannelSection = { ...section };
+    for (const [key, value] of Object.entries(defaultAccountConfig)) {
+        if (value === undefined || isSharedChannelSectionKey(channelType, key)) {
+            continue;
+        }
+        if (!(key in nextSection)) {
+            nextSection[key] = value;
+            changed = true;
+        }
+    }
+
+    return changed ? nextSection : section;
+}
+
 function normalizeFeishuSection(
     section: AccountScopedChannelSection | undefined
 ): AccountScopedChannelSection | undefined {
@@ -836,10 +1173,20 @@ function normalizeChannelSectionForRuntime(
     channelType: string,
     section: AccountScopedChannelSection | undefined
 ): AccountScopedChannelSection | undefined {
-    if (channelType === 'feishu') {
-        return normalizeFeishuSection(section);
+    let nextSection = channelType === 'feishu'
+        ? normalizeFeishuSection(section)
+        : section;
+    if (!nextSection || typeof nextSection !== 'object') {
+        return nextSection;
     }
-    return section;
+
+    nextSection = mirrorDefaultAccountConfigToTopLevel(channelType, nextSection);
+    if (CHANNELS_OMIT_DEFAULT_ACCOUNT_KEY.has(channelType) && 'defaultAccount' in nextSection) {
+        const strippedSection = { ...nextSection };
+        delete strippedSection.defaultAccount;
+        return strippedSection;
+    }
+    return nextSection;
 }
 
 function hasConfiguredChannelState(
@@ -1406,7 +1753,9 @@ export async function deleteChannelConfig(
     }
 
     if (configChanged && runtimeChannelType === 'qqbot') {
-        stagedCleanupTargets.add(getQQBotAccountStatePath(preferredAccountId ?? undefined));
+        for (const statePath of await getQQBotAccountStatePaths(preferredAccountId ?? undefined)) {
+            stagedCleanupTargets.add(statePath);
+        }
     }
 
     if (removeChinaManagedPluginMirror) {
@@ -1764,6 +2113,10 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
             repaired = true;
         }
 
+        if (ensureConfiguredBuiltInChannelsAllowed(currentConfig)) {
+            repaired = true;
+        }
+
         if (hasConfiguredChinaManagedChannel(currentConfig)) {
             for (const channelType of CHINA_CHANNEL_TYPES) {
                 if (hasConfiguredChannelState(channelType, currentConfig.channels?.[channelType] as AccountScopedChannelSection | undefined)) {
@@ -1792,6 +2145,10 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
             removeChinaManagedPluginMirror = true;
         }
 
+        if (ensureDefaultBindingsForConfiguredChannels(currentConfig)) {
+            repaired = true;
+        }
+
         pruneEmptyPluginsConfig(currentConfig);
 
         return repaired;
@@ -1813,6 +2170,7 @@ export async function repairChannelConfigConsistency(): Promise<{ repaired: bool
 }
 
 export async function listConfiguredChannels(options?: { includeCli?: boolean }): Promise<string[]> {
+    await migrateQQBotSessionAccountsToConfig().catch(() => false);
     const config = await readOpenClawConfigSnapshot();
     migrateLegacyWechatSection(config);
     return listConfiguredChannelsFromConfig(config, options);
@@ -1849,6 +2207,7 @@ export function listConfiguredChannelsFromConfig(
 }
 
 export async function listConfiguredChannelAccounts(options?: { includeCli?: boolean }): Promise<Record<string, string[]>> {
+    await migrateQQBotSessionAccountsToConfig().catch(() => false);
     const config = await readOpenClawConfigSnapshot();
     migrateLegacyWechatSection(config);
     return listConfiguredChannelAccountsFromConfig(config, options);
@@ -1906,6 +2265,7 @@ export interface ConfiguredChannelGroupSnapshot {
 }
 
 export async function listConfiguredChannelGroups(options?: { includeCli?: boolean }): Promise<ConfiguredChannelGroupSnapshot[]> {
+    await migrateQQBotSessionAccountsToConfig().catch(() => false);
     const config = await readOpenClawConfigSnapshot();
     migrateLegacyWechatSection(config);
     return listConfiguredChannelGroupsFromConfig(config, options);

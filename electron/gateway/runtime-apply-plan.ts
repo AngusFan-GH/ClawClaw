@@ -107,11 +107,19 @@ export class RuntimeApplyPlan {
       };
     }
 
+    if (this.deps.beforeApply) {
+      await this.deps.beforeApply(before);
+    }
+
     const gatewayStatus = this.deps.getGatewayStatus?.();
     if (gatewayStatus && gatewayStatus.state !== 'running') {
+      this.pending.clear();
+      if (this.deps.afterApply) {
+        await this.deps.afterApply(before);
+      }
       return {
         success: true,
-        snapshot: before,
+        snapshot: this.snapshot(),
         applied: {
           action: before.action,
           triggered: false,
@@ -120,10 +128,6 @@ export class RuntimeApplyPlan {
           reason: `gateway:${gatewayStatus.state}`,
         },
       };
-    }
-
-    if (this.deps.beforeApply) {
-      await this.deps.beforeApply(before);
     }
 
     const result = await this.deps.gatewayApplyCoordinator.applyNow({

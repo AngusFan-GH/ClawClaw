@@ -77,19 +77,31 @@ describe('RuntimeApplyPlan', () => {
     expect(snapshot.pending[0]?.requires).toBe('restart');
   });
 
-  it('keeps pending changes when the gateway is not running', async () => {
-    const { plan, applyNow } = createPlanWithGatewayState('error');
+  it('commits pending changes and defers runtime reload when the gateway is not running', async () => {
+    const { applyNow } = createPlanWithGatewayState('error');
+    const beforeApply = vi.fn(async () => undefined);
+    const afterApply = vi.fn(async () => undefined);
+    const deferredPlan = new RuntimeApplyPlan({
+      gatewayApplyCoordinator: {
+        applyNow,
+      } as unknown as ConstructorParameters<typeof RuntimeApplyPlan>[0]['gatewayApplyCoordinator'],
+      getGatewayStatus: () => ({ state: 'error', port: 18789 }),
+      beforeApply,
+      afterApply,
+    });
 
-    plan.record({
+    deferredPlan.record({
       domain: 'providers',
       label: '模型配置',
       source: 'provider.save',
       requires: 'reload',
     });
 
-    const result = await plan.apply();
+    const result = await deferredPlan.apply();
 
+    expect(beforeApply).toHaveBeenCalledTimes(1);
     expect(applyNow).not.toHaveBeenCalled();
+    expect(afterApply).toHaveBeenCalledTimes(1);
     expect(result.applied).toMatchObject({
       action: 'reload',
       triggered: false,
@@ -97,8 +109,8 @@ describe('RuntimeApplyPlan', () => {
       deferred: true,
       reason: 'gateway:error',
     });
-    expect(result.snapshot.count).toBe(1);
-    expect(plan.snapshot().count).toBe(1);
+    expect(result.snapshot.count).toBe(0);
+    expect(deferredPlan.snapshot().count).toBe(0);
   });
 
   it('runs discard hooks before clearing pending changes', async () => {

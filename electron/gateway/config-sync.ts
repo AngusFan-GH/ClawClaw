@@ -508,6 +508,7 @@ export interface GatewayLaunchContext {
   loadedProviderKeyCount: number;
   proxySummary: string;
   channelStartupSummary: string;
+  skipChannels: boolean;
 }
 
 async function repairOpenClawConfigFile(): Promise<GatewayConfigRecovery | null> {
@@ -979,10 +980,8 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     },
   );
   const configuredChannels = channelPolicy.configuredChannels;
-  const skipChannels = true;
-  const channelStartupSummary = channelPolicy.configuredChannels.length > 0
-    ? `deferred(${channelPolicy.configuredChannels.join(',')})`
-    : channelPolicy.channelStartupSummary;
+  const skipChannels = channelPolicy.skipChannels;
+  const channelStartupSummary = channelPolicy.channelStartupSummary;
   const uvEnv = await withTimeout(getUvMirrorEnv(), 5000, 'getUvMirrorEnv', {});
   const proxyEnv = await withTimeout(buildProxyEnvAsync(appSettings), 5000, 'buildProxyEnvAsync', {});
   const resolvedProxy = await withTimeout(
@@ -1049,5 +1048,6 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     loadedProviderKeyCount,
     proxySummary,
     channelStartupSummary,
+    skipChannels,
   };
 }

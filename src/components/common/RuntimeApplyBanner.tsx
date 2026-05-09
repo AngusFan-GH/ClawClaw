@@ -55,7 +55,7 @@ export function RuntimeApplyBanner({
       const result = await applyPendingChanges();
       await refreshAfterAction?.();
       if (!result.accepted && !result.triggered) {
-        toast.success('更改已保存，服务启动后生效');
+        toast.success('更改已写入配置，服务启动后会加载');
         return;
       }
       toast.success(result.action === 'restart' ? '更改已应用，服务已短暂重启' : '更改已应用');

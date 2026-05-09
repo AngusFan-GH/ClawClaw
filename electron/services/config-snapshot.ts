@@ -2,8 +2,10 @@ import type { AgentsSnapshot } from '../utils/agent-config';
 import { listAgentsSnapshot } from '../utils/agent-config';
 import type { ConfiguredChannelGroupSnapshot } from '../utils/channel-config';
 import {
+  ensureDefaultChannelBindings,
   listConfiguredChannelAccountsFromConfig,
   listConfiguredChannelGroupsFromConfig,
+  migrateQQBotSessionAccountsToConfig,
   readOpenClawConfigSnapshot,
 } from '../utils/channel-config';
 import { getOpenClawSkillsDir } from '../utils/paths';
@@ -59,6 +61,8 @@ export async function getAgentsConfigSnapshot(): Promise<AgentsConfigSnapshot> {
 }
 
 export async function getChannelsConfigSnapshot(): Promise<ChannelsConfigSnapshot> {
+  await migrateQQBotSessionAccountsToConfig().catch(() => false);
+  await ensureDefaultChannelBindings().catch(() => false);
   const config = await readOpenClawConfigSnapshot();
   const groups = listConfiguredChannelGroupsFromConfig(config, { includeCli: false });
   const accountsByType = listConfiguredChannelAccountsFromConfig(config, { includeCli: false });

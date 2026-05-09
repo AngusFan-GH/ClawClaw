@@ -120,6 +120,76 @@ describe('channel config lifecycle', () => {
     ]);
   });
 
+  it('stores whatsapp config under channels instead of plugin entries', async () => {
+    const { saveChannelConfig, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+
+    await saveChannelConfig('whatsapp', {
+      enabled: true,
+    });
+
+    await applyChannelDraft();
+
+    const config = await readOpenClawJson();
+    expect(config.channels).toEqual({
+      whatsapp: {
+        enabled: true,
+      },
+    });
+    expect(config.plugins).toBeUndefined();
+    await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([
+      {
+        type: 'whatsapp',
+        defaultAccountId: 'default',
+        configured: true,
+        accounts: [
+          expect.objectContaining({
+            accountId: 'default',
+            configured: true,
+          }),
+        ],
+      },
+    ]);
+  });
+
+  it('migrates legacy whatsapp plugin entries into channel config', async () => {
+    await writeOpenClawJson({
+      plugins: {
+        entries: {
+          whatsapp: {
+            enabled: true,
+          },
+        },
+      },
+    });
+
+    const { listConfiguredChannelGroups, saveChannelConfig } = await import('@electron/utils/channel-config');
+
+    await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([
+      {
+        type: 'whatsapp',
+        defaultAccountId: 'default',
+        configured: true,
+        accounts: [
+          expect.objectContaining({
+            accountId: 'default',
+            configured: true,
+          }),
+        ],
+      },
+    ]);
+
+    await saveChannelConfig('whatsapp', { enabled: true });
+    await applyChannelDraft();
+
+    const config = await readOpenClawJson();
+    expect(config.channels).toEqual({
+      whatsapp: {
+        enabled: true,
+      },
+    });
+    expect(config.plugins).toBeUndefined();
+  });
+
   it('collapses shadow default wechat account when a named account already owns the config', async () => {
     await writeOpenClawJson({
       channels: {
@@ -734,6 +804,219 @@ describe('channel config lifecycle', () => {
     expect(config.channels ?? {}).not.toHaveProperty('qqbot');
     expect(config.plugins).toBeUndefined();
     await expect(access(sessionDir)).rejects.toThrow();
+  });
+
+  it('migrates existing qqbot session accounts into configured accounts', async () => {
+    await writeOpenClawJson({
+      channels: {
+        qqbot: {
+          enabled: true,
+          appId: 'bot-app',
+          clientSecret: 'secret',
+        },
+      },
+      plugins: {
+        allow: ['qqbot'],
+      },
+    });
+
+    const sessionDir = join(testHome, '.openclaw', 'qqbot', 'sessions');
+    await mkdir(sessionDir, { recursive: true });
+    await writeFile(join(sessionDir, 'session-ZGVmYXVsdA.json'), JSON.stringify({ accountId: 'default' }), 'utf8');
+    await writeFile(join(sessionDir, 'session-qq1.json'), JSON.stringify({ accountId: 'qq1' }), 'utf8');
+
+    const { listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+
+    await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([
+      {
+        type: 'qqbot',
+        defaultAccountId: 'default',
+        configured: true,
+        accounts: [
+          expect.objectContaining({ accountId: 'default', configured: true }),
+          expect.objectContaining({ accountId: 'qq1', configured: true }),
+        ],
+      },
+    ]);
+
+    const config = await readOpenClawJson();
+    expect(config.channels).toEqual({
+      qqbot: {
+        enabled: true,
+        appId: 'bot-app',
+        clientSecret: 'secret',
+        defaultAccount: 'default',
+        accounts: {
+          default: {
+            appId: 'bot-app',
+            clientSecret: 'secret',
+            enabled: true,
+          },
+          qq1: {
+            appId: 'bot-app',
+            clientSecret: 'secret',
+            enabled: true,
+          },
+        },
+      },
+    });
+  });
+
+  it('adds default agent bindings for existing configured channel accounts without replacing explicit owners', async () => {
+    await writeOpenClawJson({
+      agents: {
+        list: [
+          { id: 'main', default: true },
+          { id: 'kbmatrix' },
+        ],
+      },
+      channels: {
+        feishu: {
+          enabled: true,
+          appId: 'app-id',
+          appSecret: 'secret',
+        },
+        qqbot: {
+          enabled: true,
+          accounts: {
+            default: {
+              appId: 'qq-app',
+              clientSecret: 'qq-secret',
+              enabled: true,
+            },
+          },
+        },
+      },
+      bindings: [
+        {
+          agentId: 'kbmatrix',
+          match: {
+            channel: 'qqbot',
+            accountId: 'default',
+          },
+        },
+      ],
+    });
+
+    const { ensureDefaultChannelBindings } = await import('@electron/utils/channel-config');
+
+    await expect(ensureDefaultChannelBindings()).resolves.toBe(true);
+
+    const config = await readOpenClawJson();
+    expect(config.bindings).toEqual([
+      {
+        agentId: 'kbmatrix',
+        match: {
+          channel: 'qqbot',
+          accountId: 'default',
+        },
+      },
+      {
+        agentId: 'main',
+        match: {
+          channel: 'feishu',
+          accountId: 'default',
+        },
+      },
+    ]);
+  });
+
+  it('adds configured built-in channels to restrictive plugin allowlists', async () => {
+    await writeOpenClawJson({
+      channels: {
+        telegram: {
+          enabled: true,
+          botToken: 'token',
+          allowFrom: ['123'],
+        },
+        whatsapp: {
+          enabled: true,
+        },
+        wecom: {
+          enabled: true,
+          botId: 'wecom-bot',
+          secret: 'wecom-secret',
+        },
+      },
+      plugins: {
+        allow: ['wecom'],
+      },
+    });
+
+    const { repairChannelConfigConsistency } = await import('@electron/utils/channel-config');
+
+    await expect(repairChannelConfigConsistency()).resolves.toEqual({ repaired: true });
+
+    const config = await readOpenClawJson();
+    expect(config.plugins?.allow).toEqual(['wecom', 'telegram', 'whatsapp']);
+  });
+
+  it('mirrors default account credentials to top-level channel config', async () => {
+    await writeOpenClawJson({
+      channels: {
+        qqbot: {
+          enabled: true,
+          defaultAccount: 'work',
+          accounts: {
+            work: {
+              appId: 'qq-app',
+              clientSecret: 'qq-secret',
+              enabled: true,
+            },
+          },
+        },
+      },
+    });
+
+    const { repairChannelConfigConsistency } = await import('@electron/utils/channel-config');
+
+    await expect(repairChannelConfigConsistency()).resolves.toEqual({ repaired: true });
+
+    const config = await readOpenClawJson();
+    expect(config.channels).toEqual({
+      qqbot: {
+        enabled: true,
+        defaultAccount: 'work',
+        appId: 'qq-app',
+        clientSecret: 'qq-secret',
+        accounts: {
+          work: {
+            appId: 'qq-app',
+            clientSecret: 'qq-secret',
+            enabled: true,
+          },
+        },
+      },
+    });
+  });
+
+  it('deletes base64-named qqbot default session when removing the default account', async () => {
+    await writeOpenClawJson({
+      channels: {
+        qqbot: {
+          enabled: true,
+          appId: 'bot-app',
+          clientSecret: 'secret',
+          accounts: {
+            default: {
+              appId: 'bot-app',
+              clientSecret: 'secret',
+              enabled: true,
+            },
+          },
+        },
+      },
+    });
+
+    const sessionDir = join(testHome, '.openclaw', 'qqbot', 'sessions');
+    await mkdir(sessionDir, { recursive: true });
+    await writeFile(join(sessionDir, 'session-ZGVmYXVsdA.json'), JSON.stringify({ accountId: 'default' }), 'utf8');
+
+    const { deleteChannelConfig } = await import('@electron/utils/channel-config');
+    await deleteChannelConfig('qqbot', 'default');
+    await applyChannelDraft();
+
+    await expect(access(join(sessionDir, 'session-ZGVmYXVsdA.json'))).rejects.toThrow();
   });
 
   it('normalizes feishu plugin allowlist and entries to the canonical plugin id', async () => {

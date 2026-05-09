@@ -720,7 +720,12 @@ export async function deleteAgentConfig(agentId: string): Promise<AgentsSnapshot
   return result.snapshot;
 }
 
-export async function assignChannelToAgent(agentId: string, channelType: string, accountId?: string): Promise<AgentsSnapshot> {
+export async function assignChannelToAgent(
+  agentId: string,
+  channelType: string,
+  accountId?: string,
+  options?: { mode?: BindingUpdateMode },
+): Promise<AgentsSnapshot> {
   const runtimeChannelType = toRuntimeChannelType(channelType);
   const { snapshot } = await updateBindingsConfig(async (config) => {
     const { agentsConfig, entries } = await getEffectiveAgentEntries(config);
@@ -732,7 +737,7 @@ export async function assignChannelToAgent(agentId: string, channelType: string,
       list: entries,
     };
     config.bindings = upsertBindingsForChannel(config.bindings, runtimeChannelType, agentId, accountId);
-  });
+  }, options);
   logger.info('Assigned channel to agent', { agentId, channelType: runtimeChannelType, accountId: normalizeBindingAccountId(accountId) });
   return snapshot;
 }

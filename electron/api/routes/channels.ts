@@ -27,7 +27,13 @@ import {
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { ensureBundledPluginInstalled } from '../../utils/bundled-plugin-installer';
-import { clearAllChannelBindings, clearChannelBinding } from '../../utils/agent-config';
+import {
+  assignChannelToAgent,
+  clearAllChannelBindings,
+  clearChannelBinding,
+  listAgentsSnapshot,
+} from '../../utils/agent-config';
+import { beginChannelDraftSession } from '../../services/channel-draft-session';
 import { extractSessionRecords } from '../../utils/session-util';
 import { ensureWeChatPluginInstalled } from '../../utils/wechat-installer';
 import type { ChannelType } from '../../../src/types/channel';
@@ -75,6 +81,28 @@ type ChannelAccountView = {
   error?: string;
   metadata?: Record<string, unknown>;
 };
+
+async function ensureDefaultAgentBindingForChannel(
+  channelType: string,
+  accountId?: string | null,
+): Promise<boolean> {
+  const runtimeChannelType = toRuntimeChannelType(channelType);
+  const normalizedAccountId = accountId?.trim() || 'default';
+  const snapshot = await listAgentsSnapshot();
+  const accountKey = `${runtimeChannelType}:${normalizedAccountId}`;
+  const existingOwner =
+    snapshot.channelAccountOwners[accountKey]
+    ?? snapshot.channelOwners[runtimeChannelType];
+  if (existingOwner || !snapshot.defaultAgentId) {
+    return false;
+  }
+
+  await beginChannelDraftSession();
+  await assignChannelToAgent(snapshot.defaultAgentId, runtimeChannelType, normalizedAccountId, {
+    mode: 'channel-draft',
+  });
+  return true;
+}
 
 type ChannelGroupView = {
   type: ChannelType;
@@ -690,6 +718,7 @@ async function awaitWeChatQrLogin(
       enabled: true,
       __accountId: normalizedAccountId,
     });
+    await ensureDefaultAgentBindingForChannel(WECHAT_RUNTIME_CHANNEL_ID, normalizedAccountId);
 
     if (!isActiveQrLogin(loginKey, sessionKey)) {
       return;
@@ -890,10 +919,19 @@ export async function handleChannelRoutes(
       }
       const existingValues = await getChannelFormValues(body.channelType, body.config.__accountId as string | undefined);
       if (isSameConfigValues(existingValues ?? undefined, body.config)) {
+        const bindingAdded = body.config.enabled !== false
+          ? await ensureDefaultAgentBindingForChannel(runtimeChannelType, body.config.__accountId as string | undefined)
+          : false;
+        if (bindingAdded && !body.skipRestart) {
+          scheduleGatewayChannelRefresh(ctx, runtimeChannelType, `channel:saveConfig:${runtimeChannelType}`);
+        }
         sendJson(res, 200, { success: true, noChange: true });
         return true;
       }
       await saveChannelConfig(body.channelType, body.config);
+      if (body.config.enabled !== false) {
+        await ensureDefaultAgentBindingForChannel(runtimeChannelType, body.config.__accountId as string | undefined);
+      }
       if (!body.skipRestart) {
         scheduleGatewayChannelRefresh(ctx, runtimeChannelType, `channel:saveConfig:${runtimeChannelType}`);
       }

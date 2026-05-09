@@ -32,8 +32,9 @@ import {
   runDeferredManagedPluginSync,
   runOpenClawStartupPreflightRepair,
 } from './config-sync';
-import { listConfiguredChannelAccounts } from '../utils/channel-config';
+import { listConfiguredChannelAccounts, listConfiguredChannels } from '../utils/channel-config';
 import { connectGatewaySocket, waitForGatewayReady } from './ws-client';
+import { toRuntimeChannelType } from '../utils/channel-alias';
 import {
   findExistingGatewayProcess,
   runOpenClawDoctorRepair,
@@ -122,6 +123,7 @@ export class GatewayManager extends EventEmitter {
   private lastAttachProbeAt = 0;
   private lastAttachProbeFoundGateway = false;
   private deferredChannelStartupUnsupported = false;
+  private lastLaunchSkippedChannels = false;
   /** Pre-computed launch context from a prior warmup call. Cleared on each start. */
   private cachedLaunchContext: { context: import('./config-sync').GatewayLaunchContext; port: number } | null = null;
 
@@ -479,9 +481,12 @@ export class GatewayManager extends EventEmitter {
             await this.startProcess();
           },
           waitForReady: async (port) => {
+            const toleratedFailingChannels = (await listConfiguredChannels({ includeCli: false }).catch(() => []))
+              .map((channel) => toRuntimeChannelType(channel));
             await waitForGatewayReady({
               port,
               getProcessExitCode: () => this.processExitStatus,
+              toleratedFailingChannels,
             });
           },
           onConnectedToManagedGateway: () => {
@@ -491,7 +496,9 @@ export class GatewayManager extends EventEmitter {
             // Blocking plugin copy during preflight would delay startup; these
             // plugins are optional China-channel extensions — non-fatal if absent.
             runDeferredManagedPluginSync();
-            this.startConfiguredChannelsInBackground();
+            if (this.lastLaunchSkippedChannels) {
+              this.startConfiguredChannelsInBackground();
+            }
           },
           recoverMalformedConfig: async () => {
             try {
@@ -1120,6 +1127,7 @@ export class GatewayManager extends EventEmitter {
     } else {
       logger.debug('Preparing Gateway launch context…');
     }
+    this.lastLaunchSkippedChannels = launchContext.skipChannels;
     this.lastStartupRecovery = getLastStartupPreflightRecovery();
     logger.debug('Gateway launch context ready');
     logger.debug('Ensuring legacy launchctl Gateway service is unloaded...');
