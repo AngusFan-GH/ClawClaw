@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import { app } from 'electron';
 import path from 'path';
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, symlinkSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'fs';
 import { getAllSettings, getProviderSyncHash, setProviderSyncHash } from '../utils/store';
 import { getApiKey, getDefaultProvider, getProvider } from '../utils/secure-storage';
 import { getKeyableProviderTypes, getProviderEnvVar } from '../utils/provider-registry';
@@ -71,6 +71,7 @@ const CHANNELS_REQUIRING_DIRECT_WEBSOCKET = new Set([
 
 const OPENCLAW_PLUGIN_MANIFEST = 'openclaw.plugin.json';
 const INVALID_PLUGIN_QUARANTINE_DIR = '.quarantine-invalid-manifests';
+const STALE_INSTALL_STAGE_PREFIX = '.openclaw-install-stage-';
 
 function resolveGatewayProxyBypassRules(configuredChannels: string[]): string[] {
   const merged = new Set<string>();
@@ -291,8 +292,46 @@ function quarantineInvalidUserExtensionManifests(): { quarantinedPluginIds: stri
   return { quarantinedPluginIds: uniqueIds, quarantinedDirs };
 }
 
+function cleanupStalePluginInstallStages(): { cleaned: boolean; removedDirs: string[] } {
+  const extensionsDir = path.join(resolveOpenClawDir(), 'extensions');
+  const removedDirs: string[] = [];
+
+  if (!existsSync(extensionsDir)) {
+    return { cleaned: false, removedDirs };
+  }
+
+  let entries: ReturnType<typeof readdirSync>;
+  try {
+    entries = readdirSync(extensionsDir, { withFileTypes: true });
+  } catch (err) {
+    logger.warn('[plugin-preflight] Failed to scan OpenClaw extensions directory for stale install stages:', err);
+    return { cleaned: false, removedDirs };
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith(STALE_INSTALL_STAGE_PREFIX)) continue;
+    const stageDir = path.join(extensionsDir, entry.name);
+    try {
+      rmSync(stageDir, { recursive: true, force: true });
+      removedDirs.push(stageDir);
+    } catch (err) {
+      logger.warn(`[plugin-preflight] Failed to remove stale plugin install stage at ${stageDir}:`, err);
+    }
+  }
+
+  return { cleaned: removedDirs.length > 0, removedDirs };
+}
+
 async function repairStartupPluginManifests(): Promise<{ repaired: boolean }> {
   let repaired = false;
+
+  const staleInstallStages = cleanupStalePluginInstallStages();
+  if (staleInstallStages.cleaned) {
+    repaired = true;
+    logger.warn(
+      `[plugin-preflight] Removed stale plugin install stages: ${staleInstallStages.removedDirs.join(', ')}`,
+    );
+  }
 
   const configuredChannels = await withTimeout(
     listConfiguredChannels({ includeCli: false }),
