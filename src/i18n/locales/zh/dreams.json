@@ -1,12 +1,13 @@
 {
   "title": "梦境",
-  "subtitle": "查看 OpenClaw 的记忆信号、梦境日记和基础维护操作。",
+  "subtitle": "查看梦境状态、近期记忆信号和梦境日记，并执行必要的维护操作。",
   "openFullUi": "打开完整 Dreams",
   "gatewayNotReady": "OpenClaw 网关仍在启动或未连接。网关可用后会加载 Dreams 数据。",
   "status": {
-    "configured": "全局开关",
-    "runtime": "运行状态",
-    "pending": "等待网关同步"
+    "enabledSummary": "梦境已启用，网关会按计划整理短期记忆并生成梦境日记。",
+    "disabledSummary": "梦境已停用，当前不会继续执行梦境整理。",
+    "pendingSummary": "正在等待网关同步最新状态。",
+    "runtimeSyncing": "网关正在应用最新设置。"
   },
   "metrics": {
     "shortTerm": "短期条目",
@@ -22,20 +23,20 @@
   },
   "actions": {
     "title": "维护",
-    "controlDescription": "这里与设置页共用同一个梦境总开关；设置决定是否启用，当前页负责查看运行状态和维护数据。",
-    "enable": "启动梦境",
-    "disable": "停止梦境",
-    "backfill": "回填日记",
-    "dedupe": "去重日记",
-    "repair": "修复缓存",
-    "resetGrounded": "清除已回放",
-    "resetDiary": "重置回填日记",
-    "enableSuccess": "梦境已启动。网关可能会重启以应用托管计划。",
-    "disableSuccess": "梦境已停止。网关可能会重启以移除托管计划。",
-    "backfillSuccess": "已回填 {{count}} 条梦境日记。",
-    "dedupeSuccess": "已移除 {{removed}} 条重复梦境，并保留 {{kept}} 条。",
+    "controlDescription": "在这里启用或停用梦境，并处理梦境日记、缓存和已回放条目。",
+    "enable": "启用梦境",
+    "disable": "停用梦境",
+    "backfill": "补写日记",
+    "dedupe": "整理重复日记",
+    "repair": "修复梦境缓存",
+    "resetGrounded": "清除已回放条目",
+    "resetDiary": "清空回填日记",
+    "enableSuccess": "梦境已启用，网关会在后台同步最新设置。",
+    "disableSuccess": "梦境已停用，网关会在后台同步最新设置。",
+    "backfillSuccess": "已补写 {{count}} 条梦境日记。",
+    "dedupeSuccess": "已移除 {{removed}} 条重复内容，保留 {{kept}} 条日记。",
     "repairSuccess": "梦境缓存修复完成。",
-    "resetDiarySuccess": "已移除 {{count}} 条回填梦境日记。",
+    "resetDiarySuccess": "已清除 {{count}} 条回填梦境日记。",
     "resetGroundedSuccess": "已清除 {{count}} 条已回放短期条目。"
   },
   "confirmations": {

@@ -213,6 +213,11 @@ describe('Chat Store', () => {
       compactionStatus: null,
       fallbackStatus: null,
       sessions: [{ key: 'agent:main:main', displayName: 'Main' }],
+      sessionsLoading: false,
+      sessionsLoadingMore: false,
+      sessionsHydrated: false,
+      sessionsHasMore: false,
+      sessionsNextCursor: null,
       sessionLabels: {},
       sessionLastActivity: {},
       loadHistory: actualLoadHistory,
@@ -523,12 +528,8 @@ describe('Chat Store', () => {
   });
 
   it('should prefer derived titles from sessions.list and avoid extra history fetches for labeled sessions', async () => {
-    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method, params) => {
-      if (method === 'sessions.list') {
-        expect(params).toMatchObject({
-          includeDerivedTitles: true,
-          includeLastMessage: true,
-        });
+    const hostApiSpy = vi.spyOn(hostApi, 'hostApiFetch').mockImplementation(async (path) => {
+      if (path === '/api/sessions/list') {
         return {
           sessions: [
             {
@@ -544,8 +545,13 @@ describe('Chat Store', () => {
               updatedAt: 200,
             },
           ],
+          hasMore: false,
+          nextCursor: null,
         };
       }
+      throw new Error(`Unexpected host API path: ${String(path)}`);
+    });
+    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method) => {
       if (method === 'chat.history') {
         throw new Error('chat.history should not be called when derived titles are already available');
       }
@@ -560,12 +566,13 @@ describe('Chat Store', () => {
     expect(state.sessions.find((session) => session.key === 'agent:main:session-1')?.lastMessagePreview)
       .toBe('Latest reply');
 
+    hostApiSpy.mockRestore();
     rpcMock.mockRestore();
   });
 
   it('should still warm sidebar labels for non-main sessions when displayName is only the agent name', async () => {
-    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method, params) => {
-      if (method === 'sessions.list') {
+    const hostApiSpy = vi.spyOn(hostApi, 'hostApiFetch').mockImplementation(async (path) => {
+      if (path === '/api/sessions/list') {
         return {
           sessions: [
             {
@@ -579,8 +586,13 @@ describe('Chat Store', () => {
               updatedAt: 200,
             },
           ],
+          hasMore: false,
+          nextCursor: null,
         };
       }
+      throw new Error(`Unexpected host API path: ${String(path)}`);
+    });
+    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method, params) => {
       if (method === 'chat.history') {
         expect(params).toMatchObject({ sessionKey: 'agent:main:session-2', limit: 1000 });
         return {
@@ -599,12 +611,13 @@ describe('Chat Store', () => {
     const state = useChatStore.getState();
     expect(state.sessionLabels['agent:main:session-2']).toBe('Previous conversation title');
 
+    hostApiSpy.mockRestore();
     rpcMock.mockRestore();
   });
 
   it('should strip inbound metadata blocks before deriving sidebar titles', async () => {
-    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method, params) => {
-      if (method === 'sessions.list') {
+    const hostApiSpy = vi.spyOn(hostApi, 'hostApiFetch').mockImplementation(async (path) => {
+      if (path === '/api/sessions/list') {
         return {
           sessions: [
             {
@@ -613,8 +626,13 @@ describe('Chat Store', () => {
               updatedAt: 300,
             },
           ],
+          hasMore: false,
+          nextCursor: null,
         };
       }
+      throw new Error(`Unexpected host API path: ${String(path)}`);
+    });
+    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method, params) => {
       if (method === 'chat.history') {
         expect(params).toMatchObject({ sessionKey: 'agent:main:session-3', limit: 1000 });
         return {
@@ -641,12 +659,13 @@ describe('Chat Store', () => {
 
     expect(useChatStore.getState().sessionLabels['agent:main:session-3']).toBe('Actual customer request');
 
+    hostApiSpy.mockRestore();
     rpcMock.mockRestore();
   });
 
   it('should skip synthetic session-start prompts when warming sidebar titles', async () => {
-    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method, params) => {
-      if (method === 'sessions.list') {
+    const hostApiSpy = vi.spyOn(hostApi, 'hostApiFetch').mockImplementation(async (path) => {
+      if (path === '/api/sessions/list') {
         return {
           sessions: [
             {
@@ -655,8 +674,13 @@ describe('Chat Store', () => {
               updatedAt: 400,
             },
           ],
+          hasMore: false,
+          nextCursor: null,
         };
       }
+      throw new Error(`Unexpected host API path: ${String(path)}`);
+    });
+    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method, params) => {
       if (method === 'chat.history') {
         expect(params).toMatchObject({ sessionKey: 'agent:main:session-4', limit: 1000 });
         return {
@@ -688,12 +712,13 @@ describe('Chat Store', () => {
 
     expect(useChatStore.getState().sessionLabels['agent:main:session-4']).toBe('真实历史标题');
 
+    hostApiSpy.mockRestore();
     rpcMock.mockRestore();
   });
 
   it('should strip injected timestamp prefixes when warming sidebar titles', async () => {
-    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method, params) => {
-      if (method === 'sessions.list') {
+    const hostApiSpy = vi.spyOn(hostApi, 'hostApiFetch').mockImplementation(async (path) => {
+      if (path === '/api/sessions/list') {
         return {
           sessions: [
             {
@@ -702,8 +727,13 @@ describe('Chat Store', () => {
               updatedAt: 500,
             },
           ],
+          hasMore: false,
+          nextCursor: null,
         };
       }
+      throw new Error(`Unexpected host API path: ${String(path)}`);
+    });
+    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method, params) => {
       if (method === 'chat.history') {
         expect(params).toMatchObject({ sessionKey: 'agent:main:session-5', limit: 1000 });
         return {
@@ -725,12 +755,13 @@ describe('Chat Store', () => {
 
     expect(useChatStore.getState().sessionLabels['agent:main:session-5']).toBe('你好，请帮我整理今天的任务');
 
+    hostApiSpy.mockRestore();
     rpcMock.mockRestore();
   });
 
   it('should keep a brand-new unlabeled local session selected instead of remapping it to the latest real session', async () => {
-    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method) => {
-      if (method === 'sessions.list') {
+    const hostApiSpy = vi.spyOn(hostApi, 'hostApiFetch').mockImplementation(async (path) => {
+      if (path === '/api/sessions/list') {
         return {
           sessions: [
             {
@@ -745,8 +776,13 @@ describe('Chat Store', () => {
               updatedAt: 200,
             },
           ],
+          hasMore: false,
+          nextCursor: null,
         };
       }
+      throw new Error(`Unexpected host API path: ${String(path)}`);
+    });
+    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method) => {
       if (method === 'chat.history') {
         return { messages: [] };
       }
@@ -774,7 +810,63 @@ describe('Chat Store', () => {
     expect(state.currentSessionKey).toBe('agent:main:session-local');
     expect(state.sessions.some((session) => session.key === 'agent:main:session-local')).toBe(true);
 
+    hostApiSpy.mockRestore();
     rpcMock.mockRestore();
+  });
+
+  it('should append the next sessions page when loading more sidebar sessions', async () => {
+    const hostApiSpy = vi.spyOn(hostApi, 'hostApiFetch').mockImplementation(async (path, init) => {
+      if (path !== '/api/sessions/list') {
+        throw new Error(`Unexpected host API path: ${String(path)}`);
+      }
+
+      const body = JSON.parse(String(init?.body ?? '{}')) as { cursor?: string };
+      if (!body.cursor) {
+        return {
+          sessions: [
+            {
+              key: 'agent:main:main',
+              displayName: 'Main',
+              updatedAt: 100,
+            },
+            {
+              key: 'agent:main:session-page-1',
+              displayName: 'Page 1',
+              updatedAt: 90,
+            },
+          ],
+          hasMore: true,
+          nextCursor: 'cursor-2',
+        };
+      }
+
+      expect(body.cursor).toBe('cursor-2');
+      return {
+        sessions: [
+          {
+            key: 'agent:main:session-page-2',
+            displayName: 'Page 2',
+            updatedAt: 80,
+          },
+        ],
+        hasMore: false,
+        nextCursor: null,
+      };
+    });
+
+    await useChatStore.getState().loadSessions({ preserveCurrent: true, warmLabels: false });
+    await useChatStore.getState().loadMoreSessions();
+
+    const state = useChatStore.getState();
+    expect(state.sessions.map((session) => session.key)).toEqual([
+      'agent:main:main',
+      'agent:main:session-page-1',
+      'agent:main:session-page-2',
+    ]);
+    expect(state.sessionsHasMore).toBe(false);
+    expect(state.sessionsNextCursor).toBeNull();
+
+    hostApiSpy.mockRestore();
   });
 
   it('should classify cron and subagent sessions as background work', () => {

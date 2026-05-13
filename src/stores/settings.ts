@@ -83,7 +83,6 @@ interface SettingsState {
   setReminders: (value: ReminderItem[]) => void;
   setSessionMemoryEnabled: (value: boolean) => void;
   setMemorySearchEnabled: (value: boolean) => void;
-  setDreamingEnabled: (value: boolean) => void;
   setLocalModelLean: (value: boolean) => void;
   markSetupComplete: () => void;
   resetSettings: () => void;
@@ -281,12 +280,6 @@ export const useSettingsStore = create<SettingsState>()(
       setMemorySearchEnabled: (memorySearchEnabled) => {
         set({ memorySearchEnabled });
         void persistMainSettings({ memorySearchEnabled }).catch(() => {
-          void syncFromMain().catch(() => {});
-        });
-      },
-      setDreamingEnabled: (dreamingEnabled) => {
-        set({ dreamingEnabled });
-        void persistMainSettings({ dreamingEnabled }).catch(() => {
           void syncFromMain().catch(() => {});
         });
       },

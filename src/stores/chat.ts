@@ -168,6 +168,14 @@ interface LoadSessionsOptions {
   silent?: boolean;
 }
 
+type SessionListResponse = {
+  success?: boolean;
+  sessions?: Array<Record<string, unknown>>;
+  hasMore?: boolean;
+  nextCursor?: string | null;
+  total?: number;
+};
+
 interface ChatState {
   // Messages
   messages: RawMessage[];
@@ -201,7 +209,10 @@ interface ChatState {
   // Sessions
   sessions: ChatSession[];
   sessionsLoading: boolean;
+  sessionsLoadingMore: boolean;
   sessionsHydrated: boolean;
+  sessionsHasMore: boolean;
+  sessionsNextCursor: string | null;
   currentSessionKey: string;
   currentAgentId: string;
   /** First user message text per session key, used as display label */
@@ -225,6 +236,7 @@ interface ChatState {
 
   // Actions
   loadSessions: (options?: boolean | LoadSessionsOptions) => Promise<void>;
+  loadMoreSessions: () => Promise<void>;
   restoreSessionsAfterGatewayReady: () => Promise<void>;
   switchSession: (key: string) => void;
   newSession: (agentId?: string) => void;
@@ -291,6 +303,7 @@ const SESSION_TITLE_REFRESH_DELAY_MS = 2500;
 const SESSION_TITLE_REFRESH_MAX_ATTEMPTS = 3;
 const INITIAL_HISTORY_REFRESH_DELAY_MS = 1500;
 const INITIAL_HISTORY_REFRESH_MAX_ATTEMPTS = 4;
+const SESSION_LIST_PAGE_LIMIT = 30;
 // Hard timeouts (ms) — prevent indefinite hangs
 const SESSIONS_LIST_TIMEOUT_MS = 10_000;
 const HISTORY_LOAD_TIMEOUT_MS = 15_000;
@@ -522,6 +535,43 @@ function normalizeLoadSessionsOptions(
     warmLabels: options?.warmLabels ?? true,
     silent: Boolean(options?.silent),
   };
+}
+
+function normalizeSessionListResponse(data: SessionListResponse | null | undefined): ChatSession[] {
+  const rawSessions = Array.isArray(data?.sessions) ? data.sessions : [];
+  return rawSessions
+    .map((s: Record<string, unknown>) => ({
+      key: String(s.key || ''),
+      label: s.label ? String(s.label) : undefined,
+      displayName: s.displayName ? String(s.displayName) : undefined,
+      derivedTitle: s.derivedTitle ? String(s.derivedTitle) : undefined,
+      lastMessagePreview: s.lastMessagePreview ? String(s.lastMessagePreview) : undefined,
+      kind: typeof s.kind === 'string' ? s.kind : undefined,
+      spawnedBy: typeof s.spawnedBy === 'string' ? s.spawnedBy : undefined,
+      parentSessionKey: typeof s.parentSessionKey === 'string' ? s.parentSessionKey : undefined,
+      forkedFromParent: s.forkedFromParent === true,
+      subagentRole: typeof s.subagentRole === 'string' ? s.subagentRole : undefined,
+      thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
+      model: s.model ? String(s.model) : undefined,
+      modelProvider:
+        typeof s.modelProvider === 'string'
+          ? s.modelProvider
+          : typeof s.provider === 'string'
+            ? s.provider
+            : undefined,
+      contextTokens:
+        typeof s.contextTokens === 'number'
+          ? s.contextTokens
+          : typeof s.contextTokens === 'string'
+            ? Number(s.contextTokens)
+            : typeof s.context_tokens === 'number'
+              ? s.context_tokens
+              : typeof s.context_tokens === 'string'
+                ? Number(s.context_tokens)
+                : undefined,
+      updatedAt: toMs(s.updatedAt) || undefined,
+    }))
+    .filter((s: ChatSession) => s.key && isChatSidebarSessionKey(s.key));
 }
 
 function omitSessionKey<T>(record: Record<string, T>, key: string): Record<string, T> {
@@ -1935,7 +1985,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   sessions: [{ key: INITIAL_SESSION_KEY, displayName: INITIAL_SESSION_KEY }],
   sessionsLoading: false,
+  sessionsLoadingMore: false,
   sessionsHydrated: false,
+  sessionsHasMore: false,
+  sessionsNextCursor: null,
   currentSessionKey: INITIAL_SESSION_KEY,
   currentAgentId: INITIAL_AGENT_ID,
   sessionLabels: {},
@@ -2020,52 +2073,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       // Timeout guard: prevents indefinite hang if Gateway is degraded and
       // doesn't respond to sessions.list (e.g. during context merge or overload).
+      const currentSessionKeyForRequest = get().currentSessionKey;
       const data = await Promise.race([
-        useGatewayStore
-          .getState()
-          .rpc<Record<string, unknown>>('sessions.list', {
-            includeDerivedTitles: true,
-            includeLastMessage: true,
+        hostApiFetch<SessionListResponse>('/api/sessions/list', {
+          method: 'POST',
+          body: JSON.stringify({
+            limit: SESSION_LIST_PAGE_LIMIT,
+            includeKeys: preserveCurrent && currentSessionKeyForRequest ? [currentSessionKeyForRequest] : [],
           }),
+        }),
         new Promise<null>((_, reject) =>
           setTimeout(() => reject(new Error('sessions.list timed out')), SESSIONS_LIST_TIMEOUT_MS)
         ),
       ]);
       if (data) {
-        const rawSessions = Array.isArray(data.sessions) ? data.sessions : [];
-        const sessions: ChatSession[] = rawSessions
-          .map((s: Record<string, unknown>) => ({
-            key: String(s.key || ''),
-            label: s.label ? String(s.label) : undefined,
-            displayName: s.displayName ? String(s.displayName) : undefined,
-            derivedTitle: s.derivedTitle ? String(s.derivedTitle) : undefined,
-            lastMessagePreview: s.lastMessagePreview ? String(s.lastMessagePreview) : undefined,
-            kind: typeof s.kind === 'string' ? s.kind : undefined,
-            spawnedBy: typeof s.spawnedBy === 'string' ? s.spawnedBy : undefined,
-            parentSessionKey: typeof s.parentSessionKey === 'string' ? s.parentSessionKey : undefined,
-            forkedFromParent: s.forkedFromParent === true,
-            subagentRole: typeof s.subagentRole === 'string' ? s.subagentRole : undefined,
-            thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
-            model: s.model ? String(s.model) : undefined,
-            modelProvider:
-              typeof s.modelProvider === 'string'
-                ? s.modelProvider
-                : typeof s.provider === 'string'
-                  ? s.provider
-                  : undefined,
-            contextTokens:
-              typeof s.contextTokens === 'number'
-                ? s.contextTokens
-                : typeof s.contextTokens === 'string'
-                  ? Number(s.contextTokens)
-                  : typeof s.context_tokens === 'number'
-                    ? s.context_tokens
-                    : typeof s.context_tokens === 'string'
-                      ? Number(s.context_tokens)
-                      : undefined,
-            updatedAt: toMs(s.updatedAt) || undefined,
-          }))
-          .filter((s: ChatSession) => s.key && isChatSidebarSessionKey(s.key));
+        const sessions = normalizeSessionListResponse(data);
         const realSessionKeys = new Set(sessions.map((session) => session.key));
 
         const canonicalBySuffix = new Map<string, string>();
@@ -2197,7 +2219,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set((state) => ({
           sessions: sessionsWithCurrent,
           sessionsLoading: silent ? state.sessionsLoading : false,
+          sessionsLoadingMore: false,
           sessionsHydrated: true,
+          sessionsHasMore: data.hasMore === true,
+          sessionsNextCursor: typeof data.nextCursor === 'string' && data.nextCursor.trim() ? data.nextCursor : null,
           currentSessionKey: nextSessionKey,
           currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
           pendingLocalSessionKeys: nextPendingLocalSessionKeys,
@@ -2306,8 +2331,128 @@ export const useChatStore = create<ChatState>((set, get) => ({
       console.warn('Failed to load sessions:', err);
       set((state) => ({
         sessionsLoading: silent ? state.sessionsLoading : false,
+        sessionsLoadingMore: false,
         sessionsHydrated: silent ? state.sessionsHydrated : false,
       }));
+    }
+  },
+
+  loadMoreSessions: async () => {
+    const { sessionsLoading, sessionsLoadingMore, sessionsHasMore, sessionsNextCursor } = get();
+    if (sessionsLoading || sessionsLoadingMore || !sessionsHasMore || !sessionsNextCursor) {
+      return;
+    }
+
+    set({ sessionsLoadingMore: true });
+
+    try {
+      const data = await Promise.race([
+        hostApiFetch<SessionListResponse>('/api/sessions/list', {
+          method: 'POST',
+          body: JSON.stringify({
+            limit: SESSION_LIST_PAGE_LIMIT,
+            cursor: sessionsNextCursor,
+          }),
+        }),
+        new Promise<null>((_, reject) =>
+          setTimeout(() => reject(new Error('sessions.list timed out')), SESSIONS_LIST_TIMEOUT_MS)
+        ),
+      ]);
+
+      const pageSessions = normalizeSessionListResponse(data);
+      const state = get();
+      const sessionLabels = { ...state.sessionLabels };
+      const sessionLastActivity = { ...state.sessionLastActivity };
+      const mergedSessions = [...state.sessions];
+
+      for (const session of pageSessions) {
+        const existingIndex = mergedSessions.findIndex((existing) => existing.key === session.key);
+        if (existingIndex >= 0) {
+          mergedSessions[existingIndex] = { ...mergedSessions[existingIndex], ...session };
+        } else {
+          mergedSessions.push(session);
+        }
+
+        const nextLabel = resolveSessionSidebarTitle(session);
+        if (nextLabel) {
+          sessionLabels[session.key] = nextLabel;
+        }
+        if (!sessionLastActivity[session.key] && session.updatedAt) {
+          sessionLastActivity[session.key] = session.updatedAt;
+        }
+      }
+
+      set({
+        sessions: mergedSessions,
+        sessionsLoadingMore: false,
+        sessionsHasMore: data?.hasMore === true,
+        sessionsNextCursor: typeof data?.nextCursor === 'string' && data.nextCursor.trim() ? data.nextCursor : null,
+        sessionLabels,
+        sessionLastActivity,
+      });
+
+      const sessionsToLabel = pageSessions.filter((session) => !resolveSessionSidebarTitle(session));
+      if (sessionsToLabel.length > 0) {
+        void (async () => {
+          let remaining = sessionsToLabel;
+
+          for (const delayMs of [0, 1500]) {
+            if (remaining.length === 0) break;
+            if (delayMs > 0) {
+              await new Promise((resolve) => setTimeout(resolve, delayMs));
+            }
+
+            const results = await Promise.allSettled(
+              remaining.map(async (session) => {
+                const r = await useGatewayStore
+                  .getState()
+                  .rpc<Record<string, unknown>>('chat.history', {
+                    sessionKey: session.key,
+                    limit: 1000,
+                  });
+                const msgs = Array.isArray(r.messages) ? (r.messages as RawMessage[]) : [];
+                const lastMsg = msgs[msgs.length - 1];
+                const labelText = findSessionTitleCandidate(msgs);
+                return { session, lastMsg, labelText };
+              }),
+            );
+
+            const unresolved: typeof remaining = [];
+            for (const result of results) {
+              if (result.status !== 'fulfilled') {
+                continue;
+              }
+
+              const { session, lastMsg, labelText } = result.value;
+              set((s) => {
+                const next: Partial<typeof s> = {};
+                if (labelText) {
+                  const truncated =
+                    labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
+                  next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
+                }
+                if (lastMsg?.timestamp) {
+                  next.sessionLastActivity = {
+                    ...s.sessionLastActivity,
+                    [session.key]: toMs(lastMsg.timestamp),
+                  };
+                }
+                return next;
+              });
+
+              if (!labelText) {
+                unresolved.push(session);
+              }
+            }
+
+            remaining = unresolved;
+          }
+        })();
+      }
+
+    } catch (err) {
+      console.warn('Failed to load more sessions:', err);
+      set({ sessionsLoadingMore: false });
     }
   },
 

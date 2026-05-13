@@ -326,21 +326,20 @@ export default function Dreams() {
               title={t('title')}
               description={t('subtitle')}
             />
-            <div className="-mt-2 flex flex-wrap items-center gap-3">
-              <Badge variant="secondary">
-                {t('status.configured')}
-                {` · ${dreamingEnabled ? t('common:status.enabled') : t('common:status.disabled')}`}
-              </Badge>
-              <Badge variant="outline">
-                {t('status.runtime')}
-                {` · ${
-                  !dreamsReady
-                    ? t('status.pending')
-                    : runtimeDreamingEnabled
-                      ? t('common:status.enabled')
-                      : t('common:status.disabled')
-                }`}
-              </Badge>
+            <div className="-mt-2 space-y-1">
+              <p className="text-sm text-muted-foreground">
+                {dreamingEnabled ? t('status.enabledSummary') : t('status.disabledSummary')}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={dreamingEnabled ? 'secondary' : 'outline'}>
+                  {dreamingEnabled ? t('common:status.enabled') : t('common:status.disabled')}
+                </Badge>
+                {(!dreamsReady || runtimeDreamingEnabled !== dreamingEnabled) && (
+                  <span className="text-xs text-muted-foreground">
+                    {!dreamsReady ? t('status.pendingSummary') : t('status.runtimeSyncing')}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex flex-wrap gap-2 md:justify-end">

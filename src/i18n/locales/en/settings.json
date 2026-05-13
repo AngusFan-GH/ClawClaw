@@ -245,8 +245,6 @@
     "sessionMemoryDesc": "When enabled, finished conversations are automatically saved when you reset or start a new chat, so they can be referenced later.",
     "search": "Enable memory search",
     "searchDesc": "When enabled, later chats can recall previously saved notes and conversation memories. Changing this restarts the Gateway automatically.",
-    "dreaming": "Enable memory dreaming",
-    "dreamingDesc": "When enabled, OpenClaw turns on memory-core dreaming so short-term memories can be periodically consolidated and promoted. Changing this restarts the Gateway automatically.",
     "localModelLean": "Lean local model runtime",
     "localModelLeanDesc": "Enable OpenClaw's lightweight local-model execution mode. Useful when you want local providers to prefer lower-overhead runtime behavior. Changing this restarts the Gateway automatically."
   },

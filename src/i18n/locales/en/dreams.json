@@ -1,12 +1,13 @@
 {
   "title": "Dreams",
-  "subtitle": "Review OpenClaw memory signals, diary entries, and core dreaming maintenance.",
+  "subtitle": "Review dream status, recent memory signals, dream diary entries, and run maintenance when needed.",
   "openFullUi": "Open Full Dreams",
   "gatewayNotReady": "OpenClaw Gateway is still starting or disconnected. Dreams data will load once the gateway is reachable.",
   "status": {
-    "configured": "Global switch",
-    "runtime": "Runtime state",
-    "pending": "Waiting for Gateway sync"
+    "enabledSummary": "Dreams is enabled. The gateway will periodically consolidate short-term memory and update the dream diary.",
+    "disabledSummary": "Dreams is disabled. No new dream consolidation will run right now.",
+    "pendingSummary": "Waiting for the gateway to sync the latest status.",
+    "runtimeSyncing": "The gateway is still applying the latest setting."
   },
   "metrics": {
     "shortTerm": "Short-term entries",
@@ -22,20 +23,20 @@
   },
   "actions": {
     "title": "Maintenance",
-    "controlDescription": "This page shares the same Dreams master switch as Settings. Settings decides whether Dreams is enabled; this page focuses on runtime status and maintenance.",
-    "enable": "Start Dreams",
-    "disable": "Stop Dreams",
+    "controlDescription": "Use this page to turn Dreams on or off, and manage the diary, cache, and replayed entries.",
+    "enable": "Enable Dreams",
+    "disable": "Disable Dreams",
     "backfill": "Backfill Diary",
-    "dedupe": "Dedupe Diary",
-    "repair": "Repair Cache",
-    "resetGrounded": "Clear Replayed",
-    "resetDiary": "Reset Backfilled Diary",
-    "enableSuccess": "Dreams started. Gateway may restart to apply the managed schedule.",
-    "disableSuccess": "Dreams stopped. Gateway may restart to remove the managed schedule.",
+    "dedupe": "Clean Up Duplicate Diary Entries",
+    "repair": "Repair Dream Cache",
+    "resetGrounded": "Clear Replayed Entries",
+    "resetDiary": "Clear Backfilled Diary",
+    "enableSuccess": "Dreams enabled. The gateway will sync the latest setting in the background.",
+    "disableSuccess": "Dreams disabled. The gateway will sync the latest setting in the background.",
     "backfillSuccess": "Backfilled {{count}} dream diary entries.",
-    "dedupeSuccess": "Removed {{removed}} duplicate dream entries and kept {{kept}}.",
+    "dedupeSuccess": "Removed {{removed}} duplicate entries and kept {{kept}} diary items.",
     "repairSuccess": "Dream cache repair completed.",
-    "resetDiarySuccess": "Removed {{count}} backfilled dream diary entries.",
+    "resetDiarySuccess": "Cleared {{count}} backfilled dream diary entries.",
     "resetGroundedSuccess": "Cleared {{count}} replayed short-term entries."
   },
   "confirmations": {

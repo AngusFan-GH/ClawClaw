@@ -253,8 +253,6 @@ export function Settings() {
     setSessionMemoryEnabled,
     memorySearchEnabled,
     setMemorySearchEnabled,
-    dreamingEnabled,
-    setDreamingEnabled,
     localModelLean,
     setLocalModelLean,
     initialized,
@@ -1218,16 +1216,6 @@ export function Settings() {
                   <Switch
                     checked={memorySearchEnabled}
                     onCheckedChange={setMemorySearchEnabled}
-                  />
-                }
-              />
-              <SettingRow
-                label={t('memory.dreaming')}
-                description={t('memory.dreamingDesc')}
-                control={
-                  <Switch
-                    checked={dreamingEnabled}
-                    onCheckedChange={setDreamingEnabled}
                   />
                 }
               />

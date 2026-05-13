@@ -245,8 +245,6 @@
     "sessionMemoryDesc": "开启后，当你使用 /new 或 /reset 结束当前会话时，系统会自动整理并保存这段对话，方便以后继续参考。",
     "search": "启用记忆检索",
     "searchDesc": "开启后，后续对话可以主动回忆你之前保存过的内容。修改后会自动重启网关。",
-    "dreaming": "启用梦境整理",
-    "dreamingDesc": "开启后，OpenClaw 会启用 memory-core 的 dreaming 能力，对短期记忆做定期整理与提升。修改后会自动重启网关。",
     "localModelLean": "启用本地模型轻量运行模式",
     "localModelLeanDesc": "开启后，OpenClaw 会优先使用更轻量的本地模型运行配置，适合降低本地推理链路的额外开销。修改后会自动重启网关。"
   },
