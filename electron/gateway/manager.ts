@@ -32,9 +32,8 @@ import {
   runDeferredManagedPluginSync,
   runOpenClawStartupPreflightRepair,
 } from './config-sync';
-import { listConfiguredChannelAccounts, listConfiguredChannels } from '../utils/channel-config';
+import { listConfiguredChannelAccounts } from '../utils/channel-config';
 import { connectGatewaySocket, waitForGatewayReady } from './ws-client';
-import { toRuntimeChannelType } from '../utils/channel-alias';
 import {
   findExistingGatewayProcess,
   runOpenClawDoctorRepair,
@@ -441,6 +440,8 @@ export class GatewayManager extends EventEmitter {
         this.setStatus({ pid: undefined });
       }
 
+      let currentLaunchContext: import('./config-sync').GatewayLaunchContext | null = null;
+
       try {
         await runGatewayStartupSequence({
           port: this.status.port,
@@ -478,15 +479,13 @@ export class GatewayManager extends EventEmitter {
             await waitForPortFree(port);
           },
           startProcess: async () => {
-            await this.startProcess();
+            currentLaunchContext = await this.startProcess();
           },
           waitForReady: async (port) => {
-            const toleratedFailingChannels = (await listConfiguredChannels({ includeCli: false }).catch(() => []))
-              .map((channel) => toRuntimeChannelType(channel));
             await waitForGatewayReady({
               port,
               getProcessExitCode: () => this.processExitStatus,
-              toleratedFailingChannels,
+              toleratedFailingChannels: currentLaunchContext?.toleratedFailingChannels,
             });
           },
           onConnectedToManagedGateway: () => {
@@ -1092,18 +1091,26 @@ export class GatewayManager extends EventEmitter {
   }
 
   /**
-   * Check Gateway health via WebSocket ping
-   * OpenClaw Gateway doesn't have an HTTP /health endpoint
+   * Check Gateway health via OpenClaw's native `health` RPC.
+   *
+   * This is a stricter signal than "WebSocket is still open": it lets the
+   * running Gateway report whether its runtime is actually healthy.
    */
-  async checkHealth(): Promise<{ ok: boolean; error?: string; uptime?: number }> {
+  async checkHealth(): Promise<{ ok: boolean; error?: string; uptime?: number; version?: string }> {
     try {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        const uptime = this.status.connectedAt
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        return { ok: false, error: 'WebSocket not connected' };
+      }
+
+      const result = await this.rpc<Record<string, unknown>>('health', undefined, 10_000);
+      const ok = result.ok !== false;
+      const uptime = typeof result.uptime === 'number' && Number.isFinite(result.uptime)
+        ? result.uptime
+        : this.status.connectedAt
           ? Math.floor((Date.now() - this.status.connectedAt) / 1000)
           : undefined;
-        return { ok: true, uptime };
-      }
-      return { ok: false, error: 'WebSocket not connected' };
+      const version = typeof result.version === 'string' ? result.version : undefined;
+      return { ok, uptime, version };
     } catch (error) {
       return { ok: false, error: String(error) };
     }
@@ -1113,7 +1120,7 @@ export class GatewayManager extends EventEmitter {
    * Start Gateway process
    * Uses OpenClaw npm package from node_modules (dev) or resources (production)
    */
-  private async startProcess(): Promise<void> {
+  private async startProcess(): Promise<import('./config-sync').GatewayLaunchContext> {
     const cachedCtx = this.cachedLaunchContext;
     const useCached = Boolean(cachedCtx) && cachedCtx.port === this.status.port;
     const launchContext: import('./config-sync').GatewayLaunchContext = useCached
@@ -1183,6 +1190,7 @@ export class GatewayManager extends EventEmitter {
     this.ownsProcess = true;
     this.lastSpawnSummary = lastSpawnSummary;
     this.lastAttachProbeFoundGateway = false;
+    return launchContext;
   }
 
   /**

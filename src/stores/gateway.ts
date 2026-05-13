@@ -6,7 +6,7 @@ import { create } from 'zustand';
 import { invokeIpc } from '@/lib/api-client';
 import { formatGatewayConnectError } from '@/lib/gateway-connect-error';
 import { subscribeHostEvent } from '@/lib/host-events';
-import type { GatewayLifecycle, GatewayStatus } from '../types/gateway';
+import type { GatewayHealth, GatewayLifecycle, GatewayStatus } from '../types/gateway';
 import { useChatStore } from './chat';
 
 let gatewayInitPromise: Promise<void> | null = null;
@@ -21,12 +21,6 @@ const GATEWAY_ACTIVE_POLL_MS = 2000;
 const GATEWAY_IDLE_POLL_MS = 10000;
 const GATEWAY_START_RECONCILE_TIMEOUT_MS = 130_000;
 const GATEWAY_STOP_RECONCILE_TIMEOUT_MS = 5_000;
-
-interface GatewayHealth {
-  ok: boolean;
-  error?: string;
-  uptime?: number;
-}
 
 interface GatewayState {
   status: GatewayStatus;
@@ -215,6 +209,20 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
   // completion because that can arrive before the final chat payload.
 }
 
+function parseGatewayHealthNotification(
+  notification: { method?: string; params?: Record<string, unknown> } | undefined,
+): GatewayHealth | null {
+  if (!notification || notification.method !== 'health' || !notification.params || typeof notification.params !== 'object') {
+    return null;
+  }
+  const params = notification.params;
+  const ok = params.ok !== false;
+  const error = typeof params.error === 'string' ? params.error : undefined;
+  const uptime = typeof params.uptime === 'number' && Number.isFinite(params.uptime) ? params.uptime : undefined;
+  const version = typeof params.version === 'string' ? params.version : undefined;
+  return { ok, error, uptime, version };
+}
+
 function handleGatewayChatMessage(data: unknown): void {
   const chatData = data as Record<string, unknown>;
   const payload = ('message' in chatData && typeof chatData.message === 'object')
@@ -349,12 +357,13 @@ async function reconcileGatewayStatus(
     try {
       const status = normalizeGatewayStatus(await fetchGatewayStatusSnapshot());
       if (status.state === target) {
-        set((state) => ({
-          status,
-          lifecycle: target === 'running'
-            ? reconcileLifecycleWithStatus(state.lifecycle, status)
-            : state.lifecycle,
-        }));
+      set((state) => ({
+        status,
+        lifecycle: target === 'running'
+          ? reconcileLifecycleWithStatus(state.lifecycle, status)
+          : state.lifecycle,
+        health: target === 'running' ? state.health : null,
+      }));
         if (target === 'running') {
           scheduleLifecycleClear((partial) => set(partial));
         }
@@ -381,6 +390,7 @@ async function reconcileGatewayStatus(
       set((state) => ({
         status,
         lifecycle: reconcileLifecycleWithStatus(state.lifecycle, status),
+        health: status.state === 'running' ? state.health : null,
       }));
     } catch {
       // Ignore transient host API read failures during restart; the next poll
@@ -429,6 +439,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
         status,
         isInitialized: true,
         lifecycle: reconcileLifecycleWithStatus(state.lifecycle, status),
+        health: status.state === 'running' ? state.health : null,
       }));
       if (status.state === 'running' && shouldClearLifecycle) {
         scheduleLifecycleClear((partial) => set(partial));
@@ -463,6 +474,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
                 return {
                   status: normalizedPayload,
                   lifecycle: reconcileLifecycleWithStatus(state.lifecycle, normalizedPayload),
+                  health: state.health,
                 };
               }
 
@@ -473,6 +485,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
                 return {
                   status: normalizedPayload,
                   lifecycle: reconcileLifecycleWithStatus(state.lifecycle, normalizedPayload),
+                  health: null,
                 };
               }
 
@@ -483,10 +496,14 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
                 return {
                   status: normalizedPayload,
                   lifecycle: reconcileLifecycleWithStatus(state.lifecycle, normalizedPayload),
+                  health: null,
                 };
               }
 
-              return { status: normalizedPayload };
+              return {
+                status: normalizedPayload,
+                health: normalizedPayload.state === 'running' ? state.health : null,
+              };
             });
           }));
           unsubscribers.push(subscribeHostEvent<Omit<GatewayLifecycle, 'state'> & { phase?: 'scheduled' | 'completed' | 'failed' }>(
@@ -521,6 +538,10 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
           unsubscribers.push(subscribeHostEvent<{ method?: string; params?: Record<string, unknown> }>(
             'gateway:notification',
             (payload) => {
+              const health = parseGatewayHealthNotification(payload);
+              if (health) {
+                set({ health });
+              }
               const expectedRestartDelayMs = extractExpectedRestartDelayMs(payload);
               if (expectedRestartDelayMs !== null) {
                 if (lifecycleClearTimer) {
@@ -552,6 +573,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
           status,
           isInitialized: true,
           lifecycle: reconcileLifecycleWithStatus(state.lifecycle, status),
+          health: status.state === 'running' ? state.health : null,
         }));
         if (status.state === 'running' && shouldClearLifecycle) {
           scheduleLifecycleClear((partial) => set(partial));
@@ -685,6 +707,9 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
         return health;
       }
       const health: GatewayHealth = { ok: result.ok, error: result.error, uptime: result.uptime };
+      if (result.version) {
+        health.version = result.version;
+      }
       set({ health });
       return health;
     } catch (error) {

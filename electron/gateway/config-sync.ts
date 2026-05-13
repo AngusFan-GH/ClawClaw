@@ -15,6 +15,7 @@ import {
   listConfiguredChannels,
   repairChannelConfigConsistency,
 } from '../utils/channel-config';
+import { toRuntimeChannelType } from '../utils/channel-alias';
 import {
   batchSyncConfigFields,
   syncMemorySettingsToOpenClaw,
@@ -509,6 +510,8 @@ export interface GatewayLaunchContext {
   proxySummary: string;
   channelStartupSummary: string;
   skipChannels: boolean;
+  configuredChannels: string[];
+  toleratedFailingChannels: string[];
 }
 
 async function repairOpenClawConfigFile(): Promise<GatewayConfigRecovery | null> {
@@ -964,33 +967,42 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     ? `${binPath}${path.delimiter}${process.env.PATH || ''}`
     : process.env.PATH || '';
 
-  const { providerEnv, loadedProviderKeyCount } = await withTimeout(
-    loadProviderEnv(),
-    8000,
-    'loadProviderEnv',
-    { providerEnv: {}, loadedProviderKeyCount: 0 },
-  );
-  const channelPolicy = await withTimeout(
-    resolveChannelStartupPolicy(),
-    1500,
-    'resolveChannelStartupPolicy',
-    {
-      skipChannels: false,
-      channelStartupSummary: 'enabled(timeout-fallback)',
-      configuredChannels: [],
-    },
-  );
+  const [
+    { providerEnv, loadedProviderKeyCount },
+    channelPolicy,
+    uvEnv,
+    proxyEnv,
+    resolvedProxy,
+  ] = await Promise.all([
+    withTimeout(
+      loadProviderEnv(),
+      8000,
+      'loadProviderEnv',
+      { providerEnv: {}, loadedProviderKeyCount: 0 },
+    ),
+    withTimeout(
+      resolveChannelStartupPolicy(),
+      1500,
+      'resolveChannelStartupPolicy',
+      {
+        skipChannels: false,
+        channelStartupSummary: 'enabled(timeout-fallback)',
+        configuredChannels: [],
+      },
+    ),
+    withTimeout(getUvMirrorEnv(), 5000, 'getUvMirrorEnv', {}),
+    withTimeout(buildProxyEnvAsync(appSettings), 5000, 'buildProxyEnvAsync', {}),
+    withTimeout(
+      resolveProxySettingsAsync(appSettings),
+      5000,
+      'resolveProxySettingsAsync',
+      {},
+    ),
+  ]);
   const configuredChannels = channelPolicy.configuredChannels;
   const skipChannels = channelPolicy.skipChannels;
   const channelStartupSummary = channelPolicy.channelStartupSummary;
-  const uvEnv = await withTimeout(getUvMirrorEnv(), 5000, 'getUvMirrorEnv', {});
-  const proxyEnv = await withTimeout(buildProxyEnvAsync(appSettings), 5000, 'buildProxyEnvAsync', {});
-  const resolvedProxy = await withTimeout(
-    resolveProxySettingsAsync(appSettings),
-    5000,
-    'resolveProxySettingsAsync',
-    {},
-  );
+  const toleratedFailingChannels = configuredChannels.map((channel) => toRuntimeChannelType(channel));
   const hasResolvedProxy = Boolean(
     resolvedProxy.httpProxy || resolvedProxy.httpsProxy || resolvedProxy.allProxy
   );
@@ -1050,5 +1062,7 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     proxySummary,
     channelStartupSummary,
     skipChannels,
+    configuredChannels,
+    toleratedFailingChannels,
   };
 }

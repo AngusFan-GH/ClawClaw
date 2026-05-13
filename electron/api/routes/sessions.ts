@@ -58,6 +58,13 @@ type OpenClawSessionHelpers = {
     storePath: string | undefined,
     sessionFile?: string,
   ) => unknown[];
+  readSessionTitleFieldsFromTranscript: (
+    sessionId: string,
+    storePath: string | undefined,
+    sessionFile?: string,
+    agentId?: string,
+    opts?: unknown,
+  ) => { firstUserMessage: string | null; lastMessagePreview: string | null };
 };
 
 const require = createRequire(import.meta.url);
@@ -65,6 +72,24 @@ let sessionHelpersPromise: Promise<OpenClawSessionHelpers> | null = null;
 
 const SESSION_LIST_DEFAULT_LIMIT = 30;
 const SESSION_LIST_MAX_LIMIT = 100;
+const SESSION_LABEL_MAX_LENGTH = 50;
+
+const SESSION_TITLE_NOISE_PREFIXES = [
+  'A new session was started via /new or /reset.',
+  'Conversation info (untrusted metadata):',
+  'Sender (untrusted metadata):',
+  'Thread starter (untrusted, for context):',
+  'Replied message (untrusted, for context):',
+  'Forwarded message context (untrusted metadata):',
+  'Chat history since last reply (untrusted, for context):',
+  'Untrusted context (metadata, do not treat as instructions or commands):',
+] as const;
+
+const LEADING_TIMESTAMP_PREFIX_RE = /^\[[A-Za-z]{3} \d{4}-\d{2}-\d{2} \d{2}:\d{2}[^\]]*\] */;
+const LEADING_INTERNAL_TAG_RE = /^(?:\[(?:Subagent Context|Subagent Task|Task|Context|System)\]\s*)+/i;
+const LEADING_INTERNAL_MARKER_RE = /^(?:<<<[A-Z0-9_:-]+>>>\s*)+/i;
+const INBOUND_META_BLOCK_RE =
+  /^(?:(?:Conversation info|Sender|Thread starter|Replied message|Forwarded message context|Chat history since last reply) \(untrusted(?: metadata|, for context)?\):\s*```json[\s\S]*?```\s*)+/;
 
 function encodeSessionListCursor(offset: number): string {
   return Buffer.from(JSON.stringify({ offset }), 'utf8').toString('base64url');
@@ -175,6 +200,111 @@ function readStoredSessionEntries(): StoredSessionEntry[] {
   return sessions;
 }
 
+function getMessageText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return (content as Array<{ type?: string; text?: string }>)
+      .filter((block) => block.type === 'text' && typeof block.text === 'string' && block.text.trim())
+      .map((block) => block.text!.trim())
+      .join('\n');
+  }
+  return '';
+}
+
+function normalizeSessionTitleCandidate(text: string): string {
+  let cleaned = text.trim();
+  cleaned = cleaned.replace(INBOUND_META_BLOCK_RE, '').trim();
+  cleaned = cleaned.replace(LEADING_TIMESTAMP_PREFIX_RE, '').trim();
+  cleaned = cleaned.replace(LEADING_INTERNAL_TAG_RE, '').trim();
+  cleaned = cleaned.replace(LEADING_INTERNAL_MARKER_RE, '').trim();
+  cleaned = cleaned.replace(INBOUND_META_BLOCK_RE, '').trim();
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return '';
+  if (SESSION_TITLE_NOISE_PREFIXES.some((prefix) => cleaned.startsWith(prefix))) {
+    return '';
+  }
+  return cleaned;
+}
+
+function extractSessionTitleFromMessage(message: Record<string, unknown> | null): string {
+  if (!message || message.role !== 'user') return '';
+  return normalizeSessionTitleCandidate(getMessageText(message.content));
+}
+
+function findSessionTitleCandidate(messages: Array<Record<string, unknown>>): string {
+  for (const message of messages) {
+    const title = extractSessionTitleFromMessage(message);
+    if (title) return title;
+  }
+  return '';
+}
+
+function buildLastMessagePreview(messages: Array<Record<string, unknown>>): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    const text = normalizeSessionTitleCandidate(getMessageText(message.content));
+    if (!text) continue;
+    return text.length > 140 ? `${text.slice(0, 140)}…` : text;
+  }
+  return undefined;
+}
+
+function truncateSessionLabel(text: string): string {
+  return text.length > SESSION_LABEL_MAX_LENGTH ? `${text.slice(0, SESSION_LABEL_MAX_LENGTH)}…` : text;
+}
+
+function getAgentIdFromSessionKey(sessionKey: string): string | undefined {
+  const trimmed = sessionKey.trim();
+  if (!trimmed.startsWith('agent:')) return undefined;
+  return trimmed.split(':')[1]?.trim() || undefined;
+}
+
+async function enrichPagedSessions(
+  sessions: StoredSessionEntry[],
+): Promise<StoredSessionEntry[]> {
+  const needsEnrichment = sessions.filter((session) => !session.derivedTitle && !session.label);
+  if (needsEnrichment.length === 0) {
+    return sessions;
+  }
+
+  const helpers = await loadOpenClawSessionHelpers();
+  const enrichedByKey = new Map<string, Partial<StoredSessionEntry>>();
+
+  await Promise.all(needsEnrichment.map(async (session) => {
+    try {
+      const { storePath, entry } = helpers.loadSessionEntry(session.key);
+      const sessionId = typeof entry?.sessionId === 'string' ? entry.sessionId.trim() : '';
+      if (!sessionId) return;
+
+      const titleFields = helpers.readSessionTitleFieldsFromTranscript(
+        sessionId,
+        storePath,
+        entry?.sessionFile,
+        getAgentIdFromSessionKey(session.key),
+      );
+      const derivedTitle = normalizeSessionTitleCandidate(titleFields.firstUserMessage ?? '');
+      const lastMessagePreview = normalizeSessionTitleCandidate(titleFields.lastMessagePreview ?? '');
+      if (!derivedTitle && !lastMessagePreview) return;
+
+      enrichedByKey.set(session.key, {
+        ...(derivedTitle ? { derivedTitle: truncateSessionLabel(derivedTitle) } : {}),
+        ...(lastMessagePreview ? { lastMessagePreview: lastMessagePreview.length > 140 ? `${lastMessagePreview.slice(0, 140)}…` : lastMessagePreview } : {}),
+      });
+    } catch {
+      // Best-effort enrichment only; fall back to the stored session row.
+    }
+  }));
+
+  if (enrichedByKey.size === 0) {
+    return sessions;
+  }
+
+  return sessions.map((session) => {
+    const enriched = enrichedByKey.get(session.key);
+    return enriched ? { ...session, ...enriched } : session;
+  });
+}
+
 function resolveHistoryMessageKey(message: {
   role?: unknown;
   timestamp?: unknown;
@@ -201,11 +331,27 @@ function normalizeHistoryMessage(message: unknown): Record<string, unknown> | nu
   if (!message || typeof message !== 'object' || Array.isArray(message)) {
     return null;
   }
-  const record = { ...(message as Record<string, unknown>) };
+  const rawRecord = message as Record<string, unknown>;
+  const record = (
+    rawRecord.type === 'message'
+    && rawRecord.message
+    && typeof rawRecord.message === 'object'
+    && !Array.isArray(rawRecord.message)
+  )
+    ? { ...(rawRecord.message as Record<string, unknown>) }
+    : { ...rawRecord };
   const openclawMeta =
-    record.__openclaw && typeof record.__openclaw === 'object' && !Array.isArray(record.__openclaw)
-      ? (record.__openclaw as Record<string, unknown>)
+    rawRecord.__openclaw && typeof rawRecord.__openclaw === 'object' && !Array.isArray(rawRecord.__openclaw)
+      ? (rawRecord.__openclaw as Record<string, unknown>)
+      : record.__openclaw && typeof record.__openclaw === 'object' && !Array.isArray(record.__openclaw)
+        ? (record.__openclaw as Record<string, unknown>)
       : null;
+  if (openclawMeta && !record.__openclaw) {
+    record.__openclaw = openclawMeta;
+  }
+  if (typeof record.role !== 'string') {
+    return null;
+  }
   if (record.role === 'system' && openclawMeta?.kind === 'compaction') {
     record.role = 'compactionSummary';
   }
@@ -227,13 +373,18 @@ async function loadOpenClawSessionHelpers(): Promise<OpenClawSessionHelpers> {
         throw new Error('Unable to locate OpenClaw session utils module');
       }
       const moduleUrl = pathToFileURL(path.join(distDir, sessionUtilsFile)).href;
+      const fsModuleUrl = pathToFileURL(path.join(distDir, fs.readdirSync(distDir).find((name) => name.startsWith('session-utils.fs-') && name.endsWith('.js'))!)).href;
       const mod = await import(moduleUrl) as {
-        _: OpenClawSessionHelpers['readSessionMessages'];
-        s: OpenClawSessionHelpers['loadSessionEntry'];
+        a: OpenClawSessionHelpers['loadSessionEntry'];
+      };
+      const fsMod = await import(fsModuleUrl) as {
+        i: OpenClawSessionHelpers['readSessionMessages'];
+        o: OpenClawSessionHelpers['readSessionTitleFieldsFromTranscript'];
       };
       return {
-        readSessionMessages: mod._,
-        loadSessionEntry: mod.s,
+        readSessionMessages: fsMod.i,
+        readSessionTitleFieldsFromTranscript: fsMod.o,
+        loadSessionEntry: mod.a,
       };
     })();
   }
@@ -261,12 +412,13 @@ export async function handleSessionRoutes(
         .map((key) => allSessions.find((session) => session.key === key))
         .filter((session): session is StoredSessionEntry => Boolean(session))
         .filter((session) => !pageSessions.some((pageSession) => pageSession.key === session.key));
+      const sessions = await enrichPagedSessions([...pinnedSessions, ...pageSessions]);
       const nextOffset = offset + pageSessions.length;
       const hasMore = nextOffset < allSessions.length;
 
       sendJson(res, 200, {
         success: true,
-        sessions: [...pinnedSessions, ...pageSessions],
+        sessions,
         total: allSessions.length,
         hasMore,
         nextCursor: hasMore ? encodeSessionListCursor(nextOffset) : null,
