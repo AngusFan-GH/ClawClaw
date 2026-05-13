@@ -6,17 +6,13 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { getOpenClawDir, resolveOpenClawDir } from '../../utils/paths';
-import { normalizeChatTimestampForKey, type ChatTimestamp } from '../../../src/lib/chat-timestamps';
+import { getSetting } from '../../utils/store';
+import { proxyAwareFetch } from '../../utils/proxy-fetch';
 
 type SessionHistoryBody = {
   sessionKey?: string;
   limit?: number;
-  before?: {
-    role?: string;
-    timestamp?: ChatTimestamp;
-    id?: string;
-    toolCallId?: string;
-  };
+  cursor?: string;
 };
 
 type SessionListBody = {
@@ -73,6 +69,7 @@ let sessionHelpersPromise: Promise<OpenClawSessionHelpers> | null = null;
 const SESSION_LIST_DEFAULT_LIMIT = 30;
 const SESSION_LIST_MAX_LIMIT = 100;
 const SESSION_LABEL_MAX_LENGTH = 50;
+const SESSION_HISTORY_MAX_LIMIT = 200;
 
 const SESSION_TITLE_NOISE_PREFIXES = [
   'A new session was started via /new or /reset.',
@@ -105,6 +102,23 @@ function decodeSessionListCursor(cursor: unknown): number {
     return Number.isFinite(offset) && offset > 0 ? offset : 0;
   } catch {
     return 0;
+  }
+}
+
+function encodeSessionHistoryCursor(endIndex: number): string {
+  return Buffer.from(JSON.stringify({ endIndex }), 'utf8').toString('base64url');
+}
+
+function decodeSessionHistoryCursor(cursor: unknown): number | null {
+  if (typeof cursor !== 'string' || !cursor.trim()) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as {
+      endIndex?: unknown;
+    };
+    const endIndex = typeof parsed.endIndex === 'number' ? Math.trunc(parsed.endIndex) : NaN;
+    return Number.isFinite(endIndex) && endIndex >= 0 ? endIndex : null;
+  } catch {
+    return null;
   }
 }
 
@@ -305,28 +319,6 @@ async function enrichPagedSessions(
   });
 }
 
-function resolveHistoryMessageKey(message: {
-  role?: unknown;
-  timestamp?: unknown;
-  id?: unknown;
-  toolCallId?: unknown;
-  tool_call_id?: unknown;
-}): string {
-  const toolCallId =
-    typeof message.toolCallId === 'string'
-      ? message.toolCallId
-      : (typeof message.tool_call_id === 'string' ? message.tool_call_id : '');
-  if (toolCallId) return `tool:${toolCallId}`;
-
-  const id = typeof message.id === 'string' ? message.id : '';
-  if (id) return `msg:${id}`;
-
-  const role = typeof message.role === 'string' ? message.role : 'unknown';
-  const timestamp = normalizeChatTimestampForKey(message.timestamp);
-  if (timestamp != null) return `msg:${role}:${timestamp}`;
-  return `msg:${role}`;
-}
-
 function normalizeHistoryMessage(message: unknown): Record<string, unknown> | null {
   if (!message || typeof message !== 'object' || Array.isArray(message)) {
     return null;
@@ -458,10 +450,65 @@ export async function handleSessionRoutes(
       }
 
       const pageLimit = Math.min(
-        Math.max(typeof body.limit === 'number' ? Math.trunc(body.limit) : 200, 1),
-        200,
+        Math.max(typeof body.limit === 'number' ? Math.trunc(body.limit) : SESSION_HISTORY_MAX_LIMIT, 1),
+        SESSION_HISTORY_MAX_LIMIT,
       );
-      const beforeKey = body.before ? resolveHistoryMessageKey(body.before) : null;
+      const requestedCursor = typeof body.cursor === 'string' && body.cursor.trim()
+        ? body.cursor.trim()
+        : null;
+
+      const gatewayStatus = ctx.gatewayManager.getStatus();
+      const gatewayPort = gatewayStatus.port || 18789;
+      const gatewayToken = await getSetting('gatewayToken');
+      const shouldTryGateway =
+        gatewayStatus.transportReady === true
+        || gatewayStatus.state === 'running';
+
+      if (shouldTryGateway && gatewayToken) {
+        try {
+          const upstream = new URL(
+            `http://127.0.0.1:${gatewayPort}/sessions/${encodeURIComponent(sessionKey)}/history`,
+          );
+          upstream.searchParams.set('limit', String(pageLimit));
+          if (requestedCursor) {
+            upstream.searchParams.set('cursor', requestedCursor);
+          }
+
+          const response = await proxyAwareFetch(upstream, {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${gatewayToken}`,
+            },
+          });
+          if (response.ok) {
+            const payload = await response.json().catch(() => null) as
+              | {
+                sessionKey?: string;
+                messages?: unknown[];
+                hasMore?: boolean;
+                nextCursor?: string | null;
+              }
+              | null;
+            if (payload && Array.isArray(payload.messages)) {
+              sendJson(res, 200, {
+                success: true,
+                sessionKey: payload.sessionKey ?? sessionKey,
+                messages: payload.messages
+                  .map((message) => normalizeHistoryMessage(message))
+                  .filter((message): message is Record<string, unknown> => Boolean(message)),
+                hasMore: payload.hasMore === true,
+                nextCursor:
+                  typeof payload.nextCursor === 'string' && payload.nextCursor.trim()
+                    ? payload.nextCursor
+                    : null,
+              });
+              return true;
+            }
+          }
+        } catch {
+          // Fall back to local transcript pagination below.
+        }
+      }
 
       const helpers = await loadOpenClawSessionHelpers();
       const { storePath, entry } = helpers.loadSessionEntry(sessionKey);
@@ -477,24 +524,21 @@ export async function handleSessionRoutes(
         .filter((message): message is Record<string, unknown> => Boolean(message));
 
       let endIndex = normalizedMessages.length;
-      let anchorFound = false;
-      if (beforeKey) {
-        const anchorIndex = normalizedMessages.findIndex(
-          (message) => resolveHistoryMessageKey(message) === beforeKey,
-        );
-        if (anchorIndex >= 0) {
-          endIndex = anchorIndex;
-          anchorFound = true;
+      if (requestedCursor) {
+        const decodedCursor = decodeSessionHistoryCursor(requestedCursor);
+        if (decodedCursor != null) {
+          endIndex = Math.max(0, Math.min(decodedCursor, normalizedMessages.length));
         }
       }
 
       const startIndex = Math.max(0, endIndex - pageLimit);
       sendJson(res, 200, {
         success: true,
+        sessionKey,
         messages: normalizedMessages.slice(startIndex, endIndex),
         hasMore: startIndex > 0,
+        nextCursor: startIndex > 0 ? encodeSessionHistoryCursor(startIndex) : null,
         total: normalizedMessages.length,
-        anchorFound: beforeKey ? anchorFound : true,
       });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

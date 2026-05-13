@@ -13,6 +13,7 @@ const actualLoadHistory = useChatStore.getState().loadHistory;
 
 describe('Settings Store', () => {
   beforeEach(() => {
+    vi.spyOn(hostApi, 'hostApiFetch').mockResolvedValue({ success: true } as never);
     // Reset store to default state
     useSettingsStore.setState({
       theme: 'system',
@@ -225,29 +226,33 @@ describe('Chat Store', () => {
   });
 
   it('should clear loading when a stale history request is no longer current', async () => {
-    let resolveFirst: ((value: { messages: never[] }) => void) | undefined;
-    const rpcMock = vi
-      .spyOn(useGatewayStore.getState(), 'rpc')
+    let resolveFirst:
+      | ((value: { success: true; messages: never[]; hasMore: false; nextCursor: null }) => void)
+      | undefined;
+    const historyMock = vi
+      .spyOn(hostApi, 'hostApiFetch')
       .mockImplementationOnce(
         () =>
           new Promise((resolve) => {
-            resolveFirst = resolve as (value: { messages: never[] }) => void;
+            resolveFirst = resolve as (
+              value: { success: true; messages: never[]; hasMore: false; nextCursor: null }
+            ) => void;
           }),
       )
-      .mockResolvedValueOnce({ messages: [] });
+      .mockResolvedValueOnce({ success: true, messages: [], hasMore: false, nextCursor: null });
 
     const firstLoad = useChatStore.getState().loadHistory(false);
     useChatStore.setState({ currentSessionKey: 'agent:main:other' });
     const secondLoad = useChatStore.getState().loadHistory(false);
 
-    resolveFirst?.({ messages: [] });
+    resolveFirst?.({ success: true, messages: [], hasMore: false, nextCursor: null });
 
     await Promise.all([firstLoad, secondLoad]);
 
-    expect(rpcMock).toHaveBeenCalledTimes(2);
+    expect(historyMock).toHaveBeenCalledTimes(2);
     expect(useChatStore.getState().loading).toBe(false);
 
-    rpcMock.mockRestore();
+    historyMock.mockRestore();
   });
 
   it('should adopt an external agent run without polling history mid-run', async () => {
@@ -570,195 +575,6 @@ describe('Chat Store', () => {
     rpcMock.mockRestore();
   });
 
-  it('should still warm sidebar labels for non-main sessions when displayName is only the agent name', async () => {
-    const hostApiSpy = vi.spyOn(hostApi, 'hostApiFetch').mockImplementation(async (path) => {
-      if (path === '/api/sessions/list') {
-        return {
-          sessions: [
-            {
-              key: 'agent:main:main',
-              displayName: 'Main',
-              updatedAt: 100,
-            },
-            {
-              key: 'agent:main:session-2',
-              displayName: 'Main',
-              updatedAt: 200,
-            },
-          ],
-          hasMore: false,
-          nextCursor: null,
-        };
-      }
-      throw new Error(`Unexpected host API path: ${String(path)}`);
-    });
-    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method, params) => {
-      if (method === 'chat.history') {
-        expect(params).toMatchObject({ sessionKey: 'agent:main:session-2', limit: 1000 });
-        return {
-          messages: [
-            { role: 'user', content: 'Previous conversation title', timestamp: 250 },
-          ],
-        };
-      }
-      throw new Error(`Unexpected RPC method: ${String(method)}`);
-    });
-
-    await useChatStore.getState().loadSessions({ preserveCurrent: true, warmLabels: true });
-    await Promise.resolve();
-    await Promise.resolve();
-
-    const state = useChatStore.getState();
-    expect(state.sessionLabels['agent:main:session-2']).toBe('Previous conversation title');
-
-    hostApiSpy.mockRestore();
-    rpcMock.mockRestore();
-  });
-
-  it('should strip inbound metadata blocks before deriving sidebar titles', async () => {
-    const hostApiSpy = vi.spyOn(hostApi, 'hostApiFetch').mockImplementation(async (path) => {
-      if (path === '/api/sessions/list') {
-        return {
-          sessions: [
-            {
-              key: 'agent:main:session-3',
-              displayName: 'Main',
-              updatedAt: 300,
-            },
-          ],
-          hasMore: false,
-          nextCursor: null,
-        };
-      }
-      throw new Error(`Unexpected host API path: ${String(path)}`);
-    });
-    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method, params) => {
-      if (method === 'chat.history') {
-        expect(params).toMatchObject({ sessionKey: 'agent:main:session-3', limit: 1000 });
-        return {
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: 'Conversation info (untrusted metadata):\n```json\n{"message_id":"123"}\n```\n\nSender (untrusted metadata):\n```json\n{"name":"alice"}\n```\n\nActual customer request',
-                },
-              ],
-              timestamp: 350,
-            },
-          ],
-        };
-      }
-      throw new Error(`Unexpected RPC method: ${String(method)}`);
-    });
-
-    await useChatStore.getState().loadSessions({ preserveCurrent: true, warmLabels: true });
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(useChatStore.getState().sessionLabels['agent:main:session-3']).toBe('Actual customer request');
-
-    hostApiSpy.mockRestore();
-    rpcMock.mockRestore();
-  });
-
-  it('should skip synthetic session-start prompts when warming sidebar titles', async () => {
-    const hostApiSpy = vi.spyOn(hostApi, 'hostApiFetch').mockImplementation(async (path) => {
-      if (path === '/api/sessions/list') {
-        return {
-          sessions: [
-            {
-              key: 'agent:main:session-4',
-              displayName: 'Main',
-              updatedAt: 400,
-            },
-          ],
-          hasMore: false,
-          nextCursor: null,
-        };
-      }
-      throw new Error(`Unexpected host API path: ${String(path)}`);
-    });
-    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method, params) => {
-      if (method === 'chat.history') {
-        expect(params).toMatchObject({ sessionKey: 'agent:main:session-4', limit: 1000 });
-        return {
-          messages: [
-            {
-              role: 'user',
-              content: 'A new session was started via /new or /reset. Run your Session Startup sequence - read the required files before responding to the user.',
-              timestamp: 100,
-            },
-            {
-              role: 'assistant',
-              content: 'Hello',
-              timestamp: 110,
-            },
-            {
-              role: 'user',
-              content: '真实历史标题',
-              timestamp: 120,
-            },
-          ],
-        };
-      }
-      throw new Error(`Unexpected RPC method: ${String(method)}`);
-    });
-
-    await useChatStore.getState().loadSessions({ preserveCurrent: true, warmLabels: true });
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(useChatStore.getState().sessionLabels['agent:main:session-4']).toBe('真实历史标题');
-
-    hostApiSpy.mockRestore();
-    rpcMock.mockRestore();
-  });
-
-  it('should strip injected timestamp prefixes when warming sidebar titles', async () => {
-    const hostApiSpy = vi.spyOn(hostApi, 'hostApiFetch').mockImplementation(async (path) => {
-      if (path === '/api/sessions/list') {
-        return {
-          sessions: [
-            {
-              key: 'agent:main:session-5',
-              displayName: 'Main',
-              updatedAt: 500,
-            },
-          ],
-          hasMore: false,
-          nextCursor: null,
-        };
-      }
-      throw new Error(`Unexpected host API path: ${String(path)}`);
-    });
-    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method, params) => {
-      if (method === 'chat.history') {
-        expect(params).toMatchObject({ sessionKey: 'agent:main:session-5', limit: 1000 });
-        return {
-          messages: [
-            {
-              role: 'user',
-              content: '[Wed 2026-04-08 10:30 GMT+8] 你好，请帮我整理今天的任务',
-              timestamp: 510,
-            },
-          ],
-        };
-      }
-      throw new Error(`Unexpected RPC method: ${String(method)}`);
-    });
-
-    await useChatStore.getState().loadSessions({ preserveCurrent: true, warmLabels: true });
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(useChatStore.getState().sessionLabels['agent:main:session-5']).toBe('你好，请帮我整理今天的任务');
-
-    hostApiSpy.mockRestore();
-    rpcMock.mockRestore();
-  });
-
   it('should keep a brand-new unlabeled local session selected instead of remapping it to the latest real session', async () => {
     const hostApiSpy = vi.spyOn(hostApi, 'hostApiFetch').mockImplementation(async (path) => {
       if (path === '/api/sessions/list') {
@@ -782,13 +598,6 @@ describe('Chat Store', () => {
       }
       throw new Error(`Unexpected host API path: ${String(path)}`);
     });
-    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockImplementation(async (method) => {
-      if (method === 'chat.history') {
-        return { messages: [] };
-      }
-      throw new Error(`Unexpected RPC method: ${String(method)}`);
-    });
-
     useChatStore.setState({
       currentSessionKey: 'agent:main:session-local',
       sessions: [
@@ -811,7 +620,6 @@ describe('Chat Store', () => {
     expect(state.sessions.some((session) => session.key === 'agent:main:session-local')).toBe(true);
 
     hostApiSpy.mockRestore();
-    rpcMock.mockRestore();
   });
 
   it('should append the next sessions page when loading more sidebar sessions', async () => {
@@ -996,6 +804,12 @@ describe('Chat Store', () => {
 
   it('should refresh sessions after a slash model command completes', () => {
     const loadSessionsMock = vi.fn().mockResolvedValue(undefined);
+    const hostApiSpy = vi.spyOn(hostApi, 'hostApiFetch').mockResolvedValue({
+      success: true,
+      messages: [],
+      hasMore: false,
+      nextCursor: null,
+    } as never);
 
     useChatStore.setState({
       currentSessionKey: 'agent:main:main',
@@ -1025,6 +839,8 @@ describe('Chat Store', () => {
 
     expect(loadSessionsMock).toHaveBeenCalledWith({ preserveCurrent: true, warmLabels: true });
     expect(useChatStore.getState().pendingSessionModelRefresh).toBe(false);
+
+    hostApiSpy.mockRestore();
   });
 
   it('keeps the optimistic user message until authoritative history catches up', () => {
@@ -1096,7 +912,8 @@ describe('Chat Store', () => {
   });
 
   it('keeps the pending assistant final when authoritative history has not caught up', async () => {
-    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockResolvedValue({
+    const historyMock = vi.spyOn(hostApi, 'hostApiFetch').mockResolvedValue({
+      success: true,
       messages: [
         {
           role: 'user',
@@ -1111,6 +928,8 @@ describe('Chat Store', () => {
           timestamp: 1_500,
         },
       ],
+      hasMore: false,
+      nextCursor: null,
     });
 
     useChatStore.setState({
@@ -1135,7 +954,7 @@ describe('Chat Store', () => {
       content: '好的，我现在生成 PPT。',
     });
 
-    rpcMock.mockRestore();
+    historyMock.mockRestore();
   });
 
   it('keeps streamed assistant text when the final event has no message like OpenClaw dashboard', () => {
@@ -1200,7 +1019,8 @@ describe('Chat Store', () => {
   });
 
   it('clears the pending assistant final once authoritative history catches up', async () => {
-    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockResolvedValue({
+    const historyMock = vi.spyOn(hostApi, 'hostApiFetch').mockResolvedValue({
+      success: true,
       messages: [
         {
           role: 'user',
@@ -1215,6 +1035,8 @@ describe('Chat Store', () => {
           timestamp: 2_000,
         },
       ],
+      hasMore: false,
+      nextCursor: null,
     });
 
     useChatStore.setState({
@@ -1237,11 +1059,12 @@ describe('Chat Store', () => {
     expect(useChatStore.getState().pendingAssistantMessage).toBeNull();
     expect(useChatStore.getState().pendingFinal).toBe(false);
 
-    rpcMock.mockRestore();
+    historyMock.mockRestore();
   });
 
   it('hides synthetic transcript repair tool results from chat history', async () => {
-    const rpcMock = vi.spyOn(useGatewayStore.getState(), 'rpc').mockResolvedValue({
+    const historyMock = vi.spyOn(hostApi, 'hostApiFetch').mockResolvedValue({
+      success: true,
       messages: [
         {
           role: 'user',
@@ -1263,6 +1086,8 @@ describe('Chat Store', () => {
           timestamp: 2_000,
         },
       ],
+      hasMore: false,
+      nextCursor: null,
     });
 
     useChatStore.setState({
@@ -1277,7 +1102,7 @@ describe('Chat Store', () => {
       'history-assistant-visible',
     ]);
 
-    rpcMock.mockRestore();
+    historyMock.mockRestore();
   });
 
   it('appends final messages from another run on the current session like OpenClaw dashboard', () => {
@@ -1394,7 +1219,7 @@ describe('Chat Store', () => {
     const hostApiSpy = vi.spyOn(hostApi, 'hostApiFetch').mockResolvedValue({
       success: true,
       hasMore: false,
-      anchorFound: true,
+      nextCursor: null,
       messages: [
         { role: 'user', content: 'Earlier prompt', timestamp: 100, id: 'msg-earlier-user' },
         { role: 'assistant', content: 'Earlier answer', timestamp: 110, id: 'msg-earlier-assistant' },
@@ -1410,6 +1235,7 @@ describe('Chat Store', () => {
       ],
       hasEarlierHistory: true,
       loadingEarlierHistory: false,
+      earlierHistoryCursor: 'cursor-older-1',
     });
 
     await useChatStore.getState().loadEarlierHistory();
@@ -1419,11 +1245,7 @@ describe('Chat Store', () => {
       body: JSON.stringify({
         sessionKey: 'agent:main:main',
         limit: 200,
-        before: {
-          role: 'user',
-          timestamp: 200,
-          id: 'msg-current-user',
-        },
+        cursor: 'cursor-older-1',
       }),
     });
 

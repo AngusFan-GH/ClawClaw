@@ -33,7 +33,7 @@ import {
   runOpenClawStartupPreflightRepair,
 } from './config-sync';
 import { listConfiguredChannelAccounts } from '../utils/channel-config';
-import { connectGatewaySocket, waitForGatewayReady } from './ws-client';
+import { connectGatewaySocket, probeGatewayReady, waitForGatewayReady } from './ws-client';
 import {
   findExistingGatewayProcess,
   runOpenClawDoctorRepair,
@@ -56,6 +56,9 @@ import type { GatewayConfigRecovery } from '../../src/types/gateway';
 export interface GatewayStatus {
   state: GatewayLifecycleState;
   port: number;
+  transportReady: boolean;
+  runtimeHealthy: boolean;
+  fullReady: boolean;
   pid?: number;
   uptime?: number;
   error?: string;
@@ -97,7 +100,13 @@ export class GatewayManager extends EventEmitter {
   private processExitStatus: number | string | null = null;
   private ownsProcess = false;
   private ws: WebSocket | null = null;
-  private status: GatewayStatus = { state: 'stopped', port: PORTS.OPENCLAW_GATEWAY };
+  private status: GatewayStatus = {
+    state: 'stopped',
+    port: PORTS.OPENCLAW_GATEWAY,
+    transportReady: false,
+    runtimeHealthy: false,
+    fullReady: false,
+  };
   private readonly stateController: GatewayStateController;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private reconnectAttempts = 0;
@@ -123,6 +132,7 @@ export class GatewayManager extends EventEmitter {
   private lastAttachProbeFoundGateway = false;
   private deferredChannelStartupUnsupported = false;
   private lastLaunchSkippedChannels = false;
+  private readinessRefreshInFlight: Promise<void> | null = null;
   /** Pre-computed launch context from a prior warmup call. Cleared on each start. */
   private cachedLaunchContext: { context: import('./config-sync').GatewayLaunchContext; port: number } | null = null;
 
@@ -288,6 +298,57 @@ export class GatewayManager extends EventEmitter {
     this.lastAttachProbeAt = 0;
     this.lastAttachProbeFoundGateway = false;
   }
+
+  private applyHealthToStatus(health: {
+    ok: boolean;
+    error?: string;
+    uptime?: number;
+    version?: string;
+  }): void {
+    if (this.status.state !== 'running') {
+      return;
+    }
+    this.setStatus({
+      runtimeHealthy: health.ok,
+      ...(typeof health.uptime === 'number' ? { uptime: health.uptime } : {}),
+      ...(typeof health.version === 'string' ? { version: health.version } : {}),
+    });
+  }
+
+  private async refreshReadinessFlags(port = this.status.port): Promise<void> {
+    if (this.status.state !== 'running') {
+      return;
+    }
+    if (this.readinessRefreshInFlight) {
+      await this.readinessRefreshInFlight;
+      return;
+    }
+
+    this.readinessRefreshInFlight = (async () => {
+      const [fullReadyResult, healthResult] = await Promise.allSettled([
+        probeGatewayReady(port),
+        this.checkHealth(),
+      ]);
+
+      if (this.status.state !== 'running') {
+        return;
+      }
+
+      if (healthResult.status === 'fulfilled') {
+        this.applyHealthToStatus(healthResult.value);
+      }
+
+      this.setStatus({
+        transportReady: this.ws?.readyState === WebSocket.OPEN,
+        fullReady: fullReadyResult.status === 'fulfilled' ? fullReadyResult.value : false,
+      });
+    })();
+    try {
+      await this.readinessRefreshInFlight;
+    } finally {
+      this.readinessRefreshInFlight = null;
+    }
+  }
   /**
    * Get current Gateway status
    */
@@ -420,7 +481,14 @@ export class GatewayManager extends EventEmitter {
       }
 
       this.reconnectAttempts = 0;
-      this.setStatus({ state: 'starting', reconnectAttempts: 0, restartExpectedMs: undefined });
+      this.setStatus({
+        state: 'starting',
+        transportReady: false,
+        runtimeHealthy: false,
+        fullReady: false,
+        reconnectAttempts: 0,
+        restartExpectedMs: undefined,
+      });
 
       // Check if Python environment is ready (self-healing) asynchronously.
       // Fire-and-forget: only needs to run once, not on every retry.
@@ -464,6 +532,9 @@ export class GatewayManager extends EventEmitter {
           onConnectingToExistingGateway: () => {
             this.setStatus({
               state: 'reconnecting',
+              transportReady: false,
+              runtimeHealthy: false,
+              fullReady: false,
               error: undefined,
               reconnectAttempts: 0,
               pid: undefined,
@@ -532,7 +603,15 @@ export class GatewayManager extends EventEmitter {
             }
           },
           onMalformedConfigRecoverySuccess: () => {
-            this.setStatus({ state: 'starting', error: undefined, reconnectAttempts: 0, restartExpectedMs: undefined });
+            this.setStatus({
+              state: 'starting',
+              transportReady: false,
+              runtimeHealthy: false,
+              fullReady: false,
+              error: undefined,
+              reconnectAttempts: 0,
+              restartExpectedMs: undefined,
+            });
           },
           runDoctorRepair: async () => {
             try {
@@ -545,7 +624,15 @@ export class GatewayManager extends EventEmitter {
             return await runOpenClawDoctorRepair();
           },
           onDoctorRepairSuccess: () => {
-            this.setStatus({ state: 'starting', error: undefined, reconnectAttempts: 0, restartExpectedMs: undefined });
+            this.setStatus({
+              state: 'starting',
+              transportReady: false,
+              runtimeHealthy: false,
+              fullReady: false,
+              error: undefined,
+              reconnectAttempts: 0,
+              restartExpectedMs: undefined,
+            });
           },
           delay: async (ms) => {
             await new Promise((resolve) => setTimeout(resolve, ms));
@@ -561,7 +648,14 @@ export class GatewayManager extends EventEmitter {
           `Gateway start failed (port=${this.status.port}, reconnectAttempts=${this.reconnectAttempts}, spawn=${this.lastSpawnSummary ?? 'n/a'})`,
           enrichedError
         );
-        this.setStatus({ state: 'error', error: String(enrichedError), restartExpectedMs: undefined });
+        this.setStatus({
+          state: 'error',
+          transportReady: false,
+          runtimeHealthy: false,
+          fullReady: false,
+          error: String(enrichedError),
+          restartExpectedMs: undefined,
+        });
         throw enrichedError;
       } finally {
         this.startLock = false;
@@ -650,6 +744,9 @@ export class GatewayManager extends EventEmitter {
       this.reconnectAttempts = 0;
       this.setStatus({
         state: 'reconnecting',
+        transportReady: false,
+        runtimeHealthy: false,
+        fullReady: false,
         error: undefined,
         reconnectAttempts: 0,
         pid: undefined,
@@ -668,6 +765,9 @@ export class GatewayManager extends EventEmitter {
       logger.warn(`Gateway attach decision: failed on port ${this.status.port}:`, error);
       this.setStatus({
         state: 'stopped',
+        transportReady: false,
+        runtimeHealthy: false,
+        fullReady: false,
         error: undefined,
         pid: undefined,
         connectedAt: undefined,
@@ -752,6 +852,9 @@ export class GatewayManager extends EventEmitter {
     this.restartController.resetDeferredRestart();
     this.setStatus({
       state: 'stopped',
+      transportReady: false,
+      runtimeHealthy: false,
+      fullReady: false,
       error: undefined,
       pid: undefined,
       connectedAt: undefined,
@@ -1110,9 +1213,13 @@ export class GatewayManager extends EventEmitter {
           ? Math.floor((Date.now() - this.status.connectedAt) / 1000)
           : undefined;
       const version = typeof result.version === 'string' ? result.version : undefined;
-      return { ok, uptime, version };
+      const health = { ok, uptime, version };
+      this.applyHealthToStatus(health);
+      return health;
     } catch (error) {
-      return { ok: false, error: String(error) };
+      const health = { ok: false, error: String(error) };
+      this.applyHealthToStatus(health);
+      return health;
     }
   }
 
@@ -1207,10 +1314,16 @@ export class GatewayManager extends EventEmitter {
         this.setStatus({
           state: 'running',
           port,
+          transportReady: true,
+          runtimeHealthy: false,
+          fullReady: false,
           connectedAt: Date.now(),
           restartExpectedMs: undefined,
         });
         this.startPing();
+        void this.refreshReadinessFlags(port).catch((error) => {
+          logger.debug('Failed to refresh Gateway readiness flags after handshake:', error);
+        });
       },
       onMessage: (message) => {
         this.handleMessage(message);
@@ -1222,7 +1335,13 @@ export class GatewayManager extends EventEmitter {
           new Error('Gateway connection closed during request'),
         );
         if (this.status.state === 'running') {
-          this.setStatus({ state: 'stopped', restartExpectedMs: undefined });
+          this.setStatus({
+            state: 'stopped',
+            transportReady: false,
+            runtimeHealthy: false,
+            fullReady: false,
+            restartExpectedMs: undefined,
+          });
           this.scheduleReconnect();
         }
       },
@@ -1255,6 +1374,20 @@ export class GatewayManager extends EventEmitter {
 
     // Handle OpenClaw protocol event format: { type: "event", event: "...", payload: {...} }
     if (msg.type === 'event' && typeof msg.event === 'string') {
+      if (msg.event === 'health' && typeof msg.payload === 'object' && msg.payload !== null) {
+        const payload = msg.payload as { ok?: unknown; uptime?: unknown; version?: unknown; error?: unknown };
+        this.applyHealthToStatus({
+          ok: payload.ok !== false,
+          ...(typeof payload.uptime === 'number' && Number.isFinite(payload.uptime) ? { uptime: payload.uptime } : {}),
+          ...(typeof payload.version === 'string' ? { version: payload.version } : {}),
+          ...(typeof payload.error === 'string' ? { error: payload.error } : {}),
+        });
+        if (payload.ok !== false && !this.status.fullReady) {
+          void this.refreshReadinessFlags(this.status.port).catch((error) => {
+            logger.debug('Failed to refresh full Gateway readiness after health event:', error);
+          });
+        }
+      }
       if (msg.event === 'shutdown' && typeof msg.payload === 'object' && msg.payload !== null) {
         const payload = msg.payload as { restartExpectedMs?: unknown };
         if (
@@ -1324,6 +1457,9 @@ export class GatewayManager extends EventEmitter {
       logger.info(`Scheduling fast Gateway reconnect in ${delay}ms (server-announced restart)`);
       this.setStatus({
         state: 'reconnecting',
+        transportReady: false,
+        runtimeHealthy: false,
+        fullReady: false,
         reconnectAttempts: this.reconnectAttempts,
         restartExpectedMs: delay,
       });
@@ -1384,6 +1520,9 @@ export class GatewayManager extends EventEmitter {
       logger.error(`Gateway reconnect failed: max attempts reached (${decision.maxAttempts})`);
       this.setStatus({
         state: 'error',
+        transportReady: false,
+        runtimeHealthy: false,
+        fullReady: false,
         error: 'Failed to reconnect after maximum attempts',
         reconnectAttempts: this.reconnectAttempts,
         restartExpectedMs: undefined,
@@ -1397,6 +1536,9 @@ export class GatewayManager extends EventEmitter {
 
     this.setStatus({
       state: 'reconnecting',
+      transportReady: false,
+      runtimeHealthy: false,
+      fullReady: false,
       reconnectAttempts: this.reconnectAttempts,
       restartExpectedMs: undefined,
     });

@@ -16,11 +16,13 @@ let gatewayStatusPollTimer: ReturnType<typeof setInterval> | null = null;
 let gatewayVisibilityCleanup: (() => void) | null = null;
 let lastPassiveGatewayStatusRefreshAt = 0;
 let pendingSessionMessageReloadSessionKey: string | null = null;
+let pendingSessionsChangedRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 const GATEWAY_ACTIVE_POLL_MS = 2000;
 const GATEWAY_IDLE_POLL_MS = 10000;
 const GATEWAY_START_RECONCILE_TIMEOUT_MS = 130_000;
 const GATEWAY_STOP_RECONCILE_TIMEOUT_MS = 5_000;
+const SESSIONS_CHANGED_REFRESH_DEBOUNCE_MS = 200;
 
 interface GatewayState {
   status: GatewayStatus;
@@ -146,6 +148,20 @@ function handleSessionMessageNotification(params: Record<string, unknown>): void
   void state.loadHistory(true);
 }
 
+function scheduleSilentSessionsRefresh(): void {
+  if (pendingSessionsChangedRefreshTimer) {
+    clearTimeout(pendingSessionsChangedRefreshTimer);
+  }
+  pendingSessionsChangedRefreshTimer = setTimeout(() => {
+    pendingSessionsChangedRefreshTimer = null;
+    void useChatStore.getState().loadSessions({
+      preserveCurrent: true,
+      warmLabels: false,
+      silent: true,
+    });
+  }, SESSIONS_CHANGED_REFRESH_DEBOUNCE_MS);
+}
+
 function handleGatewayNotification(notification: { method?: string; params?: Record<string, unknown> } | undefined): void {
   const payload = notification;
   if (!payload || !payload.method) {
@@ -159,6 +175,11 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
 
   if (payload.method === 'session.message' && payload.params) {
     handleSessionMessageNotification(payload.params as Record<string, unknown>);
+    return;
+  }
+
+  if (payload.method === 'sessions.changed') {
+    scheduleSilentSessionsRefresh();
     return;
   }
 
@@ -284,12 +305,18 @@ function shouldPromoteLifecycleToCompleted(
 }
 
 function normalizeGatewayStatus(status: GatewayStatus): GatewayStatus {
-  if (!status.error) {
-    return status;
+  const normalized: GatewayStatus = {
+    ...status,
+    transportReady: status.transportReady === true,
+    runtimeHealthy: status.runtimeHealthy === true,
+    fullReady: status.fullReady === true,
+  };
+  if (!normalized.error) {
+    return normalized;
   }
   return {
-    ...status,
-    error: formatGatewayConnectError({ message: status.error }),
+    ...normalized,
+    error: formatGatewayConnectError({ message: normalized.error }),
   };
 }
 
@@ -421,6 +448,9 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
   status: {
     state: 'stopped',
     port: 18789,
+    transportReady: false,
+    runtimeHealthy: false,
+    fullReady: false,
   },
   lifecycle: {
     state: 'idle',

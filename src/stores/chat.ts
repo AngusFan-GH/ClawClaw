@@ -47,13 +47,6 @@ export interface RawMessage {
   btw?: BtwInfo;
 }
 
-type HistoryAnchor = {
-  role?: string;
-  timestamp?: ChatTimestamp;
-  id?: string;
-  toolCallId?: string;
-};
-
 /** Content block inside a message */
 export interface ContentBlock {
   type: 'text' | 'image' | 'file' | 'thinking' | 'tool_use' | 'tool_result' | 'toolCall' | 'toolResult' | 'toolcall' | 'toolresult';
@@ -176,6 +169,16 @@ type SessionListResponse = {
   total?: number;
 };
 
+type SessionHistoryResponse = {
+  success?: boolean;
+  sessionKey?: string;
+  messages?: RawMessage[];
+  hasMore?: boolean;
+  nextCursor?: string | null;
+  thinkingLevel?: string | null;
+  total?: number;
+};
+
 interface ChatState {
   // Messages
   messages: RawMessage[];
@@ -227,6 +230,7 @@ interface ChatState {
   historyWindowLimited: boolean;
   hasEarlierHistory: boolean;
   loadingEarlierHistory: boolean;
+  earlierHistoryCursor: string | null;
 
   // Thinking
   showThinking: boolean;
@@ -326,16 +330,6 @@ function getRawMessageKey(message: Partial<RawMessage>): string {
   const role = typeof message.role === 'string' ? message.role : 'unknown';
   if (timestamp != null) return `msg:${role}:${timestamp}`;
   return `msg:${role}`;
-}
-
-function toHistoryAnchor(message: RawMessage | undefined): HistoryAnchor | null {
-  if (!message) return null;
-  return {
-    role: message.role,
-    timestamp: message.timestamp,
-    ...(typeof message.id === 'string' ? { id: message.id } : {}),
-    ...(typeof message.toolCallId === 'string' ? { toolCallId: message.toolCallId } : {}),
-  };
 }
 
 let _compactionClearTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1370,7 +1364,13 @@ function isInternalHistoryMessage(message: RawMessage | undefined): boolean {
 function isRetryableStartupHistoryError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
   const normalized = message.toLowerCase();
-  if (!normalized.includes('chat.history')) return false;
+  if (
+    !normalized.includes('chat.history')
+    && !normalized.includes('session history')
+    && !normalized.includes('/api/sessions/history')
+  ) {
+    return false;
+  }
   return (
     normalized.includes('unavailable')
     || normalized.includes('gateway startup')
@@ -1998,6 +1998,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   historyWindowLimited: false,
   hasEarlierHistory: false,
   loadingEarlierHistory: false,
+  earlierHistoryCursor: null,
 
   showThinking: true,
   thinkingLevel: null,
@@ -2229,6 +2230,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           historyWindowLimited: false,
           hasEarlierHistory: false,
           loadingEarlierHistory: false,
+          earlierHistoryCursor: null,
           sessionLabels: hydratedSessionLabels,
           sessionLastActivity: hydratedSessionLastActivity,
         }));
@@ -2255,77 +2257,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
           clearSessionTitleRefreshRetry(true);
         }
 
-        // Background: fetch first user message for sessions whose authoritative
-        // entry still lacks a usable title. This covers startup races where
-        // Gateway-side derived titles are not ready yet.
-        const sessionsToLabel = sessionsWithCurrent.filter((session) => {
-          if (!realSessionKeys.has(session.key)) return false;
-          return !resolveSessionSidebarTitle(session);
-        });
-        if (warmLabels && sessionsToLabel.length > 0) {
-          void (async () => {
-            let remaining = sessionsToLabel;
-
-            for (const delayMs of [0, 1500]) {
-              if (remaining.length === 0) break;
-              if (delayMs > 0) {
-                await new Promise((resolve) => setTimeout(resolve, delayMs));
-              }
-
-              const results = await Promise.allSettled(
-                remaining.map(async (session) => {
-                  const r = await useGatewayStore
-                    .getState()
-                    .rpc<
-                      Record<string, unknown>
-                    >('chat.history', { sessionKey: session.key, limit: 1000 });
-                  const msgs = Array.isArray(r.messages) ? (r.messages as RawMessage[]) : [];
-                  const lastMsg = msgs[msgs.length - 1];
-                  const labelText = findSessionTitleCandidate(msgs);
-                  return { session, msgs, lastMsg, labelText };
-                })
-              );
-
-              const unresolved: typeof remaining = [];
-              for (const result of results) {
-                if (result.status !== 'fulfilled') {
-                  continue;
-                }
-
-                const { session, msgs, lastMsg, labelText } = result.value;
-                set((s) => {
-                  const next: Partial<typeof s> = {};
-                  const isEmptyEphemeral =
-                    msgs.length === 0 &&
-                    Boolean(s.pendingLocalSessionKeys[session.key]) &&
-                    s.currentSessionKey !== session.key;
-                  if (isEmptyEphemeral) {
-                    Object.assign(next, removeSessionArtifacts(s, session.key));
-                    return next;
-                  }
-                  if (labelText) {
-                    const truncated =
-                      labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
-                    next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
-                  }
-                  if (lastMsg?.timestamp) {
-                    next.sessionLastActivity = {
-                      ...s.sessionLastActivity,
-                      [session.key]: toMs(lastMsg.timestamp),
-                    };
-                  }
-                  return next;
-                });
-
-                if (!labelText) {
-                  unresolved.push(session);
-                }
-              }
-
-              remaining = unresolved;
-            }
-          })();
-        }
       }
     } catch (err) {
       console.warn('Failed to load sessions:', err);
@@ -2390,66 +2321,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         sessionLabels,
         sessionLastActivity,
       });
-
-      const sessionsToLabel = pageSessions.filter((session) => !resolveSessionSidebarTitle(session));
-      if (sessionsToLabel.length > 0) {
-        void (async () => {
-          let remaining = sessionsToLabel;
-
-          for (const delayMs of [0, 1500]) {
-            if (remaining.length === 0) break;
-            if (delayMs > 0) {
-              await new Promise((resolve) => setTimeout(resolve, delayMs));
-            }
-
-            const results = await Promise.allSettled(
-              remaining.map(async (session) => {
-                const r = await useGatewayStore
-                  .getState()
-                  .rpc<Record<string, unknown>>('chat.history', {
-                    sessionKey: session.key,
-                    limit: 1000,
-                  });
-                const msgs = Array.isArray(r.messages) ? (r.messages as RawMessage[]) : [];
-                const lastMsg = msgs[msgs.length - 1];
-                const labelText = findSessionTitleCandidate(msgs);
-                return { session, lastMsg, labelText };
-              }),
-            );
-
-            const unresolved: typeof remaining = [];
-            for (const result of results) {
-              if (result.status !== 'fulfilled') {
-                continue;
-              }
-
-              const { session, lastMsg, labelText } = result.value;
-              set((s) => {
-                const next: Partial<typeof s> = {};
-                if (labelText) {
-                  const truncated =
-                    labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
-                  next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
-                }
-                if (lastMsg?.timestamp) {
-                  next.sessionLastActivity = {
-                    ...s.sessionLastActivity,
-                    [session.key]: toMs(lastMsg.timestamp),
-                  };
-                }
-                return next;
-              });
-
-              if (!labelText) {
-                unresolved.push(session);
-              }
-            }
-
-            remaining = unresolved;
-          }
-        })();
-      }
-
     } catch (err) {
       console.warn('Failed to load more sessions:', err);
       set({ sessionsLoadingMore: false });
@@ -2611,6 +2482,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       historyWindowLimited: false,
       hasEarlierHistory: false,
       loadingEarlierHistory: false,
+      earlierHistoryCursor: null,
       sending: false,
       streamingText: '',
       streamingMessage: null,
@@ -2674,6 +2546,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         historyWindowLimited: false,
         hasEarlierHistory: false,
         loadingEarlierHistory: false,
+        earlierHistoryCursor: null,
         sending: false,
         streamingText: '',
         streamingMessage: null,
@@ -2748,6 +2621,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       historyWindowLimited: false,
       hasEarlierHistory: false,
       loadingEarlierHistory: false,
+      earlierHistoryCursor: null,
       sending: false,
       streamingText: '',
       streamingMessage: null,
@@ -2929,23 +2803,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
         historyWindowLimited: false,
         hasEarlierHistory: false,
         loadingEarlierHistory: false,
+        earlierHistoryCursor: null,
       });
       return;
     }
 
     try {
       const startedAt = Date.now();
-      const requestHistory = async (): Promise<Record<string, unknown> | null> => {
+      const requestHistory = async (): Promise<SessionHistoryResponse> => {
         for (;;) {
           try {
             return await Promise.race([
-              useGatewayStore
-                .getState()
-                .rpc<
-                  Record<string, unknown>
-                >('chat.history', { sessionKey: requestSessionKey, limit: CHAT_HISTORY_PAGE_LIMIT }),
-              new Promise<null>((_, reject) =>
-                setTimeout(() => reject(new Error('chat.history timed out')), HISTORY_LOAD_TIMEOUT_MS)
+              hostApiFetch<SessionHistoryResponse>('/api/sessions/history', {
+                method: 'POST',
+                body: JSON.stringify({
+                  sessionKey: requestSessionKey,
+                  limit: CHAT_HISTORY_PAGE_LIMIT,
+                }),
+                timeoutMs: HISTORY_LOAD_TIMEOUT_MS,
+              }),
+              new Promise<SessionHistoryResponse>((_, reject) =>
+                setTimeout(() => reject(new Error('session history timed out')), HISTORY_LOAD_TIMEOUT_MS)
               ),
             ]);
           } catch (err) {
@@ -2986,7 +2864,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // Keep transcript ordering as close to Gateway history as possible.
         // Only enrich cached file/image previews for display.
         const enrichedMessages = enrichWithCachedImages(rawMessages);
-        const thinkingLevel = data.thinkingLevel ? String(data.thinkingLevel) : null;
+        const fallbackThinkingLevel = stateBeforeCommit.sessions.find(
+          (session) => session.key === requestSessionKey,
+        )?.thinkingLevel ?? stateBeforeCommit.thinkingLevel ?? null;
+        const thinkingLevel =
+          typeof data.thinkingLevel === 'string'
+            ? data.thinkingLevel
+            : fallbackThinkingLevel;
 
         // Preserve the optimistic user message during an active send.
         // The Gateway may not include the user's message in chat.history
@@ -3060,9 +2944,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
           pendingAssistantMessage: hasEquivalentAuthoritativeAssistantMessage ? null : s.pendingAssistantMessage,
           btwMessages: [],
           thinkingLevel,
-          historyWindowLimited: rawMessages.length >= CHAT_HISTORY_PAGE_LIMIT,
-          hasEarlierHistory: rawMessages.length >= CHAT_HISTORY_PAGE_LIMIT,
+          historyWindowLimited: data.hasMore === true,
+          hasEarlierHistory: data.hasMore === true,
           loadingEarlierHistory: false,
+          earlierHistoryCursor:
+            typeof data.nextCursor === 'string' && data.nextCursor.trim()
+              ? data.nextCursor
+              : null,
           loading: false,
           ...(shouldResetLiveState ? resetToolStreamState(s) : {}),
           ...(shouldResetLiveState ? { streamingText: '', streamingMessage: null, streamingTools: [] as ToolStatus[] } : {}),
@@ -3105,6 +2993,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 btwMessages: [],
                 historyWindowLimited: false,
                 hasEarlierHistory: false,
+                earlierHistoryCursor: null,
               }
             : {}),
         }));
@@ -3126,6 +3015,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               btwMessages: [],
               historyWindowLimited: false,
               hasEarlierHistory: false,
+              earlierHistoryCursor: null,
             }
           : {}),
       }));
@@ -3141,6 +3031,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       pendingAssistantMessage,
       loadingEarlierHistory,
       hasEarlierHistory,
+      earlierHistoryCursor,
     } = get();
 
     if (loadingEarlierHistory || !hasEarlierHistory) {
@@ -3154,31 +3045,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
       pendingUserMessage,
       pendingAssistantMessage,
     )) {
-      set({ hasEarlierHistory: false, loadingEarlierHistory: false });
+      set({ hasEarlierHistory: false, loadingEarlierHistory: false, earlierHistoryCursor: null });
       return;
     }
 
-    const anchorMessage = messages.find((message) => !isInternalHistoryMessage(message));
-    const before = toHistoryAnchor(anchorMessage);
-    if (!before) {
-      set({ hasEarlierHistory: false, loadingEarlierHistory: false });
+    if (!earlierHistoryCursor) {
+      set({ hasEarlierHistory: false, loadingEarlierHistory: false, earlierHistoryCursor: null });
       return;
     }
 
     set({ loadingEarlierHistory: true, error: null });
 
     try {
-      const data = await hostApiFetch<{
-        success: boolean;
-        messages?: RawMessage[];
-        hasMore?: boolean;
-        anchorFound?: boolean;
-      }>('/api/sessions/history', {
+      const data = await hostApiFetch<SessionHistoryResponse>('/api/sessions/history', {
         method: 'POST',
         body: JSON.stringify({
           sessionKey: currentSessionKey,
           limit: CHAT_HISTORY_PAGE_LIMIT,
-          before,
+          cursor: earlierHistoryCursor,
         }),
       });
 
@@ -3205,9 +3089,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         olderMessagesForPreview = uniqueOlderMessages;
         return {
           messages: prependedAny ? [...uniqueOlderMessages, ...state.messages] : state.messages,
-          hasEarlierHistory: data.anchorFound === false ? false : data.hasMore === true,
-          historyWindowLimited: data.anchorFound === false ? false : data.hasMore === true,
+          hasEarlierHistory: data.hasMore === true,
+          historyWindowLimited: data.hasMore === true,
           loadingEarlierHistory: false,
+          earlierHistoryCursor:
+            typeof data.nextCursor === 'string' && data.nextCursor.trim()
+              ? data.nextCursor
+              : null,
         };
       });
 
