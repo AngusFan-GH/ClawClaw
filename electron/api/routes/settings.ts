@@ -88,6 +88,7 @@ function normalizePathForCompare(path: string): string {
 function patchTouchesMemory(patch: Partial<AppSettings>): boolean {
   return Object.prototype.hasOwnProperty.call(patch, 'sessionMemoryEnabled')
     || Object.prototype.hasOwnProperty.call(patch, 'memorySearchEnabled')
+    || Object.prototype.hasOwnProperty.call(patch, 'dreamingEnabled')
     || Object.prototype.hasOwnProperty.call(patch, 'localModelLean');
 }
 
@@ -115,13 +116,14 @@ async function applyRuntimeSettingsSideEffects(
     await syncMemorySettingsToOpenClaw({
       sessionMemoryEnabled: settings.sessionMemoryEnabled,
       memorySearchEnabled: settings.memorySearchEnabled,
+      dreamingEnabled: settings.dreamingEnabled,
     });
     await syncModelRuntimeSettingsToOpenClaw({
       localModelLean: settings.localModelLean,
     });
   }
 
-  await ctx.gatewayApplyCoordinator.applyNow({
+  ctx.gatewayApplyCoordinator.enqueue({
     source: options.source,
     reason: options.source,
     requires: 'restart_immediate',
@@ -581,6 +583,7 @@ export async function handleSettingsRoutes(
         key === 'proxyBypassRules';
       const memoryChanged = key === 'sessionMemoryEnabled'
         || key === 'memorySearchEnabled'
+        || key === 'dreamingEnabled'
         || key === 'localModelLean';
       await applyRuntimeSettingsSideEffects(ctx, {
         source: proxyChanged

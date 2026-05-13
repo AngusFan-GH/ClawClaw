@@ -6,21 +6,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
-  MessageCircleMore,
-  Puzzle,
-  Clock,
-  Settings as SettingsIcon,
-  Shield,
   PanelLeftClose,
   PanelLeft,
   SquarePen,
   Trash2,
-  Bot,
-  Bell,
   ChevronUp,
   ChevronDown,
   ChevronRight,
-  Copy,
   Menu,
   CornerUpLeft,
 } from 'lucide-react';
@@ -35,59 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useTranslation } from 'react-i18next';
 import logoFullSvg from '@/assets/logo-full.svg';
-import { type MenuItemConfig, type MenuItemId } from '@/shared/menu-items';
-
-/** Menu items with icons attached. Defined here so icons (lucide) are imported in one place. */
-const SIDEBAR_MENU_ITEMS: MenuItemConfig[] = [
-  {
-    id: 'skills',
-    i18nKey: 'skills',
-    icon: <Puzzle className="h-[18px] w-[18px]" strokeWidth={2} />,
-    to: '/skills',
-  },
-  {
-    id: 'cron',
-    i18nKey: 'cronTasks',
-    icon: <Clock className="h-[18px] w-[18px]" strokeWidth={2} />,
-    to: '/cron',
-  },
-  {
-    id: 'models',
-    i18nKey: 'models',
-    icon: <Bot className="h-[18px] w-[18px]" strokeWidth={2} />,
-    to: '/models',
-  },
-  {
-    id: 'agents',
-    i18nKey: 'agents',
-    icon: <Copy className="h-[18px] w-[18px]" strokeWidth={2} />,
-    to: '/agents',
-  },
-  {
-    id: 'channels',
-    i18nKey: 'channels',
-    icon: <MessageCircleMore className="h-[18px] w-[18px]" strokeWidth={2} />,
-    to: '/channels',
-  },
-  {
-    id: 'security',
-    i18nKey: 'security',
-    icon: <Shield className="h-[18px] w-[18px]" strokeWidth={2} />,
-    to: '/security',
-  },
-  {
-    id: 'reminders',
-    i18nKey: 'reminders',
-    icon: <Bell className="h-[18px] w-[18px]" strokeWidth={2} />,
-    to: '/reminders',
-  },
-  {
-    id: 'settings',
-    i18nKey: 'settings',
-    icon: <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />,
-    to: '/settings',
-  },
-];
+import { ALL_MENU_ITEMS, type MenuItemId } from '@/shared/menu-items';
 
 type SessionBucketKey =
   | 'today'
@@ -202,9 +142,12 @@ export function Sidebar() {
   const sidebarCollapsed = useSettingsStore((state) => state.sidebarCollapsed);
   const setSidebarCollapsed = useSettingsStore((state) => state.setSidebarCollapsed);
   const shortcutMenuItems = useSettingsStore((state) => state.shortcutMenuItems);
+  const devModeUnlocked = useSettingsStore((state) => state.devModeUnlocked);
 
   const sessions = useChatStore((s) => s.sessions);
   const sessionsHydrated = useChatStore((s) => s.sessionsHydrated);
+  const sessionsHasMore = useChatStore((s) => s.sessionsHasMore);
+  const sessionsLoadingMore = useChatStore((s) => s.sessionsLoadingMore);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const messages = useChatStore((s) => s.messages);
   const sessionLabels = useChatStore((s) => s.sessionLabels);
@@ -213,6 +156,7 @@ export function Sidebar() {
   const switchSession = useChatStore((s) => s.switchSession);
   const newSession = useChatStore((s) => s.newSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
+  const loadMoreSessions = useChatStore((s) => s.loadMoreSessions);
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const runtimeApplyPlan = useRuntimeApplyStore((state) => state.plan);
@@ -253,6 +197,8 @@ export function Sidebar() {
   const [showCronBackground, setShowCronBackground] = useState(false);
   const [expandedTaskParents, setExpandedTaskParents] = useState<Record<string, boolean>>({});
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
+  const sessionScrollRef = useRef<HTMLDivElement | null>(null);
+  const sessionLoadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     void fetchAgents();
@@ -357,6 +303,29 @@ export function Sidebar() {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [settingsMenuOpen]);
+
+  useEffect(() => {
+    if (!sessionsHasMore || sidebarCollapsed) return;
+    const root = sessionScrollRef.current;
+    const target = sessionLoadMoreRef.current;
+    if (!root || !target) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void loadMoreSessions();
+        }
+      },
+      {
+        root,
+        rootMargin: '160px 0px',
+        threshold: 0.1,
+      },
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [loadMoreSessions, sessionsHasMore, sidebarCollapsed, sessionsLoadingMore]);
 
   const visibleSessions = useMemo(() => {
     return sessions.filter((session) => {
@@ -525,11 +494,15 @@ export function Sidebar() {
   const showBackgroundGroupHeaders = backgroundSessionGroups.length > 1
     || backgroundSessionGroups.some((group) => Boolean(group.parentSessionKey));
 
+  const availableMenuItems = useMemo(
+    () => ALL_MENU_ITEMS.filter((item) => !item.devOnly || devModeUnlocked),
+    [devModeUnlocked],
+  );
   const shortcutIds = new Set<MenuItemId>(shortcutMenuItems);
   const shortcutItems = shortcutMenuItems
-    .map((id) => SIDEBAR_MENU_ITEMS.find((item) => item.id === id)!)
+    .map((id) => availableMenuItems.find((item) => item.id === id)!)
     .filter(Boolean);
-  const popupItems = SIDEBAR_MENU_ITEMS.filter((item) => !shortcutIds.has(item.id));
+  const popupItems = availableMenuItems.filter((item) => !shortcutIds.has(item.id));
 
   const settingsActive = shortcutItems.some((item) => location.pathname.startsWith(item.to)) || popupItems.some((item) => location.pathname.startsWith(item.to));
   const gatewayBadgeLabel = displayGatewayState === 'running'
@@ -615,7 +588,7 @@ export function Sidebar() {
           <div className="shrink-0 px-2.5 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/55">
             {t('chat:history.title')}
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3 pr-1">
+          <div ref={sessionScrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3 pr-1">
             {!sessionsHydrated && visibleSessions.length === 0 ? (
               <div className="px-2.5 pt-2">
                 <div className="rounded-[14px] border border-black/6 bg-white/55 px-3 py-3 text-[13px] text-muted-foreground shadow-[0_6px_16px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
@@ -966,6 +939,19 @@ export function Sidebar() {
                   )}
                 </div>
               )}
+              <div ref={sessionLoadMoreRef} className="px-2.5 pt-4">
+                {sessionsHasMore ? (
+                  <div className="rounded-[14px] border border-black/6 bg-white/55 px-3 py-2.5 text-center text-[12px] text-muted-foreground shadow-[0_6px_16px_rgba(15,23,42,0.04)] dark:border-white/10 dark:bg-white/[0.04]">
+                    {sessionsLoadingMore
+                      ? t('chat:history.loadingMore', '正在加载更多会话…')
+                      : t('chat:history.scrollToLoadMore', '下拉加载更多会话')}
+                  </div>
+                ) : sessionsHydrated && visibleSessions.length > 0 ? (
+                  <div className="px-1 text-center text-[11px] text-muted-foreground/70">
+                    {t('chat:history.allSessionsLoaded', '会话已全部加载')}
+                  </div>
+                ) : null}
+              </div>
             </>
           )}
         </div>

@@ -11,6 +11,7 @@ import enAgents from './locales/en/agents.json';
 import enSkills from './locales/en/skills.json';
 import enCron from './locales/en/cron.json';
 import enSetup from './locales/en/setup.json';
+import enDreams from './locales/en/dreams.json';
 
 // ZH
 import zhCommon from './locales/zh/common.json';
@@ -22,6 +23,7 @@ import zhAgents from './locales/zh/agents.json';
 import zhSkills from './locales/zh/skills.json';
 import zhCron from './locales/zh/cron.json';
 import zhSetup from './locales/zh/setup.json';
+import zhDreams from './locales/zh/dreams.json';
 
 // JA
 import jaCommon from './locales/ja/common.json';
@@ -33,6 +35,7 @@ import jaAgents from './locales/ja/agents.json';
 import jaSkills from './locales/ja/skills.json';
 import jaCron from './locales/ja/cron.json';
 import jaSetup from './locales/ja/setup.json';
+import jaDreams from './locales/ja/dreams.json';
 
 export const SUPPORTED_LANGUAGES = [
     { code: 'en', label: 'English' },
@@ -53,6 +56,7 @@ const resources = {
         skills: enSkills,
         cron: enCron,
         setup: enSetup,
+        dreams: enDreams,
     },
     zh: {
         common: zhCommon,
@@ -64,6 +68,7 @@ const resources = {
         skills: zhSkills,
         cron: zhCron,
         setup: zhSetup,
+        dreams: zhDreams,
     },
     ja: {
         common: jaCommon,
@@ -75,6 +80,7 @@ const resources = {
         skills: jaSkills,
         cron: jaCron,
         setup: jaSetup,
+        dreams: jaDreams,
     },
 };
 
@@ -85,7 +91,7 @@ i18n
         lng: 'zh', // will be overridden by settings store
         fallbackLng: 'zh',
         defaultNS: 'common',
-        ns: ['common', 'settings', 'dashboard', 'chat', 'channels', 'agents', 'skills', 'cron', 'setup'],
+        ns: ['common', 'settings', 'dashboard', 'chat', 'channels', 'agents', 'skills', 'cron', 'setup', 'dreams'],
         interpolation: {
             escapeValue: false, // React already escapes
         },

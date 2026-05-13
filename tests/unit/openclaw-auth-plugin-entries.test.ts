@@ -170,4 +170,28 @@ describe('openclaw auth plugin entry sync', () => {
       },
     });
   });
+
+  it('syncs dreamingEnabled into plugins.entries.memory-core.config.dreaming.enabled', async () => {
+    await writeOpenClawJson({});
+
+    const { syncMemorySettingsToOpenClaw } = await import('@electron/utils/openclaw-auth');
+    await syncMemorySettingsToOpenClaw({
+      sessionMemoryEnabled: true,
+      memorySearchEnabled: true,
+      dreamingEnabled: true,
+    });
+
+    const config = await readOpenClawJson();
+    expect(config.plugins).toEqual({
+      entries: {
+        'memory-core': {
+          config: {
+            dreaming: {
+              enabled: true,
+            },
+          },
+        },
+      },
+    });
+  });
 });

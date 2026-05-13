@@ -1133,6 +1133,7 @@ export async function syncBrowserConfigToOpenClaw(): Promise<void> {
 export async function syncMemorySettingsToOpenClaw(params: {
   sessionMemoryEnabled: boolean;
   memorySearchEnabled: boolean;
+  dreamingEnabled: boolean;
 }): Promise<void> {
   let modified = false;
   await updateOpenClawConfigRecord((config) => {
@@ -1198,6 +1199,41 @@ export async function syncMemorySettingsToOpenClaw(params: {
     defaults.memorySearch = memorySearch;
     agents.defaults = defaults;
     config.agents = agents;
+
+    const plugins = (
+      config.plugins && typeof config.plugins === 'object'
+        ? { ...(config.plugins as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    const pluginEntries = (
+      plugins.entries && typeof plugins.entries === 'object'
+        ? { ...(plugins.entries as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    const memoryCoreEntry = (
+      pluginEntries['memory-core'] && typeof pluginEntries['memory-core'] === 'object'
+        ? { ...(pluginEntries['memory-core'] as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    const memoryCoreConfig = (
+      memoryCoreEntry.config && typeof memoryCoreEntry.config === 'object'
+        ? { ...(memoryCoreEntry.config as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    const dreaming = (
+      memoryCoreConfig.dreaming && typeof memoryCoreConfig.dreaming === 'object'
+        ? { ...(memoryCoreConfig.dreaming as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    if (dreaming.enabled !== params.dreamingEnabled) {
+      modified = true;
+    }
+    dreaming.enabled = params.dreamingEnabled;
+    memoryCoreConfig.dreaming = dreaming;
+    memoryCoreEntry.config = memoryCoreConfig;
+    pluginEntries['memory-core'] = memoryCoreEntry;
+    plugins.entries = pluginEntries;
+    config.plugins = plugins;
   });
 
   if (modified) {

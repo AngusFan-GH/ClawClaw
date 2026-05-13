@@ -112,9 +112,10 @@ export async function handleGatewayRoutes(
       const status = await resolveGatewayStatus();
       const port = status.port || PORTS.OPENCLAW_GATEWAY;
       const token = await getSetting('gatewayToken');
+      const view = url.searchParams.get('view') === 'dreams' ? 'dreams' : undefined;
       sendJson(res, 200, {
         success: true,
-        url: buildOpenClawControlUiUrl(port, token),
+        url: buildOpenClawControlUiUrl(port, token, view ? { view } : undefined),
         port,
         ready: status.state === 'running',
         state: status.state,

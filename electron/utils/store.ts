@@ -71,6 +71,7 @@ export interface AppSettings {
   // Memory
   sessionMemoryEnabled: boolean;
   memorySearchEnabled: boolean;
+  dreamingEnabled: boolean;
   localModelLean: boolean;
 
   // Startup optimization: hash of provider config state at last successful sync.
@@ -124,6 +125,7 @@ const defaults: AppSettings = {
   // Memory
   sessionMemoryEnabled: true,
   memorySearchEnabled: true,
+  dreamingEnabled: false,
   localModelLean: false,
 
   // Startup optimization

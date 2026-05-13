@@ -253,10 +253,20 @@ export function Settings() {
     setSessionMemoryEnabled,
     memorySearchEnabled,
     setMemorySearchEnabled,
+    dreamingEnabled,
+    setDreamingEnabled,
     localModelLean,
     setLocalModelLean,
     initialized,
   } = useSettingsStore();
+  const availableMenuItems = useMemo(
+    () => ALL_MENU_ITEMS.filter((item) => !item.devOnly || devModeUnlocked),
+    [devModeUnlocked],
+  );
+  const visibleShortcutMenuItems = useMemo(
+    () => shortcutMenuItems.filter((id) => availableMenuItems.some((item) => item.id === id)),
+    [availableMenuItems, shortcutMenuItems],
+  );
 
   const {
     status: gatewayStatus,
@@ -812,8 +822,8 @@ export function Settings() {
               className="mt-4"
             >
               <div className="mb-3 flex flex-wrap items-center gap-2">
-                <Badge variant="secondary" className="rounded-[10px] px-3 py-1 text-[12px]">
-                  {t('appearance.shortcutMenu.selectedCount', { count: shortcutMenuItems.length })}
+                  <Badge variant="secondary" className="rounded-[10px] px-3 py-1 text-[12px]">
+                  {t('appearance.shortcutMenu.selectedCount', { count: visibleShortcutMenuItems.length })}
                 </Badge>
               </div>
               <DndContext
@@ -822,16 +832,16 @@ export function Settings() {
                 onDragEnd={(event: DragEndEvent) => {
                   const { active, over } = event;
                   if (over && active.id !== over.id) {
-                    const oldIndex = shortcutMenuItems.indexOf(active.id as MenuItemId);
-                    const newIndex = shortcutMenuItems.indexOf(over.id as MenuItemId);
-                    setShortcutMenuItems(arrayMove(shortcutMenuItems, oldIndex, newIndex));
+                    const oldIndex = visibleShortcutMenuItems.indexOf(active.id as MenuItemId);
+                    const newIndex = visibleShortcutMenuItems.indexOf(over.id as MenuItemId);
+                    setShortcutMenuItems(arrayMove(visibleShortcutMenuItems, oldIndex, newIndex));
                   }
                 }}
               >
-                <SortableContext items={shortcutMenuItems} strategy={verticalListSortingStrategy}>
+                <SortableContext items={visibleShortcutMenuItems} strategy={verticalListSortingStrategy}>
                   <div className="grid w-full grid-cols-1 gap-2">
-                    {shortcutMenuItems.map((id) => {
-                      const item = ALL_MENU_ITEMS.find((m) => m.id === id)!;
+                    {visibleShortcutMenuItems.map((id) => {
+                      const item = availableMenuItems.find((m) => m.id === id)!;
                       return (
                         <SortableMenuItem
                           key={item.id}
@@ -840,7 +850,7 @@ export function Settings() {
                           label={t(`common:sidebar.${item.i18nKey}`)}
                           checked={true}
                           disabled={false}
-                          onToggle={() => setShortcutMenuItems(shortcutMenuItems.filter((i) => i !== item.id))}
+                          onToggle={() => setShortcutMenuItems(visibleShortcutMenuItems.filter((i) => i !== item.id))}
                         />
                       );
                     })}
@@ -848,13 +858,13 @@ export function Settings() {
                 </SortableContext>
               </DndContext>
 
-              {ALL_MENU_ITEMS.filter((item) => !shortcutMenuItems.includes(item.id)).length > 0 && (
+              {availableMenuItems.filter((item) => !visibleShortcutMenuItems.includes(item.id)).length > 0 && (
                 <>
                   <div className="mb-2 mt-3 flex items-center gap-2">
                     <div className="h-px flex-1 border-t border-black/10 dark:border-white/10" />
                   </div>
                   <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
-                    {ALL_MENU_ITEMS.filter((item) => !shortcutMenuItems.includes(item.id)).map((item) => (
+                    {availableMenuItems.filter((item) => !visibleShortcutMenuItems.includes(item.id)).map((item) => (
                       <div
                         key={item.id}
                         className="flex items-center justify-between rounded-[10px] border border-black/10 bg-white/75 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]"
@@ -867,8 +877,8 @@ export function Settings() {
                         </div>
                         <Switch
                           checked={false}
-                          disabled={shortcutMenuItems.length >= 3}
-                          onCheckedChange={() => setShortcutMenuItems([...shortcutMenuItems, item.id])}
+                          disabled={visibleShortcutMenuItems.length >= 3}
+                          onCheckedChange={() => setShortcutMenuItems([...visibleShortcutMenuItems, item.id])}
                         />
                       </div>
                     ))}
@@ -1208,6 +1218,16 @@ export function Settings() {
                   <Switch
                     checked={memorySearchEnabled}
                     onCheckedChange={setMemorySearchEnabled}
+                  />
+                }
+              />
+              <SettingRow
+                label={t('memory.dreaming')}
+                description={t('memory.dreamingDesc')}
+                control={
+                  <Switch
+                    checked={dreamingEnabled}
+                    onCheckedChange={setDreamingEnabled}
                   />
                 }
               />

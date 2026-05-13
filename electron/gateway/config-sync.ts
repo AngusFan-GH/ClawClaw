@@ -845,6 +845,7 @@ export async function syncGatewayConfigBeforeLaunch(
     syncMemorySettingsToOpenClaw({
       sessionMemoryEnabled: appSettings.sessionMemoryEnabled,
       memorySearchEnabled: appSettings.memorySearchEnabled,
+      dreamingEnabled: appSettings.dreamingEnabled,
     }),
     2000,
     'syncMemorySettingsToOpenClaw',

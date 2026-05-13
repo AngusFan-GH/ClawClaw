@@ -11,4 +11,10 @@ describe('buildOpenClawControlUiUrl', () => {
   it('omits the fragment when the token is blank', () => {
     expect(buildOpenClawControlUiUrl(18789, '  ')).toBe('http://127.0.0.1:18789/');
   });
+
+  it('supports opening the dreams control UI view', () => {
+    expect(buildOpenClawControlUiUrl(18789, 'secret-token', { view: 'dreams' })).toBe(
+      'http://127.0.0.1:18789/dreaming#token=secret-token',
+    );
+  });
 });

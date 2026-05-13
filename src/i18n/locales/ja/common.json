@@ -14,6 +14,7 @@
         "models": "モデル",
         "security": "セキュリティ",
         "reminders": "リマインダー",
+        "openClawDreams": "Dreams",
         "deleteSessionConfirm": "セッション \"{{label}}\" を削除してもよろしいですか？",
         "openClawPage": "OpenClaw ページ"
     },

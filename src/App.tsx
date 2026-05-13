@@ -2,7 +2,7 @@
  * Root Application Component
  * Handles routing and global providers
  */
-import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { Component, lazy, Suspense, useEffect, useRef } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { Toaster } from 'sonner';
@@ -25,6 +25,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 const Security = lazy(() => import('./pages/Security'));
 const Reminders = lazy(() => import('./pages/Reminders').then((module) => ({ default: module.Reminders })));
 const Setup = lazy(() => import('./pages/Setup'));
+const Dreams = lazy(() => import('./pages/Dreams'));
 
 function RouteLoader() {
   return <PageLoader compact className="min-h-[calc(100vh-8rem)]" />;
@@ -102,6 +103,7 @@ function App() {
   const language = useSettingsStore((state) => state.language);
   const settingsInitialized = useSettingsStore((state) => state.initialized);
   const setupComplete = useSettingsStore((state) => state.setupComplete);
+  const devModeUnlocked = useSettingsStore((state) => state.devModeUnlocked);
   const initGateway = useGatewayStore((state) => state.init);
   const gatewayStatus = useGatewayStore((state) => state.status);
   const gatewayLifecycle = useGatewayStore((state) => state.lifecycle);
@@ -214,6 +216,7 @@ function App() {
               <Route path="/cron" element={<Cron />} />
               <Route path="/security" element={<Security />} />
               <Route path="/reminders" element={<Reminders />} />
+              <Route path="/dreams" element={devModeUnlocked ? <Dreams /> : <Navigate to="/" replace />} />
               <Route path="/settings/*" element={<Settings />} />
             </Route>
           </Routes>
