@@ -1699,8 +1699,8 @@ export function Cron() {
     return (
       <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)]">
         <PageLoader
-          title={t('loadingTitle', '正在加载定时任务')}
-          description={t('loadingDescription', '正在同步 OpenClaw 的任务列表，请稍候。')}
+          title={t('loadingTitle')}
+          description={t('loadingDescription')}
         />
       </div>
     );

@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { CheckCircle2, RotateCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useRuntimeApplyStore } from '@/stores/runtime-apply';
@@ -24,6 +25,7 @@ export function RuntimeApplyBanner({
   className,
   refreshAfterAction,
 }: RuntimeApplyBannerProps) {
+  const { t } = useTranslation('common');
   const plan = useRuntimeApplyStore((state) => state.plan);
   const applying = useRuntimeApplyStore((state) => state.applying);
   const loading = useRuntimeApplyStore((state) => state.loading);
@@ -55,12 +57,19 @@ export function RuntimeApplyBanner({
       const result = await applyPendingChanges();
       await refreshAfterAction?.();
       if (!result.accepted && !result.triggered) {
-        toast.success('更改已写入配置，服务启动后会加载');
+        toast.success(t('runtimeApply.toasts.savedForNextStart', '更改已写入配置，服务启动后会加载'));
         return;
       }
-      toast.success(result.action === 'restart' ? '更改已应用，服务已短暂重启' : '更改已应用');
+      toast.success(
+        result.action === 'restart'
+          ? t('runtimeApply.toasts.appliedWithRestart', '更改已应用，服务已短暂重启')
+          : t('runtimeApply.toasts.applied', '更改已应用'),
+      );
     } catch (error) {
-      toast.error(`应用更改失败：${String(error)}`);
+      toast.error(t('runtimeApply.toasts.applyFailed', {
+        error: String(error),
+        defaultValue: `应用更改失败：${String(error)}`,
+      }));
     }
   };
 
@@ -68,9 +77,12 @@ export function RuntimeApplyBanner({
     try {
       await discardPendingChanges();
       await refreshAfterAction?.();
-      toast.success('已取消本次待应用更改');
+      toast.success(t('runtimeApply.toasts.discarded', '已取消本次待应用更改'));
     } catch (error) {
-      toast.error(`取消失败：${String(error)}`);
+      toast.error(t('runtimeApply.toasts.discardFailed', {
+        error: String(error),
+        defaultValue: `取消失败：${String(error)}`,
+      }));
     }
   };
 
@@ -86,10 +98,16 @@ export function RuntimeApplyBanner({
         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" />
         <div className="min-w-0">
           <div className="text-sm font-medium">
-            {domainSummary}有 {visibleChanges.length} 项更改待应用
+            {t('runtimeApply.summary', {
+              domains: domainSummary,
+              count: visibleChanges.length,
+              defaultValue: `${domainSummary}有 ${visibleChanges.length} 项更改待应用`,
+            })}
           </div>
           <div className="mt-0.5 text-xs text-amber-800/80 dark:text-amber-100/72">
-            {requiresRestart ? '应用时服务会短暂重启，通常只需要几秒。' : '应用后服务会加载最新配置。'}
+            {requiresRestart
+              ? t('runtimeApply.description.restart', '应用时服务会短暂重启，通常只需要几秒。')
+              : t('runtimeApply.description.reload', '应用后服务会加载最新配置。')}
           </div>
         </div>
       </div>
@@ -101,7 +119,7 @@ export function RuntimeApplyBanner({
           disabled={applying || loading}
           className="h-8 rounded-lg border-amber-400/60 bg-transparent px-3 text-xs text-amber-950 shadow-none hover:bg-amber-100 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900/40"
         >
-          取消
+          {t('actions.cancel', '取消')}
         </Button>
         <Button
           size="sm"
@@ -110,7 +128,7 @@ export function RuntimeApplyBanner({
           className="h-8 rounded-lg px-3 text-xs shadow-none"
         >
           {applying ? <RotateCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-          {applying ? '应用中' : '应用更改'}
+          {applying ? t('runtimeApply.actions.applying', '应用中') : t('runtimeApply.actions.apply', '应用更改')}
         </Button>
       </div>
     </div>

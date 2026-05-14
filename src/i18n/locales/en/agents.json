@@ -2,6 +2,8 @@
   "title": "Agents",
   "subtitle": "Manage your OpenClaw agents and their channel ownership",
   "stats": {
+    "title": "Overview",
+    "description": "Quickly review the number of agents, default agents, and currently owned channels.",
     "total": "Total agents",
     "defaults": "Default agents",
     "custom": "Custom agents",
@@ -19,6 +21,7 @@
   "addAgent": "Add Agent",
   "gatewayWarning": "Gateway is offline. Agent and channel ownership will resume syncing once the connection is restored.",
   "defaultBadge": "default",
+  "defaultAccount": "Default account",
   "inherited": "default",
   "none": "none",
   "fieldLabels": {
@@ -60,6 +63,7 @@
     "modelHelpCustom": "After saving, new conversations use this agent model while existing sessions still follow session-level settings.",
     "channelsTitle": "Channels",
     "channelsDescription": "Configure accounts on the Connections page first, then bind specific accounts to this agent here. Multi-account connections can belong to different agents.",
+    "openChannels": "Open Connections",
     "addChannel": "Bind Connection Account",
     "noChannels": "No channels are assigned to this agent yet.",
     "assignedStatus": "Assigned",
@@ -96,7 +100,8 @@
     "binding": "Binding",
     "boundHere": "Bound",
     "bindAction": "Bind to Current Agent",
-    "defaultFallbackHere": "Default fallback here"
+    "defaultFallbackHere": "Default fallback here",
+    "reassignAction": "Move to Current Agent"
   },
   "loadingTitle": "Loading agents",
   "loadingDescription": "Syncing agent configuration and channel bindings. Please wait."

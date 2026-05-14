@@ -698,9 +698,7 @@ export function Sidebar() {
                                     )}
                                   </span>
                                   <span className="truncate tracking-[0.01em]">
-                                    {t('chat:history.childTasks', {
-                                      defaultValue: '子任务',
-                                    })}
+                                    {t('chat:history.childTasks')}
                                   </span>
                                   <span className="ml-auto shrink-0 rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)] dark:bg-white/[0.08] dark:shadow-none">
                                     {childSessions.length}
@@ -814,7 +812,6 @@ export function Sidebar() {
                       >
                         {t('chat:history.showCronSessionsHidden', {
                           count: cronBackgroundSessions.length,
-                          defaultValue: `显示 Cron (${cronBackgroundSessions.length})`,
                         })}
                       </button>
                     )}
@@ -843,7 +840,7 @@ export function Sidebar() {
                                   }}
                                   className="shrink-0 rounded-full bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-black/8 hover:text-foreground dark:bg-white/8 dark:hover:bg-white/12"
                                 >
-                                  {t('chat:history.openParentSession', 'Open')}
+                                  {t('chat:history.openParentSession')}
                                 </button>
                               )}
                             </div>
@@ -904,7 +901,6 @@ export function Sidebar() {
                                         >
                                           {t('chat:history.parentSession', {
                                             label: parentSessionLabel,
-                                            defaultValue: `来源：${parentSessionLabel}`,
                                           })}
                                         </button>
                                       </div>

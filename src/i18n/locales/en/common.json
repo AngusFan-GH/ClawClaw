@@ -18,14 +18,15 @@
         "deleteSessionConfirm": "Are you sure you want to delete session \"{{label}}\"?",
         "openClawPage": "OpenClaw Page"
     },
-    "actions": {
+  "actions": {
         "save": "Save",
         "cancel": "Cancel",
         "delete": "Delete",
         "edit": "Edit",
         "refresh": "Refresh",
-        "close": "Close",
-        "copy": "Copy",
+    "close": "Close",
+    "collapse": "Collapse",
+    "copy": "Copy",
         "search": "Search",
         "confirm": "Confirm",
         "dismiss": "Dismiss",
@@ -40,9 +41,15 @@
         "restart": "Restart",
         "show": "Show",
         "hide": "Hide",
-        "clear": "Clear"
-    },
-    "status": {
+    "clear": "Clear"
+  },
+  "windowControls": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close"
+  },
+  "status": {
         "running": "Running",
         "stopped": "Stopped",
         "error": "Error",
@@ -55,8 +62,27 @@
         "configured": "Configured",
         "loading": "Loading",
         "saving": "Saving",
-        "noResults": "No matching messages"
+    "noResults": "No matching messages"
+  },
+  "runtimeApply": {
+    "summary": "{{count}} pending changes for {{domains}}",
+    "description": {
+      "restart": "Applying changes will briefly restart the service, usually only for a few seconds.",
+      "reload": "Applying changes will load the latest configuration."
     },
+    "actions": {
+      "apply": "Apply changes",
+      "applying": "Applying"
+    },
+    "toasts": {
+      "savedForNextStart": "Changes were written to configuration and will load on next start.",
+      "applied": "Changes applied.",
+      "appliedWithRestart": "Changes applied and the service briefly restarted.",
+      "applyFailed": "Failed to apply changes: {{error}}",
+      "discarded": "Pending changes were discarded.",
+      "discardFailed": "Failed to discard changes: {{error}}"
+    }
+  },
     "gateway": {
         "notRunning": "Gateway Not Running",
         "notRunningDesc": "The OpenClaw Gateway needs to be running to use this feature. It will start automatically, or you can start it from Settings.",

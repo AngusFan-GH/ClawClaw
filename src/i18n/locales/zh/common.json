@@ -25,6 +25,7 @@
     "edit": "编辑",
     "refresh": "刷新",
     "close": "关闭",
+    "collapse": "收起",
     "copy": "复制",
     "search": "搜索",
     "confirm": "确认",
@@ -42,6 +43,12 @@
     "hide": "隐藏",
     "clear": "清空"
   },
+  "windowControls": {
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "还原",
+    "close": "关闭"
+  },
   "status": {
     "running": "运行中",
     "stopped": "已停止",
@@ -56,6 +63,25 @@
     "loading": "加载中",
     "saving": "保存中",
     "noResults": "没有匹配的消息"
+  },
+  "runtimeApply": {
+    "summary": "{{domains}}有 {{count}} 项更改待应用",
+    "description": {
+      "restart": "应用时服务会短暂重启，通常只需要几秒。",
+      "reload": "应用后服务会加载最新配置。"
+    },
+    "actions": {
+      "apply": "应用更改",
+      "applying": "应用中"
+    },
+    "toasts": {
+      "savedForNextStart": "更改已写入配置，服务启动后会加载",
+      "applied": "更改已应用",
+      "appliedWithRestart": "更改已应用，服务已短暂重启",
+      "applyFailed": "应用更改失败：{{error}}",
+      "discarded": "已取消本次待应用更改",
+      "discardFailed": "取消失败：{{error}}"
+    }
   },
   "gateway": {
     "notRunning": "网关未运行",

@@ -25,6 +25,7 @@
         "edit": "編集",
         "refresh": "更新",
         "close": "閉じる",
+        "collapse": "折りたたむ",
         "copy": "コピー",
         "search": "検索",
         "confirm": "確認",
@@ -42,6 +43,12 @@
         "hide": "非表示",
         "clear": "クリア"
     },
+    "windowControls": {
+        "minimize": "最小化",
+        "maximize": "最大化",
+        "restore": "元に戻す",
+        "close": "閉じる"
+    },
     "status": {
         "running": "実行中",
         "stopped": "停止",
@@ -56,6 +63,25 @@
         "loading": "読み込み中",
         "saving": "保存中",
         "noResults": "一致するメッセージがありません"
+    },
+    "runtimeApply": {
+        "summary": "{{domains}} に {{count}} 件の未適用変更があります",
+        "description": {
+            "restart": "適用時にサービスが短時間再起動します。通常は数秒です。",
+            "reload": "適用後にサービスが最新設定を読み込みます。"
+        },
+        "actions": {
+            "apply": "変更を適用",
+            "applying": "適用中"
+        },
+        "toasts": {
+            "savedForNextStart": "変更は設定に保存され、次回起動時に読み込まれます。",
+            "applied": "変更を適用しました。",
+            "appliedWithRestart": "変更を適用し、サービスを短時間再起動しました。",
+            "applyFailed": "変更の適用に失敗しました: {{error}}",
+            "discarded": "今回の未適用変更を破棄しました。",
+            "discardFailed": "破棄に失敗しました: {{error}}"
+        }
     },
     "gateway": {
         "notRunning": "ゲートウェイが停止中",

@@ -4,6 +4,7 @@
  * Windows/Linux: icon + "ClawClaw" on left, minimize/maximize/close on right.
  */
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Minus, Square, X, Copy } from 'lucide-react';
 import logoSvg from '@/assets/logo.svg';
 import { invokeIpc } from '@/lib/api-client';
@@ -20,6 +21,7 @@ export function TitleBar() {
 }
 
 function WindowsTitleBar() {
+  const { t } = useTranslation('common');
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -58,21 +60,23 @@ function WindowsTitleBar() {
         <button
           onClick={handleMinimize}
           className="flex h-full w-11 items-center justify-center text-foreground/60 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
-          title="Minimize"
+          title={t('windowControls.minimize', 'Minimize')}
         >
           <Minus className="h-4 w-4" />
         </button>
         <button
           onClick={handleMaximize}
           className="flex h-full w-11 items-center justify-center text-foreground/60 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
-          title={maximized ? 'Restore' : 'Maximize'}
+          title={maximized
+            ? t('windowControls.restore', 'Restore')
+            : t('windowControls.maximize', 'Maximize')}
         >
           {maximized ? <Copy className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
         </button>
         <button
           onClick={handleClose}
           className="flex h-full w-11 items-center justify-center text-foreground/60 transition-colors hover:bg-red-500 hover:text-white"
-          title="Close"
+          title={t('windowControls.close', 'Close')}
         >
           <X className="h-4 w-4" />
         </button>

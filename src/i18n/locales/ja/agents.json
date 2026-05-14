@@ -2,6 +2,8 @@
   "title": "エージェント",
   "subtitle": "OpenClaw エージェントとチャンネルの所属を管理します",
   "stats": {
+    "title": "概要",
+    "description": "エージェント数、デフォルトエージェント数、現在引き継いでいるチャンネルを素早く確認できます。",
     "total": "総数",
     "defaults": "デフォルト",
     "custom": "カスタム",
@@ -19,6 +21,7 @@
   "addAgent": "エージェントを追加",
   "gatewayWarning": "ゲートウェイは未接続です。接続が復旧すると、エージェントと接続の割り当て同期を再開します。",
   "defaultBadge": "default",
+  "defaultAccount": "デフォルトアカウント",
   "inherited": "デフォルト",
   "none": "なし",
   "fieldLabels": {
@@ -60,6 +63,7 @@
     "modelHelpCustom": "保存後、新しい会話はこのエージェントモデルを使います。既存セッションは引き続きセッション単位の設定を優先します。",
     "channelsTitle": "接続",
     "channelsDescription": "まず接続ページでアカウントを設定し、ここで特定アカウントをこのエージェントにバインドします。複数アカウントの接続は別々のエージェントに割り当てられます。",
+    "openChannels": "接続を設定する",
     "addChannel": "接続アカウントをバインド",
     "noChannels": "このエージェントにはまだ接続が割り当てられていません。",
     "assignedStatus": "割り当て済み",
@@ -96,7 +100,8 @@
     "binding": "バインド中",
     "boundHere": "割り当て済み",
     "bindAction": "このエージェントにバインド",
-    "defaultFallbackHere": "既定で接管中"
+    "defaultFallbackHere": "既定で接管中",
+    "reassignAction": "このエージェントに移す"
   },
   "loadingTitle": "エージェントを読み込み中",
   "loadingDescription": "エージェント設定と接続バインドを同期しています。しばらくお待ちください。"

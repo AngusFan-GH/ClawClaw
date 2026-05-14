@@ -141,10 +141,10 @@ export function Agents() {
           <section className="mb-8 rounded-[18px] border border-border/70 bg-card/78 p-4">
             <div className="mb-4">
               <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-                {t('stats.title', '概览')}
+                {t('stats.title')}
               </h2>
               <p className="mt-1 text-[13px] text-muted-foreground">
-                {t('stats.description', '快速查看分身数量、默认分身和当前已接管的连接情况。')}
+                {t('stats.description')}
               </p>
             </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1166,21 +1166,21 @@ function AgentSettingsModal({
                   onClick={onOpenChannels}
                   className="h-9 rounded-xl border-black/10 bg-transparent px-4 text-[13px] font-medium text-foreground/80 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
                 >
-                  {t('settingsDialog.openChannels', '去配置连接')}
+                  {t('settingsDialog.openChannels')}
                 </Button>
                 <Button
                   onClick={() => setShowBindingModal(true)}
                   className="h-9 rounded-xl px-4 text-[13px] font-medium shadow-none"
                 >
                   <Plus className="h-3.5 w-3.5 mr-2" />
-                  {t('settingsDialog.addChannel', '绑定已有连接')}
+                  {t('settingsDialog.addChannel')}
                 </Button>
               </div>
             </div>
 
             {visibleAssignedChannels.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border/80 bg-muted/35 p-4 text-[13.5px] text-muted-foreground">
-                {t('settingsDialog.noChannels', '当前没有绑定任何连接。请先在连接页配置账户，再回来绑定。')}
+                {t('settingsDialog.noChannels')}
               </div>
             ) : (
               <div className="space-y-3">
@@ -1200,7 +1200,7 @@ function AgentSettingsModal({
                                 variant="secondary"
                                 className="rounded-full border-0 bg-amber-500/12 px-2 py-0.5 text-[10.5px] font-medium text-amber-700 shadow-none dark:text-amber-300"
                               >
-                                {t('settingsDialog.defaultFallbackBadge', '默认接管')}
+                                {t('settingsDialog.defaultFallbackBadge')}
                               </Badge>
                             ) : null}
                           </div>
@@ -1211,10 +1211,9 @@ function AgentSettingsModal({
                             )}
                           >
                             {channel.isDefaultAccount
-                              ? `${t('defaultAccount', '默认账户')}：${channel.accountId}`
+                              ? `${t('defaultAccount')}：${channel.accountId}`
                               : t('settingsDialog.boundAccount', {
                                 accountId: channel.accountId,
-                                defaultValue: `账户：${channel.accountId}`,
                               })}
                           </p>
                           {channel.error ? (
@@ -1275,7 +1274,6 @@ function AgentSettingsModal({
         title={t('removeChannelDialog.title')}
         message={channelToRemove ? t('removeChannelDialog.message', {
           name: channelToRemove.name,
-          defaultValue: `确认解绑 ${channelToRemove.name}？`,
         }) : ''}
         confirmLabel={t('common:actions.delete')}
         cancelLabel={t('common:actions.cancel')}
@@ -1289,7 +1287,6 @@ function AgentSettingsModal({
             await fetchChannels(false, { includeRuntime: false });
             toast.success(t('toast.channelRemoved', {
               channel: removing.name,
-              defaultValue: `${removing.name} 已解绑`,
             }));
           } catch (error) {
             toast.error(t('toast.channelRemoveFailed', { error: String(error) }));
@@ -1396,22 +1393,22 @@ function BindingPickerModal({
       <Card className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-card">
         <CardHeader className="pb-2">
           <CardTitle className="text-2xl font-semibold tracking-tight">
-            {t('bindingDialog.title', '绑定已有连接')}
+            {t('bindingDialog.title')}
           </CardTitle>
           <CardDescription className="text-[15px] mt-1 text-foreground/70">
-            {t('bindingDialog.description', '按账户绑定已配置连接。多账户连接会分别归属到不同分身。')}
+            {t('bindingDialog.description')}
           </CardDescription>
         </CardHeader>
         <CardContent className="min-h-0 flex-1 overflow-y-auto space-y-4 p-6 pt-4">
           {availableBindings.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border/80 bg-muted/35 p-5 text-sm text-muted-foreground">
-              <p>{t('bindingDialog.empty', '还没有可绑定的连接。请先去连接页配置账户。')}</p>
+              <p>{t('bindingDialog.empty')}</p>
               <Button
                 variant="outline"
                 onClick={onOpenChannels}
                 className="mt-4 h-9 rounded-xl border-black/10 bg-transparent px-4 text-[13px] font-medium text-foreground/80 shadow-none hover:bg-black/5 hover:text-foreground dark:border-white/10 dark:hover:bg-white/5"
               >
-                {t('settingsDialog.openChannels', '去配置连接')}
+                {t('settingsDialog.openChannels')}
               </Button>
             </div>
           ) : (
@@ -1420,14 +1417,12 @@ function BindingPickerModal({
                 const ownerLabel = binding.ownerId
                   ? t('bindingDialog.otherOwner', {
                       name: binding.ownerName || binding.ownerId,
-                      defaultValue: `当前归属：${binding.ownerName || binding.ownerId}`,
                     })
                   : binding.fallbackOwnerName || defaultAgentName
                     ? t('bindingDialog.fallbackOwner', {
                         name: binding.fallbackOwnerName || defaultAgentName,
-                        defaultValue: `未显式绑定，默认回退到：${binding.fallbackOwnerName || defaultAgentName}`,
                       })
-                    : t('bindingDialog.unassigned', '未绑定分身');
+                    : t('bindingDialog.unassigned');
                 const currentBindingKey = `${binding.channelType}:${binding.accountId}`;
                 return (
                   <div key={currentBindingKey} className="rounded-2xl border border-border/70 bg-muted/25 p-4">
@@ -1443,20 +1438,19 @@ function BindingPickerModal({
                         <p className="mt-3 text-[12px] text-muted-foreground/80">
                           {t('bindingDialog.account', {
                             accountId: binding.accountId,
-                            defaultValue: `账户：${binding.accountId}`,
                           })}
                         </p>
                         <p className="mt-1 text-[12px] text-muted-foreground/70">
                           {binding.configured
-                            ? t('bindingDialog.accountConfigured', '该账户已完成配置，可直接绑定。')
-                            : t('bindingDialog.accountNotConfigured', '该账户尚未完成配置，建议先回到连接页补全配置。')}
+                            ? t('bindingDialog.accountConfigured')
+                            : t('bindingDialog.accountNotConfigured')}
                         </p>
                         {binding.isDefaultAccount ? (
                           <Badge
                             variant="secondary"
                             className="mt-2 rounded-full border-0 bg-primary/12 px-2 py-0.5 text-[10px] font-medium text-primary shadow-none"
                           >
-                            {t('defaultAccount', '默认账户')}
+                            {t('defaultAccount')}
                           </Badge>
                         ) : null}
                         {binding.error ? (
@@ -1469,14 +1463,14 @@ function BindingPickerModal({
                         className="h-9 rounded-xl px-4 text-[13px] font-medium shadow-none"
                       >
                         {bindingKey === currentBindingKey
-                          ? t('bindingDialog.binding', '绑定中')
+                          ? t('bindingDialog.binding')
                           : binding.isAssignedHere
-                            ? t('bindingDialog.boundHere', '已绑定')
+                            ? t('bindingDialog.boundHere')
                             : binding.implicitAssignedHere
-                              ? t('bindingDialog.defaultFallbackHere', '默认接管中')
+                              ? t('bindingDialog.defaultFallbackHere')
                             : binding.ownerId
-                              ? t('bindingDialog.reassignAction', '转移到当前分身')
-                              : t('bindingDialog.bindAction', '绑定到当前分身')}
+                              ? t('bindingDialog.reassignAction')
+                              : t('bindingDialog.bindAction')}
                       </Button>
                     </div>
                   </div>

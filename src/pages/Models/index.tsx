@@ -246,9 +246,12 @@ export function Models() {
     try {
       await removeAccount(accountId);
       setConfirmDeleteModelId(null);
-      toast.success('已删除本地模型，正在同步网关配置');
+      toast.success(t('models.local.toasts.modelDeleted', '已删除本地模型，正在同步网关配置'));
     } catch (error) {
-      toast.error(`删除失败: ${String(error)}`);
+      toast.error(t('models.local.toasts.deleteFailed', {
+        error: String(error),
+        defaultValue: `删除失败: ${String(error)}`,
+      }));
     } finally {
       setConfirmPending(false);
     }
@@ -260,9 +263,12 @@ export function Models() {
     try {
       await removeAccount(localProviderAccount.id);
       setConfirmClearProviderOpen(false);
-      toast.success('本地模型提供商配置已清除，正在同步网关配置');
+      toast.success(t('models.local.toasts.providerCleared', '本地模型提供商配置已清除，正在同步网关配置'));
     } catch (error) {
-      toast.error(`清除失败: ${String(error)}`);
+      toast.error(t('models.local.toasts.clearFailed', {
+        error: String(error),
+        defaultValue: `清除失败: ${String(error)}`,
+      }));
     } finally {
       setConfirmPending(false);
     }
@@ -271,9 +277,12 @@ export function Models() {
   const handleSetDefaultLocalModel = async (accountId: string) => {
     try {
       await setDefaultAccount(accountId);
-      toast.success('已设为默认模型');
+      toast.success(t('models.local.toasts.defaultSet', '已设为默认模型'));
     } catch (error) {
-      toast.error(`设置默认失败: ${String(error)}`);
+      toast.error(t('models.local.toasts.defaultSetFailed', {
+        error: String(error),
+        defaultValue: `设置默认失败: ${String(error)}`,
+      }));
     }
   };
 
@@ -378,7 +387,10 @@ export function Models() {
       }
       navigate('/setup?step=complete');
     } catch (error) {
-      toast.error(`完成设置失败: ${String(error)}`);
+      toast.error(t('models.local.toasts.completeSetupFailed', {
+        error: String(error),
+        defaultValue: `完成设置失败: ${String(error)}`,
+      }));
     } finally {
       setSetupCompletionPending(false);
     }
@@ -405,12 +417,14 @@ export function Models() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-xl font-semibold tracking-tight text-foreground">
-                    {hasAnyConfiguredModels ? '模型已配置完成' : '完成模型配置后即可继续'}
+                    {hasAnyConfiguredModels
+                      ? t('dashboard:models.local.setup.readyTitle', '模型已配置完成')
+                      : t('dashboard:models.local.setup.pendingTitle', '完成模型配置后即可继续')}
                   </h2>
                   <p className="mt-1 text-[13px] text-muted-foreground">
                     {hasAnyConfiguredModels
-                      ? '当前已经检测到可用模型。继续后将完成安装并进入聊天主页。'
-                      : '请至少添加一个可用模型。你也可以稍后返回 Setup 跳过这一步。'}
+                      ? t('dashboard:models.local.setup.readyDescription', '当前已经检测到可用模型。继续后将完成安装并进入聊天主页。')
+                      : t('dashboard:models.local.setup.pendingDescription', '请至少添加一个可用模型。你也可以稍后返回 Setup 跳过这一步。')}
                   </p>
                 </div>
                 {hasAnyConfiguredModels ? (
@@ -420,7 +434,7 @@ export function Models() {
                     disabled={setupCompletionPending}
                   >
                     {setupCompletionPending ? <LoadingIcon className="mr-2 h-4 w-4" /> : null}
-                    完成设置
+                    {t('dashboard:models.local.setup.completeAction', '完成设置')}
                   </Button>
                 ) : null}
               </div>
@@ -430,9 +444,9 @@ export function Models() {
           <section className="rounded-[10px] border border-black/10 bg-[rgba(255,255,255,0.3)] p-4 dark:border-white/10 dark:bg-white/[0.03] sm:p-5">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h2 className="text-2xl font-semibold tracking-tight text-foreground">本地模型</h2>
+                <h2 className="text-2xl font-semibold tracking-tight text-foreground">{t('dashboard:models.local.sectionTitle', '本地模型')}</h2>
                 <p className="mt-1 text-[13px] text-muted-foreground">
-                  先配置本地模型提供商，再添加具体模型。默认模型会直接标记在具体模型上。
+                  {t('dashboard:models.local.sectionDescription', '先配置本地模型提供商，再添加具体模型。默认模型会直接标记在具体模型上。')}
                 </p>
               </div>
               <div className="shrink-0 flex items-center gap-2">
@@ -441,14 +455,14 @@ export function Models() {
                   className="h-9 rounded-xl border-black/10 bg-transparent px-4 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
                   onClick={() => setShowLocalProviderDialog(true)}
                 >
-                  配置
+                  {t('settings:aiProviders.dialog.actions.configure', '配置')}
                 </Button>
                 {localProviderAccount ? (
                   <Button
                     className="h-9 rounded-xl px-4"
                     onClick={() => setShowAddLocalModelDialog(true)}
                   >
-                    添加模型
+                    {t('dashboard:models.local.addModelAction', '添加模型')}
                   </Button>
                 ) : null}
               </div>
@@ -457,11 +471,11 @@ export function Models() {
             <div className="mb-4 flex items-center justify-between gap-3 rounded-[10px] border border-black/10 bg-black/[0.025] p-4 dark:border-white/10 dark:bg-white/[0.02]">
               {localProviderAccount ? (
                 <div className="text-sm text-muted-foreground">
-                  已配置本地模型提供商。需要调整 API Key、Base URL 或协议时，使用右上角“配置”。
+                  {t('dashboard:models.local.providerConfiguredHint', '已配置本地模型提供商。需要调整 API Key、Base URL 或协议时，使用右上角“配置”。')}
                 </div>
               ) : (
                 <div className="text-sm text-muted-foreground">
-                  还没有配置本地模型提供商。先完成提供商配置，再添加模型。
+                  {t('dashboard:models.local.providerMissingHint', '还没有配置本地模型提供商。先完成提供商配置，再添加模型。')}
                 </div>
               )}
               {localProviderAccount ? (
@@ -471,7 +485,7 @@ export function Models() {
                   className="h-8 shrink-0 rounded-[10px] border-red-500/25 bg-transparent px-3 text-red-600 hover:bg-red-500/5 hover:text-red-600 dark:border-red-400/20 dark:text-red-300 dark:hover:bg-red-400/10 dark:hover:text-red-300"
                   onClick={() => setConfirmClearProviderOpen(true)}
                 >
-                  清除配置
+                  {t('dashboard:models.local.clearProviderAction', '清除配置')}
                 </Button>
               ) : null}
             </div>
@@ -480,18 +494,18 @@ export function Models() {
               <div className="flex items-center justify-center rounded-[10px] border border-dashed border-border/80 bg-muted/35 py-12 text-muted-foreground">
                 <PageLoader
                   compact
-                  title="正在加载本地模型"
-                  description="正在同步当前配置，请稍候。"
+                  title={t('models.local.loadingTitle', '正在加载本地模型')}
+                  description={t('models.local.loadingDescription', '正在同步当前配置，请稍候。')}
                   className="w-full py-0"
                 />
               </div>
             ) : localModelAccounts.length === 0 && !localProviderAccount ? (
               <div className="rounded-[10px] border border-dashed border-border/80 bg-muted/35 px-5 py-8 text-sm text-muted-foreground">
-                配置本地模型提供商后，这里会显示该提供商下的模型。
+                {t('dashboard:models.local.emptyWithoutProvider', '配置本地模型提供商后，这里会显示该提供商下的模型。')}
               </div>
             ) : localModelAccounts.length === 0 ? (
               <div className="rounded-[10px] border border-dashed border-border/80 bg-muted/35 px-5 py-8 text-sm text-muted-foreground">
-                还没有添加本地模型。配置完成后，直接添加一个模型即可开始使用。
+                {t('dashboard:models.local.emptyWithoutModels', '还没有添加本地模型。配置完成后，直接添加一个模型即可开始使用。')}
               </div>
             ) : (
               <div className="grid gap-4 xl:grid-cols-2">
@@ -514,11 +528,11 @@ export function Models() {
                                 {isDefault ? (
                                   <span className="inline-flex items-center gap-1 rounded-full bg-green-500/12 px-2 py-0.5 text-[11px] font-medium text-green-700 dark:bg-green-400/10 dark:text-green-200">
                                     <Star className="h-3 w-3" />
-                                    默认
+                                    {t('dashboard:models.local.defaultBadge', '默认')}
                                   </span>
                                 ) : null}
                               </div>
-                              <p className="mt-1 text-[13px] text-muted-foreground">{account.model || '未填写模型 ID'}</p>
+                              <p className="mt-1 text-[13px] text-muted-foreground">{account.model || t('dashboard:models.local.missingModelId', '未填写模型 ID')}</p>
                             </div>
                           </div>
                         </div>
@@ -530,7 +544,7 @@ export function Models() {
                               className="h-8 rounded-[10px] border-black/10 bg-transparent px-3 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
                               onClick={() => void handleSetDefaultLocalModel(account.id)}
                             >
-                              设为默认
+                              {t('dashboard:models.local.setDefaultAction', '设为默认')}
                             </Button>
                           ) : null}
                           <Button
@@ -538,7 +552,7 @@ export function Models() {
                             size="icon"
                             className="h-8 w-8 rounded-[10px] text-muted-foreground hover:bg-black/5 hover:text-red-500 dark:hover:bg-white/5"
                             onClick={() => setConfirmDeleteModelId(account.id)}
-                            aria-label="删除本地模型"
+                            aria-label={t('models.local.deleteAriaLabel', '删除本地模型')}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -555,10 +569,10 @@ export function Models() {
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-                  模型提供商
+                  {t('dashboard:models.local.remoteProvidersTitle', '模型提供商')}
                 </h2>
                 <p className="mt-1 text-[13px] text-muted-foreground">
-                  手动管理云端模型来源，以及额外添加的自定义兼容端点。
+                  {t('dashboard:models.local.remoteProvidersDescription', '手动管理云端模型来源，以及额外添加的自定义兼容端点。')}
                 </p>
               </div>
               <div className="shrink-0">
@@ -567,7 +581,7 @@ export function Models() {
             </div>
             {otherModelAccounts.length === 0 ? (
               <div className="rounded-[10px] border border-dashed border-border/80 bg-muted/35 px-5 py-8 text-sm text-muted-foreground">
-                目前没有额外的模型提供商。需要时可以添加 OpenAI、OpenRouter 或自定义兼容端点。
+                {t('dashboard:models.local.remoteProvidersEmpty', '目前没有额外的模型提供商。需要时可以添加 OpenAI、OpenRouter 或自定义兼容端点。')}
               </div>
             ) : (
               <ProvidersSettings embedded hideHeader autoOpenOnEmpty />
@@ -737,7 +751,9 @@ export function Models() {
             const shouldOpenModelDialog = !localProviderAccount || localModelAccounts.length === 0;
             await handleSaveLocalProvider(payload);
             setShowLocalProviderDialog(false);
-            toast.success(localProviderAccount ? '本地模型提供商已更新' : '本地模型提供商已配置');
+            toast.success(localProviderAccount
+              ? t('models.local.toasts.providerUpdated', '本地模型提供商已更新')
+              : t('models.local.toasts.providerConfigured', '本地模型提供商已配置'));
             if (shouldOpenModelDialog) {
               setShowAddLocalModelDialog(true);
             }
@@ -753,17 +769,17 @@ export function Models() {
           onAdd={async (payload) => {
             await handleAddLocalModel(payload);
             setShowAddLocalModelDialog(false);
-            toast.success('本地模型已添加');
+            toast.success(t('models.local.toasts.modelAdded', '本地模型已添加'));
           }}
         />
       ) : null}
       <ConfirmDialog
         open={Boolean(confirmDeleteModelId)}
-        title="删除本地模型"
-        message="删除后会立即同步网关运行时模型列表。当前使用该模型的会话会在下一次模型刷新后切换到可用模型。"
-        confirmLabel="删除并同步"
-        confirmPendingLabel="正在删除..."
-        cancelLabel="取消"
+        title={t('models.local.deleteDialog.title', '删除本地模型')}
+        message={t('models.local.deleteDialog.message', '删除后会立即同步网关运行时模型列表。当前使用该模型的会话会在下一次模型刷新后切换到可用模型。')}
+        confirmLabel={t('models.local.deleteDialog.confirm', '删除并同步')}
+        confirmPendingLabel={t('models.local.deleteDialog.confirmPending', '正在删除...')}
+        cancelLabel={t('common:actions.cancel', '取消')}
         variant="destructive"
         confirmPending={confirmPending}
         onCancel={() => {
@@ -777,11 +793,11 @@ export function Models() {
       />
       <ConfirmDialog
         open={confirmClearProviderOpen}
-        title="清除本地模型提供商"
-        message="清除后会同时移除关联的本地模型，并同步网关运行时配置。当前使用这些模型的会话在下一次刷新后将不再可用。"
-        confirmLabel="清除并同步"
-        confirmPendingLabel="正在清除..."
-        cancelLabel="取消"
+        title={t('models.local.clearProviderDialog.title', '清除本地模型提供商')}
+        message={t('models.local.clearProviderDialog.message', '清除后会同时移除关联的本地模型，并同步网关运行时配置。当前使用这些模型的会话在下一次刷新后将不再可用。')}
+        confirmLabel={t('models.local.clearProviderDialog.confirm', '清除并同步')}
+        confirmPendingLabel={t('models.local.clearProviderDialog.confirmPending', '正在清除...')}
+        cancelLabel={t('common:actions.cancel', '取消')}
         variant="destructive"
         confirmPending={confirmPending}
         onCancel={() => {
@@ -991,6 +1007,7 @@ function LocalProviderConfigDialog({
   onClose: () => void;
   onSave: (payload: { accountId?: string; apiKey?: string; baseUrl: string; apiProtocol: ProviderAccount['apiProtocol'] }) => Promise<void>;
 }) {
+  const { t } = useTranslation(['dashboard', 'common']);
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState(account?.baseUrl || '');
   const [apiProtocol, setApiProtocol] = useState<ProviderAccount['apiProtocol']>(account?.apiProtocol || 'openai-completions');
@@ -1000,11 +1017,11 @@ function LocalProviderConfigDialog({
 
   const handleSubmit = async () => {
     if (!baseUrl.trim()) {
-      toast.error('请填写 Base URL');
+      toast.error(t('models.local.providerDialog.baseUrlRequired', '请填写 Base URL'));
       return;
     }
     if (!isEditing && !apiKey.trim()) {
-      toast.error('请填写 API Key');
+      toast.error(t('models.local.providerDialog.apiKeyRequired', '请填写 API Key'));
       return;
     }
     try {
@@ -1016,7 +1033,10 @@ function LocalProviderConfigDialog({
         apiProtocol,
       });
     } catch (error) {
-      toast.error(`保存失败: ${String(error)}`);
+      toast.error(t('models.local.providerDialog.saveFailed', {
+        error: String(error),
+        defaultValue: `保存失败: ${String(error)}`,
+      }));
     } finally {
       setSaving(false);
     }
@@ -1027,9 +1047,11 @@ function LocalProviderConfigDialog({
       <div className="w-full max-w-2xl rounded-2xl border border-black/10 bg-background shadow-xl dark:border-white/10">
         <div className="flex items-start justify-between gap-3 border-b border-black/10 px-5 py-4 dark:border-white/10">
           <div>
-            <p className="text-2xl font-semibold tracking-tight text-foreground">配置本地模型提供商</p>
+            <p className="text-2xl font-semibold tracking-tight text-foreground">
+              {t('models.local.providerDialog.title', '配置本地模型提供商')}
+            </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              填写 API Key、Base URL 和接口协议。配置成功后，就可以在这个提供商下添加模型。
+              {t('models.local.providerDialog.description', '填写 API Key、Base URL 和接口协议。配置成功后，就可以在这个提供商下添加模型。')}
             </p>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} className="h-9 w-9 rounded-xl">
@@ -1046,13 +1068,17 @@ function LocalProviderConfigDialog({
                 className="h-12 rounded-xl pr-12 font-mono"
                 value={apiKey}
                 onChange={(event) => setApiKey(event.target.value)}
-                placeholder={isEditing ? '留空表示保留当前 API Key' : 'sk-...'}
+                placeholder={isEditing
+                  ? t('dashboard:models.local.providerDialog.apiKeyPlaceholderEditing', '留空表示保留当前 API Key')
+                  : t('dashboard:models.local.providerDialog.apiKeyPlaceholder', 'sk-...')}
               />
               <button
                 type="button"
                 className="absolute inset-y-0 right-3 inline-flex items-center text-muted-foreground"
                 onClick={() => setShowApiKey((value) => !value)}
-                aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}
+                aria-label={showApiKey
+                  ? t('common:actions.hide', '隐藏')
+                  : t('common:actions.show', '显示')}
               >
                 {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
               </button>
@@ -1069,7 +1095,7 @@ function LocalProviderConfigDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label>接口协议</Label>
+            <Label>{t('dashboard:models.local.providerDialog.protocolLabel', '接口协议')}</Label>
             <div className="grid grid-cols-2 gap-3">
               <Button
                 type="button"
@@ -1077,7 +1103,7 @@ function LocalProviderConfigDialog({
                 className="h-11 rounded-xl"
                 onClick={() => setApiProtocol('openai-completions')}
               >
-                OpenAI 兼容
+                {t('dashboard:models.local.providerDialog.openaiProtocol', 'OpenAI 兼容')}
               </Button>
               <Button
                 type="button"
@@ -1085,17 +1111,19 @@ function LocalProviderConfigDialog({
                 className="h-11 rounded-xl"
                 onClick={() => setApiProtocol('anthropic-messages')}
               >
-                Anthropic 兼容
+                {t('dashboard:models.local.providerDialog.anthropicProtocol', 'Anthropic 兼容')}
               </Button>
             </div>
           </div>
         </div>
         <div className="flex items-center justify-end gap-3 border-t border-black/10 px-5 py-4 dark:border-white/10">
           <Button variant="outline" onClick={onClose} className="h-10 rounded-xl px-5">
-            取消
+            {t('common:actions.cancel', '取消')}
           </Button>
           <Button onClick={() => void handleSubmit()} disabled={saving} className="h-10 rounded-xl px-5">
-            {saving ? '保存中' : '保存配置'}
+            {saving
+              ? t('common:status.saving', '保存中')
+              : t('dashboard:models.local.providerDialog.saveAction', '保存配置')}
           </Button>
         </div>
       </div>
@@ -1116,7 +1144,7 @@ function AddLocalModelDialog({
   onClose: () => void;
   onAdd: (payload: { modelId: string; label: string }) => Promise<void>;
 }) {
-  const { t } = useTranslation('settings');
+  const { t } = useTranslation(['settings', 'dashboard', 'common']);
   const [loadingModels, setLoadingModels] = useState(true);
   const [modelOptions, setModelOptions] = useState<ProviderModelOption[]>([]);
   const [resolveError, setResolveError] = useState<string | null>(null);
@@ -1202,11 +1230,11 @@ function AddLocalModelDialog({
 
   const handleSubmit = async () => {
     if (!effectiveModelId) {
-      toast.error('请填写模型 ID');
+      toast.error(t('dashboard:models.local.modelDialog.modelIdRequired', '请填写模型 ID'));
       return;
     }
     if (!effectiveLabel) {
-      toast.error('请填写模型名称');
+      toast.error(t('dashboard:models.local.modelDialog.modelNameRequired', '请填写模型名称'));
       return;
     }
     try {
@@ -1216,7 +1244,10 @@ function AddLocalModelDialog({
         modelId: effectiveModelId,
       });
     } catch (error) {
-      toast.error(`添加失败: ${String(error)}`);
+      toast.error(t('dashboard:models.local.modelDialog.addFailed', {
+        error: String(error),
+        defaultValue: `添加失败: ${String(error)}`,
+      }));
     } finally {
       setSaving(false);
     }
@@ -1227,9 +1258,11 @@ function AddLocalModelDialog({
       <div className="w-full max-w-2xl rounded-2xl border border-black/10 bg-background shadow-xl dark:border-white/10">
         <div className="flex items-start justify-between gap-3 border-b border-black/10 px-5 py-4 dark:border-white/10">
           <div>
-            <p className="text-2xl font-semibold tracking-tight text-foreground">添加本地模型</p>
+            <p className="text-2xl font-semibold tracking-tight text-foreground">
+              {t('dashboard:models.local.modelDialog.title', '添加本地模型')}
+            </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              优先从已配置的本地模型提供商拉取模型列表；如果服务不支持列出模型，再手动填写模型 ID。
+              {t('dashboard:models.local.modelDialog.description', '优先从已配置的本地模型提供商拉取模型列表；如果服务不支持列出模型，再手动填写模型 ID。')}
             </p>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} className="h-9 w-9 rounded-xl">
@@ -1239,12 +1272,12 @@ function AddLocalModelDialog({
         <div className="space-y-5 px-5 py-5">
           {loadingModels ? (
             <div className="rounded-[10px] border border-dashed border-border/80 bg-muted/35 px-5 py-8 text-sm text-muted-foreground">
-              正在获取模型列表
+              {t('dashboard:models.local.modelDialog.loadingModels', '正在获取模型列表')}
             </div>
           ) : usingResolvedModels ? (
             <>
               <div className="space-y-2">
-                <Label htmlFor="local-model-select">可用模型</Label>
+                <Label htmlFor="local-model-select">{t('dashboard:models.local.modelDialog.availableModels', '可用模型')}</Label>
                 <div className="rounded-2xl border border-black/10 bg-muted/35 p-3 dark:border-white/10 dark:bg-white/[0.03] space-y-3">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1283,23 +1316,23 @@ function AddLocalModelDialog({
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="local-model-label">显示名称（可选）</Label>
+                <Label htmlFor="local-model-label">{t('dashboard:models.local.modelDialog.displayNameOptional', '显示名称（可选）')}</Label>
                 <Input
                   id="local-model-label"
                   className="h-12 rounded-xl"
                   value={label}
                   onChange={(event) => setLabel(event.target.value)}
-                  placeholder={selectedModelOption?.name || selectedModelOption?.id || '默认跟随所选模型名称'}
+                  placeholder={selectedModelOption?.name || selectedModelOption?.id || t('dashboard:models.local.modelDialog.displayNamePlaceholderResolved', '默认跟随所选模型名称')}
                 />
                 <p className="text-sm text-muted-foreground">
-                  留空时会直接使用所选模型名称。
+                  {t('dashboard:models.local.modelDialog.displayNameHelpResolved', '留空时会直接使用所选模型名称。')}
                 </p>
               </div>
             </>
           ) : (
             <>
               <div className="space-y-2">
-                <Label htmlFor="local-model-manual-id">模型 ID</Label>
+                <Label htmlFor="local-model-manual-id">{t('dashboard:models.local.modelDialog.modelIdLabel', '模型 ID')}</Label>
                 <Input
                   id="local-model-manual-id"
                   className="h-12 rounded-xl font-mono"
@@ -1310,20 +1343,25 @@ function AddLocalModelDialog({
                   placeholder="your-provider/model-id"
                 />
                 <p className="text-sm text-muted-foreground">
-                  {resolveError ? `未能读取模型列表：${resolveError}` : '当前服务未返回模型列表，请手动填写模型 ID。'}
+                  {resolveError
+                    ? t('dashboard:models.local.modelDialog.loadModelsFailed', {
+                      error: resolveError,
+                      defaultValue: `未能读取模型列表：${resolveError}`,
+                    })
+                    : t('dashboard:models.local.modelDialog.manualModelHelp', '当前服务未返回模型列表，请手动填写模型 ID。')}
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="local-model-label">显示名称（可选）</Label>
+                <Label htmlFor="local-model-label">{t('dashboard:models.local.modelDialog.displayNameOptional', '显示名称（可选）')}</Label>
                 <Input
                   id="local-model-label"
                   className="h-12 rounded-xl"
                   value={label}
                   onChange={(event) => setLabel(event.target.value)}
-                  placeholder={manualModelId.trim() || '默认跟随模型 ID'}
+                  placeholder={manualModelId.trim() || t('dashboard:models.local.modelDialog.displayNamePlaceholderManual', '默认跟随模型 ID')}
                 />
                 <p className="text-sm text-muted-foreground">
-                  留空时会直接使用模型 ID 作为显示名称。
+                  {t('dashboard:models.local.modelDialog.displayNameHelpManual', '留空时会直接使用模型 ID 作为显示名称。')}
                 </p>
               </div>
             </>
@@ -1331,10 +1369,12 @@ function AddLocalModelDialog({
         </div>
         <div className="flex items-center justify-end gap-3 border-t border-black/10 px-5 py-4 dark:border-white/10">
           <Button variant="outline" onClick={onClose} className="h-10 rounded-xl px-5">
-            取消
+            {t('common:actions.cancel', '取消')}
           </Button>
           <Button onClick={() => void handleSubmit()} disabled={saving || !effectiveModelId} className="h-10 rounded-xl px-5">
-            {saving ? '添加中' : '添加模型'}
+            {saving
+              ? t('dashboard:models.local.modelDialog.addingAction', '添加中')
+              : t('dashboard:models.local.modelDialog.addAction', '添加模型')}
           </Button>
         </div>
       </div>

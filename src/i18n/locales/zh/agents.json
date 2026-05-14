@@ -2,6 +2,8 @@
   "title": "分身",
   "subtitle": "管理 OpenClaw 分身以及它们的连接归属",
   "stats": {
+    "title": "概览",
+    "description": "快速查看分身数量、默认分身和当前已接管的连接情况。",
     "total": "分身总数",
     "defaults": "默认分身",
     "custom": "自定义分身",
@@ -19,6 +21,7 @@
   "addAgent": "添加分身",
   "gatewayWarning": "网关未连接。分身和连接归属会在恢复连接后继续同步。",
   "defaultBadge": "默认",
+  "defaultAccount": "默认账户",
   "inherited": "默认",
   "none": "无",
   "fieldLabels": {
@@ -60,6 +63,7 @@
     "modelHelpCustom": "保存后，新建对话会使用这个分身模型；当前会话仍以会话级设置为准。",
     "channelsTitle": "连接",
     "channelsDescription": "先在连接页配置账户，再在这里把具体账户绑定到当前分身。多账户连接会分别归属到不同分身。",
+    "openChannels": "去配置连接",
     "addChannel": "绑定连接账户",
     "noChannels": "这个分身还没有分配任何连接。",
     "assignedStatus": "已分配",
@@ -96,7 +100,8 @@
     "binding": "绑定中",
     "boundHere": "已绑定",
     "bindAction": "绑定到当前分身",
-    "defaultFallbackHere": "默认接管中"
+    "defaultFallbackHere": "默认接管中",
+    "reassignAction": "转移到当前分身"
   },
   "loadingTitle": "正在加载分身",
   "loadingDescription": "正在同步分身配置和绑定关系，请稍候。"
