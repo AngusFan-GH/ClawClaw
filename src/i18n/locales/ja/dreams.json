@@ -1,11 +1,11 @@
 {
-  "title": "Dreams",
+  "title": "夢境",
   "subtitle": "夢の状態、最近の記憶シグナル、夢日記を確認し、必要なメンテナンスを行います。",
-  "openFullUi": "完全版 Dreams を開く",
+  "openFullUi": "完全版夢境を開く",
   "gatewayNotReady": "OpenClaw Gateway は起動中または未接続です。接続後に Dreams データを読み込みます。",
   "status": {
-    "enabledSummary": "Dreams は有効です。Gateway が短期記憶を定期的に整理し、夢日記を更新します。",
-    "disabledSummary": "Dreams は無効です。現在は新しい夢整理を実行しません。",
+    "enabledSummary": "夢境は有効です。Gateway が短期記憶を定期的に整理し、夢日記を更新します。",
+    "disabledSummary": "夢境は無効です。現在は新しい夢整理を実行しません。",
     "pendingSummary": "Gateway が最新状態に同期するのを待っています。",
     "runtimeSyncing": "Gateway が最新設定を適用中です。"
   },
@@ -16,23 +16,23 @@
     "promotedToday": "今日の昇格"
   },
   "diary": {
-    "title": "Dream Diary",
+    "title": "夢日記",
     "notFound": "DREAMS.md はまだ作成されていません。",
     "empty": "夢日記のエントリはまだありません。",
     "undated": "日付なし"
   },
   "actions": {
     "title": "メンテナンス",
-    "controlDescription": "このページで Dreams の有効化・無効化を切り替え、日記、キャッシュ、再生済み項目を管理します。",
-    "enable": "Dreams を有効化",
-    "disable": "Dreams を無効化",
+    "controlDescription": "このページで夢境の有効化・無効化を切り替え、日記、キャッシュ、再生済み項目を管理します。",
+    "enable": "夢境を有効化",
+    "disable": "夢境を無効化",
     "backfill": "日記をバックフィル",
     "dedupe": "重複した日記を整理",
     "repair": "夢キャッシュを修復",
     "resetGrounded": "再生済み項目を消去",
     "resetDiary": "バックフィル日記を消去",
-    "enableSuccess": "Dreams を有効化しました。Gateway がバックグラウンドで最新設定を同期します。",
-    "disableSuccess": "Dreams を無効化しました。Gateway がバックグラウンドで最新設定を同期します。",
+    "enableSuccess": "夢境を有効化しました。Gateway がバックグラウンドで最新設定を同期します。",
+    "disableSuccess": "夢境を無効化しました。Gateway がバックグラウンドで最新設定を同期します。",
     "backfillSuccess": "{{count}} 件の夢日記をバックフィルしました。",
     "dedupeSuccess": "{{removed}} 件の重複内容を削除し、{{kept}} 件の日記を保持しました。",
     "repairSuccess": "夢キャッシュの修復が完了しました。",
@@ -58,7 +58,7 @@
     }
   },
   "phases": {
-    "title": "Dream Phases",
+    "title": "夢のフェーズ",
     "light": "Light",
     "rem": "REM",
     "deep": "Deep",
@@ -73,7 +73,7 @@
     "noSnippet": "スニペットはありません。"
   },
   "errors": {
-    "openFullUi": "完全版 OpenClaw Dreams UI を開けません。",
-    "memoryInitializing": "Dreams memory はまだ初期化中です。Gateway の起動完了後に再試行してください。"
+    "openFullUi": "完全版 OpenClaw 夢境 UI を開けません。",
+    "memoryInitializing": "夢境メモリはまだ初期化中です。Gateway の起動完了後に再試行してください。"
   }
 }
