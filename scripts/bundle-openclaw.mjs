@@ -43,13 +43,8 @@ const NODE_MODULES = path.join(ROOT, 'node_modules');
 const FORCE_REBUILD = process.argv.includes('--force') || process.env.OPENCLAW_BUNDLE_FORCE === '1';
 const BUNDLED_RUNTIME_RESOLVE_SPECIFIERS = [
   'https-proxy-agent',
-  '@slack/bolt',
-  '@slack/web-api',
   '@google/genai',
-  '@whiskeysockets/baileys',
-  'fake-indexeddb',
   'grammy',
-  'matrix-js-sdk',
   'music-metadata',
   '@aws-sdk/client-bedrock-runtime',
 ];
@@ -116,35 +111,7 @@ function verifyBundledRuntimeResolves(bundleRoot) {
     process.exit(1);
   }
 
-  const pierreDiffsPkgPath = path.join(bundleRoot, 'node_modules', '@pierre', 'diffs', 'package.json');
-  if (!fs.existsSync(pierreDiffsPkgPath)) {
-    echo`❌ Bundled runtime is missing @pierre/diffs/package.json`;
-    process.exit(1);
-  }
-  const pierreDiffsPkg = JSON.parse(fs.readFileSync(pierreDiffsPkgPath, 'utf8'));
-  const pierreDiffImport = pierreDiffsPkg?.exports?.['.']?.import;
-  const pierreDiffSsrImport = pierreDiffsPkg?.exports?.['./ssr']?.import;
-  if (
-    typeof pierreDiffImport !== 'string'
-    || !fs.existsSync(path.join(path.dirname(pierreDiffsPkgPath), pierreDiffImport))
-    || typeof pierreDiffSsrImport !== 'string'
-    || !fs.existsSync(path.join(path.dirname(pierreDiffsPkgPath), pierreDiffSsrImport))
-  ) {
-    echo`❌ Bundled runtime has an incomplete @pierre/diffs ESM export layout`;
-    process.exit(1);
-  }
-
-  const openShellPkgPath = path.join(bundleRoot, 'node_modules', 'openshell', 'package.json');
-  if (!fs.existsSync(openShellPkgPath)) {
-    echo`❌ Bundled runtime is missing openshell/package.json`;
-    process.exit(1);
-  }
-  const openShellPkg = JSON.parse(fs.readFileSync(openShellPkgPath, 'utf8'));
-  const openShellBin = typeof openShellPkg?.bin === 'string' ? openShellPkg.bin : openShellPkg?.bin?.openshell;
-  if (typeof openShellBin !== 'string' || !fs.existsSync(path.join(path.dirname(openShellPkgPath), openShellBin))) {
-    echo`❌ Bundled runtime has an incomplete openshell CLI layout`;
-    process.exit(1);
-  }
+  // @pierre/diffs and openshell were removed in openclaw 2026.5.x — no longer validated.
 }
 
 echo`📦 Bundling openclaw for electron-builder...`;
@@ -764,9 +731,13 @@ async function stageBundledPluginRuntimeDeps(packageRoot) {
     return;
   }
 
-  const { createNestedNpmInstallEnv, discoverBundledPluginRuntimeDeps } = await import(
+  const { createNestedNpmInstallEnv } = await import(
     pathToFileURL(openclawBundledPluginPostinstallScript).href
   );
+
+  // discoverBundledPluginRuntimeDeps was removed from openclaw 2026.5.x (BUNDLED_PLUGIN_INSTALL_TARGETS is now empty).
+  // Inline a minimal stub that returns [] so stageBundledPluginRuntimeDeps short-circuits.
+  const discoverBundledPluginRuntimeDeps = () => [];
   const { resolveNpmRunner } = await import(pathToFileURL(openclawNpmRunnerScript).href);
 
   const extensionsDir = path.join(packageRoot, 'dist', 'extensions');
