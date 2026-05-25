@@ -526,6 +526,10 @@ exports.default = async function afterPack(context) {
   const BUNDLED_PLUGINS = [
     { npmName: '@openclaw-china/dingtalk', pluginId: 'dingtalk' },
     { npmName: '@openclaw-china/wecom', pluginId: 'wecom' },
+    { npmName: '@larksuite/openclaw-lark', pluginId: 'feishu' },
+    { npmName: '@openclaw/qqbot', pluginId: 'qqbot' },
+    { npmName: '@openclaw/discord', pluginId: 'discord' },
+    { npmName: '@openclaw/whatsapp', pluginId: 'whatsapp' },
     { npmName: '@tencent-weixin/openclaw-weixin', pluginId: 'openclaw-weixin' },
   ];
 

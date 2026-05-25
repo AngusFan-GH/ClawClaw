@@ -52,8 +52,9 @@ type OpenClawSessionHelpers = {
   readSessionMessages: (
     sessionId: string,
     storePath: string | undefined,
-    sessionFile?: string,
-  ) => unknown[];
+    sessionFile: string | undefined,
+    opts: { mode?: 'recent' | 'all' } & Record<string, unknown>,
+  ) => Promise<unknown[]> | unknown[];
   readSessionTitleFieldsFromTranscript: (
     sessionId: string,
     storePath: string | undefined,
@@ -124,7 +125,7 @@ function decodeSessionHistoryCursor(cursor: unknown): number | null {
 
 function readStoredSessionEntries(): StoredSessionEntry[] {
   const agentsDir = path.join(resolveOpenClawDir(), 'agents');
-  let agentIds: string[] = [];
+  let agentIds: string[];
   try {
     agentIds = fs.readdirSync(agentsDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
@@ -214,17 +215,6 @@ function readStoredSessionEntries(): StoredSessionEntry[] {
   return sessions;
 }
 
-function getMessageText(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return (content as Array<{ type?: string; text?: string }>)
-      .filter((block) => block.type === 'text' && typeof block.text === 'string' && block.text.trim())
-      .map((block) => block.text!.trim())
-      .join('\n');
-  }
-  return '';
-}
-
 function normalizeSessionTitleCandidate(text: string): string {
   let cleaned = text.trim();
   cleaned = cleaned.replace(INBOUND_META_BLOCK_RE, '').trim();
@@ -238,29 +228,6 @@ function normalizeSessionTitleCandidate(text: string): string {
     return '';
   }
   return cleaned;
-}
-
-function extractSessionTitleFromMessage(message: Record<string, unknown> | null): string {
-  if (!message || message.role !== 'user') return '';
-  return normalizeSessionTitleCandidate(getMessageText(message.content));
-}
-
-function findSessionTitleCandidate(messages: Array<Record<string, unknown>>): string {
-  for (const message of messages) {
-    const title = extractSessionTitleFromMessage(message);
-    if (title) return title;
-  }
-  return '';
-}
-
-function buildLastMessagePreview(messages: Array<Record<string, unknown>>): string | undefined {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    const text = normalizeSessionTitleCandidate(getMessageText(message.content));
-    if (!text) continue;
-    return text.length > 140 ? `${text.slice(0, 140)}…` : text;
-  }
-  return undefined;
 }
 
 function truncateSessionLabel(text: string): string {
@@ -350,6 +317,22 @@ function normalizeHistoryMessage(message: unknown): Record<string, unknown> | nu
   return record;
 }
 
+function findExportByFunctionName<T extends (...args: never[]) => unknown>(
+  mod: Record<string, unknown>,
+  candidates: readonly string[],
+): T {
+  for (const key of Object.keys(mod)) {
+    const value = mod[key];
+    if (typeof value !== 'function') continue;
+    if (candidates.includes((value as { name?: string }).name ?? '')) {
+      return value as T;
+    }
+  }
+  throw new Error(
+    `OpenClaw session utils export not found (tried: ${candidates.join(', ')})`,
+  );
+}
+
 async function loadOpenClawSessionHelpers(): Promise<OpenClawSessionHelpers> {
   if (!sessionHelpersPromise) {
     sessionHelpersPromise = (async () => {
@@ -364,19 +347,37 @@ async function loadOpenClawSessionHelpers(): Promise<OpenClawSessionHelpers> {
       if (!sessionUtilsFile) {
         throw new Error('Unable to locate OpenClaw session utils module');
       }
+      const fsSessionUtilsFile = fs
+        .readdirSync(distDir)
+        .find((name) => name.startsWith('session-utils.fs-') && name.endsWith('.js'));
+      if (!fsSessionUtilsFile) {
+        throw new Error('Unable to locate OpenClaw session utils fs module');
+      }
       const moduleUrl = pathToFileURL(path.join(distDir, sessionUtilsFile)).href;
-      const fsModuleUrl = pathToFileURL(path.join(distDir, fs.readdirSync(distDir).find((name) => name.startsWith('session-utils.fs-') && name.endsWith('.js'))!)).href;
-      const mod = await import(moduleUrl) as {
-        a: OpenClawSessionHelpers['loadSessionEntry'];
-      };
-      const fsMod = await import(fsModuleUrl) as {
-        i: OpenClawSessionHelpers['readSessionMessages'];
-        o: OpenClawSessionHelpers['readSessionTitleFieldsFromTranscript'];
-      };
+      const fsModuleUrl = pathToFileURL(path.join(distDir, fsSessionUtilsFile)).href;
+      const mod = await import(moduleUrl) as Record<string, unknown>;
+      const fsMod = await import(fsModuleUrl) as Record<string, unknown>;
+
+      // The OpenClaw bundle's exports are minified to single-letter keys whose
+      // indices drift between versions, so resolve them by `.name` instead.
+      // `readSessionMessages` is only exported in an async-suffixed form in
+      // recent OpenClaw releases; older releases exposed a synchronous variant
+      // under the same logical role.
+      const loadSessionEntry = findExportByFunctionName<OpenClawSessionHelpers['loadSessionEntry']>(
+        mod,
+        ['loadSessionEntry'],
+      );
+      const readSessionTitleFieldsFromTranscript = findExportByFunctionName<
+        OpenClawSessionHelpers['readSessionTitleFieldsFromTranscript']
+      >(fsMod, ['readSessionTitleFieldsFromTranscript']);
+      const readSessionMessages = findExportByFunctionName<
+        OpenClawSessionHelpers['readSessionMessages']
+      >(fsMod, ['readSessionMessagesAsync', 'readSessionMessages']);
+
       return {
-        readSessionMessages: fsMod.i,
-        readSessionTitleFieldsFromTranscript: fsMod.o,
-        loadSessionEntry: mod.a,
+        readSessionMessages,
+        readSessionTitleFieldsFromTranscript,
+        loadSessionEntry,
       };
     })();
   }
@@ -518,8 +519,8 @@ export async function handleSessionRoutes(
         return true;
       }
 
-      const normalizedMessages = helpers
-        .readSessionMessages(sessionId, storePath, entry?.sessionFile)
+      const rawMessages = await helpers.readSessionMessages(sessionId, storePath, entry?.sessionFile, {});
+      const normalizedMessages = rawMessages
         .map((message) => normalizeHistoryMessage(message))
         .filter((message): message is Record<string, unknown> => Boolean(message));
 

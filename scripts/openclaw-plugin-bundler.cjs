@@ -151,13 +151,25 @@ function repairPluginSdkRootImports(rootDir) {
   return changedFiles;
 }
 
+// Known plugin-sdk subpaths from which it is legitimate to import
+// `resolvePreferredOpenClawTmpDir` in the openclaw@2026.5.12 era. Importing
+// it from the bare `openclaw/plugin-sdk` or from `openclaw/plugin-sdk/compat`
+// is the broken pattern this validator is guarding against.
+const TMPDIR_RESOLVE_OK_SUBPATHS = ['infra-runtime', 'temp-path'];
+
 function hasIncompatiblePluginSdkImports(rootDir) {
   for (const filePath of collectPluginSourceFiles(rootDir)) {
     const source = fs.readFileSync(normWin(filePath), 'utf8');
     if (/openclaw\/plugin-sdk\/compat/.test(source)) {
       return true;
     }
-    if (/resolvePreferredOpenClawTmpDir/.test(source) && /openclaw\/plugin-sdk/.test(source) && !/openclaw\/plugin-sdk\/infra-runtime/.test(source)) {
+    if (
+      /resolvePreferredOpenClawTmpDir/.test(source)
+      && /openclaw\/plugin-sdk/.test(source)
+      && !TMPDIR_RESOLVE_OK_SUBPATHS.some((sub) =>
+        new RegExp(`openclaw\\/plugin-sdk\\/${sub}`).test(source),
+      )
+    ) {
       return true;
     }
     const requireMatch = source.match(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\(\s*["']openclaw\/plugin-sdk(?:\/compat)?["']\s*\)/);

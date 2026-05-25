@@ -2900,13 +2900,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }));
         }
 
-        // Record last activity time from the last message in history
+        // Record last activity time from the last message in history.
+        // Only bump forward — never downgrade. The gateway's session-row
+        // `updatedAt` is persisted slightly after the message's own timestamp,
+        // so a blind overwrite here would demote the session in the sidebar
+        // ordering every time the user clicks it.
         const lastMsg = finalMessages[finalMessages.length - 1];
         if (lastMsg?.timestamp) {
           const lastAt = toMs(lastMsg.timestamp);
-          set((s) => ({
-            sessionLastActivity: { ...s.sessionLastActivity, [requestSessionKey]: lastAt },
-          }));
+          if (lastAt > 0) {
+            set((s) => {
+              const current = s.sessionLastActivity[requestSessionKey] ?? 0;
+              if (lastAt <= current) return {};
+              return {
+                sessionLastActivity: { ...s.sessionLastActivity, [requestSessionKey]: lastAt },
+              };
+            });
+          }
         }
 
         // Async: load missing image previews from disk (updates in background)

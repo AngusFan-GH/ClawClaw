@@ -1,6 +1,6 @@
 {
   "name": "clawclaw",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "pnpm": {
     "onlyBuiltDependencies": [
       "@discordjs/opus",
@@ -69,8 +69,12 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@openclaw-china/dingtalk": "2026.3.22",
-    "@openclaw-china/wecom": "2026.3.22",
+    "@larksuite/openclaw-lark": "2026.5.12",
+    "@openclaw-china/dingtalk": "2026.4.24",
+    "@openclaw-china/wecom": "2026.4.24",
+    "@openclaw/discord": "2026.5.12",
+    "@openclaw/qqbot": "2026.5.12",
+    "@openclaw/whatsapp": "2026.5.12",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-label": "^2.1.8",
@@ -83,7 +87,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toast": "^1.2.15",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@tencent-weixin/openclaw-weixin": "^2.1.1",
+    "@tencent-weixin/openclaw-weixin": "^2.4.3",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^25.3.0",
@@ -106,7 +110,7 @@
     "i18next": "^25.8.11",
     "jsdom": "^28.1.0",
     "lucide-react": "^0.563.0",
-    "openclaw": "2026.4.15",
+    "openclaw": "2026.5.12",
     "png2icons": "^2.0.1",
     "postcss": "^8.5.6",
     "react": "^19.2.4",

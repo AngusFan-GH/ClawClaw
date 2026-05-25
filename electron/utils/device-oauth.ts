@@ -25,7 +25,7 @@ import { getProviderDefaultModel } from './provider-registry';
 import { getOpenClawDir, isOpenClawPresent } from './paths';
 import { getProviderService } from '../services/providers/provider-service';
 import { getSecretStore } from '../services/secrets/secret-store';
-import { loginOpenAICodex } from '@mariozechner/pi-ai/oauth';
+import { loginOpenAICodex } from '@earendil-works/pi-ai/oauth';
 import { saveOAuthTokenToOpenClaw, setOpenClawDefaultModelWithOverride } from './openclaw-auth';
 import { proxyAwareFetch } from './proxy-fetch';
 

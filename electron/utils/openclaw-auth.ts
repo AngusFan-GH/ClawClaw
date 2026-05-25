@@ -34,6 +34,10 @@ const AUTH_PROFILE_FILENAME = 'auth-profiles.json';
 const FEISHU_PLUGIN_ID_CANDIDATES = ['feishu', 'openclaw-lark', 'feishu-openclaw-plugin'] as const;
 const QQBOT_STALE_PLUGIN_ENTRY_IDS = ['qqbot', 'openclaw-qqbot'] as const;
 const QQBOT_STALE_PLUGIN_ALLOW_IDS = ['openclaw-qqbot'] as const;
+// Upstream PR #1052 removed @openclaw/codex; we never bundle it because it depends
+// on plugin-sdk APIs that don't exist in openclaw@2026.5.12. Strip any leftover
+// references from configs so OpenClaw doesn't try to load it via npm fallback.
+const CODEX_STALE_PLUGIN_IDS = ['codex', 'openclaw-codex', '@openclaw/codex'] as const;
 
 function getOAuthPluginId(provider: string): string {
   if (provider === 'minimax-portal' || provider === 'minimax-portal-cn') {
@@ -631,6 +635,181 @@ function mergeProviderModels(
   return merged;
 }
 
+/**
+ * OpenClaw 2026.5+ requires a positive `maxTokens` on each model (and can
+ * fall back to provider-level `maxTokens`) when `api` is `anthropic-messages`.
+ * ClawClaw-written entries historically only included `{ id, name }`.
+ *
+ * Generic Anthropic-compatible providers should not be capped at 8k by
+ * default: OpenClaw's native Anthropic transport caps default requests at 32k
+ * (`min(model.maxTokens, 32000)`), while high-output providers such as MiniMax
+ * M2.7 advertise a larger catalog limit.
+ */
+export const ANTHROPIC_MESSAGES_DEFAULT_MAX_TOKENS = 32768;
+export const MINIMAX_M27_MAX_TOKENS = 131072;
+
+function resolvePositiveMaxTokens(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return undefined;
+  }
+  const floored = Math.floor(value);
+  return floored > 0 ? floored : undefined;
+}
+
+function isMiniMaxM27AnthropicEntry(
+  providerKey: string | undefined,
+  entry: Record<string, unknown> | undefined,
+  model: Record<string, unknown> | undefined,
+): boolean {
+  const normalizedProvider = (providerKey || '').toLowerCase();
+  if (normalizedProvider === 'minimax' || normalizedProvider.startsWith('minimax-portal')) {
+    return true;
+  }
+
+  const baseUrl = typeof entry?.baseUrl === 'string' ? entry.baseUrl.toLowerCase() : '';
+  if (baseUrl.includes('api.minimax.io') || baseUrl.includes('api.minimaxi.com')) {
+    return true;
+  }
+
+  const modelId = typeof model?.id === 'string' ? model.id.toLowerCase() : '';
+  return modelId === 'minimax-m2.7' || modelId === 'minimax-m2.7-highspeed';
+}
+
+function resolveAnthropicMessagesDefaultMaxTokens(
+  providerKey?: string,
+  entry?: Record<string, unknown>,
+  model?: Record<string, unknown>,
+): number {
+  if (isMiniMaxM27AnthropicEntry(providerKey, entry, model)) {
+    return MINIMAX_M27_MAX_TOKENS;
+  }
+  return ANTHROPIC_MESSAGES_DEFAULT_MAX_TOKENS;
+}
+
+function ensureAnthropicMessagesModelEntry(
+  model: Record<string, unknown>,
+  providerKey?: string,
+  entry?: Record<string, unknown>,
+): Record<string, unknown> {
+  const resolved = resolvePositiveMaxTokens(model.maxTokens);
+  if (resolved !== undefined) {
+    if (model.maxTokens === resolved) {
+      return model;
+    }
+    return { ...model, maxTokens: resolved };
+  }
+  return { ...model, maxTokens: resolveAnthropicMessagesDefaultMaxTokens(providerKey, entry, model) };
+}
+
+function resolveAnthropicMessagesProviderDefaultMaxTokens(
+  providerKey: string | undefined,
+  entry: Record<string, unknown>,
+): number {
+  if (Array.isArray(entry.models)) {
+    const modelDefaults = entry.models
+      .filter(isPlainRecord)
+      .map((model) => resolveAnthropicMessagesDefaultMaxTokens(providerKey, entry, model));
+    if (modelDefaults.length > 0) {
+      return Math.max(...modelDefaults);
+    }
+  }
+  return resolveAnthropicMessagesDefaultMaxTokens(providerKey, entry);
+}
+
+/**
+ * Ensure `models.providers.*` entries using `anthropic-messages` include the
+ * token limits OpenClaw's transport layer requires. Returns whether `entry`
+ * was modified.
+ */
+function ensureAnthropicMessagesProviderDefaults(
+  entry: Record<string, unknown>,
+  providerKey?: string,
+): boolean {
+  if (entry.api !== 'anthropic-messages') {
+    return false;
+  }
+
+  let modified = false;
+
+  if (resolvePositiveMaxTokens(entry.maxTokens) === undefined) {
+    entry.maxTokens = resolveAnthropicMessagesProviderDefaultMaxTokens(providerKey, entry);
+    modified = true;
+  }
+
+  if (Array.isArray(entry.models)) {
+    const nextModels = (entry.models as Array<Record<string, unknown>>).map((model) => {
+      if (!isPlainRecord(model)) {
+        return model;
+      }
+      const next = ensureAnthropicMessagesModelEntry(model, providerKey, entry);
+      if (next !== model) {
+        modified = true;
+      }
+      return next;
+    });
+    entry.models = nextModels;
+  }
+
+  return modified;
+}
+
+function healAnthropicMessagesMaxTokensInConfig(config: Record<string, unknown>): boolean {
+  const models = (config.models || {}) as Record<string, unknown>;
+  const providers = (models.providers || {}) as Record<string, unknown>;
+  let modified = false;
+
+  for (const [providerKey, entry] of Object.entries(providers)) {
+    if (!isPlainRecord(entry)) {
+      continue;
+    }
+    if (ensureAnthropicMessagesProviderDefaults(entry, providerKey)) {
+      providers[providerKey] = entry;
+      modified = true;
+      console.log(
+        `[openclaw-auth] Ensured anthropic-messages maxTokens defaults for models.providers.${providerKey}`,
+      );
+    }
+  }
+
+  if (modified) {
+    models.providers = providers;
+    config.models = models;
+  }
+
+  return modified;
+}
+
+/**
+ * Self-heal helper: walk `models.providers.*` and ensure every
+ * `anthropic-messages` entry (and its model rows) has a positive `maxTokens`.
+ * Returns the list of providerKeys that were updated.
+ */
+export async function ensureAnthropicMessagesModelMaxTokens(): Promise<string[]> {
+  const config = await readOpenClawJson();
+  const models = (config.models || {}) as Record<string, unknown>;
+  const providers = (models.providers || {}) as Record<string, unknown>;
+  const healed: string[] = [];
+  let modified = false;
+
+  for (const [providerKey, entry] of Object.entries(providers)) {
+    if (!isPlainRecord(entry)) {
+      continue;
+    }
+    if (ensureAnthropicMessagesProviderDefaults(entry, providerKey)) {
+      providers[providerKey] = entry;
+      healed.push(providerKey);
+      modified = true;
+    }
+  }
+
+  if (modified) {
+    models.providers = providers;
+    config.models = models;
+    await writeOpenClawJson(config);
+  }
+  return healed;
+}
+
 function upsertOpenClawProviderEntry(
   config: Record<string, unknown>,
   provider: string,
@@ -657,13 +836,22 @@ function upsertOpenClawProviderEntry(
     options.modelIds ?? [],
     options.disableTools,
   );
+  let mergedModels = mergeProviderModels(registryModels, existingModels, runtimeModels);
+  if (options.api === 'anthropic-messages') {
+    mergedModels = mergedModels.map((model) =>
+      ensureAnthropicMessagesModelEntry(model, provider, existingProvider),
+    );
+  }
 
   const nextProvider: Record<string, unknown> = {
     ...existingProvider,
     baseUrl: options.baseUrl,
     api: options.api,
-    models: mergeProviderModels(registryModels, existingModels, runtimeModels),
+    models: mergedModels,
   };
+  if (options.api === 'anthropic-messages') {
+    ensureAnthropicMessagesProviderDefaults(nextProvider, provider);
+  }
   if (options.apiKeyEnv) nextProvider.apiKey = options.apiKeyEnv;
   if (options.headers && Object.keys(options.headers).length > 0) {
     nextProvider.headers = options.headers;
@@ -905,8 +1093,7 @@ export async function getActiveOpenClawProviders(): Promise<Set<string>> {
 
 /**
  * Batch-sync gateway token, browser config, and session idle to openclaw.json
- * in a single serialized config write (replaces separate syncGatewayTokenToConfig
- * + syncBrowserConfigToOpenClaw calls, reducing file I/O on Windows + Defender).
+ * in a single serialized config write (reduces file I/O on Windows + Defender).
  *
  * Also sets browser.ssrfPolicy.dangerouslyAllowPrivateNetwork for enterprise
  * internal network access.
@@ -1042,92 +1229,6 @@ export async function batchSyncConfigFields(token: string): Promise<void> {
       console.log('Synced gateway token, browser config, and session idle to openclaw.json');
     }
   });
-}
-
-/**
- * Write the ClawClaw gateway token into ~/.openclaw/openclaw.json.
- * @deprecated Use batchSyncConfigFields instead (single-lock for token + browser + session).
- */
-export async function syncGatewayTokenToConfig(token: string): Promise<void> {
-  const config = await readOpenClawJson();
-
-  const gateway = (
-    config.gateway && typeof config.gateway === 'object'
-      ? { ...(config.gateway as Record<string, unknown>) }
-      : {}
-  ) as Record<string, unknown>;
-
-  const auth = (
-    gateway.auth && typeof gateway.auth === 'object'
-      ? { ...(gateway.auth as Record<string, unknown>) }
-      : {}
-  ) as Record<string, unknown>;
-
-  // Only write if the token actually changed — otherwise we overwrite gateway.tailscale
-  // (and other externally-added gateway fields) and trigger a spurious restart loop.
-  if (auth.token === token && auth.mode === 'token') {
-    return;
-  }
-  logger.debug('[syncGatewayTokenToConfig] token changed — writing to openclaw.json');
-
-  auth.mode = 'token';
-  auth.token = token;
-  gateway.auth = auth;
-
-  // Packaged ClawClaw loads the renderer from file://, so the gateway must allow
-  // that origin for the chat WebSocket handshake.
-  const controlUi = (
-    gateway.controlUi && typeof gateway.controlUi === 'object'
-      ? { ...(gateway.controlUi as Record<string, unknown>) }
-      : {}
-  ) as Record<string, unknown>;
-  const allowedOrigins = Array.isArray(controlUi.allowedOrigins)
-    ? (controlUi.allowedOrigins as unknown[]).filter(
-        (value): value is string => typeof value === 'string'
-      )
-    : [];
-  if (!allowedOrigins.includes('file://')) {
-    controlUi.allowedOrigins = [...allowedOrigins, 'file://'];
-  }
-  gateway.controlUi = controlUi;
-
-  if (!gateway.mode) gateway.mode = 'local';
-  config.gateway = gateway;
-
-  await writeOpenClawJson(config);
-  console.log('Synced gateway token to openclaw.json');
-}
-
-/**
- * Ensure browser automation is enabled in ~/.openclaw/openclaw.json.
- * @deprecated Use batchSyncConfigFields instead (single-lock for token + browser + session).
- */
-export async function syncBrowserConfigToOpenClaw(): Promise<void> {
-  const config = await readOpenClawJson();
-
-  const browser = (
-    config.browser && typeof config.browser === 'object'
-      ? { ...(config.browser as Record<string, unknown>) }
-      : {}
-  ) as Record<string, unknown>;
-
-  let changed = false;
-
-  if (browser.enabled === undefined) {
-    browser.enabled = true;
-    changed = true;
-  }
-
-  if (browser.defaultProfile === undefined) {
-    browser.defaultProfile = 'openclaw';
-    changed = true;
-  }
-
-  if (!changed) return;
-
-  config.browser = browser;
-  await writeOpenClawJson(config);
-  console.log('Synced browser config to openclaw.json');
 }
 
 export async function syncMemorySettingsToOpenClaw(params: {
@@ -1360,18 +1461,10 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
   const config = await readOpenClawJson();
   let modified = sanitizeKnownInvalidOpenClawKeys(config);
 
-  // ── acp section ────────────────────────────────────────────────
-  // OpenClaw's ACP schema is strict and does not accept "mcpServers".
-  // If this key is present, Gateway startup fails before the app can recover.
   if (modified) {
     console.log('[sanitize] Removed known-invalid strict-schema keys from openclaw.json');
   }
 
-  // ── skills section ──────────────────────────────────────────────
-  // OpenClaw's Zod schema uses .strict() on the skills object, accepting
-  // only: allowBundled, load, install, limits, entries.
-  // The key "enabled" belongs inside skills.entries[key].enabled, NOT at
-  // the skills root level.  Older versions may have placed it there.
   // ── plugins section ──────────────────────────────────────────────
   // Remove absolute paths in plugins that no longer exist or are bundled (preventing hardlink validation errors)
   const plugins = config.plugins;
@@ -1473,6 +1566,24 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
         delete pEntries[pluginId];
         modified = true;
         console.log(`[sanitize] Removed legacy plugins.entries.${pluginId} (qqbot is now built-in)`);
+      }
+    }
+
+    const currentAllow = Array.isArray(pluginsObj.allow) ? (pluginsObj.allow as string[]) : allowArr;
+    const normalizedAllowWithoutCodex = currentAllow.filter(
+      (id) => !CODEX_STALE_PLUGIN_IDS.includes(id as typeof CODEX_STALE_PLUGIN_IDS[number]),
+    );
+    if (normalizedAllowWithoutCodex.length !== currentAllow.length) {
+      pluginsObj.allow = normalizedAllowWithoutCodex;
+      modified = true;
+      console.log('[sanitize] Removed codex plugin allowlist entries (incompatible with openclaw@2026.5.12)');
+    }
+
+    for (const pluginId of CODEX_STALE_PLUGIN_IDS) {
+      if (pEntries[pluginId]) {
+        delete pEntries[pluginId];
+        modified = true;
+        console.log(`[sanitize] Removed plugins.entries.${pluginId} (incompatible with openclaw@2026.5.12)`);
       }
     }
 
@@ -1622,6 +1733,14 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
   // builds no longer accept (for example "ollama"). Remove only the known
   // invalid enum values so Gateway startup is not blocked by schema failure.
   if (sanitizeAgentsDefaultsMemorySearch(config)) {
+    modified = true;
+  }
+
+  // ── models.providers.*.maxTokens (anthropic-messages) ──────────
+  // OpenClaw 2026.5+ requires positive maxTokens on every anthropic-messages
+  // provider/model entry. Heal legacy configs written by ClawClaw before this
+  // contract existed so Gateway startup is not blocked by schema failure.
+  if (healAnthropicMessagesMaxTokensInConfig(config)) {
     modified = true;
   }
 

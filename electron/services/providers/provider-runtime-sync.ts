@@ -7,6 +7,7 @@ import type { ProviderConfig } from '../../utils/secure-storage';
 import { getAllProviders, getApiKey, getDefaultProvider, getProvider } from '../../utils/secure-storage';
 import { getProviderConfig, getProviderDefaultModel } from '../../utils/provider-registry';
 import {
+  ensureAnthropicMessagesModelMaxTokens,
   getActiveOpenClawProviders,
   removeProviderFromOpenClaw,
   saveOAuthTokenToOpenClaw,
@@ -751,6 +752,21 @@ export async function syncDefaultProviderToRuntime(
   if (!provider) {
     return;
   }
+
+  // OpenClaw 2026.5+ requires positive maxTokens on anthropic-messages
+  // provider entries. Self-heal legacy configs before any write below pins
+  // an entry without it.
+  try {
+    const healed = await ensureAnthropicMessagesModelMaxTokens();
+    if (healed.length > 0) {
+      logger.warn(
+        `[provider-runtime] Ensured anthropic-messages maxTokens for models.providers entries before switch: ${healed.join(', ')}`,
+      );
+    }
+  } catch (err) {
+    logger.warn('[provider-runtime] Failed to ensure anthropic-messages maxTokens before switch:', err);
+  }
+
   const ock = await resolveRuntimeProviderKey(provider);
   const providerKey = await getApiKey(providerId);
   const fallbackModels = await getProviderFallbackModelRefs(provider);

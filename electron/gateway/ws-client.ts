@@ -23,6 +23,7 @@ const OPERATOR_SCOPE_BUNDLE = [
   'operator.pairing',
 ] as const;
 const GATEWAY_CLIENT_CAPS = ['tool-events'] as const;
+const GATEWAY_PROTOCOL_VERSION = 4;
 const CONNECT_ERROR_CODES = {
   AUTH_TOKEN_MISMATCH: 'AUTH_TOKEN_MISMATCH',
   AUTH_DEVICE_TOKEN_MISMATCH: 'AUTH_DEVICE_TOKEN_MISMATCH',
@@ -336,8 +337,8 @@ export function buildGatewayConnectFrame(options: {
       id: connectId,
       method: 'connect',
       params: {
-        minProtocol: 3,
-        maxProtocol: 3,
+        minProtocol: GATEWAY_PROTOCOL_VERSION,
+        maxProtocol: GATEWAY_PROTOCOL_VERSION,
         client: {
           id: clientId,
           displayName: 'ClawClaw',

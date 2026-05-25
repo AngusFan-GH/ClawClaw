@@ -7,6 +7,10 @@
  * Current plugins:
  *   - @openclaw-china/dingtalk -> build/openclaw-plugins/dingtalk
  *   - @openclaw-china/wecom -> build/openclaw-plugins/wecom
+ *   - @larksuite/openclaw-lark -> build/openclaw-plugins/feishu
+ *   - @openclaw/qqbot -> build/openclaw-plugins/qqbot
+ *   - @openclaw/discord -> build/openclaw-plugins/discord
+ *   - @openclaw/whatsapp -> build/openclaw-plugins/whatsapp
  *   - @tencent-weixin/openclaw-weixin -> build/openclaw-plugins/openclaw-weixin
  *
  * The output plugin directory contains:
@@ -27,20 +31,13 @@ const ROOT = path.resolve(__dirname, '..');
 const OUTPUT_ROOT = path.join(ROOT, 'build', 'openclaw-plugins');
 const NODE_MODULES = path.join(ROOT, 'node_modules');
 
-// On Windows, pnpm virtual store paths can exceed MAX_PATH (260 chars).
-// Adding \\?\ prefix bypasses the limit for Win32 fs calls.
-// Node.js 18.17+ also handles this transparently when LongPathsEnabled=1,
-// but this is an extra safety net for build machines where the registry key
-// may not be set yet.
-function normWin(p) {
-  if (process.platform !== 'win32') return p;
-  if (p.startsWith('\\\\?\\')) return p;
-  return '\\\\?\\' + p.replace(/\//g, '\\');
-}
-
 const PLUGINS = [
   { npmName: '@openclaw-china/dingtalk', pluginId: 'dingtalk' },
   { npmName: '@openclaw-china/wecom', pluginId: 'wecom' },
+  { npmName: '@larksuite/openclaw-lark', pluginId: 'feishu' },
+  { npmName: '@openclaw/qqbot', pluginId: 'qqbot' },
+  { npmName: '@openclaw/discord', pluginId: 'discord' },
+  { npmName: '@openclaw/whatsapp', pluginId: 'whatsapp' },
   { npmName: '@tencent-weixin/openclaw-weixin', pluginId: 'openclaw-weixin' },
 ];
 

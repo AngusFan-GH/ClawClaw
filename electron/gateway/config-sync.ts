@@ -44,6 +44,9 @@ const CHANNEL_PLUGIN_INSTALL_MAP: Partial<Record<string, { pluginId: string; dis
   dingtalk: { pluginId: 'dingtalk', displayName: 'DingTalk' },
   wecom: { pluginId: 'wecom', displayName: 'WeCom' },
   wechat: { pluginId: 'openclaw-weixin', displayName: 'WeChat' },
+  qqbot: { pluginId: 'qqbot', displayName: 'QQ Bot' },
+  discord: { pluginId: 'discord', displayName: 'Discord' },
+  whatsapp: { pluginId: 'whatsapp', displayName: 'WhatsApp' },
 };
 
 const MANAGED_CHANNEL_PLUGIN_MIRRORS = [
@@ -51,6 +54,9 @@ const MANAGED_CHANNEL_PLUGIN_MIRRORS = [
   { pluginId: 'dingtalk', displayName: 'DingTalk' },
   { pluginId: 'openclaw-weixin', displayName: 'WeChat' },
   { pluginId: 'wecom', displayName: 'WeCom' },
+  { pluginId: 'qqbot', displayName: 'QQ Bot' },
+  { pluginId: 'discord', displayName: 'Discord' },
+  { pluginId: 'whatsapp', displayName: 'WhatsApp' },
 ] as const;
 
 const CHANNEL_PROXY_BYPASS_RULES: Partial<Record<string, string[]>> = {
@@ -293,6 +299,46 @@ function quarantineInvalidUserExtensionManifests(): { quarantinedPluginIds: stri
   return { quarantinedPluginIds: uniqueIds, quarantinedDirs };
 }
 
+/**
+ * Remove channel plugins that `openclaw doctor --fix` may have auto-installed
+ * into ~/.openclaw/npm/node_modules/@openclaw/<name>.
+ *
+ * OpenClaw's npm-mode plugin resolver fetches plugins from npm "latest", which
+ * can be newer than the openclaw main package we ship (e.g. plugin 2026.5.20
+ * against runtime 2026.5.12). When the plugin-sdk API surface drifts between
+ * minor versions, those plugins fail to register at gateway startup.
+ *
+ * We bundle our own version-pinned mirror of each channel plugin into
+ * `~/.openclaw/extensions/<id>/` via `ensureBundledPluginInstalled`, so the
+ * npm-mode copies are always redundant and frequently harmful.
+ */
+export function cleanupCorruptedNpmPlugins(): { cleaned: boolean; removedPlugins: string[] } {
+  const npmRoot = path.join(resolveOpenClawDir(), 'npm', 'node_modules', '@openclaw');
+  const removedPlugins: string[] = [];
+
+  if (!existsSync(npmRoot)) {
+    return { cleaned: false, removedPlugins };
+  }
+
+  // Anything OpenClaw might have auto-installed that we already ship a bundled
+  // mirror for, plus plugins that have been removed from ClawClaw entirely
+  // (codex was dropped because of repeated SDK-incompat breakage).
+  const PURGE_NAMES = ['codex', 'feishu', 'qqbot', 'discord', 'whatsapp'];
+
+  for (const name of PURGE_NAMES) {
+    const pluginPath = path.join(npmRoot, name);
+    if (!existsSync(pluginPath)) continue;
+    try {
+      rmSync(pluginPath, { recursive: true, force: true });
+      removedPlugins.push(`@openclaw/${name}`);
+    } catch (err) {
+      logger.warn(`[plugin-preflight] Failed to remove npm-mode plugin ${pluginPath}:`, err);
+    }
+  }
+
+  return { cleaned: removedPlugins.length > 0, removedPlugins };
+}
+
 function cleanupStalePluginInstallStages(): { cleaned: boolean; removedDirs: string[] } {
   const extensionsDir = path.join(resolveOpenClawDir(), 'extensions');
   const removedDirs: string[] = [];
@@ -325,6 +371,14 @@ function cleanupStalePluginInstallStages(): { cleaned: boolean; removedDirs: str
 
 async function repairStartupPluginManifests(): Promise<{ repaired: boolean }> {
   let repaired = false;
+
+  const corruptedNpm = cleanupCorruptedNpmPlugins();
+  if (corruptedNpm.cleaned) {
+    repaired = true;
+    logger.warn(
+      `[plugin-preflight] Removed npm-mode plugins shadowed by bundled mirrors: ${corruptedNpm.removedPlugins.join(', ')}`,
+    );
+  }
 
   const staleInstallStages = cleanupStalePluginInstallStages();
   if (staleInstallStages.cleaned) {

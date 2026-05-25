@@ -5,6 +5,7 @@ import { getDataDir, getOpenClawDir } from './paths';
 import { logger } from './logger';
 import { ensureProviderStoreMigrated } from '../services/providers/provider-migration';
 import {
+  cleanupCorruptedNpmPlugins,
   getLastStartupPreflightRecovery,
   runOpenClawStartupPreflightRepair,
 } from '../gateway/config-sync';
@@ -202,6 +203,23 @@ export async function performUpgradeMaintenanceIfNeeded(): Promise<UpgradeMainte
       logger.warn(
         `OpenClaw doctor --fix completed with ${doctorResult.warnings.length} warning(s) during upgrade maintenance`,
       );
+    }
+
+    // openclaw doctor --fix can auto-install channel plugins into
+    // ~/.openclaw/npm/node_modules/@openclaw/<name> at npm "latest", which may
+    // be newer than our pinned `openclaw` runtime and break with plugin-sdk
+    // import mismatches. We bundle our own version-pinned mirrors into
+    // ~/.openclaw/extensions/, so the npm-mode copies are always redundant —
+    // purge them right after doctor runs.
+    try {
+      const purgeResult = cleanupCorruptedNpmPlugins();
+      if (purgeResult.cleaned) {
+        logger.warn(
+          `Removed npm-mode plugin copies installed by openclaw doctor: ${purgeResult.removedPlugins.join(', ')}`,
+        );
+      }
+    } catch (err) {
+      logger.warn('Failed to clean up npm-mode plugin copies after doctor --fix:', err);
     }
   }
 
