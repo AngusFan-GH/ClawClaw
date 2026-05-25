@@ -420,9 +420,9 @@ async function repairStartupPluginManifests(): Promise<{ repaired: boolean }> {
     );
   }
 
-  for (const pluginId of pluginIds) {
-    const plugin = MANAGED_CHANNEL_PLUGIN_MIRRORS.find((p) => p.pluginId === pluginId);
-    if (!plugin) continue;
+  // Always check all managed plugins so newly-required ones (e.g. feishu added to
+  // channels but never installed) are picked up even when not yet in openclaw.json.
+  for (const plugin of MANAGED_CHANNEL_PLUGIN_MIRRORS) {
     const result = ensureBundledPluginInstalled(plugin.pluginId, plugin.displayName);
     if (result.warning) {
       logger.warn(`[plugin-preflight] ${result.warning}`);
@@ -654,10 +654,9 @@ export function getLastStartupPreflightFailedStepIds(): string[] {
 export function runDeferredManagedPluginSync(configuredChannels: string[] = []): void {
   void (async () => {
     try {
-      const pluginIds = resolveManagedPluginIdsForStartup(configuredChannels);
-      for (const pluginId of pluginIds) {
-        const plugin = MANAGED_CHANNEL_PLUGIN_MIRRORS.find((p) => p.pluginId === pluginId);
-        if (!plugin) continue;
+      // Install all managed plugins so newly-configured channels (e.g. feishu
+      // added to channels but never previously installed) are ready immediately.
+      for (const plugin of MANAGED_CHANNEL_PLUGIN_MIRRORS) {
         const result = ensureBundledPluginInstalled(plugin.pluginId, plugin.displayName);
         if (result.warning) {
           logger.warn(`[deferred-plugin-sync] ${result.warning}`);

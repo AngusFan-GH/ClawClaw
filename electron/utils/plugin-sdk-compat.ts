@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ROOT_PLUGIN_SDK_SPEC = 'openclaw/plugin-sdk';
@@ -208,10 +208,3 @@ export function repairManagedPluginSdkImports(rootDir: string): { repaired: bool
   };
 }
 
-export function isManagedPluginSdkCompatFile(filePath: string): boolean {
-  try {
-    return statSync(filePath).isFile() && !filePath.endsWith('.d.ts');
-  } catch {
-    return false;
-  }
-}

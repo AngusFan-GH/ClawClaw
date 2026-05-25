@@ -60,8 +60,6 @@ import {
 import { emitGatewayLifecycleEvent } from '../api/gateway-lifecycle';
 import { runGatewayRefresh } from '../api/gateway-refresh';
 import { getLastStartupPreflightFailedStepIds } from '../gateway/config-sync';
-import {
-} from '../services/providers/local-model-presets';
 import { getProviderService } from '../services/providers/provider-service';
 
 const isDev = !app.isPackaged;

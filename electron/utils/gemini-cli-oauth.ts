@@ -739,15 +739,3 @@ export async function loginGeminiCliOAuth(
   }
 }
 
-// Best-effort check to help with diagnostics if the user claims gemini is installed but PATH is stale.
-export function detectGeminiCliVersion(): string | null {
-  try {
-    const geminiPath = findInPath('gemini');
-    if (!geminiPath) {
-      return null;
-    }
-    return execFileSync(geminiPath, ['--version'], { encoding: 'utf8' }).trim();
-  } catch {
-    return null;
-  }
-}

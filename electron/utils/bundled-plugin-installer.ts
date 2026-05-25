@@ -63,6 +63,12 @@ function fixupPluginManifest(targetDir: string): void {
       }
       const openclaw = pkg.openclaw as Record<string, unknown> | undefined;
       if (openclaw) {
+        // Patch openclaw.channel.id so the Gateway resolves this plugin to the correct channel.
+        const channel = openclaw.channel as Record<string, unknown> | undefined;
+        if (channel && typeof channel.id === 'string' && channel.id === oldId) {
+          channel.id = newId;
+          modified = true;
+        }
         if (typeof openclaw.install === 'object' && openclaw.install !== null) {
           const install = openclaw.install as Record<string, unknown>;
           if (typeof install.npmSpec === 'string' && install.npmSpec.includes(oldId)) {
@@ -71,6 +77,41 @@ function fixupPluginManifest(targetDir: string): void {
           }
           if (typeof install.localPath === 'string' && install.localPath.includes(oldId)) {
             install.localPath = install.localPath.replace(oldId, newId);
+            modified = true;
+          }
+        }
+      }
+    }
+
+    // The bundle script flattens source dist/ files into the plugin root, but
+    // package.json still references the original ./dist/<file> paths.  Fix them
+    // so the Gateway can resolve the entry points from the flat structure.
+    if (typeof pkg.main === 'string' && pkg.main.startsWith('./dist/')) {
+      pkg.main = '.' + pkg.main.slice('./dist'.length);
+      modified = true;
+    }
+    if (typeof pkg.module === 'string' && pkg.module.startsWith('./dist/')) {
+      pkg.module = '.' + pkg.module.slice('./dist'.length);
+      modified = true;
+    }
+    const exports = pkg.exports;
+    if (typeof exports === 'object' && exports !== null && !Array.isArray(exports)) {
+      const rootExport = (exports as Record<string, unknown>)['.'];
+      if (typeof rootExport === 'object' && rootExport !== null) {
+        const re = rootExport as Record<string, unknown>;
+        for (const key of ['import', 'require', 'default']) {
+          const val = re[key];
+          if (typeof val === 'object' && val !== null) {
+            const ve = val as Record<string, unknown>;
+            for (const sub of ['types', 'default']) {
+              const subval = ve[sub];
+              if (typeof subval === 'string' && subval.startsWith('./dist/')) {
+                ve[sub] = '.' + subval.slice('./dist'.length);
+                modified = true;
+              }
+            }
+          } else if (typeof val === 'string' && val.startsWith('./dist/')) {
+            re[key] = '.' + val.slice('./dist'.length);
             modified = true;
           }
         }
@@ -275,9 +316,12 @@ export function findBundledPluginMirror(pluginId: string): string | null {
         join(process.resourcesPath, 'app.asar.unpacked', 'openclaw-plugins', pluginId),
       ]
     : [
+        // Dev: bundled plugin mirrors live under the project source tree.
+        // Note: __dirname in compiled output = dist-electron/main/ so relative
+        // paths would resolve to a non-existent dist-electron/build/ sibling.
+        // Use app.getAppPath() (== cwd == project root in dev) for reliability.
         join(app.getAppPath(), 'build', 'openclaw-plugins', pluginId),
         join(process.cwd(), 'build', 'openclaw-plugins', pluginId),
-        join(__dirname, '../../build/openclaw-plugins', pluginId),
       ];
 
   return candidateSources.find((dir) => existsSync(join(dir, 'openclaw.plugin.json')))

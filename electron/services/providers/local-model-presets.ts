@@ -129,14 +129,6 @@ export async function cleanupOrphanLocalModelRuntimeAccounts(): Promise<{ remove
   return { removedAccountIds: orphanAccounts.map((account) => account.id) };
 }
 
-export async function ensurePresetLocalModelsApplied(gatewayManager?: GatewayManager): Promise<void> {
-  const presets = await readLocalModelPresets();
-  if (presets.length === 0) {
-    return;
-  }
-
-  await applyPresetLocalModelSelection(presets[0].id, gatewayManager);
-}
 
 export async function applyPresetLocalModelSelection(
   primaryPresetId: string,
