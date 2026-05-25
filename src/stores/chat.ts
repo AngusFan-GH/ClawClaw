@@ -1954,7 +1954,103 @@ function hasNonToolAssistantContent(message: RawMessage | undefined): boolean {
   return false;
 }
 
-// ── Store ────────────────────────────────────────────────────────
+function getMessageStopReason(message: RawMessage | unknown): string | null {
+  if (!message || typeof message !== 'object') return null;
+  const msg = message as Record<string, unknown>;
+  const rawStopReason = msg.stopReason ?? msg.stop_reason;
+  if (typeof rawStopReason !== 'string') return null;
+  const normalized = rawStopReason.trim().toLowerCase();
+  return normalized || null;
+}
+
+function hasPendingToolUse(message: RawMessage | undefined): boolean {
+  if (!message) return false;
+  const reason = getMessageStopReason(message);
+  if (reason === 'tool_use' || reason === 'tooluse') return true;
+
+  const content = message.content;
+  if (Array.isArray(content)) {
+    for (const block of content as ContentBlock[]) {
+      if (block.type === 'tool_use' || block.type === 'toolCall') return true;
+    }
+  }
+
+  const msg = message as unknown as Record<string, unknown>;
+  const toolCalls = msg.tool_calls ?? msg.toolCalls;
+  if (Array.isArray(toolCalls) && toolCalls.length > 0) return true;
+
+  return false;
+}
+
+function isTerminalAssistantErrorMessage(message: RawMessage | unknown): boolean {
+  if (!message || typeof message !== 'object') return false;
+  return /\[assistant turn failed/i.test(getMessageText((message as RawMessage).content));
+}
+
+function isRealUserBoundaryMessage(msg: RawMessage): boolean {
+  if (msg.role !== 'user') return false;
+  if (!Array.isArray(msg.content)) return true;
+  const blocks = msg.content as Array<{ type?: string }>;
+  return blocks.length === 0 || !blocks.every((block) => block.type === 'tool_result' || block.type === 'toolResult');
+}
+
+function postUserSegmentMessages(filteredMessages: RawMessage[]): RawMessage[] {
+  for (let i = filteredMessages.length - 1; i >= 0; i -= 1) {
+    if (isRealUserBoundaryMessage(filteredMessages[i])) {
+      return filteredMessages.slice(i + 1);
+    }
+  }
+  return [];
+}
+
+function hasCachedActiveUserRun(sessionKey: string): boolean {
+  const cached = getCachedSessionRunState(sessionKey);
+  return cached.sending || cached.activeRunId != null || cached.pendingFinal;
+}
+
+function getCachedSessionRunState(_sessionKey: string): { sending: boolean; activeRunId: string | null; pendingFinal: boolean } {
+  const state = useChatStore.getState();
+  return {
+    sending: state.sending,
+    activeRunId: state.activeRunId,
+    pendingFinal: state.pendingFinal,
+  };
+}
+
+function segmentHasOpenToolRun(segmentMessages: RawMessage[]): boolean {
+  if (segmentMessages.length === 0) return false;
+  const hasToolActivity = segmentMessages.some(
+    (message) => message.role === 'assistant' && (hasPendingToolUse(message) || isToolOnlyMessage(message)),
+  );
+  if (!hasToolActivity) return false;
+
+  let lastToolUseOffset = -1;
+  for (let i = segmentMessages.length - 1; i >= 0; i -= 1) {
+    const message = segmentMessages[i];
+    if (message.role === 'assistant' && (hasPendingToolUse(message) || isToolOnlyMessage(message))) {
+      lastToolUseOffset = i;
+      break;
+    }
+  }
+
+  return !segmentMessages.some((message, index) => {
+    if (index <= lastToolUseOffset) return false;
+    if (message.role !== 'assistant') return false;
+    if (hasPendingToolUse(message)) return false;
+    return hasNonToolAssistantContent(message);
+  });
+}
+
+/** True when the post-user segment has real run output (not a thinking-only stub). */
+function hasMeaningfulAssistantProgressAfterLastUser(messages: RawMessage[]): boolean {
+  const segment = postUserSegmentMessages(messages);
+  return segment.some((msg) => {
+    if (msg.role !== 'assistant') return false;
+    if (hasPendingToolUse(msg) || isToolOnlyMessage(msg)) return true;
+    return hasNonToolAssistantContent(msg);
+  });
+}
+
 
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
@@ -2853,6 +2949,49 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const stateBeforeCommit = get();
         const hasExistingAuthoritativeMessages = stateBeforeCommit.messages.length > 0;
 
+        const enrichedMessages = enrichWithCachedImages(rawMessages);
+
+        // History poll is the fallback when Gateway streaming events are missing
+        // (WS disconnect, console-only runs, etc.). Any assistant turn after the
+        // user's message counts as progress so the safety timeout does not emit a
+        // false "No response received" error while tool chains are still running.
+        const isSendingNow = stateBeforeCommit.sending;
+        const latestTerminalAssistantErrorMessage = isTerminalAssistantErrorMessage(enrichedMessages[enrichedMessages.length - 1])
+          ? enrichedMessages[enrichedMessages.length - 1]
+          : null;
+        if (latestTerminalAssistantErrorMessage) {
+          clearHistoryPoll();
+          set({
+            sending: false,
+            activeRunId: null,
+            pendingFinal: false,
+            lastUserMessageAt: null,
+          });
+        }
+
+        if (isSendingNow && hasMeaningfulAssistantProgressAfterLastUser(enrichedMessages)) {
+          _lastChatEventAt = Date.now();
+          if (get().error) {
+            set({ error: null });
+          }
+        }
+
+        if (isSendingNow && !stateBeforeCommit.pendingFinal) {
+          const pendingUserTs = stateBeforeCommit.lastUserMessageAt ? toMs(stateBeforeCommit.lastUserMessageAt) : 0;
+          const hasFinalLikeAssistant = [...enrichedMessages].reverse().find((msg) => {
+            if (msg.role !== 'assistant') return false;
+            if (pendingUserTs && msg.timestamp && toMs(msg.timestamp) < pendingUserTs) return false;
+            if (hasPendingToolUse(msg)) return false;
+            return hasNonToolAssistantContent(msg);
+          });
+          if (hasFinalLikeAssistant) {
+            set({ pendingFinal: true });
+          }
+        }
+
+        // Keep transcript ordering as close to Gateway history as possible.
+        // Only enrich cached file/image previews for display.
+
         if (rawMessages.length === 0 && hasExistingAuthoritativeMessages) {
           set({
             loading: false,
@@ -2861,9 +3000,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
           return;
         }
 
-        // Keep transcript ordering as close to Gateway history as possible.
-        // Only enrich cached file/image previews for display.
-        const enrichedMessages = enrichWithCachedImages(rawMessages);
         const fallbackThinkingLevel = stateBeforeCommit.sessions.find(
           (session) => session.key === requestSessionKey,
         )?.thinkingLevel ?? stateBeforeCommit.thinkingLevel ?? null;
@@ -2892,12 +3028,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // Derive a sidebar title from the first user message when the session
         // entry itself still lacks a usable title. This includes main sessions,
         // which can be visible before Gateway-side derived titles finish loading.
+        // Guard: never overwrite a label the user has explicitly set or that is
+        // already populated (e.g. from a prior loadHistory call).
         const labelText = findSessionTitleCandidate(finalMessages);
         if (labelText) {
           const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
-          set((s) => ({
-            sessionLabels: { ...s.sessionLabels, [requestSessionKey]: truncated },
-          }));
+          set((s) => {
+            if (s.sessionLabels[requestSessionKey]) return {};
+            return { sessionLabels: { ...s.sessionLabels, [requestSessionKey]: truncated } };
+          });
         }
 
         // Record last activity time from the last message in history.
@@ -2966,12 +3105,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ...(shouldResetLiveState ? { streamingText: '', streamingMessage: null, streamingTools: [] as ToolStatus[] } : {}),
         }));
 
-        // If pendingFinal, check whether the AI produced a final text response.
+        // CRITICAL: reject intermediate tool turns so the run stays "open" across
+        // all tool rounds. Without `hasPendingToolUse` the closer matches the first
+        // `[thinking, toolCall]` intermediate turn, clears `sending`/`activeRunId`/
+        // `pendingFinal`, and makes the Thinking… indicator vanish mid-chain.
         if (pendingFinal || get().pendingFinal) {
           const recentAssistant = [...enrichedMessages].reverse().find((msg) => {
             if (msg.role !== 'assistant') return false;
-            if (!hasNonToolAssistantContent(msg)) return false;
-            return isAfterUserMsg(msg);
+            if (!isAfterUserMsg(msg)) return false;
+            if (hasPendingToolUse(msg)) return false;
+            return hasNonToolAssistantContent(msg);
           });
           if (recentAssistant) {
             clearHistoryPoll();
@@ -2984,6 +3127,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
               streamingText: '',
               streamingMessage: null,
               streamingTools: [],
+            }));
+          }
+        }
+
+        // Unstick lifecycle when history already has a conclusive reply but the
+        // Gateway never emitted a terminal phase event (WS drop, console run, etc.).
+        if (isSendingNow && !get().streamingMessage && get().streamingTools.length === 0) {
+          const openSegment = postUserSegmentMessages(enrichedMessages);
+          const hasConclusiveReply = openSegment.some((message) => {
+            if (message.role !== 'assistant') return false;
+            if (hasPendingToolUse(message)) return false;
+            return hasNonToolAssistantContent(message);
+          });
+          if (hasConclusiveReply && !segmentHasOpenToolRun(openSegment)) {
+            clearHistoryPoll();
+            set({
+              sending: false,
+              activeRunId: null,
+              pendingFinal: false,
+              lastUserMessageAt: null,
+            });
+          }
+        }
+
+        // After session switch the renderer may have reset run lifecycle flags even
+        // though the Gateway is still executing a user-initiated turn. Re-arm only
+        // when this session had an active cached run (e.g. user switched away
+        // mid-send). Do not re-arm from stale :main heartbeat/tool history alone.
+        if (!get().sending && !latestTerminalAssistantErrorMessage && hasCachedActiveUserRun(requestSessionKey)) {
+          const openSegment = postUserSegmentMessages(enrichedMessages);
+          if (segmentHasOpenToolRun(openSegment)) {
+            set((s) => ({
+              sending: true,
+              activeRunId: s.activeRunId || `re-arm:${Date.now()}`,
             }));
           }
         }
