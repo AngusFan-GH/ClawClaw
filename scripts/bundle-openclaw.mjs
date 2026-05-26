@@ -20,7 +20,6 @@ import 'zx/globals';
 import semver from 'semver';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import bundleValidator from './openclaw-bundle-validator.cjs';
 
@@ -40,10 +39,8 @@ const BUNDLED_PLUGIN_REGISTRY =
 const NODE_MODULES = path.join(ROOT, 'node_modules');
 const FORCE_REBUILD = process.argv.includes('--force') || process.env.OPENCLAW_BUNDLE_FORCE === '1';
 const BUNDLED_RUNTIME_RESOLVE_SPECIFIERS = [
-  'https-proxy-agent',
   '@google/genai',
   'grammy',
-  'music-metadata',
   '@aws-sdk/client-bedrock-runtime',
 ];
 
@@ -100,16 +97,7 @@ function verifyBundledRuntimeResolves(bundleRoot) {
     process.exit(1);
   }
 
-  const bundleRequire = createRequire(path.join(bundleRoot, 'package.json'));
-  const resolvedProxyAgentEntry = bundleRequire.resolve('https-proxy-agent');
-  const resolvedProxyAgentPkg = path.join(path.dirname(path.dirname(resolvedProxyAgentEntry)), 'package.json');
-  const resolvedProxyAgent = JSON.parse(fs.readFileSync(resolvedProxyAgentPkg, 'utf8'));
-  if (!semver.satisfies(resolvedProxyAgent.version, '^9.0.0', { includePrerelease: true })) {
-    echo`❌ Bundled runtime resolved https-proxy-agent@${resolvedProxyAgent.version}; expected ^9.0.0`;
-    process.exit(1);
-  }
-
-  // @pierre/diffs and openshell were removed in openclaw 2026.5.x — no longer validated.
+  // https-proxy-agent version check removed: openclaw 2026.5.22 no longer depends on it directly.
 }
 
 echo`📦 Bundling openclaw for electron-builder...`;
