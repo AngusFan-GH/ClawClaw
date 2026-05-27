@@ -287,7 +287,16 @@ function isPluginMirrorInstallHealthy(targetDir: string, sourceDir: string, plug
   }
 
   const sourceManifestId = readPluginManifestId(sourceDir);
-  if (sourceManifestId && sourceManifestId !== targetManifestId) {
+  // The source may have a legacy/incorrect ID (e.g. "openclaw-lark") that will
+  // be patched to the canonical ID ("feishu") by fixupPluginManifest during
+  // installation. Only fail if the source ID differs AND is NOT covered by
+  // MANIFEST_ID_FIXES (i.e. not a known ID that will be corrected).
+  if (
+    sourceManifestId &&
+    sourceManifestId !== targetManifestId &&
+    !Object.values(MANIFEST_ID_FIXES).includes(sourceManifestId as never) &&
+    sourceManifestId in MANIFEST_ID_FIXES === false
+  ) {
     return false;
   }
 

@@ -159,7 +159,7 @@ type HostApiFetchRequest = {
   timeoutMs?: number;
 };
 
-const DEFAULT_HOST_API_FETCH_TIMEOUT_MS = 15000;
+const DEFAULT_HOST_API_FETCH_TIMEOUT_MS = 30000;
 const MAX_HOST_API_FETCH_TIMEOUT_MS = 180000;
 
 function registerHostApiProxyHandlers(): void {

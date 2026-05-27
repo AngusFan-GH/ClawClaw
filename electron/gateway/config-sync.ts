@@ -23,6 +23,18 @@ import {
 } from '../utils/openclaw-auth';
 import { buildProxyEnvAsync, mergeProxyBypassRules, resolveProxySettingsAsync } from '../utils/proxy';
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
+import { stripSystemdSupervisorEnv } from './config-sync-env';
+import {
+  cleanupAgentsSymlinkedSkills,
+  cleanupStalePluginRuntimeDeps,
+} from './skills-symlink-cleanup';
+import { cleanupStaleSessionLocks } from './session-lock-cleanup';
+import {
+  buildPrelaunchMaintenanceCacheKey,
+  directoryChildrenSignature,
+  pathSignature,
+  runCachedPrelaunchMaintenanceTask,
+} from './prelaunch-maintenance-cache';
 import { recoverMalformedOpenClawConfig, resetMalformedOpenClawConfig } from '../utils/openclaw-config';
 import { logger } from '../utils/logger';
 import { ensureBundledPluginInstalled } from '../utils/bundled-plugin-installer';
@@ -320,10 +332,12 @@ export function cleanupCorruptedNpmPlugins(): { cleaned: boolean; removedPlugins
     return { cleaned: false, removedPlugins };
   }
 
-  // Anything OpenClaw might have auto-installed that we already ship a bundled
-  // mirror for, plus plugins that have been removed from ClawClaw entirely
-  // (codex was dropped because of repeated SDK-incompat breakage).
-  const PURGE_NAMES = ['codex', 'feishu', 'qqbot', 'discord', 'whatsapp'];
+  // codex: removed from ClawClaw due to repeated SDK-incompat breakage.
+  // feishu / qqbot: now managed via the standard openclaw plugin install
+  // workflow (plugins/installs.json + openclaw plugins install).  Do NOT
+  // purge them here — they are legitimate npm-mode installs that keep the
+  // plugin binary in ~/.openclaw/npm/node_modules/@openclaw/<name>/.
+  const PURGE_NAMES = ['codex'];
 
   for (const name of PURGE_NAMES) {
     const pluginPath = path.join(npmRoot, name);
@@ -371,6 +385,76 @@ function cleanupStalePluginInstallStages(): { cleaned: boolean; removedDirs: str
 
 async function repairStartupPluginManifests(): Promise<{ repaired: boolean }> {
   let repaired = false;
+
+  // Remove stray skill symlinks that escape the managed skills root.
+  // Required by openclaw 2026.5.22's hardened workspace skill path containment
+  // (openclaw/openclaw#59219).  Cache keyed by skills dirs signature.
+  {
+    const cacheKey = () =>
+      buildPrelaunchMaintenanceCacheKey({
+        skills: directoryChildrenSignature(getOpenClawSkillsDir()),
+        workspaceSkills: directoryChildrenSignature(
+          path.join(getOpenClawConfigDir(), 'workspace', 'skills'),
+        ),
+      });
+    const result = runCachedPrelaunchMaintenanceTask(
+      'skills-symlink-cleanup',
+      cacheKey,
+      () => {
+        const r = cleanupAgentsSymlinkedSkills();
+        if (r.removed.length > 0) return true;
+        return undefined;
+      },
+    );
+    if (result.executed && result.reason === 'cache-miss') {
+      logger.debug('[preflight] skills-symlink-cleanup: cache miss, executed');
+    }
+  }
+
+  // Remove stale plugin-runtime-deps cache roots.  Cache keyed by openclaw package signature.
+  {
+    const cacheKey = () =>
+      buildPrelaunchMaintenanceCacheKey({
+        openclawSignature: pathSignature(getOpenClawResolvedDir()),
+      });
+    const result = runCachedPrelaunchMaintenanceTask(
+      'runtime-deps-cleanup',
+      cacheKey,
+      () => {
+        const r = cleanupStalePluginRuntimeDeps();
+        if (r.removed.length > 0) return true;
+        return undefined;
+      },
+    );
+    if (result.executed && result.reason === 'cache-miss') {
+      logger.debug('[preflight] runtime-deps-cleanup: cache miss, executed');
+    }
+  }
+
+  // Remove stale session write locks left by dead gateway processes.
+  // When a gateway is SIGUSR1-restarted and the old process dies before cleanup
+  // handlers run, the lock file persists and blocks new sessions for 60 s.
+  // Cache keyed by the agents directory signature so any new session/agent change
+  // triggers a re-scan.
+  {
+    const agentsDir = path.join(resolveOpenClawDir(), 'agents');
+    const cacheKey = () =>
+      buildPrelaunchMaintenanceCacheKey({
+        agents: directoryChildrenSignature(agentsDir),
+      });
+    const result = runCachedPrelaunchMaintenanceTask(
+      'stale-session-lock-cleanup',
+      cacheKey,
+      async () => {
+        const r = await cleanupStaleSessionLocks();
+        if (r.removed > 0) return true;
+        return undefined;
+      },
+    );
+    if (result.executed && result.reason === 'cache-miss') {
+      logger.debug('[preflight] stale-session-lock-cleanup: cache miss, executed');
+    }
+  }
 
   const corruptedNpm = cleanupCorruptedNpmPlugins();
   if (corruptedNpm.cleaned) {
@@ -1103,12 +1187,16 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     OPENCLAW_NO_RESPAWN: '1',
   };
 
+  // Strip systemd supervisor env vars that would cause OpenClaw CLI to enter a
+  // supervised retry loop, conflicting with ClawClaw's own lifecycle management.
+  const cleanForkEnv = stripSystemdSupervisorEnv(forkEnv);
+
   return {
     appSettings,
     openclawDir,
     entryScript,
     gatewayArgs,
-    forkEnv,
+    forkEnv: cleanForkEnv,
     mode,
     binPathExists,
     loadedProviderKeyCount,

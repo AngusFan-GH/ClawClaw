@@ -181,8 +181,7 @@ export function ChatToolbar({
           </TooltipContent>
         </Tooltip>
 
-        {null}
-      </div>
+        </div>
     </div>
   );
 }

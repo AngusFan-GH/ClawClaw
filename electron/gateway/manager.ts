@@ -53,6 +53,18 @@ import { recoverMalformedOpenClawConfig } from '../utils/openclaw-config';
 import { getSetting } from '../utils/store';
 import type { GatewayConfigRecovery } from '../../src/types/gateway';
 
+/**
+ * Thrown by reload() when the Gateway's preflight check reports pending work
+ * that prevents an in-process restart.  Callers should emit a 'failed' lifecycle
+ * event so the UI can show the user what blocked the reload.
+ */
+export class RestartPreflightBlockedError extends Error {
+  constructor(public readonly blockers: string[]) {
+    super(`Reload deferred by gateway preflight; blockers: ${blockers.join(', ')}`);
+    this.name = 'RestartPreflightBlockedError';
+  }
+}
+
 export interface GatewayStatus {
   state: GatewayLifecycleState;
   port: number;
@@ -248,6 +260,26 @@ export class GatewayManager extends EventEmitter {
     const child = this.process;
     if (!child?.pid) {
       throw new Error('Cannot restart Gateway in-place without an owned process pid');
+    }
+
+    // Ask the gateway whether it is safe to restart in-place.
+    // openclaw 2026.5.22 defers restart when there is pending work (queue, replies, active tasks).
+    try {
+      const preflight = await this.rpc<{ safe: boolean; blockers?: string[] }>(
+        'gateway.restart.preflight',
+        undefined,
+        8000,
+      );
+      if (!preflight.safe) {
+        logger.warn(
+          '[gateway-restart] Restart deferred by gateway preflight; blockers: ' +
+            (preflight.blockers ?? []).join(', '),
+        );
+        // Fall through — SIGUSR1 still works as a last resort, just log the deferral.
+      }
+    } catch (err) {
+      // If the preflight RPC itself fails (e.g. gateway not fully up), proceed with SIGUSR1.
+      logger.debug('[gateway-restart] Restart preflight RPC failed, proceeding anyway:', err);
     }
 
     const waitForReconnect = this.waitForRunningStateAfterDisconnect(
@@ -1084,17 +1116,30 @@ export class GatewayManager extends EventEmitter {
     }
 
     try {
-      process.kill(this.process.pid, 'SIGUSR1');
-      logger.info(`Sent SIGUSR1 to Gateway for config reload (pid=${this.process.pid})`);
-      // Some gateway builds do not handle SIGUSR1 as an in-process reload.
-      // If process state doesn't recover quickly, fall back to restart.
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      if (this.status.state !== 'running' || !this.process?.pid) {
-        logger.warn('Gateway did not stay running after reload signal, falling back to restart');
-        await this.restart();
+      // Ask the gateway whether it is safe to reload now.
+      const preflight = await this.rpc<{ safe: boolean; blockers?: string[] }>(
+        'gateway.restart.preflight',
+        undefined,
+        8000,
+      );
+      if (!preflight.safe) {
+        const blockers = preflight.blockers ?? [];
+        logger.info(
+          `[gateway-reload] Deferred by gateway preflight; blockers: ${blockers.join(', ')}`,
+        );
+        throw new RestartPreflightBlockedError(blockers);
       }
-    } catch (error) {
-      logger.warn('Gateway reload signal failed, falling back to restart:', error);
+    } catch (err) {
+      logger.debug('[gateway-reload] Restart preflight RPC failed, proceeding anyway:', err);
+    }
+
+    process.kill(this.process.pid, 'SIGUSR1');
+    logger.info(`Sent SIGUSR1 to Gateway for config reload (pid=${this.process.pid})`);
+    // Some gateway builds do not handle SIGUSR1 as an in-process reload.
+    // If process state doesn't recover quickly, fall back to restart.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    if (this.status.state !== 'running' || !this.process?.pid) {
+      logger.warn('Gateway did not stay running after reload signal, falling back to restart');
       await this.restart();
     }
   }

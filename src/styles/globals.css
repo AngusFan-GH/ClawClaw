@@ -639,6 +639,26 @@
   color: hsl(var(--foreground));
 }
 
+.chat-duplicate-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  pointer-events: none;
+}
+
+.chat-group.user .chat-bubble-actions .chat-duplicate-badge {
+  display: none;
+}
+
 .chat-group-footer {
   display: flex;
   gap: 8px;
@@ -1288,6 +1308,20 @@
 .chat-tool-card--expanded {
   max-height: none;
   overflow: visible;
+}
+
+.chat-tool-card--error {
+  border-color: hsl(var(--destructive) / 0.35) !important;
+  background: color-mix(in srgb, hsl(var(--destructive)) 4%, hsl(var(--card))) !important;
+}
+
+.chat-tool-card--error:hover {
+  border-color: hsl(var(--destructive) / 0.5) !important;
+  background: color-mix(in srgb, hsl(var(--destructive)) 8%, hsl(var(--card))) !important;
+}
+
+.chat-tool-card__status-text--error {
+  color: hsl(var(--destructive));
 }
 
 .chat-tool-card:first-child {

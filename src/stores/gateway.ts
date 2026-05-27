@@ -581,7 +581,6 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
                 set((state) => ({
                   lifecycle: {
                     ...state.lifecycle,
-                    action: 'restart',
                     state: 'applying',
                     delayMs: expectedRestartDelayMs,
                     at: Date.now(),

@@ -13,6 +13,7 @@ type SessionHistoryBody = {
   sessionKey?: string;
   limit?: number;
   cursor?: string;
+  maxChars?: number;
 };
 
 type SessionListBody = {
@@ -286,6 +287,85 @@ async function enrichPagedSessions(
   });
 }
 
+const RECENT_TRANSCRIPT_INITIAL_READ_BYTES = 512_000;
+const RECENT_TRANSCRIPT_MAX_READ_BYTES = 10 * 1024 * 1024;
+
+interface TranscriptMessage {
+  role?: string;
+  content?: unknown;
+  timestamp?: string;
+  id?: string;
+}
+
+function readRecentTranscriptMessages(transcriptPath: string, limit: number): TranscriptMessage[] {
+  const boundedLimit = Math.max(1, Math.min(Math.floor(limit), 1000));
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(transcriptPath, 'r');
+    const size = fs.fstatSync(fd).size;
+    if (size === 0) return [];
+
+    let readBytes = Math.min(size, Math.max(RECENT_TRANSCRIPT_INITIAL_READ_BYTES, boundedLimit * 2048));
+    while (readBytes <= size) {
+      const readStart = Math.max(0, size - readBytes);
+      const readLen = size - readStart;
+      const buffer = Buffer.allocUnsafe(readLen);
+      fs.readSync(fd, buffer, 0, readLen, readStart);
+      const messages = parseRecentMessagesFromTailChunk(buffer.toString('utf8'), readStart, boundedLimit);
+      if (
+        messages.length >= boundedLimit
+        || readStart === 0
+        || readBytes >= RECENT_TRANSCRIPT_MAX_READ_BYTES
+      ) {
+        return messages;
+      }
+      readBytes = Math.min(size, readBytes * 2);
+    }
+    return [];
+  } finally {
+    if (fd !== null) fs.closeSync(fd);
+  }
+}
+
+function parseRecentMessagesFromTailChunk(
+  chunk: string,
+  byteOffset: number,
+  limit: number,
+): TranscriptMessage[] {
+  const lines = chunk.split(/\r?\n/).filter(Boolean);
+  const result: TranscriptMessage[] = [];
+  for (let i = lines.length - 1; i >= 0 && result.length < limit; i--) {
+    try {
+      const msg = JSON.parse(lines[i]) as TranscriptMessage;
+      if (msg && typeof msg === 'object' && !Array.isArray(msg)) result.unshift(msg);
+    } catch {
+      // skip malformed lines
+    }
+  }
+  return result;
+}
+
+async function loadSessionTranscriptByKey(sessionKey: string, limit: number): Promise<TranscriptMessage[] | null> {
+  const sessionHelpers = await loadOpenClawSessionHelpers();
+  const { storePath, entry } = sessionHelpers.loadSessionEntry(sessionKey);
+  if (!entry?.sessionId) return null;
+  const sessionId = entry.sessionId;
+  const sessionsDir = path.join(storePath || resolveOpenClawDir(), 'agents');
+  const sessionsJson = path.join(sessionsDir, 'sessions.json');
+  if (!fs.existsSync(sessionsJson)) return null;
+  let sessionsData: { key: string; sessionId?: string; sessionFile?: string }[] = [];
+  try {
+    sessionsData = JSON.parse(fs.readFileSync(sessionsJson, 'utf8')) as typeof sessionsData;
+  } catch {
+    return null;
+  }
+  const sessionEntry = sessionsData.find((s) => s.key === sessionKey);
+  if (!sessionEntry?.sessionFile) return null;
+  const transcriptPath = path.join(sessionsDir, sessionEntry.sessionFile);
+  if (!fs.existsSync(transcriptPath)) return null;
+  return readRecentTranscriptMessages(transcriptPath, limit);
+}
+
 function normalizeHistoryMessage(message: unknown): Record<string, unknown> | null {
   if (!message || typeof message !== 'object' || Array.isArray(message)) {
     return null;
@@ -341,15 +421,12 @@ async function loadOpenClawSessionHelpers(): Promise<OpenClawSessionHelpers> {
         const openclawEntry = require.resolve('openclaw');
         distDir = path.dirname(openclawEntry);
       }
-      const sessionUtilsFile = fs
-        .readdirSync(distDir)
-        .find((name) => name.startsWith('session-utils-') && name.endsWith('.js'));
+      const names = fs.readdirSync(distDir);
+      const sessionUtilsFile = names.find((name) => name.startsWith('session-utils-') && name.endsWith('.js'));
       if (!sessionUtilsFile) {
         throw new Error('Unable to locate OpenClaw session utils module');
       }
-      const fsSessionUtilsFile = fs
-        .readdirSync(distDir)
-        .find((name) => name.startsWith('session-utils.fs-') && name.endsWith('.js'));
+      const fsSessionUtilsFile = names.find((name) => name.startsWith('session-utils.fs-') && name.endsWith('.js'));
       if (!fsSessionUtilsFile) {
         throw new Error('Unable to locate OpenClaw session utils fs module');
       }
@@ -441,6 +518,30 @@ export async function handleSessionRoutes(
     return true;
   }
 
+  // GET /api/sessions/transcript — local JSONL transcript for history hydration.
+  if (url.pathname === '/api/sessions/transcript' && req.method === 'GET') {
+    const sessionKey = url.searchParams.get('sessionKey')?.trim() || '';
+    const limitRaw = Number(url.searchParams.get('limit') ?? '200');
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 1000) : 200;
+
+    if (!sessionKey) {
+      sendJson(res, 400, { success: false, error: 'sessionKey is required' });
+      return true;
+    }
+
+    const messages = await loadSessionTranscriptByKey(sessionKey, limit);
+    if (!messages || messages.length === 0) {
+      sendJson(res, 404, { success: false, error: 'Transcript not found' });
+      return true;
+    }
+
+    const normalized = messages
+      .map((m) => normalizeHistoryMessage(m))
+      .filter((m): m is Record<string, unknown> => m !== null);
+    sendJson(res, 200, { success: true, messages: normalized });
+    return true;
+  }
+
   if (url.pathname === '/api/sessions/history' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<SessionHistoryBody>(req);
@@ -456,6 +557,9 @@ export async function handleSessionRoutes(
       );
       const requestedCursor = typeof body.cursor === 'string' && body.cursor.trim()
         ? body.cursor.trim()
+        : null;
+      const requestedMaxChars = typeof body.maxChars === 'number' && body.maxChars > 0
+        ? Math.min(Math.trunc(body.maxChars), 10_000_000)
         : null;
 
       const gatewayStatus = ctx.gatewayManager.getStatus();
@@ -473,6 +577,9 @@ export async function handleSessionRoutes(
           upstream.searchParams.set('limit', String(pageLimit));
           if (requestedCursor) {
             upstream.searchParams.set('cursor', requestedCursor);
+          }
+          if (requestedMaxChars) {
+            upstream.searchParams.set('maxChars', String(requestedMaxChars));
           }
 
           const response = await proxyAwareFetch(upstream, {

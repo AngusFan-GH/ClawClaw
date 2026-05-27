@@ -10,6 +10,7 @@ import { extractText } from '@/pages/Chat/message-utils';
 import { historyContainsPendingUserMessage } from '@/pages/Chat/pending-user-message';
 import { useGatewayStore } from './gateway';
 import { getAppliedAgentsSnapshotState } from './agents';
+import { hydrateGatewayHistoryFromTranscript } from './chat/history-transcript-hydrate';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -133,6 +134,13 @@ export interface FallbackStatus {
   occurredAt: number;
 }
 
+export interface ChatRunUiStatus {
+  phase: 'done' | 'interrupted';
+  runId: string | null;
+  sessionKey: string;
+  occurredAt: number;
+}
+
 interface ToolStreamEntry {
   toolCallId: string;
   runId: string;
@@ -187,6 +195,8 @@ interface ChatState {
   btwMessages: RawMessage[];
   loading: boolean;
   error: string | null;
+  /** Transient "model idle" warning shown before the full safety timeout fires. */
+  runError: string | null;
 
   // Streaming
   sending: boolean;
@@ -199,7 +209,6 @@ interface ChatState {
   pendingFinal: boolean;
   terminalHistoryReconciling: boolean;
   queueFlushToken: number;
-  lastTerminalRunId: string | null;
   chatQueue: QueuedChatMessage[];
   lastUserMessageAt: number | null;
   /** Images collected from tool results, attached to the next assistant message */
@@ -208,6 +217,7 @@ interface ChatState {
   toolStreamOrder: string[];
   compactionStatus: CompactionStatus | null;
   fallbackStatus: FallbackStatus | null;
+  runStatus: ChatRunUiStatus | null;
 
   // Sessions
   sessions: ChatSession[];
@@ -300,6 +310,9 @@ let _sessionTitleRefreshAttempts = 0;
 let _initialHistoryRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 let _initialHistoryRefreshAttempts = 0;
 const CHAT_HISTORY_PAGE_LIMIT = 200;
+// OpenClaw gateway caps chat.history at 500 000 characters per response.
+// Requesting the cap prevents truncation on large sessions.
+const OPENCLAW_CHAT_HISTORY_MAX_CHARS = 500_000;
 // Session restore retry backoff
 const SESSION_RESTORE_INITIAL_DELAY_MS = 1000;
 const SESSION_RESTORE_MAX_DELAY_MS = 15_000;
@@ -310,7 +323,7 @@ const INITIAL_HISTORY_REFRESH_MAX_ATTEMPTS = 4;
 const SESSION_LIST_PAGE_LIMIT = 30;
 // Hard timeouts (ms) — prevent indefinite hangs
 const SESSIONS_LIST_TIMEOUT_MS = 10_000;
-const HISTORY_LOAD_TIMEOUT_MS = 15_000;
+const HISTORY_LOAD_TIMEOUT_MS = 30_000;
 const RESTORE_SAFETY_TIMEOUT_MS = 20_000;
 const STARTUP_CHAT_HISTORY_RETRY_TIMEOUT_MS = 60_000;
 const STARTUP_CHAT_HISTORY_DEFAULT_RETRY_MS = 500;
@@ -319,7 +332,9 @@ const STARTUP_CHAT_HISTORY_MAX_RETRY_MS = 5_000;
 // Keep the UI watchdog and send RPC slightly higher so Gateway/provider errors
 // can surface before ClawClaw synthesizes its own timeout state.
 const CHAT_SEND_TIMEOUT_MS = 135_000;
-const CHAT_RESPONSE_WATCHDOG_TIMEOUT_MS = 135_000;
+// Two-stage LLM idle handling: hint at 120s, safety timeout at 130s.
+const LLM_IDLE_HINT_MS = 120_000;
+const NO_RESPONSE_SAFETY_TIMEOUT_MS = 130_000;
 
 function getRawMessageKey(message: Partial<RawMessage>): string {
   const toolCallId = typeof message.toolCallId === 'string' ? message.toolCallId : '';
@@ -334,6 +349,7 @@ function getRawMessageKey(message: Partial<RawMessage>): string {
 
 let _compactionClearTimer: ReturnType<typeof setTimeout> | null = null;
 let _fallbackClearTimer: ReturnType<typeof setTimeout> | null = null;
+let _runStatusClearTimer: ReturnType<typeof setTimeout> | null = null;
 const COMPACTION_TOAST_DURATION_MS = 5000;
 const FALLBACK_TOAST_DURATION_MS = 8000;
 
@@ -2059,6 +2075,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   btwMessages: [],
   loading: false,
   error: null,
+  runError: null,
 
   sending: false,
   activeRunId: null,
@@ -2069,10 +2086,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   chatStreamSegments: [],
   compactionStatus: null,
   fallbackStatus: null,
+  runStatus: null,
   pendingFinal: false,
   terminalHistoryReconciling: false,
   queueFlushToken: 0,
-  lastTerminalRunId: null,
   chatQueue: [],
   lastUserMessageAt: null,
   pendingToolImages: [],
@@ -2121,10 +2138,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   requestQueueFlush: (runId) => {
     get().clearPendingQueueItemsForRun(runId);
+    const { currentSessionKey } = get();
     set((s) => ({
       queueFlushToken: s.queueFlushToken + 1,
-      lastTerminalRunId: runId?.trim() || null,
+      runStatus: s.runStatus ?? {
+        phase: 'done',
+        runId: runId?.trim() || null,
+        sessionKey: currentSessionKey,
+        occurredAt: Date.now(),
+      },
     }));
+    // Auto-clear after 5 seconds, matching OpenClaw's CHAT_RUN_STATUS_TOAST_DURATION_MS.
+    _runStatusClearTimer = _runStatusClearTimer != null
+      ? (clearTimeout(_runStatusClearTimer), null)
+      : null;
+    _runStatusClearTimer = setTimeout(() => {
+      _runStatusClearTimer = null;
+      set({ runStatus: null });
+    }, 5_000);
   },
 
   enqueueChatMessage: (item) => {
@@ -2458,11 +2489,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
           if (useGatewayStore.getState().status.state !== 'running') break;
 
           try {
-            // ── Step 1: Load session list (with per-attempt timeout) ────────
+            // ── Load session list ─────────────────────────────────────────────
+            // loadSessions sets sessionsHydrated and currentSessionKey (from
+            // persisted key). Then loadHistory for the current session key.
+            // After this completes, Chat/index.tsx's currentSessionKey effect
+            // fires and calls loadHistory again with the same key — the second
+            // call (same seq) is a no-op due to loadHistory's stale-guard, so
+            // there is no double-load or race.
             const sessionsOk = await Promise.race([
               get().loadSessions({ preserveCurrent: true, warmLabels: true }),
               new Promise<false>((_, reject) =>
-                setTimeout(() => reject(new Error('sessions.list timeout')), SESSIONS_LIST_TIMEOUT_MS * 2)
+                setTimeout(() => reject(new Error('sessions.list timeout')), SESSIONS_LIST_TIMEOUT_MS)
               ),
             ]).then(() => true).catch(() => false);
 
@@ -2471,17 +2508,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
               break;
             }
 
-            // sessionsHydrated is now true if loadSessions succeeded.
-            // ── Step 2: Load history for current session ───────────────────────
-            // (warm-label fetching already runs in parallel inside loadSessions).
-            // If history times out, sessions are still shown — scheduleRetry
-            // will continue retrying history in the background.
+            // Load history for the session key that loadSessions set as current.
+            // This is safe to run alongside the Chat/index.tsx useEffect that also
+            // calls loadHistory after currentSessionKey changes — both use the same
+            // requestSeq stale-guard so only one result commits.
             await Promise.race([
               get().loadHistory(get().messages.length > 0),
               new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error('chat.history timeout')), HISTORY_LOAD_TIMEOUT_MS)
               ),
-            ]).catch(() => { /* timeout → scheduleRetry will retry */ });
+            ]).catch(() => { /* timeout → let shouldRetryInitialHistory handle */ });
 
             if (shouldRetryInitialHistory(get())) {
               scheduleInitialHistoryRetry();
@@ -2649,6 +2685,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         streamingTools: [],
         activeRunId: null,
         error: null,
+        runError: null,
         pendingFinal: false,
         terminalHistoryReconciling: false,
         lastUserMessageAt: null,
@@ -2866,7 +2903,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ── Load chat history ──
 
   loadHistory: async (quiet = false) => {
-    const { currentSessionKey, pendingLocalSessionKeys } = get();
+    const { currentSessionKey } = get();
     const requestSessionKey = currentSessionKey;
     const requestSeq = ++_historyLoadSeq;
     const isStale = () =>
@@ -2885,7 +2922,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (isEmptyEphemeralSession(
       requestSessionKey,
       get().messages,
-      pendingLocalSessionKeys,
+      get().pendingLocalSessionKeys,
       get().pendingUserMessage,
       get().pendingAssistantMessage,
     )) {
@@ -2915,6 +2952,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 body: JSON.stringify({
                   sessionKey: requestSessionKey,
                   limit: CHAT_HISTORY_PAGE_LIMIT,
+                  maxChars: OPENCLAW_CHAT_HISTORY_MAX_CHARS,
                 }),
                 timeoutMs: HISTORY_LOAD_TIMEOUT_MS,
               }),
@@ -2949,7 +2987,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const stateBeforeCommit = get();
         const hasExistingAuthoritativeMessages = stateBeforeCommit.messages.length > 0;
 
-        const enrichedMessages = enrichWithCachedImages(rawMessages);
+        const fullyEnrichedMessages = enrichWithCachedImages(rawMessages);
+
+        // Hydrate truncated history entries from the local JSONL transcript.
+        // Large sessions may exceed the gateway's maxChars window and return
+        // truncated message content; filling from the transcript preserves it.
+        const enrichedMessages = await hydrateGatewayHistoryFromTranscript(
+          requestSessionKey,
+          fullyEnrichedMessages,
+          CHAT_HISTORY_PAGE_LIMIT,
+          stateBeforeCommit.messages,
+        );
 
         // History poll is the fallback when Gateway streaming events are missing
         // (WS disconnect, console-only runs, etc.). Any assistant turn after the
@@ -3451,19 +3499,80 @@ export const useChatStore = create<ChatState>((set, get) => ({
     _lastChatEventAt = Date.now();
     clearHistoryPoll();
 
+    /** True when there is any assistant message after the last real user boundary. */
+    function hasAssistantAfterLastRealUser(msgs: RawMessage[]): boolean {
+      for (let i = msgs.length - 1; i >= 0; i -= 1) {
+        if (isRealUserBoundaryMessage(msgs[i])) {
+          return msgs.slice(i + 1).some((m) => m.role === 'assistant');
+        }
+      }
+      return false;
+    }
+
+    /**
+     * True when history shows real assistant output since the last user message
+     * (skipping in-flight optimistic user messages that have no timestamp yet).
+     */
+    function hasAssistantProgressSinceSend(msgs: RawMessage[], lastUserMsgAt: number | null): boolean {
+      if (!lastUserMsgAt) return false;
+      // Normalize: strip trailing user messages that lack timestamps (in-flight optimistics)
+      const normalized = [...msgs];
+      while (normalized.length > 0) {
+        const last = normalized[normalized.length - 1];
+        if (last.role === 'user' && !last.timestamp) {
+          normalized.pop();
+          continue;
+        }
+        break;
+      }
+      return hasAssistantAfterLastRealUser(normalized);
+    }
+
     const checkStuck = () => {
       const state = get();
       if (!state.sending) return;
-      if (state.streamingMessage || state.streamingText) return;
-      const idleMs = Date.now() - _lastChatEventAt;
-      if (state.pendingFinal && idleMs < CHAT_RESPONSE_WATCHDOG_TIMEOUT_MS) {
+
+      // Gateway run-start / model-switch deltas can set `{ role: 'assistant' }`
+      // with no payload. That placeholder must not block the safety timeout.
+      if (state.streamingMessage || state.streamingText) {
+        set({ streamingMessage: null, streamingText: '' });
+      }
+
+      const sendAgeMs = state.lastUserMessageAt
+        ? Date.now() - toMs(state.lastUserMessageAt)
+        : 0;
+      const hasProgress = hasAssistantProgressSinceSend(state.messages, state.lastUserMessageAt);
+
+      // Stage 1 — LLM idle hint (120s): show a soft warning if no progress detected.
+      if (sendAgeMs >= LLM_IDLE_HINT_MS && !state.runError && !hasProgress) {
+        set({ runError: 'The model did not respond within 120 seconds. Retrying…' });
+      }
+
+      // While pending finalization, keep polling as long as we see progress.
+      if (state.pendingFinal) {
+        if (hasProgress) {
+          setTimeout(checkStuck, 10_000);
+          return;
+        }
+        set({ pendingFinal: false });
+      }
+
+      // Clear transient runError when real progress arrives.
+      if (hasProgress) {
+        _lastChatEventAt = Date.now();
+        if (state.error || state.runError) {
+          set({ error: null, runError: null });
+        }
         setTimeout(checkStuck, 10_000);
         return;
       }
-      if (!state.pendingFinal && idleMs < CHAT_RESPONSE_WATCHDOG_TIMEOUT_MS) {
+
+      // Stage 2 — Safety timeout (130s): escalate to hard error.
+      if (Date.now() - _lastChatEventAt < NO_RESPONSE_SAFETY_TIMEOUT_MS) {
         setTimeout(checkStuck, 10_000);
         return;
       }
+
       clearHistoryPoll();
       void state.loadHistory(true);
       set({
@@ -3481,6 +3590,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         streamingTools: [],
         pendingToolImages: [],
         lastUserMessageAt: null,
+        runError: null,
         ...resetToolStreamState(get()),
       });
     };
@@ -4057,8 +4167,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
           lastUserMessageAt: null,
           pendingUserMessage: null,
           terminalHistoryReconciling: false,
+          runStatus: {
+            phase: 'interrupted',
+            runId: runId || null,
+            sessionKey: get().currentSessionKey,
+            occurredAt: Date.now(),
+          },
           ...resetToolStreamState(get()),
         });
+        _runStatusClearTimer = _runStatusClearTimer != null
+          ? (clearTimeout(_runStatusClearTimer), null)
+          : null;
+        _runStatusClearTimer = setTimeout(() => {
+          _runStatusClearTimer = null;
+          set({ runStatus: null });
+        }, 5_000);
         clearHistoryPoll();
         get().requestQueueFlush(runId || null);
         break;

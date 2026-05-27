@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, ArrowDown, Brain, Check, ChevronDown, Loader2 } from 'lucide-react';
+import { AlertCircle, ArrowDown, Brain, Check, ChevronDown, Loader2, Square } from 'lucide-react';
 import { DEFAULT_SESSION_KEY, useChatStore, type QueuedChatMessage, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
@@ -129,6 +129,7 @@ export function Chat() {
   const queuedMessages = useChatStore((s) => s.chatQueue);
   const compactionStatus = useChatStore((s) => s.compactionStatus);
   const fallbackStatus = useChatStore((s) => s.fallbackStatus);
+  const runStatus = useChatStore((s) => s.runStatus);
   const loadHistory = useChatStore((s) => s.loadHistory);
   const loadEarlierHistory = useChatStore((s) => s.loadEarlierHistory);
   const loadSessions = useChatStore((s) => s.loadSessions);
@@ -1217,6 +1218,31 @@ export function Chat() {
                           'Fallback active: {{selected}} -> {{active}}',
                           { selected: fallbackStatus.selected, active: fallbackStatus.active }
                         )}
+                  </span>
+                </div>
+              )}
+
+              {/* Run status toast — store auto-clears after 5 s via _runStatusClearTimer */}
+              {runStatus && (runStatus.phase === 'done' || runStatus.phase === 'interrupted') && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className={cn(
+                    'flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium',
+                    runStatus.phase === 'done'
+                      ? 'border-black/10 bg-white/90 text-green-600 shadow-sm dark:border-white/10 dark:bg-white/[0.06]'
+                      : 'border-black/10 bg-white/90 text-orange-600 shadow-sm dark:border-white/10 dark:bg-white/[0.06]'
+                  )}
+                >
+                  {runStatus.phase === 'done' ? (
+                    <Check className="h-4 w-4 shrink-0" />
+                  ) : (
+                    <Square className="h-4 w-4 shrink-0 fill-current" />
+                  )}
+                  <span>
+                    {runStatus.phase === 'done'
+                      ? t('status.runDone', 'Done')
+                      : t('status.runInterrupted', 'Interrupted')}
                   </span>
                 </div>
               )}

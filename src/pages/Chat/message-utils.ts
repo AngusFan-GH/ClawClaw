@@ -585,3 +585,42 @@ export function formatTimestamp(timestamp: unknown): string {
     minute: '2-digit',
   }).format(date);
 }
+
+// Heartbeat token produced by LLM providers when no new tokens are generated
+// during a polling cycle — not shown in the chat UI.
+export const HEARTBEAT_TOKEN = '<!-- ping -->';
+
+export function isAssistantHeartbeatAckForDisplay(message: RawMessage): boolean {
+  const m = message as unknown as Record<string, unknown>;
+  if (m.role !== 'assistant') return false;
+  const content = m.content;
+  if (typeof content !== 'string') return false;
+  return content.trim() === HEARTBEAT_TOKEN;
+}
+
+export function stripHeartbeatTokenForDisplay(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed === HEARTBEAT_TOKEN) return '';
+  // Strip trailing heartbeat token from streamed text
+  if (trimmed.endsWith(HEARTBEAT_TOKEN)) {
+    return trimmed.slice(0, -HEARTBEAT_TOKEN.length).trimEnd();
+  }
+  return text;
+}
+
+// Detects whether a tool output string contains an error.
+// Mirrors OpenClaw's isToolErrorOutput() logic from tool-cards.ts.
+export function isToolErrorOutput(output: string | undefined): boolean {
+  if (!output || typeof output !== 'string') return false;
+  const trimmed = output.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return false;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === 'object') {
+      return parsed.error != null || parsed.status === 'error';
+    }
+  } catch {
+    // Not valid JSON — treat as non-error.
+  }
+  return false;
+}

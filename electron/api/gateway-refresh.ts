@@ -1,5 +1,6 @@
 import type { HostApiContext } from './context';
 import { emitGatewayLifecycleEvent, type GatewayLifecycleAction } from './gateway-lifecycle';
+import { RestartPreflightBlockedError } from '../gateway/manager';
 
 type GatewayRefreshOptions = {
   action: GatewayLifecycleAction;
@@ -77,12 +78,17 @@ export async function runGatewayRefresh(
     });
     return { triggered: true, accepted: true };
   } catch (error) {
+    const errorMessage = String(error);
+    const blockers =
+      error instanceof RestartPreflightBlockedError ? error.blockers : undefined;
     emitGatewayLifecycleEvent(ctx, {
       phase: 'failed',
       action: options.action,
       source: options.source,
       reason: options.reason,
-      error: String(error),
+      error: blockers
+        ? `Reload blocked by pending work: ${blockers.join(', ')}`
+        : errorMessage,
     });
     throw error;
   }

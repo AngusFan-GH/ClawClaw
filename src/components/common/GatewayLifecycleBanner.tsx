@@ -36,6 +36,10 @@ export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecy
   const showManualRestartProgress = isManualGatewayRestartInProgress(lifecycle);
   const sourceLabel = getGatewayLifecycleSourceLabel(t, lifecycle.source);
 
+  const showReloadProgress =
+    lifecycle.action === 'reload' &&
+    (lifecycle.state === 'scheduled' || lifecycle.state === 'applying');
+
   if (showManualRestartProgress) {
     return (
       <div className="mb-6 rounded-2xl border border-sky-500/25 bg-sky-500/10 px-4 py-3 transition-colors">
@@ -47,6 +51,31 @@ export function GatewayLifecycleBanner({ lifecycle }: { lifecycle: GatewayLifecy
             <div className="flex flex-wrap items-center gap-2">
               <div className="text-[13px] font-medium text-foreground">
                 {t('gateway.lifecycle.applyingRestartTitle')}
+              </div>
+              <span className="inline-flex items-center rounded-full bg-sky-500/12 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-300">
+                {sourceLabel}
+              </span>
+            </div>
+            <div className="mt-1 text-[12px] leading-[1.7] text-muted-foreground">
+              {t('gateway.lifecycle.applyingDescription', { source: sourceLabel })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (showReloadProgress) {
+    return (
+      <div className="mb-6 rounded-2xl border border-sky-500/25 bg-sky-500/10 px-4 py-3 transition-colors">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 shrink-0">
+            <Loader2 className="h-4.5 w-4.5 animate-spin text-sky-600 dark:text-sky-300" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-[13px] font-medium text-foreground">
+                {t('gateway.lifecycle.applyingReloadTitle')}
               </div>
               <span className="inline-flex items-center rounded-full bg-sky-500/12 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-300">
                 {sourceLabel}

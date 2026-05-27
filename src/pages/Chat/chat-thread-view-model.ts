@@ -1,8 +1,13 @@
 import { getHostApiBase } from '@/lib/host-api';
 import { normalizeChatTimestampForKey, normalizeChatTimestampMs } from '@/lib/chat-timestamps';
 import type { RawMessage, StreamSegment } from '@/stores/chat';
-import { extractImages, extractText, extractThinking } from './message-utils';
+import { extractImages, extractText, extractThinking, isAssistantHeartbeatAckForDisplay, isToolErrorOutput, stripHeartbeatTokenForDisplay } from './message-utils';
 import { historyContainsPendingUserMessage } from './pending-user-message';
+
+// Limit how many messages are rendered and their total character budget.
+// OpenClaw uses CHAT_HISTORY_RENDER_LIMIT=100 and CHAT_HISTORY_RENDER_CHAR_BUDGET=240000.
+const CHAT_HISTORY_RENDER_LIMIT = 100;
+const CHAT_HISTORY_RENDER_CHAR_BUDGET = 240_000;
 
 export type ToolCard = {
   kind?: 'call' | 'result';
@@ -12,6 +17,7 @@ export type ToolCard = {
   inputText?: string;
   outputText?: string;
   text?: string;
+  isError?: boolean;
   preview?: {
     kind: 'canvas';
     surface?: 'assistant_message';
@@ -68,7 +74,8 @@ export type ChatItem =
   | { kind: 'message'; key: string; message: RawMessage }
   | { kind: 'divider'; key: string; label: string; timestamp: number }
   | { kind: 'stream'; key: string; text: string; startedAt: number }
-  | { kind: 'reading-indicator'; key: string };
+  | { kind: 'reading-indicator'; key: string }
+  | { kind: 'truncated-notice'; key: string };
 
 export type MessageGroup = {
   kind: 'group';
@@ -86,7 +93,7 @@ export type TranscriptEntry =
   | { kind: 'side-result'; key: string; message: RawMessage }
   | { kind: 'divider'; key: string; label: string; timestamp: number }
   | MessageGroup
-  | Extract<ChatItem, { kind: 'stream' | 'reading-indicator' }>;
+  | Extract<ChatItem, { kind: 'stream' | 'reading-indicator' | 'truncated-notice' }>;
 
 type TranscriptFlowItem = Exclude<ChatItem, { kind: 'message' }> | MessageGroup;
 
@@ -133,6 +140,7 @@ type NormalizedMessage = {
   timestamp: number;
   id?: string;
   senderLabel?: string | null;
+  duplicateCount?: number;
 };
 
 export function toDisplayTimestampMs(timestamp: unknown): number {
@@ -405,6 +413,17 @@ function expandAssistantTextContent(text: string): NormalizedContentItem[] {
 }
 
 export function normalizeMessage(message: RawMessage): NormalizedMessage {
+  // Filter out heartbeat-only messages before processing.
+  if (isAssistantHeartbeatAckForDisplay(message)) {
+    return {
+      role: 'assistant',
+      content: [],
+      timestamp: toDisplayTimestampMs(message.timestamp),
+      id: message.id,
+      senderLabel: null,
+    };
+  }
+
   const m = message as unknown as Record<string, unknown>;
   let role = typeof m.role === 'string' ? m.role : 'unknown';
 
@@ -749,6 +768,28 @@ function findNearestAssistantMessageIndex(
   return assistantEntries[assistantEntries.length - 1]?.index ?? null;
 }
 
+/**
+ * Resolves the starting index for rendering chat history, respecting both message
+ * count and character budget limits. Always includes the last N messages (most recent)
+ * and adds older messages backward until the budget is exhausted.
+ */
+export function resolveHistoryStartIndex(messages: RawMessage[]): number {
+  if (messages.length <= CHAT_HISTORY_RENDER_LIMIT) return 0;
+
+  let charCount = 0;
+  // Scan from newest to oldest, counting from the end.
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    charCount += extractText(messages[i]).length;
+    if (i <= messages.length - CHAT_HISTORY_RENDER_LIMIT) {
+      // Always include the last CHAT_HISTORY_RENDER_LIMIT messages.
+      if (charCount > CHAT_HISTORY_RENDER_CHAR_BUDGET) {
+        return i + 1;
+      }
+    }
+  }
+  return 0;
+}
+
 export function buildChatItems(params: {
   messages: RawMessage[];
   pendingUserMessage: RawMessage | null;
@@ -765,12 +806,52 @@ export function buildChatItems(params: {
 }): TranscriptFlowItem[] {
   const transcriptItems: ChatItem[] = [];
   const liveItems: ChatItem[] = [];
-  const history = Array.isArray(params.messages) ? params.messages : [];
+  const allHistory = Array.isArray(params.messages) ? params.messages : [];
+
+  // Apply character-budget-aware slice so very large sessions don't cause
+  // memory or rendering performance issues.
+  const startIndex = resolveHistoryStartIndex(allHistory);
+  const history = startIndex > 0
+    ? allHistory.slice(startIndex)
+    : allHistory;
+
+  // If we truncated history, prepend a notice item alerting the user.
+  if (startIndex > 0) {
+    transcriptItems.push({ kind: 'truncated-notice', key: 'notice:history-truncated' });
+  }
 
   for (let i = 0; i < history.length; i += 1) {
     if (history[i].role === 'compactionSummary') {
       continue;
     }
+
+    // Detect and collapse consecutive identical assistant messages.
+    if (history[i].role === 'assistant') {
+      const prev = transcriptItems.at(-1);
+      const prevMessage = prev?.kind === 'message' ? prev.message : null;
+      if (prevMessage?.role === 'assistant') {
+        const normalized = normalizeMessage(history[i]);
+        const prevNormalized = normalizeMessage(prevMessage);
+        if (
+          normalized.content.length > 0
+          && normalized.content.length === prevNormalized.content.length
+          && normalized.content.every((block, bix) => {
+            const prevBlock = prevNormalized.content[bix];
+            return block.type === prevBlock.type && block.text === prevBlock.text;
+          })
+        ) {
+          // Merge duplicateCount into the previous message's normalized content
+          // by tagging the RawMessage key with a duplicate suffix.
+          transcriptItems[transcriptItems.length - 1] = {
+            kind: 'message',
+            key: `${getMessageKey(prevMessage)}:${((prevMessage as unknown) as Record<string, unknown>)._dup ?? 1}`,
+            message: { ...prevMessage, _dup: (((prevMessage as unknown) as Record<string, unknown>)._dup as number ?? 1) + 1 } as unknown as RawMessage,
+          };
+          continue;
+        }
+      }
+    }
+
     transcriptItems.push({
       kind: 'message',
       key: getMessageKey(history[i]),
@@ -824,7 +905,7 @@ export function buildChatItems(params: {
   for (let i = 0; i < liveCount; i += 1) {
     const segment = streamSegments[i];
     if (segment) {
-      const text = segment.text.trim();
+      const text = stripHeartbeatTokenForDisplay(segment.text).trim();
       if (text) {
         liveItems.push({
           kind: 'stream',
@@ -846,7 +927,9 @@ export function buildChatItems(params: {
     }
   }
 
-  const streamingText = params.streamingMessage ? extractText(params.streamingMessage).trim() : '';
+  const streamingText = stripHeartbeatTokenForDisplay(
+    params.streamingMessage ? extractText(params.streamingMessage) : '',
+  );
   const streamingHasToolOrMedia =
     params.streamingMessage
     && params.showThinking
@@ -1162,9 +1245,10 @@ export function extractToolCards(message: RawMessage, prefix = 'tool'): ToolCard
         existing.outputText = text;
         existing.text = text;
         existing.preview = preview;
+        existing.isError = isToolErrorOutput(text);
         continue;
       }
-      cards.push({ id, kind: 'result', name, outputText: text, text, preview });
+      cards.push({ id, kind: 'result', name, outputText: text, text, preview, isError: isToolErrorOutput(text) });
     }
   }
 
@@ -1189,6 +1273,7 @@ export function extractToolCards(message: RawMessage, prefix = 'tool'): ToolCard
       outputText: text,
       text,
       preview: extractToolPreview(text),
+      isError: isToolErrorOutput(text),
     });
   }
 

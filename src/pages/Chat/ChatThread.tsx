@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { invokeIpc } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import type { RawMessage, StreamSegment } from '@/stores/chat';
-import { extractImages, extractText } from './message-utils';
+import { extractImages, extractText, isToolErrorOutput } from './message-utils';
 import { toSanitizedMarkdownHtml } from './markdown';
 import { detectTextDirection } from './text-direction';
 import {
@@ -213,15 +213,16 @@ const ToolCardItem = memo(function ToolCardItem({
   const display = resolveToolDisplay(card.name, card.args, labels);
   const outputText = card.outputText ?? card.text ?? '';
   const hasText = Boolean(outputText.trim());
-  const inline = hasText && outputText.length <= 80;
+  const inline = hasText && outputText.length <= 240;
   const hasPreview = card.preview?.kind === 'canvas' && Boolean(card.preview.url);
+  const isError = card.isError || isToolErrorOutput(card.outputText);
 
   return (
-    <div className={cn('chat-tool-card', expanded && 'chat-tool-card--expanded')}>
+    <div className={cn('chat-tool-card', expanded && 'chat-tool-card--expanded', isError && 'chat-tool-card--error')}>
       <div className="chat-tool-card__header">
         <div className="chat-tool-card__title">
           <span className="chat-tool-card__icon">
-            {card.outputText || card.preview ? <Check className="h-3.5 w-3.5" /> : <Zap className="h-3.5 w-3.5" />}
+            {isError ? <AlertCircle className="h-3.5 w-3.5" /> : card.outputText || card.preview ? <Check className="h-3.5 w-3.5" /> : <Zap className="h-3.5 w-3.5" />}
           </span>
           <span>{display.label}</span>
         </div>
@@ -243,8 +244,11 @@ const ToolCardItem = memo(function ToolCardItem({
       {card.inputText && expanded ? (
         <pre className="chat-tool-card__full mono"><code>{card.inputText}</code></pre>
       ) : null}
-      {card.outputText !== undefined && !hasText && !hasPreview ? (
+      {card.outputText !== undefined && !hasText && !hasPreview && !isError ? (
         <div className="chat-tool-card__status-text muted">{labels.completed}</div>
+      ) : null}
+      {isError && !hasText && !hasPreview ? (
+        <div className="chat-tool-card__status-text chat-tool-card__status-text--error">Failed</div>
       ) : null}
       {hasPreview ? (
         <div className="chat-tool-card__preview" data-kind="canvas">
@@ -455,6 +459,7 @@ const GroupedMessage = memo(function GroupedMessage({
     || String(role).toLowerCase() === 'tool_result'
     || typeof m.toolCallId === 'string'
     || typeof m.tool_call_id === 'string';
+  const duplicateCount = (m._dup as number) ?? 0;
 
   const toolCards = extractToolCards(message);
   const hasToolCards = toolCards.length > 0;
@@ -496,6 +501,13 @@ const GroupedMessage = memo(function GroupedMessage({
       {canCopyMarkdown ? (
         <div className="chat-bubble-actions">
           <CopyButton text={markdown!} label={labels.codeCopy} />
+        </div>
+      ) : null}
+      {duplicateCount > 1 ? (
+        <div className="chat-bubble-actions">
+          <span className="chat-duplicate-badge" title={`${duplicateCount} duplicate responses collapsed`}>
+            ×{duplicateCount}
+          </span>
         </div>
       ) : null}
       {isToolMessage ? (
@@ -1106,6 +1118,15 @@ export const ChatThread = memo(function ChatThread({
         }
         if (item.kind === 'reading-indicator') {
           return <ReadingIndicator key={item.key} />;
+        }
+        if (item.kind === 'truncated-notice') {
+          return (
+            <TranscriptNotice
+              key={item.key}
+              message={labels.historyWindowLimited}
+              icon="alert"
+            />
+          );
         }
         if (item.kind === 'group') {
           if (hiddenGroups.has(item.key)) {
