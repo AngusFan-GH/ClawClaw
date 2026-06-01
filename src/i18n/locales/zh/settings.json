@@ -487,13 +487,27 @@
     "toasts": {
       "loadFailed": "加载安全策略失败",
       "selectDirectoryFailed": "选择目录失败",
-      "applySuccess": "安全策略已应用。",
+      "applySuccess": "安全策略已应用，Gateway 重启完成。",
       "applyFailed": "应用失败",
-      "resetSuccess": "安全策略已重置。",
+      "resetSuccess": "安全策略已重置，Gateway 重启完成。",
       "resetFailed": "重置失败",
       "enablePromptPolicyFirst": "请先添加至少一个禁止目录，或勾选至少一条限制规则，再启用安全策略。",
-      "interrupted": "已停止当前这轮运行，让更新后的安全策略立刻对后续回合生效。"
+      "interrupted": "已停止当前这轮运行，让更新后的安全策略立刻对后续回合生效。",
+      "gatewayRestartTimeout": "Gateway 重启超时。请手动检查 Gateway 状态。",
+      "syncPartialFailed": "{{count}} 个工作空间同步安全策略失败",
+      "syncWorkspaceFailed": "工作空间"
     },
+    "resetConfirm": {
+      "title": "确定要重置安全策略吗？",
+      "message": "这将把安全设置恢复到默认值。所有禁止目录和行为限制都将被清除。此操作无法撤销。"
+    },
+    "apply": "应用",
+    "applying": "正在应用…",
+    "applyingGateway": "重启中…",
+    "applyingGatewayHint": "Gateway 正在重启，请稍候。",
+    "rulesAlwaysActiveWarning": "行为限制始终生效，无法暂停。即使安全策略被禁用，已激活的限制仍会拦截对应的操作。",
+    "directorySoftLimitNote": "软保护 — 将路径指引添加到工作空间说明中。如需阻止访问目录，请同时启用对应的行为限制。",
+    "highDanger": "高危",
     "dialog": {
       "selectDeniedDirs": "选择禁止的目录"
     },

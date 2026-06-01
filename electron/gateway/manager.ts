@@ -147,6 +147,8 @@ export class GatewayManager extends EventEmitter {
   private readinessRefreshInFlight: Promise<void> | null = null;
   /** Pre-computed launch context from a prior warmup call. Cleared on each start. */
   private cachedLaunchContext: { context: import('./config-sync').GatewayLaunchContext; port: number } | null = null;
+  /** Active denied paths for runtime path enforcement. Updated on security policy apply. */
+  private deniedPaths: string[] = [];
 
   constructor(config?: Partial<ReconnectConfig>) {
     super();
@@ -214,6 +216,66 @@ export class GatewayManager extends EventEmitter {
   private isUnknownGatewayMethodError(error: unknown, method: string): boolean {
     const message = error instanceof Error ? error.message : String(error);
     return new RegExp(`unknown method:\\s*${method.replace('.', '\\.')}`, 'i').test(message);
+  }
+
+  /**
+   * Check if a tool call targets a denied path.
+   * Supports read, write, edit, apply_patch, and browser tools.
+   */
+  private isPathBlocked(toolName: string, params: Record<string, unknown> | undefined): boolean {
+    if (!params || this.deniedPaths.length === 0) return false;
+
+    // Read tool: path or paths argument
+    const paths = params.paths ?? params.path;
+    if (paths) {
+      return this.doesPathMatchDenied(paths);
+    }
+
+    // Write / edit tool: path argument
+    const path = params.path ?? params.file_path ?? params.target;
+    if (path && (toolName === 'write' || toolName === 'edit' || toolName === 'apply_patch')) {
+      return this.doesPathMatchDenied(path);
+    }
+
+    // Browser tool: url check for path traversal
+    const url = typeof params.url === 'string' ? params.url : '';
+    if (toolName === 'browser' && url) {
+      // Block file:// URLs pointing to denied paths
+      if (url.startsWith('file://')) {
+        return this.doesPathMatchDenied(decodeURIComponent(url.replace('file://', '')));
+      }
+    }
+
+    return false;
+  }
+
+  private doesPathMatchDenied(target: string | string[]): boolean {
+    const raw = Array.isArray(target) ? target : [target];
+    for (const path of raw) {
+      if (typeof path !== 'string') continue;
+      const normalized = path.replace(/\\/g, '/');
+      for (const denied of this.deniedPaths) {
+        const deniedNorm = denied.replace(/\\/g, '/');
+        // Check if path equals or is inside the denied directory
+        if (
+          normalized === deniedNorm ||
+          normalized.startsWith(deniedNorm + '/') ||
+          normalized.startsWith(deniedNorm + '\\')
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Update the denied paths list from the current security policy.
+   * Called after the Gateway applies a new security policy.
+   */
+  updateDeniedPaths(paths: string[]): void {
+    this.deniedPaths = paths.filter((p) => typeof p === 'string' && p.length > 0);
+    logger.debug(`[security] Updated denied paths: ${this.deniedPaths.length} entries`);
   }
 
   private waitForRunningStateAfterDisconnect(timeoutMs: number): Promise<void> {
@@ -1182,6 +1244,23 @@ export class GatewayManager extends EventEmitter {
    * Uses OpenClaw protocol format: { type: "req", id: "...", method: "...", params: {...} }
    */
   async rpc<T>(method: string, params?: unknown, timeoutMs = 30000): Promise<T> {
+    // Intercept tool calls against active denied paths — check before setting up
+    // the timeout so we don't leak a timer if we return early.
+    if (
+      this.deniedPaths.length > 0 &&
+      (method === 'tools.call' || method === 'tool.call' || method === 'read' || method === 'write' || method === 'browser')
+    ) {
+      const paramsRecord = params as Record<string, unknown> | undefined;
+      const toolName = typeof paramsRecord?.name === 'string' ? paramsRecord.name : method;
+      if (this.isPathBlocked(toolName, paramsRecord)) {
+        logger.info(`[security] Blocked tool call "${toolName}" due to denied path policy`);
+        return Promise.resolve({
+          ok: false,
+          error: { message: `Tool call "${toolName}" is blocked because it targets a restricted directory.` },
+        } as unknown as T);
+      }
+    }
+
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
         reject(new Error('Gateway not connected'));

@@ -58,6 +58,7 @@
     "stop": "Stop",
     "sendBtw": "Send side question",
     "queueMessage": "Queue message",
+    "queue": "Queue",
     "commandBtwHint": "Side answers are not saved to chat history and do not affect future context.",
     "commandCompactHint": "This triggers a manual context compaction.",
     "commandQueueHint": "This changes queue behavior for the current session when it is busy.",
@@ -77,7 +78,25 @@
     "compactionRetrying": "Context compacted; retrying run",
     "newMessages": "New messages",
     "queuedMessages": "Queued",
-    "queuedAttachmentOnly": "Attachment-only message"
+    "queuedAttachmentOnly": "Attachment-only message",
+    "steer": "Steer",
+    "steerQueuedMessage": "Send this message first",
+    "fallbackCleared": "Fallback cleared: back on {{model}}",
+    "fallbackActive": "Fallback active: {{selected}} → {{active}}",
+    "runDone": "Done",
+    "runInterrupted": "Interrupted",
+    "contextCompacted": "Context compacted",
+    "compactingContext": "Compacting context"
+  },
+  "execApproval": {
+    "title": "Approval Required",
+    "deny": "Deny",
+    "allowOnce": "Allow once",
+    "allowAlways": "Allow always",
+    "kind": {
+      "plugin": "Plugin",
+      "exec": "Exec"
+    }
   },
   "thread": {
     "codeCopy": "Copy",
@@ -88,6 +107,8 @@
     "assistant": "Assistant",
     "tool": "Tool",
     "toolOutput": "Tool output",
+    "toolPending": "Pending",
+    "toolError": "Failed",
     "tokenInputPrefix": "↑",
     "tokenOutputPrefix": "↓",
     "cacheReadPrefix": "R",
@@ -190,5 +211,31 @@
       "queue": { "description": "Adjust queue settings." },
       "bash": { "description": "Run host shell commands (host-only)." }
     }
+  },
+  "runtime": {
+    "duration": "Session duration"
+  },
+  "sessionStatus": {
+    "running": "Running",
+    "done": "Done",
+    "failed": "Failed",
+    "killed": "Stopped",
+    "timeout": "Timeout",
+    "idle": "Idle"
+  },
+  "sessionList": {
+    "searchPlaceholder": "Search sessions...",
+    "sortUpdated": "Last updated",
+    "sortTokens": "Tokens",
+    "sortLabel": "Name",
+    "sortKind": "Kind",
+    "sortAsc": "Ascending",
+    "sortDesc": "Descending",
+    "noResults": "No sessions match your search",
+    "tokens": "{{in}}\u2191{{out}}\u2193",
+    "selectAll": "Select all",
+    "deselectAll": "Deselect",
+    "deleteSelected": "Delete selected",
+    "selectedCount": "{{count}} selected"
   }
 }

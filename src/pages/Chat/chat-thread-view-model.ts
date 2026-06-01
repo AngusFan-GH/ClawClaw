@@ -45,6 +45,8 @@ export type ChatThreadLabels = {
   assistant: string;
   tool: string;
   toolOutput: string;
+  toolPending: string;
+  toolError: string;
   tokenInputPrefix: string;
   tokenOutputPrefix: string;
   cacheReadPrefix: string;

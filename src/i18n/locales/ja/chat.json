@@ -58,6 +58,7 @@
     "stop": "停止",
     "sendBtw": "横道の質問を送信",
     "queueMessage": "キューに追加",
+    "queue": "キュー",
     "commandBtwHint": "横道の回答はチャット履歴に保存されず、今後の文脈にも影響しません。",
     "commandCompactHint": "手動でコンテキスト圧縮を実行します。",
     "commandQueueHint": "会話がビジーのときのキュー挙動を変更します。",
@@ -77,7 +78,25 @@
     "compactionRetrying": "コンテキストを圧縮済み、実行を再試行中",
     "newMessages": "新着メッセージ",
     "queuedMessages": "キュー済み",
-    "queuedAttachmentOnly": "添付のみのメッセージ"
+    "queuedAttachmentOnly": "添付のみのメッセージ",
+    "steer": "優先送信",
+    "steerQueuedMessage": "このメッセージを先に送信",
+    "fallbackCleared": "フォールバック解除：{{model}} に戻ります",
+    "fallbackActive": "フォールバック有効：{{selected}} → {{active}}",
+    "runDone": "完了",
+    "runInterrupted": "中断済み",
+    "contextCompacted": "コンテキストを圧縮済み",
+    "compactingContext": "コンテキストを圧縮中"
+  },
+  "execApproval": {
+    "title": "承認が必要です",
+    "deny": "拒否",
+    "allowOnce": "今回のみ許可",
+    "allowAlways": "常に許可",
+    "kind": {
+      "plugin": "プラグイン",
+      "exec": "Exec"
+    }
   },
   "thread": {
     "codeCopy": "コピー",
@@ -87,7 +106,9 @@
     "you": "あなた",
     "assistant": "Assistant",
     "tool": "ツール",
-    "toolOutput": "Tool output",
+    "toolOutput": "ツール出力",
+    "toolPending": "処理中",
+    "toolError": "失敗",
     "tokenInputPrefix": "↑",
     "tokenOutputPrefix": "↓",
     "cacheReadPrefix": "R",
@@ -190,5 +211,31 @@
       "queue": { "description": "キュー設定を調整します。" },
       "bash": { "description": "ホストの shell コマンドを実行します（ホスト専用）。" }
     }
+  },
+  "runtime": {
+    "duration": "セッション時間"
+  },
+  "sessionStatus": {
+    "running": "実行中",
+    "done": "完了",
+    "failed": "失敗",
+    "killed": "停止",
+    "timeout": "タイムアウト",
+    "idle": "アイドル"
+  },
+  "sessionList": {
+    "searchPlaceholder": "セッションを検索...",
+    "sortUpdated": "最終更新",
+    "sortTokens": "トークン数",
+    "sortLabel": "名前",
+    "sortKind": "種類",
+    "sortAsc": "昇順",
+    "sortDesc": "降順",
+    "noResults": "一致するセッションがありません",
+    "tokens": "{{in}}\u2191{{out}}\u2193",
+    "selectAll": "すべて選択",
+    "deselectAll": "選択解除",
+    "deleteSelected": "選択を削除",
+    "selectedCount": "{{count}} 件選択"
   }
 }

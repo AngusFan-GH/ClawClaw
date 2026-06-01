@@ -312,6 +312,8 @@ async function applyPolicyRuntimeConfig(
   previousPolicy: SecurityPolicy,
   nextPolicy: SecurityPolicy,
 ): Promise<{ managedToolDeny: string[]; totalToolDeny: string[] }> {
+  // Rules are only enforced when the policy is enabled.
+  // If disabled, we remove any previously applied managed denies but keep extra denies intact.
   const nextManaged = nextPolicy.prompt.enabled
     ? getManagedToolDenyForRules(nextPolicy.prompt.rules)
     : [];
@@ -350,7 +352,8 @@ export async function handleSecurityRoutes(
   if (url.pathname === '/api/security/policy' && req.method === 'GET') {
     const current = normalizeSecurityPolicy(await getSetting('securityPolicy'));
     const config = await readOpenclawConfig();
-    sendJson(res, 200, buildPolicySnapshot(current, config));
+    const appliedAt = await getSetting('securityPolicyAppliedAt');
+    sendJson(res, 200, { ...buildPolicySnapshot(current, config), appliedAt });
     return true;
   }
 
@@ -358,6 +361,14 @@ export async function handleSecurityRoutes(
     try {
       const body = await parseJsonBody<Partial<SecurityPolicy>>(req);
       const policy = await normalizePolicyInput(body);
+
+      // Reject saving an enabled policy with no content — this guards against
+      // PUT being used without the apply check.
+      if (policy.prompt.enabled && policy.prompt.deniedPaths.length === 0 && policy.prompt.rules.length === 0) {
+        sendJson(res, 400, { success: false, error: 'Prompt policy enabled but no denied directories or preset restrictions configured.' });
+        return true;
+      }
+
       await setSetting('securityPolicy', policy);
       sendJson(res, 200, { success: true, policy });
     } catch (error) {
@@ -380,6 +391,7 @@ export async function handleSecurityRoutes(
       const config = await readOpenclawConfig();
       const verify = await applyPolicyRuntimeConfig(config, current, policy);
       await setSetting('securityPolicy', policy);
+      await setSetting('securityPolicyAppliedAt', Date.now());
       const reminders = normalizeReminders(await getSetting('reminders'));
       const syncResult = await syncSecurityPolicyArtifacts(config, policy, reminders);
       const gatewayRestartResult = ctx.gatewayApplyCoordinator.enqueue({
@@ -389,11 +401,13 @@ export async function handleSecurityRoutes(
         skipIfStopped: true,
       });
 
+      const appliedAt = Date.now();
       sendJson(res, 200, {
         success: true,
         snapshot: buildPolicySnapshot(policy, config),
         verify,
         sync: syncResult,
+        appliedAt,
         gatewayRestarted: gatewayRestartResult.accepted,
       });
     } catch (error) {
@@ -408,6 +422,7 @@ export async function handleSecurityRoutes(
       const current = normalizeSecurityPolicy(await getSetting('securityPolicy'));
       const verify = await applyPolicyRuntimeConfig(config, current, DEFAULT_SECURITY_POLICY);
       await setSetting('securityPolicy', DEFAULT_SECURITY_POLICY);
+      await setSetting('securityPolicyAppliedAt', Date.now());
       const reminders = normalizeReminders(await getSetting('reminders'));
       const syncResult = await syncSecurityPolicyArtifacts(config, DEFAULT_SECURITY_POLICY, reminders);
       const gatewayRestartResult = ctx.gatewayApplyCoordinator.enqueue({
@@ -417,11 +432,13 @@ export async function handleSecurityRoutes(
         skipIfStopped: true,
       });
 
+      const appliedAt = Date.now();
       sendJson(res, 200, {
         success: true,
         snapshot: buildPolicySnapshot(DEFAULT_SECURITY_POLICY, config),
         verify,
         sync: syncResult,
+        appliedAt,
         gatewayRestarted: gatewayRestartResult.accepted,
       });
     } catch (error) {

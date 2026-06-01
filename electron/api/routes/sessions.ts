@@ -38,6 +38,13 @@ type StoredSessionEntry = {
   modelProvider?: string;
   contextTokens?: number;
   updatedAt?: number;
+  runtimeMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  status?: string;
+  startedAt?: number;
+  endedAt?: number;
 };
 
 type OpenClawSessionEntry = {
@@ -199,6 +206,13 @@ function readStoredSessionEntries(): StoredSessionEntry[] {
               : undefined,
           contextTokens: Number.isFinite(contextTokens) ? contextTokens : undefined,
           updatedAt: Number.isFinite(updatedAt) ? updatedAt : undefined,
+          runtimeMs: Number.isFinite(record.runtimeMs as number) ? (record.runtimeMs as number) : undefined,
+          inputTokens: Number.isFinite(record.inputTokens as number) ? (record.inputTokens as number) : undefined,
+          outputTokens: Number.isFinite(record.outputTokens as number) ? (record.outputTokens as number) : undefined,
+          totalTokens: Number.isFinite(record.totalTokens as number) ? (record.totalTokens as number) : undefined,
+          status: typeof record.status === 'string' ? record.status : undefined,
+          startedAt: Number.isFinite(record.startedAt as number) ? (record.startedAt as number) : undefined,
+          endedAt: Number.isFinite(record.endedAt as number) ? (record.endedAt as number) : undefined,
         });
       }
     } catch {
@@ -349,7 +363,6 @@ async function loadSessionTranscriptByKey(sessionKey: string, limit: number): Pr
   const sessionHelpers = await loadOpenClawSessionHelpers();
   const { storePath, entry } = sessionHelpers.loadSessionEntry(sessionKey);
   if (!entry?.sessionId) return null;
-  const sessionId = entry.sessionId;
   const sessionsDir = path.join(storePath || resolveOpenClawDir(), 'agents');
   const sessionsJson = path.join(sessionsDir, 'sessions.json');
   if (!fs.existsSync(sessionsJson)) return null;

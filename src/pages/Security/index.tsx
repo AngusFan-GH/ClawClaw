@@ -1,15 +1,17 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FolderPlus, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FolderPlus, Trash2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { RefreshButton } from '@/components/common/RefreshButton';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '@/stores/chat';
+import { useGatewayStore } from '@/stores/gateway';
 import {
   DEFAULT_SECURITY_POLICY,
   type SecurityPolicy,
@@ -22,9 +24,23 @@ import {
   normalizeSecurityRules,
 } from '@/shared/security-policy';
 
+const GATEWAY_RESTART_POLL_INTERVAL_MS = 1500;
+const GATEWAY_RESTART_TIMEOUT_MS = 60_000;
+
+function formatRelativeTime(ts: number): string {
+  if (!ts) return '';
+  const diff = Date.now() - ts;
+  if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`;
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
+}
+
 export function Security() {
   const { t } = useTranslation('settings');
   const interruptActiveRunForPolicyChange = useChatStore((state) => state.interruptActiveRunForPolicyChange);
+  const gatewayRefreshStatus = useGatewayStore((s) => s.refreshStatus);
+  const gatewayStatus = useGatewayStore((s) => s.status);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [policy, setPolicy] = useState<SecurityPolicy>(DEFAULT_SECURITY_POLICY);
@@ -37,11 +53,14 @@ export function Security() {
     extraToolDeny: [],
     managedInSync: true,
   });
+  const [appliedAt, setAppliedAt] = useState<number>(0);
+  const [gatewayReady, setGatewayReady] = useState(false);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 
   const loadPolicy = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await hostApiFetch<SecurityPolicySnapshot>('/api/security/policy');
+      const data = await hostApiFetch<SecurityPolicySnapshot & { appliedAt?: number }>('/api/security/policy');
       const nextPolicy = data?.policy ?? DEFAULT_SECURITY_POLICY;
       setPolicy(nextPolicy);
       setSavedPolicy(nextPolicy);
@@ -53,6 +72,7 @@ export function Security() {
         extraToolDeny: [],
         managedInSync: true,
       });
+      setAppliedAt(data?.appliedAt ?? 0);
     } catch (error) {
       toast.error(`${t('security.toasts.loadFailed')}: ${String(error)}`);
     } finally {
@@ -63,6 +83,43 @@ export function Security() {
   useEffect(() => {
     void loadPolicy();
   }, [loadPolicy]);
+
+  // Poll gateway status until fullReady after apply/reset
+  const pollGatewayUntilReady = useCallback((startedAt: number) => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const tick = () => {
+      void gatewayRefreshStatus().then((status) => {
+        if (!status) {
+          // status fetch failed, keep polling
+          timeoutId = setTimeout(tick, GATEWAY_RESTART_POLL_INTERVAL_MS);
+          return;
+        }
+        if (status.fullReady && status.state === 'running') {
+          setGatewayReady(true);
+          return;
+        }
+        if (Date.now() - startedAt > GATEWAY_RESTART_TIMEOUT_MS) {
+          setGatewayReady(false);
+          toast.error(t('security.toasts.gatewayRestartTimeout'));
+          return;
+        }
+        timeoutId = setTimeout(tick, GATEWAY_RESTART_POLL_INTERVAL_MS);
+      });
+    };
+
+    timeoutId = setTimeout(tick, GATEWAY_RESTART_POLL_INTERVAL_MS);
+    return () => clearTimeout(timeoutId);
+  }, [gatewayRefreshStatus, t]);
+
+  useEffect(() => {
+    if (!applying) {
+      setGatewayReady(false);
+      return;
+    }
+    const cleanup = pollGatewayUntilReady(Date.now());
+    return cleanup;
+  }, [applying, pollGatewayUntilReady]);
 
   const addPromptDirs = useCallback(async () => {
     try {
@@ -136,6 +193,7 @@ export function Security() {
     }
 
     setApplying(true);
+    setGatewayReady(false);
     try {
       const interrupted = await interruptActiveRunForPolicyChange(t('security.toasts.interrupted'));
       if (interrupted) {
@@ -143,23 +201,49 @@ export function Security() {
       }
       const response = await hostApiFetch<{
         snapshot?: SecurityPolicySnapshot;
+        appliedAt?: number;
+        sync?: { failures: { workspace: string; error: string }[] };
       }>('/api/security/apply', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
+
       const nextSnapshot = response.snapshot;
-      setSavedPolicy(nextSnapshot?.policy ?? payload);
-      setPolicy(nextSnapshot?.policy ?? payload);
+      const nextPolicy = nextSnapshot?.policy ?? payload;
+      setSavedPolicy(nextPolicy);
+      setPolicy(nextPolicy);
       setRuntime(nextSnapshot?.runtime ?? runtime);
+      const newAppliedAt = response.appliedAt ?? Date.now();
+      setAppliedAt(newAppliedAt);
+
+      // Sync denied paths to gateway manager for runtime path enforcement
+      const pathsToBlock = nextPolicy.prompt.enabled ? nextPolicy.prompt.deniedPaths : [];
+      try {
+        await invokeIpc('security:updateDeniedPaths', pathsToBlock);
+      } catch {
+        // Non-fatal: the path block is also written to workspace artifacts as a fallback
+      }
+
+      // Surface sync failures
+      if (response.sync?.failures?.length) {
+        toast.warning(t('security.toasts.syncPartialFailed', { count: response.sync.failures.length }), {
+          description: response.sync.failures.map((f) => f.workspace).join(', '),
+        });
+      }
+
+      toast.success(t('security.toasts.applySuccess'));
     } catch (error) {
       toast.error(`${t('security.toasts.applyFailed')}: ${String(error)}`);
     } finally {
-      setApplying(false);
+      // Note: applying=true keeps the polling alive until gateway becomes ready.
+      // The useEffect above handles the transition when applying goes false.
     }
   }, [interruptActiveRunForPolicyChange, policy, runtime, t]);
 
   const resetPolicy = useCallback(async () => {
+    setResetConfirmOpen(false);
     setApplying(true);
+    setGatewayReady(false);
     try {
       const interrupted = await interruptActiveRunForPolicyChange(t('security.toasts.interrupted'));
       if (interrupted) {
@@ -167,6 +251,8 @@ export function Security() {
       }
       const response = await hostApiFetch<{
         snapshot?: SecurityPolicySnapshot;
+        appliedAt?: number;
+        sync?: { failures: { workspace: string; error: string }[] };
       }>('/api/security/reset', {
         method: 'POST',
       });
@@ -181,12 +267,36 @@ export function Security() {
         extraToolDeny: [],
         managedInSync: true,
       });
+      const newAppliedAt = response.appliedAt ?? Date.now();
+      setAppliedAt(newAppliedAt);
+
+      // Clear all denied paths on reset
+      try {
+        await invokeIpc('security:updateDeniedPaths', []);
+      } catch {
+        // Non-fatal
+      }
+
+      if (response.sync?.failures?.length) {
+        toast.warning(t('security.toasts.syncPartialFailed', { count: response.sync.failures.length }), {
+          description: response.sync.failures.map((f) => f.workspace).join(', '),
+        });
+      }
+
+      toast.success(t('security.toasts.resetSuccess'));
     } catch (error) {
       toast.error(`${t('security.toasts.resetFailed')}: ${String(error)}`);
     } finally {
-      setApplying(false);
+      // applying=true keeps gateway polling active
     }
   }, [interruptActiveRunForPolicyChange, t]);
+
+  // Mark gateway as ready once it is running
+  useEffect(() => {
+    if (applying && gatewayStatus.fullReady && gatewayStatus.state === 'running') {
+      setGatewayReady(true);
+    }
+  }, [applying, gatewayStatus.fullReady, gatewayStatus.state]);
 
   const summary = useMemo(() => {
     if (!policy.prompt.enabled) {
@@ -211,8 +321,26 @@ export function Security() {
       ? 'security.runtimePreview.outOfSync'
       : 'security.runtimePreview.inSync';
 
+  const applyButtonLabel = applying
+    ? gatewayReady
+      ? t('security.apply')
+      : t('security.applyingGateway')
+    : t('security.apply');
+
+  const rulesAlwaysActiveWarning = !policy.prompt.enabled && policy.prompt.rules.length > 0;
+
   return (
     <div className="-m-6 h-[calc(100vh-2.5rem)] overflow-hidden dark:bg-background">
+      <ConfirmDialog
+        open={resetConfirmOpen}
+        title={t('security.resetConfirm.title')}
+        message={t('security.resetConfirm.message')}
+        confirmLabel={t('security.actions.reset')}
+        variant="destructive"
+        onConfirm={resetPolicy}
+        onCancel={() => setResetConfirmOpen(false)}
+      />
+
       <div className="mx-auto flex h-full w-full max-w-4xl flex-col px-6 py-8 md:px-8 md:py-10">
         <div className="mb-4 shrink-0">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -223,17 +351,26 @@ export function Security() {
             />
 
             <div className="flex flex-wrap items-center gap-2 md:justify-end">
+              {appliedAt > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  {t('security.lastApplied')}: {formatRelativeTime(appliedAt)}
+                </span>
+              )}
               <RefreshButton
                 label={t('security.actions.reload')}
                 loading={loading}
                 onClick={() => void loadPolicy()}
                 disabled={applying}
               />
-              <Button variant="outline" onClick={() => void resetPolicy()} disabled={applying}>
+              <Button variant="outline" onClick={() => setResetConfirmOpen(true)} disabled={applying}>
                 {t('security.actions.reset')}
               </Button>
-              <Button onClick={() => void applyPolicy()} disabled={applying || !isDirty}>
-                {applying ? t('security.applying') : t('security.apply')}
+              <Button
+                onClick={() => void applyPolicy()}
+                disabled={applying || !isDirty}
+                title={applying && !gatewayReady ? t('security.applyingGatewayHint') : undefined}
+              >
+                {applyButtonLabel}
               </Button>
             </div>
           </div>
@@ -241,6 +378,13 @@ export function Security() {
           {isDirty ? (
             <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
               {t('security.pendingNotice')}
+            </div>
+          ) : null}
+
+          {rulesAlwaysActiveWarning ? (
+            <div className="mt-3 rounded-xl border border-orange-300 bg-orange-50 px-4 py-3 text-sm text-orange-900 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-100 flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{t('security.rulesAlwaysActiveWarning')}</span>
             </div>
           ) : null}
         </div>
@@ -314,6 +458,10 @@ export function Security() {
                   <p className="text-sm text-muted-foreground">
                     {t('security.sections.directoriesDesc')}
                   </p>
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3 text-orange-500" />
+                    {t('security.directorySoftLimitNote')}
+                  </p>
                 </div>
                 <Button variant="outline" onClick={addPromptDirs}>
                   <FolderPlus className="mr-2 h-4 w-4" />
@@ -353,13 +501,21 @@ export function Security() {
               <div className="mt-4 grid gap-3">
                 {SECURITY_RULE_DEFINITIONS.map((rule) => {
                   const checked = policy.prompt.rules.includes(rule.key);
+                  const isHighDanger = rule.key === 'denyRuntime' || rule.key === 'denyWrite';
                   return (
                     <div
                       key={rule.key}
-                      className="flex items-start justify-between gap-4 rounded-lg border px-4 py-3 transition-colors hover:border-primary/40"
+                      className={`flex items-start justify-between gap-4 rounded-lg border px-4 py-3 transition-colors hover:border-primary/40 ${
+                        isHighDanger && checked ? 'border-red-300 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20' : ''
+                      }`}
                     >
                       <div className="space-y-1">
-                        <div className="text-sm font-medium">
+                        <div className="text-sm font-medium flex items-center gap-2">
+                          {isHighDanger && checked && (
+                            <span className="inline-flex items-center rounded-md border border-red-300 bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
+                              {t('security.highDanger')}
+                            </span>
+                          )}
                           {t(`security.rules.items.${rule.key}.label`)}
                         </div>
                         <div className="text-sm text-muted-foreground">

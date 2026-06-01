@@ -66,6 +66,7 @@ export interface AppSettings {
 
   // Security
   securityPolicy: SecurityPolicy;
+  securityPolicyAppliedAt: number;
   reminders: ReminderItem[];
 
   // Memory
@@ -120,6 +121,7 @@ const defaults: AppSettings = {
 
   // Security
   securityPolicy: DEFAULT_SECURITY_POLICY,
+  securityPolicyAppliedAt: 0,
   reminders: [],
 
   // Memory
@@ -158,6 +160,9 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     proxyMode,
     proxyEnabled: proxyMode === 'custom',
     securityPolicy: normalizeSecurityPolicy((settings as Partial<AppSettings>).securityPolicy),
+    securityPolicyAppliedAt: typeof (settings as Partial<AppSettings>).securityPolicyAppliedAt === 'number'
+      ? (settings as Partial<AppSettings>).securityPolicyAppliedAt
+      : 0,
     reminders: normalizeReminders((settings as Partial<AppSettings>).reminders),
   };
 }

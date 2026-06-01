@@ -1110,6 +1110,11 @@ export function ChatInput({
               >
                 {primaryAction === 'stop' ? (
                   <Square className="h-4 w-4" fill="currentColor" />
+                ) : sending ? (
+                  <div className="flex flex-col items-center">
+                    <SendHorizontal className="h-[14px] w-[14px] opacity-50" strokeWidth={2} />
+                    <span className="mt-0.5 text-[9px] font-medium leading-none">{t('composer.queue', 'Queue')}</span>
+                  </div>
                 ) : (
                   <SendHorizontal className="h-[18px] w-[18px]" strokeWidth={2} />
                 )}

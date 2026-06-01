@@ -248,7 +248,7 @@ const ToolCardItem = memo(function ToolCardItem({
         <div className="chat-tool-card__status-text muted">{labels.completed}</div>
       ) : null}
       {isError && !hasText && !hasPreview ? (
-        <div className="chat-tool-card__status-text chat-tool-card__status-text--error">Failed</div>
+        <div className="chat-tool-card__status-text chat-tool-card__status-text--error">{labels.toolError}</div>
       ) : null}
       {hasPreview ? (
         <div className="chat-tool-card__preview" data-kind="canvas">
@@ -861,6 +861,8 @@ export const ChatThread = memo(function ChatThread({
     assistant: resolvedAssistantName,
     tool: t('thread.tool', 'Tool'),
     toolOutput: t('thread.toolOutput', 'Tool output'),
+    toolPending: t('thread.toolPending', 'Pending'),
+    toolError: t('thread.toolError', 'Failed'),
     tokenInputPrefix: t('thread.tokenInputPrefix', '↑'),
     tokenOutputPrefix: t('thread.tokenOutputPrefix', '↓'),
     cacheReadPrefix: t('thread.cacheReadPrefix', 'R'),

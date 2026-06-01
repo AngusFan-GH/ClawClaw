@@ -373,13 +373,27 @@
     "toasts": {
       "loadFailed": "Load security policy failed",
       "selectDirectoryFailed": "Select directory failed",
-      "applySuccess": "Security policy applied.",
+      "applySuccess": "Security policy applied. Gateway restart complete.",
       "applyFailed": "Apply failed",
-      "resetSuccess": "Security policy reset.",
+      "resetSuccess": "Security policy reset. Gateway restart complete.",
       "resetFailed": "Reset failed",
       "enablePromptPolicyFirst": "Please add at least one denied directory or enable at least one preset restriction before enabling security policy.",
-      "interrupted": "Current run stopped so the updated security policy can take effect immediately."
+      "interrupted": "Current run stopped so the updated security policy can take effect immediately.",
+      "gatewayRestartTimeout": "Gateway restart timed out. Please check Gateway status manually.",
+      "syncPartialFailed": "{{count}} workspace(s) failed to sync security policy",
+      "syncWorkspaceFailed": "workspace"
     },
+    "resetConfirm": {
+      "title": "Reset security policy?",
+      "message": "This will restore all security settings to their defaults. All denied directories and behavior restrictions will be cleared. This action cannot be undone."
+    },
+    "apply": "Apply",
+    "applying": "Applying…",
+    "applyingGateway": "Restarting…",
+    "applyingGatewayHint": "Gateway is restarting. Please wait.",
+    "rulesAlwaysActiveWarning": "Behavior restrictions are always in effect and cannot be paused. Even when the security policy is disabled, active restrictions will still block their corresponding actions.",
+    "directorySoftLimitNote": "Soft protection — adds path guidance to workspace instructions. To block directory access, also enable the corresponding behavior restriction.",
+    "highDanger": "HIGH RISK",
     "dialog": {
       "selectDeniedDirs": "Select denied directories"
     },

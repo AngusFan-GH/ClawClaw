@@ -87,6 +87,13 @@ export interface ChatSession {
   modelProvider?: string;
   contextTokens?: number;
   updatedAt?: number;
+  runtimeMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  status?: string;
+  startedAt?: number;
+  endedAt?: number;
 }
 
 export interface ToolStatus {
@@ -277,6 +284,7 @@ interface ChatState {
   requestQueueFlush: (runId?: string | null) => void;
   enqueueChatMessage: (item: Omit<QueuedChatMessage, 'id'> & { id?: string }) => void;
   removeQueuedMessage: (id: string) => void;
+  steerQueuedMessage: (id: string) => void;
   clearChatQueue: () => void;
   clearPendingQueueItemsForRun: (runId?: string | null) => void;
   toggleThinking: () => void;
@@ -580,6 +588,13 @@ function normalizeSessionListResponse(data: SessionListResponse | null | undefin
                 ? Number(s.context_tokens)
                 : undefined,
       updatedAt: toMs(s.updatedAt) || undefined,
+      runtimeMs: typeof s.runtimeMs === 'number' ? s.runtimeMs : undefined,
+      inputTokens: typeof s.inputTokens === 'number' ? s.inputTokens : undefined,
+      outputTokens: typeof s.outputTokens === 'number' ? s.outputTokens : undefined,
+      totalTokens: typeof s.totalTokens === 'number' ? s.totalTokens : undefined,
+      status: typeof s.status === 'string' ? s.status : undefined,
+      startedAt: typeof s.startedAt === 'number' ? s.startedAt : undefined,
+      endedAt: typeof s.endedAt === 'number' ? s.endedAt : undefined,
     }))
     .filter((s: ChatSession) => s.key && isChatSidebarSessionKey(s.key));
 }
@@ -2179,6 +2194,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({ chatQueue: s.chatQueue.filter((item) => item.id !== id) }));
   },
 
+  steerQueuedMessage: (id) => {
+    set((s) => {
+      const idx = s.chatQueue.findIndex((item) => item.id === id);
+      if (idx <= 0) return s;
+      const next = [...s.chatQueue];
+      const [item] = next.splice(idx, 1);
+      next.unshift(item);
+      return { chatQueue: next };
+    });
+  },
+
   clearChatQueue: () => {
     set({ chatQueue: [] });
   },
@@ -2812,8 +2838,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
       throw new Error(message);
     }
 
+    // Capture original values before optimistic update so we can roll back on failure.
+    const currentSession = sessions.find((session) => session.key === currentSessionKey);
+    const originalModel = currentSession?.model;
+    const originalModelProvider = currentSession?.modelProvider;
+
+    // Optimistic update — apply immediately so the UI feels instant.
+    const splitIndex = modelForPatch.indexOf('/');
+    const optimisticProvider = splitIndex > 0 ? modelForPatch.slice(0, splitIndex) : undefined;
+    const optimisticModel = splitIndex > 0 ? modelForPatch.slice(splitIndex + 1) : modelForPatch;
+    set((s) => ({
+      sessions: s.sessions.map((session) =>
+        session.key === currentSessionKey
+          ? { ...session, model: optimisticModel, modelProvider: optimisticProvider ?? session.modelProvider }
+          : session,
+      ),
+    }));
+
     try {
-      const currentSession = sessions.find((session) => session.key === currentSessionKey);
       const currentSessionRef = resolveSessionModelRef(currentSession, allowedModelRefs);
       const splitIndex = modelForPatch.indexOf('/');
       const targetProvider = splitIndex > 0 ? modelForPatch.slice(0, splitIndex) : undefined;
@@ -2894,8 +2936,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         )),
       }));
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      set({ error: message });
+      // Rollback optimistic state on failure.
+      set((s) => ({
+        sessions: s.sessions.map((session) =>
+          session.key === currentSessionKey
+            ? { ...session, model: originalModel, modelProvider: originalModelProvider }
+            : session,
+        ),
+        error: err instanceof Error ? err.message : String(err),
+      }));
       throw err;
     }
   },
@@ -2919,12 +2968,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // for them can fall back to an older real transcript, which makes "New chat"
     // appear to jump back into a previous conversation. Keep them empty until the
     // first user message materializes the session in Gateway.
+    // NOTE: We snapshot state here rather than calling get() inside isEmptyEphemeralSession
+    // because Zustand's set() is applied before get() in the same synchronous turn —
+    // get() still reads the *previous* committed state, not the one we just set.
+    const stateSnapshot = get();
     if (isEmptyEphemeralSession(
       requestSessionKey,
-      get().messages,
-      get().pendingLocalSessionKeys,
-      get().pendingUserMessage,
-      get().pendingAssistantMessage,
+      stateSnapshot.messages,
+      stateSnapshot.pendingLocalSessionKeys,
+      stateSnapshot.pendingUserMessage,
+      stateSnapshot.pendingAssistantMessage,
     )) {
       set({
         ...(quiet ? {} : { loading: false }),

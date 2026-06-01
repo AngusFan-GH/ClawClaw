@@ -634,21 +634,21 @@ export function Sidebar() {
                                   openSession(s.key);
                                 }}
                                 className={cn(
-                                  'w-full text-left px-3 py-2.5 pr-8 transition-all',
+                                  'w-full text-left px-3 py-2 pr-8 transition-all',
                                   'hover:bg-white/55 dark:hover:bg-white/[0.06]',
                                   isOnChat && currentSessionKey === s.key
                                     ? 'text-foreground font-semibold'
                                     : 'text-foreground/78'
                                 )}
                               >
-                                <div className="flex min-w-0 items-center gap-2.5">
+                                <div className="flex min-w-0 items-center gap-2">
                                   <span className="min-w-0 flex-1 truncate text-[13px] leading-5">
                                     {getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle, s.subagentRole)}
                                   </span>
                                   <span
                                     title={getSessionAgentLabel(s.key)}
                                     className={cn(
-                                      'ml-auto max-w-[104px] shrink-0 truncate rounded-[10px] px-2 py-0.5 text-[10px] font-medium',
+                                      'ml-auto max-w-[80px] shrink-0 truncate rounded-[10px] px-1.5 py-0.5 text-[10px] font-medium',
                                       isOnChat && currentSessionKey === s.key
                                         ? 'bg-slate-100 text-foreground/72 dark:bg-white/10 dark:text-foreground/80'
                                         : 'bg-black/[0.035] text-muted-foreground dark:bg-white/8'
@@ -716,7 +716,7 @@ export function Sidebar() {
                                           <div key={child.key} className="group relative flex items-center">
                                             <div
                                               className={cn(
-                                                'w-full rounded-[12px] border px-3 py-2.5 pr-8 transition-all',
+                                                'w-full rounded-[12px] border px-3 py-2 pr-7 transition-all',
                                                 'hover:border-black/6 hover:bg-white/78 dark:hover:border-white/10 dark:hover:bg-white/[0.06]',
                                                 isOnChat && currentSessionKey === child.key
                                                   ? 'border-black/8 bg-white/95 text-foreground font-semibold shadow-[0_8px_16px_rgba(15,23,42,0.05)] dark:border-white/12 dark:bg-white/[0.08]'
@@ -738,7 +738,7 @@ export function Sidebar() {
                                                   {showChildAgentLabel && (
                                                     <span
                                                       title={childAgentLabel}
-                                                      className="max-w-[88px] shrink-0 truncate rounded-[10px] bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground dark:bg-white/8"
+                                                      className="shrink-0 truncate rounded-[10px] bg-black/[0.035] px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground dark:bg-white/8"
                                                     >
                                                       {childAgentLabel}
                                                     </span>
@@ -854,7 +854,7 @@ export function Sidebar() {
                                 <div key={s.key} className="group relative flex items-center">
                                   <div
                                     className={cn(
-                                      'w-full rounded-[14px] border px-3 py-2.5 pr-8 transition-all',
+                                      'w-full rounded-[14px] border px-3 py-2 pr-7 transition-all',
                                       'hover:border-black/6 hover:bg-white/55 dark:hover:border-white/10 dark:hover:bg-white/[0.06]',
                                       isOnChat && currentSessionKey === s.key
                                         ? 'border-black/8 bg-white/90 text-foreground font-semibold shadow-[0_8px_18px_rgba(15,23,42,0.06)] dark:border-white/12 dark:bg-white/[0.08]'
@@ -868,17 +868,17 @@ export function Sidebar() {
                                       }}
                                       className="w-full text-left"
                                     >
-                                      <div className="flex min-w-0 items-center gap-2.5">
+                                      <div className="flex min-w-0 items-center gap-2">
                                         <span className="min-w-0 flex-1 truncate text-[13px] leading-5">
                                           {getSessionLabel(s.key, s.displayName, s.label, s.derivedTitle, s.subagentRole)}
                                         </span>
-                                        <span className="shrink-0 rounded-[10px] bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground dark:bg-white/8">
+                                        <span className="shrink-0 rounded-[10px] bg-black/[0.035] px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground dark:bg-white/8">
                                           {getBackgroundSessionKindLabel(s, (key, fallback) => t(key, fallback))}
                                         </span>
                                         <span
                                           title={getSessionAgentLabel(s.key)}
                                           className={cn(
-                                            'max-w-[104px] shrink-0 truncate rounded-[10px] px-2 py-0.5 text-[10px] font-medium',
+                                            'max-w-[80px] shrink-0 truncate rounded-[10px] px-1.5 py-0.5 text-[10px] font-medium',
                                             isOnChat && currentSessionKey === s.key
                                               ? 'bg-slate-100 text-foreground/72 dark:bg-white/10 dark:text-foreground/80'
                                               : 'bg-black/[0.035] text-muted-foreground dark:bg-white/8'

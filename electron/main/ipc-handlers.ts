@@ -1157,7 +1157,15 @@ function registerGatewayHandlers(gatewayManager: GatewayManager, mainWindow: Bro
     }
   });
 
-  // Gateway RPC call
+  // Update Gateway manager's denied paths list from security policy
+  ipcMain.handle('security:updateDeniedPaths', async (_, paths: string[]) => {
+    try {
+      gatewayManager.updateDeniedPaths(paths);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
   ipcMain.handle('gateway:rpc', async (_, method: string, params?: unknown, timeoutMs?: number) => {
     try {
       const result = await gatewayManager.rpc(method, params, timeoutMs);

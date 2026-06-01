@@ -24,6 +24,24 @@ const GATEWAY_START_RECONCILE_TIMEOUT_MS = 130_000;
 const GATEWAY_STOP_RECONCILE_TIMEOUT_MS = 5_000;
 const SESSIONS_CHANGED_REFRESH_DEBOUNCE_MS = 200;
 
+export interface ExecApprovalItem {
+  id: string;
+  kind: 'plugin' | 'exec';
+  expiresAtMs: number;
+  request: {
+    command?: string;
+    args?: string[];
+    cwd?: string;
+    severity?: string;
+    pluginTitle?: string;
+  };
+  pluginTitle?: string;
+  error?: string;
+}
+
+// Module-level exec approval queue — used by gateway notification handler (outside store).
+let execApprovalQueueModule: ExecApprovalItem[] = [];
+
 interface GatewayState {
   status: GatewayStatus;
   lifecycle: GatewayLifecycle;
@@ -31,6 +49,7 @@ interface GatewayState {
   isInitialized: boolean;
   lastError: string | null;
   overlaySuppressed: boolean;
+  execApprovalQueue: ExecApprovalItem[];
   init: () => Promise<void>;
   refreshStatus: () => Promise<GatewayStatus | null>;
   start: () => Promise<void>;
@@ -41,6 +60,7 @@ interface GatewayState {
   setStatus: (status: GatewayStatus) => void;
   setOverlaySuppressed: (suppressed: boolean) => void;
   clearError: () => void;
+  resolveExecApproval: (id: string, decision: 'allow-once' | 'allow-always' | 'deny') => Promise<void>;
 }
 
 function extractExpectedRestartDelayMs(
@@ -180,6 +200,29 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
 
   if (payload.method === 'sessions.changed') {
     scheduleSilentSessionsRefresh();
+    return;
+  }
+
+  if (payload.method === 'exec.approval.pending' && payload.params) {
+    const p = payload.params as Record<string, unknown>;
+    const id = typeof p.id === 'string' ? p.id : '';
+    if (id) {
+      const item: ExecApprovalItem = {
+        id,
+        kind: (p.kind === 'plugin' ? 'plugin' : 'exec') as 'plugin' | 'exec',
+        expiresAtMs: typeof p.expiresAtMs === 'number' ? p.expiresAtMs : Date.now() + 60_000,
+        request: {
+          command: typeof p.command === 'string' ? p.command : undefined,
+          args: Array.isArray(p.args) ? p.args.filter((a): a is string => typeof a === 'string') : undefined,
+          cwd: typeof p.cwd === 'string' ? p.cwd : undefined,
+          severity: typeof p.severity === 'string' ? p.severity : undefined,
+          pluginTitle: typeof p.pluginTitle === 'string' ? p.pluginTitle : undefined,
+        },
+        pluginTitle: typeof p.pluginTitle === 'string' ? p.pluginTitle : undefined,
+      };
+      execApprovalQueueModule = [...execApprovalQueueModule, item];
+      useGatewayStore.setState({ execApprovalQueue: execApprovalQueueModule });
+    }
     return;
   }
 
@@ -459,6 +502,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
   isInitialized: false,
   lastError: null,
   overlaySuppressed: false,
+  execApprovalQueue: [],
 
   refreshStatus: async () => {
     try {
@@ -763,4 +807,10 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
   setStatus: (status) => set({ status: normalizeGatewayStatus(status) }),
   setOverlaySuppressed: (overlaySuppressed) => set({ overlaySuppressed }),
   clearError: () => set({ lastError: null }),
+
+  resolveExecApproval: async (id, decision) => {
+    await get().rpc('exec.approval.resolve', { id, decision });
+    execApprovalQueueModule = execApprovalQueueModule.filter((item) => item.id !== id);
+    set({ execApprovalQueue: execApprovalQueueModule });
+  },
 }));

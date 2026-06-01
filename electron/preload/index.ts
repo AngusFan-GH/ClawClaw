@@ -119,6 +119,8 @@ const electronAPI = {
         'chat:sendWithMedia',
         // Session management
         'session:delete',
+        // Security policy runtime
+        'security:updateDeniedPaths',
         // OpenClaw extras
         'openclaw:getDir',
         'openclaw:getConfigDir',

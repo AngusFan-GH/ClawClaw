@@ -487,13 +487,27 @@
     "toasts": {
       "loadFailed": "セキュリティポリシーの読み込みに失敗しました",
       "selectDirectoryFailed": "ディレクトリの選択に失敗しました",
-      "applySuccess": "セキュリティポリシーを適用しました。",
+      "applySuccess": "セキュリティポリシーを適用しました。Gateway 再起動が完了しました。",
       "applyFailed": "適用に失敗しました",
-      "resetSuccess": "セキュリティポリシーをリセットしました。",
+      "resetSuccess": "セキュリティポリシーをリセットしました。Gateway 再起動が完了しました。",
       "resetFailed": "リセットに失敗しました",
       "enablePromptPolicyFirst": "セキュリティポリシーを有効にする前に、少なくとも 1 つの禁止ディレクトリを追加するか、少なくとも 1 つの制限ルールを有効にしてください。",
-      "interrupted": "更新したセキュリティポリシーをすぐ反映するため、現在の実行を停止しました。"
+      "interrupted": "更新したセキュリティポリシーをすぐ反映するため、現在の実行を停止しました。",
+      "gatewayRestartTimeout": "Gateway 再起動がタイムアウトしました。Gateway のステータスを手動で確認してください。",
+      "syncPartialFailed": "{{count}} 個のワークスペースでセキュリティポリシーの同期に失敗しました",
+      "syncWorkspaceFailed": "ワークスペース"
     },
+    "resetConfirm": {
+      "title": "セキュリティポリシーをリセットしますか？",
+      "message": "すべてのセキュリティ設定をデフォルトに戻します。禁止ディレクトリや動作制限もすべてクリアされます。この操作は取り消せません。"
+    },
+    "apply": "適用",
+    "applying": "適用中…",
+    "applyingGateway": "再起動中…",
+    "applyingGatewayHint": "Gateway を再起動しています。しばらくお待ちください。",
+    "rulesAlwaysActiveWarning": "動作制限は常に有効であり、一時停止できません。セキュリティポリシーが無効な場合でも、有効化された制限は対応する操作をブロックし続けます。",
+    "directorySoftLimitNote": "ソフト保護 — ワークスペースの案内にパスのガイダンスを追加します。ディレクトリへのアクセスをブロックするには、対応する動作制限も有効にしてください。",
+    "highDanger": "高リスク",
     "dialog": {
       "selectDeniedDirs": "禁止ディレクトリを選択"
     },

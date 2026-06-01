@@ -138,7 +138,10 @@ export function Chat() {
   const clearError = useChatStore((s) => s.clearError);
   const enqueueChatMessage = useChatStore((s) => s.enqueueChatMessage);
   const removeQueuedMessage = useChatStore((s) => s.removeQueuedMessage);
+  const steerQueuedMessage = useChatStore((s) => s.steerQueuedMessage);
   const clearChatQueue = useChatStore((s) => s.clearChatQueue);
+  const execApprovalQueue = useGatewayStore((s) => s.execApprovalQueue);
+  const resolveExecApproval = useGatewayStore((s) => s.resolveExecApproval);
   const setSessionModel = useChatStore((s) => s.setSessionModel);
   const setModelGuard = useChatStore((s) => s.setModelGuard);
   const toggleThinking = useChatStore((s) => s.toggleThinking);
@@ -732,17 +735,17 @@ export function Chat() {
     [chatModelCatalog, currentSession?.thinkingLevel, thinkingModelIdentity.model, thinkingModelIdentity.provider]
   );
   const loadingDescription = isGatewayRunning
-    ? t('history.loading', '正在恢复最近对话')
+    ? t('history.loading')
     : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
-      ? t('history.connectingGateway', '网关正在恢复连接')
-      : t('history.waitingForGateway', '网关未连接，请启动或重启网关后再试');
+      ? t('history.connectingGateway')
+      : t('history.waitingForGateway');
   const loadingTitle = isGatewayRunning
-    ? t('loading.title', '正在加载对话')
+    ? t('history.loading')
     : displayGatewayState === 'starting'
-      ? t('toolbar.gatewayStarting', '正在连接网关')
+      ? t('toolbar.gatewayStarting')
       : displayGatewayState === 'reconnecting'
-        ? t('toolbar.gatewayReconnecting', '网关重连中')
-        : t('toolbar.gatewayStopped', '网关未连接');
+        ? t('toolbar.gatewayReconnecting')
+        : t('toolbar.gatewayStopped');
 
   useEffect(() => {
     queueMicrotask(() => clearChatQueue());
@@ -1183,11 +1186,13 @@ export function Chat() {
                     <Loader2 className="h-4 w-4 animate-spin" />
                   )}
                   <span>
-                    {compactionStatus.phase === 'complete'
-                      ? t('status.contextCompacted', 'Context compacted')
-                      : compactionStatus.phase === 'retrying'
-                        ? t('status.compactionRetrying', 'Context compacted; retrying run')
-                        : t('status.compactingContext', 'Compacting context')}
+                    {t(
+                      compactionStatus.phase === 'complete'
+                        ? 'status.contextCompacted'
+                        : compactionStatus.phase === 'retrying'
+                          ? 'status.compactionRetrying'
+                          : 'status.compactingContext'
+                    )}
                   </span>
                 </div>
               )}
@@ -1210,12 +1215,10 @@ export function Chat() {
                     {fallbackStatus.phase === 'cleared'
                       ? t(
                           'status.fallbackCleared',
-                          'Fallback cleared: back on {{model}}',
                           { model: fallbackStatus.active }
                         )
                       : t(
                           'status.fallbackActive',
-                          'Fallback active: {{selected}} -> {{active}}',
                           { selected: fallbackStatus.selected, active: fallbackStatus.active }
                         )}
                   </span>
@@ -1240,9 +1243,7 @@ export function Chat() {
                     <Square className="h-4 w-4 shrink-0 fill-current" />
                   )}
                   <span>
-                    {runStatus.phase === 'done'
-                      ? t('status.runDone', 'Done')
-                      : t('status.runInterrupted', 'Interrupted')}
+                    {t(runStatus.phase === 'done' ? 'status.runDone' : 'status.runInterrupted')}
                   </span>
                 </div>
               )}
@@ -1295,7 +1296,7 @@ export function Chat() {
         <div className="pointer-events-none absolute inset-x-4 bottom-28 z-20 flex justify-center">
           <div className="pointer-events-auto w-full max-w-4xl rounded-[18px] border border-black/10 bg-card/95 p-3 shadow-[0_18px_50px_rgba(15,23,42,0.16)] backdrop-blur-xl dark:border-white/10">
             <div className="mb-2 flex items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              <span>{t('status.queuedMessages', '已排队')} ({queuedMessages.length})</span>
+              <span>{t('status.queuedMessages')} ({queuedMessages.length})</span>
             </div>
             <div className="max-h-28 space-y-2 overflow-y-auto pr-1">
               {queuedMessages.map((item) => (
@@ -1304,15 +1305,92 @@ export function Chat() {
                   className="flex items-center gap-3 rounded-[12px] bg-black/5 px-3 py-2 text-sm dark:bg-white/5"
                 >
                   <div className="min-w-0 flex-1 truncate">
-                    {item.text || t('status.queuedAttachmentOnly', '仅附件消息')}
+                    {item.text || t('status.queuedAttachmentOnly')}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => removeQueuedMessage(item.id)}
-                    className="shrink-0 text-xs text-muted-foreground underline hover:text-foreground"
-                  >
-                    {t('common:actions.remove', '移除')}
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      title={t('status.steerQueuedMessage')}
+                      onClick={() => steerQueuedMessage(item.id)}
+                      className="text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400"
+                    >
+                      {t('status.steer', 'Steer')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeQueuedMessage(item.id)}
+                      className="text-xs text-muted-foreground underline hover:text-foreground"
+                    >
+                      {t('common:actions.remove', '移除')}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {execApprovalQueue.length > 0 ? (
+        <div className="pointer-events-none absolute inset-x-4 z-20 flex justify-center"
+          style={{ bottom: queuedMessages.length > 0 ? '12.5rem' : '7rem' }}>
+          <div className="pointer-events-auto w-full max-w-4xl rounded-[18px] border border-black/10 bg-card/95 p-3 shadow-[0_18px_50px_rgba(15,23,42,0.16)] backdrop-blur-xl dark:border-white/10">
+            <div className="mb-2 flex items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <span>{t('execApproval.title', 'Approval Required')} ({execApprovalQueue.length})</span>
+            </div>
+            <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
+              {execApprovalQueue.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-[12px] bg-black/5 px-3 py-2 text-sm dark:bg-white/5"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={cn(
+                      'inline-block rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+                      item.kind === 'plugin'
+                        ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                    )}>
+                      {t(`execApproval.kind.${item.kind}`, item.kind === 'plugin' ? 'Plugin' : 'Exec')}
+                    </span>
+                    {item.pluginTitle ? (
+                      <span className="text-xs font-semibold text-foreground/70">{item.pluginTitle}</span>
+                    ) : null}
+                    {item.request.severity ? (
+                      <span className="text-[10px] text-muted-foreground">{item.request.severity}</span>
+                    ) : null}
+                  </div>
+                  {item.request.command ? (
+                    <div className="font-mono text-xs text-foreground/80 truncate mb-1">
+                      {item.request.command}
+                      {item.request.args && item.request.args.length > 0
+                        ? ` ${item.request.args.join(' ')}`
+                        : ''}
+                    </div>
+                  ) : null}
+                  <div className="flex items-center justify-end gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => resolveExecApproval(item.id, 'deny')}
+                      className="rounded-lg px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                    >
+                      {t('execApproval.deny', 'Deny')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => resolveExecApproval(item.id, 'allow-once')}
+                      className="rounded-lg px-3 py-1 text-xs font-medium text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                    >
+                      {t('execApproval.allowOnce', 'Allow once')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => resolveExecApproval(item.id, 'allow-always')}
+                      className="rounded-lg bg-emerald-500 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-600"
+                    >
+                      {t('execApproval.allowAlways', 'Allow always')}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

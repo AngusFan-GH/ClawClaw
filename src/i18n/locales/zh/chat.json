@@ -58,6 +58,7 @@
     "stop": "停止",
     "sendBtw": "发送旁支问题",
     "queueMessage": "加入队列",
+    "queue": "队列",
     "commandBtwHint": "旁支回答不会写入会话历史，也不会污染后续上下文。",
     "commandCompactHint": "这会触发一次手动上下文压缩。",
     "commandQueueHint": "这会修改当前会话在忙碌时的排队策略。",
@@ -77,7 +78,25 @@
     "compactionRetrying": "上下文已压缩，正在重试运行",
     "newMessages": "新消息",
     "queuedMessages": "已排队",
-    "queuedAttachmentOnly": "仅附件消息"
+    "queuedAttachmentOnly": "仅附件消息",
+    "steer": "优先发送",
+    "steerQueuedMessage": "将此消息提前发送",
+    "fallbackCleared": "备用模型已清除：恢复使用 {{model}}",
+    "fallbackActive": "备用模型生效：{{selected}} → {{active}}",
+    "runDone": "完成",
+    "runInterrupted": "已中断",
+    "contextCompacted": "上下文已压缩",
+    "compactingContext": "正在压缩上下文"
+  },
+  "execApproval": {
+    "title": "需要审批",
+    "deny": "拒绝",
+    "allowOnce": "仅本次允许",
+    "allowAlways": "始终允许",
+    "kind": {
+      "plugin": "插件",
+      "exec": "命令"
+    }
   },
   "thread": {
     "codeCopy": "复制",
@@ -88,6 +107,8 @@
     "assistant": "助手",
     "tool": "工具",
     "toolOutput": "工具输出",
+    "toolPending": "进行中",
+    "toolError": "失败",
     "tokenInputPrefix": "↑",
     "tokenOutputPrefix": "↓",
     "cacheReadPrefix": "R",
@@ -190,5 +211,31 @@
       "queue": { "description": "调整队列设置。" },
       "bash": { "description": "运行主机 shell 命令（仅主机环境）。" }
     }
+  },
+  "sessionStatus": {
+    "running": "运行中",
+    "done": "已完成",
+    "failed": "失败",
+    "killed": "已停止",
+    "timeout": "超时",
+    "idle": "空闲"
+  },
+  "sessionList": {
+    "searchPlaceholder": "搜索会话...",
+    "sortUpdated": "最近更新",
+    "sortTokens": "Token数",
+    "sortLabel": "名称",
+    "sortKind": "类型",
+    "sortAsc": "升序",
+    "sortDesc": "降序",
+    "noResults": "没有匹配的会话",
+    "tokens": "{{in}}\u2191{{out}}\u2193",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
+    "deleteSelected": "删除所选",
+    "selectedCount": "已选 {{count}} 项"
+  },
+  "runtime": {
+    "duration": "会话时长"
   }
 }
