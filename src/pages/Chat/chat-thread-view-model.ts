@@ -804,6 +804,7 @@ export function buildChatItems(params: {
   sending: boolean;
   pendingFinal: boolean;
   showThinking: boolean;
+  showToolCalls: boolean;
   locale: string;
 }): TranscriptFlowItem[] {
   const transcriptItems: ChatItem[] = [];
@@ -861,9 +862,11 @@ export function buildChatItems(params: {
     });
   }
 
-  const liftedCanvasSources = params.toolMessages
+  const liftedCanvasSources = params.showToolCalls
+    ? params.toolMessages
     .map((tool) => extractChatMessagePreview(tool))
-    .filter((entry): entry is NonNullable<ReturnType<typeof extractChatMessagePreview>> => Boolean(entry));
+    .filter((entry): entry is NonNullable<ReturnType<typeof extractChatMessagePreview>> => Boolean(entry))
+    : [];
   for (const liftedCanvasSource of liftedCanvasSources) {
     const assistantIndex = findNearestAssistantMessageIndex(transcriptItems, liftedCanvasSource.timestamp);
     if (assistantIndex == null) continue;
@@ -920,7 +923,7 @@ export function buildChatItems(params: {
 
     const message = toolMessages[i];
     if (message) {
-      if (!hasVisibleMessageContent(message, params.showThinking)) continue;
+      if (!hasVisibleMessageContent(message, params.showThinking, params.showToolCalls)) continue;
       liveItems.push({
         kind: 'message',
         key: `tool-live:${getMessageKey(message)}`,
@@ -935,7 +938,7 @@ export function buildChatItems(params: {
   const streamingHasToolOrMedia =
     params.streamingMessage
     && params.showThinking
-    && hasVisibleMessageContent(params.streamingMessage, params.showThinking);
+    && hasVisibleMessageContent(params.streamingMessage, params.showThinking, params.showToolCalls);
   if (streamingText) {
     liveItems.push({
       kind: 'stream',
@@ -1282,7 +1285,7 @@ export function extractToolCards(message: RawMessage, prefix = 'tool'): ToolCard
   return cards;
 }
 
-export function hasVisibleMessageContent(message: RawMessage, _showThinking: boolean): boolean {
+export function hasVisibleMessageContent(message: RawMessage, showThinking: boolean, showToolCalls = true): boolean {
   const m = message as unknown as Record<string, unknown>;
   const role = typeof m.role === 'string' ? m.role : 'unknown';
   const isToolResult =
@@ -1290,16 +1293,17 @@ export function hasVisibleMessageContent(message: RawMessage, _showThinking: boo
     || String(role).toLowerCase() === 'tool_result'
     || typeof m.toolCallId === 'string'
     || typeof m.tool_call_id === 'string';
-  const toolCards = extractToolCards(message);
+  const toolCards = showToolCalls ? extractToolCards(message) : [];
   const hasToolCards = toolCards.length > 0;
   const hasImages = extractImages(message).length > 0;
   const markdown = extractText(message)?.trim() ? extractText(message) : '';
+  const hasThinking = showThinking && message.role === 'assistant' && Boolean(extractThinking(message)?.trim());
   const visibleToolCards = hasToolCards;
 
   if (!markdown && visibleToolCards && isToolResult) {
     return true;
   }
-  if (!markdown && !visibleToolCards && !hasImages) {
+  if (!markdown && !visibleToolCards && !hasImages && !hasThinking) {
     return false;
   }
   return true;

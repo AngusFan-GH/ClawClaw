@@ -34,7 +34,9 @@ const DEFAULT_GATEWAY_READY_TIMEOUT_WINDOWS_MS = 120_000;
 const DEFAULT_GATEWAY_READY_INTERVAL_MS = 200;
 const GATEWAY_LOOPBACK_HOST = '127.0.0.1';
 const GATEWAY_READY_LOG_MILESTONES_MS = [5_000, 15_000, 30_000, 45_000, 60_000, 90_000] as const;
-const GATEWAY_READY_PROBE_TIMEOUT_MS = 1_000;
+// Give /readyz a slightly wider startup budget so event-loop pressure from
+// channel/plugin warmup doesn't look like a hard not-ready condition.
+const GATEWAY_READY_PROBE_TIMEOUT_MS = 2_500;
 const GATEWAY_READY_DIAGNOSTIC_BODY_LIMIT = 240;
 
 function formatGatewayReadyTimeout(timeoutMs: number): string {
@@ -364,6 +366,7 @@ export async function connectGatewaySocket(options: {
   deviceIdentity: DeviceIdentity | null;
   platform: string;
   getToken: () => Promise<string>;
+  handshakeTimeoutMs?: number;
   onHandshakeComplete: (ws: WebSocket) => void;
   onMessage: (message: unknown) => void;
   onCloseAfterHandshake: () => void;
@@ -373,7 +376,10 @@ export async function connectGatewaySocket(options: {
   return await new Promise<WebSocket>((resolve, reject) => {
     const wsUrl = `ws://${GATEWAY_LOOPBACK_HOST}:${options.port}/ws`;
     const ws = new WebSocket(wsUrl);
-    const handshakeTimeoutMs = resolveGatewayHandshakeTimeoutMs();
+    const handshakeTimeoutMs =
+      typeof options.handshakeTimeoutMs === 'number' && Number.isFinite(options.handshakeTimeoutMs)
+        ? Math.max(Math.floor(options.handshakeTimeoutMs), 1_000)
+        : resolveGatewayHandshakeTimeoutMs();
     let handshakeComplete = false;
     let connectId: string | null = null;
     let handshakeTimeout: NodeJS.Timeout | null = null;
@@ -457,6 +463,9 @@ export async function connectGatewaySocket(options: {
     });
 
     ws.on('message', (data) => {
+      if (settled && !handshakeComplete) {
+        return;
+      }
       try {
         const message = JSON.parse(data.toString());
         if (
@@ -492,6 +501,9 @@ export async function connectGatewaySocket(options: {
         ) {
           const response = message as GatewayResponseFrame;
           if (response.ok) {
+            if (settled) {
+              return;
+            }
             handshakeComplete = true;
             const hello = (response.payload ?? {}) as GatewayHelloOk;
             if (options.deviceIdentity && hello.auth?.deviceToken) {
@@ -556,6 +568,9 @@ export async function connectGatewaySocket(options: {
 
     ws.on('close', (code, reason) => {
       const reasonStr = reason?.toString() || 'unknown';
+      if (settled && !handshakeComplete) {
+        return;
+      }
       logger.warn(
         `Gateway WebSocket closed (code=${code}, reason=${reasonStr}, handshake=${handshakeComplete ? 'ok' : 'pending'})`
       );
@@ -568,6 +583,9 @@ export async function connectGatewaySocket(options: {
     });
 
     ws.on('error', (error) => {
+      if (settled && !handshakeComplete) {
+        return;
+      }
       if (
         error.message?.includes('closed before handshake') ||
         (error as NodeJS.ErrnoException).code === 'ECONNREFUSED'

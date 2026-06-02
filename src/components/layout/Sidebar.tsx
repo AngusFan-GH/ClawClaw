@@ -141,6 +141,8 @@ function resolveAgentDisplayName(agent: { gateway: { id: string; name?: string; 
 export function Sidebar() {
   const sidebarCollapsed = useSettingsStore((state) => state.sidebarCollapsed);
   const setSidebarCollapsed = useSettingsStore((state) => state.setSidebarCollapsed);
+  const chatHideCronSessions = useSettingsStore((state) => state.chatHideCronSessions);
+  const setChatHideCronSessions = useSettingsStore((state) => state.setChatHideCronSessions);
   const shortcutMenuItems = useSettingsStore((state) => state.shortcutMenuItems);
   const devModeUnlocked = useSettingsStore((state) => state.devModeUnlocked);
 
@@ -194,7 +196,6 @@ export function Sidebar() {
   const [nowMs, setNowMs] = useState(() => Date.now()); // lazy init: computed at mount time, not module-load time
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [backgroundExpanded, setBackgroundExpanded] = useState(false);
-  const [showCronBackground, setShowCronBackground] = useState(false);
   const [expandedTaskParents, setExpandedTaskParents] = useState<Record<string, boolean>>({});
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
   const sessionScrollRef = useRef<HTMLDivElement | null>(null);
@@ -444,7 +445,7 @@ export function Sidebar() {
   const sortedBackgroundSessions = useMemo(
     () => [
       ...nonCronBackgroundSessions.filter((session) => !resolveConversationParentKey(session)),
-      ...(showCronBackground ? cronBackgroundSessions : []),
+      ...(!chatHideCronSessions ? cronBackgroundSessions : []),
     ].sort(
       (a, b) => (sessionLastActivity[b.key] ?? 0) - (sessionLastActivity[a.key] ?? 0)
     ),
@@ -453,7 +454,7 @@ export function Sidebar() {
       nonCronBackgroundSessions,
       resolveConversationParentKey,
       sessionLastActivity,
-      showCronBackground,
+      chatHideCronSessions,
     ]
   );
 
@@ -804,10 +805,10 @@ export function Sidebar() {
                         <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                       )}
                     </button>
-                    {cronBackgroundSessions.length > 0 && !showCronBackground && (
+                    {cronBackgroundSessions.length > 0 && chatHideCronSessions && (
                       <button
                         type="button"
-                        onClick={() => setShowCronBackground(true)}
+                        onClick={() => setChatHideCronSessions(false)}
                         className="shrink-0 rounded-full bg-black/[0.035] px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-black/8 dark:bg-white/8 dark:hover:bg-white/12"
                       >
                         {t('chat:history.showCronSessionsHidden', {

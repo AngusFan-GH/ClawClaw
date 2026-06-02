@@ -21,7 +21,6 @@ import {
   extractGroupSearchText,
   extractToolCards,
   formatArgs,
-  formatChatTime,
   getReasoningMarkdown,
   hasVisibleMessageContent,
   jsonSummaryLabel,
@@ -76,6 +75,50 @@ function fmtTokens(n: number): string {
   return String(n);
 }
 
+function formatChatDateTime(timestamp: number, locale: string): string {
+  return new Date(timestamp).toLocaleString(locale, {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+function resolveContextUsage(meta: GroupMeta | null, contextWindow: number | null): {
+  used: number;
+  limit: number;
+  pct: number;
+} | null {
+  if (!meta || !contextWindow || meta.input <= 0) return null;
+  return {
+    used: meta.input,
+    limit: contextWindow,
+    pct: Math.min(Math.round((meta.input / contextWindow) * 100), 100),
+  };
+}
+
+function findLatestContextUsage(
+  messages: RawMessage[],
+  contextWindow: number | null,
+): { used: number; limit: number; pct: number } | null {
+  if (!contextWindow) return null;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
+    if (msg.role !== 'assistant') continue;
+    const usage = msg.usage as Record<string, number> | undefined;
+    const used = usage?.input ?? usage?.inputTokens ?? 0;
+    if (!used) continue;
+    return {
+      used,
+      limit: contextWindow,
+      pct: Math.min(Math.round((used / contextWindow) * 100), 100),
+    };
+  }
+  return null;
+}
+
 const MessageMeta = memo(function MessageMeta({ meta, labels }: { meta: GroupMeta | null; labels: ChatThreadLabels }) {
   if (!meta) return null;
   const parts: ReactElement[] = [];
@@ -96,6 +139,34 @@ const MessageMeta = memo(function MessageMeta({ meta, labels }: { meta: GroupMet
 
   if (parts.length === 0) return null;
   return <span className="msg-meta">{parts}</span>;
+});
+
+const FooterContextBadge = memo(function FooterContextBadge({ label }: { label: string }) {
+  return (
+    <span className="chat-context-badge">
+      <span className="chat-context-badge__dot" />
+      <span>{label}</span>
+    </span>
+  );
+});
+
+const ContextUsagePill = memo(function ContextUsagePill({
+  usage,
+}: {
+  usage: { used: number; limit: number; pct: number };
+}) {
+  return (
+    <div className="chat-context-pill" role="status" aria-live="polite">
+      <div className="chat-context-pill__track" aria-hidden="true">
+        <div
+          className="chat-context-pill__fill"
+          style={{ width: `${Math.min(Math.max(usage.pct, 0), 100)}%` }}
+        />
+      </div>
+      <span className="chat-context-pill__label">{usage.pct}% context used</span>
+      <span className="chat-context-pill__detail">{fmtTokens(usage.used)} / {fmtTokens(usage.limit)}</span>
+    </div>
+  );
 });
 
 const MessageMarkdown = memo(function MessageMarkdown({ text, labels }: { text: string; labels: ChatThreadLabels }) {
@@ -435,6 +506,7 @@ const GroupedMessage = memo(function GroupedMessage({
   messageKey,
   isStreaming,
   showThinking,
+  showToolCalls,
   labels,
   toolMessageExpanded,
   onToggleToolMessage,
@@ -445,6 +517,7 @@ const GroupedMessage = memo(function GroupedMessage({
   messageKey: string;
   isStreaming: boolean;
   showThinking: boolean;
+  showToolCalls: boolean;
   labels: ChatThreadLabels;
   toolMessageExpanded: boolean;
   onToggleToolMessage: () => void;
@@ -461,7 +534,7 @@ const GroupedMessage = memo(function GroupedMessage({
     || typeof m.tool_call_id === 'string';
   const duplicateCount = (m._dup as number) ?? 0;
 
-  const toolCards = extractToolCards(message);
+  const toolCards = showToolCalls ? extractToolCards(message) : [];
   const hasToolCards = toolCards.length > 0;
   const images = extractImages(message);
   const hasImages = images.length > 0;
@@ -611,6 +684,7 @@ const Avatar = memo(function Avatar({ role }: { role: string }) {
 const Group = memo(function Group({
   group,
   showThinking,
+  showToolCalls,
   labels,
   contextWindow,
   locale,
@@ -622,6 +696,7 @@ const Group = memo(function Group({
 }: {
   group: MessageGroup;
   showThinking: boolean;
+  showToolCalls: boolean;
   labels: ChatThreadLabels;
   contextWindow: number | null;
   locale: string;
@@ -631,14 +706,15 @@ const Group = memo(function Group({
   isToolCardExpanded: (toolCardId: string) => boolean;
   onToggleToolCard: (toolCardId: string) => void;
 }) {
-  const timestamp = formatChatTime(group.timestamp, locale);
+  const fullTimestamp = formatChatDateTime(group.timestamp, locale);
   const label = group.role === 'user'
     ? (group.senderLabel?.trim() || labels.you)
     : group.role === 'assistant'
       ? labels.assistant
       : labels.tool;
   const meta = extractGroupMeta(group, contextWindow);
-  const visibleMessages = group.messages.filter((item) => hasVisibleMessageContent(item.message, showThinking));
+  const footerContextUsage = resolveContextUsage(meta, contextWindow);
+  const visibleMessages = group.messages.filter((item) => hasVisibleMessageContent(item.message, showThinking, showToolCalls));
 
   if (visibleMessages.length === 0 && !group.hasReadingIndicator) {
     return null;
@@ -655,6 +731,7 @@ const Group = memo(function Group({
             messageKey={item.key}
             isStreaming={group.isStreaming && index === visibleMessages.length - 1}
             showThinking={showThinking}
+            showToolCalls={showToolCalls}
             labels={labels}
             toolMessageExpanded={isToolMessageExpanded(`toolmsg:${item.key}`)}
             onToggleToolMessage={() => onToggleToolMessage(`toolmsg:${item.key}`)}
@@ -665,7 +742,10 @@ const Group = memo(function Group({
         {group.hasReadingIndicator ? <div className="chat-group-reading"><ReadingIndicator inline /></div> : null}
         <div className="chat-group-footer">
           <span className="chat-sender-name">{label}</span>
-          <span className="chat-group-timestamp">{timestamp}</span>
+          <span className="chat-group-timestamp" title={fullTimestamp}>{fullTimestamp}</span>
+          {group.role === 'assistant' && footerContextUsage ? (
+            <FooterContextBadge label="Context" />
+          ) : null}
           <MessageMeta meta={meta} labels={labels} />
           <button
             type="button"
@@ -687,13 +767,15 @@ const StreamingGroup = memo(function StreamingGroup({
   startedAt,
   labels,
   locale,
+  showToolCalls,
 }: {
   text: string;
   startedAt: number;
   labels: ChatThreadLabels;
   locale: string;
+  showToolCalls: boolean;
 }) {
-  const timestamp = formatChatTime(startedAt, locale);
+  const fullTimestamp = formatChatDateTime(startedAt, locale);
   return (
     <div className="chat-group assistant">
       <Avatar role="assistant" />
@@ -703,6 +785,7 @@ const StreamingGroup = memo(function StreamingGroup({
           messageKey={`stream:${startedAt}`}
           isStreaming
           showThinking={false}
+          showToolCalls={showToolCalls}
           labels={labels}
           toolMessageExpanded={false}
           onToggleToolMessage={() => undefined}
@@ -711,7 +794,7 @@ const StreamingGroup = memo(function StreamingGroup({
         />
         <div className="chat-group-footer">
           <span className="chat-sender-name">{labels.assistant}</span>
-          <span className="chat-group-timestamp">{timestamp}</span>
+          <span className="chat-group-timestamp" title={fullTimestamp}>{fullTimestamp}</span>
         </div>
       </div>
     </div>
@@ -816,6 +899,7 @@ export const ChatThread = memo(function ChatThread({
   sending,
   pendingFinal,
   showThinking,
+  showToolCalls,
   sessionKey,
   streamingStartedAt,
   contextWindow,
@@ -837,6 +921,7 @@ export const ChatThread = memo(function ChatThread({
   sending: boolean;
   pendingFinal: boolean;
   showThinking: boolean;
+  showToolCalls: boolean;
   sessionKey: string;
   streamingStartedAt: number;
   contextWindow?: number | null;
@@ -907,8 +992,9 @@ export const ChatThread = memo(function ChatThread({
     sending,
     pendingFinal,
     showThinking,
+    showToolCalls,
     locale,
-  }), [locale, messages, pendingUserMessage, pendingAssistantMessage, toolMessages, streamSegments, streamingMessage, streamingStartedAt, sessionKey, sending, pendingFinal, showThinking]);
+  }), [locale, messages, pendingUserMessage, pendingAssistantMessage, toolMessages, streamSegments, streamingMessage, streamingStartedAt, sessionKey, sending, pendingFinal, showThinking, showToolCalls]);
 
   // Context usage notice (>= 85% threshold)
   const contextNotice = useMemo<{ pct: number; used: number; limit: number } | null>(() => {
@@ -931,6 +1017,7 @@ export const ChatThread = memo(function ChatThread({
     const pct = Math.min(Math.round(ratio * 100), 100);
     return { pct, used, limit: contextWindow };
   }, [messages, contextWindow]);
+  const bottomContextUsage = findLatestContextUsage(messages, contextWindow ?? null);
   const latestBtwMessage = useMemo(() => {
     const latest = btwMessages[btwMessages.length - 1] ?? null;
     if (!latest) return null;
@@ -1115,6 +1202,7 @@ export const ChatThread = memo(function ChatThread({
               startedAt={item.startedAt}
               labels={labels}
               locale={locale}
+              showToolCalls={showToolCalls}
             />
           );
         }
@@ -1139,6 +1227,7 @@ export const ChatThread = memo(function ChatThread({
               key={item.key}
               group={item}
               showThinking={showThinking}
+              showToolCalls={showToolCalls}
               labels={labels}
               contextWindow={contextWindow ?? null}
               locale={locale}
@@ -1156,6 +1245,7 @@ export const ChatThread = memo(function ChatThread({
         }
         return null;
       })}
+      {bottomContextUsage ? <ContextUsagePill usage={bottomContextUsage} /> : null}
     </div>
   );
 });

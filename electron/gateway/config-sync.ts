@@ -735,7 +735,7 @@ export function getLastStartupPreflightFailedStepIds(): string[] {
  * DEFERRED from preflight (optimization: plugin file copy is I/O-bound
  * and not required for Gateway startup; deferring unblocks startup).
  */
-export function runDeferredManagedPluginSync(configuredChannels: string[] = []): void {
+export function runDeferredManagedPluginSync(): void {
   void (async () => {
     try {
       // Install all managed plugins so newly-configured channels (e.g. feishu
@@ -1052,8 +1052,11 @@ async function resolveChannelStartupPolicy(): Promise<{
     }
 
     return {
-      skipChannels: false,
-      channelStartupSummary: `enabled(${configuredChannels.join(',')})`,
+      // Start the control plane first, then bring channels online in the
+      // background via channels.start. This keeps channel network setup out of
+      // the initial readyz -> operator handshake critical path.
+      skipChannels: true,
+      channelStartupSummary: `deferred(${configuredChannels.join(',')})`,
       configuredChannels,
     };
   } catch (error) {
@@ -1144,7 +1147,9 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     resolvedProxy.httpProxy || resolvedProxy.httpsProxy || resolvedProxy.allProxy
   );
   const proxyMode = appSettings.proxyMode || (appSettings.proxyEnabled ? 'custom' : 'system');
-  const gatewayProxyBypassRules = resolveGatewayProxyBypassRules(skipChannels ? [] : configuredChannels);
+  // Even when channels are deferred, the Gateway process still needs the right
+  // long-lived proxy environment for later channels.start calls.
+  const gatewayProxyBypassRules = resolveGatewayProxyBypassRules(configuredChannels);
   if (gatewayProxyBypassRules.length > 0) {
     const mergedNoProxy = mergeProxyBypassRules(
       typeof proxyEnv.NO_PROXY === 'string' ? proxyEnv.NO_PROXY : proxyEnv.no_proxy,
@@ -1156,8 +1161,9 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
       resolvedProxy.bypassRules = mergeProxyBypassRules(resolvedProxy.bypassRules, gatewayProxyBypassRules);
     }
   }
-  const requiresDirectWebSocket = !skipChannels
-    && configuredChannels.some((channelType) => CHANNELS_REQUIRING_DIRECT_WEBSOCKET.has(channelType));
+  const requiresDirectWebSocket = configuredChannels.some((channelType) =>
+    CHANNELS_REQUIRING_DIRECT_WEBSOCKET.has(channelType)
+  );
   if (requiresDirectWebSocket) {
     proxyEnv.ALL_PROXY = '';
     proxyEnv.all_proxy = '';

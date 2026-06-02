@@ -230,6 +230,51 @@
   gap: 0;
 }
 
+.chat-context-pill {
+  position: sticky;
+  bottom: 12px;
+  align-self: center;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 10px 14px;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--border) / 0.9);
+  background: hsl(var(--card) / 0.9);
+  color: hsl(var(--muted-foreground));
+  box-shadow: 0 10px 30px hsl(220 20% 20% / 0.08);
+  backdrop-filter: blur(16px);
+}
+
+.chat-context-pill__track {
+  position: relative;
+  width: 74px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: hsl(var(--muted) / 0.9);
+}
+
+.chat-context-pill__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, hsl(var(--foreground) / 0.55), hsl(var(--foreground) / 0.35));
+}
+
+.chat-context-pill__label,
+.chat-context-pill__detail {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.chat-context-pill__label {
+  font-weight: 600;
+  color: hsl(var(--foreground) / 0.72);
+}
+
 .compaction-indicator {
   display: flex;
   align-items: center;
@@ -662,7 +707,8 @@
 .chat-group-footer {
   display: flex;
   gap: 8px;
-  align-items: baseline;
+  align-items: center;
+  flex-wrap: wrap;
   margin-top: 6px;
   color: hsl(var(--muted-foreground));
   padding: 0;
@@ -682,6 +728,28 @@
   font-size: 11px;
   color: hsl(var(--muted-foreground));
   opacity: 0.7;
+}
+
+.chat-context-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card) / 0.72);
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  font-weight: 500;
+  backdrop-filter: blur(10px);
+}
+
+.chat-context-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: hsl(var(--muted-foreground) / 0.7);
 }
 
 .chat-group-delete {
@@ -715,7 +783,6 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-top: 4px;
   flex-wrap: wrap;
   font-size: 11px;
   line-height: 1;

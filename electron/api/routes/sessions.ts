@@ -6,6 +6,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { getOpenClawDir, resolveOpenClawDir } from '../../utils/paths';
+import { readOpenClawConfigRecordRaw } from '../../utils/openclaw-config';
 import { getSetting } from '../../utils/store';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
 
@@ -34,6 +35,21 @@ type StoredSessionEntry = {
   forkedFromParent?: boolean;
   subagentRole?: string;
   thinkingLevel?: string;
+  thinkingOptions?: string[];
+  thinkingLevels?: Array<{ id?: string; label?: string }>;
+  thinkingDefault?: string;
+  fastMode?: boolean;
+  verboseLevel?: string;
+  reasoningLevel?: string;
+  elevatedLevel?: string;
+  execHost?: string;
+  execSecurity?: string;
+  execAsk?: string;
+  execNode?: string;
+  queueMode?: string;
+  queueDebounceMs?: number;
+  queueCap?: number;
+  queueDrop?: string;
   model?: string;
   modelProvider?: string;
   contextTokens?: number;
@@ -45,6 +61,17 @@ type StoredSessionEntry = {
   status?: string;
   startedAt?: number;
   endedAt?: number;
+};
+
+type StoredSessionDefaults = {
+  model?: string;
+  modelProvider?: string;
+  thinkingLevels?: Array<{ id?: string; label?: string }>;
+  thinkingOptions?: string[];
+  thinkingDefault?: string;
+  verboseDefault?: string;
+  reasoningDefault?: string;
+  elevatedDefault?: string;
 };
 
 type OpenClawSessionEntry = {
@@ -79,6 +106,7 @@ const SESSION_LIST_DEFAULT_LIMIT = 30;
 const SESSION_LIST_MAX_LIMIT = 100;
 const SESSION_LABEL_MAX_LENGTH = 50;
 const SESSION_HISTORY_MAX_LIMIT = 200;
+const SESSION_HISTORY_GATEWAY_TIMEOUT_MS = 2_000;
 
 const SESSION_TITLE_NOISE_PREFIXES = [
   'A new session was started via /new or /reset.',
@@ -181,6 +209,20 @@ function readStoredSessionEntries(): StoredSessionEntry[] {
           : typeof contextTokensRaw === 'string'
             ? Number(contextTokensRaw)
             : undefined;
+        const thinkingOptions = Array.isArray(record.thinkingOptions)
+          ? record.thinkingOptions
+              .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+          : undefined;
+        const thinkingLevels = Array.isArray(record.thinkingLevels)
+          ? record.thinkingLevels
+              .flatMap((value) => {
+                if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+                const option = value as Record<string, unknown>;
+                const id = typeof option.id === 'string' ? option.id : undefined;
+                const label = typeof option.label === 'string' ? option.label : undefined;
+                return id || label ? [{ id, label }] : [];
+              })
+          : undefined;
 
         sessions.push({
           key,
@@ -198,6 +240,21 @@ function readStoredSessionEntries(): StoredSessionEntry[] {
           forkedFromParent: record.forkedFromParent === true,
           subagentRole: typeof record.subagentRole === 'string' ? record.subagentRole : undefined,
           thinkingLevel: typeof record.thinkingLevel === 'string' ? record.thinkingLevel : undefined,
+          thinkingOptions: thinkingOptions?.length ? thinkingOptions : undefined,
+          thinkingLevels: thinkingLevels?.length ? thinkingLevels : undefined,
+          thinkingDefault: typeof record.thinkingDefault === 'string' ? record.thinkingDefault : undefined,
+          fastMode: typeof record.fastMode === 'boolean' ? record.fastMode : undefined,
+          verboseLevel: typeof record.verboseLevel === 'string' ? record.verboseLevel : undefined,
+          reasoningLevel: typeof record.reasoningLevel === 'string' ? record.reasoningLevel : undefined,
+          elevatedLevel: typeof record.elevatedLevel === 'string' ? record.elevatedLevel : undefined,
+          execHost: typeof record.execHost === 'string' ? record.execHost : undefined,
+          execSecurity: typeof record.execSecurity === 'string' ? record.execSecurity : undefined,
+          execAsk: typeof record.execAsk === 'string' ? record.execAsk : undefined,
+          execNode: typeof record.execNode === 'string' ? record.execNode : undefined,
+          queueMode: typeof record.queueMode === 'string' ? record.queueMode : undefined,
+          queueDebounceMs: Number.isFinite(record.queueDebounceMs as number) ? (record.queueDebounceMs as number) : undefined,
+          queueCap: Number.isFinite(record.queueCap as number) ? (record.queueCap as number) : undefined,
+          queueDrop: typeof record.queueDrop === 'string' ? record.queueDrop : undefined,
           model: typeof record.model === 'string' ? record.model : undefined,
           modelProvider: typeof record.modelProvider === 'string'
             ? record.modelProvider
@@ -255,6 +312,91 @@ function getAgentIdFromSessionKey(sessionKey: string): string | undefined {
   return trimmed.split(':')[1]?.trim() || undefined;
 }
 
+function parseModelRef(ref?: string | null): { provider?: string; model?: string } {
+  const trimmed = ref?.trim();
+  if (!trimmed) return {};
+  const slashIndex = trimmed.indexOf('/');
+  if (slashIndex <= 0) return { model: trimmed };
+  return {
+    provider: trimmed.slice(0, slashIndex),
+    model: trimmed.slice(slashIndex + 1),
+  };
+}
+
+async function readStoredSessionDefaults(): Promise<StoredSessionDefaults | null> {
+  try {
+    const config = await readOpenClawConfigRecordRaw<Record<string, unknown>>();
+    const agents = config.agents;
+    const defaults = agents && typeof agents === 'object' && !Array.isArray(agents)
+      ? (agents as Record<string, unknown>).defaults
+      : undefined;
+    const defaultsRecord = defaults && typeof defaults === 'object' && !Array.isArray(defaults)
+      ? defaults as Record<string, unknown>
+      : null;
+    if (!defaultsRecord) return null;
+
+    const modelField = defaultsRecord.model;
+    const primaryModel = typeof modelField === 'string'
+      ? modelField.trim()
+      : modelField && typeof modelField === 'object' && !Array.isArray(modelField)
+        && typeof (modelField as Record<string, unknown>).primary === 'string'
+        ? String((modelField as Record<string, unknown>).primary).trim()
+        : '';
+    const parsedModel = parseModelRef(primaryModel);
+    const thinkingOptions = Array.isArray(defaultsRecord.thinkingOptions)
+      ? defaultsRecord.thinkingOptions
+          .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      : undefined;
+    const thinkingLevels = Array.isArray(defaultsRecord.thinkingLevels)
+      ? defaultsRecord.thinkingLevels
+          .flatMap((value) => {
+            if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+            const option = value as Record<string, unknown>;
+            const id = typeof option.id === 'string' ? option.id : undefined;
+            const label = typeof option.label === 'string' ? option.label : undefined;
+            return id || label ? [{ id, label }] : [];
+          })
+      : undefined;
+    const thinkingDefault = typeof defaultsRecord.thinkingDefault === 'string'
+      ? defaultsRecord.thinkingDefault
+      : undefined;
+    const verboseDefault = typeof defaultsRecord.verboseDefault === 'string'
+      ? defaultsRecord.verboseDefault
+      : undefined;
+    const reasoningDefault = typeof defaultsRecord.reasoningDefault === 'string'
+      ? defaultsRecord.reasoningDefault
+      : undefined;
+    const elevatedDefault = typeof defaultsRecord.elevatedDefault === 'string'
+      ? defaultsRecord.elevatedDefault
+      : undefined;
+
+    if (
+      !primaryModel
+      && !thinkingDefault
+      && !thinkingOptions?.length
+      && !thinkingLevels?.length
+      && !verboseDefault
+      && !reasoningDefault
+      && !elevatedDefault
+    ) {
+      return null;
+    }
+
+    return {
+      model: primaryModel || undefined,
+      modelProvider: parsedModel.provider,
+      thinkingOptions: thinkingOptions?.length ? thinkingOptions : undefined,
+      thinkingLevels: thinkingLevels?.length ? thinkingLevels : undefined,
+      thinkingDefault,
+      verboseDefault,
+      reasoningDefault,
+      elevatedDefault,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function enrichPagedSessions(
   sessions: StoredSessionEntry[],
 ): Promise<StoredSessionEntry[]> {
@@ -303,6 +445,7 @@ async function enrichPagedSessions(
 
 const RECENT_TRANSCRIPT_INITIAL_READ_BYTES = 512_000;
 const RECENT_TRANSCRIPT_MAX_READ_BYTES = 10 * 1024 * 1024;
+const LEADING_TRANSCRIPT_READ_BYTES = 256_000;
 
 interface TranscriptMessage {
   role?: string;
@@ -310,6 +453,11 @@ interface TranscriptMessage {
   timestamp?: string;
   id?: string;
 }
+
+type LocalSessionFileEntry = {
+  sessionId?: string;
+  sessionFile?: string;
+};
 
 function readRecentTranscriptMessages(transcriptPath: string, limit: number): TranscriptMessage[] {
   const boundedLimit = Math.max(1, Math.min(Math.floor(limit), 1000));
@@ -341,6 +489,38 @@ function readRecentTranscriptMessages(transcriptPath: string, limit: number): Tr
   }
 }
 
+function readLeadingTranscriptMessages(transcriptPath: string, limit: number): TranscriptMessage[] {
+  const boundedLimit = Math.max(1, Math.min(Math.floor(limit), 1000));
+  try {
+    const fd = fs.openSync(transcriptPath, 'r');
+    try {
+      const size = fs.fstatSync(fd).size;
+      if (size === 0) return [];
+      const readLen = Math.min(size, LEADING_TRANSCRIPT_READ_BYTES);
+      const buffer = Buffer.allocUnsafe(readLen);
+      fs.readSync(fd, buffer, 0, readLen, 0);
+      const lines = buffer.toString('utf8').split(/\r?\n/).filter(Boolean);
+      const result: TranscriptMessage[] = [];
+      for (const line of lines) {
+        if (result.length >= boundedLimit) break;
+        try {
+          const parsed = JSON.parse(line) as TranscriptMessage;
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            result.push(parsed);
+          }
+        } catch {
+          // Skip a potentially truncated trailing line in the first chunk.
+        }
+      }
+      return result;
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return [];
+  }
+}
+
 function parseRecentMessagesFromTailChunk(
   chunk: string,
   byteOffset: number,
@@ -359,24 +539,97 @@ function parseRecentMessagesFromTailChunk(
   return result;
 }
 
-async function loadSessionTranscriptByKey(sessionKey: string, limit: number): Promise<TranscriptMessage[] | null> {
-  const sessionHelpers = await loadOpenClawSessionHelpers();
-  const { storePath, entry } = sessionHelpers.loadSessionEntry(sessionKey);
-  if (!entry?.sessionId) return null;
-  const sessionsDir = path.join(storePath || resolveOpenClawDir(), 'agents');
-  const sessionsJson = path.join(sessionsDir, 'sessions.json');
-  if (!fs.existsSync(sessionsJson)) return null;
-  let sessionsData: { key: string; sessionId?: string; sessionFile?: string }[] = [];
+function readAllTranscriptMessages(transcriptPath: string): TranscriptMessage[] {
   try {
-    sessionsData = JSON.parse(fs.readFileSync(sessionsJson, 'utf8')) as typeof sessionsData;
+    const raw = fs.readFileSync(transcriptPath, 'utf8');
+    if (!raw.trim()) return [];
+    return raw
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .flatMap((line) => {
+        try {
+          const parsed = JSON.parse(line) as TranscriptMessage;
+          return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+            ? [parsed]
+            : [];
+        } catch {
+          return [];
+        }
+      });
+  } catch {
+    return [];
+  }
+}
+
+function resolveLocalSessionsStorePath(sessionKey: string): string | null {
+  const agentId = getAgentIdFromSessionKey(sessionKey);
+  if (!agentId) return null;
+  const storePath = path.join(resolveOpenClawDir(), 'agents', agentId, 'sessions', 'sessions.json');
+  return fs.existsSync(storePath) ? storePath : null;
+}
+
+function findLocalSessionFileEntryByKey(sessionKey: string): LocalSessionFileEntry | null {
+  const sessionsJson = resolveLocalSessionsStorePath(sessionKey);
+  if (!sessionsJson) return null;
+
+  try {
+    const raw = fs.readFileSync(sessionsJson, 'utf8').trim();
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Record<string, unknown> | { sessions?: unknown[] };
+
+    const fromRecord = (record: Record<string, unknown>): LocalSessionFileEntry => ({
+      sessionId: typeof record.sessionId === 'string' ? record.sessionId : undefined,
+      sessionFile: typeof record.sessionFile === 'string' ? record.sessionFile : undefined,
+    });
+
+    if (Array.isArray((parsed as { sessions?: unknown[] }).sessions)) {
+      const entries = (parsed as { sessions?: unknown[] }).sessions ?? [];
+      const match = entries.find((value) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+        const record = value as Record<string, unknown>;
+        const keyValue = record.key ?? record.sessionKey;
+        return typeof keyValue === 'string' && keyValue.trim() === sessionKey;
+      });
+      return match && typeof match === 'object' && !Array.isArray(match)
+        ? fromRecord(match as Record<string, unknown>)
+        : null;
+    }
+
+    const keyed = parsed as Record<string, unknown>;
+    const direct = keyed[sessionKey];
+    if (direct && typeof direct === 'object' && !Array.isArray(direct)) {
+      return fromRecord(direct as Record<string, unknown>);
+    }
+    return null;
   } catch {
     return null;
   }
-  const sessionEntry = sessionsData.find((s) => s.key === sessionKey);
-  if (!sessionEntry?.sessionFile) return null;
-  const transcriptPath = path.join(sessionsDir, sessionEntry.sessionFile);
-  if (!fs.existsSync(transcriptPath)) return null;
-  return readRecentTranscriptMessages(transcriptPath, limit);
+}
+
+function resolveTranscriptPathFromSessionKey(sessionKey: string): string | null {
+  const entry = findLocalSessionFileEntryByKey(sessionKey);
+  const candidate = entry?.sessionFile?.trim();
+  if (!candidate) return null;
+  if (path.isAbsolute(candidate)) {
+    return fs.existsSync(candidate) ? candidate : null;
+  }
+
+  const sessionsJson = resolveLocalSessionsStorePath(sessionKey);
+  if (!sessionsJson) return null;
+  const transcriptPath = path.join(path.dirname(sessionsJson), candidate);
+  return fs.existsSync(transcriptPath) ? transcriptPath : null;
+}
+
+async function loadSessionTranscriptByKey(
+  sessionKey: string,
+  limit: number,
+  mode: 'recent' | 'head' = 'recent',
+): Promise<TranscriptMessage[] | null> {
+  const transcriptPath = resolveTranscriptPathFromSessionKey(sessionKey);
+  if (!transcriptPath) return null;
+  return mode === 'head'
+    ? readLeadingTranscriptMessages(transcriptPath, limit)
+    : readRecentTranscriptMessages(transcriptPath, limit);
 }
 
 function normalizeHistoryMessage(message: unknown): Record<string, unknown> | null {
@@ -496,12 +749,14 @@ export async function handleSessionRoutes(
         .filter((session): session is StoredSessionEntry => Boolean(session))
         .filter((session) => !pageSessions.some((pageSession) => pageSession.key === session.key));
       const sessions = await enrichPagedSessions([...pinnedSessions, ...pageSessions]);
+      const defaults = await readStoredSessionDefaults();
       const nextOffset = offset + pageSessions.length;
       const hasMore = nextOffset < allSessions.length;
 
       sendJson(res, 200, {
         success: true,
         sessions,
+        defaults,
         total: allSessions.length,
         hasMore,
         nextCursor: hasMore ? encodeSessionListCursor(nextOffset) : null,
@@ -536,13 +791,14 @@ export async function handleSessionRoutes(
     const sessionKey = url.searchParams.get('sessionKey')?.trim() || '';
     const limitRaw = Number(url.searchParams.get('limit') ?? '200');
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 1000) : 200;
+    const mode = url.searchParams.get('mode') === 'head' ? 'head' : 'recent';
 
     if (!sessionKey) {
       sendJson(res, 400, { success: false, error: 'sessionKey is required' });
       return true;
     }
 
-    const messages = await loadSessionTranscriptByKey(sessionKey, limit);
+    const messages = await loadSessionTranscriptByKey(sessionKey, limit, mode);
     if (!messages || messages.length === 0) {
       sendJson(res, 404, { success: false, error: 'Transcript not found' });
       return true;
@@ -578,9 +834,15 @@ export async function handleSessionRoutes(
       const gatewayStatus = ctx.gatewayManager.getStatus();
       const gatewayPort = gatewayStatus.port || 18789;
       const gatewayToken = await getSetting('gatewayToken');
+      // Prefer local transcript pagination while the Gateway is still settling
+      // after startup/reconnect. This avoids piling 2-5s history requests onto
+      // a control-plane that is technically "running" but not yet responsive.
       const shouldTryGateway =
-        gatewayStatus.transportReady === true
-        || gatewayStatus.state === 'running';
+        gatewayStatus.state === 'running'
+        && gatewayStatus.transportReady === true
+        && gatewayStatus.fullReady === true
+        && gatewayStatus.runtimeHealthy !== false
+        && !ctx.gatewayManager.isInStartupStabilizationWindow(15_000);
 
       if (shouldTryGateway && gatewayToken) {
         try {
@@ -595,11 +857,18 @@ export async function handleSessionRoutes(
             upstream.searchParams.set('maxChars', String(requestedMaxChars));
           }
 
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => {
+            controller.abort(new Error(`Gateway session history timed out after ${SESSION_HISTORY_GATEWAY_TIMEOUT_MS}ms`));
+          }, SESSION_HISTORY_GATEWAY_TIMEOUT_MS);
           const response = await proxyAwareFetch(upstream, {
             method: 'GET',
             headers: {
               Authorization: `Bearer ${gatewayToken}`,
             },
+            signal: controller.signal,
+          }).finally(() => {
+            clearTimeout(timeoutId);
           });
           if (response.ok) {
             const payload = await response.json().catch(() => null) as
@@ -631,15 +900,13 @@ export async function handleSessionRoutes(
         }
       }
 
-      const helpers = await loadOpenClawSessionHelpers();
-      const { storePath, entry } = helpers.loadSessionEntry(sessionKey);
-      const sessionId = typeof entry?.sessionId === 'string' ? entry.sessionId.trim() : '';
-      if (!sessionId) {
+      const transcriptPath = resolveTranscriptPathFromSessionKey(sessionKey);
+      if (!transcriptPath) {
         sendJson(res, 404, { success: false, error: 'Session transcript not found' });
         return true;
       }
 
-      const rawMessages = await helpers.readSessionMessages(sessionId, storePath, entry?.sessionFile, {});
+      const rawMessages = readAllTranscriptMessages(transcriptPath);
       const normalizedMessages = rawMessages
         .map((message) => normalizeHistoryMessage(message))
         .filter((message): message is Record<string, unknown> => Boolean(message));

@@ -11,6 +11,7 @@ import { historyContainsPendingUserMessage } from '@/pages/Chat/pending-user-mes
 import { useGatewayStore } from './gateway';
 import { getAppliedAgentsSnapshotState } from './agents';
 import { hydrateGatewayHistoryFromTranscript } from './chat/history-transcript-hydrate';
+import { loadSessionTranscriptFallback } from './chat/history-transcript-fallback';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -81,8 +82,21 @@ export interface ChatSession {
   forkedFromParent?: boolean;
   subagentRole?: string;
   thinkingLevel?: string;
+  thinkingLevels?: Array<{ id?: string; label?: string }>;
   thinkingOptions?: string[];
   thinkingDefault?: string;
+  fastMode?: boolean;
+  verboseLevel?: string;
+  reasoningLevel?: string;
+  elevatedLevel?: string;
+  execHost?: string;
+  execSecurity?: string;
+  execAsk?: string;
+  execNode?: string;
+  queueMode?: string;
+  queueDebounceMs?: number;
+  queueCap?: number;
+  queueDrop?: string;
   model?: string;
   modelProvider?: string;
   contextTokens?: number;
@@ -94,6 +108,17 @@ export interface ChatSession {
   status?: string;
   startedAt?: number;
   endedAt?: number;
+}
+
+export interface ChatSessionDefaults {
+  model?: string;
+  modelProvider?: string;
+  thinkingLevels?: Array<{ id?: string; label?: string }>;
+  thinkingOptions?: string[];
+  thinkingDefault?: string;
+  verboseDefault?: string;
+  reasoningDefault?: string;
+  elevatedDefault?: string;
 }
 
 export interface ToolStatus {
@@ -179,6 +204,7 @@ interface LoadSessionsOptions {
 type SessionListResponse = {
   success?: boolean;
   sessions?: Array<Record<string, unknown>>;
+  defaults?: Record<string, unknown>;
   hasMore?: boolean;
   nextCursor?: string | null;
   total?: number;
@@ -233,6 +259,7 @@ interface ChatState {
   sessionsHydrated: boolean;
   sessionsHasMore: boolean;
   sessionsNextCursor: string | null;
+  sessionDefaults: ChatSessionDefaults | null;
   currentSessionKey: string;
   currentAgentId: string;
   /** First user message text per session key, used as display label */
@@ -317,6 +344,13 @@ let _sessionTitleRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 let _sessionTitleRefreshAttempts = 0;
 let _initialHistoryRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 let _initialHistoryRefreshAttempts = 0;
+let _sessionLabelWarmActive = 0;
+const _sessionLabelWarmQueued = new Set<string>();
+const _sessionLabelWarmInFlight = new Set<string>();
+const _sessionLabelWarmDone = new Set<string>();
+const _sessionLabelWarmQueue: string[] = [];
+const _sessionLabelWarmPending = new Set<string>();
+let _sessionLabelWarmTimer: ReturnType<typeof setTimeout> | null = null;
 const CHAT_HISTORY_PAGE_LIMIT = 200;
 // OpenClaw gateway caps chat.history at 500 000 characters per response.
 // Requesting the cap prevents truncation on large sessions.
@@ -329,6 +363,9 @@ const SESSION_TITLE_REFRESH_MAX_ATTEMPTS = 3;
 const INITIAL_HISTORY_REFRESH_DELAY_MS = 1500;
 const INITIAL_HISTORY_REFRESH_MAX_ATTEMPTS = 4;
 const SESSION_LIST_PAGE_LIMIT = 30;
+const SESSION_LABEL_WARM_CONCURRENCY = 1;
+const SESSION_LABEL_WARM_TRANSCRIPT_LIMIT = 40;
+const SESSION_LABEL_WARM_IDLE_DELAY_MS = 1500;
 // Hard timeouts (ms) — prevent indefinite hangs
 const SESSIONS_LIST_TIMEOUT_MS = 10_000;
 const HISTORY_LOAD_TIMEOUT_MS = 30_000;
@@ -570,6 +607,32 @@ function normalizeSessionListResponse(data: SessionListResponse | null | undefin
       forkedFromParent: s.forkedFromParent === true,
       subagentRole: typeof s.subagentRole === 'string' ? s.subagentRole : undefined,
       thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
+      thinkingLevels: Array.isArray(s.thinkingLevels)
+        ? (s.thinkingLevels as Array<Record<string, unknown>>)
+            .flatMap((entry) => {
+              if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+              const id = typeof entry.id === 'string' ? entry.id : undefined;
+              const label = typeof entry.label === 'string' ? entry.label : undefined;
+              return id || label ? [{ id, label }] : [];
+            })
+        : undefined,
+      thinkingOptions: Array.isArray(s.thinkingOptions)
+        ? (s.thinkingOptions as unknown[])
+            .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+        : undefined,
+      thinkingDefault: s.thinkingDefault ? String(s.thinkingDefault) : undefined,
+      fastMode: typeof s.fastMode === 'boolean' ? s.fastMode : undefined,
+      verboseLevel: typeof s.verboseLevel === 'string' ? s.verboseLevel : undefined,
+      reasoningLevel: typeof s.reasoningLevel === 'string' ? s.reasoningLevel : undefined,
+      elevatedLevel: typeof s.elevatedLevel === 'string' ? s.elevatedLevel : undefined,
+      execHost: typeof s.execHost === 'string' ? s.execHost : undefined,
+      execSecurity: typeof s.execSecurity === 'string' ? s.execSecurity : undefined,
+      execAsk: typeof s.execAsk === 'string' ? s.execAsk : undefined,
+      execNode: typeof s.execNode === 'string' ? s.execNode : undefined,
+      queueMode: typeof s.queueMode === 'string' ? s.queueMode : undefined,
+      queueDebounceMs: typeof s.queueDebounceMs === 'number' ? s.queueDebounceMs : undefined,
+      queueCap: typeof s.queueCap === 'number' ? s.queueCap : undefined,
+      queueDrop: typeof s.queueDrop === 'string' ? s.queueDrop : undefined,
       model: s.model ? String(s.model) : undefined,
       modelProvider:
         typeof s.modelProvider === 'string'
@@ -597,6 +660,75 @@ function normalizeSessionListResponse(data: SessionListResponse | null | undefin
       endedAt: typeof s.endedAt === 'number' ? s.endedAt : undefined,
     }))
     .filter((s: ChatSession) => s.key && isChatSidebarSessionKey(s.key));
+}
+
+function normalizeSessionDefaultsResponse(
+  data: SessionListResponse | null | undefined,
+): ChatSessionDefaults | null {
+  const raw = data?.defaults;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const defaults = raw as Record<string, unknown>;
+  const model =
+    typeof defaults.model === 'string'
+      ? defaults.model
+      : typeof defaults.primaryModel === 'string'
+        ? defaults.primaryModel
+        : undefined;
+  const modelProvider =
+    typeof defaults.modelProvider === 'string'
+      ? defaults.modelProvider
+      : typeof defaults.provider === 'string'
+        ? defaults.provider
+        : undefined;
+  const thinkingLevels = Array.isArray(defaults.thinkingLevels)
+    ? (defaults.thinkingLevels as Array<Record<string, unknown>>)
+        .flatMap((entry) => {
+          if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+          const id = typeof entry.id === 'string' ? entry.id : undefined;
+          const label = typeof entry.label === 'string' ? entry.label : undefined;
+          return id || label ? [{ id, label }] : [];
+        })
+    : undefined;
+  const thinkingOptions = Array.isArray(defaults.thinkingOptions)
+    ? (defaults.thinkingOptions as unknown[])
+        .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+    : undefined;
+  const thinkingDefault = typeof defaults.thinkingDefault === 'string'
+    ? defaults.thinkingDefault
+    : undefined;
+  const verboseDefault = typeof defaults.verboseDefault === 'string'
+    ? defaults.verboseDefault
+    : undefined;
+  const reasoningDefault = typeof defaults.reasoningDefault === 'string'
+    ? defaults.reasoningDefault
+    : undefined;
+  const elevatedDefault = typeof defaults.elevatedDefault === 'string'
+    ? defaults.elevatedDefault
+    : undefined;
+
+  if (
+    !model
+    && !modelProvider
+    && !thinkingLevels?.length
+    && !thinkingOptions?.length
+    && !thinkingDefault
+    && !verboseDefault
+    && !reasoningDefault
+    && !elevatedDefault
+  ) {
+    return null;
+  }
+
+  return {
+    model,
+    modelProvider,
+    thinkingLevels: thinkingLevels?.length ? thinkingLevels : undefined,
+    thinkingOptions: thinkingOptions?.length ? thinkingOptions : undefined,
+    thinkingDefault,
+    verboseDefault,
+    reasoningDefault,
+    elevatedDefault,
+  };
 }
 
 function omitSessionKey<T>(record: Record<string, T>, key: string): Record<string, T> {
@@ -769,6 +901,150 @@ function hasResolvableSessionTitle(
   sessionLabels: Record<string, string>,
 ): boolean {
   return Boolean(sessionLabels[session.key] || resolveSessionSidebarTitle(session));
+}
+
+function clearSessionLabelWarmState(sessionKey: string): void {
+  _sessionLabelWarmPending.delete(sessionKey);
+  _sessionLabelWarmQueued.delete(sessionKey);
+  _sessionLabelWarmInFlight.delete(sessionKey);
+  _sessionLabelWarmDone.delete(sessionKey);
+  const queueIndex = _sessionLabelWarmQueue.indexOf(sessionKey);
+  if (queueIndex >= 0) {
+    _sessionLabelWarmQueue.splice(queueIndex, 1);
+  }
+}
+
+function queueMissingSessionLabels(sessionKeys: string[]): void {
+  const state = useChatStore.getState();
+  for (const sessionKey of sessionKeys) {
+    const session = state.sessions.find((entry) => entry.key === sessionKey);
+    if (!session) continue;
+    if (state.pendingLocalSessionKeys[sessionKey]) continue;
+    if (hasResolvableSessionTitle(session, state.sessionLabels)) {
+      _sessionLabelWarmDone.add(sessionKey);
+      continue;
+    }
+    if (
+      _sessionLabelWarmDone.has(sessionKey)
+      || _sessionLabelWarmQueued.has(sessionKey)
+      || _sessionLabelWarmInFlight.has(sessionKey)
+    ) {
+      continue;
+    }
+    _sessionLabelWarmQueued.add(sessionKey);
+    _sessionLabelWarmQueue.push(sessionKey);
+  }
+  processSessionLabelQueue();
+}
+
+function scheduleMissingSessionLabels(sessionKeys: string[]): void {
+  const state = useChatStore.getState();
+  for (const sessionKey of sessionKeys) {
+    const session = state.sessions.find((entry) => entry.key === sessionKey);
+    if (!session) continue;
+    if (state.pendingLocalSessionKeys[sessionKey]) continue;
+    if (hasResolvableSessionTitle(session, state.sessionLabels)) {
+      _sessionLabelWarmDone.add(sessionKey);
+      continue;
+    }
+    if (
+      _sessionLabelWarmDone.has(sessionKey)
+      || _sessionLabelWarmQueued.has(sessionKey)
+      || _sessionLabelWarmInFlight.has(sessionKey)
+    ) {
+      continue;
+    }
+    _sessionLabelWarmPending.add(sessionKey);
+  }
+
+  if (_sessionLabelWarmPending.size === 0 || _sessionLabelWarmTimer) {
+    return;
+  }
+
+  const delay = (
+    state.loading
+    || state.sessionsLoading
+    || Boolean(_sessionRestorePromise)
+  )
+    ? SESSION_LABEL_WARM_IDLE_DELAY_MS
+    : 0;
+
+  _sessionLabelWarmTimer = setTimeout(() => {
+    _sessionLabelWarmTimer = null;
+    const pendingKeys = [..._sessionLabelWarmPending];
+    _sessionLabelWarmPending.clear();
+    queueMissingSessionLabels(pendingKeys);
+  }, delay);
+}
+
+function processSessionLabelQueue(): void {
+  while (
+    _sessionLabelWarmActive < SESSION_LABEL_WARM_CONCURRENCY
+    && _sessionLabelWarmQueue.length > 0
+  ) {
+    const nextSessionKey = _sessionLabelWarmQueue.shift();
+    if (!nextSessionKey) break;
+    _sessionLabelWarmQueued.delete(nextSessionKey);
+    if (_sessionLabelWarmDone.has(nextSessionKey) || _sessionLabelWarmInFlight.has(nextSessionKey)) {
+      continue;
+    }
+    _sessionLabelWarmInFlight.add(nextSessionKey);
+    _sessionLabelWarmActive += 1;
+    void warmSingleSessionLabel(nextSessionKey).finally(() => {
+      _sessionLabelWarmInFlight.delete(nextSessionKey);
+      _sessionLabelWarmActive = Math.max(0, _sessionLabelWarmActive - 1);
+      processSessionLabelQueue();
+    });
+  }
+}
+
+async function warmSingleSessionLabel(sessionKey: string): Promise<void> {
+  try {
+    const state = useChatStore.getState();
+    const session = state.sessions.find((entry) => entry.key === sessionKey);
+    if (!session || state.pendingLocalSessionKeys[sessionKey]) {
+      _sessionLabelWarmDone.add(sessionKey);
+      return;
+    }
+    if (hasResolvableSessionTitle(session, state.sessionLabels)) {
+      _sessionLabelWarmDone.add(sessionKey);
+      return;
+    }
+
+    const transcriptMessages = await loadSessionTranscriptFallback(
+      sessionKey,
+      SESSION_LABEL_WARM_TRANSCRIPT_LIMIT,
+      'head',
+    );
+    const labelText = findSessionTitleCandidate(transcriptMessages);
+
+    const truncated = labelText
+      ? (labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText)
+      : '';
+
+    useChatStore.setState((current) => {
+      const nextSession = current.sessions.find((entry) => entry.key === sessionKey);
+      if (!nextSession || current.pendingLocalSessionKeys[sessionKey]) {
+        return {};
+      }
+      if (hasResolvableSessionTitle(nextSession, current.sessionLabels)) {
+        return {};
+      }
+
+      const next: Partial<ChatState> = {};
+      if (truncated) {
+        next.sessionLabels = {
+          ...current.sessionLabels,
+          [sessionKey]: truncated,
+        };
+      }
+      return next;
+    });
+
+    _sessionLabelWarmDone.add(sessionKey);
+  } catch (error) {
+    console.warn('[session-label-warm] failed:', sessionKey, error);
+  }
 }
 
 function shouldRetryInitialHistory(state: ChatState): boolean {
@@ -2117,6 +2393,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sessionsHydrated: false,
   sessionsHasMore: false,
   sessionsNextCursor: null,
+  sessionDefaults: null,
   currentSessionKey: INITIAL_SESSION_KEY,
   currentAgentId: INITIAL_AGENT_ID,
   sessionLabels: {},
@@ -2242,6 +2519,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ]);
       if (data) {
         const sessions = normalizeSessionListResponse(data);
+        const sessionDefaults = normalizeSessionDefaultsResponse(data);
         const realSessionKeys = new Set(sessions.map((session) => session.key));
 
         const canonicalBySuffix = new Map<string, string>();
@@ -2356,19 +2634,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
           nextSessionKey = preferredSessionKey;
         }
 
-        const shouldKeepSyntheticCurrent = hasLocalPendingSession || dedupedSessions.length === 0;
-        const sessionsWithCurrent =
-          !dedupedSessions.find((s) => s.key === nextSessionKey) &&
-          nextSessionKey &&
-          shouldKeepSyntheticCurrent
-            ? [...dedupedSessions, { key: nextSessionKey, displayName: nextSessionKey }]
-            : dedupedSessions;
-
         const nextPendingLocalSessionKeys = Object.fromEntries(
           Object.entries(pendingLocalSessionKeys).filter(([key]) => (
             !realSessionKeys.has(key) && !materializedSessionKeyMap.has(key)
           ))
         ) as Record<string, true>;
+
+        const pendingSyntheticSessions = localSessions.filter((session) => (
+          Boolean(nextPendingLocalSessionKeys[session.key])
+          && !dedupedSessions.some((entry) => entry.key === session.key)
+        ));
+        const shouldKeepSyntheticCurrent = hasLocalPendingSession || dedupedSessions.length === 0;
+        const sessionsWithCurrent = [...dedupedSessions, ...pendingSyntheticSessions];
+        if (
+          !sessionsWithCurrent.find((s) => s.key === nextSessionKey)
+          && nextSessionKey
+          && shouldKeepSyntheticCurrent
+        ) {
+          sessionsWithCurrent.push({ key: nextSessionKey, displayName: nextSessionKey });
+        }
 
         set((state) => ({
           sessions: sessionsWithCurrent,
@@ -2377,6 +2661,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           sessionsHydrated: true,
           sessionsHasMore: data.hasMore === true,
           sessionsNextCursor: typeof data.nextCursor === 'string' && data.nextCursor.trim() ? data.nextCursor : null,
+          sessionDefaults,
           currentSessionKey: nextSessionKey,
           currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
           pendingLocalSessionKeys: nextPendingLocalSessionKeys,
@@ -2408,6 +2693,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         } else {
           clearSessionTitleRefreshRetry(true);
+        }
+
+        if (warmLabels && unresolvedTitleCount > 0) {
+          scheduleMissingSessionLabels(
+            sessionsWithCurrent
+              .filter((session) => (
+                realSessionKeys.has(session.key)
+                && !nextPendingLocalSessionKeys[session.key]
+                && !hasResolvableSessionTitle(session, hydratedSessionLabels)
+              ))
+              .map((session) => session.key),
+          );
         }
 
       }
@@ -2444,6 +2741,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ]);
 
       const pageSessions = normalizeSessionListResponse(data);
+      const sessionDefaults = normalizeSessionDefaultsResponse(data);
       const state = get();
       const sessionLabels = { ...state.sessionLabels };
       const sessionLastActivity = { ...state.sessionLastActivity };
@@ -2471,9 +2769,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         sessionsLoadingMore: false,
         sessionsHasMore: data?.hasMore === true,
         sessionsNextCursor: typeof data?.nextCursor === 'string' && data.nextCursor.trim() ? data.nextCursor : null,
+        sessionDefaults: sessionDefaults ?? state.sessionDefaults,
         sessionLabels,
         sessionLastActivity,
       });
+
+      scheduleMissingSessionLabels(
+        pageSessions
+          .filter((session) => !hasResolvableSessionTitle(session, sessionLabels))
+          .map((session) => session.key),
+      );
     } catch (err) {
       console.warn('Failed to load more sessions:', err);
       set({ sessionsLoadingMore: false });
@@ -2670,6 +2975,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ error: 'Main sessions cannot be deleted.' });
       return;
     }
+
+    clearSessionLabelWarmState(key);
 
     // Soft-delete the session's JSONL transcript on disk.
     // The main process renames <suffix>.jsonl → <suffix>.deleted.jsonl so that
@@ -3532,7 +3839,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Update session label with first user message text as soon as it's sent,
     // including main sessions before the Gateway derives a title.
-    const { sessionLabels, messages } = get();
+    const { sessionLabels, messages, pendingLocalSessionKeys } = get();
     const isFirstMessage = !messages.some((m) => m.role === 'user');
     if (
       isFirstMessage &&
@@ -3545,6 +3852,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Mark this session as most recently active
     set((s) => ({ sessionLastActivity: { ...s.sessionLastActivity, [currentSessionKey]: nowMs } }));
+
+    if (isFirstMessage && pendingLocalSessionKeys[currentSessionKey]) {
+      setTimeout(() => {
+        if (useGatewayStore.getState().status.state !== 'running') return;
+        const state = get();
+        if (!state.pendingLocalSessionKeys[currentSessionKey]) return;
+        void state.loadSessions({ preserveCurrent: true, warmLabels: true, silent: true });
+      }, 300);
+    }
 
     // Match OpenClaw dashboard: live chat events own the active transcript.
     // Do not poll chat.history mid-run, because an incomplete authoritative

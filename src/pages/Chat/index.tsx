@@ -43,10 +43,10 @@ import {
 } from './chat-page-view-model';
 import {
   type ChatThinkingConfigSnapshot,
-  listThinkingLevelsForModel,
   normalizeThinkingLevel,
+  normalizeThinkingOptionValue,
   parseModelRef,
-  resolveDefaultThinkingLevel,
+  resolveChatThinkingSelectState,
 } from './thinking-levels';
 
 const CHAT_SEND_RPC_TIMEOUT_MS = 135_000;
@@ -112,6 +112,7 @@ export function Chat() {
   const showThinking = useChatStore((s) => s.showThinking);
   const sessions = useChatStore((s) => s.sessions);
   const sessionsHydrated = useChatStore((s) => s.sessionsHydrated);
+  const sessionDefaults = useChatStore((s) => s.sessionDefaults);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const switchSession = useChatStore((s) => s.switchSession);
   const newSession = useChatStore((s) => s.newSession);
@@ -147,6 +148,12 @@ export function Chat() {
   const toggleThinking = useChatStore((s) => s.toggleThinking);
   const chatFocusMode = useSettingsStore((s) => s.chatFocusMode);
   const setChatFocusMode = useSettingsStore((s) => s.setChatFocusMode);
+  const chatShowToolCalls = useSettingsStore((s) => s.chatShowToolCalls);
+  const setChatShowToolCalls = useSettingsStore((s) => s.setChatShowToolCalls);
+  const chatHideCronSessions = useSettingsStore((s) => s.chatHideCronSessions);
+  const setChatHideCronSessions = useSettingsStore((s) => s.setChatHideCronSessions);
+  const chatAutoScroll = useSettingsStore((s) => s.chatAutoScroll);
+  const setChatAutoScroll = useSettingsStore((s) => s.setChatAutoScroll);
 
   const agents = useAgentsStore((s) => s.agents);
   const defaultAgentId = useAgentsStore((s) => s.defaultAgentId);
@@ -172,6 +179,7 @@ export function Chat() {
   const pendingPrependScrollRef = useRef<{ height: number; top: number } | null>(null);
   const processedQueueFlushTokenRef = useRef(0);
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
+  const invalidThinkingAutoClearRef = useRef<string | null>(null);
   const currentSession = sessions.find((session) => session.key === currentSessionKey);
   const sessionAgentId = useMemo(
     () => getAgentIdFromSessionKey(currentSessionKey) || getAgentIdFromSessionKey(currentSession?.key),
@@ -475,6 +483,20 @@ export function Chat() {
     };
   }, []);
 
+  useLayoutEffect(() => {
+    pendingPrependScrollRef.current = null;
+    shouldStickToBottomRef.current = true;
+    setShowNewMessages(false);
+
+    const viewport = scrollViewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    viewport.scrollTop = viewport.scrollHeight;
+    schedulePinChatToBottom('auto');
+  }, [currentSessionKey, schedulePinChatToBottom]);
+
   // Keep a restored or streaming thread pinned only while the user is already at the bottom.
   useLayoutEffect(() => {
     const viewport = scrollViewportRef.current;
@@ -486,7 +508,10 @@ export function Chat() {
     if (!content) return;
 
     const observer = new ResizeObserver(() => {
-      if (!loadingEarlierHistory && shouldStickToBottomRef.current) {
+      if (chatAutoScroll === 'off') {
+        return;
+      }
+      if (!loadingEarlierHistory && (chatAutoScroll === 'always' || shouldStickToBottomRef.current)) {
         pinChatToBottom('auto');
         setShowNewMessages(false);
       }
@@ -494,7 +519,7 @@ export function Chat() {
     observer.observe(content);
 
     return () => observer.disconnect();
-  }, [loadingEarlierHistory, pinChatToBottom]);
+  }, [chatAutoScroll, loadingEarlierHistory, pinChatToBottom]);
 
   // Always scroll to bottom when the user sends a message, regardless of scroll position.
   // This uses queueMicrotask (runs after DOM update) to ensure the user's own
@@ -513,7 +538,13 @@ export function Chat() {
 
   // Auto-scroll on new messages, streaming, or activity changes when the user is already near the bottom.
   useEffect(() => {
-    if (loadingEarlierHistory || !shouldStickToBottomRef.current) {
+    if (chatAutoScroll === 'off') {
+      if (!loadingEarlierHistory && !shouldStickToBottomRef.current) {
+        setShowNewMessages(true);
+      }
+      return;
+    }
+    if (loadingEarlierHistory || (chatAutoScroll !== 'always' && !shouldStickToBottomRef.current)) {
       if (!loadingEarlierHistory && !shouldStickToBottomRef.current) {
         setShowNewMessages(true);
       }
@@ -521,7 +552,7 @@ export function Chat() {
     }
     schedulePinChatToBottom(streamingMessage ? 'auto' : 'smooth');
     setShowNewMessages(false);
-  }, [messages, streamingMessage, sending, pendingFinal, loadingEarlierHistory, schedulePinChatToBottom]);
+  }, [chatAutoScroll, messages, streamingMessage, sending, pendingFinal, loadingEarlierHistory, schedulePinChatToBottom]);
 
   const scrollToBottom = useCallback(() => {
     shouldStickToBottomRef.current = true;
@@ -626,31 +657,55 @@ export function Chat() {
     if (sessionProvider && sessionModel) {
       return { provider: sessionProvider, model: sessionModel };
     }
+    const defaultsProvider = sessionDefaults?.modelProvider?.trim();
+    const defaultsModel = sessionDefaults?.model?.trim();
+    if (defaultsProvider && defaultsModel) {
+      return { provider: defaultsProvider, model: defaultsModel };
+    }
     return parseModelRef(normalizedSelectedModel || normalizedDefaultModelValue);
   }, [
     currentSession?.model,
     currentSession?.modelProvider,
     normalizedDefaultModelValue,
     normalizedSelectedModel,
+    sessionDefaults?.model,
+    sessionDefaults?.modelProvider,
   ]);
-  const thinkingDefault = useMemo(
-    () => resolveDefaultThinkingLevel({
-      provider: thinkingModelIdentity.provider,
-      model: thinkingModelIdentity.model,
+  const thinkingState = useMemo(
+    () => resolveChatThinkingSelectState({
+      sessionThinkingLevel: currentSession?.thinkingLevel,
+      sessionThinkingLevels: currentSession?.thinkingLevels,
+      sessionThinkingOptions: currentSession?.thinkingOptions,
+      sessionThinkingDefault: currentSession?.thinkingDefault,
+      sessionProvider: currentSession?.modelProvider || thinkingModelIdentity.provider,
+      sessionModel: currentSession?.model || thinkingModelIdentity.model,
+      defaultsThinkingLevels: sessionDefaults?.thinkingLevels,
+      defaultsThinkingOptions: sessionDefaults?.thinkingOptions,
+      defaultsThinkingDefault: sessionDefaults?.thinkingDefault,
+      defaultsProvider: sessionDefaults?.modelProvider,
+      defaultsModel: sessionDefaults?.model,
       catalog: chatModelCatalog,
       config: chatThinkingConfig,
     }),
-    [chatModelCatalog, chatThinkingConfig, thinkingModelIdentity.model, thinkingModelIdentity.provider],
+    [
+      chatModelCatalog,
+      chatThinkingConfig,
+      currentSession?.thinkingDefault,
+      currentSession?.thinkingLevel,
+      currentSession?.thinkingLevels,
+      currentSession?.thinkingOptions,
+      currentSession?.model,
+      currentSession?.modelProvider,
+      sessionDefaults?.model,
+      sessionDefaults?.modelProvider,
+      sessionDefaults?.thinkingDefault,
+      sessionDefaults?.thinkingLevels,
+      sessionDefaults?.thinkingOptions,
+      thinkingModelIdentity.model,
+      thinkingModelIdentity.provider,
+    ],
   );
-
-  // Gateway not running block has been completely removed so the UI always renders.
-  const effectiveThinkingLevel = (
-    currentSession?.thinkingLevel?.trim()
-    || thinkingDefault
-    || 'off'
-  ).toLowerCase();
-  const canShowThinkingDetails = effectiveThinkingLevel !== 'off';
-  const showThinkingDetails = showThinking && canShowThinkingDetails;
+  const showThinkingDetails = showThinking && thinkingState.canShowThinkingDetails;
 
   const {
     liveStreamingMessage,
@@ -705,6 +760,10 @@ export function Chat() {
 
   const resolvedAgentLabel = currentAgentLabel?.trim() || 'Main';
   const resolvedAssistantName = resolvedAgentLabel;
+  const hiddenCronCount = useMemo(
+    () => sessions.filter((session) => session.kind === 'cron' || session.key.includes(':cron:')).length,
+    [sessions]
+  );
   const handleExportChat = useCallback(() => {
     exportChatMarkdown(messages, resolvedAssistantName);
   }, [messages, resolvedAssistantName]);
@@ -722,18 +781,6 @@ export function Chat() {
     modelOptions,
     modelCatalogSyncing: chatModelsLoading,
   });
-  const thinkingOptions = useMemo(
-    () => [
-      '',
-      ...listThinkingLevelsForModel({
-        provider: thinkingModelIdentity.provider,
-        model: thinkingModelIdentity.model,
-        catalog: chatModelCatalog,
-        currentLevel: currentSession?.thinkingLevel,
-      }),
-    ],
-    [chatModelCatalog, currentSession?.thinkingLevel, thinkingModelIdentity.model, thinkingModelIdentity.provider]
-  );
   const loadingDescription = isGatewayRunning
     ? t('history.loading')
     : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
@@ -821,7 +868,6 @@ export function Chat() {
         key: currentSessionKey,
         thinkingLevel: normalizedLevel ?? null,
       });
-      void loadSessions({ preserveCurrent: true, warmLabels: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       useChatStore.setState((state) => ({
@@ -837,7 +883,71 @@ export function Chat() {
       }));
       throw err;
     }
-  }, [currentSessionKey, loadSessions]);
+  }, [currentSessionKey]);
+
+  const compactCurrentSession = useCallback(async (): Promise<void> => {
+    const result = await useGatewayStore.getState().rpc<{
+      compacted?: boolean;
+      reason?: string;
+      result?: { tokensBefore?: number; tokensAfter?: number };
+    }>('sessions.compact', { key: currentSessionKey });
+    if (result?.compacted) {
+      const before = result.result?.tokensBefore;
+      const after = result.result?.tokensAfter;
+      const tokenSummary =
+        typeof before === 'number' && typeof after === 'number'
+          ? ` (${before.toLocaleString()} -> ${after.toLocaleString()} tokens)`
+          : '';
+      appendSystemMessage(`Context compacted successfully${tokenSummary}.`);
+    } else if (typeof result?.reason === 'string' && result.reason.trim()) {
+      appendSystemMessage(`Compaction skipped: ${result.reason}`);
+    } else {
+      appendSystemMessage('Compaction skipped.');
+    }
+    await loadHistory(true);
+  }, [appendSystemMessage, currentSessionKey, loadHistory]);
+
+  useEffect(() => {
+    if (!isGatewayRunning) return;
+    const persistedThinkingLevel = currentSession?.thinkingLevel?.trim();
+    if (!persistedThinkingLevel) {
+      invalidThinkingAutoClearRef.current = null;
+      return;
+    }
+
+    const normalizedPersisted = normalizeThinkingOptionValue(persistedThinkingLevel);
+    if (!normalizedPersisted || normalizedPersisted === 'off') {
+      invalidThinkingAutoClearRef.current = null;
+      return;
+    }
+
+    if (thinkingState.options.length > 0) {
+      invalidThinkingAutoClearRef.current = null;
+      return;
+    }
+
+    const modelSignature = [
+      currentSessionKey,
+      currentSession?.modelProvider || sessionDefaults?.modelProvider || '',
+      currentSession?.model || sessionDefaults?.model || '',
+      normalizedPersisted,
+    ].join('|');
+    if (invalidThinkingAutoClearRef.current === modelSignature) {
+      return;
+    }
+    invalidThinkingAutoClearRef.current = modelSignature;
+    void setSessionThinkingLevel(undefined).catch(() => undefined);
+  }, [
+    currentSession?.model,
+    currentSession?.modelProvider,
+    currentSession?.thinkingLevel,
+    currentSessionKey,
+    isGatewayRunning,
+    sessionDefaults?.model,
+    sessionDefaults?.modelProvider,
+    setSessionThinkingLevel,
+    thinkingState.options.length,
+  ]);
 
   const executeLocalSlashCommand = useCallback(async (
     commandName: string,
@@ -877,25 +987,7 @@ export function Chat() {
         return true;
       }
       case 'compact': {
-        const result = await useGatewayStore.getState().rpc<{
-          compacted?: boolean;
-          reason?: string;
-          result?: { tokensBefore?: number; tokensAfter?: number };
-        }>('sessions.compact', { key: currentSessionKey });
-        if (result?.compacted) {
-          const before = result.result?.tokensBefore;
-          const after = result.result?.tokensAfter;
-          const tokenSummary =
-            typeof before === 'number' && typeof after === 'number'
-              ? ` (${before.toLocaleString()} -> ${after.toLocaleString()} tokens)`
-              : '';
-          appendSystemMessage(`Context compacted successfully${tokenSummary}.`);
-        } else if (typeof result?.reason === 'string' && result.reason.trim()) {
-          appendSystemMessage(`Compaction skipped: ${result.reason}`);
-        } else {
-          appendSystemMessage('Compaction skipped.');
-        }
-        await loadHistory(true);
+        await compactCurrentSession();
         return true;
       }
       case 'focus': {
@@ -968,6 +1060,7 @@ export function Chat() {
     loadSessions,
     messages,
     newSession,
+    compactCurrentSession,
     enqueueChatMessage,
     normalizedAgentModelValue,
     normalizedDefaultModelValue,
@@ -1139,6 +1232,17 @@ export function Chat() {
           onSearchChange={shouldShowWelcome ? undefined : setSearchQuery}
           canExport={messages.length > 0}
           onExport={handleExportChat}
+          showToolCalls={chatShowToolCalls}
+          onToggleToolCalls={() => setChatShowToolCalls(!chatShowToolCalls)}
+          showThinking={showThinkingDetails}
+          onToggleThinking={thinkingState.canShowThinkingDetails ? toggleThinking : undefined}
+          chatFocusMode={chatFocusMode}
+          onToggleFocusMode={() => setChatFocusMode(!chatFocusMode)}
+          hiddenCronCount={hiddenCronCount}
+          hideCronSessions={chatHideCronSessions}
+          onToggleCronSessions={() => setChatHideCronSessions(!chatHideCronSessions)}
+          autoScrollMode={chatAutoScroll}
+          onAutoScrollModeChange={setChatAutoScroll}
         />
       </div>
 
@@ -1260,6 +1364,7 @@ export function Chat() {
                 sending={sending}
                 pendingFinal={pendingFinal}
                 showThinking={showThinkingDetails}
+                showToolCalls={chatShowToolCalls}
                 sessionKey={currentSessionKey}
                 contextWindow={currentSession?.contextTokens ?? null}
                 assistantName={resolvedAssistantName}
@@ -1420,7 +1525,7 @@ export function Chat() {
       <ChatInput
         onSend={handleChatSend}
         onStop={abortRun}
-        onToggleThinking={canShowThinkingDetails ? toggleThinking : undefined}
+        onToggleThinking={thinkingState.canShowThinkingDetails ? toggleThinking : undefined}
         resetKey={`${currentSessionKey || 'no-session'}:${shouldShowWelcome ? 'welcome' : isEmpty ? 'empty' : 'active'}`}
         modelOptions={modelOptions}
         selectedModel={normalizedSelectedModel || normalizedAgentModelValue}
@@ -1430,9 +1535,9 @@ export function Chat() {
         onConfigureModels={() => navigate('/models')}
         modelDisabled={!isGatewayRunning}
         modelState={modelState}
-        thinkingLevel={currentSession?.thinkingLevel ?? null}
-        thinkingOptions={thinkingOptions}
-        thinkingDefault={thinkingDefault}
+        thinkingLevel={thinkingState.currentOverride || null}
+        thinkingOptions={thinkingState.options}
+        thinkingDefaultLevel={thinkingState.defaultLevel}
         onThinkingLevelChange={setSessionThinkingLevel}
         thinkingDisabled={!isGatewayRunning || sending || Boolean(activeRunId) || loading}
         disabled={!isGatewayRunning}

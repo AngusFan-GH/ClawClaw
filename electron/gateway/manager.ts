@@ -108,6 +108,9 @@ export interface GatewayManagerEvents {
 export class GatewayManager extends EventEmitter {
   private static readonly ATTACH_PROBE_COOLDOWN_MS = 8000;
   private static readonly IN_PLACE_RESTART_READY_TIMEOUT_MS = 70_000;
+  private static readonly STARTUP_CONNECT_HANDSHAKE_TIMEOUT_MS = 30_000;
+  private static readonly STARTUP_CONNECT_RETRY_DELAY_MS = 1000;
+  private static readonly STARTUP_CONNECT_MAX_ATTEMPTS = 2;
   private process: ChildProcess | null = null;
   private processExitStatus: number | string | null = null;
   private ownsProcess = false;
@@ -147,6 +150,8 @@ export class GatewayManager extends EventEmitter {
   private readinessRefreshInFlight: Promise<void> | null = null;
   /** Pre-computed launch context from a prior warmup call. Cleared on each start. */
   private cachedLaunchContext: { context: import('./config-sync').GatewayLaunchContext; port: number } | null = null;
+  /** In-flight warmup so start() can await the same work instead of recomputing it. */
+  private launchContextWarmupPromise: Promise<{ context: import('./config-sync').GatewayLaunchContext; port: number } | null> | null = null;
   /** Active denied paths for runtime path enforcement. Updated on security policy apply. */
   private deniedPaths: string[] = [];
 
@@ -1110,16 +1115,29 @@ export class GatewayManager extends EventEmitter {
    * the context normally (no correctness impact, just no speedup).
    */
   public async prewarmLaunchContext(): Promise<void> {
-    try {
-      const targetPort = this.status.port || PORTS.OPENCLAW_GATEWAY;
-      logger.debug(`[warmup] Pre-computing Gateway launch context for port ${targetPort}…`);
-      const context = await prepareGatewayLaunchContext(targetPort);
-      this.cachedLaunchContext = { context, port: targetPort };
-      logger.debug('[warmup] Gateway launch context ready and cached');
-    } catch (err) {
-      logger.debug('[warmup] Could not pre-warm launch context (non-fatal):', err);
-      this.cachedLaunchContext = null;
+    const targetPort = this.status.port || PORTS.OPENCLAW_GATEWAY;
+    if (this.cachedLaunchContext?.port === targetPort) {
+      return;
     }
+    if (!this.launchContextWarmupPromise) {
+      this.launchContextWarmupPromise = (async () => {
+        try {
+          logger.debug(`[warmup] Pre-computing Gateway launch context for port ${targetPort}…`);
+          const context = await prepareGatewayLaunchContext(targetPort);
+          const warmed = { context, port: targetPort };
+          this.cachedLaunchContext = warmed;
+          logger.debug('[warmup] Gateway launch context ready and cached');
+          return warmed;
+        } catch (err) {
+          logger.debug('[warmup] Could not pre-warm launch context (non-fatal):', err);
+          this.cachedLaunchContext = null;
+          return null;
+        } finally {
+          this.launchContextWarmupPromise = null;
+        }
+      })();
+    }
+    await this.launchContextWarmupPromise;
   }
 
   /**
@@ -1352,7 +1370,10 @@ export class GatewayManager extends EventEmitter {
    * Uses OpenClaw npm package from node_modules (dev) or resources (production)
    */
   private async startProcess(): Promise<import('./config-sync').GatewayLaunchContext> {
-    const cachedCtx = this.cachedLaunchContext;
+    const warmedCtx = this.launchContextWarmupPromise
+      ? await this.launchContextWarmupPromise
+      : null;
+    const cachedCtx = warmedCtx ?? this.cachedLaunchContext;
     const useCached = Boolean(cachedCtx) && cachedCtx.port === this.status.port;
     const launchContext: import('./config-sync').GatewayLaunchContext = useCached
       ? cachedCtx.context
@@ -1428,48 +1449,84 @@ export class GatewayManager extends EventEmitter {
    * Connect WebSocket to Gateway
    */
   private async connect(port: number, _externalToken?: string): Promise<void> {
-    this.ws = await connectGatewaySocket({
-      port,
-      deviceIdentity: this.deviceIdentity,
-      platform: process.platform,
-      getToken: async () => await getSetting('gatewayToken'),
-      onHandshakeComplete: (ws) => {
-        this.ws = ws;
-        this.setStatus({
-          state: 'running',
+    const isStartupConnect =
+      this.startLock
+      || this.status.state === 'starting'
+      || this.status.state === 'reconnecting';
+    const maxAttempts = isStartupConnect ? GatewayManager.STARTUP_CONNECT_MAX_ATTEMPTS : 1;
+    const handshakeTimeoutMs = isStartupConnect
+      ? GatewayManager.STARTUP_CONNECT_HANDSHAKE_TIMEOUT_MS
+      : undefined;
+
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        this.ws = await connectGatewaySocket({
           port,
-          transportReady: true,
-          runtimeHealthy: false,
-          fullReady: false,
-          connectedAt: Date.now(),
-          restartExpectedMs: undefined,
+          deviceIdentity: this.deviceIdentity,
+          platform: process.platform,
+          getToken: async () => await getSetting('gatewayToken'),
+          handshakeTimeoutMs,
+          onHandshakeComplete: (ws) => {
+            this.ws = ws;
+            this.setStatus({
+              state: 'running',
+              port,
+              transportReady: true,
+              runtimeHealthy: false,
+              fullReady: false,
+              connectedAt: Date.now(),
+              restartExpectedMs: undefined,
+            });
+            this.startPing();
+            void this.refreshReadinessFlags(port).catch((error) => {
+              logger.debug('Failed to refresh Gateway readiness flags after handshake:', error);
+            });
+          },
+          onMessage: (message) => {
+            this.handleMessage(message);
+          },
+          onCloseAfterHandshake: () => {
+            this.lastAttachProbeFoundGateway = false;
+            clearPendingGatewayRequests(
+              this.pendingRequests,
+              new Error('Gateway connection closed during request'),
+            );
+            if (this.status.state === 'running') {
+              this.setStatus({
+                state: 'stopped',
+                transportReady: false,
+                runtimeHealthy: false,
+                fullReady: false,
+                restartExpectedMs: undefined,
+              });
+              this.scheduleReconnect();
+            }
+          },
         });
-        this.startPing();
-        void this.refreshReadinessFlags(port).catch((error) => {
-          logger.debug('Failed to refresh Gateway readiness flags after handshake:', error);
-        });
-      },
-      onMessage: (message) => {
-        this.handleMessage(message);
-      },
-      onCloseAfterHandshake: () => {
-        this.lastAttachProbeFoundGateway = false;
-        clearPendingGatewayRequests(
-          this.pendingRequests,
-          new Error('Gateway connection closed during request'),
-        );
-        if (this.status.state === 'running') {
-          this.setStatus({
-            state: 'stopped',
-            transportReady: false,
-            runtimeHealthy: false,
-            fullReady: false,
-            restartExpectedMs: undefined,
-          });
-          this.scheduleReconnect();
+        return;
+      } catch (error) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : String(error);
+        const retryableStartupHandshakeFailure =
+          isStartupConnect
+          && attempt < maxAttempts
+          && (
+            /connect handshake timeout/i.test(message)
+            || /websocket closed before handshake/i.test(message)
+            || /timed out waiting for connect\.challenge/i.test(message)
+          );
+        if (!retryableStartupHandshakeFailure) {
+          throw error;
         }
-      },
-    });
+        logger.warn(
+          `Gateway startup control-plane handshake stalled; retrying connect (${attempt}/${maxAttempts})`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, GatewayManager.STARTUP_CONNECT_RETRY_DELAY_MS));
+      }
+    }
+
+    throw (lastError instanceof Error ? lastError : new Error(String(lastError)));
   }
 
   /**

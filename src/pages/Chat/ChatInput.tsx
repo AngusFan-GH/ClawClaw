@@ -25,7 +25,11 @@ import { Brain } from 'lucide-react';
 import { ChatAttachmentPreview } from './ChatAttachmentPreview';
 import { ChatModelMenu } from './ChatModelMenu';
 import { ChatSlashMenu } from './ChatSlashMenu';
-import { DEFAULT_THINKING_LEVELS, normalizeThinkingLevel } from './thinking-levels';
+import {
+  normalizeThinkingLevel,
+  normalizeThinkingOptionValue,
+  type ChatThinkingLevelOption,
+} from './thinking-levels';
 import {
   CATEGORY_I18N_KEYS,
   CATEGORY_LABELS,
@@ -67,8 +71,8 @@ interface ChatInputProps {
   modelDisabled?: boolean;
   modelState?: 'disabled' | 'ready' | 'syncing' | 'invalid' | 'unconfigured';
   thinkingLevel?: string | null;
-  thinkingOptions?: string[];
-  thinkingDefault?: string | null;
+  thinkingOptions?: ChatThinkingLevelOption[];
+  thinkingDefaultLevel?: string | null;
   onThinkingLevelChange?: (level?: string) => void | Promise<void>;
   thinkingDisabled?: boolean;
   disabled?: boolean;
@@ -107,15 +111,35 @@ const selectorTriggerClass =
 const selectorTriggerSizeClass = (isEmpty: boolean) =>
   isEmpty ? 'h-10 min-w-[128px] rounded-[16px]' : 'h-11 min-w-[136px] rounded-[16px]';
 
-function formatThinkingLevelLabel(
-  t: ReturnType<typeof useTranslation>['t'],
-  level: string,
+function formatLocalizedThinkingLevelLabel(
+  t: ReturnType<typeof useTranslation<'chat'>>['t'],
+  value: string,
 ): string {
-  const normalized = level.trim();
-  if (!normalized) return normalized;
-  return t(`composer.thinkingLevels.${normalized}`, {
-    defaultValue: normalized,
-  });
+  const normalized = normalizeThinkingOptionValue(value);
+  if (!normalized) return value;
+  const translated = t(`composer.thinkingLevels.${normalized}`, '');
+  if (translated) return translated;
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function resolveLocalizedThinkingOptionLabel(
+  t: ReturnType<typeof useTranslation<'chat'>>['t'],
+  value: string,
+  label?: string,
+): string {
+  const normalized = normalizeThinkingOptionValue(value);
+  if (!normalized || normalized === 'off') {
+    return formatLocalizedThinkingLevelLabel(t, 'off');
+  }
+  const trimmedLabel = label?.trim();
+  if (!trimmedLabel) {
+    return formatLocalizedThinkingLevelLabel(t, normalized);
+  }
+  const normalizedLabel = normalizeThinkingOptionValue(trimmedLabel);
+  if (normalizedLabel && normalizedLabel === normalized) {
+    return formatLocalizedThinkingLevelLabel(t, normalized);
+  }
+  return trimmedLabel;
 }
 
 class InputHistory {
@@ -170,7 +194,7 @@ export function ChatInput({
   modelState = 'ready',
   thinkingLevel,
   thinkingOptions = [],
-  thinkingDefault,
+  thinkingDefaultLevel,
   onThinkingLevelChange,
   thinkingDisabled = false,
   disabled = false,
@@ -210,38 +234,41 @@ export function ChatInput({
   const hasModelOptions = modelOptions.length > 0;
   const currentThinkingLevel = thinkingLevel?.trim() || '';
   const normalizedThinkingOptions = useMemo(() => {
-    const fallback = ['', ...DEFAULT_THINKING_LEVELS];
-    const source = thinkingOptions.length > 0 ? thinkingOptions : fallback;
     const seen = new Set<string>();
-    return [...source, currentThinkingLevel]
-      .map((option) => normalizeThinkingLevel(option) ?? option.trim())
+    return [{ value: '' }, ...thinkingOptions, { value: currentThinkingLevel }]
+      .map((option) => ({
+        value: normalizeThinkingLevel(option.value) ?? option.value.trim(),
+        label: option.label?.trim() || undefined,
+      }))
       .filter((option) => {
-        if (seen.has(option)) return false;
-        seen.add(option);
+        if (seen.has(option.value)) return false;
+        seen.add(option.value);
         return true;
       });
   }, [currentThinkingLevel, thinkingOptions]);
   const canChangeThinkingLevel = Boolean(onThinkingLevelChange) && normalizedThinkingOptions.length > 0;
-  const thinkingDefaultLabel = thinkingDefault?.trim() || 'off';
-  const localizedThinkingDefaultLabel = formatThinkingLevelLabel(t, thinkingDefaultLabel);
+  const thinkingDefaultLabel = thinkingDefaultLevel?.trim() || 'off';
   const thinkingMenuOptions = useMemo(
     () => normalizedThinkingOptions.map((option) => ({
-      value: option,
-      label: option
-        ? formatThinkingLevelLabel(t, option)
-        : t('composer.defaultThinkingLevel', 'Default ({{level}})', {
-            level: localizedThinkingDefaultLabel,
-          }),
+      value: option.value,
+      label: option.value
+        ? resolveLocalizedThinkingOptionLabel(t, option.value, option.label)
+        : t('composer.inheritedThinkingLevel', {
+          level: formatLocalizedThinkingLevelLabel(t, thinkingDefaultLabel),
+        }),
     })),
-    [normalizedThinkingOptions, t, localizedThinkingDefaultLabel]
+    [normalizedThinkingOptions, t, thinkingDefaultLabel]
   );
   const effectiveThinkingLevel = normalizeThinkingLevel(currentThinkingLevel) ?? currentThinkingLevel;
-  const thinkingButtonLabel =
-    effectiveThinkingLevel
-      ? formatThinkingLevelLabel(t, effectiveThinkingLevel)
-      : t('composer.defaultThinkingLevel', 'Default ({{level}})', {
-          level: localizedThinkingDefaultLabel,
-        });
+  const thinkingDefaultDisplayLabel = useMemo(
+    () => t('composer.inheritedThinkingLevel', {
+      level: formatLocalizedThinkingLevelLabel(t, thinkingDefaultLabel),
+    }),
+    [t, thinkingDefaultLabel]
+  );
+  const thinkingButtonLabel = effectiveThinkingLevel
+    ? (thinkingMenuOptions.find((option) => option.value === effectiveThinkingLevel)?.label ?? effectiveThinkingLevel)
+    : thinkingDefaultDisplayLabel;
   const currentModelValue = selectedModel || defaultModelValue;
   const selectedOption = modelOptions.find((option) => option.value === currentModelValue);
   const currentModelShortLabel =

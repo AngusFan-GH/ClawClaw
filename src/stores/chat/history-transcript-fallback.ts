@@ -4,9 +4,10 @@ import type { RawMessage } from '@/stores/chat';
 export async function loadSessionTranscriptFallback(
   sessionKey: string,
   limit = 200,
+  mode: 'recent' | 'head' = 'recent',
 ): Promise<RawMessage[]> {
   try {
-    const params = new URLSearchParams({ sessionKey, limit: String(limit) });
+    const params = new URLSearchParams({ sessionKey, limit: String(limit), mode });
     const response = await hostApiFetch<{ messages?: RawMessage[] }>(
       `/api/sessions/transcript?${params.toString()}`,
     );

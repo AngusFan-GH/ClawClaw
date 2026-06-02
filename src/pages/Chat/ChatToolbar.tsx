@@ -4,9 +4,18 @@
  * Rendered in the Header when on the Chat page.
  */
 import { Badge } from '@/components/ui/badge';
+import { Select } from '@/components/ui/select';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RefreshButton } from '@/components/common/RefreshButton';
-import { Download, Search, X } from 'lucide-react';
+import { Blocks, Brain, Clock3, Download, Focus, Search, Settings2, X } from 'lucide-react';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
@@ -26,6 +35,17 @@ export function ChatToolbar({
   onSearchChange,
   canExport = false,
   onExport,
+  showToolCalls = true,
+  onToggleToolCalls,
+  showThinking = false,
+  onToggleThinking,
+  chatFocusMode = false,
+  onToggleFocusMode,
+  hiddenCronCount = 0,
+  hideCronSessions = true,
+  onToggleCronSessions,
+  autoScrollMode = 'near-bottom',
+  onAutoScrollModeChange,
 }: {
   currentAgentLabel?: string;
   showAgentLabel?: boolean;
@@ -33,8 +53,20 @@ export function ChatToolbar({
   onSearchChange?: (q: string) => void;
   canExport?: boolean;
   onExport?: () => void;
+  showToolCalls?: boolean;
+  onToggleToolCalls?: () => void;
+  showThinking?: boolean;
+  onToggleThinking?: () => void;
+  chatFocusMode?: boolean;
+  onToggleFocusMode?: () => void;
+  hiddenCronCount?: number;
+  hideCronSessions?: boolean;
+  onToggleCronSessions?: () => void;
+  autoScrollMode?: 'always' | 'near-bottom' | 'off';
+  onAutoScrollModeChange?: (mode: 'always' | 'near-bottom' | 'off') => void;
 }) {
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const modelMenuRef = useRef<HTMLDivElement>(null);
 
   const refresh = useChatStore((s) => s.refresh);
@@ -181,7 +213,166 @@ export function ChatToolbar({
           </TooltipContent>
         </Tooltip>
 
-        </div>
+        {onToggleToolCalls ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  'relative inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors',
+                  showToolCalls
+                    ? 'text-primary hover:bg-primary/10'
+                    : 'text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10'
+                )}
+                onClick={onToggleToolCalls}
+                aria-label={t('toolbar.toolCallsToggle', 'Toggle tool calls and tool results')}
+                title={t('toolbar.toolCallsToggle', 'Toggle tool calls and tool results')}
+              >
+                <Blocks className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{t('toolbar.toolCallsToggle', 'Toggle tool calls and tool results')}</p>
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+
+        {onToggleThinking ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  'inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors',
+                  showThinking
+                    ? 'text-primary hover:bg-primary/10'
+                    : 'text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10'
+                )}
+                onClick={onToggleThinking}
+                aria-label={showThinking ? t('toolbar.hideThinking') : t('toolbar.showThinking')}
+                title={showThinking ? t('toolbar.hideThinking') : t('toolbar.showThinking')}
+              >
+                <Brain className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{showThinking ? t('toolbar.hideThinking') : t('toolbar.showThinking')}</p>
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+
+        <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <SheetTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
+                  aria-label={t('toolbar.settings', 'Chat settings')}
+                  title={t('toolbar.settings', 'Chat settings')}
+                >
+                  <Settings2 className="h-4 w-4" />
+                </button>
+              </SheetTrigger>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{t('toolbar.settings', 'Chat settings')}</p>
+            </TooltipContent>
+          </Tooltip>
+          <SheetContent side="right" className="w-[360px] max-w-[95vw]">
+            <SheetHeader>
+              <SheetTitle>{t('toolbar.settings', 'Chat settings')}</SheetTitle>
+              <SheetDescription>
+                {t('toolbar.chatSettingsDescription', 'Control local chat display and scrolling behavior.')}
+              </SheetDescription>
+            </SheetHeader>
+            <div className="mt-6 space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  {t('toolbar.autoScrollMode', 'Auto-scroll mode')}
+                </label>
+                <Select
+                  value={autoScrollMode}
+                  onChange={(event) => onAutoScrollModeChange?.(event.target.value as 'always' | 'near-bottom' | 'off')}
+                >
+                  <option value="always">{t('toolbar.autoScrollAlways', 'Always')}</option>
+                  <option value="near-bottom">{t('toolbar.autoScrollNearBottom', 'Near bottom')}</option>
+                  <option value="off">{t('toolbar.autoScrollOff', 'Off')}</option>
+                </Select>
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        {onToggleFocusMode ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  'inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors',
+                  chatFocusMode
+                    ? 'text-primary hover:bg-primary/10'
+                    : 'text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10'
+                )}
+                onClick={onToggleFocusMode}
+                aria-label={t('toolbar.focusToggle', 'Toggle focus mode (hide sidebar + page header)')}
+                title={t('toolbar.focusToggle', 'Toggle focus mode (hide sidebar + page header)')}
+              >
+                <Focus className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{t('toolbar.focusToggle', 'Toggle focus mode (hide sidebar + page header)')}</p>
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+
+        {onToggleCronSessions ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  'relative inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors',
+                  hideCronSessions
+                    ? 'text-primary hover:bg-primary/10'
+                    : 'text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10'
+                )}
+                onClick={onToggleCronSessions}
+                aria-label={
+                  hideCronSessions
+                    ? t('toolbar.showCronSessions', 'Show cron sessions')
+                    : t('toolbar.hideCronSessions', 'Hide cron sessions')
+                }
+                title={
+                  hideCronSessions
+                    ? t('toolbar.showCronSessions', 'Show cron sessions')
+                    : t('toolbar.hideCronSessions', 'Hide cron sessions')
+                }
+              >
+                <Clock3 className="h-4 w-4" />
+                {hideCronSessions && hiddenCronCount > 0 ? (
+                  <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-4 text-white">
+                    {hiddenCronCount}
+                  </span>
+                ) : null}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>
+                {hideCronSessions
+                  ? t('toolbar.showCronSessionsHidden', {
+                    count: hiddenCronCount,
+                    defaultValue: `Show cron sessions (${hiddenCronCount} hidden)`,
+                  })
+                  : t('toolbar.hideCronSessions', 'Hide cron sessions')}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+
+      </div>
     </div>
   );
 }

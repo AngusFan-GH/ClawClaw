@@ -15,6 +15,7 @@ import { DEFAULT_SHORTCUT_MENU_IDS, type MenuItemId } from '@/shared/menu-items'
 type Theme = 'light' | 'dark' | 'system';
 type UpdateChannel = 'stable';
 type ProxyMode = 'system' | 'custom' | 'direct';
+type ChatAutoScrollMode = 'always' | 'near-bottom' | 'off';
 
 interface SettingsState {
   // General
@@ -42,6 +43,9 @@ interface SettingsState {
   // UI State
   sidebarCollapsed: boolean;
   chatFocusMode: boolean;
+  chatShowToolCalls: boolean;
+  chatHideCronSessions: boolean;
+  chatAutoScroll: ChatAutoScrollMode;
   shortcutMenuItems: MenuItemId[];
   devModeUnlocked: boolean;
   slashCommandHintsEnabled: boolean;
@@ -77,6 +81,9 @@ interface SettingsState {
   setAutoDownloadUpdate: (value: boolean) => void;
   setSidebarCollapsed: (value: boolean) => void;
   setChatFocusMode: (value: boolean) => void;
+  setChatShowToolCalls: (value: boolean) => void;
+  setChatHideCronSessions: (value: boolean) => void;
+  setChatAutoScroll: (value: ChatAutoScrollMode) => void;
   setShortcutMenuItems: (value: MenuItemId[]) => void;
   setDevModeUnlocked: (value: boolean) => void;
   setSlashCommandHintsEnabled: (value: boolean) => void;
@@ -107,6 +114,9 @@ const defaultSettings = {
   autoDownloadUpdate: false,
   sidebarCollapsed: false,
   chatFocusMode: false,
+  chatShowToolCalls: true,
+  chatHideCronSessions: true,
+  chatAutoScroll: 'near-bottom' as ChatAutoScrollMode,
   shortcutMenuItems: DEFAULT_SHORTCUT_MENU_IDS,
   devModeUnlocked: false,
   slashCommandHintsEnabled: false,
@@ -245,6 +255,15 @@ export const useSettingsStore = create<SettingsState>()(
       },
       setChatFocusMode: (chatFocusMode) => {
         set({ chatFocusMode });
+      },
+      setChatShowToolCalls: (chatShowToolCalls) => {
+        set({ chatShowToolCalls });
+      },
+      setChatHideCronSessions: (chatHideCronSessions) => {
+        set({ chatHideCronSessions });
+      },
+      setChatAutoScroll: (chatAutoScroll) => {
+        set({ chatAutoScroll });
       },
       setShortcutMenuItems: (shortcutMenuItems) => {
         set({ shortcutMenuItems });
