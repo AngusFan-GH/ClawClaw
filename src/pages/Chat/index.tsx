@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertCircle, ArrowDown, Brain, Check, ChevronDown, Loader2, Square } from 'lucide-react';
-import { DEFAULT_SESSION_KEY, useChatStore, type QueuedChatMessage, type RawMessage } from '@/stores/chat';
+import { DEFAULT_SESSION_KEY, isBackgroundSession, useChatStore, type QueuedChatMessage, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { getAppliedAgentsSnapshotState, useAgentsStore } from '@/stores/agents';
@@ -761,7 +761,10 @@ export function Chat() {
   const resolvedAgentLabel = currentAgentLabel?.trim() || 'Main';
   const resolvedAssistantName = resolvedAgentLabel;
   const hiddenCronCount = useMemo(
-    () => sessions.filter((session) => session.kind === 'cron' || session.key.includes(':cron:')).length,
+    () => sessions.filter((session) => (
+      isBackgroundSession(session)
+      && (session.kind === 'cron' || session.key.includes(':cron:'))
+    )).length,
     [sessions]
   );
   const handleExportChat = useCallback(() => {
@@ -1211,18 +1214,6 @@ export function Chat() {
         'relative flex min-h-0 flex-1 flex-col -m-6 overflow-hidden transition-colors duration-500 dark:bg-background'
       )}
     >
-      {chatFocusMode ? (
-        <button
-          type="button"
-          className="absolute right-4 top-4 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 bg-card/90 text-lg leading-none text-muted-foreground shadow-lg backdrop-blur transition-colors hover:text-foreground dark:border-white/10"
-          onClick={() => setChatFocusMode(false)}
-          aria-label={t('toolbar.exitFocusMode', 'Exit focus mode')}
-          title={t('toolbar.exitFocusMode', 'Exit focus mode')}
-        >
-          ×
-        </button>
-      ) : null}
-
       {/* Toolbar */}
       <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-2">
         <ChatToolbar

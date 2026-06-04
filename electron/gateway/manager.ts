@@ -33,6 +33,7 @@ import {
   runOpenClawStartupPreflightRepair,
 } from './config-sync';
 import { listConfiguredChannelAccounts } from '../utils/channel-config';
+import { normalizeOpenClawAccountId, toRuntimeChannelType } from '../utils/channel-alias';
 import { connectGatewaySocket, probeGatewayReady, waitForGatewayReady } from './ws-client';
 import {
   findExistingGatewayProcess,
@@ -515,6 +516,7 @@ export class GatewayManager extends EventEmitter {
 
     void (async () => {
       let accountsByChannel: Record<string, string[]>;
+      let supportedChannels = new Set<string>();
       try {
         accountsByChannel = await listConfiguredChannelAccounts({ includeCli: false });
       } catch (error) {
@@ -522,19 +524,44 @@ export class GatewayManager extends EventEmitter {
         return;
       }
 
+      try {
+        const status = await this.rpc<{
+          channels?: Record<string, unknown>;
+          channelOrder?: string[];
+        }>('channels.status', {}, 15_000);
+        supportedChannels = new Set<string>([
+          ...(Array.isArray(status?.channelOrder) ? status.channelOrder.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0) : []),
+          ...Object.keys(status?.channels ?? {}),
+        ]);
+      } catch (error) {
+        logger.warn('Failed to resolve supported channels for deferred startup:', error);
+      }
+
       for (const [channel, accountIds] of Object.entries(accountsByChannel)) {
+        const canonicalChannel =
+          [channel, toRuntimeChannelType(channel)]
+            .map((entry) => entry.trim())
+            .find((entry) => supportedChannels.size === 0 || supportedChannels.has(entry));
+        if (!canonicalChannel) {
+          logger.info(`Skipping deferred channel startup for unsupported channel "${channel}"`);
+          continue;
+        }
         const targets = accountIds.length > 0 ? accountIds : ['default'];
         for (const accountId of targets) {
           try {
-            await this.rpc('channels.start', { channel, accountId }, 30_000);
-            logger.info(`Deferred channel startup requested (${channel}:${accountId})`);
+            const normalizedAccountId = normalizeOpenClawAccountId(accountId);
+            const params = normalizedAccountId === 'default'
+              ? { channel: canonicalChannel }
+              : { channel: canonicalChannel, accountId: normalizedAccountId };
+            await this.rpc('channels.start', params, 30_000);
+            logger.info(`Deferred channel startup requested (${canonicalChannel}:${normalizedAccountId})`);
           } catch (error) {
             if (this.isUnknownGatewayMethodError(error, 'channels.start')) {
               this.deferredChannelStartupUnsupported = true;
               logger.info('Gateway does not support channels.start; skipping deferred channel startup');
               return;
             }
-            logger.warn(`Deferred channel startup failed (${channel}:${accountId}):`, error);
+            logger.warn(`Deferred channel startup failed (${canonicalChannel}:${accountId}):`, error);
           }
         }
       }
