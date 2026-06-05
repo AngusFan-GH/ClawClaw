@@ -6,7 +6,7 @@
 import { create } from 'zustand';
 import { normalizeChatTimestampForKey, normalizeChatTimestampMs, type ChatTimestamp } from '@/lib/chat-timestamps';
 import { hostApiFetch } from '@/lib/host-api';
-import { extractText } from '@/pages/Chat/message-utils';
+import { extractText, isAssistantErrorMessage, isAssistantFailureSentinelText } from '@/pages/Chat/message-utils';
 import { historyContainsPendingUserMessage } from '@/pages/Chat/pending-user-message';
 import { useGatewayStore } from './gateway';
 import { getAppliedAgentsSnapshotState } from './agents';
@@ -43,6 +43,8 @@ export interface RawMessage {
   cost?: Record<string, number>;
   details?: unknown;
   isError?: boolean;
+  stopReason?: string;
+  errorMessage?: string;
   /** Local-only: file metadata for user-uploaded attachments (not sent to/from Gateway) */
   _attachedFiles?: AttachedFileMeta[];
   /** Present when this message is a BTW side-question response */
@@ -2330,19 +2332,27 @@ function hasNonToolAssistantContent(message: RawMessage | undefined): boolean {
 
 function hasConclusiveAssistantContent(message: RawMessage | undefined): boolean {
   if (!message) return false;
-  if (typeof message.content === 'string' && message.content.trim()) return true;
+  if (typeof message.content === 'string' && message.content.trim()) {
+    return !isAssistantFailureSentinelText(message.content);
+  }
 
   const content = message.content;
   if (Array.isArray(content)) {
     for (const block of content as ContentBlock[]) {
-      if (block.type === 'text' && block.text && block.text.trim()) return true;
+      if (block.type === 'text' && block.text && block.text.trim()) {
+        if (!isAssistantFailureSentinelText(block.text)) {
+          return true;
+        }
+      }
       if (block.type === 'image') return true;
       if (block.type === 'file') return true;
     }
   }
 
   const msg = message as unknown as Record<string, unknown>;
-  if (typeof msg.text === 'string' && msg.text.trim()) return true;
+  if (typeof msg.text === 'string' && msg.text.trim()) {
+    return !isAssistantFailureSentinelText(msg.text);
+  }
 
   return false;
 }
@@ -2376,8 +2386,7 @@ function hasPendingToolUse(message: RawMessage | undefined): boolean {
 }
 
 function isTerminalAssistantErrorMessage(message: RawMessage | unknown): boolean {
-  if (!message || typeof message !== 'object') return false;
-  return /\[assistant turn failed/i.test(getMessageText((message as RawMessage).content));
+  return isAssistantErrorMessage(message);
 }
 
 function isRealUserBoundaryMessage(msg: RawMessage): boolean {

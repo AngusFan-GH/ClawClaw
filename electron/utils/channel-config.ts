@@ -863,6 +863,130 @@ export interface OpenClawConfig {
     [key: string]: unknown;
 }
 
+function cloneConfigRecord(value: unknown): Record<string, unknown> {
+    return value && typeof value === 'object' && !Array.isArray(value)
+        ? { ...(value as Record<string, unknown>) }
+        : {};
+}
+
+function cloneConfigStringArray(value: unknown): string[] | null {
+    if (!Array.isArray(value)) {
+        return null;
+    }
+    const items = value
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter((item) => item.length > 0);
+    return items.length > 0 ? items : null;
+}
+
+function buildDiscordChannelConfig(existingValue: unknown): Record<string, unknown> {
+    return {
+        ...cloneConfigRecord(existingValue),
+        allow: true,
+        requireMention: true,
+    };
+}
+
+function transformDiscordChannelConfig(
+    config: ChannelConfigData,
+    existingConfig: ChannelConfigData | undefined,
+): ChannelConfigData {
+    const { guildId, channelId, ...restConfig } = config;
+    const transformedConfig: ChannelConfigData = { ...restConfig };
+    const existingDiscordConfig = existingConfig || {};
+    const existingGuilds = cloneConfigRecord(existingDiscordConfig.guilds);
+
+    transformedConfig.groupPolicy =
+        typeof existingDiscordConfig.groupPolicy === 'string'
+            ? existingDiscordConfig.groupPolicy
+            : 'allowlist';
+
+    const existingDm = cloneConfigRecord(existingDiscordConfig.dm);
+    transformedConfig.dm =
+        Object.keys(existingDm).length > 0
+            ? {
+                ...existingDm,
+                enabled:
+                    typeof existingDm.enabled === 'boolean'
+                        ? existingDm.enabled
+                        : false,
+            }
+            : { enabled: false };
+
+    const existingRetry = cloneConfigRecord(existingDiscordConfig.retry);
+    transformedConfig.retry =
+        Object.keys(existingRetry).length > 0
+            ? existingRetry
+            : {
+                attempts: 3,
+                minDelayMs: 500,
+                maxDelayMs: 30000,
+                jitter: 0.1,
+            };
+
+    const normalizedGuildId = typeof guildId === 'string' ? guildId.trim() : '';
+    const normalizedChannelId = typeof channelId === 'string' ? channelId.trim() : '';
+    if (!normalizedGuildId) {
+        if (Object.keys(existingGuilds).length > 0) {
+            transformedConfig.guilds = existingGuilds;
+        }
+        return transformedConfig;
+    }
+
+    const existingGuildConfig = cloneConfigRecord(existingGuilds[normalizedGuildId]);
+    const nextGuildConfig: Record<string, unknown> = {
+        ...existingGuildConfig,
+        users: cloneConfigStringArray(existingGuildConfig.users) ?? ['*'],
+        requireMention:
+            typeof existingGuildConfig.requireMention === 'boolean'
+                ? existingGuildConfig.requireMention
+                : true,
+    };
+
+    if (normalizedChannelId) {
+        const existingChannels = cloneConfigRecord(existingGuildConfig.channels);
+        nextGuildConfig.channels = {
+            [normalizedChannelId]: buildDiscordChannelConfig(existingChannels[normalizedChannelId]),
+        };
+    } else {
+        const existingChannels = cloneConfigRecord(existingGuildConfig.channels);
+        nextGuildConfig.channels =
+            Object.keys(existingChannels).length > 0
+                ? existingChannels
+                : { '*': buildDiscordChannelConfig(undefined) };
+    }
+
+    transformedConfig.guilds = {
+        ...existingGuilds,
+        [normalizedGuildId]: nextGuildConfig,
+    };
+    return transformedConfig;
+}
+
+function transformTelegramChannelConfig(
+    config: ChannelConfigData,
+    existingConfig: ChannelConfigData | undefined,
+): ChannelConfigData {
+    const { allowedUsers, ...restConfig } = config;
+    const transformedConfig: ChannelConfigData = { ...restConfig };
+    if (typeof allowedUsers === 'string') {
+        const users = allowedUsers
+            .split(',')
+            .map((user) => user.trim())
+            .filter((user) => user.length > 0);
+
+        if (users.length > 0) {
+            transformedConfig.allowFrom = users;
+        } else if (Array.isArray(existingConfig?.allowFrom)) {
+            transformedConfig.allowFrom = [...existingConfig.allowFrom];
+        }
+    } else if (Array.isArray(existingConfig?.allowFrom)) {
+        transformedConfig.allowFrom = [...existingConfig.allowFrom];
+    }
+
+    return transformedConfig;
+}
+
 function cloneConfigCommands(config: OpenClawConfig): Record<string, unknown> {
     return config.commands && typeof config.commands === 'object'
         ? { ...(config.commands as Record<string, unknown>) }
@@ -1350,71 +1474,6 @@ export async function saveChannelConfig(
             currentConfig.channels = {};
         }
 
-        // Transform config to match OpenClaw expected format.
-        let transformedConfig: ChannelConfigData = { ...config };
-        delete transformedConfig.__accountId;
-
-        if (runtimeChannelType === 'discord') {
-            const { guildId, channelId, ...restConfig } = config;
-            transformedConfig = { ...restConfig };
-
-            transformedConfig.groupPolicy = 'allowlist';
-            transformedConfig.dm = { enabled: false };
-            transformedConfig.retry = {
-                attempts: 3,
-                minDelayMs: 500,
-                maxDelayMs: 30000,
-                jitter: 0.1,
-            };
-
-            if (guildId && typeof guildId === 'string' && guildId.trim()) {
-                const guildConfig: Record<string, unknown> = {
-                    users: ['*'],
-                    requireMention: true,
-                };
-
-                guildConfig.channels = channelId && typeof channelId === 'string' && channelId.trim()
-                    ? { [channelId.trim()]: { allow: true, requireMention: true } }
-                    : { '*': { allow: true, requireMention: true } };
-
-                transformedConfig.guilds = {
-                    [guildId.trim()]: guildConfig,
-                };
-            }
-        }
-
-        if (runtimeChannelType === 'telegram') {
-            const { allowedUsers, ...restConfig } = config;
-            transformedConfig = { ...restConfig };
-
-            if (allowedUsers && typeof allowedUsers === 'string') {
-                const users = allowedUsers.split(',')
-                    .map((user) => user.trim())
-                    .filter((user) => user.length > 0);
-
-                if (users.length > 0) {
-                    transformedConfig.allowFrom = users;
-                }
-            }
-        }
-
-        if (runtimeChannelType === 'feishu' || runtimeChannelType === 'wecom') {
-            const existingConfig = currentConfig.channels[runtimeChannelType] || {};
-            const existingDmPolicy = existingConfig.dmPolicy === 'pairing' ? 'open' : existingConfig.dmPolicy;
-            transformedConfig.dmPolicy = transformedConfig.dmPolicy ?? existingDmPolicy ?? 'open';
-
-            let allowFrom = (transformedConfig.allowFrom ?? existingConfig.allowFrom ?? ['*']) as string[];
-            if (!Array.isArray(allowFrom)) {
-                allowFrom = [allowFrom] as string[];
-            }
-
-            if (transformedConfig.dmPolicy === 'open' && !allowFrom.includes('*')) {
-                allowFrom = [...allowFrom, '*'];
-            }
-
-            transformedConfig.allowFrom = allowFrom;
-        }
-
         const existingSection = normalizeChannelSectionForRuntime(
             runtimeChannelType,
             currentConfig.channels[runtimeChannelType] as AccountScopedChannelSection | undefined,
@@ -1429,6 +1488,40 @@ export async function saveChannelConfig(
             normalizedPreferredAccountId && normalizedPreferredAccountId !== 'default'
                 ? { kind: 'account' as const, accountId: normalizedPreferredAccountId }
                 : resolveEditableChannelSource(currentConfig, runtimeChannelType, preferredAccountId);
+
+        const existingEditableConfig =
+            editableSource.kind === 'account'
+                ? ((existingSection.accounts || {})[editableSource.accountId] as ChannelConfigData | undefined)
+                : existingSection;
+
+        // Transform config to match OpenClaw expected format.
+        let transformedConfig: ChannelConfigData = { ...config };
+        delete transformedConfig.__accountId;
+
+        if (runtimeChannelType === 'discord') {
+            transformedConfig = transformDiscordChannelConfig(config, existingEditableConfig);
+        }
+
+        if (runtimeChannelType === 'telegram') {
+            transformedConfig = transformTelegramChannelConfig(config, existingEditableConfig);
+        }
+
+        if (runtimeChannelType === 'feishu' || runtimeChannelType === 'wecom') {
+            const existingConfig = existingEditableConfig || currentConfig.channels[runtimeChannelType] || {};
+            const existingDmPolicy = existingConfig.dmPolicy === 'pairing' ? 'open' : existingConfig.dmPolicy;
+            transformedConfig.dmPolicy = transformedConfig.dmPolicy ?? existingDmPolicy ?? 'open';
+
+            let allowFrom = (transformedConfig.allowFrom ?? existingConfig.allowFrom ?? ['*']) as string[];
+            if (!Array.isArray(allowFrom)) {
+                allowFrom = [allowFrom] as string[];
+            }
+
+            if (transformedConfig.dmPolicy === 'open' && !allowFrom.includes('*')) {
+                allowFrom = [...allowFrom, '*'];
+            }
+
+            transformedConfig.allowFrom = allowFrom;
+        }
 
         if (editableSource.kind === 'account') {
             const accounts = { ...(existingSection.accounts || {}) };

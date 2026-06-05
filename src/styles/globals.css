@@ -610,6 +610,15 @@
   background: hsl(var(--card));
 }
 
+.chat-bubble--error {
+  border-color: hsl(12 76% 62% / 0.38);
+  background: linear-gradient(180deg, hsl(12 90% 97%), hsl(12 80% 98%));
+}
+
+.chat-bubble--error .chat-text {
+  color: hsl(12 48% 28%);
+}
+
 .chat-bubble.streaming {
   animation: chat-pulsing-border 1.5s ease-out infinite;
 }
@@ -639,6 +648,10 @@
 
 .chat-group.user .chat-bubble:hover {
   background: color-mix(in oklab, hsl(var(--primary)) 10%, hsl(var(--card)));
+}
+
+.chat-bubble--error:hover {
+  background: linear-gradient(180deg, hsl(12 88% 96%), hsl(12 76% 97%));
 }
 
 .chat-bubble-actions {

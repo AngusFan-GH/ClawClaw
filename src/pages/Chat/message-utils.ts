@@ -41,6 +41,141 @@ const MEMORY_TAG_RE = /<\s*(\/?)\s*relevant[-_]memories\b[^<>]*>/gi;
 const MEMORY_TAG_QUICK_RE = /<\s*\/?\s*relevant[-_]memories\b/i;
 const LEADING_TIMESTAMP_PREFIX_RE = /^(?:\[[^\]]+\]\s*)+/;
 const LEADING_SYSTEM_EVENT_LINE_RE = /^(?:\s*System(?:\s+\(untrusted\))?:\s+.+(?:\n|$))+/i;
+const ASSISTANT_TURN_FAILED_SENTINEL = '[assistant turn failed before producing content]';
+const ERROR_PAYLOAD_PREFIX_RE =
+  /^(?:error|(?:[a-z][\w-]*\s+)?api\s*error|apierror|openai\s*error|anthropic\s*error|gateway\s*error|codex\s*error)(?:\s+\d{3})?[:\s-]+/i;
+const HTTP_STATUS_DELIMITER_RE = /(?:\s*:\s*|\s+)/;
+const HTTP_STATUS_PREFIX_RE = new RegExp(
+  `^(?:http\\s*)?(\\d{3})${HTTP_STATUS_DELIMITER_RE.source}(.+)$`,
+  'i',
+);
+
+function isErrorPayloadObject(payload: unknown): payload is Record<string, unknown> {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return false;
+  }
+  const record = payload as Record<string, unknown>;
+  if (record.type === 'error') {
+    return true;
+  }
+  if (typeof record.request_id === 'string' || typeof record.requestId === 'string') {
+    return true;
+  }
+  if ('error' in record) {
+    const err = record.error;
+    if (err && typeof err === 'object' && !Array.isArray(err)) {
+      const errRecord = err as Record<string, unknown>;
+      if (
+        typeof errRecord.message === 'string'
+        || typeof errRecord.type === 'string'
+        || typeof errRecord.code === 'string'
+      ) {
+        return true;
+      }
+    }
+    if (typeof err === 'string' && typeof record.message === 'string') {
+      return true;
+    }
+  }
+  return false;
+}
+
+function parseApiErrorPayload(raw?: string): Record<string, unknown> | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const candidates = [trimmed];
+  if (ERROR_PAYLOAD_PREFIX_RE.test(trimmed)) {
+    candidates.push(trimmed.replace(ERROR_PAYLOAD_PREFIX_RE, '').trim());
+  }
+  for (const candidate of candidates) {
+    if (!candidate.startsWith('{') || !candidate.endsWith('}')) continue;
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      if (isErrorPayloadObject(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // ignore malformed error payloads
+    }
+  }
+  return null;
+}
+
+export function isAssistantFailureSentinelText(text: string | null | undefined): boolean {
+  return typeof text === 'string' && text.trim().toLowerCase() === ASSISTANT_TURN_FAILED_SENTINEL;
+}
+
+function resolveAssistantErrorMessage(message: RawMessage | unknown): string {
+  if (!message || typeof message !== 'object') {
+    return '';
+  }
+  const msg = message as Record<string, unknown>;
+  const direct = typeof msg.errorMessage === 'string' ? msg.errorMessage.trim() : '';
+  if (direct) return direct;
+  const details = msg.details;
+  if (details && typeof details === 'object' && !Array.isArray(details)) {
+    const nested = (details as Record<string, unknown>).errorMessage;
+    if (typeof nested === 'string' && nested.trim()) {
+      return nested.trim();
+    }
+  }
+  return '';
+}
+
+export function formatAssistantErrorForUi(raw?: string | null): string {
+  const trimmed = (raw ?? '').trim();
+  if (!trimmed) {
+    return 'LLM request failed before producing a visible reply.';
+  }
+
+  const httpMatch = trimmed.match(HTTP_STATUS_PREFIX_RE);
+  if (httpMatch && !httpMatch[2].trim().startsWith('{')) {
+    return `HTTP ${httpMatch[1]}: ${httpMatch[2].trim()}`;
+  }
+
+  const payload = parseApiErrorPayload(trimmed);
+  if (payload) {
+    const topType = typeof payload.type === 'string' ? payload.type : undefined;
+    const topMessage = typeof payload.message === 'string' ? payload.message : undefined;
+    const err =
+      payload.error && typeof payload.error === 'object' && !Array.isArray(payload.error)
+        ? payload.error as Record<string, unknown>
+        : null;
+    const errType =
+      typeof err?.type === 'string'
+        ? err.type
+        : typeof err?.code === 'string'
+          ? err.code
+          : typeof payload.error === 'string'
+            ? payload.error
+            : topType;
+    const errMessage =
+      typeof err?.message === 'string'
+        ? err.message
+        : topMessage;
+    if (errMessage) {
+      const httpPrefix = httpMatch ? `HTTP ${httpMatch[1]}` : 'LLM error';
+      return errType ? `${httpPrefix} ${errType}: ${errMessage}` : `${httpPrefix}: ${errMessage}`;
+    }
+  }
+
+  return trimmed.length > 600 ? `${trimmed.slice(0, 600)}...` : trimmed;
+}
+
+export function isAssistantErrorMessage(message: RawMessage | unknown): boolean {
+  if (!message || typeof message !== 'object') return false;
+  const msg = message as Record<string, unknown>;
+  const stopReason =
+    typeof msg.stopReason === 'string'
+      ? msg.stopReason.trim().toLowerCase()
+      : typeof msg.stop_reason === 'string'
+        ? msg.stop_reason.trim().toLowerCase()
+        : '';
+  if (stopReason === 'error') return true;
+  const visible = extractRawText(message);
+  return isAssistantFailureSentinelText(visible);
+}
 
 type CodeRegion = { start: number; end: number };
 
@@ -375,8 +510,15 @@ function extractAssistantVisibleText(message: RawMessage | unknown): string | nu
   // semantics for completed final turns.
   if (hasAssistantTextPhase(message, 'final_answer')) return null;
 
-  return extractAssistantTextForPhase(message, { phase: 'commentary' })
+  const commentary = extractAssistantTextForPhase(message, { phase: 'commentary' })
     ?? extractAssistantTextForPhase(message);
+  if (commentary && !isAssistantFailureSentinelText(commentary)) {
+    return commentary;
+  }
+  if (isAssistantErrorMessage(message)) {
+    return formatAssistantErrorForUi(resolveAssistantErrorMessage(message));
+  }
+  return commentary && !isAssistantFailureSentinelText(commentary) ? commentary : null;
 }
 
 function processMessageText(text: string, role: string): string {

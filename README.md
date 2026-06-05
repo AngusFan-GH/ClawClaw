@@ -89,7 +89,7 @@ Building AI agents shouldn't require mastering the command line. ClawClaw was de
 ClawClaw is built directly upon the official **OpenClaw** core. Instead of requiring a separate installation, we embed the runtime within the application to provide a seamless "battery-included" experience.
 
 We are committed to maintaining strict alignment with the upstream OpenClaw project, ensuring that you always have access to the latest capabilities, stability improvements, and ecosystem compatibility provided by the official releases.
-The bundled stable runtime is now aligned to **OpenClaw 2026.4.15**, which keeps ClawClaw on the current upstream stable release track while preserving the packaged desktop integration.
+The bundled stable runtime is now aligned to **OpenClaw 2026.5.28**, which keeps ClawClaw on the current upstream stable release track while preserving the packaged desktop integration.
 
 ---
 

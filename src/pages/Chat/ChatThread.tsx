@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { invokeIpc } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import type { RawMessage, StreamSegment } from '@/stores/chat';
-import { extractImages, extractText, isToolErrorOutput } from './message-utils';
+import { extractImages, extractText, isAssistantErrorMessage, isToolErrorOutput } from './message-utils';
 import { toSanitizedMarkdownHtml } from './markdown';
 import { detectTextDirection } from './text-direction';
 import {
@@ -527,6 +527,7 @@ const GroupedMessage = memo(function GroupedMessage({
   const images = extractImages(message);
   const hasImages = images.length > 0;
   const markdown = extractText(message)?.trim() ? extractText(message) : '';
+  const hasAssistantError = normalizedRole === 'assistant' && isAssistantErrorMessage(message);
   const reasoningMarkdown = role === 'assistant'
     ? getReasoningMarkdown(message, showThinking, labels)
     : null;
@@ -558,7 +559,7 @@ const GroupedMessage = memo(function GroupedMessage({
   const toolPreview = markdown && !toolSummaryLabel ? markdown.trim().replace(/\s+/g, ' ').slice(0, 120) : '';
 
   return (
-    <div className={cn('chat-bubble', 'fade-in', isStreaming && 'streaming', canCopyMarkdown && 'has-copy')}>
+    <div className={cn('chat-bubble', 'fade-in', isStreaming && 'streaming', canCopyMarkdown && 'has-copy', hasAssistantError && 'chat-bubble--error')}>
       {canCopyMarkdown ? (
         <div className="chat-bubble-actions">
           <CopyButton text={markdown!} label={labels.codeCopy} />
