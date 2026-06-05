@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { AlertCircle, Bot, Check, Copy, FileText, RotateCcw, Search, Trash2, User, X, Zap } from 'lucide-react';
+import { AlertCircle, Bot, Check, ChevronRight, Copy, FileText, RotateCcw, Search, Trash2, User, X, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invokeIpc } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
@@ -86,19 +86,6 @@ function formatChatDateTime(timestamp: number, locale: string): string {
   });
 }
 
-function resolveContextUsage(meta: GroupMeta | null, contextWindow: number | null): {
-  used: number;
-  limit: number;
-  pct: number;
-} | null {
-  if (!meta || !contextWindow || meta.input <= 0) return null;
-  return {
-    used: meta.input,
-    limit: contextWindow,
-    pct: Math.min(Math.round((meta.input / contextWindow) * 100), 100),
-  };
-}
-
 function findLatestContextUsage(
   messages: RawMessage[],
   contextWindow: number | null,
@@ -138,15 +125,16 @@ const MessageMeta = memo(function MessageMeta({ meta, labels }: { meta: GroupMet
   }
 
   if (parts.length === 0) return null;
-  return <span className="msg-meta">{parts}</span>;
-});
-
-const FooterContextBadge = memo(function FooterContextBadge({ label }: { label: string }) {
   return (
-    <span className="chat-context-badge">
-      <span className="chat-context-badge__dot" />
-      <span>{label}</span>
-    </span>
+    <details className="msg-meta">
+      <summary className="msg-meta__summary" title="Show message context details">
+        <span className="msg-meta__summary-icon" aria-hidden="true">
+          <ChevronRight className="h-3 w-3" />
+        </span>
+        <span>Context</span>
+      </summary>
+      <span className="msg-meta__details">{parts}</span>
+    </details>
   );
 });
 
@@ -713,7 +701,6 @@ const Group = memo(function Group({
       ? labels.assistant
       : labels.tool;
   const meta = extractGroupMeta(group, contextWindow);
-  const footerContextUsage = resolveContextUsage(meta, contextWindow);
   const visibleMessages = group.messages.filter((item) => hasVisibleMessageContent(item.message, showThinking, showToolCalls));
 
   if (visibleMessages.length === 0 && !group.hasReadingIndicator) {
@@ -739,14 +726,11 @@ const Group = memo(function Group({
             onToggleToolCard={onToggleToolCard}
           />
         ))}
-        {group.hasReadingIndicator ? <div className="chat-group-reading"><ReadingIndicator inline /></div> : null}
+        {group.hasReadingIndicator ? <div className="chat-group-reading"><ReadingIndicator inline label={group.readingIndicatorLabel} /></div> : null}
         <div className="chat-group-footer">
           <span className="chat-sender-name">{label}</span>
           <span className="chat-group-timestamp" title={fullTimestamp}>{fullTimestamp}</span>
-          {group.role === 'assistant' && footerContextUsage ? (
-            <FooterContextBadge label="Context" />
-          ) : null}
-          <MessageMeta meta={meta} labels={labels} />
+          {group.role === 'assistant' ? <MessageMeta meta={meta} labels={labels} /> : null}
           <button
             type="button"
             className="chat-group-delete"
@@ -801,7 +785,13 @@ const StreamingGroup = memo(function StreamingGroup({
   );
 });
 
-const ReadingIndicator = memo(function ReadingIndicator({ inline = false }: { inline?: boolean }) {
+const ReadingIndicator = memo(function ReadingIndicator({
+  inline = false,
+  label,
+}: {
+  inline?: boolean;
+  label?: string;
+}) {
   return (
     <div className={cn(!inline && 'chat-group assistant')}>
       {!inline ? <Avatar role="assistant" /> : null}
@@ -812,13 +802,15 @@ const ReadingIndicator = memo(function ReadingIndicator({ inline = false }: { in
             !inline && 'streaming',
             'chat-bubble--reading'
           )}
-          aria-hidden="true"
+          role="status"
+          aria-live="polite"
         >
           <span className="chat-reading-indicator__dots">
             <span />
             <span />
             <span />
           </span>
+          {label ? <span className="chat-reading-indicator__label">{label}</span> : null}
         </div>
       </div>
     </div>
@@ -907,9 +899,11 @@ export const ChatThread = memo(function ChatThread({
   historyWindowLimited,
   canLoadEarlier,
   loadingEarlierHistory,
+  showActivityIndicator,
   searchQuery,
   onSearchChange,
   hideSearch,
+  activityLabel,
 }: {
   messages: RawMessage[];
   pendingUserMessage: RawMessage | null;
@@ -929,9 +923,11 @@ export const ChatThread = memo(function ChatThread({
   historyWindowLimited?: boolean;
   canLoadEarlier?: boolean;
   loadingEarlierHistory?: boolean;
+  showActivityIndicator?: boolean;
   searchQuery: string;
   onSearchChange: (q: string) => void;
   hideSearch?: boolean;
+  activityLabel?: string;
 }) {
   const { t, i18n } = useTranslation('chat');
   const locale = i18n.language || 'en';
@@ -991,10 +987,12 @@ export const ChatThread = memo(function ChatThread({
     sessionKey,
     sending,
     pendingFinal,
+    showActivityIndicator,
+    activityLabel,
     showThinking,
     showToolCalls,
     locale,
-  }), [locale, messages, pendingUserMessage, pendingAssistantMessage, toolMessages, streamSegments, streamingMessage, streamingStartedAt, sessionKey, sending, pendingFinal, showThinking, showToolCalls]);
+  }), [activityLabel, locale, messages, pendingUserMessage, pendingAssistantMessage, toolMessages, streamSegments, streamingMessage, streamingStartedAt, sessionKey, sending, pendingFinal, showActivityIndicator, showThinking, showToolCalls]);
 
   // Context usage notice (>= 85% threshold)
   const contextNotice = useMemo<{ pct: number; used: number; limit: number } | null>(() => {
@@ -1207,7 +1205,7 @@ export const ChatThread = memo(function ChatThread({
           );
         }
         if (item.kind === 'reading-indicator') {
-          return <ReadingIndicator key={item.key} />;
+          return <ReadingIndicator key={item.key} label={item.label} />;
         }
         if (item.kind === 'truncated-notice') {
           return (

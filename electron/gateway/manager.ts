@@ -112,6 +112,8 @@ export class GatewayManager extends EventEmitter {
   private static readonly STARTUP_CONNECT_HANDSHAKE_TIMEOUT_MS = 30_000;
   private static readonly STARTUP_CONNECT_RETRY_DELAY_MS = 1000;
   private static readonly STARTUP_CONNECT_MAX_ATTEMPTS = 2;
+  private static readonly DEFERRED_CHANNEL_STARTUP_STABILIZATION_MS = 12_000;
+  private static readonly DEFERRED_CHANNEL_STARTUP_POLL_MS = 1000;
   private process: ChildProcess | null = null;
   private processExitStatus: number | string | null = null;
   private ownsProcess = false;
@@ -222,6 +224,11 @@ export class GatewayManager extends EventEmitter {
   private isUnknownGatewayMethodError(error: unknown, method: string): boolean {
     const message = error instanceof Error ? error.message : String(error);
     return new RegExp(`unknown method:\\s*${method.replace('.', '\\.')}`, 'i').test(message);
+  }
+
+  private isInvalidGatewayChannelError(error: unknown, method: string): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return new RegExp(`invalid\\s+${method.replace('.', '\\.')}\\s+channel`, 'i').test(message);
   }
 
   /**
@@ -516,7 +523,6 @@ export class GatewayManager extends EventEmitter {
 
     void (async () => {
       let accountsByChannel: Record<string, string[]>;
-      let supportedChannels = new Set<string>();
       try {
         accountsByChannel = await listConfiguredChannelAccounts({ includeCli: false });
       } catch (error) {
@@ -524,28 +530,12 @@ export class GatewayManager extends EventEmitter {
         return;
       }
 
-      try {
-        const status = await this.rpc<{
-          channels?: Record<string, unknown>;
-          channelOrder?: string[];
-        }>('channels.status', {}, 15_000);
-        supportedChannels = new Set<string>([
-          ...(Array.isArray(status?.channelOrder) ? status.channelOrder.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0) : []),
-          ...Object.keys(status?.channels ?? {}),
-        ]);
-      } catch (error) {
-        logger.warn('Failed to resolve supported channels for deferred startup:', error);
+      while (this.isInStartupStabilizationWindow(GatewayManager.DEFERRED_CHANNEL_STARTUP_STABILIZATION_MS)) {
+        await new Promise((resolve) => setTimeout(resolve, GatewayManager.DEFERRED_CHANNEL_STARTUP_POLL_MS));
       }
 
       for (const [channel, accountIds] of Object.entries(accountsByChannel)) {
-        const canonicalChannel =
-          [channel, toRuntimeChannelType(channel)]
-            .map((entry) => entry.trim())
-            .find((entry) => supportedChannels.size === 0 || supportedChannels.has(entry));
-        if (!canonicalChannel) {
-          logger.info(`Skipping deferred channel startup for unsupported channel "${channel}"`);
-          continue;
-        }
+        const canonicalChannel = toRuntimeChannelType(channel).trim() || channel.trim();
         const targets = accountIds.length > 0 ? accountIds : ['default'];
         for (const accountId of targets) {
           try {
@@ -560,6 +550,10 @@ export class GatewayManager extends EventEmitter {
               this.deferredChannelStartupUnsupported = true;
               logger.info('Gateway does not support channels.start; skipping deferred channel startup');
               return;
+            }
+            if (this.isInvalidGatewayChannelError(error, 'channels.start')) {
+              logger.info(`Skipping deferred channel startup for unsupported or unavailable channel "${canonicalChannel}"`);
+              break;
             }
             logger.warn(`Deferred channel startup failed (${canonicalChannel}:${accountId}):`, error);
           }

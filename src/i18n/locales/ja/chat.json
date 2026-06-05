@@ -133,6 +133,10 @@
     "close": "閉じる"
   },
   "status": {
+    "thinking": "思考中",
+    "waitingForResponse": "応答を待っています",
+    "runningTools": "ツールを実行中",
+    "finalizingResponse": "回答を整理中",
     "processingToolResults": "ツール結果を処理中",
     "compactionRetrying": "コンテキストを圧縮済み、実行を再試行中",
     "newMessages": "新着メッセージ",

@@ -76,7 +76,7 @@ export type ChatItem =
   | { kind: 'message'; key: string; message: RawMessage }
   | { kind: 'divider'; key: string; label: string; timestamp: number }
   | { kind: 'stream'; key: string; text: string; startedAt: number }
-  | { kind: 'reading-indicator'; key: string }
+  | { kind: 'reading-indicator'; key: string; label?: string }
   | { kind: 'truncated-notice'; key: string };
 
 export type MessageGroup = {
@@ -88,6 +88,7 @@ export type MessageGroup = {
   timestamp: number;
   isStreaming: boolean;
   hasReadingIndicator?: boolean;
+  readingIndicatorLabel?: string;
 };
 
 export type TranscriptEntry =
@@ -559,6 +560,7 @@ function groupMessages(items: ChatItem[]): Array<ChatItem | MessageGroup> {
     if (item.kind !== 'message') {
       if (item.kind === 'reading-indicator' && currentGroup?.role === 'assistant') {
         currentGroup.hasReadingIndicator = true;
+        currentGroup.readingIndicatorLabel = item.label;
         continue;
       }
       if (currentGroup) {
@@ -669,6 +671,7 @@ function mergeTrailingReadingIndicatorIntoAssistantGroup(
     {
       ...lastTranscriptItem,
       hasReadingIndicator: true,
+      readingIndicatorLabel: liveFlow[0].label,
     },
   ];
 }
@@ -803,6 +806,8 @@ export function buildChatItems(params: {
   sessionKey: string;
   sending: boolean;
   pendingFinal: boolean;
+  showActivityIndicator?: boolean;
+  activityLabel?: string;
   showThinking: boolean;
   showToolCalls: boolean;
   locale: string;
@@ -955,8 +960,12 @@ export function buildChatItems(params: {
   }
 
   const hasLiveAssistantText = liveItems.some((item) => item.kind === 'stream');
-  if ((params.sending || params.pendingFinal) && !hasLiveAssistantText) {
-    liveItems.push({ kind: 'reading-indicator', key: `reading:${params.sessionKey}` });
+  if ((params.sending || params.pendingFinal || params.showActivityIndicator) && !hasLiveAssistantText) {
+    liveItems.push({
+      kind: 'reading-indicator',
+      key: `reading:${params.sessionKey}`,
+      label: params.activityLabel,
+    });
   }
 
   const transcriptFlow = withDateDividers(toGroupedFlowItems(transcriptItems), params.locale);

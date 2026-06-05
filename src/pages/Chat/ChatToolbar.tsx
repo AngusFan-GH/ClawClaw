@@ -1,9 +1,8 @@
 /**
  * Chat Toolbar
- * Model selector, gateway status, refresh, and thinking toggle.
+ * Model selector, refresh, and thinking toggle.
  * Rendered in the Header when on the Chat page.
  */
-import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import {
   Sheet,
@@ -17,7 +16,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { RefreshButton } from '@/components/common/RefreshButton';
 import { Blocks, Brain, Clock3, Download, Focus, Search, Settings2, X } from 'lucide-react';
 import { useChatStore } from '@/stores/chat';
-import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -71,10 +69,7 @@ export function ChatToolbar({
 
   const refresh = useChatStore((s) => s.refresh);
   const loading = useChatStore((s) => s.loading);
-  const gatewayStatus = useGatewayStore((s) => s.status);
-  const gatewayInitialized = useGatewayStore((s) => s.isInitialized);
   const { t } = useTranslation(['chat', 'common']);
-  const displayGatewayState = gatewayInitialized ? gatewayStatus.state : 'starting';
 
   useEffect(() => {
     if (!modelMenuOpen) return;
@@ -97,17 +92,6 @@ export function ChatToolbar({
       window.removeEventListener('keydown', handleEscape);
     };
   }, [modelMenuOpen]);
-
-  const gatewayStatusLabel =
-    displayGatewayState === 'running'
-      ? t('toolbar.gatewayRunning')
-      : displayGatewayState === 'error'
-        ? t('toolbar.gatewayError')
-        : displayGatewayState === 'starting'
-          ? t('toolbar.gatewayStarting')
-          : displayGatewayState === 'reconnecting'
-            ? t('toolbar.gatewayReconnecting')
-            : t('toolbar.gatewayStopped');
 
   return (
     <div className="flex w-full items-center justify-between gap-3">
@@ -149,36 +133,6 @@ export function ChatToolbar({
       ) : null}
 
       <div className="flex shrink-0 items-center gap-2">
-        <Badge
-          variant="secondary"
-          className={cn(
-            'h-8 rounded-[10px] border px-3 text-[12px]',
-            displayGatewayState === 'running'
-              ? 'border-emerald-500/30 bg-emerald-500/12 text-emerald-700 dark:text-emerald-400'
-              : displayGatewayState === 'error'
-                ? 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
-                : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
-                  ? 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400'
-                  : 'border-black/10 bg-white/80 text-muted-foreground dark:border-white/10 dark:bg-white/[0.06]'
-          )}
-        >
-          <span className="inline-flex items-center gap-2">
-            <span
-              className={cn(
-                'h-2 w-2 rounded-full',
-                displayGatewayState === 'running'
-                  ? 'bg-emerald-500'
-                  : displayGatewayState === 'error'
-                    ? 'bg-red-500'
-                    : displayGatewayState === 'starting' || displayGatewayState === 'reconnecting'
-                      ? 'bg-sky-500 animate-pulse'
-                      : 'bg-muted-foreground/60'
-              )}
-            />
-            {gatewayStatusLabel}
-          </span>
-        </Badge>
-
         <Tooltip>
           <TooltipTrigger asChild>
             <RefreshButton

@@ -77,6 +77,7 @@ interface ChatInputProps {
   thinkingDisabled?: boolean;
   disabled?: boolean;
   sending?: boolean;
+  stoppable?: boolean;
   isEmpty?: boolean;
   showThinking?: boolean;
 }
@@ -199,6 +200,7 @@ export function ChatInput({
   thinkingDisabled = false,
   disabled = false,
   sending = false,
+  stoppable = false,
   isEmpty = false,
   showThinking = false,
 }: ChatInputProps) {
@@ -684,7 +686,7 @@ export function ChatInput({
   const hasSubmitContent = Boolean(trimmedInput || attachments.length > 0);
   const canSubmit = hasSubmitContent && allReady && !disabled;
   const canQueueWhileSending = canSubmit && sending;
-  const canStop = sending && !disabled && !!onStop;
+  const canStop = stoppable && !disabled && !!onStop;
 
   const handleSend = useCallback(() => {
     if (!canSubmit) return;

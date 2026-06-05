@@ -133,6 +133,10 @@
     "close": "Close"
   },
   "status": {
+    "thinking": "Thinking",
+    "waitingForResponse": "Waiting for response",
+    "runningTools": "Running tools",
+    "finalizingResponse": "Finalizing response",
     "processingToolResults": "Processing tool results",
     "compactionRetrying": "Context compacted; retrying run",
     "newMessages": "New messages",

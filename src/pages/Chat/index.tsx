@@ -109,6 +109,7 @@ export function Chat() {
   const sending = useChatStore((s) => s.sending);
   const activeRunId = useChatStore((s) => s.activeRunId);
   const error = useChatStore((s) => s.error);
+  const runError = useChatStore((s) => s.runError);
   const showThinking = useChatStore((s) => s.showThinking);
   const sessions = useChatStore((s) => s.sessions);
   const sessionsHydrated = useChatStore((s) => s.sessionsHydrated);
@@ -747,6 +748,78 @@ export function Chat() {
     return buildAgentOptions(appliedAgents);
   }, [appliedAgents]);
   const canSwitchAgent = currentSessionIsPlaceholder;
+  const waitingForAssistantFallback = useMemo(() => {
+    if (!isGatewayRunning || error || runError) return false;
+    if (sending || activeRunId || pendingFinal || terminalHistoryReconciling) return false;
+
+    const combinedMessages = pendingUserMessage
+      ? [...messages, pendingUserMessage]
+      : messages;
+    if (combinedMessages.length === 0) return false;
+
+    let lastUserIndex = -1;
+    for (let index = combinedMessages.length - 1; index >= 0; index -= 1) {
+      if (combinedMessages[index]?.role === 'user') {
+        lastUserIndex = index;
+        break;
+      }
+    }
+    if (lastUserIndex < 0) return false;
+
+    const lastUserMessage = combinedMessages[lastUserIndex];
+    const lastUserTimestamp = normalizeChatTimestampMs(lastUserMessage.timestamp) ?? Date.now();
+    if (Date.now() - lastUserTimestamp > 5 * 60 * 1000) return false;
+
+    const hasProgressAfterLastUser = combinedMessages
+      .slice(lastUserIndex + 1)
+      .some((message) => message.role !== 'user');
+    return !hasProgressAfterLastUser;
+  }, [
+    activeRunId,
+    error,
+    isGatewayRunning,
+    messages,
+    pendingFinal,
+    pendingUserMessage,
+    runError,
+    sending,
+    terminalHistoryReconciling,
+  ]);
+  const activityLabel = useMemo(() => {
+    if (terminalHistoryReconciling) {
+      return t('status.processingToolResults');
+    }
+    if (waitingForAssistantFallback) {
+      return t('status.waitingForResponse');
+    }
+    if (chatToolMessages.length > 0) {
+      return t('status.runningTools');
+    }
+    if (pendingFinal) {
+      return t('status.finalizingResponse');
+    }
+    if (sending) {
+      return t('status.thinking');
+    }
+    return undefined;
+  }, [chatToolMessages.length, pendingFinal, sending, t, terminalHistoryReconciling, waitingForAssistantFallback]);
+  const inputRunActive = sending
+    || Boolean(activeRunId)
+    || pendingFinal
+    || terminalHistoryReconciling
+    || waitingForAssistantFallback;
+
+  useEffect(() => {
+    if (!waitingForAssistantFallback) return;
+    const interval = window.setInterval(() => {
+      const state = useChatStore.getState();
+      if (state.sending || state.activeRunId || state.pendingFinal || state.terminalHistoryReconciling) {
+        return;
+      }
+      void state.loadHistory(true);
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [waitingForAssistantFallback, currentSessionKey]);
   const currentAgentLabel = useMemo(
     () => resolveCurrentAgentLabel({
       agentOptions,
@@ -1320,6 +1393,17 @@ export function Chat() {
                 </div>
               )}
 
+              {terminalHistoryReconciling && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="compaction-indicator compaction-indicator--active"
+                >
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>{t('status.processingToolResults')}</span>
+                </div>
+              )}
+
               {/* Run status toast — store auto-clears after 5 s via _runStatusClearTimer */}
               {runStatus && (runStatus.phase === 'done' || runStatus.phase === 'interrupted') && (
                 <div
@@ -1354,6 +1438,8 @@ export function Chat() {
                 streamingStartedAt={streamingTimestamp}
                 sending={sending}
                 pendingFinal={pendingFinal}
+                showActivityIndicator={waitingForAssistantFallback}
+                activityLabel={activityLabel}
                 showThinking={showThinkingDetails}
                 showToolCalls={chatShowToolCalls}
                 sessionKey={currentSessionKey}
@@ -1495,6 +1581,14 @@ export function Chat() {
       ) : null}
 
       {/* Error bar */}
+      {runError && !error && (
+        <div className="border-t border-amber-500/20 bg-amber-500/10 px-4 py-2">
+          <div className="mx-auto flex max-w-4xl items-start gap-2 text-sm leading-6 text-amber-700 dark:text-amber-300">
+            <AlertCircle className="mt-1 h-4 w-4 shrink-0" />
+            <span className="min-w-0 break-words">{runError}</span>
+          </div>
+        </div>
+      )}
       {error && (
         <div className="px-4 py-2 bg-destructive/10 border-t border-destructive/20">
           <div className="mx-auto flex max-w-4xl flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -1533,6 +1627,7 @@ export function Chat() {
         thinkingDisabled={!isGatewayRunning || sending || Boolean(activeRunId) || loading}
         disabled={!isGatewayRunning}
         sending={sending}
+        stoppable={inputRunActive}
         isEmpty={shouldShowWelcome}
         showThinking={showThinkingDetails}
       />

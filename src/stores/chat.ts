@@ -327,6 +327,34 @@ interface ChatState {
 // during tool-use conversations where streamingMessage is temporarily cleared
 // between tool-result finals and the next delta.
 let _lastChatEventAt = 0;
+let _lastAbortedRunId: string | null = null;
+let _lastAbortedSessionKey: string | null = null;
+
+function setLastAbortedRunGuard(sessionKey: string, runId: string | null | undefined): void {
+  _lastAbortedSessionKey = sessionKey.trim() || null;
+  _lastAbortedRunId = runId?.trim() || '*';
+}
+
+function clearLastAbortedRunGuard(sessionKey?: string): void {
+  if (!sessionKey) {
+    _lastAbortedRunId = null;
+    _lastAbortedSessionKey = null;
+    return;
+  }
+  const trimmed = sessionKey.trim();
+  if (!trimmed || _lastAbortedSessionKey !== trimmed) return;
+  _lastAbortedRunId = null;
+  _lastAbortedSessionKey = null;
+}
+
+function isBlockedAbortedRunEvent(sessionKey: string | null | undefined, runId: string | null | undefined): boolean {
+  if (!_lastAbortedSessionKey || !_lastAbortedRunId) return false;
+  const incomingSessionKey = sessionKey?.trim() || '';
+  if (!incomingSessionKey || incomingSessionKey !== _lastAbortedSessionKey) return false;
+  if (_lastAbortedRunId === '*') return true;
+  const incomingRunId = runId?.trim() || '';
+  return Boolean(incomingRunId && incomingRunId === _lastAbortedRunId);
+}
 
 /** Normalize a timestamp to milliseconds. Handles numeric seconds and milliseconds. */
 function toMs(ts: unknown): number {
@@ -1848,6 +1876,45 @@ function resetStreamingPresentationState(): Pick<ChatState, 'streamingText' | 's
   };
 }
 
+function clearResolvedRunState(
+  state: Pick<
+    ChatState,
+    | 'toolStreamById'
+    | 'toolStreamOrder'
+    | 'pendingUserMessage'
+    | 'pendingAssistantMessage'
+  >,
+): Pick<
+  ChatState,
+  | 'sending'
+  | 'activeRunId'
+  | 'pendingFinal'
+  | 'terminalHistoryReconciling'
+  | 'lastUserMessageAt'
+  | 'runError'
+  | 'pendingSessionModelRefresh'
+  | 'streamingText'
+  | 'streamingMessage'
+  | 'streamingTools'
+  | 'pendingToolImages'
+  | 'toolStreamById'
+  | 'toolStreamOrder'
+  | 'chatToolMessages'
+  | 'chatStreamSegments'
+> {
+  return {
+    sending: false,
+    activeRunId: null,
+    pendingFinal: false,
+    terminalHistoryReconciling: false,
+    lastUserMessageAt: null,
+    runError: null,
+    pendingSessionModelRefresh: false,
+    ...resetStreamingPresentationState(),
+    ...resetToolStreamState(state),
+  };
+}
+
 function resetChatRuntimeActivity(
   state: Pick<ChatState, 'toolStreamById' | 'toolStreamOrder'>,
 ): Pick<
@@ -2261,6 +2328,25 @@ function hasNonToolAssistantContent(message: RawMessage | undefined): boolean {
   return false;
 }
 
+function hasConclusiveAssistantContent(message: RawMessage | undefined): boolean {
+  if (!message) return false;
+  if (typeof message.content === 'string' && message.content.trim()) return true;
+
+  const content = message.content;
+  if (Array.isArray(content)) {
+    for (const block of content as ContentBlock[]) {
+      if (block.type === 'text' && block.text && block.text.trim()) return true;
+      if (block.type === 'image') return true;
+      if (block.type === 'file') return true;
+    }
+  }
+
+  const msg = message as unknown as Record<string, unknown>;
+  if (typeof msg.text === 'string' && msg.text.trim()) return true;
+
+  return false;
+}
+
 function getMessageStopReason(message: RawMessage | unknown): string | null {
   if (!message || typeof message !== 'object') return null;
   const msg = message as Record<string, unknown>;
@@ -2344,7 +2430,7 @@ function segmentHasOpenToolRun(segmentMessages: RawMessage[]): boolean {
     if (index <= lastToolUseOffset) return false;
     if (message.role !== 'assistant') return false;
     if (hasPendingToolUse(message)) return false;
-    return hasNonToolAssistantContent(message);
+    return hasConclusiveAssistantContent(message);
   });
 }
 
@@ -3390,7 +3476,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             if (msg.role !== 'assistant') return false;
             if (pendingUserTs && msg.timestamp && toMs(msg.timestamp) < pendingUserTs) return false;
             if (hasPendingToolUse(msg)) return false;
-            return hasNonToolAssistantContent(msg);
+            return hasConclusiveAssistantContent(msg);
           });
           if (hasFinalLikeAssistant) {
             set({ pendingFinal: true });
@@ -3522,20 +3608,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
             if (msg.role !== 'assistant') return false;
             if (!isAfterUserMsg(msg)) return false;
             if (hasPendingToolUse(msg)) return false;
-            return hasNonToolAssistantContent(msg);
+            return hasConclusiveAssistantContent(msg);
           });
           if (recentAssistant) {
             clearHistoryPoll();
             set((s) => ({
-              sending: false,
-              activeRunId: null,
-              pendingFinal: false,
               pendingAssistantMessage: hasEquivalentAuthoritativeAssistantMessage ? null : s.pendingAssistantMessage,
-              ...resetToolStreamState(s),
-              streamingText: '',
-              streamingMessage: null,
-              streamingTools: [],
+              ...clearResolvedRunState(s),
             }));
+            get().requestQueueFlush(stateBeforeCommit.activeRunId || null);
           }
         }
 
@@ -3546,16 +3627,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
           const hasConclusiveReply = openSegment.some((message) => {
             if (message.role !== 'assistant') return false;
             if (hasPendingToolUse(message)) return false;
-            return hasNonToolAssistantContent(message);
+            return hasConclusiveAssistantContent(message);
           });
           if (hasConclusiveReply && !segmentHasOpenToolRun(openSegment)) {
             clearHistoryPoll();
-            set({
-              sending: false,
-              activeRunId: null,
-              pendingFinal: false,
-              lastUserMessageAt: null,
-            });
+            set((s) => ({
+              ...clearResolvedRunState(s),
+            }));
+            get().requestQueueFlush(stateBeforeCommit.activeRunId || null);
           }
         }
 
@@ -3729,6 +3808,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   ) => {
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
+    clearLastAbortedRunGuard(get().currentSessionKey);
 
     const { currentSessionKey, sessions, allowedModelRefs, defaultModelRef, currentAgentId } = get();
     const currentSession = sessions.find((session) => session.key === currentSessionKey);
@@ -4126,7 +4206,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   abortRun: async () => {
     clearHistoryPoll();
-    const { currentSessionKey } = get();
+    const { currentSessionKey, activeRunId } = get();
+    setLastAbortedRunGuard(currentSessionKey, activeRunId);
     set({
       sending: false,
       activeRunId: null,
@@ -4141,6 +4222,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (err) {
       set({ error: String(err) });
     }
+    void get().loadHistory(true);
   },
 
   interruptActiveRunForPolicyChange: async (message: string) => {
@@ -4182,6 +4264,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // (e.g. BTW responses may use a different session key alias than the current session).
     const isActiveRun = Boolean(activeRunId && runId && runId === activeRunId);
     if (eventSessionKey != null && !sessionKeysMatch(currentSessionKey, eventSessionKey, sessions) && !isActiveRun) return;
+    if (isBlockedAbortedRunEvent(eventSessionKey, runId)) {
+      return;
+    }
 
     // Final from another run (e.g. sub-agent announce): refresh history to show new message.
     // See https://github.com/openclaw/openclaw/issues/1909
@@ -4191,7 +4276,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (
           finalMessage
           && !isAssistantSilentReply(finalMessage)
-          && hasNonToolAssistantContent(finalMessage)
+          && hasConclusiveAssistantContent(finalMessage)
         ) {
           set((s) => {
             const id = finalMessage.id || `run-${runId}`;
@@ -4361,7 +4446,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             break;
           }
           const toolOnly = isToolOnlyMessage(finalMsg);
-          const hasOutput = hasNonToolAssistantContent(finalMsg);
+          const hasOutput = hasConclusiveAssistantContent(finalMsg);
           const shouldRefreshSessionModel = get().pendingSessionModelRefresh;
           if (!toolOnly && !hasOutput) {
             const streamFallback = buildAssistantMessageFromStream(get(), runId);
@@ -4567,7 +4652,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           abortedMessage
           && (abortedMessage.role === 'assistant' || abortedMessage.role === undefined)
           && !isAssistantSilentReply(abortedMessage)
-          && hasNonToolAssistantContent(abortedMessage)
+          && hasConclusiveAssistantContent(abortedMessage)
             ? {
                 ...abortedMessage,
                 role: 'assistant' as const,
@@ -4638,6 +4723,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (eventSessionKey && !sessionKeysMatch(currentSessionKey, eventSessionKey, sessions)) return;
 
     const incomingRunId = typeof event.runId === 'string' ? event.runId : '';
+    if (isBlockedAbortedRunEvent(eventSessionKey, incomingRunId)) return;
     // Match OpenClaw dashboard tool-stream handling: tool events are scoped by
     // session, not by chatRunId. Some runtimes emit tool events with an engine
     // run id that differs from the chat.send run/idempotency id, so filtering

@@ -133,6 +133,10 @@
     "close": "关闭"
   },
   "status": {
+    "thinking": "正在思考",
+    "waitingForResponse": "正在等待响应",
+    "runningTools": "正在执行工具",
+    "finalizingResponse": "正在整理最终回答",
     "processingToolResults": "正在处理工具结果",
     "compactionRetrying": "上下文已压缩，正在重试运行",
     "newMessages": "新消息",
