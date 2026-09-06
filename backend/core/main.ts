@@ -2,76 +2,189 @@ import JsonStore from '../host/json-store';
 import { app, HostWindow, requestHandlers } from '../host/desktop';
 import { emitDesktop, send } from '../host/transport';
 import { ClawCoreRuntime } from './runtime';
-import type { CoreProvider } from './provider-store';
+import type { RunEvent } from './contracts';
+import { CoreError, isCoreError } from './errors';
+import { v, validateArgs, type Check } from './validation';
+import { VENDORS } from './provider-catalog';
+import { channelAccount } from './secrets/keychain';
 
-const settings = new JsonStore<Record<string, unknown>>({ name: 'settings', defaults: {
-  setupComplete: false, autoCheckUpdate: false, theme: 'system', language: 'zh-CN',
-} });
-const runtime = new ClawCoreRuntime(event => emitDesktop('core:run:event', event));
+const settings = new JsonStore<Record<string, unknown>>({
+  name: 'settings',
+  defaults: { setupComplete: false, autoCheckUpdate: false, theme: 'system', language: 'zh-CN' },
+});
 
-function providerView(provider: CoreProvider) {
-  return { ...provider, hasKey: runtime.providerStore.hasApiKey(provider.id), keyMasked: null };
+let runtime: ClawCoreRuntime;
+
+function register(channel: string, schema: Check<unknown>[], handler: (...args: any[]) => unknown): void {
+  requestHandlers.handle(channel, (_event, ...args) => {
+    const valid = validateArgs(schema, args);
+    return Promise.resolve()
+      .then(() => handler(...valid))
+      .catch((error: unknown) => {
+        throw normalize(error);
+      });
+  });
 }
-function register(channel: string, handler: (...args: any[]) => unknown) { requestHandlers.handle(channel, (_event, ...args) => handler(...args)); }
+
+function normalize(error: unknown): Error {
+  if (isCoreError(error)) return new Error(error.toString());
+  if (error instanceof Error) {
+    // Preserve already-encoded `CODE: message` strings; wrap anything else.
+    if (/^[A-Z_]+:/.test(error.message)) return error;
+    return new Error(new CoreError('INTERNAL_ERROR', error.message).toString());
+  }
+  return new Error(new CoreError('INTERNAL_ERROR', 'Unexpected error').toString());
+}
 
 export async function initialize(): Promise<void> {
   void new HostWindow();
-  await runtime.initialize();
-  register('app:version', () => app.getVersion());
-  register('app:name', () => app.getName());
-  register('app:platform', () => process.platform);
-  register('settings:getAll', () => settings.store);
-  register('settings:get', (key: string) => settings.get(key));
-  register('settings:set', (key: string, value: unknown) => settings.set(key, value));
-  register('settings:setMany', (values: Record<string, unknown>) => settings.set(values));
-  register('settings:reset', () => settings.clear());
-  register('core:run:create', (input) => runtime.runs.create(input));
-  register('core:run:getEvents', (runId: string, afterSequence?: number) => runtime.runs.eventLog(runId, afterSequence));
-  register('core:run:cancel', (runId: string, reason?: string) => runtime.cancelRun(runId, reason));
-  register('core:run:resolveToolApproval', (runId: string, approved: boolean) => runtime.resolveToolApproval(runId, approved));
-  register('core:chat:send', (input) => runtime.startChat(input));
-  register('core:conversation:messages', (workspaceId: string, conversationId: string) => runtime.getConversation(workspaceId, conversationId));
-  register('core:conversation:list', (workspaceId: string) => runtime.listConversations(workspaceId));
-  register('core:conversation:delete', (workspaceId: string, conversationId: string) => runtime.deleteConversation(workspaceId, conversationId));
-  register('cron:list', () => runtime.cron.list());
-  register('cron:save', (job) => runtime.cron.save(job));
-  register('cron:delete', (id: string) => runtime.cron.delete(id));
-  register('cron:trigger', (id: string) => runtime.triggerCron(id));
-  register('agent:list', () => runtime.agents.list());
-  register('agent:create', (name: string) => runtime.agents.create(name));
-  register('agent:update', (id: string, updates: { name?: string; model?: string | null; isDefault?: boolean }) => { const old = runtime.agents.get(id); if (!old) throw new Error('Agent not found'); return runtime.agents.save({ ...old, ...updates, model: updates.model ?? undefined, name: updates.name ?? old.name }); });
-  register('agent:delete', (id: string) => runtime.agents.delete(id));
-  register('agent:bindChannel', (id: string, channelType: string, accountId?: string) => runtime.agents.bind(id, channelType, accountId));
-  register('agent:unbindChannel', (id: string, channelType: string, accountId?: string) => runtime.agents.unbind(id, channelType, accountId));
-  register('skill:list', () => runtime.skills.list());
-  register('skill:search', (query: string) => runtime.skills.search(query));
-  register('skill:install', (slug: string) => runtime.skills.install(slug));
-  register('skill:uninstall', (slug: string) => runtime.skills.uninstall(slug));
-  register('skill:setEnabled', (id: string, enabled: boolean) => runtime.skills.setEnabled(id, enabled));
-  register('artifact:stagePaths', (paths: string[]) => runtime.artifacts.stagePaths(paths));
-  register('artifact:stageBuffer', (base64: string, fileName: string, mimeType: string) => runtime.artifacts.stageBuffer(base64, fileName, mimeType));
-  register('provider:list', () => runtime.providerStore.list().map(providerView));
-  register('provider:get', (id: string) => { const provider = runtime.providerStore.get(id); return provider && providerView(provider); });
-  register('provider:getDefault', () => runtime.providerStore.getDefault());
-  register('provider:hasApiKey', (id: string) => runtime.providerStore.hasApiKey(id));
-  register('provider:save', (provider: CoreProvider) => providerView(runtime.providerStore.save(provider)));
-  register('provider:setApiKey', async (id: string, apiKey: string) => runtime.providerStore.setApiKey(id, apiKey));
-  register('provider:updateWithKey', async (provider: CoreProvider, apiKey?: string) => { const saved = runtime.providerStore.save(provider); if (apiKey) await runtime.providerStore.setApiKey(saved.id, apiKey); return providerView(saved); });
-  register('provider:deleteApiKey', async (id: string) => runtime.providerStore.deleteApiKey(id));
-  register('provider:delete', async (id: string) => runtime.providerStore.delete(id));
-  register('provider:setDefault', (id: string) => runtime.providerStore.setDefault(id));
-  register('app:request', async (request: { module: string; action: string; payload?: unknown }) => {
-    const channel = `${request.module}:${request.action}`;
-    try {
-      const args = Array.isArray(request.payload) ? request.payload : request.payload === undefined ? [] : [request.payload];
-      // Unified IPC is deliberately a small allowlist; it never exposes arbitrary backend calls.
-      const supported = new Set(['app:version', 'app:name', 'app:platform', 'settings:getAll', 'settings:get', 'settings:set', 'settings:setMany', 'settings:reset', 'provider:list', 'provider:get', 'provider:getDefault', 'provider:hasApiKey', 'provider:save', 'provider:setApiKey', 'provider:updateWithKey', 'provider:deleteApiKey', 'provider:delete', 'provider:setDefault', 'agent:list', 'agent:create', 'agent:update', 'agent:delete', 'agent:bindChannel', 'agent:unbindChannel', 'skill:list', 'skill:search', 'skill:install', 'skill:uninstall', 'skill:setEnabled']);
-      if (!supported.has(channel)) throw new Error(`APP_REQUEST_UNSUPPORTED:${channel}`);
-      const { dispatch } = await import('../host/transport');
-      return { ok: true, data: await dispatch(channel, args) };
-    } catch (error) { return { ok: false, error: { message: error instanceof Error ? error.message : String(error) } }; }
+  runtime = new ClawCoreRuntime({
+    dataDir: process.env.CLAWCLAW_DATA_DIR || app.getPath('userData'),
+    onEvent: (event: RunEvent) => emit('core:run:event', event),
   });
+  await runtime.initialize();
+  registerMeta();
+  registerProviders();
+  registerAgents();
+  registerSkills();
+  registerArtifacts();
+  registerChannels();
+  registerRuns();
+  registerCron();
+  registerMemory();
   send({ type: 'ready', platform: process.platform });
 }
 
-export async function shutdown(): Promise<void> { runtime.close(); }
+export async function shutdown(): Promise<void> {
+  runtime?.close();
+}
+
+function emit(channel: string, ...args: unknown[]): void {
+  emitDesktop(channel, ...args);
+}
+
+function registerMeta(): void {
+  register('app:version', [], () => app.getVersion());
+  register('app:name', [], () => app.getName());
+  register('app:platform', [], () => process.platform);
+  register('app:readiness', [v.string()], async (workspaceId) => {
+    const providers = runtime.providerStore.list(workspaceId);
+    const def = providers.find(p => p.isDefault);
+    return {
+      ready: true,
+      workspaceId,
+      setupComplete: Boolean(settings.get('setupComplete')),
+      providerCount: providers.length,
+      defaultConfigured: Boolean(def && def.enabled && (def.hasSecret || !def.requiresSecret)),
+      defaultAgent: Boolean(runtime.agents.getDefault(workspaceId)),
+    };
+  });
+  register('settings:getAll', [], () => settings.store);
+  register('settings:get', [v.string()], (key) => settings.get(key));
+  register('settings:set', [v.string(), v.unknown()], (key, value) => settings.set(key, value));
+  register('settings:setMany', [v.object()], (values) => settings.set(values as Record<string, unknown>));
+  register('settings:reset', [], () => settings.clear());
+}
+
+function registerProviders(): void {
+  register('provider:catalog', [], () => VENDORS.map(vv => ({
+    id: vv.id, label: vv.label, category: vv.category, defaultBaseUrl: vv.defaultBaseUrl ?? '',
+    protocol: vv.protocol, defaultModel: vv.defaultModel ?? '', authModes: vv.authModes,
+    defaultAuthMode: vv.defaultAuthMode, requiresSecret: vv.requiresSecret, keyUrl: vv.keyUrl ?? null,
+    editableBaseUrl: vv.editableBaseUrl, editableModel: vv.editableModel,
+    oauthSupported: vv.oauthImplemented === true,
+  })));
+  register('provider:list', [v.string()], (ws) => runtime.providerStore.list(ws));
+  register('provider:get', [v.string(), v.id()], (ws, id) => runtime.providerStore.get(ws, id) ?? null);
+  register('provider:create', [v.string(), v.object()], (ws, input) => runtime.providerStore.create(ws, input));
+  register('provider:update', [v.string(), v.id(), v.object()], (ws, id, patch) => runtime.providerStore.update(ws, id, patch));
+  register('provider:delete', [v.string(), v.id()], (ws, id) => runtime.providerStore.delete(ws, id));
+  register('provider:setDefault', [v.string(), v.id()], (ws, id) => runtime.providerStore.setDefault(ws, id));
+  register('provider:setEnabled', [v.string(), v.id(), v.boolean()], (ws, id, enabled) => runtime.providerStore.setEnabled(ws, id, enabled));
+  register('provider:hasSecret', [v.string(), v.id()], async (ws, id) => (await runtime.providerStore.getSecret(ws, id)) !== null);
+  register('provider:setSecret', [v.string(), v.id(), v.string({ max: 4096 })], (ws, id, secret) => runtime.providerStore.putSecret(ws, id, secret));
+  register('provider:deleteSecret', [v.string(), v.id()], (ws, id) => runtime.providerStore.deleteSecret(ws, id));
+  register('provider:validate', [v.string(), v.id()], (ws, id) => runtime.validateProvider(ws, id));
+}
+
+function registerAgents(): void {
+  register('agent:list', [v.string()], (ws) => runtime.agents.list(ws));
+  register('agent:get', [v.string(), v.id()], (ws, id) => runtime.agents.get(ws, id) ?? null);
+  register('agent:create', [v.string(), v.string({ min: 1, max: 80 })], (ws, name) => runtime.agents.create(ws, name));
+  register('agent:update', [v.string(), v.id(), v.object()], (ws, id, patch) => runtime.agents.update(ws, id, patch));
+  register('agent:delete', [v.string(), v.id()], (ws, id) => runtime.agents.delete(ws, id));
+  register('agent:setDefault', [v.string(), v.id()], (ws, id) => runtime.agents.setDefault(ws, id));
+  register('agent:bindChannel', [v.string(), v.id(), v.string(), v.string()], (ws, id, type, accountId) => runtime.agents.bind(ws, id, type, accountId));
+  register('agent:unbindChannel', [v.string(), v.id(), v.string(), v.string()], (ws, id, type, accountId) => runtime.agents.unbind(ws, id, type, accountId));
+}
+
+function registerSkills(): void {
+  register('skill:list', [v.string()], (ws) => runtime.skills.list(ws));
+  register('skill:search', [v.string(), v.string()], (ws, query) => runtime.skills.search(ws, query));
+  register('skill:get', [v.string(), v.string()], (ws, slug) => runtime.skills.get(ws, slug) ?? null);
+  register('skill:install', [v.string(), v.string()], (ws, slug) => runtime.skills.install(ws, slug));
+  register('skill:installFromPath', [v.string(), v.string({ max: 1024 })], (ws, path) => runtime.skills.installFromPath(ws, path));
+  register('skill:uninstall', [v.string(), v.string()], (ws, slug) => runtime.skills.uninstall(ws, slug));
+  register('skill:setEnabled', [v.string(), v.string(), v.boolean()], (ws, slug, enabled) => runtime.skills.setEnabled(ws, slug, enabled));
+  register('skill:configure', [v.string(), v.string(), v.object()], (ws, slug, config) => runtime.skills.configure(ws, slug, config));
+}
+
+function registerArtifacts(): void {
+  register('artifact:stagePaths', [v.string(), v.array(v.string({ max: 4096 }), { max: 20 })], (ws, paths) => (paths as string[]).map((p: string) => runtime.artifacts.stagePath(ws, p)));
+  register('artifact:stageBuffer', [v.string(), v.string(), v.string({ max: 300 }), v.optionalString()], (ws, base64, fileName, mime) => runtime.artifacts.stageBase64(ws, base64, fileName, mime ?? undefined));
+  register('artifact:list', [v.string()], (ws) => runtime.artifacts.list(ws));
+  register('artifact:get', [v.string(), v.id()], (ws, id) => runtime.artifacts.get(ws, id));
+  register('artifact:readImage', [v.string(), v.id()], (ws, id) => runtime.artifacts.readImageBase64(ws, id));
+  register('artifact:delete', [v.string(), v.id()], (ws, id) => runtime.artifacts.delete(ws, id));
+}
+
+function registerChannels(): void {
+  register('channel:catalog', [], () => runtime.channels.adapterCatalog());
+  register('channel:list', [v.string()], async (ws) => {
+    const accounts = runtime.channels.listAccounts(ws);
+    return Promise.all(accounts.map(async (a) => ({
+      ...a,
+      hasSecrets: (await runtime.keychain.get(channelAccount(ws, a.id))) !== null,
+    })));
+  });
+  register('channel:create', [v.string(), v.object()], (ws, input) => runtime.channels.createAccount(ws, input));
+  register('channel:update', [v.string(), v.id(), v.object(), v.optionalObject()], (ws, id, config, secrets) => runtime.channels.updateConfig(ws, id, config, (secrets as Record<string, string>) ?? undefined));
+  register('channel:connect', [v.string(), v.id()], (ws, id) => runtime.channels.connect(ws, id));
+  register('channel:disconnect', [v.string(), v.id()], (ws, id) => runtime.channels.disconnect(ws, id));
+  register('channel:delete', [v.string(), v.id()], (ws, id) => runtime.channels.deleteAccount(ws, id));
+  register('channel:send', [v.string(), v.id(), v.string({ max: 20_000 })], (ws, id, text) => runtime.channels.send(ws, id, text));
+  register('channel:startInbound', [v.string(), v.id()], (ws, id) => runtime.channels.startInbound(ws, id));
+  register('channel:stopInbound', [v.string(), v.id()], (ws, id) => runtime.channels.stopInbound(ws, id));
+  register('channel:ingest', [v.string(), v.id(), v.object()], (ws, id, input) => runtime.channels.ingest(ws, id, input as never));
+}
+
+function registerRuns(): void {
+  register('core:chat:send', [v.object()], (input) => runtime.startChat(input));
+  register('core:run:getEvents', [v.id(), v.number({ integer: true, min: 0, optional: true })], (runId, after) => runtime.getEvents(runId, after ?? 0));
+  register('core:run:cancel', [v.id(), v.optionalString()], (runId, reason) => runtime.cancelRun(runId, reason ?? undefined));
+  register('core:run:invocations', [v.id()], (runId) => runtime.runs.listToolInvocations(runId));
+  register('core:run:resolveApproval', [v.id(), v.string(), v.boolean(), v.optionalString()], (runId, toolCallId, approved, reason) =>
+    runtime.resolveToolApproval(runId, toolCallId, approved, reason ?? undefined));
+  register('core:conversation:list', [v.string()], (ws) => runtime.listConversations(ws));
+  register('core:conversation:page', [v.string(), v.id(), v.optionalObject()], (ws, id, opts) =>
+    runtime.getConversation(ws, id, opts as { beforeSeq?: number; limit?: number } | undefined));
+  register('core:conversation:rename', [v.string(), v.id(), v.string({ max: 120 })], (ws, id, title) => runtime.conversations.rename(ws, id, title));
+  register('core:conversation:delete', [v.string(), v.id()], (ws, id) => runtime.deleteConversation(ws, id));
+}
+
+function registerCron(): void {
+  register('cron:list', [v.string()], (ws) => runtime.cron.list(ws));
+  register('cron:save', [v.object()], (input) => runtime.cron.save(input));
+  register('cron:delete', [v.string(), v.id()], (ws, id) => runtime.cron.delete(ws, id));
+  register('cron:setEnabled', [v.string(), v.id(), v.boolean()], (ws, id, enabled) => runtime.cron.setEnabled(ws, id, enabled));
+  register('cron:trigger', [v.string(), v.id()], (ws, id) => runtime.triggerCron(ws, id));
+}
+
+function registerMemory(): void {
+  register('memory:list', [v.string(), v.number({ integer: true, min: 1, max: 500, optional: true })], (ws, limit) => runtime.memory.list(ws, limit));
+  register('memory:search', [v.string(), v.string(), v.number({ integer: true, min: 1, max: 50, optional: true })], (ws, query, limit) => runtime.memory.search(ws, query, limit));
+  register('memory:add', [v.string(), v.object()], (ws, input) => runtime.memory.add(ws, input));
+  register('memory:update', [v.string(), v.id(), v.object()], (ws, id, patch) => runtime.memory.update(ws, id, patch));
+  register('memory:delete', [v.string(), v.id()], (ws, id) => runtime.memory.delete(ws, id));
+  register('summary:latest', [v.string(), v.id()], (ws, conv) => runtime.memory.latestSummary(ws, conv) ?? null);
+}

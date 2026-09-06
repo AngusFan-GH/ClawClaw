@@ -1,44 +1,44 @@
 /**
  * Vitest Test Setup
- * Global test configuration and mocks
+ * Renderer tests run in jsdom; backend core tests run in node (per-file
+ * `@vitest-environment node`). Only install the renderer bridge when a DOM
+ * exists so node-environment tests are unaffected.
  */
 import { vi } from 'vitest';
-import '@testing-library/jest-dom';
 
-// Mock window.desktop API
-const mockElectron = {
-  ipcRenderer: {
-    invoke: vi.fn(),
-    on: vi.fn(),
-    once: vi.fn(),
-    off: vi.fn(),
-  },
-  openExternal: vi.fn(),
-  platform: 'darwin',
-  isDev: true,
-};
+if (typeof window !== 'undefined') {
+  await import('@testing-library/jest-dom/vitest').catch(() => undefined);
 
-Object.defineProperty(window, 'desktop', {
-  value: mockElectron,
-  writable: true,
-});
+  const mockDesktop = {
+    ipcRenderer: {
+      invoke: vi.fn(),
+      on: vi.fn(),
+      once: vi.fn(),
+      off: vi.fn(),
+    },
+    openExternal: vi.fn(),
+    platform: 'darwin',
+    isDev: true,
+  };
 
-// Mock matchMedia
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: vi.fn().mockImplementation((query) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })),
-});
+  Object.defineProperty(window, 'desktop', { value: mockDesktop, writable: true, configurable: true });
 
-// Reset mocks after each test
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
+
 afterEach(() => {
   vi.clearAllMocks();
 });

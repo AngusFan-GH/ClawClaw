@@ -106,7 +106,7 @@ fn start_backend(app: &tauri::AppHandle) -> Result<Arc<Backend>, Box<dyn std::er
         }
         b.alive.store(false, Ordering::SeqCst);
         for (_, reply) in b.pending.lock().await.drain() { let _ = reply.send(Err("Backend exited".into())); }
-        let _ = handle.emit("host-event", json!({"channel":"gateway:error","args":["Backend exited. Please restart ClawClaw."]}));
+        let _ = handle.emit("host-event", json!({"channel":"core:error","args":["Backend exited. Please restart ClawClaw."]}));
     });
     let log_dir = app.path().app_log_dir()?;
     std::fs::create_dir_all(&log_dir)?;

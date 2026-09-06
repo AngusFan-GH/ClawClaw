@@ -224,11 +224,6 @@
   animation-delay: 0.24s;
 }
 
-.openclaw-chat-thread {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
 
 .chat-context-pill {
   position: sticky;

@@ -1,53 +1,30 @@
-# CLAUDE.md
+# ClawClaw
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Cross-platform Tauri desktop app hosting a **local ClawCore agent**. ClawCore owns state, context, tools, the model transport (Pi @earendil-works/pi-ai), budgets, persistence (`node:sqlite`), the keychain, channels, skills and cron. There is no Electron, OpenClaw, Gateway or ClawHub dependency.
 
-## Project Overview
-
-ClawClaw is a cross-platform Tauri desktop app (React 19 + Vite + TypeScript + Rust) providing a GUI for the OpenClaw AI agent runtime. It uses pnpm as its package manager.
-
-## Dev Commands
+## Commands
 
 | Task | Command |
 |------|---------|
-| Install deps + download uv | `pnpm run init` |
-| Dev server (Vite + Tauri) | `pnpm dev` |
-| Lint (ESLint, auto-fix) | `pnpm run lint` |
+| Install | `corepack pnpm install --frozen-lockfile` (Node >= 22.5; needs `node:sqlite`) |
 | Type check | `pnpm run typecheck` |
-| Unit tests (Vitest) | `pnpm test` |
-| Build frontend only | `pnpm run build:vite` |
-| Full production build | `pnpm run build` |
-
-**pnpm version**: The exact pnpm version is pinned via `packageManager` in `package.json`. Use `corepack enable && corepack prepare` to activate it before installing.
+| Unit tests | `pnpm test` (Vitest; backend tests use `// @vitest-environment node`) |
+| Renderer build | `pnpm run build:vite` |
+| Backend build | `pnpm run build:backend` (esbuild → `dist-backend/entry.mjs`) |
+| Standalone smoke | `pnpm run smoke` (temp dir, fake keychain) |
+| Full gate | `pnpm run release:check` (typecheck → tests → vite → backend → smoke → cargo check) |
+| Dev | `pnpm dev` (Tauri) / `pnpm dev:web` (renderer only) |
 
 ## Architecture
 
-### Dual-Process Layout
-- `src-tauri/` — Tauri native host (window/tray/menu management and Node backend lifecycle)
-- `backend/` — Node backend (Host API handlers and Gateway lifecycle)
-- `src/` — React renderer process (UI, Zustand stores, API client)
+- Tauri host (`src-tauri/src/main.rs`) spawns Node and bridges stdio JSON frames + `secret:*` (OS keyring) + dialog/shell.
+- Active entry: `backend/entry.ts` → `backend/core/main.ts` (validated command registry) → `backend/core/runtime.ts` (composition root).
+- SQLite: one connection in `backend/core/db/`; idempotent schema/migrations in `db/schema.ts`; legacy 0.1.x tables are reconciled read-only and plaintext provider keys are migrated to the keychain (write → readback → delete → VACUUM).
+- Renderer boundary: the ONLY backend entry is `src/lib/ipc.ts`/`api.ts` (explicit `namespace:action` channels). No loopback HTTP, no `fetch`/WebSocket, no `window.confirm`.
 
-### Renderer/Main API Boundary (enforced by ESLint)
-- Renderer **must** use `src/lib/host-api.ts` and `src/lib/api-client.ts` as the single entry for backend calls.
-- Do **not** add direct Tauri `invoke(...)` calls in pages/components; expose them through host-api/api-client.
-- Do **not** call Gateway HTTP endpoints (`http://127.0.0.1:18789/...`) directly from renderer. Use Main-process proxy channels (`hostapi:fetch`, `gateway:httpProxy`) to avoid CORS issues.
-- Transport policy is Main-owned (`WS -> HTTP -> IPC fallback`); renderer should not implement protocol switching.
+## Rules
 
-### State Management
-Zustand stores in `src/stores/`: `agents.ts`, `chat.ts`, `channels.ts`, `cron.ts`, `skills.ts`, `providers.ts`, `settings.ts`, `gateway.ts`, `update.ts`.
-
-### Main Process API Routes
-Route modules under `backend/api/routes/`: `/app`, `/channels`, `/logs`, `/providers`, `/settings`, `/usage`.
-
-### Gateway Process
-OpenClaw Gateway runs as a supervised subprocess (port 18789). Lifecycle is managed by `backend/gateway/`. It takes ~10–30s to start; the app works without it (shows "connecting" state).
-
-### Storage
-JSON settings files + OS keychain. No database.
-
-## Key Caveats
-
-- **Gateway startup**: Not required for UI development. App functions without it.
-- **Build warnings**: `pnpm install` may warn about `@discordjs/opus` and `koffi`. These are optional messaging-channel deps — safe to ignore.
-- **Lint after uv:download**: ESLint may fail with `ENOENT` temp directory race if run right after `pnpm run uv:download`. Re-run lint after the download script finishes.
-- **Doc sync**: After architecture/functional changes, update `README.md`, `README.zh-CN.md`, and `README.ja-JP.md` in the same PR.
+- Credentials: keychain only (`provider:<ws>:<id>`, `channel:<ws>:<id>`), SQLite stores non-secrets.
+- Tools: versioned JSON schema → policy → approval; low-risk runs auto, file/network tools require explicit user approval; never execute twice.
+- Channels may make outbound calls only to their configured endpoint; QR/OAuth adapters register as unsupported.
+- Keep docs/i18n (en/zh/ja) in sync with real behavior; never add early-returns that fake completion.

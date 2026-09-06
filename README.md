@@ -1,494 +1,56 @@
-<p align="center">
-  <img src="src/assets/logo.svg" width="128" height="128" alt="ClawClaw Logo" />
-</p>
+# ClawClaw
 
-<h1 align="center">ClawClaw</h1>
+A cross-platform desktop AI agent built on **Tauri + a local ClawCore runtime (Node)**.
 
-<p align="center">
-  <strong>A local-first desktop application for ClawCore AI agents</strong>
-</p>
-
-<p align="center">
-  <a href="#features">Features</a> •
-  <a href="#why-clawclaw">Why ClawClaw</a> •
-  <a href="#getting-started">Getting Started</a> •
-  <a href="#architecture">Architecture</a> •
-  <a href="#development">Development</a> •
-  <a href="#contributing">Contributing</a>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/platform-MacOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform" />
-  <img src="https://img.shields.io/badge/tauri-2-24C8DB?logo=tauri" alt="Tauri" />
-  <img src="https://img.shields.io/badge/react-19-61DAFB?logo=react" alt="React" />
-  <a href="https://discord.com/invite/84Kex3GGAh" target="_blank">
-  <img src="https://img.shields.io/discord/1399603591471435907?logo=discord&labelColor=%20%235462eb&logoColor=%20%23f5f5f5&color=%20%235462eb" alt="chat on Discord" />
-  </a>
-  <img src="https://img.shields.io/github/downloads/Xzinfra/ClawClaw/total?color=%23027DEB" alt="Downloads" />
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="License" />
-</p>
-
-<p align="center">
-  English | <a href="README.zh-CN.md">简体中文</a> | <a href="README.ja-JP.md">日本語</a>
-</p>
-
----
-
-## Overview
-
-**ClawClaw** makes capable AI agents accessible from a desktop application. It runs its own local-first **ClawCore** runtime: durable SQLite-backed runs, explicit lifecycle events, provider adapters, and approval-ready tool boundaries. No OpenClaw runtime, gateway, plugin mirror, or CLI is packaged or required.
-
-Whether you're automating workflows, managing AI-powered channels, or scheduling intelligent tasks, ClawClaw provides the interface you need to harness AI agents effectively.
-
-ClawClaw supports mainstream cloud providers, OpenClaw-aligned local/self-hosted runtimes like Ollama, vLLM, and SGLang, plus multi-language settings out of the box. Of course, you can also fine-tune advanced configurations via **Settings → Advanced → Developer Mode**.
-
----
-
-## Screenshot
-
-<p align="center">
-  <img src="resources/screenshot/chat.png" style="width: 100%; height: auto;">
-</p>
-
-<p align="center">
-  <img src="resources/screenshot/cron_task.png" style="width: 100%; height: auto;">
-</p>
-
-<p align="center">
-  <img src="resources/screenshot/skills.png" style="width: 100%; height: auto;">
-</p>
-
-<!-- <p align="center">
-  <img src="resources/screenshot/channels.png" style="width: 100%; height: auto;">
-</p> -->
-
-<p align="center">
-  <img src="resources/screenshot/dashboard.png" style="width: 100%; height: auto;">
-</p>
-
-<p align="center">
-  <img src="resources/screenshot/settings.png" style="width: 100%; height: auto;">
-</p>
-
----
-
-## Why ClawClaw
-
-Building AI agents shouldn't require mastering the command line. ClawClaw was designed with a simple philosophy: **powerful technology deserves an interface that respects your time.**
-
-| Challenge                 | ClawClaw Solution                               |
-| ------------------------- | ----------------------------------------------- |
-| Complex CLI setup         | Guided first-launch setup with automatic runtime checks |
-| Configuration files       | Visual settings with real-time validation       |
-| Process management        | Automatic gateway lifecycle management          |
-| Multiple AI providers     | Cloud provider panel plus local model center    |
-| Skill/plugin installation | Built-in skill marketplace and management       |
-
-### ClawCore Inside
-
-ClawCore owns the agent loop and its data model. The desktop host only transports requests and events; the React renderer never chooses a runtime transport. Provider requests use Pi as a protocol adapter, while conversation runs, budgets, state transitions, and future tool approvals remain application-owned. See [the architecture document](docs/clawcore-architecture.md).
-
----
+ClawCore owns the agent loop, context, tools, budgets, persistence and scheduling.
+It talks to model providers directly through the Pi transport; model keys live in
+the OS keychain. There is no bundled OpenClaw/Gateway/ClawHub runtime and no local
+HTTP proxy — the renderer talks to the backend over an allowlisted Tauri IPC surface.
 
 ## Features
 
-### 🎯 Zero Configuration Barrier
+- Local-first runs persisted in SQLite (`node:sqlite`) with an immutable event log
+- Provider accounts with OS-keychain secrets, per-workspace default and one-click validation
+- Agents with system prompt, provider/model override, tool policy and budgets
+- Versioned, permissioned tools: `core.time.getCurrentTime` (auto) and workspace-scoped
+  `core.artifact.readText` / `core.fs.listDirectory` (approval required)
+- Local skill library (bundled read-only + installed from a folder), no remote marketplace
+- Channel accounts: a real token/webhook adapter for outbound delivery and inbound
+  routing; WeChat/WhatsApp QR/OAuth are shown as unsupported (never faked)
+- Five-field cron (IANA timezone) with a durable fire cursor — no replay after downtime
+- Artifact staging with size/MIME/path-escape controls and image pixel cap
+- Conversation summaries (exact source cursor) and FTS5 keyword memory, workspace-isolated
 
-Complete the core setup through a guided first-launch flow. ClawClaw initializes ClawCore, makes its local skill catalog available, and then walks you to manual model configuration when you are ready.
-
-### 💬 Intelligent Chat Interface
-
-Communicate with AI agents through a modern chat experience. Support for multiple conversation contexts, message history, and rich content rendering with Markdown.
-
-### 📡 Multi-Channel Management
-
-Configure and monitor multiple AI channels simultaneously. Each channel operates independently, allowing you to run specialized agents for different tasks.
-Channels now follow OpenClaw's type-first model: each channel type is shown as a single card with nested accounts, while account-level configuration, deletion, and status inspection stay aligned with the upstream runtime snapshot. Whether a channel exposes “Add account” depends on the upstream plugin's real multi-account capability, not on a blanket UI rule across all channel types. The intended flow is now explicit: create or edit concrete channel accounts on the Connections page first, then bind those accounts to agents on the Agents page so multi-account channels do not have to share one owner.
-For WeChat, ClawClaw now treats login as a plugin-managed QR session: it prefers the bundled OpenClaw plugin mirror from the Connections page, falls back to the official install flow only when needed, requests a QR code directly in-app, refreshes expired sessions, and saves the returned account automatically. Although the upstream WeChat plugin supports multiple accounts, ClawClaw currently exposes WeChat as a single saved connection and replaces the previous saved account on the next login. Model, agent, and connection-account configuration changes are now saved first and then applied through a shared pending-changes banner, so multi-step setup usually results in one Gateway reload or short restart instead of several. The exception is agent-to-channel ownership bindings: OpenClaw resolves `bindings` live without a Gateway reload, so binding a channel account to an agent takes effect immediately.
-Gateway startup now prioritizes the core OpenClaw HTTP/WebSocket runtime first. Configured channel accounts are restored in the background after the managed Gateway is connected, so a channel login, network, or plugin-sidecar problem does not block model setup or the main desktop runtime.
-
-### ⏰ Cron-Based Automation
-
-Schedule AI tasks to run automatically. Define triggers, set intervals, and let your AI agents work around the clock without manual intervention.
-
-### 🧩 Extensible Skill System
-
-Extend your AI agents with pre-built skills. Browse, install, and manage skills through the integrated skill panel—no package managers required.
-
-### 🔐 Secure Provider Integration
-
-Connect to multiple AI providers (OpenAI, Anthropic, OpenCode Go, and more) with API keys or supported OAuth flows. OpenAI Codex sign-in follows OpenClaw's native browser OAuth flow and now prefers newer upstream Codex models such as `gpt-5.4-pro` when that model is actually available, while keeping existing accounts on their saved model until you change them. Other provider accounts now prefer verified model lists resolved from the upstream endpoint when available, while still allowing manual model IDs if a provider cannot enumerate models. Model-type filters are shown only when the upstream source explicitly returns category metadata; otherwise the picker falls back to search-only, with no heuristic guessing in the UI. Self-hosted OpenAI-compatible runtimes such as Ollama, vLLM, and SGLang remain available as first-class providers, and each self-hosted account can now explicitly allow private-network endpoints when your OpenClaw request path must reach LAN or localhost services. The dedicated local-model center continues to handle the project-specific local model workflow. Credentials are stored securely in your system's native keychain.
-
-> vLLM note: ClawClaw defaults vLLM models to `supportsTools: false` to avoid the common `400 "auto" tool choice` server error. You can now enable vLLM tool calling explicitly in provider settings, but your vLLM server must be started with `--enable-auto-tool-choice` and `--tool-call-parser`.
-
-### 🛡️ Granular Security Policy
-
-Configure denied directories and capability-level runtime restrictions separately. Reminders and denied-directory rules are synced into the agent workspace `AGENTS.md` as standing orders that continue to apply in new and existing conversations, while behavior restrictions map to OpenClaw's tool deny layer without overwriting unrelated deny rules already present in `openclaw.json`.
-
-### 💻 Flexible Model Setup
-
-ClawClaw no longer forces a bundled model during first launch. After the runtime is ready, you can open **Models** to add a local endpoint or a cloud provider, pick the model you want, or skip that step and finish it later. The cloud and self-hosted provider flows now stay closer to OpenClaw's provider-first onboarding, while the dedicated local-model center continues to preserve the existing local model workflow. Clearing the local-model provider now also removes any local models that depended on that provider, so stale local-model entries do not linger after the provider config is removed manually or from the UI. Saved model edits appear as pending runtime changes until you apply them; if the Gateway is stopped, starting, or recovering, ClawClaw keeps those changes pending instead of forcing a fragile restart, then applies them once the managed runtime is available.
-
-### 🌙 Adaptive Theming
-
-Light mode, dark mode, or system-synchronized themes. ClawClaw adapts to your preferences automatically.
-
----
-
-## Getting Started
-
-### System Requirements
-
-- **Operating System**: macOS 11+, Windows 10+, or Linux (Ubuntu 20.04+)
-- **Memory**: 4GB RAM minimum (8GB recommended)
-- **Storage**: 1GB available disk space
-
-### Installation
-
-#### Pre-built Releases (Recommended)
-
-Download the latest release for your platform from the [Releases](https://github.com/Xzinfra/ClawClaw/releases) page.
-
-#### Build from Source
+## Develop
 
 ```bash
-# Clone the repository
-git clone https://github.com/Xzinfra/ClawClaw.git
-cd ClawClaw
-
-# Initialize the project
-pnpm run init
-
-# Start in development mode
-# This also refreshes managed OpenClaw plugin mirrors needed by dev startup.
+corepack pnpm install --frozen-lockfile   # Node >= 22.5
+pnpm run typecheck
+pnpm test
+pnpm run build:backend && pnpm run smoke
+pnpm run build:vite
 pnpm dev
 ```
 
-### First Launch
-
-When you launch ClawClaw for the first time, the **startup flow** keeps the welcome shell visible on every step and then runs:
-
-1. automatic runtime checks
-2. automatic Gateway startup
-3. automatic installation of the default skills
-4. an optional model-configuration step
-
-Windows builds ship a bundled Python 3.12 runtime and use `UV_PYTHON` to point OpenClaw/uv at that executable, so first launch no longer downloads Python on the user's machine. If a developer build is missing that runtime, the setup code can still fall back to `uv python install` with official/mirror retries.
-
-Model configuration is now manual. You can jump to **Models** from setup to add a local model or a cloud provider, or skip that step and finish it later.
-
-### Bundled Project Skills
-
-ClawClaw also preinstalls any project-local skill placed under `resources/skills/<slug>/SKILL.md`.
-On startup, those directories are copied into the managed OpenClaw skills directory if they are not already installed.
-
-Minimal example:
-
-```text
-resources/
-  skills/
-    my-skill/
-      SKILL.md
-```
-
-See [resources/skills/README.md](resources/skills/README.md) for the expected layout and a starter `SKILL.md` template.
-
-> Note for Moonshot (Kimi): ClawClaw keeps Kimi web search enabled by default.  
-> When Moonshot is configured, ClawClaw also syncs Kimi web search to the China endpoint (`https://api.moonshot.cn/v1`) in OpenClaw config.
-
-### Proxy Settings
-
-ClawClaw includes built-in proxy settings for environments where the desktop host, the OpenClaw Gateway, or channels such as Telegram need to reach the internet through a local proxy client.
-
-Open **Settings → Gateway → Proxy** and configure:
-
-- **Proxy Server**: the default proxy for all requests
-- **Bypass Rules**: hosts that should connect directly, separated by semicolons, commas, or new lines
-- In **Developer Mode**, you can optionally override:
-  - **HTTP Proxy**
-  - **HTTPS Proxy**
-  - **ALL_PROXY / SOCKS**
-
-Recommended local examples:
-
-```text
-Proxy Server: http://127.0.0.1:7890
-```
-
-Notes:
-
-- A bare `host:port` value is treated as HTTP.
-- If advanced proxy fields are left empty, ClawClaw falls back to `Proxy Server`.
-- Saving proxy settings reapplies host networking immediately and still restarts the Gateway automatically when required.
-- Model, agent, and connection-account edits are saved as pending runtime changes and can be applied together, so repeated setup steps no longer trigger multiple Gateway restarts in a row. Agent-to-channel ownership bindings remain immediate because upstream OpenClaw treats `bindings` as live config.
-- In `Follow System` mode, ClawClaw also resolves the OS proxy and passes it to the auto-started OpenClaw Gateway process.
-- ClawClaw also syncs the proxy to OpenClaw's Telegram channel config when Telegram is enabled.
-
-### Memory Settings
-
-Open **Settings → Memory** to control how ClawClaw and OpenClaw preserve and recall information across sessions:
-
-- **Auto-archive session memory** enables OpenClaw's bundled `session-memory` hook. On `/new` or `/reset`, OpenClaw writes a memory summary for the finished conversation into the workspace `memory/` folder.
-- **Enable memory search** enables OpenClaw's `memorySearch` runtime configuration so later conversations can recall `MEMORY.md` and `memory/*.md` through the upstream `memory_search` and `memory_get` tools.
-- **Lean local model runtime** enables OpenClaw's `agents.defaults.experimental.localModelLean` switch so local-model execution paths can prefer the lighter upstream runtime mode.
-
-Notes:
-
-- The current conversation still relies on the normal OpenClaw session transcript. `session-memory` is an additional cross-session archive, not the primary source of in-session context.
-- Changing either memory toggle updates the managed OpenClaw config and restarts the Gateway automatically so the upstream runtime picks up the new setting.
-- Model, agent, and connection edits now use a shared pending-apply flow; memory toggles still apply immediately because they affect active runtime behavior.
-
-### Settings Backup and Cleanup
-
-Open **Settings → Data & Uninstall** to export a JSON backup of your current configuration before removing data or uninstalling the app. The same section can stop the Gateway, clean managed ClawClaw/OpenClaw data from a fixed allowlist, and prepare a full uninstall flow before you remove the app itself from the OS uninstaller. On Windows, ClawClaw's own cache, storage, and logs are queued for post-exit cleanup so locked Chromium files can be removed safely after the app quits.
-
-Open **Settings → Updates** to control auto-check / auto-download behavior and manually trigger update checks from the packaged app. ClawClaw currently follows the stable release feed only.
-Windows packaging uses the NSIS assisted installer and always installs for the current Windows user. The installer shows its native wizard immediately, then performs extraction, file copy, registry registration, shortcut creation, and CLI PATH configuration as installation steps. The uninstaller also uses NSIS and continues to provide explicit data deletion choices.
-On the first launch after upgrading from an older ClawClaw or bundled OpenClaw version, ClawClaw now runs a one-time maintenance pass before normal Gateway startup and before any automatic update re-check so legacy provider records, managed plugin mirrors, and older `openclaw.json` shapes are repaired proactively instead of waiting for a startup failure.
-Windows installed-build upgrades from `0.1.15` and earlier also trigger an expanded compatibility path: the NSIS installer cleans the previous installation before copying the managed runtime / CLI resources, and the first launch forces a heavier OpenClaw repair pass for older plugin, channel, and runtime layouts.
-In **Settings → Developer**, the diagnostics section can run OpenClaw checks or repair with a compact status summary, while raw command output stays collapsed by default. The same section also exposes the OpenClaw Control UI entry when the Gateway is running. Developer Mode now also unlocks a **Dreams** page in the sidebar for reviewing `doctor.memory.status`, dream diary content, and core dream-maintenance actions.
-
----
+`pnpm run release:check` runs the full ordered gate (typecheck, tests, both builds,
+standalone smoke, cargo check).
 
 ## Architecture
 
-ClawClaw employs a **Tauri host plus Node backend architecture** with a unified host API layer. The renderer talks to a single client abstraction, while the Tauri host owns native lifecycle and the backend owns Gateway transport:
-
-```┌─────────────────────────────────────────────────────────────────┐
-│                        ClawClaw Desktop App                         │
-│                                                                  │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │              Tauri Native Host (Rust)                       │  │
-│  │  • Window & application lifecycle management               │  │
-│  │  • Node backend process supervision                         │  │
-│  │  • System integration (tray, notifications, keychain)       │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                              │                                    │
-│                              │ IPC (authoritative control plane)  │
-│                              ▼                                    │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │              React Renderer Process                         │  │
-│  │  • Modern component-based UI (React 19)                     │  │
-│  │  • State management with Zustand                            │  │
-│  │  • Unified host-api/api-client calls                        │  │
-│  │  • Rich Markdown rendering                                  │  │
-│  └────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │
-                               │ Framed IPC to Node backend
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                Host API & Backend Proxies                       │
-│                                                                  │
-│  • hostapi:fetch (backend proxy, avoids CORS in dev/prod)       │
-│  • Unified error mapping and request telemetry                   │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │
-                               │ Gateway RPC via Node backend
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     OpenClaw Gateway                             │
-│                                                                  │
-│  • AI agent runtime and orchestration                           │
-│  • Message channel management                                    │
-│  • Skill/plugin execution environment                           │
-│  • Provider abstraction layer                                    │
-└─────────────────────────────────────────────────────────────────┘
+```
+React renderer
+   └─ src/lib/ipc.ts → Tauri host_request (explicit channels, no network)
+Tauri host (src-tauri) ── stdio frames ── Node ClawCore (backend/core)
+                                              ├─ SQLite (single connection)
+                                              ├─ OS keychain (secret:*)
+                                              ├─ Pi model transport
+                                              └─ tools / skills / channels / cron
 ```
 
-### Design Principles
-
-- **Process Isolation**: The AI runtime operates in a separate process, ensuring UI responsiveness even during heavy computation
-- **Single Entry for Frontend Calls**: Renderer requests go through host-api/api-client; protocol details are hidden behind a stable interface
-- **Backend Runtime Ownership**: The Node backend owns Gateway startup, recovery, and RPC execution
-- **Graceful Recovery**: Built-in reconnect, timeout, and backoff logic handles transient failures automatically
-- **Secure Storage**: API keys and sensitive data leverage the operating system's native secure storage mechanisms
-- **CORS-Safe by Design**: Local HTTP access is proxied by Main, preventing renderer-side CORS issues
-
----
-
-## Use Cases
-
-### 🤖 Personal AI Assistant
-
-Configure a general-purpose AI agent that can answer questions, draft emails, summarize documents, and help with everyday tasks—all from a clean desktop interface.
-
-### 📊 Automated Monitoring
-
-Set up scheduled agents to monitor news feeds, track prices, or watch for specific events. Results are delivered to your preferred notification channel.
-
-### 💻 Developer Productivity
-
-Integrate AI into your development workflow. Use agents to review code, generate documentation, or automate repetitive coding tasks.
-
-### 🔄 Workflow Automation
-
-Chain multiple skills together to create sophisticated automation pipelines. Process data, transform content, and trigger actions—all orchestrated visually.
-
----
-
-## Development
-
-### Prerequisites
-
-- **Node.js**: 22+ (LTS recommended)
-- **Package Manager**: pnpm 9+ (recommended) or npm
-
-### Project Structure
-
-```ClawClaw/
-├── src-tauri/                 # Tauri native host and packaging configuration
-│   └── src/                  # Rust commands, native integrations and backend lifecycle
-├── backend/                   # Node backend process
-│   ├── api/                 # Main-side API router and handlers
-│   │   └── routes/          # RPC/HTTP proxy route modules
-│   ├── services/            # Provider, secrets and runtime services
-│   │   ├── providers/       # Provider/account model sync logic
-│   │   └── secrets/         # OS keychain and secret storage
-│   ├── shared/              # Shared provider schemas/constants
-│   │   └── providers/
-│   ├── main/                # App entry, windows, IPC registration
-│   ├── gateway/             # OpenClaw Gateway process manager
-│   ├── host/                # Framed transport and desktop compatibility APIs
-│   └── utils/               # Utilities (storage, auth, paths)
-├── src/                      # React Renderer Process
-│   ├── lib/                 # Unified frontend API + error model
-│   ├── stores/              # Zustand stores (settings/chat/gateway)
-│   ├── components/          # Reusable UI components
-│   ├── pages/               # Setup/Dashboard/Chat/Channels/Skills/Cron/Settings
-│   ├── i18n/                # Localization resources
-│   └── types/               # TypeScript type definitions
-├── tests/
-│   └── unit/                # Vitest unit/integration-like tests
-├── resources/                # Static assets (icons/images)
-└── scripts/                  # Build and utility scripts
-```
-
-### Available Commands
-
-```bash
-# Development
-pnpm run init             # Install dependencies + download uv
-pnpm run python:download:win # Download bundled Windows Python runtimes for packaging
-pnpm dev                  # Start with hot reload
-
-# Quality
-pnpm lint                 # Run ESLint
-pnpm typecheck            # TypeScript validation
-
-# Testing
-pnpm test                 # Run unit tests
-pnpm run release:check    # Run the release gate (upgrade compatibility + recovery checks)
-
-# Build & Package
-pnpm run build:vite       # Build frontend only
-pnpm run package:prepare  # Prepare frontend, bundled backend and OpenClaw runtime resources
-pnpm build                # Prepare production packaging assets
-pnpm package:mac          # Package for macOS
-pnpm package:win          # Build Windows Tauri installers
-pnpm package:linux        # Package for Linux
-```
-
-Notes:
-
-- `pnpm package:prepare` creates `src-tauri/runtime`, which contains the bundled Node backend, OpenClaw, plugin mirrors, Node, uv, and Python required by packaged builds.
-- `pnpm package:win`, `pnpm package:mac`, and `pnpm package:linux` call `tauri build` after preparing those resources.
-- Tauri's updater is not configured in this release; update controls report that updates are unavailable until a signed update endpoint is supplied.
-
-### Release Gate
-
-Before packaging a customer-facing release, run `pnpm run release:check`.
-
-This gate focuses on upgrade stability rather than generic feature coverage. It verifies:
-
-- legacy provider-store migration
-- runtime provider/auth reconciliation before first Gateway launch
-- malformed `openclaw.json` recovery with backup preservation
-- bundled plugin mirror repair when the installed target is incomplete
-- multi-agent runtime auth convergence during upgrade
-
-### Tech Stack
-
-| Layer        | Technology               |
-| ------------ | ------------------------ |
-| Runtime      | Tauri 2 + Rust           |
-| UI Framework | React 19 + TypeScript    |
-| Styling      | Tailwind CSS + shadcn/ui |
-| State        | Zustand                  |
-| Build        | Vite + Tauri CLI         |
-| Testing      | Vitest                   |
-| Animation    | Framer Motion            |
-| Icons        | Lucide React             |
-
----
-
-## Contributing
-
-We welcome contributions from the community! Whether it's bug fixes, new features, documentation improvements, or translations—every contribution helps make ClawClaw better.
-
-### How to Contribute
-
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes with clear messages
-4. **Push** to your branch
-5. **Open** a Pull Request
-
-### Guidelines
-
-- Follow the existing code style (ESLint + Prettier)
-- Write tests for new functionality
-- Update documentation as needed
-- Keep commits atomic and descriptive
-
----
-
-## Acknowledgments
-
-ClawClaw is built on the shoulders of excellent open-source projects:
-
-- [OpenClaw](https://github.com/OpenClaw) – The AI agent runtime
-- [Tauri](https://tauri.app/) – Cross-platform desktop framework
-- [React](https://react.dev/) – UI component library
-- [shadcn/ui](https://ui.shadcn.com/) – Beautifully designed components
-- [Zustand](https://github.com/pmndrs/zustand) – Lightweight state management
-
----
-
-## Community
-
-Join our community to connect with other users, get support, and share your experiences.
-
-|                                Enterprise WeChat                                 |                                   Feishu Group                                    |                                         Discord                                          |
-| :------------------------------------------------------------------------------: | :-------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------: |
-| <img src="src/assets/community/wecom-qr.png" width="150" alt="WeChat QR Code" /> | <img src="src/assets/community/feishu-qr.png" width="150" alt="Feishu QR Code" /> | <img src="src/assets/community/20260212-185822.png" width="150" alt="Discord QR Code" /> |
-
-### ClawClaw Partner Program 🚀
-
-We're launching the ClawClaw Partner Program and looking for partners who can help introduce ClawClaw to more clients, especially those with custom AI agent or automation needs.
-
-Partners help connect us with potential users and projects, while the ClawClaw team provides full technical support, customization, and integration.
-
-If you work with clients interested in AI tools or automation, we'd love to collaborate.
-
-DM us or email [public@xzinfra.com](mailto:public@xzinfra.com) to learn more.
-
----
-
-## Star History
-
-<p align="center">
-  <img src="https://api.star-history.com/svg?repos=Xzinfra/ClawClaw&type=Date" alt="Star History Chart" />
-</p>
-
----
+Security boundaries and data flows are documented in
+[`docs/migration-inventory.md`](docs/migration-inventory.md) and
+[`docs/migration-completion-report.md`](docs/migration-completion-report.md).
 
 ## License
 
-ClawClaw is released under the [MIT License](LICENSE). You're free to use, modify, and distribute this software.
-
----
-
-<p align="center">
-  <sub>Built with ❤️ by the Xzinfra Team</sub>
-</p>
+MIT

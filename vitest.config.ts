@@ -6,7 +6,10 @@ export default defineConfig({
   plugins: [react()],
   test: {
     globals: true,
+    // Backend core tests annotate `@vitest-environment node`; UI tests use jsdom.
     environment: 'jsdom',
+    pool: 'threads',
+    fileParallelism: false,
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.{test,spec}.{ts,tsx}'],
     coverage: {

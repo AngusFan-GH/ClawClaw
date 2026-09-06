@@ -7,7 +7,7 @@ import globals from 'globals';
 
 export default [
   {
-    ignores: ['dist/**', 'dist-backend/**', 'openclaw/**', 'release/**', 'build/**', 'src-tauri/runtime/**', 'src-tauri/target/**'],
+    ignores: ['dist/**', 'dist-backend/**', 'release/**', 'build/**', 'src-tauri/runtime/**', 'src-tauri/target/**'],
   },
   {
     files: ['**/*.{ts,tsx}'],
@@ -43,23 +43,35 @@ export default [
   {
     files: ['src/**/*.{ts,tsx}'],
     rules: {
+      'no-alert': 'error',
+      'no-restricted-globals': ['error', 'confirm', 'alert'],
       'no-restricted-syntax': [
         'error',
         {
-          selector: "CallExpression[callee.name='invoke']",
-          message: 'Use host-api/api-client instead of calling Tauri invoke directly from a page or component.',
+          selector: "CallExpression[callee.type='Identifier'][callee.name='fetch']",
+          message: 'Renderer code must not make HTTP calls; route through a ClawCore IPC channel.',
         },
         {
-          selector: "CallExpression[callee.name='fetch'] Literal[value=/^https?:\\/\\/(127\\.0\\.0\\.1|localhost)(:\\d+)?\\//]",
-          message: 'Do not call local endpoints directly from renderer. Route through host-api/api-client proxies.',
+          selector: "NewExpression[callee.type='Identifier'][callee.name='WebSocket']",
+          message: 'WebSocket is not allowed in the renderer; use the ClawCore event/IPC layer.',
+        },
+      ],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            { group: ['**/lib/host-api', '**/stores/gateway', '**/lib/api-client'], message: 'Legacy gateway/host-api imports are removed; use lib/api.' },
+            { group: ['@tauri-apps/api/core'], message: 'Only src/lib/desktop.ts may import the Tauri bridge.' },
+          ],
         },
       ],
     },
   },
   {
-    files: ['src/lib/api-client.ts'],
+    files: ['src/lib/desktop.ts'],
     rules: {
       'no-restricted-syntax': 'off',
+      'no-restricted-imports': 'off',
     },
   },
 ];

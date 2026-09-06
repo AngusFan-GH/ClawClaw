@@ -1,9 +1,34 @@
 import type { UsageSnapshot } from './contracts';
 
+export interface ModelToolDescriptor {
+  name: string;
+  description: string;
+  /** JSON Schema for the parameters object. */
+  parameters: Record<string, unknown>;
+}
+
+export interface ModelToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+export interface ModelChatMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string;
+  /** Present on assistant messages that requested tool calls. */
+  toolCalls?: ModelToolCall[];
+  /** Present on tool result messages. */
+  toolCallId?: string;
+  toolName?: string;
+  isError?: boolean;
+}
+
 export interface ModelTurn {
   systemPrompt?: string;
-  messages: Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content: string }>;
+  messages: ModelChatMessage[];
   model: { provider: string; id: string; apiKey?: string; baseUrl?: string; api?: string; headers?: Record<string, string> };
+  tools?: ModelToolDescriptor[];
 }
 
 export interface ModelCancellationSignal {
@@ -12,8 +37,12 @@ export interface ModelCancellationSignal {
 
 export class MutableCancellationSignal implements ModelCancellationSignal {
   private cancelled = false;
-  get aborted(): boolean { return this.cancelled; }
-  abort(): void { this.cancelled = true; }
+  get aborted(): boolean {
+    return this.cancelled;
+  }
+  abort(): void {
+    this.cancelled = true;
+  }
 }
 
 export type ModelStreamEvent =
@@ -21,7 +50,12 @@ export type ModelStreamEvent =
   | { type: 'reasoning.delta'; text: string }
   | { type: 'tool.call'; id: string; name: string; arguments: Record<string, unknown> }
   | { type: 'usage'; usage: UsageSnapshot }
-  | { type: 'complete'; message: string }
+  | {
+      type: 'complete';
+      message: string;
+      toolCalls: ModelToolCall[];
+      stopReason: 'stop' | 'toolUse' | 'length' | 'error' | 'aborted';
+    }
   | { type: 'error'; code: string; message: string };
 
 export interface ModelAdapter {

@@ -1,42 +1,9 @@
-# Project Bundled Skills
+# Local skill library
 
-ClawClaw preinstalls any project skill found under `resources/skills/<slug>/SKILL.md`
-into the user's OpenClaw skill directory on app startup:
+These folders are bundled **read-only** Markdown skills. They are instruction
+content only — ClawCore never executes scripts from a skill.
 
-- Source: `resources/skills/<slug>/`
-- Target: `~/.openclaw/skills/<slug>/`
-
-Only directories that contain `SKILL.md` are installed. Files such as
-`bundles.json` or this README are ignored.
-
-## Minimal layout
-
-```text
-resources/
-  skills/
-    my-skill/
-      SKILL.md
-      references/
-      scripts/
-      assets/
-```
-
-## Minimal `SKILL.md`
-
-```md
-# My Skill
-
-Use this skill when the user asks for a project-specific workflow.
-
-## Instructions
-
-1. Confirm the target task briefly.
-2. Inspect the local project files before making changes.
-3. Use any files in `references/` or `scripts/` when needed.
-```
-
-## Notes
-
-- Skills are copied only when `~/.openclaw/skills/<slug>/SKILL.md` does not already exist.
-- To force a fresh reinstall during development, delete the installed target directory first.
-- Keep the directory name stable because it becomes the installed skill slug.
+- Bundled skills appear under source **bundled** and can be enabled/disabled per workspace.
+- User skills are installed from a local folder into the application data
+  directory under source **local**; only those can be uninstalled.
+- There is no remote marketplace.
