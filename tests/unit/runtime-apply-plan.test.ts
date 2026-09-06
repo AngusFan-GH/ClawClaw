@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { RuntimeApplyPlan } from '@electron/gateway/runtime-apply-plan';
+import { RuntimeApplyPlan } from '@backend/gateway/runtime-apply-plan';
 
 function createPlan() {
   const applyNow = vi.fn(async () => ({ triggered: true, accepted: true }));

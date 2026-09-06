@@ -295,7 +295,7 @@ export function Settings() {
 
   const proxyInitRef = useRef(false);
   const proxySaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isWindows = window.electron.platform === 'win32';
+  const isWindows = window.desktop.platform === 'win32';
 
   useEffect(() => {
     void initGateway();

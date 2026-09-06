@@ -3,7 +3,7 @@
  * Manages scheduled task state
  */
 import { create } from 'zustand';
-import { hostApiFetch } from '@/lib/host-api';
+import { invokeIpc } from '@/lib/api-client';
 import { useChatStore } from './chat';
 import type { CronJob, CronJobCreateInput, CronJobUpdateInput } from '../types/cron';
 
@@ -26,7 +26,7 @@ let fetchJobsInFlight: Promise<CronJob[]> | null = null;
 
 function fetchCronJobs(): Promise<CronJob[]> {
   if (!fetchJobsInFlight) {
-    fetchJobsInFlight = hostApiFetch<CronJob[]>('/api/cron/jobs')
+    fetchJobsInFlight = invokeIpc<CronJob[]>('cron:list')
       .finally(() => {
         fetchJobsInFlight = null;
       });
@@ -60,10 +60,7 @@ export const useCronStore = create<CronState>((set) => ({
   createJob: async (input) => {
     try {
       const agentId = input.agentId ?? useChatStore.getState().currentAgentId;
-      const job = await hostApiFetch<CronJob>('/api/cron/jobs', {
-        method: 'POST',
-        body: JSON.stringify({ ...input, agentId }),
-      });
+      const job = await invokeIpc<CronJob>('cron:save', { ...input, agentId });
       set((state) => ({ jobs: [...state.jobs, job] }));
       return job;
     } catch (error) {
@@ -74,10 +71,9 @@ export const useCronStore = create<CronState>((set) => ({
   
   updateJob: async (id, input) => {
     try {
-      const updatedJob = await hostApiFetch<CronJob>(`/api/cron/jobs/${encodeURIComponent(id)}`, {
-        method: 'PUT',
-        body: JSON.stringify(input),
-      });
+      const existing = useCronStore.getState().jobs.find((job) => job.id === id);
+      if (!existing) throw new Error('Cron job not found');
+      const updatedJob = await invokeIpc<CronJob>('cron:save', { ...existing, ...input, id });
       set((state) => ({
         jobs: state.jobs.map((job) =>
           job.id === id ? updatedJob : job
@@ -91,9 +87,7 @@ export const useCronStore = create<CronState>((set) => ({
   
   deleteJob: async (id) => {
     try {
-      await hostApiFetch(`/api/cron/jobs/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-      });
+      await invokeIpc('cron:delete', id);
       set((state) => ({
         jobs: state.jobs.filter((job) => job.id !== id),
       }));
@@ -105,10 +99,9 @@ export const useCronStore = create<CronState>((set) => ({
   
   toggleJob: async (id, enabled) => {
     try {
-      const updatedJob = await hostApiFetch<CronJob>('/api/cron/toggle', {
-        method: 'POST',
-        body: JSON.stringify({ id, enabled }),
-      });
+      const existing = useCronStore.getState().jobs.find((job) => job.id === id);
+      if (!existing) throw new Error('Cron job not found');
+      const updatedJob = await invokeIpc<CronJob>('cron:save', { ...existing, enabled, id });
       set((state) => ({
         jobs: state.jobs.map((job) =>
           job.id === id ? updatedJob : job
@@ -122,10 +115,7 @@ export const useCronStore = create<CronState>((set) => ({
   
   triggerJob: async (id) => {
     try {
-      await hostApiFetch('/api/cron/trigger', {
-        method: 'POST',
-        body: JSON.stringify({ id }),
-      });
+      await invokeIpc('cron:trigger', id);
       // Refresh jobs after trigger to update lastRun/nextRun state
       try {
         const jobs = await fetchCronJobs();

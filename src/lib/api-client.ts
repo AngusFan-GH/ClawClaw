@@ -100,8 +100,8 @@ function toUnifiedRequest(channel: string, args: unknown[]): UnifiedRequest {
 }
 
 async function invokeViaIpc<T>(channel: string, args: unknown[]): Promise<T> {
-  if (!window.electron?.ipcRenderer?.invoke) {
-    throw normalizeAppError(new Error('Electron IPC bridge is unavailable'), {
+  if (!window.desktop?.ipcRenderer?.invoke) {
+    throw normalizeAppError(new Error('Desktop host bridge is unavailable'), {
       transport: 'ipc',
       channel,
       source: 'renderer',
@@ -112,7 +112,7 @@ async function invokeViaIpc<T>(channel: string, args: unknown[]): Promise<T> {
     const request = toUnifiedRequest(channel, args);
 
     try {
-      const response = (await window.electron.ipcRenderer.invoke(
+      const response = (await window.desktop.ipcRenderer.invoke(
         'app:request',
         request
       )) as UnifiedResponse;
@@ -138,19 +138,19 @@ async function invokeViaIpc<T>(channel: string, args: unknown[]): Promise<T> {
   }
 
   try {
-    return (await window.electron.ipcRenderer.invoke(channel, ...args)) as T;
+    return (await window.desktop.ipcRenderer.invoke(channel, ...args)) as T;
   } catch (err) {
     throw normalizeAppError(err, { transport: 'ipc', channel, source: 'legacy-ipc' });
   }
 }
 
 export function initializeDefaultTransports(): void {
-  // Renderer transport is intentionally fixed to Electron IPC. Gateway protocol
+  // Renderer transport is intentionally fixed to the desktop host IPC. Gateway protocol
   // selection and recovery belong to the main process.
 }
 
 export function applyGatewayTransportPreference(): void {
-  // Compatibility shim for stale Vite/Electron renderer modules during dev reloads.
+  // Compatibility shim for stale renderer modules during dev reloads.
   // Transport selection no longer lives in the renderer.
 }
 

@@ -93,7 +93,7 @@ describe('Gateway Store', () => {
   });
 
   it('should proxy gateway rpc through ipc', async () => {
-    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
+    const invoke = vi.mocked(window.desktop.ipcRenderer.invoke);
     invoke.mockResolvedValueOnce({ success: true, result: { ok: true } });
 
     const result = await useGatewayStore.getState().rpc<{ ok: boolean }>('chat.history', { limit: 10 }, 5000);

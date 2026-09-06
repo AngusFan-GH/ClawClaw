@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildOpenClawControlUiUrl } from '../../electron/utils/openclaw-control-ui';
+import { buildOpenClawControlUiUrl } from '../../backend/utils/openclaw-control-ui';
 
 describe('buildOpenClawControlUiUrl', () => {
   it('uses the URL fragment for auth token import', () => {

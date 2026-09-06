@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ClawClaw is a cross-platform Electron desktop app (React 19 + Vite + TypeScript) providing a GUI for the OpenClaw AI agent runtime. It uses pnpm as its package manager.
+ClawClaw is a cross-platform Tauri desktop app (React 19 + Vite + TypeScript + Rust) providing a GUI for the OpenClaw AI agent runtime. It uses pnpm as its package manager.
 
 ## Dev Commands
 
 | Task | Command |
 |------|---------|
 | Install deps + download uv | `pnpm run init` |
-| Dev server (Vite + Electron) | `pnpm dev` |
+| Dev server (Vite + Tauri) | `pnpm dev` |
 | Lint (ESLint, auto-fix) | `pnpm run lint` |
 | Type check | `pnpm run typecheck` |
 | Unit tests (Vitest) | `pnpm test` |
@@ -23,12 +23,13 @@ ClawClaw is a cross-platform Electron desktop app (React 19 + Vite + TypeScript)
 ## Architecture
 
 ### Dual-Process Layout
-- `electron/` — Electron main process (IPC handlers, Gateway lifecycle, window/tray/menu management, system integration)
+- `src-tauri/` — Tauri native host (window/tray/menu management and Node backend lifecycle)
+- `backend/` — Node backend (Host API handlers and Gateway lifecycle)
 - `src/` — React renderer process (UI, Zustand stores, API client)
 
 ### Renderer/Main API Boundary (enforced by ESLint)
 - Renderer **must** use `src/lib/host-api.ts` and `src/lib/api-client.ts` as the single entry for backend calls.
-- Do **not** add new direct `window.electron.ipcRenderer.invoke(...)` calls in pages/components; expose them through host-api/api-client.
+- Do **not** add direct Tauri `invoke(...)` calls in pages/components; expose them through host-api/api-client.
 - Do **not** call Gateway HTTP endpoints (`http://127.0.0.1:18789/...`) directly from renderer. Use Main-process proxy channels (`hostapi:fetch`, `gateway:httpProxy`) to avoid CORS issues.
 - Transport policy is Main-owned (`WS -> HTTP -> IPC fallback`); renderer should not implement protocol switching.
 
@@ -36,13 +37,13 @@ ClawClaw is a cross-platform Electron desktop app (React 19 + Vite + TypeScript)
 Zustand stores in `src/stores/`: `agents.ts`, `chat.ts`, `channels.ts`, `cron.ts`, `skills.ts`, `providers.ts`, `settings.ts`, `gateway.ts`, `update.ts`.
 
 ### Main Process API Routes
-Route modules under `electron/api/routes/`: `/app`, `/channels`, `/logs`, `/providers`, `/settings`, `/usage`.
+Route modules under `backend/api/routes/`: `/app`, `/channels`, `/logs`, `/providers`, `/settings`, `/usage`.
 
 ### Gateway Process
-OpenClaw Gateway runs as a supervised subprocess (port 18789). Lifecycle is managed by `electron/gateway/`. It takes ~10–30s to start; the app works without it (shows "connecting" state).
+OpenClaw Gateway runs as a supervised subprocess (port 18789). Lifecycle is managed by `backend/gateway/`. It takes ~10–30s to start; the app works without it (shows "connecting" state).
 
 ### Storage
-`electron-store` (JSON files) + OS keychain. No database.
+JSON settings files + OS keychain. No database.
 
 ## Key Caveats
 

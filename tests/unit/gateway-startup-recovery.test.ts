@@ -7,7 +7,7 @@ import {
   isMalformedConfigSignal,
   isTransientGatewayStartError,
   shouldAttemptConfigAutoRepair,
-} from '@electron/gateway/startup-recovery';
+} from '@backend/gateway/startup-recovery';
 
 describe('gateway startup recovery heuristics', () => {
   it('detects invalid-config signal from stderr lines', () => {

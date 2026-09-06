@@ -11,15 +11,15 @@ vi.mock('node:fs/promises', () => ({
   },
 }));
 
-vi.mock('@electron/utils/paths', () => ({
+vi.mock('@backend/utils/paths', () => ({
   getOpenClawConfigDir: () => '/tmp/openclaw',
 }));
 
-vi.mock('@electron/utils/agent-config', () => ({
+vi.mock('@backend/utils/agent-config', () => ({
   listAgentsSnapshot: vi.fn(),
 }));
 
-vi.mock('@electron/api/route-utils', () => ({
+vi.mock('@backend/api/route-utils', () => ({
   parseJsonBody: vi.fn(),
   sendJson: (...args: unknown[]) => sendJsonMock(...args),
 }));
@@ -53,7 +53,7 @@ describe('handleCronRoutes', () => {
       return '';
     });
 
-    const { handleCronRoutes } = await import('@electron/api/routes/cron');
+    const { handleCronRoutes } = await import('@backend/api/routes/cron');
 
     const handled = await handleCronRoutes(
       { method: 'GET' } as IncomingMessage,

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   hasIncompatibleManagedPluginSdkImports,
   repairManagedPluginSdkImports,
-} from '@electron/utils/plugin-sdk-compat';
+} from '@backend/utils/plugin-sdk-compat';
 
 describe('managed plugin sdk compatibility repair', () => {
   it('rewrites moved root plugin-sdk exports onto scoped subpaths', async () => {

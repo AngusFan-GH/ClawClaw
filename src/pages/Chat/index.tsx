@@ -100,6 +100,9 @@ export function Chat() {
   const gatewayInitialized = useGatewayStore((s) => s.isInitialized);
   const displayGatewayState = gatewayInitialized ? gatewayStatus.state : 'starting';
   const isGatewayRunning = displayGatewayState === 'running';
+  // Chat runs through ClawCore. Gateway state is retained only for legacy UI
+  // affordances that have not yet been removed from this component.
+  const isRuntimeReady = true;
 
   const messages = useChatStore((s) => s.messages);
   const pendingUserMessage = useChatStore((s) => s.pendingUserMessage);
@@ -212,7 +215,7 @@ export function Chat() {
   // stay visible while fresh data loads in the background.  This avoids
   // an unnecessary messages → spinner → messages flicker.
   useEffect(() => {
-    if (!isGatewayRunning) return;
+    if (!isRuntimeReady) return;
     let cancelled = false;
     (async () => {
       if (createNewSessionFromRoute) {
@@ -245,7 +248,7 @@ export function Chat() {
       cancelled = true;
     };
   }, [
-    isGatewayRunning,
+    isRuntimeReady,
     loadHistory,
     loadSessions,
     newSession,
@@ -1625,7 +1628,7 @@ export function Chat() {
         thinkingDefaultLevel={thinkingState.defaultLevel}
         onThinkingLevelChange={setSessionThinkingLevel}
         thinkingDisabled={!isGatewayRunning || sending || Boolean(activeRunId) || loading}
-        disabled={!isGatewayRunning}
+        disabled={!isRuntimeReady}
         sending={sending}
         stoppable={inputRunActive}
         isEmpty={shouldShowWelcome}

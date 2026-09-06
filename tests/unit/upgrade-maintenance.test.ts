@@ -27,7 +27,7 @@ const mockFns = vi.hoisted(() => ({
   readFile: vi.fn(async () => JSON.stringify({ version: '2026.4.15' })),
 }));
 
-vi.mock('electron', () => ({
+vi.mock('../../backend/host/desktop', () => ({
   app: {
     getVersion: () => '0.1.16',
     isPackaged: false,
@@ -36,7 +36,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('electron-store', () => {
+vi.mock('../../backend/host/json-store', () => {
   class MockStore<T extends Record<string, unknown>> {
     private readonly name: string;
     constructor(options?: { name?: string; defaults?: T }) {
@@ -83,26 +83,26 @@ vi.mock('fs/promises', async (importOriginal) => {
   };
 });
 
-vi.mock('@electron/services/providers/provider-migration', () => ({
+vi.mock('@backend/services/providers/provider-migration', () => ({
   ensureProviderStoreMigrated: mockFns.ensureProviderStoreMigrated,
 }));
 
-vi.mock('@electron/gateway/config-sync', () => ({
+vi.mock('@backend/gateway/config-sync', () => ({
   runOpenClawStartupPreflightRepair: mockFns.runOpenClawStartupPreflightRepair,
   getLastStartupPreflightRecovery: mockFns.getLastStartupPreflightRecovery,
 }));
 
-vi.mock('@electron/utils/channel-config', () => ({
+vi.mock('@backend/utils/channel-config', () => ({
   cleanupDanglingWeChatPluginState: mockFns.cleanupDanglingWeChatPluginState,
   cleanupLegacyChannelPlugins: mockFns.cleanupLegacyChannelPlugins,
 }));
 
-vi.mock('@electron/services/providers/local-model-presets', () => ({
+vi.mock('@backend/services/providers/local-model-presets', () => ({
   migrateLegacyLocalModelAccounts: mockFns.migrateLegacyLocalModelAccounts,
   cleanupOrphanLocalModelRuntimeAccounts: mockFns.cleanupOrphanLocalModelRuntimeAccounts,
 }));
 
-vi.mock('@electron/utils/openclaw-doctor', () => ({
+vi.mock('@backend/utils/openclaw-doctor', () => ({
   OPENCLAW_DOCTOR_FIX_TIMEOUT_MS: 120_000,
   runOpenClawDoctorFix: mockFns.runOpenClawDoctorFix,
 }));
@@ -116,7 +116,7 @@ describe('upgrade maintenance', () => {
   });
 
   it('runs once when current versions have not been recorded yet', async () => {
-    const { performUpgradeMaintenanceIfNeeded } = await import('@electron/utils/upgrade-maintenance');
+    const { performUpgradeMaintenanceIfNeeded } = await import('@backend/utils/upgrade-maintenance');
 
     const result = await performUpgradeMaintenanceIfNeeded();
 
@@ -144,7 +144,7 @@ describe('upgrade maintenance', () => {
       lastOpenClawVersion: '2026.4.15',
     });
 
-    const { performUpgradeMaintenanceIfNeeded } = await import('@electron/utils/upgrade-maintenance');
+    const { performUpgradeMaintenanceIfNeeded } = await import('@backend/utils/upgrade-maintenance');
 
     const result = await performUpgradeMaintenanceIfNeeded();
 
@@ -162,7 +162,7 @@ describe('upgrade maintenance', () => {
       lastOpenClawVersion: '2026.4.15',
     });
 
-    const { performUpgradeMaintenanceIfNeeded, isLegacyInstallUpgradeVersion } = await import('@electron/utils/upgrade-maintenance');
+    const { performUpgradeMaintenanceIfNeeded, isLegacyInstallUpgradeVersion } = await import('@backend/utils/upgrade-maintenance');
 
     expect(isLegacyInstallUpgradeVersion('0.1.15')).toBe(true);
     expect(isLegacyInstallUpgradeVersion('0.1.16')).toBe(false);

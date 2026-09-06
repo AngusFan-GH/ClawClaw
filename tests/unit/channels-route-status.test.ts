@@ -3,7 +3,7 @@ import {
   mapAccountStatus,
   normalizeAccountStatusForUi,
   resolveGroupStatus,
-} from '@electron/api/routes/channels';
+} from '@backend/api/routes/channels';
 
 describe('channel route runtime status helpers', () => {
   it('treats connected accounts as connected even if a stale lastError is present', () => {

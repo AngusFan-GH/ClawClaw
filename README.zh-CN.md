@@ -5,7 +5,7 @@
 <h1 align="center">ClawClaw</h1>
 
 <p align="center">
-  <strong>OpenClaw AI 智能体的桌面客户端</strong>
+  <strong>面向 ClawCore AI 智能体的本地优先桌面应用</strong>
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/platform-MacOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform" />
-  <img src="https://img.shields.io/badge/electron-40+-47848F?logo=electron" alt="Electron" />
+  <img src="https://img.shields.io/badge/tauri-2-24C8DB?logo=tauri" alt="Tauri" />
   <img src="https://img.shields.io/badge/react-19-61DAFB?logo=react" alt="React" />
   <a href="https://discord.com/invite/84Kex3GGAh" target="_blank">
   <img src="https://img.shields.io/discord/1399603591471435907?logo=discord&labelColor=%20%235462eb&logoColor=%20%23f5f5f5&color=%20%235462eb" alt="chat on Discord" />
@@ -36,7 +36,7 @@
 
 ## 概述
 
-**ClawClaw** 是连接强大 AI 智能体与普通用户之间的桥梁。基于 [OpenClaw](https://github.com/OpenClaw) 构建，它将命令行式的 AI 编排转变为易用、美观的桌面体验——无需使用终端。
+**ClawClaw** 将 AI 智能体带到桌面端。应用运行自研、以本地数据为中心的 **ClawCore**：SQLite 持久化 Run、显式生命周期事件、供应商适配器和预留审批边界。发布包不再包含或依赖 OpenClaw 运行时、Gateway、插件镜像或 CLI。
 
 无论是自动化工作流、连接通讯软件，还是调度智能定时任务，ClawClaw 都能提供高效易用的图形界面，帮助你充分发挥 AI 智能体的能力。
 
@@ -84,12 +84,9 @@ ClawClaw 原生支持预装本地模型、主流云端供应商以及多语言�
 | 多 AI 供应商切换  | 统一的供应商配置面板         |
 | 技能/插件安装复杂 | 内置技能市场与管理界面       |
 
-### 内置 OpenClaw 核心
+### 内置 ClawCore 核心
 
-ClawClaw 直接基于官方 **OpenClaw** 核心构建。无需单独安装，我们将运行时嵌入应用内部，提供开箱即用的无缝体验。
-
-我们致力于与上游 OpenClaw 项目保持严格同步，确保你始终可以使用官方发布的最新功能、稳定性改进和生态兼容性。
-当前随包稳定运行时已对齐到 **OpenClaw 2026.5.28**，在保持桌面端集成体验不变的前提下，跟随上游当前稳定发布线。
+ClawCore 自己拥有智能体循环和数据模型。桌面宿主只负责请求与事件传输，React 渲染层不参与运行时协议选择。Pi 仅作为模型协议适配器；会话 Run、预算、状态迁移和后续工具审批都由应用控制。请参阅[架构文档](docs/clawcore-architecture.md)。
 
 ---
 
@@ -201,7 +198,7 @@ resources/
 
 ### 代理设置
 
-ClawClaw 内置了代理设置，适用于需要通过本地代理客户端访问外网的场景，包括 Electron 本身、OpenClaw Gateway，以及 Telegram 这类频道的联网请求。
+ClawClaw 内置了代理设置，适用于需要通过本地代理客户端访问外网的场景，包括桌面宿主、OpenClaw Gateway，以及 Telegram 这类频道的联网请求。
 
 打开 **设置 → 网关 → 代理**，配置以下内容：
 
@@ -222,7 +219,7 @@ ClawClaw 内置了代理设置，适用于需要通过本地代理客户端访�
 
 - 只填写 `host:port` 时，会按 HTTP 代理处理。
 - 高级代理项留空时，会自动回退到“代理服务器”。
-- 保存代理设置后，Electron 网络层会立即重新应用代理；确实需要时，Gateway 仍会自动重启。
+- 保存代理设置后，宿主网络层会立即重新应用代理；确实需要时，Gateway 仍会自动重启。
 - 模型、分身和连接账户配置变更会先保存为待应用运行时更改，用户可以统一应用，因此连续配置时不会反复触发多次 Gateway 重启。分身与连接账户的归属绑定仍会立即生效，因为上游 OpenClaw 会把 `bindings` 当作实时配置读取。
 - 在“跟随系统”模式下，ClawClaw 也会解析系统代理，并传给自动启动的 OpenClaw Gateway 子进程。
 - 如果启用了 Telegram，ClawClaw 还会把代理同步到 OpenClaw 的 Telegram 频道配置中。
@@ -255,13 +252,13 @@ Windows 安装版从 `0.1.15` 及更早版本升级时，NSIS 安装流程会在
 
 ## 系统架构
 
-ClawClaw 采用 **双进程 + Host API 统一接入架构**。渲染进程只调用统一客户端抽象，协议选择与进程生命周期由 Electron 主进程统一管理：
+ClawClaw 采用 **Tauri 宿主 + Node 后端 + Host API 统一接入架构**。渲染进程只调用统一客户端抽象；Tauri 管理原生窗口生命周期，Node 后端管理 Gateway 传输：
 
 ```┌─────────────────────────────────────────────────────────────────┐
 │                        ClawClaw 桌面应用                             │
 │                                                                  │
 │  ┌────────────────────────────────────────────────────────────┐  │
-│  │              Electron 主进程                                 │  │
+│  │              Tauri 原生宿主（Rust）                           │  │
 │  │  • 窗口与应用生命周期管理                                      │  │
 │  │  • 网关进程监控                                               │  │
 │  │  • 系统集成（托盘、通知、密钥链）                                │  │
@@ -289,7 +286,7 @@ ClawClaw 采用 **双进程 + Host API 统一接入架构**。渲染进程只调
 │  • 统一错误映射与请求遥测                                          │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
-                               │ 通过 Electron 主进程执行 Gateway RPC
+                               │ 通过 Node 后端执行 Gateway RPC
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                     OpenClaw 网关                                 │
@@ -342,7 +339,8 @@ ClawClaw 采用 **双进程 + Host API 统一接入架构**。渲染进程只调
 ### 项目结构
 
 ```ClawClaw/
-├── electron/                 # Electron 主进程
+├── src-tauri/                 # Tauri 原生宿主与打包配置
+├── backend/                   # Node 后端进程
 │   ├── api/                 # 主进程 API 路由与处理器
 │   │   └── routes/          # RPC/HTTP 代理路由模块
 │   ├── services/            # Provider、Secrets 与运行时服务
@@ -352,7 +350,7 @@ ClawClaw 采用 **双进程 + Host API 统一接入架构**。渲染进程只调
 │   │   └── providers/
 │   ├── main/                # 应用入口、窗口、IPC 注册
 │   ├── gateway/             # OpenClaw 网关进程管理
-│   ├── preload/             # 安全 IPC 桥接
+│   ├── host/                # 帧协议与桌面宿主接口
 │   └── utils/               # 工具模块（存储、认证、路径）
 ├── src/                      # React 渲染进程
 │   ├── lib/                 # 前端统一 API 与错误模型
@@ -385,23 +383,18 @@ pnpm run release:check    # 运行发版门禁（升级兼容与恢复检查）
 
 # 构建与打包
 pnpm run build:vite       # 仅构建前端
-pnpm run package:prepare  # 共享打包前置步骤（vite + OpenClaw bundle + builder 输出清理）
+pnpm run package:prepare  # 准备前端、后端与 OpenClaw 运行时资源
 pnpm build                # 准备生产打包资产
 pnpm package:mac          # 为 macOS 打包
-pnpm package:win          # 构建 Windows NSIS 安装包 + 兼容旧更新器的 setup exe/latest.yml
-pnpm run package:organize # 将根目录产物整理到 release/v<version>/windows|mac|linux|metadata
+pnpm package:win          # 构建 Windows Tauri 安装包
 pnpm package:linux        # 为 Linux 打包
-pnpm run upload:update    # 上传 release/v<version>/windows/latest.yml 及其引用的 Windows 更新文件
 ```
 
 说明：
 
-- `pnpm package:win` 用于构建 Windows NSIS 安装包，并暂存兼容旧更新器命名的 `ClawClaw-Setup-v<version>-<arch>.exe`、稳定别名 `ClawClaw-Setup-v<version>.exe` 与 `latest.yml`；内部走 `scripts/package-win.mjs`，会在调用 electron-builder 前校验或下载 Windows `node.exe`、`uv.exe` 和 Python 运行时。
-- `pnpm package:prepare` 是 `build` 以及所有平台打包命令共用的前置步骤，只清理 release 根目录的 builder 暂存输出，不会触碰已存在的版本目录。
-- `pnpm package:organize` 会把 builder 暂存到 release 根目录的产物整理到 `release/v<package.json version>/windows`、`release/v<package.json version>/mac`、`release/v<package.json version>/linux`、`release/v<package.json version>/metadata`。
-- `release/` 现在采用按版本分目录模式。旧版本会保留不动，只有同版本目录下的产物会被覆盖；更新上传脚本读取 `release/v<package.json version>/windows/latest.yml`。
-- `pnpm run upload:update` 会继续只负责 Windows 安装版更新发布，用来保持旧安装版依赖的 `latest.yml` 协议不变；如果 `latest.yml` 里的版本和 `package.json` 不一致，脚本会直接失败。
-- OpenClaw 受管插件镜像是在 `after-pack` 阶段复制进安装包，因此打包时不需要额外执行独立的 `bundle:openclaw-plugins`。
+- `pnpm package:prepare` 会创建 `src-tauri/runtime`，其中包括打包后的 Node 后端、OpenClaw、插件镜像、Node、uv 和 Python。
+- `pnpm package:win`、`pnpm package:mac`、`pnpm package:linux` 会在准备资源后运行 `tauri build`。
+- 当前未配置 Tauri 更新服务；更新界面会在配置签名更新端点前显示不可用。
 
 ### 发版门禁
 
@@ -419,12 +412,12 @@ pnpm run upload:update    # 上传 release/v<version>/windows/latest.yml 及其�
 
 | 层级     | 技术                     |
 | -------- | ------------------------ |
-| 运行时   | Electron 40+             |
+| 运行时   | Tauri 2 + Rust           |
 | UI 框架  | React 19 + TypeScript    |
 | 样式     | Tailwind CSS + shadcn/ui |
 | 状态管理 | Zustand                  |
-| 构建工具 | Vite + electron-builder  |
-| 测试     | Vitest + Playwright      |
+| 构建工具 | Vite + Tauri CLI         |
+| 测试     | Vitest                   |
 | 动画     | Framer Motion            |
 | 图标     | Lucide React             |
 
@@ -456,7 +449,7 @@ pnpm run upload:update    # 上传 release/v<version>/windows/latest.yml 及其�
 ClawClaw 构建于以下优秀的开源项目之上：
 
 - [OpenClaw](https://github.com/OpenClaw) – AI 智能体运行时
-- [Electron](https://www.electronjs.org/) – 跨平台桌面框架
+- [Tauri](https://tauri.app/) – 跨平台桌面框架
 - [React](https://react.dev/) – UI 组件库
 - [shadcn/ui](https://ui.shadcn.com/) – 精美设计的组件库
 - [Zustand](https://github.com/pmndrs/zustand) – 轻量级状态管理

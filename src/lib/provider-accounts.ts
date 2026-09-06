@@ -1,4 +1,4 @@
-import { hostApiFetch } from '@/lib/host-api';
+import { invokeIpc } from '@/lib/api-client';
 import type {
   ProviderAccount,
   ProviderType,
@@ -20,18 +20,16 @@ export interface ProviderListItem {
 }
 
 export async function fetchProviderSnapshot(): Promise<ProviderSnapshot> {
-  const [accounts, statuses, vendors, defaultInfo] = await Promise.all([
-    hostApiFetch<ProviderAccount[]>('/api/provider-accounts'),
-    hostApiFetch<ProviderWithKeyInfo[]>('/api/provider-accounts/statuses'),
-    hostApiFetch<ProviderVendorInfo[]>('/api/provider-vendors'),
-    hostApiFetch<{ accountId: string | null }>('/api/provider-accounts/default'),
+  const [accounts, defaultAccount] = await Promise.all([
+    invokeIpc<Array<ProviderAccount & ProviderWithKeyInfo>>('provider:list'),
+    invokeIpc<ProviderAccount | null>('provider:getDefault'),
   ]);
 
   return {
     accounts: Array.isArray(accounts) ? accounts : [],
-    statuses: Array.isArray(statuses) ? statuses : [],
-    vendors: Array.isArray(vendors) ? vendors : [],
-    defaultAccountId: defaultInfo?.accountId ?? null,
+    statuses: Array.isArray(accounts) ? accounts : [],
+    vendors: [],
+    defaultAccountId: defaultAccount?.id ?? null,
   };
 }
 

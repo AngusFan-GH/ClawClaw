@@ -15,7 +15,7 @@ vi.mock('os', () => {
   return { ...mocked, default: mocked };
 });
 
-vi.mock('electron', () => ({
+vi.mock('../../backend/host/desktop', () => ({
   app: {
     isPackaged: false,
     getPath: () => testUserData,
@@ -49,7 +49,7 @@ describe('openclaw auth plugin entry sync', () => {
   it('enables oauth provider plugins through plugins.entries without creating plugins.allow', async () => {
     await writeOpenClawJson({});
 
-    const { syncProviderConfigToOpenClaw } = await import('@electron/utils/openclaw-auth');
+    const { syncProviderConfigToOpenClaw } = await import('@backend/utils/openclaw-auth');
     await syncProviderConfigToOpenClaw('qwen-portal', 'qwen-max', {
       baseUrl: 'https://portal.qwen.ai/v1',
       api: 'openai-completions',
@@ -70,7 +70,7 @@ describe('openclaw auth plugin entry sync', () => {
       },
     });
 
-    const { setOpenClawDefaultModelWithOverride } = await import('@electron/utils/openclaw-auth');
+    const { setOpenClawDefaultModelWithOverride } = await import('@backend/utils/openclaw-auth');
     await setOpenClawDefaultModelWithOverride('qwen-portal', 'qwen-max', {
       baseUrl: 'https://portal.qwen.ai/v1',
       api: 'openai-completions',
@@ -107,7 +107,7 @@ describe('openclaw auth plugin entry sync', () => {
       },
     });
 
-    const { syncProviderConfigToOpenClaw } = await import('@electron/utils/openclaw-auth');
+    const { syncProviderConfigToOpenClaw } = await import('@backend/utils/openclaw-auth');
     await syncProviderConfigToOpenClaw('moonshot', 'kimi-k2.5', {
       baseUrl: 'https://api.moonshot.cn/v1',
       api: 'openai-completions',
@@ -133,7 +133,7 @@ describe('openclaw auth plugin entry sync', () => {
   it('writes allowPrivateNetwork into models.providers.request for self-hosted providers', async () => {
     await writeOpenClawJson({});
 
-    const { syncProviderConfigToOpenClaw } = await import('@electron/utils/openclaw-auth');
+    const { syncProviderConfigToOpenClaw } = await import('@backend/utils/openclaw-auth');
     await syncProviderConfigToOpenClaw('custom-runtime', 'my-model', {
       baseUrl: 'http://127.0.0.1:4000/v1',
       api: 'openai-completions',
@@ -158,7 +158,7 @@ describe('openclaw auth plugin entry sync', () => {
   it('syncs localModelLean into agents.defaults.experimental', async () => {
     await writeOpenClawJson({});
 
-    const { syncModelRuntimeSettingsToOpenClaw } = await import('@electron/utils/openclaw-auth');
+    const { syncModelRuntimeSettingsToOpenClaw } = await import('@backend/utils/openclaw-auth');
     await syncModelRuntimeSettingsToOpenClaw({ localModelLean: true });
 
     const config = await readOpenClawJson();
@@ -174,7 +174,7 @@ describe('openclaw auth plugin entry sync', () => {
   it('syncs dreamingEnabled into plugins.entries.memory-core.config.dreaming.enabled', async () => {
     await writeOpenClawJson({});
 
-    const { syncMemorySettingsToOpenClaw } = await import('@electron/utils/openclaw-auth');
+    const { syncMemorySettingsToOpenClaw } = await import('@backend/utils/openclaw-auth');
     await syncMemorySettingsToOpenClaw({
       sessionMemoryEnabled: true,
       memorySearchEnabled: true,

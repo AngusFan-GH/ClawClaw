@@ -15,7 +15,7 @@ vi.mock('os', () => {
   return { ...mocked, default: mocked };
 });
 
-vi.mock('electron', () => ({
+vi.mock('../../backend/host/desktop', () => ({
   app: {
     isPackaged: false,
     getPath: () => testUserData,
@@ -90,7 +90,7 @@ describe('saveProviderKeyToOpenClaw', () => {
     );
 
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const { saveProviderKeyToOpenClaw } = await import('@electron/utils/openclaw-auth');
+    const { saveProviderKeyToOpenClaw } = await import('@backend/utils/openclaw-auth');
 
     await saveProviderKeyToOpenClaw('openrouter', 'sk-test');
 

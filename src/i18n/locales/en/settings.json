@@ -214,7 +214,7 @@
     "autoStart": "Auto-start Gateway",
     "autoStartDesc": "Start Gateway when ClawClaw launches",
     "proxyTitle": "Proxy",
-    "proxyDesc": "Route Electron and Gateway traffic through your local proxy client.",
+    "proxyDesc": "Route desktop host and Gateway traffic through your local proxy client.",
     "proxyModeSystem": "Follow System",
     "proxyModeSystemHelp": "Use your system proxy settings. Best when your proxy is already configured at the OS or proxy-app level.",
     "proxyModeCustom": "Custom Proxy",
@@ -234,7 +234,7 @@
     "hideAdvancedProxy": "Hide advanced proxy fields",
     "proxyBypass": "Bypass Rules",
     "proxyBypassHelp": "Semicolon, comma, or newline separated hosts that should connect directly.",
-    "proxyRestartNote": "Saving reapplies Electron networking and restarts the Gateway immediately.",
+    "proxyRestartNote": "Saving reapplies host networking and restarts the Gateway immediately.",
     "proxySaved": "Proxy settings saved",
     "proxySaveFailed": "Failed to save proxy settings"
   },

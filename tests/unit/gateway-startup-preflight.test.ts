@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { runGatewayStartupPreflight } from '@electron/gateway/startup-preflight';
+import { runGatewayStartupPreflight } from '@backend/gateway/startup-preflight';
 
 describe('gateway startup preflight runner', () => {
   it('runs phases in order and continues after a failed non-fatal step', async () => {

@@ -6,7 +6,7 @@ const storeCalls = vi.hoisted(() => ({
   options: [] as Array<Record<string, unknown>>,
 }));
 
-vi.mock('electron', () => ({
+vi.mock('../../backend/host/desktop', () => ({
   app: {
     isPackaged: true,
     getPath: () => testUserData,
@@ -14,7 +14,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('electron-store', () => {
+vi.mock('../../backend/host/json-store', () => {
   class MockStore {
     constructor(options?: Record<string, unknown>) {
       storeCalls.options.push(options ?? {});
@@ -31,7 +31,7 @@ describe('provider store instance', () => {
   });
 
   it('uses the app data directory as electron-store cwd', async () => {
-    const { getClawXProviderStore } = await import('@electron/services/providers/store-instance');
+    const { getClawXProviderStore } = await import('@backend/services/providers/store-instance');
 
     await getClawXProviderStore();
 

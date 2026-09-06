@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyOpenClawDoctorResult } from '@electron/utils/openclaw-doctor';
+import { classifyOpenClawDoctorResult } from '@backend/utils/openclaw-doctor';
 
 describe('classifyOpenClawDoctorResult', () => {
   it('marks a clean exit as success', () => {

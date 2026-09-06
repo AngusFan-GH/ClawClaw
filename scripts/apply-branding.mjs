@@ -19,13 +19,9 @@ function replaceInFile(file, replacers) {
   fs.writeFileSync(file, text);
 }
 
-// 1) electron-builder metadata
-replaceInFile(path.join(root, 'electron-builder.yml'), [
-  [/^productName:\s.*$/m, `productName: ${productName}`],
-  [
-    /^copyright:\s.*$/m,
-    `copyright: Copyright © ${copyrightYear} ${companyEn} (${companyZh}). All rights reserved.`,
-  ],
+// 1) Tauri metadata
+replaceInFile(path.join(root, 'src-tauri', 'tauri.conf.json'), [
+  [/"productName":\s*"[^"]*"/, `"productName": "${productName}"`],
 ]);
 
 // 2) EULA

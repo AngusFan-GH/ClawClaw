@@ -5,7 +5,7 @@
 import { vi } from 'vitest';
 import '@testing-library/jest-dom';
 
-// Mock window.electron API
+// Mock window.desktop API
 const mockElectron = {
   ipcRenderer: {
     invoke: vi.fn(),
@@ -18,7 +18,7 @@ const mockElectron = {
   isDev: true,
 };
 
-Object.defineProperty(window, 'electron', {
+Object.defineProperty(window, 'desktop', {
   value: mockElectron,
   writable: true,
 });

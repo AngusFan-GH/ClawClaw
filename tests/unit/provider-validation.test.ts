@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const proxyAwareFetch = vi.fn();
 
-vi.mock('@electron/utils/proxy-fetch', () => ({
+vi.mock('@backend/utils/proxy-fetch', () => ({
   proxyAwareFetch,
 }));
 
@@ -18,7 +18,7 @@ describe('validateApiKeyWithProvider', () => {
   });
 
   it('validates MiniMax CN keys with Anthropic headers', async () => {
-    const { validateApiKeyWithProvider } = await import('@electron/services/providers/provider-validation');
+    const { validateApiKeyWithProvider } = await import('@backend/services/providers/provider-validation');
 
     const result = await validateApiKeyWithProvider('minimax-portal-cn', 'sk-cn-test');
 
@@ -35,7 +35,7 @@ describe('validateApiKeyWithProvider', () => {
   });
 
   it('still validates OpenAI-compatible providers with bearer auth', async () => {
-    const { validateApiKeyWithProvider } = await import('@electron/services/providers/provider-validation');
+    const { validateApiKeyWithProvider } = await import('@backend/services/providers/provider-validation');
 
     const result = await validateApiKeyWithProvider('openai', 'sk-openai-test');
 

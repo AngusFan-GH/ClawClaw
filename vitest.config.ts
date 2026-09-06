@@ -17,7 +17,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
-      '@electron': resolve(__dirname, 'electron'),
+      '@backend': resolve(__dirname, 'backend'),
     },
   },
 });

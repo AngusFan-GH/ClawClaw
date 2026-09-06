@@ -19,7 +19,7 @@ describe('quoteForCmd', () => {
   let quoteForCmd: (value: string) => string;
 
   beforeEach(async () => {
-    const mod = await import('@electron/utils/win-shell');
+    const mod = await import('@backend/utils/win-shell');
     quoteForCmd = mod.quoteForCmd;
   });
 
@@ -72,7 +72,7 @@ describe('needsWinShell', () => {
   let needsWinShell: (bin: string) => boolean;
 
   beforeEach(async () => {
-    const mod = await import('@electron/utils/win-shell');
+    const mod = await import('@backend/utils/win-shell');
     needsWinShell = mod.needsWinShell;
   });
 
@@ -110,7 +110,7 @@ describe('prepareWinSpawn', () => {
   ) => { shell: boolean; command: string; args: string[] };
 
   beforeEach(async () => {
-    const mod = await import('@electron/utils/win-shell');
+    const mod = await import('@backend/utils/win-shell');
     prepareWinSpawn = mod.prepareWinSpawn;
   });
 
@@ -160,7 +160,7 @@ describe('normalizeNodeRequirePathForNodeOptions', () => {
   let normalizeNodeRequirePathForNodeOptions: (modulePath: string) => string;
 
   beforeEach(async () => {
-    const mod = await import('@electron/utils/win-shell');
+    const mod = await import('@backend/utils/win-shell');
     normalizeNodeRequirePathForNodeOptions = mod.normalizeNodeRequirePathForNodeOptions;
   });
 
@@ -195,7 +195,7 @@ describe('appendNodeRequireToNodeOptions', () => {
   ) => string;
 
   beforeEach(async () => {
-    const mod = await import('@electron/utils/win-shell');
+    const mod = await import('@backend/utils/win-shell');
     appendNodeRequireToNodeOptions = mod.appendNodeRequireToNodeOptions;
   });
 

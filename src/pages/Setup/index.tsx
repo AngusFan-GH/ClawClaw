@@ -353,7 +353,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
       gateway: { status: 'checking', message: '' },
     });
 
-    // Check Node.js - always available in Electron
+    // Check Node.js - bundled for packaged desktop builds.
     setChecks((prev) => ({
       ...prev,
       nodejs: { status: 'success', message: t('runtime.status.success') },

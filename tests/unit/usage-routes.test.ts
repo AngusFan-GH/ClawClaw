@@ -4,11 +4,11 @@ import type { IncomingMessage, ServerResponse } from 'http';
 const getRecentTokenUsageHistoryMock = vi.fn();
 const sendJsonMock = vi.fn();
 
-vi.mock('@electron/utils/token-usage', () => ({
+vi.mock('@backend/utils/token-usage', () => ({
   getRecentTokenUsageHistory: (...args: unknown[]) => getRecentTokenUsageHistoryMock(...args),
 }));
 
-vi.mock('@electron/api/route-utils', () => ({
+vi.mock('@backend/api/route-utils', () => ({
   sendJson: (...args: unknown[]) => sendJsonMock(...args),
 }));
 
@@ -19,7 +19,7 @@ describe('handleUsageRoutes', () => {
 
   it('passes undefined limit when query param is missing', async () => {
     getRecentTokenUsageHistoryMock.mockResolvedValueOnce([{ totalTokens: 1 }]);
-    const { handleUsageRoutes } = await import('@electron/api/routes/usage');
+    const { handleUsageRoutes } = await import('@backend/api/routes/usage');
 
     const handled = await handleUsageRoutes(
       { method: 'GET' } as IncomingMessage,
@@ -39,7 +39,7 @@ describe('handleUsageRoutes', () => {
 
   it('passes sanitized numeric limit when provided', async () => {
     getRecentTokenUsageHistoryMock.mockResolvedValueOnce([]);
-    const { handleUsageRoutes } = await import('@electron/api/routes/usage');
+    const { handleUsageRoutes } = await import('@backend/api/routes/usage');
 
     await handleUsageRoutes(
       { method: 'GET' } as IncomingMessage,

@@ -214,7 +214,7 @@
     "autoStart": "自动启动网关",
     "autoStartDesc": "ClawClaw 启动时自动启动网关",
     "proxyTitle": "代理",
-    "proxyDesc": "让 Electron 和 Gateway 的网络请求都走本地代理客户端。",
+    "proxyDesc": "让桌面宿主和 Gateway 的网络请求都走本地代理客户端。",
     "proxyModeSystem": "跟随系统",
     "proxyModeSystemHelp": "使用系统代理设置。适合已经在系统或代理软件中完成配置的环境。",
     "proxyModeCustom": "自定义代理",
@@ -234,7 +234,7 @@
     "hideAdvancedProxy": "隐藏高级代理字段",
     "proxyBypass": "绕过规则",
     "proxyBypassHelp": "使用分号、逗号或换行分隔需要直连的主机。",
-    "proxyRestartNote": "保存后会立即重新应用 Electron 网络代理，并自动重启 Gateway。",
+    "proxyRestartNote": "保存后会立即重新应用宿主网络代理，并自动重启 Gateway。",
     "proxySaved": "代理设置已保存",
     "proxySaveFailed": "保存代理设置失败"
   },

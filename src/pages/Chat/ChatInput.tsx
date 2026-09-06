@@ -16,7 +16,6 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { hostApiFetch } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
@@ -553,7 +552,7 @@ export function ChatInput({
       if (import.meta.env.DEV) {
         console.debug('[pickFiles] Staging files:', result.filePaths);
       }
-      const staged = await hostApiFetch<
+      const staged = await invokeIpc<
         Array<{
           id: string;
           fileName: string;
@@ -562,10 +561,7 @@ export function ChatInput({
           stagedPath: string;
           preview: string | null;
         }>
-      >('/api/files/stage-paths', {
-        method: 'POST',
-        body: JSON.stringify({ filePaths: result.filePaths }),
-      });
+      >('artifact:stagePaths', result.filePaths);
       if (import.meta.env.DEV) {
         console.debug(
           '[pickFiles] Stage result:',
@@ -637,21 +633,14 @@ export function ChatInput({
         if (import.meta.env.DEV) {
           console.debug(`[stageBuffer] Base64 length: ${base64?.length ?? 'null'}`);
         }
-        const staged = await hostApiFetch<{
+        const staged = await invokeIpc<{
           id: string;
           fileName: string;
           mimeType: string;
           fileSize: number;
           stagedPath: string;
           preview: string | null;
-        }>('/api/files/stage-buffer', {
-          method: 'POST',
-          body: JSON.stringify({
-            base64,
-            fileName: file.name,
-            mimeType: file.type || 'application/octet-stream',
-          }),
-        });
+        }>('artifact:stageBuffer', base64, file.name, file.type || 'application/octet-stream');
         if (import.meta.env.DEV) {
           console.debug(
             `[stageBuffer] Staged: id=${staged?.id}, path=${staged?.stagedPath}, size=${staged?.fileSize}`

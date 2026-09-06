@@ -128,7 +128,7 @@ function parseLegacyProxyResponse<T>(
 export async function hostApiFetch<T>(path: string, init?: HostApiFetchInit): Promise<T> {
   const startedAt = Date.now();
   const method = init?.method || 'GET';
-  // In Electron renderer, always proxy through main process to avoid CORS.
+  // Always proxy through the backend process to avoid CORS.
   try {
     const response = await invokeIpc<HostApiProxyResponse>('hostapi:fetch', {
       path,

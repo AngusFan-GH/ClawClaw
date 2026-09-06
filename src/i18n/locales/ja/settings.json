@@ -214,7 +214,7 @@
     "autoStart": "ゲートウェイ自動起動",
     "autoStartDesc": "ClawClaw 起動時にゲートウェイを自動起動",
     "proxyTitle": "プロキシ",
-    "proxyDesc": "Electron と Gateway の通信をローカルプロキシ経由にします。",
+    "proxyDesc": "デスクトップホストと Gateway の通信をローカルプロキシ経由にします。",
     "proxyModeSystem": "システム設定を使用",
     "proxyModeSystemHelp": "システムのプロキシ設定を使用します。OS やプロキシアプリ側で設定済みの場合に適しています。",
     "proxyModeCustom": "カスタムプロキシ",
@@ -234,7 +234,7 @@
     "hideAdvancedProxy": "高度なプロキシ項目を非表示",
     "proxyBypass": "バイパスルール",
     "proxyBypassHelp": "直接接続するホストをセミコロン、カンマ、または改行で区切って指定します。",
-    "proxyRestartNote": "保存すると Electron のネットワーク設定を再適用し、Gateway をすぐ再起動します。",
+    "proxyRestartNote": "保存するとホストのネットワーク設定を再適用し、Gateway をすぐ再起動します。",
     "proxySaved": "プロキシ設定を保存しました",
     "proxySaveFailed": "プロキシ設定の保存に失敗しました"
   },

@@ -20,7 +20,7 @@ vi.mock('os', () => {
   return { ...mocked, default: mocked };
 });
 
-vi.mock('electron', () => ({
+vi.mock('../../backend/host/desktop', () => ({
   app: {
     isPackaged: false,
     getAppPath: () => testAppPath,
@@ -54,7 +54,7 @@ describe('ensureBundledPluginInstalled', () => {
     await writePlugin(sourceDir, pluginId, '1.2.3', { withNodeModules: true });
     await writePlugin(targetDir, pluginId, '1.2.3');
 
-    const { ensureBundledPluginInstalled } = await import('@electron/utils/bundled-plugin-installer');
+    const { ensureBundledPluginInstalled } = await import('@backend/utils/bundled-plugin-installer');
     const result = ensureBundledPluginInstalled(pluginId, 'Test Plugin');
 
     expect(result.installed).toBe(true);
@@ -69,7 +69,7 @@ describe('ensureBundledPluginInstalled', () => {
     await writePlugin(sourceDir, pluginId, '1.0.0', { withNodeModules: true });
     await writePlugin(targetDir, 'wrong-plugin-id', '1.0.0', { withNodeModules: true });
 
-    const { ensureBundledPluginInstalled } = await import('@electron/utils/bundled-plugin-installer');
+    const { ensureBundledPluginInstalled } = await import('@backend/utils/bundled-plugin-installer');
     const result = ensureBundledPluginInstalled(pluginId, 'Test Plugin');
 
     expect(result.installed).toBe(true);
@@ -85,7 +85,7 @@ describe('ensureBundledPluginInstalled', () => {
     await writePlugin(targetDir, pluginId, '1.0.0', { withNodeModules: true });
     await writeFile(join(targetDir, 'stale.txt'), 'old-state', 'utf8');
 
-    const { ensureBundledPluginInstalled } = await import('@electron/utils/bundled-plugin-installer');
+    const { ensureBundledPluginInstalled } = await import('@backend/utils/bundled-plugin-installer');
     const result = ensureBundledPluginInstalled(pluginId, 'Test Plugin', { forceReinstall: true });
 
     expect(result.installed).toBe(true);
@@ -108,7 +108,7 @@ describe('ensureBundledPluginInstalled', () => {
       'utf8',
     );
 
-    const { ensureBundledPluginInstalled } = await import('@electron/utils/bundled-plugin-installer');
+    const { ensureBundledPluginInstalled } = await import('@backend/utils/bundled-plugin-installer');
     const result = ensureBundledPluginInstalled(pluginId, 'Test Plugin', { forceReinstall: true });
 
     expect(result.installed).toBe(true);

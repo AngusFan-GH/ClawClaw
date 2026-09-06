@@ -15,7 +15,7 @@ vi.mock('os', () => {
   return { ...mocked, default: mocked };
 });
 
-vi.mock('electron', () => ({
+vi.mock('../../backend/host/desktop', () => ({
   app: {
     isPackaged: false,
     getPath: () => testUserData,
@@ -38,7 +38,7 @@ async function readOpenClawJson(): Promise<Record<string, unknown>> {
 }
 
 async function applyChannelDraft(): Promise<void> {
-  const { commitChannelDraftSession, finalizeChannelDraftSession } = await import('@electron/services/channel-draft-session');
+  const { commitChannelDraftSession, finalizeChannelDraftSession } = await import('@backend/services/channel-draft-session');
   await commitChannelDraftSession();
   await finalizeChannelDraftSession();
 }
@@ -60,7 +60,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    const { listConfiguredChannelGroups } = await import('@backend/utils/channel-config');
     const groups = await listConfiguredChannelGroups({ includeCli: false });
 
     expect(groups).toEqual([
@@ -99,7 +99,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { listConfiguredChannelGroups, listConfiguredChannelAccounts } = await import('@electron/utils/channel-config');
+    const { listConfiguredChannelGroups, listConfiguredChannelAccounts } = await import('@backend/utils/channel-config');
 
     await expect(listConfiguredChannelAccounts({ includeCli: false })).resolves.toEqual({
       wechat: ['3d6aa0bf112f-im-bot'],
@@ -121,7 +121,7 @@ describe('channel config lifecycle', () => {
   });
 
   it('stores whatsapp config under channels instead of plugin entries', async () => {
-    const { saveChannelConfig, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    const { saveChannelConfig, listConfiguredChannelGroups } = await import('@backend/utils/channel-config');
 
     await saveChannelConfig('whatsapp', {
       enabled: true,
@@ -162,7 +162,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { listConfiguredChannelGroups, saveChannelConfig } = await import('@electron/utils/channel-config');
+    const { listConfiguredChannelGroups, saveChannelConfig } = await import('@backend/utils/channel-config');
 
     await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([
       {
@@ -212,7 +212,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { listConfiguredChannelGroups, getChannelConfig } = await import('@electron/utils/channel-config');
+    const { listConfiguredChannelGroups, getChannelConfig } = await import('@backend/utils/channel-config');
     await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([
       {
         type: 'wechat',
@@ -264,7 +264,7 @@ describe('channel config lifecycle', () => {
       'utf8',
     );
 
-    const { deleteChannelConfig, listConfiguredChannels } = await import('@electron/utils/channel-config');
+    const { deleteChannelConfig, listConfiguredChannels } = await import('@backend/utils/channel-config');
     await deleteChannelConfig('wechat');
 
     await applyChannelDraft();
@@ -308,7 +308,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { deleteChannelConfig, listConfiguredChannelAccounts, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    const { deleteChannelConfig, listConfiguredChannelAccounts, listConfiguredChannelGroups } = await import('@backend/utils/channel-config');
     await deleteChannelConfig('wecom', 'default');
 
     await expect(listConfiguredChannelAccounts({ includeCli: false })).resolves.toEqual({});
@@ -329,7 +329,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { saveChannelConfig, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    const { saveChannelConfig, listConfiguredChannelGroups } = await import('@backend/utils/channel-config');
     await saveChannelConfig('wechat', {
       __accountId: '3d6aa0bf112f-im-bot',
       endpoint: 'ws://wechat.example',
@@ -378,11 +378,11 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { saveChannelConfig, listConfiguredChannels } = await import('@electron/utils/channel-config');
+    const { saveChannelConfig, listConfiguredChannels } = await import('@backend/utils/channel-config');
     const {
       commitChannelDraftSession,
       finalizeChannelDraftSession,
-    } = await import('@electron/services/channel-draft-session');
+    } = await import('@backend/services/channel-draft-session');
     await saveChannelConfig('telegram', {
       botToken: '123:abc',
       chatId: '456',
@@ -424,11 +424,11 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { setChannelEnabled, getChannelConfig } = await import('@electron/utils/channel-config');
+    const { setChannelEnabled, getChannelConfig } = await import('@backend/utils/channel-config');
     const {
       commitChannelDraftSession,
       finalizeChannelDraftSession,
-    } = await import('@electron/services/channel-draft-session');
+    } = await import('@backend/services/channel-draft-session');
     await setChannelEnabled('telegram', false);
 
     await expect(getChannelConfig('telegram')).resolves.toMatchObject({
@@ -476,11 +476,11 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { deleteChannelConfig, listConfiguredChannels } = await import('@electron/utils/channel-config');
+    const { deleteChannelConfig, listConfiguredChannels } = await import('@backend/utils/channel-config');
     const {
       commitChannelDraftSession,
       finalizeChannelDraftSession,
-    } = await import('@electron/services/channel-draft-session');
+    } = await import('@backend/services/channel-draft-session');
     await deleteChannelConfig('telegram');
 
     const configBeforeApply = await readOpenClawJson();
@@ -507,7 +507,7 @@ describe('channel config lifecycle', () => {
     await writeOpenClawJson({});
     await mkdir(join(testHome, '.openclaw', 'extensions', 'openclaw-weixin'), { recursive: true });
 
-    const { listConfiguredChannels, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    const { listConfiguredChannels, listConfiguredChannelGroups } = await import('@backend/utils/channel-config');
 
     await expect(listConfiguredChannels({ includeCli: false })).resolves.toEqual([]);
     await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([]);
@@ -527,7 +527,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { deleteChannelConfig, listConfiguredChannels, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    const { deleteChannelConfig, listConfiguredChannels, listConfiguredChannelGroups } = await import('@backend/utils/channel-config');
     await deleteChannelConfig('wecom');
 
     await applyChannelDraft();
@@ -562,7 +562,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { deleteChannelConfig, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    const { deleteChannelConfig, listConfiguredChannelGroups } = await import('@backend/utils/channel-config');
     await deleteChannelConfig('wecom', 'corp-a');
 
     await applyChannelDraft();
@@ -620,7 +620,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { deleteChannelConfig, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    const { deleteChannelConfig, listConfiguredChannelGroups } = await import('@backend/utils/channel-config');
     await deleteChannelConfig('wecom', 'default');
 
     await applyChannelDraft();
@@ -675,7 +675,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { listConfiguredChannelAccounts, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    const { listConfiguredChannelAccounts, listConfiguredChannelGroups } = await import('@backend/utils/channel-config');
 
     await expect(listConfiguredChannelAccounts({ includeCli: false })).resolves.toEqual({
       wecom: ['corp-b'],
@@ -725,7 +725,7 @@ describe('channel config lifecycle', () => {
     await mkdir(join(testHome, '.openclaw', 'openclaw-weixin'), { recursive: true });
     await mkdir(join(testHome, '.openclaw', 'extensions', 'openclaw-weixin'), { recursive: true });
 
-    const { cleanupDanglingWeChatPluginState } = await import('@electron/utils/channel-config');
+    const { cleanupDanglingWeChatPluginState } = await import('@backend/utils/channel-config');
     await expect(cleanupDanglingWeChatPluginState()).resolves.toEqual({ cleanedDanglingState: true });
 
     const config = await readOpenClawJson();
@@ -761,7 +761,7 @@ describe('channel config lifecycle', () => {
     );
     await mkdir(join(testHome, '.openclaw', 'extensions', 'openclaw-weixin'), { recursive: true });
 
-    const { cleanupDanglingWeChatPluginState } = await import('@electron/utils/channel-config');
+    const { cleanupDanglingWeChatPluginState } = await import('@backend/utils/channel-config');
     await expect(cleanupDanglingWeChatPluginState()).resolves.toEqual({ cleanedDanglingState: false });
 
     const config = await readOpenClawJson();
@@ -795,7 +795,7 @@ describe('channel config lifecycle', () => {
     await mkdir(sessionDir, { recursive: true });
     await writeFile(join(sessionDir, 'session-default.json'), '{}', 'utf8');
 
-    const { deleteChannelConfig } = await import('@electron/utils/channel-config');
+    const { deleteChannelConfig } = await import('@backend/utils/channel-config');
     await deleteChannelConfig('qqbot');
 
     await applyChannelDraft();
@@ -825,7 +825,7 @@ describe('channel config lifecycle', () => {
     await writeFile(join(sessionDir, 'session-ZGVmYXVsdA.json'), JSON.stringify({ accountId: 'default' }), 'utf8');
     await writeFile(join(sessionDir, 'session-qq1.json'), JSON.stringify({ accountId: 'qq1' }), 'utf8');
 
-    const { listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    const { listConfiguredChannelGroups } = await import('@backend/utils/channel-config');
 
     await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([
       {
@@ -898,7 +898,7 @@ describe('channel config lifecycle', () => {
       ],
     });
 
-    const { ensureDefaultChannelBindings } = await import('@electron/utils/channel-config');
+    const { ensureDefaultChannelBindings } = await import('@backend/utils/channel-config');
 
     await expect(ensureDefaultChannelBindings()).resolves.toBe(true);
 
@@ -943,7 +943,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { repairChannelConfigConsistency } = await import('@electron/utils/channel-config');
+    const { repairChannelConfigConsistency } = await import('@backend/utils/channel-config');
 
     await expect(repairChannelConfigConsistency()).resolves.toEqual({ repaired: true });
 
@@ -968,7 +968,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { repairChannelConfigConsistency } = await import('@electron/utils/channel-config');
+    const { repairChannelConfigConsistency } = await import('@backend/utils/channel-config');
 
     await expect(repairChannelConfigConsistency()).resolves.toEqual({ repaired: true });
 
@@ -1012,7 +1012,7 @@ describe('channel config lifecycle', () => {
     await mkdir(sessionDir, { recursive: true });
     await writeFile(join(sessionDir, 'session-ZGVmYXVsdA.json'), JSON.stringify({ accountId: 'default' }), 'utf8');
 
-    const { deleteChannelConfig } = await import('@electron/utils/channel-config');
+    const { deleteChannelConfig } = await import('@backend/utils/channel-config');
     await deleteChannelConfig('qqbot', 'default');
     await applyChannelDraft();
 
@@ -1036,7 +1036,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { saveChannelConfig } = await import('@electron/utils/channel-config');
+    const { saveChannelConfig } = await import('@backend/utils/channel-config');
     await saveChannelConfig('feishu', {
       appId: 'app-id',
       appSecret: 'app-secret',
@@ -1056,7 +1056,7 @@ describe('channel config lifecycle', () => {
   });
 
   it('preserves existing feishu accounts when adding a second named account', async () => {
-    const { saveChannelConfig, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    const { saveChannelConfig, listConfiguredChannelGroups } = await import('@backend/utils/channel-config');
 
     await saveChannelConfig('feishu', {
       __accountId: 'team-a',
@@ -1145,7 +1145,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { saveChannelConfig, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    const { saveChannelConfig, listConfiguredChannelGroups } = await import('@backend/utils/channel-config');
     await saveChannelConfig('feishu', {
       __accountId: 'team-b',
       appId: 'app-b',
@@ -1237,7 +1237,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { repairChannelConfigConsistency, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    const { repairChannelConfigConsistency, listConfiguredChannelGroups } = await import('@backend/utils/channel-config');
     await expect(repairChannelConfigConsistency()).resolves.toEqual({ repaired: true });
     await expect(listConfiguredChannelGroups({ includeCli: false })).resolves.toEqual([
       {
@@ -1268,7 +1268,7 @@ describe('channel config lifecycle', () => {
   });
 
   it('deletes only the selected feishu account and preserves remaining accounts plus plugin state', async () => {
-    const { saveChannelConfig, deleteChannelConfig, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    const { saveChannelConfig, deleteChannelConfig, listConfiguredChannelGroups } = await import('@backend/utils/channel-config');
 
     await saveChannelConfig('feishu', {
       __accountId: 'team-a',
@@ -1328,7 +1328,7 @@ describe('channel config lifecycle', () => {
   });
 
   it('does not keep a plugin-only feishu channel visible after deleting its last configured account', async () => {
-    const { saveChannelConfig, deleteChannelConfig, listConfiguredChannelAccounts, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    const { saveChannelConfig, deleteChannelConfig, listConfiguredChannelAccounts, listConfiguredChannelGroups } = await import('@backend/utils/channel-config');
 
     await saveChannelConfig('feishu', {
       __accountId: 'team-a',
@@ -1368,7 +1368,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { deleteChannelConfig, listConfiguredChannelAccounts, listConfiguredChannelGroups } = await import('@electron/utils/channel-config');
+    const { deleteChannelConfig, listConfiguredChannelAccounts, listConfiguredChannelGroups } = await import('@backend/utils/channel-config');
     await deleteChannelConfig('qqbot', 'default');
 
     await expect(listConfiguredChannelAccounts({ includeCli: false })).resolves.toEqual({});
@@ -1382,7 +1382,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { repairChannelConfigConsistency } = await import('@electron/utils/channel-config');
+    const { repairChannelConfigConsistency } = await import('@backend/utils/channel-config');
     await expect(repairChannelConfigConsistency()).resolves.toEqual({ repaired: true });
 
     const config = await readOpenClawJson();
@@ -1419,7 +1419,7 @@ describe('channel config lifecycle', () => {
     await mkdir(staleMirrorDir, { recursive: true });
     await writeFile(join(staleMirrorDir, 'openclaw.plugin.json'), JSON.stringify({ id: 'channels' }, null, 2), 'utf8');
 
-    const { repairChannelConfigConsistency } = await import('@electron/utils/channel-config');
+    const { repairChannelConfigConsistency } = await import('@backend/utils/channel-config');
     await expect(repairChannelConfigConsistency()).resolves.toEqual({ repaired: true });
 
     const config = await readOpenClawJson();
@@ -1443,7 +1443,7 @@ describe('channel config lifecycle', () => {
       },
     });
 
-    const { repairChannelConfigConsistency } = await import('@electron/utils/channel-config');
+    const { repairChannelConfigConsistency } = await import('@backend/utils/channel-config');
     await expect(repairChannelConfigConsistency()).resolves.toEqual({ repaired: true });
 
     const config = await readOpenClawJson();
@@ -1467,7 +1467,7 @@ describe('channel config lifecycle', () => {
       'utf8',
     );
 
-    const { cleanupInvalidManagedChannelPlugins } = await import('@electron/utils/channel-config');
+    const { cleanupInvalidManagedChannelPlugins } = await import('@backend/utils/channel-config');
     await expect(cleanupInvalidManagedChannelPlugins()).resolves.toEqual({
       cleaned: true,
       removedPluginIds: ['channels'],
@@ -1495,7 +1495,7 @@ describe('channel config lifecycle', () => {
       'utf8',
     );
 
-    const { cleanupInvalidManagedChannelPlugins } = await import('@electron/utils/channel-config');
+    const { cleanupInvalidManagedChannelPlugins } = await import('@backend/utils/channel-config');
     await expect(cleanupInvalidManagedChannelPlugins()).resolves.toEqual({
       cleaned: true,
       removedPluginIds: ['openclaw-weixin'],
@@ -1522,8 +1522,8 @@ describe('channel config lifecycle', () => {
     await mkdir(qqbotSessionDir, { recursive: true });
     await writeFile(join(qqbotSessionDir, 'session-default.json'), '{"ok":true}', 'utf8');
 
-    const { deleteChannelConfig } = await import('@electron/utils/channel-config');
-    const { discardChannelDraftSession } = await import('@electron/services/channel-draft-session');
+    const { deleteChannelConfig } = await import('@backend/utils/channel-config');
+    const { discardChannelDraftSession } = await import('@backend/services/channel-draft-session');
 
     await deleteChannelConfig('qqbot');
     await expect(access(join(qqbotSessionDir, 'session-default.json'))).resolves.toBeUndefined();

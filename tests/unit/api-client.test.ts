@@ -12,7 +12,7 @@ describe('api-client', () => {
   });
 
   it('forwards unified channels through app:request', async () => {
-    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
+    const invoke = vi.mocked(window.desktop.ipcRenderer.invoke);
     invoke.mockResolvedValueOnce({ ok: true, data: { ok: true } });
 
     const result = await invokeIpc<{ ok: boolean }>('settings:getAll', { a: 1 });
@@ -28,7 +28,7 @@ describe('api-client', () => {
   });
 
   it('falls back to a legacy channel when app:request is unsupported', async () => {
-    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
+    const invoke = vi.mocked(window.desktop.ipcRenderer.invoke);
     invoke
       .mockRejectedValueOnce(new Error('APP_REQUEST_UNSUPPORTED:settings.getAll'))
       .mockResolvedValueOnce({ foo: 'bar' });
@@ -40,7 +40,7 @@ describe('api-client', () => {
   });
 
   it('sends tuple payload for multi-arg unified requests', async () => {
-    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
+    const invoke = vi.mocked(window.desktop.ipcRenderer.invoke);
     invoke.mockResolvedValueOnce({ ok: true, data: { success: true } });
 
     const result = await invokeIpc<{ success: boolean }>('settings:set', 'language', 'en');
@@ -57,7 +57,7 @@ describe('api-client', () => {
   });
 
   it('uses IPC directly for gateway RPC', async () => {
-    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
+    const invoke = vi.mocked(window.desktop.ipcRenderer.invoke);
     invoke.mockResolvedValueOnce({ success: true, result: { rows: [] } });
 
     const result = await invokeIpc<{ success: boolean; result: { rows: unknown[] } }>(
@@ -71,14 +71,14 @@ describe('api-client', () => {
   });
 
   it('normalizes timeout errors', async () => {
-    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
+    const invoke = vi.mocked(window.desktop.ipcRenderer.invoke);
     invoke.mockRejectedValueOnce(new Error('Gateway Timeout'));
 
     await expect(invokeIpc('gateway:status')).rejects.toMatchObject({ code: 'TIMEOUT' });
   });
 
   it('retries once for retryable unified errors', async () => {
-    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
+    const invoke = vi.mocked(window.desktop.ipcRenderer.invoke);
     invoke
       .mockResolvedValueOnce({ ok: false, error: { code: 'TIMEOUT', message: 'network timeout' } })
       .mockResolvedValueOnce({ ok: true, data: { success: true } });

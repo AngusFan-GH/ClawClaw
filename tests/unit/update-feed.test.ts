@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { UPDATE_FEEDS } from '@electron/shared/update-feed';
+import { UPDATE_FEEDS } from '@backend/shared/update-feed';
 
 describe('update feed helpers', () => {
   it('keeps installed update feed on the stable latest.yml base URL', () => {

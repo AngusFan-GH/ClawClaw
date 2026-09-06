@@ -5,7 +5,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import i18n from '@/i18n';
-import { hostApiFetch } from '@/lib/host-api';
+import { invokeIpc } from '@/lib/api-client';
 import { useChatStore } from '@/stores/chat';
 import { toast } from 'sonner';
 import type { ReminderItem } from '@/shared/reminders';
@@ -133,7 +133,7 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => {
       const syncFromMain = async (): Promise<void> => {
-        const settings = await hostApiFetch<Partial<typeof defaultSettings>>('/api/settings');
+        const settings = await invokeIpc<Partial<typeof defaultSettings>>('settings:getAll');
         const normalizedProxyMode =
           settings.proxyMode
           || (settings.proxyEnabled ? 'custom' : 'system');
@@ -151,10 +151,7 @@ export const useSettingsStore = create<SettingsState>()(
       };
 
       const persistMainSettings = async (patch: Partial<typeof defaultSettings>): Promise<void> => {
-        await hostApiFetch<{ success: boolean }>('/api/settings', {
-          method: 'PUT',
-          body: JSON.stringify(patch),
-        });
+        await invokeIpc('settings:setMany', patch);
         await syncFromMain();
       };
 
@@ -165,10 +162,7 @@ export const useSettingsStore = create<SettingsState>()(
         if (interrupted) {
           toast.message(i18n.t('settings:reminders.toasts.interrupted', 'Current run stopped so updated reminders can take effect immediately.'));
         }
-        await hostApiFetch<{ success: boolean }>('/api/security/reminders', {
-          method: 'PUT',
-          body: JSON.stringify({ reminders }),
-        });
+        await invokeIpc('settings:set', 'reminders', reminders);
         await syncFromMain();
       };
 

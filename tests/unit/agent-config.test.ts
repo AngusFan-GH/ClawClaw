@@ -15,7 +15,7 @@ vi.mock('os', () => {
   return { ...mocked, default: mocked };
 });
 
-vi.mock('electron', () => ({
+vi.mock('../../backend/host/desktop', () => ({
   app: {
     isPackaged: false,
     getPath: () => testUserData,
@@ -55,7 +55,7 @@ describe('agent config lifecycle', () => {
       },
     });
 
-    const { listConfiguredAgentIds } = await import('@electron/utils/agent-config');
+    const { listConfiguredAgentIds } = await import('@backend/utils/agent-config');
 
     await expect(listConfiguredAgentIds()).resolves.toEqual(['main', 'test3']);
   });
@@ -63,7 +63,7 @@ describe('agent config lifecycle', () => {
   it('falls back to the implicit main agent when no list exists', async () => {
     await writeOpenClawJson({});
 
-    const { listConfiguredAgentIds } = await import('@electron/utils/agent-config');
+    const { listConfiguredAgentIds } = await import('@backend/utils/agent-config');
 
     await expect(listConfiguredAgentIds()).resolves.toEqual(['main']);
   });
@@ -83,7 +83,7 @@ describe('agent config lifecycle', () => {
       },
     });
 
-    const { updateAgentSettings } = await import('@electron/utils/agent-config');
+    const { updateAgentSettings } = await import('@backend/utils/agent-config');
 
     const updated = await updateAgentSettings('helper', { model: 'minimax/MiniMax-M2.5' });
     const helper = updated.agents.find((agent) => agent.id === 'helper');
@@ -125,11 +125,11 @@ describe('agent config lifecycle', () => {
     await mkdir(join(testHome, '.openclaw', 'workspace'), { recursive: true });
     await writeFile(join(testHome, '.openclaw', 'workspace', 'AGENTS.md'), '# main', 'utf8');
 
-    const { createAgent } = await import('@electron/utils/agent-config');
+    const { createAgent } = await import('@backend/utils/agent-config');
     const {
       commitAgentDraftSession,
       finalizeAgentDraftSession,
-    } = await import('@electron/services/agent-draft-session');
+    } = await import('@backend/services/agent-draft-session');
 
     const snapshot = await createAgent('Helper');
     expect(snapshot.agents.some((agent) => agent.id === 'helper')).toBe(true);
@@ -179,7 +179,7 @@ describe('agent config lifecycle', () => {
       bindings: [],
     });
 
-    const { assignChannelToAgent } = await import('@electron/utils/agent-config');
+    const { assignChannelToAgent } = await import('@backend/utils/agent-config');
 
     const snapshot = await assignChannelToAgent('helper', 'wechat', 'corp-a');
     expect(snapshot.agents.some((agent) => agent.id === 'helper')).toBe(true);
@@ -255,11 +255,11 @@ describe('agent config lifecycle', () => {
     await writeFile(join(test2WorkspaceDir, 'AGENTS.md'), '# test2', 'utf8');
 
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    const { deleteAgentConfig } = await import('@electron/utils/agent-config');
+    const { deleteAgentConfig } = await import('@backend/utils/agent-config');
     const {
       commitAgentDraftSession,
       finalizeAgentDraftSession,
-    } = await import('@electron/services/agent-draft-session');
+    } = await import('@backend/services/agent-draft-session');
 
     const snapshot = await deleteAgentConfig('test2');
 
@@ -332,10 +332,10 @@ describe('agent config lifecycle', () => {
     await mkdir(helperWorkspaceDir, { recursive: true });
     await writeFile(join(helperWorkspaceDir, 'AGENTS.md'), '# helper', 'utf8');
 
-    const { beginAgentDraftSession, discardAgentDraftSession } = await import('@electron/services/agent-draft-session');
+    const { beginAgentDraftSession, discardAgentDraftSession } = await import('@backend/services/agent-draft-session');
     await beginAgentDraftSession();
 
-    const { updateAgentSettings, deleteAgentConfig } = await import('@electron/utils/agent-config');
+    const { updateAgentSettings, deleteAgentConfig } = await import('@backend/utils/agent-config');
     await updateAgentSettings('helper', { name: 'Helper Draft', model: 'openai/gpt-5.5' });
     await deleteAgentConfig('helper');
 
@@ -400,11 +400,11 @@ describe('agent config lifecycle', () => {
 
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    const { deleteAgentConfig } = await import('@electron/utils/agent-config');
+    const { deleteAgentConfig } = await import('@backend/utils/agent-config');
     const {
       commitAgentDraftSession,
       finalizeAgentDraftSession,
-    } = await import('@electron/services/agent-draft-session');
+    } = await import('@backend/services/agent-draft-session');
 
     await deleteAgentConfig('test2');
     await commitAgentDraftSession();
@@ -448,12 +448,12 @@ describe('agent config lifecycle', () => {
       ],
     });
 
-    const { clearAllChannelBindings } = await import('@electron/utils/agent-config');
+    const { clearAllChannelBindings } = await import('@backend/utils/agent-config');
     const {
       beginChannelDraftSession: beginChannelsDraft,
       commitChannelDraftSession,
       finalizeChannelDraftSession,
-    } = await import('@electron/services/channel-draft-session');
+    } = await import('@backend/services/channel-draft-session');
     await beginChannelsDraft();
     const snapshot = await clearAllChannelBindings('wecom', { mode: 'channel-draft' });
 

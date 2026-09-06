@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { GatewayApplyCoordinator } from '@electron/gateway/apply-coordinator';
+import { GatewayApplyCoordinator } from '@backend/gateway/apply-coordinator';
 
 describe('GatewayApplyCoordinator', () => {
   it('fails applyNow instead of waiting forever behind a stuck apply', async () => {

@@ -6,6 +6,7 @@ const HOST_EVENT_TO_IPC_CHANNEL: Record<string, string> = {
   'gateway:lifecycle': 'gateway:lifecycle-changed',
   'gateway:channel-status': 'gateway:channel-status',
   'gateway:exit': 'gateway:exit',
+  'core:run:event': 'core:run:event',
   'oauth:code': 'oauth:code',
   'oauth:success': 'oauth:success',
   'oauth:error': 'oauth:error',
@@ -22,7 +23,7 @@ export function subscribeHostEvent<T = unknown>(
   eventName: string,
   handler: (payload: T) => void
 ): () => void {
-  const ipc = window.electron?.ipcRenderer;
+  const ipc = window.desktop?.ipcRenderer;
   const ipcChannel = HOST_EVENT_TO_IPC_CHANNEL[eventName];
   if (ipcChannel && ipc?.on && ipc?.off) {
     const listener = (payload: unknown) => {

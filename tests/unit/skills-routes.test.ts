@@ -12,32 +12,32 @@ const getOpenClawSkillsDirMock = vi.fn();
 const resolveOpenClawDirMock = vi.fn();
 const sendJsonMock = vi.fn();
 
-vi.mock('@electron/utils/skill-config', () => ({
+vi.mock('@backend/utils/skill-config', () => ({
   getAllSkillConfigs: (...args: unknown[]) => getAllSkillConfigsMock(...args),
   updateSkillConfig: vi.fn(),
 }));
 
-vi.mock('@electron/utils/skill-metadata', () => ({
+vi.mock('@backend/utils/skill-metadata', () => ({
   getManagedInstalledSkillSlugs: (...args: unknown[]) => getManagedInstalledSkillSlugsMock(...args),
   getProjectBundledSkillSlugs: (...args: unknown[]) => getProjectBundledSkillSlugsMock(...args),
   getSkillMetadata: (...args: unknown[]) => getSkillMetadataMock(...args),
 }));
 
-vi.mock('@electron/utils/skill-list', () => ({
+vi.mock('@backend/utils/skill-list', () => ({
   buildUnifiedSkillList: (...args: unknown[]) => buildUnifiedSkillListMock(...args),
   summarizeGatewaySkillSources: (...args: unknown[]) => summarizeGatewaySkillSourcesMock(...args),
 }));
 
-vi.mock('@electron/utils/agent-config', () => ({
+vi.mock('@backend/utils/agent-config', () => ({
   listAgentsSnapshot: (...args: unknown[]) => listAgentsSnapshotMock(...args),
 }));
 
-vi.mock('@electron/utils/paths', () => ({
+vi.mock('@backend/utils/paths', () => ({
   getOpenClawSkillsDir: (...args: unknown[]) => getOpenClawSkillsDirMock(...args),
   resolveOpenClawDir: (...args: unknown[]) => resolveOpenClawDirMock(...args),
 }));
 
-vi.mock('@electron/api/route-utils', () => ({
+vi.mock('@backend/api/route-utils', () => ({
   parseJsonBody: vi.fn(),
   sendJson: (...args: unknown[]) => sendJsonMock(...args),
 }));
@@ -61,7 +61,7 @@ describe('handleSkillRoutes', () => {
 
   it('passes agentId through to skills.status for scoped skill lists', async () => {
     const rpcMock = vi.fn().mockResolvedValue({ skills: [], workspaceDir: '/tmp/ws', managedSkillsDir: '/tmp/managed' });
-    const { handleSkillRoutes } = await import('@electron/api/routes/skills');
+    const { handleSkillRoutes } = await import('@backend/api/routes/skills');
 
     const handled = await handleSkillRoutes(
       { method: 'GET' } as IncomingMessage,
@@ -92,7 +92,7 @@ describe('handleSkillRoutes', () => {
   it('uses local fallback workspace/managed dirs when gateway is not running', async () => {
     summarizeGatewaySkillSourcesMock.mockReturnValue({ stats: [], dirs: [{ key: 'managed', label: 'Managed skills', path: '/tmp/managed', count: 0 }] });
     const rpcMock = vi.fn();
-    const { handleSkillRoutes } = await import('@electron/api/routes/skills');
+    const { handleSkillRoutes } = await import('@backend/api/routes/skills');
 
     await handleSkillRoutes(
       { method: 'GET' } as IncomingMessage,

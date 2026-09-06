@@ -5,7 +5,7 @@
 <h1 align="center">ClawClaw</h1>
 
 <p align="center">
-  <strong>The Desktop Interface for OpenClaw AI Agents</strong>
+  <strong>A local-first desktop application for ClawCore AI agents</strong>
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/platform-MacOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform" />
-  <img src="https://img.shields.io/badge/electron-40+-47848F?logo=electron" alt="Electron" />
+  <img src="https://img.shields.io/badge/tauri-2-24C8DB?logo=tauri" alt="Tauri" />
   <img src="https://img.shields.io/badge/react-19-61DAFB?logo=react" alt="React" />
   <a href="https://discord.com/invite/84Kex3GGAh" target="_blank">
   <img src="https://img.shields.io/discord/1399603591471435907?logo=discord&labelColor=%20%235462eb&logoColor=%20%23f5f5f5&color=%20%235462eb" alt="chat on Discord" />
@@ -36,7 +36,7 @@
 
 ## Overview
 
-**ClawClaw** bridges the gap between powerful AI agents and everyday users. Built on top of [OpenClaw](https://github.com/OpenClaw), it transforms command-line AI orchestration into an accessible, beautiful desktop experience—no terminal required.
+**ClawClaw** makes capable AI agents accessible from a desktop application. It runs its own local-first **ClawCore** runtime: durable SQLite-backed runs, explicit lifecycle events, provider adapters, and approval-ready tool boundaries. No OpenClaw runtime, gateway, plugin mirror, or CLI is packaged or required.
 
 Whether you're automating workflows, managing AI-powered channels, or scheduling intelligent tasks, ClawClaw provides the interface you need to harness AI agents effectively.
 
@@ -84,12 +84,9 @@ Building AI agents shouldn't require mastering the command line. ClawClaw was de
 | Multiple AI providers     | Cloud provider panel plus local model center    |
 | Skill/plugin installation | Built-in skill marketplace and management       |
 
-### OpenClaw Inside
+### ClawCore Inside
 
-ClawClaw is built directly upon the official **OpenClaw** core. Instead of requiring a separate installation, we embed the runtime within the application to provide a seamless "battery-included" experience.
-
-We are committed to maintaining strict alignment with the upstream OpenClaw project, ensuring that you always have access to the latest capabilities, stability improvements, and ecosystem compatibility provided by the official releases.
-The bundled stable runtime is now aligned to **OpenClaw 2026.5.28**, which keeps ClawClaw on the current upstream stable release track while preserving the packaged desktop integration.
+ClawCore owns the agent loop and its data model. The desktop host only transports requests and events; the React renderer never chooses a runtime transport. Provider requests use Pi as a protocol adapter, while conversation runs, budgets, state transitions, and future tool approvals remain application-owned. See [the architecture document](docs/clawcore-architecture.md).
 
 ---
 
@@ -97,7 +94,7 @@ The bundled stable runtime is now aligned to **OpenClaw 2026.5.28**, which keeps
 
 ### 🎯 Zero Configuration Barrier
 
-Complete the core setup through a guided first-launch flow. ClawClaw checks the runtime, starts the Gateway, installs the default skills, and then walks you to manual model configuration when you are ready.
+Complete the core setup through a guided first-launch flow. ClawClaw initializes ClawCore, makes its local skill catalog available, and then walks you to manual model configuration when you are ready.
 
 ### 💬 Intelligent Chat Interface
 
@@ -201,7 +198,7 @@ See [resources/skills/README.md](resources/skills/README.md) for the expected la
 
 ### Proxy Settings
 
-ClawClaw includes built-in proxy settings for environments where Electron, the OpenClaw Gateway, or channels such as Telegram need to reach the internet through a local proxy client.
+ClawClaw includes built-in proxy settings for environments where the desktop host, the OpenClaw Gateway, or channels such as Telegram need to reach the internet through a local proxy client.
 
 Open **Settings → Gateway → Proxy** and configure:
 
@@ -222,7 +219,7 @@ Notes:
 
 - A bare `host:port` value is treated as HTTP.
 - If advanced proxy fields are left empty, ClawClaw falls back to `Proxy Server`.
-- Saving proxy settings reapplies Electron networking immediately and still restarts the Gateway automatically when required.
+- Saving proxy settings reapplies host networking immediately and still restarts the Gateway automatically when required.
 - Model, agent, and connection-account edits are saved as pending runtime changes and can be applied together, so repeated setup steps no longer trigger multiple Gateway restarts in a row. Agent-to-channel ownership bindings remain immediate because upstream OpenClaw treats `bindings` as live config.
 - In `Follow System` mode, ClawClaw also resolves the OS proxy and passes it to the auto-started OpenClaw Gateway process.
 - ClawClaw also syncs the proxy to OpenClaw's Telegram channel config when Telegram is enabled.
@@ -255,17 +252,16 @@ In **Settings → Developer**, the diagnostics section can run OpenClaw checks o
 
 ## Architecture
 
-ClawClaw employs a **dual-process architecture** with a unified host API layer. The renderer talks to a single client abstraction, while Electron Main owns protocol selection and process lifecycle:
+ClawClaw employs a **Tauri host plus Node backend architecture** with a unified host API layer. The renderer talks to a single client abstraction, while the Tauri host owns native lifecycle and the backend owns Gateway transport:
 
 ```┌─────────────────────────────────────────────────────────────────┐
 │                        ClawClaw Desktop App                         │
 │                                                                  │
 │  ┌────────────────────────────────────────────────────────────┐  │
-│  │              Electron Main Process                          │  │
+│  │              Tauri Native Host (Rust)                       │  │
 │  │  • Window & application lifecycle management               │  │
-│  │  • Gateway process supervision                              │  │
+│  │  • Node backend process supervision                         │  │
 │  │  • System integration (tray, notifications, keychain)       │  │
-│  │  • Auto-update orchestration                                │  │
 │  └────────────────────────────────────────────────────────────┘  │
 │                              │                                    │
 │                              │ IPC (authoritative control plane)  │
@@ -279,16 +275,16 @@ ClawClaw employs a **dual-process architecture** with a unified host API layer. 
 │  └────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
-                               │ Main-owned Gateway lifecycle
+                               │ Framed IPC to Node backend
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                Host API & Main Process Proxies                  │
+│                Host API & Backend Proxies                       │
 │                                                                  │
-│  • hostapi:fetch (Main proxy, avoids CORS in dev/prod)          │
+│  • hostapi:fetch (backend proxy, avoids CORS in dev/prod)       │
 │  • Unified error mapping and request telemetry                   │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
-                               │ Gateway RPC via Electron Main
+                               │ Gateway RPC via Node backend
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                     OpenClaw Gateway                             │
@@ -304,7 +300,7 @@ ClawClaw employs a **dual-process architecture** with a unified host API layer. 
 
 - **Process Isolation**: The AI runtime operates in a separate process, ensuring UI responsiveness even during heavy computation
 - **Single Entry for Frontend Calls**: Renderer requests go through host-api/api-client; protocol details are hidden behind a stable interface
-- **Main-Process Runtime Ownership**: Electron Main owns Gateway startup, recovery, and RPC execution
+- **Backend Runtime Ownership**: The Node backend owns Gateway startup, recovery, and RPC execution
 - **Graceful Recovery**: Built-in reconnect, timeout, and backoff logic handles transient failures automatically
 - **Secure Storage**: API keys and sensitive data leverage the operating system's native secure storage mechanisms
 - **CORS-Safe by Design**: Local HTTP access is proxied by Main, preventing renderer-side CORS issues
@@ -341,7 +337,9 @@ Chain multiple skills together to create sophisticated automation pipelines. Pro
 ### Project Structure
 
 ```ClawClaw/
-├── electron/                 # Electron Main Process
+├── src-tauri/                 # Tauri native host and packaging configuration
+│   └── src/                  # Rust commands, native integrations and backend lifecycle
+├── backend/                   # Node backend process
 │   ├── api/                 # Main-side API router and handlers
 │   │   └── routes/          # RPC/HTTP proxy route modules
 │   ├── services/            # Provider, secrets and runtime services
@@ -351,7 +349,7 @@ Chain multiple skills together to create sophisticated automation pipelines. Pro
 │   │   └── providers/
 │   ├── main/                # App entry, windows, IPC registration
 │   ├── gateway/             # OpenClaw Gateway process manager
-│   ├── preload/             # Secure IPC bridge
+│   ├── host/                # Framed transport and desktop compatibility APIs
 │   └── utils/               # Utilities (storage, auth, paths)
 ├── src/                      # React Renderer Process
 │   ├── lib/                 # Unified frontend API + error model
@@ -384,23 +382,18 @@ pnpm run release:check    # Run the release gate (upgrade compatibility + recove
 
 # Build & Package
 pnpm run build:vite       # Build frontend only
-pnpm run package:prepare  # Shared packaging prep (vite + bundled OpenClaw + cleaned builder output)
+pnpm run package:prepare  # Prepare frontend, bundled backend and OpenClaw runtime resources
 pnpm build                # Prepare production packaging assets
 pnpm package:mac          # Package for macOS
-pnpm package:win          # Build Windows NSIS installers + updater-compatible setup exe/latest.yml
-pnpm run package:organize # Re-home staged artifacts under release/v<version>/windows|mac|linux|metadata
+pnpm package:win          # Build Windows Tauri installers
 pnpm package:linux        # Package for Linux
-pnpm run upload:update    # Upload release/v<version>/windows/latest.yml and referenced Windows update artifacts
 ```
 
 Notes:
 
-- `pnpm package:win` builds the Windows NSIS installers and stages updater-compatible `ClawClaw-Setup-v<version>-<arch>.exe` files, the stable alias `ClawClaw-Setup-v<version>.exe`, and `latest.yml`. It verifies or downloads the Windows `node.exe`, `uv.exe`, and Python runtime before invoking electron-builder.
-- `pnpm package:prepare` is the shared pre-packaging step used by `build` and all platform package commands. It only cleans root-level builder staging output and leaves existing versioned release directories untouched.
-- `pnpm package:organize` moves root-level builder output into `release/v<package.json version>/windows`, `release/v<package.json version>/mac`, `release/v<package.json version>/linux`, and `release/v<package.json version>/metadata`.
-- `release/` now uses versioned directories. Existing versions are preserved; only artifacts inside the same version directory are replaced. The updater uploader reads from `release/v<package.json version>/windows/latest.yml`.
-- `pnpm run upload:update` is intentionally kept as the Windows installed-build uploader. It preserves the legacy `latest.yml` contract for older installed versions and fails if `latest.yml` does not match `package.json`'s version.
-- Bundled OpenClaw plugin mirrors are copied during `after-pack`, so packaging does not require a separate `bundle:openclaw-plugins` step.
+- `pnpm package:prepare` creates `src-tauri/runtime`, which contains the bundled Node backend, OpenClaw, plugin mirrors, Node, uv, and Python required by packaged builds.
+- `pnpm package:win`, `pnpm package:mac`, and `pnpm package:linux` call `tauri build` after preparing those resources.
+- Tauri's updater is not configured in this release; update controls report that updates are unavailable until a signed update endpoint is supplied.
 
 ### Release Gate
 
@@ -418,12 +411,12 @@ This gate focuses on upgrade stability rather than generic feature coverage. It 
 
 | Layer        | Technology               |
 | ------------ | ------------------------ |
-| Runtime      | Electron 40+             |
+| Runtime      | Tauri 2 + Rust           |
 | UI Framework | React 19 + TypeScript    |
 | Styling      | Tailwind CSS + shadcn/ui |
 | State        | Zustand                  |
-| Build        | Vite + electron-builder  |
-| Testing      | Vitest + Playwright      |
+| Build        | Vite + Tauri CLI         |
+| Testing      | Vitest                   |
 | Animation    | Framer Motion            |
 | Icons        | Lucide React             |
 
@@ -455,7 +448,7 @@ We welcome contributions from the community! Whether it's bug fixes, new feature
 ClawClaw is built on the shoulders of excellent open-source projects:
 
 - [OpenClaw](https://github.com/OpenClaw) – The AI agent runtime
-- [Electron](https://www.electronjs.org/) – Cross-platform desktop framework
+- [Tauri](https://tauri.app/) – Cross-platform desktop framework
 - [React](https://react.dev/) – UI component library
 - [shadcn/ui](https://ui.shadcn.com/) – Beautifully designed components
 - [Zustand](https://github.com/pmndrs/zustand) – Lightweight state management

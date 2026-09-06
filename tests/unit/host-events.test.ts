@@ -6,7 +6,7 @@ describe('host-events', () => {
   });
 
   it('subscribes through IPC for mapped host events', async () => {
-    const onMock = vi.mocked(window.electron.ipcRenderer.on);
+    const onMock = vi.mocked(window.desktop.ipcRenderer.on);
     const unsubscribeMock = vi.fn();
     const captured: Array<(...args: unknown[]) => void> = [];
     onMock.mockImplementation((_, cb: (...args: unknown[]) => void) => {

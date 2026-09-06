@@ -17,7 +17,7 @@ vi.mock('os', () => {
   return { ...mocked, default: mocked };
 });
 
-vi.mock('electron', () => ({
+vi.mock('../../backend/host/desktop', () => ({
   app: {
     isPackaged: false,
     getPath: () => testUserData,
@@ -29,7 +29,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('electron-store', () => {
+vi.mock('../../backend/host/json-store', () => {
   class MockStore<T extends Record<string, unknown>> {
     private readonly name: string;
     private readonly defaults: T;
@@ -115,10 +115,10 @@ describe('provider draft session', () => {
     });
 
     const { beginProviderDraftSession, discardProviderDraftSession } = await import(
-      '@electron/services/provider-draft-session'
+      '@backend/services/provider-draft-session'
     );
-    const { getProviderService } = await import('@electron/services/providers/provider-service');
-    const { getClawXProviderStore } = await import('@electron/services/providers/store-instance');
+    const { getProviderService } = await import('@backend/services/providers/provider-service');
+    const { getClawXProviderStore } = await import('@backend/services/providers/store-instance');
 
     await beginProviderDraftSession();
 

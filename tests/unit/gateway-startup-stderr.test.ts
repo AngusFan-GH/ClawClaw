@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyGatewayStderrMessage } from '@electron/gateway/startup-stderr';
+import { classifyGatewayStderrMessage } from '@backend/gateway/startup-stderr';
 
 describe('gateway stderr classification', () => {
   it('downgrades Telegram getUpdates conflicts because upstream retries them', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveRuntimeAccountIdForUi } from '@electron/api/routes/channels';
+import { resolveRuntimeAccountIdForUi } from '@backend/api/routes/channels';
 
 describe('resolveRuntimeAccountIdForUi', () => {
   it('maps a runtime default account to the sole configured named account', () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { resolveProviderRuntime } from '@electron/services/providers/provider-runtime-resolver';
+import { resolveProviderRuntime } from '@backend/services/providers/provider-runtime-resolver';
 
-vi.mock('electron', () => ({
+vi.mock('../../backend/host/desktop', () => ({
   app: {
     isPackaged: false,
     getPath: () => '/tmp/clawclaw-test',

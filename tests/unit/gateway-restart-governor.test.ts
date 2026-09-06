@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GatewayRestartGovernor } from '@electron/gateway/restart-governor';
+import { GatewayRestartGovernor } from '@backend/gateway/restart-governor';
 
 describe('gateway restart governor', () => {
   it('enforces cooldown between consecutive restarts', () => {

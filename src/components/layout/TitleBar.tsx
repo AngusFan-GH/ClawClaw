@@ -9,7 +9,7 @@ import { Minus, Square, X, Copy } from 'lucide-react';
 import logoSvg from '@/assets/logo.svg';
 import { invokeIpc } from '@/lib/api-client';
 
-const isMac = window.electron?.platform === 'darwin';
+const isMac = window.desktop?.platform === 'darwin';
 
 export function TitleBar() {
   if (isMac) {

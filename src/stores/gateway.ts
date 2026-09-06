@@ -1,6 +1,6 @@
 /**
  * Gateway State Store
- * Uses Electron IPC for lifecycle/status events and Gateway RPC.
+ * Uses desktop-host IPC for lifecycle/status events and Gateway RPC.
  */
 import { create } from 'zustand';
 import { invokeIpc } from '@/lib/api-client';

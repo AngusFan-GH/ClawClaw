@@ -31,7 +31,7 @@ try {
     .png() // Ensure it's PNG
     .toBuffer();
 
-  // Save the main icon.png (typically 512x512 for Electron root icon)
+  // Save the main 512x512 application icon.
   await sharp(masterPngBuffer).resize(512, 512).toFile(path.join(ICONS_DIR, 'icon.png'));
   echo`  ✅ Created icon.png (512x512)`;
 

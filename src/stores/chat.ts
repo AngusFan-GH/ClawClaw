@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import { normalizeChatTimestampForKey, normalizeChatTimestampMs, type ChatTimestamp } from '@/lib/chat-timestamps';
 import { hostApiFetch } from '@/lib/host-api';
+import { cancelCoreRun, deleteCoreConversation, getCoreConversationMessages, getCoreRunEvents, isCoreRun, listCoreConversations, resolveCoreToolApproval, startCoreChat, subscribeCoreRun, type CoreRunEvent } from '@/lib/core-run';
 import { extractText, isAssistantErrorMessage, isAssistantFailureSentinelText } from '@/pages/Chat/message-utils';
 import { historyContainsPendingUserMessage } from '@/pages/Chat/pending-user-message';
 import { useGatewayStore } from './gateway';
@@ -2593,9 +2594,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   loadSessions: async (options) => {
     const { preferMostRecent, preserveCurrent, warmLabels, silent } = normalizeLoadSessionsOptions(options);
+    void preferMostRecent; void preserveCurrent; void warmLabels;
     if (!silent) {
       set({ sessionsLoading: true });
     }
+    try {
+      const conversations = await listCoreConversations('default');
+      const existing = get().currentSessionKey;
+      const sessions = conversations.map((conversation) => ({ key: conversation.id, displayName: conversation.lastMessagePreview || conversation.id, updatedAt: Date.parse(conversation.updatedAt) }));
+      const currentSessionKey = sessions.some(session => session.key === existing) || sessions.length === 0 ? existing : sessions[0].key;
+      set((state) => ({ sessions, currentSessionKey, currentAgentId: getAgentIdFromSessionKey(currentSessionKey), sessionsLoading: silent ? state.sessionsLoading : false, sessionsLoadingMore: false, sessionsHydrated: true, sessionsHasMore: false, sessionsNextCursor: null, sessionLabels: Object.fromEntries(sessions.map(session => [session.key, session.displayName || session.key])), sessionLastActivity: Object.fromEntries(sessions.map(session => [session.key, session.updatedAt || 0])) }));
+      persistCurrentSessionKey(currentSessionKey);
+      return;
+    } catch (err) {
+      console.warn('Failed to load ClawCore sessions:', err);
+      set((state) => ({ sessionsLoading: silent ? state.sessionsLoading : false, sessionsHydrated: state.sessionsHydrated }));
+      return;
+    }
+    /* Legacy Gateway implementation retained below during UI migration. */
     try {
       // Timeout guard: prevents indefinite hang if Gateway is degraded and
       // doesn't respond to sessions.list (e.g. during context merge or overload).
@@ -2612,7 +2628,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           setTimeout(() => reject(new Error('sessions.list timed out')), SESSIONS_LIST_TIMEOUT_MS)
         ),
       ]);
-      if (data) {
+      if (!data) return;
+      {
         const sessions = normalizeSessionListResponse(data);
         const sessionDefaults = normalizeSessionDefaultsResponse(data);
         const realSessionKeys = new Set(sessions.map((session) => session.key));
@@ -2672,22 +2689,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
             sessionLastActivity: hydratedSessionLastActivity,
           });
           if (!materializedKey) continue;
-          materializedSessionKeyMap.set(pendingKey, materializedKey);
-          if (!hydratedSessionLabels[materializedKey] && hydratedSessionLabels[pendingKey]) {
-            hydratedSessionLabels[materializedKey] = hydratedSessionLabels[pendingKey];
+          materializedSessionKeyMap.set(pendingKey, materializedKey!);
+          if (!hydratedSessionLabels[materializedKey!] && hydratedSessionLabels[pendingKey]) {
+            hydratedSessionLabels[materializedKey!] = hydratedSessionLabels[pendingKey]!;
           }
-          if (!hydratedSessionLastActivity[materializedKey] && hydratedSessionLastActivity[pendingKey]) {
-            hydratedSessionLastActivity[materializedKey] = hydratedSessionLastActivity[pendingKey];
+          if (!hydratedSessionLastActivity[materializedKey!] && hydratedSessionLastActivity[pendingKey]) {
+            hydratedSessionLastActivity[materializedKey!] = hydratedSessionLastActivity[pendingKey]!;
           }
           delete hydratedSessionLabels[pendingKey];
           delete hydratedSessionLastActivity[pendingKey];
         }
-        let nextSessionKey = currentSessionKey || DEFAULT_SESSION_KEY;
+        let nextSessionKey: string = currentSessionKey || DEFAULT_SESSION_KEY;
         nextSessionKey = materializedSessionKeyMap.get(nextSessionKey) || nextSessionKey;
         if (!nextSessionKey.startsWith('agent:')) {
           const canonicalMatch = canonicalBySuffix.get(nextSessionKey);
           if (canonicalMatch) {
-            nextSessionKey = canonicalMatch;
+            nextSessionKey = canonicalMatch!;
           }
         }
         const hasLocalPendingSession =
@@ -2726,7 +2743,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
           }
         } else if (shouldAutoChooseLatest && preferredSessionKey) {
-          nextSessionKey = preferredSessionKey;
+          nextSessionKey = preferredSessionKey!;
         }
 
         const nextPendingLocalSessionKeys = Object.fromEntries(
@@ -2754,10 +2771,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           sessionsLoading: silent ? state.sessionsLoading : false,
           sessionsLoadingMore: false,
           sessionsHydrated: true,
-          sessionsHasMore: data.hasMore === true,
-          sessionsNextCursor: typeof data.nextCursor === 'string' && data.nextCursor.trim() ? data.nextCursor : null,
+          sessionsHasMore: data!.hasMore === true,
+          sessionsNextCursor: typeof data!.nextCursor === 'string' && data!.nextCursor.trim() ? data!.nextCursor : null,
           sessionDefaults,
-          currentSessionKey: nextSessionKey,
+          currentSessionKey: nextSessionKey!,
           currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
           pendingLocalSessionKeys: nextPendingLocalSessionKeys,
           historyWindowLimited: false,
@@ -3073,22 +3090,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     clearSessionLabelWarmState(key);
 
-    // Soft-delete the session's JSONL transcript on disk.
-    // The main process renames <suffix>.jsonl → <suffix>.deleted.jsonl so that
-    // sessions.list skips it automatically.
     try {
-      const result = await hostApiFetch<{
-        success: boolean;
-        error?: string;
-      }>('/api/sessions/delete', {
-        method: 'POST',
-        body: JSON.stringify({ sessionKey: key }),
-      });
-      if (!result.success) {
-        console.warn(`[deleteSession] IPC reported failure for ${key}:`, result.error);
-      }
+      await deleteCoreConversation('default', key);
     } catch (err) {
-      console.warn(`[deleteSession] IPC call failed for ${key}:`, err);
+      console.warn(`[deleteSession] ClawCore deletion failed for ${key}:`, err);
     }
 
     const { currentSessionKey, sessions } = get();
@@ -3365,6 +3370,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     };
     if (!quiet) set({ loading: true, error: null });
+    try {
+      const messages = await getCoreConversationMessages('default', requestSessionKey);
+      if (isStale()) return;
+      set({ messages: messages.map(message => ({ id: message.id, role: message.role === 'tool' ? 'toolresult' : message.role, content: message.content, timestamp: Date.parse(message.createdAt) })), loading: false, historyWindowLimited: false, hasEarlierHistory: false, loadingEarlierHistory: false, earlierHistoryCursor: null });
+      return;
+    } catch (err) {
+      console.warn('Failed to load ClawCore history:', err);
+      clearLoadingIfLatest();
+      return;
+    }
 
     // Brand-new local sessions do not exist in Gateway yet. Querying chat.history
     // for them can fall back to an older real transcript, which makes "New chat"
@@ -4078,6 +4093,65 @@ export const useChatStore = create<ChatState>((set, get) => ({
         saveImageCache(_imageCache);
       }
 
+      // ClawCore owns every chat turn. Attachments are represented as durable
+      // local references for approved file tools; no message is sent to a gateway.
+      if (true) {
+        let lastSequence = 0;
+        let assistantText = '';
+        let unsubscribe = () => {};
+        const applyCoreEvent = (event: CoreRunEvent) => {
+          if (event.sequence <= lastSequence) return;
+          lastSequence = event.sequence;
+          if (event.type === 'message.delta') {
+            const payload = event.payload as { text?: string };
+            assistantText += payload.text || '';
+            set({
+              streamingText: assistantText,
+              streamingMessage: { role: 'assistant', content: assistantText, timestamp: Date.now() / 1000, id: event.runId },
+            });
+          }
+          if (event.type === 'tool.requested') {
+            const payload = event.payload as { name?: string; arguments?: Record<string, unknown> };
+            const approved = window.confirm(`Allow tool ${payload.name || 'request'} to run?\n\n${JSON.stringify(payload.arguments || {}, null, 2)}`);
+            void resolveCoreToolApproval(event.runId, approved).catch(error => set({ sending: false, activeRunId: null, error: String(error) }));
+          }
+          if (event.type === 'run.completed') {
+            unsubscribe();
+            set((state) => ({
+              messages: [...state.messages, userMsg, { role: 'assistant', content: assistantText, timestamp: Date.now() / 1000, id: event.runId }],
+              pendingUserMessage: null,
+              pendingAssistantMessage: null,
+              sending: false,
+              activeRunId: null,
+              streamingText: '',
+              streamingMessage: null,
+              pendingFinal: false,
+            }));
+          }
+          if (event.type === 'run.failed' || event.type === 'run.cancelled') {
+            unsubscribe();
+            const payload = event.payload as { message?: string };
+            set({ sending: false, activeRunId: null, streamingText: '', streamingMessage: null, error: payload.message || 'ClawCore run failed' });
+          }
+        };
+        try {
+          const core = await startCoreChat({
+            workspaceId: 'default',
+            conversationId: currentSessionKey,
+            agentId: currentAgentId || 'main',
+            message: hasMedia ? `${trimmed || 'Process the attached file(s).'}\n\nAttached local files:\n${attachments.map(a => `- ${a.fileName} (${a.mimeType}): ${a.stagedPath}`).join('\n')}` : trimmed,
+            idempotencyKey,
+          });
+          unsubscribe = subscribeCoreRun(core.run.id, applyCoreEvent);
+          for (const event of await getCoreRunEvents(core.run.id)) applyCoreEvent(event);
+          return;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          set({ sending: false, activeRunId: null, pendingAssistantMessage: null, error: message });
+          return;
+        }
+      }
+
       let result: { success: boolean; result?: { runId?: string }; error?: string };
 
       const executeSend = async (idempotencyKey: string) => {
@@ -4120,10 +4194,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const modelNotAllowed = !result.success && /model not allowed/i.test(result.error || '');
       if (modelNotAllowed) {
-        const fallbackModel =
-          (defaultModelRef && (!hasGuard || allowedModelRefs.includes(defaultModelRef)))
-            ? defaultModelRef
-            : allowedModelRefs[0] || 'default';
+        const requestedModel = defaultModelRef ?? '';
+        const fallbackModel: string =
+          (requestedModel && (!hasGuard || (allowedModelRefs ?? []).includes(requestedModel)))
+            ? requestedModel
+            : allowedModelRefs[0] ?? 'default';
         try {
           const splitIndex = fallbackModel.indexOf('/');
           const providerOverride = splitIndex > 0 ? fallbackModel.slice(0, splitIndex) : undefined;
@@ -4216,6 +4291,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   abortRun: async () => {
     clearHistoryPoll();
     const { currentSessionKey, activeRunId } = get();
+    const wasCoreRun = isCoreRun(activeRunId);
     setLastAbortedRunGuard(currentSessionKey, activeRunId);
     set({
       sending: false,
@@ -4227,11 +4303,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
 
     try {
-      await useGatewayStore.getState().rpc('chat.abort', { sessionKey: currentSessionKey });
+      if (wasCoreRun) await cancelCoreRun(activeRunId!, 'Cancelled by user');
+      else await useGatewayStore.getState().rpc('chat.abort', { sessionKey: currentSessionKey });
     } catch (err) {
       set({ error: String(err) });
     }
-    void get().loadHistory(true);
+    if (!wasCoreRun) void get().loadHistory(true);
   },
 
   interruptActiveRunForPolicyChange: async (message: string) => {
@@ -4252,7 +4329,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
 
     try {
-      await useGatewayStore.getState().rpc('chat.abort', { sessionKey: currentSessionKey });
+      if (isCoreRun(activeRunId)) await cancelCoreRun(activeRunId!, message);
+      else await useGatewayStore.getState().rpc('chat.abort', { sessionKey: currentSessionKey });
     } catch (err) {
       set({ error: `${message} (${String(err)})` });
     }

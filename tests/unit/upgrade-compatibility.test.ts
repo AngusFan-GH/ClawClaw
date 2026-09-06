@@ -24,7 +24,7 @@ vi.mock('node:os', () => {
   return { ...mocked, default: mocked };
 });
 
-vi.mock('electron', () => ({
+vi.mock('../../backend/host/desktop', () => ({
   app: {
     isPackaged: false,
     getPath: () => testUserData,
@@ -36,7 +36,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('electron-store', () => {
+vi.mock('../../backend/host/json-store', () => {
   class MockStore<T extends Record<string, unknown>> {
     private readonly name: string;
     private readonly defaults: T;
@@ -73,7 +73,7 @@ vi.mock('electron-store', () => {
   };
 });
 
-vi.mock('@electron/utils/openclaw-runtime-integrity', () => ({
+vi.mock('@backend/utils/openclaw-runtime-integrity', () => ({
   validateBundledOpenClawRuntime: vi.fn(async () => undefined),
 }));
 
@@ -188,8 +188,8 @@ describe('upgrade compatibility baseline', () => {
       defaultProviderAccountId: null,
     });
 
-    const { ensureProviderStoreMigrated } = await import('@electron/services/providers/provider-migration');
-    const { getClawXProviderStore } = await import('@electron/services/providers/store-instance');
+    const { ensureProviderStoreMigrated } = await import('@backend/services/providers/provider-migration');
+    const { getClawXProviderStore } = await import('@backend/services/providers/store-instance');
 
     await ensureProviderStoreMigrated();
 
@@ -260,7 +260,7 @@ describe('upgrade compatibility baseline', () => {
       defaultProviderAccountId: 'openrouter',
     });
 
-    const { syncGatewayConfigBeforeLaunch } = await import('@electron/gateway/config-sync');
+    const { syncGatewayConfigBeforeLaunch } = await import('@backend/gateway/config-sync');
 
     await syncGatewayConfigBeforeLaunch({
       theme: 'system',
@@ -319,7 +319,7 @@ describe('upgrade compatibility baseline', () => {
   it('recovers a malformed legacy runtime config during upgrade and preserves a backup', async () => {
     await writeRawOpenClawJson('{\n  "models": {\n    "default": "anthropic"\n  }\n}\n;\n');
 
-    const { recoverMalformedOpenClawConfig } = await import('@electron/utils/openclaw-config');
+    const { recoverMalformedOpenClawConfig } = await import('@backend/utils/openclaw-config');
     const result = await recoverMalformedOpenClawConfig();
 
     expect(result.outcome).toBe('repaired');
@@ -365,7 +365,7 @@ describe('upgrade compatibility baseline', () => {
       defaultProviderAccountId: 'openrouter',
     });
 
-    const { syncGatewayConfigBeforeLaunch } = await import('@electron/gateway/config-sync');
+    const { syncGatewayConfigBeforeLaunch } = await import('@backend/gateway/config-sync');
 
     await syncGatewayConfigBeforeLaunch({
       theme: 'system',
@@ -432,7 +432,7 @@ describe('upgrade compatibility baseline', () => {
     await writePlugin(sourceDir, pluginId, '2.0.0', { withNodeModules: true });
     await writePlugin(targetDir, pluginId, '2.0.0');
 
-    const { ensureBundledPluginInstalled } = await import('@electron/utils/bundled-plugin-installer');
+    const { ensureBundledPluginInstalled } = await import('@backend/utils/bundled-plugin-installer');
     const result = ensureBundledPluginInstalled(pluginId, 'Test Upgrade Plugin');
 
     expect(result.installed).toBe(true);
@@ -475,7 +475,7 @@ describe('upgrade compatibility baseline', () => {
       'utf8',
     );
 
-    const { syncGatewayConfigBeforeLaunch } = await import('@electron/gateway/config-sync');
+    const { syncGatewayConfigBeforeLaunch } = await import('@backend/gateway/config-sync');
 
     await syncGatewayConfigBeforeLaunch({
       theme: 'system',
@@ -588,7 +588,7 @@ describe('upgrade compatibility baseline', () => {
       defaultProviderAccountId: 'openrouter',
     });
 
-    const { syncGatewayConfigBeforeLaunch } = await import('@electron/gateway/config-sync');
+    const { syncGatewayConfigBeforeLaunch } = await import('@backend/gateway/config-sync');
 
     await syncGatewayConfigBeforeLaunch({
       theme: 'system',
@@ -681,8 +681,8 @@ describe('upgrade compatibility baseline', () => {
       defaultProviderAccountId: 'local-model-stale',
     });
 
-    const { syncGatewayConfigBeforeLaunch } = await import('@electron/gateway/config-sync');
-    const { getClawXProviderStore } = await import('@electron/services/providers/store-instance');
+    const { syncGatewayConfigBeforeLaunch } = await import('@backend/gateway/config-sync');
+    const { getClawXProviderStore } = await import('@backend/services/providers/store-instance');
 
     await syncGatewayConfigBeforeLaunch({
       theme: 'system',
@@ -755,7 +755,7 @@ describe('upgrade compatibility baseline', () => {
     );
     await writeFile(join(targetDir, 'stale.txt'), 'legacy-plugin', 'utf8');
 
-    const { syncGatewayConfigBeforeLaunch } = await import('@electron/gateway/config-sync');
+    const { syncGatewayConfigBeforeLaunch } = await import('@backend/gateway/config-sync');
 
     await syncGatewayConfigBeforeLaunch({
       theme: 'system',

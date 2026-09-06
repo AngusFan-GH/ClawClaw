@@ -6,17 +6,15 @@ const checks = [
     cmd: ['pnpm', 'run', 'typecheck'],
   },
   {
-    label: 'Upgrade compatibility gate',
+    label: 'ClawCore runtime gate',
     cmd: [
       'pnpm',
       'exec',
       'vitest',
       'run',
-      'tests/unit/upgrade-compatibility.test.ts',
-      'tests/unit/openclaw-config.test.ts',
-      'tests/unit/gateway-startup-recovery.test.ts',
-      'tests/unit/gateway-recovery.test.ts',
-      'tests/unit/bundled-plugin-installer.test.ts',
+      'tests/unit/core-run-service.test.ts',
+      'tests/unit/core-run-engine.test.ts',
+      'tests/unit/core-conversation-store.test.ts',
     ],
   },
 ];

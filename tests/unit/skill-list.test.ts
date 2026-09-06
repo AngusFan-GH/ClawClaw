@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildUnifiedSkillList, summarizeGatewaySkillSources } from '../../electron/utils/skill-list';
+import { buildUnifiedSkillList, summarizeGatewaySkillSources } from '../../backend/utils/skill-list';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';

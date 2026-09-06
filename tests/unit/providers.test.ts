@@ -11,7 +11,7 @@ import {
   getProviderConfig,
   getProviderEnvVar,
   getProviderEnvVars,
-} from '@electron/utils/provider-registry';
+} from '@backend/utils/provider-registry';
 
 describe('provider metadata', () => {
   it('includes ark in the frontend provider registry', () => {

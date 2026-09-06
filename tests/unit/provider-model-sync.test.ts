@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildNonOAuthAgentProviderUpdate, getModelIdFromRef } from '@electron/main/provider-model-sync';
-import type { ProviderConfig } from '@electron/utils/secure-storage';
+import { buildNonOAuthAgentProviderUpdate, getModelIdFromRef } from '@backend/main/provider-model-sync';
+import type { ProviderConfig } from '@backend/utils/secure-storage';
 
 function providerConfig(overrides: Partial<ProviderConfig>): ProviderConfig {
   return {

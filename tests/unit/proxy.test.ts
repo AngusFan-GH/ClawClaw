@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildElectronProxyConfig,
+  buildHostProxyConfig,
   buildProxyEnv,
   normalizeProxyServer,
   resolveProxySettings,
-} from '@electron/utils/proxy';
+} from '@backend/utils/proxy';
 
 describe('proxy helpers', () => {
   it('normalizes bare host:port values to http URLs', () => {
@@ -63,8 +63,8 @@ describe('proxy helpers', () => {
     });
   });
 
-  it('builds a direct Electron config when proxy is disabled', () => {
-    expect(buildElectronProxyConfig({
+  it('builds a direct host config when proxy is disabled', () => {
+    expect(buildHostProxyConfig({
       proxyEnabled: false,
       proxyServer: '127.0.0.1:7890',
       proxyHttpServer: '',
@@ -74,8 +74,8 @@ describe('proxy helpers', () => {
     })).toEqual({ mode: 'system' });
   });
 
-  it('builds protocol-specific Electron rules when proxy is enabled', () => {
-    expect(buildElectronProxyConfig({
+  it('builds protocol-specific host rules when proxy is enabled', () => {
+    expect(buildHostProxyConfig({
       proxyEnabled: true,
       proxyServer: 'http://127.0.0.1:7890',
       proxyHttpServer: '',

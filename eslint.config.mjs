@@ -7,7 +7,7 @@ import globals from 'globals';
 
 export default [
   {
-    ignores: ['dist/**', 'dist-electron/**', 'openclaw/**', 'release/**', 'build/**'],
+    ignores: ['dist/**', 'dist-backend/**', 'openclaw/**', 'release/**', 'build/**', 'src-tauri/runtime/**', 'src-tauri/target/**'],
   },
   {
     files: ['**/*.{ts,tsx}'],
@@ -46,8 +46,8 @@ export default [
       'no-restricted-syntax': [
         'error',
         {
-          selector: "CallExpression[callee.type='MemberExpression'][callee.property.name='invoke'][callee.object.type='MemberExpression'][callee.object.property.name='ipcRenderer'][callee.object.object.type='MemberExpression'][callee.object.object.property.name='electron'][callee.object.object.object.name='window']",
-          message: 'Use invokeIpc from @/lib/api-client instead of window.electron.ipcRenderer.invoke.',
+          selector: "CallExpression[callee.name='invoke']",
+          message: 'Use host-api/api-client instead of calling Tauri invoke directly from a page or component.',
         },
         {
           selector: "CallExpression[callee.name='fetch'] Literal[value=/^https?:\\/\\/(127\\.0\\.0\\.1|localhost)(:\\d+)?\\//]",

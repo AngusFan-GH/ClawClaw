@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractSessionIdFromTranscriptFileName } from '@electron/utils/token-usage-core';
+import { extractSessionIdFromTranscriptFileName } from '@backend/utils/token-usage-core';
 
 describe('extractSessionIdFromTranscriptFileName', () => {
   it('parses normal jsonl transcript names', () => {

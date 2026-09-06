@@ -5,7 +5,7 @@ import {
   isLifecycleSuperseded,
   nextLifecycleEpoch,
   shouldDeferRestart,
-} from '@electron/gateway/process-policy';
+} from '@backend/gateway/process-policy';
 
 describe('gateway process policy helpers', () => {
   describe('lifecycle epoch helpers', () => {

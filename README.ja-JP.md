@@ -5,7 +5,7 @@
 <h1 align="center">ClawClaw</h1>
 
 <p align="center">
-  <strong>OpenClaw AIエージェントのためのデスクトップインターフェース</strong>
+  <strong>ClawCore AIエージェントのためのローカルファーストなデスクトップアプリ</strong>
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/platform-MacOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform" />
-  <img src="https://img.shields.io/badge/electron-40+-47848F?logo=electron" alt="Electron" />
+  <img src="https://img.shields.io/badge/tauri-2-24C8DB?logo=tauri" alt="Tauri" />
   <img src="https://img.shields.io/badge/react-19-61DAFB?logo=react" alt="React" />
   <a href="https://discord.com/invite/84Kex3GGAh" target="_blank">
   <img src="https://img.shields.io/discord/1399603591471435907?logo=discord&labelColor=%20%235462eb&logoColor=%20%23f5f5f5&color=%20%235462eb" alt="chat on Discord" />
@@ -36,7 +36,7 @@
 
 ## 概要
 
-**ClawClaw**は、強力なAIエージェントと日常のユーザーとの間のギャップを埋めます。[OpenClaw](https://github.com/OpenClaw)をベースに構築されており、コマンドラインによるAIオーケストレーションを、アクセスしやすく美しいデスクトップ体験に変換します。ターミナルは不要です。
+**ClawClaw** は AI エージェントをデスクトップで使いやすくします。独自のローカルファーストな **ClawCore** ランタイムを実行し、SQLite に永続化される Run、明示的なライフサイクルイベント、プロバイダーアダプター、承認可能なツール境界を備えます。OpenClaw ランタイム、Gateway、プラグインミラー、CLI を同梱せず、依存もしません。
 
 ワークフローの自動化、AI搭載チャネルの管理、インテリジェントなタスクのスケジューリングなど、ClawClawはAIエージェントを効果的に活用するために必要なインターフェースを提供します。
 
@@ -84,12 +84,9 @@ AIエージェントの構築にコマンドラインの習得は不要である
 | 複数のAIプロバイダー            | 統合プロバイダー設定パネル                                 |
 | スキル/プラグインのインストール | 組み込みのスキルマーケットプレイスと管理機能               |
 
-### OpenClaw内蔵
+### ClawCore 内蔵
 
-ClawClawは公式の**OpenClaw**コアを直接ベースに構築されています。別途インストールを必要とせず、アプリケーション内にランタイムを組み込むことで、シームレスな「バッテリー同梱」体験を提供します。
-
-私たちはアップストリームのOpenClawプロジェクトとの厳密な整合性を維持することにコミットしており、公式リリースが提供する最新の機能、安定性の改善、エコシステムの互換性に常にアクセスできることを保証します。
-現在の同梱安定ランタイムは **OpenClaw 2026.5.28** に揃えてあり、デスクトップ統合を維持したまま上流の安定リリースラインに追従しています。
+ClawCore はエージェントループとデータモデルを自ら所有します。デスクトップホストは要求とイベントを転送するだけで、React のレンダラーはランタイムの通信方式を選びません。Pi はモデルプロトコルのアダプターとしてのみ使い、会話 Run、予算、状態遷移、今後のツール承認はアプリケーションが管理します。[アーキテクチャ文書](docs/clawcore-architecture.md)を参照してください。
 
 ---
 
@@ -198,7 +195,7 @@ resources/
 
 ### プロキシ設定
 
-ClawClawには、Electron、OpenClaw Gateway、またはTelegramなどのチャネルがローカルプロキシクライアントを介してインターネットにアクセスする必要がある環境向けに、組み込みのプロキシ設定が含まれています。
+ClawClawには、デスクトップホスト、OpenClaw Gateway、またはTelegramなどのチャネルがローカルプロキシクライアントを介してインターネットにアクセスする必要がある環境向けに、組み込みのプロキシ設定が含まれています。
 
 **設定 → ゲートウェイ → プロキシ**を開いて以下を設定します：
 
@@ -219,7 +216,7 @@ ClawClawには、Electron、OpenClaw Gateway、またはTelegramなどのチャ�
 
 - `host:port`のみの値はHTTPとして扱われます。
 - 高度なプロキシフィールドが空の場合、ClawClawは`プロキシサーバー`にフォールバックします。
-- プロキシ設定を保存すると、Electron のネットワーク設定は即座に再適用され、必要な場合は Gateway も自動的に再起動されます。
+- プロキシ設定を保存すると、ホストのネットワーク設定は即座に再適用され、必要な場合は Gateway も自動的に再起動されます。
 - モデル、Agent、Connection アカウント設定の変更は未適用のランタイム変更として保存され、まとめて適用できるため、連続したセットアップで Gateway の再起動が何度も発生しにくくなっています。Agent と Connection アカウントの所有バインドだけは、上流 OpenClaw が `bindings` をライブ設定として扱うため即時反映されます。
 - `システム設定を使用` モードでは、ClawClaw は OS のプロキシも解決し、自動起動された OpenClaw Gateway 子プロセスへ渡します。
 - ClawClawはTelegramが有効な場合、プロキシをOpenClawのTelegramチャネル設定にも同期します。
@@ -258,7 +255,7 @@ ClawClawは、**デュアルプロセス + Host API 統一アクセス**構成�
 │                        ClawClaw デスクトップアプリ                    │
 │                                                                  │
 │  ┌────────────────────────────────────────────────────────────┐  │
-│  │              Electron メインプロセス                         │  │
+│  │              Tauri ネイティブホスト（Rust）                  │  │
 │  │  • ウィンドウ＆アプリケーションライフサイクル管理              │  │
 │  │  • ゲートウェイプロセスの監視                                │  │
 │  │  • システム統合（トレイ、通知、キーチェーン）                 │  │
@@ -286,7 +283,7 @@ ClawClawは、**デュアルプロセス + Host API 統一アクセス**構成�
 │  • 統一エラーマッピングとリクエスト計測                          │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
-                               │ Electron Main 経由の Gateway RPC
+                               │ Node バックエンド経由の Gateway RPC
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                     OpenClaw ゲートウェイ                         │
@@ -339,7 +336,8 @@ AI を開発ワークフローに統合できます。エージェントを使�
 ### プロジェクト構成
 
 ```ClawClaw/
-├── electron/                 # Electron メインプロセス
+├── src-tauri/                 # Tauri ネイティブホストとパッケージ設定
+├── backend/                   # Node バックエンドプロセス
 │   ├── api/                 # メイン側 API ルーターとハンドラー
 │   │   └── routes/          # RPC/HTTP プロキシのルートモジュール
 │   ├── services/            # Provider/Secrets/ランタイムサービス
@@ -349,7 +347,7 @@ AI を開発ワークフローに統合できます。エージェントを使�
 │   │   └── providers/
 │   ├── main/                # アプリ入口、ウィンドウ、IPC 登録
 │   ├── gateway/             # OpenClaw ゲートウェイプロセスマネージャー
-│   ├── preload/             # セキュア IPC ブリッジ
+│   ├── host/                # フレーム転送とデスクトップホスト API
 │   └── utils/               # ユーティリティ（ストレージ、認証、パス）
 ├── src/                      # React レンダラープロセス
 │   ├── lib/                 # フロントエンド統一 API とエラーモデル
@@ -382,23 +380,18 @@ pnpm run release:check    # リリースゲートを実行（アップグレー�
 
 # ビルド＆パッケージ
 pnpm run build:vite       # フロントエンドのみビルド
-pnpm run package:prepare  # 共通パッケージ前処理（vite + OpenClaw bundle + builder出力クリーン）
+pnpm run package:prepare  # フロントエンド、バックエンド、OpenClaw ランタイムリソースを準備
 pnpm build                # 本番パッケージ用アセットを準備
 pnpm package:mac          # macOS向けにパッケージ化
-pnpm package:win          # Windows NSIS インストーラーと updater 互換 setup exe/latest.yml をビルド
-pnpm run package:organize # ルート出力を release/v<version>/windows|mac|linux|metadata に整理
+pnpm package:win          # Windows Tauri インストーラーをビルド
 pnpm package:linux        # Linux向けにパッケージ化
-pnpm run upload:update    # release/v<version>/windows/latest.yml と参照される Windows 更新ファイルをアップロード
 ```
 
 注記:
 
-- `pnpm package:win` は Windows NSIS インストーラーをビルドし、旧 updater 互換名の `ClawClaw-Setup-v<version>-<arch>.exe`、安定別名 `ClawClaw-Setup-v<version>.exe`、および `latest.yml` をステージします。内部では `scripts/package-win.mjs` を使い、electron-builder の前に Windows の `node.exe`、`uv.exe`、Python ランタイムを検証またはダウンロードします。
-- `pnpm package:prepare` は `build` と各プラットフォーム向けパッケージコマンドで共通利用する前処理で、release 直下の builder 一時出力だけを掃除し、既存のバージョン別成果物には触れません。
-- `pnpm package:organize` は builder が一時的に release 直下へ出力した成果物を `release/v<package.json version>/windows`、`release/v<package.json version>/mac`、`release/v<package.json version>/linux`、`release/v<package.json version>/metadata` へ振り分けます。
-- `release/` はバージョン別ディレクトリで運用します。既存バージョンは保持され、同じバージョンの成果物だけが上書きされます。更新アップロードスクリプトは `release/v<package.json version>/windows/latest.yml` を参照します。
-- `pnpm run upload:update` は引き続き Windows インストール版専用です。古いインストール版が依存する `latest.yml` 契約を維持し、`latest.yml` 内のバージョンが `package.json` と一致しない場合は失敗します。
-- 同梱 OpenClaw プラグインミラーは `after-pack` 段階でコピーされるため、パッケージ化時に別途 `bundle:openclaw-plugins` を実行する必要はありません。
+- `pnpm package:prepare` は `src-tauri/runtime` を作成します。ここにはバンドル済み Node バックエンド、OpenClaw、プラグインミラー、Node、uv、Python が含まれます。
+- `pnpm package:win`、`pnpm package:mac`、`pnpm package:linux` はリソースの準備後に `tauri build` を実行します。
+- 現在 Tauri 更新サービスは未設定です。署名済み更新エンドポイントを設定するまで、更新画面は利用不可と表示します。
 
 ### Release Gate
 
@@ -416,12 +409,12 @@ pnpm run upload:update    # release/v<version>/windows/latest.yml と参照さ�
 
 | レイヤー         | 技術                     |
 | ---------------- | ------------------------ |
-| ランタイム       | Electron 40以上          |
+| ランタイム       | Tauri 2 + Rust           |
 | UIフレームワーク | React 19 + TypeScript    |
 | スタイリング     | Tailwind CSS + shadcn/ui |
 | ステート管理     | Zustand                  |
-| ビルド           | Vite + electron-builder  |
-| テスト           | Vitest + Playwright      |
+| ビルド           | Vite + Tauri CLI         |
+| テスト           | Vitest                   |
 | アニメーション   | Framer Motion            |
 | アイコン         | Lucide React             |
 
@@ -453,7 +446,7 @@ pnpm run upload:update    # release/v<version>/windows/latest.yml と参照さ�
 ClawClawは優れたオープンソースプロジェクトの上に構築されています：
 
 - [OpenClaw](https://github.com/OpenClaw) – AIエージェントランタイム
-- [Electron](https://www.electronjs.org/) – クロスプラットフォームデスクトップフレームワーク
+- [Tauri](https://tauri.app/) – クロスプラットフォームデスクトップフレームワーク
 - [React](https://react.dev/) – UIコンポーネントライブラリ
 - [shadcn/ui](https://ui.shadcn.com/) – 美しくデザインされたコンポーネント
 - [Zustand](https://github.com/pmndrs/zustand) – 軽量ステート管理

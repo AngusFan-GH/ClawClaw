@@ -4,7 +4,7 @@ import {
   decodeCliInstallOutput,
   formatWeChatPluginInstallError,
   WECHAT_PLUGIN_SPEC,
-} from '../../electron/utils/wechat-installer';
+} from '../../backend/utils/wechat-installer';
 
 describe('wechat plugin install helpers', () => {
   it('decodes utf16le stderr emitted by Windows npm.cmd failures', () => {

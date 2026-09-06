@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import http from 'node:http';
-import { buildGatewayConnectFrame, probeGatewayReady, waitForGatewayReady } from '../../electron/gateway/ws-client';
+import { buildGatewayConnectFrame, probeGatewayReady, waitForGatewayReady } from '../../backend/gateway/ws-client';
 
 describe('buildGatewayConnectFrame', () => {
   it('uses backend gateway client semantics aligned with openclaw', () => {

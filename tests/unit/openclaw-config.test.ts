@@ -27,7 +27,7 @@ describe('recoverMalformedOpenClawConfig', () => {
   it('repairs configs with stray semicolon-only lines while preserving data', async () => {
     await writeMalformedConfig('{\n  "models": {\n    "default": "anthropic"\n  }\n}\n;\n');
 
-    const { recoverMalformedOpenClawConfig } = await import('@electron/utils/openclaw-config');
+    const { recoverMalformedOpenClawConfig } = await import('@backend/utils/openclaw-config');
     const result = await recoverMalformedOpenClawConfig();
 
     expect(result.outcome).toBe('repaired');
@@ -41,7 +41,7 @@ describe('recoverMalformedOpenClawConfig', () => {
   it('repairs configs when a valid root object is followed by a stray closing brace', async () => {
     await writeMalformedConfig('{\n  "models": {\n    "default": "anthropic"\n  }\n}\n}\n');
 
-    const { recoverMalformedOpenClawConfig } = await import('@electron/utils/openclaw-config');
+    const { recoverMalformedOpenClawConfig } = await import('@backend/utils/openclaw-config');
     const result = await recoverMalformedOpenClawConfig();
 
     expect(result.outcome).toBe('repaired');
@@ -55,7 +55,7 @@ describe('recoverMalformedOpenClawConfig', () => {
   it('falls back to reset when minimal repair cannot recover the file', async () => {
     await writeMalformedConfig('totally broken ;;;;');
 
-    const { recoverMalformedOpenClawConfig } = await import('@electron/utils/openclaw-config');
+    const { recoverMalformedOpenClawConfig } = await import('@backend/utils/openclaw-config');
     const result = await recoverMalformedOpenClawConfig();
 
     expect(result.outcome).toBe('reset');
@@ -69,7 +69,7 @@ describe('recoverMalformedOpenClawConfig', () => {
   it('returns none for already valid configs without creating a backup', async () => {
     await writeMalformedConfig('{\n  "models": {\n    "default": "openrouter"\n  }\n}\n');
 
-    const { recoverMalformedOpenClawConfig } = await import('@electron/utils/openclaw-config');
+    const { recoverMalformedOpenClawConfig } = await import('@backend/utils/openclaw-config');
     const result = await recoverMalformedOpenClawConfig();
 
     expect(result.outcome).toBe('none');
