@@ -15,6 +15,33 @@ function ClawClawBrandName() {
   return <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.03em' }}>ClawClaw</span>
 }
 
+function replaceExpandedSidebarBrand(): void {
+  const button = [...document.querySelectorAll<HTMLButtonElement>('button')].find(candidate => {
+    const label = candidate.getAttribute('aria-label')
+    if (label !== '新建会话' && label !== 'New session') return false
+    return candidate.querySelector(':scope > span[aria-hidden="true"]') !== null
+  })
+  const identity = button?.querySelector<HTMLSpanElement>(':scope > span[aria-hidden="true"]')
+  if (identity === null || identity === undefined || identity.dataset.clawclawBrand === 'true') return
+  identity.dataset.clawclawBrand = 'true'
+  const mark = identity.children.item(0)
+  const name = identity.children.item(1)
+  if (mark !== null) {
+    const icon = document.createElement('img')
+    icon.src = CLAWCLAW_ICON
+    icon.width = 24
+    icon.height = 24
+    icon.alt = ''
+    mark.replaceChildren(icon)
+  }
+  if (name !== null) {
+    const title = document.createElement('span')
+    title.textContent = 'ClawClaw'
+    title.style.cssText = 'font-size:16px;font-weight:700;letter-spacing:-0.03em'
+    name.replaceChildren(title)
+  }
+}
+
 function replaceCollapsedSidebarBrand(): void {
   const toggle = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => {
     const label = button.getAttribute('aria-label')
@@ -67,9 +94,11 @@ export function applyClawClawBrand(ctx: ClientContext): void {
   ctx.slots.inject('sidebar.brand.name', () => ctx.slots.register({ name: 'sidebar.brand.name' }, ClawClawBrandName))
 
   replaceHeroCopy()
+  replaceExpandedSidebarBrand()
   replaceCollapsedSidebarBrand()
   const observer = new MutationObserver(records => {
     for (const record of records) replaceHeroCopy(record.target)
+    replaceExpandedSidebarBrand()
     replaceCollapsedSidebarBrand()
   })
   observer.observe(document.body, { childList: true, subtree: true })
