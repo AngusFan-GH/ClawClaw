@@ -726,7 +726,7 @@ export function verifySelectiveUnpackedRuntime(
   const unexpectedPackageRoots = [...new Set(normalizedFiles.flatMap((file) => {
     const root = unpackedPackageRoot(file.path)
     return root === undefined || allowedSmartUnpackPackageRoot(root)
-      || file.path.startsWith('node_modules/@agents-anywhere/dsh-bridge-next/lib/bundled-connector/') ? [] : [root]
+      ? [] : [root]
   }))].sort()
   if (unexpectedPackageRoots.length > 0) {
     throw new Error(

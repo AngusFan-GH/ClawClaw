@@ -1,19 +1,6 @@
 /** Desktop-owned settings copy. */
 
 export const zh = {
-  remoteControl: '远程控制',
-  remoteControlNew: '新功能',
-  aaSaving: '正在保存手机连接设置…',
-  aaLoadFailed: '手机连接未能启动。选择“重试加载”以重试；如果仍然失败，请检查日志。',
-  retryAa: '重试加载',
-  aaSaveFailed: '未能保存手机连接设置。请重试。',
-  aaSaved: '手机连接设置已保存。',
-  aaTitle: 'Agents-Anywhere',
-  aaIntro: '通过 Agents-Anywhere，在手机或浏览器中访问这台电脑上的 DSH。',
-  aaDisabled: '关闭手机连接',
-  aaDisabledBody: '不在手机或浏览器中通过 Agents-Anywhere 访问这台电脑。',
-  aaEnabled: '开启手机连接',
-  aaEnabledBody: '开启后，打开侧边栏中的“手机连接”完成设置。',
   beta: 'Beta',
   nav: '桌面设置',
   title: 'DSH Desktop 设置',
@@ -122,19 +109,6 @@ export const zh = {
 export type DesktopSettingsLocaleKey = keyof typeof zh
 
 export const en: Record<DesktopSettingsLocaleKey, string> = {
-  remoteControl: 'Remote control',
-  remoteControlNew: 'New feature',
-  aaSaving: 'Saving phone connection settings…',
-  aaLoadFailed: 'Phone connection could not start. Select Retry loading to try again. If it still fails, check the logs.',
-  retryAa: 'Retry loading',
-  aaSaveFailed: 'Could not save phone connection settings. Please try again.',
-  aaSaved: 'Phone connection settings saved.',
-  aaTitle: 'Agents-Anywhere',
-  aaIntro: 'Use Agents-Anywhere to access DSH on this computer from your phone or a browser.',
-  aaDisabled: 'Turn off phone connection',
-  aaDisabledBody: 'Do not use Agents-Anywhere to access this computer from a phone or browser.',
-  aaEnabled: 'Turn on phone connection',
-  aaEnabledBody: 'After enabling, open Phone connection in the sidebar to finish setup.',
   beta: 'Beta',
   nav: 'Desktop settings',
   title: 'DSH Desktop settings',

@@ -22,7 +22,6 @@ export interface DesktopSetupWizardSelection {
   readonly windowsMaterial: DesktopSetupWizardWindowsMaterial
   readonly openBrowser: boolean
   readonly networkExposure: DesktopSetupWizardNetworkExposure
-  readonly aaEnabled?: boolean
   readonly market: DesktopSetupWizardMarket
   readonly notifications: DesktopSetupWizardNotifications
 }
@@ -46,7 +45,6 @@ const SELECTION_KEYS = Object.freeze([
   'windowsMaterial',
   'openBrowser',
   'networkExposure',
-  'aaEnabled',
   'market',
   'notifications',
 ] as const)
@@ -70,7 +68,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
-  const actual = Object.keys(expected.includes('aaEnabled') ? { aaEnabled: false, ...value } : value)
+  const actual = Object.keys(value)
   return actual.length === expected.length && actual.every(key => expected.includes(key))
 }
 
@@ -107,8 +105,7 @@ export function isDesktopSetupWizardNotifications(
 }
 
 function hasSelectionValues(value: Record<string, unknown>): boolean {
-  return (value.aaEnabled === undefined || typeof value.aaEnabled === 'boolean')
-    && isMode(value.mode)
+  return isMode(value.mode)
     && isMacosMaterial(value.macosMaterial)
     && isWindowsMaterial(value.windowsMaterial)
     && typeof value.openBrowser === 'boolean'

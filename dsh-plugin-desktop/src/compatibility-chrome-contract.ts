@@ -11,7 +11,6 @@ export interface CompatibilityChromeState {
   readonly platform: DesktopPlatform
   readonly version: string
   readonly material: string
-  readonly remoteControl?: { readonly enabled: boolean; readonly seen: boolean }
 }
 
 export interface CompatibilityChromeBridge {

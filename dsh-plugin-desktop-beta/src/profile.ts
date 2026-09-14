@@ -86,8 +86,6 @@ export { DESKTOP_PACKAGE_NAME } from './product-identity.ts'
 /** Empty include root rewritten before every profile boot. */
 export const DESKTOP_PROFILE_ROOT = 'cordis.yml'
 
-const AA_PACKAGE_NAME = '@agents-anywhere/dsh-bridge-next'
-const AA_ROW_ID = 'agents-anywhere-bridge-next'
 const BIN_NAME = DESKTOP_PACKAGE_NAME
 const REQUIRED_BUNDLES = requiredWebBundles()
 const REQUIRED_BUNDLE_SET = new Set(REQUIRED_BUNDLES)
@@ -293,8 +291,6 @@ export interface PreparedDesktopProfile {
   settingsDocument: string
   /** Requested provider and the fail-closed provider effective for this generation. */
   market: DesktopMarketSnapshot
-  aaEnabled: boolean
-  aaFailure?: string
   /** Internal boot diagnostic when the requested provider was disabled. */
   marketFailure?: string
   /** Whether packaged pnpm must rebuild a legacy Profile dependency layout. */
@@ -303,9 +299,6 @@ export interface PreparedDesktopProfile {
 
 /** Optional observations emitted before profile preparation can fail. */
 export interface DesktopProfilePreparationHooks {
-  /** Explicit Profile choice; false also enforces safe-mode exclusion. */
-  aaEnabled?: boolean
-
   /** Receive the trusted settings path before its contents are parsed. */
   onSettingsDocumentResolved?: (path: string) => void
   /** LAN IPv4 literals sampled once before this profile generation is composed. */
@@ -475,7 +468,6 @@ function profileDependencyMigrationRequired(
 interface RecoveryFilteredProfile {
   readonly profile: Profile
   readonly dshMarketFailure?: string
-  readonly aaFailure?: string
 }
 
 /** Render one provider failure without leaking an arbitrary thrown object into public state. */
@@ -493,7 +485,6 @@ function loadRecoveryFilteredProfile(
   profileDir: string,
   disabledBundles: ReadonlySet<string>,
   marketProvider: DesktopMarketProvider,
-  aaEnabled: boolean,
 ): RecoveryFilteredProfile {
   if (!existsSync(join(profileDir, 'package.json'))) {
     const template = PROFILE_TEMPLATES[profileName]
@@ -515,8 +506,7 @@ function loadRecoveryFilteredProfile(
   }
   const patchReload = rawPatchReload ?? PROFILE_TEMPLATES[profileName]?.patchReload ?? DEFAULT_PROFILE_PATCH_RELOAD
   const selectedBundles = bundles.filter(packageName =>
-    (aaEnabled || packageName !== AA_PACKAGE_NAME) &&
-    packageName !== DESKTOP_MARKET_IDENTITIES.community.packageName
+packageName !== DESKTOP_MARKET_IDENTITIES.community.packageName
     && (marketProvider === DESKTOP_MARKET_IDENTITIES.dshMarket.provider
       || packageName !== DESKTOP_MARKET_IDENTITIES.dshMarket.packageName),
   )
@@ -524,23 +514,20 @@ function loadRecoveryFilteredProfile(
     && !selectedBundles.includes(DESKTOP_MARKET_IDENTITIES.dshMarket.packageName)) {
     selectedBundles.push(DESKTOP_MARKET_IDENTITIES.dshMarket.packageName)
   }
-  if (aaEnabled && !selectedBundles.includes(AA_PACKAGE_NAME)) selectedBundles.push(AA_PACKAGE_NAME)
   const layers: Profile['layers'] = []
-  let aaFailure: string | undefined
   let dshMarketFailure: string | undefined
   const installPackageUrl = pathToFileURL(INSTALL_ANCHOR).href
   const profilePackageUrl = pathToFileURL(join(profileDir, 'package.json')).href
   for (const packageName of selectedBundles) {
     const isDshMarket = packageName === DESKTOP_MARKET_IDENTITIES.dshMarket.packageName
-    const isAa = packageName === AA_PACKAGE_NAME
-    if (!isAa && !isDshMarket && desktopPluginBundleMutable(packageName) && disabledBundles.has(packageName)) continue
+    if (!isDshMarket && desktopPluginBundleMutable(packageName) && disabledBundles.has(packageName)) continue
     try {
       const packageDir = resolveOverlayPackage(packageName, {
         installPackageUrl,
         profilePackageUrl,
       }).selected.packageDir
       const bundleManifest: unknown = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8'))
-      if ((isDshMarket || isAa) && (bundleManifest === null || typeof bundleManifest !== 'object'
+      if (isDshMarket && (bundleManifest === null || typeof bundleManifest !== 'object'
         || Array.isArray(bundleManifest)
         || (bundleManifest as { name?: unknown }).name !== packageName)) {
         throw new Error(`${BIN_NAME}: selected ${packageName} bundle has an invalid package identity`)
@@ -559,8 +546,7 @@ function loadRecoveryFilteredProfile(
         patches: loadOverlayPatches(BIN_NAME, patchPath),
       })
     } catch (cause) {
-      if (isAa) aaFailure = marketFailureMessage(cause)
-      else if (isDshMarket) dshMarketFailure = marketFailureMessage(cause)
+      if (isDshMarket) dshMarketFailure = marketFailureMessage(cause)
       else throw cause
     }
   }
@@ -575,7 +561,6 @@ function loadRecoveryFilteredProfile(
       patchReload,
     },
     ...(dshMarketFailure === undefined ? {} : { dshMarketFailure }),
-    ...(aaFailure === undefined ? {} : { aaFailure }),
   }
 }
 
@@ -750,12 +735,6 @@ function filterMarketProviderPatches(patches: PatchOptions[], matches = isMarket
   return { patches: filtered, removedProviderReference }
 }
 
-/** AA is an optional bundle; user layers cannot bypass its Desktop selection. */
-function isAaEntry(entry: { readonly id?: unknown, readonly name?: unknown }): boolean {
-  return entry.id === AA_ROW_ID || entry.name === AA_PACKAGE_NAME
-    || (typeof entry.name === 'string' && entry.name.startsWith(`${AA_PACKAGE_NAME}/`))
-}
-
 /** Accept only the audited single-row contract from the selected direct bundle layer. */
 export function validateDshMarketBundlePatches(patches: readonly PatchOptions[]): void {
   const rows = composeEntries([[...patches]])
@@ -873,7 +852,6 @@ export function prepareDesktopProfile(
     profileDir,
     disabledBundles,
     marketSelection.requested,
-    hooks.aaEnabled === true,
   )
   const profile = loadedProfile.profile
   const rootConfig = join(profileDir, DESKTOP_PROFILE_ROOT)
@@ -882,16 +860,13 @@ export function prepareDesktopProfile(
 
   const desktopPatches = loadOverlayPatches(BIN_NAME, DESKTOP_PATCH_PATH)
   const bundlePatches: PatchOptions[] = []
-  let aaLayer: Profile['layers'][number] | undefined
   let dshMarketPatches: PatchOptions[] | undefined
   let desktopLayerInserted = false
   const providerAwareDisabledBundles = new Set(disabledBundles)
   if (marketSelection.requested === DESKTOP_MARKET_IDENTITIES.dshMarket.provider) {
     providerAwareDisabledBundles.delete(DESKTOP_MARKET_IDENTITIES.dshMarket.packageName)
   }
-  if (hooks.aaEnabled === true) providerAwareDisabledBundles.delete(AA_PACKAGE_NAME)
   for (const layer of activeDesktopProfileLayers(profile, providerAwareDisabledBundles)) {
-    if (layer.packageName === AA_PACKAGE_NAME) { aaLayer = layer; continue }
     if (layer.packageName === DESKTOP_MARKET_IDENTITIES.dshMarket.packageName) {
       dshMarketPatches = layer.patches
       continue
@@ -955,31 +930,8 @@ export function prepareDesktopProfile(
     ...providerPatches,
     ...filteredProfile.patches,
     ...filteredHome.patches,
-  ], isAaEntry)
-  const aaPatches: PatchOptions[] = []
-  let aaFailure = loadedProfile.aaFailure
-  if (hooks.aaEnabled === true && aaFailure === undefined) {
-    try {
-      if (ordinary.removedProviderReference) throw new Error('conflicting AA configuration was removed')
-      if (!aaLayer) throw new Error('selected AA bundle layer is unavailable')
-      const aaRows = composeEntries([aaLayer.patches])
-      const aaRow = aaRows.find(row => row.id === AA_ROW_ID && row.name === AA_PACKAGE_NAME)
-      if (!aaRow || aaRows.length !== 1 || aaRow.disabled === true) {
-        throw new Error('AA bundle must contain one active canonical plugin entry')
-      }
-      // Preserve the declared bundle. Supply only the actual Harness home and
-      // the physical Python payload path required when Electron uses ASAR.
-      const connectorSourceDir = join(aaLayer.packageDir, 'lib', 'bundled-connector')
-        .replace(/([\\/])app\.asar([\\/])/u, '$1app.asar.unpacked$2')
-      if (!existsSync(join(connectorSourceDir, 'pyproject.toml'))) throw new Error('AA Connector payload is unavailable')
-      aaPatches.push(...aaLayer.patches, { id: AA_ROW_ID, config: {
-        ...rowConfig(aaRow), dshHome: home, connectorSourceDir,
-      } })
-    } catch (cause) {
-      aaFailure = marketFailureMessage(cause)
-    }
-  }
-  const patches: PatchOptions[] = [...ordinary.patches, ...aaPatches]
+  ])
+  const patches: PatchOptions[] = [...ordinary.patches]
   const composedRows = composeEntries([patches])
   assertUniqueEntryIds(composedRows)
   assertEffectiveMarketRows(composedRows, effectiveMarket)
@@ -1175,8 +1127,6 @@ export function prepareDesktopProfile(
     networkExposure,
     lanAddresses,
     settingsDocument,
-    aaEnabled: aaPatches.length > 0,
-    ...(aaFailure === undefined ? {} : { aaFailure }),
     market: desktopMarketSnapshotWithEffective(marketSelection, effectiveMarket),
     requiresDependencyMigration,
     ...(marketFailure === undefined ? {} : { marketFailure }),

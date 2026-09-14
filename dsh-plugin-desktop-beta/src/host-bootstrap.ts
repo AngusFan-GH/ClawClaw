@@ -49,7 +49,7 @@ export interface DesktopHostOptions {
 export async function bootDesktopHost(options: DesktopHostOptions, runtime: DesktopRuntime,
   browserAccess: DesktopBrowserAccess, lanHttps: DesktopLanHttpsRuntime,
   bindHost: (host: DesktopStartupGenerationHost) => void, requestQuit: (code: number) => void,
-): Promise<() => { aaRuntime: boolean; aaOnboarding: boolean }> {
+): Promise<() => object> {
   const { prepared, profilePreferences, homeDir, activeProfileName, pluginManagementStatePath,
     selectionStatePath, marketUserDataDir, releaseUserDataLocations, desktopLaunchEnvironment,
     desktopPnpmBootstrap } = options
@@ -184,15 +184,6 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
         hostCtx.provide('desktopSettingsController', new DesktopSettingsController({
           profiles: hostCtx.desktopProfiles,
           readMarket,
-          readAa: () => ({ requested: currentProfilePreferences.aaEnabled === true, effective: prepared.aaEnabled }),
-          selectAa: async enabled => {
-            await enqueueProfilePreferencesWrite(current => desktopProfilePreferencesFromSettings(
-              current,
-              current.notifications,
-              current.market,
-              enabled,
-            ))
-          },
           readWeb: () => {
             const lan = lanHttps.snapshot()
             const lanOrigins = lan.state === 'ready' && lan.actualPort !== null
@@ -216,7 +207,6 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
               current,
               current.notifications,
               provider,
-              current.aaEnabled === true,
             ))
             return desktopMarketSnapshotWithEffective(
               await selectDesktopMarketProvider(marketUserDataDir, provider),
@@ -265,7 +255,6 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
           ? next as DesktopNotificationSettings
           : ctx.settings.get(DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE) as DesktopNotificationSettings,
         current.market,
-        current.aaEnabled === true,
       ))
       void write.catch((cause: unknown) => {
         ctx.logger.error(
@@ -273,5 +262,5 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
         )
       })
     })
-  return () => ({ aaRuntime: ctx.get('agentsAnywhereRuntime') !== undefined, aaOnboarding: ctx.get('agentsAnywhereOnboarding') !== undefined })
+  return () => ({})
 }

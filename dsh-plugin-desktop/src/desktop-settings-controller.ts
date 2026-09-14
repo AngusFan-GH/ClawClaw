@@ -28,9 +28,6 @@ export interface DesktopSettingsControllerBootstrap {
   /** Generation-scoped profile service. */
   readonly profiles: Pick<DesktopProfiles, 'current' | 'list' | 'create' | 'prepareSelection'>
     & Partial<Pick<DesktopProfiles, 'canDelete' | 'delete'>>
-  /** Read the latest persisted request and the startup-effective provider. */
-  readAa?(): { readonly requested: boolean; readonly effective: boolean }
-  selectAa?(enabled: boolean): Promise<void>
   readMarket(): DesktopMarketSnapshot
   /** Persist an explicit provider request. */
   selectMarket(provider: DesktopMarketProvider): Promise<DesktopMarketSnapshot>
@@ -106,7 +103,6 @@ export class DesktopSettingsController {
           this.bootstrap.profiles.canDelete?.(profile.name) ?? false,
         )),
       ),
-      aa: Object.freeze(this.bootstrap.readAa?.() ?? { requested: false, effective: false }),
       market: projectMarket(this.bootstrap.readMarket(), this.effectiveMarket),
       web: Object.freeze({
         localUrl: web.localUrl,
@@ -151,16 +147,6 @@ export class DesktopSettingsController {
   ): Promise<DesktopSettingsPostResponse<DesktopMarketSelectResponse>> {
     await this.bootstrap.selectMarket(provider)
     const restartRequired = provider !== this.effectiveMarket
-    return Object.freeze({
-      response: Object.freeze({ accepted: true, restartRequired }),
-      ...(restartRequired ? { afterResponse: () => { this.bootstrap.scheduleRestart() } } : {}),
-    })
-  }
-
-  async selectAa(enabled: boolean): Promise<DesktopSettingsPostResponse<DesktopMarketSelectResponse>> {
-    if (!this.bootstrap.selectAa || !this.bootstrap.readAa) throw new Error('AA selection is unavailable')
-    await this.bootstrap.selectAa(enabled)
-    const restartRequired = enabled !== this.bootstrap.readAa().effective
     return Object.freeze({
       response: Object.freeze({ accepted: true, restartRequired }),
       ...(restartRequired ? { afterResponse: () => { this.bootstrap.scheduleRestart() } } : {}),
