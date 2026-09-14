@@ -235,7 +235,7 @@ export function apply(ctx: Context, config: Config): void {
     throw new Error('dsh-plugin-desktop: desktop shell WebServer host does not match networkExposure')
   }
   lanHttps.attach(ctx.webServer.port)
-  const iconFilename = 'app-icon.png'
+  const iconFilename = process.platform === 'darwin' ? 'app-icon-mac.png' : 'app-icon.png'
   const iconPath = fileURLToPath(new URL(`../build/${iconFilename}`, import.meta.url))
   const trayIcons = {
     templatePath: fileURLToPath(new URL('../build/tray-iconTemplate.png', import.meta.url)),
