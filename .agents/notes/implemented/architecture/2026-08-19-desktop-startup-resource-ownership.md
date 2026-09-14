@@ -85,7 +85,7 @@ The existing shutdown deadline remains the outer process-level guarantee. The ge
 
 Focused tests cover one-Host ownership, concurrent final release, shared Host-effect callbacks, concurrent recovery quiescence, timeout behavior, failed-disposal retry, reverse resource release, and failure preservation. Package structure tests verify that `main.ts` delegates pnpm and DSH runtime ownership, shutdown, fail-loud cleanup, and recovery quiescence to the generation module.
 
-The Desktop type check passed. Its full test suite completed 626 tests with 11 platform skips. The root `corepack yarn check` passed with Market 255/255, the Desktop build and tests, runtime closure, CLI, Loader and profile smoke checks, and license verification. An earlier root run hit a Fetch forbidden-port allocation in an unchanged Market HTTP test; that test and the complete root gate both passed on rerun.
+The Desktop type check passed. Its full test suite completed 626 tests with 11 platform skips. The root `corepack pnpm check` passed with Market 255/255, the Desktop build and tests, runtime closure, CLI, Loader and profile smoke checks, and license verification. An earlier root run hit a Fetch forbidden-port allocation in an unchanged Market HTTP test; that test and the complete root gate both passed on rerun.
 
 ## Consequences
 

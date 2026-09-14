@@ -32,7 +32,7 @@
 | 分支 | `fix/windows-installer-upgrade-evidence` |
 | 基线提交 | `2172b1b2f2b0de4c2b3a1d8b55f11f8083a9305e` |
 | Node.js | `v24.15.0` |
-| Yarn | `4.18.0`（通过 Corepack） |
+| pnpm | `4.18.0`（通过 Corepack） |
 | DSH 子模块 | `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`，未修改 |
 
 ## 安装器身份
@@ -145,7 +145,7 @@
 执行：
 
 ```powershell
-corepack yarn check:win-package
+corepack pnpm check:win-package
 ```
 
 结果：

@@ -39,7 +39,7 @@ Boundary result: network content enters product state only after Host validation
 
 ```mermaid
 flowchart TB
-  Root[Root Yarn workspace] --> DesktopPkg[dsh-plugin-desktop]
+  Root[Root pnpm workspace] --> DesktopPkg[dsh-plugin-desktop]
   Root --> Market[dsh-community-market]
   Root --> Fabric[dsh-community-fabric]
   Root --> Upstream[deepseek-harness submodule]
@@ -263,7 +263,7 @@ Diagnostic evidence explains failure but grants no recovery authority. Recovery 
 
 ```mermaid
 flowchart TB
-  Source[Outer Yarn workspace] --> Gate[build + typecheck + unit tests + layout checks]
+  Source[Outer pnpm workspace] --> Gate[build + typecheck + unit tests + layout checks]
   Gate --> Package[electron-builder packaging]
   Package --> Win[Windows installer / portable]
   Package --> Mac[macOS app / installer]

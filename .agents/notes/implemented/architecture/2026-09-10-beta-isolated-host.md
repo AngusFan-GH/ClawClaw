@@ -18,13 +18,13 @@ The private control channel transports native commands and snapshots. Functions 
 From this worktree, install locked dependencies and build the Beta package:
 
 ```sh
-corepack yarn install --immutable
-corepack yarn workspace dsh-plugin-desktop-beta build
-corepack yarn workspace dsh-plugin-desktop-beta prepare:electron-native
-corepack yarn workspace dsh-plugin-desktop-beta start
+corepack pnpm install --immutable
+corepack pnpm workspace dsh-plugin-desktop-beta build
+corepack pnpm workspace dsh-plugin-desktop-beta prepare:electron-native
+corepack pnpm workspace dsh-plugin-desktop-beta start
 ```
 
-The Yarn script works on Windows as well as macOS. Close the running Beta first. Set `DSH_DESKTOP_ISOLATED_HOST=0` to compare with the original in-process path. Do not use the same Profile simultaneously in two instances.
+The pnpm script works on Windows as well as macOS. Close the running Beta first. Set `DSH_DESKTOP_ISOLATED_HOST=0` to compare with the original in-process path. Do not use the same Profile simultaneously in two instances.
 
 ## Verification and promotion
 

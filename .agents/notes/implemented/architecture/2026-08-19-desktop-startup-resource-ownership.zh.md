@@ -85,7 +85,7 @@ flowchart LR
 
 聚焦测试覆盖唯一 Host ownership、并发最终释放、共享 Host-effect 回调、并发恢复静默化、超时行为、失败 disposal 重试、资源逆序释放和失败保留。包结构测试验证 `main.ts` 把 pnpm 与 DSH runtime ownership、shutdown、fail-loud 清理和恢复静默化委托给 generation module。
 
-Desktop 类型检查通过。完整测试完成 626 项，另有 11 项平台跳过。根仓库 `corepack yarn check` 通过，包括 Market 255/255、Desktop 构建和测试、runtime closure、CLI、Loader 与 profile smoke，以及许可证验证。更早一次根检查在未修改的 Market HTTP 测试里随机分配到 Fetch 禁止端口；该测试和完整根 gate 重跑均通过。
+Desktop 类型检查通过。完整测试完成 626 项，另有 11 项平台跳过。根仓库 `corepack pnpm check` 通过，包括 Market 255/255、Desktop 构建和测试、runtime closure、CLI、Loader 与 profile smoke，以及许可证验证。更早一次根检查在未修改的 Market HTTP 测试里随机分配到 Fetch 禁止端口；该测试和完整根 gate 重跑均通过。
 
 ## 后果
 

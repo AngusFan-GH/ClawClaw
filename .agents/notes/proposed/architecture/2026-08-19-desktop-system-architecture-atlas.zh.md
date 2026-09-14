@@ -39,7 +39,7 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-  Root[根 Yarn workspace] --> DesktopPkg[dsh-plugin-desktop]
+  Root[根 pnpm workspace] --> DesktopPkg[dsh-plugin-desktop]
   Root --> Market[dsh-community-market]
   Root --> Fabric[dsh-community-fabric]
   Root --> Upstream[deepseek-harness submodule]
@@ -263,7 +263,7 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-  Source[Outer Yarn workspace] --> Gate[build + typecheck + unit tests + layout checks]
+  Source[Outer pnpm workspace] --> Gate[build + typecheck + unit tests + layout checks]
   Gate --> Package[electron-builder packaging]
   Package --> Win[Windows installer / portable]
   Package --> Mac[macOS app / installer]

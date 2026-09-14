@@ -20,7 +20,7 @@ export interface MacSmokePackageOptions {
   readonly arch: string
   /** Node version executing the package build. */
   readonly nodeVersion: string
-  /** Repository root containing the Yarn workspace. */
+  /** Repository root containing the pnpm workspace. */
   readonly workspaceRoot: string
   /** Desktop package root containing electron-builder configuration. */
   readonly desktopRoot: string
@@ -117,7 +117,7 @@ export function packageMacSmoke(options: MacSmokePackageOptions = defaultOptions
   if (options.env.DSH_PACKAGE_CHECK_ALREADY_RAN !== '1') {
     options.run(
       'corepack',
-      ['yarn', 'workspace', 'dsh-plugin-desktop-beta', 'check:mac-package'],
+      ['pnpm', '--filter', 'dsh-plugin-desktop-beta', 'check:mac-package'],
       options.workspaceRoot,
       cleanEnvironment,
     )

@@ -106,7 +106,7 @@ interface 没有扩大，但 implementation 隐藏了调用者不应该重复实
 - 旧运行不能删除新运行的 marker；
 - 拒绝链接 marker 且不修改链接目标。
 
-桌面 workspace 的类型检查、构建和全量测试均通过。初始化 pinned upstream checkout 后，根目录 `corepack yarn check` 也通过。
+桌面 workspace 的类型检查、构建和全量测试均通过。初始化 pinned upstream checkout 后，根目录 `corepack pnpm check` 也通过。
 
 ## 后果
 

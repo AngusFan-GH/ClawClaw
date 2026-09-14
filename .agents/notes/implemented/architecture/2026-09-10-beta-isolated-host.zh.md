@@ -18,13 +18,13 @@ Beta 默认在 Electron utility process 中启动 Cordis Host。主进程继续�
 在本 worktree 安装锁定依赖并构建 Beta：
 
 ```sh
-corepack yarn install --immutable
-corepack yarn workspace dsh-plugin-desktop-beta build
-corepack yarn workspace dsh-plugin-desktop-beta prepare:electron-native
-corepack yarn workspace dsh-plugin-desktop-beta start
+corepack pnpm install --immutable
+corepack pnpm workspace dsh-plugin-desktop-beta build
+corepack pnpm workspace dsh-plugin-desktop-beta prepare:electron-native
+corepack pnpm workspace dsh-plugin-desktop-beta start
 ```
 
-Yarn 脚本同时适用于 Windows 和 macOS。请先退出已有 Beta。设置 `DSH_DESKTOP_ISOLATED_HOST=0` 可回退到原有同进程路径进行对比。不要让两个实例同时使用同一 Profile。
+pnpm 脚本同时适用于 Windows 和 macOS。请先退出已有 Beta。设置 `DSH_DESKTOP_ISOLATED_HOST=0` 可回退到原有同进程路径进行对比。不要让两个实例同时使用同一 Profile。
 
 ## 验证与推广
 

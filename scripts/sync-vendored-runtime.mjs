@@ -10,10 +10,11 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { basename, join, relative, resolve } from 'node:path'
+import YAML from 'yaml'
 
 const root = resolve(import.meta.dirname, '..')
 const upstreamPath = join(root, 'upstream.json')
-const workspacePath = join(root, 'package.json')
+const pnpmWorkspacePath = join(root, 'pnpm-workspace.yaml')
 const mode = process.argv[2]
 const channelFlag = process.argv.indexOf('--channel')
 const requestedChannel = channelFlag === -1 ? undefined : process.argv[channelFlag + 1]
@@ -26,9 +27,6 @@ const readJson = path => JSON.parse(readFileSync(path, 'utf8'))
 const writeJson = (path, value) => writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`)
 const sha256 = path => createHash('sha256').update(readFileSync(path)).digest('hex')
 const isDshPackage = name => name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-')
-const isDshResolution = selector => selector === '@deepseek-ai/dsh'
-  || selector.startsWith('@deepseek-ai/dsh@')
-  || selector.startsWith('@deepseek-ai/dsh-')
 const fail = message => { throw new Error(`sync-vendored-runtime: ${message}`) }
 
 const upstreamDocument = readJson(upstreamPath)
@@ -37,10 +35,6 @@ if (channel !== 'stable' && channel !== 'beta') fail(`unknown release channel ${
 const upstream = upstreamDocument.channels?.[channel]
 if (upstream === undefined || typeof upstream !== 'object') fail(`missing upstream metadata for ${channel}`)
 const otherChannel = channel === 'stable' ? 'beta' : 'stable'
-const otherVersion = upstreamDocument.channels?.[otherChannel]?.sourceVersion
-if (typeof otherVersion !== 'string' || !/^[0-9A-Za-z][0-9A-Za-z.-]*$/u.test(otherVersion)) {
-  fail(`unsafe ${otherChannel} source version ${JSON.stringify(otherVersion)}`)
-}
 const pluginPaths = [
   join(root, upstream.package, 'package.json'),
   ...(channel === 'beta' ? [join(root, 'dsh-community-market', 'package.json')] : []),
@@ -53,11 +47,8 @@ if (typeof version !== 'string' || !/^[0-9A-Za-z][0-9A-Za-z.-]*$/u.test(version)
 const vendorRelative = `vendor/dsh-runtime/${version}`
 const vendorDirectory = join(root, ...vendorRelative.split('/'))
 const manifestPath = join(vendorDirectory, 'manifest.json')
-const resolutionSelector = (name, range = version) => `${name}@npm:${range}`
-const isChannelResolution = selector => selector.endsWith(`@npm:${version}`)
-  || selector.endsWith(`@npm:^${version}`)
-const isOtherChannelResolution = selector => selector.endsWith(`@npm:${otherVersion}`)
-  || selector.endsWith(`@npm:^${otherVersion}`)
+const readPnpmWorkspace = () => YAML.parse(readFileSync(pnpmWorkspacePath, 'utf8'))
+const writePnpmWorkspace = value => writeFileSync(pnpmWorkspacePath, YAML.stringify(value))
 
 function packageName(filename) {
   const suffix = `-${version}.tgz`
@@ -71,18 +62,20 @@ function packageName(filename) {
 
 function expectedResolution(entry) {
   const source = `file:${vendorRelative}/${entry.filename}`
+  return source
+}
+
+function expectedPatch(entry) {
   const unscoped = entry.name.slice('@deepseek-ai/'.length)
-  const patchRelative = `patches/${unscoped}@${version}.patch`
-  return existsSync(join(root, patchRelative))
-    ? `patch:${entry.name}@${source.replace(':', '%3A')}#./${patchRelative}`
-    : source
+  const patch = `patches/${unscoped}@${version}.patch`
+  return existsSync(join(root, patch)) ? patch : undefined
 }
 
 function writeVendor() {
   const packedDirectory = join(root, 'deepseek-harness', 'dist', 'npm')
   const orderPath = join(packedDirectory, 'publish-order.txt')
   if (!existsSync(orderPath)) {
-    fail('upstream release tarballs are missing; run yarn upstream:prepare-runtime first')
+    fail('upstream release tarballs are missing; run pnpm run upstream:prepare-runtime first')
   }
   const filenames = readFileSync(orderPath, 'utf8').trim().split(/\r?\n/u).filter(Boolean)
   if (filenames.length === 0 || new Set(filenames).size !== filenames.length) {
@@ -128,15 +121,21 @@ function writeVendor() {
   upstream.runtimeSource = `${vendorRelative}/manifest.json`
   writeJson(upstreamPath, upstreamDocument)
 
-  const workspace = readJson(workspacePath)
-  const resolutions = Object.fromEntries(Object.entries(workspace.resolutions ?? {})
-    .filter(([selector]) => !isDshResolution(selector) || isOtherChannelResolution(selector)))
-  for (const entry of packages) {
-    resolutions[resolutionSelector(entry.name)] = expectedResolution(entry)
-    resolutions[resolutionSelector(entry.name, `^${version}`)] = expectedResolution(entry)
+  const pnpmWorkspace = readPnpmWorkspace()
+  const overrides = Object.fromEntries(Object.entries(pnpmWorkspace.overrides ?? {})
+    .filter(([name]) => !isDshPackage(name)))
+  const patchedDependencies = { ...(pnpmWorkspace.patchedDependencies ?? {}) }
+  for (const name of Object.keys(patchedDependencies)) {
+    if (isDshPackage(name.slice(0, name.lastIndexOf('@')))) delete patchedDependencies[name]
   }
-  workspace.resolutions = resolutions
-  writeJson(workspacePath, workspace)
+  for (const entry of packages) {
+    overrides[entry.name] = expectedResolution(entry)
+    const patch = expectedPatch(entry)
+    if (patch !== undefined) patchedDependencies[`${entry.name}@${version}`] = patch
+  }
+  pnpmWorkspace.overrides = overrides
+  pnpmWorkspace.patchedDependencies = patchedDependencies
+  writePnpmWorkspace(pnpmWorkspace)
 
   const packageNames = new Set(packages.map(entry => entry.name))
   for (const path of pluginPaths) {
@@ -167,8 +166,9 @@ function checkVendor() {
   }
   if (!Array.isArray(manifest.packages) || manifest.packages.length === 0) fail('runtime manifest has no packages')
 
-  const workspace = readJson(workspacePath)
-  const resolutions = workspace.resolutions ?? {}
+  const pnpmWorkspace = readPnpmWorkspace()
+  const overrides = pnpmWorkspace.overrides ?? {}
+  const patchedDependencies = pnpmWorkspace.patchedDependencies ?? {}
   const expectedFiles = new Set(['manifest.json'])
   const names = new Set()
   for (const entry of manifest.packages) {
@@ -182,14 +182,17 @@ function checkVendor() {
     if (statSync(path).size !== entry.size || sha256(path) !== entry.sha256) {
       fail(`vendored tarball integrity differs for ${entry.filename}`)
     }
-    if (resolutions[resolutionSelector(entry.name)] !== expectedResolution(entry)
-      || resolutions[resolutionSelector(entry.name, `^${version}`)] !== expectedResolution(entry)) {
-      fail(`workspace resolution differs for ${entry.name}`)
+    if (overrides[entry.name] !== expectedResolution(entry)) {
+      fail(`workspace override differs for ${entry.name}`)
+    }
+    const patch = expectedPatch(entry)
+    if ((patch === undefined && patchedDependencies[`${entry.name}@${version}`] !== undefined)
+      || (patch !== undefined && patchedDependencies[`${entry.name}@${version}`] !== patch)) {
+      fail(`workspace patch differs for ${entry.name}`)
     }
   }
-  for (const selector of Object.keys(resolutions).filter(isChannelResolution)) {
-    const name = selector.slice(0, selector.indexOf('@npm:'))
-    if (!names.has(name)) fail(`workspace has a stale ${channel} DSH resolution for ${selector}`)
+  for (const name of Object.keys(overrides).filter(isDshPackage)) {
+    if (!names.has(name)) fail(`workspace has a stale ${channel} DSH override for ${name}`)
   }
   for (const entry of readdirSync(vendorDirectory, { withFileTypes: true })) {
     if (!entry.isFile() || !expectedFiles.has(entry.name)) fail(`unexpected vendored runtime entry ${entry.name}`)

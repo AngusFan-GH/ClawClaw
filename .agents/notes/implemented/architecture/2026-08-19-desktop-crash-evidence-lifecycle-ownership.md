@@ -106,7 +106,7 @@ The focused tests cover:
 - an older run failing to remove a newer run's marker;
 - linked marker rejection without changing the linked target.
 
-The desktop package passed its type check, build, and full test suite. The root `corepack yarn check` also passed after initializing the pinned upstream checkout.
+The desktop package passed its type check, build, and full test suite. The root `corepack pnpm check` also passed after initializing the pinned upstream checkout.
 
 ## Consequences
 

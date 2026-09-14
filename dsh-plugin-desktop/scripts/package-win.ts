@@ -26,7 +26,7 @@ export interface WindowsPackageOptions {
   readonly arch: string
   /** Node version executing the package build. */
   readonly nodeVersion: string
-  /** Repository root containing the Yarn workspace. */
+  /** Repository root containing the pnpm workspace. */
   readonly workspaceRoot: string
   /** Desktop package root containing electron-builder configuration. */
   readonly desktopRoot: string
@@ -142,7 +142,7 @@ export function packageWindowsArtifact(
         '/d',
         '/s',
         '/c',
-        'corepack yarn workspace dsh-plugin-desktop check:win-package',
+        'corepack pnpm workspace dsh-plugin-desktop check:win-package',
       ],
       options.workspaceRoot,
       cleanEnvironment,

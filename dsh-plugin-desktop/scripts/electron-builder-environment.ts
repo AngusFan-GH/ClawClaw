@@ -2,7 +2,7 @@
 
 /**
  * Keep the Beta package on Electron Builder's bounded physical traversal.
- * Its Yarn Berry collector delegates to `npm list --all`, which expands the
+ * Its pnpm collector delegates to `npm list --all`, which expands the
  * outer stable and Beta workspace instead of the selected app's runtime graph.
  */
 export function electronBuilderEnvironment(

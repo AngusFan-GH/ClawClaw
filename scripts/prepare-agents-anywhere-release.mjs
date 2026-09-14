@@ -17,13 +17,14 @@ const peerPackages = ['@deepseek-ai/dsh-typert-protocol', '@deepseek-ai/dsh-llm'
 
 function invocation(name, args) {
   if (name === 'corepack') {
-    const yarnEntry = process.env.COREPACK_ROOT
-      ? join(process.env.COREPACK_ROOT, 'dist', 'yarn.js')
+    const packageManager = args[0]
+    const packageManagerEntry = process.env.COREPACK_ROOT
+      ? join(process.env.COREPACK_ROOT, 'dist', `${packageManager}.js`)
       : /\.[cm]?js$/u.test(process.env.npm_execpath ?? '') ? process.env.npm_execpath : undefined
-    if (!yarnEntry || !existsSync(yarnEntry) || args[0] !== 'yarn') {
-      throw new Error('Run this script through corepack yarn aa:prepare-release')
+    if (!['pnpm', 'yarn'].includes(packageManager) || !packageManagerEntry || !existsSync(packageManagerEntry)) {
+      throw new Error('Run this script through Corepack pnpm or Yarn')
     }
-    return [process.execPath, [yarnEntry, ...args.slice(1)]]
+    return [process.execPath, [packageManagerEntry, ...args.slice(1)]]
   }
   return [name, args]
 }
@@ -132,7 +133,7 @@ function prepare() {
     console.log(`Reusing verified AA artifact ${currentProvenance.artifact}`)
     return
   }
-  const snapshotPaths = [...packagePaths, 'yarn.lock', 'vendor/agents-anywhere/provenance.json']
+  const snapshotPaths = [...packagePaths, 'pnpm-lock.yaml', 'vendor/agents-anywhere/provenance.json']
   const snapshots = new Map(snapshotPaths.map(path => [path, readFileSync(join(root, path))]))
   let targetArtifact
   let published = false
@@ -191,13 +192,13 @@ function prepare() {
       manifest.dependencies['@agents-anywhere/dsh-bridge-next'] = `file:../vendor/agents-anywhere/${artifactName}`
       writeFileSync(join(root, path), `${JSON.stringify(manifest, null, 2)}\n`)
     }
-    run('corepack', ['yarn', 'install', '--mode=skip-build'], root)
+    run('corepack', ['pnpm', 'install', '--ignore-scripts', '--no-frozen-lockfile'], root)
     published = true
     console.log(`Agents Anywhere release package prepared from ${commit} (${destination})`)
   } catch (error) {
     for (const [path, contents] of snapshots) writeFileSync(join(root, path), contents)
     if (targetArtifact && !published) rmSync(targetArtifact, { force: true })
-    console.error('AA preparation failed; manifests and lockfile restored. Run yarn install --immutable before retrying if installation started.')
+    console.error('AA preparation failed; manifests and lockfile restored. Run pnpm install --frozen-lockfile before retrying if installation started.')
     throw error
   } finally {
     rmSync(stagingRoot, { recursive: true, force: true })
