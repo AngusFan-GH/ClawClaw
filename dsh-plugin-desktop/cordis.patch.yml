@@ -26,3 +26,8 @@
     printUrl: false
     surfaceContext: true
     trustedHosts: []
+
+# ClawClaw does not upload user feedback or session history to an upstream
+# telemetry endpoint. Products may opt in through an explicit profile override.
+- id: session-telemetry-otel
+  disabled: true
