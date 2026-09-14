@@ -58,6 +58,7 @@ function replaceHeroCopy(root: Node = document): void {
 
 /** Apply the product identity without mutating the pinned upstream web client. */
 export function applyClawClawBrand(ctx: ClientContext): void {
+  if (typeof document === 'undefined') return
   document.title = 'ClawClaw'
   let favicon = document.querySelector<HTMLLinkElement>('link[rel~="icon"]')
   if (favicon === null) {

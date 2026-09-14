@@ -359,7 +359,7 @@
       "!node_modules/fs-ext/build/**"
     ],
     "mac": {
-      "artifactName": "DSH-Desktop-Beta-${version}-${arch}.${ext}",
+      "artifactName": "ClawClaw-Beta-${version}-${arch}.${ext}",
       "target": [
         "dir"
       ],
@@ -392,7 +392,7 @@
           ]
         }
       ],
-      "artifactName": "DSH-Desktop-Beta-${version}-${arch}-Portable.${ext}",
+      "artifactName": "ClawClaw-Beta-${version}-${arch}-Portable.${ext}",
       "icon": "build/app-icon.ico",
       "asar": false
     },
@@ -408,7 +408,7 @@
       "differentialPackage": false,
       "shortcutName": "ClawClaw Beta",
       "useZip": false,
-      "artifactName": "DSH-Desktop-Beta-${version}-${arch}-Setup.${ext}"
+      "artifactName": "ClawClaw-Beta-${version}-${arch}-Setup.${ext}"
     },
     "linux": {
       "target": [

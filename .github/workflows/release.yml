@@ -1,0 +1,78 @@
+name: Release ClawClaw Desktop
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Release channel
+        required: true
+        type: choice
+        options: [stable, beta]
+      version:
+        description: Package version to release
+        required: true
+  push:
+    tags: ['clawclaw-v*']
+permissions: { contents: write }
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            package: ${{ (inputs.channel == 'beta' || contains(github.ref_name, '-beta')) && 'dsh-plugin-desktop-beta' || 'dsh-plugin-desktop' }}
+            artifact: macos
+          - os: windows-latest
+            package: ${{ (inputs.channel == 'beta' || contains(github.ref_name, '-beta')) && 'dsh-plugin-desktop-beta' || 'dsh-plugin-desktop' }}
+            artifact: windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with: { submodules: recursive }
+      - uses: actions/setup-node@v6
+        with: { node-version: 22.23.2 }
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run upstream:prepare-runtime
+      - name: Build signed macOS DMG
+        if: matrix.artifact == 'macos'
+        run: pnpm --filter ${{ matrix.package }} run dist:mac
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      - name: Build Windows installer
+        if: matrix.artifact == 'windows'
+        run: pnpm --filter ${{ matrix.package }} run dist:win
+      - uses: actions/upload-artifact@v4
+        with: { name: ${{ matrix.artifact }}, path: ${{ matrix.package }}/dist/**/*.dmg\n${{ matrix.package }}/dist/**/*.exe }
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: 22.23.2 }
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts }
+      - name: Assemble release and static manifest
+        shell: bash
+        env: { CHANNEL: ${{ inputs.channel || (contains(github.ref_name, '-beta') && 'beta' || 'stable') }} }
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' \) -exec cp {} release/ \;
+          node scripts/generate-release-manifest.mjs --channel "$CHANNEL" --directory release --output release/release.json --base-url "https://clawclaw.xzinfra.com/updates/$CHANNEL"
+      - uses: actions/upload-artifact@v4
+        with: { name: release, path: release/ }
+      - name: Upload release channel to OSS
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          CHANNEL: ${{ inputs.channel || (contains(github.ref_name, '-beta') && 'beta' || 'stable') }}
+        run: |
+          curl -sL https://gosspublic.alicdn.com/ossutil/install.sh | sudo bash
+          printf '[Credentials]\nlanguage=EN\nendpoint=oss-cn-hangzhou.aliyuncs.com\naccessKeyID=%s\naccessKeySecret=%s\n' "$OSS_ACCESS_KEY_ID" "$OSS_ACCESS_KEY_SECRET" > "$HOME/.ossutilconfig"
+          ossutil cp -r -f --meta='Cache-Control:no-cache,no-store,must-revalidate' release/ "oss://xzinfra-clawclaw/updates/$CHANNEL/"

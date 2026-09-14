@@ -1,27 +1,18 @@
 /** Headless, confirmation-gated downloads for ClawClaw installers. */
 
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { chmod, lstat, mkdir, open, readFile, rename, unlink } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import {
   compareSemVerVersions,
-  DESKTOP_RELEASE_CHANNEL_HEADER,
+  fetchDesktopReleaseManifest,
   parseSemVer,
   type DesktopReleaseChannel,
 } from './update-checker.ts'
 
 /** Desktop platforms with a fixed installer download endpoint. */
 export type DesktopDownloadPlatform = 'darwin' | 'win32'
-
-/** Fixed download endpoints that record one user-confirmed installer download. */
-export const DESKTOP_DOWNLOAD_URLS: Readonly<Record<DesktopDownloadPlatform, string>> = {
-  darwin: 'https://www.dshdesktop.cn/api/downloads/mac',
-  win32: 'https://www.dshdesktop.cn/api/downloads/windows',
-}
-
-/** Header pinning a download request and response to the checked release. */
-export const DESKTOP_TARGET_VERSION_HEADER = 'X-DSH-Desktop-Target-Version'
 
 /** Maximum accepted installer size, in bytes. */
 export const MAX_UPDATE_DOWNLOAD_BYTES = 1024 * 1024 * 1024
@@ -119,16 +110,15 @@ export async function downloadDesktopUpdate(options: DownloadDesktopUpdateOption
   const paths = await prepareDownloadPaths(destinationPath)
   throwIfAborted(options.signal)
 
+  const manifest = await fetchDesktopReleaseManifest(channel, options.request, options.signal)
+  if (manifest === null || manifest.version !== options.version) {
+    throw new UpdateDownloadError('invalid-artifact', 'The selected ClawClaw release is no longer available.')
+  }
+  const artifact = manifest.artifacts[platform]
   let response: Response
   try {
-    response = await options.request(DESKTOP_DOWNLOAD_URLS[platform], {
-      method: 'GET',
-      headers: {
-        [DESKTOP_RELEASE_CHANNEL_HEADER]: channel,
-        [DESKTOP_TARGET_VERSION_HEADER]: options.version,
-      },
-      cache: 'no-store',
-      redirect: 'follow',
+    response = await options.request(artifact.url, {
+      method: 'GET', cache: 'no-store', redirect: 'error',
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     })
   } catch (cause) {
@@ -152,6 +142,7 @@ export async function downloadDesktopUpdate(options: DownloadDesktopUpdateOption
   try {
     await writeResponseBody(paths.temporary, response.body, options.signal)
     throwIfAborted(options.signal)
+    await validateArtifactChecksum(paths.temporary, artifact.sha512)
     await validateArtifact(paths.temporary, platform)
     throwIfAborted(options.signal)
     await unlinkIfPresent(paths.completed)
@@ -180,7 +171,7 @@ export function desktopUpdateFilename(
   validatedVersion(version, channel)
   const extension = platform === 'darwin' ? 'dmg' : 'exe'
   const platformName = platform === 'darwin' ? 'mac' : 'windows'
-  const product = channel === 'beta' ? 'DSH-Desktop-Beta' : 'DSH-Desktop'
+  const product = channel === 'beta' ? 'ClawClaw-Beta' : 'ClawClaw'
   return `${product}-${version}-${platformName}.${extension}`
 }
 
@@ -453,6 +444,22 @@ async function writeAll(
     if (result.bytesWritten === 0) throw new Error('The update installer write made no progress.')
     offset += result.bytesWritten
   }
+}
+
+async function validateArtifactChecksum(filename: string, expected: string): Promise<void> {
+  const hash = createHash('sha512')
+  const handle = await open(filename, 'r')
+  try {
+    const buffer = Buffer.allocUnsafe(1024 * 1024)
+    let position = 0
+    while (true) {
+      const result = await handle.read(buffer, 0, buffer.length, position)
+      if (result.bytesRead === 0) break
+      hash.update(buffer.subarray(0, result.bytesRead))
+      position += result.bytesRead
+    }
+  } finally { await handle.close() }
+  if (hash.digest('base64') !== expected) throw new UpdateDownloadError('invalid-artifact', 'The update installer checksum does not match the published release.')
 }
 
 async function validateArtifact(filename: string, platform: DesktopDownloadPlatform): Promise<void> {

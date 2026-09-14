@@ -11,7 +11,7 @@ import {
 
 describe('Desktop relaunch arguments', () => {
   const argv = [
-    '/Applications/DSH Desktop.app/Contents/MacOS/DSH Desktop',
+    '/Applications/ClawClaw.app/Contents/MacOS/ClawClaw',
     'desktop-main.cjs',
     '--profile=work',
     DESKTOP_RECOVERY_MODE_ARGUMENT,

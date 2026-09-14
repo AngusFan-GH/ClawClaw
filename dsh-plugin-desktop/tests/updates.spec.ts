@@ -15,7 +15,6 @@ import type {
   DesktopTrayItem,
 } from '../src/runtime.ts'
 import {
-  DESKTOP_RELEASE_CHANNEL_HEADER,
   type UpdateCheckResult,
 } from '../src/update-checker.ts'
 import { apply, Config, inject, type Config as UpdateConfig } from '../src/updates.ts'
@@ -27,8 +26,12 @@ const testConfig: UpdateConfig = {
   requestTimeoutMs: 1000,
 }
 
-function versionResponse(version: unknown): Response {
-  return Response.json({ version })
+const RELEASE_SHA512 = Buffer.alloc(64, 3).toString('base64')
+function versionResponse(version: unknown, channel: 'stable' | 'beta' = 'stable'): Response {
+  return Response.json({ version, channel, artifacts: {
+    darwin: { url: 'https://clawclaw.xzinfra.com/releases/ClawClaw.dmg', sha512: RELEASE_SHA512, size: 1 },
+    win32: { url: 'https://clawclaw.xzinfra.com/releases/ClawClaw.exe', sha512: RELEASE_SHA512, size: 1 },
+  } })
 }
 
 interface Harness {
@@ -146,11 +149,8 @@ afterEach(() => {
 
 describe('desktop update Host plugin', () => {
   it('checks Beta automatically and installs an older stable release only through the explicit action', async () => {
-    const request = vi.fn(async (_url: string, init: RequestInit) => {
-      const channel = new Headers(init.headers).get(DESKTOP_RELEASE_CHANNEL_HEADER)
-      return Response.json(channel === 'beta'
-        ? { version: '2.0.6-beta.1', channel: 'beta' }
-        : { version: '2.0.4', channel: 'stable' })
+    const request = vi.fn(async (_url: string, _init: RequestInit) => {
+      return _url.includes('/beta/') ? versionResponse('2.0.6-beta.1', 'beta') : versionResponse('2.0.4', 'stable')
     })
     const harness = await createHarness({
       releaseChannel: 'beta',
@@ -170,9 +170,9 @@ describe('desktop update Host plugin', () => {
       expect.any(AbortSignal),
       'stable',
     )
-    const channels = request.mock.calls.map(([, init]) => new Headers(init.headers).get(DESKTOP_RELEASE_CHANNEL_HEADER))
-    expect(channels).toContain('beta')
-    expect(channels).toContain('stable')
+    const urls = request.mock.calls.map(([url]) => url)
+    expect(urls.some(url => url.includes('/beta/'))).toBe(true)
+    expect(urls.some(url => url.includes('/stable/'))).toBe(true)
     await harness.dispose()
   })
 
@@ -291,13 +291,13 @@ describe('desktop update Host plugin', () => {
     await vi.advanceTimersByTimeAsync(testConfig.initialDelayMs)
     await vi.waitFor(() => {
       expect(harness.notifications).toEqual([{
-        title: 'DSH Desktop Update Available',
-        body: 'Version 2.1.0 is ready to download. Open DSH Desktop to continue.',
+        title: 'ClawClaw Update Available',
+        body: 'Version 2.1.0 is ready to download. Open ClawClaw to continue.',
       }])
     })
     expect(harness.confirmDownload).not.toHaveBeenCalled()
     expect(harness.downloadAndOpen).not.toHaveBeenCalled()
-    expect(harness.tray.label()).toBe('DSH Desktop 2.1.0 Available')
+    expect(harness.tray.label()).toBe('ClawClaw 2.1.0 Available')
     await vi.waitFor(async () => {
       expect(JSON.parse(await readFile(harness.statePath, 'utf8'))).toEqual({
         version: 3,
@@ -332,14 +332,14 @@ describe('desktop update Host plugin', () => {
     expect(version).toBe('2.1.0')
     expect(signal).toBeInstanceOf(AbortSignal)
     expect(signal.aborted).toBe(false)
-    expect(harness.tray.label()).toBe('Downloading DSH Desktop 2.1.0…')
+    expect(harness.tray.label()).toBe('Downloading ClawClaw 2.1.0…')
     expect(harness.notifications).toEqual([])
 
     resolveDownload()
     await pending
-    await vi.waitFor(() => { expect(harness.tray.label()).toBe('DSH Desktop 2.1.0 Available') })
+    await vi.waitFor(() => { expect(harness.tray.label()).toBe('ClawClaw 2.1.0 Available') })
     expect(harness.notifications).toEqual([])
-    expect(harness.tray.label()).toBe('DSH Desktop 2.1.0 Available')
+    expect(harness.tray.label()).toBe('ClawClaw 2.1.0 Available')
   })
 
   it('treats a manual available-version selection as a fresh confirmation', async () => {
@@ -355,7 +355,7 @@ describe('desktop update Host plugin', () => {
     await harness.tray.invoke()
     expect(confirmDownload).toHaveBeenCalledOnce()
     expect(harness.downloadAndOpen).not.toHaveBeenCalled()
-    expect(harness.tray.label()).toBe('DSH Desktop 2.1.0 Available')
+    expect(harness.tray.label()).toBe('ClawClaw 2.1.0 Available')
 
     await harness.tray.invoke()
     expect(confirmDownload).toHaveBeenCalledTimes(2)
@@ -379,7 +379,7 @@ describe('desktop update Host plugin', () => {
     expect(harness.confirmDownload).toHaveBeenCalledWith('2.1.0')
     expect(harness.downloadAndOpen).not.toHaveBeenCalled()
     expect(harness.showManualCheckResult).not.toHaveBeenCalled()
-    expect(harness.tray.label()).toBe('DSH Desktop 2.2.0 Available')
+    expect(harness.tray.label()).toBe('ClawClaw 2.2.0 Available')
   })
 
   it.each([
@@ -468,7 +468,7 @@ describe('desktop update Host plugin', () => {
 
     expect(harness.notifications).toEqual([])
     expect(harness.confirmDownload).not.toHaveBeenCalled()
-    expect(harness.tray.label()).toBe('DSH Desktop 2.1.0 Available')
+    expect(harness.tray.label()).toBe('ClawClaw 2.1.0 Available')
   })
 
   it('does not prompt on a platform without a fixed download entry', async () => {
@@ -511,7 +511,7 @@ describe('desktop update Host plugin', () => {
     expect(harness.downloadAndOpen).toHaveBeenCalledOnce()
     expect(harness.notifications).toEqual([])
     expect(harness.warnings).toEqual([])
-    expect(harness.tray.label()).toBe('DSH Desktop 2.1.0 Available')
+    expect(harness.tray.label()).toBe('ClawClaw 2.1.0 Available')
   })
 
   it('aborts checks and downloads and removes the tray item on effect disposal', async () => {

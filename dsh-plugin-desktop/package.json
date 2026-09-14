@@ -390,7 +390,7 @@
           ]
         }
       ],
-      "artifactName": "DSH-Desktop-${version}-${arch}-Portable.${ext}",
+      "artifactName": "ClawClaw-${version}-${arch}-Portable.${ext}",
       "icon": "build/app-icon.ico"
     },
     "nsis": {
@@ -407,7 +407,7 @@
       "shortcutName": "ClawClaw",
       "uninstallerIcon": "build/app-icon.ico",
       "useZip": false,
-      "artifactName": "DSH-Desktop-${version}-${arch}-Setup.${ext}"
+      "artifactName": "ClawClaw-${version}-${arch}-Setup.${ext}"
     },
     "linux": {
       "target": [

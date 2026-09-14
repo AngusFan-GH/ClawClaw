@@ -11,23 +11,23 @@ describe('Desktop installer quit request', () => {
   it('accepts only the dedicated flag on Windows', () => {
     expect(DESKTOP_INSTALLER_QUIT_FLAG).toBe('--dsh-installer-quit')
     expect(isDesktopInstallerQuitRequest(
-      ['DSH Desktop.exe', DESKTOP_INSTALLER_QUIT_FLAG],
+      ['ClawClaw.exe', DESKTOP_INSTALLER_QUIT_FLAG],
       'win32',
     )).toBe(true)
-    expect(isDesktopInstallerQuitRequest(['DSH Desktop.exe', '--quit'], 'win32')).toBe(false)
+    expect(isDesktopInstallerQuitRequest(['ClawClaw.exe', '--quit'], 'win32')).toBe(false)
     expect(isDesktopInstallerQuitRequest(
-      ['DSH Desktop', DESKTOP_INSTALLER_QUIT_FLAG],
+      ['ClawClaw', DESKTOP_INSTALLER_QUIT_FLAG],
       'darwin',
     )).toBe(false)
   })
 
   it('distinguishes background Node re-entry from an explicit application launch', () => {
-    expect(isDesktopBackgroundNodeRequest(['DSH Desktop.exe'])).toBe(false)
-    expect(isDesktopBackgroundNodeRequest(['DSH Desktop.exe', '--profile', 'desktop'])).toBe(false)
-    expect(isDesktopBackgroundNodeRequest(['DSH Desktop.exe', 'C:\\app\\pnpm\\bin\\pnpm.mjs', 'install'])).toBe(true)
-    expect(isDesktopBackgroundNodeRequest(['DSH Desktop.exe', '--require', 'C:\\runtime\\clear-env.cjs'])).toBe(true)
-    expect(isDesktopBackgroundNodeRequest(['DSH Desktop.exe', '--import=file:///runtime/clear-env.mjs'])).toBe(true)
-    expect(isDesktopBackgroundNodeRequest(['DSH Desktop.exe', '--expose-internals', 'desktop-cli.js'])).toBe(true)
+    expect(isDesktopBackgroundNodeRequest(['ClawClaw.exe'])).toBe(false)
+    expect(isDesktopBackgroundNodeRequest(['ClawClaw.exe', '--profile', 'desktop'])).toBe(false)
+    expect(isDesktopBackgroundNodeRequest(['ClawClaw.exe', 'C:\\app\\pnpm\\bin\\pnpm.mjs', 'install'])).toBe(true)
+    expect(isDesktopBackgroundNodeRequest(['ClawClaw.exe', '--require', 'C:\\runtime\\clear-env.cjs'])).toBe(true)
+    expect(isDesktopBackgroundNodeRequest(['ClawClaw.exe', '--import=file:///runtime/clear-env.mjs'])).toBe(true)
+    expect(isDesktopBackgroundNodeRequest(['ClawClaw.exe', '--expose-internals', 'desktop-cli.js'])).toBe(true)
   })
 
   it('handles first- and second-instance requests without showing a window', () => {

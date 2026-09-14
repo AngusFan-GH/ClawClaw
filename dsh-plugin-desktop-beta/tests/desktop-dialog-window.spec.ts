@@ -179,7 +179,7 @@ describe('DesktopDialogWindow', () => {
     const result = new DesktopDialogWindow({
       type: 'warning',
       title: 'Profile compatibility warning',
-      message: 'Current Profile “work” was used by DSH Desktop Beta.',
+      message: 'Current Profile “work” was used by ClawClaw Beta.',
       detail: 'Previous DSH: 0.1.2-alpha.5\nCurrent DSH: 0.1.1-rc.2',
       advisory: 'Warning: DSH version differences may make plugins unavailable.',
       presentation: 'profile-compatibility',
