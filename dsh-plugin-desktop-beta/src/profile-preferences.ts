@@ -318,6 +318,17 @@ export function readDesktopProfilePreferences(
   assertPrivateDirectory(profileRoot)
   const text = readStateBytes(path)
   if (text === undefined) return undefined
+  // Agents Anywhere is no longer part of Desktop. Discard its old, isolated
+  // preference record rather than treating a removed feature as a boot failure.
+  try {
+    const value = JSON.parse(text) as unknown
+    if (isRecord(value) && Object.hasOwn(value, 'aaEnabled')) {
+      unlinkSync(path)
+      return undefined
+    }
+  } catch {
+    // parseState below retains the strict diagnostic for malformed state.
+  }
   return parseState(text, desktopProfilePreferencesProfileHash(profileDir))
 }
 
