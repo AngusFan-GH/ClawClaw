@@ -148,7 +148,7 @@ export const REQUIRED_PACKAGED_RUNTIME_ENTRIES = [
 
 /** macOS-only desktop assets loaded by nativeImage from physical paths. */
 export const REQUIRED_MACOS_UNPACKED_RUNTIME_ENTRIES = [
-  'build/app-icon-mac.png',
+  'build/app-icon.png',
   'build/tray-iconTemplate.png',
   'build/tray-iconTemplate@2x.png',
 ] as const
