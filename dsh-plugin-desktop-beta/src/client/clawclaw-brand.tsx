@@ -15,30 +15,20 @@ function ClawClawBrandName() {
   return <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.03em' }}>ClawClaw</span>
 }
 
-function replaceSidebarBrand(): void {
-  const button = [...document.querySelectorAll<HTMLButtonElement>('button')].find(candidate => {
-    const box = candidate.getBoundingClientRect()
-    return box.left < 24 && box.top < 72 && box.width >= 28 && box.height < 48
+function replaceCollapsedSidebarBrand(): void {
+  const toggle = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => {
+    const label = button.getAttribute('aria-label')
+    return label === '打开侧边栏' || label === '收起侧边栏' || label === 'Open sidebar' || label === 'Collapse sidebar'
   })
-  if (button === undefined || button.dataset.clawclawBrand === 'true') return
-  button.dataset.clawclawBrand = 'true'
-  button.replaceChildren()
-  const identity = document.createElement('span')
-  identity.style.cssText = 'display:flex;align-items:center;gap:8px;color:inherit'
+  const mark = toggle?.querySelector<HTMLSpanElement>('span[aria-hidden="true"]')
+  if (mark === null || mark === undefined || mark.dataset.clawclawBrand === 'true') return
+  mark.dataset.clawclawBrand = 'true'
   const icon = document.createElement('img')
   icon.src = CLAWCLAW_ICON
   icon.width = 24
   icon.height = 24
   icon.alt = ''
-  if (button.getBoundingClientRect().width >= 80) {
-    const name = document.createElement('span')
-    name.textContent = 'ClawClaw'
-    name.style.cssText = 'font-size:16px;font-weight:700;letter-spacing:-0.03em'
-    identity.append(icon, name)
-  } else {
-    identity.style.gap = '0'
-  }
-  button.append(identity)
+  mark.replaceChildren(icon)
 }
 
 function replaceHeroCopy(root: Node = document): void {
@@ -77,10 +67,10 @@ export function applyClawClawBrand(ctx: ClientContext): void {
   ctx.slots.inject('sidebar.brand.name', () => ctx.slots.register({ name: 'sidebar.brand.name' }, ClawClawBrandName))
 
   replaceHeroCopy()
-  replaceSidebarBrand()
+  replaceCollapsedSidebarBrand()
   const observer = new MutationObserver(records => {
     for (const record of records) replaceHeroCopy(record.target)
-    replaceSidebarBrand()
+    replaceCollapsedSidebarBrand()
   })
   observer.observe(document.body, { childList: true, subtree: true })
   ctx.effect(() => () => { observer.disconnect(); heroStyle.remove() }, 'dsh-plugin-desktop: ClawClaw page identity')
