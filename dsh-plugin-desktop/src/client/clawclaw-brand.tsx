@@ -58,15 +58,18 @@ function replaceCollapsedSidebarBrand(): void {
   mark.replaceChildren(icon)
 }
 
-function replaceHeroCopy(root: Node = document): void {
-  const replacements = new Map([
-    ['探索未至之境', 'ClawClaw，万物皆有回响'],
-    ['Into the Unknown', 'ClawClaw, every thought finds an answer'],
-  ])
+const CLAWCLAW_COPY_REPLACEMENTS = new Map([
+  ['探索未至之境', 'ClawClaw，万物皆有回响'],
+  ['Into the Unknown', 'ClawClaw, every thought finds an answer'],
+  ['深度求索中...', '正在思考...'],
+  ['Deep diving...', 'Thinking...'],
+])
+
+function replaceProductCopy(root: Node = document): void {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
     const text = node.textContent ?? ''
-    const replacement = replacements.get(text)
+    const replacement = CLAWCLAW_COPY_REPLACEMENTS.get(text)
     if (replacement !== undefined) node.textContent = replacement
     if (text === '预览版' || text === 'Preview') {
       const badge = node.parentElement
@@ -93,11 +96,11 @@ export function applyClawClawBrand(ctx: ClientContext): void {
   ctx.slots.inject('sidebar.brand.mark', () => ctx.slots.register({ name: 'sidebar.brand.mark' }, ClawClawBrandMark))
   ctx.slots.inject('sidebar.brand.name', () => ctx.slots.register({ name: 'sidebar.brand.name' }, ClawClawBrandName))
 
-  replaceHeroCopy()
+  replaceProductCopy()
   replaceExpandedSidebarBrand()
   replaceCollapsedSidebarBrand()
   const observer = new MutationObserver(records => {
-    for (const record of records) replaceHeroCopy(record.target)
+    for (const record of records) replaceProductCopy(record.target)
     replaceExpandedSidebarBrand()
     replaceCollapsedSidebarBrand()
   })

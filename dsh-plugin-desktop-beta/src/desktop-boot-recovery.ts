@@ -92,6 +92,14 @@ export const DESKTOP_BOOT_RECOVERY_SCRIPT = `(() => {
     if (content !== undefined) node.textContent = content;
     return node;
   };
+  const applyBrand = () => {
+    const root = document.querySelector('[data-dsh-boot]');
+    if (!root) return;
+    const wordmark = [...root.querySelectorAll('div')].find((node) =>
+      node.childElementCount === 0 && node.textContent?.trim() === 'HARNESS'
+    );
+    if (wordmark) wordmark.textContent = 'ClawClaw';
+  };
   const attach = () => {
     const root = document.querySelector('[data-dsh-boot]');
     if (!root || root.querySelector('[data-dsh-desktop-recovery]')) return;
@@ -117,7 +125,9 @@ export const DESKTOP_BOOT_RECOVERY_SCRIPT = `(() => {
     panel.append(element('p', {}, description), button);
     report.append(panel);
   };
-  new MutationObserver(attach).observe(document.documentElement, { childList: true, subtree: true });
+  const update = () => { applyBrand(); attach(); };
+  new MutationObserver(update).observe(document.documentElement, { childList: true, subtree: true });
+  applyBrand();
   attach();
 })();`
 

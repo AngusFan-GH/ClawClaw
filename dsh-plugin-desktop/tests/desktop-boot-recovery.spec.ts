@@ -20,6 +20,8 @@ describe('Desktop early-boot recovery injection', () => {
     expect(DESKTOP_BOOT_TERMINAL_SCRIPT).toBe(DESKTOP_BOOT_RECOVERY_SCRIPT)
     expect(DESKTOP_TERMINAL_OPEN_REQUEST).toBe(DESKTOP_RECOVERY_RESTART_REQUEST)
     expect(DESKTOP_BOOT_RECOVERY_SCRIPT).toContain('Failed to load plugins')
+    expect(DESKTOP_BOOT_RECOVERY_SCRIPT).toContain("node.textContent?.trim() === 'HARNESS'")
+    expect(DESKTOP_BOOT_RECOVERY_SCRIPT).toContain("wordmark.textContent = 'ClawClaw'")
     expect(DESKTOP_BOOT_RECOVERY_SCRIPT).toContain(DESKTOP_RECOVERY_RESTART_PATH)
     expect(DESKTOP_BOOT_RECOVERY_SCRIPT).toContain(JSON.stringify(DESKTOP_RECOVERY_RESTART_REQUEST))
     expect(DESKTOP_BOOT_RECOVERY_SCRIPT).toContain('打开恢复模式 / Open Recovery Mode')
