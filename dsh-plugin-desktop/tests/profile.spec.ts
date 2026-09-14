@@ -478,6 +478,47 @@ virtualStoreDirMaxLength: 60
     }))
   })
 
+  it('uses SpiritX as the product model default without DeepSeek-owned defaults', () => {
+    const prepared = prepareDesktopProfile(undefined, temporaryHome(), 'darwin')
+    const rows = composeEntries([prepared.patches])
+
+    expect(rows.find(row => row.id === 'agent-default-model')).toEqual(expect.objectContaining({
+      config: { provider: 'spiritx', model: 'DeepSeek-V4-Flash' },
+    }))
+    expect(rows.find(row => row.id === 'spiritx')).toEqual(expect.objectContaining({
+      name: 'dsh-plugin-desktop/spiritx',
+      config: {
+        providers: {
+          spiritx: expect.objectContaining({
+            displayName: 'SpiritX',
+            apiKeyEnv: 'SPIRITX_API_KEY',
+            api: 'openai-responses',
+            baseURL: 'https://ai.xzinfra.com/spiritx-api/v1',
+            models: expect.arrayContaining([
+              { id: 'DeepSeek-V4-Flash', name: 'DeepSeek-V4-Flash' },
+              { id: 'gpt-6-astra', name: 'gpt-6-astra' },
+            ]),
+          }),
+        },
+      },
+    }))
+    expect(rows.find(row => row.id === 'llm-pi-ai')?.disabled).toBe(true)
+    for (const id of [
+      'llm-deepseek',
+      'deepseek-llm-api-extensions',
+      'session-log-deepseek',
+      'plugin-package-inventory-deepseek',
+      'web-search-deepseek',
+      'ui-brand-official',
+      'session-telemetry-otel',
+    ]) {
+      expect(rows.find(row => row.id === id)?.disabled).toBe(true)
+    }
+    expect(rows.find(row => row.id === 'web')).toEqual(expect.objectContaining({
+      config: { fetchProvider: 'http' },
+    }))
+  })
+
   it('merges a frozen LAN IPv4 snapshot into existing Web runtime trust', () => {
     const home = temporaryHome()
     writeFileSync(join(home, 'cordis.patch.yml'), [

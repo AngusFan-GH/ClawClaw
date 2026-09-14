@@ -58,6 +58,7 @@ try {
     '  default: minimal',
     '',
   ].join('\n'))
+  const prepared = prepareDesktopProfile(undefined, home, 'win32')
   const hostServicePluginDir = join(
     prepared.profile.dir,
     'node_modules',
@@ -184,6 +185,24 @@ try {
 
   if (ctx.get('desktopPnpm') === undefined) {
     throw new Error('assembled desktop profile is missing the desktop pnpm Host capability')
+  }
+  const selection = ctx.agentDefaultModel.currentSelection()
+  if (selection.provider !== 'spiritx' || selection.model !== 'DeepSeek-V4-Flash') {
+    throw new Error(`assembled profile selected unexpected default model ${selection.provider}/${selection.model}`)
+  }
+  const providers = ctx.llm.listProviders()
+  if (!providers.some(provider => provider.id === 'spiritx' && provider.name === 'SpiritX')
+    || providers.some(provider => provider.id === 'deepseek-official')) {
+    throw new Error(`assembled profile exposes unexpected model providers: ${JSON.stringify(providers)}`)
+  }
+  const configurableProviders = ctx.llm.listConfigurableProviders()
+  const spiritxDirectory = configurableProviders[0]
+  if (spiritxDirectory?.displayName !== 'SpiritX' || spiritxDirectory.declared !== false) {
+    throw new Error(`assembled profile does not present SpiritX first and built in: ${JSON.stringify(configurableProviders)}`)
+  }
+  const spiritxModels = await ctx.llm.listModels('spiritx')
+  if (!spiritxModels.some(model => model.id === 'DeepSeek-V4-Flash')) {
+    throw new Error(`assembled profile is missing the SpiritX default model: ${JSON.stringify(spiritxModels)}`)
   }
   if (ctx.desktopProfiles.current.name !== 'desktop'
     || ctx.desktopProfiles.current.dir !== prepared.profile.dir) {

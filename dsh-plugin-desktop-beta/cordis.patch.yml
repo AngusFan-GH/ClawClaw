@@ -31,3 +31,82 @@
 # telemetry endpoint. Products may opt in through an explicit profile override.
 - id: session-telemetry-otel
   disabled: true
+
+# SpiritX is the product-owned model route. Keep the upstream DeepSeek adapter
+# and its request metadata out of the default Desktop composition.
+- insert:
+    - id: spiritx
+      name: dsh-plugin-desktop-beta/spiritx
+      config:
+        providers:
+          spiritx:
+            displayName: SpiritX
+            apiKeyEnv: SPIRITX_API_KEY
+            api: openai-responses
+            baseURL: https://ai.xzinfra.com/spiritx-api/v1
+            models:
+              - id: DeepSeek-V4-Flash
+                name: DeepSeek-V4-Flash
+              - id: DeepSeek-V4-Flash-0731
+                name: DeepSeek-V4-Flash-0731
+              - id: gpt-6-Astra
+                name: gpt-6-Astra
+              - id: Qwen3Guard-Gen-4B
+                name: Qwen3Guard-Gen-4B
+              - id: Qwen3.8-Flash-Next-NVFP4
+                name: Qwen3.8-Flash-Next-NVFP4
+              - id: gpt-5.6-terra
+                name: gpt-5.6-terra
+              - id: gpt-image-2
+                name: gpt-image-2
+              - id: Qwen3.8-27B-FP8
+                name: Qwen3.8-27B-FP8
+              - id: Qwen3.8-27B
+                name: Qwen3.8-27B
+              - id: gpt-5.6-sol
+                name: gpt-5.6-sol
+              - id: gpt-5.6-luna
+                name: gpt-5.6-luna
+              - id: gpt-5.6
+                name: gpt-5.6
+              - id: glm-5.2
+                name: glm-5.2
+              - id: MiniMax-M2.7-NVFP4
+                name: MiniMax-M2.7-NVFP4
+              - id: Qwen3.6-27B
+                name: Qwen3.6-27B
+              - id: gpt-6-astra
+                name: gpt-6-astra
+
+- id: llm-pi-ai
+  disabled: true
+
+- id: agent-default-model
+  config:
+    provider: spiritx
+    model: DeepSeek-V4-Flash
+
+- id: llm-deepseek
+  disabled: true
+
+- id: deepseek-llm-api-extensions
+  disabled: true
+
+- id: session-log-deepseek
+  disabled: true
+
+- id: plugin-package-inventory-deepseek
+  disabled: true
+
+# SpiritX search does not yet have a verified WebSearchProvider contract.
+# Keep public HTTP fetching available without silently falling back to DeepSeek.
+- id: web
+  config:
+    fetchProvider: http
+
+- id: web-search-deepseek
+  disabled: true
+
+# Desktop supplies its own ClawClaw identity through the client plugin.
+- id: ui-brand-official
+  disabled: true

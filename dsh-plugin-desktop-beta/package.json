@@ -67,6 +67,10 @@
       "types": "./lib/types/notifications.d.ts",
       "default": "./lib/notifications.js"
     },
+    "./spiritx": {
+      "types": "./lib/types/spiritx.d.ts",
+      "default": "./lib/spiritx.js"
+    },
     "./updates": {
       "types": "./lib/types/updates.d.ts",
       "default": "./lib/updates.js"
@@ -213,6 +217,7 @@
     "@deepseek-ai/dsh-launch-environment": "0.1.5-rc.2",
     "@deepseek-ai/dsh-llm": "0.1.5-rc.2",
     "@deepseek-ai/dsh-llm-deepseek": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-llm-pi-ai": "0.1.5-rc.2",
     "@deepseek-ai/dsh-llm-retry": "0.1.5-rc.2",
     "@deepseek-ai/dsh-mcp-client": "0.1.5-rc.2",
     "@deepseek-ai/dsh-message-feedback": "0.1.5-rc.2",

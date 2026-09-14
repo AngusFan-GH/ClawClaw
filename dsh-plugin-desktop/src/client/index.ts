@@ -15,6 +15,7 @@ import { applyDesktopSettings } from './desktop-settings.ts'
 import { installDesktopDirectoryPickerBridge } from './directory-picker.ts'
 import { parseDesktopClientEnvironment } from './environment.ts'
 import { applyExtendedShell } from './extended-shell.ts'
+import { applySpiritXOnboarding } from './spiritx-onboarding.tsx'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
 
 export { applyAdvancedShell } from './advanced-shell.ts'
@@ -75,6 +76,8 @@ export const inject = [
   'locale',
   'connection',
   'remote',
+  'remote.credentials',
+  'remote.llm',
   'settingsScope',
   'sessions',
   'theme',
@@ -90,6 +93,7 @@ export function apply(ctx: ClientContext): void {
     'dsh-plugin-desktop: native window geometry service',
   )
   applyClawClawBrand(ctx)
+  applySpiritXOnboarding(ctx)
   const desktopSettings = applyDesktopSettings(ctx, environment)
   ctx.effect(
     () => startRendererBootReporter(ctx.loader),

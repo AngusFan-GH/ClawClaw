@@ -784,6 +784,9 @@ importers:
       '@deepseek-ai/dsh-llm-deepseek':
         specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-llm-deepseek-0.1.5-rc.2.tgz
         version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-llm-deepseek-0.1.5-rc.2.tgz(98f66e1ae7425b6b0c01eb7d2d38e877)
+      '@deepseek-ai/dsh-llm-pi-ai':
+        specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-llm-pi-ai-0.1.5-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-llm-pi-ai-0.1.5-rc.2.tgz(b7cbd3df30a21ea5be296f8d82f4c4a8)
       '@deepseek-ai/dsh-llm-retry':
         specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-llm-retry-0.1.5-rc.2.tgz
         version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-llm-retry-0.1.5-rc.2.tgz(e9d62a8e116fb2fba1f050a194d92e79)
@@ -1340,6 +1343,9 @@ importers:
       '@deepseek-ai/dsh-llm-deepseek':
         specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-llm-deepseek-0.1.5-rc.2.tgz
         version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-llm-deepseek-0.1.5-rc.2.tgz(98f66e1ae7425b6b0c01eb7d2d38e877)
+      '@deepseek-ai/dsh-llm-pi-ai':
+        specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-llm-pi-ai-0.1.5-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-llm-pi-ai-0.1.5-rc.2.tgz(b7cbd3df30a21ea5be296f8d82f4c4a8)
       '@deepseek-ai/dsh-llm-retry':
         specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-llm-retry-0.1.5-rc.2.tgz
         version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-llm-retry-0.1.5-rc.2.tgz(e9d62a8e116fb2fba1f050a194d92e79)
@@ -8409,7 +8415,7 @@ snapshots:
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.34.1
       '@smithy/fetch-http-handler': 5.8.0
-      '@smithy/node-http-handler': 4.7.3
+      '@smithy/node-http-handler': 4.12.1
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
