@@ -18,7 +18,7 @@ function ClawClawBrandName() {
 function replaceSidebarBrand(): void {
   const button = [...document.querySelectorAll<HTMLButtonElement>('button')].find(candidate => {
     const box = candidate.getBoundingClientRect()
-    return box.left < 24 && box.top < 72 && box.width > 80 && box.height < 48
+    return box.left < 24 && box.top < 72 && box.width >= 28 && box.height < 48
   })
   if (button === undefined || button.dataset.clawclawBrand === 'true') return
   button.dataset.clawclawBrand = 'true'
@@ -30,10 +30,14 @@ function replaceSidebarBrand(): void {
   icon.width = 24
   icon.height = 24
   icon.alt = ''
-  const name = document.createElement('span')
-  name.textContent = 'ClawClaw'
-  name.style.cssText = 'font-size:16px;font-weight:700;letter-spacing:-0.03em'
-  identity.append(icon, name)
+  if (button.getBoundingClientRect().width >= 80) {
+    const name = document.createElement('span')
+    name.textContent = 'ClawClaw'
+    name.style.cssText = 'font-size:16px;font-weight:700;letter-spacing:-0.03em'
+    identity.append(icon, name)
+  } else {
+    identity.style.gap = '0'
+  }
   button.append(identity)
 }
 
