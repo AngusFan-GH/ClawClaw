@@ -17,6 +17,7 @@ export default defineConfig([
       profiles: 'src/profiles.ts',
       diagnostics: 'src/diagnostics.ts',
       notifications: 'src/notifications.ts',
+      'default-workspace': 'src/default-workspace.ts',
       spiritx: 'src/spiritx.ts',
       'diagnostic-export-worker': 'src/diagnostic-export-worker.ts',
       'packaged-runtime-smoke': 'src/packaged-runtime-smoke.ts',

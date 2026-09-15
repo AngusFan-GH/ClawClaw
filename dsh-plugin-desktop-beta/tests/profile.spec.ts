@@ -476,6 +476,11 @@ virtualStoreDirMaxLength: 60
     expect(rows.find(row => row.id === 'desktop-notifications')).toEqual(expect.objectContaining({
       name: 'dsh-plugin-desktop-beta/notifications',
     }))
+    expect(rows.find(row => row.id === 'desktop-default-workspace')).toEqual({
+      id: 'desktop-default-workspace',
+      name: 'dsh-plugin-desktop-beta/default-workspace',
+      config: { path: { __jsExpr: 'process.env.CLAWCLAW_DEFAULT_WORKSPACE' } },
+    })
     expect(rows.find(row => row.id === 'desktop-profiles')).toEqual(expect.objectContaining({
       name: 'dsh-plugin-desktop-beta/profiles',
     }))

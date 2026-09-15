@@ -10,6 +10,8 @@ import { apply as applyWecom } from '../node_modules/@xmanrui/dsh-im/plugin-src/
 import { apply as applyWecomApp } from '../node_modules/@xmanrui/dsh-im/plugin-src/host/channels/wecom-app/index.mjs'
 import { apply as applyWeixin } from '../node_modules/@xmanrui/dsh-im/plugin-src/host/channels/weixin/index.mjs'
 import { apply as applyWhatsapp } from '../node_modules/@xmanrui/dsh-im/plugin-src/host/channels/whatsapp/index.mjs'
+import { homedir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { installOutboundArtifactTool } from '../node_modules/@xmanrui/dsh-im/src/channels/shared/semantic/artifact.mjs'
 import { installHostLanguage } from '../node_modules/@xmanrui/dsh-im/plugin-src/host/host-language.mjs'
 import { installHostLanguageRpc } from '../node_modules/@xmanrui/dsh-im/plugin-src/host/host-language-rpc.mjs'
@@ -40,12 +42,20 @@ const CHANNELS = Object.freeze([
 
 export const CLAWCLAW_HOST_CHANNELS = Object.freeze(CHANNELS.map(([channel]) => channel))
 
+export function resolveChannelWorkspace(config, channel) {
+  const own = config[channel] ?? {}
+  return resolve(own.workspace
+    ?? config.defaultWorkspace
+    ?? process.env.CLAWCLAW_DEFAULT_WORKSPACE
+    ?? join(homedir(), '.clawclaw', 'workspaces', 'default'))
+}
+
 function channelConfig(config, channel, deliveryService) {
   const own = config[channel] ?? {}
   const authorized = config.rpcAuthority === undefined
     ? own
     : { ...own, rpcAuthority: config.rpcAuthority }
-  return { ...authorized, deliveryService }
+  return { ...authorized, workspace: resolveChannelWorkspace(config, channel), deliveryService }
 }
 
 export function createImHostPlugin(internals = {}) {

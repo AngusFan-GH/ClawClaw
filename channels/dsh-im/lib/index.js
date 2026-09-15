@@ -11082,12 +11082,12 @@ var require_promisify = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     function promisify2(fn) {
       return function(req, opts) {
-        return new Promise((resolve18, reject) => {
+        return new Promise((resolve19, reject) => {
           fn.call(this, req, opts, (err, rtn) => {
             if (err) {
               reject(err);
             } else {
-              resolve18(rtn);
+              resolve19(rtn);
             }
           });
         });
@@ -11291,7 +11291,7 @@ var require_parse_proxy_response = __commonJS({
     var debug_1 = __importDefault(require_src());
     var debug = debug_1.default("https-proxy-agent:parse-proxy-response");
     function parseProxyResponse(socket) {
-      return new Promise((resolve18, reject) => {
+      return new Promise((resolve19, reject) => {
         let buffersLength = 0;
         const buffers = [];
         function read() {
@@ -11331,7 +11331,7 @@ var require_parse_proxy_response = __commonJS({
           const firstLine = buffered.toString("ascii", 0, buffered.indexOf("\r\n"));
           const statusCode = +firstLine.split(" ")[1];
           debug("got proxy server response: %o", firstLine);
-          resolve18({
+          resolve19({
             statusCode,
             buffered
           });
@@ -11352,11 +11352,11 @@ var require_agent = __commonJS({
     "use strict";
     var __awaiter2 = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
       function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve18) {
-          resolve18(value);
+        return value instanceof P ? value : new P(function(resolve19) {
+          resolve19(value);
         });
       }
-      return new (P || (P = Promise))(function(resolve18, reject) {
+      return new (P || (P = Promise))(function(resolve19, reject) {
         function fulfilled(value) {
           try {
             step(generator.next(value));
@@ -11372,7 +11372,7 @@ var require_agent = __commonJS({
           }
         }
         function step(result2) {
-          result2.done ? resolve18(result2.value) : adopt(result2.value).then(fulfilled, rejected);
+          result2.done ? resolve19(result2.value) : adopt(result2.value).then(fulfilled, rejected);
         }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
       });
@@ -19136,7 +19136,7 @@ var require_aspromise = __commonJS({
       var params = new Array(arguments.length - 1), offset = 0, index = 2, pending = true;
       while (index < arguments.length)
         params[offset++] = arguments[index++];
-      return new Promise(function executor(resolve18, reject) {
+      return new Promise(function executor(resolve19, reject) {
         params[offset] = function callback(err) {
           if (pending) {
             pending = false;
@@ -19146,7 +19146,7 @@ var require_aspromise = __commonJS({
               var params2 = new Array(arguments.length - 1), offset2 = 0;
               while (offset2 < params2.length)
                 params2[offset2++] = arguments[offset2];
-              resolve18.apply(null, params2);
+              resolve19.apply(null, params2);
             }
           }
         };
@@ -23513,14 +23513,14 @@ var require_react_development = __commonJS({
               var thenableResult = result2;
               var wasAwaited = false;
               var thenable = {
-                then: function(resolve18, reject) {
+                then: function(resolve19, reject) {
                   wasAwaited = true;
                   thenableResult.then(function(returnValue2) {
                     popActScope(prevActScopeDepth);
                     if (actScopeDepth === 0) {
-                      recursivelyFlushAsyncActWork(returnValue2, resolve18, reject);
+                      recursivelyFlushAsyncActWork(returnValue2, resolve19, reject);
                     } else {
-                      resolve18(returnValue2);
+                      resolve19(returnValue2);
                     }
                   }, function(error2) {
                     popActScope(prevActScopeDepth);
@@ -23550,20 +23550,20 @@ var require_react_development = __commonJS({
                   ReactCurrentActQueue.current = null;
                 }
                 var _thenable = {
-                  then: function(resolve18, reject) {
+                  then: function(resolve19, reject) {
                     if (ReactCurrentActQueue.current === null) {
                       ReactCurrentActQueue.current = [];
-                      recursivelyFlushAsyncActWork(returnValue, resolve18, reject);
+                      recursivelyFlushAsyncActWork(returnValue, resolve19, reject);
                     } else {
-                      resolve18(returnValue);
+                      resolve19(returnValue);
                     }
                   }
                 };
                 return _thenable;
               } else {
                 var _thenable2 = {
-                  then: function(resolve18, reject) {
-                    resolve18(returnValue);
+                  then: function(resolve19, reject) {
+                    resolve19(returnValue);
                   }
                 };
                 return _thenable2;
@@ -23579,7 +23579,7 @@ var require_react_development = __commonJS({
             actScopeDepth = prevActScopeDepth;
           }
         }
-        function recursivelyFlushAsyncActWork(returnValue, resolve18, reject) {
+        function recursivelyFlushAsyncActWork(returnValue, resolve19, reject) {
           {
             var queue = ReactCurrentActQueue.current;
             if (queue !== null) {
@@ -23588,16 +23588,16 @@ var require_react_development = __commonJS({
                 enqueueTask(function() {
                   if (queue.length === 0) {
                     ReactCurrentActQueue.current = null;
-                    resolve18(returnValue);
+                    resolve19(returnValue);
                   } else {
-                    recursivelyFlushAsyncActWork(returnValue, resolve18, reject);
+                    recursivelyFlushAsyncActWork(returnValue, resolve19, reject);
                   }
                 });
               } catch (error2) {
                 reject(error2);
               }
             } else {
-              resolve18(returnValue);
+              resolve19(returnValue);
             }
           }
         }
@@ -27004,8 +27004,8 @@ async function withSessionBindingLock(state, key, operation) {
   const locks = stateLocks(state);
   const previous = locks.get(key) ?? Promise.resolve();
   let release;
-  const current = new Promise((resolve18) => {
-    release = resolve18;
+  const current = new Promise((resolve19) => {
+    release = resolve19;
   });
   locks.set(key, current);
   await previous;
@@ -27899,14 +27899,14 @@ function abortError2(signal) {
 }
 function abortableDelay(ms, signal) {
   if (ms <= 0) return Promise.resolve();
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     if (signal?.aborted) {
       reject(abortError2(signal));
       return;
     }
     const timer = setTimeout(() => {
       signal?.removeEventListener("abort", onAbort);
-      resolve18();
+      resolve19();
     }, ms);
     const onAbort = () => {
       clearTimeout(timer);
@@ -29883,7 +29883,7 @@ async function watchInProcessMux({ apiProxy, rpcId, signal, onOpen, onEnvelope }
 function watchWebSocketMux({ baseUrl, createWebSocket, signal, onOpen, onEnvelope, onMalformed }) {
   const url2 = new URL("/api/events.mux", baseUrl);
   url2.protocol = url2.protocol === "https:" ? "wss:" : "ws:";
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     const socket = createWebSocket(url2.toString());
     let opened = false;
     let finished = false;
@@ -29900,7 +29900,7 @@ function watchWebSocketMux({ baseUrl, createWebSocket, signal, onOpen, onEnvelop
       } catch {
       }
       if (error && !signal.aborted) reject(error);
-      else resolve18();
+      else resolve19();
     };
     const close = () => finish();
     const handleOpen = () => {
@@ -30032,7 +30032,7 @@ function consumeDshImInputOrigin(scope, rpcId) {
   return origins.delete(rpcId);
 }
 function callWithSignal(call, signal) {
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     const cleanup = () => signal.removeEventListener("abort", handleAbort);
     const handleAbort = () => {
       cleanup();
@@ -30048,7 +30048,7 @@ function callWithSignal(call, signal) {
       return call();
     }).then((value) => {
       cleanup();
-      resolve18(value);
+      resolve19(value);
     }, (error) => {
       cleanup();
       reject(error);
@@ -30167,14 +30167,14 @@ function workspaceSessions(workspace, archivedSessionIds, sessionList) {
   };
 }
 function sleep(ms, signal) {
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     if (signal?.aborted) {
       reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
       return;
     }
     const timer = setTimeout(() => {
       signal?.removeEventListener("abort", onAbort);
-      resolve18();
+      resolve19();
     }, ms);
     const onAbort = () => {
       clearTimeout(timer);
@@ -31142,8 +31142,8 @@ var HarnessClient = class {
       }
       if (interactionSignal) {
         let markOpen;
-        const opened = new Promise((resolve18) => {
-          markOpen = resolve18;
+        const opened = new Promise((resolve19) => {
+          markOpen = resolve19;
         });
         interactionTask = this.watchInteractions(sessionId, {
           signal: interactionSignal,
@@ -32457,8 +32457,8 @@ var HarnessApprovalQueue = class {
   }
   async #transition(next, work) {
     let release;
-    const barrier = new Promise((resolve18) => {
-      release = resolve18;
+    const barrier = new Promise((resolve19) => {
+      release = resolve19;
     });
     if (next) next.activationTask = barrier;
     try {
@@ -36254,8 +36254,8 @@ var DingtalkHarnessBridge = class {
         "remove"
       );
       if (!attached || !cleaned) {
-        await new Promise((resolve18) => {
-          const retry2 = setTimeout(resolve18, Math.min(1e3, this.#reactionTimeoutMs));
+        await new Promise((resolve19) => {
+          const retry2 = setTimeout(resolve19, Math.min(1e3, this.#reactionTimeoutMs));
           retry2.unref?.();
         });
         cleaned = await this.#runReactionCall(
@@ -37036,7 +37036,7 @@ function streamIsOpen(client) {
   return client?.connected === true || client?.socket?.readyState === 1;
 }
 function abortable(promise, signal) {
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     if (signal.aborted) {
       reject(signal.reason);
       return;
@@ -37046,7 +37046,7 @@ function abortable(promise, signal) {
     Promise.resolve(promise).then(
       (value) => {
         signal.removeEventListener("abort", onAbort);
-        resolve18(value);
+        resolve19(value);
       },
       (error) => {
         signal.removeEventListener("abort", onAbort);
@@ -37059,10 +37059,10 @@ async function waitForStreamOpen(client, pollIntervalMs, signal) {
   while (true) {
     signal?.throwIfAborted();
     if (streamIsOpen(client)) return;
-    await new Promise((resolve18, reject) => {
+    await new Promise((resolve19, reject) => {
       const timer = setTimeout(() => {
         signal?.removeEventListener("abort", onAbort);
-        resolve18();
+        resolve19();
       }, pollIntervalMs);
       const onAbort = () => {
         clearTimeout(timer);
@@ -40087,8 +40087,8 @@ var ConnectionSupervisor = class {
     this.#healthyIntervalMs = Number.isFinite(healthyIntervalMs) && healthyIntervalMs >= 0 ? healthyIntervalMs : 15e3;
     this.#setTimeout = setTimeoutImpl;
     this.#clearTimeout = clearTimeoutImpl;
-    this.#ready = new Promise((resolve18) => {
-      this.#resolveReady = resolve18;
+    this.#ready = new Promise((resolve19) => {
+      this.#resolveReady = resolve19;
     });
   }
   get ready() {
@@ -40333,9 +40333,9 @@ var MuxSubscription = class {
   push(frame) {
     if (this.#closed) return;
     if (this.#waiting) {
-      const resolve18 = this.#waiting;
+      const resolve19 = this.#waiting;
       this.#waiting = null;
-      resolve18({ value: frame, done: false });
+      resolve19({ value: frame, done: false });
     } else {
       this.#frames.push(frame);
     }
@@ -40345,8 +40345,8 @@ var MuxSubscription = class {
       return Promise.resolve({ value: this.#frames.shift(), done: false });
     }
     if (this.#closed) return Promise.resolve({ value: void 0, done: true });
-    return new Promise((resolve18) => {
-      this.#waiting = resolve18;
+    return new Promise((resolve19) => {
+      this.#waiting = resolve19;
     });
   }
   return() {
@@ -40360,9 +40360,9 @@ var MuxSubscription = class {
     this.#dispose?.();
     this.#dispose = null;
     if (this.#waiting) {
-      const resolve18 = this.#waiting;
+      const resolve19 = this.#waiting;
       this.#waiting = null;
-      resolve18({ value: void 0, done: true });
+      resolve19({ value: void 0, done: true });
     }
   }
   [Symbol.asyncIterator]() {
@@ -40654,7 +40654,7 @@ var ModernHarnessApi = class {
         "ASK_ABORTED"
       ));
     }
-    return new Promise((resolve18, reject) => {
+    return new Promise((resolve19, reject) => {
       const pending = {
         rpcId: randomUUID10(),
         sessionId: owner.sessionId,
@@ -40669,7 +40669,7 @@ var ModernHarnessApi = class {
             questionRpcId: pending.rpcId,
             outcome
           });
-          if (outcome === "answered") resolve18(value);
+          if (outcome === "answered") resolve19(value);
           else reject(value);
         }
       };
@@ -40715,7 +40715,7 @@ var ModernHarnessApi = class {
       }
     }
     if (approvalId === void 0) return next();
-    return new Promise((resolve18) => {
+    return new Promise((resolve19) => {
       const pending = {
         rpcId: randomUUID10(),
         sessionId: owner.sessionId,
@@ -40732,7 +40732,7 @@ var ModernHarnessApi = class {
             approvalId: pending.approvalId,
             outcome
           });
-          resolve18(outcome);
+          resolve19(outcome);
         }
       };
       const onAbort = () => pending.settle("cancelled");
@@ -42760,12 +42760,12 @@ function uncertainDiscordDelivery(cause) {
   return preserveProviderMetadata(error, cause);
 }
 function delay(ms, signal) {
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     if (signal?.aborted) {
       reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
       return;
     }
-    const timer = setTimeout(resolve18, ms);
+    const timer = setTimeout(resolve19, ms);
     timer?.unref?.();
     signal?.addEventListener("abort", () => {
       clearTimeout(timer);
@@ -45078,7 +45078,7 @@ var DiscordRuntime = class {
     const socket = this.#createWebSocket(url2);
     this.#socket = socket;
     let settled = false;
-    return new Promise((resolve18, reject) => {
+    return new Promise((resolve19, reject) => {
       const markReady = () => {
         if (settled || generation !== this.#generation) return;
         settled = true;
@@ -45089,7 +45089,7 @@ var DiscordRuntime = class {
         this.#status.lastCheckedAt = now;
         this.#status.lastConnectedAt = now;
         this.#status.lastError = null;
-        resolve18();
+        resolve19();
       };
       addSocketListener(socket, "message", (event) => {
         if (generation !== this.#generation || this.#stopped) return;
@@ -45330,7 +45330,7 @@ var DiscordRuntime = class {
     }
     await Promise.race([
       bridge?.waitForIdle() ?? Promise.resolve(),
-      new Promise((resolve18) => setTimeout(resolve18, 2e3))
+      new Promise((resolve19) => setTimeout(resolve19, 2e3))
     ]);
     this.#status.ready = false;
     this.#status.connectionState = "idle";
@@ -45506,8 +45506,8 @@ var TokenConnectionSupervisor = class {
     this.#healthyIntervalMs = Number.isFinite(healthyIntervalMs) && healthyIntervalMs >= 0 ? healthyIntervalMs : 15e3;
     this.#setTimeout = setTimeoutImpl;
     this.#clearTimeout = clearTimeoutImpl;
-    this.#ready = new Promise((resolve18) => {
-      this.#resolveReady = resolve18;
+    this.#ready = new Promise((resolve19) => {
+      this.#resolveReady = resolve19;
     });
   }
   get ready() {
@@ -47966,10 +47966,10 @@ var CanceledError = class extends AxiosError_default {
 var CanceledError_default = CanceledError;
 
 // ../../node_modules/.pnpm/axios@1.20.0_debug@4.4.3/node_modules/axios/lib/core/settle.js
-function settle(resolve18, reject, response) {
+function settle(resolve19, reject, response) {
   const validateStatus2 = response.config.validateStatus;
   if (!response.status || !validateStatus2 || validateStatus2(response.status)) {
-    resolve18(response);
+    resolve19(response);
   } else {
     reject(new AxiosError_default(
       "Request failed with status code " + response.status,
@@ -49328,7 +49328,7 @@ function setProxy(options, configProxy, location, isRedirect, configHttpsAgent, 
 }
 var isHttpAdapterSupported = typeof process !== "undefined" && utils_default.kindOf(process) === "process";
 var wrapAsync = (asyncExecutor) => {
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     let onDone;
     let isDone;
     const done = (value, isRejected) => {
@@ -49338,7 +49338,7 @@ var wrapAsync = (asyncExecutor) => {
     };
     const _resolve = (value) => {
       done(value);
-      resolve18(value);
+      resolve19(value);
     };
     const _reject = (reason) => {
       done(reason, true);
@@ -49409,7 +49409,7 @@ var http2Transport = {
   }
 };
 var http_default = isHttpAdapterSupported && function httpAdapter(config) {
-  return wrapAsync(async function dispatchHttpRequest(resolve18, reject, onDone) {
+  return wrapAsync(async function dispatchHttpRequest(resolve19, reject, onDone) {
     const own2 = (key) => utils_default.getSafeProp(config, key);
     const transitional2 = own2("transitional") || transitional_default;
     let data = own2("data");
@@ -49546,7 +49546,7 @@ var http_default = isHttpAdapterSupported && function httpAdapter(config) {
       }
       let convertedData;
       if (method !== "GET") {
-        return settle(resolve18, reject, {
+        return settle(resolve19, reject, {
           status: 405,
           statusText: "method not allowed",
           headers: {},
@@ -49568,7 +49568,7 @@ var http_default = isHttpAdapterSupported && function httpAdapter(config) {
       } else if (responseType === "stream") {
         convertedData = stream3.Readable.from(convertedData);
       }
-      return settle(resolve18, reject, {
+      return settle(resolve19, reject, {
         data: convertedData,
         status: 200,
         statusText: "OK",
@@ -49940,7 +49940,7 @@ var http_default = isHttpAdapterSupported && function httpAdapter(config) {
           });
         }
         response.data = responseStream;
-        settle(resolve18, reject, response);
+        settle(resolve19, reject, response);
       } else {
         const responseBuffer = [];
         let totalResponseBytes = 0;
@@ -49991,7 +49991,7 @@ var http_default = isHttpAdapterSupported && function httpAdapter(config) {
           } catch (err) {
             return reject(AxiosError_default.from(err, null, config, response.request, response));
           }
-          settle(resolve18, reject, response);
+          settle(resolve19, reject, response);
         });
       }
       abortEmitter.once("abort", (err) => {
@@ -50365,7 +50365,7 @@ var resolveConfig_default = resolveConfig;
 // ../../node_modules/.pnpm/axios@1.20.0_debug@4.4.3/node_modules/axios/lib/adapters/xhr.js
 var isXHRAdapterSupported = typeof XMLHttpRequest !== "undefined";
 var xhr_default = isXHRAdapterSupported && function(config) {
-  return new Promise(function dispatchXhrRequest(resolve18, reject) {
+  return new Promise(function dispatchXhrRequest(resolve19, reject) {
     const _config = resolveConfig_default(config);
     let requestData = _config.data;
     const requestHeaders = AxiosHeaders_default.from(_config.headers).normalize();
@@ -50420,7 +50420,7 @@ var xhr_default = isXHRAdapterSupported && function(config) {
       };
       settle(
         function _resolve(value) {
-          resolve18(value);
+          resolve19(value);
           done();
         },
         function _reject(err) {
@@ -51045,8 +51045,8 @@ var factory = (env) => {
         }
       }
       !isStreamResponse && unsubscribe && unsubscribe();
-      return await new Promise((resolve18, reject) => {
-        settle(resolve18, reject, {
+      return await new Promise((resolve19, reject) => {
+        settle(resolve19, reject, {
           data: responseData,
           headers: AxiosHeaders_default.from(response.headers),
           status: response.status,
@@ -51526,8 +51526,8 @@ var CancelToken = class _CancelToken {
       throw new TypeError("executor must be a function.");
     }
     let resolvePromise;
-    this.promise = new Promise(function promiseExecutor(resolve18) {
-      resolvePromise = resolve18;
+    this.promise = new Promise(function promiseExecutor(resolve19) {
+      resolvePromise = resolve19;
     });
     const token = this;
     this.promise.then((cancel) => {
@@ -51540,9 +51540,9 @@ var CancelToken = class _CancelToken {
     });
     this.promise.then = (onfulfilled) => {
       let _resolve;
-      const promise = new Promise((resolve18) => {
-        token.subscribe(resolve18);
-        _resolve = resolve18;
+      const promise = new Promise((resolve19) => {
+        token.subscribe(resolve19);
+        _resolve = resolve19;
       }).then(onfulfilled);
       promise.cancel = function reject() {
         token.unsubscribe(_resolve);
@@ -51811,11 +51811,11 @@ function __rest(s, e) {
 }
 function __awaiter(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve18) {
-      resolve18(value);
+    return value instanceof P ? value : new P(function(resolve19) {
+      resolve19(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve18, reject) {
+  return new (P || (P = Promise))(function(resolve19, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -51831,7 +51831,7 @@ function __awaiter(thisArg, _arguments, P, generator) {
       }
     }
     function step(result2) {
-      result2.done ? resolve18(result2.value) : adopt(result2.value).then(fulfilled, rejected);
+      result2.done ? resolve19(result2.value) : adopt(result2.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -51891,14 +51891,14 @@ function __asyncValues(o) {
   }, i);
   function verb(n) {
     i[n] = o[n] && function(v) {
-      return new Promise(function(resolve18, reject) {
-        v = o[n](v), settle2(resolve18, reject, v.done, v.value);
+      return new Promise(function(resolve19, reject) {
+        v = o[n](v), settle2(resolve19, reject, v.done, v.value);
       });
     };
   }
-  function settle2(resolve18, reject, d, v) {
+  function settle2(resolve19, reject, d, v) {
     Promise.resolve(v).then(function(v2) {
-      resolve18({ value: v2, done: d });
+      resolve19({ value: v2, done: d });
     }, reject);
   }
 }
@@ -52245,10 +52245,10 @@ var Client$1P = class {
           return {
             writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
               checkIsReadable();
-              return new Promise((resolve18, reject) => {
+              return new Promise((resolve19, reject) => {
                 const writableStream = fs.createWriteStream(filePath);
                 writableStream.on("finish", () => {
-                  resolve18(filePath);
+                  resolve19(filePath);
                 });
                 writableStream.on("error", (e) => {
                   reject(e);
@@ -52428,10 +52428,10 @@ var Client$1P = class {
           return {
             writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
               checkIsReadable();
-              return new Promise((resolve18, reject) => {
+              return new Promise((resolve19, reject) => {
                 const writableStream = fs.createWriteStream(filePath);
                 writableStream.on("finish", () => {
-                  resolve18(filePath);
+                  resolve19(filePath);
                 });
                 writableStream.on("error", (e) => {
                   reject(e);
@@ -52764,10 +52764,10 @@ var Client$1P = class {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -52949,10 +52949,10 @@ var Client$1P = class {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -61792,10 +61792,10 @@ var Client$1H = class extends Client$1I {
           return {
             writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
               checkIsReadable();
-              return new Promise((resolve18, reject) => {
+              return new Promise((resolve19, reject) => {
                 const writableStream = fs.createWriteStream(filePath);
                 writableStream.on("finish", () => {
-                  resolve18(filePath);
+                  resolve19(filePath);
                 });
                 writableStream.on("error", (e) => {
                   reject(e);
@@ -62974,10 +62974,10 @@ var Client$1H = class extends Client$1I {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -65180,10 +65180,10 @@ var Client$1B = class extends Client$1C {
           return {
             writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
               checkIsReadable();
-              return new Promise((resolve18, reject) => {
+              return new Promise((resolve19, reject) => {
                 const writableStream = fs.createWriteStream(filePath);
                 writableStream.on("finish", () => {
-                  resolve18(filePath);
+                  resolve19(filePath);
                 });
                 writableStream.on("error", (e) => {
                   reject(e);
@@ -65706,10 +65706,10 @@ var Client$1B = class extends Client$1C {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -69727,10 +69727,10 @@ var Client$1x = class extends Client$1y {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -80700,10 +80700,10 @@ var Client$1l = class extends Client$1m {
           return {
             writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
               checkIsReadable();
-              return new Promise((resolve18, reject) => {
+              return new Promise((resolve19, reject) => {
                 const writableStream = fs.createWriteStream(filePath);
                 writableStream.on("finish", () => {
-                  resolve18(filePath);
+                  resolve19(filePath);
                 });
                 writableStream.on("error", (e) => {
                   reject(e);
@@ -83457,10 +83457,10 @@ var Client$1l = class extends Client$1m {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -86896,10 +86896,10 @@ var Client$1l = class extends Client$1m {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -93521,10 +93521,10 @@ var Client$1c = class extends Client$1d {
           return {
             writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
               checkIsReadable();
-              return new Promise((resolve18, reject) => {
+              return new Promise((resolve19, reject) => {
                 const writableStream = fs.createWriteStream(filePath);
                 writableStream.on("finish", () => {
-                  resolve18(filePath);
+                  resolve19(filePath);
                 });
                 writableStream.on("error", (e) => {
                   reject(e);
@@ -93773,10 +93773,10 @@ var Client$1c = class extends Client$1d {
           return {
             writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
               checkIsReadable();
-              return new Promise((resolve18, reject) => {
+              return new Promise((resolve19, reject) => {
                 const writableStream = fs.createWriteStream(filePath);
                 writableStream.on("finish", () => {
-                  resolve18(filePath);
+                  resolve19(filePath);
                 });
                 writableStream.on("error", (e) => {
                   reject(e);
@@ -94394,10 +94394,10 @@ var Client$1c = class extends Client$1d {
           return {
             writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
               checkIsReadable();
-              return new Promise((resolve18, reject) => {
+              return new Promise((resolve19, reject) => {
                 const writableStream = fs.createWriteStream(filePath);
                 writableStream.on("finish", () => {
-                  resolve18(filePath);
+                  resolve19(filePath);
                 });
                 writableStream.on("error", (e) => {
                   reject(e);
@@ -95340,10 +95340,10 @@ var Client$1c = class extends Client$1d {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -95592,10 +95592,10 @@ var Client$1c = class extends Client$1d {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -96219,10 +96219,10 @@ var Client$1c = class extends Client$1d {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -97058,10 +97058,10 @@ var Client$19 = class extends Client$1a {
           return {
             writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
               checkIsReadable();
-              return new Promise((resolve18, reject) => {
+              return new Promise((resolve19, reject) => {
                 const writableStream = fs.createWriteStream(filePath);
                 writableStream.on("finish", () => {
-                  resolve18(filePath);
+                  resolve19(filePath);
                 });
                 writableStream.on("error", (e) => {
                   reject(e);
@@ -97194,10 +97194,10 @@ var Client$19 = class extends Client$1a {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -98029,10 +98029,10 @@ var Client$11 = class extends Client$12 {
           return {
             writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
               checkIsReadable();
-              return new Promise((resolve18, reject) => {
+              return new Promise((resolve19, reject) => {
                 const writableStream = fs.createWriteStream(filePath);
                 writableStream.on("finish", () => {
-                  resolve18(filePath);
+                  resolve19(filePath);
                 });
                 writableStream.on("error", (e) => {
                   reject(e);
@@ -98427,10 +98427,10 @@ var Client$11 = class extends Client$12 {
           return {
             writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
               checkIsReadable();
-              return new Promise((resolve18, reject) => {
+              return new Promise((resolve19, reject) => {
                 const writableStream = fs.createWriteStream(filePath);
                 writableStream.on("finish", () => {
-                  resolve18(filePath);
+                  resolve19(filePath);
                 });
                 writableStream.on("error", (e) => {
                   reject(e);
@@ -99467,10 +99467,10 @@ var Client$11 = class extends Client$12 {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -99869,10 +99869,10 @@ var Client$11 = class extends Client$12 {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -114568,10 +114568,10 @@ var Client$_ = class extends Client$$ {
           return {
             writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
               checkIsReadable();
-              return new Promise((resolve18, reject) => {
+              return new Promise((resolve19, reject) => {
                 const writableStream = fs.createWriteStream(filePath);
                 writableStream.on("finish", () => {
-                  resolve18(filePath);
+                  resolve19(filePath);
                 });
                 writableStream.on("error", (e) => {
                   reject(e);
@@ -114806,10 +114806,10 @@ var Client$_ = class extends Client$$ {
           return {
             writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
               checkIsReadable();
-              return new Promise((resolve18, reject) => {
+              return new Promise((resolve19, reject) => {
                 const writableStream = fs.createWriteStream(filePath);
                 writableStream.on("finish", () => {
-                  resolve18(filePath);
+                  resolve19(filePath);
                 });
                 writableStream.on("error", (e) => {
                   reject(e);
@@ -114891,10 +114891,10 @@ var Client$_ = class extends Client$$ {
           return {
             writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
               checkIsReadable();
-              return new Promise((resolve18, reject) => {
+              return new Promise((resolve19, reject) => {
                 const writableStream = fs.createWriteStream(filePath);
                 writableStream.on("finish", () => {
-                  resolve18(filePath);
+                  resolve19(filePath);
                 });
                 writableStream.on("error", (e) => {
                   reject(e);
@@ -116713,10 +116713,10 @@ var Client$_ = class extends Client$$ {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -116953,10 +116953,10 @@ var Client$_ = class extends Client$$ {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -117038,10 +117038,10 @@ var Client$_ = class extends Client$$ {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -117543,10 +117543,10 @@ var Client$X = class extends Client$Y {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -124717,10 +124717,10 @@ var Client$Q = class extends Client$R {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -139380,10 +139380,10 @@ var Client$4 = class extends Client$5 {
           return {
             writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
               checkIsReadable();
-              return new Promise((resolve18, reject) => {
+              return new Promise((resolve19, reject) => {
                 const writableStream = fs.createWriteStream(filePath);
                 writableStream.on("finish", () => {
-                  resolve18(filePath);
+                  resolve19(filePath);
                 });
                 writableStream.on("error", (e) => {
                   reject(e);
@@ -142711,10 +142711,10 @@ var Client$4 = class extends Client$5 {
             return {
               writeFile: (filePath) => __awaiter(this, void 0, void 0, function* () {
                 checkIsReadable();
-                return new Promise((resolve18, reject) => {
+                return new Promise((resolve19, reject) => {
                   const writableStream = fs.createWriteStream(filePath);
                   writableStream.on("finish", () => {
-                    resolve18(filePath);
+                    resolve19(filePath);
                   });
                   writableStream.on("error", (e) => {
                     reject(e);
@@ -145648,7 +145648,7 @@ var CardActionHandler = class {
     });
   }
 };
-var pickRequestData = (req) => new Promise((resolve18) => {
+var pickRequestData = (req) => new Promise((resolve19) => {
   let chunks = "";
   req.on("data", (chunk) => {
     chunks += chunk;
@@ -145656,9 +145656,9 @@ var pickRequestData = (req) => new Promise((resolve18) => {
   req.on("end", () => {
     try {
       const data = JSON.parse(chunks);
-      resolve18(data);
+      resolve19(data);
     } catch (e) {
-      resolve18("");
+      resolve19("");
     }
   });
 });
@@ -146549,7 +146549,7 @@ var WSClient = class {
       return Promise.resolve(false);
     }
     this.pendingWsInstance = wsInstance;
-    return new Promise((resolve18) => {
+    return new Promise((resolve19) => {
       let settled = false;
       let timer;
       const settleOnce = (ok) => {
@@ -146560,7 +146560,7 @@ var WSClient = class {
           clearTimeout(timer);
         if (this.pendingWsInstance === wsInstance)
           this.pendingWsInstance = null;
-        resolve18(ok);
+        resolve19(ok);
       };
       if (this.handshakeTimeoutMs && this.handshakeTimeoutMs > 0) {
         timer = setTimeout(() => {
@@ -147034,7 +147034,7 @@ var Aily = class {
         throw EExecStatus.ERROR;
       }
       const polling = () => __awaiter(this, void 0, void 0, function* () {
-        return new Promise((resolve18) => {
+        return new Promise((resolve19) => {
           setTimeout(() => __awaiter(this, void 0, void 0, function* () {
             var _a2, _b2;
             const runStatusInfo = yield this.client.aily.v1.ailySessionRun.get({
@@ -147044,7 +147044,7 @@ var Aily = class {
               }
             }, options);
             if (!(runStatusInfo.code === 0 && runStatusInfo.data)) {
-              resolve18(3);
+              resolve19(3);
               return;
             }
             const status = (_b2 = (_a2 = runStatusInfo.data) === null || _a2 === void 0 ? void 0 : _a2.run) === null || _b2 === void 0 ? void 0 : _b2.status;
@@ -147053,18 +147053,18 @@ var Aily = class {
               case "IN_PROGRESS":
                 yield (() => __awaiter(this, void 0, void 0, function* () {
                   const ret = yield polling();
-                  resolve18(ret);
+                  resolve19(ret);
                 }))();
               case "COMPLETED":
-                resolve18(EExecStatus.SUCCESS);
+                resolve19(EExecStatus.SUCCESS);
               case "EXPIRED":
-                resolve18(EExecStatus.EXPIRED);
+                resolve19(EExecStatus.EXPIRED);
               case "CANCELLED":
-                resolve18(EExecStatus.CANCELLED);
+                resolve19(EExecStatus.CANCELLED);
               case "FAILED":
-                resolve18(EExecStatus.FAILED);
+                resolve19(EExecStatus.FAILED);
               default:
-                resolve18(EExecStatus.OTHER);
+                resolve19(EExecStatus.OTHER);
             }
           }), 500);
         });
@@ -147335,7 +147335,7 @@ function begin(baseUrl) {
   });
 }
 function startPolling(ctx) {
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     var _a, _b;
     let { baseUrl, interval } = ctx;
     let domainSwitched = false;
@@ -147381,7 +147381,7 @@ function startPolling(ctx) {
         }
         if (pollRes.client_id && pollRes.client_secret) {
           cleanup();
-          resolve18({
+          resolve19({
             client_id: pollRes.client_id,
             client_secret: pollRes.client_secret,
             user_info: pollRes.user_info
@@ -150259,7 +150259,7 @@ var LarkChannel = class {
    * corresponding public events.
    */
   connectWebSocket(timeoutMs) {
-    return new Promise((resolve18, reject) => {
+    return new Promise((resolve19, reject) => {
       var _a;
       let settled = false;
       const timer = setTimeout(() => {
@@ -150286,7 +150286,7 @@ var LarkChannel = class {
             return;
           settled = true;
           clearTimeout(timer);
-          resolve18();
+          resolve19();
         },
         onError: (err) => {
           if (settled)
@@ -150679,12 +150679,12 @@ function bufferFromStream(raw) {
   });
 }
 function readableToBuffer(stream4) {
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     const chunks = [];
     stream4.on("data", (chunk) => {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     });
-    stream4.on("end", () => resolve18(Buffer.concat(chunks)));
+    stream4.on("end", () => resolve19(Buffer.concat(chunks)));
     stream4.on("error", reject);
   });
 }
@@ -150754,8 +150754,8 @@ var ConnectionSupervisor2 = class {
     this.#healthyIntervalMs = safeDelay(healthyIntervalMs, 15e3);
     this.#setTimeout = setTimeoutImpl;
     this.#clearTimeout = clearTimeoutImpl;
-    this.#ready = new Promise((resolve18) => {
-      this.#resolveReady = resolve18;
+    this.#ready = new Promise((resolve19) => {
+      this.#resolveReady = resolve19;
     });
   }
   get ready() {
@@ -152551,7 +152551,7 @@ var STEP_PUSH_INTENT_FIELDS = [
 var MAX_STEP_PUSH_SEND_STATES = 512;
 var DEFAULT_STEP_PUSH_CLOCK = Object.freeze({
   now: () => Date.now(),
-  delay: (ms) => new Promise((resolve18) => setTimeout(resolve18, ms))
+  delay: (ms) => new Promise((resolve19) => setTimeout(resolve19, ms))
 });
 function operationArguments(toolCall) {
   const source = toolCall?.arguments;
@@ -152709,7 +152709,7 @@ function strictSenderOpenId(event) {
   return nonEmptyString8(event?.sender?.sender_id?.open_id);
 }
 function abortableDelay2(milliseconds, signal) {
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     if (signal?.aborted) {
       reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
       return;
@@ -152718,7 +152718,7 @@ function abortableDelay2(milliseconds, signal) {
     timer.unref?.();
     function done() {
       signal?.removeEventListener("abort", aborted);
-      resolve18();
+      resolve19();
     }
     function aborted() {
       clearTimeout(timer);
@@ -156339,7 +156339,7 @@ ${error.batchInputMessage}` : messageFailureText(failure);
       } catch (error) {
         lastError = error;
         if (attempt < 2 && this.#isRetriableSendError(error)) {
-          await new Promise((resolve18) => setTimeout(resolve18, 300 * (attempt + 1)));
+          await new Promise((resolve19) => setTimeout(resolve19, 300 * (attempt + 1)));
           continue;
         }
         break;
@@ -156465,7 +156465,7 @@ ${error.batchInputMessage}` : messageFailureText(failure);
     void (async () => {
       try {
         while (!watchdog.stopped && !this.#signal?.aborted && !state.heartbeatStopped) {
-          await new Promise((resolve18) => setTimeout(resolve18, 10));
+          await new Promise((resolve19) => setTimeout(resolve19, 10));
           if (watchdog.stopped || this.#signal?.aborted || state.heartbeatStopped) return;
           const now = this.#stepPushClock.now();
           const silentFor = now - (state.silenceSince ?? state.turnStartedAt ?? now);
@@ -157547,7 +157547,7 @@ function waitForFileOperation(operation, { signal, timeoutMs, stage }) {
   signal?.throwIfAborted();
   const deadline = new AbortController();
   const operationSignal = signal ? AbortSignal.any([signal, deadline.signal]) : deadline.signal;
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     let settled = false;
     const finish = (callback, value) => {
       if (settled) return;
@@ -157563,7 +157563,7 @@ function waitForFileOperation(operation, { signal, timeoutMs, stage }) {
     const timer = setTimeout(() => deadline.abort(), timeoutMs);
     operationSignal.addEventListener("abort", onAbort, { once: true });
     Promise.resolve().then(() => operation(operationSignal)).then(
-      (value) => finish(resolve18, value),
+      (value) => finish(resolve19, value),
       (error) => finish(reject, error)
     );
     if (operationSignal.aborted) onAbort();
@@ -158476,7 +158476,7 @@ var FeishuRuntime = class {
       });
       let settleReady;
       let settleError;
-      const ready = new Promise((resolve18, reject) => {
+      const ready = new Promise((resolve19, reject) => {
         let settled = false;
         const onAbort = () => {
           settleError(abortError7());
@@ -158495,7 +158495,7 @@ var FeishuRuntime = class {
           );
         }, this.#connectTimeoutMs);
         settleReady = () => {
-          settle2(resolve18);
+          settle2(resolve19);
         };
         settleError = (error) => {
           settle2(reject, error);
@@ -158608,7 +158608,7 @@ var FeishuRuntime = class {
       );
       throw probeError("card_action_probe_send_failed", "\u98DE\u4E66\u672A\u8FD4\u56DE\u6D4B\u8BD5\u5361\u7247\u7684\u6D88\u606F ID");
     }
-    return new Promise((resolve18, reject) => {
+    return new Promise((resolve19, reject) => {
       const timeout = setTimeout(() => {
         const current = this.#pendingCardActionProbes.get(messageId);
         if (!current || current.nonce !== nonce) return;
@@ -158629,7 +158629,7 @@ var FeishuRuntime = class {
         nonce,
         expectedOperatorOpenId: operatorOpenId,
         timeout,
-        resolve: resolve18,
+        resolve: resolve19,
         reject
       });
     });
@@ -162364,7 +162364,7 @@ function validPayload(endpoint, payload) {
   return "Unknown Feishu endpoint.";
 }
 function abortableDelay3(milliseconds, signal) {
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     if (signal?.aborted) {
       reject(signal.reason ?? new Error("aborted"));
       return;
@@ -162373,7 +162373,7 @@ function abortableDelay3(milliseconds, signal) {
     timer.unref?.();
     function done() {
       signal?.removeEventListener("abort", aborted);
-      resolve18();
+      resolve19();
     }
     function aborted() {
       clearTimeout(timer);
@@ -163592,7 +163592,7 @@ function approvalRequest(interaction) {
   };
 }
 function waitForReply(entry, approvalId) {
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     if (entry.controller.signal.aborted) return reject(entry.controller.signal.reason ?? abortError3());
     const onAbort = () => {
       entry.approvals.delete(approvalId);
@@ -163603,7 +163603,7 @@ function waitForReply(entry, approvalId) {
       resolve(value) {
         entry.controller.signal.removeEventListener("abort", onAbort);
         entry.approvals.delete(approvalId);
-        resolve18(value);
+        resolve19(value);
       }
     });
   });
@@ -164582,8 +164582,8 @@ var QqController = class {
     if (this.#activeAttemptId) await this.cancelProvisioning(this.#activeAttemptId);
     let firstQrResolve;
     let firstQrReject;
-    const firstQr = new Promise((resolve18, reject) => {
-      firstQrResolve = resolve18;
+    const firstQr = new Promise((resolve19, reject) => {
+      firstQrResolve = resolve19;
       firstQrReject = reject;
     });
     const record2 = {
@@ -165780,7 +165780,7 @@ function abortReason3(signal) {
 function waitWithSignal(promise, signal) {
   if (!signal) return promise;
   signal.throwIfAborted();
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     let settled = false;
     const finish = (callback, value) => {
       if (settled) return;
@@ -165791,7 +165791,7 @@ function waitWithSignal(promise, signal) {
     const onAbort = () => finish(reject, abortReason3(signal));
     signal.addEventListener("abort", onAbort, { once: true });
     Promise.resolve(promise).then(
-      (value) => finish(resolve18, value),
+      (value) => finish(resolve19, value),
       (error) => finish(reject, error)
     );
     if (signal.aborted) onAbort();
@@ -166974,8 +166974,8 @@ var QqRuntime = class {
     }));
     let readyResolve;
     let readyReject;
-    const ready = new Promise((resolve18, reject) => {
-      readyResolve = resolve18;
+    const ready = new Promise((resolve19, reject) => {
+      readyResolve = resolve19;
       readyReject = reject;
     });
     const onReady = () => {
@@ -167058,7 +167058,7 @@ var QqRuntime = class {
     }
     await Promise.race([
       runTask?.catch(() => void 0) ?? Promise.resolve(),
-      new Promise((resolve18) => setTimeout(resolve18, 2e3))
+      new Promise((resolve19) => setTimeout(resolve19, 2e3))
     ]);
     await bridge?.waitForIdle();
     this.#status.ready = false;
@@ -167243,8 +167243,8 @@ var ConnectionSupervisor3 = class {
     this.#healthyIntervalMs = Number.isFinite(healthyIntervalMs) && healthyIntervalMs >= 0 ? healthyIntervalMs : 15e3;
     this.#setTimeout = setTimeoutImpl;
     this.#clearTimeout = clearTimeoutImpl;
-    this.#ready = new Promise((resolve18) => {
-      this.#resolveReady = resolve18;
+    this.#ready = new Promise((resolve19) => {
+      this.#resolveReady = resolve19;
     });
   }
   get ready() {
@@ -167946,12 +167946,12 @@ function isSlackWorkspaceRedirect(target) {
   return target?.protocol === "https:" && !target.username && !target.password && (!target.port || target.port === "443") && target.hostname.endsWith(".slack.com") && target.hostname !== SLACK_FILE_HOST && target.pathname === "/" && target.searchParams.has("redir");
 }
 function delay2(ms, signal) {
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     if (signal?.aborted) {
       reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
       return;
     }
-    const timer = setTimeout(resolve18, ms);
+    const timer = setTimeout(resolve19, ms);
     timer?.unref?.();
     signal?.addEventListener("abort", () => {
       clearTimeout(timer);
@@ -169210,7 +169210,7 @@ var SlackRuntime = class {
     const socket = this.#createWebSocket(socketUrl2(value));
     this.#socket = socket;
     let settled = false;
-    return new Promise((resolve18, reject) => {
+    return new Promise((resolve19, reject) => {
       const markReady = (packet) => {
         if (settled || generation !== this.#generation) return;
         settled = true;
@@ -169222,7 +169222,7 @@ var SlackRuntime = class {
         this.#status.lastCheckedAt = now;
         this.#status.lastConnectedAt = now;
         this.#status.lastError = null;
-        resolve18();
+        resolve19();
       };
       addSocketListener2(socket, "message", (event) => {
         if (generation !== this.#generation || this.#stopped) return;
@@ -169324,7 +169324,7 @@ var SlackRuntime = class {
     }
     await Promise.race([
       bridge?.waitForIdle() ?? Promise.resolve(),
-      new Promise((resolve18) => setTimeout(resolve18, 2e3))
+      new Promise((resolve19) => setTimeout(resolve19, 2e3))
     ]);
     this.#status.ready = false;
     this.#status.connectionState = "idle";
@@ -171283,11 +171283,11 @@ var TelegramRuntime = class {
     this.#bridge = null;
     await Promise.race([
       pollTask?.catch(() => void 0) ?? Promise.resolve(),
-      new Promise((resolve18) => setTimeout(resolve18, 2e3))
+      new Promise((resolve19) => setTimeout(resolve19, 2e3))
     ]);
     await Promise.race([
       bridge?.waitForIdle() ?? Promise.resolve(),
-      new Promise((resolve18) => setTimeout(resolve18, 2e3))
+      new Promise((resolve19) => setTimeout(resolve19, 2e3))
     ]);
     try {
       await httpTransport?.destroy();
@@ -172630,7 +172630,7 @@ function abortReason6(signal) {
 function waitWithSignal2(promise, signal) {
   if (!signal) return promise;
   signal.throwIfAborted();
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     let settled = false;
     const finish = (callback, value) => {
       if (settled) return;
@@ -172641,7 +172641,7 @@ function waitWithSignal2(promise, signal) {
     const onAbort = () => finish(reject, abortReason6(signal));
     signal.addEventListener("abort", onAbort, { once: true });
     Promise.resolve(promise).then(
-      (value) => finish(resolve18, value),
+      (value) => finish(resolve19, value),
       (error) => finish(reject, error)
     );
     if (signal.aborted) onAbort();
@@ -174032,8 +174032,8 @@ var WecomRuntime = class {
     let readyResolve;
     let readyReject;
     let authenticated = false;
-    const ready = new Promise((resolve18, reject) => {
-      readyResolve = resolve18;
+    const ready = new Promise((resolve19, reject) => {
+      readyResolve = resolve19;
       readyReject = reject;
     });
     const onAuthenticated = () => {
@@ -174209,8 +174209,8 @@ var ConnectionSupervisor4 = class {
     this.#healthyIntervalMs = Number.isFinite(healthyIntervalMs) && healthyIntervalMs >= 0 ? healthyIntervalMs : 15e3;
     this.#setTimeout = setTimeoutImpl;
     this.#clearTimeout = clearTimeoutImpl;
-    this.#ready = new Promise((resolve18) => {
-      this.#resolveReady = resolve18;
+    this.#ready = new Promise((resolve19) => {
+      this.#resolveReady = resolve19;
     });
   }
   get ready() {
@@ -176971,14 +176971,14 @@ var WecomAppCallbackServer = class {
     server.on("clientError", (_error, socket) => {
       if (socket.writable) socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
     });
-    await new Promise((resolve18, reject) => {
+    await new Promise((resolve19, reject) => {
       const onceError = (error) => {
         server.removeListener("listening", onceListening);
         reject(error);
       };
       const onceListening = () => {
         server.removeListener("error", onceError);
-        resolve18();
+        resolve19();
       };
       server.once("error", onceError);
       server.once("listening", onceListening);
@@ -176994,8 +176994,8 @@ var WecomAppCallbackServer = class {
     this.#streams.clear();
     this.#streamByMsgId.clear();
     if (!server) return;
-    await new Promise((resolve18) => {
-      server.close(() => resolve18());
+    await new Promise((resolve19) => {
+      server.close(() => resolve19());
       server.closeAllConnections?.();
     });
   }
@@ -177173,7 +177173,7 @@ var WecomAppCallbackServer = class {
     this.#dispatch(route, message, envelope, response);
   }
   #readBody(request, response) {
-    return new Promise((resolve18) => {
+    return new Promise((resolve19) => {
       const chunks = [];
       let length = 0;
       request.on("data", (chunk) => {
@@ -177182,7 +177182,7 @@ var WecomAppCallbackServer = class {
         if (length > this.#maxBodyBytes) {
           writeText(response, 413, "payload too large");
           request.destroy();
-          resolve18(null);
+          resolve19(null);
           return;
         }
         chunks.push(buffer);
@@ -177191,13 +177191,13 @@ var WecomAppCallbackServer = class {
         const raw = Buffer.concat(chunks, length).toString("utf8");
         if (!raw.trim()) {
           writeText(response, 400, "empty payload");
-          resolve18(null);
+          resolve19(null);
           return;
         }
-        resolve18({ raw });
+        resolve19({ raw });
       });
       request.on("error", () => {
-        resolve18(null);
+        resolve19(null);
       });
     });
   }
@@ -179634,9 +179634,9 @@ var WeixinController = class {
     try {
       while (!record2.controller.signal.aborted && Date.now() < record2.expiresAt) {
         if (record2.state === "needs_verification" && !record2.pendingVerifyCode) {
-          await new Promise((resolve18) => {
-            record2.verifyResolve = resolve18;
-            if (record2.controller.signal.aborted) resolve18();
+          await new Promise((resolve19) => {
+            record2.verifyResolve = resolve19;
+            if (record2.controller.signal.aborted) resolve19();
           });
           record2.verifyResolve = null;
           this.#assertAttemptActive(record2);
@@ -181218,14 +181218,14 @@ function harnessHealthError(cause) {
   return runtimeStartError(code, cause);
 }
 function delay3(ms, signal) {
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     if (signal?.aborted) {
       reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
       return;
     }
     const finish = () => {
       signal?.removeEventListener("abort", onAbort);
-      resolve18();
+      resolve19();
     };
     const timer = setTimeout(finish, ms);
     const onAbort = () => {
@@ -181612,8 +181612,8 @@ var ConnectionSupervisor5 = class {
     this.#healthyIntervalMs = Number.isFinite(healthyIntervalMs) && healthyIntervalMs >= 0 ? healthyIntervalMs : 15e3;
     this.#setTimeout = setTimeoutImpl;
     this.#clearTimeout = clearTimeoutImpl;
-    this.#ready = new Promise((resolve18) => {
-      this.#resolveReady = resolve18;
+    this.#ready = new Promise((resolve19) => {
+      this.#resolveReady = resolve19;
     });
   }
   get ready() {
@@ -182454,11 +182454,11 @@ var WhatsappController = class {
     let resolveFirstQr;
     let rejectFirstQr;
     let firstQrSettled = false;
-    const firstQr = new Promise((resolve18, reject) => {
+    const firstQr = new Promise((resolve19, reject) => {
       resolveFirstQr = () => {
         if (firstQrSettled) return;
         firstQrSettled = true;
-        resolve18();
+        resolve19();
       };
       rejectFirstQr = (error) => {
         if (firstQrSettled) return;
@@ -182890,8 +182890,8 @@ async function createWhatsappWebSession({
   let socket = null;
   let socketGeneration = 0;
   let restartTask = null;
-  const ready = new Promise((resolve18, reject) => {
-    resolveReady = resolve18;
+  const ready = new Promise((resolve19, reject) => {
+    resolveReady = resolve19;
     rejectReady = reject;
   });
   const settleFailure = (error) => {
@@ -183129,7 +183129,7 @@ async function downloadWhatsappImage(message, download, {
   const timeout = AbortSignal.timeout(IMAGE_DOWNLOAD_TIMEOUT_MS);
   const downloadSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
   const pendingStream = Promise.resolve().then(() => download(message, "stream", { options: { signal: downloadSignal } }));
-  const stream4 = await new Promise((resolve18, reject) => {
+  const stream4 = await new Promise((resolve19, reject) => {
     let settled = false;
     const finish = (callback, value) => {
       if (settled) return false;
@@ -183141,7 +183141,7 @@ async function downloadWhatsappImage(message, download, {
     const onAbort = () => finish(reject, downloadSignal.reason);
     downloadSignal.addEventListener("abort", onAbort, { once: true });
     pendingStream.then((value) => {
-      if (!finish(resolve18, value)) value?.destroy?.();
+      if (!finish(resolve19, value)) value?.destroy?.();
     }, (error) => finish(reject, error));
     if (downloadSignal.aborted) onAbort();
   }).catch((error) => {
@@ -183313,7 +183313,7 @@ function abortReason7(signal) {
 function waitWithSignal3(promise, signal) {
   if (!signal) return promise;
   signal.throwIfAborted();
-  return new Promise((resolve18, reject) => {
+  return new Promise((resolve19, reject) => {
     let settled = false;
     const finish = (callback, value) => {
       if (settled) return;
@@ -183324,7 +183324,7 @@ function waitWithSignal3(promise, signal) {
     const onAbort = () => finish(reject, abortReason7(signal));
     signal.addEventListener("abort", onAbort, { once: true });
     Promise.resolve(promise).then(
-      (value) => finish(resolve18, value),
+      (value) => finish(resolve19, value),
       (error) => finish(reject, error)
     );
     if (signal.aborted) onAbort();
@@ -183762,7 +183762,7 @@ var WhatsappRuntime = class {
     await session?.close().catch(() => void 0);
     await Promise.race([
       bridge?.waitForIdle() ?? Promise.resolve(),
-      new Promise((resolve18) => setTimeout(resolve18, 2e3))
+      new Promise((resolve19) => setTimeout(resolve19, 2e3))
     ]);
     this.#status.ready = false;
     this.#status.connectionState = "idle";
@@ -184154,6 +184154,10 @@ async function apply12(ctx, config = {}) {
     createHandler: (controller) => createWhatsappRpcHandler(controller, config.rpcOptions)
   });
 }
+
+// src/index.mjs
+import { homedir as homedir12 } from "node:os";
+import { join as join16, resolve as resolve18 } from "node:path";
 
 // ../../node_modules/.pnpm/@xmanrui+dsh-im@4.20.2/node_modules/@xmanrui/dsh-im/plugin-src/host/host-language.mjs
 import { homedir as homedir11 } from "node:os";
@@ -185375,10 +185379,14 @@ var CHANNELS4 = Object.freeze([
   ["whatsapp", apply12]
 ]);
 var CLAWCLAW_HOST_CHANNELS = Object.freeze(CHANNELS4.map(([channel]) => channel));
+function resolveChannelWorkspace(config, channel) {
+  const own2 = config[channel] ?? {};
+  return resolve18(own2.workspace ?? config.defaultWorkspace ?? process.env.CLAWCLAW_DEFAULT_WORKSPACE ?? join16(homedir12(), ".clawclaw", "workspaces", "default"));
+}
 function channelConfig(config, channel, deliveryService) {
   const own2 = config[channel] ?? {};
   const authorized = config.rpcAuthority === void 0 ? own2 : { ...own2, rpcAuthority: config.rpcAuthority };
-  return { ...authorized, deliveryService };
+  return { ...authorized, workspace: resolveChannelWorkspace(config, channel), deliveryService };
 }
 function createImHostPlugin(internals = {}) {
   const channels = internals.channels ?? CHANNELS4;
@@ -185480,7 +185488,8 @@ export {
   apply13 as apply,
   createImHostPlugin,
   inject,
-  name
+  name,
+  resolveChannelWorkspace
 };
 /*! Bundled license information:
 

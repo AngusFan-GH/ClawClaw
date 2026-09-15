@@ -67,6 +67,10 @@
       "types": "./lib/types/notifications.d.ts",
       "default": "./lib/notifications.js"
     },
+    "./default-workspace": {
+      "types": "./lib/types/default-workspace.d.ts",
+      "default": "./lib/default-workspace.js"
+    },
     "./spiritx": {
       "types": "./lib/types/spiritx.d.ts",
       "default": "./lib/spiritx.js"

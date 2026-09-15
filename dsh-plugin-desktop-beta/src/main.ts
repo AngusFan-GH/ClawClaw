@@ -90,10 +90,12 @@ import {
 } from './desktop-market.ts'
 import DesktopSettingsController from './desktop-settings-controller.ts'
 import {
+  readDesktopDataDirectoryState,
   resolveDesktopDataDirectory,
   selectDesktopDataDirectory,
   type DesktopDataDirectoryLocation,
 } from './desktop-data-directory.ts'
+import { clawClawDataLayout, prepareClawClawDataLayout } from './product-data-layout.ts'
 import { acquireDesktopDataOperationLock } from './desktop-data-operation-lock.ts'
 import { resetDesktopDataDirectory } from './desktop-factory-reset.ts'
 import {
@@ -686,9 +688,29 @@ async function start(): Promise<void> {
     })
     const dshBootstrapPath = fileURLToPath(new URL('./desktop-cli.js', import.meta.url))
     const releasePnpmRuntime = generation.own(() => { pnpmRuntime.dispose() })
-    const fallbackHome = resolveDshHome()
-    const defaultHome = resolve(defaultDshHome())
+    const productLayout = clawClawDataLayout(app.getPath('home'))
+    const defaultHome = productLayout.dshHome
     const fallbackSource = process.env.DSH_HOME === undefined ? 'default' : 'environment'
+    const desktopDataState = safeModePaths === undefined
+      ? readDesktopDataDirectoryState(desktopUserDataDir)
+      : undefined
+    let fallbackHome: string
+    if (process.env.DSH_HOME !== undefined) {
+      fallbackHome = resolveDshHome()
+    } else if (desktopDataState !== undefined) {
+      fallbackHome = defaultHome
+    } else {
+      const preparedLayout = prepareClawClawDataLayout(
+        app.getPath('home'),
+        resolve(defaultDshHome()),
+      )
+      fallbackHome = preparedLayout.dshHome
+      if (preparedLayout.legacyHomeConflict) {
+        electronLogger.error(
+          `${BIN_NAME}: both the legacy and ClawClaw data directories exist; using ${preparedLayout.dshHome}`,
+        )
+      }
+    }
     let dataDirectoryLocation: DesktopDataDirectoryLocation | undefined
     let homeDir: string
     if (safeModePaths !== undefined) {
@@ -702,6 +724,9 @@ async function start(): Promise<void> {
       homeDir = dataDirectoryLocation.homeDir
     }
     process.env.DSH_HOME = homeDir
+    process.env.CLAWCLAW_DEFAULT_WORKSPACE = safeModePaths === undefined
+      ? productLayout.defaultWorkspace
+      : join(safeModePaths.rootDir, 'workspace')
     const desktopLaunchEnvironment = withDesktopDshHome(environment, homeDir)
     const projectionCacheRecovery = recoverOversizedSessionProjectionCache(homeDir)
     if (projectionCacheRecovery.status === 'quarantined') {
