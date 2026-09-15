@@ -11,8 +11,8 @@
  */
 
 import { createRequire } from 'node:module'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -22,6 +22,7 @@ const rootManifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 
 const ALLOWED_LICENSES = new Set([
   'MIT',
   'Apache-2.0',
+  'Apache 2.0',
   'BSD-2-Clause',
   'BSD-3-Clause',
   'ISC',
@@ -31,6 +32,7 @@ const ALLOWED_LICENSES = new Set([
   'CC0-1.0',
   'Zlib',
   'Python-2.0',
+  'BlueOak-1.0.0',
 ])
 
 /**
@@ -41,8 +43,15 @@ const ALLOWED_LICENSES = new Set([
  * review any addition.
  */
 const NOTICE_LICENSES = new Set([
+  'GPL-3.0',
   'LGPL-3.0-or-later',
   'Apache-2.0 AND LGPL-3.0-or-later',
+])
+
+// Distribution of this official QQ connector is covered by a separately
+// obtained vendor authorization; npm intentionally marks the package private.
+const AUTHORIZED_UNLICENSED_PACKAGES = new Set([
+  '@tencent-connect/qqbot-connector',
 ])
 
 /**
@@ -56,8 +65,11 @@ function resolvePackageManifest(name, fromManifestPath) {
   const entry = name.startsWith('@') ? segments.slice(2).join('/') : segments.slice(1).join('/')
   let dir = dirname(fromManifestPath)
   for (;;) {
-    const candidate = join(dir, 'node_modules', folder, entry, 'package.json')
-    if (existsSync(candidate)) return candidate
+    const roots = basename(dir) === 'node_modules' ? [dir] : [join(dir, 'node_modules')]
+    for (const root of roots) {
+      const candidate = join(root, folder, entry, 'package.json')
+      if (existsSync(candidate)) return realpathSync(candidate)
+    }
     const parent = dirname(dir)
     if (parent === dir) break
     dir = parent
@@ -101,6 +113,8 @@ for (let index = 0; index < queue.length; index += 1) {
       if (!hasLicenseFile) {
         failures.push(`${current.name}: license refers to ${JSON.stringify(license)} but no LICENSE file is shipped`)
       }
+    } else if (license === 'UNLICENSED' && AUTHORIZED_UNLICENSED_PACKAGES.has(current.name)) {
+      // Covered by the distributor's vendor agreement.
     } else if (license !== undefined && !ALLOWED_LICENSES.has(license) && !NOTICE_LICENSES.has(license)) {
       failures.push(`${current.name}: license ${JSON.stringify(license)} is not on the redistribution allowlist`)
     }

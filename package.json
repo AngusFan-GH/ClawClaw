@@ -14,6 +14,9 @@
     "@google/genai": {
       "built": false
     },
+    "@whiskeysockets/baileys": {
+      "built": false
+    },
     "electron": {
       "built": true
     },
@@ -37,9 +40,9 @@
     }
   },
   "scripts": {
-    "build": "pnpm --filter dsh-community-market run build && pnpm --filter dsh-plugin-desktop run build && pnpm --filter dsh-plugin-desktop-beta run build",
-    "typecheck": "pnpm --filter dsh-plugin-desktop run typecheck && pnpm --filter dsh-plugin-desktop-beta run typecheck && pnpm --filter dsh-community-market run typecheck",
-    "test": "pnpm --filter dsh-plugin-desktop run test && pnpm --filter dsh-plugin-desktop-beta run test && pnpm --filter dsh-community-market run test",
+    "build": "pnpm --filter @clawclaw/dsh-im run build && pnpm --filter dsh-community-market run build && pnpm --filter dsh-plugin-desktop run build && pnpm --filter dsh-plugin-desktop-beta run build",
+    "typecheck": "pnpm --filter @clawclaw/dsh-im run typecheck && pnpm --filter dsh-plugin-desktop run typecheck && pnpm --filter dsh-plugin-desktop-beta run typecheck && pnpm --filter dsh-community-market run typecheck",
+    "test": "pnpm --filter @clawclaw/dsh-im run test && pnpm --filter dsh-plugin-desktop run test && pnpm --filter dsh-plugin-desktop-beta run test && pnpm --filter dsh-community-market run test",
     "test:bilingual-docs": "node --test scripts/bilingual-docs.test.mjs",
     "check:bilingual-docs": "pnpm run test:bilingual-docs && node scripts/verify-bilingual-docs.mjs",
     "test:architecture-gates": "node --test scripts/market-dependency-direction.test.mjs",

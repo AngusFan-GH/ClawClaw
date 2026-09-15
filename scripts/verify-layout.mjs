@@ -15,6 +15,7 @@ const workspace = readJson('package.json')
 const upstream = readJson('upstream.json')
 const stablePlugin = readJson('dsh-plugin-desktop/package.json')
 const betaPlugin = readJson('dsh-plugin-desktop-beta/package.json')
+const imPlugin = readJson('channels/dsh-im/package.json')
 const fabric = readJson('dsh-community-fabric/package.json')
 const market = readJson('dsh-community-market/package.json')
 const upstreamPackage = readJson('deepseek-harness/package.json')
@@ -29,7 +30,7 @@ if (workspace.packageManager !== 'pnpm@11.8.0') {
   fail('the product workspace must pin pnpm@11.8.0')
 }
 const workspaceDefinition = readFileSync(resolve(root, 'pnpm-workspace.yaml'), 'utf8')
-for (const packagePath of ['dsh-plugin-desktop', 'dsh-plugin-desktop-beta', 'dsh-community-fabric', 'dsh-community-market']) {
+for (const packagePath of ['dsh-plugin-desktop', 'dsh-plugin-desktop-beta', 'dsh-community-fabric', 'dsh-community-market', 'channels/dsh-im']) {
   if (!workspaceDefinition.includes(`  - ${packagePath}`)) {
     fail(`the root pnpm workspace is missing ${packagePath}`)
   }
@@ -43,6 +44,7 @@ if (workspace.workspaces !== undefined) {
 for (const [name, manifest] of [
   ['dsh-plugin-desktop', stablePlugin],
   ['dsh-plugin-desktop-beta', betaPlugin],
+  ['@clawclaw/dsh-im', imPlugin],
   ['dsh-community-fabric', fabric],
   ['dsh-community-market', market],
 ]) {
@@ -50,6 +52,7 @@ for (const [name, manifest] of [
 }
 if (fabric.name !== 'dsh-community-fabric') fail('the Fabric workspace must own dsh-community-fabric')
 if (market.name !== 'dsh-community-market') fail('the market workspace must own dsh-community-market')
+if (imPlugin.name !== '@clawclaw/dsh-im') fail('the channels workspace must own @clawclaw/dsh-im')
 const claudePath = resolve(root, 'CLAUDE.md')
 const claudeStat = lstatSync(claudePath)
 // Windows checkouts materialize the symlink as a regular file holding the
@@ -94,8 +97,9 @@ for (const [owner, manifest] of [
   for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
     for (const [name, range] of Object.entries(manifest[field] ?? {})) {
       if (typeof range !== 'string') continue
-      if (/^(?:workspace|portal|link):/u.test(range)
-        || (range.startsWith('file:') && range.includes('deepseek-harness'))) {
+      const ownedWorkspaceDependency = name === '@clawclaw/dsh-im' && range === 'workspace:*'
+      if (!ownedWorkspaceDependency && (/^(?:workspace|portal|link):/u.test(range)
+        || (range.startsWith('file:') && range.includes('deepseek-harness')))) {
         fail(`${owner} ${field}.${name} bypasses the published DSH package boundary`)
       }
     }

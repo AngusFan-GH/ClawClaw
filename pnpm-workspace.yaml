@@ -3,7 +3,7 @@ packages:
   - dsh-plugin-desktop-beta
   - dsh-community-fabric
   - dsh-community-market
-
+  - channels/dsh-im
 linkWorkspacePackages: true
 
 overrides:
@@ -307,6 +307,8 @@ allowBuilds:
   "protobufjs": false
   "electron-winstaller": false
   "msgpackr-extract": false
+  esbuild: true
+  '@whiskeysockets/baileys': false
 
 supportedArchitectures:
   os:

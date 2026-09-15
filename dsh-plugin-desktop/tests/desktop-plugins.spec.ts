@@ -136,6 +136,10 @@ describe('desktop direct bundle management', () => {
     expect(first.find(item => item.packageName === '@deepseek-ai/dsh-web-app')).toEqual(
       expect.objectContaining({ status: 'active', mutable: false }),
     )
+    expect(first.find(item => item.packageName === '@clawclaw/dsh-im')).toEqual(
+      expect.objectContaining({ status: 'active', mutable: false, uninstallable: false }),
+    )
+    expect(desktopPluginBundleMutable('@clawclaw/dsh-im')).toBe(false)
     expect(desktopPluginBundleMutable('dsh-plugin-desktop')).toBe(false)
     expect(desktopPluginBundleMutable('dsh-community-market')).toBe(false)
     expect(desktopPluginBundleMutable('../third-party-plugin')).toBe(false)
