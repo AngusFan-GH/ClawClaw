@@ -223,6 +223,47 @@ describe('final Electron fuse verification', () => {
     expect(exists).toHaveBeenCalledWith(universalExecutable)
   })
 
+  it('resolves a mac directory build when electron-builder omits its NoOpTarget', () => {
+    const platform = { buildConfigurationKey: 'mac' }
+    const built = {
+      outDir: '/build',
+      configuration: { productName: 'ClawClaw', mac: { target: ['dir'] } },
+      platformToTargets: new Map([[platform, new Map()]]),
+    } satisfies ElectronArtifactBuildResult
+
+    expect(resolveFinalPackagedRuntimeContexts(built, () => true)).toEqual([
+      expect.objectContaining({
+        appOutDir: join('/build', `mac${process.arch === 'arm64' ? '-arm64' : ''}`),
+        arch: process.arch === 'arm64' ? Arch.arm64 : Arch.x64,
+      }),
+    ])
+  })
+
+  it('honors an explicit directory architecture when electron-builder omits its NoOpTarget', () => {
+    const platform = { buildConfigurationKey: 'mac' }
+    const built = {
+      outDir: '/build',
+      configuration: { productName: 'ClawClaw', mac: { target: [{ target: 'dir', arch: 'x64' }] } },
+      platformToTargets: new Map([[platform, new Map()]]),
+    } satisfies ElectronArtifactBuildResult
+
+    expect(resolveFinalPackagedRuntimeContexts(built, () => true)).toEqual([
+      expect.objectContaining({ appOutDir: join('/build', 'mac'), arch: Arch.x64 }),
+    ])
+  })
+
+  it('keeps ambiguous empty non-directory targets fail-closed', () => {
+    const platform = { buildConfigurationKey: 'mac' }
+    const built = {
+      outDir: '/build',
+      configuration: { productName: 'ClawClaw', mac: { target: ['dmg'] } },
+      platformToTargets: new Map([[platform, new Map()]]),
+    } satisfies ElectronArtifactBuildResult
+
+    expect(() => resolveFinalPackagedRuntimeContexts(built, () => true))
+      .toThrow('cannot determine requested Electron architecture(s) for mac')
+  })
+
   it('checks every requested final executable after all artifact builds', async () => {
     const executables = [
       join('/build', 'mac-arm64', 'ClawClaw.app', 'Contents', 'MacOS', 'ClawClaw'),

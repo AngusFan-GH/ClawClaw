@@ -199,6 +199,20 @@ function configuredTargetArchitectures(
   return [...result]
 }
 
+function hasConfiguredTarget(
+  configuration: ElectronPlatformOutputConfiguration | null | undefined,
+  expectedName: string,
+): boolean {
+  const targets = configuration?.target === undefined || configuration.target === null
+    ? []
+    : Array.isArray(configuration.target) ? configuration.target : [configuration.target]
+  return targets.some((target) => {
+    const rawName = typeof target === 'string' ? target : target.target
+    const separator = rawName.lastIndexOf(':')
+    return (separator > 0 ? rawName.slice(0, separator) : rawName) === expectedName
+  })
+}
+
 function requestedArchitectures(
   result: ElectronArtifactBuildResult,
   platform: { readonly buildConfigurationKey: string },
@@ -220,9 +234,13 @@ function requestedArchitectures(
   const targetNames = new Set(
     [...targets.keys()].filter((name): name is string => typeof name === 'string'),
   )
+  const configuredDirectory = hasConfiguredTarget(result.configuration[key], DIR_TARGET)
+  const configuredTargetNames = configuredDirectory
+    ? new Set([...targetNames, DIR_TARGET])
+    : targetNames
   const fromConfiguration = configuredTargetArchitectures(
     result.configuration[key],
-    targetNames,
+    configuredTargetNames,
     description,
   )
   if (fromConfiguration.length > 0) return fromConfiguration
@@ -230,7 +248,10 @@ function requestedArchitectures(
   // electron-builder's NoOpTarget (used by --dir) deliberately retains neither
   // the arch nor its packager. With no explicit target.arch, electron-builder
   // itself defaults that target to the Node process architecture.
-  if (targetNames.has(DIR_TARGET)) return [architectureNumber(process.arch, description)]
+  if (
+    targetNames.has(DIR_TARGET)
+    || configuredDirectory
+  ) return [architectureNumber(process.arch, description)]
 
   throw new Error(
     `dsh-plugin-desktop: cannot determine requested Electron architecture(s) for ${key}`,
