@@ -443,9 +443,15 @@ virtualStoreDirMaxLength: 60
     expect(rows.find(row => row.id === 'directory-picker')).toEqual(expect.objectContaining({
       name: '@deepseek-ai/dsh-host-directory-picker-auto',
     }))
-    expect(rows.find(row => row.id === 'directory-picker')?.disabled).toBeFalsy()
-    expect(rows.map(row => row.id)).not.toContain('desktop-directory-picker-browse-host')
-    expect(rows.map(row => row.id)).not.toContain('desktop-directory-picker-browse-surface')
+    expect(rows.find(row => row.id === 'directory-picker')?.disabled).toBe(true)
+    expect(rows).toContainEqual(expect.objectContaining({
+      id: 'desktop-directory-picker-browse-host',
+      name: '@deepseek-ai/dsh-host-directory-picker-browse',
+    }))
+    expect(rows).toContainEqual(expect.objectContaining({
+      id: 'desktop-directory-picker-browse-surface',
+      name: '@deepseek-ai/dsh-client-ui-directory-picker-browse',
+    }))
     expect(rows.find(row => row.id === 'subprocess')).toEqual({
       id: 'subprocess',
       name: '@deepseek-ai/dsh-subprocess-local',

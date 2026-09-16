@@ -10,6 +10,8 @@
     "src/client/**/*.tsx",
     "tests/client-boot-health.spec.ts",
     "tests/client-directory-picker.spec.ts",
+    "tests/client-channel-directory-picker.spec.ts",
+    "tests/client-default-workspace-selection.spec.ts",
     "tests/client-aa-settings.spec.ts",
     "tests/client-desktop-settings.spec.ts",
     "tests/client-environment.spec.ts",

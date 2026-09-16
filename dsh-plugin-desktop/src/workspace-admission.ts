@@ -1,3 +1,4 @@
+import type { DesktopDirectoryPickerOptions } from './directory-picker-contract.ts'
 import type {
   OpenDialogOptions,
   OpenDialogReturnValue,
@@ -28,12 +29,12 @@ export class ElectronWorkspaceAdmission {
   constructor(private readonly options: ElectronWorkspaceAdmissionOptions) {}
 
   /** Select one directory through the native platform adapter, coalescing concurrent requests. */
-  async pickDirectory(): Promise<string | null> {
+  async pickDirectory(options?: DesktopDirectoryPickerOptions): Promise<string | null> {
     if (!this.options.canPickDirectory) {
       throw new Error(`dsh-plugin-desktop: native workspace picker is unavailable on ${this.options.platform}`)
     }
     if (this.pickTask !== undefined) return await this.pickTask
-    const task = this.showDirectoryPicker()
+    const task = this.showDirectoryPicker(options)
     this.pickTask = task
     try {
       return await task
@@ -87,10 +88,10 @@ export class ElectronWorkspaceAdmission {
     return false
   }
 
-  private async showDirectoryPicker(): Promise<string | null> {
+  private async showDirectoryPicker(options?: DesktopDirectoryPickerOptions): Promise<string | null> {
     const result = await this.options.showOpenDialog({
       title: this.options.locale() === 'zh' ? '选择工作区目录' : 'Select Workspace Directory',
-      properties: ['openDirectory', 'dontAddToRecent'],
+      properties: ['openDirectory', 'dontAddToRecent', ...(options?.showHiddenFiles ? ['showHiddenFiles' as const] : [])],
     })
     return result.canceled ? null : result.filePaths[0] ?? null
   }

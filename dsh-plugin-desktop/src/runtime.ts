@@ -1,3 +1,4 @@
+import type { DesktopDirectoryPickerOptions } from './directory-picker-contract.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { DesktopRendererAccessHeader } from './desktop-browser-access.ts'
 import type { RendererBootReport } from './renderer-boot-contract.ts'
@@ -219,7 +220,7 @@ export interface DesktopRuntime {
   exportDiagnostics(): Promise<void>
 
   /** Open the desktop operating system's native workspace-folder chooser. */
-  pickDirectory(): Promise<string | null>
+  pickDirectory(options?: DesktopDirectoryPickerOptions): Promise<string | null>
 
   /** Open the isolated native Profile creator, focusing an existing instance. */
   openProfileCreateWindow(options: Omit<ProfileCreateWindowOptions, 'locale'>): void

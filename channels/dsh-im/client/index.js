@@ -1,4 +1,7 @@
 import * as React from 'react'
+import { h, isEnglish, localizeText } from '../node_modules/@xmanrui/dsh-im/plugin-src/client/i18n.js'
+import { channelTranslator, en, zh } from './locales.js'
+import { channelDirectoryPicker } from './directory-picker.js'
 import { apply as applyDshImClient, IMSettingsTab } from '../node_modules/@xmanrui/dsh-im/plugin-src/client/index.js'
 import {
   DingtalkLogoGlyph,
@@ -22,7 +25,6 @@ import {
 import { installChannelNavIcon } from './nav-icon.js'
 import { installClawClawChannelStyles } from './styles.js'
 
-const h = React.createElement
 export const inject = ['slots', 'connection', 'locale', 'workspaces']
 
 const LOGOS = Object.freeze({
@@ -53,7 +55,7 @@ function ChannelCard({ channel, status, onOpen }) {
     h('p', null, channel.description),
     h('span', { className: 'ccChannelState' },
       h('span', { className: 'ccChannelDot', 'data-state': status?.state ?? 'loading' }),
-      channelStatusLabel(status))),
+      channelStatusLabel(status, isEnglish() ? 'en' : 'zh'))),
   h('span', { className: 'ccChannelArrow', 'aria-hidden': 'true' }, channel.unavailable === true ? '' : '›'))
 }
 
@@ -155,12 +157,39 @@ export function ClawClawChannelSettings(injected) {
 }
 
 function interceptedContext(ctx) {
+  const locale = new Proxy(ctx.locale, {
+    get(target, property) {
+      if (property === 'bind') {
+        return namespace => namespace === 'dsh-im'
+          ? channelTranslator(target.bind(namespace), localizeText) : target.bind(namespace)
+      }
+      if (property === 'register') {
+        return (namespace, dictionaries) => target.register(namespace, namespace === 'dsh-im'
+          ? { ...dictionaries, zh: { ...dictionaries.zh, ...zh }, en: { ...dictionaries.en, ...en } }
+          : dictionaries)
+      }
+      const value = Reflect.get(target, property, target)
+      return typeof value === 'function' ? value.bind(target) : value
+    },
+  })
   const slots = new Proxy(ctx.slots, {
     get(target, property) {
       if (property === 'register') {
         return (options, component) => target.register(
           options?.id === 'xmanrui-dsh-im'
-            ? { ...options, id: 'clawclaw-channels', label: () => '消息渠道' }
+            ? {
+                ...options,
+                id: 'clawclaw-channels',
+                label: () => localizeText('消息渠道'),
+                inject: (...args) => {
+                  const injected = options.inject(...args)
+                  return {
+                    ...injected,
+                    workspaceDirectoryPicker: channelDirectoryPicker(injected.workspaceDirectoryPicker,
+                      () => window.__DSH_DESKTOP_PICK_DIRECTORY__),
+                  }
+                },
+              }
             : options,
           options?.id === 'xmanrui-dsh-im' ? ClawClawChannelSettings : component,
         )
@@ -172,6 +201,7 @@ function interceptedContext(ctx) {
   return new Proxy(ctx, {
     get(target, property) {
       if (property === 'slots') return slots
+      if (property === 'locale') return locale
       const value = Reflect.get(target, property, target)
       return typeof value === 'function' ? value.bind(target) : value
     },

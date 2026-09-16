@@ -19,6 +19,31 @@ function admission(overrides: Partial<ElectronWorkspaceAdmissionOptions> = {}) {
 }
 
 describe('Electron workspace admission', () => {
+  it('applies the current hidden-folder preference on each macOS chooser opening', async () => {
+    const { admission: subject, options } = admission({ platform: 'darwin' })
+    for (const showHiddenFiles of [false, true, false]) {
+      await subject.pickDirectory({ showHiddenFiles })
+      expect(options.showOpenDialog).toHaveBeenLastCalledWith({
+        title: 'Select Workspace Directory',
+        properties: ['openDirectory', 'dontAddToRecent', ...(showHiddenFiles ? ['showHiddenFiles'] : [])],
+      })
+    }
+  })
+
+  it.each(['zh', 'en'] as const)('keeps the macOS native picker localized without forcing hidden directories (%s)', async (locale) => {
+    const path = '/Users/test/.clawclaw/workspaces/default'
+    const { admission: subject, options } = admission({
+      platform: 'darwin',
+      locale: () => locale,
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: [path] })),
+    })
+    await expect(subject.pickDirectory()).resolves.toBe(path)
+    expect(options.showOpenDialog).toHaveBeenCalledWith({
+      title: locale === 'zh' ? '选择工作区目录' : 'Select Workspace Directory',
+      properties: ['openDirectory', 'dontAddToRecent'],
+    })
+  })
+
   it('coalesces concurrent native selections and releases the task after completion', async () => {
     let finish: ((value: { canceled: false; filePaths: string[] }) => void) | undefined
     const showOpenDialog = vi.fn<ElectronWorkspaceAdmissionOptions['showOpenDialog']>(() => new Promise((resolve) => {

@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
+import { channelDirectoryPickerPatch } from './channel-directory-picker-patch.mjs'
 import { larkSdkHandshakePatch } from '../node_modules/@xmanrui/dsh-im/plugin-src/host/lark-sdk-handshake-patch.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -53,6 +54,7 @@ const client = await build({
   platform: 'browser',
   target: ['chrome100'],
   external: ['react', 'react-dom'],
+  plugins: [channelDirectoryPickerPatch],
   write: false,
   legalComments: 'none',
 })

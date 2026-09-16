@@ -12,6 +12,7 @@ import { applyAdvancedShell } from './advanced-shell.ts'
 import { applyClawClawBrand } from './clawclaw-brand.tsx'
 import { startRendererBootReporter } from './boot-health.ts'
 import { applyDesktopSettings } from './desktop-settings.ts'
+import { applyDefaultWorkspaceSelection } from './default-workspace-selection.ts'
 import { installDesktopDirectoryPickerBridge } from './directory-picker.ts'
 import { parseDesktopClientEnvironment } from './environment.ts'
 import { applyExtendedShell } from './extended-shell.ts'
@@ -21,6 +22,11 @@ import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
 export { applyAdvancedShell } from './advanced-shell.ts'
 export { applyClawClawBrand } from './clawclaw-brand.tsx'
 export { applyDesktopSettings } from './desktop-settings.ts'
+export {
+  applyDefaultWorkspaceSelection,
+  installDesktopWorkspaceSelection,
+  resolveDesktopWorkspaceSelection,
+} from './default-workspace-selection.ts'
 export { applyExtendedShell, applyFramedShell } from './extended-shell.ts'
 export {
   createDesktopSettingsApi,
@@ -94,12 +100,13 @@ export function apply(ctx: ClientContext): void {
   )
   applyClawClawBrand(ctx)
   applySpiritXOnboarding(ctx)
+  applyDefaultWorkspaceSelection(ctx)
   const desktopSettings = applyDesktopSettings(ctx, environment)
   ctx.effect(
     () => startRendererBootReporter(ctx.loader),
     'dsh-plugin-desktop: renderer boot health report',
   )
-  if (environment.platform === 'win32') {
+  if (environment.platform === 'win32' || environment.platform === 'darwin') {
     ctx.effect(
       () => installDesktopDirectoryPickerBridge(),
       'dsh-plugin-desktop: native directory picker bridge',

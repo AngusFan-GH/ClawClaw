@@ -20,6 +20,10 @@ const THIRD_PARTY_DEPENDENCY_NAME = 'dsh-desktop-loader-smoke-dependency'
 const PRODUCT_VERSION = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
 ).version
+const CLIENT_ARTIFACT = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+if (/require\(["']@deepseek-ai\/schemastery["']\)/u.test(CLIENT_ARTIFACT)) {
+  throw new Error('desktop client artifact contains the Host-only @deepseek-ai/schemastery dependency')
+}
 const AUTHENTICATION_TOKEN = Buffer.alloc(32, 3).toString('base64url')
 let ordinaryBrowserEnabled = false
 const BROWSER_ACCESS = Object.freeze({

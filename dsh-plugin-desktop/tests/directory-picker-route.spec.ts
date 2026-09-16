@@ -32,6 +32,21 @@ function response(): ServerResponse & {
 }
 
 describe('desktop directory picker route', () => {
+  it.each([true, false])('forwards the hidden-folder preference (%s)', async (showHiddenFiles) => {
+    const pick = vi.fn(async () => null)
+    const res = response()
+    await handleDesktopDirectoryPickerRequest(jsonRequest({ showHiddenFiles }), res, 'http://127.0.0.1:43120', pick)
+    expect(res.statusCode).toBe(200)
+    expect(pick).toHaveBeenCalledWith({ showHiddenFiles })
+  })
+  it.each([null, [], { showHiddenFiles: 'true' }])('rejects invalid preferences without opening a chooser (%j)', async (value) => {
+    const pick = vi.fn(async () => null)
+    const res = response()
+    await handleDesktopDirectoryPickerRequest(jsonRequest(value), res, 'http://127.0.0.1:43120', pick)
+    expect(res.statusCode).toBe(400)
+    expect(pick).not.toHaveBeenCalled()
+  })
+
   it('returns the path selected by the native desktop adapter', async () => {
     const pick = vi.fn(async () => 'C:\\Work')
     const res = response()

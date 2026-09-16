@@ -94,7 +94,7 @@ export function createHostRuntime(rpc: HostRpc, snapshot: RuntimeSnapshot): Desk
     reloadRenderer() { void send('native:reloadRenderer') },
     toggleDeveloperTools() { void send('native:toggleDeveloperTools') },
     exportDiagnostics: () => send('native:exportDiagnostics'),
-    pickDirectory: () => send('native:pickDirectory'),
+    pickDirectory: (options) => options === undefined ? send('native:pickDirectory') : send('native:pickDirectory', [options]),
     validateDirectory: path => send('native:validateDirectory', [path]),
     reportRendererBoot: report => { void send('native:reportRendererBoot', [report]) },
     setLocalePreference(preference) { locale = preference ?? snapshot.locale; trayPublishers.forEach(publish => publish()); void send('native:setLocalePreference', [preference]) },

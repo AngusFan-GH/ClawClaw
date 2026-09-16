@@ -1,6 +1,10 @@
 const STYLE_ID = 'clawclaw-channel-overview'
 
 const CSS = `
+.dim-directoryPathField { position: relative; min-width: 0; }
+.dim-directoryPathField .dim-directoryPathInput { width: 100%; box-sizing: border-box; padding-left: 38px; }
+.dim-directoryPathControl .ccDirectoryNativePicker { position: absolute; top: 1px; left: 1px; display: grid; place-items: center; width: 36px; min-height: 36px; padding: 0; border: 0; border-radius: 7px 0 0 7px; background: transparent; color: var(--dsw-alias-content-secondary, #686d76); }
+.ccDirectoryNativePicker svg { width: 18px; height: 18px; }
 .ccChannels { width: min(100%, 880px); padding: 2px 0 36px; color: var(--dsw-alias-content-primary, #16181d); }
 .ccChannelsHeader { margin-bottom: 24px; }
 .ccChannelsHeader h2, .ccChannelsSection h3 { margin: 0; letter-spacing: 0; }

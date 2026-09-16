@@ -1010,7 +1010,7 @@ export function prepareDesktopProfile(
   if (webserver === undefined) {
     throw new Error(`${BIN_NAME}: desktop profile has no webserver row`)
   }
-  if (platform === 'win32') {
+  if (platform === 'win32' || platform === 'darwin') {
     if (!rows.has(DIRECTORY_PICKER_ROW_ID)) {
       throw new Error(`${BIN_NAME}: desktop profile has no directory-picker row`)
     }
@@ -1033,6 +1033,8 @@ export function prepareDesktopProfile(
         ],
       },
     )
+  }
+  if (platform === 'win32') {
     const pwshSandbox = rows.get(PWSH_SANDBOX_ROW_ID)
     if (pwshSandbox?.name === UPSTREAM_PWSH_SANDBOX_PACKAGE
       && !rowDisabledOnPlatform(pwshSandbox, platform)) {

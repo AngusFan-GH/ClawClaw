@@ -37,7 +37,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "typecheck": "node --check src/index.mjs && node --check client/index.js && node --check client/nav-icon.js && node --check client/overview-state.js",
+    "typecheck": "node --check src/index.mjs && node --check client/index.js && node --check client/nav-icon.js && node --check client/overview-state.js && node --check client/locales.js && node --check client/directory-picker.js && node --check scripts/channel-directory-picker-patch.mjs",
     "test": "node --test tests/*.test.mjs",
     "check": "pnpm run build && pnpm run typecheck && pnpm run test"
   },

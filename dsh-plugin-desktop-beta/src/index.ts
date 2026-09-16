@@ -346,7 +346,7 @@ export function apply(ctx: Context, config: Config): void {
     }),
     'dsh-plugin-desktop: renderer boot report route',
   )
-  if (runtime.platform === 'win32') {
+  if (runtime.platform === 'win32' || runtime.platform === 'darwin') {
     ctx.effect(
       () => ctx.webServer.register({
         kind: 'exact',
@@ -357,7 +357,7 @@ export function apply(ctx: Context, config: Config): void {
             req,
             res,
             rendererOrigin,
-            () => runtime.pickDirectory(),
+            (options) => runtime.pickDirectory(options),
             cause => {
               ctx.logger.error(`dsh-plugin-desktop: native directory picker failed: ${cause instanceof Error ? cause.message : String(cause)}`)
             },

@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { electronPlatformStrategy } from '../src/electron-platform.ts'
+import { createServer } from 'node:http'
+import { ElectronWorkspaceAdmission } from '../src/workspace-admission.ts'
+import { handleDesktopDirectoryPickerRequest } from '../src/directory-picker-route.ts'
+import { requestDesktopDirectory } from '../src/client/directory-picker.ts'
 
 const electron = vi.hoisted(() => ({
   app: {
@@ -65,7 +69,7 @@ describe('electronPlatformStrategy', () => {
 
     expect(strategy.platform).toBe('darwin')
     expect(strategy.updateDownloadPlatform).toBe('darwin')
-    expect(strategy.canPickDirectory).toBe(false)
+    expect(strategy.canPickDirectory).toBe(true)
     expect(strategy.canToggleShellMode).toBe(true)
 
     strategy.configureApplication(icon, 'DSH Desktop')
@@ -96,6 +100,49 @@ describe('electronPlatformStrategy', () => {
     expect(electron.Menu.setApplicationMenu).not.toHaveBeenCalled()
     expect(window.removeMenu).not.toHaveBeenCalled()
     expect(window.setBackgroundMaterial).not.toHaveBeenCalled()
+  })
+
+  it('serves the macOS renderer picker request using the real platform capability', async () => {
+    const strategy = electronPlatformStrategy('darwin')
+    const showOpenDialog = vi.fn(async () => ({ canceled: false, filePaths: ['/Users/test/.clawclaw'] }))
+    const picker = new ElectronWorkspaceAdmission({
+      platform: strategy.platform,
+      canPickDirectory: strategy.canPickDirectory,
+      locale: () => 'en',
+      showOpenDialog,
+      showMessageBox: vi.fn(),
+      logError: vi.fn(),
+    })
+    let origin = ''
+    const server = createServer((req, res) => {
+      void handleDesktopDirectoryPickerRequest(req, res, origin, (options) => picker.pickDirectory(options))
+    })
+    try {
+      await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+      const address = server.address()
+      if (address === null || typeof address === 'string') throw new Error('missing server address')
+      origin = `http://127.0.0.1:${address.port}`
+      const request: Parameters<typeof requestDesktopDirectory>[0] = (input, init) => fetch(
+        new URL(String(input), origin),
+        { ...init, headers: { ...init?.headers, origin } },
+      )
+      await expect(requestDesktopDirectory(request)).resolves.toBe('/Users/test/.clawclaw')
+      expect(showOpenDialog).toHaveBeenCalledWith({
+        title: 'Select Workspace Directory',
+        properties: ['openDirectory', 'dontAddToRecent'],
+      })
+      for (const showHiddenFiles of [true, false]) {
+        await expect(requestDesktopDirectory(request, { showHiddenFiles })).resolves.toBe('/Users/test/.clawclaw')
+        expect(showOpenDialog).toHaveBeenLastCalledWith({
+          title: 'Select Workspace Directory',
+          properties: ['openDirectory', 'dontAddToRecent', ...(showHiddenFiles ? ['showHiddenFiles'] : [])],
+        })
+      }
+      showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] })
+      await expect(requestDesktopDirectory(request)).resolves.toBeNull()
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+    }
   })
 
   it('rejects unsupported platforms', () => {

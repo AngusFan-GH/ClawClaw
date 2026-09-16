@@ -2,12 +2,13 @@ import {
   DESKTOP_DIRECTORY_PICKER_PATH,
   DESKTOP_DIRECTORY_VALIDATOR_PATH,
   type DesktopDirectoryPickerResponse,
+  type DesktopDirectoryPickerOptions,
   type DesktopDirectoryValidationResponse,
 } from '../directory-picker-contract.ts'
 
 /** Window seam consumed by the patched upstream browse panel. */
 export interface DesktopDirectoryPickerWindow {
-  __DSH_DESKTOP_PICK_DIRECTORY__?: () => Promise<string | null>
+  __DSH_DESKTOP_PICK_DIRECTORY__?: (options?: DesktopDirectoryPickerOptions) => Promise<string | null>
   __DSH_DESKTOP_VALIDATE_DIRECTORY__?: (path: string) => Promise<boolean>
 }
 
@@ -32,10 +33,12 @@ function isValidationResponse(value: unknown): value is DesktopDirectoryValidati
 /** Ask the desktop Host to open the platform folder chooser. */
 export async function requestDesktopDirectory(
   request: DirectoryPickerRequest = window.fetch.bind(window),
+  options?: DesktopDirectoryPickerOptions,
 ): Promise<string | null> {
   const response = await request(DESKTOP_DIRECTORY_PICKER_PATH, {
     method: 'POST',
-    headers: { accept: 'application/json' },
+    headers: { accept: 'application/json', ...(options === undefined ? {} : { 'content-type': 'application/json' }) },
+    ...(options === undefined ? {} : { body: JSON.stringify(options) }),
   })
   if (!response.ok) throw new Error('ClawClaw could not open the system folder picker')
   const value: unknown = await response.json()
@@ -62,14 +65,14 @@ export async function requestDesktopDirectoryValidation(
   return value.allowed
 }
 
-/** Publish the Windows-only picker bridge for the browse panel's icon action. */
+/** Publish the Desktop native picker bridge for channel and browse dialogs. */
 export function installDesktopDirectoryPickerBridge(
   target: DesktopDirectoryPickerWindow = window as DesktopDirectoryPickerWindow,
   request: DirectoryPickerRequest = window.fetch.bind(window),
 ): () => void {
   const previousPicker = target.__DSH_DESKTOP_PICK_DIRECTORY__
   const previousValidator = target.__DSH_DESKTOP_VALIDATE_DIRECTORY__
-  const pick = async (): Promise<string | null> => await requestDesktopDirectory(request)
+  const pick = async (options?: DesktopDirectoryPickerOptions): Promise<string | null> => await requestDesktopDirectory(request, options)
   const validate = async (path: string): Promise<boolean> => await requestDesktopDirectoryValidation(path, request)
   target.__DSH_DESKTOP_PICK_DIRECTORY__ = pick
   target.__DSH_DESKTOP_VALIDATE_DIRECTORY__ = validate

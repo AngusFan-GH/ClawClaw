@@ -1,3 +1,4 @@
+import type { DesktopDirectoryPickerOptions } from './directory-picker-contract.ts'
 /** Electron implementation of the launcher-provided desktop runtime capability. */
 
 import {
@@ -282,8 +283,8 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   }
 
   /** @inheritdoc */
-  async pickDirectory(): Promise<string | null> {
-    return await this.workspaceAdmission.pickDirectory()
+  async pickDirectory(options?: DesktopDirectoryPickerOptions): Promise<string | null> {
+    return await this.workspaceAdmission.pickDirectory(options)
   }
 
   /** @inheritdoc */

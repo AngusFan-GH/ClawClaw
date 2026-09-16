@@ -142,7 +142,20 @@ export function channelOverviewState(result) {
   });
 }
 
-export function channelStatusLabel(status) {
+export function channelStatusLabel(status, locale = 'zh') {
+  if (locale === 'en') {
+    if (status === undefined) return 'Loading status';
+    const count = status.connected === status.configured
+      ? `${status.connected}` : `${status.connected}/${status.configured}`;
+    switch (status.state) {
+      case 'connected': return `${count} ${status.configured === 1 ? 'bot' : 'bots'} connected`;
+      case 'connecting': return 'Connecting';
+      case 'offline': return `${status.configured} ${status.configured === 1 ? 'bot' : 'bots'} offline`;
+      case 'error': return 'Status unavailable';
+      case 'unavailable': return 'Not included in this edition';
+      default: return 'Not configured';
+    }
+  }
   if (status === undefined) return "读取状态中";
   switch (status.state) {
     case "connected":

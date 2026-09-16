@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type {
   DesktopDirectoryPickerResponse,
+  DesktopDirectoryPickerOptions,
   DesktopDirectoryValidationRequest,
   DesktopDirectoryValidationResponse,
 } from './directory-picker-contract.ts'
@@ -36,13 +37,28 @@ export async function handleDesktopDirectoryPickerRequest(
   req: IncomingMessage,
   res: ServerResponse,
   expectedOrigin: string,
-  pickDirectory: () => Promise<string | null>,
+  pickDirectory: (options?: DesktopDirectoryPickerOptions) => Promise<string | null>,
   reportError: (cause: unknown) => void = () => {},
 ): Promise<void> {
   if (req.method !== 'POST') return finishJson(res, 405, { error: 'method not allowed' })
   if (req.headers.origin !== expectedOrigin) return finishJson(res, 403, { error: 'forbidden' })
+  let options: DesktopDirectoryPickerOptions | undefined
+  if (req.headers['content-type'] !== undefined) {
+    if (req.headers['content-type'].split(';', 1)[0]?.trim().toLowerCase() !== 'application/json') {
+      return finishJson(res, 415, { error: 'content type must be application/json' })
+    }
+    let value: unknown
+    try { value = await readJson(req) } catch {
+      return finishJson(res, 400, { error: 'invalid directory picker request' })
+    }
+    if (typeof value !== 'object' || value === null || Array.isArray(value)
+      || ('showHiddenFiles' in value && typeof value.showHiddenFiles !== 'boolean')) {
+      return finishJson(res, 400, { error: 'invalid directory picker request' })
+    }
+    options = { showHiddenFiles: 'showHiddenFiles' in value ? value.showHiddenFiles as boolean : false }
+  }
   try {
-    const response: DesktopDirectoryPickerResponse = { path: await pickDirectory() }
+    const response: DesktopDirectoryPickerResponse = { path: await pickDirectory(options) }
     finishJson(res, 200, response)
   } catch (cause: unknown) {
     reportError(cause)

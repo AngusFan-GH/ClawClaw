@@ -69,3 +69,15 @@ describe('desktop directory picker client bridge', () => {
     expect(target.__DSH_DESKTOP_VALIDATE_DIRECTORY__).toBe(previousValidation)
   })
 })
+
+it.each([true, false])('sends hidden folder preferences through the renderer bridge (%s)', async (showHiddenFiles) => {
+  const request = vi.fn(async () => new Response(JSON.stringify({ path: null })))
+  const target = {}
+  const dispose = installDesktopDirectoryPickerBridge(target, request)
+  await (target as DesktopDirectoryPickerWindow).__DSH_DESKTOP_PICK_DIRECTORY__!({ showHiddenFiles })
+  expect(request).toHaveBeenCalledWith(DESKTOP_DIRECTORY_PICKER_PATH, {
+    method: 'POST', headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({ showHiddenFiles }),
+  })
+  dispose()
+})
