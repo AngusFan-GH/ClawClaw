@@ -1,49 +1,47 @@
-# DSH Desktop FAQ
+# ClawClaw FAQ
 
 [中文](faq.md)
 
-This page answers common questions about installation, supported platforms, the bundled runtime, and plugins in the current stable release. The [latest GitHub Release](https://github.com/anywhere-labs/deepseek-harness-desktop/releases/latest) and [user guide](user-guide.en.md) define the shipped product scope.
+## How does this relate to DeepSeek Harness and DSH Desktop?
 
-## What is DSH Desktop?
+ClawClaw is independently maintained on their foundations. DeepSeek Harness supplies the agent runtime; DSH Desktop supplies the desktop foundation. ClawClaw does not represent their official products or services.
 
-DSH Desktop is an open-source DeepSeek Harness desktop client for Windows and macOS. It packages the official Harness local Web UI, Host service, and plugin system into a native desktop application with a window, system tray, terminal, updates, and profile management.
+## Where are installers? Is Node.js required?
 
-## Is this an official DeepSeek product?
+Check [ClawClaw Releases](https://github.com/AngusFan-GH/ClawClaw/releases). Installers bundle their runtime; source development requires Node.js and Corepack, as described in [Contributing](../CONTRIBUTING.en.md). macOS/Windows are the primary packaging targets. Linux source support does not imply a published distribution.
 
-No. DSH Desktop is an independent, community-maintained open-source project. It is not affiliated with or endorsed by DeepSeek. The name only describes its technical relationship with the official [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
+## Does a local application work offline?
 
-## Which operating systems are supported?
+Host, configuration, and workspace files are local. The default SpiritX model uses a remote API requiring credentials and network access. Channels, markets, updates, and networked plugins also contact external services. See [data handling](../PRIVACY.md).
 
-Current release installers support Windows x64 and universal macOS (Intel and Apple Silicon). There is currently no Linux installer. Cross-platform compatibility code in the source tree does not imply that an installer has been released for that platform.
+## Where is data stored? Is Beta isolated?
 
-## Do I need to install Node.js, pnpm, or DSH?
+Defaults are `~/.clawclaw/data` for Harness data and `~/.clawclaw/workspaces/default` for workspace files. Stable/Beta share these defaults; Electron state uses separate ClawClaw and ClawClaw Beta application-data directories. See the [user guide](user-guide.en.md) for overrides and migration.
 
-No. The installer includes Electron, Node.js, pnpm, and pinned DSH dependencies. Ordinary users can install and launch directly, and Desktop does not modify the global system PATH or user shell configuration.
+## Why cannot I delete the default workspace?
 
-## Does the first launch download a runtime?
+Host protects its registration as the default file location for new sessions and Channels. Add or select other workspaces as needed. Registration protection does not back up files.
 
-No separate Node.js or Harness core download is required. The installer is larger because it contains the runtime and pinned dependencies, trading download size for a more deterministic first launch and dependency set. Cloud models, update checks, and new-version downloads still require network access.
+## Why do Channels still need setup?
 
-## Does DSH Desktop modify official Harness?
+The application supplies adapters and settings, not platform accounts. Each platform needs credentials, QR authorization, or permissions. iMessage requires macOS.
 
-No. The repository pins an unmodified official Harness checkout. Compatibility mode runs the upstream default Web client below an independent overlay frame. Extended and enhanced modes each install their own Desktop-owned root registration through the plugin/profile composition boundary while retaining the official slot occupants. None of these modes edits upstream source.
+## Is the plugin market implemented?
 
-## Is data stored locally?
+Community Market and `dshmarket` are bundled and can be selected or disabled. Fabric remains a community RFC Draft, not an installable SDK. Market installation is not a security review; plugins run with local user permissions.
 
-The Desktop Host, profiles, and DSH home live on the local machine. Whether content is sent to an external service depends on the model or tool providers the user configures; requests to cloud models still go to those providers.
+## Are profiles and workspaces the same?
 
-## Can I install DSH plugins?
+No. Profiles select plugins and configuration; workspaces select task directories. Desktop terminal plugin commands use the profile selected when the terminal opened. Restart after changes. Switching profiles does not copy plugins.
 
-Yes. DSH Desktop uses the official Harness plugin system. Open DSH Terminal from the tray and run `dsh plugin add`, `dsh plugin remove`, or `dsh plugin update`. These commands default to the active profile, and Desktop must be restarted after plugin changes.
+## Is upstream completely unchanged?
 
-## Does the Desktop profile automatically sync with an existing web profile?
+The upstream Git submodule is read-only. Actual runtime packages are vendored and receive explicit compatibility patches from `patches/`. Desktop plugins also change model, brand, workspace, and channel composition.
 
-No plugins are copied automatically. Each profile has its own bundle and dependency composition. After switching profiles, default plugin commands target the active profile; `--profile <name>` can always select one explicitly.
+## Does startup failure automatically roll back?
 
-## How are updates installed?
+No automatic profile switch or configuration restore occurs. Select a checkpoint in Recovery. Checkpoints exclude sessions, credentials, and workspace files; they are not backups.
 
-Packaged applications check for stable releases in the background but never install silently. A newer version requires confirmation. Before downloading, a native save dialog lets you choose the installer's directory and filename; cancelling it does not start a download. macOS downloads and opens a DMG; Windows downloads and starts an NSIS installer. After the upgrade and next launch, the app asks whether to delete or keep the installer. Network and download failures leave the current installation intact.
+## How do I update or report issues?
 
-## Where can I download the app or report a problem?
-
-Download from the [project download page](https://www.dshdesktop.cn/) or the [latest GitHub Release](https://github.com/anywhere-labs/deepseek-harness-desktop/releases/latest). Check the [troubleshooting section](user-guide.en.md#troubleshooting) first. If the problem remains, open a [GitHub Issue](https://github.com/anywhere-labs/deepseek-harness-desktop/issues/new/choose) with the operating system, app version, reproduction steps, and error details.
+Use the application's update check. Channel-specific ClawClaw manifests supply artifacts that are digest-verified before user-confirmed installation. Report problems at [ClawClaw Issues](https://github.com/AngusFan-GH/ClawClaw/issues), including version, platform, reproduction, and sanitized logs.

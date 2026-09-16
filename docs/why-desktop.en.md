@@ -1,49 +1,29 @@
-# Why DSH Desktop Exists
+# Why ClawClaw exists
 
-## The problem
+[中文](why-desktop.md)
 
-DeepSeek Harness is a composable agent harness. It is powerful from the command line and through its Web UI, and it lets developers combine models, tools, sessions, and workflows into their own runtime. For a first-time user, however, Node.js, profiles, dependency installation, ports, and process lifetime are still part of the experience.
+ClawClaw packages the composable DSH runtime as a desktop application intended for regular use, and adds product-layer support for local workspaces and messaging channels. It does not rewrite the agent runtime or pretend that the Web UI is a native Electron UI.
 
-DSH Desktop does not reimplement Harness. It puts the same runtime into an application that is easier to start and manage on a desktop operating system:
+## Boundaries
 
-- The installer provides Electron, a Node runtime, and pinned DSH dependencies.
-- The application owns the window, tray, single-instance lock, shutdown, and local-service lifecycle.
-- Users keep using the official DSH profiles, plugins, sessions, and Web UI.
-- Upstream Harness remains authoritative for agents, models, tools, sessions, and Web client behavior.
+- Upstream DSH remains responsible for agents, models, tools, sessions, profiles, and Web protocol.
+- ClawClaw owns Electron lifecycle, isolated Host, workspace defaults, Channels entry points, desktop windows, terminal, recovery, market selection, and update client behavior.
+- Third-party plugins integrate through published Cordis/Web contracts and do not gain windows, tray, private RPC, installers, or launcher-private state.
 
-Desktop is therefore a product entry point and runtime adapter. It is not a replacement for upstream Harness and it is not a second copy of the upstream source that must permanently diverge.
+An unchanged upstream submodule is a source-ownership rule. The actual product still combines pinned runtime tarballs, root pnpm overrides, explicit patches, and Desktop/Channels plugins. Compatibility work must validate the composition rather than only reviewing the submodule diff.
 
-## Why plugins
+## Why workspaces and Channels
 
-Harness follows an “everything is a plugin” model. Desktop keeps the same principle for three practical reasons:
+Profiles describe dependency composition, but ordinary tasks need a clear and safe starting location for files. ClawClaw registers a non-deletable default workspace, lets users add or choose other directories, and lets Channels use it when no channel-specific directory is configured. It neither moves existing files nor treats a workspace as a profile copy.
 
-1. **Upstream behavior stays replaceable.** Desktop can use the official Web client, while a profile can add model, tool, UI, or workflow plugins.
-2. **Desktop behavior stays extensible.** Profile management and the packaged package-manager environment can be exposed as explicit Host services instead of making every plugin guess at Electron internals.
-3. **Ownership stays clear.** Upstream DSH owns agent semantics, Desktop owns native integration, and third-party plugins depend only on the contracts they need.
+Channels connect messaging platforms to existing task and session capabilities. Channel configuration, account authorization, platform limits, and message transport remain a relationship between the user and the platform. A built-in entry point is not account hosting, a service-availability guarantee, or a security review.
 
-The plugin boundary also tells us what not to expose. Third-party plugins can only use clearly published interfaces; they cannot directly control the window, tray, installers, or other internal implementation. A stable boundary is easier to upgrade and debug than an unrestricted private API. See [plugin development](plugin-development.en.md) for the published interface details.
+## Why plugins remain central
 
-## What Desktop provides
+Desktop, Market, and Channels are compositional layers, not direct modifications of upstream private APIs. Ordinary DSH plugins can still run in CLI or Web profiles, while ClawClaw-only plugins can depend on explicit `desktopProfiles`, `desktopPnpm`, and `desktopWindow` contracts. Host generation defines lifecycle: profile or presentation changes require plugins to release old services and subprocesses.
 
-The current Desktop product provides:
-
-- Native windows, a tray, and single-instance lifecycle on macOS and Windows.
-- Compatibility, extended, and enhanced presentation modes. Compatibility preserves the upstream client below an independent Desktop frame; extended uses its own Desktop layout/sidebar registration to host official occupants in an inverted L; enhanced retains a separate root registration with compact internal captions. Desktop frames provide capability-gated native materials and drag regions.
-- Multiple profile selection. Desktop exposes the active profile identity for the current generation, and switching takes effect through an orderly restart.
-- A bundled terminal and pinned pnpm environment. They apply only to processes created by Desktop and do not modify the user's global PATH.
-- A controlled set of extension interfaces for plugin developers (see [plugin development](plugin-development.en.md)).
-- Version discovery and confirmation-gated installer downloads, handing off to a macOS DMG or Windows NSIS installer.
-
-## What we deliberately do not do
-
-- Reimplement the upstream Web UI as an Electron-native page.
-- Override the upstream layout, sidebar, or conversation composition in compatibility mode.
-- Copy records into a separate “Desktop database”; official profiles share the DSH home for sessions and settings by default.
-- Give third-party plugins an undefined private Electron API.
-- Present roadmap items such as a plugin marketplace, mobile remote control, or Channels as shipped features.
+Community Market is currently implemented as a private built-in package. Fabric remains a community RFC Draft. Catalog presence or installability does not mean compatibility, security, license, or privacy review.
 
 ## Who should read this
 
-- Users who want to install and use Harness: start with the [user guide](user-guide.en.md).
-- Users installing or building DSH plugins: read [plugin development](plugin-development.en.md), then the [Desktop service contract](../dsh-plugin-desktop/docs/plugin-services.md).
-- Maintainers working on startup, profiles, or packaging: read the [architecture](architecture.en.md) and the package [README](../dsh-plugin-desktop/README.md).
+Start with the [user guide](user-guide.en.md) to use the application. Plugin authors should read [plugin development](plugin-development.en.md) and the [service contract](../dsh-plugin-desktop/docs/plugin-services.md). Maintainers should use [architecture](architecture.en.md) and the Desktop package READMEs for startup, packaging, and release work.

@@ -1,51 +1,67 @@
-# DSH Desktop 用户指南
+# ClawClaw 用户指南
+
+[English](user-guide.en.md)
 
 ## 安装与首次启动
 
-从产品下载入口获取 macOS 或 Windows 安装包。安装后的 DSH Desktop 自带运行所需的 Electron、Node 和 DSH 依赖，普通用户不需要另行安装 Node.js 或 pnpm。
+安装包以 [ClawClaw Releases](https://github.com/AngusFan-GH/ClawClaw/releases) 实际发布内容为准。Windows x64 使用 NSIS 安装程序或便携 ZIP；macOS 使用 DMG。安装包包含 Electron、Node、pnpm 和 DSH runtime，无需另装这些开发工具。自行构建见[贡献指南](../CONTRIBUTING.md)。
 
-首次启动时，应用会准备默认 profile，并在本机启动官方 DSH Web surface。关闭窗口通常只会隐藏窗口；可以从托盘重新打开，选择 **退出** 才会结束应用和 Host 进程。
+未初始化的 profile 会先显示 Setup Wizard，可选择窗口模式、材质、市场、通知、浏览器和网络范围，也可以跳过。向导结束前不启动主 Host 和窗口。关闭主窗口通常仅隐藏；从托盘重新打开，选择退出才会结束应用。
 
-## Profile
+## 数据目录
 
-Profile 是一组 DSH bundle、依赖和 patch 的组合。托盘中的 **Profile** 菜单会列出现有 profile，以及可按需创建的 `desktop` 和 `web` 默认 profile。
+| 内容 | 默认位置 |
+| --- | --- |
+| Harness 数据、profiles、settings、sessions | `~/.clawclaw/data` |
+| 默认工作区的实际文件 | `~/.clawclaw/workspaces/default` |
+| Stable 应用状态和日志（macOS） | `~/Library/Application Support/ClawClaw` |
+| Beta 应用状态和日志（macOS） | `~/Library/Application Support/ClawClaw Beta` |
+| Windows 应用状态和日志 | `%APPDATA%\ClawClaw` 或 `%APPDATA%\ClawClaw Beta` |
 
-选择 profile 后应用会有序重启。新 profile 在 Host、窗口和浏览器客户端都成功启动后才会被记录为最近一次可用 profile；启动失败会回到上一次可用选择。官方 profile 默认使用同一个 DSH home，所以 sessions、settings 和 storage 通常不需要迁移。自定义配置（patch）如果主动改写持久化路径，则以该 profile 自己的设置为准。
+`~` 指当前用户主目录。未指定其他数据位置时，若只有旧 `~/.dsh`，首次启动会将它移动到 `~/.clawclaw/data`；若两处都存在则保留两者、使用新目录并记录冲突，不自动合并。迁移前请备份需要保留的数据。设置中保存的数据目录选择优先于启动时的默认位置；未保存选择时，显式 `DSH_HOME` 可以覆盖默认数据目录。安全模式使用单独的临时数据和工作区。
 
-切换 profile 不会把旧 profile 的插件偷偷复制到新 profile。要管理目标 profile，请在终端中显式写出 profile，或者在切换后使用终端里的默认命令。
+数据目录和工作区是不同概念：更改 Harness 数据位置不会自动搬移默认工作区的文件。Stable 与 Beta 默认共享 Harness 数据和默认工作区，只隔离 Electron 应用状态。便携 ZIP 也不是自包含的数据目录。
 
-## 窗口模式与材质
+## 工作区
 
-- **兼容模式**：保持 profile 的官方 layout/sidebar/conversation 组合完整，并把它放在独立的 36 像素 Desktop frame 下方。frame 可以拖动，图标操作仍可点击，官方 dialog 只会占用与 frame 无关的下方内容 viewport。
-- **扩展窗口**：安装 Desktop 自有 layout 与 sidebar surface，并在其中承载官方 sidebar、conversation 和 details occupant。36 像素顶部 frame 与左侧 sidebar surface 组成一个带圆角内拐角的倒 L 材质区域。
-- **增强模式**：保留独立 root registration 与紧凑内部 caption；macOS 使用 20 像素内容 inset 和 32 像素拖动区域，Windows 使用 32 像素 caption row，不复用扩展窗口的独立 frame。
+应用会注册名为“默认”的工作区；它的注册不能删除。已有工作区会保留，新会话选择会结合持久化的活动工作区、当前选项及默认工作区。
 
-macOS 自定义窗口模式可以打开或关闭透明材质。Windows 可关闭材质；仅 Windows 11 build 22621 及以上在支持时显示 Mica。旧版 Windows 亚克力偏好会安全地按关闭处理，并在设置文件可写时自动迁移。切换模式或材质都会重启应用，不会在正在运行的 renderer 中热替换 root slot 或窗口材质。Linux 只提供兼容模式。
+在会话首页或侧栏添加工作区时，可浏览文件夹、输入绝对路径、回到主目录、新建文件夹、显示隐藏文件夹，或使用系统选择器。选择目录后再创建或切换工作区。工作区决定任务操作的文件位置；profile 决定加载哪些插件，两者互不替代。
 
-## 本地 Web 端口
+## Channels
 
-Desktop 默认让系统随机分配本地 Web 端口（`dsh-desktop.port: 0`），可避免与其他服务发生端口冲突。依赖浏览器 `localStorage` 的界面插件按 origin 隔离数据；如果这类插件需要在 Desktop 重启后继续读取设置，请在设置中指定一个固定端口：
+从 Channels 入口选择平台并按对应页面完成凭据或扫码配置。当前界面提供微信、企业微信、飞书、钉钉、QQ、iMessage、Telegram、WhatsApp、Discord 和 Slack；iMessage 仅适用于 macOS。是否能够连接取决于平台账号权限、配置和网络，内置入口不代表已授权账号。
+
+渠道工作目录依次使用渠道自身的 `workspace`、插件的 `defaultWorkspace`、`CLAWCLAW_DEFAULT_WORKSPACE`，最后回退到 `~/.clawclaw/workspaces/default`。归档或已失效的绑定会话收到新消息时会建立可用会话。平台消息和回复会经过对应平台，详见[数据处理说明](../PRIVACY.zh.md)与 [Channels 参考](../channels/dsh-im/README.zh.md)。
+
+## Profile 与恢复
+
+Profile 是 bundle、依赖和 patch 的组合。托盘可发现现有 profile 以及可按需创建的 `desktop`、`web`。切换先持久保存目标，再有序重启；不会把旧 profile 插件复制过去。
+
+启动失败不会自动换成上一次 profile。使用恢复窗口的插件管理、回滚、切换配置或诊断功能处理。健康启动维护三个轮换检查点，覆盖当前 profile 的声明文件及共享 Harness home 的 `settings.yaml`、`cordis.patch.yml`。恢复需要明确选择槽位；检查点不含凭据、`.env`、会话、storage、缓存或工作区文件，也不是完整备份。
+
+## 窗口与本地访问
+
+- **兼容模式**保留上游默认客户端布局。macOS/Windows 的 36 像素标题栏位于独立的 Desktop WebContentsView，内容页面不会被插件 CSS 带着改动标题栏。
+- **扩展窗口**使用独立标题栏与 Desktop 布局，承载上游 sidebar、conversation 和 details。
+- **增强模式**使用独立 root 与紧凑内置 caption。
+
+macOS 支持透明材质；Windows 11 build 22621 及以上按能力提供 Mica；Linux 仅兼容模式。模式和材质切换需要重启。
+
+Web 服务默认回环访问，端口默认为 `0`（系统分配）。需要固定浏览器 origin 的插件可在桌面设置中指定空闲端口，或设置：
 
 ```yaml
 dsh-desktop:
   port: 43189
 ```
 
-端口必须是 `0` 到 `65535` 之间的整数。修改后应用会有序重启。服务默认只监听 `127.0.0.1`；只有在“桌面设置”中确认危险提示并明确允许局域网访问后，才会改为监听所有网络接口。固定端口如果已被其他程序占用，Desktop 将无法启动；此时需要释放该端口，或把设置改回 `0` 或另一个空闲端口。
+浏览器打开选项不等于向局域网开放。局域网访问需要单独启用；页面显示实际 URL。不要将网络可达性视为用户鉴权：被允许连接的客户端可能通过会话和工具操作本机文件。仅在可信网络中使用。
 
-## 插件管理
+## 插件和终端
 
-插件是给 DSH 添加能力的扩展包，例如模型、工具、界面和工作流。DSH Desktop 使用的就是官方 Harness 的插件体系，官方插件可以直接安装使用；多个插件遵循统一的约定，可以一起安装、一起工作。
+市场可在设置中选择 Community Market、`dsh-market` 或关闭。Community Market 从所选目录发现插件，安装时从 npm 解析精确版本并要求确认；第三方插件以本机用户权限运行。
 
-普通 DSH 插件仍使用官方 CLI 语义：
-
-```sh
-dsh plugin --profile desktop add <plugin>
-dsh plugin --profile desktop remove <plugin>
-dsh plugin --profile desktop update
-```
-
-在 DSH Desktop 托盘打开的终端中，裸 `dsh` 和不带 `--profile` 的 plugin 命令默认使用当前激活 profile：
+从桌面终端入口打开终端后，以下命令默认作用于当前 profile：
 
 ```sh
 dsh plugin add <plugin>
@@ -53,38 +69,25 @@ dsh plugin remove <plugin>
 dsh plugin update
 ```
 
-显式 `--profile <name>` 始终优先。插件变更后需要重启 DSH Desktop，才能让新的 bundle 进入 Loader 组合。
-
-## 打开终端
-
-可以从托盘、Desktop 设置或 Desktop frame 选择 **Open DSH Terminal**；设置中的旁边提供重启下拉菜单，可以普通重启或 **重启到恢复模式**，两种操作都必须确认。macOS 会打开 Terminal，Windows 会优先使用 Windows Terminal，找不到时回退到 PowerShell 或命令提示符。
-
-欢迎信息会显示：应用版本、当前 profile、profile 目录和 DSH home。Desktop 会在自己的 user-data 目录生成 `dsh`、`pnpm` 和 `node` 私有 shim，只对这个终端进程设置 PATH，不会修改系统 PATH 或用户 shell 配置。
+使用 `--profile <name>` 可显式指定。插件改变后重启应用。终端带有私有 `dsh`、`pnpm`、`node` shim 和 `DSH_HOME`，不会修改全局 PATH；已打开终端保留打开时的 profile。
 
 ## 更新
 
-打包后的 macOS/Windows 应用会在后台检查 `https://www.dshdesktop.cn/api/desktop/version`。后台检查不阻塞启动；网络错误、非 200、非法版本或服务端版本不新时保持静默。发现新版本时，应用会更新托盘并且每个版本只发送一次非阻塞系统通知，不会自动弹出下载确认；点击通知会显示 Desktop。
+打包应用读取 `https://clawclaw.xzinfra.com/updates/<stable|beta>/release.json`。后台检查失败或无新版本时静默；手动检查会显示结果。Beta 只接受 `-beta.N` 版本；安装稳定版是独立操作。
 
-托盘中的 **Check for Updates…** 是当前发行通道的手动检查：稳定版只接收稳定更新，Beta 只接收 Beta 更新。即使已经是当前版本，也会显示结果；检查失败会提示稍后重试。Beta 还提供 **安装稳定版…**，它会在保留 Beta 的同时安装稳定版。用户取消不会访问计数下载入口。
-
-确认下载后，应用会先打开原生的“保存更新安装包”对话框，默认建议保存到 Downloads；你可以改用其他目录和文件名，取消对话框则不会开始下载。保存后应用才会请求当前平台的固定下载地址，并记录安装包位置。macOS 会打开 DMG，由用户把应用替换到 Applications；Windows 会准备 NSIS 安装器，再询问是否退出并启动安装。升级完成并重新启动后，应用会询问是否删除安装包以释放磁盘空间，也可以选择保留。下载和安装失败不会破坏当前版本，托盘仍可重试。
+确认下载并选择保存位置后，应用从 manifest 指定的 HTTPS 地址获取安装包，校验 SHA-512 和 DMG/PE 容器。当前请求不发送旧项目的 `X-DSH-Desktop-*` 统计 header。校验摘要不等于验证发布者数字签名。macOS 打开 DMG 后由用户替换应用；Windows 确认后交给 NSIS。安装后可选择删除下载文件。服务或产物是否已发布，以检查实际结果为准。
 
 ## 排查
 
-Desktop 的确认、警告与操作结果会打开独立、基于 shadcn 的桌面级模态窗口，而不是侵入官方页面的 overlay。恢复窗口会先展示进入原因，再提供 **插件管理**、**回滚**、**切换配置** 与 **诊断** 四个 Tab；它与新增 Profile 窗口顶部的 utility frame 都不会重复显示标题。
-
-- **应用能够进入托盘**：右键托盘图标，选择 **导出诊断信息…**。确认隐私提示后，Desktop 会生成 `diagnostics-*.zip` 并在文件管理器中显示它。
-- **应用持续闪退，无法进入托盘**：在 PowerShell 中直接运行安装后的程序并加上恢复参数。默认安装位置的命令如下；如果安装时修改过目录，请替换为实际的 EXE 路径。
+- 窗口关闭后先检查托盘；退出才会停止后台服务。
+- 插件未出现时检查目标 profile，重启后再看日志。
+- Channels 无法连接时检查平台凭据、权限、网络和页面错误；不要公开凭据。
+- 可从托盘导出诊断 ZIP；崩溃无法进入界面时运行实际安装的程序并加 `--export-diagnostics`。例如 Windows：
 
   ```powershell
-  & "$env:LOCALAPPDATA\Programs\DSH Desktop\DSH Desktop.exe" --export-diagnostics
+  & "$env:LOCALAPPDATA\Programs\ClawClaw\ClawClaw.exe" --export-diagnostics
   ```
 
-  通过 npm 安装时，稳定版可运行 `dsh-desktop --export-diagnostics`，Beta 可运行 `dsh-desktop-beta --export-diagnostics`。这个命令不会启动 Host、profile、插件或窗口；完成后会在终端输出诊断 ZIP 的绝对路径。
-- **诊断包内容**：包含最近的应用日志、本地 Crashpad `.dmp`、当前运行标记和 `system-info.txt`。系统信息会记录 Desktop、Electron、Node、平台和架构版本。日志会对可识别的认证凭据脱敏，但本地路径、工作区 ID、会话 ID 和崩溃时的内存片段仍可能存在。公开上传前必须检查；不适合公开的 dump 应通过可信渠道提供。
-- **窗口消失了**：先检查系统托盘，关闭窗口不是退出。
-- **插件没有出现**：确认命令作用于目标 profile，并重启应用。
-- **终端命令找不到**：从托盘重新打开 Desktop 终端；系统 shell 的全局 PATH 不会被 Desktop 修改。
-- **更新没有提示**：后台错误会静默；使用托盘手动检查查看结果。
+- 日志在应用数据目录的 `logs/`，诊断 ZIP 在 `diagnostics/`。导出可能包含路径、会话内容和崩溃内存片段，分享前先检查。
 
-更底层的生命周期、打包和平台限制属于开发者文档，见[文档索引](README.md)。
+仍无法解决时，在 [ClawClaw Issues](https://github.com/AngusFan-GH/ClawClaw/issues) 提供操作系统、版本、复现步骤和脱敏后的错误。

@@ -1,55 +1,48 @@
-# Contributing
+# Contributing to ClawClaw
 
-Thank you for wanting to contribute to DSH Desktop. This is a community project — whether you are a regular user, a plugin author, or a developer, there is a way to contribute that fits you.
+[中文](CONTRIBUTING.md)
 
-## Regular users: use, report, and spread the word
+Use [Issues](https://github.com/AngusFan-GH/ClawClaw/issues) for problems and feature proposals, and pull requests in this repository for code and documentation. Include OS, version, reproduction, and sanitized errors. Follow the [code of conduct](CODE_OF_CONDUCT.en.md).
 
-- Report problems or odd behavior in an [issue](https://github.com/anywhere-labs/deepseek-harness-desktop/issues): include your operating system (macOS / Windows), application version, and reproduction steps.
-- Feature ideas and improvement suggestions are welcome as issues too.
-- Join the [community channels](README.en.md#community) (WeChat group, QQ group, Discord) and help other users.
-- Write tutorials or experience posts, or help improve and translate the documentation.
-- Suggest ecosystem projects for the [related links](README.en.md#friendly-links) section.
+## Setup
 
-## Plugin authors: extend the ecosystem
-
-DSH is built around plugins. If you write plugins, start with:
-
-- [Plugin development](docs/plugin-development.en.md): how to write ordinary DSH plugins and Desktop plugins.
-- [DSH plugin ecosystem manifesto](docs/plugin-ecosystem.en.md): our vision of an open, composable, sustainable ecosystem, and the three principles — composition first, declare clearly, compatibility first.
-- [DSH Community Fabric Draft](dsh-community-fabric/README.md): join the public discussion of manifests, capabilities, Host Descriptors, and event contracts.
-- [Community Market design](dsh-community-market/docs/market-shell.md): how the future market will discover plugins and why listing is not a security review.
-
-Plugins that follow the manifesto coexist better with other plugins and will be easier to discover and trust in the marketplace when it ships.
-
-## Developers: contribute code
-
-### Development environment
+Use Node.js `^22.19.0` or `>=24.0.0`, Corepack, and root-pinned pnpm `11.8.0`:
 
 ```sh
 git submodule update --init --recursive
 corepack pnpm install --frozen-lockfile
-corepack pnpm check   # full headless gate: build, typecheck, tests, and smokes
-corepack pnpm dev     # launch the application when a graphical session is available
+corepack pnpm dev:beta
 ```
 
-### Repository boundaries (please read before starting)
+`dev:beta` and `dev` open graphical applications; validation must remain headless-safe. Root launch/packaging defaults target Stable; use the `:beta` variants for Beta.
 
-- `deepseek-harness/` is the pinned upstream submodule. **Desktop development never edits files inside it**; upstream updates land through separate pin commits.
-- Desktop code lives in `dsh-plugin-desktop/`; `dsh-community-fabric/` owns the community-standard Draft and `dsh-community-market/` owns the market-shell design. Both community packages are currently documentation-only and not loadable; all three owned packages share the outer pnpm workspace.
-- Builds, typechecks, unit tests, and smoke checks must stay headless-safe.
+## Ownership
 
-### Commits and pull requests
+- `deepseek-harness/` is a read-only submodule. Commit upstream pin updates separately from desktop behavior.
+- Implement and validate shared Desktop changes in `dsh-plugin-desktop-beta/` first, then synchronize `dsh-plugin-desktop/`. The source trees do not inherit edits.
+- `channels/dsh-im/` owns product Channels; maintain supplier version, build patches, and notices together.
+- Community Market has runtime, schemas, and tests but remains a private built-in package. Fabric remains a private documentation Draft without runtime/SDK.
+- Five owned packages share outer pnpm. Upstream has its own workspace; use root `upstream:*` commands.
+- Keep vendored runtime, patches, manifests, lockfile, and `upstream.json` aligned. See [architecture](docs/architecture.en.md).
 
-- Use conventional commit messages (for example `fix(desktop): ...`, `docs: ...`).
-- Run `pnpm run check` and keep it green before committing.
-- After changing production dependencies, run `pnpm --filter dsh-plugin-desktop run verify:notices` to refresh the third-party notices and commit the updated `dsh-plugin-desktop/THIRD_PARTY_NOTICES.md`.
-- Documentation changes should stay bilingual and update the `README.i18n.yaml` hash record.
-- Describe the change, its motivation, and how it was verified in the PR; merge after CI passes.
+## Validation
 
-## Join the technical team
+```sh
+corepack pnpm check:layout
+corepack pnpm check
+corepack pnpm --filter @clawclaw/dsh-im run check
+```
 
-If you would like to join our technical team, contact us at [t4wefan@qq.com](mailto:t4wefan@qq.com).
+`check:layout` covers bilingual records, dependency direction, vendored runtime, Desktop variants, and layout. `check` runs Fabric, Market, and both Desktop gates; run the extra Channels `check` above for its independent tests. Root `test` and `typecheck` include Channels.
 
-## Code of conduct
+Documentation-only changes require at least bilingual and both community documentation checks, plus `git diff --check`. Verify local targets when changing links. Shared Desktop behavior requires `check:desktop-variants` and validation of both packages. Native UI, installation/uninstallation, and signing require explicit checks on the target platform.
 
-Be kind and respectful, and stick to the topic. We want a community that welcomes newcomers. The [Contributor Covenant](CODE_OF_CONDUCT.en.md) applies to all project spaces.
+## Documentation and commits
+
+- Keep English and Chinese content aligned. Update each adjacent `*.i18n.yaml` Git blob hash, not only the root README record.
+- For example, `git hash-object --path=docs/user-guide.md -- docs/user-guide.md` produces that document's hash. Record each file separately; matching hashes do not establish translation quality.
+- Preserve historical context in dated decisions, research, and experiments. Put current usage in product guides, API references, and package READMEs.
+- Use conventional commits such as `fix(desktop): ...` or `docs: ...`. PRs should state the problem, final behavior, validation, and limits.
+- After production dependency changes, run `verify:notices` for each Desktop package, review generated changes, and preserve third-party licenses. Review the independent Channels notices too.
+
+See [Stable](dsh-plugin-desktop/README.md) and [Beta](dsh-plugin-desktop-beta/README.md) package references for release commands. Do not describe local builds as published or signed artifacts.

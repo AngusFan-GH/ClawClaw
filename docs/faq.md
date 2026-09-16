@@ -1,49 +1,47 @@
-# DSH Desktop 常见问题
+# ClawClaw 常见问题
 
 [English](faq.en.md)
 
-本页回答当前正式版本最常见的安装、平台、运行环境和插件问题。功能范围以[最新 GitHub Release](https://github.com/anywhere-labs/deepseek-harness-desktop/releases/latest)和[用户指南](user-guide.md)为准。
+## 与 DeepSeek Harness、DSH Desktop 是什么关系？
 
-## DSH Desktop 是什么？
+ClawClaw 基于两者演进，独立维护。DeepSeek Harness 提供 Agent runtime，DSH Desktop 提供桌面基础。本项目不代表它们的官方产品或服务。
 
-DSH Desktop 是面向 Windows 和 macOS 的开源 DeepSeek Harness 桌面客户端。它把官方 Harness 的本地 Web UI、Host 服务和插件系统装进原生桌面应用，并提供窗口、系统托盘、终端、更新和 profile 管理。
+## 安装包在哪？需要 Node.js 吗？
 
-## 这是 DeepSeek 官方产品吗？
+以 [ClawClaw Releases](https://github.com/AngusFan-GH/ClawClaw/releases) 为准。安装包包含运行环境，不需单独安装 Node.js。源码开发需要 Node.js 和 Corepack，见[贡献指南](../CONTRIBUTING.md)。macOS/Windows 是主要打包目标；Linux 源码支持不等于已有发行包。
 
-不是。DSH Desktop 是社区维护的独立开源项目，不隶属于 DeepSeek，也未获得 DeepSeek 官方背书。项目名称仅用于说明它与官方 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的技术关系。
+## 本地应用是否离线运行？
 
-## 支持哪些操作系统？
+本地 Host、配置和工作区在本机。默认 SpiritX 模型会访问远程 API，需要可用凭据和网络；Channels、市场、更新及其他联网插件也会连接外部服务。详见[数据处理说明](../PRIVACY.zh.md)。
 
-当前正式安装包支持 Windows x64 和 universal macOS（Intel 与 Apple Silicon）。当前没有 Linux 安装包；不要根据源码中存在跨平台兼容代码推断已经发布了对应安装包。
+## 数据存在哪里？Beta 是否隔离？
 
-## 需要安装 Node.js、pnpm 或 DSH 吗？
+默认数据是 `~/.clawclaw/data`，工作区是 `~/.clawclaw/workspaces/default`。Stable/Beta 默认共享这两处，Electron 状态分别保存在 ClawClaw 与 ClawClaw Beta 的应用数据目录。显式数据路径和迁移规则见[用户指南](user-guide.md)。
 
-不需要。安装包已经包含 Electron、Node.js、pnpm 和固定版本的 DSH 依赖。普通用户下载安装后即可启动，Desktop 也不会修改系统全局 PATH 或用户的 shell 配置。
+## 为什么默认工作区不能删除？
 
-## 首次启动需要下载运行环境吗？
+它是新会话和 Channels 的默认文件位置，由 Host 保护其注册。可以添加和切换其他工作区；保护注册不代表文件有自动备份。
 
-不需要另行下载 Node.js 或 Harness 核心。安装包较大，是因为运行时和固定版本依赖已经包含在内，以换取更确定的首次启动和版本组合。使用云端模型、检查更新或下载新版本时仍然需要网络。
+## 为什么 Channels 还要配置？
 
-## DSH Desktop 会修改官方 Harness 吗？
+程序内置的是渠道适配和设置入口，不是平台账号。每个平台需要相应凭据、扫码或权限；iMessage 仅适用于 macOS。
 
-不会。仓库固定一个未修改的官方 Harness 上游版本。兼容模式在独立 overlay frame 下运行上游默认 Web client；扩展窗口与增强模式分别通过插件/profile composition 边界安装各自的 Desktop root registration，并继续承载官方 slot occupant。所有模式都不会直接修改上游源码。
+## 插件市场可用了吗？
 
-## 数据是否保存在本地？
+Community Market 与 `dshmarket` 已内置，可在设置中选择或关闭。Fabric 仍是社区 RFC Draft，不是可安装 SDK。市场安装不等于安全审核，插件会使用本机用户权限。
 
-Desktop Host、profile 和 DSH home 位于本机。是否向外部服务发送内容取决于用户配置的模型或工具提供商；使用云端模型时，相应请求仍会发送给该提供商。
+## Profile 和工作区是否相同？
 
-## 可以安装 DSH 插件吗？
+不是。Profile 决定插件与配置；工作区决定任务目录。插件命令默认作用于桌面终端打开时的 profile，变更后需重启。切换 profile 不会复制插件。
 
-可以。DSH Desktop 使用官方 Harness 插件体系。可以从托盘打开 DSH Terminal，然后运行 `dsh plugin add`、`dsh plugin remove` 和 `dsh plugin update`；命令默认作用于当前激活的 profile，插件变更后需要重启 Desktop。
+## 上游真的完全没有修改吗？
 
-## Desktop profile 和已有 web profile 会自动同步吗？
+上游 Git 子模块保持只读。实际运行时来自 vendored 包，并应用仓库 `patches/` 中的兼容补丁；桌面自有插件还会改变模型、品牌、工作区和渠道组合。
 
-不会自动复制插件。每个 profile 都有自己的 bundle 和依赖组合；切换 profile 后，终端中的默认插件命令会作用于当前 profile，也可以使用 `--profile <name>` 显式指定目标。
+## 启动失败会自动回滚吗？
 
-## 应用如何更新？
+不会自动切换 profile 或还原配置。使用恢复界面选择检查点。检查点不含会话、凭据或工作区文件，不能代替备份。
 
-打包后的应用会在后台检查稳定版本，但不会静默安装。发现新版本后先征得用户确认；下载前可以在原生保存对话框中选择安装包的目录和文件名，取消保存不会开始下载。macOS 下载并打开 DMG，Windows 下载并启动 NSIS 安装程序。升级完成并重新启动后，应用会询问是否删除或保留安装包。网络或下载失败不会破坏当前安装。
+## 如何更新或报告问题？
 
-## 在哪里下载和报告问题？
-
-从[项目下载页](https://www.dshdesktop.cn/)或[最新 GitHub Release](https://github.com/anywhere-labs/deepseek-harness-desktop/releases/latest)下载安装包。遇到问题时先查看[用户指南的排查部分](user-guide.md#排查)，仍无法解决再提交 [GitHub Issue](https://github.com/anywhere-labs/deepseek-harness-desktop/issues/new/choose)，并附上操作系统、应用版本、复现步骤和错误信息。
+使用应用的检查更新功能；更新来自 ClawClaw 分通道 manifest，下载后校验摘要并由用户确认安装。问题提交到 [ClawClaw Issues](https://github.com/AngusFan-GH/ClawClaw/issues)，附版本、平台和复现步骤，先对日志脱敏。

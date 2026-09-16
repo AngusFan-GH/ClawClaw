@@ -1,79 +1,69 @@
-# DSH Desktop 架构
+# ClawClaw 架构
 
-## 总览
+[English](architecture.en.md)
 
-DSH Desktop 是一个薄的 Electron 宿主。它在 Electron main 进程中启动官方 DSH Host，Host 再通过 HTTP/WebSocket Web carrier 提供普通 Web UI；carrier 默认只监听回环地址，也可在用户明确确认风险后向局域网开放。Desktop 没有另造一条 renderer IPC 插件系统，也不把 Electron API 暴露给页面。
+本文描述当前源码。日期化 Agent Notes 记录当时的设计取舍，不能替代本页或当前接口。
+
+## 进程与运行边界
 
 ```mermaid
 flowchart LR
-  User[用户] --> Native[Electron main / tray / window]
-  Native --> Launcher[Profile launcher]
-  Launcher --> Host[Host Cordis generation]
-  Host --> Carrier[HTTP + WebSocket Web carrier]
-  Carrier --> Renderer[Sandboxed Web renderer]
-  Host --> Upstream[Upstream DSH services]
-  Host --> Desktop[Desktop-owned plugins]
-  Host --> ThirdParty[Third-party plugins]
-  Launcher --> Services[desktopProfiles + desktopPnpm]
-  Services --> ThirdParty
+  Main[Electron main / Launcher] --> Native[Window / Tray / 独立 Chrome]
+  Main -->|私有 Host RPC| Host[隔离 Host 子进程 / Cordis]
+  Host --> DSH[DSH runtime / Profiles / Sessions]
+  Host --> Plugins[Desktop / Market / Channels 插件]
+  Host -->|HTTP + WebSocket| Content[沙箱内容 WebContentsView]
+  Native --> Frame[Desktop Chrome WebContentsView]
 ```
 
-## 启动顺序
+稳定版和 Beta 默认都通过 `startIsolatedDesktopHost()` 启动 Host；`DSH_DESKTOP_ISOLATED_HOST=0` 保留同进程排查路径。Electron main 拥有原生资源，Host 拥有 Cordis、插件、Web 服务和会话。Host 与 main 之间是内部 RPC，第三方插件不能把它当作公开 Electron 接口。浏览器插件仍通过标准 Web routes、RPC、service 和 slot 通信。
 
-1. Electron 获取单实例锁，并读取 Desktop 私有的 profile/mode 状态。
-2. Launcher 准备激活 profile，但不会为了列举 profile 而改写用户 profile。
-3. Launcher 提供当前 generation 的 native runtime、`desktopProfiles` bootstrap 和内置 pnpm 环境。
-4. Host Cordis root 启动 Loader entries。Desktop service 在第三方插件可读取前注册。
-5. 官方 `dsh-base`、`dsh-web-app` 和 profile 中的第三方 bundle 组成 Web carrier。
-6. Host 默认绑定 loopback，也可按已确认的设置绑定所有网络接口；Electron 创建 BrowserWindow 并从 loopback 地址加载同源页面。
-7. Web surface 成功加载后才创建托盘并提交 profile 的 last-known-good 状态。
+启动先确定数据目录、profile、包解析环境和偏好；未初始化时先运行 Setup Wizard。然后启动 Host，等待 Web 与客户端健康状态，显示内容并记录健康检查点。切换 profile、窗口模式或材质会释放当前 generation 并重启；服务引用和进程 handle 不跨 generation 缓存。
 
-任何 profile 或模式切换都会 dispose 当前 generation，再启动新的 generation。Service reference、窗口对象和 subprocess handle 都不能跨 generation 缓存。
+## UI 所有权
 
-## Host、Client 和 native runtime
+macOS/Windows 的兼容和扩展模式在一个原生窗口内使用两个独立 WebContentsView。Desktop Chrome 拥有 36 像素工具栏，内容 View 位于其下方；样式、portal 和第三方客户端不能跨文档影响 Chrome。因此内容侧 `desktopWindow.safeAreaInsets` 与 `dragRegion` 为零，不能再次预留 36 像素。Linux 兼容模式使用原生标题栏回退。
 
-- **Upstream Host**：agent、model、tool、session、settings、webServer 和 subprocess 等官方能力。
-- **Desktop Host**：窗口、托盘、profile、终端、更新，以及对第三方开放的两个 service。
-- **Web Client**：官方 Web UI 和第三方浏览器界面。它通过共享 Web carrier 工作，不直接调用 Electron。
-- **Native runtime**：Electron BrowserWindow、系统托盘、文件/网络/安装器适配。`desktopRuntime` 只供 Desktop 自有 row 使用。
+兼容模式保留上游默认布局；扩展模式组合 Desktop layout/sidebar；增强模式使用自己的 root 和集成 caption。确认、恢复和 Setup 等工具窗口由 Desktop 独立管理。详见[标题栏隔离](../dsh-plugin-desktop/docs/compatibility-chrome-isolation.md)与[服务合同](../dsh-plugin-desktop/docs/plugin-services.zh.md)。
 
-兼容模式的 Client face 会校验环境，并且只通过 overlay slot 加入一条独立的 36 像素 Desktop frame；官方 layout、root、sidebar 与 conversation 作为完全无关的内容 viewport 从它下方开始。扩展窗口会禁用官方 root layout，安装自己独立注册的 Desktop layout/sidebar surface，并在倒 L 材质 frame 中继续承载官方 sidebar、conversation 与 details occupant。增强模式保留独立 root registration 与最初的紧凑内部 caption 几何。macOS 与 Windows 会按系统能力使用原生材质，同时不改变上游 occupant slot 的所有权。
+## 工作区、数据与模型
 
-Desktop 级确认、警告、错误与结果不会进入 Web Client 组件树。`DesktopDialogWindow` 会创建独立、沙箱化的模态 `BrowserWindow`，应用共享的空白 utility frame，并在可能时以当前 generation 窗口为 parent，只接受一次有界本地结果。恢复模式与新增 Profile 是使用同一套无标题 frame 的独立 Desktop-owned 窗口。恢复页面本身使用 shadcn，先展示原因，再提供四个工作流 Tab；破坏性恢复操作会把确认交回 `DesktopDialogWindow`。
+默认 Harness home 是 `~/.clawclaw/data`，默认工作区是 `~/.clawclaw/workspaces/default`。迁移、覆盖和通道共享规则见[用户指南](user-guide.md)。默认工作区通过上游 registry 注册，Host 阻止删除该注册；Client 持久化活动选择并提供中英文目录流程。工作区不是 profile，也不是恢复检查点。
 
-### 原生 Shell generation 与平台 adapter
+Desktop patch 默认组合 `spiritx`，通过上游 pi-ai transport 的 OpenAI Responses 协议访问 `https://ai.xzinfra.com/spiritx-api/v1`，凭据环境变量为 `SPIRITX_API_KEY`，默认模型为 `DeepSeek-V4-Flash`。支持目录以 `cordis.patch.yml` 为准，不代表服务端每个模型都可用。默认禁用原 DeepSeek 模型适配器、其 API extensions、session 日志上报、官方 package inventory、session telemetry 和 DeepSeek web search；HTTP fetch 保持可用。用户 profile 可以显式改变组合。
 
-`ElectronRuntime` 负责协调 Host 与原生桌面环境，但不直接拥有窗口和托盘的细节。每次启动由一个 `ElectronShellGeneration` module 完整拥有 `BrowserWindow`、`Tray`、相关 Electron listener、导航限制、外链处理和缩放快捷键。释放 generation 必须通过其幂等 `release()` interface 完成，调用方不能跨 generation 缓存或单独销毁这些资源。
+Channels 由 `@clawclaw/dsh-im` 提供，基于固定的 `@xmanrui/dsh-im` 4.20.2 构建。桌面自有渠道页面、目录选择和会话修补与供应方运行时代码分开维护。
 
-平台差异集中在启动时选择一次的 `ElectronPlatformStrategy` seam。Windows、macOS 与 Linux adapter 声明目录选择、Shell 模式切换和更新下载能力，并负责各自的菜单、Dock 图标与原生材质操作。新的平台分支应进入对应 adapter；generation 与 runtime 中只保留各平台共享的生命周期流程。
+## 包与来源
 
-## Profile 与服务边界
+| 路径 | 职责 |
+| --- | --- |
+| `dsh-plugin-desktop-beta/` | Beta 产品、Host/Client、Electron、打包与测试；共享功能先在这里实现 |
+| `dsh-plugin-desktop/` | Stable 的独立源码树；需显式同步 |
+| `channels/dsh-im/` | Channels Host 组合、UI、构建修补与测试 |
+| `dsh-community-market/` | 已实现的私有内置 Market runtime、Schema 与 adapter |
+| `dsh-community-fabric/` | 私有 RFC 文档工程；无运行时或发布 SDK |
+| `deepseek-harness/` | 固定的只读上游子模块，独立 pnpm workspace |
+| `vendor/dsh-runtime/` | 固定运行时 tarball 和 manifest |
+| `patches/` | 外层 pnpm 对依赖应用的显式补丁 |
 
-profile 的名字和绝对目录由 `desktopProfiles.current` 提供，不能从 argv、settings 或 URL 猜测。`list()` 是只读发现；`select()` 记录 pending target，并通过重启完成切换。
+外层使用 pnpm 11.8.0 的 isolated linker。两个通道当前固定同一 DSH 0.1.5-rc.2 source/runtime family；`upstream.json` 记录各自 pin，当前 gitlink 对应 `activeChannel: beta`。根 workspace override 指向 vendored tarball，`patchedDependencies` 应用兼容修补。应用不直接链接上游源码树。
 
-`desktopPnpm.run()` 直接跑内置 pnpm；`runPlugin()` 通过打包的 DSH CLI 维持 profile 初始化、相对 source 和 bundle reconcile。两者都属于当前 generation，并由 subprocess service 管理完整进程树。
+## 服务和恢复
 
-Launcher 私有的 `desktopRuntime`、`desktopPnpmBootstrap`、Electron executable、Node helper 和 ABI 环境不是第三方 API。稳定包的公开 contract 是 `dsh-plugin-desktop/profile-service` 与 `dsh-plugin-desktop/pnpm`；Beta 包提供对应的 `dsh-plugin-desktop-beta/*` 路径。
+公开 Host contract 是 `desktopProfiles` 与 `desktopPnpm`；Client contract 是 `desktopWindow`。`desktopPnpm` 提供 `run`、`runPlugin`、`runExternalMarketPluginInstall`，不再提供 `installPlugin()` 或安装 WAL/receipt 事务。Market 使用 `run()`，自己管理 npm 目标与 bundle reconcile。
 
-## 打包与运行时闭包
+每次健康启动轮换三个配置检查点；失败后由用户选择恢复槽位，启动不会自动切回旧 profile。它们不包含 session、凭据或 workspace 文件。Renderer watchdog 和崩溃重载修复界面，不等同于回滚数据或重启整个 Host。
 
-发布包使用 Electron Builder 和 `app.asar`，但需要物理 unpack 的依赖（例如 pnpm、node-pty、Windows ACL/native 文件）会放在 `app.asar.unpacked`。Packaged runtime gate 会检查 ASAR 入口和物理运行时入口，profile fallback 不能把符号链接指向无法被 Node 解析的虚拟 ASAR 路径。
+## 打包与更新
 
-根 workspace 使用 pnpm；固定的 `deepseek-harness/` 子模块保持上游自己的 pnpm workspace。稳定版与 Beta 的桌面代码分别位于 `dsh-plugin-desktop/` 和 `dsh-plugin-desktop-beta/`，共享功能由变体同步检查约束；两者都不修改上游子模块。
+两个包在所有平台均禁用 ASAR。应用主 manifest、`lib` 和依赖以物理文件放在 `resources/app/`（macOS 为 `Contents/Resources/app/`）。运行时闭包检查覆盖 Host、CLI、pnpm、native 依赖及 profile fallback。
 
-## 发行通道协议
+| 通道 | 包名 | 产品名 | appId |
+| --- | --- | --- | --- |
+| Stable | `dsh-plugin-desktop` | ClawClaw | `com.clawclaw.desktop` |
+| Beta | `dsh-plugin-desktop-beta` | ClawClaw Beta | `com.clawclaw.desktop.beta` |
 
-稳定版与 Beta 是两个实体 npm 包和两个系统应用，不由 Git 分支区分。稳定版使用 `dsh-plugin-desktop`、`DSH Desktop` 与 `ai.deepseek.dsh.desktop`；Beta 使用 `dsh-plugin-desktop-beta`、`DSH Desktop Beta` 与 `ai.deepseek.dsh.desktop.beta`。`upstream.json` 同时记录两个通道的上游版本、提交和 vendored runtime 清单，根级精确 override 保证每个 workspace 只能解析自己的 DSH 运行时。
+更新读取 `https://clawclaw.xzinfra.com/updates/<channel>/release.json`。manifest 必须提供匹配的 `channel`、规范版本和 `darwin`/`win32` 的 HTTPS `url`、base64 `sha512`、`size`；正文最多 16 KiB，安装包最多 1 GiB。版本与下载请求均拒绝重定向，不发送原项目的统计 header。下载校验 SHA-512 与容器格式；实现不验证 manifest 的独立数字签名，不能将摘要校验描述为签名验证。
 
-版本检查和安装包下载均携带 `X-DSH-Desktop-Channel: stable|beta`。检查请求还携带当前版本；下载请求携带 `X-DSH-Desktop-Target-Version`，服务端必须返回与请求一致的通道与版本。没有通道 header 的旧客户端按稳定版处理；Beta 客户端则必须收到明确的 `channel: "beta"` 响应。稳定通道只接受正式 SemVer，Beta 通道只接受 `-beta.N`。Beta 自动更新只查询 Beta；“安装稳定版”是独立的显式操作，允许选择较低版本并将稳定版安装在 Beta 旁边。
-
-服务端必须在 Beta 发布前先支持上述选择与回显规则，并为两个通道分别准备完整的平台产物。否则客户端会把响应视为无效，不会静默跨通道下载。
-
-## 维护者深入阅读
-
-- [Desktop service contract](../dsh-plugin-desktop/docs/plugin-services.md)
-- [Package README](../dsh-plugin-desktop/README.md)
-- [Pinned upstream and isolated pnpm workspace](../.agents/notes/implemented/process/2026-08-15-pinned-upstream-and-isolated-pnpm-workspace.md)
-- [Profile and pnpm services decision](../.agents/notes/implemented/architecture/2026-08-15-desktop-profile-and-pnpm-services.md)
-- [Advanced shell decision](../.agents/notes/implemented/architecture/2026-08-15-desktop-advanced-shell.md)
-- [Native shell generation and platform adapters](../.agents/notes/implemented/architecture/2026-08-19-native-shell-generation-and-platform-adapters.md)
+发布步骤见[包级参考](../dsh-plugin-desktop/README.zh.md)。本页描述客户端协议，不证明远程端点或发行产物已经上线。

@@ -1,59 +1,48 @@
-# 参与贡献
+# 参与 ClawClaw
 
-感谢你愿意参与 DSH Desktop。这是一个社区项目，无论你是普通用户、插件作者还是开发者，都有适合你的贡献方式。
+[English](CONTRIBUTING.en.md)
 
-## 普通用户：使用、反馈与传播
+通过 [Issues](https://github.com/AngusFan-GH/ClawClaw/issues) 提交问题或功能建议，通过本仓库 Pull Request 贡献代码和文档。问题应包含系统、应用版本、复现步骤和脱敏错误；社区行为见[行为准则](CODE_OF_CONDUCT.md)。
 
-- 遇到问题或异常，[提 issue](https://github.com/anywhere-labs/deepseek-harness-desktop/issues)：说明操作系统（macOS / Windows）、应用版本和复现步骤。
-- 有功能想法或改进建议，也欢迎提 issue 讨论。
-- 参与[社区交流](README.md#社区交流)（微信群、QQ 群、Discord），帮助其他用户解决问题。
-- 写使用教程、体验文章，或帮助完善和翻译文档。
-- 在[友情链接](README.md#友情链接)中收录生态项目。
+## 环境与启动
 
-## 插件作者：扩展生态
-
-DSH 的核心是插件。如果你写插件，请先阅读：
-
-- [插件开发](docs/plugin-development.md)：如何编写普通 DSH 插件和 Desktop 插件。
-- [DSH 插件生态倡议书](docs/plugin-ecosystem.md)：开放、可组合、可持续的生态愿景，以及组合优先、声明清晰、兼容优先三条原则。
-- [DSH Community Fabric Draft](dsh-community-fabric/README.zh.md)：参与 Manifest、Capability、Host Descriptor 和事件 contract 的公开讨论。
-- [Community Market 设计](dsh-community-market/docs/market-shell.zh.md)：未来市场如何发现插件，以及为什么收录不等于安全审核。
-
-遵循倡议书的插件更容易与其他插件共存，也会在未来上线时更容易在插件市场中被发现和信任。
-
-## 开发者：贡献代码
-
-### 开发环境
+使用 Node.js `^22.19.0` 或 `>=24.0.0`，安装 Corepack，使用根目录锁定的 pnpm `11.8.0`：
 
 ```sh
 git submodule update --init --recursive
 corepack pnpm install --frozen-lockfile
-corepack pnpm check   # 完整 headless gate：构建、类型检查、测试与冒烟
-corepack pnpm dev     # 有图形环境时启动应用
+corepack pnpm dev:beta
 ```
 
-### 仓库边界（开始前务必了解）
+`dev:beta` 和 `dev` 会打开图形应用，其他验证保持 headless-safe。根命令的默认打包/启动对象是 Stable；Beta 使用 `:beta` 后缀。
 
-- `deepseek-harness/` 是固定版本的上游子模块，**桌面开发不修改其中的任何文件**；上游内容更新走独立的 pin 提交。
-- 桌面代码位于 `dsh-plugin-desktop/`；`dsh-community-fabric/` 保存社区标准 Draft，`dsh-community-market/` 保存市场壳设计。两个社区 package 当前都只有文档、尚不可加载，三个自有 package 共用外层 pnpm workspace。
-- 构建、类型检查、单元测试和冒烟检查必须保持 headless-safe。
+## 所有权
 
-### 提交与 PR
+- `deepseek-harness/` 是只读子模块。上游 pin 与桌面行为变更分开提交。
+- Desktop 共享功能先在 `dsh-plugin-desktop-beta/` 实现和验证，再同步 `dsh-plugin-desktop/`；两份源码不会自动继承。
+- `channels/dsh-im/` 拥有 Channels 产品层；供应方版本、构建修补和声明应一起维护。
+- Community Market 已有 runtime、Schema 和测试，仍为私有内置包；Fabric 仍是私有文档 Draft，无 runtime/SDK。
+- 五个自有 package 共用外层 pnpm workspace。上游使用独立 workspace，只通过根 `upstream:*` 命令操作。
+- vendored runtime、补丁、manifest、锁文件和 `upstream.json` 必须保持一致。参见[架构](docs/architecture.md)。
 
-与桌面版必要功能无关的 PR，以及其他插件收录相关的 PR，我们可能不会接受。
+## 验证
 
-目前我们接受与桌面版必要功能相关的 PR（如问题修复、新功能等），非常欢迎各位开发者提出此类 PR。
+```sh
+corepack pnpm check:layout
+corepack pnpm check
+corepack pnpm --filter @clawclaw/dsh-im run check
+```
 
-- 提交信息使用 conventional commits 风格（例如 `fix(desktop): ...`、`docs: ...`）。
-- 提交前运行 `pnpm run check` 并保证全绿。
-- 变更生产依赖后，运行 `pnpm --filter dsh-plugin-desktop run verify:notices` 刷新第三方许可清单，并提交更新后的 `dsh-plugin-desktop/THIRD_PARTY_NOTICES.md`。
-- 文档改动请中英同步，并更新 `README.i18n.yaml` 的双语 hash 记录。
-- PR 描述说明改动内容、动机和验证方式；CI 通过后再合并。
+`check:layout` 包含双语、依赖方向、vendored runtime、Desktop 变体和仓库布局检查。`check` 覆盖 Fabric、Market 与两个 Desktop 完整 gate；Channels 的独立测试需额外运行上述 `check`。根 `test` 和 `typecheck` 会包含 Channels。
 
-## 加入技术团队
+仅文档变更至少运行双语与两个社区文档检查，以及 `git diff --check`；更改链接时验证本地目标。修改共享 Desktop 行为需 `check:desktop-variants` 和两个包的验证。原生 UI、安装/卸载和签名行为需要对应目标系统的显式人工或打包验证。
 
-如果你希望加入我们的技术团队，欢迎通过 [t4wefan@qq.com](mailto:t4wefan@qq.com) 联系我们。
+## 文档与提交
 
-## 行为准则
+- 保持中英文内容一致，修改文档后更新其相邻 `*.i18n.yaml` 中的 Git blob hash；不是只更新根 README 的记录。
+- 可用 `git hash-object --path=docs/user-guide.md -- docs/user-guide.md` 获取示例文档的 hash；逐个填写对应记录，不把 hash 一致误当翻译质量检查。
+- 日期化决策、研究和实验保留历史语境；当前用法放在产品指南、接口参考和包 README 中。
+- 使用 conventional commits，如 `fix(desktop): ...`、`docs: ...`。PR 说明问题、最终行为、验证和限制。
+- 生产依赖变化后，对两个 Desktop 包分别运行 `verify:notices`，检查生成差异并保留第三方许可。渠道的独立声明也需复核。
 
-请保持友善与尊重，就事论事。我们希望这是一个欢迎新人的社区。完整的[参与者公约](CODE_OF_CONDUCT.md)适用于所有项目空间。
+发布与平台命令见[Stable 包](dsh-plugin-desktop/README.zh.md)和 [Beta 包](dsh-plugin-desktop-beta/README.zh.md)。不要将本地构建描述为已发布或已签名产物。

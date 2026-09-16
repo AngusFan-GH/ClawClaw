@@ -1,79 +1,69 @@
-# DSH Desktop Architecture
+# ClawClaw architecture
 
-## Overview
+[中文](architecture.md)
 
-DSH Desktop is a thin Electron host. It starts the official DSH Host in Electron's main process; the Host exposes the ordinary Web UI over an HTTP/WebSocket Web carrier. The carrier listens on loopback by default and can be exposed to the LAN only after the user explicitly acknowledges the risk. Desktop does not create a second renderer IPC plugin system and does not expose raw Electron APIs to the page.
+This page describes current source. Dated Agent Notes record historical decisions rather than superseding current interfaces.
+
+## Processes and ownership
 
 ```mermaid
 flowchart LR
-  User[User] --> Native[Electron main / tray / window]
-  Native --> Launcher[Profile launcher]
-  Launcher --> Host[Host Cordis generation]
-  Host --> Carrier[HTTP + WebSocket Web carrier]
-  Carrier --> Renderer[Sandboxed Web renderer]
-  Host --> Upstream[Upstream DSH services]
-  Host --> Desktop[Desktop-owned plugins]
-  Host --> ThirdParty[Third-party plugins]
-  Launcher --> Services[desktopProfiles + desktopPnpm]
-  Services --> ThirdParty
+  Main[Electron main / Launcher] --> Native[Window / Tray / Isolated Chrome]
+  Main -->|Private Host RPC| Host[Isolated Host child / Cordis]
+  Host --> DSH[DSH runtime / Profiles / Sessions]
+  Host --> Plugins[Desktop / Market / Channels plugins]
+  Host -->|HTTP + WebSocket| Content[Sandboxed content WebContentsView]
+  Native --> Frame[Desktop Chrome WebContentsView]
 ```
 
-## Startup order
+Both Stable and Beta default to `startIsolatedDesktopHost()`. `DSH_DESKTOP_ISOLATED_HOST=0` retains an in-process diagnostic path. Electron main owns native resources; Host owns Cordis, plugins, the Web service, and sessions. Private Host RPC is not a public Electron interface. Browser plugins use standard Web routes, RPC, services, and slots.
 
-1. Electron acquires the single-instance lock and reads Desktop-owned profile/mode state.
-2. The launcher prepares the active profile without modifying profiles merely to list them.
-3. The launcher provides the native runtime, the generation's `desktopProfiles` bootstrap, and the bundled pnpm environment.
-4. The Host Cordis root mounts Loader entries. Desktop services are registered before third-party entries can consume them.
-5. `dsh-base`, `dsh-web-app`, and the selected profile's third-party bundles compose the Web carrier.
-6. The Host binds loopback by default or all network interfaces when the confirmed setting requests it; Electron creates the BrowserWindow and loads the same-origin page through the loopback address.
-7. The tray is created only after the Web surface loads, and the profile is committed as last-known-good.
+Startup resolves data paths, profile, package environment, and preferences, then runs Setup Wizard when required. Host boot and Web/client health precede healthy checkpoints. Profile, presentation, and material changes dispose the current generation and restart. Service references and process handles must not cross generations.
 
-Every profile or mode switch disposes the current generation before starting the next one. Service references, window objects, and subprocess handles must not be cached across generations.
+## UI ownership
 
-## Host, Client, and native runtime
+On macOS/Windows, compatibility and extended modes use two independent WebContentsViews in one native window. Desktop Chrome owns the 36-pixel toolbar; content is sized below it. Plugin styles and portals cannot cross this document boundary. Content-side `desktopWindow.safeAreaInsets` and `dragRegion` are zero; do not reserve another 36 pixels. Linux compatibility uses native-titlebar fallback.
 
-- **Upstream Host** owns agent, model, tool, session, settings, webServer, and subprocess capabilities.
-- **Desktop Host** owns the window, tray, profiles, terminal, updates, and the two public Desktop services.
-- **Web Client** contains the official Web UI and third-party browser contributions. It works over the shared Web carrier and does not call Electron directly.
-- **Native runtime** adapts Electron BrowserWindow, the tray, filesystem/network operations, and installers. `desktopRuntime` is for Desktop-owned rows only.
+Compatibility preserves upstream layout; extended composes Desktop layout/sidebar; advanced has its own root and integrated captions. Desktop separately owns confirmation, recovery, and setup windows. See [chrome isolation](../dsh-plugin-desktop/docs/compatibility-chrome-isolation.md) and the [service contract](../dsh-plugin-desktop/docs/plugin-services.md).
 
-Compatibility mode validates its environment and adds only an independent 36-pixel Desktop frame through the overlay slot; the official layout, root, sidebar, and conversation remain an unrelated content viewport below it. Extended mode disables the official root layout and installs its own Desktop layout/sidebar registration, which continues to host the official sidebar, conversation, and details occupants inside an inverted-L material frame. Enhanced mode keeps a separate root registration and its original compact internal-caption geometry. macOS and Windows apply capability-gated native materials without changing the ownership of upstream occupant slots.
+## Workspaces, data, and models
 
-Desktop-level confirmations, warnings, errors, and results do not enter the Web Client tree. `DesktopDialogWindow` creates a separate sandboxed modal `BrowserWindow`, applies the shared empty utility frame, parents it to the active generation window when possible, and accepts only one bounded local response. Recovery and Profile creation are separate Desktop-owned windows using the same title-free frame. Recovery itself is a shadcn page with reason-first presentation and four workflow tabs; destructive recovery actions delegate their confirmation back to `DesktopDialogWindow`.
+Default Harness home is `~/.clawclaw/data`; the default workspace is `~/.clawclaw/workspaces/default`. See the [user guide](user-guide.en.md) for migration, overrides, and channel sharing. The default workspace is registered through the upstream registry and protected against deletion in Host. Client persists active selection and supplies a bilingual directory flow. A workspace is neither a profile nor a recovery checkpoint.
 
-### Native shell generation and platform adapters
+The Desktop patch composes `spiritx` by default using the upstream pi-ai transport with OpenAI Responses at `https://ai.xzinfra.com/spiritx-api/v1`. Credentials use `SPIRITX_API_KEY`; the default model is `DeepSeek-V4-Flash`. The declared catalog is in `cordis.patch.yml` and does not guarantee server availability. The default composition disables the original DeepSeek model adapter, its API extensions, session log reporting, official package inventory, session telemetry, and DeepSeek web search; HTTP fetch remains available. User profiles may explicitly change composition.
 
-`ElectronRuntime` coordinates the Host and native desktop environment without directly owning window and tray details. Each start creates one `ElectronShellGeneration` module that completely owns its `BrowserWindow`, `Tray`, related Electron listeners, navigation restrictions, external-link handling, and zoom shortcuts. A generation must be disposed through its idempotent `release()` interface; callers must not cache or destroy those resources separately across generations.
+`@clawclaw/dsh-im` supplies Channels, built on pinned `@xmanrui/dsh-im` 4.20.2. Product channel UI, directory selection, and session patches are maintained separately from the supplier runtime.
 
-Platform differences live at the `ElectronPlatformStrategy` seam selected once during startup. The Windows, macOS, and Linux adapters declare directory-picking, shell-mode, and update-download capabilities and own their platform-specific menu, Dock icon, and native-material operations. New platform branches belong in the corresponding adapter; the generation and runtime retain only the lifecycle shared across platforms.
+## Packages and provenance
 
-## Profile and service boundaries
+| Path | Responsibility |
+| --- | --- |
+| `dsh-plugin-desktop-beta/` | Beta Host/Client, Electron, packaging, tests; develop shared behavior here first |
+| `dsh-plugin-desktop/` | Independent Stable source tree requiring explicit synchronization |
+| `channels/dsh-im/` | Channels composition, UI, build patches, tests |
+| `dsh-community-market/` | Implemented private built-in Market runtime, schemas, adapters |
+| `dsh-community-fabric/` | Private RFC documentation; no runtime or published SDK |
+| `deepseek-harness/` | Pinned read-only upstream submodule with independent pnpm workspace |
+| `vendor/dsh-runtime/` | Pinned runtime tarballs and manifests |
+| `patches/` | Explicit dependency patches applied by outer pnpm |
 
-The profile name and absolute directory come from `desktopProfiles.current`; they must not be inferred from argv, settings, or a URL. `list()` is read-only discovery. `select()` records a pending target and completes the switch through restart.
+The outer workspace uses pnpm 11.8.0 with the isolated linker. Both channels currently pin DSH 0.1.5-rc.2 source/runtime; `upstream.json` records each pin and the current gitlink follows `activeChannel: beta`. Root overrides select vendored tarballs, with compatibility fixes in `patchedDependencies`. Applications do not source-link the upstream checkout.
 
-`desktopPnpm.run()` runs bundled pnpm directly. `runPlugin()` uses packaged DSH CLI semantics so profile initialization, relative sources, and bundle reconciliation remain authoritative. Both operations belong to the current generation and use the subprocess service for complete process-tree ownership.
+## Services and recovery
 
-The launcher-private `desktopRuntime`, `desktopPnpmBootstrap`, Electron executable, Node helpers, and ABI environment are not third-party APIs. The stable package exposes `dsh-plugin-desktop/profile-service` and `dsh-plugin-desktop/pnpm`; the Beta package exposes the corresponding `dsh-plugin-desktop-beta/*` paths.
+Public Host contracts are `desktopProfiles` and `desktopPnpm`; Client exposes `desktopWindow`. `desktopPnpm` offers `run`, `runPlugin`, and `runExternalMarketPluginInstall`, without `installPlugin()` or installation WAL/receipt transactions. Market uses `run()` and owns npm target selection and bundle reconciliation.
 
-## Packaging and runtime closure
+Healthy startup rotates three configuration checkpoints. Recovery requires an explicit slot selection; startup never silently returns to an old profile. Checkpoints exclude sessions, credentials, and workspace files. Renderer watchdog/reload recovery repairs presentation, not data or the entire Host.
 
-Release artifacts use Electron Builder and `app.asar`, while dependencies that must be physical (for example pnpm, node-pty, and Windows ACL/native files) live under `app.asar.unpacked`. The packaged-runtime gate checks both archive entries and physical runtime entries; profile fallback links must not target virtual ASAR paths that Node cannot resolve.
+## Packaging and updates
 
-The outer workspace uses pnpm. The pinned `deepseek-harness/` submodule keeps its own pnpm workspace. Stable and Beta Desktop sources live in `dsh-plugin-desktop/` and `dsh-plugin-desktop-beta/`, with a variant-alignment gate protecting shared behavior; neither package edits the upstream submodule.
+Both packages disable ASAR on all platforms. Root manifest, `lib`, and dependencies are physical files under `resources/app/` (`Contents/Resources/app/` on macOS). Runtime-closure gates cover Host, CLI, pnpm, native dependencies, and profile fallback.
 
-## Release-channel protocol
+| Channel | Package | Product | appId |
+| --- | --- | --- | --- |
+| Stable | `dsh-plugin-desktop` | ClawClaw | `com.clawclaw.desktop` |
+| Beta | `dsh-plugin-desktop-beta` | ClawClaw Beta | `com.clawclaw.desktop.beta` |
 
-Stable and Beta are separate physical npm packages and system applications; Git branches do not define the channels. Stable uses `dsh-plugin-desktop`, `DSH Desktop`, and `ai.deepseek.dsh.desktop`; Beta uses `dsh-plugin-desktop-beta`, `DSH Desktop Beta`, and `ai.deepseek.dsh.desktop.beta`. `upstream.json` records both channels' upstream versions, commits, and vendored-runtime manifests. Exact root overrides ensure that each workspace resolves only its own DSH runtime.
+Updates read `https://clawclaw.xzinfra.com/updates/<channel>/release.json`. Manifests require matching `channel`, canonical version, and `darwin`/`win32` artifacts with HTTPS `url`, base64 `sha512`, and `size`. Manifest bodies are capped at 16 KiB, installers at 1 GiB. Manifest and artifact requests reject redirects and omit original-project statistics headers. Downloads verify SHA-512 and container format. There is no independent manifest digital-signature verification; a digest check must not be described as signature verification.
 
-Version checks and installer downloads send `X-DSH-Desktop-Channel: stable|beta`. A check also sends the current version, while a download sends `X-DSH-Desktop-Target-Version`; the service must echo the requested channel and version. Legacy clients without the channel header are treated as stable. A Beta client requires an explicit `channel: "beta"` response. Stable accepts only release SemVer, while Beta accepts only `-beta.N`. Automatic Beta updates query only Beta. **Install Stable Edition** is a separate explicit operation that may select a lower version and installs Stable alongside Beta.
-
-The service must implement these selection and echo rules, with complete platform artifacts for both channels, before a Beta release becomes discoverable. Otherwise the client treats the response as invalid and will not silently cross channels.
-
-## Maintainer reading
-
-- [Desktop service contract](../dsh-plugin-desktop/docs/plugin-services.md)
-- [Package README](../dsh-plugin-desktop/README.md)
-- [Pinned upstream and isolated pnpm workspace](../.agents/notes/implemented/process/2026-08-15-pinned-upstream-and-isolated-pnpm-workspace.md)
-- [Profile and pnpm services decision](../.agents/notes/implemented/architecture/2026-08-15-desktop-profile-and-pnpm-services.md)
-- [Advanced shell decision](../.agents/notes/implemented/architecture/2026-08-15-desktop-advanced-shell.md)
-- [Native shell generation and platform adapters](../.agents/notes/implemented/architecture/2026-08-19-native-shell-generation-and-platform-adapters.md)
+See [package reference](../dsh-plugin-desktop/README.md) for release commands. This describes the client protocol, not proof that the remote service or artifacts are deployed.

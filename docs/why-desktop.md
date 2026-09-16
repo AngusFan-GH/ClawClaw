@@ -1,49 +1,29 @@
-# 为什么做 DSH Desktop
+# 为什么做 ClawClaw
 
-## 我们解决什么问题
+[English](why-desktop.en.md)
 
-DeepSeek Harness 的核心是一个可组合的 agent harness。它适合通过命令行和 Web UI 使用，也适合开发者把模型、工具、会话和工作流组合成自己的运行时。但对很多用户来说，第一次运行仍然要面对 Node.js、profile、依赖安装、端口和进程生命周期。
+ClawClaw 把可组合的 DSH runtime 放进适合长期使用的桌面应用，并为本地工作区与即时通讯渠道补上产品层能力。它不试图重写 Agent runtime 或把 Web UI 伪装成 Electron 原生界面。
 
-DSH Desktop 的目标不是重新实现 Harness，而是把同一个运行时放进一个容易启动、容易管理、符合操作系统习惯的应用里：
+## 边界
 
-- 安装包负责提供 Electron、Node 运行时和固定版本的 DSH 依赖。
-- 应用负责窗口、托盘、单实例、退出和本地服务生命周期。
-- 用户仍然使用官方 DSH 的 profile、插件、会话和 Web UI。
-- 上游 Harness 继续拥有 agent、模型、工具、会话和 Web 客户端的核心语义。
+- 上游 DSH 继续负责 agent、模型、工具、会话、profile 和 Web 协议。
+- ClawClaw 负责 Electron 生命周期、隔离 Host、工作区默认值、Channels 入口、桌面窗口、终端、恢复、市场选择和更新客户端。
+- 第三方插件通过公开 Cordis/Web contract 集成，不获得窗口、托盘、内部 RPC、安装器或 launcher 私有状态。
 
-因此 Desktop 是一个产品入口和运行时适配层，不是上游项目的替代品，也不是把上游源码复制一份再长期分叉。
+“上游子模块不改动”是源码所有权约束。实际产品仍由固定 runtime tarball、根 pnpm override、显式补丁和 Desktop/Channels 插件组成；因此兼容升级必须检查完整组合，而不是只看子模块 diff。
 
-## 为什么坚持插件化
+## 为什么有工作区与 Channels
 
-“一切皆插件”让 Harness 的能力可以被组合，而不是被一个固定应用绑死。Desktop 采用同一原则有三个直接好处：
+DSH 的 profile 处理依赖组合，但日常任务还需要一个明确、安全的文件起点。ClawClaw 注册不可删除的默认工作区，允许用户增加或选择其他目录，并让 Channels 在没有单独配置时复用默认工作区。它不移动用户已有文件，也不把工作区当成 profile 的副本。
 
-1. **上游能力保持可替换。** Desktop 可以使用官方 Web client，用户的 profile 也可以加入模型、工具、界面和工作流插件。
-2. **桌面能力保持可扩展。** profile 管理和打包环境提供的能力可以通过明确的 Host service 给插件使用，而不是让每个插件猜 Electron 的内部对象。
-3. **边界更容易维护。** 上游 DSH 负责 agent 语义，Desktop 负责原生窗口和系统集成，第三方插件只依赖自己真正需要的 contract。
+Channels 把消息平台接入现有任务和会话能力。渠道配置、账号授权、平台限制和消息传输仍是用户与平台的关系；内置入口不构成账号托管、服务可用性保证或安全审核。
 
-插件化也意味着不是所有东西都应该暴露。第三方插件只能使用明确公开的接口，不能直接控制窗口、托盘、安装器等内部实现；稳定的边界比“什么都能访问”更容易升级和排错。公开接口的细节见[插件开发](plugin-development.md)。
+## 为什么仍然使用插件
 
-## Desktop 自己提供什么
+Desktop、Market 和 Channels 是可组合层，而不是对上游私有 API 的直接修改。这样做让普通 DSH 插件仍可在 CLI 或 Web profile 中运行，也让 ClawClaw 专用插件可以只依赖明确的 `desktopProfiles`、`desktopPnpm` 和 `desktopWindow` contract。生命周期以 Host generation 为边界：切换 profile 或窗口模式时，插件必须释放旧 service 与子进程。
 
-当前 Desktop 主要提供：
+当前 Community Market 已作为私有内置 package 实现；Fabric 仍是社区 RFC Draft。市场目录或“可安装”状态不等于兼容性、安全性、许可证或隐私审查。
 
-- macOS 和 Windows 原生窗口、托盘和单实例生命周期。
-- 兼容、扩展窗口和增强三种呈现模式。兼容模式在独立 Desktop frame 下保留上游默认客户端；扩展窗口使用自己独立注册的 Desktop layout/sidebar surface 承载官方 occupant 并形成倒 L；增强模式保留独立 root registration 与紧凑内部 caption。Desktop frame 还会按能力提供原生材质与拖动区域。
-- 多 profile 选择。当前 generation 的 profile 身份由 Desktop 明确提供，切换通过有序重启生效。
-- 内置终端和固定版本 pnpm 环境。它们只作用于 Desktop 自己创建的进程，不修改用户的全局 PATH。
-- 面向插件开发者的一组受控扩展接口（详见[插件开发](plugin-development.md)）。
-- 版本检查、用户确认后的安装包下载，以及 macOS DMG/Windows NSIS 的平台交接。
+## 面向谁
 
-## 我们刻意不做什么
-
-- 不把上游 Web UI 重新实现成 Electron 原生页面。
-- 不在兼容模式中覆盖上游 layout、sidebar 或 conversation 组合。
-- 不把记录复制到另一个“Desktop 数据库”；官方 profile 默认共享 DSH home 中的会话和设置。
-- 不给第三方插件一个未定义的 Electron 私有 API。
-- 不把 roadmap（插件市场、手机远程、Channels）写成当前版本已经交付的功能。
-
-## 适合谁
-
-- 只想安装后直接使用 Harness 的用户：从[用户指南](user-guide.md)开始。
-- 想安装或开发 DSH 插件的用户：先读[插件开发](plugin-development.md)，再看 [Desktop service contract](../dsh-plugin-desktop/docs/plugin-services.md)。
-- 想理解启动、profile 和打包边界的维护者：阅读[架构说明](architecture.md)和包级 [README](../dsh-plugin-desktop/README.md)。
+使用应用请从[用户指南](user-guide.md)开始；开发插件读[插件开发](plugin-development.md)和[服务合同](../dsh-plugin-desktop/docs/plugin-services.zh.md)；维护启动、打包和发布读[架构](architecture.md)及各 Desktop 包 README。

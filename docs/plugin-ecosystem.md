@@ -1,46 +1,14 @@
-# DSH 插件生态倡议书
+# ClawClaw 插件生态
 
-[English](plugin-ecosystem.en.md) | 中文
+[English](plugin-ecosystem.en.md)
 
-DSH 的插件生态正在快速增长。插件越多，它们能否协同工作就越重要：如果每个插件都假设甚至覆盖其他插件的内部实现，装几个插件就会开始冲突，生态会逐渐碎片化。这不是任何人的错，而是缺少共同约定的必然结果。
+ClawClaw 采用 DSH 的组合模型：上游、Desktop、Channels、Market 和第三方插件以明确 contract 组合。生态的目标是可选择、可诊断、可维护，不是让每个插件获得全部本机权限。
 
-## 我们的愿景
+1. **优先通用 contract。** 普通插件依赖上游 DSH，桌面功能才使用 `desktopProfiles`、`desktopPnpm`、`desktopWindow`。不要依赖 Electron、内部 RPC 或文件布局。
+2. **清楚声明边界。** 说明运行位置、网络请求、权限、数据目录、兼容版本和是否需要重启。市场元数据不能代替插件自己的说明。
+3. **以用户确认和可恢复性为先。** 安装、账号授权、网络暴露和文件操作应有明确用户动作；恢复检查点不是插件事务或完整备份。
+4. **尊重来源与许可。** 插件包、目录和渠道供应方各自负责其元数据、服务与许可证。可安装、收录或显示在设置中不等于项目背书。
 
-我们希望构建一个**开放、可组合、可持续**的 DSH 插件生态：
+Community Market 已提供目录选择、发现、详情和受确认的 npm 操作。`dshmarket` 是可选兼容 provider。Fabric 仍是 RFC Draft；在有评审 schema、参考 adapter 和一致性证据前，不能将其称为稳定互操作标准。
 
-- **开放**：任何作者都可以参与，官方、桌面和第三方插件在同一个平台上平等组合。
-- **可组合**：插件按同一套约定扩展，装在一起也能一起工作、互不干扰。
-- **可持续**：升级保持向后兼容，生态可以长期演进，不需要推倒重来。
-
-## 我们倡导的三条原则
-
-1. **组合优先**：通过官方 slot、service 和 patch 组合能力，不要假设或覆盖其他插件的内部实现。
-2. **声明清晰**：明确声明依赖的 service 和 slot，不依赖运行时巧合。
-3. **兼容优先**：升级保持向后兼容，不破坏已有组合。
-
-## 桌面壳是第一个范例
-
-DSH Desktop 是这套方式的第一个实践者：桌面壳本身就是一个普通 DSH 插件，与官方、第三方插件走同一条组合路径，没有任何特权。我们不是魔改上游源码做一个固定外壳，而是让"桌面"也成为插件生态里平等的一员。
-
-## 活文档，社区共建
-
-这份倡议不是单方面规定，而是一份**活文档**：它随生态实践更新，接受社区讨论和修订。任何作者都可以通过 issue、讨论区或 PR 提出修改。
-
-## 插件市场：让约定成为有利的选择
-
-插件市场上线后，符合本倡议的插件将更容易被发现、安装和信任。我们希望让"按规范开发"成为对每个作者都有利的选择，而不是额外的负担。
-
-## 从倡议走向可测试的 contract
-
-[DSH Community Fabric](../dsh-community-fabric/README.zh.md) 正在把这份愿景整理成可公开讨论的 Manifest、Capability、Host Descriptor 与事件 Draft。它目前只有文档，不是已经发布的标准或运行时；当前插件仍使用现有 DSH/Cordis 接口。
-
-Fabric 的 capability 首先用于兼容判断、用户确认和审计，不会把同进程 JavaScript 伪装成安全沙箱。只有具备真实隔离证据的 Host 才能声称权限被技术强制执行。
-
-市场目前仍处于[产品与安全设计阶段](../dsh-community-market/README.zh.md)，尚未提供可用页面或安装器。目录收录只代表符合目录规则，不等于安全审核或推荐。
-
-## 如何参与
-
-- 在[插件开发](plugin-development.md)中了解插件如何编写。
-- 阅读并评论 [Community Fabric RFC 0001](../dsh-community-fabric/docs/rfcs/0001-plugin-manifest-capabilities-events.zh.md)。
-- 在[用户指南](user-guide.md)中了解如何安装和管理插件。
-- 通过 issue 和讨论区提出你对本倡议的意见。
+插件作者从[插件开发](plugin-development.md)开始；市场提供方看 [Community Market 文档](../dsh-community-market/README.zh.md)；当前 runtime 所有权见[架构](architecture.md)。

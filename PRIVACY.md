@@ -1,220 +1,43 @@
-# DSH Desktop Privacy Policy
+# ClawClaw data handling
 
 [中文](PRIVACY.zh.md)
 
-- **Version:** 1.0
-- **Effective and last updated:** August 26, 2026
+- **Version:** 2.0
+- **Last updated:** 2026-09-16
 
-DSH Desktop is a local-first, open-source desktop application. This policy explains what information the official DSH Desktop distribution and official online services process, why they process it, who receives it, and what choices you have.
+ClawClaw is a local-first open-source desktop application. This notice describes known local storage and network behavior in this repository's source and builds. It is not a privacy promise for undeployed services, third-party builds, plugins, or platforms. The project is independently maintained at [AngusFan-GH/ClawClaw](https://github.com/AngusFan-GH/ClawClaw) and does not represent DeepSeek, Anywhere Labs, SpiritX, npm, GitHub, or messaging platforms.
 
-In this policy, “we” means the **Anywhere Labs project maintainer team** that maintains and publishes the official DSH Desktop distribution under the [`anywhere-labs`](https://github.com/anywhere-labs) GitHub organization and operates the official `dshdesktop.cn` services. DSH Desktop is an independent community project and has no affiliation, partnership, authorization, or endorsement relationship with DeepSeek.
+## Local data
 
-For privacy questions or rights requests, email [t4wefan@qq.com](mailto:t4wefan@qq.com). Do not put installation identifiers, logs, credentials, or other private information in a public GitHub Issue.
+Default Harness data is `~/.clawclaw/data`; the default workspace is `~/.clawclaw/workspaces/default`. Data can include profiles, settings, sessions, logs, caches, plugin dependencies, and files saved in workspaces. Stable/Beta use separate Electron application-data directories for windows, logs, update state, and diagnostics while sharing default Harness data and workspace. Explicit `DSH_HOME`, an application data-directory choice, and safe mode can change paths.
 
-## 1. Scope
+On first use, a sole `~/.dsh` is moved to the new default. If both exist, they are not merged. Healthy-start recovery checkpoints cover only selected profile declarations and shared settings/patches; they exclude credentials, `.env`, sessions, storage, caches, and workspace files.
 
-This policy applies to:
+## Network connections
 
-- DSH Desktop provided through the [official GitHub repository](https://github.com/anywhere-labs/dsh-desktop) and official release channels;
-- the official website, version-check service, and download redirects under `https://www.dshdesktop.cn/`; and
-- privacy requests, support email, or issue reports that you voluntarily send to the project maintainers.
+Connections depend on user choices, profiles, and plugins. Known endpoints in the default Desktop composition are:
 
-This policy does not control processing performed by third-party forks, modified builds, third-party distributors, model providers, plugins, marketplace sources, or package services. If a third-party build still calls the hard-coded official `dshdesktop.cn` endpoints, this policy applies to the information those official endpoints actually receive, but not to other processing by that build or its distributor.
-
-## 2. Summary
-
-- DSH Desktop profiles, settings, workspaces, sessions, logs, and crash files remain on your device by default.
-- The official update service does not require a DSH Desktop account. Its version-check code does not intentionally send prompts, responses, file contents, workspace paths, profile names, session contents, API keys, MAC addresses, or hardware serial numbers.
-- Packaged macOS and Windows builds check for updates by default and send a locally generated, persistently stored random installation UUID. This is a pseudonymous identifier that may qualify as personal data under applicable law. It is not a hardware ID and does not guarantee one value per physical machine.
-- Installer downloads do not receive that installation UUID from Desktop, although the website, download host, and network infrastructure still receive ordinary network metadata.
-- Diagnostic archives are created locally only when you export them and are never uploaded automatically by DSH Desktop.
-- Model services, plugins, marketplace sources, and package services that you choose process data under their own terms. They do not become subject to this policy merely because DSH Desktop can connect to them.
-
-## 3. Official version checks
-
-### 3.1 When the request occurs
-
-Packaged macOS and Windows applications request the following endpoint about 60 seconds after startup by default:
-
-```text
-GET https://www.dshdesktop.cn/api/desktop/version
-```
-
-Another check occurs about six hours after each completed check. You can also select **Check for Updates** manually. Development runs, unpackaged launches, and Linux do not currently use this packaged automatic-update flow.
-
-### 3.2 What the request contains
-
-The client explicitly adds:
-
-- `Accept: application/json`; and
-- `X-DSH-Desktop-Installation-Id: <random UUID v4>`.
-- `X-DSH-Desktop-Version: <canonical installed stable version>`.
-
-The application adds no query parameters or request body to this GET request. Like every internet request, the official service and its infrastructure also receive the IP address, request time, TLS and connection details, and standard request metadata generated by the networking stack. That metadata may include a User-Agent, cookies, accepted compression, and operating-system or runtime-version information. The current code does not explicitly require the Electron network session to omit existing credentials, so we do not promise that a version request can never include session data. We also do not describe “two headers explicitly set by the client” as “only two fields leave the device.”
-
-The version-check code does not intentionally attach prompts, responses, file contents, workspace paths, profile names, session contents, model credentials, MAC addresses, or hardware serial numbers.
-
-### 3.3 How the installation UUID is created and changed
-
-The installation UUID:
-
-- is generated as a cryptographically random UUID v4 when Desktop starts and no valid persistent value exists in its Electron user-data directory;
-- is stored in `identity/installation-id` below that user-data directory;
-- is regenerated when the file is missing or corrupt, or when the complete user-data directory has been removed, and is not rotated during an ordinary launch;
-- is not derived from and does not encode a username, device name, MAC address, disk serial number, or other hardware information;
-- identifies one Desktop user-data directory, not a physical machine. Different operating-system users, user-data directories, or app copies on the same computer can have different UUIDs, while copied user data may copy the UUID; and
-- normally persists until the file or application user data is deleted, becomes corrupt, and is rebuilt.
-
-Default locations are:
-
-- macOS: `~/Library/Application Support/DSH Desktop/identity/installation-id`;
-- Windows: `%APPDATA%\DSH Desktop\identity\installation-id`.
-
-Deleting this file only causes a new UUID to be generated at the next launch. It **does not stop later version checks or prevent the new UUID from being sent**.
-
-### 3.4 Purposes
-
-Version-check data may be used only to:
-
-- return the latest stable version and support update notices;
-- recognize repeated requests from the same Desktop user-data directory as one installation, enabling deduplicated, aggregate update-service usage trends;
-- maintain service reliability, investigate abnormal requests, and prevent abuse; and
-- meet applicable legal obligations.
-
-We do not use the installation UUID for advertising profiles or cross-service tracking, and we do not sell it. A version check requires no login, and the client sends no name, email address, or DSH Desktop account ID in that request.
-
-## 4. Installer downloads, the website, and project communications
-
-| Scenario | Trigger | Information that may be processed | Purpose and recipients |
-| --- | --- | --- | --- |
-| Installer download | You click a download or confirm a download after an update is found | IP address, time, standard network metadata, and the platform shown by the `/mac` or `/windows` path | `dshdesktop.cn`, its hosting service, and the final download host use this information to deliver the file, protect the service, and measure download service usage. Desktop does not add the installation UUID to the download request. |
-| Website visit | You open the website in a browser | IP address, time, browser and device network metadata, and the requested page | Website hosting and network infrastructure use it to deliver the page, protect the service, and diagnose failures. |
-| GitHub Issue, discussion, or contribution | You submit it | Account details, text, attachments, code, and metadata that you make public | GitHub and the project maintainers use it to process issues, contributions, and community communications. Public submissions are publicly visible. |
-| Email and support material | You send it | Email address, message, attachments, and diagnostics or environment details that you choose to provide | [QQ Mail](https://mail.qq.com/), your sending provider, and the project maintainers use it to deliver and respond to the message, investigate problems, and retain necessary correspondence. |
-
-As of this policy's effective date, the website and official APIs are hosted by [Vercel](https://vercel.com/), so Vercel directly processes the installation UUID, IP address, and request headers that reach the API. Stable release state uses [Upstash](https://upstash.com/); the repository proves only that the backend reads release state, and this policy does not claim that the Desktop installation UUID is forwarded to Upstash. Official installer downloads currently redirect to files hosted by [ModelScope](https://modelscope.cn/). A download redirect target may set its own cookies or other session identifiers and processes the request under its own policy. We will update this section when a provider or download host changes.
-
-## 5. Information stored locally by default
-
-The following information remains on your device by default rather than being uploaded automatically to Anywhere Labs:
-
-| Local information | Purpose and retention |
+| Trigger | Recipient and data that may be sent |
 | --- | --- |
-| Profiles, Desktop preferences, window preferences, plugin configuration, and marketplace source selection | Provide your configured local experience; retained until you delete it in the application, manually delete the relevant data, or reset application data. |
-| Sessions, prompts, responses, tool records, and workspace information | Support local DSH features. Session records are stored under `$DSH_HOME/sessions` by default. The current persistence backend has no deletion API, so they accumulate until you remove them externally. Content may be sent to your chosen services when you invoke a model or tool, as described in Section 6. |
-| Attachments and image caches | Stored under `$DSH_HOME/attachments/v1` by default. The current implementation has no reference-aware garbage collection, so they remain until you delete them manually. |
-| Model and service credentials | May come from the inherited environment, a project `.env`, `$DSH_HOME/.env`, or `$DSH_HOME/.credentials.yaml`. The managed YAML uses a `0600` file below a `0700` directory on platforms with POSIX permissions, but it is not encrypted. Tools or models running as the same operating-system user can deliberately read it. |
-| Desktop logs | Stored below the Electron user-data directory. A file rotates at 10 MiB; files older than seven days are removed at startup; and the log directory is held below 200 MiB. Logs can still contain paths, workspace IDs, session IDs, commands, or plugin messages. |
-| Local crash files | Electron Crashpad collects them locally and is configured not to upload to a crash server. They may contain fragments of process memory. |
-| Diagnostic ZIP archives | Created only when you export one. They may contain logs, system and version information, paths, workspace or session IDs, bounded lifecycle and plugin IDs, and crash files within a shared 50 MiB evidence budget. The application retains the three newest archives that it manages; copies you make elsewhere are outside that limit. |
-| System notifications | Turn and job notices use generic completion or failure copy without session names, user text, job contents, or error details; update notices include the available version. The operating system handles them locally without a DSH Desktop remote-push service. Notification history or cross-device synchronization depends on your system account settings. |
-| Installation UUID | Stored as described in Section 3 and sent to the official update endpoint during a version check. |
+| SpiritX model requests | `https://ai.xzinfra.com/spiritx-api/v1`; model requests, authentication information, and protocol metadata. Users configure `SPIRITX_API_KEY`. |
+| Update checks | `https://clawclaw.xzinfra.com/updates/<stable|beta>/release.json`; IP, time, User-Agent, and normal HTTP metadata. The client does not add original DSH Desktop installation UUID or `X-DSH-Desktop-*` statistics headers. |
+| Confirmed downloads | The HTTPS artifact URL in a release manifest; IP, time, download path, and normal network metadata. The client verifies SHA-512 and container format. |
+| Community Market / dshmarket / pnpm | User-selected catalogs, npm registry, GitHub, or package/image sources; searches, package names, versions, browsing data, and normal metadata may be sent. |
+| Channels | Relevant Weixin, WeCom, Feishu, DingTalk, QQ, iMessage, Telegram, WhatsApp, Discord, or Slack services; credentials, authorization/QR data, message content, attachment references, and protocol metadata depend on platform/configuration. |
+| Other plugins/tools | Plugin- or user-configured models, MCP servers, websites, registries, and APIs; their own implementation and policies control scope. |
 
-Credential masking reduces risk but cannot guarantee that a log or diagnostic archive contains no sensitive information. Review an archive and remove information you do not want a recipient to see before sharing it.
+The default Desktop patch disables upstream session telemetry, DeepSeek session log, DeepSeek model API extensions, DeepSeek web search, and official package inventory. User profiles or plugins can enable other network behavior; inspect the active profile rather than relying only on this default.
 
-Uninstalling the application may leave Electron user data, the DSH home, profiles, downloaded installers, or diagnostic files that you copied elsewhere. Back up anything you need before deleting local data.
+## Local Web and LAN
 
-## 6. Third-party services you choose
+The Web carrier listens on loopback by default. Opening a system browser still accesses a local service. When users explicitly enable LAN access, the service can bind network interfaces. Reachability is not user authentication: LAN clients may request operations on local resources through sessions and tools. Use trusted networks only. LAN traffic need not pass through project update services, but reaches connected clients.
 
-DSH Desktop is a composable plugin platform. The following transfers are triggered by services, sources, plugins, or actions you choose. Each recipient processes information under its own privacy terms.
+## Diagnostics and sharing
 
-### 6.1 Model and tool services
+Diagnostic ZIPs are created only when a user exports them. They can include application logs, Crashpad dumps, run markers, and system information. Recognized credentials are masked where possible, but paths, session text, tool output, plugin messages, or memory fragments can remain. Exports are never uploaded automatically. Review them and use trusted sharing channels.
 
-When you configure and invoke a model provider, MCP service, external tool, or other API, the recipient may receive an API key, prompts, conversation context, attachments or file contents, tool inputs and outputs, session identifiers, network metadata, and other information required by that service's protocol. The exact scope depends on your configuration and request. Do not send sensitive data to a provider you do not trust.
+## Choices and responsibility
 
-Upstream DSH also maintains an `.anonymous-user-id` that is separate from the Desktop installation UUID. When you invoke the current default DeepSeek model adapter, it sends that identifier in the `x-deepseek-harness-user-id` header, together with an optional session ID, the API key, and the complete model request, to the DeepSeek or compatible `baseURL` you configure. Do not confuse it with `X-DSH-Desktop-Installation-Id`.
+Users can disable markets, remove plugins, disable LAN access, change models, or delete local data. The application cannot retract data already sent to a model, market, messaging platform, or plugin; review each recipient's policy. Uninstalling does not necessarily remove `~/.clawclaw`, workspaces, or application-data directories; back up files first.
 
-The default composition also provides DeepSeek `web_search`. When you invoke it, it sends the API key, original search term inside a fixed prompt, model and token/use limits, and standard request metadata to the configured DeepSeek Messages endpoint. The webpage `fetch` tool is disabled by default.
-
-### 6.2 Community Market and package services
-
-Community Market does not require a remote source to be selected by default. After you select and use a source, the Host sends requests to it. Current built-in optional sources include:
-
-- DSH 1024Store: `deepseek1024.com`;
-- dshfind: `api.dshfind.com`; and
-- a standard catalog source that you configure and confirm.
-
-These sources receive the IP address, time, a fixed Market User-Agent, and the requested catalog resource. Depending on the capabilities of the selected source, a request can also include search terms, categories, sort order, language, page numbers, or cursors. Desktop's Host may fetch plugin images from the catalog source, GitHub, or an allowed image host, allowing the recipient to infer which plugin or publisher you are viewing.
-
-When you preview or confirm a plugin installation, Desktop may also contact `registry.npmjs.org`, `raw.githubusercontent.com`, GitHub, or a registry you configure to retrieve package names, versions, manifests, repository or commit evidence, and dependencies. When profile dependencies need to be materialized at startup, the bundled package manager may also contact npm, GitHub, dependency hosts, or Electron's download service. Installed plugins and their dependencies run locally with your permissions and may independently read local data or access the network. Catalog inclusion and an **Installable** result are not privacy or security reviews.
-
-### 6.3 dsh-market
-
-If you select `dsh-market` in Setup or settings, opening the market, checking for updates, or viewing plugin content can contact `awesome-dsh-plugin.com`, the npm Registry, the GitHub API, `raw.githubusercontent.com`, GitHub avatar services, and `images.weserv.nl`. These recipients receive the IP address, time, requested resource, and relevant plugin, package, or repository identifiers; an image proxy also receives the original image URL. Installation or update still requires your confirmation and can then contact addresses declared by plugin dependencies. These requests do not include Desktop's `X-DSH-Desktop-Installation-Id`.
-
-`dsh-market` also provides profile backups that you trigger manually or after you explicitly enable optional automatic backup:
-
-- a local export only creates a file on your device;
-- a WebDAV upload always sends a complete backup. Automatic backup is off by default; after you enable it, an upload can occur automatically when its 24-hour interval condition is met. The URL, username, automatic-backup setting, and last-success time are stored in browser local storage. After entry, the password remains in current renderer memory until the component unmounts or the page refreshes and is sent temporarily to the local Host for each request; `dsh-market` does not write the password to local storage or disk;
-- a GitHub Gist backup uses a GitHub token with `api.github.com` to verify access and create, update, or read a secret Gist. A secret Gist is not publicly listed, but anyone with its URL can read it. A manually entered token remains in session memory, while `DSH_GITHUB_TOKEN` or a locally authenticated `gh` can also be used. The Gist ID and WebDAV URL or username may remain in browser local storage; and
-- a complete backup contains `package.json` and profile configuration files. It excludes `node_modules`, the lockfile, and Market cache, but may include `config.toml`, `.env`, API keys, tokens, or other secrets without masking. Local and WebDAV exports always use a complete backup; only a Gist export can select plugins and let you decide whether to include configuration.
-
-Upload a backup only to a WebDAV service or GitHub account you trust. The selected service processes the backup, credentials, and network metadata under its own policy.
-
-### 6.4 Optional upstream telemetry
-
-Upstream DSH session telemetry is `DISABLED` in Desktop's default composition. If you or a deployment operator explicitly sets `DSH_TELEMETRY_MODE` to `FULL` or `FEEDBACK_ONLY`, raw session telemetry may be sent with the upstream anonymous user ID to `https://harness-telemetry.deepseeksvc.com/v1/logs` or the endpoint configured in `DSH_TELEMETRY_OTLP_URL`. That processing is controlled by the upstream configuration and recipient policy and is not the Anywhere Labs official update service.
-
-### 6.5 External links
-
-External HTTP, HTTPS, and email links in the application or documentation are handed to the system browser or email client. The destination's policy applies after you open it.
-
-## 7. Browser and LAN access
-
-Allowing DSH to open in a browser does not itself upload a session to Anywhere Labs. It lets an ordinary browser access the local Host and is available only in compatibility mode. Loopback access is limited to `127.0.0.1` by default.
-
-If you explicitly enable LAN access, the Host listens on LAN interfaces. The Host trust marker is not user authentication. Configuration surfaces such as settings, credentials, and local native dialogs remain restricted to loopback access, but a LAN client can create sessions and may operate your computer through the default command and filesystem tools. Browser security restrictions on LAN HTTP can also make some security modules unavailable. Enable it only temporarily on a fully trusted network, and turn it off when no longer needed.
-
-LAN traffic normally does not pass through Anywhere Labs, but a person who connects to your computer over the LAN becomes a recipient of the data exposed through that connection.
-
-## 8. Sharing, processors, and international transfers
-
-The legal basis depends on your jurisdiction and the specific processing. Downloads, support, and third-party connections that you initiate are used to fulfill your request. Where that basis is recognized, version checks and necessary network logs rely on our legitimate interests in delivering secure, reliable updates and protecting the official service. Legal obligations rely on the relevant law, and non-essential processing that requires consent can rely only on valid consent. A jurisdiction that does not recognize legitimate interests for the processing does not acquire such a basis merely from this policy. Section 11 explains the current consent limitation for the stable installation UUID and your right to object.
-
-We disclose or permit processing only in the following circumstances:
-
-- infrastructure providers needed for the website, updates, downloads, email, and source-code hosting;
-- model, tool, plugin, catalog, registry, download, or external-link services that you choose;
-- recipients reasonably necessary to comply with applicable law or a court order, or to protect users, the project, and public safety; and
-- a successor operator that assumes the same purposes and policy obligations in a project reorganization or service migration, with additional notice where required.
-
-We do not sell personal data or provide the installation UUID to third parties for their advertising profiles.
-
-Vercel, Upstash, GitHub, npm, ModelScope, model providers, and community sources may process data in different countries or regions. The location depends on current routing, the recipient, and your choices. Where a cross-border notice, separate consent, standard contract, or another safeguard is required, we and the relevant recipient must complete the applicable requirements.
-
-## 9. Retention
-
-We determine retention as follows:
-
-- local installation UUIDs, logs, and diagnostic archives follow the rules in Sections 3 and 5;
-- raw official-service request logs, including any UUID, IP address, and network metadata they contain, are retained only for the shortest period reasonably needed to deliver updates, maintain security, prevent abuse, diagnose failures, and produce de-identified aggregate statistics. They are then deleted or irreversibly de-identified unless a longer period is legally required;
-- support email and issue records are retained until responding, dispute handling, or security follow-up no longer reasonably requires them. Public GitHub content is also subject to your controls and GitHub's retention rules; and
-- third-party recipients retain information under their own policies and your arrangements with them.
-
-Official-service infrastructure and logging settings can change, so this policy states the purpose and deletion conditions used to determine the period instead of inventing a fixed number of days that has not been verified against server configuration. You can ask about current processing and retention through the privacy contact email.
-
-## 10. Security
-
-Official internet endpoints use HTTPS. Desktop creates private directory and file permissions for the local installation UUID and constrains navigation, remote images, and catalog requests. Crashpad does not upload automatically, and diagnostic export warns about its privacy boundary.
-
-No measure provides absolute security. Third-party plugins, privileged local processes, copied user data, publicly shared diagnostics, and unauthenticated LAN access can cross Desktop's intended boundaries. LAN HTTP is not an end-to-end encrypted channel.
-
-## 11. Your choices and rights
-
-Depending on applicable law, you may have rights to access, copy, correct, delete, or restrict processing of personal data; withdraw consent; object to particular processing; receive a portable copy; and complain to a supervisory authority. Contact [t4wefan@qq.com](mailto:t4wefan@qq.com). To locate version-service records, we may ask you to provide your local installation UUID privately. Do not publish it.
-
-We cannot remotely delete files on your device. You can remove relevant local data while the application is closed; deleting the installation UUID causes a new value to be generated at the next launch. Data that has already been irreversibly aggregated or can no longer be linked to you may not be recoverable or individually deletable.
-
-This policy is a notice, not automatic consent where law requires separate or affirmative consent. The current release sends a stable installation UUID by default and does not yet expose a dedicated user interface that disables only that identifier. Where applicable law requires consent before transmission, the product also needs an appropriate prior-choice mechanism; installing or continuing to use the software does not replace legally required separate consent.
-
-We do not make decisions with legal or similarly significant effects about you solely from the data described in this policy.
-
-## 12. Children
-
-DSH Desktop is a tool for developers and people able to manage a local computing environment and is not directed specifically to children. Minors should use it with a guardian's guidance. If you believe we processed a child's personal data without satisfying applicable requirements, contact us so that we can investigate and take appropriate action.
-
-## 13. Changes to this policy
-
-When data categories, purposes, official recipients, or user choices change materially, we will update this policy, its effective date, and the repository history. Where law requires renewed notice or consent for a material change, we will complete that step before the relevant processing begins.
-
-The Chinese and English versions of this policy have equal authority. If they diverge, read them together and notify us through the privacy contact email so that we can correct them.
+This project has no account system or centralized user database. Report security or privacy issues at [ClawClaw Issues](https://github.com/AngusFan-GH/ClawClaw/issues) without credentials or private logs, or use a security channel published by repository maintainers when one exists.
