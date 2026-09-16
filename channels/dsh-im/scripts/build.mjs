@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 import { channelDirectoryPickerPatch } from './channel-directory-picker-patch.mjs'
+import { channelSessionArchivePatch } from './channel-session-archive-patch.mjs'
 import { larkSdkHandshakePatch } from '../node_modules/@xmanrui/dsh-im/plugin-src/host/lark-sdk-handshake-patch.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -33,7 +34,7 @@ await build({
     'undici',
     'undici/*',
   ],
-  plugins: [larkSdkHandshakePatch],
+  plugins: [larkSdkHandshakePatch, channelSessionArchivePatch],
   banner: {
     js: [
       "import { createRequire as __clawCreateRequire } from 'node:module';",

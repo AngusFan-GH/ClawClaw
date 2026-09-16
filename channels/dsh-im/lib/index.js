@@ -27136,7 +27136,7 @@ async function askInWorkspaceSession({
         await awaitPendingConversationSwitch(harness, key);
         let sessionId = state.sessionFor(key);
         let session = sessionId ? workspaceSession(harness, sessionId, key) : null;
-        if (!session || !await sessionExists(session, existsOptions)) {
+        if (!session || !await sessionExists(session, existsOptions) || await channelSessionArchived(harness, sessionId, existsOptions)) {
           sessionId = await createSession(harness, {
             conversationKey: key,
             ...createOptions ?? {}
@@ -27192,6 +27192,13 @@ async function askInWorkspaceSession({
       if (error?.code !== WORKSPACE_SESSION_STALE) throw error;
     }
   }
+}
+async function channelSessionArchived(harness, sessionId, options) {
+  const value = await harness.rpc("workspace.list", {}, 3e4, options);
+  if (!Array.isArray(value?.archivedSessionIds) || value.archivedSessionIds.some((id) => typeof id !== "string")) {
+    throw new Error("Invalid workspace archive state for channel session binding");
+  }
+  return value.archivedSessionIds.includes(sessionId);
 }
 
 // ../../node_modules/.pnpm/@xmanrui+dsh-im@4.20.2/node_modules/@xmanrui/dsh-im/src/channels/shared/workspace-command.mjs
