@@ -14,6 +14,7 @@ import { startRendererBootReporter } from './boot-health.ts'
 import { applyDesktopSettings } from './desktop-settings.ts'
 import { applyDefaultWorkspaceSelection } from './default-workspace-selection.ts'
 import { installDesktopDirectoryPickerBridge } from './directory-picker.ts'
+import { applyWorkspaceDirectoryFlow } from './workspace-directory-flow.tsx'
 import { parseDesktopClientEnvironment } from './environment.ts'
 import { applyExtendedShell } from './extended-shell.ts'
 import { applySpiritXOnboarding } from './spiritx-onboarding.tsx'
@@ -112,6 +113,7 @@ export function apply(ctx: ClientContext): void {
       'dsh-plugin-desktop: native directory picker bridge',
     )
   }
+  if (environment.mode !== 'compatibility') applyWorkspaceDirectoryFlow(ctx)
   if (environment.mode === 'advanced') applyAdvancedShell(ctx, environment)
   if (environment.mode === 'extended') applyExtendedShell(ctx, environment, desktopSettings)
 }

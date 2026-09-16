@@ -5,6 +5,7 @@ import type { IWorkspaces, WorkspaceId, WorkspaceSnapshot } from '@deepseek-ai/d
 import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type {} from './workspace-client-contract.ts'
 import type { DesktopWorkspaceSettings } from '../workspace-settings.ts'
 import { DESKTOP_WORKSPACE_SETTINGS_NAMESPACE } from '../workspace-settings.ts'
 import { installDefaultWorkspaceMenu } from './default-workspace-menu.ts'
@@ -21,12 +22,6 @@ interface WorkspaceMenuLocale {
   bind(namespace: string): (key: string, params?: Record<string, unknown>) => string
   register(namespace: string, dictionaries: typeof DEFAULT_WORKSPACE_LOCALES): () => void
   subscribe(listener: () => void): () => void
-}
-
-declare module '@deepseek-ai/cordis' {
-  interface Context {
-    uiWorkspace: DesktopUiWorkspace
-  }
 }
 
 interface WorkspaceSelectionOptions {
