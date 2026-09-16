@@ -22,7 +22,7 @@ Connections depend on user choices, profiles, and plugins. Known endpoints in th
 | SpiritX model requests | `https://ai.xzinfra.com/spiritx-api/v1`; model requests, authentication information, and protocol metadata. Users configure `SPIRITX_API_KEY`. |
 | Update checks | `https://clawclaw.xzinfra.com/updates/<stable|beta>/release.json`; IP, time, User-Agent, and normal HTTP metadata. The client does not add original DSH Desktop installation UUID or `X-DSH-Desktop-*` statistics headers. |
 | Confirmed downloads | The HTTPS artifact URL in a release manifest; IP, time, download path, and normal network metadata. The client verifies SHA-512 and container format. |
-| Community Market / dshmarket / pnpm | User-selected catalogs, npm registry, GitHub, or package/image sources; searches, package names, versions, browsing data, and normal metadata may be sent. |
+| dshmarket / pnpm | User-selected catalogs, npm registry, GitHub, or package/image sources; searches, package names, versions, browsing data, and normal metadata may be sent. |
 | Channels | Relevant Weixin, WeCom, Feishu, DingTalk, QQ, iMessage, Telegram, WhatsApp, Discord, or Slack services; credentials, authorization/QR data, message content, attachment references, and protocol metadata depend on platform/configuration. |
 | Other plugins/tools | Plugin- or user-configured models, MCP servers, websites, registries, and APIs; their own implementation and policies control scope. |
 

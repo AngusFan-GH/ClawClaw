@@ -49,8 +49,6 @@ export interface DesktopSetupWizardCopy {
   readonly marketBody: string
   readonly marketDisabled: string
   readonly marketDisabledBody: string
-  readonly communityMarket: string
-  readonly communityMarketBody: string
   readonly dshMarket: string
   readonly dshMarketBody: string
   readonly notificationsTitle: string
@@ -122,8 +120,6 @@ const COPY: Record<DesktopLocale, DesktopSetupWizardCopy> = {
     marketBody: 'Choose a plugin market for the current Profile. Only one can be enabled at a time.',
     marketDisabled: 'Turn off plugin market',
     marketDisabledBody: 'Do not load a plugin market interface.',
-    communityMarket: 'dsh-community-market',
-    communityMarketBody: 'The open market built into ClawClaw, including custom data sources.',
     dshMarket: 'dsh-market',
     dshMarketBody: 'The popular community market powered by awesome-dsh-plugin data.',
     notificationsTitle: 'Set up Desktop notifications',
@@ -193,8 +189,6 @@ const COPY: Record<DesktopLocale, DesktopSetupWizardCopy> = {
     marketBody: '为当前 Profile 选择一个插件市场。一次只能启用一个。',
     marketDisabled: '关闭插件市场',
     marketDisabledBody: '不加载插件市场界面。',
-    communityMarket: 'dsh-community-market',
-    communityMarketBody: 'ClawClaw 内置的开放市场，并支持自定义数据源。',
     dshMarket: 'dsh-market',
     dshMarketBody: '使用 awesome-dsh-plugin 数据的热门社区市场。',
     notificationsTitle: '设置桌面通知',

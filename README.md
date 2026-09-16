@@ -13,7 +13,7 @@
 - **桌面运行**：原生窗口、托盘、隔离 Host 进程、三种窗口模式、终端和恢复工具。
 - **工作区**：内置受保护的默认工作区，支持浏览目录、输入路径、新建文件夹和系统目录选择器。
 - **Channels**：微信、企业微信、飞书、钉钉、QQ、iMessage、Telegram、WhatsApp、Discord 和 Slack 的配置入口；各平台仍需账号、凭据或扫码授权。
-- **插件市场**：内置 Community Market 与 `dshmarket`，通过设置选择或关闭；目录收录不等于安全审核。
+- **插件市场**：内置 `dshmarket`，可通过设置选择或关闭；目录收录不等于安全审核。
 - **更新**：通过 ClawClaw 的分通道静态 manifest 发现版本，验证下载的 SHA-512，再由用户确认安装。
 
 Windows x64 和 macOS 是主要打包目标；macOS 支持 Universal 构建。Linux 有兼容模式和 headless 检查路径，不能据此推断已有 Linux 发行包。
@@ -54,7 +54,7 @@ corepack pnpm --filter @clawclaw/dsh-im run check
 | 插件接口与示例 | [插件开发](docs/plugin-development.md) |
 | 桌面包与发布命令 | [稳定包](dsh-plugin-desktop/README.zh.md) · [Beta 包](dsh-plugin-desktop-beta/README.zh.md) |
 | Channels 实现与维护 | [Channels](channels/dsh-im/README.zh.md) |
-| 市场与社区合同 | [Community Market](dsh-community-market/README.zh.md) · [Fabric Draft](dsh-community-fabric/README.zh.md) |
+| 市场与社区合同 | [Fabric Draft](dsh-community-fabric/README.zh.md) |
 
 ## 来源与许可
 

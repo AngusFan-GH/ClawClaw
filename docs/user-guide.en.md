@@ -59,7 +59,7 @@ Opening in a browser does not enable LAN exposure. LAN access is a separate sett
 
 ## Plugins and terminal
 
-Select Community Market, `dsh-market`, or disabled in settings. Community Market discovers entries from the chosen catalog and resolves an exact npm version for confirmed installation. Third-party plugins run with local user permissions.
+Select `dsh-market` or disabled in settings. Third-party plugins run with local user permissions.
 
 Open the desktop terminal to run commands against its active profile:
 

@@ -13,7 +13,7 @@ The source version is **0.2.0**, with **0.2.0-beta.1** for Beta and **0.1.5-rc.2
 - **Desktop runtime**: native windows, tray, isolated Host process, three presentation modes, terminal, and recovery tools.
 - **Workspaces**: a protected default workspace, directory browsing, direct path entry, folder creation, and a system directory picker.
 - **Channels**: configuration surfaces for Weixin, WeCom, Feishu, DingTalk, QQ, iMessage, Telegram, WhatsApp, Discord, and Slack. Each platform still requires accounts, credentials, or QR authorization.
-- **Plugin markets**: bundled Community Market and `dshmarket`, selectable or disabled in settings. Listing does not imply a security review.
+- **Plugin market**: bundled `dshmarket`, selectable or disabled in settings. Listing does not imply a security review.
 - **Updates**: channel-specific ClawClaw release manifests, SHA-512 download verification, and user-confirmed installation.
 
 Windows x64 and macOS are the primary packaging targets; macOS supports Universal builds. Linux compatibility mode and headless checks do not imply a published Linux distribution.
@@ -54,7 +54,7 @@ Stable and Beta have separate Electron application data but share these default 
 | Plugin interfaces and examples | [Plugin development](docs/plugin-development.en.md) |
 | Desktop packages and release commands | [Stable](dsh-plugin-desktop/README.md) · [Beta](dsh-plugin-desktop-beta/README.md) |
 | Channels implementation | [Channels](channels/dsh-im/README.md) |
-| Markets and community contracts | [Community Market](dsh-community-market/README.md) · [Fabric Draft](dsh-community-fabric/README.md) |
+| Community contracts | [Fabric Draft](dsh-community-fabric/README.md) |
 
 ## Attribution and license
 

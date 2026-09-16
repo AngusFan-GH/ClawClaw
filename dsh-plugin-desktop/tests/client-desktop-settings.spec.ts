@@ -377,7 +377,7 @@ describe('Desktop settings API', () => {
     await expect(api.createProfile('work')).resolves.toEqual(VIEW)
     await expect(api.selectProfile('work')).resolves.toEqual({ accepted: true, restartRequired: true })
     await expect(api.deleteProfile('work')).resolves.toEqual(VIEW)
-    await expect(api.selectMarket('community-market')).resolves.toEqual({ accepted: true, restartRequired: true })
+    await expect(api.selectMarket('dsh-market')).resolves.toEqual({ accepted: true, restartRequired: true })
     await expect(api.openTerminal()).resolves.toBeUndefined()
     await expect(api.restart()).resolves.toBeUndefined()
     await expect(api.restartToRecovery()).resolves.toBeUndefined()
@@ -410,7 +410,7 @@ describe('Desktop settings API', () => {
       body: JSON.stringify({ name: 'work' }),
     })
     expect(fetcher.mock.calls[4]?.[1]).toMatchObject({
-      body: JSON.stringify({ provider: 'community-market' }),
+      body: JSON.stringify({ provider: 'dsh-market' }),
     })
     expect(fetcher.mock.calls[5]?.[1]).toMatchObject({
       method: 'POST',

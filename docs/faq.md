@@ -28,7 +28,7 @@ ClawClaw 基于两者演进，独立维护。DeepSeek Harness 提供 Agent runti
 
 ## 插件市场可用了吗？
 
-Community Market 与 `dshmarket` 已内置，可在设置中选择或关闭。Fabric 仍是社区 RFC Draft，不是可安装 SDK。市场安装不等于安全审核，插件会使用本机用户权限。
+`dshmarket` 已内置，可在设置中选择或关闭。Fabric 仍是社区 RFC Draft，不是可安装 SDK。市场安装不等于安全审核，插件会使用本机用户权限。
 
 ## Profile 和工作区是否相同？
 

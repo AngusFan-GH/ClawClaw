@@ -2,7 +2,6 @@ packages:
   - dsh-plugin-desktop
   - dsh-plugin-desktop-beta
   - dsh-community-fabric
-  - dsh-community-market
   - channels/dsh-im
 linkWorkspacePackages: true
 
@@ -279,6 +278,54 @@ overrides:
   "@deepseek-ai/dsh-typert-generator": "file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-typert-generator-0.1.5-rc.2.tgz"
   "@deepseek-ai/dsh-web-search-exa": "file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-web-search-exa-0.1.5-rc.2.tgz"
   "@deepseek-ai/dsh-web-search-perplexity": "file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-web-search-perplexity-0.1.5-rc.2.tgz"
+
+packageExtensions:
+  "@deepseek-ai/dsh-api-remotes@0.1.5-rc.2":
+    dependencies:
+      "@deepseek-ai/dsh-agent": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-agent-presets": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-api-gateway": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-api-session-controller": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-api-settings-controller": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-api-workspace-controller": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-api-workspace-files": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-client-connection": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-client-file-upload": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-command-feedback": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-commands": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-cordis-host-runner": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-credentials": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-file-reference": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-goal": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-host-plugin-inventory": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-llm": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-message-feedback": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-session-reference": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-settings": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-subagent": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-typert-protocol": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-user-approval": "^0.1.5-rc.2"
+      "@deepseek-ai/dsh-user-questions": "^0.1.5-rc.2"
+  "@deepseek-ai/dsh-client-ui-primitives@0.1.5-rc.2":
+    dependencies:
+      "@shikijs/langs": "^4.3.1"
+      anser: "^2.3.5"
+      clsx: "^2.0.0"
+      katex: "^0.16.47"
+      mdast-util-from-markdown: "^2.0.3"
+      mdast-util-gfm: "^3.1.0"
+      mdast-util-math: "^3.0.0"
+      micromark-core-commonmark: "^2.0.3"
+      micromark-extension-gfm: "^3.0.0"
+      micromark-extension-math: "^3.1.0"
+      micromark-factory-space: "^2.0.1"
+      micromark-util-character: "^2.1.1"
+      micromark-util-classify-character: "^2.0.1"
+      micromark-util-sanitize-uri: "^2.0.1"
+      micromark-util-symbol: "^2.0.1"
+      react: "^18.2.0"
+      react-dom: "^18.2.0"
+      shiki: "^4.3.1"
 
 patchedDependencies:
   "app-builder-lib@26.15.7": "patches/app-builder-lib@26.15.7.patch"

@@ -21,7 +21,7 @@ corepack pnpm dev:beta
 - `deepseek-harness/` is a read-only submodule. Commit upstream pin updates separately from desktop behavior.
 - Implement and validate shared Desktop changes in `dsh-plugin-desktop-beta/` first, then synchronize `dsh-plugin-desktop/`. The source trees do not inherit edits.
 - `channels/dsh-im/` owns product Channels; maintain supplier version, build patches, and notices together.
-- Community Market has runtime, schemas, and tests but remains a private built-in package. Fabric remains a private documentation Draft without runtime/SDK.
+- Fabric remains a private documentation Draft without runtime/SDK.
 - Five owned packages share outer pnpm. Upstream has its own workspace; use root `upstream:*` commands.
 - Keep vendored runtime, patches, manifests, lockfile, and `upstream.json` aligned. See [architecture](docs/architecture.en.md).
 

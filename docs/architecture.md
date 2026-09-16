@@ -41,7 +41,6 @@ Channels 由 `@clawclaw/dsh-im` 提供，基于固定的 `@xmanrui/dsh-im` 4.20.
 | `dsh-plugin-desktop-beta/` | Beta 产品、Host/Client、Electron、打包与测试；共享功能先在这里实现 |
 | `dsh-plugin-desktop/` | Stable 的独立源码树；需显式同步 |
 | `channels/dsh-im/` | Channels Host 组合、UI、构建修补与测试 |
-| `dsh-community-market/` | 已实现的私有内置 Market runtime、Schema 与 adapter |
 | `dsh-community-fabric/` | 私有 RFC 文档工程；无运行时或发布 SDK |
 | `deepseek-harness/` | 固定的只读上游子模块，独立 pnpm workspace |
 | `vendor/dsh-runtime/` | 固定运行时 tarball 和 manifest |

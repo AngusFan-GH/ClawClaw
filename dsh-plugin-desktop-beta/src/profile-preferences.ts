@@ -125,8 +125,8 @@ function assertExposure(value: unknown, error: ErrorFactory): DesktopNetworkExpo
 }
 
 function assertMarket(value: unknown, error: ErrorFactory): DesktopMarketProvider {
-  if (value === 'disabled' || value === 'community-market' || value === 'dsh-market') return value
-  throw error('market must be disabled, community-market, or dsh-market')
+  if (value === 'disabled' || value === 'dsh-market') return value
+  throw error('market must be disabled or dsh-market')
 }
 
 function assertRecordedAt(value: unknown, error: ErrorFactory): string {

@@ -123,12 +123,14 @@ const DEFAULT_DESKTOP_MARKET_SNAPSHOT: DesktopMarketSnapshot = Object.freeze({
   effective: 'disabled',
   legacyDefaulted: true,
 })
+const LEGACY_COMMUNITY_MARKET_ROW_ID = 'community-market'
+const LEGACY_COMMUNITY_MARKET_PACKAGE = 'dsh-community-market'
 const MARKET_ROW_IDS: ReadonlySet<string> = new Set([
-  DESKTOP_MARKET_IDENTITIES.community.rowId,
+  LEGACY_COMMUNITY_MARKET_ROW_ID,
   DESKTOP_MARKET_IDENTITIES.dshMarket.rowId,
 ])
 const MARKET_PACKAGE_NAMES: ReadonlySet<string> = new Set([
-  DESKTOP_MARKET_IDENTITIES.community.packageName,
+  LEGACY_COMMUNITY_MARKET_PACKAGE,
   DESKTOP_MARKET_IDENTITIES.dshMarket.packageName,
 ])
 
@@ -509,7 +511,7 @@ function loadRecoveryFilteredProfile(
   }
   const patchReload = rawPatchReload ?? PROFILE_TEMPLATES[profileName]?.patchReload ?? DEFAULT_PROFILE_PATCH_RELOAD
   const selectedBundles = bundles.filter(packageName =>
-packageName !== DESKTOP_MARKET_IDENTITIES.community.packageName
+packageName !== LEGACY_COMMUNITY_MARKET_PACKAGE
     && (marketProvider === DESKTOP_MARKET_IDENTITIES.dshMarket.provider
       || packageName !== DESKTOP_MARKET_IDENTITIES.dshMarket.packageName),
   )
@@ -750,17 +752,6 @@ export function validateDshMarketBundlePatches(patches: readonly PatchOptions[])
   }
 }
 
-/** Ensure a Desktop dependency is resolvable through the selected profile fallback. */
-function validateMarketPackage(name: string, profilePackageUrl: string): string | undefined {
-  try {
-    resolveOverlayPackage(name, {
-      installPackageUrl: pathToFileURL(INSTALL_ANCHOR).href,
-      profilePackageUrl,
-    })
-  } catch (cause) {
-    return `${BIN_NAME}: cannot resolve selected Market package ${name}: ${marketFailureMessage(cause)}`
-  }
-}
 
 /** Assert the final graph contains only the provider selected by the launcher. */
 function assertEffectiveMarketRows(
@@ -772,9 +763,7 @@ function assertEffectiveMarketRows(
     if (providers.length !== 0) throw new Error(`${BIN_NAME}: disabled Market provider leaked into the Loader graph`)
     return
   }
-  const identity = effective === DESKTOP_MARKET_IDENTITIES.community.provider
-    ? DESKTOP_MARKET_IDENTITIES.community
-    : DESKTOP_MARKET_IDENTITIES.dshMarket
+  const identity = DESKTOP_MARKET_IDENTITIES.dshMarket
   if (providers.length !== 1 || providers[0]?.id !== identity.rowId
     || providers[0]?.name !== identity.packageName) {
     throw new Error(`${BIN_NAME}: selected Market provider did not compose to one canonical Loader row`)
@@ -822,7 +811,6 @@ function loadDesktopMachinePatches(home: string): PatchOptions[] {
  * @param home - Harness home containing profiles and the machine-wide patch.
  * @param platform - native platform selecting launcher-owned safety overlays.
  * @param profileName - existing or lazily available Web profile to compose.
- * @param pluginStatePath - optional Desktop-private disabled-bundle state.
  * @param marketSelection - machine-level provider request fixed for this generation.
  * @returns root config, profile metadata, and ordered patches.
  */
@@ -831,7 +819,7 @@ export function prepareDesktopProfile(
   home: string = resolveDshHome(),
   platform: NodeJS.Platform = process.platform,
   profileName: string = DESKTOP_PROFILE_NAME,
-  pluginStatePath?: string,
+  _pluginStatePath?: string,
   marketSelection: DesktopMarketSnapshot = DEFAULT_DESKTOP_MARKET_SNAPSHOT,
   hooks: DesktopProfilePreparationHooks = {},
 ): PreparedDesktopProfile {
@@ -841,15 +829,11 @@ export function prepareDesktopProfile(
     : resolveProfileDir(profileName, home)
   const workspaceChanged = reconcileProfilePnpmWorkspace(profileDir)
   const requiresDependencyMigration = profileDependencyMigrationRequired(profileDir, workspaceChanged, platform)
-  // `plugin-management` remains the community market's user-facing scope.
-  // Recovery mode no longer reads or writes an independent disable policy:
-  // package removal goes through the provider-neutral `dsh plugin remove`.
-  const managedDisabledBundles = pluginStatePath === undefined
+  // Desktop-managed disable state applies before loading third-party bundle patches.
+  const managedDisabledBundles = _pluginStatePath === undefined
     ? new Set<string>()
-    : readDesktopDisabledBundles(pluginStatePath, profileName)
-  const disabledBundles = marketSelection.requested === DESKTOP_MARKET_IDENTITIES.community.provider
-    ? new Set(managedDisabledBundles)
-    : new Set<string>()
+    : readDesktopDisabledBundles(_pluginStatePath, profileName)
+  const disabledBundles = new Set(managedDisabledBundles)
   const loadedProfile = loadRecoveryFilteredProfile(
     profileName,
     profileDir,
@@ -900,20 +884,6 @@ export function prepareDesktopProfile(
   if (marketSelection.requested !== 'disabled') {
     if (hasProviderConflict) {
       marketFailure = `${BIN_NAME}: conflicting Market provider Loader identity was removed`
-    } else if (marketSelection.requested === DESKTOP_MARKET_IDENTITIES.community.provider) {
-      marketFailure = validateMarketPackage(
-        DESKTOP_MARKET_IDENTITIES.community.packageName,
-        bareModuleBaseUrl,
-      )
-      if (marketFailure === undefined) {
-        providerPatches.push({
-          insert: [{
-            id: DESKTOP_MARKET_IDENTITIES.community.rowId,
-            name: DESKTOP_MARKET_IDENTITIES.community.packageName,
-          }],
-        })
-        effectiveMarket = DESKTOP_MARKET_IDENTITIES.community.provider
-      }
     } else if (loadedProfile.dshMarketFailure !== undefined) {
       marketFailure = loadedProfile.dshMarketFailure
     } else if (dshMarketPatches === undefined) {

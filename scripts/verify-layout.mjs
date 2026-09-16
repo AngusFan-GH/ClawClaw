@@ -17,7 +17,6 @@ const stablePlugin = readJson('dsh-plugin-desktop/package.json')
 const betaPlugin = readJson('dsh-plugin-desktop-beta/package.json')
 const imPlugin = readJson('channels/dsh-im/package.json')
 const fabric = readJson('dsh-community-fabric/package.json')
-const market = readJson('dsh-community-market/package.json')
 const upstreamPackage = readJson('deepseek-harness/package.json')
 
 if (stablePlugin.name !== 'dsh-plugin-desktop') fail('the stable Desktop workspace must retain dsh-plugin-desktop')
@@ -30,7 +29,7 @@ if (workspace.packageManager !== 'pnpm@11.8.0') {
   fail('the product workspace must pin pnpm@11.8.0')
 }
 const workspaceDefinition = readFileSync(resolve(root, 'pnpm-workspace.yaml'), 'utf8')
-for (const packagePath of ['dsh-plugin-desktop', 'dsh-plugin-desktop-beta', 'dsh-community-fabric', 'dsh-community-market', 'channels/dsh-im']) {
+for (const packagePath of ['dsh-plugin-desktop', 'dsh-plugin-desktop-beta', 'dsh-community-fabric', 'channels/dsh-im']) {
   if (!workspaceDefinition.includes(`  - ${packagePath}`)) {
     fail(`the root pnpm workspace is missing ${packagePath}`)
   }
@@ -39,19 +38,17 @@ if (workspaceDefinition.includes('yarn')) {
   fail('the root pnpm workspace must not retain Yarn configuration')
 }
 if (workspace.workspaces !== undefined) {
-  fail('the root pnpm workspace must contain the desktop, community-fabric, and community-market packages')
+  fail('the root pnpm workspace must contain the desktop, community-fabric, and IM packages')
 }
 for (const [name, manifest] of [
   ['dsh-plugin-desktop', stablePlugin],
   ['dsh-plugin-desktop-beta', betaPlugin],
   ['@clawclaw/dsh-im', imPlugin],
   ['dsh-community-fabric', fabric],
-  ['dsh-community-market', market],
 ]) {
   if (manifest.packageManager !== undefined) fail(`${name} must inherit the root pnpm release`)
 }
 if (fabric.name !== 'dsh-community-fabric') fail('the Fabric workspace must own dsh-community-fabric')
-if (market.name !== 'dsh-community-market') fail('the market workspace must own dsh-community-market')
 if (imPlugin.name !== '@clawclaw/dsh-im') fail('the channels workspace must own @clawclaw/dsh-im')
 const claudePath = resolve(root, 'CLAUDE.md')
 const claudeStat = lstatSync(claudePath)
@@ -72,8 +69,6 @@ for (const legacyFile of [
   'dsh-plugin-desktop-beta/pnpm-workspace.yaml',
   'dsh-community-fabric/pnpm-lock.yaml',
   'dsh-community-fabric/pnpm-workspace.yaml',
-  'dsh-community-market/pnpm-lock.yaml',
-  'dsh-community-market/pnpm-workspace.yaml',
 ]) {
   if (existsSync(resolve(root, legacyFile))) fail(`${legacyFile} must not exist`)
 }
@@ -92,7 +87,6 @@ for (const [owner, manifest] of [
   ['stable desktop', stablePlugin],
   ['beta desktop', betaPlugin],
   ['fabric', fabric],
-  ['market', market],
 ]) {
   for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
     for (const [name, range] of Object.entries(manifest[field] ?? {})) {

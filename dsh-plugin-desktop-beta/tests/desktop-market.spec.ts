@@ -126,7 +126,7 @@ describe('Desktop Market fail-safe reads', () => {
 })
 
 describe('Desktop Market explicit selection', () => {
-  it.each(['disabled', 'community-market', 'dsh-market'] as const)(
+  it.each(['disabled', 'dsh-market'] as const)(
     'persists provider %s with no effective field',
     async provider => {
       const userData = temporaryUserData()
@@ -152,7 +152,7 @@ describe('Desktop Market explicit selection', () => {
 
   it('replaces a previous valid state atomically and leaves no temporary siblings', async () => {
     const userData = temporaryUserData()
-    await selectDesktopMarketProvider(userData, 'community-market')
+    await selectDesktopMarketProvider(userData, 'disabled')
     const statePath = desktopMarketStatePath(userData)
     const previous = readFileSync(statePath, 'utf8')
 
@@ -174,7 +174,7 @@ describe('Desktop Market explicit selection', () => {
       return
     }
 
-    await expect(selectDesktopMarketProvider(userData, 'community-market')).rejects.toThrow(
+    await expect(selectDesktopMarketProvider(userData, 'dsh-market')).rejects.toThrow(
       'state directory must be a real directory',
     )
     expect(readdirSync(outside)).toEqual([])

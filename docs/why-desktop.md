@@ -22,7 +22,7 @@ Channels 把消息平台接入现有任务和会话能力。渠道配置、账�
 
 Desktop、Market 和 Channels 是可组合层，而不是对上游私有 API 的直接修改。这样做让普通 DSH 插件仍可在 CLI 或 Web profile 中运行，也让 ClawClaw 专用插件可以只依赖明确的 `desktopProfiles`、`desktopPnpm` 和 `desktopWindow` contract。生命周期以 Host generation 为边界：切换 profile 或窗口模式时，插件必须释放旧 service 与子进程。
 
-当前 Community Market 已作为私有内置 package 实现；Fabric 仍是社区 RFC Draft。市场目录或“可安装”状态不等于兼容性、安全性、许可证或隐私审查。
+Fabric 仍是社区 RFC Draft。市场的可安装状态不等于兼容性、安全性、许可证或隐私审查。
 
 ## 面向谁
 

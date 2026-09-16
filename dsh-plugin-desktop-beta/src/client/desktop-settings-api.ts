@@ -22,7 +22,7 @@ const LAN_ERROR_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u
 const SHA256_FINGERPRINT_PATTERN = /^[a-f0-9]{64}$/u
 
 /** Launcher-supported plugin market implementations. */
-export type DesktopMarketProvider = 'disabled' | 'community-market' | 'dsh-market'
+export type DesktopMarketProvider = 'disabled' | 'dsh-market'
 
 /** Safe profile projection returned to the renderer. */
 export interface DesktopProfileView {
@@ -90,7 +90,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 function isMarketProvider(value: unknown): value is DesktopMarketProvider {
-  return value === 'disabled' || value === 'community-market' || value === 'dsh-market'
+  return value === 'disabled' || value === 'dsh-market'
 }
 
 function isLanState(value: unknown): value is DesktopLanState {

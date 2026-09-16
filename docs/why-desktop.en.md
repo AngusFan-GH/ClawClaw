@@ -22,7 +22,7 @@ Channels connect messaging platforms to existing task and session capabilities. 
 
 Desktop, Market, and Channels are compositional layers, not direct modifications of upstream private APIs. Ordinary DSH plugins can still run in CLI or Web profiles, while ClawClaw-only plugins can depend on explicit `desktopProfiles`, `desktopPnpm`, and `desktopWindow` contracts. Host generation defines lifecycle: profile or presentation changes require plugins to release old services and subprocesses.
 
-Community Market is currently implemented as a private built-in package. Fabric remains a community RFC Draft. Catalog presence or installability does not mean compatibility, security, license, or privacy review.
+Fabric remains a community RFC Draft. Market installability does not mean compatibility, security, license, or privacy review.
 
 ## Who should read this
 

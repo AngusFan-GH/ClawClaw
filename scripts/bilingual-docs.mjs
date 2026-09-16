@@ -84,10 +84,15 @@ export function verifyBilingualRecords({ root, recordPaths, readText, hashDocume
 }
 
 export function verifyTrackedBilingualRecords(root) {
+  const deletedPaths = new Set(runGit(root, ['ls-files', '-z', '--deleted'])
+    .split('\0')
+    .filter(Boolean)
+    .map(normalizePath))
   const recordPaths = runGit(root, ['ls-files', '-z', '--', '*.i18n.yaml'])
     .split('\0')
     .filter(Boolean)
     .map(normalizePath)
+    .filter(recordPath => !deletedPaths.has(recordPath))
   return verifyBilingualRecords({
     root,
     recordPaths,

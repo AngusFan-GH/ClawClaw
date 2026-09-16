@@ -42,7 +42,7 @@ describe('Desktop factory reset', () => {
       mode: 'advanced' as const,
       openBrowser: false,
       networkExposure: 'loopback' as const,
-      market: 'community-market' as const,
+      market: 'dsh-market' as const,
       notifications: {
         enabled: false,
         notifyOnTurnCompletion: false,
@@ -101,7 +101,7 @@ describe('Desktop factory reset', () => {
     const { root, home } = await fixture()
     const userDataDir = join(root, 'desktop-state')
     const profile = join(home, 'profiles', 'desktop')
-    await selectDesktopMarketProvider(userDataDir, 'community-market')
+    await selectDesktopMarketProvider(userDataDir, 'dsh-market')
     await completeOrSkipDesktopSetupWizard(userDataDir, profile, 'completed', {
       desktopVersion: '2.0.6-beta.1', dshVersion: '0.1.3-alpha.2', setupRevision: 1,
     })
@@ -113,7 +113,7 @@ describe('Desktop factory reset', () => {
       trashItem: async () => { throw new Error('trash unavailable') },
     })).rejects.toThrow('trash unavailable')
 
-    expect(readDesktopMarketStateForUserData(userDataDir).requested).toBe('community-market')
+    expect(readDesktopMarketStateForUserData(userDataDir).requested).toBe('dsh-market')
     expect(readDesktopSetupWizardState(userDataDir, profile)?.outcome).toBe('completed')
     expect(existsSync(profile)).toBe(true)
   })

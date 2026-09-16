@@ -5,7 +5,7 @@ export type DesktopSetupWizardMode = 'compatibility' | 'extended' | 'advanced'
 export type DesktopSetupWizardMacosMaterial = 'off' | 'transparent'
 export type DesktopSetupWizardWindowsMaterial = 'off' | 'mica'
 export type DesktopSetupWizardNetworkExposure = 'loopback' | 'lan'
-export type DesktopSetupWizardMarket = 'disabled' | 'community-market' | 'dsh-market'
+export type DesktopSetupWizardMarket = 'disabled' | 'dsh-market'
 
 export interface DesktopSetupWizardNotifications {
   readonly enabled: boolean
@@ -89,7 +89,7 @@ function isNetworkExposure(value: unknown): value is DesktopSetupWizardNetworkEx
 }
 
 function isMarket(value: unknown): value is DesktopSetupWizardMarket {
-  return value === 'disabled' || value === 'community-market' || value === 'dsh-market'
+  return value === 'disabled' || value === 'dsh-market'
 }
 
 function isPlatform(value: unknown): value is DesktopSetupWizardPlatform {

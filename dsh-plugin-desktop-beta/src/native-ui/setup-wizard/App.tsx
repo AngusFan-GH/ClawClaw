@@ -340,7 +340,6 @@ function MarketOptions({
 }): JSX.Element {
   const markets: readonly { readonly value: DesktopSetupWizardMarket; readonly title: string; readonly body: string }[] = [
     { value: 'disabled', title: copy.marketDisabled, body: copy.marketDisabledBody },
-    { value: 'community-market', title: copy.communityMarket, body: copy.communityMarketBody },
     { value: 'dsh-market', title: copy.dshMarket, body: copy.dshMarketBody },
   ]
   return <RadioGroup
@@ -348,13 +347,12 @@ function MarketOptions({
     aria-orientation="vertical"
     name="setup-plugin-market"
     onValueChange={value => {
-      if (value === 'disabled' || value === 'community-market' || value === 'dsh-market') {
+      if (value === 'disabled' || value === 'dsh-market') {
         update({ ...selection, market: value })
       }
     }}
     value={selection.market}
   >{markets.map(option => <Choice
-    {...(option.value === 'community-market' ? { badge: copy.beta } : {})}
     body={option.body}
     id={`setup-plugin-market-${option.value}`}
     key={option.value}

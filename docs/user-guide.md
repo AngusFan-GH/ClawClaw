@@ -59,7 +59,7 @@ dsh-desktop:
 
 ## 插件和终端
 
-市场可在设置中选择 Community Market、`dsh-market` 或关闭。Community Market 从所选目录发现插件，安装时从 npm 解析精确版本并要求确认；第三方插件以本机用户权限运行。
+市场可在设置中选择 `dsh-market` 或关闭。第三方插件以本机用户权限运行。
 
 从桌面终端入口打开终端后，以下命令默认作用于当前 profile：
 

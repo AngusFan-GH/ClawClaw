@@ -21,7 +21,7 @@ corepack pnpm dev:beta
 - `deepseek-harness/` 是只读子模块。上游 pin 与桌面行为变更分开提交。
 - Desktop 共享功能先在 `dsh-plugin-desktop-beta/` 实现和验证，再同步 `dsh-plugin-desktop/`；两份源码不会自动继承。
 - `channels/dsh-im/` 拥有 Channels 产品层；供应方版本、构建修补和声明应一起维护。
-- Community Market 已有 runtime、Schema 和测试，仍为私有内置包；Fabric 仍是私有文档 Draft，无 runtime/SDK。
+- Fabric 仍是私有文档 Draft，无 runtime/SDK。
 - 五个自有 package 共用外层 pnpm workspace。上游使用独立 workspace，只通过根 `upstream:*` 命令操作。
 - vendored runtime、补丁、manifest、锁文件和 `upstream.json` 必须保持一致。参见[架构](docs/architecture.md)。
 

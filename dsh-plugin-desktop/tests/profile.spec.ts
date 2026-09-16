@@ -604,26 +604,10 @@ virtualStoreDirMaxLength: 60
       effective: 'disabled',
       legacyDefaulted: true,
     })
-    expect(rows.some(row => row.id === DESKTOP_MARKET_IDENTITIES.community.rowId
+    expect(rows.some(row => row.id === 'community-market'
       || row.id === DESKTOP_MARKET_IDENTITIES.dshMarket.rowId)).toBe(false)
   })
 
-  it('inserts the community Market as one canonical row only after explicit selection', () => {
-    const home = temporaryHome()
-    const prepared = prepareDesktopProfile(undefined, home, 'darwin', 'desktop', undefined, {
-      requested: 'community-market',
-      effective: 'community-market',
-      legacyDefaulted: false,
-    })
-    const rows = composeEntries([prepared.patches])
-
-    expect(prepared.market.effective).toBe('community-market')
-    expect(rows.filter(row => row.id === DESKTOP_MARKET_IDENTITIES.community.rowId)).toEqual([{
-      id: DESKTOP_MARKET_IDENTITIES.community.rowId,
-      name: DESKTOP_MARKET_IDENTITIES.community.packageName,
-    }])
-    expect(rows.some(row => row.id === DESKTOP_MARKET_IDENTITIES.dshMarket.rowId)).toBe(false)
-  })
 
   it('loads the exact dshmarket dependency as a direct bundle only after explicit selection', () => {
     const home = temporaryHome()
@@ -654,7 +638,7 @@ virtualStoreDirMaxLength: 60
       id: DESKTOP_MARKET_IDENTITIES.dshMarket.rowId,
       name: DESKTOP_MARKET_IDENTITIES.dshMarket.packageName,
     }])
-    expect(rows.some(row => row.id === DESKTOP_MARKET_IDENTITIES.community.rowId)).toBe(false)
+    expect(rows.some(row => row.id === 'community-market')).toBe(false)
   })
 
   it('keeps the newer Desktop dshmarket when a Profile copy is older', () => {
@@ -686,7 +670,7 @@ virtualStoreDirMaxLength: 60
     })
   })
 
-  it('does not let community-management disables suppress a third-party market', () => {
+  it('applies Desktop-managed disables independently of market selection', () => {
     const home = temporaryHome()
     const packageName = 'third-party-plugin'
     installBundle(home, packageName, '- insert:\n    - id: third-party-marker\n      name: cordis:example\n')
@@ -711,19 +695,19 @@ virtualStoreDirMaxLength: 60
       managementStatePath,
       { requested: 'dsh-market', effective: 'dsh-market', legacyDefaulted: false },
     )
-    expect(composeEntries([external.patches])).toContainEqual(expect.objectContaining({
+    expect(composeEntries([external.patches])).not.toContainEqual(expect.objectContaining({
       id: 'third-party-marker',
     }))
 
-    const community = prepareDesktopProfile(
+    const disabled = prepareDesktopProfile(
       undefined,
       home,
       'darwin',
       'desktop',
       managementStatePath,
-      { requested: 'community-market', effective: 'community-market', legacyDefaulted: false },
+      { requested: 'disabled', effective: 'disabled', legacyDefaulted: false },
     )
-    expect(composeEntries([community.patches])).not.toContainEqual(expect.objectContaining({
+    expect(composeEntries([disabled.patches])).not.toContainEqual(expect.objectContaining({
       id: 'third-party-marker',
     }))
   })
@@ -782,15 +766,15 @@ virtualStoreDirMaxLength: 60
     writeFileSync(join(home, 'cordis.patch.yml'), `- insert:\n    - id: community-market\n      name: dsh-community-market\n`)
 
     const prepared = prepareDesktopProfile(undefined, home, 'darwin', 'desktop', undefined, {
-      requested: 'community-market',
-      effective: 'community-market',
+      requested: 'dsh-market',
+      effective: 'dsh-market',
       legacyDefaulted: false,
     })
     const rows = composeEntries([prepared.patches])
 
     expect(prepared.market.effective).toBe('disabled')
     expect(prepared.marketFailure).toContain('conflicting Market provider Loader identity')
-    expect(rows.some(row => row.id === DESKTOP_MARKET_IDENTITIES.community.rowId
+    expect(rows.some(row => row.id === 'community-market'
       || row.id === DESKTOP_MARKET_IDENTITIES.dshMarket.rowId)).toBe(false)
     expect(rows.some(row => row.id === 'webserver')).toBe(true)
   })

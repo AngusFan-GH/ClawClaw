@@ -9,6 +9,6 @@ ClawClaw 采用 DSH 的组合模型：上游、Desktop、Channels、Market 和�
 3. **以用户确认和可恢复性为先。** 安装、账号授权、网络暴露和文件操作应有明确用户动作；恢复检查点不是插件事务或完整备份。
 4. **尊重来源与许可。** 插件包、目录和渠道供应方各自负责其元数据、服务与许可证。可安装、收录或显示在设置中不等于项目背书。
 
-Community Market 已提供目录选择、发现、详情和受确认的 npm 操作。`dshmarket` 是可选兼容 provider。Fabric 仍是 RFC Draft；在有评审 schema、参考 adapter 和一致性证据前，不能将其称为稳定互操作标准。
+`dshmarket` 是可选兼容 provider。Fabric 仍是 RFC Draft；在有评审 schema、参考 adapter 和一致性证据前，不能将其称为稳定互操作标准。
 
-插件作者从[插件开发](plugin-development.md)开始；市场提供方看 [Community Market 文档](../dsh-community-market/README.zh.md)；当前 runtime 所有权见[架构](architecture.md)。
+插件作者从[插件开发](plugin-development.md)开始；当前 runtime 所有权见[架构](architecture.md)。

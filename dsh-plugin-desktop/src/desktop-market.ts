@@ -22,15 +22,10 @@ const STATE_FILE_MODE = 0o600
 const MAX_STATE_BYTES = 4 * 1024
 
 /** Market implementation selected for the next Desktop generation. */
-export type DesktopMarketProvider = 'disabled' | 'community-market' | 'dsh-market'
+export type DesktopMarketProvider = 'disabled' | 'dsh-market'
 
 /** Canonical Loader identities owned by the Desktop provider switch. */
 export const DESKTOP_MARKET_IDENTITIES = Object.freeze({
-  community: Object.freeze({
-    provider: 'community-market' as const,
-    rowId: 'community-market',
-    packageName: 'dsh-community-market',
-  }),
   dshMarket: Object.freeze({
     provider: 'dsh-market' as const,
     rowId: 'dsh-market',
@@ -86,7 +81,7 @@ export function desktopMarketSnapshotWithEffective(
 }
 
 function isProvider(value: unknown): value is DesktopMarketProvider {
-  return value === 'disabled' || value === 'community-market' || value === 'dsh-market'
+  return value === 'disabled' || value === 'dsh-market'
 }
 
 function invalidState(message: string): Error {

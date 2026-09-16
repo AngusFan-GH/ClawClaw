@@ -41,7 +41,6 @@ The Desktop patch composes `spiritx` by default using the upstream pi-ai transpo
 | `dsh-plugin-desktop-beta/` | Beta Host/Client, Electron, packaging, tests; develop shared behavior here first |
 | `dsh-plugin-desktop/` | Independent Stable source tree requiring explicit synchronization |
 | `channels/dsh-im/` | Channels composition, UI, build patches, tests |
-| `dsh-community-market/` | Implemented private built-in Market runtime, schemas, adapters |
 | `dsh-community-fabric/` | Private RFC documentation; no runtime or published SDK |
 | `deepseek-harness/` | Pinned read-only upstream submodule with independent pnpm workspace |
 | `vendor/dsh-runtime/` | Pinned runtime tarballs and manifests |

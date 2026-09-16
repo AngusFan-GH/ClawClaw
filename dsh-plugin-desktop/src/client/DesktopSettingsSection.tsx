@@ -270,18 +270,13 @@ const MARKET_OPTIONS: readonly {
   body: DesktopSettingsLocaleKey
 }[] = [
   { id: 'disabled', title: 'marketDisabled', body: 'marketDisabledBody' },
-  { id: 'community-market', title: 'communityMarket', body: 'communityMarketBody' },
   { id: 'dsh-market', title: 'dshMarket', body: 'dshMarketBody' },
 ]
 
-const COMMUNITY_MARKET_URL = 'https://github.com/anywhere-labs/deepseek-harness-desktop/tree/master/dsh-community-market'
 const DSH_MARKET_URL = 'https://github.com/dsh-market/dsh-market'
 const AWESOME_DSH_PLUGIN_URL = 'https://github.com/awesome-dsh-plugin/awesome-dsh-plugin'
 
 function marketTitle(option: (typeof MARKET_OPTIONS)[number], t: Translate): ReactNode {
-  if (option.id === 'community-market') {
-    return <RepositoryLink href={COMMUNITY_MARKET_URL}>{t(option.title)}</RepositoryLink>
-  }
   if (option.id === 'dsh-market') {
     return <RepositoryLink href={DSH_MARKET_URL}>{t(option.title)}</RepositoryLink>
   }
@@ -587,8 +582,7 @@ export function DesktopSettingsSection({
               <Choice
                 key={option.id}
                 title={marketTitle(option, t)}
-                badge={option.id === 'community-market' ? t('beta') : undefined}
-                body={marketBody(option, t)}
+                                body={marketBody(option, t)}
                 selected={view.market.requested === option.id}
                 reselectable={view.market.requested === option.id && view.market.requested !== view.market.effective}
                 disabled={busy !== undefined || restart !== 'none'}

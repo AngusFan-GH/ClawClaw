@@ -37,7 +37,6 @@ if (upstream === undefined || typeof upstream !== 'object') fail(`missing upstre
 const otherChannel = channel === 'stable' ? 'beta' : 'stable'
 const pluginPaths = [
   join(root, upstream.package, 'package.json'),
-  ...(channel === 'beta' ? [join(root, 'dsh-community-market', 'package.json')] : []),
 ]
 const version = upstream.sourceVersion
 if (typeof version !== 'string' || !/^[0-9A-Za-z][0-9A-Za-z.-]*$/u.test(version)) {
