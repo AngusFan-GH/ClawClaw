@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, expect, it, vi } from 'vitest'
 import { WorkspaceDirectoryFlow } from '../src/client/workspace-directory-flow.tsx'
 import type { DirectoryFlowServices } from '../src/client/workspace-directory-flow.tsx'
-import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
+import type { DirectoryListing } from '@deepseek-ai/dsh-host-directory-picker/types'
 
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
   Modal: ({ open, children }: { open: boolean; children: React.ReactNode }) => open ? children : null,

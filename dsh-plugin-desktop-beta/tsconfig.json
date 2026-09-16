@@ -17,6 +17,11 @@
     "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
+    // The pinned DSH release packages expose declaration-only client facades
+    // whose type imports are currently published as devDependencies. Desktop
+    // still checks all of its own source; omit diagnostics inside that external
+    // declaration graph until the upstream package metadata is corrected.
+    "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "types": ["node"]
   },

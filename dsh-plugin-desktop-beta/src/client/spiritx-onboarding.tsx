@@ -1,33 +1,27 @@
 /** Product-owned replacements for the upstream welcome and DeepSeek credential steps. */
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { SPIRITX_ONBOARDING_COPY, SPIRITX_ONBOARDING_SHADOW, spiritXCredentialState, type SpiritXCredentialState } from './spiritx-onboarding-state.ts'
 
 const CREDENTIAL_REF = 'SPIRITX_API_KEY'
 const LOCALE_NS = 'desktop.spiritx-onboarding'
-const WELCOME_FIELD = 'welcomeNoticeVersion'
-const WELCOME_VERSION = 'spiritx-2026-09-14.1'
 type Copy = typeof SPIRITX_ONBOARDING_COPY.en
 type CopyKey = keyof Copy
 type CredentialState = { kind: 'loading' } | SpiritXCredentialState
-type WelcomeSection = Record<string, unknown>
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap { 'desktop.spiritx-onboarding': CopyKey }
 }
 
-interface WelcomeInjected { scope: SettingsScope<WelcomeSection>; t: (key: CopyKey) => string }
 interface CredentialInjected {
   loadCredential: () => Promise<CredentialState>
   storeCredential: (value: string) => Promise<string | undefined>
   t: (key: CopyKey) => string
 }
-type WelcomeProps = PropsRuntime<'settings.onboarding'> & InjectFace<WelcomeInjected>
 type CredentialProps = PropsRuntime<'settings.onboarding'> & InjectFace<CredentialInjected>
 const ignoreImplicitDismiss = (): void => {}
 
@@ -51,31 +45,10 @@ function ProductOnboardingModal({ title, focusTitle = false, children }: {
   </Modal>
 }
 
-function SpiritXWelcome({ complete, scope, t }: WelcomeProps): ReactNode {
-  const snapshot = useSyncExternalStore(listener => scope.subscribe(listener), () => scope.getSnapshot())
-  const [saving, setSaving] = useState(false)
-  const [failure, setFailure] = useState(false)
-  const acknowledged = snapshot.value?.[WELCOME_FIELD] === WELCOME_VERSION
-  useEffect(() => { if (acknowledged) complete() }, [acknowledged, complete])
-  if (snapshot.status === 'loading' || acknowledged) return null
-  const acknowledge = async (): Promise<void> => {
-    if (snapshot.mode === 'memory') { complete(); return }
-    setSaving(true); setFailure(false)
-    try {
-      await scope.set(WELCOME_FIELD, WELCOME_VERSION)
-      if (scope.getSnapshot().value?.[WELCOME_FIELD] === WELCOME_VERSION) complete()
-      else setFailure(true)
-    } finally { setSaving(false) }
-  }
-  return <ProductOnboardingModal title={t('welcomeTitle')} focusTitle>
-    <div className="spiritxWelcomeCopy">
-      {t('welcomeBody').split('\n\n').map(paragraph => <p key={paragraph}>{paragraph}</p>)}
-    </div>
-    {failure ? <p className="spiritxOnboardingError" role="alert">{t('welcomeError')}</p> : null}
-    <div className="spiritxOnboardingActions">
-      <Button variant="primary" disabled={saving} onClick={() => { void acknowledge() }}>{t('welcomeContinue')}</Button>
-    </div>
-  </ProductOnboardingModal>
+/** Replace the upstream welcome notice without making a configured user acknowledge it. */
+function SpiritXWelcome({ complete }: PropsRuntime<'settings.onboarding'>): null {
+  useEffect(() => { complete() }, [complete])
+  return null
 }
 
 function SpiritXCredential({ complete, loadCredential, storeCredential, t }: CredentialProps): ReactNode {
@@ -124,8 +97,7 @@ const STYLES = `
 .spiritxOnboardingContent { display: flex; flex-direction: column; box-sizing: border-box; max-height: calc(100vh - 48px); padding: 28px; overflow-y: auto; }
 .spiritxOnboardingTitle { margin: 0; color: var(--dsw-alias-label-primary); font-size: 20px; line-height: 28px; font-weight: 500; letter-spacing: 0; outline: none; }
 .spiritxOnboardingBody { margin-top: 20px; }
-.spiritxWelcomeCopy, .spiritxOnboardingDescription { margin: 0; color: var(--dsw-alias-label-secondary); font-size: 14px; line-height: 24px; }
-.spiritxWelcomeCopy p { margin: 0; } .spiritxWelcomeCopy p + p { margin-top: 12px; }
+.spiritxOnboardingDescription { margin: 0; color: var(--dsw-alias-label-secondary); font-size: 14px; line-height: 24px; }
 .spiritxOnboardingField { display: flex; flex-direction: column; gap: 6px; margin-top: 24px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; font-weight: 500; }
 .spiritxOnboardingField input { box-sizing: border-box; width: 100%; height: 32px; padding: 0 10px; border: .5px solid var(--dsw-alias-border-l4); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; line-height: 22px; }
 .spiritxOnboardingField input:focus { outline: none; border-color: var(--dsw-alias-brand-primary); }
@@ -147,13 +119,9 @@ function valueAt(root: unknown, path: readonly string[]): unknown {
 
 /** Register product replacements in the same slot cells as the upstream steps. */
 export function applySpiritXOnboarding(ctx: ClientContext): void {
+  if (typeof document === 'undefined') return
   ctx.effect(() => ctx.locale.register(LOCALE_NS, SPIRITX_ONBOARDING_COPY), 'dsh-plugin-desktop: SpiritX onboarding copy')
-  const t = ctx.locale.bind(LOCALE_NS) as WelcomeInjected['t']
-  const welcomeScope = ctx.settingsScope.bind<WelcomeSection>({
-    namespace: 'ui-onboarding',
-    decode: section => typeof section === 'object' && section !== null && !Array.isArray(section)
-      ? section as WelcomeSection : {},
-  })
+  const t = ctx.locale.bind(LOCALE_NS) as CredentialInjected['t']
   const loadCredential = async (): Promise<CredentialState> => {
     const [registered, directory] = await Promise.all([ctx.remote.llm.listProviders(), ctx.remote.llm.listConfigurableProviders()])
     if (!registered.ok || !directory.ok) return { kind: 'unavailable' }
@@ -187,7 +155,6 @@ export function applySpiritXOnboarding(ctx: ClientContext): void {
   }
   ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding', ...SPIRITX_ONBOARDING_SHADOW.welcome,
-    inject: () => ({ scope: welcomeScope, t }),
   }, SpiritXWelcome))
   ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding', ...SPIRITX_ONBOARDING_SHADOW.credential,

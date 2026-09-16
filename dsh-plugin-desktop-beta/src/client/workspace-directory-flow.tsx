@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
-import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
+import type { DirectoryListing } from '@deepseek-ai/dsh-host-directory-picker/types'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from './workspace-client-contract.ts'

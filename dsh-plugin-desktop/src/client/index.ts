@@ -8,6 +8,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-api-settings-controller/remote'
 import { applyAdvancedShell } from './advanced-shell.ts'
 import { applyClawClawBrand } from './clawclaw-brand.tsx'
 import { startRendererBootReporter } from './boot-health.ts'
@@ -91,16 +92,18 @@ export const inject = [
   'uiRenderer',
 ]
 
-/** Register desktop-owned client surfaces for the current BrowserWindow mode. @param ctx - browser Cordis context. */
+/** Register product identity and, in Electron, native client surfaces. @param ctx - browser Cordis context. */
 export function apply(ctx: ClientContext): void {
   const environment = parseDesktopClientEnvironment(window.location.search)
+  // The Desktop-hosted browser client shares the product identity, while
+  // native window services and shell effects require the Electron markers.
+  applyClawClawBrand(ctx)
+  applySpiritXOnboarding(ctx)
   if (!environment) return
   ctx.effect(
     () => provideDesktopWindow(ctx, desktopWindowService(environment)),
     'dsh-plugin-desktop: native window geometry service',
   )
-  applyClawClawBrand(ctx)
-  applySpiritXOnboarding(ctx)
   applyDefaultWorkspaceSelection(ctx)
   const desktopSettings = applyDesktopSettings(ctx, environment)
   ctx.effect(

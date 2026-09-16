@@ -1,4 +1,4 @@
-import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
+import type { DirectoryListing } from '@deepseek-ai/dsh-host-directory-picker/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 
 /** Workspace navigation and directory operations consumed by Desktop client features. */
