@@ -16,6 +16,10 @@
       name: dsh-plugin-desktop/default-workspace
       config:
         path: !!js process.env.CLAWCLAW_DEFAULT_WORKSPACE
+    - id: desktop-skills
+      name: dsh-plugin-desktop/skills
+    - id: desktop-mcp
+      name: dsh-plugin-desktop/mcp
     - id: desktop-pnpm
       name: dsh-plugin-desktop/pnpm
     - id: desktop-profiles

@@ -16,6 +16,10 @@
       name: dsh-plugin-desktop-beta/default-workspace
       config:
         path: !!js process.env.CLAWCLAW_DEFAULT_WORKSPACE
+    - id: desktop-skills
+      name: dsh-plugin-desktop-beta/skills
+    - id: desktop-mcp
+      name: dsh-plugin-desktop-beta/mcp
     - id: desktop-pnpm
       name: dsh-plugin-desktop-beta/pnpm
     - id: desktop-profiles

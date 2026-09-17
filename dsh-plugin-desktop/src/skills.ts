@@ -1,0 +1,217 @@
+/** Desktop-owned Skills inventory and model-visibility management. */
+
+import { randomUUID } from 'node:crypto'
+import { chmod, lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { basename, dirname, relative, resolve } from 'node:path'
+import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-agent-presets/types'
+import type { SkillDefinition, SkillSummary, SkillViewOptions } from '@deepseek-ai/dsh-skill'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { parseDocument } from 'yaml'
+import { registerDesktopJsonApi } from './desktop-json-api.ts'
+import {
+  DESKTOP_SKILLS_ACTION_PATH, DESKTOP_SKILLS_PATH,
+  type DesktopRecycledSkill, type DesktopSkillDetail, type DesktopSkillsView, type DesktopSkillView,
+} from './skills-contract.ts'
+
+export * from './skills-contract.ts'
+export const name = 'desktop-skills'
+export const inject = ['skills', 'webServer', 'connection']
+
+const MAX_SKILL_CONTENT_BYTES = 256 * 1024
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+function projectSkill(skill: SkillSummary): DesktopSkillView {
+  return Object.freeze({ name: skill.name, description: skill.description,
+    ...(skill.whenToUse === undefined ? {} : { whenToUse: skill.whenToUse }),
+    source: skill.source, provider: skill.provider,
+    modelInvocable: skill.invocation.modelInvocable, userInvocable: skill.invocation.userInvocable,
+    editable: (skill.source === 'user-dsh' || skill.source === 'user-agents') && skill.provider === 'filesystem' })
+}
+function projectSkillDetail(skill: SkillDefinition): DesktopSkillDetail {
+  return Object.freeze({ ...projectSkill(skill), content: skill.content,
+    ...(skill.path === undefined ? {} : { path: skill.path }) })
+}
+function isPathInside(root: string, target: string): boolean {
+  const path = relative(root, target)
+  return path !== '' && path !== '..' && !path.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`)
+}
+
+function skillLibraryRoot(): string { return resolve(resolveDshHome(), 'skills') }
+function agentsSkillLibraryRoot(): string { return resolve(process.env.DSH_AGENTS_HOME ?? resolve(homedir(), '.agents'), 'skills') }
+function recycleRoot(): string { return resolve(skillLibraryRoot(), '.recycle') }
+function safeSkillName(value: string): string {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(value)) throw new Error('Skill name must be kebab-case')
+  return value
+}
+
+function skillDocument(text: string): { readonly name: string } {
+  const lines = text.split(/\r?\n/u)
+  if (lines[0]?.trim() !== '---') throw new Error('Skill must start with YAML frontmatter')
+  const closing = lines.slice(1).findIndex(line => line.trim() === '---')
+  if (closing < 0) throw new Error('Skill frontmatter is not terminated')
+  const document = parseDocument(lines.slice(1, closing + 1).join('\n'), { prettyErrors: true })
+  const data = document.toJS()
+  if (document.errors.length > 0 || !isRecord(data) || typeof data.name !== 'string' || typeof data.description !== 'string' || data.description.trim() === '') {
+    throw new Error('Skill frontmatter requires a name and description')
+  }
+  return { name: safeSkillName(data.name) }
+}
+
+export function setSkillModelInvocableDocument(text: string, enabled: boolean): string {
+  return setSkillInvocationDocument(text, 'disable-model-invocation', !enabled)
+}
+
+export function setSkillUserInvocableDocument(text: string, enabled: boolean): string {
+  return setSkillInvocationDocument(text, 'user-invocable', enabled)
+}
+
+function setSkillInvocationDocument(text: string, key: string, value: boolean): string {
+  const newline = text.includes('\r\n') ? '\r\n' : '\n'
+  const lines = text.split(/\r?\n/u)
+  if (lines[0]?.trim() !== '---') {
+    if ((key === 'user-invocable' && value) || (key === 'disable-model-invocation' && value === false)) return text
+    return `---${newline}${key}: ${String(value)}${newline}---${newline}${newline}${text}`
+  }
+  const closing = lines.slice(1).findIndex(line => line.trim() === '---')
+  if (closing < 0) throw new Error('Skill frontmatter is not terminated')
+  const closingIndex = closing + 1
+  const document = parseDocument(lines.slice(1, closingIndex).join('\n'), { prettyErrors: true })
+  if (document.errors.length > 0 || !isRecord(document.toJS() ?? {})) throw new Error('Skill frontmatter must be a YAML map')
+  if (key === 'disable-model-invocation' && value === false) document.delete(key)
+  else if (key === 'user-invocable' && value === true) document.delete(key)
+  else document.set(key, value)
+  const frontmatter = document.toString({ lineWidth: 0 }).trimEnd().replaceAll('\n', newline)
+  return ['---', frontmatter, '---', ...lines.slice(closingIndex + 1)]
+    .filter((line, index) => !(index === 1 && line === '')).join(newline)
+}
+
+async function writeSkillInvocation(skill: SkillDefinition, key: 'model' | 'user', enabled: boolean): Promise<void> {
+  if ((skill.source !== 'user-dsh' && skill.source !== 'user-agents') || skill.provider !== 'filesystem' || skill.path === undefined) {
+    throw new Error('Only Skills in a user library can be changed here')
+  }
+  const root = await realpath(skill.source === 'user-dsh' ? skillLibraryRoot() : agentsSkillLibraryRoot())
+  const target = await realpath(skill.path)
+  if (!isPathInside(root, target)) throw new Error('Skill file is outside its user library')
+  const info = await lstat(target)
+  if (!info.isFile() || info.isSymbolicLink()) throw new Error('Skill file must be a regular file')
+  const text = await readFile(target, 'utf8')
+  const next = key === 'model' ? setSkillModelInvocableDocument(text, enabled) : setSkillUserInvocableDocument(text, enabled)
+  if (next === text) return
+  const temporary = resolve(dirname(target), `.${randomUUID()}.tmp`)
+  try {
+    await writeFile(temporary, next, { encoding: 'utf8', mode: info.mode })
+    if (process.platform !== 'win32') await chmod(temporary, info.mode)
+    await rename(temporary, target)
+  } catch (cause) {
+    await rm(temporary, { force: true }).catch(() => {})
+    throw cause
+  }
+}
+
+export class DesktopSkillsController {
+  constructor(private readonly ctx: Context) {}
+  private async viewOptions(): Promise<SkillViewOptions> {
+    // Filesystem providers belong to preset layers in the Web composition.
+    // A settings read has no Agent: use the default preset's standing scope.
+    const presets = this.ctx.get('agentPresets')
+    return presets === undefined ? {} : { scope: await presets.standingKeyFor() }
+  }
+  async read(): Promise<DesktopSkillsView> {
+    const snapshot = await this.ctx.skills.snapshot(await this.viewOptions())
+    if (!snapshot.complete) throw new Error('Skill discovery is incomplete. Please refresh to retry.')
+    return Object.freeze({ skills: Object.freeze(snapshot.skills.map(projectSkill)), recycled: await this.recycled() })
+  }
+  async detail(name: string): Promise<DesktopSkillDetail> {
+    const skill = await this.ctx.skills.get(name, await this.viewOptions())
+    if (skill === undefined) throw new Error(`Skill not found: ${name}`)
+    if (Buffer.byteLength(skill.content, 'utf8') > MAX_SKILL_CONTENT_BYTES) throw new Error('Skill content is too large to preview')
+    return projectSkillDetail(skill)
+  }
+  async setModelInvocable(name: string, enabled: boolean): Promise<DesktopSkillsView> {
+    const skill = await this.ctx.skills.get(name, await this.viewOptions())
+    if (skill === undefined) throw new Error(`Skill not found: ${name}`)
+    await writeSkillInvocation(skill, 'model', enabled)
+    return await this.withInvocation(name, { modelInvocable: enabled })
+  }
+  async setUserInvocable(name: string, enabled: boolean): Promise<DesktopSkillsView> {
+    const skill = await this.ctx.skills.get(name, await this.viewOptions())
+    if (skill === undefined) throw new Error(`Skill not found: ${name}`)
+    await writeSkillInvocation(skill, 'user', enabled)
+    return await this.withInvocation(name, { userInvocable: enabled })
+  }
+  private async withInvocation(name: string, patch: Pick<DesktopSkillView, 'modelInvocable'> | Pick<DesktopSkillView, 'userInvocable'>): Promise<DesktopSkillsView> {
+    // Filesystem discovery is watch-driven. Preserve the just-written value in
+    // this response so the UI is not reverted by a snapshot from before its
+    // watcher has observed the atomic rename.
+    const view = await this.read()
+    return Object.freeze({ ...view, skills: Object.freeze(view.skills.map(skill => skill.name === name ? Object.freeze({ ...skill, ...patch }) : skill)) })
+  }
+  private async recycled(): Promise<readonly DesktopRecycledSkill[]> {
+    const root = recycleRoot()
+    const entries = await readdir(root, { withFileTypes: true }).catch(cause => {
+      if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return []
+      throw cause
+    })
+    return Object.freeze(entries.filter(entry => entry.isDirectory()).map(entry => {
+      const match = /^([a-z0-9]+(?:-[a-z0-9]+)*)--([0-9a-f-]{36})$/u.exec(entry.name)
+      if (match === null) return undefined
+      return Object.freeze({ id: entry.name, name: match[1]!, deletedAt: match[2]! })
+    }).filter((entry): entry is DesktopRecycledSkill => entry !== undefined))
+  }
+  async importDocument(text: string): Promise<DesktopSkillsView> {
+    const { name } = skillDocument(text)
+    const root = skillLibraryRoot(); const target = resolve(root, name, 'SKILL.md')
+    await mkdir(dirname(target), { recursive: true, mode: 0o700 })
+    const existing = await lstat(target).catch(cause => (cause as NodeJS.ErrnoException).code === 'ENOENT' ? undefined : Promise.reject(cause))
+    if (existing !== undefined) throw new Error(`A user Skill named ${name} already exists`)
+    await writeFile(target, text, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+    return await this.read()
+  }
+  async recycle(name: string): Promise<DesktopSkillsView> {
+    const skill = await this.ctx.skills.get(name, await this.viewOptions())
+    if (skill === undefined || skill.source !== 'user-dsh' || skill.provider !== 'filesystem' || skill.path === undefined) throw new Error('Only Skills in the DSH user library can be deleted here')
+    const root = await realpath(skillLibraryRoot()); const target = await realpath(skill.path)
+    if (!isPathInside(root, target)) throw new Error('Skill file is outside the DSH user library')
+    const parent = dirname(target); const source = basename(target) === 'SKILL.md' ? parent : target
+    const destination = resolve(recycleRoot(), `${safeSkillName(name)}--${randomUUID()}`)
+    await mkdir(recycleRoot(), { recursive: true, mode: 0o700 })
+    if (source === target) {
+      await mkdir(destination, { mode: 0o700 })
+      await rename(source, resolve(destination, 'SKILL.md'))
+    } else await rename(source, destination)
+    return await this.read()
+  }
+  async restore(id: string): Promise<DesktopSkillsView> {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*--[0-9a-f-]{36}$/u.test(id)) throw new Error('Invalid recycled Skill')
+    const source = resolve(recycleRoot(), id); const name = id.slice(0, id.lastIndexOf('--'))
+    const info = await lstat(source)
+    if (!info.isDirectory()) throw new Error('Recycled Skill is missing')
+    const target = resolve(skillLibraryRoot(), name)
+    if (await lstat(target).catch(cause => (cause as NodeJS.ErrnoException).code === 'ENOENT' ? undefined : Promise.reject(cause)) !== undefined) throw new Error(`A user Skill named ${name} already exists`)
+    await rename(source, target)
+    return await this.read()
+  }
+}
+
+async function handleAction(controller: DesktopSkillsController, value: unknown): Promise<DesktopSkillsView | DesktopSkillDetail> {
+  if (!isRecord(value) || typeof value.action !== 'string') throw new TypeError('invalid Skills action')
+  if (value.action === 'detail' && typeof value.name === 'string') return await controller.detail(value.name)
+  if (value.action === 'set-model-invocable' && typeof value.name === 'string' && typeof value.enabled === 'boolean') {
+    return await controller.setModelInvocable(value.name, value.enabled)
+  }
+  if (value.action === 'set-user-invocable' && typeof value.name === 'string' && typeof value.enabled === 'boolean') return await controller.setUserInvocable(value.name, value.enabled)
+  if (value.action === 'import' && typeof value.content === 'string' && value.content.length <= MAX_SKILL_CONTENT_BYTES) return await controller.importDocument(value.content)
+  if (value.action === 'recycle' && typeof value.name === 'string') return await controller.recycle(value.name)
+  if (value.action === 'restore' && typeof value.id === 'string') return await controller.restore(value.id)
+  throw new TypeError('invalid Skills action')
+}
+
+export function apply(ctx: Context): void {
+  const controller = new DesktopSkillsController(ctx)
+  registerDesktopJsonApi(ctx, { label: 'Skills', readPath: DESKTOP_SKILLS_PATH, actionPath: DESKTOP_SKILLS_ACTION_PATH,
+    read: () => controller.read(), action: value => handleAction(controller, value) })
+}

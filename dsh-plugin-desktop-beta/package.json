@@ -71,6 +71,14 @@
       "types": "./lib/types/default-workspace.d.ts",
       "default": "./lib/default-workspace.js"
     },
+    "./skills": {
+      "types": "./lib/types/skills.d.ts",
+      "default": "./lib/skills.js"
+    },
+    "./mcp": {
+      "types": "./lib/types/mcp.d.ts",
+      "default": "./lib/mcp.js"
+    },
     "./spiritx": {
       "types": "./lib/types/spiritx.d.ts",
       "default": "./lib/spiritx.js"

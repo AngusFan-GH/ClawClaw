@@ -18,6 +18,8 @@ import { installDesktopDirectoryPickerBridge } from './directory-picker.ts'
 import { applyWorkspaceDirectoryFlow } from './workspace-directory-flow.tsx'
 import { parseDesktopClientEnvironment } from './environment.ts'
 import { applyExtendedShell } from './extended-shell.ts'
+import { applyMcpSettings } from './mcp-settings.ts'
+import { applySkillsSettings } from './skills-settings.ts'
 import { applySpiritXOnboarding } from './spiritx-onboarding.tsx'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
 
@@ -30,6 +32,8 @@ export {
   resolveDesktopWorkspaceSelection,
 } from './default-workspace-selection.ts'
 export { applyExtendedShell, applyFramedShell } from './extended-shell.ts'
+export { applyMcpSettings } from './mcp-settings.ts'
+export { applySkillsSettings } from './skills-settings.ts'
 export {
   createDesktopSettingsApi,
   desktopSettingsPaths,
@@ -105,6 +109,8 @@ export function apply(ctx: ClientContext): void {
     'dsh-plugin-desktop: native window geometry service',
   )
   applyDefaultWorkspaceSelection(ctx)
+  applySkillsSettings(ctx)
+  applyMcpSettings(ctx)
   const desktopSettings = applyDesktopSettings(ctx, environment)
   ctx.effect(
     () => startRendererBootReporter(ctx.loader),

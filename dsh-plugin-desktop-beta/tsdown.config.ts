@@ -18,6 +18,8 @@ export default defineConfig([
       diagnostics: 'src/diagnostics.ts',
       notifications: 'src/notifications.ts',
       'default-workspace': 'src/default-workspace.ts',
+      skills: 'src/skills.ts',
+      mcp: 'src/mcp.ts',
       spiritx: 'src/spiritx.ts',
       'diagnostic-export-worker': 'src/diagnostic-export-worker.ts',
       'packaged-runtime-smoke': 'src/packaged-runtime-smoke.ts',
