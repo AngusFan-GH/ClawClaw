@@ -501,6 +501,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-renderer':
         specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-renderer-0.1.5-rc.2.tgz
         version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-renderer-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/dsh-client-ui-schedule':
+        specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-schedule-0.1.5-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-schedule-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-session':
         specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-session-0.1.5-rc.2.tgz
         version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-session-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
@@ -651,6 +654,9 @@ importers:
       '@deepseek-ai/dsh-sandbox-windows-acl':
         specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-sandbox-windows-acl-0.1.5-rc.2.tgz
         version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-sandbox-windows-acl-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/dsh-schedule':
+        specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-schedule-0.1.5-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-schedule-0.1.5-rc.2.tgz(8d23cc9cd4155e2e3efa46bd0a9653cd)
       '@deepseek-ai/dsh-scope':
         specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-scope-0.1.5-rc.2.tgz
         version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-scope-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-invariants-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2))
@@ -810,6 +816,9 @@ importers:
       adm-zip:
         specifier: ^0.6.0
         version: 0.6.1
+      cron-parser:
+        specifier: 5.7.0
+        version: 5.7.0
       dshmarket:
         specifier: 1.38.1
         version: 1.38.1(patch_hash=5d431487c633bdba7a79e97da131692d5f150b4718b112ac8f4ed61cd290626a)(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-settings@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-settings-0.1.5-rc.2.tgz(patch_hash=2e064457f7dc3df87160ea1ccd345259a129edfd40e83986cf60a4a57d886290)(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-brand@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-brand-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-invariants@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-invariants-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-session@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-session-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-scope@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-scope-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-invariants-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2))))(@deepseek-ai/schemastery@3.18.2))(@deepseek-ai/schemastery@3.18.2)
@@ -1060,6 +1069,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-renderer':
         specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-renderer-0.1.5-rc.2.tgz
         version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-renderer-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/dsh-client-ui-schedule':
+        specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-schedule-0.1.5-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-schedule-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-session':
         specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-session-0.1.5-rc.2.tgz
         version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-session-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
@@ -1210,6 +1222,9 @@ importers:
       '@deepseek-ai/dsh-sandbox-windows-acl':
         specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-sandbox-windows-acl-0.1.5-rc.2.tgz
         version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-sandbox-windows-acl-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/dsh-schedule':
+        specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-schedule-0.1.5-rc.2.tgz
+        version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-schedule-0.1.5-rc.2.tgz(8d23cc9cd4155e2e3efa46bd0a9653cd)
       '@deepseek-ai/dsh-scope':
         specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-scope-0.1.5-rc.2.tgz
         version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-scope-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-invariants-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2))
@@ -1369,6 +1384,9 @@ importers:
       adm-zip:
         specifier: ^0.6.0
         version: 0.6.1
+      cron-parser:
+        specifier: 5.7.0
+        version: 5.7.0
       dshmarket:
         specifier: 1.38.1
         version: 1.38.1(patch_hash=5d431487c633bdba7a79e97da131692d5f150b4718b112ac8f4ed61cd290626a)(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-settings@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-settings-0.1.5-rc.2.tgz(patch_hash=2e064457f7dc3df87160ea1ccd345259a129edfd40e83986cf60a4a57d886290)(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-brand@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-brand-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-invariants@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-invariants-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-session@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-session-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-scope@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-scope-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-invariants-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2))))(@deepseek-ai/schemastery@3.18.2))(@deepseek-ai/schemastery@3.18.2)
@@ -5927,6 +5945,10 @@ packages:
       typescript:
         optional: true
 
+  cron-parser@5.7.0:
+    resolution: {integrity: sha512-iSpDHpwwW/GhIg4JVODYlWUEpMNSimaHvqOhHpOz1W+Y97z1lL1nf+dpcF17cNwFRpTtKN9devgi1fxflp3Phw==}
+    engines: {node: '>=18'}
+
   cross-dirname@0.1.0:
     resolution: {integrity: sha512-+R08/oI0nl3vfPcqftZRpytksBXDzOUveBq/NBVx0sUp1axwzPQrKinNx5yd5sxPu8j1wIy8AfnVQ+5eFdha6Q==}
 
@@ -7038,6 +7060,10 @@ packages:
     resolution: {integrity: sha512-yH1ubCAduho9UR7oJhRXIQXogksRILBiTuZC4/bQIGeB9JOkxMlSuEHyyZpo1Z3S0yWJO2KTSUZbjiNvVxeOUw==}
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
+  luxon@3.7.2:
+    resolution: {integrity: sha512-vtEhXh/gNjI9Yg1u4jX/0YVPMvxzHuGgCm6tC5kZyb08yjGWGnqAjGJvcXbqQR2P3MyMEFnRbpcdFS6PBcLqew==}
+    engines: {node: '>=12'}
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
@@ -14303,6 +14329,10 @@ snapshots:
     optionalDependencies:
       typescript: 6.0.3
 
+  cron-parser@5.7.0:
+    dependencies:
+      luxon: 3.7.2
+
   cross-dirname@0.1.0:
     optional: true
 
@@ -15444,6 +15474,8 @@ snapshots:
   lucide-react@1.45.0(react@18.3.1):
     dependencies:
       react: 18.3.1
+
+  luxon@3.7.2: {}
 
   magic-string@0.30.21:
     dependencies:

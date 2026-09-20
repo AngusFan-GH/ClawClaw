@@ -12,6 +12,12 @@
       name: dsh-plugin-desktop/diagnostics
     - id: desktop-notifications
       name: dsh-plugin-desktop/notifications
+    - id: desktop-cron-tasks
+      name: dsh-plugin-desktop/cron-tasks
+    # Durable, session-local reminders. The corresponding client package is
+    # resolved by the upstream Web bundle and enabled in the renderer below.
+    - id: schedule
+      name: '@deepseek-ai/dsh-schedule'
     - id: desktop-default-workspace
       name: dsh-plugin-desktop/default-workspace
       config:
@@ -39,6 +45,11 @@
 # telemetry endpoint. Products may opt in through an explicit profile override.
 - id: session-telemetry-otel
   disabled: true
+
+# Surface active durable reminders in the conversation header. Schedule owns
+# creation, persistence, and delivery; this client contribution is read-only.
+- id: ui-schedule
+  disabled: false
 
 # SpiritX is the product-owned model route. Keep the upstream DeepSeek adapter
 # and its request metadata out of the default Desktop composition.

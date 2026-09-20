@@ -3,6 +3,7 @@ import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/clie
 
 /** Workspace navigation and directory operations consumed by Desktop client features. */
 export interface DesktopUiWorkspace {
+  openSession(sessionId: string): void
   openWorkspace(workspaceId: WorkspaceId): Promise<void>
   startSession(): void
   listDirectory(path?: string, signal?: AbortSignal): Promise<DirectoryListing>

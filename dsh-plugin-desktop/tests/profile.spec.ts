@@ -434,6 +434,7 @@ virtualStoreDirMaxLength: 60
       ['ui-layout', '@deepseek-ai/dsh-client-ui-layout'],
       ['ui-sidebar', '@deepseek-ai/dsh-client-ui-sidebar'],
       ['ui-conversation', '@deepseek-ai/dsh-client-ui-conversation'],
+      ['ui-schedule', '@deepseek-ai/dsh-client-ui-schedule'],
     ] as const) {
       const matching = rows.filter(row => row.id === id)
       expect(matching).toHaveLength(1)
@@ -482,6 +483,14 @@ virtualStoreDirMaxLength: 60
     expect(rows.find(row => row.id === 'desktop-notifications')).toEqual(expect.objectContaining({
       name: 'dsh-plugin-desktop/notifications',
     }))
+    expect(rows.find(row => row.id === 'desktop-cron-tasks')).toEqual({
+      id: 'desktop-cron-tasks',
+      name: 'dsh-plugin-desktop/cron-tasks',
+    })
+    expect(rows.find(row => row.id === 'schedule')).toEqual({
+      id: 'schedule',
+      name: '@deepseek-ai/dsh-schedule',
+    })
     expect(rows.find(row => row.id === 'desktop-default-workspace')).toEqual({
       id: 'desktop-default-workspace',
       name: 'dsh-plugin-desktop/default-workspace',

@@ -400,6 +400,7 @@ the package names, versions, and licenses for transparency.
 | content-disposition | 1.1.0 | MIT |
 | content-type | 2.1.0 | MIT |
 | cookie | 0.7.2 | MIT |
+| cron-parser | 5.7.0 | MIT |
 | cookie-signature | 1.2.2 | MIT |
 | cors | 2.8.6 | MIT |
 | cross-spawn | 7.0.6 | MIT |

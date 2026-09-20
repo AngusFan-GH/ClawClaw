@@ -19,7 +19,9 @@ import { applyWorkspaceDirectoryFlow } from './workspace-directory-flow.tsx'
 import { parseDesktopClientEnvironment } from './environment.ts'
 import { applyExtendedShell } from './extended-shell.ts'
 import { applyMcpSettings } from './mcp-settings.ts'
+import { applyCronTasksSettings } from './cron-tasks-settings.ts'
 import { applySkillsSettings } from './skills-settings.ts'
+import { installSemanticSettingsNavIcons } from './settings-nav-icons.ts'
 import { applySpiritXOnboarding } from './spiritx-onboarding.tsx'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
 
@@ -111,6 +113,13 @@ export function apply(ctx: ClientContext): void {
   applyDefaultWorkspaceSelection(ctx)
   applySkillsSettings(ctx)
   applyMcpSettings(ctx)
+  applyCronTasksSettings(ctx)
+  ctx.effect(() => installSemanticSettingsNavIcons([
+    { icon: 'marketplace', labels: ['插件市场', 'Plugin Marketplace', 'Plugins'] },
+    { icon: 'skill', labels: ['Skills'] },
+    { icon: 'mcp', labels: ['MCP Servers'] },
+    { icon: 'schedule', labels: ['定时任务', 'Scheduled tasks'] },
+  ]), 'dsh-plugin-desktop: semantic settings navigation icons')
   const desktopSettings = applyDesktopSettings(ctx, environment)
   ctx.effect(
     () => startRendererBootReporter(ctx.loader),

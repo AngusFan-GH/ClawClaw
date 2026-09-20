@@ -17,6 +17,7 @@ export default defineConfig([
       profiles: 'src/profiles.ts',
       diagnostics: 'src/diagnostics.ts',
       notifications: 'src/notifications.ts',
+      'cron-tasks': 'src/cron-tasks.ts',
       'default-workspace': 'src/default-workspace.ts',
       skills: 'src/skills.ts',
       mcp: 'src/mcp.ts',

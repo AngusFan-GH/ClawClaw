@@ -1,0 +1,55 @@
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {} from './workspace-client-contract.ts'
+import { CronTasksSettingsSection } from './CronTasksSettingsSection.tsx'
+import { createCronTasksApi, openCronTaskSession } from './cron-tasks-api.ts'
+import { en, zh, type CronTasksLocaleKey } from './cron-tasks-locales.ts'
+import { installIntegrationsStyles } from './integrations-styles.ts'
+
+export const DESKTOP_CRON_TASKS_LOCALE_NAMESPACE = 'desktop.cron-tasks'
+interface ClientSessionsNavigation {
+  refresh(): Promise<void>
+  binding(sessionId: SessionId): { session: { rename(title: string): Promise<{
+    ok: boolean
+    error?: { message: string }
+  }> } } | undefined
+}
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap { 'desktop.cron-tasks': CronTasksLocaleKey }
+}
+export function applyCronTasksSettings(ctx: ClientContext): void {
+  const api = createCronTasksApi()
+  const t = ctx.locale.bind(DESKTOP_CRON_TASKS_LOCALE_NAMESPACE)
+  ctx.effect(() => ctx.locale.register(DESKTOP_CRON_TASKS_LOCALE_NAMESPACE, { zh, en }), 'dsh-plugin-desktop: Cron task dictionaries')
+  ctx.effect(() => installIntegrationsStyles(), 'dsh-plugin-desktop: Cron task styles')
+  ctx.inject(['uiWorkspace', 'workspaces'], (scope: ClientContext) => {
+    scope.slots.inject('settings.section', () => scope.slots.register({
+      name: 'settings.section', id: 'desktop-cron-tasks', order: 92,
+      label: () => t('nav'), locale: DESKTOP_CRON_TASKS_LOCALE_NAMESPACE, inject: () => ({ api,
+        localeId: () => scope.locale.getSnapshot().active,
+        openSession: async (taskId: string, sessionId: string) => {
+          await openCronTaskSession(api, {
+            reconcileWorkspace: async (workspaceId, attachedSessionId) => {
+              await scope.workspaces.insertSessionBefore(
+                workspaceId as WorkspaceId,
+                attachedSessionId as SessionId,
+                attachedSessionId as SessionId,
+              )
+            },
+            refreshSessions: () => (scope.get('sessions') as unknown as ClientSessionsNavigation).refresh(),
+            renameSession: async (attachedSessionId, title) => {
+              const sessions = scope.get('sessions') as unknown as ClientSessionsNavigation
+              const session = sessions.binding(attachedSessionId as SessionId)?.session
+              if (session === undefined) throw new Error(`Unknown scheduled Session: ${attachedSessionId}`)
+              const result = await session.rename(title)
+              if (!result.ok) throw new Error(result.error?.message ?? 'Failed to name scheduled Session')
+            },
+            openSession: attachedSessionId => { scope.uiWorkspace.openSession(attachedSessionId as SessionId) },
+          }, taskId, sessionId)
+        },
+      }),
+    }, CronTasksSettingsSection))
+  })
+}
