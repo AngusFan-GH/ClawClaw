@@ -82,7 +82,7 @@ describe('desktop Cron task controller', () => {
     await expect(runCronTask(runtime, task)).resolves.toMatch(/^cron-/)
     expect(get).toHaveBeenCalledWith(configured.id)
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ meta: { cwd: configured.path } }))
-    expect(rename).toHaveBeenCalledWith(session, 'Default')
+    expect(rename).toHaveBeenCalledWith(session, '[Cron] Default')
     expect(attachSession).toHaveBeenCalledWith(expect.stringMatching(/^cron-/))
     expect(attachSession.mock.invocationCallOrder[0]).toBeLessThan(flush.mock.invocationCallOrder[0] as number)
     expect(dispose).toHaveBeenCalledOnce()

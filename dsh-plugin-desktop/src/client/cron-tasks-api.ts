@@ -1,6 +1,7 @@
 /** Same-origin client for the Desktop Cron task registry. */
 
 import { DESKTOP_CRON_TASKS_ACTION_PATH, DESKTOP_CRON_TASKS_PATH } from '../cron-tasks-contract.ts'
+import { cronSessionTitle } from '../cron-session-title.ts'
 export { DESKTOP_CRON_TASKS_ACTION_PATH, DESKTOP_CRON_TASKS_PATH } from '../cron-tasks-contract.ts'
 
 export interface CronTaskRunView {
@@ -114,6 +115,7 @@ export function watchCronTaskSessionDisposals(
   api: CronTasksApi,
   subscribe: CronSessionRemovedSubscription,
   refreshSessions: () => Promise<void>,
+  markUnread?: (sessionId: string) => void,
 ): () => void {
   let disposed = false
   let queue = Promise.resolve()
@@ -122,6 +124,7 @@ export function watchCronTaskSessionDisposals(
       const view = await api.read()
       if (disposed || view.archivedSessionIds.includes(sessionId)) return
       if (!view.jobs.some(job => job.activeSessionId === sessionId)) return
+      markUnread?.(sessionId)
       await refreshSessions()
     }).catch(() => {})
   })
@@ -146,6 +149,6 @@ export async function openCronTaskSession(
   }
   await navigation.reconcileWorkspace(attached.workspaceId, sessionId)
   await navigation.refreshSessions()
-  await navigation.renameSession(sessionId, attached.title)
+  await navigation.renameSession(sessionId, cronSessionTitle(attached.title))
   navigation.openSession(sessionId)
 }

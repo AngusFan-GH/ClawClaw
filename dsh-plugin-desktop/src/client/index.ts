@@ -105,6 +105,13 @@ export function apply(ctx: ClientContext): void {
   // native window services and shell effects require the Electron markers.
   applyClawClawBrand(ctx)
   applySpiritXOnboarding(ctx)
+  applyCronTasksSettings(ctx)
+  ctx.effect(() => installSemanticSettingsNavIcons([
+    { icon: 'marketplace', labels: ['插件市场', 'Plugin Marketplace', 'Plugins'] },
+    { icon: 'skill', labels: ['Skills'] },
+    { icon: 'mcp', labels: ['MCP Servers'] },
+    { icon: 'schedule', labels: ['定时任务', 'Scheduled tasks'] },
+  ]), 'dsh-plugin-desktop: semantic settings navigation icons')
   if (!environment) return
   ctx.effect(
     () => provideDesktopWindow(ctx, desktopWindowService(environment)),
@@ -113,13 +120,6 @@ export function apply(ctx: ClientContext): void {
   applyDefaultWorkspaceSelection(ctx)
   applySkillsSettings(ctx)
   applyMcpSettings(ctx)
-  applyCronTasksSettings(ctx)
-  ctx.effect(() => installSemanticSettingsNavIcons([
-    { icon: 'marketplace', labels: ['插件市场', 'Plugin Marketplace', 'Plugins'] },
-    { icon: 'skill', labels: ['Skills'] },
-    { icon: 'mcp', labels: ['MCP Servers'] },
-    { icon: 'schedule', labels: ['定时任务', 'Scheduled tasks'] },
-  ]), 'dsh-plugin-desktop: semantic settings navigation icons')
   const desktopSettings = applyDesktopSettings(ctx, environment)
   ctx.effect(
     () => startRendererBootReporter(ctx.loader),

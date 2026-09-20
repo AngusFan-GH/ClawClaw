@@ -14,6 +14,7 @@ import { maskSecrets } from './mask-secrets.ts'
 import { DESKTOP_CRON_TASKS_ACTION_PATH, DESKTOP_CRON_TASKS_PATH } from './cron-tasks-contract.ts'
 import { CRON_TASK_HISTORY_LIMIT, createCronTask, nextCronTaskRun, nextTaskRun, normalizeCronTaskInput, rehydrateCronTask } from './cron-task-domain.ts'
 import type { CronTask, CronTaskRun } from './cron-task-domain.ts'
+import { cronSessionTitle } from './cron-session-title.ts'
 import { DESKTOP_WORKSPACE_SETTINGS_NAMESPACE } from './workspace-settings.ts'
 
 export const name = 'desktop-cron-tasks'
@@ -152,7 +153,7 @@ export async function runCronTask(
   const cancel = (): void => { agent.cancel({ kind: 'hook', reason: 'scheduled task cancelled' }, { keepInbox: true }) }
   try {
     throwIfAborted(signal)
-    runtime.sessionTitle.rename(agent.session, task.name)
+    runtime.sessionTitle.rename(agent.session, cronSessionTitle(task.name))
     await workspace.attachSession(sessionId)
     await onSessionResolved?.(String(sessionId), String(workspace.id))
     const message = createUserMessage({

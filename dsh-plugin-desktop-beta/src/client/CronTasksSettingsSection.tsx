@@ -21,6 +21,7 @@ import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw.mjs'
 import Search from 'lucide-react/dist/esm/icons/search.mjs'
 // @ts-expect-error package subpath has no declaration file
 import X from 'lucide-react/dist/esm/icons/x.mjs'
+import { IconChevronDownOutline14, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { CronTaskInputView, CronTaskPolicyView, CronTaskRunView, CronTaskView, CronTasksApi, CronTaskWorkspaceView } from './cron-tasks-api.ts'
 import { friendlyCronExpression, localDateTimeInput, parseFriendlyCronSchedule,
@@ -45,6 +46,8 @@ interface Draft extends CronTaskInputView {
 }
 const WEEKDAYS = ['1', '2', '3', '4', '5', '6', '0'] as const
 const SCHEDULE_MODES = ['once', 'daily', 'weekdays', 'weekends', 'weekly', 'interval', 'custom'] as const
+const HOURS = Array.from({ length: 24 }, (_, value) => String(value).padStart(2, '0'))
+const MINUTES = Array.from({ length: 60 }, (_, value) => String(value).padStart(2, '0'))
 
 function emptyDraft(): Draft {
   return { name: '', prompt: '', expression: '0 9 * * 1-5', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
@@ -66,6 +69,36 @@ function draftInput(draft: Draft): CronTaskInputView {
     timeZone: draft.timeZone, ...(draft.workspaceId?.trim() ? { workspaceId: draft.workspaceId.trim() } : {}),
     ...(draft.scheduleMode === 'once' && draft.oneTimeLocal ? { oneTimeAt: new Date(draft.oneTimeLocal).toISOString() } : {}),
     enabled: draft.enabled }
+}
+
+function TimeSegment({ label, value, options, onChange }: {
+  readonly label: string
+  readonly value: string
+  readonly options: readonly string[]
+  readonly onChange: (value: string) => void
+}): JSX.Element {
+  const [open, setOpen] = useState(false)
+  return <Menu className="dshCronTimeSegmentRoot" open={open} onClose={() => { setOpen(false) }} side="top" compact selectedId={value}
+    items={options.map(option => ({ id: option, label: option }))}
+    onSelect={next => { onChange(next); setOpen(false) }}
+    anchor={<button className="dshCronTimeSegment" type="button" aria-label={label} aria-haspopup="menu"
+      aria-expanded={open} onClick={() => { setOpen(current => !current) }}><span>{value}</span><IconChevronDownOutline14 /></button>} />
+}
+
+export function CronTimePicker({ value, label, hourLabel, minuteLabel, onChange }: {
+  readonly value: string
+  readonly label: string
+  readonly hourLabel: string
+  readonly minuteLabel: string
+  readonly onChange: (value: string) => void
+}): JSX.Element {
+  const [hour = '00', minute = '00'] = value.split(':')
+  return <div className="dshCronTimePicker" role="group" aria-label={label}>
+    <TimeSegment label={hourLabel} value={hour} options={HOURS} onChange={next => { onChange(`${next}:${minute}`) }} />
+    <span aria-hidden="true">:</span>
+    <TimeSegment label={minuteLabel} value={minute} options={MINUTES} onChange={next => { onChange(`${hour}:${next}`) }} />
+    <Clock3 aria-hidden="true" />
+  </div>
 }
 
 export async function openCronRunSession(
@@ -91,6 +124,7 @@ export function CronTasksSettingsSection({ t, api, localeId, openSession, close 
   const [error, setError] = useState<string>()
   const [draft, setDraft] = useState<Draft>()
   const [detailId, setDetailId] = useState<string>()
+  const [openMenuId, setOpenMenuId] = useState<string>()
   const [query, setQuery] = useState('')
   const [preview, setPreview] = useState<readonly string[]>([])
   const [previewError, setPreviewError] = useState<string>()
@@ -111,6 +145,22 @@ export function CronTasksSettingsSection({ t, api, localeId, openSession, close 
     }, 5_000)
     return () => { window.clearInterval(timer) }
   }, [api])
+  useEffect(() => {
+    if (openMenuId === undefined) return
+    const closeOnOutsideClick = (event: MouseEvent): void => {
+      const target = event.target
+      if (!(target instanceof Element) || target.closest('.dshCronMore') === null) setOpenMenuId(undefined)
+    }
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setOpenMenuId(undefined)
+    }
+    document.addEventListener('click', closeOnOutsideClick)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('click', closeOnOutsideClick)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [openMenuId])
   useEffect(() => {
     if (draft === undefined) { setPreview([]); setPreviewError(undefined); return }
     let current = true
@@ -207,9 +257,9 @@ export function CronTasksSettingsSection({ t, api, localeId, openSession, close 
         <div className="dshCronScheduleChoices" role="group" aria-label={t('frequency')}>
           {SCHEDULE_MODES.map(mode => <button key={mode} type="button" aria-pressed={draft.scheduleMode === mode} onClick={() => { setFriendlySchedule({ scheduleMode: mode }) }}>{t(mode)}</button>)}
         </div>
-        {draft.scheduleMode === 'once' && <label className="dshCronNarrowField">{t('runDateTime')}<input type="datetime-local" required value={draft.oneTimeLocal} min={localDateTimeInput(new Date())} onChange={event => { setDraft({ ...draft, oneTimeLocal: event.target.value }) }} /></label>}
+        {draft.scheduleMode === 'once' && <div className="dshCronField dshCronNarrowField"><span>{t('runDateTime')}</span><div className="dshCronDateTimeFields"><input type="date" aria-label={t('date')} required value={draft.oneTimeLocal.slice(0, 10)} min={localDateTimeInput(new Date()).slice(0, 10)} onChange={event => { setDraft({ ...draft, oneTimeLocal: `${event.target.value}T${draft.oneTimeLocal.slice(11, 16) || '09:00'}` }) }} /><CronTimePicker value={draft.oneTimeLocal.slice(11, 16) || '09:00'} label={t('runAt')} hourLabel={t('hour')} minuteLabel={t('minute')} onChange={time => { setDraft({ ...draft, oneTimeLocal: `${draft.oneTimeLocal.slice(0, 10)}T${time}` }) }} /></div></div>}
         {['daily', 'weekdays', 'weekends', 'weekly'].includes(draft.scheduleMode) && <div className="dshCronFriendlyFields">
-          <label>{t('runAt')}<input type="time" required value={draft.time} onChange={event => { setFriendlySchedule({ time: event.target.value }) }} /></label>
+          <div className="dshCronField"><span>{t('runAt')}</span><CronTimePicker value={draft.time} label={t('runAt')} hourLabel={t('hour')} minuteLabel={t('minute')} onChange={time => { setFriendlySchedule({ time }) }} /></div>
         </div>}
         {draft.scheduleMode === 'weekly' && <div><span className="dshCronFieldLabel">{t('chooseWeekdays')}</span><div className="dshCronWeekdays" role="group" aria-label={t('chooseWeekdays')}>
           {WEEKDAYS.map(day => <button key={day} type="button" aria-pressed={draft.weekdays.includes(day)} onClick={() => { toggleWeekday(day) }}>{t(`weekdayShort${day}` as 'weekdayShort0')}</button>)}
@@ -248,7 +298,7 @@ export function CronTasksSettingsSection({ t, api, localeId, openSession, close 
       : filtered.length === 0 ? <p className="dshIntegrationsEmpty">{t('noSearchResults')}</p>
       : <div className="dshCronList">{filtered.map(job => <article className="dshCronRow" key={job.id}>
         <span className="dshCronStatusDot" data-enabled={job.enabled} /><button className="dshCronMain" type="button" onClick={() => { setDetailId(job.id) }}><span className="dshCronTitle"><strong>{job.name}</strong>{running.includes(job.id) && <em>{t('running')}</em>}</span><span className="dshCronSchedule">{scheduleLabel(job)}</span><span className="dshCronNext"><b>{t('nextRun')}</b> {localDate(job.nextRunAt, activeLocale)}</span></button>
-        <div className="dshIntegrationsRowActions">{running.includes(job.id) ? <button className="dshIntegrationsCommand dshCronDanger" type="button" disabled={busy !== undefined} onClick={() => { if (window.confirm(t('confirmCancel'))) void perform(`cancel:${job.id}`, async () => { await api.action({ action: 'cancel', id: job.id }) }) }}>{busy === `cancel:${job.id}` ? t('cancelling') : t('cancelRun')}</button> : <button className="dshIntegrationsCommand" type="button" disabled={busy !== undefined || !job.enabled} onClick={() => { void perform(`run:${job.id}`, async () => { await api.action({ action: 'run', id: job.id }) }) }}>{busy === `run:${job.id}` ? t('running') : t('run')}</button>}<button className="dshIntegrationsCommand" type="button" disabled={busy !== undefined || running.includes(job.id)} onClick={() => { openEdit(job) }}>{t('edit')}</button><details className="dshCronMore"><summary aria-label={t('more')} title={t('more')}><MoreHorizontal aria-hidden="true" /></summary><div><button type="button" disabled={busy !== undefined || running.includes(job.id)} onClick={() => { void perform(`toggle:${job.id}`, async () => { await api.action({ action: 'toggle', id: job.id, enabled: !job.enabled }) }) }}>{job.enabled ? t('disable') : t('enable')}</button><button className="dshCronDanger" type="button" disabled={busy !== undefined || running.includes(job.id)} onClick={() => { if (window.confirm(t('confirmDelete'))) void perform(`delete:${job.id}`, async () => { await api.action({ action: 'delete', id: job.id }) }) }}>{t('delete')}</button></div></details></div>
+        <div className="dshIntegrationsRowActions">{running.includes(job.id) ? <button className="dshIntegrationsCommand dshCronDanger" type="button" disabled={busy !== undefined} onClick={() => { if (window.confirm(t('confirmCancel'))) void perform(`cancel:${job.id}`, async () => { await api.action({ action: 'cancel', id: job.id }) }) }}>{busy === `cancel:${job.id}` ? t('cancelling') : t('cancelRun')}</button> : <button className="dshIntegrationsCommand" type="button" disabled={busy !== undefined || !job.enabled} onClick={() => { void perform(`run:${job.id}`, async () => { await api.action({ action: 'run', id: job.id }) }) }}>{busy === `run:${job.id}` ? t('running') : t('run')}</button>}<button className="dshIntegrationsCommand" type="button" disabled={busy !== undefined || running.includes(job.id)} onClick={() => { openEdit(job) }}>{t('edit')}</button><div className="dshCronMore"><button className="dshCronMoreTrigger" type="button" aria-label={t('more')} title={t('more')} aria-haspopup="menu" aria-expanded={openMenuId === job.id} onClick={() => { setOpenMenuId(current => current === job.id ? undefined : job.id) }}><MoreHorizontal aria-hidden="true" /></button>{openMenuId === job.id && <div className="dshCronMoreMenu" role="menu"><button role="menuitem" type="button" disabled={busy !== undefined || running.includes(job.id)} onClick={() => { setOpenMenuId(undefined); void perform(`toggle:${job.id}`, async () => { await api.action({ action: 'toggle', id: job.id, enabled: !job.enabled }) }) }}>{job.enabled ? t('disable') : t('enable')}</button><button className="dshCronDanger" role="menuitem" type="button" disabled={busy !== undefined || running.includes(job.id)} onClick={() => { setOpenMenuId(undefined); if (window.confirm(t('confirmDelete'))) void perform(`delete:${job.id}`, async () => { await api.action({ action: 'delete', id: job.id }) }) }}>{t('delete')}</button></div>}</div></div>
       </article>)}</div>}
   </section>
 }

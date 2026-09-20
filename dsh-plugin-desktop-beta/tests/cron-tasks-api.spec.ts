@@ -53,7 +53,7 @@ describe('desktop Cron task client API', () => {
     await openCronTaskSession(api, navigation, 'task-1', 'cron-1')
 
     expect(api.action).toHaveBeenCalledWith({ action: 'attach-session', id: 'task-1', sessionId: 'cron-1' })
-    expect(calls).toEqual(['workspace:workspace-1:cron-1', 'sessions', 'rename:cron-1:Morning report', 'open:cron-1'])
+    expect(calls).toEqual(['workspace:workspace-1:cron-1', 'sessions', 'rename:cron-1:[Cron] Morning report', 'open:cron-1'])
   })
 
   it('does not navigate when the attachment response is malformed', async () => {
@@ -70,14 +70,16 @@ describe('desktop Cron task client API', () => {
     let removed: ((sessionId: string) => void) | undefined
     const stop = vi.fn()
     const refreshSessions = vi.fn(async () => {})
+    const markUnread = vi.fn()
     const api = { action: vi.fn(), read: vi.fn(async () => ({ ...view, jobs: [{
       id: 'task-1', name: 'Morning report', prompt: 'Report', expression: '0 9 * * *', timeZone: 'UTC',
       activeSessionId: 'cron-1', enabled: true, nextRunAt: null, history: [],
     }] })) }
-    const dispose = watchCronTaskSessionDisposals(api, (listener) => { removed = listener; return stop }, refreshSessions)
+    const dispose = watchCronTaskSessionDisposals(api, (listener) => { removed = listener; return stop }, refreshSessions, markUnread)
 
     removed?.('cron-1')
     await vi.waitFor(() => { expect(refreshSessions).toHaveBeenCalledTimes(1) })
+    expect(markUnread).toHaveBeenCalledWith('cron-1')
 
     dispose()
     expect(stop).toHaveBeenCalledTimes(1)
