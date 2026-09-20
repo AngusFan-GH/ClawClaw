@@ -4,6 +4,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from './workspace-client-contract.ts'
 import { CronTasksSettingsSection } from './CronTasksSettingsSection.tsx'
 import { installCronTaskSessionIcons } from './cron-task-session-icon.ts'
@@ -35,7 +36,11 @@ export function applyCronTasksSettings(ctx: ClientContext): void {
   ctx.inject(['sessions', 'workspaces'], (scope: ClientContext) => {
     scope.effect(() => {
       const sessions = scope.get('sessions') as unknown as ClientCronSessions
-      const reminders = installCronTaskUnreadReminders({ sessions, workspaces: scope.workspaces })
+      const reminders = installCronTaskUnreadReminders({
+        sessions,
+        statuses: scope.uiSession.sessionStatus,
+        workspaces: scope.workspaces,
+      })
       const stopIcons = installCronTaskSessionIcons({ sessions, label: t('sessionConversation') })
       const stop = watchCronTaskSessionDisposals(
         api,

@@ -7,7 +7,8 @@ it('checks preset dependencies through the real Desktop resolver without importi
   const require = createRequire(import.meta.url)
   const script = `
     import assert from 'node:assert/strict';
-    import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+    import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+    import { createRequire } from 'node:module';
     import { tmpdir } from 'node:os';
     import { dirname, join } from 'node:path';
     import { pathToFileURL } from 'node:url';
@@ -37,10 +38,20 @@ it('checks preset dependencies through the real Desktop resolver without importi
       assert.equal(rows.find(p => p.id === 'subpath').broken, undefined);
       assert.ok(rows.find(p => p.id === 'missing').broken);
       assert.ok(rows.find(p => p.id === 'bad-export').broken);
-      const shipped = await scanRoot({ path: join(dirname(process.argv[1]), '../presets'), trust: 'system' }, base);
-      const standard = shipped.find(p => p.id === 'standard');
-      assert.ok(standard);
-      assert.equal(standard.broken, undefined);
+      const presetRoot = join(dirname(process.argv[1]), '../presets');
+      const resolveFromProfile = createRequire(base);
+      const unresolvable = [];
+      for (const id of readdirSync(presetRoot)) {
+        const yaml = readFileSync(join(presetRoot, id, 'agent.cordis.yml'), 'utf8');
+        for (const [, name] of yaml.matchAll(/^\\s*-?\\s*name:\\s*'([^']+)'/gm)) {
+          if (name.startsWith('cordis:')) continue;
+          try { resolveFromProfile.resolve(name); } catch { unresolvable.push(id + ': ' + name); }
+        }
+      }
+      assert.deepEqual([...new Set(unresolvable)], []);
+      const shipped = await scanRoot({ path: presetRoot, trust: 'system' }, base);
+      assert.ok(shipped.find(p => p.id === 'standard'), 'the shipped preset root must be readable');
+      assert.deepEqual(shipped.filter(p => p.broken !== undefined).map(p => p.id + ': ' + p.broken), []);
       // Profile plugins are visible, but discovery must not evaluate their code.
       const override = join(profile, 'node_modules', '@desktop-regression', 'probe');
       mkdirSync(override, { recursive: true });

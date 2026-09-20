@@ -22,18 +22,35 @@ function memoryStorage(initial?: readonly string[]) {
   }
 }
 
-function sessionState(current?: string, completed = false) {
+function sessionState() {
   const id = SessionId('cron-1')
   return {
-    ids: [id], byId: { [id]: { id, displayTitle: 'Report', running: false, completed, blank: false, updatedAt: 1 } },
-    current: current === undefined ? undefined : SessionId(current), phase: 'ready' as const,
-    subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
+    ids: [id],
+    byId: { [id]: {
+      id,
+      displayTitle: 'Report',
+      running: false,
+      retainedBy: {},
+      blank: false,
+      updatedAt: 1,
+    } },
+    phase: 'ready' as const,
+    subagentsByParent: {},
+    jobsBySession: {},
   }
 }
 
 function workspaceState(archivedSessionIds: readonly string[] = []) {
   return { items: [], archivedSessionIds: archivedSessionIds.map(SessionId), state: 'idle' as const,
     phase: 'ready' as const, error: null }
+}
+
+function statusState(completionUnread = true) {
+  return new Map([[SessionId('cron-1'), {
+    running: false,
+    pendingInteraction: undefined,
+    completionUnread,
+  }]])
 }
 
 describe('Cron task unread reminders', () => {
@@ -43,7 +60,10 @@ describe('Cron task unread reminders', () => {
     const storage = memoryStorage()
     const handleSessionStatus = vi.fn()
     const reminders = installCronTaskUnreadReminders({
-      sessions: { list: sessionsList, handleSessionStatus }, workspaces: { list: workspacesList }, storage,
+      sessions: { list: sessionsList, handleSessionStatus },
+      statuses: source(statusState()),
+      workspaces: { list: workspacesList },
+      storage,
     })
 
     reminders.markUnread('cron-1')
@@ -58,23 +78,30 @@ describe('Cron task unread reminders', () => {
     const sessionsList = source(sessionState())
     const storage = memoryStorage(['cron-1'])
     const handleSessionStatus = vi.fn()
+    const statuses = source(statusState())
     installCronTaskUnreadReminders({
-      sessions: { list: sessionsList, handleSessionStatus }, workspaces: { list: source(workspaceState()) }, storage,
+      sessions: { list: sessionsList, handleSessionStatus },
+      statuses,
+      workspaces: { list: source(workspaceState()) },
+      storage,
     })
     expect(handleSessionStatus).toHaveBeenCalledTimes(2)
 
-    sessionsList.set(sessionState('cron-1', true))
+    statuses.set(statusState(false))
 
     expect(storage.read()).toEqual([])
   })
 
   it('does not mark the visible Session and removes archived reminders', () => {
-    const sessionsList = source(sessionState('cron-1'))
+    const sessionsList = source(sessionState())
     const workspacesList = source(workspaceState())
     const storage = memoryStorage()
     const handleSessionStatus = vi.fn()
     const reminders = installCronTaskUnreadReminders({
-      sessions: { list: sessionsList, handleSessionStatus }, workspaces: { list: workspacesList }, storage,
+      sessions: { list: sessionsList, handleSessionStatus },
+      statuses: source(statusState(false)),
+      workspaces: { list: workspacesList },
+      storage,
     })
     reminders.markUnread('cron-1')
     expect(storage.read()).toEqual([])

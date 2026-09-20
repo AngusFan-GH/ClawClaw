@@ -400,9 +400,9 @@ the package names, versions, and licenses for transparency.
 | content-disposition | 1.1.0 | MIT |
 | content-type | 2.1.0 | MIT |
 | cookie | 0.7.2 | MIT |
-| cron-parser | 5.7.0 | MIT |
 | cookie-signature | 1.2.2 | MIT |
 | cors | 2.8.6 | MIT |
+| cron-parser | 5.7.0 | MIT |
 | cross-spawn | 7.0.6 | MIT |
 | curve25519-js | 0.0.4 | MIT |
 | data-uri-to-buffer | 4.0.1 | MIT |
@@ -496,6 +496,7 @@ the package names, versions, and licenses for transparency.
 | long | 5.3.2 | Apache-2.0 |
 | loose-envify | 1.4.0 | MIT |
 | lru-cache | 11.5.2 | BlueOak-1.0.0 |
+| luxon | 3.7.2 | MIT |
 | math-intrinsics | 1.1.0 | MIT |
 | media-typer | 2.0.0 | MIT |
 | merge-descriptors | 2.0.0 | MIT |

@@ -3,6 +3,7 @@
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import type { SessionStatusSnapshot } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 export const CRON_TASK_UNREAD_STORAGE_KEY = 'dsh.desktop.cron-tasks.unread.v1'
@@ -28,6 +29,7 @@ export interface CronTaskUnreadReminders {
 
 export interface CronTaskUnreadReminderOptions {
   readonly sessions: CronTaskReminderSessions
+  readonly statuses: ObservableSnapshot<SessionStatusSnapshot>
   readonly workspaces: CronTaskReminderWorkspaces
   readonly storage?: ReminderStorage | undefined
   readonly warn?: ((message: string, reason: unknown) => void) | undefined
@@ -55,7 +57,7 @@ function restoreUnread(storage: ReminderStorage | undefined, warn: (message: str
 
 /** Keep Cron completion reminders across the live-Agent disposal boundary and app restarts. */
 export function installCronTaskUnreadReminders(options: CronTaskUnreadReminderOptions): CronTaskUnreadReminders {
-  const { sessions, workspaces } = options
+  const { sessions, statuses, workspaces } = options
   const storage = options.storage ?? browserStorage()
   const warn = options.warn ?? ((message, reason) => { console.warn(message, reason) })
   const unread = restoreUnread(storage, warn)
@@ -75,8 +77,9 @@ export function installCronTaskUnreadReminders(options: CronTaskUnreadReminderOp
       const snapshot = sessions.list.getSnapshot()
       const archived = new Set(workspaces.list.getSnapshot().archivedSessionIds.map(String))
       let changed = false
+      const statusSnapshot = statuses.getSnapshot()
       for (const sessionId of unread) {
-        if (sessionId === snapshot.current || archived.has(sessionId)) {
+        if (archived.has(sessionId)) {
           unread.delete(sessionId)
           armed.delete(sessionId)
           changed = true
@@ -89,24 +92,38 @@ export function installCronTaskUnreadReminders(options: CronTaskUnreadReminderOp
           armed.delete(sessionId)
           continue
         }
-        if (summary.completed || armed.has(sessionId)) continue
+        if (armed.has(sessionId)) {
+          if (statusSnapshot.get(sessionId as SessionId)?.completionUnread === false) {
+            unread.delete(sessionId)
+            armed.delete(sessionId)
+            changed = true
+          }
+          continue
+        }
         armed.add(sessionId)
         // The manager owns the existing green completion reminder. A batched
         // synthetic edge restores it without introducing a second row UI.
         sessions.handleSessionStatus(sessionId as SessionId, true)
         sessions.handleSessionStatus(sessionId as SessionId, false)
+        if (statuses.getSnapshot().get(sessionId as SessionId)?.completionUnread === false) {
+          unread.delete(sessionId)
+          armed.delete(sessionId)
+          changed = true
+        }
       }
+      if (changed) persist()
     } finally {
       reconciling = false
     }
   }
 
   const stopSessions = sessions.list.subscribe(reconcile)
+  const stopStatuses = statuses.subscribe(reconcile)
   const stopWorkspaces = workspaces.list.subscribe(reconcile)
   reconcile()
   return {
     markUnread(sessionId) {
-      if (disposed || sessionId === '' || sessions.list.getSnapshot().current === sessionId) return
+      if (disposed || sessionId === '') return
       if (!unread.has(sessionId)) {
         unread.add(sessionId)
         persist()
@@ -118,6 +135,7 @@ export function installCronTaskUnreadReminders(options: CronTaskUnreadReminderOp
       if (disposed) return
       disposed = true
       stopWorkspaces()
+      stopStatuses()
       stopSessions()
       armed.clear()
     },

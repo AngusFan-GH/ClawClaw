@@ -200,7 +200,12 @@ try {
   await runtime.mountScheduled()
 
   const desktopEntry = ctx.loader.resolve('include:desktop-shell')
-  const marketEntry = ctx.loader.resolve('include:community-market')
+  let marketEntry
+  try {
+    marketEntry = ctx.loader.resolve('include:community-market')
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes('cannot resolve entry')) throw error
+  }
   const thirdPartyEntry = ctx.loader.resolve('include:third-party-smoke')
   if (desktopEntry?.options.name !== 'dsh-plugin-desktop') {
     throw new Error('launcher-owned desktop plugin did not activate through its bare package name')

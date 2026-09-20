@@ -11,6 +11,8 @@ vi.mock('../src/client/DesktopSettingsSection.tsx', () => ({ DesktopSettingsSect
 vi.mock('../src/client/DesktopTerminalSettingsAction.tsx', () => ({ DesktopTerminalSettingsAction: vi.fn() }))
 vi.mock('../src/client/spiritx-onboarding.tsx', () => ({ applySpiritXOnboarding: vi.fn() }))
 vi.mock('../src/client/workspace-directory-flow.tsx', () => ({ applyWorkspaceDirectoryFlow: vi.fn() }))
+vi.mock('../src/client/cron-tasks-settings.ts', () => ({ applyCronTasksSettings: vi.fn() }))
+vi.mock('../src/client/skills-settings.ts', () => ({ applySkillsSettings: vi.fn() }))
 
 describe('ClawClaw product copy', () => {
   it.each([
@@ -33,7 +35,10 @@ describe('ClawClaw product copy', () => {
       expect(document.querySelector('h1')?.textContent).toBe(brandedHero)
       expect(document.getElementById('preview')?.style.display).toBe('none')
       expect(inject.mock.calls.map(([name]) => name)).toEqual(['sidebar.brand.mark', 'sidebar.brand.name'])
-      expect(effect.mock.calls.map(([, label]) => label)).toEqual(['dsh-plugin-desktop: ClawClaw page identity'])
+      expect(effect.mock.calls.map(([, label]) => label)).toEqual([
+        'dsh-plugin-desktop: ClawClaw page identity',
+        'dsh-plugin-desktop: semantic settings navigation icons',
+      ])
 
       const status = document.createElement('p')
       status.textContent = thinking

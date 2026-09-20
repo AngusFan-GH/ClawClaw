@@ -37,6 +37,24 @@ describe('ClawClaw release manifest', () => {
     await expect(checkForDesktopUpdate({ currentVersion: '2.0.0-beta.1', channel: 'beta', request: async () => manifest('2.0.0', 'stable') })).resolves.toBeNull()
   })
 
+  it('silently ignores network failure and caller cancellation', async () => {
+    await expect(checkForStableUpdate({
+      currentVersion: '2.0.0',
+      request: async () => { throw new Error('offline') },
+    })).resolves.toBeNull()
+
+    const controller = new AbortController()
+    controller.abort()
+    const request = vi.fn(async (_url: string, init: RequestInit) => {
+      expect(init.signal).toBe(controller.signal)
+      throw new DOMException('cancelled', 'AbortError')
+    })
+    await expect(checkForStableUpdate({
+      currentVersion: '2.0.0', request, signal: controller.signal,
+    })).resolves.toBeNull()
+    expect(request).toHaveBeenCalledOnce()
+  })
+
   it.each([
     [{ version: '2.1.0', channel: 'stable', artifacts: {} }],
     [{ version: '2.1.0', channel: 'stable', artifacts: { darwin: { url: 'http://bad.test/a', sha512, size: 1 }, win32: { url: 'https://ok.test/a', sha512, size: 1 } } }],
@@ -50,5 +68,14 @@ describe('ClawClaw release manifest', () => {
     const request = vi.fn(async (_url: string, _init: RequestInit) => manifest('2.1.0'))
     await expect(checkForStableUpdate({ currentVersion: 'v2.0.0', request })).resolves.toBeNull()
     expect(request).not.toHaveBeenCalled()
+  })
+
+  it('silently ignores declared and streamed oversized responses', async () => {
+    await expect(fetchDesktopReleaseManifest('stable', async () => new Response('{}', {
+      headers: { 'content-length': String(MAX_VERSION_RESPONSE_BYTES + 1) },
+    }))).resolves.toBeNull()
+    await expect(fetchDesktopReleaseManifest('stable', async () => new Response(
+      'x'.repeat(MAX_VERSION_RESPONSE_BYTES + 1),
+    ))).resolves.toBeNull()
   })
 })

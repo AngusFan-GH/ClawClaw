@@ -63,12 +63,12 @@ describe('Desktop product copy', () => {
     expect(copy.updateCheckFailedTitle).toBe('无法检查更新')
     expect(copy.terminalErrorTitle).toBe('无法打开 DSH 终端')
     expect(copy.diagnosticsErrorTitle).toBe('无法导出诊断信息')
-    expect(copy.updateAvailableMessage('2.1.0')).toBe('DSH Desktop 2.1.0 已可用。')
+    expect(copy.updateAvailableMessage('2.1.0')).toBe('ClawClaw 2.1.0 已可用。')
   })
 
   it('explains cross-channel Profile risk and routes users to Profile selection', () => {
     const copy = desktopNativeCopy('zh')
-    expect(copy.profileCompatibilityMessage('work', 'DSH Desktop'))
+    expect(copy.profileCompatibilityMessage('work', 'ClawClaw'))
       .toBe('当前 Profile“work”最后一次使用的桌面版本与当前版本不同：')
     expect(copy.profileCompatibilityDetail('2.0.4', '0.1.1-rc.2', 'ClawClaw Beta', '2.0.5-beta.2', '0.1.2-alpha.5'))
       .toBe('最后一次的桌面版/DSH 版本：2.0.4/0.1.1-rc.2\n当前的桌面版/DSH 版本：2.0.5-beta.2/0.1.2-alpha.5')

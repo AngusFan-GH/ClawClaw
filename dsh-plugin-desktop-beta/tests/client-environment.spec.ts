@@ -27,6 +27,9 @@ import {
   WINDOWS_CAPTION_CONTROLS_WIDTH,
 } from '../src/window-chrome.ts'
 
+vi.mock('../src/client/cron-tasks-settings.ts', () => ({ applyCronTasksSettings: vi.fn() }))
+vi.mock('../src/client/skills-settings.ts', () => ({ applySkillsSettings: vi.fn() }))
+
 describe('desktop client environment', () => {
   it.each(['darwin', 'win32', 'linux'])('keeps compatibility chrome out of the %s client slot tree', platform => {
     const marker = platform === 'win32' ? '&dsh-desktop-mica=0' : ''
@@ -37,6 +40,7 @@ describe('desktop client environment', () => {
     const inject = vi.fn()
     const ctx = {
       effect,
+      inject: vi.fn(),
       slots: { inject },
       locale: { bind: () => (key: string) => key },
       settingsScope: { bind: () => ({}) },
@@ -44,7 +48,7 @@ describe('desktop client environment', () => {
     try {
       apply(ctx)
       expect(inject.mock.calls.map(([name]) => name)).toEqual([
-        'settings.section', 'settings.section', 'settings.section', 'settings.action',
+        'settings.section', 'settings.section', 'settings.action',
       ])
       expect(effect.mock.calls.map(([, label]) => label)).not.toContain('desktop: independent compatibility frame styles')
     } finally {
@@ -59,7 +63,11 @@ describe('desktop client environment', () => {
     try {
       expect(parseDesktopClientEnvironment('')).toBeUndefined()
       apply({ effect } as unknown as ClientContext)
-      expect(effect).not.toHaveBeenCalled()
+      expect(effect).toHaveBeenCalledOnce()
+      expect(effect).toHaveBeenCalledWith(
+        expect.any(Function),
+        'dsh-plugin-desktop: semantic settings navigation icons',
+      )
     }
     finally {
       vi.unstubAllGlobals()

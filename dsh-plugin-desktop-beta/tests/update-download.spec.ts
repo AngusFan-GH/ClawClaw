@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -46,6 +46,36 @@ describe('ClawClaw installer download', () => {
   it('rejects a changed release manifest before downloading', async () => {
     const directory = await temp()
     await expect(downloadDesktopUpdate({ platform: 'win32', version: '2.3.0', destinationPath: join(directory, 'update.exe'), request: requestFor('2.3.1', { darwin: dmg(), win32: exe() }) })).rejects.toMatchObject({ code: 'invalid-artifact' })
+  })
+
+  it('passes the caller signal and removes a partial file when aborted during streaming', async () => {
+    const directory = await temp(); const artifact = dmg(); const controller = new AbortController()
+    const destinationPath = join(directory, 'ClawClaw-2.3.0-mac.dmg')
+    const request: UpdateArtifactRequest = async (url, init) => {
+      expect(init.signal).toBe(controller.signal)
+      if (url.endsWith('release.json')) return requestFor('2.3.0', { darwin: artifact, win32: exe() })(url, init)
+      return new Response(new ReadableStream<Uint8Array>({
+        start(stream) { stream.enqueue(artifact.subarray(0, 128)); controller.abort() },
+      }))
+    }
+    await expect(downloadDesktopUpdate({
+      platform: 'darwin', version: '2.3.0', destinationPath, request, signal: controller.signal,
+    })).rejects.toMatchObject({ code: 'aborted' })
+    expect(await readdir(directory)).toEqual([])
+  })
+
+  it('keeps an existing destination until its validated replacement is ready', async () => {
+    const directory = await temp(); const good = dmg(); const bad = Buffer.from(good); bad[0] = 1
+    const destinationPath = join(directory, 'ClawClaw-2.3.0-mac.dmg')
+    await writeFile(destinationPath, 'existing installer')
+    const request: UpdateArtifactRequest = async (url, init) => url.endsWith('release.json')
+      ? requestFor('2.3.0', { darwin: good, win32: exe() })(url, init)
+      : new Response(bad)
+    await expect(downloadDesktopUpdate({
+      platform: 'darwin', version: '2.3.0', destinationPath, request,
+    })).rejects.toMatchObject({ code: 'invalid-artifact' })
+    expect(await readFile(destinationPath, 'utf8')).toBe('existing installer')
+    expect((await readdir(directory)).filter(name => name.endsWith('.partial'))).toEqual([])
   })
 
   it('retains and resolves a completed installer after the new version starts', async () => {

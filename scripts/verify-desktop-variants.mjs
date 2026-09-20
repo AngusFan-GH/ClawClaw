@@ -4,9 +4,17 @@ import { join, relative, resolve, sep } from 'node:path'
 const root = resolve(import.meta.dirname, '..')
 const stableRoot = join(root, 'dsh-plugin-desktop', 'src')
 const betaRoot = join(root, 'dsh-plugin-desktop-beta', 'src')
-// Both editions share behavior. Only release identity and launcher wording differ.
+// Both editions share product behavior. The listed files intentionally bridge
+// different Harness APIs while stable remains on rc.2 and beta tracks alpha.2.
 const betaOnlyPaths = new Set([])
-const allowedDifferences = new Set(['product-identity.ts'])
+const allowedDifferences = new Set([
+  'product-identity.ts',
+  'windows-pwsh-sandbox.ts',
+  'profile.ts',
+  'profile-manager.ts',
+  'client/cron-task-unread.ts',
+  'client/cron-tasks-settings.ts',
+])
 const normalizeIdentity = source => source.toString().replaceAll('dsh-plugin-desktop-beta', 'dsh-plugin-desktop').replaceAll('ClawClaw Beta', 'ClawClaw')
 
 function files(directory, base = directory) {

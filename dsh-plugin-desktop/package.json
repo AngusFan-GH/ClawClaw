@@ -301,6 +301,7 @@
     "@deepseek-ai/dsh-workflow": "0.1.5-rc.2",
     "@deepseek-ai/dsh-workspace": "0.1.5-rc.2",
     "@deepseek-ai/schemastery": "^3.18.2",
+    "@vscode/ripgrep": "1.18.0",
     "adm-zip": "^0.6.0",
     "cron-parser": "5.7.0",
     "dshmarket": "1.38.1",

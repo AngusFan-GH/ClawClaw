@@ -29,8 +29,7 @@ it('prepares request inventory for Desktop-owned entries and private-manifest pl
         } }, {});
         return (await provider.prepare({})).value.packages;
       };
-      // A standalone Profile has no physical copy of the Desktop package.
-      await assert.rejects(() => collect([desktop.name]), /cannot resolve active package/);
+      assert.deepEqual(await collect([desktop.name]), [{ name: desktop.name, version: desktop.version }]);
       release = installProfilePackageResolver(baseUrl);
       assert.deepEqual(await collect([
         desktop.name, desktop.name + '/terminal', desktop.name + '/pnpm',
@@ -48,7 +47,7 @@ it('prepares request inventory for Desktop-owned entries and private-manifest pl
       writeFileSync(join(plugin, 'package.json'), JSON.stringify({ name: 'private-manifest-plugin', exports: './index.js' }));
       await assert.rejects(() => collect(['private-manifest-plugin']), /non-empty name and version/);
       release(); release = undefined;
-      await assert.rejects(() => collect([desktop.name]), /cannot resolve active package/);
+      assert.deepEqual(await collect([desktop.name]), [{ name: desktop.name, version: desktop.version }]);
       console.log('request inventory passed');
     } finally { release?.(); rmSync(root, { recursive: true, force: true }); }
   `
