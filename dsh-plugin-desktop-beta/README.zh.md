@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-`dsh-plugin-desktop-beta` 是 Beta ClawClaw Desktop 包，当前版本 `0.2.0-beta.1`。它提供 Electron bootstrap、隔离 DSH Host、原生窗口/托盘、profile 与 pnpm service、工作区、恢复、更新、Market 选择和 ClawClaw Client 呈现层。安装后的产品身份是 **ClawClaw Beta**（`com.clawclaw.desktop.beta`）。
+`dsh-plugin-desktop-beta` 是 Beta ClawClaw Desktop 包，当前版本 `0.2.1-beta.1`。它提供 Electron bootstrap、隔离 DSH Host、原生窗口/托盘、profile 与 pnpm service、工作区、恢复、更新、Market 选择和 ClawClaw Client 呈现层。安装后的产品身份是 **ClawClaw Beta**（`com.clawclaw.desktop.beta`）。
 
 该包属于根 pnpm workspace，不应作为独立 npm 应用安装：它依赖根目录的 vendored DSH runtime、override、patch、同级 Market 与 Channels workspace 包。
 

@@ -2,7 +2,7 @@
 
 [中文](README.zh.md)
 
-`dsh-plugin-desktop-beta` is the Beta ClawClaw Desktop package, version `0.2.0-beta.1`. It supplies Electron bootstrap, an isolated DSH Host, native windows/tray, profile and pnpm services, workspaces, recovery, updates, Market selection, and the ClawClaw client presentation. Its installed product identity is **ClawClaw Beta** (`com.clawclaw.desktop.beta`).
+`dsh-plugin-desktop-beta` is the Beta ClawClaw Desktop package, version `0.2.1-beta.1`. It supplies Electron bootstrap, an isolated DSH Host, native windows/tray, profile and pnpm services, workspaces, recovery, updates, Market selection, and the ClawClaw client presentation. Its installed product identity is **ClawClaw Beta** (`com.clawclaw.desktop.beta`).
 
 This package is part of the root pnpm workspace. Do not install it as a standalone npm application: it depends on the root vendored DSH runtime, overrides, patches, sibling Market, and Channels workspace package.
 
