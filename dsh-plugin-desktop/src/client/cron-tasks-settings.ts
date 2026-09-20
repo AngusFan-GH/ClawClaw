@@ -4,7 +4,7 @@ import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/clie
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from './workspace-client-contract.ts'
 import { CronTasksSettingsSection } from './CronTasksSettingsSection.tsx'
-import { createCronTasksApi, openCronTaskSession } from './cron-tasks-api.ts'
+import { createCronTasksApi, openCronTaskSession, watchCronTaskSessionDisposals } from './cron-tasks-api.ts'
 import { en, zh, type CronTasksLocaleKey } from './cron-tasks-locales.ts'
 import { installIntegrationsStyles } from './integrations-styles.ts'
 
@@ -24,6 +24,11 @@ export function applyCronTasksSettings(ctx: ClientContext): void {
   const t = ctx.locale.bind(DESKTOP_CRON_TASKS_LOCALE_NAMESPACE)
   ctx.effect(() => ctx.locale.register(DESKTOP_CRON_TASKS_LOCALE_NAMESPACE, { zh, en }), 'dsh-plugin-desktop: Cron task dictionaries')
   ctx.effect(() => installIntegrationsStyles(), 'dsh-plugin-desktop: Cron task styles')
+  ctx.effect(() => watchCronTaskSessionDisposals(
+    api,
+    listener => ctx.remote.$on('api-session/removed', sessionId => { listener(String(sessionId)) }),
+    () => (ctx.get('sessions') as unknown as ClientSessionsNavigation).refresh(),
+  ), 'dsh-plugin-desktop: reconcile disposed Cron task Sessions')
   ctx.inject(['uiWorkspace', 'workspaces'], (scope: ClientContext) => {
     scope.slots.inject('settings.section', () => scope.slots.register({
       name: 'settings.section', id: 'desktop-cron-tasks', order: 92,

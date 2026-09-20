@@ -60,6 +60,7 @@ export interface CronSessionNavigation {
   renameSession(sessionId: string, title: string): Promise<void>
   openSession(sessionId: string): void
 }
+export type CronSessionRemovedSubscription = (listener: (sessionId: string) => void) => () => void
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -106,6 +107,28 @@ export function createCronTasksApi(fetcher: FetchLike = globalThis.fetch.bind(gl
     },
     action: post,
   })
+}
+
+/** Restore a durable Cron Session after its background Agent leaves the live Session projection. */
+export function watchCronTaskSessionDisposals(
+  api: CronTasksApi,
+  subscribe: CronSessionRemovedSubscription,
+  refreshSessions: () => Promise<void>,
+): () => void {
+  let disposed = false
+  let queue = Promise.resolve()
+  const stop = subscribe((sessionId) => {
+    queue = queue.then(async () => {
+      const view = await api.read()
+      if (disposed || view.archivedSessionIds.includes(sessionId)) return
+      if (!view.jobs.some(job => job.activeSessionId === sessionId)) return
+      await refreshSessions()
+    }).catch(() => {})
+  })
+  return () => {
+    disposed = true
+    stop()
+  }
 }
 
 /** Reconcile both client projections before selecting a Host-created background session. */

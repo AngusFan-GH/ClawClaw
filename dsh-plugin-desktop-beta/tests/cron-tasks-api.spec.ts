@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createCronTasksApi, DESKTOP_CRON_TASKS_ACTION_PATH, DESKTOP_CRON_TASKS_PATH,
-  openCronTaskSession } from '../src/client/cron-tasks-api.ts'
+  openCronTaskSession, watchCronTaskSessionDisposals } from '../src/client/cron-tasks-api.ts'
 
-const policy = { requiresHost: true, missedRuns: 'skip', interruptedRuns: 'do-not-retry', timeoutMinutes: 60 }
+const policy = { requiresHost: true, missedRuns: 'skip', interruptedRuns: 'do-not-retry', timeoutMinutes: 60 } as const
 const view = { jobs: [], running: [], archivedSessionIds: [], workspaces: [{ id: 'workspace-1', title: 'Project', path: '/work/project' }],
   defaultWorkspaceId: 'workspace-1', policy }
 function response(value: unknown, status = 200): Response {
@@ -64,5 +64,37 @@ describe('desktop Cron task client API', () => {
     }
     await expect(openCronTaskSession(api, navigation, 'task-1', 'cron-1')).rejects.toThrow(/attachment response/)
     expect(navigation.openSession).not.toHaveBeenCalled()
+  })
+
+  it('restores a durable Cron Session after its background Agent is disposed', async () => {
+    let removed: ((sessionId: string) => void) | undefined
+    const stop = vi.fn()
+    const refreshSessions = vi.fn(async () => {})
+    const api = { action: vi.fn(), read: vi.fn(async () => ({ ...view, jobs: [{
+      id: 'task-1', name: 'Morning report', prompt: 'Report', expression: '0 9 * * *', timeZone: 'UTC',
+      activeSessionId: 'cron-1', enabled: true, nextRunAt: null, history: [],
+    }] })) }
+    const dispose = watchCronTaskSessionDisposals(api, (listener) => { removed = listener; return stop }, refreshSessions)
+
+    removed?.('cron-1')
+    await vi.waitFor(() => { expect(refreshSessions).toHaveBeenCalledTimes(1) })
+
+    dispose()
+    expect(stop).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not refresh Sessions for unrelated or archived removals', async () => {
+    let removed: ((sessionId: string) => void) | undefined
+    const refreshSessions = vi.fn(async () => {})
+    const api = { action: vi.fn(), read: vi.fn(async () => ({ ...view, archivedSessionIds: ['cron-archived'], jobs: [{
+      id: 'task-1', name: 'Morning report', prompt: 'Report', expression: '0 9 * * *', timeZone: 'UTC',
+      activeSessionId: 'cron-archived', enabled: true, nextRunAt: null, history: [],
+    }] })) }
+    watchCronTaskSessionDisposals(api, (listener) => { removed = listener; return () => {} }, refreshSessions)
+
+    removed?.('ordinary-session')
+    removed?.('cron-archived')
+    await vi.waitFor(() => { expect(api.read).toHaveBeenCalledTimes(2) })
+    expect(refreshSessions).not.toHaveBeenCalled()
   })
 })
