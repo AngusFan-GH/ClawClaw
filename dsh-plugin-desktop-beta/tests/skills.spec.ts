@@ -1,6 +1,14 @@
-import { describe, expect, it, vi } from 'vitest'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { DesktopSkillsController, setSkillModelInvocableDocument, setSkillUserInvocableDocument } from '../src/skills.ts'
+import {
+  createStructuredSkillDocument, DesktopSkillsController, setSkillModelInvocableDocument,
+  setSkillUserInvocableDocument, updateStructuredSkillDocument,
+} from '../src/skills.ts'
+
+afterEach(() => { vi.unstubAllEnvs() })
 
 describe('Desktop Skills', () => {
   it('changes only the standard model visibility frontmatter field', () => {
@@ -27,6 +35,30 @@ describe('Desktop Skills', () => {
     expect(setSkillModelInvocableDocument(plain, false)).toBe(
       '---\ndisable-model-invocation: true\n---\n\n# Skill\n\nInstructions.\n',
     )
+  })
+
+  it('creates a structured Skill document with optional routing guidance', () => {
+    expect(createStructuredSkillDocument({ name: 'release-check', description: 'Check a release',
+      whenToUse: 'Before publishing', instructions: '# Workflow\n\nRun every check.' })).toBe(
+      '---\nname: release-check\ndescription: Check a release\nwhenToUse: Before publishing\n---\n\n# Workflow\n\nRun every check.\n',
+    )
+  })
+
+  it('updates authored fields without dropping invocation or custom metadata', () => {
+    const original = '---\nname: review\ndescription: Old\nwhenToUse: Old use\ndisable-model-invocation: true\nmetadata:\n  owner: desktop\n---\n\nOld instructions.\n'
+    const updated = updateStructuredSkillDocument(original, { name: 'review', description: 'New description',
+      instructions: 'New instructions.' })
+    expect(updated).toContain('description: New description')
+    expect(updated).not.toContain('whenToUse')
+    expect(updated).toContain('disable-model-invocation: true')
+    expect(updated).toContain('owner: desktop')
+    expect(updated).toContain('New instructions.')
+  })
+
+  it('rejects invalid structured fields', () => {
+    expect(() => createStructuredSkillDocument({ name: 'Not Valid', description: 'Description', instructions: 'Instructions' })).toThrow('kebab-case')
+    expect(() => createStructuredSkillDocument({ name: 'valid', description: ' ', instructions: 'Instructions' })).toThrow('description')
+    expect(() => createStructuredSkillDocument({ name: 'valid', description: 'Description', instructions: ' ' })).toThrow('instructions')
   })
 })
 
@@ -68,5 +100,41 @@ describe('Desktop Skills preset catalog', () => {
     } as unknown as Context)
     await expect(controller.read()).rejects.toThrow('preset unavailable')
     expect(snapshot).not.toHaveBeenCalled()
+  })
+
+  it('updates only a regular file in a user Skill library', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'clawclaw-skills-'))
+    vi.stubEnv('DSH_HOME', root)
+    const path = join(root, 'skills', 'review', 'SKILL.md')
+    await mkdir(join(root, 'skills', 'review'), { recursive: true })
+    await writeFile(path, '---\nname: review\ndescription: Old\ncustom: keep\n---\n\nOld.\n')
+    const userSkill = { ...skill, source: 'user-dsh', path }
+    const ctx = { get: () => undefined, skills: {
+      get: vi.fn(async () => userSkill), snapshot: vi.fn(async () => ({ skills: [userSkill], complete: true })),
+    } } as unknown as Context
+    try {
+      const result = await new DesktopSkillsController(ctx).update('review', {
+        name: 'review', description: 'Updated', whenToUse: 'During review', instructions: 'Use the checklist.',
+      })
+      expect(result.skills[0]).toEqual(expect.objectContaining({ description: 'Updated', whenToUse: 'During review' }))
+      expect(await readFile(path, 'utf8')).toContain('custom: keep')
+      expect(await readFile(path, 'utf8')).toContain('Use the checklist.')
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
+
+  it('creates a user Skill bundle without waiting for filesystem discovery', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'clawclaw-skills-create-'))
+    vi.stubEnv('DSH_HOME', root)
+    const ctx = { get: () => undefined, skills: { snapshot: vi.fn(async () => ({ skills: [], complete: true })) } } as unknown as Context
+    try {
+      const result = await new DesktopSkillsController(ctx).create({
+        name: 'release-check', description: 'Check a release', whenToUse: 'Before publishing', instructions: 'Run all checks.',
+      })
+      expect(result.skills).toEqual([expect.objectContaining({ name: 'release-check', source: 'user-dsh', editable: true })])
+      expect(await readFile(join(root, 'skills', 'release-check', 'SKILL.md'), 'utf8')).toContain('whenToUse: Before publishing')
+      await expect(new DesktopSkillsController(ctx).create({
+        name: 'release-check', description: 'Duplicate', instructions: 'No.',
+      })).rejects.toThrow('already exists')
+    } finally { await rm(root, { recursive: true, force: true }) }
   })
 })

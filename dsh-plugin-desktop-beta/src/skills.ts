@@ -12,7 +12,7 @@ import { parseDocument } from 'yaml'
 import { registerDesktopJsonApi } from './desktop-json-api.ts'
 import {
   DESKTOP_SKILLS_ACTION_PATH, DESKTOP_SKILLS_PATH,
-  type DesktopRecycledSkill, type DesktopSkillDetail, type DesktopSkillsView, type DesktopSkillView,
+  type DesktopRecycledSkill, type DesktopSkillDetail, type DesktopSkillInput, type DesktopSkillsView, type DesktopSkillView,
 } from './skills-contract.ts'
 
 export * from './skills-contract.ts'
@@ -35,6 +35,11 @@ function projectSkillDetail(skill: SkillDefinition): DesktopSkillDetail {
   return Object.freeze({ ...projectSkill(skill), content: skill.content,
     ...(skill.path === undefined ? {} : { path: skill.path }) })
 }
+function projectSkillInput(skill: DesktopSkillView, input: DesktopSkillInput): DesktopSkillView {
+  const { whenToUse: _whenToUse, ...rest } = skill
+  return Object.freeze({ ...rest, description: input.description,
+    ...(input.whenToUse === undefined ? {} : { whenToUse: input.whenToUse }) })
+}
 function isPathInside(root: string, target: string): boolean {
   const path = relative(root, target)
   return path !== '' && path !== '..' && !path.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`)
@@ -48,6 +53,22 @@ function safeSkillName(value: string): string {
   return value
 }
 
+function skillInput(value: unknown, expectedName?: string): DesktopSkillInput {
+  if (!isRecord(value) || typeof value.name !== 'string' || typeof value.description !== 'string'
+    || typeof value.instructions !== 'string' || (value.whenToUse !== undefined && typeof value.whenToUse !== 'string')) {
+    throw new TypeError('Invalid Skill fields')
+  }
+  const name = safeSkillName(value.name.trim())
+  if (expectedName !== undefined && name !== expectedName) throw new Error('Skill name cannot be changed')
+  const description = value.description.trim()
+  const whenToUse = value.whenToUse?.trim()
+  const instructions = value.instructions.trim()
+  if (description === '') throw new Error('Skill description is required')
+  if (instructions === '') throw new Error('Skill instructions are required')
+  if (description.length > 4_000 || (whenToUse?.length ?? 0) > 4_000) throw new Error('Skill metadata is too large')
+  return Object.freeze({ name, description, ...(whenToUse === undefined || whenToUse === '' ? {} : { whenToUse }), instructions })
+}
+
 function skillDocument(text: string): { readonly name: string } {
   const lines = text.split(/\r?\n/u)
   if (lines[0]?.trim() !== '---') throw new Error('Skill must start with YAML frontmatter')
@@ -59,6 +80,34 @@ function skillDocument(text: string): { readonly name: string } {
     throw new Error('Skill frontmatter requires a name and description')
   }
   return { name: safeSkillName(data.name) }
+}
+
+
+export function createStructuredSkillDocument(value: DesktopSkillInput): string {
+  const input = skillInput(value)
+  const document = parseDocument('', { prettyErrors: true })
+  document.set('name', input.name)
+  document.set('description', input.description)
+  if (input.whenToUse !== undefined) document.set('whenToUse', input.whenToUse)
+  return `---\n${document.toString({ lineWidth: 0 }).trimEnd()}\n---\n\n${input.instructions}\n`
+}
+
+export function updateStructuredSkillDocument(text: string, value: DesktopSkillInput): string {
+  const input = skillInput(value, value.name)
+  const newline = text.includes('\r\n') ? '\r\n' : '\n'
+  const lines = text.split(/\r?\n/u)
+  if (lines[0]?.trim() !== '---') throw new Error('Skill must start with YAML frontmatter')
+  const closing = lines.slice(1).findIndex(line => line.trim() === '---')
+  if (closing < 0) throw new Error('Skill frontmatter is not terminated')
+  const document = parseDocument(lines.slice(1, closing + 1).join('\n'), { prettyErrors: true })
+  const data = document.toJS()
+  if (document.errors.length > 0 || !isRecord(data)) throw new Error('Skill frontmatter must be a YAML map')
+  if (data.name !== input.name) throw new Error('Skill name does not match its file')
+  document.set('description', input.description)
+  if (input.whenToUse === undefined) document.delete('whenToUse')
+  else document.set('whenToUse', input.whenToUse)
+  const frontmatter = document.toString({ lineWidth: 0 }).trimEnd().replaceAll('\n', newline)
+  return `---${newline}${frontmatter}${newline}---${newline}${newline}${input.instructions}${newline}`
 }
 
 export function setSkillModelInvocableDocument(text: string, enabled: boolean): string {
@@ -90,21 +139,32 @@ function setSkillInvocationDocument(text: string, key: string, value: boolean): 
 }
 
 async function writeSkillInvocation(skill: SkillDefinition, key: 'model' | 'user', enabled: boolean): Promise<void> {
+  const { target, mode } = await writableSkillFile(skill)
+  const text = await readFile(target, 'utf8')
+  const next = key === 'model' ? setSkillModelInvocableDocument(text, enabled) : setSkillUserInvocableDocument(text, enabled)
+  if (next === text) return
+  await atomicWrite(target, next, mode)
+}
+
+async function writableSkillFile(skill: SkillDefinition): Promise<{ readonly target: string, readonly mode: number }> {
   if ((skill.source !== 'user-dsh' && skill.source !== 'user-agents') || skill.provider !== 'filesystem' || skill.path === undefined) {
     throw new Error('Only Skills in a user library can be changed here')
   }
   const root = await realpath(skill.source === 'user-dsh' ? skillLibraryRoot() : agentsSkillLibraryRoot())
+  const presentedInfo = await lstat(skill.path)
+  if (presentedInfo.isSymbolicLink()) throw new Error('Skill file must not be a symbolic link')
   const target = await realpath(skill.path)
   if (!isPathInside(root, target)) throw new Error('Skill file is outside its user library')
   const info = await lstat(target)
   if (!info.isFile() || info.isSymbolicLink()) throw new Error('Skill file must be a regular file')
-  const text = await readFile(target, 'utf8')
-  const next = key === 'model' ? setSkillModelInvocableDocument(text, enabled) : setSkillUserInvocableDocument(text, enabled)
-  if (next === text) return
+  return { target, mode: info.mode }
+}
+
+async function atomicWrite(target: string, text: string, mode: number): Promise<void> {
   const temporary = resolve(dirname(target), `.${randomUUID()}.tmp`)
   try {
-    await writeFile(temporary, next, { encoding: 'utf8', mode: info.mode })
-    if (process.platform !== 'win32') await chmod(temporary, info.mode)
+    await writeFile(temporary, text, { encoding: 'utf8', mode })
+    if (process.platform !== 'win32') await chmod(temporary, mode)
     await rename(temporary, target)
   } catch (cause) {
     await rm(temporary, { force: true }).catch(() => {})
@@ -163,13 +223,43 @@ export class DesktopSkillsController {
     }).filter((entry): entry is DesktopRecycledSkill => entry !== undefined))
   }
   async importDocument(text: string): Promise<DesktopSkillsView> {
+    if (Buffer.byteLength(text, 'utf8') > MAX_SKILL_CONTENT_BYTES) throw new Error('Skill content is too large')
     const { name } = skillDocument(text)
-    const root = skillLibraryRoot(); const target = resolve(root, name, 'SKILL.md')
-    await mkdir(dirname(target), { recursive: true, mode: 0o700 })
-    const existing = await lstat(target).catch(cause => (cause as NodeJS.ErrnoException).code === 'ENOENT' ? undefined : Promise.reject(cause))
-    if (existing !== undefined) throw new Error(`A user Skill named ${name} already exists`)
-    await writeFile(target, text, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+    const root = skillLibraryRoot(); const directory = resolve(root, name); const target = resolve(directory, 'SKILL.md')
+    await mkdir(root, { recursive: true, mode: 0o700 })
+    try { await mkdir(directory, { mode: 0o700 }) } catch (cause) {
+      if ((cause as NodeJS.ErrnoException).code === 'EEXIST') throw new Error(`A user Skill named ${name} already exists`)
+      throw cause
+    }
+    try { await writeFile(target, text, { encoding: 'utf8', mode: 0o600, flag: 'wx' }) } catch (cause) {
+      await rm(directory, { recursive: true, force: true }).catch(() => {})
+      throw cause
+    }
     return await this.read()
+  }
+  async create(inputValue: DesktopSkillInput): Promise<DesktopSkillsView> {
+    const input = skillInput(inputValue)
+    const text = createStructuredSkillDocument(input)
+    if (Buffer.byteLength(text, 'utf8') > MAX_SKILL_CONTENT_BYTES) throw new Error('Skill content is too large')
+    const view = await this.importDocument(text)
+    if (view.skills.some(skill => skill.name === input.name)) return view
+    const created: DesktopSkillView = Object.freeze({ name: input.name, description: input.description,
+      ...(input.whenToUse === undefined ? {} : { whenToUse: input.whenToUse }), source: 'user-dsh', provider: 'filesystem',
+      modelInvocable: true, userInvocable: true, editable: true })
+    return Object.freeze({ ...view, skills: Object.freeze([...view.skills, created]) })
+  }
+  async update(nameValue: string, inputValue: DesktopSkillInput): Promise<DesktopSkillsView> {
+    const name = safeSkillName(nameValue)
+    const input = skillInput(inputValue, name)
+    const skill = await this.ctx.skills.get(name, await this.viewOptions())
+    if (skill === undefined) throw new Error(`Skill not found: ${name}`)
+    const { target, mode } = await writableSkillFile(skill)
+    const current = await readFile(target, 'utf8')
+    const next = updateStructuredSkillDocument(current, input)
+    if (Buffer.byteLength(next, 'utf8') > MAX_SKILL_CONTENT_BYTES) throw new Error('Skill content is too large')
+    await atomicWrite(target, next, mode)
+    const view = await this.read()
+    return Object.freeze({ ...view, skills: Object.freeze(view.skills.map(item => item.name === name ? projectSkillInput(item, input) : item)) })
   }
   async recycle(name: string): Promise<DesktopSkillsView> {
     const skill = await this.ctx.skills.get(name, await this.viewOptions())
@@ -205,6 +295,8 @@ async function handleAction(controller: DesktopSkillsController, value: unknown)
   }
   if (value.action === 'set-user-invocable' && typeof value.name === 'string' && typeof value.enabled === 'boolean') return await controller.setUserInvocable(value.name, value.enabled)
   if (value.action === 'import' && typeof value.content === 'string' && value.content.length <= MAX_SKILL_CONTENT_BYTES) return await controller.importDocument(value.content)
+  if (value.action === 'create') return await controller.create(skillInput(value.input))
+  if (value.action === 'update' && typeof value.name === 'string') return await controller.update(value.name, skillInput(value.input, value.name))
   if (value.action === 'recycle' && typeof value.name === 'string') return await controller.recycle(value.name)
   if (value.action === 'restore' && typeof value.id === 'string') return await controller.restore(value.id)
   throw new TypeError('invalid Skills action')

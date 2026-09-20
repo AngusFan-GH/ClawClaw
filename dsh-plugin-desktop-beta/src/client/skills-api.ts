@@ -1,6 +1,7 @@
 import {
   DESKTOP_SKILLS_ACTION_PATH, DESKTOP_SKILLS_PATH,
   type DesktopRecycledSkill, type DesktopSkillDetail, type DesktopSkillsView, type DesktopSkillView,
+  type DesktopSkillInput,
 } from '../skills-contract.ts'
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
@@ -50,6 +51,8 @@ export interface DesktopSkillsApi {
   setModelInvocable(name: string, enabled: boolean): Promise<readonly DesktopSkillView[]>
   setUserInvocable(name: string, enabled: boolean): Promise<readonly DesktopSkillView[]>
   importDocument(content: string): Promise<DesktopSkillsView>
+  create(input: DesktopSkillInput): Promise<DesktopSkillsView>
+  update(name: string, input: DesktopSkillInput): Promise<DesktopSkillsView>
   recycle(name: string): Promise<DesktopSkillsView>
   restore(id: string): Promise<DesktopSkillsView>
 }
@@ -75,6 +78,8 @@ export function createDesktopSkillsApi(fetcher: FetchLike = globalThis.fetch.bin
     },
     async setUserInvocable(name: string, enabled: boolean) { return parseDesktopSkillsView(await post({ action: 'set-user-invocable', name, enabled })).skills },
     async importDocument(content: string) { return parseDesktopSkillsView(await post({ action: 'import', content })) },
+    async create(input: DesktopSkillInput) { return parseDesktopSkillsView(await post({ action: 'create', input })) },
+    async update(name: string, input: DesktopSkillInput) { return parseDesktopSkillsView(await post({ action: 'update', name, input })) },
     async recycle(name: string) { return parseDesktopSkillsView(await post({ action: 'recycle', name })) },
     async restore(id: string) { return parseDesktopSkillsView(await post({ action: 'restore', id })) },
   })

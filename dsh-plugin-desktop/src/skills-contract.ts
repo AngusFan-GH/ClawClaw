@@ -27,3 +27,10 @@ export interface DesktopSkillsView {
   readonly skills: readonly DesktopSkillView[]
   readonly recycled: readonly DesktopRecycledSkill[]
 }
+
+export interface DesktopSkillInput {
+  readonly name: string
+  readonly description: string
+  readonly whenToUse?: string
+  readonly instructions: string
+}

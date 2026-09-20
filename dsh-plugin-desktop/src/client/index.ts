@@ -106,9 +106,10 @@ export function apply(ctx: ClientContext): void {
   applyClawClawBrand(ctx)
   applySpiritXOnboarding(ctx)
   applyCronTasksSettings(ctx)
+  applySkillsSettings(ctx)
   ctx.effect(() => installSemanticSettingsNavIcons([
     { icon: 'marketplace', labels: ['插件市场', 'Plugin Marketplace', 'Plugins'] },
-    { icon: 'skill', labels: ['Skills'] },
+    { icon: 'skill', labels: ['技能', 'Skills'] },
     { icon: 'mcp', labels: ['MCP Servers'] },
     { icon: 'schedule', labels: ['定时任务', 'Scheduled tasks'] },
   ]), 'dsh-plugin-desktop: semantic settings navigation icons')
@@ -118,7 +119,6 @@ export function apply(ctx: ClientContext): void {
     'dsh-plugin-desktop: native window geometry service',
   )
   applyDefaultWorkspaceSelection(ctx)
-  applySkillsSettings(ctx)
   applyMcpSettings(ctx)
   const desktopSettings = applyDesktopSettings(ctx, environment)
   ctx.effect(
