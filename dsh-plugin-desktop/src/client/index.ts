@@ -111,7 +111,7 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => installSemanticSettingsNavIcons([
     { icon: 'marketplace', labels: ['插件市场', 'Plugin Marketplace', 'Plugins'] },
     { icon: 'skill', labels: ['技能', 'Skills'] },
-    { icon: 'mcp', labels: ['MCP Servers'] },
+    { icon: 'mcp', labels: ['MCP 服务', 'MCP Servers'] },
     { icon: 'schedule', labels: ['定时任务', 'Scheduled tasks'] },
   ]), 'dsh-plugin-desktop: semantic settings navigation icons')
   if (!environment) return

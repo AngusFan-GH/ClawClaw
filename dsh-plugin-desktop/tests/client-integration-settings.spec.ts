@@ -3,10 +3,16 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { openCronRunSession } from '../src/client/CronTasksSettingsSection.tsx'
 import { applyCronTasksSettings } from '../src/client/cron-tasks-settings.ts'
+import { zh as mcpZh } from '../src/client/mcp-locales.ts'
 import { applyMcpSettings } from '../src/client/mcp-settings.ts'
 import { applySkillsSettings } from '../src/client/skills-settings.ts'
 
 describe('Desktop Skills and MCP settings registration', () => {
+  it('localizes the MCP settings label and title in Chinese', () => {
+    expect(mcpZh.nav).toBe('MCP 服务')
+    expect(mcpZh.title).toBe('MCP 服务')
+  })
+
   it('registers independent menu entries and sections', () => {
     const registrations: Array<{ id: string, locale: string }> = []
     const ctx = {

@@ -1,5 +1,5 @@
 export const zh = {
-  nav: 'MCP Servers', title: 'MCP Servers', intro: '管理当前 Profile 的 MCP Server 及其工具连接。',
+  nav: 'MCP 服务', title: 'MCP 服务', intro: '管理当前 Profile 的 MCP Server 及其工具连接。',
   refresh: '刷新', loading: '正在加载…', unavailable: '暂时无法读取 MCP 配置。',
   operationFailed: '操作失败，请检查配置后重试。', addServer: '添加 Server', editServer: '编辑',
   removeServer: '删除', testServer: '测试连接', serverName: 'Server 名称', transport: '传输方式',
