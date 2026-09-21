@@ -67,6 +67,54 @@ describe('Desktop Skills preset catalog', () => {
   const skill = { name: 'review', description: 'Review code', source: 'bundled', provider: 'filesystem',
     invocation: { modelInvocable: true, userInvocable: true }, content: 'Review instructions.' }
 
+  it('imports and restores immediately despite a stale watcher, preserving bundle assets and invocation flags', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'clawclaw-skills-lifecycle-'))
+    vi.stubEnv('DSH_HOME', root)
+    let discovered: typeof skill[] = []
+    const path = join(root, 'skills', 'review', 'SKILL.md')
+    const controller = new DesktopSkillsController({ get: () => undefined, skills: {
+      snapshot: async () => ({ skills: discovered, complete: true }),
+      get: async () => ({ ...skill, source: 'user-dsh', path }),
+    } } as unknown as Context)
+    try {
+      const imported = await controller.importDocument('---\nname: review\ndescription: Review code\nuser-invocable: false\ndisable-model-invocation: true\n---\nReview.')
+      expect(imported.skills).toEqual([expect.objectContaining({ name: 'review', modelInvocable: false, userInvocable: false })])
+      await writeFile(join(root, 'skills', 'review', 'reference.txt'), 'Keep this asset')
+      discovered = [skill]
+      const recycled = await controller.recycle('review')
+      expect(recycled.skills).toEqual([])
+      expect(recycled.recycled).toHaveLength(1)
+      expect(Number.isFinite(Date.parse(recycled.recycled[0]!.deletedAt))).toBe(true)
+      discovered = []
+      const restored = await controller.restore(recycled.recycled[0]!.id)
+      expect(restored.recycled).toEqual([])
+      expect(restored.skills).toEqual([expect.objectContaining({ name: 'review', modelInvocable: false, userInvocable: false })])
+      expect(await readFile(join(root, 'skills', 'review', 'reference.txt'), 'utf8')).toBe('Keep this asset')
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
+
+  it('rejects imports that would shadow an existing skill from another source', async () => {
+    const controller = new DesktopSkillsController({ get: () => undefined, skills: {
+      snapshot: async () => ({ skills: [skill], complete: true }),
+    } } as unknown as Context)
+    await expect(controller.importDocument('---\nname: review\ndescription: Replacement\n---\nInstructions.')).rejects.toThrow('already exists')
+  })
+
+  it('never recycles the user library itself for a root-level SKILL.md', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'clawclaw-skills-boundary-'))
+    vi.stubEnv('DSH_HOME', root)
+    const path = join(root, 'skills', 'SKILL.md')
+    await mkdir(join(root, 'skills'))
+    await writeFile(path, 'Root skill')
+    try {
+      const controller = new DesktopSkillsController({ get: () => undefined, skills: {
+        get: async () => ({ ...skill, source: 'user-dsh', path }),
+      } } as unknown as Context)
+      await expect(controller.recycle('review')).rejects.toThrow('top-level')
+      expect(await readFile(path, 'utf8')).toBe('Root skill')
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
+
   it('reads the default preset layer for both inventory and details without an active session', async () => {
     const scope = {}
     const standingKeyFor = vi.fn(async () => scope)
@@ -91,6 +139,28 @@ describe('Desktop Skills preset catalog', () => {
     expect(snapshot).toHaveBeenCalledWith({})
     snapshot.mockResolvedValueOnce({ skills: [], complete: false })
     await expect(controller.read()).rejects.toThrow('discovery is incomplete')
+  })
+
+  it('keeps independent request selections for inventory, details, and mutations', async () => {
+    const standingKeyFor = vi.fn(async (id?: string) => ({ id }))
+    const get = vi.fn(async () => skill)
+    const snapshot = vi.fn(async () => ({ skills: [skill], complete: true }))
+    const ctx = { get: () => ({ standingKeyFor }), skills: { get, snapshot } } as unknown as Context
+    const standard = new DesktopSkillsController(ctx, 'standard')
+    const minimal = new DesktopSkillsController(ctx, 'minimal')
+    await standard.read()
+    await minimal.detail('review')
+    await expect(standard.setUserInvocable('review', false)).rejects.toThrow('Only Skills')
+    expect(snapshot).toHaveBeenCalledWith({ scope: { id: 'standard' } })
+    expect(get.mock.calls).toEqual([['review', { scope: { id: 'minimal' } }], ['review', { scope: { id: 'standard' } }]])
+    expect(standingKeyFor.mock.calls).toEqual([['standard'], ['minimal'], ['standard']])
+  })
+
+  it('does not silently fall back when an explicit preset is unavailable', async () => {
+    const snapshot = vi.fn()
+    const ctx = { get: () => undefined, skills: { snapshot } } as unknown as Context
+    await expect(new DesktopSkillsController(ctx, 'missing').read()).rejects.toThrow('presets are unavailable')
+    expect(snapshot).not.toHaveBeenCalled()
   })
 
   it('surfaces a broken default preset instead of falling back to the empty global layer', async () => {

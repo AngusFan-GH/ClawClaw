@@ -1,6 +1,16 @@
 export const DESKTOP_SKILLS_PATH = '/api/desktop/skills'
 export const DESKTOP_SKILLS_ACTION_PATH = '/api/desktop/skills/action'
 
+export interface DesktopSkillsScope {
+  readonly workspaceId?: string
+  readonly sessionId?: string
+}
+export interface DesktopSkillsWorkspace {
+  readonly id: string
+  readonly title: string
+  readonly path: string
+}
+
 export interface DesktopSkillView {
   readonly name: string
   readonly description: string

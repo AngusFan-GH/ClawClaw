@@ -11,6 +11,7 @@ describe('Desktop Skills and MCP settings registration', () => {
     const registrations: Array<{ id: string, locale: string }> = []
     const ctx = {
       effect: vi.fn(),
+      inject: vi.fn(),
       locale: { bind: (namespace: string) => (key: string) => `${namespace}.${key}`, register: vi.fn() },
       slots: {
         inject: vi.fn((_name: string, install: () => void) => { install() }),
@@ -20,6 +21,7 @@ describe('Desktop Skills and MCP settings registration', () => {
 
     applySkillsSettings(ctx)
     applyMcpSettings(ctx)
+    expect(ctx.inject).toHaveBeenCalledWith(['conversation', 'remote.skills', 'remote.commands'], expect.any(Function))
 
     expect(registrations).toEqual([
       expect.objectContaining({ id: 'desktop-skills', locale: 'desktop.skills' }),

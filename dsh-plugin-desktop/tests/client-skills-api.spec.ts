@@ -6,6 +6,40 @@ const view = { skills: [{ name: 'review', description: 'Review code', source: 'u
   modelInvocable: true, userInvocable: true, editable: true }], recycled: [] }
 
 describe('Desktop Skills client API', () => {
+  it('preserves Workspace scope across preset changes and every request', async () => {
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => new Response(JSON.stringify(JSON.parse(String(init?.body ?? '{}')).action === 'detail' ? { ...view.skills[0], content: 'Instructions' } : view)))
+    const base = createDesktopSkillsApi(fetcher)
+    const selection = { workspaceId: 'project-a' }
+    const api = base.forScope(selection).forPreset('standard')
+    selection.workspaceId = 'project-b'
+    await api.readView(); await api.detail('review'); await api.setUserInvocable('review', false)
+    for (const [, init] of fetcher.mock.calls) expect(JSON.parse(String(init?.body))).toMatchObject({ workspaceId: 'project-a', preset: 'standard' })
+    await base.forScope({ sessionId: 'session-a' }).readView()
+    expect(JSON.parse(String(fetcher.mock.lastCall?.[1]?.body))).toEqual({ action: 'read', sessionId: 'session-a' })
+    await base.readView()
+    expect(fetcher.mock.lastCall?.[1]?.method).toBe('GET')
+  })
+  it('carries the selection through every operation without mutating the default client', async () => {
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { action?: string }
+      return new Response(JSON.stringify(body.action === 'detail' ? { ...view.skills[0], content: 'Instructions' } : view))
+    })
+    const base = createDesktopSkillsApi(fetcher)
+    const api = base.forPreset('minimal')
+    await api.readView()
+    await api.detail('review')
+    await api.setModelInvocable('review', false)
+    await api.setUserInvocable('review', false)
+    await api.importDocument('document')
+    const input = { name: 'review', description: 'Review', instructions: 'Review code' }
+    await api.create(input)
+    await api.update('review', input)
+    await api.recycle('review')
+    await api.restore('id')
+    for (const [, init] of fetcher.mock.calls) expect(JSON.parse(String(init?.body))).toHaveProperty('preset', 'minimal')
+    await base.readView()
+    expect(fetcher.mock.lastCall?.[1]?.method).toBe('GET')
+  })
   it('registers Skills before the Electron-only client boundary', () => {
     const entry = readFileSync('src/client/index.ts', 'utf8')
     expect(entry.indexOf('applySkillsSettings(ctx)')).toBeLessThan(entry.indexOf('if (!environment) return'))

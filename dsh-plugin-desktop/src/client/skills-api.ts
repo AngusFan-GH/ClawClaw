@@ -1,7 +1,7 @@
 import {
   DESKTOP_SKILLS_ACTION_PATH, DESKTOP_SKILLS_PATH,
   type DesktopRecycledSkill, type DesktopSkillDetail, type DesktopSkillsView, type DesktopSkillView,
-  type DesktopSkillInput,
+  type DesktopSkillInput, type DesktopSkillsScope, type DesktopSkillsWorkspace,
 } from '../skills-contract.ts'
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
@@ -45,6 +45,10 @@ async function readResponse(response: Response): Promise<unknown> {
   return value
 }
 export interface DesktopSkillsApi {
+  forPreset(preset?: string): DesktopSkillsApi
+  forScope(scope: DesktopSkillsScope): DesktopSkillsApi
+  workspaces(): Promise<readonly DesktopSkillsWorkspace[]>
+  presets(): Promise<readonly { id: string, name: string }[]>
   read(): Promise<readonly DesktopSkillView[]>
   readView(): Promise<DesktopSkillsView>
   detail(name: string): Promise<DesktopSkillDetail>
@@ -56,18 +60,39 @@ export interface DesktopSkillsApi {
   recycle(name: string): Promise<DesktopSkillsView>
   restore(id: string): Promise<DesktopSkillsView>
 }
-export function createDesktopSkillsApi(fetcher: FetchLike = globalThis.fetch.bind(globalThis)): DesktopSkillsApi {
+export function createDesktopSkillsApi(fetcher: FetchLike = globalThis.fetch.bind(globalThis), preset?: string, scope: DesktopSkillsScope = {}): DesktopSkillsApi {
+  const selection = { ...scope }
   const post = async (body: object): Promise<unknown> => readResponse(await fetcher(DESKTOP_SKILLS_ACTION_PATH, {
     method: 'POST', credentials: 'same-origin', redirect: 'error',
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, ...selection, ...(preset === undefined ? {} : { preset }) }),
   }))
   return Object.freeze({
+    forPreset(next?: string) { return createDesktopSkillsApi(fetcher, next, selection) },
+    forScope(next: DesktopSkillsScope) { return createDesktopSkillsApi(fetcher, preset, next) },
+    async workspaces() {
+      const value = await post({ action: 'workspaces' })
+      if (!isRecord(value) || !Array.isArray(value.workspaces) || value.workspaces.length > 10_000) throw new Error('Invalid Workspaces')
+      return value.workspaces.map(item => {
+        if (!isRecord(item) || !text(item.id, 512) || item.id === '' || !text(item.title, 512) || !text(item.path, 8192)) throw new Error('Invalid Workspace')
+        return { id: item.id, title: item.title, path: item.path }
+      })
+    },
+    async presets() {
+      const value = await post({ action: 'presets' })
+      if (!isRecord(value) || !Array.isArray(value.presets) || value.presets.length > 10_000) throw new Error('Invalid Agent presets')
+      return value.presets.map(item => {
+        if (!isRecord(item) || !text(item.id, 128) || !text(item.name, 512)) throw new Error('Invalid Agent preset')
+        return { id: item.id, name: item.name }
+      })
+    },
     async read() {
+      if (preset !== undefined || selection.workspaceId !== undefined || selection.sessionId !== undefined) return parseDesktopSkillsView(await post({ action: 'read' })).skills
       const value = await readResponse(await fetcher(DESKTOP_SKILLS_PATH, { method: 'GET', credentials: 'same-origin',
         redirect: 'error', cache: 'no-store', headers: { Accept: 'application/json' } }))
       return parseDesktopSkillsView(value).skills
     },
     async readView() {
+      if (preset !== undefined || selection.workspaceId !== undefined || selection.sessionId !== undefined) return parseDesktopSkillsView(await post({ action: 'read' }))
       const value = await readResponse(await fetcher(DESKTOP_SKILLS_PATH, { method: 'GET', credentials: 'same-origin',
         redirect: 'error', cache: 'no-store', headers: { Accept: 'application/json' } }))
       return parseDesktopSkillsView(value)

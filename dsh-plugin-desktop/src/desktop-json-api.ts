@@ -7,13 +7,13 @@ const MAX_BODY_BYTES = 64 * 1024
 
 class BodyTooLargeError extends Error {}
 
-async function readJson(req: IncomingMessage): Promise<unknown> {
+async function readJson(req: IncomingMessage, maxBodyBytes: number): Promise<unknown> {
   let size = 0
   const chunks: Buffer[] = []
   for await (const chunk of req) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array)
     size += buffer.byteLength
-    if (size > MAX_BODY_BYTES) throw new BodyTooLargeError()
+    if (size > maxBodyBytes) throw new BodyTooLargeError('Request body is too large')
     chunks.push(buffer)
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
@@ -50,6 +50,7 @@ export interface DesktopJsonApiOptions {
   readonly label: string
   readonly readPath: string
   readonly actionPath: string
+  readonly maxBodyBytes?: number
   readonly read: () => Promise<object>
   readonly action: (value: unknown) => Promise<object>
 }
@@ -71,7 +72,7 @@ export function registerDesktopJsonApi(ctx: Context, options: DesktopJsonApiOpti
           return finishJson(res, 415, { error: 'content type must be application/json' })
         }
         try {
-          finishJson(res, 200, action ? await options.action(await readJson(req)) : await options.read())
+          finishJson(res, 200, action ? await options.action(await readJson(req, options.maxBodyBytes ?? MAX_BODY_BYTES)) : await options.read())
         } catch (cause) {
           const status = cause instanceof BodyTooLargeError ? 413 : cause instanceof TypeError ? 400 : 409
           finishJson(res, status, { error: cause instanceof Error ? cause.message : `${options.label} operation failed` })

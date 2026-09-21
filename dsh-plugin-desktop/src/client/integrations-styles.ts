@@ -1,6 +1,9 @@
+import { SKILLS_CSS } from './skills-styles.ts'
+
 const STYLE_ID = 'dsh-desktop-management-styles'
 
 const CSS = `
+.dshSkillsPresetMenu{max-width:100%;min-width:0}.dshSkillsPresetMenu button{max-width:100%;min-width:0}.dshSkillsPresetMenu button span{overflow-wrap:anywhere;min-width:0}.dshSkillsPresetMenu svg,.dshIntegrationsEditorHeader>.dshIntegrationsIconButton{flex-shrink:0}
 .dshIntegrations{display:flex;flex-direction:column;gap:20px;width:100%;max-width:880px;min-width:0;box-sizing:border-box;container-type:inline-size;padding:2px 0 36px;color:var(--dsw-alias-label-primary)}
 .dshIntegrationsHeader,.dshIntegrationsEditorHeader,.dshIntegrationsMcpHeader,.dshIntegrationsToolbar,.dshIntegrationsEditorFooter,.dshIntegrationsDetailHeader{display:flex;align-items:center;justify-content:space-between;gap:14px;min-width:0}.dshIntegrationsHeader{align-items:flex-start}.dshIntegrationsHeader h2,.dshIntegrationsEditorHeader h3,.dshIntegrationsEditor h3,.dshIntegrationsSkillInlineDetail h4{margin:0;font-weight:600}.dshIntegrationsHeader h2{font-size:22px;line-height:1.35}.dshIntegrationsEditorHeader h3{font-size:14px}.dshIntegrationsHeader p,.dshIntegrationsEditorHeader p,.dshIntegrationsDetailHeader p,.dshIntegrationsToolbar p{max-width:680px;margin:6px 0 0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.6}
 .dshIntegrationsBody,.dshIntegrationsList,.dshIntegrationsSkillGroup{display:flex;flex-direction:column;gap:8px;min-width:0}.dshIntegrationsBody{gap:16px}.dshIntegrationsSkillGroup h3{margin:8px 2px 0;color:var(--dsw-alias-label-secondary);font-size:12px;font-weight:500}
@@ -26,6 +29,7 @@ const CSS = `
 @container(max-width:720px){.dshCronFields{grid-template-columns:1fr}.dshCronToolbar{grid-template-columns:1fr auto}.dshCronToolbar p{grid-column:1/-1;grid-row:2}}
 @container(max-width:520px){.dshIntegrationsHeader,.dshIntegrationsToolbar,.dshIntegrationsMcpHeader{align-items:flex-start;flex-direction:column}.dshIntegrationsHeader .dshIntegrationsRowActions,.dshIntegrationsToolbar .dshIntegrationsRowActions,.dshIntegrationsMcpHeader .dshIntegrationsRowActions{width:100%;justify-content:flex-start}.dshIntegrationsRow{align-items:flex-start;flex-direction:column}.dshIntegrationsRowActions{flex-wrap:wrap}.dshIntegrationsSkillAside{align-items:flex-start;flex-direction:column;gap:8px}.dshIntegrationsSkillActions{gap:10px}.dshIntegrationsCommand{align-self:flex-start}.dshSkillsConfirm{align-items:flex-start;flex-direction:column}.dshCronFields,.dshCronFriendlyFields,.dshCronDateTimeFields{grid-template-columns:1fr}.dshCronTimePicker{width:100%}.dshCronEditorFooter{align-items:flex-start;flex-direction:column}.dshCronWeekdays{flex-wrap:wrap}.dshCronRow{grid-template-columns:auto minmax(0,1fr);align-items:start}.dshCronRow>.dshIntegrationsRowActions{grid-column:2;justify-content:flex-start}.dshCronDetail dl>div{grid-template-columns:1fr;gap:5px}}
 .dshCronArchivedSession{display:block;margin-top:6px;color:var(--dsw-alias-label-secondary);font-size:11px}
+.dshIntegrationsSkillName.dshIntegrationsTextButton{font-size:14px;font-weight:600;color:inherit;text-align:start}.dshIntegrationsSkillName:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px}
 `
 
 export function installIntegrationsStyles(document: Document = globalThis.document): () => void {
@@ -33,7 +37,7 @@ export function installIntegrationsStyles(document: Document = globalThis.docume
   if (existing !== null) return () => {}
   const style = document.createElement('style')
   style.id = STYLE_ID
-  style.textContent = CSS
+  style.textContent = CSS + SKILLS_CSS
   document.head.append(style)
   return () => { style.remove() }
 }

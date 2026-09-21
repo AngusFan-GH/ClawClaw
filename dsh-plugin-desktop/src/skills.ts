@@ -5,6 +5,9 @@ import { chmod, lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile
 import { homedir } from 'node:os'
 import { basename, dirname, relative, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+import type { WorkspaceId } from '@deepseek-ai/dsh-workspace'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type {} from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
 import type { SkillDefinition, SkillSummary, SkillViewOptions } from '@deepseek-ai/dsh-skill'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
@@ -12,7 +15,7 @@ import { parseDocument } from 'yaml'
 import { registerDesktopJsonApi } from './desktop-json-api.ts'
 import {
   DESKTOP_SKILLS_ACTION_PATH, DESKTOP_SKILLS_PATH,
-  type DesktopRecycledSkill, type DesktopSkillDetail, type DesktopSkillInput, type DesktopSkillsView, type DesktopSkillView,
+  type DesktopRecycledSkill, type DesktopSkillDetail, type DesktopSkillInput, type DesktopSkillsView, type DesktopSkillView, type DesktopSkillsScope,
 } from './skills-contract.ts'
 
 export * from './skills-contract.ts'
@@ -69,7 +72,7 @@ function skillInput(value: unknown, expectedName?: string): DesktopSkillInput {
   return Object.freeze({ name, description, ...(whenToUse === undefined || whenToUse === '' ? {} : { whenToUse }), instructions })
 }
 
-function skillDocument(text: string): { readonly name: string } {
+function skillDocument(text: string): DesktopSkillView {
   const lines = text.split(/\r?\n/u)
   if (lines[0]?.trim() !== '---') throw new Error('Skill must start with YAML frontmatter')
   const closing = lines.slice(1).findIndex(line => line.trim() === '---')
@@ -79,7 +82,10 @@ function skillDocument(text: string): { readonly name: string } {
   if (document.errors.length > 0 || !isRecord(data) || typeof data.name !== 'string' || typeof data.description !== 'string' || data.description.trim() === '') {
     throw new Error('Skill frontmatter requires a name and description')
   }
-  return { name: safeSkillName(data.name) }
+  return { name: safeSkillName(data.name), description: data.description,
+    ...(typeof data.whenToUse === 'string' ? { whenToUse: data.whenToUse } : {}),
+    source: 'user-dsh', provider: 'filesystem', editable: true,
+    modelInvocable: data['disable-model-invocation'] !== true, userInvocable: data['user-invocable'] !== false }
 }
 
 
@@ -173,32 +179,62 @@ async function atomicWrite(target: string, text: string, mode: number): Promise<
 }
 
 export class DesktopSkillsController {
-  constructor(private readonly ctx: Context) {}
-  private async viewOptions(): Promise<SkillViewOptions> {
+  constructor(private readonly ctx: Context, private readonly preset?: string, private readonly selection: DesktopSkillsScope = {}) {}
+  private async view(): Promise<{ registry: Context['skills']; options: SkillViewOptions }> {
     // Filesystem providers belong to preset layers in the Web composition.
-    // A settings read has no Agent: use the default preset's standing scope.
+    // Each request has its own selection; browsing never changes the default.
     const presets = this.ctx.get('agentPresets')
-    return presets === undefined ? {} : { scope: await presets.standingKeyFor() }
+    let cwd: string | undefined
+    let preset = this.preset
+    if (this.selection.workspaceId !== undefined && this.selection.sessionId !== undefined) throw new TypeError('Choose either a Workspace or a Session')
+    if (this.selection.sessionId !== undefined) {
+      if (preset !== undefined) throw new TypeError('A Session uses its recorded Agent preset')
+      const query = this.ctx.get('sessionQuery')
+      if (query === undefined) throw new Error('Session discovery is unavailable')
+      const sessionId = this.selection.sessionId as SessionId
+      using observation = await query.observeSession(sessionId)
+      if (observation.projections === undefined || observation.header.cwd === undefined) throw new Error('Session Skill context is unavailable')
+      cwd = observation.header.cwd
+      preset = observation.projections.values.agentPreset ?? undefined
+      const live = this.ctx.get('agents')?.get(sessionId)
+      if (live !== undefined) return { registry: presets?.serviceFor(live, 'skills') ?? this.ctx.skills, options: { cwd, scope: live } }
+    } else if (this.selection.workspaceId !== undefined) {
+      const workspace = this.ctx.get('workspaceRegistry')?.get(this.selection.workspaceId as WorkspaceId)
+      if (workspace === undefined) throw new Error('Workspace not found')
+      if (await workspace.status() !== 'ok') throw new Error('Workspace directory is unavailable')
+      cwd = workspace.path
+    }
+    const options: SkillViewOptions = cwd === undefined ? {} : { cwd }
+    if (presets === undefined) {
+      if (preset !== undefined) throw new Error('Agent presets are unavailable')
+      return { registry: this.ctx.skills, options }
+    }
+    return { registry: this.ctx.skills, options: { ...options, scope: await (preset === undefined ? presets.standingKeyFor() : presets.standingKeyFor(preset)) } }
+  }
+  private async getSkill(name: string): Promise<SkillDefinition | undefined> {
+    const { registry, options } = await this.view()
+    return registry.get(name, options)
   }
   async read(): Promise<DesktopSkillsView> {
-    const snapshot = await this.ctx.skills.snapshot(await this.viewOptions())
+    const { registry, options } = await this.view()
+    const snapshot = await registry.snapshot(options)
     if (!snapshot.complete) throw new Error('Skill discovery is incomplete. Please refresh to retry.')
     return Object.freeze({ skills: Object.freeze(snapshot.skills.map(projectSkill)), recycled: await this.recycled() })
   }
   async detail(name: string): Promise<DesktopSkillDetail> {
-    const skill = await this.ctx.skills.get(name, await this.viewOptions())
+    const skill = await this.getSkill(name)
     if (skill === undefined) throw new Error(`Skill not found: ${name}`)
     if (Buffer.byteLength(skill.content, 'utf8') > MAX_SKILL_CONTENT_BYTES) throw new Error('Skill content is too large to preview')
     return projectSkillDetail(skill)
   }
   async setModelInvocable(name: string, enabled: boolean): Promise<DesktopSkillsView> {
-    const skill = await this.ctx.skills.get(name, await this.viewOptions())
+    const skill = await this.getSkill(name)
     if (skill === undefined) throw new Error(`Skill not found: ${name}`)
     await writeSkillInvocation(skill, 'model', enabled)
     return await this.withInvocation(name, { modelInvocable: enabled })
   }
   async setUserInvocable(name: string, enabled: boolean): Promise<DesktopSkillsView> {
-    const skill = await this.ctx.skills.get(name, await this.viewOptions())
+    const skill = await this.getSkill(name)
     if (skill === undefined) throw new Error(`Skill not found: ${name}`)
     await writeSkillInvocation(skill, 'user', enabled)
     return await this.withInvocation(name, { userInvocable: enabled })
@@ -216,15 +252,22 @@ export class DesktopSkillsController {
       if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return []
       throw cause
     })
-    return Object.freeze(entries.filter(entry => entry.isDirectory()).map(entry => {
+    const records = await Promise.all(entries.filter(entry => entry.isDirectory()).map(async entry => {
       const match = /^([a-z0-9]+(?:-[a-z0-9]+)*)--([0-9a-f-]{36})$/u.exec(entry.name)
       if (match === null) return undefined
-      return Object.freeze({ id: entry.name, name: match[1]!, deletedAt: match[2]! })
-    }).filter((entry): entry is DesktopRecycledSkill => entry !== undefined))
+      const info = await lstat(resolve(root, entry.name))
+      return Object.freeze({ id: entry.name, name: match[1]!, deletedAt: info.ctime.toISOString() })
+    }))
+    return Object.freeze(records.filter((entry): entry is DesktopRecycledSkill => entry !== undefined)
+      .sort((left, right) => right.deletedAt.localeCompare(left.deletedAt)))
   }
   async importDocument(text: string): Promise<DesktopSkillsView> {
     if (Buffer.byteLength(text, 'utf8') > MAX_SKILL_CONTENT_BYTES) throw new Error('Skill content is too large')
-    const { name } = skillDocument(text)
+    const imported = skillDocument(text)
+    const { name } = imported
+    if ((await this.read()).skills.some(skill => skill.name === name)) {
+      throw new Error(`A Skill named ${name} already exists`)
+    }
     const root = skillLibraryRoot(); const directory = resolve(root, name); const target = resolve(directory, 'SKILL.md')
     await mkdir(root, { recursive: true, mode: 0o700 })
     try { await mkdir(directory, { mode: 0o700 }) } catch (cause) {
@@ -235,23 +278,19 @@ export class DesktopSkillsController {
       await rm(directory, { recursive: true, force: true }).catch(() => {})
       throw cause
     }
-    return await this.read()
+    const view = await this.read()
+    return Object.freeze({ ...view, skills: Object.freeze([...view.skills.filter(skill => skill.name !== name), imported]) })
   }
   async create(inputValue: DesktopSkillInput): Promise<DesktopSkillsView> {
     const input = skillInput(inputValue)
     const text = createStructuredSkillDocument(input)
     if (Buffer.byteLength(text, 'utf8') > MAX_SKILL_CONTENT_BYTES) throw new Error('Skill content is too large')
-    const view = await this.importDocument(text)
-    if (view.skills.some(skill => skill.name === input.name)) return view
-    const created: DesktopSkillView = Object.freeze({ name: input.name, description: input.description,
-      ...(input.whenToUse === undefined ? {} : { whenToUse: input.whenToUse }), source: 'user-dsh', provider: 'filesystem',
-      modelInvocable: true, userInvocable: true, editable: true })
-    return Object.freeze({ ...view, skills: Object.freeze([...view.skills, created]) })
+    return await this.importDocument(text)
   }
   async update(nameValue: string, inputValue: DesktopSkillInput): Promise<DesktopSkillsView> {
     const name = safeSkillName(nameValue)
     const input = skillInput(inputValue, name)
-    const skill = await this.ctx.skills.get(name, await this.viewOptions())
+    const skill = await this.getSkill(name)
     if (skill === undefined) throw new Error(`Skill not found: ${name}`)
     const { target, mode } = await writableSkillFile(skill)
     const current = await readFile(target, 'utf8')
@@ -262,18 +301,20 @@ export class DesktopSkillsController {
     return Object.freeze({ ...view, skills: Object.freeze(view.skills.map(item => item.name === name ? projectSkillInput(item, input) : item)) })
   }
   async recycle(name: string): Promise<DesktopSkillsView> {
-    const skill = await this.ctx.skills.get(name, await this.viewOptions())
+    const skill = await this.getSkill(name)
     if (skill === undefined || skill.source !== 'user-dsh' || skill.provider !== 'filesystem' || skill.path === undefined) throw new Error('Only Skills in the DSH user library can be deleted here')
     const root = await realpath(skillLibraryRoot()); const target = await realpath(skill.path)
     if (!isPathInside(root, target)) throw new Error('Skill file is outside the DSH user library')
     const parent = dirname(target); const source = basename(target) === 'SKILL.md' ? parent : target
+    if (dirname(source) !== root || source === root) throw new Error('Only top-level user Skill bundles can be deleted here')
     const destination = resolve(recycleRoot(), `${safeSkillName(name)}--${randomUUID()}`)
     await mkdir(recycleRoot(), { recursive: true, mode: 0o700 })
     if (source === target) {
       await mkdir(destination, { mode: 0o700 })
       await rename(source, resolve(destination, 'SKILL.md'))
     } else await rename(source, destination)
-    return await this.read()
+    const view = await this.read()
+    return Object.freeze({ ...view, skills: Object.freeze(view.skills.filter(item => item.name !== name)) })
   }
   async restore(id: string): Promise<DesktopSkillsView> {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*--[0-9a-f-]{36}$/u.test(id)) throw new Error('Invalid recycled Skill')
@@ -281,9 +322,13 @@ export class DesktopSkillsController {
     const info = await lstat(source)
     if (!info.isDirectory()) throw new Error('Recycled Skill is missing')
     const target = resolve(skillLibraryRoot(), name)
+    const restored = skillDocument(await readFile(resolve(source, 'SKILL.md'), 'utf8'))
+    if (restored.name !== name) throw new Error('Recycled Skill name does not match its document')
+    if ((await this.read()).skills.some(skill => skill.name === name)) throw new Error(`A Skill named ${name} already exists`)
     if (await lstat(target).catch(cause => (cause as NodeJS.ErrnoException).code === 'ENOENT' ? undefined : Promise.reject(cause)) !== undefined) throw new Error(`A user Skill named ${name} already exists`)
     await rename(source, target)
-    return await this.read()
+    const view = await this.read()
+    return Object.freeze({ ...view, skills: Object.freeze([...view.skills.filter(skill => skill.name !== name), restored]) })
   }
 }
 
@@ -305,5 +350,23 @@ async function handleAction(controller: DesktopSkillsController, value: unknown)
 export function apply(ctx: Context): void {
   const controller = new DesktopSkillsController(ctx)
   registerDesktopJsonApi(ctx, { label: 'Skills', readPath: DESKTOP_SKILLS_PATH, actionPath: DESKTOP_SKILLS_ACTION_PATH,
-    read: () => controller.read(), action: value => handleAction(controller, value) })
+    maxBodyBytes: MAX_SKILL_CONTENT_BYTES * 6 + 16_384,
+    read: () => controller.read(), action: async value => {
+      if (!isRecord(value)) throw new TypeError('Invalid Skills action')
+      if (value.action === 'workspaces') return { workspaces: (ctx.get('workspaceRegistry')?.list() ?? []).map(workspace => ({ id: workspace.id, title: workspace.title, path: workspace.path })) }
+      if (value.action === 'presets') {
+        const presets = ctx.get('agentPresets')
+        return { presets: presets === undefined ? [] : (await presets.list()).map((preset: { id: string, name?: string }) => ({ id: preset.id, name: preset.name ?? preset.id })) }
+      }
+      if (value.preset !== undefined && (typeof value.preset !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/u.test(value.preset))) throw new TypeError('Invalid Agent preset')
+      for (const key of ['workspaceId', 'sessionId'] as const) {
+        if (value[key] !== undefined && (typeof value[key] !== 'string' || value[key].length === 0 || value[key].length > 512 || value[key].includes('\0'))) throw new TypeError(`Invalid ${key}`)
+      }
+      const selection: DesktopSkillsScope = {
+        ...(typeof value.workspaceId === 'string' ? { workspaceId: value.workspaceId } : {}),
+        ...(typeof value.sessionId === 'string' ? { sessionId: value.sessionId } : {}),
+      }
+      const scoped = new DesktopSkillsController(ctx, value.preset as string | undefined, selection)
+      return value.action === 'read' ? scoped.read() : handleAction(scoped, value)
+    } })
 }
