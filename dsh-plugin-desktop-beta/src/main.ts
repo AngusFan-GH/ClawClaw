@@ -123,6 +123,7 @@ import { DesktopStartupGeneration } from './startup-generation.ts'
 import {
   healDesktopProfileModuleFallback,
   prepareDesktopProfile,
+  desktopHarnessProfileContext,
   type SkippedOptionalEntry,
 } from './profile.ts'
 import { DesktopProfileCheckpoint } from './profile-checkpoint.ts'
@@ -1471,6 +1472,7 @@ async function start(): Promise<void> {
           // Keep Host imports and browser bundle discovery on the same public
           // profile-overlay resolver used by packaged Electron.
           hostCtx.loader.internal = undefined
+          hostCtx.provide('profileContext', desktopHarnessProfileContext(prepared, desktopPnpmBootstrap))
           generation.bindHost(hostCtx)
           hostCtx.effect(
             () => async () => { await flushProfilePreferencesWrites() },

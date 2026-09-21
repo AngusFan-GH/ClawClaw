@@ -1,6 +1,8 @@
 /** Compatibility profile composition over the official Web bundle and user plugins. */
 
 import { createRequire } from 'node:module'
+import type { DesktopPnpmBootstrap } from './pnpm.ts'
+import { withDesktopPnpmPolicy } from './pnpm-policy.ts'
 import {
   existsSync,
   lstatSync,
@@ -911,6 +913,9 @@ export function prepareDesktopProfile(
   for (const row of composedRows) {
     if (typeof row.id === 'string') rows.set(row.id, row)
   }
+  // Desktop owns generation restarts and uses the public Node resolver.
+  // Upstream HMR requires Node internals that Electron does not expose.
+  if (rows.has('hmr')) patches.push({ id: 'hmr', disabled: true })
   const settings = rows.get('settings')
   if (settings?.name !== SETTINGS_FILE_PACKAGE) {
     throw new Error(`${BIN_NAME}: desktop profile must use ${SETTINGS_FILE_PACKAGE} in the settings row`)
@@ -1104,6 +1109,35 @@ export function prepareDesktopProfile(
     market: desktopMarketSnapshotWithEffective(marketSelection, effectiveMarket),
     requiresDependencyMigration,
     ...(marketFailure === undefined ? {} : { marketFailure }),
+  }
+}
+
+/** Launcher facts consumed by upstream profile-aware Host plugins. */
+export function desktopHarnessProfileContext(prepared: PreparedDesktopProfile, bootstrap: DesktopPnpmBootstrap) {
+  return {
+    name: prepared.profile.name,
+    dir: prepared.profile.dir,
+    patchPath: prepared.profile.patchPath,
+    installAnchor: INSTALL_ANCHOR,
+    cwd: process.cwd(),
+    home: prepared.homeDir,
+    startedBundles: prepared.profile.layers.map(layer => layer.packageName),
+    overlays: [] as PatchOptions[],
+    telemetryDisabledEnv: process.env.DSH_TELEMETRY_DISABLED,
+    packageManager: {
+      command: bootstrap.appExecutable,
+      args: ['--import', pathToFileURL(bootstrap.clearEnvironmentPath).href,
+        bootstrap.pnpmBinPath, ...withDesktopPnpmPolicy([])],
+      env: {
+        ELECTRON_RUN_AS_NODE: '1',
+        NODE: bootstrap.nodeShimPath,
+        DSH_HOME: bootstrap.homeDir,
+        CI: 'true',
+        npm_config_runtime: 'electron',
+        npm_config_target: bootstrap.electronVersion,
+        npm_config_disturl: 'https://electronjs.org/headers',
+      },
+    },
   }
 }
 

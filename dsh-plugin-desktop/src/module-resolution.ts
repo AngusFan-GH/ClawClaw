@@ -7,7 +7,7 @@ import Module, {
   type ModuleHooks,
   type ResolveHookSync,
 } from 'node:module'
-import { realpathSync } from 'node:fs'
+import { readFileSync, realpathSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
@@ -19,6 +19,18 @@ import {
 import { retainAsarModuleResolver } from './asar-module-resolver-state.ts'
 
 const LOADER_ENTRY_URL = import.meta.resolve('@deepseek-ai/cordis-plugin-loader')
+const loaderManifest = JSON.parse(readFileSync(new URL('../package.json', LOADER_ENTRY_URL), 'utf8'))
+const LOADER_DEPENDENCIES = new Set(Object.keys({
+  ...loaderManifest.dependencies,
+  ...loaderManifest.peerDependencies,
+  ...loaderManifest.optionalDependencies,
+}))
+
+function isLoaderEntry(url: string | undefined): boolean {
+  return url === LOADER_ENTRY_URL || (url !== undefined
+    && filePath(url)?.replaceAll('\\', '/')
+      .endsWith('/node_modules/@deepseek-ai/cordis-plugin-loader/lib/index.js') === true)
+}
 // Keep installation resolution in Electron's logical ASAR tree. Native
 // payloads are redirected by Electron Builder, while ordinary modules avoid a
 // second physical node_modules tree and its Windows antivirus I/O cost.
@@ -279,11 +291,45 @@ function newestRegistration(
   return selected
 }
 
+function packageDirectoryKey(candidate: string): string | undefined {
+  const normalized = candidate.replaceAll('\\', '/')
+  const marker = '/node_modules/'
+  const markerIndex = normalized.lastIndexOf(marker)
+  if (markerIndex < 0) return undefined
+  const packageStart = markerIndex + marker.length
+  const segments = normalized.slice(packageStart).split('/')
+  const segmentCount = segments[0]?.startsWith('@') ? 2 : 1
+  if (segments.length < segmentCount || segments.slice(0, segmentCount).some(segment => segment.length === 0)) {
+    return undefined
+  }
+  return normalized.slice(0, packageStart) + segments.slice(0, segmentCount).join('/')
+}
+
+function selectedPackageSource(
+  registration: ProfileResolverRegistration,
+  parentURL: string,
+): ModuleSource | undefined {
+  const candidate = filePath(parentURL)
+  if (candidate === undefined) return undefined
+  for (const selected of registration.overlayCandidates.values()) {
+    if (isLexicallyWithin(selected.packageDir, candidate)) return selected.source
+  }
+  const packageDirectory = packageDirectoryKey(candidate)
+  if (packageDirectory === undefined) return undefined
+  for (const [url, source] of registration.moduleSources) {
+    const tracked = filePath(url)
+    if (tracked !== undefined && packageDirectoryKey(tracked) === packageDirectory) return source
+  }
+  return undefined
+}
+
 function registrationForParent(
   state: ProcessResolverState,
   parentURL: string | undefined,
 ): ParentRegistration | undefined {
-  if (parentURL === LOADER_ENTRY_URL) {
+  // pnpm can materialize multiple Loader instances with different peer sets.
+  // Each instance's public import fallback must use the active Desktop overlay.
+  if (isLoaderEntry(parentURL)) {
     const registration = newestRegistration(state, () => true)
     return registration === undefined ? undefined : { registration, boundary: true }
   }
@@ -308,6 +354,25 @@ function registrationForParent(
       registration: graph,
       boundary: false,
       source: graph.moduleSources.get(parentURL)!,
+    }
+  }
+
+  // Cordis config entries use synthetic parent URLs such as
+  // agent.cordis.yml#tool-subagent. They are not imported modules, so they do
+  // not enter moduleSources, but packages loaded from them must still use the
+  // same Desktop/Profile overlay as the package that owns the config file.
+  const packageBoundary = newestRegistration(
+    state,
+    registration => selectedPackageSource(registration, parentURL) !== undefined,
+  )
+  if (packageBoundary !== undefined) {
+    const source = selectedPackageSource(packageBoundary, parentURL)!
+    // A config remains a boundary on every lookup; tracking it as a module
+    // would let subsequent imports bypass overlay selection via the graph.
+    return {
+      registration: packageBoundary,
+      boundary: true,
+      source,
     }
   }
 
@@ -480,6 +545,9 @@ function resolveFilenameWithState(
     return state.previousResolveFilename.call(thisArg, request, parent, isMain, options)
   }
   const parentURL = parent?.filename === undefined ? undefined : pathToFileURL(parent.filename).href
+  if (isLoaderEntry(parentURL) && LOADER_DEPENDENCIES.has(resolvablePackageName(request) ?? '')) {
+    return resolveCommonJsNormally(state, thisArg, request, parent, isMain, options)
+  }
   const parentRegistration = registrationForParent(state, parentURL)
   const packageName = resolvablePackageName(request)
   if (parentRegistration === undefined) {
@@ -607,6 +675,9 @@ function resolveWithState(
 ): ReturnType<ResolveHookSync> {
   // Builtins cannot be overlaid by a Profile and have no filesystem owner.
   if (state.bypassDepth > 0 || isBuiltin(specifier)) return nextResolve(specifier, context)
+  if (isLoaderEntry(context.parentURL) && LOADER_DEPENDENCIES.has(resolvablePackageName(specifier) ?? '')) {
+    return nextResolve(specifier, context)
+  }
   const parentRegistration = registrationForParent(state, context.parentURL)
   return parentRegistration === undefined
     ? nextResolve(specifier, context)

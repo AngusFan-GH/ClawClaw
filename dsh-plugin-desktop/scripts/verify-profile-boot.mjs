@@ -1,10 +1,11 @@
 /** Headless smoke for the complete published DSH Web profile and renderer manifest. */
 
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { boot } from '@deepseek-ai/dsh-app-boot'
+import { boot, composeEntries } from '@deepseek-ai/dsh-app-boot'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
 import {
   createLaunchEnvironmentSnapshot,
@@ -13,7 +14,7 @@ import {
 import { DESKTOP_SETTINGS_NAMESPACE } from '../lib/index.js'
 import { installDesktopPnpmRuntime } from '../lib/desktop-runtime-environment.js'
 import { installProfilePackageResolver } from '../lib/module-resolution.js'
-import { prepareDesktopProfile } from '../lib/profile.js'
+import { desktopHarnessProfileContext, prepareDesktopProfile } from '../lib/profile.js'
 import { DesktopProfileService } from '../lib/profile-service.js'
 
 const BIN_NAME = 'dsh-plugin-desktop-profile-smoke'
@@ -82,6 +83,44 @@ try {
     ...prepared.patches,
   ]
   const packageRoot = new URL('../', import.meta.url)
+  const packageManifest = JSON.parse(readFileSync(new URL('package.json', packageRoot), 'utf8'))
+  const harnessVersion = packageManifest.dependencies?.['@deepseek-ai/dsh']
+  const profilePackages = new Set(composeEntries([prepared.patches])
+    .flatMap(entry => typeof entry.name === 'string' && entry.name.startsWith('@deepseek-ai/dsh')
+      ? [entry.name.split('/').slice(0, 2).join('/')]
+      : []))
+  for (const packageName of profilePackages) {
+    if (packageManifest.dependencies?.[packageName] === undefined) {
+      throw new Error(`assembled profile package ${packageName} is not a direct Desktop dependency`)
+    }
+    const installed = JSON.parse(readFileSync(
+      new URL(`node_modules/${packageName}/package.json`, packageRoot),
+      'utf8',
+    ))
+    if (installed.version !== harnessVersion) {
+      throw new Error(
+        `assembled profile package ${packageName} uses ${installed.version} instead of ${harnessVersion}`,
+      )
+    }
+  }
+  const desktopRequire = createRequire(new URL('package.json', packageRoot))
+  const presetManifestPath = desktopRequire.resolve('@deepseek-ai/dsh-agent-presets/package.json')
+  const presetRequire = createRequire(presetManifestPath)
+  const presetsDirectory = join(dirname(presetManifestPath), 'presets')
+  const presetPackages = new Set(readdirSync(presetsDirectory, { recursive: true })
+    .filter(file => String(file).endsWith('.yml'))
+    .flatMap(file => [...readFileSync(join(presetsDirectory, String(file)), 'utf8')
+      .matchAll(/@deepseek-ai\/dsh-[\w-]+/gu)]
+      .map(match => match[0])))
+  for (const packageName of presetPackages) {
+    const installedPath = presetRequire.resolve(`${packageName}/package.json`)
+    const installed = JSON.parse(readFileSync(installedPath, 'utf8'))
+    if (installed.version !== harnessVersion) {
+      throw new Error(
+        `agent preset package ${packageName} resolves to ${installed.version} instead of ${harnessVersion}`,
+      )
+    }
+  }
   const pnpmBinPath = fileURLToPath(new URL('node_modules/pnpm/bin/pnpm.mjs', packageRoot))
   const electronVersion = JSON.parse(
     readFileSync(new URL('node_modules/electron/package.json', packageRoot), 'utf8'),
@@ -159,6 +198,7 @@ try {
         clearEnvironmentPath: pnpmRuntime.clearEnvironmentPath,
         dshBootstrapPath: fileURLToPath(new URL('../lib/desktop-cli.js', import.meta.url)),
       })
+      host.provide('profileContext', desktopHarnessProfileContext(prepared, host.desktopPnpmBootstrap))
       await host.plugin(DesktopProfileService, {
         current: {
           name: 'desktop',
@@ -220,6 +260,28 @@ try {
     throw new Error(`assembled Windows profile selected unexpected default ${agentPresets.defaultId}`)
   }
   const minimalPreset = await agentPresets.resolve('minimal')
+  for (const presetId of presetIds) {
+    const scope = await agentPresets.standingKeyFor(presetId)
+    const snapshot = await ctx.skills.snapshot({ scope })
+    if (presetId === 'cordis'
+      && !snapshot.skills.some(skill => skill.name === 'editing-cordis-compositions')) {
+      throw new Error('Creator preset mounted but its scoped skills are not visible')
+    }
+  }
+  if (ctx.get('hmr') !== undefined) {
+    throw new Error('Desktop must use generation restarts instead of upstream internal-loader HMR')
+  }
+  const pluginManager = ctx.get('pluginManager')
+  if (harnessVersion === '0.1.6-alpha.2' && pluginManager === undefined) {
+    throw new Error('Beta Creator preset requires the upstream plugin management service')
+  }
+  if (pluginManager !== undefined) {
+    await pluginManager.listPlugins()
+    await pluginManager.listBundles()
+    if (ctx.profileContext.packageManager.command !== process.execPath) {
+      throw new Error('plugin management must use the application-owned package manager runtime')
+    }
+  }
   if (minimalPreset.id !== 'minimal') {
     throw new Error(`assembled Windows profile remapped minimal preset to ${minimalPreset.id}`)
   }

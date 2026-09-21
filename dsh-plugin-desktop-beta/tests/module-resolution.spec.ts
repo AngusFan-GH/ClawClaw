@@ -42,8 +42,8 @@ const harness = vi.hoisted(() => {
       }
       return {
         packageName,
-        selected,
-        [source]: selected,
+        selected: { ...selected, packageDir: dirname(selected.manifestPath) },
+        [source]: { ...selected, packageDir: dirname(selected.manifestPath) },
       }
     }),
     registerHooks,
@@ -125,14 +125,15 @@ describe('installProfilePackageResolver', () => {
     expect(harness.overlay).not.toHaveBeenCalled()
   })
 
-  it('uses the overlay-selected side for every Loader package and subpath', () => {
+  it.each([
+    import.meta.resolve('@deepseek-ai/cordis-plugin-loader'),
+    'file:///install/node_modules/.pnpm/loader_other-peers/node_modules/@deepseek-ai/cordis-plugin-loader/lib/index.js',
+  ])('uses the overlay-selected side for packages loaded by %s', loaderEntryUrl => {
     const profileBaseUrl = 'file:///C:/Users/test/profile/package.json'
     harness.sources.set('@deepseek-ai/dsh-web-app', 'install')
     harness.sources.set('dsh-plugin-desktop-beta', 'profile')
     installProfilePackageResolver(profileBaseUrl)
     const nextResolve = vi.fn((specifier: string, context: { parentURL?: string }) => ({ specifier, context }))
-    const loaderEntryUrl = import.meta.resolve('@deepseek-ai/cordis-plugin-loader')
-
     const installed = harness.resolve?.(
       '@deepseek-ai/dsh-web-app',
       { parentURL: profileBaseUrl },
@@ -153,6 +154,20 @@ describe('installProfilePackageResolver', () => {
     expect(harness.overlay).toHaveBeenCalledWith('dsh-plugin-desktop-beta', expect.any(Object))
   })
 
+  it.each([
+    import.meta.resolve('@deepseek-ai/cordis-plugin-loader'),
+    'file:///install/node_modules/.pnpm/loader_other-peers/node_modules/@deepseek-ai/cordis-plugin-loader/lib/index.js',
+  ])('preserves the declared runtime dependencies of Loader %s', loaderEntryUrl => {
+    installProfilePackageResolver('file:///profiles/desktop/package.json')
+    const context = { parentURL: loaderEntryUrl }
+    const result = { url: 'file:///loader-dependencies/cosmokit/index.js' }
+    const nextResolve = vi.fn(() => result)
+    expect(harness.resolve?.('@deepseek-ai/cosmokit', context, nextResolve)).toBe(result)
+    expect(nextResolve).toHaveBeenCalledExactlyOnceWith('@deepseek-ai/cosmokit', context)
+    harness.cjsModule._resolveFilename('@deepseek-ai/cosmokit', { filename: fileURLToPath(loaderEntryUrl) }, false)
+    expect(harness.overlay).not.toHaveBeenCalled()
+  })
+
   it('caches one overlay selection per Profile generation and package root', () => {
     const profileBaseUrl = 'file:///C:/Users/test/profile/package.json'
     harness.sources.set('plugin', 'install')
@@ -166,6 +181,44 @@ describe('installProfilePackageResolver', () => {
     harness.resolve?.('plugin/feature', { parentURL: loaderEntryUrl }, nextResolve)
 
     expect(harness.overlay).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses the overlay for packages loaded from a selected package config URL', () => {
+    const profileBaseUrl = 'file:///C:/Users/test/profile/package.json'
+    harness.sources.set('@deepseek-ai/dsh-agent', 'install')
+    harness.sources.set('@deepseek-ai/dsh-tool-subagent', 'install')
+    installProfilePackageResolver(profileBaseUrl)
+    const loaderEntryUrl = import.meta.resolve('@deepseek-ai/cordis-plugin-loader')
+    const agentUrl = 'file:///install/node_modules/@deepseek-ai/dsh-agent/index.js'
+    const presetUrl = 'file:///install/node_modules/@deepseek-ai/dsh-agent-presets/index.js'
+    const configUrl = 'file:///install/node_modules/@deepseek-ai/dsh-agent-presets/presets/standard/agent.cordis.yml#tool-subagent'
+    const nextResolve = vi.fn((specifier: string, context: { parentURL?: string }) => ({ specifier, context }))
+
+    expect(harness.resolve?.(
+      '@deepseek-ai/dsh-agent',
+      { parentURL: loaderEntryUrl },
+      () => ({ url: agentUrl }),
+    )).toEqual({ url: agentUrl })
+    expect(harness.resolve?.(
+      '@deepseek-ai/dsh-agent-presets',
+      { parentURL: agentUrl },
+      () => ({ url: presetUrl }),
+    )).toEqual({ url: presetUrl })
+    expect(harness.resolve?.(
+      '@deepseek-ai/dsh-tool-subagent',
+      { parentURL: configUrl },
+      nextResolve,
+    )).toEqual({
+      specifier: '@deepseek-ai/dsh-tool-subagent',
+      context: expect.objectContaining({ parentURL: expect.stringMatching(/\/lib\/index\.js$/u) }),
+    })
+    nextResolve.mockClear()
+    harness.resolve?.('@deepseek-ai/dsh-tool-subagent', { parentURL: configUrl }, nextResolve)
+    expect(nextResolve).toHaveBeenCalledWith(
+      '@deepseek-ai/dsh-tool-subagent',
+      expect.objectContaining({ parentURL: expect.stringMatching(/\/lib\/index\.js$/u) }),
+    )
+    expect(harness.overlay).toHaveBeenCalledWith('@deepseek-ai/dsh-tool-subagent', expect.any(Object))
   })
 
   it('refreshes overlay selection when a new HMR generation retains the Profile', () => {
