@@ -1,6 +1,6 @@
 /** Desktop Settings surface dedicated to MCP servers. */
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 // @ts-expect-error package subpath has no declaration file
 import Pencil from 'lucide-react/dist/esm/icons/pencil.mjs'
 // @ts-expect-error package subpath has no declaration file
@@ -34,19 +34,29 @@ interface McpDraft {
   references: string
   secrets: string
   timeoutMs: string
+  reconnectEnabled: boolean
+  reconnectInitialDelayMs: string
+  reconnectMaxDelayMs: string
+  reconnectMaxAttempts: string
   url: string
   enabled: boolean
 }
-const EMPTY_DRAFT: McpDraft = { serverName: '', transport: 'stdio', command: '', args: '', cwd: '', references: '', secrets: '', timeoutMs: '60000', url: '', enabled: true }
+const EMPTY_DRAFT: McpDraft = { serverName: '', transport: 'stdio', command: '', args: '', cwd: '', references: '', secrets: '', timeoutMs: '60000',
+  reconnectEnabled: true, reconnectInitialDelayMs: '500', reconnectMaxDelayMs: '30000', reconnectMaxAttempts: '10', url: '', enabled: true }
 
-function linesToMap(value: string): Record<string, string> {
+function linesToMap(value: string, t: Translate): Record<string, string> {
   const entries = value.split(/\r?\n/u).map(line => line.trim()).filter(Boolean).map(line => {
     const separator = line.indexOf('=')
-    if (separator < 1 || separator === line.length - 1) throw new Error('Use NAME=VALUE, one entry per line')
+    if (separator < 1 || separator === line.length - 1) throw new Error(t('lineFormatError'))
     return [line.slice(0, separator).trim(), line.slice(separator + 1).trim()] as const
   })
-  if (new Set(entries.map(([key]) => key)).size !== entries.length) throw new Error('Credential names must be unique')
+  if (new Set(entries.map(([key]) => key)).size !== entries.length) throw new Error(t('duplicateCredentialError'))
   return Object.fromEntries(entries)
+}
+function integer(value: string, min: number, max: number, error: string): number {
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) throw new Error(error)
+  return parsed
 }
 function mapToLines(value: Readonly<Record<string, string>>): string { return Object.entries(value).map(([key, item]) => `${key}=${item}`).join('\n') }
 
@@ -58,7 +68,9 @@ function mcpDraft(server: DesktopMcpServerView): McpDraft {
   return { previousName: server.serverName, serverName: server.serverName, transport: server.transport,
     command: server.transport === 'stdio' ? server.command : '', args: server.transport === 'stdio' ? server.args.join('\n') : '',
     cwd: server.transport === 'stdio' ? server.cwd : '', references: mapToLines(server.transport === 'stdio' ? server.env : server.headers), secrets: '',
-    timeoutMs: String(server.timeoutMs), url: server.transport === 'streamable-http' ? server.url : '', enabled: server.enabled }
+    timeoutMs: String(server.timeoutMs), reconnectEnabled: server.reconnect.enabled,
+    reconnectInitialDelayMs: String(server.reconnect.initialDelayMs), reconnectMaxDelayMs: String(server.reconnect.maxDelayMs),
+    reconnectMaxAttempts: String(server.reconnect.maxAttempts), url: server.transport === 'streamable-http' ? server.url : '', enabled: server.enabled }
 }
 
 export function McpSettingsSection({ t, api }: McpSettingsSectionProps) {
@@ -69,27 +81,44 @@ export function McpSettingsSection({ t, api }: McpSettingsSectionProps) {
   const [draft, setDraft] = useState<McpDraft>()
   const [removeName, setRemoveName] = useState<string>()
   const [importText, setImportText] = useState<string>()
+  const busyRef = useRef(false)
+  const mountedRef = useRef(true)
 
-  const load = async (): Promise<void> => {
-    setLoading(true); setError(undefined)
-    try { setServers(await api.read()) } catch (cause) { setError(cause instanceof Error ? cause.message : t('unavailable')) }
-    finally { setLoading(false) }
-  }
-  useEffect(() => { void load() }, [])
+  const load = useCallback(async (silent = false): Promise<void> => {
+    if (busyRef.current) return
+    if (!silent) { setLoading(true); setError(undefined) }
+    try {
+      const next = await api.read()
+      if (mountedRef.current) setServers(next)
+    } catch (cause) {
+      if (mountedRef.current && !silent) setError(cause instanceof Error ? cause.message : t('unavailable'))
+    } finally { if (mountedRef.current && !silent) setLoading(false) }
+  }, [api, t])
+  useEffect(() => {
+    mountedRef.current = true
+    void load()
+    const timer = setInterval(() => { void load(true) }, 5_000)
+    return () => { mountedRef.current = false; clearInterval(timer) }
+  }, [load])
   const run = async (key: string, operation: () => Promise<void>): Promise<void> => {
-    setBusy(key); setError(undefined)
+    busyRef.current = true; setBusy(key); setError(undefined)
     try { await operation() } catch (cause) { setError(cause instanceof Error ? cause.message : t('operationFailed')) }
-    finally { setBusy(undefined) }
+    finally { busyRef.current = false; setBusy(undefined) }
   }
   const saveServer = (event: FormEvent): void => {
     event.preventDefault()
     if (draft === undefined) return
     try {
-      const references = linesToMap(draft.references)
-      const secrets = linesToMap(draft.secrets)
-      const timeoutMs = Number(draft.timeoutMs)
-      if (!Number.isInteger(timeoutMs)) throw new Error('Timeout must be a whole number of milliseconds')
-      const reconnect = { enabled: true, initialDelayMs: 500, maxDelayMs: 30_000, maxAttempts: 10 }
+      const references = linesToMap(draft.references, t)
+      const secrets = linesToMap(draft.secrets, t)
+      const referenced = new Set(Object.values(references))
+      if (Object.keys(secrets).some(ref => !referenced.has(ref))) throw new Error(t('unreferencedCredentialError'))
+      const timeoutMs = integer(draft.timeoutMs, 1_000, 600_000, t('timeoutRangeError'))
+      const reconnect = { enabled: draft.reconnectEnabled,
+        initialDelayMs: integer(draft.reconnectInitialDelayMs, 100, 60_000, t('initialDelayRangeError')),
+        maxDelayMs: integer(draft.reconnectMaxDelayMs, 100, 300_000, t('maxDelayRangeError')),
+        maxAttempts: integer(draft.reconnectMaxAttempts, 0, 100, t('maxAttemptsRangeError')) }
+      if (reconnect.maxDelayMs < reconnect.initialDelayMs) throw new Error(t('reconnectDelayOrderError'))
       const server: DesktopMcpServerConfig = draft.transport === 'stdio'
         ? { serverName: draft.serverName.trim(), transport: 'stdio', command: draft.command.trim(),
             args: draft.args.split(/\r?\n/u).map(value => value.trim()).filter(Boolean), cwd: draft.cwd.trim(), env: references, timeoutMs, reconnect, enabled: draft.enabled }
@@ -137,6 +166,16 @@ export function McpSettingsSection({ t, api }: McpSettingsSectionProps) {
           onChange={event => { setDraft({ ...draft, secrets: event.target.value }) }} /></label>
         <label><span>{t('timeout')}</span><input required inputMode="numeric" value={draft.timeoutMs}
           onChange={event => { setDraft({ ...draft, timeoutMs: event.target.value }) }} /></label>
+        <fieldset><legend>{t('reconnect')}</legend>
+          <label className="dshIntegrationsEnabled"><input type="checkbox" checked={draft.reconnectEnabled}
+            onChange={event => { setDraft({ ...draft, reconnectEnabled: event.target.checked }) }} />{t('reconnectEnabled')}</label>
+          <label><span>{t('initialDelay')}</span><input required type="number" min="100" max="60000" step="1" value={draft.reconnectInitialDelayMs}
+            onChange={event => { setDraft({ ...draft, reconnectInitialDelayMs: event.target.value }) }} /></label>
+          <label><span>{t('maxDelay')}</span><input required type="number" min="100" max="300000" step="1" value={draft.reconnectMaxDelayMs}
+            onChange={event => { setDraft({ ...draft, reconnectMaxDelayMs: event.target.value }) }} /></label>
+          <label><span>{t('maxAttempts')}</span><input required type="number" min="0" max="100" step="1" value={draft.reconnectMaxAttempts}
+            onChange={event => { setDraft({ ...draft, reconnectMaxAttempts: event.target.value }) }} /></label>
+        </fieldset>
         <div className="dshIntegrationsEditorFooter"><label className="dshIntegrationsEnabled"><input type="checkbox" checked={draft.enabled}
           onChange={event => { setDraft({ ...draft, enabled: event.target.checked }) }} />{t('enabled')}</label>
           <button type="submit" className="dshIntegrationsCommand" disabled={busy !== undefined}>{t('save')}</button></div>

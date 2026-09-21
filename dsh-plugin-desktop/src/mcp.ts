@@ -1,5 +1,6 @@
 /** Desktop-owned MCP configuration and runtime management. */
 
+import { createHash } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef, isCredentialRefName } from '@deepseek-ai/dsh-credentials'
 import * as McpClient from '@deepseek-ai/dsh-mcp-client'
@@ -77,6 +78,12 @@ function validateSettings(settings: DesktopMcpSettings): void {
   }
 }
 
+export function mcpCredentialReference(serverName: string, key: string): string {
+  const normalized = `MCP_${serverName}_${key}`.replaceAll(/[^A-Za-z0-9_]/gu, '_').toUpperCase()
+  const suffix = createHash('sha256').update(serverName).update('\0').update(key).digest('hex').slice(0, 12).toUpperCase()
+  return `${normalized}_${suffix}`
+}
+
 /** Convert the widely-used `mcpServers` JSON document into reference-only Desktop records. */
 export function importMcpServersDocument(value: unknown): readonly { server: DesktopMcpServerConfig, secrets: Readonly<Record<string, string>> }[] {
   if (!isRecord(value) || !isRecord(value.mcpServers)) throw new TypeError('MCP import must contain an mcpServers object')
@@ -90,7 +97,7 @@ export function importMcpServersDocument(value: unknown): readonly { server: Des
     const secrets: Record<string, string> = {}
     for (const [key, secret] of Object.entries(rawValues ?? {})) {
       if (typeof secret !== 'string' || secret.length === 0 || secret.length > 16_384) throw new TypeError('MCP import credential values must be non-empty strings')
-      const ref = `MCP_${serverName}_${key}`.replaceAll(/[^A-Za-z0-9_]/gu, '_').toUpperCase()
+      const ref = mcpCredentialReference(serverName, key)
       references[key] = ref; secrets[ref] = secret
     }
     const input = stdio
@@ -107,7 +114,6 @@ interface McpStatus { state: DesktopMcpServerView['state'], error?: string, cred
 export class DesktopMcpController {
   private readonly runtime = new Map<string, McpRuntime>()
   private readonly status = new Map<string, McpStatus>()
-  private readonly discoveredTools = new Map<string, readonly { name: string; description: string }[]>()
   private reconcileTail: Promise<void> = Promise.resolve()
   private disposed = false
   private stopWatching: (() => void) | undefined
@@ -136,11 +142,10 @@ export class DesktopMcpController {
       throw new Error(`MCP server already exists: ${server.serverName}`)
     }
     const next = index < 0 ? [...current, server] : current.map((item, itemIndex) => itemIndex === index ? server : item)
-    for (const [ref, secret] of Object.entries(secrets)) {
-      if (!isCredentialRefName(ref) || typeof secret !== 'string' || secret.length === 0 || secret.length > 16_384) throw new TypeError('Invalid MCP credential value')
-      await this.ctx.credentials.set(credentialRef(ref), secret)
-    }
-    await this.settings.update({ mcpServers: next }); await this.reconcile()
+    const referenced = new Set(Object.values(server.transport === 'stdio' ? server.env : server.headers))
+    const writes = this.validateCredentialWrites(secrets, referenced)
+    await this.commitCredentials(writes, async () => { await this.settings.update({ mcpServers: next }) })
+    await this.reconcile()
     return await this.read()
   }
   async remove(serverName: string): Promise<DesktopMcpView> {
@@ -154,11 +159,19 @@ export class DesktopMcpController {
     const current = this.settings.get().mcpServers
     const names = new Set(current.map(server => server.serverName))
     for (const { server } of imported) if (names.has(server.serverName)) throw new Error(`MCP server already exists: ${server.serverName}`)
+    const mergedSecrets = new Map<string, string>()
     for (const { server, secrets } of imported) {
-      for (const [ref, secret] of Object.entries(secrets)) await this.ctx.credentials.set(credentialRef(ref), secret)
+      const referenced = new Set(Object.values(server.transport === 'stdio' ? server.env : server.headers))
+      for (const [ref, secret] of this.validateCredentialWrites(secrets, referenced)) {
+        if (mergedSecrets.has(ref)) throw new Error(`MCP credential reference collision: ${ref}`)
+        mergedSecrets.set(ref, secret)
+      }
       names.add(server.serverName)
     }
-    await this.settings.update({ mcpServers: [...current, ...imported.map(item => item.server)] }); await this.reconcile()
+    await this.commitCredentials([...mergedSecrets], async () => {
+      await this.settings.update({ mcpServers: [...current, ...imported.map(item => item.server)] })
+    })
+    await this.reconcile()
     return await this.read()
   }
   async toggle(serverName: string, enabled: boolean): Promise<DesktopMcpView> {
@@ -187,7 +200,6 @@ export class DesktopMcpController {
     for (const serverName of [...this.runtime.keys()]) {
       const server = desired.get(serverName)
       if (server === undefined || !server.enabled || this.runtime.get(serverName)?.fingerprint !== JSON.stringify(server)) {
-        if (server !== undefined && this.runtime.get(serverName)?.fingerprint !== JSON.stringify(server)) this.discoveredTools.delete(serverName)
         await this.stop(serverName)
       }
     }
@@ -218,7 +230,6 @@ export class DesktopMcpController {
       await fiber
       if (this.disposed) { await fiber.dispose(); return }
       this.runtime.set(server.serverName, { fingerprint: JSON.stringify(server), dispose: () => fiber.dispose() })
-      this.discoveredTools.set(server.serverName, this.liveTools(server.serverName))
       this.status.set(server.serverName, { state: 'running', credentialsReady: true })
     } catch (cause) {
       this.status.set(server.serverName, { state: 'error', error: cause instanceof Error ? cause.message : String(cause), credentialsReady: !String(cause).includes('credential references') })
@@ -231,16 +242,47 @@ export class DesktopMcpController {
   }
   private projectServer(server: DesktopMcpServerConfig): DesktopMcpServerView {
     const status = this.status.get(server.serverName) ?? { state: server.enabled ? 'starting' : 'disabled' }
-    const liveTools = this.liveTools(server.serverName)
-    const tools = liveTools.length > 0 ? liveTools : this.discoveredTools.get(server.serverName) ?? []
     const credentialsReady = status.credentialsReady ?? true
-    return Object.freeze({ ...server, state: status.state, tools: Object.freeze(tools), credentialsReady,
+    return Object.freeze({ ...server, state: status.state, tools: this.liveTools(server.serverName), credentialsReady,
       ...(status.error === undefined ? {} : { error: status.error }) })
   }
   private liveTools(serverName: string): readonly { name: string; description: string }[] {
     const prefix = `mcp__${serverName}__`
     return Object.freeze(this.ctx.tools.schemas().filter(tool => tool.name.startsWith(prefix))
       .map(tool => Object.freeze({ name: tool.name, description: tool.description ?? '' })))
+  }
+  private validateCredentialWrites(secrets: Readonly<Record<string, string>>, referenced: ReadonlySet<string>): readonly (readonly [string, string])[] {
+    return Object.entries(secrets).map(([ref, secret]) => {
+      if (!isCredentialRefName(ref) || typeof secret !== 'string' || secret.length === 0 || secret.length > 16_384) {
+        throw new TypeError('Invalid MCP credential value')
+      }
+      if (!referenced.has(ref)) throw new TypeError(`MCP credential is not referenced by this server: ${ref}`)
+      return [ref, secret] as const
+    })
+  }
+  private async commitCredentials(writes: readonly (readonly [string, string])[], commit: () => Promise<void>): Promise<void> {
+    const previous = new Map<string, string | undefined>()
+    const written: string[] = []
+    try {
+      for (const [ref, secret] of writes) {
+        const branded = credentialRef(ref)
+        previous.set(ref, (await this.ctx.credentials.resolve(branded))?.value)
+        await this.ctx.credentials.set(branded, secret)
+        written.push(ref)
+      }
+      await commit()
+    } catch (cause) {
+      const rollbackErrors: unknown[] = []
+      for (const ref of written.reverse()) {
+        try {
+          const value = previous.get(ref)
+          if (value === undefined) await this.ctx.credentials.unset(credentialRef(ref))
+          else await this.ctx.credentials.set(credentialRef(ref), value)
+        } catch (rollbackCause) { rollbackErrors.push(rollbackCause) }
+      }
+      if (rollbackErrors.length > 0) throw new AggregateError([cause, ...rollbackErrors], 'MCP credential transaction and rollback failed')
+      throw cause
+    }
   }
 }
 
