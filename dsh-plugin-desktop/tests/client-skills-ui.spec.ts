@@ -35,6 +35,110 @@ async function click(text: string) { await act(async () => { button(text).click(
 afterEach(async () => { await act(async () => { root?.unmount() }); root = undefined; document.body.replaceChildren(); vi.unstubAllGlobals() })
 
 describe('Skills catalog UI', () => {
+  it('shows one name-sorted list with source labels and hides redundant labels when filtered', async () => {
+    await mount({}, { configure: api => { vi.mocked(api.readView).mockResolvedValue({ ...view, skills: [
+      { ...skill, name: 'z-local' }, { ...skill, name: 'a-shared', source: 'user-agents' },
+    ] }) } })
+    expect(document.querySelectorAll('.dshSkillsGrid')).toHaveLength(1)
+    expect([...document.querySelectorAll('.dshSkillsCardHeading strong')].map(item => item.textContent)).toEqual(['a-shared', 'z-local'])
+    expect([...document.querySelectorAll('.dshSkillsCardSource')].map(item => item.textContent)).toEqual([zh.sourceUserAgents, zh.sourceUserDsh])
+    expect(document.querySelectorAll('.dshSkillsCardDelete')).toHaveLength(1)
+    await click(zh.filterSource); await click(`${zh.sourceUserAgents} · 1`)
+    expect(document.querySelectorAll('.dshSkillsCard')).toHaveLength(1)
+    expect(document.querySelector('.dshSkillsCardSource')).toBeNull()
+  })
+  it('requires confirmation for permanent deletion and supports cancellation', async () => {
+    const purge = vi.fn(async (ids: readonly string[]) => ({ deleted: ids, failed: [] }))
+    await mount({}, { configure: api => { api.purge = purge } })
+    await act(async () => { (document.querySelectorAll('[role="tab"]')[1] as HTMLButtonElement).click() })
+    await click(`${zh.permanentlyDelete}: removed`)
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(zh.purgeWarning)
+    expect(purge).not.toHaveBeenCalled()
+    await click(zh.cancel)
+    expect(purge).not.toHaveBeenCalled()
+    await click(`${zh.permanentlyDelete}: removed`); await click(zh.permanentlyDelete)
+    expect(purge).toHaveBeenCalledWith(['deleted-id'])
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(document.body.textContent).toContain(zh.recycleEmpty)
+  })
+  it('keeps only failed items in the clear confirmation and retries those IDs', async () => {
+    const purge = vi.fn().mockResolvedValueOnce({ deleted: ['deleted-id'], failed: ['second-id'] }).mockResolvedValueOnce({ deleted: ['second-id'], failed: [] })
+    await mount({}, { configure: api => {
+      api.purge = purge
+      vi.mocked(api.readView).mockResolvedValue({ ...view, recycled: [...view.recycled, { id: 'second-id', name: 'second', deletedAt: '2026-09-21T00:00:00Z' }] })
+    } })
+    await act(async () => { (document.querySelectorAll('[role="tab"]')[1] as HTMLButtonElement).click() })
+    await click(zh.emptyRecycleBin)
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(`${zh.purgeCount}: 2`)
+    await click(zh.permanentlyDelete)
+    expect(purge).toHaveBeenCalledWith(['deleted-id', 'second-id'])
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain(zh.purgeFailed)
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(`${zh.purgeCount}: 1`)
+    await click(zh.permanentlyDelete)
+    expect(purge).toHaveBeenLastCalledWith(['second-id'])
+    expect(button(zh.emptyRecycleBin).disabled).toBe(true)
+  })
+  it('previews a selected folder and imports all files only after confirmation', async () => {
+    const importBundle = vi.fn(async () => view)
+    const api = await mount({}, { configure: api => { api.importBundle = importBundle } })
+    await click(zh.importRaw)
+    const file = new File(['Instructions'], 'SKILL.md')
+    Object.defineProperty(file, 'webkitRelativePath', { value: 'review/SKILL.md' })
+    Object.defineProperty(file, 'arrayBuffer', { value: async () => new TextEncoder().encode('Instructions').buffer })
+    const input = document.querySelector<HTMLInputElement>('input[webkitdirectory]')!
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] })
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })) })
+    expect(document.querySelector('.dshSkillBundleList')?.textContent).toContain('SKILL.md')
+    expect(importBundle).not.toHaveBeenCalled()
+    await click(zh.import)
+    expect(importBundle).toHaveBeenCalledWith([{ path: 'SKILL.md', base64: btoa('Instructions') }])
+    expect(api.importDocument).not.toHaveBeenCalled()
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+  })
+  it('browses resource files without executing or rendering their contents as HTML', async () => {
+    const api = await mount({}, { configure: api => {
+      vi.mocked(api.detail).mockResolvedValue({ ...skill, content: 'Instructions', path: '/data/skills/review/SKILL.md' })
+      api.files = vi.fn(async () => [{ path: 'scripts/check.py', size: 12, blocked: false }, { path: 'linked', size: 0, blocked: true }])
+      api.file = vi.fn(async (_name, path) => ({ path, content: '<script>not executed</script>', unavailable: false }))
+    } })
+    await click('查看详情: review')
+    expect(document.querySelector('.dshSkillFiles')).toBeNull()
+    await click(zh.skillFiles)
+    const files = document.querySelector('.dshSkillFiles')!
+    expect(files.textContent).toContain('check.py')
+    expect(button('linked').disabled).toBe(true)
+    await act(async () => { files.querySelector('summary')!.click() })
+    await click('scripts/check.py')
+    expect(api.file).toHaveBeenCalledWith('review', 'scripts/check.py')
+    expect(files.querySelector('pre')?.textContent).toBe('<script>not executed</script>')
+    expect(files.querySelector('script')).toBeNull()
+    await click(zh.backToFiles)
+    expect(files.querySelector('pre')).toBeNull()
+    expect(files.querySelector('.dshSkillFileBrowser')?.getAttribute('data-preview')).toBe('false')
+  })
+  it('filters Skills by source without changing their scope or calling configuration', async () => {
+    const api = await mount({}, { configure: api => { vi.mocked(api.readView).mockResolvedValue({ ...view, skills: [skill, { ...skill, name: 'project-review', source: 'project-agents', editable: false }] }) } })
+    await click(zh.filterSource)
+    await click(`${zh.sourceProjectAgents} · 1`)
+    expect(document.querySelectorAll('.dshSkillsCard')).toHaveLength(1)
+    expect(button('查看详情: project-review')).toBeDefined()
+    expect(api.setModelInvocable).not.toHaveBeenCalled()
+    await click(zh.filterSource)
+    await click(`${zh.allSources} · 2`)
+    expect(document.querySelectorAll('.dshSkillsCard')).toHaveLength(2)
+  })
+  it('ignores stale file previews after switching files', async () => {
+    let finish!: (value: { path: string; content: string; unavailable: boolean }) => void
+    await mount({}, { configure: api => {
+      vi.mocked(api.detail).mockResolvedValue({ ...skill, content: 'Instructions', path: '/data/skills/review/SKILL.md' })
+      api.files = async () => [{ path: 'a.md', size: 1, blocked: false }, { path: 'b.md', size: 1, blocked: false }]
+      api.file = async (_name, path) => path === 'a.md' ? new Promise(done => { finish = done }) : { path, content: 'New content', unavailable: false }
+    } })
+    await click('查看详情: review'); await click(zh.skillFiles)
+    await click('a.md'); await click('b.md')
+    await act(async () => { finish({ path: 'a.md', content: 'Old content', unavailable: false }) })
+    expect(document.querySelector('.dshSkillFilePreview pre')?.textContent).toBe('New content')
+  })
   it('collapses directories by default while keeping the effective preset visible', async () => {
     await mount({}, { configure: api => { vi.mocked(api.readView).mockResolvedValue({ ...view, locations: {
       userLibrary: '/data/skills', recycleBin: '/data/skills/.recycle', cwd: '/workspaces/default', preset: 'standard',
@@ -121,7 +225,7 @@ describe('Skills catalog UI', () => {
     } })
     await click(zh.skillScope); await click('Project A · /project/a')
     expect(api.forScope).toHaveBeenCalledWith({ workspaceId: 'a' })
-    expect(document.querySelector('.dshSkillsGroup h3')?.textContent).toContain(zh.sourceProjectAgents)
+    expect(document.querySelector('.dshSkillsCardSource')?.textContent).toContain(zh.sourceProjectAgents)
     expect(button(zh.skillScope).textContent).toBe('Project A')
   })
   it('refreshes in the background without interrupting an open Skill', async () => {
@@ -151,24 +255,16 @@ describe('Skills catalog UI', () => {
       expect(button('查看详情: review')).toBeDefined()
     } finally { vi.useRealTimers() }
   })
-  it('delays the compact deletion tooltip and keeps the full reason in details', async () => {
+  it('explains shared origins and edit impact without offering unsupported deletion', async () => {
     await mount({ source: 'user-agents' })
-    vi.useFakeTimers()
-    try {
-      const anchor = button('移至回收站: review').parentElement!
-      vi.spyOn(anchor, 'getBoundingClientRect').mockReturnValue(new DOMRect(200, 120, 30, 30))
-      await act(async () => { anchor.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })) })
-      expect(document.querySelector('[role="tooltip"]')).toBeNull()
-      await act(async () => { vi.advanceTimersByTime(350) })
-      const tooltip = document.querySelector<HTMLElement>('[role="tooltip"]')!
-      expect(tooltip.textContent).toBe(zh.recycleSharedHint)
-      expect(tooltip.style.maxWidth).toBe('240px')
-      expect(tooltip.dataset.side).toBe('top')
-      await act(async () => { anchor.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })) })
-      expect(document.querySelector('[role="tooltip"]')).toBeNull()
-    } finally { vi.useRealTimers() }
+    expect(document.querySelector('.dshSkillsCardSource')?.textContent).toBe(zh.sourceUserAgents)
+    expect(document.querySelector('.dshSkillsCardDelete')).toBeNull()
     await click('查看详情: review')
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(zh.recycleSharedRestricted)
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(zh.sharedSkillOrigin)
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(zh.sharedSkillEditImpact)
+    await click(zh.edit)
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(zh.sharedSkillEditImpact)
   })
   it('offers card deletion without nested buttons and requires confirmation before recycling', async () => {
     const api = await mount()
@@ -183,11 +279,11 @@ describe('Skills catalog UI', () => {
     expect(document.querySelector('.dshSkillsCard')).toBeNull()
     expect(document.activeElement).toBe(document.querySelector('[role="tab"]'))
   })
-  it.each(['user-agents', 'bundled', 'plugin:demo'])('keeps restricted deletion visible and explains the %s source', async source => {
+  it.each(['user-agents', 'bundled', 'plugin:demo'])('hides unsupported deletion and explains the %s source', async source => {
     const api = await mount({ source, editable: source === 'user-agents' })
-    expect(button('移至回收站: review').disabled).toBe(true)
+    expect(document.querySelector('.dshSkillsCardDelete')).toBeNull()
     await click('查看详情: review')
-    expect(button('移至回收站').disabled).toBe(true)
+    expect([...document.querySelectorAll('button')].some(item => item.textContent === zh.recycle)).toBe(false)
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(source === 'user-agents' ? zh.recycleSharedRestricted : zh.recycleManagedRestricted)
     expect(api.recycle).not.toHaveBeenCalled()
   })

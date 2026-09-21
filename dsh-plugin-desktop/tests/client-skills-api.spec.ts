@@ -6,6 +6,14 @@ const view = { skills: [{ name: 'review', description: 'Review code', source: 'u
   modelInvocable: true, userInvocable: true, editable: true }], recycled: [] }
 
 describe('Desktop Skills client API', () => {
+  it('submits only confirmed recycled IDs and validates partial purge results', async () => {
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ deleted: ['a'], failed: ['b'] })))
+    const api = createDesktopSkillsApi(fetcher)
+    expect(await api.purge!(['a', 'b'])).toEqual({ deleted: ['a'], failed: ['b'] })
+    expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toMatchObject({ action: 'purge', ids: ['a', 'b'] })
+    fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ deleted: ['unconfirmed'], failed: ['b'] })))
+    await expect(api.purge!(['a', 'b'])).rejects.toThrow('Invalid Skill purge result')
+  })
   it('validates installation diagnostics independently of effective Skills', () => {
     const installed = [{ name: 'hidden', path: '/data/skills/hidden/SKILL.md', status: 'overridden', effectivePath: '/project/.agents/skills/hidden/SKILL.md', effectiveSource: 'project-agents' }]
     expect(parseDesktopSkillsView({ ...view, installed }).installed).toEqual(installed)

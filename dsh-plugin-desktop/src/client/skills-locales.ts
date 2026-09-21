@@ -1,4 +1,16 @@
 export const zh = {
+  clawclawSkillOrigin: '保存在 ClawClaw 用户技能目录。', sharedSkillOrigin: '来自本机共享 Agents 技能目录，不代表团队共享或云同步。',
+  sharedSkillEditImpact: '修改指令或调用设置可能影响使用同一技能目录的其他工具。',
+  permanentlyDelete: '永久删除', emptyRecycleBin: '清空回收站', purgeWarning: '以下技能及其全部脚本和资源将被永久删除，无法恢复。',
+  purgeFailed: '部分条目未删除。剩余条目如下，可重试。', purgeCount: '待删除数量',
+  allSources: '全部来源', filterSource: '按来源筛选', clearFilters: '清除筛选', skillOverview: '概览',
+  searchSkillFiles: '搜索文件', selectSkillFile: '未选择文件', backToFiles: '返回文件列表',
+  chooseFolder: '选择技能文件夹', skillFiles: '技能文件', skillFilesUnavailable: '无法读取技能文件，请刷新重试。',
+  skillFileBlocked: '不支持的文件类型', skillFileNoPreview: '此文件为二进制或超过 256 KiB，暂不支持预览。',
+  skillBundleHint: '将导入以下全部文件（最多 500 个，总计 8 MiB）。不会自动执行脚本或安装依赖。',
+  skillBundleLimit: '技能包最多包含 500 个文件，总大小不能超过 8 MiB。',
+  skillBundleInvalidPath: '技能包包含不安全、重复或不支持的文件路径。',
+  skillBundleMissingDocument: '请选择根目录包含 SKILL.md 的技能文件夹。', skillBundleConflict: '同名技能已存在，未覆盖现有文件。',
   effectiveSkill: '当前生效版本', diagnosticMissingFile: '缺少 SKILL.md 文件', diagnosticUnreadable: '文件或链接无法读取',
   diagnosticLimit: '文件超过诊断大小限制，未检查内容', diagnosticInvalid: '文档格式或元数据不符合要求',
   diagnosticNotDiscovered: '当前范围与预设未发现此技能',
@@ -33,12 +45,24 @@ export const zh = {
   whenToUse: '何时使用', whenToUsePlaceholder: '说明适用场景，帮助 Agent 判断何时选择它', instructions: '执行指令', instructionsPlaceholder: '输入 Agent 执行此技能时应遵循的步骤、约束和输出要求',
   importSkill: '导入 SKILL.md', importRaw: '导入技能', importHint: '导入到共享用户技能库；仅包含当前文档，不包含引用的脚本或资源文件。', rawDocument: 'SKILL.md 内容', importPlaceholder: '粘贴完整的 SKILL.md 内容', import: '导入', recycle: '移至回收站', recycleBin: '回收站', restore: '恢复', confirmRecycle: '确定将此技能移至回收站吗？',
   closeDetails: '关闭详情', expand: '展开', collapse: '收起', manage: '管理', source: '来源', provider: '提供方', path: '文件位置', skillContent: '技能指令',
-  sourceUserDsh: 'ClawClaw 用户技能', sourceUserAgents: 'Agents 用户技能', sourceBundled: '内置技能', sourcePlugin: '插件技能', sourceOther: '其他来源',
+  sourceUserDsh: 'ClawClaw 技能', sourceUserAgents: '共享技能', sourceBundled: '内置技能', sourcePlugin: '插件技能', sourceOther: '其他来源',
 } as const
 
 export type DesktopSkillsLocaleKey = keyof typeof zh
 
 export const en: Record<DesktopSkillsLocaleKey, string> = {
+  clawclawSkillOrigin: 'Stored in the ClawClaw user Skill directory.', sharedSkillOrigin: 'From the shared Agents directory on this device. This does not imply team sharing or cloud sync.',
+  sharedSkillEditImpact: 'Changes to instructions or invocation settings may affect other tools using the same Skill directory.',
+  permanentlyDelete: 'Delete permanently', emptyRecycleBin: 'Empty recycle bin', purgeWarning: 'These Skills and all their scripts and resources will be permanently deleted. This cannot be undone.',
+  purgeFailed: 'Some items could not be deleted. Remaining items are listed below; retry to continue.', purgeCount: 'Items to delete',
+  allSources: 'All sources', filterSource: 'Filter by source', clearFilters: 'Clear filters', skillOverview: 'Overview',
+  searchSkillFiles: 'Search files', selectSkillFile: 'No file selected', backToFiles: 'Back to files',
+  chooseFolder: 'Choose Skill folder', skillFiles: 'Skill files', skillFilesUnavailable: 'Unable to read Skill files. Refresh to retry.',
+  skillFileBlocked: 'Unsupported file type', skillFileNoPreview: 'Binary files and files larger than 256 KiB cannot be previewed.',
+  skillBundleHint: 'All listed files will be imported (up to 500 files and 8 MiB total). Scripts and dependencies will not run or install automatically.',
+  skillBundleLimit: 'A Skill bundle may contain up to 500 files and 8 MiB total.',
+  skillBundleInvalidPath: 'The bundle contains unsafe, duplicate or unsupported file paths.',
+  skillBundleMissingDocument: 'Select a Skill folder with SKILL.md at its root.', skillBundleConflict: 'A Skill with this name already exists. Existing files were not overwritten.',
   effectiveSkill: 'Effective version', diagnosticMissingFile: 'SKILL.md file is missing', diagnosticUnreadable: 'Cannot read the file or link',
   diagnosticLimit: 'File exceeds the inspection size limit; content was not checked', diagnosticInvalid: 'Invalid document format or metadata',
   diagnosticNotDiscovered: 'Not discovered in the current scope and preset',
@@ -73,5 +97,5 @@ export const en: Record<DesktopSkillsLocaleKey, string> = {
   whenToUse: 'When to use', whenToUsePlaceholder: 'Describe the situations that should lead the Agent to choose this Skill', instructions: 'Instructions', instructionsPlaceholder: 'Enter the steps, constraints, and output requirements the Agent should follow',
   importSkill: 'Import SKILL.md', importRaw: 'Import Skill', importHint: 'Imports into the shared user library. Referenced scripts and assets are not included.', rawDocument: 'SKILL.md content', importPlaceholder: 'Paste the complete SKILL.md content', import: 'Import', recycle: 'Move to recycle bin', recycleBin: 'Recycle bin', restore: 'Restore', confirmRecycle: 'Move this Skill to the recycle bin?',
   closeDetails: 'Close details', expand: 'Expand', collapse: 'Collapse', manage: 'Manage', source: 'Source', provider: 'Provider', path: 'File location', skillContent: 'Skill instructions',
-  sourceUserDsh: 'ClawClaw user Skills', sourceUserAgents: 'Agents user Skills', sourceBundled: 'Built-in Skills', sourcePlugin: 'Plugin Skills', sourceOther: 'Other sources',
+  sourceUserDsh: 'ClawClaw Skills', sourceUserAgents: 'Shared Skills', sourceBundled: 'Built-in Skills', sourcePlugin: 'Plugin Skills', sourceOther: 'Other sources',
 }

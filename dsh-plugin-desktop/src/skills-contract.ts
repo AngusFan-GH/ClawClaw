@@ -1,5 +1,10 @@
 export const DESKTOP_SKILLS_PATH = '/api/desktop/skills'
 export const DESKTOP_SKILLS_ACTION_PATH = '/api/desktop/skills/action'
+export const MAX_SKILL_BUNDLE_BYTES = 8 * 1024 * 1024
+export const MAX_SKILL_BUNDLE_FILES = 500
+export interface DesktopSkillBundleFile { readonly path: string; readonly base64: string }
+export interface DesktopSkillFile { readonly path: string; readonly size: number; readonly blocked: boolean }
+export interface DesktopSkillFilePreview { readonly path: string; readonly content?: string; readonly unavailable: boolean }
 
 export interface DesktopSkillsScope {
   readonly workspaceId?: string
@@ -32,6 +37,10 @@ export interface DesktopRecycledSkill {
   readonly id: string
   readonly name: string
   readonly deletedAt: string
+}
+export interface DesktopSkillPurgeResult {
+  readonly deleted: readonly string[]
+  readonly failed: readonly string[]
 }
 
 export interface DesktopSkillsView {

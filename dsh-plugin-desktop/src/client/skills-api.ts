@@ -1,7 +1,7 @@
 import {
   DESKTOP_SKILLS_ACTION_PATH, DESKTOP_SKILLS_PATH,
   type DesktopRecycledSkill, type DesktopSkillDetail, type DesktopSkillsView, type DesktopSkillView,
-  type DesktopSkillInput, type DesktopSkillsScope, type DesktopSkillsWorkspace,
+  type DesktopSkillInput, type DesktopSkillsScope, type DesktopSkillsWorkspace, type DesktopSkillBundleFile, type DesktopSkillFile, type DesktopSkillFilePreview,
 } from '../skills-contract.ts'
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
@@ -77,6 +77,10 @@ async function readResponse(response: Response): Promise<unknown> {
   return value
 }
 export interface DesktopSkillsApi {
+  purge?(ids: readonly string[]): Promise<import('../skills-contract.ts').DesktopSkillPurgeResult>
+  importBundle?(files: readonly DesktopSkillBundleFile[]): Promise<DesktopSkillsView>
+  files?(name: string): Promise<readonly DesktopSkillFile[]>
+  file?(name: string, path: string): Promise<DesktopSkillFilePreview>
   forPreset(preset?: string): DesktopSkillsApi
   forScope(scope: DesktopSkillsScope): DesktopSkillsApi
   workspaces(): Promise<readonly DesktopSkillsWorkspace[]>
@@ -99,6 +103,29 @@ export function createDesktopSkillsApi(fetcher: FetchLike = globalThis.fetch.bin
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, ...selection, ...(preset === undefined ? {} : { preset }) }),
   }))
   return Object.freeze({
+    async purge(ids: readonly string[]) {
+      const value = await post({ action: 'purge', ids })
+      if (!isRecord(value) || !Array.isArray(value.deleted) || !Array.isArray(value.failed)) throw new Error('Invalid Skill purge result')
+      const results = [...value.deleted, ...value.failed]
+      if (results.length !== ids.length || new Set(results).size !== results.length || results.some(id => typeof id !== 'string' || !ids.includes(id))) throw new Error('Invalid Skill purge result')
+      return { deleted: value.deleted as string[], failed: value.failed as string[] }
+    },
+    async importBundle(files: readonly DesktopSkillBundleFile[]) { return parseDesktopSkillsView(await post({ action: 'import-bundle', files })) },
+    async files(name: string) {
+      const value = await post({ action: 'files', name })
+      if (!isRecord(value) || !Array.isArray(value.files) || value.files.length > 500) throw new Error('Invalid Skill files')
+      return value.files.map(file => {
+        if (!isRecord(file) || !text(file.path, 1024) || typeof file.size !== 'number' || !Number.isSafeInteger(file.size) || file.size < 0 || typeof file.blocked !== 'boolean') throw new Error('Invalid Skill files')
+        return { path: file.path, size: file.size, blocked: file.blocked }
+      })
+    },
+    async file(name: string, path: string) {
+      const value = await post({ action: 'file', name, path })
+      if (!isRecord(value) || value.path !== path || typeof value.unavailable !== 'boolean'
+        || (value.content !== undefined && !text(value.content, 256 * 1024))
+        || (!value.unavailable && typeof value.content !== 'string')) throw new Error('Invalid Skill file')
+      return { path, unavailable: value.unavailable, ...(value.content === undefined ? {} : { content: value.content as string }) }
+    },
     forPreset(next?: string) { return createDesktopSkillsApi(fetcher, next, selection) },
     forScope(next: DesktopSkillsScope) { return createDesktopSkillsApi(fetcher, preset, next) },
     async workspaces() {

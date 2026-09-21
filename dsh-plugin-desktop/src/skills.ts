@@ -13,8 +13,9 @@ import type { SkillDefinition, SkillSummary, SkillViewOptions } from '@deepseek-
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { parseDocument } from 'yaml'
 import { registerDesktopJsonApi } from './desktop-json-api.ts'
+import { decodeSkillBundle, listSkillFiles, previewSkillFile } from './skill-bundle.ts'
 import {
-  DESKTOP_SKILLS_ACTION_PATH, DESKTOP_SKILLS_PATH,
+  DESKTOP_SKILLS_ACTION_PATH, DESKTOP_SKILLS_PATH, MAX_SKILL_BUNDLE_BYTES,
   type DesktopRecycledSkill, type DesktopSkillDetail, type DesktopSkillInput, type DesktopSkillsView, type DesktopSkillView, type DesktopSkillsScope, type DesktopSkillInstallation,
 } from './skills-contract.ts'
 
@@ -353,6 +354,33 @@ export class DesktopSkillsController {
     const view = await this.afterWrite()
     return Object.freeze({ ...view, skills: Object.freeze([...view.skills.filter(skill => skill.name !== name), imported]) })
   }
+  async importBundle(value: unknown): Promise<DesktopSkillsView> {
+    const files = decodeSkillBundle(value)
+    const document = files.find(file => file.path === 'SKILL.md')!.data
+    if (document.length > MAX_SKILL_CONTENT_BYTES) throw new Error('skillBundleLimit')
+    const imported = skillDocument(new TextDecoder('utf-8', { fatal: true }).decode(document))
+    if ((await this.read()).skills.some(skill => skill.name === imported.name)) throw new Error('skillBundleConflict')
+    const directory = resolve(skillLibraryRoot(), imported.name)
+    await mkdir(skillLibraryRoot(), { recursive: true, mode: 0o700 })
+    try { await mkdir(directory, { mode: 0o700 }) }
+    catch (cause) { if ((cause as NodeJS.ErrnoException).code === 'EEXIST') throw new Error('skillBundleConflict'); throw cause }
+    try {
+      // Publish SKILL.md last so discovery never sees an incomplete new bundle.
+      for (const file of [...files.filter(file => file.path !== 'SKILL.md'), files.find(file => file.path === 'SKILL.md')!]) {
+        const path = resolve(directory, file.path)
+        await mkdir(dirname(path), { recursive: true, mode: 0o700 })
+        await writeFile(path, file.data, { flag: 'wx', mode: 0o600 })
+      }
+    } catch (cause) { await rm(directory, { recursive: true, force: true }); throw cause }
+    return await this.afterWrite()
+  }
+  private async bundleDocument(name: string): Promise<string> {
+    const skill = await this.getSkill(name)
+    if (skill?.provider !== 'filesystem' || skill.path === undefined) throw new Error('skillFilesUnavailable')
+    return skill.path
+  }
+  async files(name: string) { return { files: await listSkillFiles(await this.bundleDocument(name)) } }
+  async file(name: string, path: string) { return await previewSkillFile(await this.bundleDocument(name), path) }
   async create(inputValue: DesktopSkillInput): Promise<DesktopSkillsView> {
     const input = skillInput(inputValue)
     const text = createStructuredSkillDocument(input)
@@ -402,10 +430,39 @@ export class DesktopSkillsController {
     const view = await this.afterWrite()
     return Object.freeze({ ...view, skills: Object.freeze(view.skills.some(skill => skill.name === name) ? view.skills : [...view.skills, restored]) })
   }
+  async purge(ids: unknown): Promise<{ deleted: string[]; failed: string[] }> {
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > 10_000 || ids.some(id => typeof id !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*--[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(id))
+      || new Set(ids).size !== ids.length) throw new TypeError('Invalid recycled Skill IDs')
+    const root = recycleRoot()
+    const rootInfo = await lstat(root).catch(cause => {
+      if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+      throw cause
+    })
+    if (rootInfo === undefined) return { deleted: ids as string[], failed: [] }
+    if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink() || await realpath(root) !== resolve(await realpath(skillLibraryRoot()), '.recycle')) throw new Error('Invalid recycle directory')
+    const deleted: string[] = []; const failed: string[] = []
+    for (const id of ids as string[]) {
+      const target = resolve(root, id)
+      try {
+        const info = await lstat(target)
+        if (!info.isDirectory() || info.isSymbolicLink()) { failed.push(id); continue }
+        await rm(target, { recursive: true })
+        deleted.push(id)
+      } catch (cause) {
+        if ((cause as NodeJS.ErrnoException).code === 'ENOENT') deleted.push(id)
+        else failed.push(id)
+      }
+    }
+    return { deleted, failed }
+  }
 }
 
-async function handleAction(controller: DesktopSkillsController, value: unknown): Promise<DesktopSkillsView | DesktopSkillDetail> {
+async function handleAction(controller: DesktopSkillsController, value: unknown): Promise<object> {
   if (!isRecord(value) || typeof value.action !== 'string') throw new TypeError('invalid Skills action')
+  if (value.action === 'purge') return controller.purge(value.ids)
+  if (value.action === 'import-bundle') return controller.importBundle(value.files)
+  if (value.action === 'files' && typeof value.name === 'string') return controller.files(value.name)
+  if (value.action === 'file' && typeof value.name === 'string' && typeof value.path === 'string') return controller.file(value.name, value.path)
   if (value.action === 'detail' && typeof value.name === 'string') return await controller.detail(value.name)
   if (value.action === 'set-model-invocable' && typeof value.name === 'string' && typeof value.enabled === 'boolean') {
     return await controller.setModelInvocable(value.name, value.enabled)
@@ -425,7 +482,7 @@ async function handleAction(controller: DesktopSkillsController, value: unknown)
 export function apply(ctx: Context): void {
   const controller = new DesktopSkillsController(ctx)
   registerDesktopJsonApi(ctx, { label: 'Skills', readPath: DESKTOP_SKILLS_PATH, actionPath: DESKTOP_SKILLS_ACTION_PATH,
-    maxBodyBytes: MAX_SKILL_CONTENT_BYTES * 6 + 16_384,
+    maxBodyBytes: MAX_SKILL_BUNDLE_BYTES * 2,
     read: () => controller.read(), action: async value => {
       if (!isRecord(value)) throw new TypeError('Invalid Skills action')
       if (value.action === 'workspaces') return { workspaces: (ctx.get('workspaceRegistry')?.list() ?? []).map(workspace => ({ id: workspace.id, title: workspace.title, path: workspace.path })) }
