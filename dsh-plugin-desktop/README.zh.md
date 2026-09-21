@@ -1,8 +1,8 @@
-# ClawClaw Desktop（Stable）
+# ClawClaw Desktop
 
 [English](README.md)
 
-`dsh-plugin-desktop` 是 Stable ClawClaw Desktop 包，当前版本 `0.2.0`。它提供 Electron bootstrap、隔离 DSH Host、原生窗口/托盘、profile 与 pnpm service、工作区、恢复、更新、Market 选择和 ClawClaw Client 呈现层。安装后的产品身份是 **ClawClaw**（`com.clawclaw.desktop`）。
+`dsh-plugin-desktop` 是 ClawClaw Desktop 包，当前版本 `0.2.0`。它提供 Electron bootstrap、隔离 DSH Host、原生窗口/托盘、profile 与 pnpm service、工作区、恢复、更新、Market 选择和 ClawClaw Client 呈现层。安装后的产品身份是 **ClawClaw**（`com.clawclaw.desktop`）。
 
 该包属于根 pnpm workspace，不应作为独立 npm 应用安装：它依赖根目录的 vendored DSH runtime、override、patch、同级 Market 与 Channels workspace 包。
 
@@ -10,7 +10,7 @@
 
 Electron main 默认通过 `startIsolatedDesktopHost()` 启动 Host；`DSH_DESKTOP_ISOLATED_HOST=0` 是同进程排查路径。Host 拥有 Cordis 和 Web 服务，Electron main 拥有原生资源。浏览器内容通过普通 loopback HTTP/WebSocket 工作，没有通用 Electron bridge。
 
-Launcher 默认准备 `~/.clawclaw/data` 与 `~/.clawclaw/workspaces/default`；已保存的数据目录、`DSH_HOME` 或安全模式可以覆盖。仅有旧 `~/.dsh` 时会迁移；两个根目录并存时保留两者、不合并。Stable 与 Beta 的 Electron user-data 独立，但默认共享 Harness 数据和工作区。
+Launcher 默认准备 `~/.clawclaw/data` 与 `~/.clawclaw/workspaces/default`；已保存的数据目录、`DSH_HOME` 或安全模式可以覆盖。仅有旧 `~/.dsh` 时会迁移；两个根目录并存时保留两者、不合并。
 
 macOS/Windows 的兼容、扩展模式用独立 WebContentsView 隔离桌面标题栏和内容；增强模式使用集成呈现。窗口/profile 改变会重启 generation。公开插件 contract 是 `./profile-service`、`./pnpm`、`./client`，详见[插件 service](docs/plugin-services.zh.md)。
 
@@ -33,7 +33,6 @@ corepack pnpm --filter dsh-plugin-desktop run package:dir
 corepack pnpm dev
 corepack pnpm build
 corepack pnpm check
-corepack pnpm check:desktop-variants
 ```
 
 `dev` 会启动图形应用。build、typecheck、test、loader/profile/CLI smoke、runtime closure、notices 和可靠性检查必须保持 headless-safe。
@@ -46,6 +45,6 @@ corepack pnpm check:desktop-variants
 
 ## 更新与发布
 
-Stable 客户端读取 `https://clawclaw.xzinfra.com/updates/stable/release.json`。manifest 必须给出规范 Stable 版本，及带有 `url`、`sha512`、`size` 的 `darwin`/`win32` HTTPS artifact。客户端拒绝重定向、校验 SHA-512 与 DMG/PE 容器，再请求用户确认交接；不发送旧 DSH Desktop 统计 header，也不验证独立 manifest 签名。
+客户端读取 `https://clawclaw.xzinfra.com/updates/stable/release.json`。manifest 必须给出规范发布版本，及带有 `url`、`sha512`、`size` 的 `darwin`/`win32` HTTPS artifact。客户端拒绝重定向、校验 SHA-512 与 DMG/PE 容器，再请求用户确认交接；不发送旧 DSH Desktop 统计 header，也不验证独立 manifest 签名。
 
-共享 Desktop 改动合并前按需要同步 Beta/Stable 源码，并运行 `corepack pnpm check:desktop-variants`。生产 dependency 改动后运行 `verify:notices`。产品背景见根 [README](../README.md)、[架构](../docs/architecture.md)和[用户指南](../docs/user-guide.md)。
+生产 dependency 改动后运行 `verify:notices`。产品背景见根 [README](../README.md)、[架构](../docs/architecture.md)和[用户指南](../docs/user-guide.md)。

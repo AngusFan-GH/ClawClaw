@@ -14,13 +14,12 @@
 | --- | --- |
 | Harness 数据、profiles、settings、sessions | `~/.clawclaw/data` |
 | 默认工作区的实际文件 | `~/.clawclaw/workspaces/default` |
-| Stable 应用状态和日志（macOS） | `~/Library/Application Support/ClawClaw` |
-| Beta 应用状态和日志（macOS） | `~/Library/Application Support/ClawClaw Beta` |
-| Windows 应用状态和日志 | `%APPDATA%\ClawClaw` 或 `%APPDATA%\ClawClaw Beta` |
+| 应用状态和日志（macOS） | `~/Library/Application Support/ClawClaw` |
+| 应用状态和日志（Windows） | `%APPDATA%\ClawClaw` |
 
 `~` 指当前用户主目录。未指定其他数据位置时，若只有旧 `~/.dsh`，首次启动会将它移动到 `~/.clawclaw/data`；若两处都存在则保留两者、使用新目录并记录冲突，不自动合并。迁移前请备份需要保留的数据。设置中保存的数据目录选择优先于启动时的默认位置；未保存选择时，显式 `DSH_HOME` 可以覆盖默认数据目录。安全模式使用单独的临时数据和工作区。
 
-数据目录和工作区是不同概念：更改 Harness 数据位置不会自动搬移默认工作区的文件。Stable 与 Beta 默认共享 Harness 数据和默认工作区，只隔离 Electron 应用状态。便携 ZIP 也不是自包含的数据目录。
+数据目录和工作区是不同概念：更改 Harness 数据位置不会自动搬移默认工作区的文件。便携 ZIP 也不是自包含的数据目录。
 
 ## 工作区
 
@@ -73,7 +72,7 @@ dsh plugin update
 
 ## 更新
 
-打包应用读取 `https://clawclaw.xzinfra.com/updates/<stable|beta>/release.json`。后台检查失败或无新版本时静默；手动检查会显示结果。Beta 只接受 `-beta.N` 版本；安装稳定版是独立操作。
+打包应用读取 `https://clawclaw.xzinfra.com/updates/stable/release.json`。后台检查失败或无新版本时静默；手动检查会显示结果。
 
 确认下载并选择保存位置后，应用从 manifest 指定的 HTTPS 地址获取安装包，校验 SHA-512 和 DMG/PE 容器。当前请求不发送旧项目的 `X-DSH-Desktop-*` 统计 header。校验摘要不等于验证发布者数字签名。macOS 打开 DMG 后由用户替换应用；Windows 确认后交给 NSIS。安装后可选择删除下载文件。服务或产物是否已发布，以检查实际结果为准。
 

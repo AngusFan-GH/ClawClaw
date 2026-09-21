@@ -14,9 +14,9 @@ ClawClaw 基于两者演进，独立维护。DeepSeek Harness 提供 Agent runti
 
 本地 Host、配置和工作区在本机。默认 SpiritX 模型会访问远程 API，需要可用凭据和网络；Channels、市场、更新及其他联网插件也会连接外部服务。详见[数据处理说明](../PRIVACY.zh.md)。
 
-## 数据存在哪里？Beta 是否隔离？
+## 数据存在哪里？
 
-默认数据是 `~/.clawclaw/data`，工作区是 `~/.clawclaw/workspaces/default`。Stable/Beta 默认共享这两处，Electron 状态分别保存在 ClawClaw 与 ClawClaw Beta 的应用数据目录。显式数据路径和迁移规则见[用户指南](user-guide.md)。
+默认数据是 `~/.clawclaw/data`，工作区是 `~/.clawclaw/workspaces/default`，Electron 状态保存在 ClawClaw 的应用数据目录。显式数据路径和迁移规则见[用户指南](user-guide.md)。
 
 ## 为什么默认工作区不能删除？
 

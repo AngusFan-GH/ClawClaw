@@ -15,7 +15,7 @@ This repository owns the desktop product around an unmodified DeepSeek Harness c
 - Run unit tests with `corepack pnpm test`.
 - Run type checking with `corepack pnpm typecheck`.
 - Run the complete headless gate with `corepack pnpm check`.
-- Develop and validate Desktop feature changes in `dsh-plugin-desktop-beta/` first, then synchronize shared changes into `dsh-plugin-desktop/` while preserving declared variant differences. Before committing or pushing shared Desktop changes, run `corepack pnpm check:desktop-variants` and validate both affected packages; neither package automatically inherits the other's source edits.
+- Develop and validate Desktop feature changes in `dsh-plugin-desktop/`.
 - Run upstream operations through the root scripts, such as `corepack pnpm upstream:build`.
 
 - `deepseek-harness/` is a pinned upstream Git submodule. Never edit files inside it from a desktop feature branch.

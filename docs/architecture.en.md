@@ -16,7 +16,7 @@ flowchart LR
   Native --> Frame[Desktop Chrome WebContentsView]
 ```
 
-Both Stable and Beta default to `startIsolatedDesktopHost()`. `DSH_DESKTOP_ISOLATED_HOST=0` retains an in-process diagnostic path. Electron main owns native resources; Host owns Cordis, plugins, the Web service, and sessions. Private Host RPC is not a public Electron interface. Browser plugins use standard Web routes, RPC, services, and slots.
+ClawClaw defaults to `startIsolatedDesktopHost()`. `DSH_DESKTOP_ISOLATED_HOST=0` retains an in-process diagnostic path. Electron main owns native resources; Host owns Cordis, plugins, the Web service, and sessions. Private Host RPC is not a public Electron interface. Browser plugins use standard Web routes, RPC, services, and slots.
 
 Startup resolves data paths, profile, package environment, and preferences, then runs Setup Wizard when required. Host boot and Web/client health precede healthy checkpoints. Profile, presentation, and material changes dispose the current generation and restart. Service references and process handles must not cross generations.
 
@@ -38,15 +38,14 @@ The Desktop patch composes `spiritx` by default using the upstream pi-ai transpo
 
 | Path | Responsibility |
 | --- | --- |
-| `dsh-plugin-desktop-beta/` | Beta Host/Client, Electron, packaging, tests; develop shared behavior here first |
-| `dsh-plugin-desktop/` | Independent Stable source tree requiring explicit synchronization |
+| `dsh-plugin-desktop/` | ClawClaw Host/Client, Electron, packaging, and tests |
 | `channels/dsh-im/` | Channels composition, UI, build patches, tests |
 | `dsh-community-fabric/` | Private RFC documentation; no runtime or published SDK |
 | `deepseek-harness/` | Pinned read-only upstream submodule with independent pnpm workspace |
 | `vendor/dsh-runtime/` | Pinned runtime tarballs and manifests |
 | `patches/` | Explicit dependency patches applied by outer pnpm |
 
-The outer workspace uses pnpm 11.8.0 with the isolated linker. Both channels currently pin DSH 0.1.5-rc.2 source/runtime; `upstream.json` records each pin and the current gitlink follows `activeChannel: beta`. Root overrides select vendored tarballs, with compatibility fixes in `patchedDependencies`. Applications do not source-link the upstream checkout.
+The outer workspace uses pnpm 11.8.0 with the isolated linker. ClawClaw pins the DSH 0.1.5-rc.2 source/runtime family; `upstream.json` records the single pin and the gitlink matches it. Root overrides select vendored tarballs, with compatibility fixes in `patchedDependencies`. Applications do not source-link the upstream checkout.
 
 ## Services and recovery
 
@@ -56,13 +55,10 @@ Healthy startup rotates three configuration checkpoints. Recovery requires an ex
 
 ## Packaging and updates
 
-Both packages disable ASAR on all platforms. Root manifest, `lib`, and dependencies are physical files under `resources/app/` (`Contents/Resources/app/` on macOS). Runtime-closure gates cover Host, CLI, pnpm, native dependencies, and profile fallback.
+The Desktop package disables ASAR on all platforms. Root manifest, `lib`, and dependencies are physical files under `resources/app/` (`Contents/Resources/app/` on macOS). Runtime-closure gates cover Host, CLI, pnpm, native dependencies, and profile fallback.
 
-| Channel | Package | Product | appId |
-| --- | --- | --- | --- |
-| Stable | `dsh-plugin-desktop` | ClawClaw | `com.clawclaw.desktop` |
-| Beta | `dsh-plugin-desktop-beta` | ClawClaw Beta | `com.clawclaw.desktop.beta` |
+The package is `dsh-plugin-desktop`, the product is ClawClaw, and its appId is `com.clawclaw.desktop`.
 
-Updates read `https://clawclaw.xzinfra.com/updates/<channel>/release.json`. Manifests require matching `channel`, canonical version, and `darwin`/`win32` artifacts with HTTPS `url`, base64 `sha512`, and `size`. Manifest bodies are capped at 16 KiB, installers at 1 GiB. Manifest and artifact requests reject redirects and omit original-project statistics headers. Downloads verify SHA-512 and container format. There is no independent manifest digital-signature verification; a digest check must not be described as signature verification.
+Updates read `https://clawclaw.xzinfra.com/updates/stable/release.json`. Manifests require the `stable` channel, a canonical version, and `darwin`/`win32` artifacts with HTTPS `url`, base64 `sha512`, and `size`. Manifest bodies are capped at 16 KiB, installers at 1 GiB. Manifest and artifact requests reject redirects and omit original-project statistics headers. Downloads verify SHA-512 and container format. There is no independent manifest digital-signature verification; a digest check must not be described as signature verification.
 
 See [package reference](../dsh-plugin-desktop/README.md) for release commands. This describes the client protocol, not proof that the remote service or artifacts are deployed.

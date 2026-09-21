@@ -21,14 +21,12 @@ const DIAGNOSTIC_DIALOG_INITIAL_HEIGHT = 460
 const DIALOG_PREFERRED_HEIGHT_OFFSET = 32
 const DIALOG_REVEAL_FALLBACK_MS = 250
 
-/** Windows and the content-sized compatibility notice already include the action row. */
+/** Windows already includes the action row in its preferred height. */
 export function desktopDialogPreferredHeight(
   preferredHeight: number,
   platform: NodeJS.Platform = process.platform,
-  presentation: DesktopDialogOptions['presentation'] = 'default',
 ): number {
-  return preferredHeight + (platform === 'win32' || presentation === 'profile-compatibility'
-    ? 0 : DIALOG_PREFERRED_HEIGHT_OFFSET)
+  return preferredHeight + (platform === 'win32' ? 0 : DIALOG_PREFERRED_HEIGHT_OFFSET)
 }
 
 export interface DesktopDialogOptions {
@@ -36,13 +34,11 @@ export interface DesktopDialogOptions {
   readonly title: string
   readonly message: string
   readonly detail?: string
-  /** Important guidance rendered after the detail instead of inside its scroll area. */
-  readonly advisory?: string
   readonly buttons: readonly string[]
   readonly defaultId?: number
   readonly cancelId?: number
   /** Use a larger shadcn scroll surface for bounded technical diagnostics. */
-  readonly presentation?: 'default' | 'diagnostic' | 'profile-compatibility'
+  readonly presentation?: 'default' | 'diagnostic'
   /** Override whether this dialog exposes native close/caption controls. */
   readonly windowControls?: boolean
 }
@@ -89,7 +85,6 @@ export class DesktopDialogWindow {
       title: this.options.title,
       message: this.options.message,
       ...(this.options.detail === undefined ? {} : { detail: this.options.detail }),
-      ...(this.options.advisory === undefined ? {} : { advisory: this.options.advisory }),
       buttons: this.options.buttons,
       defaultId,
       cancelId,
@@ -179,7 +174,7 @@ export class DesktopDialogWindow {
       window.webContents.on('will-redirect', navigate)
       window.webContents.on('preferred-size-changed', (_event, size) => {
         if (!Number.isSafeInteger(size.height) || size.height <= 0) return
-        preferredHeight = desktopDialogPreferredHeight(size.height, process.platform, this.options.presentation)
+        preferredHeight = desktopDialogPreferredHeight(size.height, process.platform)
         applyPreferredSize()
       })
       window.webContents.on('did-finish-load', () => {

@@ -1,15 +1,6 @@
 name: Release ClawClaw Desktop
 on:
   workflow_dispatch:
-    inputs:
-      channel:
-        description: Release channel
-        required: true
-        type: choice
-        options: [stable, beta]
-      version:
-        description: Package version to release
-        required: true
   push:
     tags: ['clawclaw-v*']
 permissions: { contents: write }
@@ -20,10 +11,10 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            package: ${{ (inputs.channel == 'beta' || contains(github.ref_name, '-beta')) && 'dsh-plugin-desktop-beta' || 'dsh-plugin-desktop' }}
+            package: dsh-plugin-desktop
             artifact: macos
           - os: windows-latest
-            package: ${{ (inputs.channel == 'beta' || contains(github.ref_name, '-beta')) && 'dsh-plugin-desktop-beta' || 'dsh-plugin-desktop' }}
+            package: dsh-plugin-desktop
             artifact: windows
     runs-on: ${{ matrix.os }}
     steps:
@@ -59,19 +50,19 @@ jobs:
         with: { path: artifacts }
       - name: Assemble release and static manifest
         shell: bash
-        env: { CHANNEL: ${{ inputs.channel || (contains(github.ref_name, '-beta') && 'beta' || 'stable') }} }
+        env: { CHANNEL: stable }
         run: |
           set -euo pipefail
           mkdir -p release
           find artifacts -type f \( -name '*.dmg' -o -name '*.exe' \) -exec cp {} release/ \;
-          node scripts/generate-release-manifest.mjs --channel "$CHANNEL" --directory release --output release/release.json --base-url "https://clawclaw.xzinfra.com/updates/$CHANNEL"
+          node scripts/generate-release-manifest.mjs --directory release --output release/release.json --base-url "https://clawclaw.xzinfra.com/updates/$CHANNEL"
       - uses: actions/upload-artifact@v4
         with: { name: release, path: release/ }
-      - name: Upload release channel to OSS
+      - name: Upload stable release to OSS
         env:
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          CHANNEL: ${{ inputs.channel || (contains(github.ref_name, '-beta') && 'beta' || 'stable') }}
+          CHANNEL: stable
         run: |
           curl -sL https://gosspublic.alicdn.com/ossutil/install.sh | sudo bash
           printf '[Credentials]\nlanguage=EN\nendpoint=oss-cn-hangzhou.aliyuncs.com\naccessKeyID=%s\naccessKeySecret=%s\n' "$OSS_ACCESS_KEY_ID" "$OSS_ACCESS_KEY_SECRET" > "$HOME/.ossutilconfig"

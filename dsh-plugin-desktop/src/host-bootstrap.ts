@@ -1,4 +1,4 @@
-/** Headless bootstrap for the Beta isolated Host experiment. */
+/** Headless bootstrap for the isolated Desktop Host. */
 import { boot, resolveProfileDir } from '@deepseek-ai/dsh-app-boot'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
 import { DSH_LAUNCH_ENVIRONMENT_KEY, type LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
@@ -13,7 +13,8 @@ import { clearDesktopProfilePluginState } from './desktop-plugins.ts'
 import { desktopMarketSnapshotWithEffective, selectDesktopMarketProvider, type DesktopMarketProvider, type DesktopMarketSnapshot } from './desktop-market.ts'
 import DesktopSettingsController from './desktop-settings-controller.ts'
 import { clearDesktopProfilePreferences, desktopProfilePreferencesFromSettings, writeDesktopProfilePreferences, type DesktopProfilePreferences, type DesktopProfilePreferencesStateV1 } from './profile-preferences.ts'
-import { clearDesktopProfileUsageHistory, type DesktopReleaseUserDataLocations } from './profile-channel-admission.ts'
+import { clearDesktopProfileCheckpoint } from './profile-checkpoint.ts'
+import { clearDesktopSetupWizardStateSync } from './setup-wizard-state.ts'
 import { desktopHarnessProfileContext, type PreparedDesktopProfile } from './profile.ts'
 import { desktopLanBrowserUrls, desktopLoopbackBrowserUrl } from './desktop-network.ts'
 import { DESKTOP_LAN_HTTPS_CA_PATH, type DesktopLanHttpsRuntime } from './lan-https-runtime.ts'
@@ -40,7 +41,6 @@ export interface DesktopHostOptions {
   pluginManagementStatePath: string
   selectionStatePath: string
   marketUserDataDir: string
-  releaseUserDataLocations: DesktopReleaseUserDataLocations
   desktopLaunchEnvironment: LaunchEnvironmentSnapshot
   desktopPnpmBootstrap: DesktopPnpmBootstrap
   logDirectory: string
@@ -51,13 +51,13 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
   bindHost: (host: DesktopStartupGenerationHost) => void, requestQuit: (code: number) => void,
 ): Promise<() => object> {
   const { prepared, profilePreferences, homeDir, activeProfileName, pluginManagementStatePath,
-    selectionStatePath, marketUserDataDir, releaseUserDataLocations, desktopLaunchEnvironment,
+    selectionStatePath, marketUserDataDir, desktopLaunchEnvironment,
     desktopPnpmBootstrap } = options
-  const createFreshDesktopProfile = (name: string) => {
-    const created = createDesktopWebProfile(homeDir, name)
-    clearDesktopProfileUsageHistory(releaseUserDataLocations, created.dir)
-    return created
+  const clearDesktopProfileState = (profileDir: string): void => {
+    clearDesktopProfileCheckpoint(marketUserDataDir, profileDir)
+    clearDesktopSetupWizardStateSync(marketUserDataDir, profileDir)
   }
+  const createFreshDesktopProfile = (name: string) => createDesktopWebProfile(homeDir, name)
   const logSink = new LogFileSink(options.logDirectory, {
     maxFileBytes: 10 * 1024 * 1024, maxDirectoryBytes: 200 * 1024 * 1024,
   })
@@ -141,7 +141,7 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
               currentProfileName: activeProfileName,
               clearDisabledState: () => clearDesktopProfilePluginState(pluginManagementStatePath, name),
               clearCheckpoint: async () => {
-                clearDesktopProfileUsageHistory(releaseUserDataLocations, profileDir)
+                clearDesktopProfileState(profileDir)
               },
             }, name)
             try {

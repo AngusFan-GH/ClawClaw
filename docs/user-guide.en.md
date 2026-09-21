@@ -14,13 +14,12 @@ An uninitialized profile first opens Setup Wizard for mode, material, market, no
 | --- | --- |
 | Harness data, profiles, settings, sessions | `~/.clawclaw/data` |
 | Default workspace files | `~/.clawclaw/workspaces/default` |
-| Stable application state and logs on macOS | `~/Library/Application Support/ClawClaw` |
-| Beta application state and logs on macOS | `~/Library/Application Support/ClawClaw Beta` |
-| Windows application state and logs | `%APPDATA%\ClawClaw` or `%APPDATA%\ClawClaw Beta` |
+| Application state and logs on macOS | `~/Library/Application Support/ClawClaw` |
+| Application state and logs on Windows | `%APPDATA%\ClawClaw` |
 
 `~` is the current user's home. Without another data location, a sole legacy `~/.dsh` is moved into `~/.clawclaw/data`. If both directories exist, both are preserved, the new directory is used, and a conflict is logged without merging. Back up important data before migration. A data-directory selection saved in the application takes precedence over startup defaults; without a saved selection, explicit `DSH_HOME` can override the default. Safe mode uses separate temporary data and workspace locations.
 
-Harness data and workspace files are separate: changing the data directory does not move the default workspace. Stable and Beta share default Harness data and workspace paths while separating Electron application state. Portable ZIPs do not provide self-contained data storage.
+Harness data and workspace files are separate: changing the data directory does not move the default workspace. Portable ZIPs do not provide self-contained data storage.
 
 ## Workspaces
 
@@ -73,7 +72,7 @@ An explicit `--profile <name>` takes precedence. Restart after plugin changes. P
 
 ## Updates
 
-Packaged applications read `https://clawclaw.xzinfra.com/updates/<stable|beta>/release.json`. Background failures or unchanged versions are silent; manual checks show a result. Beta accepts only `-beta.N` versions; installing Stable is a separate action.
+Packaged applications read `https://clawclaw.xzinfra.com/updates/stable/release.json`. Background failures or unchanged versions are silent; manual checks show a result.
 
 After download confirmation and destination selection, the application fetches the manifest's HTTPS artifact and verifies SHA-512 and its DMG/PE container. Requests do not send the original project's `X-DSH-Desktop-*` statistics headers. Digest verification is not publisher-signature verification. On macOS, replace the application using the opened DMG; Windows hands off to NSIS after confirmation. Downloaded installers can be removed after installation. Actual checks determine whether the service and artifacts are available.
 

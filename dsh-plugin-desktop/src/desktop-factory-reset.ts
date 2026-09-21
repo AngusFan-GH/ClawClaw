@@ -23,8 +23,6 @@ export interface DesktopFactoryResetOptions {
   readonly protectedPaths: readonly string[]
   /** Electron shell.trashItem adapter; injected so the safety boundary is testable. */
   readonly trashItem: (path: string) => Promise<void>
-  /** Clear this exact Profile's first-use evidence in both Desktop editions. */
-  readonly clearProfileUsageHistory?: (profileDir: string) => void
 }
 
 function canonicalPath(value: string, label: string): string {
@@ -99,7 +97,6 @@ export async function resetDesktopDataDirectory(
     clearDesktopProfileCheckpoint(userDataDir, profileDir)
     // Staging/dependency entries can exist here but cannot own plugin state.
     try { assertDesktopProfileName(name) } catch { continue }
-    options.clearProfileUsageHistory?.(profileDir)
     await clearDesktopProfilePluginState(join(userDataDir, 'plugin-management', 'state.json'), name)
   }
   // A fresh Profile imports this legacy machine-level selection on first boot.

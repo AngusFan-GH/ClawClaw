@@ -19,7 +19,6 @@ export type DesktopTrayLabelKey =
   | 'advanced'
   | 'compatibility'
   | 'extended'
-  | 'installStable'
   | 'unavailableForDesktop'
   | 'updateAvailable'
 
@@ -40,7 +39,6 @@ const labels: Record<DesktopLocale, Record<DesktopTrayLabelKey, (value: string) 
     advanced: () => 'Enhanced Mode',
     compatibility: () => 'Compatibility Mode',
     extended: () => 'Extended Window',
-    installStable: () => 'Install Stable Edition…',
     unavailableForDesktop: profileName => `${profileName} (Unavailable for Desktop)`,
     updateAvailable: version => `ClawClaw ${version} Available`,
   },
@@ -60,7 +58,6 @@ const labels: Record<DesktopLocale, Record<DesktopTrayLabelKey, (value: string) 
     advanced: () => '增强模式',
     compatibility: () => '兼容模式',
     extended: () => '扩展窗口',
-    installStable: () => '安装稳定版…',
     unavailableForDesktop: profileName => `${profileName}（不可用于桌面端）`,
     updateAvailable: version => `ClawClaw ${version} 可用`,
   },

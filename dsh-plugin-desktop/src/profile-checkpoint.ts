@@ -113,7 +113,7 @@ interface ProfileCheckpointManifestMetadata {
   readonly appVersion: string
 }
 
-export type DesktopProfileCheckpointReleaseChannel = 'stable' | 'beta'
+export type DesktopProfileCheckpointReleaseChannel = 'stable'
 
 export interface ProfileCheckpointManifestV2 extends ProfileCheckpointManifestMetadata {
   readonly version: 2
@@ -137,30 +137,6 @@ export type ProfileCheckpointManifest =
   | ProfileCheckpointManifestV2
   | ProfileCheckpointManifestV3
   | ProfileCheckpointManifestV4
-
-/** Minimal healthy-start evidence read without opening or repairing checkpoint state. */
-export interface DesktopProfileCheckpointUsageEvidence {
-  readonly source: 'checkpoint'
-  readonly recordedAt: string
-  readonly desktopPackageName: string
-  readonly releaseChannel: DesktopProfileCheckpointReleaseChannel
-  readonly desktopVersion: string
-  readonly dshVersion?: string
-}
-
-/** Read-only result for another Desktop edition's checkpoint directory. */
-export type DesktopProfileCheckpointUsageProbe =
-  | { readonly status: 'none' }
-  | { readonly status: 'valid', readonly evidence: DesktopProfileCheckpointUsageEvidence }
-  | { readonly status: 'invalid', readonly problem: string }
-
-export interface DesktopProfileCheckpointUsageProbeOptions {
-  readonly userDataDir: string
-  readonly profileDir: string
-  readonly profileName: string
-  readonly legacyDesktopPackageName: string
-  readonly legacyReleaseChannel: DesktopProfileCheckpointReleaseChannel
-}
 
 export interface ProfileCheckpointSlot {
   readonly slotId: DesktopProfileCheckpointSlotId
@@ -251,7 +227,7 @@ function assertAppVersion(value: string): string {
 }
 
 function assertReleaseChannel(value: string): DesktopProfileCheckpointReleaseChannel {
-  if (value !== 'stable' && value !== 'beta') fail('invalid Desktop release channel')
+  if (value !== 'stable') fail('invalid Desktop release channel')
   return value
 }
 
@@ -349,123 +325,6 @@ function checkpointFiles(version: unknown): readonly DesktopProfileCheckpointFil
   if (version === LEGACY_MANIFEST_VERSION) return LEGACY_PROFILE_CHECKPOINT_FILES
   if (version === PREVIOUS_MANIFEST_VERSION || version === MANIFEST_VERSION) return DESKTOP_PROFILE_CHECKPOINT_FILES
   fail('checkpoint manifest is invalid')
-}
-
-/**
- * Read the newest healthy-start identity without creating directories, rotating
- * slots, recovering interrupted writes, or reading snapshotted Profile files.
- */
-export function inspectLatestDesktopProfileCheckpointUsage(
-  options: DesktopProfileCheckpointUsageProbeOptions,
-): DesktopProfileCheckpointUsageProbe {
-  let userDataDir: string
-  let profileDir: string
-  let profileName: string
-  let legacyPackageName: string
-  let legacyChannel: DesktopProfileCheckpointReleaseChannel
-  try {
-    userDataDir = assertAbsolute('userDataDir', options.userDataDir)
-    profileDir = assertAbsolute('profileDir', options.profileDir)
-    profileName = assertProfileName(options.profileName)
-    legacyPackageName = assertIdentifier('Desktop package name', options.legacyDesktopPackageName)
-    legacyChannel = assertReleaseChannel(options.legacyReleaseChannel)
-  } catch (cause) {
-    return { status: 'invalid', problem: cause instanceof Error ? cause.message : String(cause) }
-  }
-
-  const profileIdentity = hash(profileDir)
-  const snapshotRoot = join(userDataDir, SNAPSHOT_ROOT)
-  const profileRoot = join(snapshotRoot, hash(profileIdentity))
-  try {
-    const userData = lstatSync(userDataDir)
-    if (!userData.isDirectory() || userData.isSymbolicLink()) fail('userDataDir must be a real directory')
-    const snapshots = lstatSync(snapshotRoot)
-    if (!snapshots.isDirectory() || snapshots.isSymbolicLink()
-      || (CHECK_POSIX_MODE && (snapshots.mode & 0o777) !== DIRECTORY_MODE)) {
-      fail('checkpoint root has unsafe type or mode')
-    }
-    const root = lstatSync(profileRoot)
-    if (!root.isDirectory() || root.isSymbolicLink()
-      || (CHECK_POSIX_MODE && (root.mode & 0o777) !== DIRECTORY_MODE)) {
-      fail('checkpoint directory has unsafe type or mode')
-    }
-  } catch (cause) {
-    if (isENOENT(cause)) return { status: 'none' }
-    return { status: 'invalid', problem: cause instanceof Error ? cause.message : String(cause) }
-  }
-
-  let latest: DesktopProfileCheckpointUsageEvidence | undefined
-  try {
-    for (const slotId of DESKTOP_PROFILE_CHECKPOINT_SLOT_IDS) {
-      const directory = join(profileRoot, slotId)
-      let directoryItem
-      try { directoryItem = lstatSync(directory) } catch (cause) {
-        if (isENOENT(cause)) continue
-        throw cause
-      }
-      if (!directoryItem.isDirectory() || directoryItem.isSymbolicLink()
-        || (CHECK_POSIX_MODE && (directoryItem.mode & 0o777) !== DIRECTORY_MODE)) {
-        fail('checkpoint directory has unsafe type or mode')
-      }
-      const value = readJson(join(directory, MANIFEST_FILENAME))
-      if (value === null || typeof value !== 'object' || Array.isArray(value)) fail('checkpoint manifest is invalid')
-      const object = value as Record<string, unknown>
-      const expectedFiles = checkpointFiles(object.version)
-      if (typeof object.snapshotId !== 'string' || !ID_PATTERN.test(object.snapshotId)
-        || typeof object.capturedAt !== 'string' || !Number.isFinite(Date.parse(object.capturedAt))
-        || new Date(Date.parse(object.capturedAt)).toISOString() !== object.capturedAt
-        || object.profileIdentity !== profileIdentity || object.profileName !== profileName
-        || object.slotId !== slotId || object.reason !== 'healthy-startup'
-        || typeof object.provider !== 'string'
-        || assertIdentifier('checkpoint provider', object.provider) !== object.provider
-        || typeof object.appVersion !== 'string' || assertAppVersion(object.appVersion) !== object.appVersion
-        || !Array.isArray(object.files) || object.files.length !== expectedFiles.length) {
-        fail('checkpoint metadata is invalid')
-      }
-      for (let index = 0; index < expectedFiles.length; index += 1) {
-        const record = object.files[index]
-        const expected = expectedFiles[index]!
-        if (record === null || typeof record !== 'object' || Array.isArray(record)) {
-          fail('checkpoint manifest is invalid')
-        }
-        const item = record as Record<string, unknown>
-        if (item.name !== expected || typeof item.present !== 'boolean') fail('checkpoint manifest is invalid')
-        if (item.present && (typeof item.sha256 !== 'string' || !HASH_PATTERN.test(item.sha256)
-          || !Number.isSafeInteger(item.size) || (item.size as number) < 0 || (item.size as number) > FILE_LIMITS[expected]
-          || !Number.isSafeInteger(item.mode) || (item.mode as number) < 0 || (item.mode as number) > 0o777)) {
-          fail('checkpoint manifest is invalid')
-        }
-      }
-      let desktopPackageName = legacyPackageName
-      let releaseChannel = legacyChannel
-      let dshVersion: string | undefined
-      if (object.version === MANIFEST_VERSION) {
-        if (typeof object.desktopPackageName !== 'string'
-          || assertIdentifier('Desktop package name', object.desktopPackageName) !== legacyPackageName
-          || typeof object.releaseChannel !== 'string'
-          || typeof object.dshVersion !== 'string') {
-          fail('checkpoint Desktop identity is invalid')
-        }
-        const manifestChannel = assertReleaseChannel(object.releaseChannel)
-        if (manifestChannel !== legacyChannel) fail('checkpoint Desktop identity is invalid')
-        desktopPackageName = object.desktopPackageName
-        releaseChannel = manifestChannel
-        dshVersion = assertAppVersion(object.dshVersion)
-      }
-      const evidence: DesktopProfileCheckpointUsageEvidence = Object.freeze({
-        source: 'checkpoint',
-        recordedAt: object.capturedAt,
-        desktopPackageName,
-        releaseChannel,
-        desktopVersion: object.appVersion,
-        ...(dshVersion === undefined ? {} : { dshVersion }),
-      })
-      if (latest === undefined || Date.parse(evidence.recordedAt) > Date.parse(latest.recordedAt)) latest = evidence
-    }
-    return latest === undefined ? { status: 'none' } : { status: 'valid', evidence: latest }
-  } catch (cause) {
-    return { status: 'invalid', problem: cause instanceof Error ? cause.message : String(cause) }
-  }
 }
 
 function targetPath(

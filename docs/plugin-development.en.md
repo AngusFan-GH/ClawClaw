@@ -10,7 +10,7 @@ Every profile boot and presentation-mode switch creates a Host generation. Host/
 
 ## Desktop Host services
 
-Import types from the appropriate channel package: Stable is `dsh-plugin-desktop/*`; Beta is `dsh-plugin-desktop-beta/*`. Do not mix them in one bundle.
+Import Desktop types from `dsh-plugin-desktop/*`.
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
@@ -37,7 +37,7 @@ export function apply(ctx: Context) {
 }
 ```
 
-`desktopProfiles.current` exposes immutable active-profile name and absolute directory. `list()` is read-only discovery; `create()`, `prepareSelection()`, `select()`, `canDelete()`, and `delete()` go through the launcher boundary. `select()` performs an orderly restart. See the [Stable contract](../dsh-plugin-desktop/docs/plugin-services.md) or its Beta counterpart for exact signatures.
+`desktopProfiles.current` exposes immutable active-profile name and absolute directory. `list()` is read-only discovery; `create()`, `prepareSelection()`, `select()`, `canDelete()`, and `delete()` go through the launcher boundary. `select()` performs an orderly restart. See the [Desktop contract](../dsh-plugin-desktop/docs/plugin-services.md) for exact signatures.
 
 `desktopPnpm` methods are:
 
@@ -71,10 +71,10 @@ The plugin owns its ordinary DSH fallback. Renderers cannot use Host services di
 
 ## Client service
 
-Browser plugins can type-only import `dsh-plugin-desktop/client` (or Beta) and inject `desktopWindow`. It exposes immutable generation-local mode, platform, effective material, and geometry, not Electron controls. Content WebContentsViews in compatibility/extended modes already sit below isolated Chrome, so both `safeAreaInsets.top` and `dragRegion.height` are `0`; plugins must not add toolbar spacing. Only advanced mode reports integrated caption geometry.
+Browser plugins can type-only import `dsh-plugin-desktop/client` and inject `desktopWindow`. It exposes immutable generation-local mode, platform, effective material, and geometry, not Electron controls. Content WebContentsViews in compatibility/extended modes already sit below isolated Chrome, so both `safeAreaInsets.top` and `dragRegion.height` are `0`; plugins must not add toolbar spacing. Only advanced mode reports integrated caption geometry.
 
 ## Private implementation
 
 `desktopRuntime`, `desktopPnpmBootstrap`, Electron APIs, Host RPC, BrowserWindow, tray, bundled Node shims, internal resolvers, and installers are private implementation. Their presence at runtime or in declarations does not create a compatibility promise.
 
-Test separately in ordinary DSH and the target ClawClaw channel. Shared Desktop work also requires `corepack pnpm check:desktop-variants`.
+Test separately in ordinary DSH and ClawClaw Desktop.

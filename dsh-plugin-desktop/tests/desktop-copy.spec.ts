@@ -65,16 +65,4 @@ describe('Desktop product copy', () => {
     expect(copy.diagnosticsErrorTitle).toBe('无法导出诊断信息')
     expect(copy.updateAvailableMessage('2.1.0')).toBe('ClawClaw 2.1.0 已可用。')
   })
-
-  it('explains cross-channel Profile risk and routes users to Profile selection', () => {
-    const copy = desktopNativeCopy('zh')
-    expect(copy.profileCompatibilityMessage('work', 'ClawClaw'))
-      .toBe('当前 Profile“work”最后一次使用的桌面版本与当前版本不同：')
-    expect(copy.profileCompatibilityDetail('2.0.4', '0.1.1-rc.2', 'ClawClaw Beta', '2.0.5-beta.2', '0.1.2-alpha.5'))
-      .toBe('最后一次的桌面版/DSH 版本：2.0.4/0.1.1-rc.2\n当前的桌面版/DSH 版本：2.0.5-beta.2/0.1.2-alpha.5')
-    expect(copy.profileCompatibilityUnknownDetail('ClawClaw Beta', '2.0.5-beta.2', '0.1.2-alpha.5'))
-      .toBe('最后一次的桌面版/DSH 版本：未知/未知\n当前的桌面版/DSH 版本：2.0.5-beta.2/0.1.2-alpha.5')
-    expect(copy.profileCompatibilityWarning).toBe('DSH 版本差异可能会导致：\n1. 历史会话信息加载出错；\n2. 当前 Profile 下的部分插件不兼容，甚至引发报错或崩溃。\n建议您切换到兼容的 Profile，或创建新的 Profile。')
-    expect(copy.switchProfile).toBe('切换 Profile')
-  })
 })

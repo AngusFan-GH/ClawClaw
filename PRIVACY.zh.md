@@ -9,7 +9,7 @@ ClawClaw 是本地优先的开源桌面应用。本说明覆盖此仓库源码�
 
 ## 本地数据
 
-默认 Harness 数据目录为 `~/.clawclaw/data`，默认工作区为 `~/.clawclaw/workspaces/default`。数据可能包括 profile、设置、会话、日志、缓存、插件依赖和用户在工作区保存的文件。Stable/Beta 使用独立 Electron 应用数据目录保存窗口、日志、更新状态和诊断状态，但默认共享 Harness 数据与工作区。显式 `DSH_HOME`、应用数据目录选择和安全模式可改变路径。
+默认 Harness 数据目录为 `~/.clawclaw/data`，默认工作区为 `~/.clawclaw/workspaces/default`。数据可能包括 profile、设置、会话、日志、缓存、插件依赖和用户在工作区保存的文件。Electron 应用数据目录保存窗口、日志、更新状态和诊断状态。显式 `DSH_HOME`、应用数据目录选择和安全模式可改变路径。
 
 首次使用时，若只有 `~/.dsh`，应用会移动该目录到新默认目录；若两处都存在，不合并。健康启动的恢复检查点只覆盖部分 profile 声明和共享设置/patch，不包括凭据、`.env`、会话、storage、缓存或工作区文件。
 
@@ -20,7 +20,7 @@ ClawClaw 是本地优先的开源桌面应用。本说明覆盖此仓库源码�
 | 触发 | 接收方与可能发送的数据 |
 | --- | --- |
 | SpiritX 模型请求 | `https://ai.xzinfra.com/spiritx-api/v1`；模型请求、认证信息及协议所需元数据。`SPIRITX_API_KEY` 由用户配置。 |
-| 更新检查 | `https://clawclaw.xzinfra.com/updates/<stable|beta>/release.json`；HTTP 请求的 IP、时间、User-Agent 与普通网络元数据。客户端不添加旧 DSH Desktop 的安装 UUID 或 `X-DSH-Desktop-*` 统计 header。 |
+| 更新检查 | `https://clawclaw.xzinfra.com/updates/stable/release.json`；HTTP 请求的 IP、时间、User-Agent 与普通网络元数据。客户端不添加旧 DSH Desktop 的安装 UUID 或 `X-DSH-Desktop-*` 统计 header。 |
 | 确认下载 | release manifest 中的 HTTPS artifact URL；IP、时间、下载路径和普通网络元数据。客户端校验 SHA-512 与容器格式。 |
 | dshmarket / pnpm | 用户选择的目录来源、npm registry、GitHub 或 package/图片来源；搜索词、包名、版本、目录浏览信息与普通网络元数据可能发送。 |
 | Channels | 对应微信、企业微信、飞书、钉钉、QQ、iMessage、Telegram、WhatsApp、Discord、Slack 服务；凭据、授权/扫码数据、消息内容、附件引用及其协议元数据由平台和配置决定。 |

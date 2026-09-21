@@ -272,9 +272,6 @@ try {
     throw new Error('Desktop must use generation restarts instead of upstream internal-loader HMR')
   }
   const pluginManager = ctx.get('pluginManager')
-  if (harnessVersion === '0.1.6-alpha.2' && pluginManager === undefined) {
-    throw new Error('Beta Creator preset requires the upstream plugin management service')
-  }
   if (pluginManager !== undefined) {
     await pluginManager.listPlugins()
     await pluginManager.listBundles()

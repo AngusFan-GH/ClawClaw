@@ -147,7 +147,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       get statePath() { return join(app.getPath('userData'), 'updates', 'state.json') },
       ...(installationId === undefined ? {} : { installationId }),
       request: (url, init) => net.fetch(url, init),
-      confirmDownload: (version, channel) => this.confirmUpdateDownload(version, channel),
+      confirmDownload: version => this.confirmUpdateDownload(version),
       showManualCheckResult: result => this.showManualUpdateCheckResult(result),
       downloadAndOpen: (version, signal, channel) => this.downloadAndOpenUpdate(version, signal, channel),
       notify: notification => { this.showNotification(notification) },
@@ -606,18 +606,13 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   }
 
   /** Ask before making the fixed download endpoint's counted request. */
-  private async confirmUpdateDownload(
-    version: string,
-    channel: DesktopReleaseChannel = 'stable',
-  ): Promise<boolean> {
+  private async confirmUpdateDownload(version: string): Promise<boolean> {
     const copy = desktopNativeCopy(this.currentLocale)
     const result = await this.showUpdateMessageBox({
       type: 'info',
       title: copy.updateAvailableTitle,
       message: copy.updateAvailableMessage(version),
-      detail: channel === DESKTOP_RELEASE_CHANNEL
-        ? copy.downloadUpdate
-        : copy.installStableAlongsideBeta,
+      detail: copy.downloadUpdate,
       buttons: [copy.download, copy.later],
       defaultId: 1,
       cancelId: 1,

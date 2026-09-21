@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   CLAWCLAW_UPDATE_BASE_URL,
-  checkForDesktopUpdate,
   checkForStableUpdate,
   desktopReleaseManifestUrl,
   fetchDesktopReleaseManifest,
@@ -9,7 +8,7 @@ import {
 } from '../src/update-checker.ts'
 
 const sha512 = Buffer.alloc(64, 7).toString('base64')
-function manifest(version: string, channel: 'stable' | 'beta' = 'stable'): Response {
+function manifest(version: string, channel: 'stable' = 'stable'): Response {
   return Response.json({ version, channel, artifacts: {
     darwin: { url: `https://clawclaw.xzinfra.com/releases/${channel}/ClawClaw-${version}.dmg`, sha512, size: 1024 },
     win32: { url: `https://clawclaw.xzinfra.com/releases/${channel}/ClawClaw-${version}.exe`, sha512, size: 1024 },
@@ -17,10 +16,9 @@ function manifest(version: string, channel: 'stable' | 'beta' = 'stable'): Respo
 }
 
 describe('ClawClaw release manifest', () => {
-  it('uses isolated static manifest URLs for stable and beta', () => {
+  it('uses the stable static manifest URL', () => {
     expect(CLAWCLAW_UPDATE_BASE_URL).toBe('https://clawclaw.xzinfra.com/updates')
     expect(desktopReleaseManifestUrl('stable')).toBe('https://clawclaw.xzinfra.com/updates/stable/release.json')
-    expect(desktopReleaseManifestUrl('beta')).toBe('https://clawclaw.xzinfra.com/updates/beta/release.json')
   })
 
   it('checks a newer stable release without sending installation identifiers', async () => {
@@ -30,11 +28,6 @@ describe('ClawClaw release manifest', () => {
     })
     expect(request.mock.calls[0]![0]).toBe(desktopReleaseManifestUrl('stable'))
     expect([...new Headers(request.mock.calls[0]![1].headers).entries()]).toEqual([])
-  })
-
-  it('keeps beta releases isolated', async () => {
-    await expect(checkForDesktopUpdate({ currentVersion: '2.0.0-beta.1', channel: 'beta', request: async () => manifest('2.0.0-beta.2', 'beta') })).resolves.toMatchObject({ status: 'update-available' })
-    await expect(checkForDesktopUpdate({ currentVersion: '2.0.0-beta.1', channel: 'beta', request: async () => manifest('2.0.0', 'stable') })).resolves.toBeNull()
   })
 
   it('silently ignores network failure and caller cancellation', async () => {

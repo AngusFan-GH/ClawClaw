@@ -27,7 +27,7 @@ const testConfig: UpdateConfig = {
 }
 
 const RELEASE_SHA512 = Buffer.alloc(64, 3).toString('base64')
-function versionResponse(version: unknown, channel: 'stable' | 'beta' = 'stable'): Response {
+function versionResponse(version: unknown, channel: 'stable' = 'stable'): Response {
   return Response.json({ version, channel, artifacts: {
     darwin: { url: 'https://clawclaw.xzinfra.com/releases/ClawClaw.dmg', sha512: RELEASE_SHA512, size: 1 },
     win32: { url: 'https://clawclaw.xzinfra.com/releases/ClawClaw.exe', sha512: RELEASE_SHA512, size: 1 },
@@ -57,11 +57,11 @@ async function createHarness(options: {
   readonly canDownload?: boolean
   readonly config?: UpdateConfig
   readonly request?: DesktopRuntime['updates']['request']
-  readonly releaseChannel?: 'stable' | 'beta'
+  readonly releaseChannel?: 'stable'
   readonly currentVersion?: string
-  readonly confirmDownload?: (version: string, channel?: 'stable' | 'beta') => Promise<boolean>
+  readonly confirmDownload?: (version: string, channel?: 'stable') => Promise<boolean>
   readonly showManualCheckResult?: (result: UpdateCheckResult | null) => Promise<void>
-  readonly downloadAndOpen?: (version: string, signal: AbortSignal, channel?: 'stable' | 'beta') => Promise<void>
+  readonly downloadAndOpen?: (version: string, signal: AbortSignal, channel?: 'stable') => Promise<void>
   readonly notify?: (notification: DesktopNotification) => void
   readonly locale?: DesktopRuntime['locale']
   readonly state?: string
@@ -148,34 +148,6 @@ afterEach(() => {
 })
 
 describe('desktop update Host plugin', () => {
-  it('checks Beta automatically and installs an older stable release only through the explicit action', async () => {
-    const request = vi.fn(async (_url: string, _init: RequestInit) => {
-      return _url.includes('/beta/') ? versionResponse('2.0.6-beta.1', 'beta') : versionResponse('2.0.4', 'stable')
-    })
-    const harness = await createHarness({
-      releaseChannel: 'beta',
-      currentVersion: '2.0.6-beta.1',
-      request,
-      confirmDownload: async () => true,
-    })
-
-    expect(harness.trays).toHaveLength(2)
-    await harness.tray.invoke()
-    expect(harness.downloadAndOpen).not.toHaveBeenCalled()
-
-    await harness.trays[1]!.invoke()
-    expect(harness.confirmDownload).toHaveBeenCalledWith('2.0.4', 'stable')
-    expect(harness.downloadAndOpen).toHaveBeenCalledWith(
-      '2.0.4',
-      expect.any(AbortSignal),
-      'stable',
-    )
-    const urls = request.mock.calls.map(([url]) => url)
-    expect(urls.some(url => url.includes('/beta/'))).toBe(true)
-    expect(urls.some(url => url.includes('/stable/'))).toBe(true)
-    await harness.dispose()
-  })
-
   it('exposes the packaged 60-second and six-hour background policy', () => {
     expect(inject).toEqual(['desktopRuntime', 'webServer', 'connection'])
     expect(Config({} as UpdateConfig)).toEqual({

@@ -1,6 +1,6 @@
 # Compatibility chrome isolation
 
-Both editions use the isolated frame originally introduced in PR #868. Renderer crash recovery from PR #869 remains enabled in both variants.
+ClawClaw uses the isolated frame originally introduced in PR #868. Renderer crash recovery from PR #869 remains enabled.
 
 On macOS and Windows, compatibility and extended modes use two documents in one native window:
 

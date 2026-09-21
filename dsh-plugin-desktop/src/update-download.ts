@@ -171,8 +171,7 @@ export function desktopUpdateFilename(
   validatedVersion(version, channel)
   const extension = platform === 'darwin' ? 'dmg' : 'exe'
   const platformName = platform === 'darwin' ? 'mac' : 'windows'
-  const product = channel === 'beta' ? 'ClawClaw-Beta' : 'ClawClaw'
-  return `${product}-${version}-${platformName}.${extension}`
+  return `ClawClaw-${version}-${platformName}.${extension}`
 }
 
 /** Remember a downloaded installer until an upgraded application resolves its retention. */
@@ -250,11 +249,7 @@ function validatedPlatform(platform: DesktopDownloadPlatform): DesktopDownloadPl
 
 function validatedVersion(version: string, channel: DesktopReleaseChannel = 'stable'): string {
   const parsed = parseSemVer(version)
-  const expectedPrerelease = channel === 'stable'
-    ? parsed?.prerelease.length === 0
-    : parsed?.prerelease.length === 2
-      && parsed.prerelease[0] === 'beta'
-      && /^[0-9]+$/u.test(parsed.prerelease[1]!)
+  const expectedPrerelease = parsed?.prerelease.length === 0
   if (parsed === null || !expectedPrerelease || parsed.version !== version) {
     throw new UpdateDownloadError('invalid-options', `The update version must match the ${channel} channel.`)
   }
@@ -263,11 +258,7 @@ function validatedVersion(version: string, channel: DesktopReleaseChannel = 'sta
 
 function validatedReleaseVersion(version: string): string {
   const parsed = parseSemVer(version)
-  const isStable = parsed?.prerelease.length === 0
-  const isBeta = parsed?.prerelease.length === 2
-    && parsed.prerelease[0] === 'beta'
-    && /^[0-9]+$/u.test(parsed.prerelease[1]!)
-  if (parsed === null || parsed.version !== version || (!isStable && !isBeta)) {
+  if (parsed === null || parsed.version !== version || parsed.prerelease.length !== 0) {
     throw new UpdateDownloadError('invalid-options', 'The update version must belong to a supported release channel.')
   }
   return version

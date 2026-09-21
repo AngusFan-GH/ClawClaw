@@ -14,9 +14,9 @@ Check [ClawClaw Releases](https://github.com/AngusFan-GH/ClawClaw/releases). Ins
 
 Host, configuration, and workspace files are local. The default SpiritX model uses a remote API requiring credentials and network access. Channels, markets, updates, and networked plugins also contact external services. See [data handling](../PRIVACY.md).
 
-## Where is data stored? Is Beta isolated?
+## Where is data stored?
 
-Defaults are `~/.clawclaw/data` for Harness data and `~/.clawclaw/workspaces/default` for workspace files. Stable/Beta share these defaults; Electron state uses separate ClawClaw and ClawClaw Beta application-data directories. See the [user guide](user-guide.en.md) for overrides and migration.
+Defaults are `~/.clawclaw/data` for Harness data and `~/.clawclaw/workspaces/default` for workspace files. Electron state uses the ClawClaw application-data directory. See the [user guide](user-guide.en.md) for overrides and migration.
 
 ## Why cannot I delete the default workspace?
 

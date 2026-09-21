@@ -16,7 +16,7 @@ flowchart LR
   Native --> Frame[Desktop Chrome WebContentsView]
 ```
 
-稳定版和 Beta 默认都通过 `startIsolatedDesktopHost()` 启动 Host；`DSH_DESKTOP_ISOLATED_HOST=0` 保留同进程排查路径。Electron main 拥有原生资源，Host 拥有 Cordis、插件、Web 服务和会话。Host 与 main 之间是内部 RPC，第三方插件不能把它当作公开 Electron 接口。浏览器插件仍通过标准 Web routes、RPC、service 和 slot 通信。
+ClawClaw 默认通过 `startIsolatedDesktopHost()` 启动 Host；`DSH_DESKTOP_ISOLATED_HOST=0` 保留同进程排查路径。Electron main 拥有原生资源，Host 拥有 Cordis、插件、Web 服务和会话。Host 与 main 之间是内部 RPC，第三方插件不能把它当作公开 Electron 接口。浏览器插件仍通过标准 Web routes、RPC、service 和 slot 通信。
 
 启动先确定数据目录、profile、包解析环境和偏好；未初始化时先运行 Setup Wizard。然后启动 Host，等待 Web 与客户端健康状态，显示内容并记录健康检查点。切换 profile、窗口模式或材质会释放当前 generation 并重启；服务引用和进程 handle 不跨 generation 缓存。
 
@@ -38,15 +38,14 @@ Channels 由 `@clawclaw/dsh-im` 提供，基于固定的 `@xmanrui/dsh-im` 4.20.
 
 | 路径 | 职责 |
 | --- | --- |
-| `dsh-plugin-desktop-beta/` | Beta 产品、Host/Client、Electron、打包与测试；共享功能先在这里实现 |
-| `dsh-plugin-desktop/` | Stable 的独立源码树；需显式同步 |
+| `dsh-plugin-desktop/` | ClawClaw 产品、Host/Client、Electron、打包与测试 |
 | `channels/dsh-im/` | Channels Host 组合、UI、构建修补与测试 |
 | `dsh-community-fabric/` | 私有 RFC 文档工程；无运行时或发布 SDK |
 | `deepseek-harness/` | 固定的只读上游子模块，独立 pnpm workspace |
 | `vendor/dsh-runtime/` | 固定运行时 tarball 和 manifest |
 | `patches/` | 外层 pnpm 对依赖应用的显式补丁 |
 
-外层使用 pnpm 11.8.0 的 isolated linker。两个通道当前固定同一 DSH 0.1.5-rc.2 source/runtime family；`upstream.json` 记录各自 pin，当前 gitlink 对应 `activeChannel: beta`。根 workspace override 指向 vendored tarball，`patchedDependencies` 应用兼容修补。应用不直接链接上游源码树。
+外层使用 pnpm 11.8.0 的 isolated linker。ClawClaw 固定 DSH 0.1.5-rc.2 source/runtime family；`upstream.json` 记录唯一 pin，gitlink 与之对应。根 workspace override 指向 vendored tarball，`patchedDependencies` 应用兼容修补。应用不直接链接上游源码树。
 
 ## 服务和恢复
 
@@ -56,13 +55,10 @@ Channels 由 `@clawclaw/dsh-im` 提供，基于固定的 `@xmanrui/dsh-im` 4.20.
 
 ## 打包与更新
 
-两个包在所有平台均禁用 ASAR。应用主 manifest、`lib` 和依赖以物理文件放在 `resources/app/`（macOS 为 `Contents/Resources/app/`）。运行时闭包检查覆盖 Host、CLI、pnpm、native 依赖及 profile fallback。
+Desktop 包在所有平台均禁用 ASAR。应用主 manifest、`lib` 和依赖以物理文件放在 `resources/app/`（macOS 为 `Contents/Resources/app/`）。运行时闭包检查覆盖 Host、CLI、pnpm、native 依赖及 profile fallback。
 
-| 通道 | 包名 | 产品名 | appId |
-| --- | --- | --- | --- |
-| Stable | `dsh-plugin-desktop` | ClawClaw | `com.clawclaw.desktop` |
-| Beta | `dsh-plugin-desktop-beta` | ClawClaw Beta | `com.clawclaw.desktop.beta` |
+包名为 `dsh-plugin-desktop`，产品名为 ClawClaw，appId 为 `com.clawclaw.desktop`。
 
-更新读取 `https://clawclaw.xzinfra.com/updates/<channel>/release.json`。manifest 必须提供匹配的 `channel`、规范版本和 `darwin`/`win32` 的 HTTPS `url`、base64 `sha512`、`size`；正文最多 16 KiB，安装包最多 1 GiB。版本与下载请求均拒绝重定向，不发送原项目的统计 header。下载校验 SHA-512 与容器格式；实现不验证 manifest 的独立数字签名，不能将摘要校验描述为签名验证。
+更新读取 `https://clawclaw.xzinfra.com/updates/stable/release.json`。manifest 必须提供 `stable` channel、规范版本和 `darwin`/`win32` 的 HTTPS `url`、base64 `sha512`、`size`；正文最多 16 KiB，安装包最多 1 GiB。版本与下载请求均拒绝重定向，不发送原项目的统计 header。下载校验 SHA-512 与容器格式；实现不验证 manifest 的独立数字签名，不能将摘要校验描述为签名验证。
 
 发布步骤见[包级参考](../dsh-plugin-desktop/README.zh.md)。本页描述客户端协议，不证明远程端点或发行产物已经上线。

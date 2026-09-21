@@ -9,7 +9,7 @@ ClawClaw is a local-first open-source desktop application. This notice describes
 
 ## Local data
 
-Default Harness data is `~/.clawclaw/data`; the default workspace is `~/.clawclaw/workspaces/default`. Data can include profiles, settings, sessions, logs, caches, plugin dependencies, and files saved in workspaces. Stable/Beta use separate Electron application-data directories for windows, logs, update state, and diagnostics while sharing default Harness data and workspace. Explicit `DSH_HOME`, an application data-directory choice, and safe mode can change paths.
+Default Harness data is `~/.clawclaw/data`; the default workspace is `~/.clawclaw/workspaces/default`. Data can include profiles, settings, sessions, logs, caches, plugin dependencies, and files saved in workspaces. Electron application data stores windows, logs, update state, and diagnostics. Explicit `DSH_HOME`, an application data-directory choice, and safe mode can change paths.
 
 On first use, a sole `~/.dsh` is moved to the new default. If both exist, they are not merged. Healthy-start recovery checkpoints cover only selected profile declarations and shared settings/patches; they exclude credentials, `.env`, sessions, storage, caches, and workspace files.
 
@@ -20,7 +20,7 @@ Connections depend on user choices, profiles, and plugins. Known endpoints in th
 | Trigger | Recipient and data that may be sent |
 | --- | --- |
 | SpiritX model requests | `https://ai.xzinfra.com/spiritx-api/v1`; model requests, authentication information, and protocol metadata. Users configure `SPIRITX_API_KEY`. |
-| Update checks | `https://clawclaw.xzinfra.com/updates/<stable|beta>/release.json`; IP, time, User-Agent, and normal HTTP metadata. The client does not add original DSH Desktop installation UUID or `X-DSH-Desktop-*` statistics headers. |
+| Update checks | `https://clawclaw.xzinfra.com/updates/stable/release.json`; IP, time, User-Agent, and normal HTTP metadata. The client does not add original DSH Desktop installation UUID or `X-DSH-Desktop-*` statistics headers. |
 | Confirmed downloads | The HTTPS artifact URL in a release manifest; IP, time, download path, and normal network metadata. The client verifies SHA-512 and container format. |
 | dshmarket / pnpm | User-selected catalogs, npm registry, GitHub, or package/image sources; searches, package names, versions, browsing data, and normal metadata may be sent. |
 | Channels | Relevant Weixin, WeCom, Feishu, DingTalk, QQ, iMessage, Telegram, WhatsApp, Discord, or Slack services; credentials, authorization/QR data, message content, attachment references, and protocol metadata depend on platform/configuration. |

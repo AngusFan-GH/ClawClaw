@@ -8,13 +8,13 @@ This repository is maintained at [AngusFan-GH/ClawClaw](https://github.com/Angus
 
 ## Current status
 
-The source version is **0.2.1**, with **0.2.1-beta.1** for Beta and **0.1.5-rc.2** for the pinned DSH source and runtime. These are repository versions, not a claim that every platform has a published installer. Check this project's [Releases](https://github.com/AngusFan-GH/ClawClaw/releases) for actual artifacts. Downloads from the original DSH Desktop website are not ClawClaw releases.
+The source version is **0.2.1**, with **0.1.5-rc.2** for the pinned DSH source and runtime. These are repository versions, not a claim that every platform has a published installer. Check this project's [Releases](https://github.com/AngusFan-GH/ClawClaw/releases) for actual artifacts. Downloads from the original DSH Desktop website are not ClawClaw releases.
 
 - **Desktop runtime**: native windows, tray, isolated Host process, three presentation modes, terminal, and recovery tools.
 - **Workspaces**: a protected default workspace, directory browsing, direct path entry, folder creation, and a system directory picker.
 - **Channels**: configuration surfaces for Weixin, WeCom, Feishu, DingTalk, QQ, iMessage, Telegram, WhatsApp, Discord, and Slack. Each platform still requires accounts, credentials, or QR authorization.
 - **Plugin market**: bundled `dshmarket`, selectable or disabled in settings. Listing does not imply a security review.
-- **Updates**: channel-specific ClawClaw release manifests, SHA-512 download verification, and user-confirmed installation.
+- **Updates**: the stable ClawClaw release manifest, SHA-512 download verification, and user-confirmed installation.
 
 Windows x64 and macOS are the primary packaging targets; macOS supports Universal builds. Linux compatibility mode and headless checks do not imply a published Linux distribution.
 
@@ -25,10 +25,10 @@ Use Node.js `^22.19.0` or `>=24.0.0`, Corepack, and Git. The outer workspace use
 ```sh
 git submodule update --init --recursive
 corepack pnpm install --frozen-lockfile
-corepack pnpm dev:beta
+corepack pnpm dev
 ```
 
-`dev:beta` opens a graphical application; `dev` launches Stable. Develop and validate in Beta first, then synchronize shared changes into Stable. For headless validation:
+`dev` opens the graphical application. For headless validation:
 
 ```sh
 corepack pnpm check
@@ -38,8 +38,6 @@ corepack pnpm --filter @clawclaw/dsh-im run check
 ## Data and configuration
 
 The default data directory is `~/.clawclaw/data`; the default workspace is `~/.clawclaw/workspaces/default`. An existing `~/.dsh` is moved when the new data directory does not exist. If both exist, both are preserved and the new directory is used without merging. Explicit `DSH_HOME`, a directory selected in the application, and safe mode have separate override rules; see the [user guide](docs/user-guide.en.md).
-
-Stable and Beta have separate Electron application data but share these default Harness data and workspace locations. Beta is not a fully isolated data sandbox.
 
 ## Documentation
 
@@ -52,7 +50,7 @@ Stable and Beta have separate Electron application data but share these default 
 | Contribution and validation | [Contributing](CONTRIBUTING.en.md) |
 | Processes, plugins, packaging, updates | [Architecture](docs/architecture.en.md) |
 | Plugin interfaces and examples | [Plugin development](docs/plugin-development.en.md) |
-| Desktop packages and release commands | [Stable](dsh-plugin-desktop/README.md) · [Beta](dsh-plugin-desktop-beta/README.md) |
+| Desktop package and release commands | [Desktop package](dsh-plugin-desktop/README.md) |
 | Channels implementation | [Channels](channels/dsh-im/README.md) |
 | Community contracts | [Fabric Draft](dsh-community-fabric/README.md) |
 

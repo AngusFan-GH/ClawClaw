@@ -3,8 +3,8 @@
 /** Public static release-manifest origin. */
 export const CLAWCLAW_UPDATE_BASE_URL = 'https://clawclaw.xzinfra.com/updates'
 
-/** Release streams supported by the desktop product. */
-export type DesktopReleaseChannel = 'stable' | 'beta'
+/** The single release stream supported by the desktop product. */
+export type DesktopReleaseChannel = 'stable'
 
 /** Maximum response body bytes accepted from a release manifest. */
 export const MAX_VERSION_RESPONSE_BYTES = 16 * 1024
@@ -43,8 +43,6 @@ export type UpdateRequest = (url: string, init: RequestInit) => Promise<Response
 export interface UpdateCheckOptions {
   readonly currentVersion: string
   readonly channel: DesktopReleaseChannel
-  readonly currentChannel?: DesktopReleaseChannel
-  readonly allowDowngrade?: boolean
   readonly signal?: AbortSignal
   readonly request?: UpdateRequest
 }
@@ -98,15 +96,15 @@ export async function fetchDesktopReleaseManifest(
 
 /** Check whether a newer release exists in one published channel. */
 export async function checkForDesktopUpdate(options: UpdateCheckOptions): Promise<UpdateCheckResult | null> {
-  const current = parseCanonicalChannelVersion(options.currentVersion, options.currentChannel ?? options.channel)
+  const current = parseCanonicalChannelVersion(options.currentVersion)
   if (current === null) return null
   const release = await fetchDesktopReleaseManifest(options.channel, options.request, options.signal)
   if (release === null) return null
-  const latest = parseCanonicalChannelVersion(release.version, options.channel)
+  const latest = parseCanonicalChannelVersion(release.version)
   if (latest === null) return null
   const comparison = compareParsedSemVer(latest, current)
   return {
-    status: comparison > 0 || (options.allowDowngrade === true && comparison !== 0) ? 'update-available' : 'up-to-date',
+    status: comparison > 0 ? 'update-available' : 'up-to-date',
     currentVersion: current.version, latestVersion: latest.version,
   }
 }
@@ -132,7 +130,7 @@ async function readLimitedBody(response: Response): Promise<string> {
 function parseReleaseManifest(body: string, expectedChannel: DesktopReleaseChannel): DesktopReleaseManifest | null {
   let value: unknown; try { value = JSON.parse(body) } catch { return null }
   if (!isRecord(value) || value.channel !== expectedChannel || typeof value.version !== 'string' || !isRecord(value.artifacts)) return null
-  if (parseCanonicalChannelVersion(value.version, expectedChannel) === null) return null
+  if (parseCanonicalChannelVersion(value.version) === null) return null
   const artifacts = {} as Record<DesktopReleasePlatform, DesktopReleaseArtifact>
   for (const platform of ['darwin', 'win32'] as const) {
     const artifact = value.artifacts[platform]
@@ -144,11 +142,10 @@ function parseReleaseManifest(body: string, expectedChannel: DesktopReleaseChann
   return { version: value.version, channel: expectedChannel, artifacts }
 }
 
-function parseCanonicalChannelVersion(input: string, channel: DesktopReleaseChannel): ParsedSemVer | null {
+function parseCanonicalChannelVersion(input: string): ParsedSemVer | null {
   const parsed = parseSemVer(input)
   if (parsed === null || parsed.version !== input) return null
-  if (channel === 'stable') return parsed.prerelease.length === 0 ? parsed : null
-  return parsed.prerelease.length === 2 && parsed.prerelease[0] === 'beta' && isNumeric(parsed.prerelease[1]!) ? parsed : null
+  return parsed.prerelease.length === 0 ? parsed : null
 }
 
 function compareParsedSemVer(left: ParsedSemVer, right: ParsedSemVer): number {

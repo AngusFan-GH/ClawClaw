@@ -10,7 +10,7 @@ ClawClaw 每次启动 profile 或切换窗口模式都会创建新的 Host gener
 
 ## Desktop Host services
 
-从对应通道的包导入类型：Stable 使用 `dsh-plugin-desktop/*`，Beta 使用 `dsh-plugin-desktop-beta/*`。不要把两者混在一个 bundle 中。
+从 `dsh-plugin-desktop/*` 导入 Desktop 类型。
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
@@ -37,7 +37,7 @@ export function apply(ctx: Context) {
 }
 ```
 
-`desktopProfiles.current` 给出不可变的当前 profile 名称和绝对目录。`list()` 只读发现；`create()`、`prepareSelection()`、`select()`、`canDelete()`、`delete()` 经 launcher 边界操作。`select()` 会有序重启。详细签名见[Stable contract](../dsh-plugin-desktop/docs/plugin-services.zh.md)或 Beta 对应文件。
+`desktopProfiles.current` 给出不可变的当前 profile 名称和绝对目录。`list()` 只读发现；`create()`、`prepareSelection()`、`select()`、`canDelete()`、`delete()` 经 launcher 边界操作。`select()` 会有序重启。详细签名见 [Desktop contract](../dsh-plugin-desktop/docs/plugin-services.zh.md)。
 
 `desktopPnpm` 的方法如下：
 
@@ -71,10 +71,10 @@ export function apply(ctx: Context) {
 
 ## Client service
 
-浏览器插件可 type-only 导入 `dsh-plugin-desktop/client`（或 Beta）并注入 `desktopWindow`。它只提供当前 generation 的窗口模式、平台、有效材质与几何事实，不能控制 Electron。兼容和扩展模式的内容 WebContentsView 已在独立 Chrome 下方，`safeAreaInsets.top` 和 `dragRegion.height` 都是 `0`；插件不能再次添加标题栏间距。增强模式才报告其集成 caption 几何。
+浏览器插件可 type-only 导入 `dsh-plugin-desktop/client` 并注入 `desktopWindow`。它只提供当前 generation 的窗口模式、平台、有效材质与几何事实，不能控制 Electron。兼容和扩展模式的内容 WebContentsView 已在独立 Chrome 下方，`safeAreaInsets.top` 和 `dragRegion.height` 都是 `0`；插件不能再次添加标题栏间距。增强模式才报告其集成 caption 几何。
 
 ## 不公开的实现
 
 `desktopRuntime`、`desktopPnpmBootstrap`、Electron APIs、Host RPC、BrowserWindow、tray、打包 Node shim、内部 resolver 和安装器属于私有实现。它们即使出现在运行时或声明中，也不保证兼容性。
 
-开发完成后，在普通 DSH 与目标 ClawClaw 通道中分别测试；共享 Desktop 改动还需通过 `corepack pnpm check:desktop-variants`。
+开发完成后，在普通 DSH 与 ClawClaw Desktop 中分别测试。

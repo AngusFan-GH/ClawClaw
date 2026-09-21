@@ -1,8 +1,8 @@
-# ClawClaw Desktop (Stable)
+# ClawClaw Desktop
 
 [中文](README.zh.md)
 
-`dsh-plugin-desktop` is the Stable ClawClaw Desktop package, version `0.2.0`. It supplies Electron bootstrap, an isolated DSH Host, native windows/tray, profile and pnpm services, workspaces, recovery, updates, Market selection, and the ClawClaw client presentation. Its installed product identity is **ClawClaw** (`com.clawclaw.desktop`).
+`dsh-plugin-desktop` is the ClawClaw Desktop package, version `0.2.0`. It supplies Electron bootstrap, an isolated DSH Host, native windows/tray, profile and pnpm services, workspaces, recovery, updates, Market selection, and the ClawClaw client presentation. Its installed product identity is **ClawClaw** (`com.clawclaw.desktop`).
 
 This package is part of the root pnpm workspace. Do not install it as a standalone npm application: it depends on the root vendored DSH runtime, overrides, patches, sibling Market, and Channels workspace package.
 
@@ -10,7 +10,7 @@ This package is part of the root pnpm workspace. Do not install it as a standalo
 
 Electron main starts the Host through `startIsolatedDesktopHost()` by default. `DSH_DESKTOP_ISOLATED_HOST=0` is an in-process diagnostic route. The Host owns Cordis and Web services; Electron main owns native resources. The browser content uses ordinary loopback HTTP/WebSocket and has no general Electron bridge.
 
-The launcher prepares `~/.clawclaw/data` and `~/.clawclaw/workspaces/default` unless saved data-directory configuration, `DSH_HOME`, or safe mode selects another path. A sole legacy `~/.dsh` is moved; two existing roots are preserved without merging. Stable and Beta have separate Electron user-data, but share default Harness data and workspace.
+The launcher prepares `~/.clawclaw/data` and `~/.clawclaw/workspaces/default` unless saved data-directory configuration, `DSH_HOME`, or safe mode selects another path. A sole legacy `~/.dsh` is moved; two existing roots are preserved without merging.
 
 Compatibility and extended modes isolate desktop chrome from content in separate WebContentsViews on macOS/Windows. Advanced mode uses an integrated presentation. Window/profile changes restart the generation. The public plugin contracts are `./profile-service`, `./pnpm`, and `./client`; see [plugin services](docs/plugin-services.md).
 
@@ -33,7 +33,6 @@ Use root shortcuts for the product workflow:
 corepack pnpm dev
 corepack pnpm build
 corepack pnpm check
-corepack pnpm check:desktop-variants
 ```
 
 `dev` is graphical. Build, typecheck, tests, loader/profile/CLI smokes, runtime closure, notices, and reliability checks remain headless-safe.
@@ -46,6 +45,6 @@ All platforms disable ASAR. Packaged application files and dependencies remain p
 
 ## Updates and releases
 
-The Stable client checks `https://clawclaw.xzinfra.com/updates/stable/release.json`. The manifest must contain a canonical stable version and `darwin`/`win32` HTTPS artifacts with `url`, `sha512`, and `size`. The client rejects redirects, verifies SHA-512 and the DMG/PE container, and asks the user before handoff. It does not send legacy DSH Desktop statistics headers or verify an independent manifest signature.
+The client checks `https://clawclaw.xzinfra.com/updates/stable/release.json`. The manifest must contain a canonical release version and `darwin`/`win32` HTTPS artifacts with `url`, `sha512`, and `size`. The client rejects redirects, verifies SHA-512 and the DMG/PE container, and asks the user before handoff. It does not send legacy DSH Desktop statistics headers or verify an independent manifest signature.
 
-Before shared Desktop changes are merged, synchronize relevant source changes into Beta/Stable as required and run `corepack pnpm check:desktop-variants`. Run `verify:notices` after production dependency changes. Current product context is in the root [README](../README.en.md), [architecture](../docs/architecture.en.md), and [user guide](../docs/user-guide.en.md).
+Run `verify:notices` after production dependency changes. Current product context is in the root [README](../README.en.md), [architecture](../docs/architecture.en.md), and [user guide](../docs/user-guide.en.md).

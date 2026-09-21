@@ -493,9 +493,8 @@ export function SetupWizardWelcome({
         <h1 className="text-2xl font-semibold tracking-tight">{copy.welcomeTitle}</h1>
         <Badge
           className="mb-0.5 px-1.5 py-0 text-[10px] leading-4"
-          data-beta-placement="title-bottom-right"
           variant="secondary"
-        >{copy.beta} · v{appVersion}</Badge>
+        >v{appVersion}</Badge>
       </div>
       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{copy.welcomeBody}</p>
       <Card className="mt-7 w-full text-left">

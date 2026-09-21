@@ -42,13 +42,6 @@ describe('Recovery native terminal action', () => {
     expect(source).toContain('title={state.profileDirectory}')
   })
 
-  it('uses the shared ScrollArea for the standalone Profile selector', () => {
-    const source = readFileSync(new URL('../src/native-ui/profile-selector/App.tsx', import.meta.url), 'utf8')
-    expect(source).toContain("from '../components/ui/scroll-area.tsx'")
-    expect(source).toContain('<ScrollArea className="min-h-0 flex-1 pr-3">')
-    expect(source).not.toContain('overflow-y-auto')
-  })
-
   it('renders a labelled pill opposite each platform native-control group', () => {
     const copy = desktopRecoveryCopy('en')
     const mac = renderToStaticMarkup(createElement(RecoveryTerminalAction, {
@@ -87,17 +80,17 @@ describe('Recovery native terminal action', () => {
     const markup = renderToStaticMarkup(createElement(
       RecoveryActionFooter,
       {
-        leading: createElement(RecoveryActionLink, { children: 'Back', href: 'dsh-profile-selector://cancel' }),
+        leading: createElement(RecoveryActionLink, { children: 'Back', href: 'dsh-recovery://back' }),
         children: createElement(RecoveryActionLink, {
           children: 'Restart ClawClaw',
-          href: 'dsh-profile-selector://restart',
+          href: 'dsh-recovery://restart',
           variant: 'default',
         }),
       },
     ))
 
     expect(markup).toContain('mr-auto')
-    expect(markup).toContain('dsh-profile-selector://cancel')
-    expect(markup).toContain('dsh-profile-selector://restart')
+    expect(markup).toContain('dsh-recovery://back')
+    expect(markup).toContain('dsh-recovery://restart')
   })
 })

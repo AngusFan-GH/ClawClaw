@@ -180,12 +180,12 @@ describe('Desktop Setup Wizard state', () => {
     })).toBe(false)
   })
 
-  it.each(['completed', 'skipped'] as const)('keeps %s decisions across Stable/Beta switches in either direction', async outcome => {
+  it.each(['completed', 'skipped'] as const)('keeps %s decisions across Desktop version changes', async outcome => {
     const userData = temporaryDirectory('dsh-setup-state-user-')
     const profile = temporaryDirectory('dsh-setup-state-profile-')
-    for (const desktopVersion of ['2.0.5', '2.0.6-beta.1']) {
+    for (const desktopVersion of ['2.0.5', '2.0.6']) {
       const state = await recordSetup(userData, profile, outcome, { ...CURRENT_VERSIONS, desktopVersion })
-      for (const nextVersion of ['2.0.4', '2.0.6', '2.0.7-beta.1']) {
+      for (const nextVersion of ['2.0.4', '2.0.6', '2.0.7']) {
         expect(desktopSetupWizardRequired(state, { ...CURRENT_VERSIONS, desktopVersion: nextVersion })).toBe(false)
       }
       expect(readDesktopSetupWizardState(userData, profile)).toEqual(state)
