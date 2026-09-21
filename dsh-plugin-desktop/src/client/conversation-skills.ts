@@ -11,6 +11,19 @@ export interface ConversationSkillCatalog {
   readonly skills: readonly SkillEntry[]
   readonly commands: readonly string[]
 }
+
+export function rankConversationSkills(skills: readonly SkillEntry[], query: string): SkillEntry[] {
+  const needle = query.trim().toLocaleLowerCase()
+  const score = (skill: SkillEntry): number => {
+    const name = skill.name.toLocaleLowerCase()
+    if (needle === '' || name === needle) return 0
+    if (name.startsWith(needle)) return 1
+    if (name.includes(needle)) return 2
+    return skill.description.toLocaleLowerCase().includes(needle) ? 3 : 4
+  }
+  return skills.map(skill => ({ skill, score: score(skill) })).filter(item => item.score < 4)
+    .sort((left, right) => left.score - right.score || left.skill.name.localeCompare(right.skill.name)).map(item => item.skill)
+}
 export interface ConversationSkillsApi {
   list(signal: AbortSignal): Promise<ConversationSkillCatalog>
   select(name: string, signal: AbortSignal): Promise<void>

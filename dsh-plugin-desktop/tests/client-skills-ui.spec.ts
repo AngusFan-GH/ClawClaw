@@ -35,12 +35,82 @@ async function click(text: string) { await act(async () => { button(text).click(
 afterEach(async () => { await act(async () => { root?.unmount() }); root = undefined; document.body.replaceChildren(); vi.unstubAllGlobals() })
 
 describe('Skills catalog UI', () => {
+  it('collapses directories by default while keeping the effective preset visible', async () => {
+    await mount({}, { configure: api => { vi.mocked(api.readView).mockResolvedValue({ ...view, locations: {
+      userLibrary: '/data/skills', recycleBin: '/data/skills/.recycle', cwd: '/workspaces/default', preset: 'standard',
+    } }) } })
+    const context = document.querySelector<HTMLDetailsElement>('.dshSkillsContext')!
+    expect(context.open).toBe(false)
+    expect(context.querySelector('summary')?.textContent).toContain('standard')
+    await act(async () => { context.querySelector('summary')!.click() })
+    expect(context.open).toBe(true)
+    expect(context.querySelector('dl')?.textContent).toContain('/workspaces/default')
+    await act(async () => { (document.querySelectorAll('[role="tab"]')[1] as HTMLButtonElement).click() })
+    expect(document.querySelector<HTMLDetailsElement>('.dshSkillsContext')?.open).toBe(false)
+    expect(document.querySelector('.dshSkillsContext summary')?.textContent).not.toContain('standard')
+  })
+  it('keeps installation diagnostics separate from callable catalog cards', async () => {
+    const api = await mount({}, { configure: api => { vi.mocked(api.readView).mockResolvedValue({ ...view, installed: [
+      { name: 'review', path: '/data/skills/review/SKILL.md', status: 'overridden', effectivePath: '/project/.agents/skills/review/SKILL.md', effectiveSource: 'project-agents' },
+      { name: 'broken', path: '/data/skills/broken/SKILL.md', status: 'invalid', reason: 'missing-file' },
+    ] }) } })
+    expect(document.querySelector('details')?.textContent).toContain(zh.installationOverridden)
+    expect(document.querySelector('details')?.textContent).toContain('/data/skills/broken/SKILL.md')
+    expect(document.querySelectorAll('.dshSkillsCard')).toHaveLength(1)
+    expect(document.querySelector('details')?.textContent).toContain(zh.diagnosticMissingFile)
+    expect(document.querySelector('details')?.textContent).toContain('/project/.agents/skills/review/SKILL.md')
+    await act(async () => { document.querySelector<HTMLButtonElement>('details button')!.click() })
+    expect(api.detail).toHaveBeenCalledWith('review')
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  })
+  it('preserves the catalog and reports a warning after a completed operation with pending refresh', async () => {
+    const api = await mount()
+    vi.mocked(api.recycle).mockResolvedValue({ skills: [], recycled: [], refreshPending: true })
+    await click('移至回收站: review'); await click(zh.recycle)
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(document.querySelector('[role="alert"]')).toBeNull()
+    expect(document.body.textContent).toContain(zh.skillSavedRefreshPending)
+    expect(button('查看详情: review')).toBeDefined()
+    await click(zh.refresh)
+    expect(document.body.textContent).not.toContain(zh.skillSavedRefreshPending)
+  })
+  it('keeps a conflicted draft and requires review before adopting a new revision', async () => {
+    const api = await mount()
+    vi.mocked(api.detail).mockResolvedValue({ ...skill, content: 'My draft', revision: 'a'.repeat(64) })
+    await click('查看详情: review'); await click(zh.edit)
+    vi.mocked(api.update).mockRejectedValueOnce(new Error('skillEditConflict'))
+    await act(async () => { document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) })
+    expect(api.update).toHaveBeenLastCalledWith('review', expect.objectContaining({ instructions: 'My draft' }), 'a'.repeat(64))
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe(zh.skillEditConflict)
+    vi.mocked(api.detail).mockResolvedValue({ ...skill, content: 'External changes', revision: 'b'.repeat(64) })
+    await click(zh.reviewLatest)
+    expect(document.querySelector('pre')?.textContent).toBe('External changes')
+    expect(document.querySelector<HTMLTextAreaElement>('.dshSkillsCode')?.value).toBe('My draft')
+    await click(zh.confirmDraftVersion)
+    await act(async () => { document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) })
+    expect(api.update).toHaveBeenLastCalledWith('review', expect.objectContaining({ instructions: 'My draft' }), 'b'.repeat(64))
+  })
+  it('shows resolved data and working directories and the user-library install destination', async () => {
+    const locations = { userLibrary: '/custom/data/skills', recycleBin: '/custom/data/skills/.recycle', cwd: '/projects/current' }
+    await mount({}, { configure: api => { vi.mocked(api.readView).mockResolvedValue({ ...view, locations }) } })
+    expect(document.querySelector('[aria-label="技能目录"]')?.textContent).toContain(locations.cwd)
+    await click(zh.newSkill)
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(zh.installDestination)
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(locations.userLibrary)
+    await click(zh.cancel)
+    await click(zh.importRaw)
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(locations.userLibrary)
+    await click(zh.cancel)
+    await act(async () => { (document.querySelectorAll('[role="tab"]')[1] as HTMLButtonElement).click() })
+    expect(document.querySelector('[aria-label="技能目录"]')?.textContent).toContain(locations.recycleBin)
+    expect(document.querySelector('[aria-label="技能目录"]')?.textContent).not.toContain(locations.cwd)
+  })
   it('starts in the current Session scope and uses its preset', async () => {
     const api = await mount({}, { initialSessionId: 'current-session' })
     expect(api.forScope).toHaveBeenCalledWith({ sessionId: 'current-session' })
     expect(api.forPreset).toHaveBeenCalledWith()
     expect(button(zh.skillScope).textContent).toBe(zh.scopeSession)
-    expect(document.body.textContent).toContain(zh.sessionPreset)
+    expect(document.querySelector('.dshSkillsToolbar')?.textContent).not.toContain(zh.sessionPreset)
   })
   it('switches Workspace scope and groups project Skills separately', async () => {
     const api = await mount({}, { configure: api => {

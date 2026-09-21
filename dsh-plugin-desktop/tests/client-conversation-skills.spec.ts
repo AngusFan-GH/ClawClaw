@@ -2,12 +2,18 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import { applyConversationSkills, createConversationSkillsApi, skillInsertion, type ConversationSkillsApi } from '../src/client/conversation-skills.ts'
+import { applyConversationSkills, createConversationSkillsApi, rankConversationSkills, skillInsertion, type ConversationSkillsApi } from '../src/client/conversation-skills.ts'
 
 const catalog = { skills: [{ name: 'review', description: 'Review code', modelInvocable: false }], commands: ['help'] }
 const state = { draft: 'Check @file please', draftRev: 7, phase: 'plain' as const }
 
 describe('conversation skill invocation', () => {
+  it('ranks exact names ahead of prefixes, substrings and descriptions without mutating the catalog', () => {
+    const skills = ['other', 'pre-review', 'review-more', 'review'].map(name => ({ name, description: 'review code', modelInvocable: true }))
+    expect(rankConversationSkills(skills, ' REVIEW ').map(skill => skill.name)).toEqual(['review', 'review-more', 'pre-review', 'other'])
+    expect(skills[0]?.name).toBe('other')
+    expect(rankConversationSkills(skills, 'missing')).toEqual([])
+  })
   it('wires the composer seat to session-addressed remotes and the scoped editor event', async () => {
     let inject: ((id: SessionId) => { api: ConversationSkillsApi }) | undefined
     const sid = 'current-conversation' as SessionId

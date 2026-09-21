@@ -6,6 +6,22 @@ const view = { skills: [{ name: 'review', description: 'Review code', source: 'u
   modelInvocable: true, userInvocable: true, editable: true }], recycled: [] }
 
 describe('Desktop Skills client API', () => {
+  it('validates installation diagnostics independently of effective Skills', () => {
+    const installed = [{ name: 'hidden', path: '/data/skills/hidden/SKILL.md', status: 'overridden', effectivePath: '/project/.agents/skills/hidden/SKILL.md', effectiveSource: 'project-agents' }]
+    expect(parseDesktopSkillsView({ ...view, installed }).installed).toEqual(installed)
+    expect(parseDesktopSkillsView({ ...view, installed }).skills).toEqual(view.skills)
+    expect(() => parseDesktopSkillsView({ ...view, installed: [{ ...installed[0], status: 'unknown' }] })).toThrow('Invalid Skill installation')
+    expect(() => parseDesktopSkillsView({ ...view, installed: [{ ...installed[0], reason: 'unknown' }] })).toThrow('Invalid Skill installation')
+    expect(() => parseDesktopSkillsView({ ...view, installed: [{ ...installed[0], effectivePath: 123 }] })).toThrow('Invalid Skill installation')
+  })
+  it('preserves server-resolved directories and rejects malformed location metadata', () => {
+    const locations = { userLibrary: '/custom/data/skills', recycleBin: '/custom/data/skills/.recycle', cwd: '/workspaces/default', preset: 'custom' }
+    expect(parseDesktopSkillsView({ ...view, locations }).locations).toEqual(locations)
+    expect(parseDesktopSkillsView(view).locations).toBeUndefined()
+    expect(() => parseDesktopSkillsView({ ...view, locations: { ...locations, cwd: 42 } })).toThrow('Invalid Skill locations')
+    expect(() => parseDesktopSkillsView({ ...view, locations: { ...locations, preset: 42 } })).toThrow('Invalid Skill locations')
+    expect(() => parseDesktopSkillsView({ ...view, locations: { ...locations, userLibrary: '' } })).toThrow('Invalid Skill locations')
+  })
   it('preserves Workspace scope across preset changes and every request', async () => {
     const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => new Response(JSON.stringify(JSON.parse(String(init?.body ?? '{}')).action === 'detail' ? { ...view.skills[0], content: 'Instructions' } : view)))
     const base = createDesktopSkillsApi(fetcher)

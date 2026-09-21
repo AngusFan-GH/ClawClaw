@@ -22,6 +22,35 @@ async function click(name: string) { await act(async () => { button(name).click(
 afterEach(async () => { await act(async () => { root?.unmount() }); root = undefined; document.body.replaceChildren(); vi.unstubAllGlobals() })
 
 describe('conversation Skill picker', () => {
+  it('navigates with arrow keys, skips conflicts and supports Enter from search', async () => {
+    const api = { list: vi.fn(async () => ({ skills: [
+      { name: 'blocked', description: 'Blocked', modelInvocable: true },
+      { name: 'review', description: 'Review', modelInvocable: true },
+    ], commands: ['blocked'] })), select: vi.fn(async () => {}) }
+    await mount(api); await click('选择技能')
+    const search = document.querySelector<HTMLInputElement>('input[type="search"]')!
+    await act(async () => { search.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })) })
+    expect(document.activeElement).toBe(button('review'))
+    await act(async () => { search.focus(); search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) })
+    expect(api.select).toHaveBeenCalledWith('review', expect.any(AbortSignal))
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+  })
+  it('refreshes an open picker without closing it and stops polling after close', async () => {
+    vi.useFakeTimers()
+    try {
+      const api = { list: vi.fn(async () => catalog), select: vi.fn(async () => {}) }
+      await mount(api); await click('选择技能')
+      api.list.mockResolvedValue({ skills: [{ name: 'new-skill', description: 'New skill', modelInvocable: true }], commands: [] })
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
+      expect(button('new-skill')).toBeDefined()
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+      await click('刷新')
+      expect(api.list).toHaveBeenCalledTimes(3)
+      await click('关闭')
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
+      expect(api.list).toHaveBeenCalledTimes(3)
+    } finally { vi.useRealTimers() }
+  })
   it('loads on each open, focuses search, inserts only the chosen Skill and closes', async () => {
     const api = { list: vi.fn(async () => catalog), select: vi.fn(async () => {}) }
     await mount(api)

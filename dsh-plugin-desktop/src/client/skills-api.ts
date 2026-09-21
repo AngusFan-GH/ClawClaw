@@ -23,20 +23,52 @@ export function parseDesktopSkillsView(value: unknown): DesktopSkillsView {
     throw new Error('dsh-plugin-desktop: invalid Skills response')
   }
   const skills = value.skills.map(parseSkill)
+  let installed: DesktopSkillsView['installed']
+  if (value.installed !== undefined) {
+    if (!Array.isArray(value.installed) || value.installed.length > 10_000) throw new Error('Invalid Skill installations')
+    installed = value.installed.map(item => {
+      if (!isRecord(item) || !text(item.name, 512) || !text(item.path, 8192)
+        || !['effective', 'overridden', 'not-discovered', 'invalid', 'unavailable'].includes(String(item.status))) throw new Error('Invalid Skill installation')
+      if ((item.reason !== undefined && !['missing-file', 'unreadable-file', 'inspection-limit', 'invalid-document'].includes(String(item.reason)))
+        || (item.effectivePath !== undefined && !text(item.effectivePath, 8192))
+        || (item.effectiveSource !== undefined && !text(item.effectiveSource, 256))) throw new Error('Invalid Skill installation')
+      return { name: item.name, path: item.path, status: item.status as NonNullable<DesktopSkillsView['installed']>[number]['status'],
+        ...(item.reason === undefined ? {} : { reason: item.reason as NonNullable<NonNullable<DesktopSkillsView['installed']>[number]['reason']> }),
+        ...(item.effectivePath === undefined ? {} : { effectivePath: item.effectivePath }),
+        ...(item.effectiveSource === undefined ? {} : { effectiveSource: item.effectiveSource }) }
+    })
+  }
+  if (value.refreshPending !== undefined && typeof value.refreshPending !== 'boolean') throw new Error('Invalid Skill refresh state')
   if (new Set(skills.map(skill => skill.name)).size !== skills.length) throw new Error('dsh-plugin-desktop: duplicate Skill response row')
   if (!Array.isArray(value.recycled) || value.recycled.length > 10_000) throw new Error('dsh-plugin-desktop: invalid Skills recycle response')
   const recycled = value.recycled.map(value => {
     if (!isRecord(value) || !text(value.id, 512) || !text(value.name, 256) || !text(value.deletedAt, 256)) throw new Error('dsh-plugin-desktop: invalid recycled Skill')
     return Object.freeze({ id: value.id, name: value.name, deletedAt: value.deletedAt }) as DesktopRecycledSkill
   })
-  return Object.freeze({ skills: Object.freeze(skills), recycled: Object.freeze(recycled) })
+  let locations: DesktopSkillsView['locations']
+  if (value.locations !== undefined) {
+    const paths = value.locations
+    if (!isRecord(paths) || !text(paths.userLibrary, 8192) || paths.userLibrary === ''
+      || !text(paths.recycleBin, 8192) || paths.recycleBin === ''
+      || (paths.preset !== undefined && (!text(paths.preset, 512) || paths.preset === ''))
+      || (paths.cwd !== undefined && (!text(paths.cwd, 8192) || paths.cwd === ''))) throw new Error('Invalid Skill locations')
+    locations = Object.freeze({ userLibrary: paths.userLibrary, recycleBin: paths.recycleBin,
+      ...(paths.cwd === undefined ? {} : { cwd: paths.cwd }),
+      ...(paths.preset === undefined ? {} : { preset: paths.preset }) })
+  }
+  return Object.freeze({ skills: Object.freeze(skills), recycled: Object.freeze(recycled),
+    ...(installed === undefined ? {} : { installed }),
+    ...(value.refreshPending === true ? { refreshPending: true } : {}),
+    ...(locations === undefined ? {} : { locations }) })
 }
 export function parseDesktopSkillDetail(value: unknown): DesktopSkillDetail {
   const skill = parseSkill(value)
   if (!isRecord(value) || !text(value.content, 256 * 1024) || (value.path !== undefined && !text(value.path, 8_192))) {
     throw new Error('dsh-plugin-desktop: invalid Skill detail response')
   }
-  return Object.freeze({ ...skill, content: value.content, ...(value.path === undefined ? {} : { path: value.path }) })
+  if (value.revision !== undefined && (typeof value.revision !== 'string' || !/^[a-f0-9]{64}$/u.test(value.revision))) throw new Error('Invalid Skill revision')
+  return Object.freeze({ ...skill, content: value.content, ...(value.path === undefined ? {} : { path: value.path }),
+    ...(value.revision === undefined ? {} : { revision: value.revision }) })
 }
 async function readResponse(response: Response): Promise<unknown> {
   let value: unknown
@@ -56,7 +88,7 @@ export interface DesktopSkillsApi {
   setUserInvocable(name: string, enabled: boolean): Promise<readonly DesktopSkillView[]>
   importDocument(content: string): Promise<DesktopSkillsView>
   create(input: DesktopSkillInput): Promise<DesktopSkillsView>
-  update(name: string, input: DesktopSkillInput): Promise<DesktopSkillsView>
+  update(name: string, input: DesktopSkillInput, revision?: string): Promise<DesktopSkillsView>
   recycle(name: string): Promise<DesktopSkillsView>
   restore(id: string): Promise<DesktopSkillsView>
 }
@@ -99,12 +131,18 @@ export function createDesktopSkillsApi(fetcher: FetchLike = globalThis.fetch.bin
     },
     async detail(name: string) { return parseDesktopSkillDetail(await post({ action: 'detail', name })) },
     async setModelInvocable(name: string, enabled: boolean) {
-      return parseDesktopSkillsView(await post({ action: 'set-model-invocable', name, enabled })).skills
+      const view = parseDesktopSkillsView(await post({ action: 'set-model-invocable', name, enabled }))
+      if (view.refreshPending) throw new Error('skillSavedRefreshPending')
+      return view.skills
     },
-    async setUserInvocable(name: string, enabled: boolean) { return parseDesktopSkillsView(await post({ action: 'set-user-invocable', name, enabled })).skills },
+    async setUserInvocable(name: string, enabled: boolean) {
+      const view = parseDesktopSkillsView(await post({ action: 'set-user-invocable', name, enabled }))
+      if (view.refreshPending) throw new Error('skillSavedRefreshPending')
+      return view.skills
+    },
     async importDocument(content: string) { return parseDesktopSkillsView(await post({ action: 'import', content })) },
     async create(input: DesktopSkillInput) { return parseDesktopSkillsView(await post({ action: 'create', input })) },
-    async update(name: string, input: DesktopSkillInput) { return parseDesktopSkillsView(await post({ action: 'update', name, input })) },
+    async update(name: string, input: DesktopSkillInput, revision?: string) { return parseDesktopSkillsView(await post({ action: 'update', name, input, ...(revision === undefined ? {} : { revision }) })) },
     async recycle(name: string) { return parseDesktopSkillsView(await post({ action: 'recycle', name })) },
     async restore(id: string) { return parseDesktopSkillsView(await post({ action: 'restore', id })) },
   })

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it, vi } from 'vitest'
@@ -13,26 +13,31 @@ import * as SkillFileSystem from '@deepseek-ai/dsh-skill-filesystem'
 import * as toolSkill from '@deepseek-ai/dsh-tool-skill'
 import { DesktopSkillsController } from '../src/skills.ts'
 import { skillInsertion } from '../src/client/conversation-skills.ts'
+import { clawClawDataLayout } from '../src/product-data-layout.ts'
 
-it('loads a desktop-authored, user-only Skill through the installed Harness pre-step pipeline', async () => {
+it.each([false, true])('loads a user-only Skill from the active data directory through Harness (custom directory: %s)', async custom => {
   const home = await mkdtemp(join(tmpdir(), 'clawclaw-skill-invocation-'))
   const ctx = new Context()
-  vi.stubEnv('DSH_HOME', join(home, '.dsh'))
+  const layout = clawClawDataLayout(home)
+  const dataHome = custom ? join(home, 'custom-data') : layout.dshHome
+  vi.stubEnv('DSH_HOME', dataHome)
   try {
+    await mkdir(layout.defaultWorkspace, { recursive: true })
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(SkillRegistry)
-    await ctx.plugin(SkillFileSystem, { dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false })
+    await ctx.plugin(SkillFileSystem, { dshHome: dataHome, agentsHome: join(home, '.agents'), watch: true })
     await ctx.plugin(toolSkill)
     const controller = new DesktopSkillsController(ctx)
     await controller.importDocument('---\nname: desktop-review\ndescription: Review code\ndisable-model-invocation: true\n---\nCheck all public interfaces before changing code.\n')
-    const skills = await ctx.skills.list({ cwd: home })
+    await vi.waitFor(async () => { expect((await controller.detail('desktop-review')).path).toBe(join(dataHome, 'skills', 'desktop-review', 'SKILL.md')) })
+    const skills = await ctx.skills.list({ cwd: layout.defaultWorkspace })
     const catalog = { skills: skills.filter(skill => skill.invocation?.userInvocable !== false).map(skill => ({ name: skill.name, description: skill.description, modelInvocable: skill.invocation?.modelInvocable !== false })), commands: [] }
     const draft = 'Review this change.'
     const insertion = skillInsertion('desktop-review', { draft, draftRev: 1, phase: 'plain' }, catalog)
     const id = SessionId('desktop-skill-test')
-    const session = Session.create(id, [], { version: SESSION_FORMAT_VERSION, id, createdAt: 0, cwd: home, isSeeded: false })
+    const session = Session.create(id, [], { version: SESSION_FORMAT_VERSION, id, createdAt: 0, cwd: layout.defaultWorkspace, isSeeded: false })
     const agent = { id, ctx, session, options: {} } as Agent
     const messages = [createUserMessage({ content: [{ type: 'text', text: insertion.text + draft }], source: { kind: 'user' } })]
     const decision = await agentEvents(ctx, agent).waterfall('agent/pre-step', {

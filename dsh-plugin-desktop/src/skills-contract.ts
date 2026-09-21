@@ -25,6 +25,7 @@ export interface DesktopSkillView {
 export interface DesktopSkillDetail extends DesktopSkillView {
   readonly content: string
   readonly path?: string
+  readonly revision?: string
 }
 
 export interface DesktopRecycledSkill {
@@ -34,8 +35,25 @@ export interface DesktopRecycledSkill {
 }
 
 export interface DesktopSkillsView {
+  readonly installed?: readonly DesktopSkillInstallation[]
+  readonly refreshPending?: boolean
   readonly skills: readonly DesktopSkillView[]
   readonly recycled: readonly DesktopRecycledSkill[]
+  readonly locations?: {
+    readonly userLibrary: string
+    readonly recycleBin: string
+    readonly cwd?: string
+    readonly preset?: string
+  }
+}
+
+export interface DesktopSkillInstallation {
+  readonly name: string
+  readonly path: string
+  readonly status: 'effective' | 'overridden' | 'not-discovered' | 'invalid' | 'unavailable'
+  readonly reason?: 'missing-file' | 'unreadable-file' | 'inspection-limit' | 'invalid-document'
+  readonly effectivePath?: string
+  readonly effectiveSource?: string
 }
 
 export interface DesktopSkillInput {

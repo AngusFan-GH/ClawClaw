@@ -14,7 +14,7 @@ import Search from 'lucide-react/dist/esm/icons/search.mjs'
 import Trash2 from 'lucide-react/dist/esm/icons/trash-2.mjs'
 import { IconChevronDownOutline14, IconSkillOutline16, Menu, Modal, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { DesktopRecycledSkill, DesktopSkillDetail, DesktopSkillInput, DesktopSkillView, DesktopSkillsWorkspace } from '../skills-contract.ts'
+import type { DesktopRecycledSkill, DesktopSkillDetail, DesktopSkillInput, DesktopSkillView, DesktopSkillsView, DesktopSkillsWorkspace } from '../skills-contract.ts'
 import type { DesktopSkillsApi } from './skills-api.ts'
 import { readSkillFile } from './skill-file.ts'
 import { SettingsIconButton, SettingsToggle } from './settings-controls.tsx'
@@ -22,7 +22,7 @@ import { SettingsIconButton, SettingsToggle } from './settings-controls.tsx'
 export interface SkillsSettingsSectionInjected { readonly api: DesktopSkillsApi; readonly initialSessionId?: string }
 export type SkillsSettingsSectionProps = PropsRuntime<'settings.section'>
   & PropsLocale<'desktop.skills'> & InjectFace<SkillsSettingsSectionInjected>
-type SkillDraft = DesktopSkillInput & { readonly mode: 'create' | 'edit' }
+type SkillDraft = DesktopSkillInput & { readonly mode: 'create' | 'edit'; readonly revision?: string | undefined }
 const EMPTY_DRAFT: SkillDraft = { mode: 'create', name: '', description: '', whenToUse: '', instructions: '' }
 const SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
 const canRecycle = (skill: DesktopSkillView): boolean => skill.editable && skill.source === 'user-dsh' && skill.provider === 'filesystem'
@@ -41,13 +41,17 @@ export function SkillsSettingsSection({ t, api: baseApi, initialSessionId }: Ski
   const api = useMemo(() => scopedApi(scope, preset), [baseApi, scope, preset])
   const [skills, setSkills] = useState<readonly DesktopSkillView[]>([])
   const [recycled, setRecycled] = useState<readonly DesktopRecycledSkill[]>([])
+  const [locations, setLocations] = useState<DesktopSkillsView['locations']>()
+  const [installed, setInstalled] = useState<DesktopSkillsView['installed']>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
+  const [refreshPending, setRefreshPending] = useState(false)
   const [busy, setBusy] = useState<string>()
   const [view, setView] = useState<'library' | 'recycle'>('library')
   const [search, setSearch] = useState('')
   const [detail, setDetail] = useState<DesktopSkillDetail>()
   const [draft, setDraft] = useState<SkillDraft>()
+  const [conflictDetail, setConflictDetail] = useState<DesktopSkillDetail>()
   const [importText, setImportText] = useState('')
   const [importOpen, setImportOpen] = useState(false)
   const [fileName, setFileName] = useState('')
@@ -65,7 +69,11 @@ export function SkillsSettingsSection({ t, api: baseApi, initialSessionId }: Ski
   const modalOpen = detail !== undefined || draft !== undefined || importOpen
   const disabled = loading || busy !== undefined
 
-  const applyView = (next: Awaited<ReturnType<DesktopSkillsApi['readView']>>): void => { setSkills(next.skills); setRecycled(next.recycled) }
+  const applyView = (next: Awaited<ReturnType<DesktopSkillsApi['readView']>>): void => {
+    setRefreshPending(next.refreshPending === true)
+    if (next.refreshPending) return
+    setSkills(next.skills); setRecycled(next.recycled); setLocations(next.locations); setInstalled(next.installed)
+  }
   const sourceLabel = (source: string): string => {
     if (source === 'user-dsh') return t('sourceUserDsh')
     if (source === 'user-agents') return t('sourceUserAgents')
@@ -138,12 +146,17 @@ export function SkillsSettingsSection({ t, api: baseApi, initialSessionId }: Ski
     if (inFlight.current) return
     readEpoch.current++
     inFlight.current = true; setBusy(key); setError(undefined)
-    try { await operation() } catch (cause) { setError(cause instanceof Error ? cause.message : t('operationFailed')) }
+    try { await operation() } catch (cause) {
+      const message = cause instanceof Error ? cause.message : ''
+      if (message === 'skillSavedRefreshPending') setRefreshPending(true)
+      else setError(message === 'skillEditConflict' ? t('skillEditConflict') : message || t('operationFailed'))
+    }
     finally { inFlight.current = false; setBusy(undefined) }
   }
   const close = (): void => {
     if (inFlight.current) return
     setDetail(undefined); setDraft(undefined); setImportOpen(false); setImportText(''); setFileName('')
+    setConflictDetail(undefined)
     setDiscard(false); setRecycleConfirm(false); setError(undefined)
   }
   const requestClose = (): void => {
@@ -162,6 +175,7 @@ export function SkillsSettingsSection({ t, api: baseApi, initialSessionId }: Ski
     return () => { document.removeEventListener('keydown', onEscape, true) }
   }, [modalOpen, draft, importOpen, importText])
   const beginDraft = (next: SkillDraft): void => {
+    setConflictDetail(undefined)
     initialDraft.current = JSON.stringify(next); setDraft(next); setDetail(undefined); setError(undefined); setRecycleConfirm(false)
   }
   const saveDraft = (event: FormEvent): void => {
@@ -171,7 +185,7 @@ export function SkillsSettingsSection({ t, api: baseApi, initialSessionId }: Ski
       const whenToUse = draft.whenToUse?.trim()
       const input: DesktopSkillInput = { name: draft.name.trim(), description: draft.description.trim(),
         ...(whenToUse === undefined || whenToUse === '' ? {} : { whenToUse }), instructions: draft.instructions.trim() }
-      applyView(draft.mode === 'create' ? await api.create(input) : await api.update(draft.name, input))
+      applyView(draft.mode === 'create' ? await api.create(input) : await api.update(draft.name, input, draft.revision))
       if (draft.mode === 'create') { setView('library'); setSearch('') }
       setDraft(undefined); setDiscard(false)
     })
@@ -213,18 +227,20 @@ export function SkillsSettingsSection({ t, api: baseApi, initialSessionId }: Ski
           }}>{t(value === 'library' ? 'library' : 'recycleBin')}<span>{value === 'library' ? skills.length : recycled.length}</span></button>)}
       </div>
       {!modalOpen && errorMessage}
+      {!modalOpen && refreshPending && <p role="status" className="dshSkillsNote">{t('skillSavedRefreshPending')}</p>}
       <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${view}`} className="dshSkillsCatalog" aria-busy={disabled}>
         <div className="dshSkillsToolbar">
           <label className="dshIntegrationsSearch"><Search aria-hidden="true" /><input aria-label={t('searchSkills')} value={search} onChange={event => { setSearch(event.target.value) }} placeholder={t('searchSkills')} /></label>
           {view === 'library' && <Menu className="dshSkillsPresetMenu" open={scopeMenuOpen} onClose={() => { setScopeMenuOpen(false) }} compact portal selectedId={scope}
-            items={[{ id: 'global', label: t('scopeGlobal') }, ...(initialSessionId === undefined ? [] : [{ id: `session:${initialSessionId}`, label: t('scopeSession') }]), ...workspaces.map(workspace => ({ id: `workspace:${workspace.id}`, label: `${workspace.title} · ${workspace.path}` }))]}
+            items={[{ id: 'global', label: t('scopeGlobal') }, ...(initialSessionId === undefined ? [] : [{ id: `session:${initialSessionId}`, label: t('scopeSession') }]),
+              ...(workspaces.length === 0 ? [] : [{ type: 'separator' as const, id: 'workspace-separator' }, { type: 'label' as const, id: 'workspace-label', text: t('scopeWorkspaces') }]),
+              ...workspaces.map(workspace => ({ id: `workspace:${workspace.id}`, label: `${workspace.title} · ${workspace.path}` }))]}
             onSelect={next => {
               setScopeMenuOpen(false)
               void run('scope', async () => { const result = await scopedApi(next, preset).readView(); setScope(next); applyView(result) })
             }} anchor={<button type="button" className="dshIntegrationsCommand" disabled={disabled} aria-label={t('skillScope')} aria-haspopup="menu" aria-expanded={scopeMenuOpen} onClick={() => { setScopeMenuOpen(open => !open) }}>
               <span>{scope.startsWith('session:') ? t('scopeSession') : workspaces.find(workspace => `workspace:${workspace.id}` === scope)?.title ?? t('scopeGlobal')}</span><IconChevronDownOutline14 />
             </button>} />}
-          {view === 'library' && scope.startsWith('session:') && <span className="dshSkillsNote">{t('sessionPreset')}</span>}
           {view === 'library' && !scope.startsWith('session:') && presets.length > 0 && <Menu className="dshSkillsPresetMenu" open={presetMenuOpen} onClose={() => { setPresetMenuOpen(false) }} compact portal selectedId={preset ?? ''}
             items={[{ id: '', label: t('defaultPreset') }, ...presets.map(item => ({ id: item.id, label: item.name }))]}
             onSelect={next => {
@@ -235,7 +251,32 @@ export function SkillsSettingsSection({ t, api: baseApi, initialSessionId }: Ski
             </button>} />}
           <SettingsIconButton label={t('refresh')} disabled={disabled} onClick={() => { void load() }}><RefreshCw /></SettingsIconButton>
         </div>
+        {locations !== undefined && <details className="dshSkillsContext" key={view}>
+          <summary><span>{t('skillLocations')}</span>{view === 'library' && locations.preset !== undefined && <span className="dshSkillsContextPreset">{t('agentPreset')} · {presets.find(item => item.id === locations.preset)?.name ?? locations.preset}</span>}</summary>
+          <dl className="dshSkillsFacts" aria-label={t('skillLocations')}>
+          <div><dt>{t(view === 'recycle' ? 'recycleBin' : 'userLibraryPath')}</dt><dd><code>{view === 'recycle' ? locations.recycleBin : locations.userLibrary}</code></dd></div>
+          {view === 'library' && locations.cwd !== undefined && <div><dt>{t('workingDirectory')}</dt><dd><code>{locations.cwd}</code></dd></div>}
+          </dl>
+        </details>}
         {loading ? <p className="dshIntegrationsEmpty" role="status">{t('loading')}</p> : view === 'library' ? <>
+          {installed !== undefined && installed.some(item => item.status !== 'effective') && <details className="dshSkillsDiagnostics">
+            <summary>{t('installationIssues')} · {installed.filter(item => item.status !== 'effective').length}</summary>
+            <dl className="dshSkillsFacts">{installed.filter(item => item.status !== 'effective').map(item => <div key={item.path}>
+              <dt>{t(item.status === 'overridden' ? 'installationOverridden' : item.status === 'invalid' ? 'installationInvalid' : item.status === 'unavailable' ? 'unavailable' : 'installationNotDiscovered')}</dt>
+              <dd><strong>{item.name}</strong><br /><code>{item.path}</code>
+                {item.reason !== undefined && <p>{t(item.reason === 'missing-file' ? 'diagnosticMissingFile' : item.reason === 'unreadable-file' ? 'diagnosticUnreadable' : item.reason === 'inspection-limit' ? 'diagnosticLimit' : 'diagnosticInvalid')}</p>}
+                {item.status === 'not-discovered' && <p>{t('diagnosticNotDiscovered')}</p>}
+                {item.status === 'overridden' && <>
+                  <p>{t('effectiveSkill')}{item.effectiveSource === undefined ? '' : ` · ${sourceLabel(item.effectiveSource)}`}</p>
+                  {item.effectivePath !== undefined && <code>{item.effectivePath}</code>}
+                  {skills.some(skill => skill.name === item.name) && <div><button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={event => {
+                    const skill = skills.find(skill => skill.name === item.name)
+                    if (skill !== undefined) openSkill(skill, event.currentTarget)
+                  }}>{t('viewDetails')}: {item.name}</button></div>}
+                </>}
+              </dd>
+            </div>)}</dl>
+          </details>}
           {grouped.map(([source, items]) => <section className="dshSkillsGroup" key={source} aria-label={sourceLabel(source)}>
             <h3>{sourceLabel(source)}<span>{items.length}</span></h3>
             <ul className="dshSkillsGrid">{items.map(skill => <li key={skill.name}>
@@ -268,7 +309,7 @@ export function SkillsSettingsSection({ t, api: baseApi, initialSessionId }: Ski
             </div>}
             <div className="dshIntegrationsRowActions">
               <button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={requestClose}>{t(detail === undefined ? 'cancel' : 'close')}</button>
-              {detail?.editable && <button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={() => { beginDraft({ mode: 'edit', name: detail.name, description: detail.description, whenToUse: detail.whenToUse ?? '', instructions: detail.content }) }}><Pencil />{t('edit')}</button>}
+              {detail?.editable && <button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={() => { beginDraft({ mode: 'edit', revision: detail.revision, name: detail.name, description: detail.description, whenToUse: detail.whenToUse ?? '', instructions: detail.content }) }}><Pencil />{t('edit')}</button>}
               {draft !== undefined && <button type="submit" form={`${id}-form`} className="dshIntegrationsCommand dshCronPrimary" disabled={disabled || !draftValid}>{busy === 'save' ? t('saving') : t(draft.mode === 'create' ? 'create' : 'save')}</button>}
               {importOpen && <button type="button" className="dshIntegrationsCommand dshCronPrimary" disabled={disabled || importText.trim() === ''} onClick={() => { void run('import', async () => { applyView(await api.importDocument(importText)); setImportText(''); setFileName(''); setImportOpen(false); setView('library'); setSearch('') }) }}>{busy === 'import' ? t('importing') : t('import')}</button>}
             </div>
@@ -276,6 +317,20 @@ export function SkillsSettingsSection({ t, api: baseApi, initialSessionId }: Ski
       </div>}>
       <div ref={modalBody} className="dshSkillsDialogBody" aria-busy={disabled}>
         {modalOpen && errorMessage}
+        {draft?.mode === 'edit' && error === t('skillEditConflict') && <button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={() => {
+          void run('compare', async () => { setConflictDetail(await api.detail(draft.name)) })
+        }}>{t('reviewLatest')}</button>}
+        {draft?.mode === 'edit' && conflictDetail !== undefined && <section className="dshSkillsInstructions">
+          <h3>{t('latestVersion')}</h3><p className="dshSkillsDescription">{conflictDetail.description}</p>
+          {conflictDetail.whenToUse && <p className="dshSkillsNote">{conflictDetail.whenToUse}</p>}<pre>{conflictDetail.content}</pre>
+          <button type="button" className="dshIntegrationsCommand" disabled={disabled || conflictDetail.revision === undefined} onClick={() => {
+            setDraft({ ...draft, revision: conflictDetail.revision }); setConflictDetail(undefined)
+          }}>{t('confirmDraftVersion')}</button>
+        </section>}
+        {modalOpen && refreshPending && <p role="status" className="dshSkillsNote">{t('skillSavedRefreshPending')}</p>}
+        {locations !== undefined && (draft?.mode === 'create' || importOpen) && <dl className="dshSkillsFacts">
+          <div><dt>{t('installDestination')}</dt><dd><code>{locations.userLibrary}</code></dd></div>
+        </dl>}
         {draft !== undefined && <form id={`${id}-form`} className="dshSkillsForm" onSubmit={saveDraft}>
           <label>{t('name')}<input required maxLength={128} disabled={disabled || draft.mode === 'edit'} value={draft.name} placeholder={t('namePlaceholder')} onChange={event => { setDraft({ ...draft, name: event.target.value }) }} /></label>
           <label>{t('description')}<textarea required maxLength={4000} disabled={disabled} rows={2} value={draft.description} placeholder={t('descriptionPlaceholder')} onChange={event => { setDraft({ ...draft, description: event.target.value }) }} /></label>

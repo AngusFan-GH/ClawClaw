@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rename, readFile, rm, writeFile, access } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Context } from '@deepseek-ai/cordis'
@@ -6,8 +6,47 @@ import SkillRegistry from '@deepseek-ai/dsh-skill'
 import * as SkillFileSystem from '@deepseek-ai/dsh-skill-filesystem'
 import { describe, expect, it, vi } from 'vitest'
 import { DesktopSkillsController } from '../src/skills.ts'
+import { prepareClawClawDataLayout } from '../src/product-data-layout.ts'
 
 describe('Skill discovery scope', () => {
+  it.each([false, true])('keeps migration, installation, discovery and recycle in the active data directory (relocated: %s)', async relocated => {
+    const home = await mkdtemp(join(tmpdir(), 'clawclaw-skill-layout-'))
+    const ctx = new Context()
+    try {
+      const legacy = join(home, '.dsh')
+      await mkdir(join(legacy, 'skills', 'legacy-skill'), { recursive: true })
+      await writeFile(join(legacy, 'skills', 'legacy-skill', 'SKILL.md'), '---\nname: legacy-skill\ndescription: Migrated skill\n---\nLegacy instructions\n')
+      const layout = prepareClawClawDataLayout(home)
+      expect(layout.migratedLegacyHome).toBe(true)
+      const activeHome = relocated ? join(home, 'custom-data') : layout.dshHome
+      if (relocated) await rename(layout.dshHome, activeHome)
+      vi.stubEnv('DSH_HOME', activeHome)
+      await mkdir(layout.defaultWorkspace, { recursive: true })
+      await ctx.plugin(SkillRegistry)
+      await ctx.plugin(SkillFileSystem, { dshHome: activeHome, agentsHome: join(home, '.agents'), watch: true })
+      const host = { skills: ctx.skills, get: (name: string) => name === 'workspaceRegistry'
+        ? { get: () => ({ path: layout.defaultWorkspace, status: async () => 'ok' }) } : undefined } as unknown as Context
+      const controller = new DesktopSkillsController(host, undefined, { workspaceId: 'default' })
+      expect((await controller.read()).locations).toEqual({ userLibrary: join(activeHome, 'skills'), recycleBin: join(activeHome, 'skills', '.recycle'), cwd: layout.defaultWorkspace })
+      expect((await controller.detail('legacy-skill')).path).toBe(join(activeHome, 'skills', 'legacy-skill', 'SKILL.md'))
+      await controller.create({ name: 'new-skill', description: 'Created skill', instructions: 'New instructions' })
+      await vi.waitFor(async () => { expect((await controller.detail('new-skill')).content).toContain('New instructions') })
+      expect(await readFile(join(activeHome, 'skills', 'new-skill', 'SKILL.md'), 'utf8')).toContain('New instructions')
+      await controller.update('new-skill', { name: 'new-skill', description: 'Updated skill', instructions: 'Updated instructions' }, (await controller.detail('new-skill')).revision)
+      await vi.waitFor(async () => { expect((await controller.detail('new-skill')).content).toContain('Updated instructions') })
+      const removed = await controller.recycle('new-skill')
+      expect(removed.recycled).toHaveLength(1)
+      await vi.waitFor(async () => { expect((await controller.read()).skills.some(skill => skill.name === 'new-skill')).toBe(false) })
+      await controller.restore(removed.recycled[0]!.id)
+      await vi.waitFor(async () => { expect((await controller.detail('new-skill')).content).toContain('Updated instructions') })
+      expect((await controller.read()).recycled).toHaveLength(0)
+      await expect(access(legacy)).rejects.toMatchObject({ code: 'ENOENT' })
+      await expect(access(join(layout.defaultWorkspace, '.dsh'))).rejects.toMatchObject({ code: 'ENOENT' })
+      if (relocated) await expect(access(layout.dshHome)).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await ctx.fiber.dispose(); vi.unstubAllEnvs(); await rm(home, { recursive: true, force: true })
+    }
+  })
   it('uses the recorded Session cwd and preset for both inventory and details', async () => {
     const scope = {}
     const snapshot = vi.fn(async () => ({ skills: [], complete: true }))
@@ -17,7 +56,7 @@ describe('Skill discovery scope', () => {
     const observeSession = vi.fn(async () => ({ header: { cwd: '/project/a' }, projections: { values: { agentPreset: 'custom' } }, [Symbol.dispose]: dispose }))
     const ctx = { skills: { snapshot, get }, get: (name: string) => name === 'agentPresets' ? { standingKeyFor } : name === 'sessionQuery' ? { observeSession } : undefined } as unknown as Context
     const controller = new DesktopSkillsController(ctx, undefined, { sessionId: 'session-a' })
-    await controller.read()
+    expect((await controller.read()).locations).toMatchObject({ cwd: '/project/a', preset: 'custom' })
     await expect(controller.detail('review')).rejects.toThrow('Skill not found')
     expect(observeSession).toHaveBeenCalledWith('session-a')
     expect(standingKeyFor).toHaveBeenCalledWith('custom')
@@ -75,6 +114,22 @@ describe('Skill discovery scope', () => {
         expect((await b.read()).skills).toContainEqual(expect.objectContaining({ name: 'project-review', source: 'user-dsh' }))
       }, { timeout: 5000 })
       expect((await a.detail('project-review')).content).toContain('Project A instructions')
+      expect((await a.read()).installed).toContainEqual(expect.objectContaining({ name: 'project-review', status: 'overridden', effectiveSource: 'project-agents', effectivePath: join(first, '.agents', 'skills', 'project-review', 'SKILL.md') }))
+      expect((await b.read()).installed).toContainEqual(expect.objectContaining({ name: 'project-review', status: 'effective' }))
+      await mkdir(join(home, 'user', 'skills', 'broken'), { recursive: true })
+      await writeFile(join(home, 'user', 'skills', 'broken', 'SKILL.md'), 'Not a valid document')
+      expect((await a.read()).installed).toContainEqual(expect.objectContaining({ name: 'broken', status: 'invalid', reason: 'invalid-document' }))
+      await mkdir(join(home, 'user', 'skills', 'missing'), { recursive: true })
+      expect((await a.read()).installed).toContainEqual(expect.objectContaining({ name: 'missing', reason: 'missing-file' }))
+      await mkdir(join(home, 'user', 'skills', 'large'), { recursive: true })
+      await writeFile(join(home, 'user', 'skills', 'large', 'SKILL.md'), 'x'.repeat(256 * 1024 + 1))
+      expect((await a.read()).installed).toContainEqual(expect.objectContaining({ name: 'large', status: 'unavailable', reason: 'inspection-limit' }))
+      expect((await a.read()).skills.some(skill => skill.name === 'broken')).toBe(false)
+      await mkdir(join(home, 'user', 'skills', 'external'), { recursive: true })
+      await writeFile(join(home, 'user', 'skills', 'external', 'SKILL.md'), `---\nname: external\ndescription: ${'x'.repeat(4001)}\n---\n`)
+      await vi.waitFor(async () => {
+        expect((await b.read()).installed).toContainEqual(expect.objectContaining({ name: 'external', status: 'effective' }))
+      }, { timeout: 5000 })
       expect((await b.detail('project-review')).content).toContain('Global instructions')
       await expect(a.recycle('project-review')).rejects.toThrow('Only Skills')
       await expect(a.setUserInvocable('project-review', false)).rejects.toThrow('Only Skills')

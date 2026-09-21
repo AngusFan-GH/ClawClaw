@@ -67,6 +67,49 @@ describe('Desktop Skills preset catalog', () => {
   const skill = { name: 'review', description: 'Review code', source: 'bundled', provider: 'filesystem',
     invocation: { modelInvocable: true, userInvocable: true }, content: 'Review instructions.' }
 
+  it('rejects stale edits, reports successful writes despite discovery failure and restores beneath a project override', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'clawclaw-skills-reliability-'))
+    vi.stubEnv('DSH_HOME', root)
+    const path = join(root, 'skills', 'review', 'SKILL.md')
+    const current = { ...skill, source: 'user-dsh', path }
+    const snapshot = vi.fn(async () => ({ skills: [current], complete: true }))
+    const controller = new DesktopSkillsController({ get: () => undefined, skills: { snapshot, get: async () => current } } as unknown as Context)
+    try {
+      await mkdir(join(root, 'skills', 'review'), { recursive: true })
+      const original = '---\nname: review\ndescription: Original\n---\nOriginal instructions\n'
+      await writeFile(path, original)
+      const detail = await controller.detail('review')
+      expect(detail.description).toBe('Original')
+      expect(detail.revision).toMatch(/^[a-f0-9]{64}$/u)
+      const external = original.replace('Original instructions', 'Agent instructions')
+      await writeFile(path, external)
+      const input = { name: 'review', description: 'Draft', instructions: 'User instructions' }
+      await expect(controller.update('review', input)).rejects.toThrow('skillEditConflict')
+      await expect(controller.update('review', input, detail.revision)).rejects.toThrow('skillEditConflict')
+      expect(await readFile(path, 'utf8')).toBe(external)
+      const latest = await controller.detail('review')
+      snapshot.mockRejectedValueOnce(new Error('Registry offline'))
+      expect((await controller.update('review', input, latest.revision)).refreshPending).toBe(true)
+      expect(await readFile(path, 'utf8')).toContain('User instructions')
+      const recycled = await controller.recycle('review')
+      snapshot.mockResolvedValue({ skills: [{ ...current, source: 'project-agents' }], complete: true })
+      const restored = await controller.restore(recycled.recycled[0]!.id)
+      expect(restored.skills[0]?.source).toBe('project-agents')
+      expect(await readFile(path, 'utf8')).toContain('User instructions')
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
+
+  it.each([
+    `description: ${'x'.repeat(4001)}`,
+    'description: Valid\nuser-invocable: "false"',
+    'description: Valid\nwhenToUse: 42',
+  ])('rejects invalid import metadata before discovery or writes: %.40s', async metadata => {
+    const snapshot = vi.fn()
+    const controller = new DesktopSkillsController({ get: () => undefined, skills: { snapshot } } as unknown as Context)
+    await expect(controller.importDocument(`---\nname: review\n${metadata}\n---\nInstructions`)).rejects.toThrow()
+    expect(snapshot).not.toHaveBeenCalled()
+  })
+
   it('imports and restores immediately despite a stale watcher, preserving bundle assets and invocation flags', async () => {
     const root = await mkdtemp(join(tmpdir(), 'clawclaw-skills-lifecycle-'))
     vi.stubEnv('DSH_HOME', root)
@@ -183,9 +226,10 @@ describe('Desktop Skills preset catalog', () => {
       get: vi.fn(async () => userSkill), snapshot: vi.fn(async () => ({ skills: [userSkill], complete: true })),
     } } as unknown as Context
     try {
-      const result = await new DesktopSkillsController(ctx).update('review', {
+      const controller = new DesktopSkillsController(ctx)
+      const result = await controller.update('review', {
         name: 'review', description: 'Updated', whenToUse: 'During review', instructions: 'Use the checklist.',
-      })
+      }, (await controller.detail('review')).revision)
       expect(result.skills[0]).toEqual(expect.objectContaining({ description: 'Updated', whenToUse: 'During review' }))
       expect(await readFile(path, 'utf8')).toContain('custom: keep')
       expect(await readFile(path, 'utf8')).toContain('Use the checklist.')

@@ -1,7 +1,7 @@
 /** Desktop-owned Skills inventory and model-visibility management. */
 
-import { randomUUID } from 'node:crypto'
-import { chmod, lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
+import { createHash, randomUUID } from 'node:crypto'
+import { chmod, lstat, stat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, relative, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -15,7 +15,7 @@ import { parseDocument } from 'yaml'
 import { registerDesktopJsonApi } from './desktop-json-api.ts'
 import {
   DESKTOP_SKILLS_ACTION_PATH, DESKTOP_SKILLS_PATH,
-  type DesktopRecycledSkill, type DesktopSkillDetail, type DesktopSkillInput, type DesktopSkillsView, type DesktopSkillView, type DesktopSkillsScope,
+  type DesktopRecycledSkill, type DesktopSkillDetail, type DesktopSkillInput, type DesktopSkillsView, type DesktopSkillView, type DesktopSkillsScope, type DesktopSkillInstallation,
 } from './skills-contract.ts'
 
 export * from './skills-contract.ts'
@@ -23,6 +23,7 @@ export const name = 'desktop-skills'
 export const inject = ['skills', 'webServer', 'connection']
 
 const MAX_SKILL_CONTENT_BYTES = 256 * 1024
+const revisionOf = (path: string, text: string): string => createHash('sha256').update(path).update('\0').update(text).digest('hex')
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -72,7 +73,7 @@ function skillInput(value: unknown, expectedName?: string): DesktopSkillInput {
   return Object.freeze({ name, description, ...(whenToUse === undefined || whenToUse === '' ? {} : { whenToUse }), instructions })
 }
 
-function skillDocument(text: string): DesktopSkillView {
+function skillDocument(text: string, mode: 'import' | 'inspect' = 'import'): DesktopSkillView {
   const lines = text.split(/\r?\n/u)
   if (lines[0]?.trim() !== '---') throw new Error('Skill must start with YAML frontmatter')
   const closing = lines.slice(1).findIndex(line => line.trim() === '---')
@@ -82,7 +83,13 @@ function skillDocument(text: string): DesktopSkillView {
   if (document.errors.length > 0 || !isRecord(data) || typeof data.name !== 'string' || typeof data.description !== 'string' || data.description.trim() === '') {
     throw new Error('Skill frontmatter requires a name and description')
   }
-  return { name: safeSkillName(data.name), description: data.description,
+  if (mode === 'import' && (data.description.length > 4000 || (typeof data.whenToUse === 'string' && data.whenToUse.length > 4000))) throw new Error('Skill metadata is too large')
+  if (mode === 'import' && data.whenToUse !== undefined && typeof data.whenToUse !== 'string') throw new Error('Skill whenToUse must be text')
+  for (const key of ['disable-model-invocation', 'user-invocable']) {
+    if (data[key] !== undefined && typeof data[key] !== 'boolean') throw new Error(`Skill ${key} must be a boolean`)
+  }
+  if (mode === 'import' && lines.slice(closing + 2).join('\n').trim() === '') throw new Error('Skill instructions are required')
+  return { name: safeSkillName(data.name.trim()), description: data.description.trim(),
     ...(typeof data.whenToUse === 'string' ? { whenToUse: data.whenToUse } : {}),
     source: 'user-dsh', provider: 'filesystem', editable: true,
     modelInvocable: data['disable-model-invocation'] !== true, userInvocable: data['user-invocable'] !== false }
@@ -180,7 +187,7 @@ async function atomicWrite(target: string, text: string, mode: number): Promise<
 
 export class DesktopSkillsController {
   constructor(private readonly ctx: Context, private readonly preset?: string, private readonly selection: DesktopSkillsScope = {}) {}
-  private async view(): Promise<{ registry: Context['skills']; options: SkillViewOptions }> {
+  private async view(): Promise<{ registry: Context['skills']; options: SkillViewOptions; preset?: string }> {
     // Filesystem providers belong to preset layers in the Web composition.
     // Each request has its own selection; browsing never changes the default.
     const presets = this.ctx.get('agentPresets')
@@ -197,7 +204,7 @@ export class DesktopSkillsController {
       cwd = observation.header.cwd
       preset = observation.projections.values.agentPreset ?? undefined
       const live = this.ctx.get('agents')?.get(sessionId)
-      if (live !== undefined) return { registry: presets?.serviceFor(live, 'skills') ?? this.ctx.skills, options: { cwd, scope: live } }
+      if (live !== undefined) return { registry: presets?.serviceFor(live, 'skills') ?? this.ctx.skills, options: { cwd, scope: live }, ...(preset === undefined ? {} : { preset }) }
     } else if (this.selection.workspaceId !== undefined) {
       const workspace = this.ctx.get('workspaceRegistry')?.get(this.selection.workspaceId as WorkspaceId)
       if (workspace === undefined) throw new Error('Workspace not found')
@@ -209,23 +216,88 @@ export class DesktopSkillsController {
       if (preset !== undefined) throw new Error('Agent presets are unavailable')
       return { registry: this.ctx.skills, options }
     }
-    return { registry: this.ctx.skills, options: { ...options, scope: await (preset === undefined ? presets.standingKeyFor() : presets.standingKeyFor(preset)) } }
+    const resolvedPreset = preset ?? presets.defaultId
+    return { registry: this.ctx.skills, options: { ...options, scope: await (resolvedPreset === undefined ? presets.standingKeyFor() : presets.standingKeyFor(resolvedPreset)) },
+      ...(resolvedPreset === undefined ? {} : { preset: resolvedPreset }) }
   }
   private async getSkill(name: string): Promise<SkillDefinition | undefined> {
     const { registry, options } = await this.view()
     return registry.get(name, options)
   }
   async read(): Promise<DesktopSkillsView> {
-    const { registry, options } = await this.view()
+    const { registry, options, preset } = await this.view()
     const snapshot = await registry.snapshot(options)
     if (!snapshot.complete) throw new Error('Skill discovery is incomplete. Please refresh to retry.')
-    return Object.freeze({ skills: Object.freeze(snapshot.skills.map(projectSkill)), recycled: await this.recycled() })
+    const installed = await this.installations(registry, options, new Set(snapshot.skills.map(skill => skill.name)))
+    return Object.freeze({ skills: Object.freeze(snapshot.skills.map(projectSkill)), recycled: await this.recycled(), installed,
+      locations: Object.freeze({ userLibrary: skillLibraryRoot(), recycleBin: recycleRoot(),
+        ...(preset === undefined ? {} : { preset }),
+        ...(options.cwd === undefined ? {} : { cwd: options.cwd }) }) })
+  }
+  private async installations(registry: Context['skills'], options: SkillViewOptions, names: ReadonlySet<string>): Promise<readonly DesktopSkillInstallation[]> {
+    // This is a managed-library inventory, never an alternative invocation catalog.
+    const root = skillLibraryRoot()
+    const entries = await readdir(root, { withFileTypes: true }).catch(cause => {
+      if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return []
+      throw cause
+    })
+    const result: DesktopSkillInstallation[] = []
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue
+      const entryInfo = entry.isSymbolicLink() ? await stat(resolve(root, entry.name)).catch(() => undefined) : entry
+      if (entryInfo === undefined) { result.push({ name: entry.name, path: resolve(root, entry.name), status: 'unavailable', reason: 'unreadable-file' }); continue }
+      if (!entryInfo.isDirectory() && !(entryInfo.isFile() && entry.name.endsWith('.md'))) continue
+      const path = resolve(root, entry.name, ...(entryInfo.isDirectory() ? ['SKILL.md'] : []))
+      let name = entry.name
+      let raw: string
+      try {
+        const info = await stat(path)
+        if (!info.isFile()) { result.push({ name, path, status: 'invalid', reason: 'missing-file' }); continue }
+        if (info.size > MAX_SKILL_CONTENT_BYTES) { result.push({ name, path, status: 'unavailable', reason: 'inspection-limit' }); continue }
+        raw = await readFile(path, 'utf8')
+      } catch (cause) {
+        const missing = (cause as NodeJS.ErrnoException).code === 'ENOENT'
+        result.push({ name, path, status: missing ? 'invalid' : 'unavailable', reason: missing ? 'missing-file' : 'unreadable-file' }); continue
+      }
+      try { name = skillDocument(raw, 'inspect').name }
+      catch { result.push({ name, path, status: 'invalid', reason: 'invalid-document' }); continue }
+      if (!names.has(name)) { result.push({ name, path, status: 'not-discovered' }); continue }
+      try {
+        const winner = await registry.get(name, options)
+        const winnerPath = winner?.path === undefined ? undefined : await realpath(winner.path).catch(() => undefined)
+        const actualPath = await realpath(path)
+        result.push({ name, path, status: winner === undefined ? 'not-discovered' : winnerPath === actualPath ? 'effective' : 'overridden',
+          ...(winner === undefined ? {} : { effectiveSource: winner.source }),
+          ...(winner?.path === undefined ? {} : { effectivePath: winner.path }) })
+      } catch { result.push({ name, path, status: 'unavailable' }) }
+    }
+    return result.sort((left, right) => left.name.localeCompare(right.name) || left.path.localeCompare(right.path))
   }
   async detail(name: string): Promise<DesktopSkillDetail> {
     const skill = await this.getSkill(name)
     if (skill === undefined) throw new Error(`Skill not found: ${name}`)
     if (Buffer.byteLength(skill.content, 'utf8') > MAX_SKILL_CONTENT_BYTES) throw new Error('Skill content is too large to preview')
+    if (projectSkill(skill).editable) {
+      let target: string
+      try { ({ target } = await writableSkillFile(skill)) }
+      catch { return { ...projectSkillDetail(skill), editable: false } }
+      const raw = await readFile(target, 'utf8')
+      if (Buffer.byteLength(raw, 'utf8') > MAX_SKILL_CONTENT_BYTES) throw new Error('Skill content is too large to preview')
+      let metadata: DesktopSkillView
+      try { metadata = skillDocument(raw) }
+      catch { return { ...projectSkillDetail(skill), editable: false } }
+      const lines = raw.split(/\r?\n/u)
+      const closing = lines.slice(1).findIndex(line => line.trim() === '---') + 1
+      const { whenToUse: _oldWhenToUse, ...detail } = projectSkillDetail(skill)
+      return { ...detail, description: metadata.description, ...(metadata.whenToUse === undefined ? {} : { whenToUse: metadata.whenToUse }),
+        modelInvocable: metadata.modelInvocable, userInvocable: metadata.userInvocable,
+        content: lines.slice(closing + 1).join('\n').trim(), revision: revisionOf(target, raw) }
+    }
     return projectSkillDetail(skill)
+  }
+  private async afterWrite(): Promise<DesktopSkillsView> {
+    try { return await this.read() }
+    catch { return { skills: [], recycled: [], refreshPending: true } }
   }
   async setModelInvocable(name: string, enabled: boolean): Promise<DesktopSkillsView> {
     const skill = await this.getSkill(name)
@@ -243,7 +315,7 @@ export class DesktopSkillsController {
     // Filesystem discovery is watch-driven. Preserve the just-written value in
     // this response so the UI is not reverted by a snapshot from before its
     // watcher has observed the atomic rename.
-    const view = await this.read()
+    const view = await this.afterWrite()
     return Object.freeze({ ...view, skills: Object.freeze(view.skills.map(skill => skill.name === name ? Object.freeze({ ...skill, ...patch }) : skill)) })
   }
   private async recycled(): Promise<readonly DesktopRecycledSkill[]> {
@@ -278,7 +350,7 @@ export class DesktopSkillsController {
       await rm(directory, { recursive: true, force: true }).catch(() => {})
       throw cause
     }
-    const view = await this.read()
+    const view = await this.afterWrite()
     return Object.freeze({ ...view, skills: Object.freeze([...view.skills.filter(skill => skill.name !== name), imported]) })
   }
   async create(inputValue: DesktopSkillInput): Promise<DesktopSkillsView> {
@@ -287,17 +359,18 @@ export class DesktopSkillsController {
     if (Buffer.byteLength(text, 'utf8') > MAX_SKILL_CONTENT_BYTES) throw new Error('Skill content is too large')
     return await this.importDocument(text)
   }
-  async update(nameValue: string, inputValue: DesktopSkillInput): Promise<DesktopSkillsView> {
+  async update(nameValue: string, inputValue: DesktopSkillInput, expectedRevision?: string): Promise<DesktopSkillsView> {
     const name = safeSkillName(nameValue)
     const input = skillInput(inputValue, name)
     const skill = await this.getSkill(name)
     if (skill === undefined) throw new Error(`Skill not found: ${name}`)
     const { target, mode } = await writableSkillFile(skill)
     const current = await readFile(target, 'utf8')
+    if (expectedRevision === undefined || revisionOf(target, current) !== expectedRevision) throw new Error('skillEditConflict')
     const next = updateStructuredSkillDocument(current, input)
     if (Buffer.byteLength(next, 'utf8') > MAX_SKILL_CONTENT_BYTES) throw new Error('Skill content is too large')
     await atomicWrite(target, next, mode)
-    const view = await this.read()
+    const view = await this.afterWrite()
     return Object.freeze({ ...view, skills: Object.freeze(view.skills.map(item => item.name === name ? projectSkillInput(item, input) : item)) })
   }
   async recycle(name: string): Promise<DesktopSkillsView> {
@@ -313,7 +386,7 @@ export class DesktopSkillsController {
       await mkdir(destination, { mode: 0o700 })
       await rename(source, resolve(destination, 'SKILL.md'))
     } else await rename(source, destination)
-    const view = await this.read()
+    const view = await this.afterWrite()
     return Object.freeze({ ...view, skills: Object.freeze(view.skills.filter(item => item.name !== name)) })
   }
   async restore(id: string): Promise<DesktopSkillsView> {
@@ -324,11 +397,10 @@ export class DesktopSkillsController {
     const target = resolve(skillLibraryRoot(), name)
     const restored = skillDocument(await readFile(resolve(source, 'SKILL.md'), 'utf8'))
     if (restored.name !== name) throw new Error('Recycled Skill name does not match its document')
-    if ((await this.read()).skills.some(skill => skill.name === name)) throw new Error(`A Skill named ${name} already exists`)
     if (await lstat(target).catch(cause => (cause as NodeJS.ErrnoException).code === 'ENOENT' ? undefined : Promise.reject(cause)) !== undefined) throw new Error(`A user Skill named ${name} already exists`)
     await rename(source, target)
-    const view = await this.read()
-    return Object.freeze({ ...view, skills: Object.freeze([...view.skills.filter(skill => skill.name !== name), restored]) })
+    const view = await this.afterWrite()
+    return Object.freeze({ ...view, skills: Object.freeze(view.skills.some(skill => skill.name === name) ? view.skills : [...view.skills, restored]) })
   }
 }
 
@@ -341,7 +413,10 @@ async function handleAction(controller: DesktopSkillsController, value: unknown)
   if (value.action === 'set-user-invocable' && typeof value.name === 'string' && typeof value.enabled === 'boolean') return await controller.setUserInvocable(value.name, value.enabled)
   if (value.action === 'import' && typeof value.content === 'string' && value.content.length <= MAX_SKILL_CONTENT_BYTES) return await controller.importDocument(value.content)
   if (value.action === 'create') return await controller.create(skillInput(value.input))
-  if (value.action === 'update' && typeof value.name === 'string') return await controller.update(value.name, skillInput(value.input, value.name))
+  if (value.action === 'update' && typeof value.name === 'string') {
+    if (typeof value.revision !== 'string' || !/^[a-f0-9]{64}$/u.test(value.revision)) throw new TypeError('skillEditConflict')
+    return await controller.update(value.name, skillInput(value.input, value.name), value.revision)
+  }
   if (value.action === 'recycle' && typeof value.name === 'string') return await controller.recycle(value.name)
   if (value.action === 'restore' && typeof value.id === 'string') return await controller.restore(value.id)
   throw new TypeError('invalid Skills action')
