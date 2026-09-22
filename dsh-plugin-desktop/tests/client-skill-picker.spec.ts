@@ -54,6 +54,8 @@ describe('conversation Skill picker', () => {
   it('loads on each open, focuses search, inserts only the chosen Skill and closes', async () => {
     const api = { list: vi.fn(async () => catalog), select: vi.fn(async () => {}) }
     await mount(api)
+    await act(async () => { button('选择技能').focus() })
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('选择技能')
     await click('选择技能')
     expect(document.activeElement?.getAttribute('type')).toBe('search')
     expect(document.body.style.overflow).toBe('hidden')
@@ -61,6 +63,7 @@ describe('conversation Skill picker', () => {
     expect(api.select).toHaveBeenCalledWith('review', expect.any(AbortSignal))
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     expect(document.activeElement).toBe(button('选择技能'))
+    expect(document.querySelector('[role="tooltip"]')).toBeNull()
     expect(document.body.style.overflow).toBe('')
     await click('选择技能')
     expect(api.list).toHaveBeenCalledTimes(2)

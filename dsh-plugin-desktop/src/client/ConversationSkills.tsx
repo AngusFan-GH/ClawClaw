@@ -28,15 +28,21 @@ export function SkillPicker({ api, t, disabled }: { api: ConversationSkillsApi; 
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [reload, setReload] = useState(0)
+  const [suppressTooltip, setSuppressTooltip] = useState(false)
   const request = useRef<AbortController>()
   const selecting = useRef(false)
   const trigger = useRef<HTMLButtonElement>(null)
   const search = useRef<HTMLInputElement>(null)
   const results = useRef<HTMLDivElement>(null)
-  const close = () => { request.current?.abort(); setOpen(false) }
+  const close = () => { request.current?.abort(); setSuppressTooltip(true); setOpen(false) }
   const message = (cause: unknown) => cause instanceof SkillPickError ? t(cause.code) : t('unavailable')
 
   useEffect(() => { if (disabled) close() }, [disabled])
+  useEffect(() => {
+    if (open || !suppressTooltip) return
+    const frame = window.requestAnimationFrame(() => { setSuppressTooltip(false) })
+    return () => { window.cancelAnimationFrame(frame) }
+  }, [open, suppressTooltip])
   useEffect(() => {
     if (!open) return
     setCatalog(undefined); setError(''); setBusy(false)
@@ -109,7 +115,7 @@ export function SkillPicker({ api, t, disabled }: { api: ConversationSkillsApi; 
     buttons[next]?.focus(); buttons[next]?.scrollIntoView?.({ block: 'nearest' })
   }
   return <>
-    <Tooltip label={t('chooseSkill')}><button ref={trigger} type="button" className="dshSkillPickerTrigger" aria-label={t('chooseSkill')} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => { setQuery(''); setOpen(true) }}><IconSkillOutline16 /></button></Tooltip>
+    <Tooltip label={t('chooseSkill')} disabled={open || suppressTooltip}><button ref={trigger} type="button" className="dshSkillPickerTrigger" aria-label={t('chooseSkill')} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => { setQuery(''); setOpen(true) }}><IconSkillOutline16 /></button></Tooltip>
     <Modal open={open} onClose={close} title={t('chooseSkill')} closeLabel={t('close')} className="dshSkillsDialog dshSkillPicker" contentClassName="dshSkillsDialogContent">
       <div className="dshSkillPickerToolbar"><input ref={search} type="search" aria-label={t('searchSkills')} placeholder={t('searchSkills')} value={query} onKeyDown={navigate} onChange={event => { setQuery(event.target.value) }} />
         <SettingsIconButton label={t('refresh')} disabled={busy} onClick={() => { setReload(value => value + 1) }}><RefreshCw /></SettingsIconButton>
