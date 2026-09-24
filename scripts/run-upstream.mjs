@@ -23,5 +23,6 @@ if (command === undefined) {
 execFileSync(process.platform === 'win32' ? 'corepack.cmd' : 'corepack', command.args, {
   cwd: resolve('deepseek-harness'),
   env: { ...process.env, ...command.env },
+  ...(process.platform === 'win32' ? { shell: true } : {}),
   stdio: 'inherit',
 })
