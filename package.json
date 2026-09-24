@@ -57,11 +57,11 @@
     "dist:win": "pnpm --filter dsh-plugin-desktop run dist:win",
     "dist:win-portable": "pnpm --filter dsh-plugin-desktop run dist:win-portable",
     "upload:update": "node --env-file-if-exists=.env.server.local scripts/upload-update.mjs",
-    "upstream:version": "cd deepseek-harness && corepack pnpm --version",
-    "upstream:install": "cd deepseek-harness && CI=true corepack pnpm install --frozen-lockfile",
-    "upstream:build": "cd deepseek-harness && corepack pnpm run build",
-    "upstream:build:official": "cd deepseek-harness && CI=true DSH_BUILD_CLIENT_PROFILE=official corepack pnpm run build",
-    "upstream:pack:dsh": "cd deepseek-harness && CI=true corepack pnpm run release:pack --family dsh",
+    "upstream:version": "node scripts/run-upstream.mjs version",
+    "upstream:install": "node scripts/run-upstream.mjs install",
+    "upstream:build": "node scripts/run-upstream.mjs build",
+    "upstream:build:official": "node scripts/run-upstream.mjs build-official",
+    "upstream:pack:dsh": "node scripts/run-upstream.mjs pack-dsh",
     "upstream:prepare-runtime": "pnpm run upstream:install && pnpm run upstream:build:official && pnpm run upstream:pack:dsh"
   },
   "devDependencies": {
