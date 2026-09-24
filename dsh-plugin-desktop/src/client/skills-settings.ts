@@ -18,7 +18,7 @@ export function applySkillsSettings(ctx: ClientContext): void {
   ctx.effect(() => installIntegrationsStyles(), 'dsh-plugin-desktop: Skills styles')
   applyConversationSkills(ctx)
   ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section', id: 'desktop-skills', order: 90,
+    name: 'settings.section', id: 'desktop-skills', order: 30,
     label: () => t('nav'), locale: DESKTOP_SKILLS_LOCALE_NAMESPACE, inject: () => {
       const current = (ctx.get('sessions') as unknown as ISessions | undefined)?.list.getSnapshot().current
       return { api, ...(current === undefined ? {} : { initialSessionId: current as string }) }

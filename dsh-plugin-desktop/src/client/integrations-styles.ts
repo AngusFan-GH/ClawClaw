@@ -32,12 +32,16 @@ const CSS = `
 .dshIntegrationsSkillName.dshIntegrationsTextButton{font-size:14px;font-weight:600;color:inherit;text-align:start}.dshIntegrationsSkillName:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px}
 `
 
+const REMINDERS_CSS = `
+.dshReminders{gap:16px}.dshRemindersNotice{margin:0;padding:10px 12px;border-left:3px solid var(--dsw-alias-brand-primary);border-radius:8px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.5}.dshRemindersGrid{display:grid;grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:14px}.dshRemindersPanel{display:flex;flex-direction:column;gap:13px;padding:16px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}.dshRemindersPanel h3,.dshRemindersPanel h4{margin:0;font-size:14px}.dshRemindersPanel h4{margin-top:4px}.dshRemindersPanelHeader{display:flex;align-items:center;justify-content:space-between;gap:12px}.dshRemindersPanelHeader span,.dshRemindersStatus{padding:2px 7px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:11px}.dshRemindersInput{box-sizing:border-box;width:100%;min-height:118px;resize:vertical;padding:10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:1.5}.dshRemindersInput:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}.dshRemindersPresets{display:flex;flex-wrap:wrap;gap:6px}.dshRemindersPresets button{padding:6px 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:11px;text-align:left}.dshRemindersPresets button:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}.dshRemindersPresets button:disabled{cursor:default;opacity:.45}.dshRemindersList{display:flex;flex-direction:column;gap:8px}.dshRemindersRow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:flex-start;gap:12px;padding:13px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}.dshRemindersRow[data-enabled=false]{opacity:.68}.dshRemindersBody{min-width:0}.dshRemindersBody p{margin:8px 0 0;white-space:pre-wrap;font-size:13px;line-height:1.55}.dshRemindersBody .dshIntegrationsRowActions{margin-top:10px}@container(max-width:720px){.dshRemindersGrid{grid-template-columns:1fr}}@container(max-width:520px){.dshRemindersRow{grid-template-columns:auto minmax(0,1fr)}.dshRemindersRow>.dshIntegrationsRowActions{grid-column:2;justify-content:flex-start}}
+`
+
 export function installIntegrationsStyles(document: Document = globalThis.document): () => void {
   const existing = document.getElementById(STYLE_ID)
   if (existing !== null) return () => {}
   const style = document.createElement('style')
   style.id = STYLE_ID
-  style.textContent = CSS + SKILLS_CSS
+  style.textContent = CSS + SKILLS_CSS + REMINDERS_CSS
   document.head.append(style)
   return () => { style.remove() }
 }

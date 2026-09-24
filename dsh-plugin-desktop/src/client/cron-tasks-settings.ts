@@ -52,7 +52,7 @@ export function applyCronTasksSettings(ctx: ClientContext): void {
   })
   ctx.inject(['uiWorkspace', 'workspaces'], (scope: ClientContext) => {
     scope.slots.inject('settings.section', () => scope.slots.register({
-      name: 'settings.section', id: 'desktop-cron-tasks', order: 92,
+      name: 'settings.section', id: 'desktop-cron-tasks', order: 60,
       label: () => t('nav'), locale: DESKTOP_CRON_TASKS_LOCALE_NAMESPACE, inject: () => ({ api,
         localeId: () => scope.locale.getSnapshot().active,
         openSession: async (taskId: string, sessionId: string) => {

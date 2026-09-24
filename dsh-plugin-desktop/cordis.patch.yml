@@ -14,6 +14,10 @@
       name: dsh-plugin-desktop/notifications
     - id: desktop-cron-tasks
       name: dsh-plugin-desktop/cron-tasks
+    - id: desktop-shortcuts
+      name: dsh-plugin-desktop/shortcut-menu
+    - id: desktop-reminders
+      name: dsh-plugin-desktop/reminders
     # Durable, session-local reminders. The corresponding client package is
     # resolved by the upstream Web bundle and enabled in the renderer below.
     - id: schedule

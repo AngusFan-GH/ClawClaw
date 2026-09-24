@@ -35,7 +35,7 @@ index cc6a233..d948def 100644
  		/** Nav glyph by section id; unknown ids fall back to the settings gear. */
  		function navIcon(id) {
  			if (id === "models") return (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconDataOutline16, {
-@@ -86,6 +112,10 @@ window.__ModuleLoader__.load({
+@@ -86,6 +112,14 @@ window.__ModuleLoader__.load({
  				className: SettingsRoot_module_css_default.navIcon,
  				size: 16
  			});
@@ -43,6 +43,26 @@ index cc6a233..d948def 100644
 +				className: SettingsRoot_module_css_default.navIcon,
 +				size: 16
 +			});
++			if (id === "desktop-reminders") return (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconListPenOutline16, {
++				className: SettingsRoot_module_css_default.navIcon,
++				size: 16
++			});
  			return (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconSettingsOutline16, {
  				className: SettingsRoot_module_css_default.navIcon,
  				size: 16
+@@ -184,5 +218,15 @@ window.__ModuleLoader__.load({
+ 				setOpen(true);
+ 			}, []);
++			(0, react.useEffect)(() => {
++				const onOpen = (event) => {
++					const id = event.detail?.id;
++					if (typeof id === "string") openSection(id);
++				};
++				window.addEventListener("clawclaw:open-settings-section", onOpen);
++				return () => {
++					window.removeEventListener("clawclaw:open-settings-section", onOpen);
++				};
++			}, [openSection]);
+ 			const rows = useSections((s) => s);
+ 			const connectionState = useConnectionState((state) => state);
+ 			const previousConnectionState = (0, react.useRef)(connectionState);

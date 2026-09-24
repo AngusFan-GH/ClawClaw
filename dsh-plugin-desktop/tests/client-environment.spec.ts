@@ -28,7 +28,9 @@ import {
 } from '../src/window-chrome.ts'
 
 vi.mock('../src/client/cron-tasks-settings.ts', () => ({ applyCronTasksSettings: vi.fn() }))
+vi.mock('../src/client/reminders-settings.ts', () => ({ applyRemindersSettings: vi.fn() }))
 vi.mock('../src/client/skills-settings.ts', () => ({ applySkillsSettings: vi.fn() }))
+vi.mock('../src/client/shortcut-menu.tsx', () => ({ applyShortcutMenu: vi.fn() }))
 
 describe('desktop client environment', () => {
   it.each(['darwin', 'win32', 'linux'])('keeps compatibility chrome out of the %s client slot tree', platform => {
@@ -63,11 +65,10 @@ describe('desktop client environment', () => {
     try {
       expect(parseDesktopClientEnvironment('')).toBeUndefined()
       apply({ effect } as unknown as ClientContext)
-      expect(effect).toHaveBeenCalledOnce()
-      expect(effect).toHaveBeenCalledWith(
-        expect.any(Function),
+      expect(effect.mock.calls.map(([, label]) => label)).toEqual([
+        'dsh-plugin-desktop: shortcut menu styles',
         'dsh-plugin-desktop: semantic settings navigation icons',
-      )
+      ])
     }
     finally {
       vi.unstubAllGlobals()

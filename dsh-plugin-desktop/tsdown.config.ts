@@ -18,6 +18,8 @@ export default defineConfig([
       diagnostics: 'src/diagnostics.ts',
       notifications: 'src/notifications.ts',
       'cron-tasks': 'src/cron-tasks.ts',
+      reminders: 'src/reminders.ts',
+      'shortcut-menu': 'src/shortcut-menu.ts',
       'default-workspace': 'src/default-workspace.ts',
       skills: 'src/skills.ts',
       mcp: 'src/mcp.ts',

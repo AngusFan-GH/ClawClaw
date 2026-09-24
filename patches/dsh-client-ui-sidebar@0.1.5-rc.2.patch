@@ -1,0 +1,25 @@
+diff --git a/lib/client.js b/lib/client.js
+index 963f6587df..460ad0df51 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -280,6 +280,9 @@ window.__ModuleLoader__.load({
+ 							renderSlot
+ 						}, id))
+ 					}),
++					(0, react_jsx_runtime.jsx)("div", {
++						children: renderSlot("sidebar.shortcuts", { wide })
++					}),
+ 					(0, react_jsx_runtime.jsx)("div", {
+ 						className: SidebarRoot_module_css_default.regionArea,
+ 						children: renderSlot("sidebar.workspaces", {
+@@ -388,6 +392,10 @@ window.__ModuleLoader__.load({
+ 						kind: "list",
+ 						scope: "root"
+ 					},
++					"sidebar.shortcuts": {
++						kind: "list",
++						scope: "root"
++					},
+ 					"sidebar.workspaces": {
+ 						kind: "single",
+ 						scope: "root"

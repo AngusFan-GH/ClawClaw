@@ -1,0 +1,12 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -1761,7 +1761,7 @@ window.__ModuleLoader__.load({
+ 			ctx.slots.inject("settings.section", () => ctx.slots.register({
+ 				name: "settings.section",
+ 				id: "plugins",
+-				order: 15,
++				order: 39,
+ 				label: () => t("nav"),
+ 				locale: NS,
+ 				inject: sectionInjected,

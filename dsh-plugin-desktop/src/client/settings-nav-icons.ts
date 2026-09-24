@@ -1,7 +1,8 @@
 /** Semantic icons for settings pages that the upstream shell treats as unknown ids. */
 
 const STYLE_ID = 'dsh-desktop-settings-nav-icons'
-const ICON_ATTRIBUTE = 'data-dsh-settings-icon'
+export const SETTINGS_NAV_ICON_ATTRIBUTE = 'data-dsh-settings-icon'
+const ICON_ATTRIBUTE = SETTINGS_NAV_ICON_ATTRIBUTE
 
 export type DesktopSettingsNavIcon = 'marketplace' | 'skill' | 'mcp' | 'schedule'
 
@@ -27,7 +28,8 @@ export function installSemanticSettingsNavIcons(
   const labels = new Map(entries.flatMap(entry => entry.labels.map(label => [label, entry.icon] as const)))
   const style = document.createElement('style')
   style.id = STYLE_ID
-  style.textContent = CSS
+  // The sidebar shortcut rows use the same glyph masks as the settings navigation.
+  style.textContent = CSS + CSS.replaceAll('[role=dialog] nav button', '.dshShortcutGlyph')
   document.head.append(style)
   const scan = (): void => {
     for (const button of document.querySelectorAll<HTMLButtonElement>('[role="dialog"] nav button')) {

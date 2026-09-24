@@ -553,6 +553,9 @@ patchedDependencies:
   '@deepseek-ai/dsh-client-modules@0.1.5-rc.2': 1a4d6546befc0e1d7a7fc6396e5516ee57888d18d144f2ffeb2e65af8ae2e629
   '@deepseek-ai/dsh-client-ui-directory-picker-browse@0.1.5-rc.2': 728798d09643efbc77a426d10dceffbe42fd2a72b91569c2c1bc34177bc03bf4
   '@deepseek-ai/dsh-client-ui-primitives@0.1.5-rc.2': 69ab45f6cf4ee6a85a6ad5d838cee005a4519faca187f203ff2c02a7119f6364
+  '@deepseek-ai/dsh-client-ui-settings-general@0.1.5-rc.2': b288ed645a8ee648cc8280bed545a78a52647369c09438b72c8bab141e9e7015
+  '@deepseek-ai/dsh-client-ui-settings-plugins@0.1.5-rc.2': 3fc8493f6fa452d76938947094422e73ac54070c2678cde94ffb242f36fc449b
+  '@deepseek-ai/dsh-client-ui-sidebar@0.1.5-rc.2': 8cbd7d329306f9e596b3e034015cac2a9bbf57ccd8cec1210bb1f764f6f13480
   '@deepseek-ai/dsh-fs-local@0.1.5-rc.2': 1f824a4f60413e22b619941eefa8691ca660bcb16026216bd1ca259a7714313a
   '@deepseek-ai/dsh-host-directory-picker-browse@0.1.5-rc.2': 8a0b845cdbfd7d0355c8f0033dadc68aee0bac10cba477df89a70664f8ace090
   '@deepseek-ai/dsh-settings@0.1.5-rc.2': 2e064457f7dc3df87160ea1ccd345259a129edfd40e83986cf60a4a57d886290
@@ -827,7 +830,7 @@ importers:
         version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-settings-general':
         specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-general-0.1.5-rc.2.tgz
-        version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-general-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
+        version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-general-0.1.5-rc.2.tgz(patch_hash=b288ed645a8ee648cc8280bed545a78a52647369c09438b72c8bab141e9e7015)(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-settings-models':
         specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-models-0.1.5-rc.2.tgz
         version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-models-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
@@ -836,10 +839,10 @@ importers:
         version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-plugin-inventory-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-settings-plugins':
         specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-plugins-0.1.5-rc.2.tgz
-        version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-plugins-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
+        version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-plugins-0.1.5-rc.2.tgz(patch_hash=3fc8493f6fa452d76938947094422e73ac54070c2678cde94ffb242f36fc449b)(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-sidebar':
         specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-sidebar-0.1.5-rc.2.tgz
-        version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-sidebar-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
+        version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-sidebar-0.1.5-rc.2.tgz(patch_hash=8cbd7d329306f9e596b3e034015cac2a9bbf57ccd8cec1210bb1f764f6f13480)(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-sidebar-documentpreview':
         specifier: file:../vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-sidebar-documentpreview-0.1.5-rc.2.tgz
         version: file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-sidebar-documentpreview-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
@@ -9896,7 +9899,7 @@ snapshots:
     dependencies:
       '@deepseek-ai/cordis': 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
 
-  '@deepseek-ai/dsh-client-ui-settings-general@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-general-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)':
+  '@deepseek-ai/dsh-client-ui-settings-general@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-general-0.1.5-rc.2.tgz(patch_hash=b288ed645a8ee648cc8280bed545a78a52647369c09438b72c8bab141e9e7015)(@deepseek-ai/cordis@4.0.2)':
     dependencies:
       '@deepseek-ai/cordis': 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
       '@deepseek-ai/schemastery': 3.18.2
@@ -9909,7 +9912,7 @@ snapshots:
     dependencies:
       '@deepseek-ai/cordis': 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
 
-  '@deepseek-ai/dsh-client-ui-settings-plugins@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-plugins-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)':
+  '@deepseek-ai/dsh-client-ui-settings-plugins@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-plugins-0.1.5-rc.2.tgz(patch_hash=3fc8493f6fa452d76938947094422e73ac54070c2678cde94ffb242f36fc449b)(@deepseek-ai/cordis@4.0.2)':
     dependencies:
       '@deepseek-ai/cordis': 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
 
@@ -9929,7 +9932,7 @@ snapshots:
     dependencies:
       '@deepseek-ai/cordis': 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
 
-  '@deepseek-ai/dsh-client-ui-sidebar@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-sidebar-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)':
+  '@deepseek-ai/dsh-client-ui-sidebar@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-sidebar-0.1.5-rc.2.tgz(patch_hash=8cbd7d329306f9e596b3e034015cac2a9bbf57ccd8cec1210bb1f764f6f13480)(@deepseek-ai/cordis@4.0.2)':
     dependencies:
       '@deepseek-ai/cordis': 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
 
@@ -11434,11 +11437,11 @@ snapshots:
       '@deepseek-ai/dsh-client-ui-schedule': file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-schedule-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-session': file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-session-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-settings': file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
-      '@deepseek-ai/dsh-client-ui-settings-general': file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-general-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/dsh-client-ui-settings-general': file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-general-0.1.5-rc.2.tgz(patch_hash=b288ed645a8ee648cc8280bed545a78a52647369c09438b72c8bab141e9e7015)(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-settings-models': file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-models-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-settings-plugin-inventory': file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-plugin-inventory-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
-      '@deepseek-ai/dsh-client-ui-settings-plugins': file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-plugins-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
-      '@deepseek-ai/dsh-client-ui-sidebar': file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-sidebar-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/dsh-client-ui-settings-plugins': file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-settings-plugins-0.1.5-rc.2.tgz(patch_hash=3fc8493f6fa452d76938947094422e73ac54070c2678cde94ffb242f36fc449b)(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/dsh-client-ui-sidebar': file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-sidebar-0.1.5-rc.2.tgz(patch_hash=8cbd7d329306f9e596b3e034015cac2a9bbf57ccd8cec1210bb1f764f6f13480)(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-sidebar-documentpreview': file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-sidebar-documentpreview-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-sidebar-files': file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-sidebar-files-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-sidebar-right': file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-client-ui-sidebar-right-0.1.5-rc.2.tgz(@deepseek-ai/cordis@4.0.2)

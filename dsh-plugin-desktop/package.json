@@ -71,6 +71,14 @@
       "types": "./lib/types/cron-tasks.d.ts",
       "default": "./lib/cron-tasks.js"
     },
+    "./reminders": {
+      "types": "./lib/types/reminders.d.ts",
+      "default": "./lib/reminders.js"
+    },
+    "./shortcut-menu": {
+      "types": "./lib/types/shortcut-menu.d.ts",
+      "default": "./lib/shortcut-menu.js"
+    },
     "./default-workspace": {
       "types": "./lib/types/default-workspace.d.ts",
       "default": "./lib/default-workspace.js"

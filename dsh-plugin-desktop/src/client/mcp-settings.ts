@@ -15,7 +15,7 @@ export function applyMcpSettings(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(DESKTOP_MCP_LOCALE_NAMESPACE, { zh, en }), 'dsh-plugin-desktop: MCP dictionaries')
   ctx.effect(() => installIntegrationsStyles(), 'dsh-plugin-desktop: MCP styles')
   ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section', id: 'desktop-mcp', order: 91,
+    name: 'settings.section', id: 'desktop-mcp', order: 40,
     label: () => t('nav'), locale: DESKTOP_MCP_LOCALE_NAMESPACE, inject: () => ({ api }),
   }, McpSettingsSection))
 }
