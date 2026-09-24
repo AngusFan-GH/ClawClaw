@@ -20,7 +20,7 @@ if (command === undefined) {
   throw new Error(`Unknown upstream operation: ${String(operation)}`)
 }
 
-execFileSync('corepack', command.args, {
+execFileSync(process.platform === 'win32' ? 'corepack.cmd' : 'corepack', command.args, {
   cwd: resolve('deepseek-harness'),
   env: { ...process.env, ...command.env },
   stdio: 'inherit',
