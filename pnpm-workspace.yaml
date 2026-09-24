@@ -651,7 +651,10 @@ allowBuilds:
   "@google/genai": false
   "protobufjs": false
   "electron-winstaller": false
+  "fs-ext": true
+  "koffi": true
   "msgpackr-extract": false
+  "node-pty": true
   esbuild: true
   '@whiskeysockets/baileys': false
 supportedArchitectures:
