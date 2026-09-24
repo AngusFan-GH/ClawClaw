@@ -6,7 +6,6 @@ import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { withoutMacReleaseSecrets } from './release-preflight.ts'
-import { prepareInstalledMacUniversalRuntime } from './mac-universal.ts'
 import { prepareFsExtForElectron } from './prepare-fs-ext.ts'
 import { electronBuilderEnvironment } from './electron-builder-environment.ts'
 
@@ -76,8 +75,6 @@ function defaultOptions(): MacSmokePackageOptions {
     resetOutput: () => rmSync(outputDir, { recursive: true, force: true }),
     prepareRuntime: () => {
       prepareFsExtForElectron({ platform: 'darwin', arch: 'arm64', desktopRoot })
-      prepareFsExtForElectron({ platform: 'darwin', arch: 'x64', desktopRoot })
-      prepareInstalledMacUniversalRuntime(desktopRoot)
     },
     builderCli: require.resolve('electron-builder/cli.js'),
     verifier: fileURLToPath(new URL('./verify-mac-smoke.ts', import.meta.url)),
@@ -92,8 +89,8 @@ function defaultOptions(): MacSmokePackageOptions {
  *
  * The signed and notarized release stays a manual step on a credentialed
  * machine; this smoke exists so macOS packaging regressions fail in CI before
- * a manual release. The universal target exercises both Intel and Apple
- * Silicon packaging in one artifact.
+ * a manual release. It targets Apple Silicon, which is the runner's native
+ * architecture; the signed release remains the universal distribution path.
  * @param options - Injectable process and command boundaries.
  */
 export function packageMacSmoke(options: MacSmokePackageOptions = defaultOptions()): void {
@@ -132,7 +129,7 @@ export function packageMacSmoke(options: MacSmokePackageOptions = defaultOptions
       options.builderCli,
       '--mac',
       'dmg',
-      '--universal',
+      '--arm64',
       '--publish',
       'never',
       '--config.mac.notarize=false',
