@@ -48,13 +48,10 @@ import {
   rendererRecoveryCopy,
 } from './tray-locale.ts'
 import {
-  desktopUpdateFilename,
-  downloadDesktopUpdate,
   pendingDesktopUpdateArtifact,
-  recordDesktopUpdateArtifact,
   resolveDesktopUpdateArtifact,
-  type DesktopUpdateArtifact,
 } from './update-download.ts'
+import { getNativeUpdater, stageNativeUpdate } from './native-update-installer.ts'
 import type { UpdateCheckResult } from './update-checker.ts'
 import type { DesktopInstallationId } from './desktop-installation-id.ts'
 import { DESKTOP_RELEASE_CHANNEL } from './product-identity.ts'
@@ -110,6 +107,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   private terminalSpec: DesktopTerminalSpec | undefined
   private diagnosticExport: Promise<void> | undefined
   private readonly workspaceAdmission: ElectronWorkspaceAdmission
+  private installOnExit: (() => void) | undefined
   private updateCleanupTask: Promise<void> | undefined
   private rendererHealthGate: DesktopRendererHealthGate | undefined
   private rendererBootHealthy = false
@@ -600,13 +598,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       : await this.generation.showMessageBox(options)
   }
 
-  private async showUpdateSaveDialog(options: Electron.SaveDialogOptions): Promise<Electron.SaveDialogReturnValue> {
-    return this.generation === undefined
-      ? await dialog.showSaveDialog(options)
-      : await this.generation.showSaveDialog(options)
-  }
 
-  /** Ask before making the fixed download endpoint's counted request. */
   private async confirmUpdateDownload(version: string): Promise<boolean> {
     const copy = desktopNativeCopy(this.currentLocale)
     const result = await this.showUpdateMessageBox({
@@ -675,93 +667,39 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     })
   }
 
-  /** Download a confirmed installer and hand it to the native installation flow. */
+  /** Called by the launcher only after Host disposal and removal of quit guards. */
+  completeUpdateExit(code: number): boolean {
+    const install = this.installOnExit
+    this.installOnExit = undefined
+    if (code !== 0 || install === undefined) return false
+    try { install(); return true } catch (cause) {
+      this.logError(`dsh-plugin-desktop: update installation failed: ${String(cause)}`)
+      return false
+    }
+  }
+
+  /** Stage a verified native update, then request a graceful Host shutdown on confirmation. */
   private async downloadAndOpenUpdate(
     version: string,
     signal: AbortSignal,
-    channel: DesktopReleaseChannel = 'stable',
+    _channel: DesktopReleaseChannel = 'stable',
   ): Promise<void> {
+    if (!this.updates.canDownload) throw new Error('Updates require a packaged macOS or Windows application')
+    const install = await stageNativeUpdate(await getNativeUpdater(), version, signal,
+      fraction => { this.generation?.setProgressBar(fraction) })
+    signal.throwIfAborted()
     const copy = desktopNativeCopy(this.currentLocale)
-    const platform = this.platformStrategy.updateDownloadPlatform
-    if (platform === undefined) {
-      throw new Error(`dsh-plugin-desktop: updates are unavailable on ${this.platform}`)
-    }
-    const destinationPath = await this.chooseUpdateDestination(version, channel)
-    if (destinationPath === undefined) return
-    signal.throwIfAborted()
-    const artifactPath = await downloadDesktopUpdate({
-      platform,
-      version,
-      ...(channel === 'stable' ? {} : { channel }),
-      destinationPath,
-      request: (url, init) => net.fetch(url, init),
-      signal,
-    })
-    signal.throwIfAborted()
-    const artifact: DesktopUpdateArtifact = { platform, version, path: artifactPath }
-    try {
-      await recordDesktopUpdateArtifact(app.getPath('userData'), artifact)
-    } catch (cause) {
-      this.logError(`dsh-plugin-desktop: failed to remember update installer for cleanup: ${cause instanceof Error ? cause.message : String(cause)}`)
-    }
-
-    if (platform === 'darwin') {
-      const openError = await shell.openPath(artifactPath)
-      if (openError !== '') throw new Error(`dsh-plugin-desktop: failed to open update disk image: ${openError}`)
-      signal.throwIfAborted()
-      await this.showUpdateMessageBox({
-        type: 'info',
-        title: copy.updateDownloadedTitle,
-        message: copy.updateReady(version),
-        detail: copy.macInstallInstructions,
-        buttons: [copy.ok],
-        defaultId: 0,
-        noLink: true,
-      })
-      return
-    }
-
     const result = await this.showUpdateMessageBox({
-      type: 'info',
-      title: copy.updateDownloadedTitle,
-      message: copy.updateReady(version),
-      detail: copy.windowsInstallQuestion,
-      buttons: [copy.restartAndInstall, copy.later],
-      defaultId: 1,
-      cancelId: 1,
-      noLink: true,
+      type: 'info', title: copy.updateDownloadedTitle, message: copy.updateReady(version),
+      detail: copy.restartInstallQuestion, buttons: [copy.restartAndInstall, copy.later],
+      defaultId: 1, cancelId: 1, noLink: true,
     })
-    if (result.response !== 0) return
-
-    const spec = this.scheduled
-    if (spec === undefined) throw new Error('dsh-plugin-desktop: no active shell can exit for update installation')
     signal.throwIfAborted()
-    await this.launchWindowsUpdateInstaller(artifactPath)
-    this.quitting = true
+    if (result.response !== 0) return
+    const spec = this.scheduled
+    if (spec === undefined) throw new Error('No active shell can exit for update installation')
+    this.installOnExit = install
     spec.requestQuit(0)
-  }
-
-  private async chooseUpdateDestination(
-    version: string,
-    channel: DesktopReleaseChannel = 'stable',
-  ): Promise<string | undefined> {
-    if (this.platform !== 'darwin' && this.platform !== 'win32') return undefined
-    const copy = desktopNativeCopy(this.currentLocale)
-    const filename = desktopUpdateFilename(this.platform, version, channel)
-    const extension = this.platform === 'darwin' ? 'dmg' : 'exe'
-    const result = await this.showUpdateSaveDialog({
-      title: copy.saveInstallerTitle,
-      defaultPath: join(app.getPath('downloads'), filename),
-      buttonLabel: copy.saveAndDownload,
-      filters: [{
-        name: this.platform === 'darwin'
-          ? copy.diskImage
-          : copy.windowsInstaller,
-        extensions: [extension],
-      }],
-      properties: ['createDirectory', 'showOverwriteConfirmation', 'dontAddToRecent'],
-    })
-    return result.canceled ? undefined : result.filePath
   }
 
   private offerUpdateArtifactCleanup(): Promise<void> {
@@ -790,36 +728,6 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       noLink: true,
     })
     await resolveDesktopUpdateArtifact(userDataPath, artifact, result.response === 0)
-  }
-
-  /** Start the downloaded NSIS installer visibly before releasing the current process. */
-  private async launchWindowsUpdateInstaller(installerPath: string): Promise<void> {
-    await new Promise<void>((resolve, reject) => {
-      let child: ReturnType<typeof spawn>
-      try {
-        child = spawn(installerPath, ['--updated', '--force-run'], {
-          detached: true,
-          stdio: 'ignore',
-          shell: false,
-          // UV_PROCESS_WINDOWS_HIDE also applies SW_HIDE to GUI processes,
-          // which leaves an interactive NSIS installer running invisibly.
-          windowsHide: false,
-        })
-      } catch (cause) {
-        reject(cause)
-        return
-      }
-      const fail = (cause: Error): void => { reject(cause) }
-      child.once('error', fail)
-      child.once('spawn', () => {
-        child.off('error', fail)
-        child.once('error', cause => {
-          this.logError(`dsh-plugin-desktop: update installer failed after launch: ${cause.message}`)
-        })
-        child.unref()
-        resolve()
-      })
-    })
   }
 
   /** Keep native-terminal launch failures visible in a packaged GUI process. */

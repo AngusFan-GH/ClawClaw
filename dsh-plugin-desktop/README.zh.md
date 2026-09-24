@@ -45,10 +45,10 @@ corepack pnpm check
 
 ## 更新与发布
 
-客户端读取 `https://clawclaw.xzinfra.com/updates/stable/release.json`。manifest 必须给出规范发布版本，及带有 `url`、`sha512`、`size` 的 `darwin`/`win32` HTTPS artifact。客户端拒绝重定向、校验安装包的精确大小、SHA-512 与 DMG/PE 容器，再请求用户确认交接；不发送旧 DSH Desktop 统计 header，也不验证独立 manifest 签名。
+DSH Desktop 使用 `https://clawclaw.xzinfra.com/updates/dsh/stable/`。静态 `release.json` 用于受限的版本检查；`latest.yml` 与 `latest-mac.yml` 分别提供 Windows 和 macOS 的原生签名安装包元数据。旧 OpenClaw 产品的 Windows 更新源保留在 `/updates/stable/`，DSH Desktop 不会使用它。
 
-打包后的应用在启动 60 秒后检查更新，此后每六小时检查一次。后台对每个可用版本通知一次，不自动下载。设置和托盘共用同一套手动检查及下载流程。用户确认后会重新检查版本：发布版本变化、检查失败、下载/校验/打开安装包失败都会显示明确结果，可通过“检查更新”重试。取消保存对话框或释放 Host 不显示错误。
+打包后的应用在启动 60 秒后检查更新，此后每六小时检查一次。后台对每个可用版本通知一次，不自动下载。设置和托盘共用同一套手动检查及下载流程。确认后，原生更新器会重新检查所选版本、校验平台安装包、显示下载进度，并询问是否重启。只有 Host 正常关闭后才会开始安装；取消或关闭过程不会安装待处理更新。
 
-发布清单在跨 Host 进程传输前限制为 16 KiB。取消下载会终止等待中的流读取并删除临时文件；已有目标文件仅在校验成功后被原子替换。macOS 打开 DMG 供用户手动替换应用；Windows 在启动安装器并退出前再次询问。升级后的应用会询问保留或删除已记录的安装包。下载进度、断点续传和无人值守安装尚未实现。
+发布清单在跨 Host 进程传输前限制为 16 KiB。macOS 发布包含用于首次安装的已签名、公证 Universal DMG，以及用于原生更新的 ZIP 和 `latest-mac.yml`。Windows 发布包含 NSIS 安装程序、`latest.yml` 和生成的 blockmap。发布流程会先上传安装包，再发布元数据文件，因此客户端不会先发现尚未可下载的版本。尚未实现断点续传。
 
 生产 dependency 改动后运行 `verify:notices`。产品背景见根 [README](../README.md)、[架构](../docs/architecture.md)和[用户指南](../docs/user-guide.md)。

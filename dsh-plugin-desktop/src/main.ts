@@ -489,7 +489,7 @@ async function start(): Promise<void> {
       relaunch: args => {
         app.relaunch({ args: [...(args ?? desktopDefaultRelaunchArguments())] })
       },
-      exit: code => { app.exit(code) },
+      exit: code => { if (!runtime.completeUpdateExit(code)) app.exit(code) },
     },
     () => {
       removeShutdownRequests?.()

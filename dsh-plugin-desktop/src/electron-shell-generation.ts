@@ -182,6 +182,11 @@ export interface ElectronShellGenerationOptions {
 
 /** Own one BrowserWindow and Tray generation, including every native listener. */
 export class ElectronShellGeneration {
+  /** Native dock/taskbar progress for an explicit update download. */
+  setProgressBar(fraction: number): void {
+    if (this.window !== undefined && !this.window.isDestroyed()) this.window.setProgressBar(fraction)
+  }
+
   private window: BrowserWindow | undefined
   private renderer: WebContents | undefined
   private compatibilityShell: CompatibilityShell | undefined

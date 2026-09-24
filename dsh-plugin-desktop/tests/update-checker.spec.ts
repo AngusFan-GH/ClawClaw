@@ -17,8 +17,8 @@ function manifest(version: string, channel: 'stable' = 'stable'): Response {
 
 describe('ClawClaw release manifest', () => {
   it('uses the stable static manifest URL', () => {
-    expect(CLAWCLAW_UPDATE_BASE_URL).toBe('https://clawclaw.xzinfra.com/updates')
-    expect(desktopReleaseManifestUrl('stable')).toBe('https://clawclaw.xzinfra.com/updates/stable/release.json')
+    expect(CLAWCLAW_UPDATE_BASE_URL).toBe('https://clawclaw.xzinfra.com/updates/dsh')
+    expect(desktopReleaseManifestUrl('stable')).toBe('https://clawclaw.xzinfra.com/updates/dsh/stable/release.json')
   })
 
   it('checks a newer stable release without sending installation identifiers', async () => {

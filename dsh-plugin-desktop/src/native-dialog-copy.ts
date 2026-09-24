@@ -32,6 +32,7 @@ export interface DesktopNativeCopy {
   readonly updateDownloadedTitle: string
   readonly updateReady: (version: string) => string
   readonly macInstallInstructions: string
+  readonly restartInstallQuestion: string
   readonly windowsInstallQuestion: string
   readonly restartAndInstall: string
   readonly saveInstallerTitle: string
@@ -84,6 +85,7 @@ const COPY: Record<DesktopLocale, DesktopNativeCopy> = {
     updateDownloadedTitle: 'ClawClaw Update Downloaded',
     updateReady: version => `ClawClaw ${version} is ready to install.`,
     macInstallInstructions: 'The disk image has opened. Replace ClawClaw in Applications, then reopen it.',
+    restartInstallQuestion: 'Restart ClawClaw and install the update now?',
     windowsInstallQuestion: 'Restart ClawClaw and run the installer now?',
     restartAndInstall: 'Restart and Install',
     saveInstallerTitle: 'Save Update Installer',
@@ -136,6 +138,7 @@ const COPY: Record<DesktopLocale, DesktopNativeCopy> = {
     updateDownloadedTitle: 'ClawClaw 更新已下载',
     updateReady: version => `ClawClaw ${version} 已可安装。`,
     macInstallInstructions: '磁盘映像已打开。请替换“应用程序”中的 ClawClaw，然后重新打开。',
+    restartInstallQuestion: '现在重启 ClawClaw 并安装更新？',
     windowsInstallQuestion: '现在重启 ClawClaw 并运行安装程序？',
     restartAndInstall: '重启并安装',
     saveInstallerTitle: '保存更新安装包',

@@ -38,7 +38,14 @@ jobs:
         if: matrix.artifact == 'windows'
         run: pnpm --filter ${{ matrix.package }} run dist:win
       - uses: actions/upload-artifact@v4
-        with: { name: ${{ matrix.artifact }}, path: ${{ matrix.package }}/dist/**/*.dmg\n${{ matrix.package }}/dist/**/*.exe }
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.package }}/dist/**/*.dmg
+            ${{ matrix.package }}/dist/**/*.zip
+            ${{ matrix.package }}/dist/**/*.exe
+            ${{ matrix.package }}/dist/**/*.yml
+            ${{ matrix.package }}/dist/**/*.blockmap
   publish:
     needs: build
     runs-on: ubuntu-latest
@@ -48,22 +55,59 @@ jobs:
         with: { node-version: 22.23.2 }
       - uses: actions/download-artifact@v4
         with: { path: artifacts }
-      - name: Assemble release and static manifest
+      - name: Assemble release metadata
         shell: bash
         env: { CHANNEL: stable }
         run: |
           set -euo pipefail
           mkdir -p release
-          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' \) -exec cp {} release/ \;
-          node scripts/generate-release-manifest.mjs --directory release --output release/release.json --base-url "https://clawclaw.xzinfra.com/updates/$CHANNEL"
+          find artifacts -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.yml' -o -name '*.blockmap' \) -exec cp {} release/ \;
+          test "$(find release -maxdepth 1 -name '*.dmg' -type f | wc -l)" = 1
+          test "$(find release -maxdepth 1 -name '*.exe' -type f | wc -l)" = 1
+          test "$(find release -maxdepth 1 -name 'latest.yml' -type f | wc -l)" = 1
+          test "$(find release -maxdepth 1 -name 'latest-mac.yml' -type f | wc -l)" = 1
+          node scripts/generate-release-manifest.mjs --directory release --output release/release.json --base-url "https://clawclaw.xzinfra.com/updates/dsh/$CHANNEL"
       - uses: actions/upload-artifact@v4
         with: { name: release, path: release/ }
-      - name: Upload stable release to OSS
+      - name: Publish stable release to the update origin
         env:
-          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          SSHPASS: ${{ secrets.UPDATE_PASSWORD }}
           CHANNEL: stable
         run: |
-          curl -sL https://gosspublic.alicdn.com/ossutil/install.sh | sudo bash
-          printf '[Credentials]\nlanguage=EN\nendpoint=oss-cn-hangzhou.aliyuncs.com\naccessKeyID=%s\naccessKeySecret=%s\n' "$OSS_ACCESS_KEY_ID" "$OSS_ACCESS_KEY_SECRET" > "$HOME/.ossutilconfig"
-          ossutil cp -r -f --meta='Cache-Control:no-cache,no-store,must-revalidate' release/ "oss://xzinfra-clawclaw/updates/$CHANNEL/"
+          set -euo pipefail
+          test -n "$SSHPASS"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' '101.200.13.235 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPbPPFUw6R3s4V3iV41PNtMR/DRDwTJrZZhl02VtwWuu' > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/known_hosts"
+          archive="clawclaw-dsh-${GITHUB_RUN_ID}.tar.gz"
+          tar -C release -czf "$archive" .
+          ssh_base=(sshpass -e ssh -o StrictHostKeyChecking=yes root@101.200.13.235)
+          scp_base=(sshpass -e scp -o StrictHostKeyChecking=yes)
+          "${scp_base[@]}" "$archive" root@101.200.13.235:/tmp/"$archive"
+          "${ssh_base[@]}" "CHANNEL=$CHANNEL ARCHIVE=/tmp/$archive bash -s" <<'REMOTE'
+          set -euo pipefail
+          root=/var/www/xzinfra
+          stable="$root/updates/dsh/$CHANNEL"
+          staging=$(mktemp -d "$root/updates/.incoming.XXXXXX")
+          cleanup() { rm -rf "$staging" "$ARCHIVE"; }
+          trap cleanup EXIT
+          tar -xzf "$ARCHIVE" -C "$staging"
+          test "$(find "$staging" -maxdepth 1 -name '*.dmg' -type f | wc -l)" = 1
+          test "$(find "$staging" -maxdepth 1 -name '*.exe' -type f | wc -l)" = 1
+          test -f "$staging/latest.yml"
+          test -f "$staging/latest-mac.yml"
+          test -f "$staging/release.json"
+          version=$(node -p "JSON.parse(require('fs').readFileSync('$staging/release.json')).version")
+          archive_dir="$root/releases/dsh/$version"
+          install -d -m 0755 "$stable" "$archive_dir"
+          find "$staging" -maxdepth 1 -type f ! -name '*.yml' ! -name 'release.json' -exec install -m 0644 {} "$archive_dir" \;
+          find "$staging" -maxdepth 1 -type f ! -name '*.yml' ! -name 'release.json' -exec install -m 0644 {} "$stable" \;
+          install -m 0644 "$staging/release.json" "$stable/release.json.new"
+          install -m 0644 "$staging/latest.yml" "$stable/latest.yml.new"
+          install -m 0644 "$staging/latest-mac.yml" "$stable/latest-mac.yml.new"
+          mv "$stable/release.json.new" "$stable/release.json"
+          mv "$stable/latest.yml.new" "$stable/latest.yml"
+          mv "$stable/latest-mac.yml.new" "$stable/latest-mac.yml"
+          REMOTE

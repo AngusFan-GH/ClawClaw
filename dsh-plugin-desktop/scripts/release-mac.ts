@@ -102,7 +102,7 @@ export function releaseMac(options: MacReleaseOptions = defaultReleaseOptions())
   options.resetOutput()
   options.prepareRuntime()
   options.run('pnpm', [
-    'exec', 'electron-builder', '--mac', 'dmg', '--universal',
+    'exec', 'electron-builder', '--mac', 'dmg', 'zip', '--universal', '--publish', 'never',
     '--config.forceCodeSigning=true', '--config.mac.notarize=true',
     '--config.npmRebuild=false',
     `--config.directories.output=${options.outputDir}`,

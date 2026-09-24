@@ -34,6 +34,7 @@ export default defineConfig([
       terminal: 'src/terminal.ts',
       'update-checker': 'src/update-checker.ts',
       'update-download': 'src/update-download.ts',
+      'native-update-installer': 'src/native-update-installer.ts',
       updates: 'src/updates.ts',
       'windows-pwsh-sandbox': 'src/windows-pwsh-sandbox.ts',
       'windows-acl-runner': 'src/windows-acl-runner.ts',

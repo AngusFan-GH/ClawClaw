@@ -72,7 +72,7 @@ describe('macOS release command boundary', () => {
     expect(calls[1]).toEqual({
       command: 'pnpm',
       args: [
-        'exec', 'electron-builder', '--mac', 'dmg', '--universal',
+        'exec', 'electron-builder', '--mac', 'dmg', 'zip', '--universal', '--publish', 'never',
         '--config.forceCodeSigning=true', '--config.mac.notarize=true',
         '--config.npmRebuild=false',
         '--config.directories.output=/repo/dsh-plugin-desktop/dist/mac-release',

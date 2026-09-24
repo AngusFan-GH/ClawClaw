@@ -14,6 +14,11 @@ const updater = vi.hoisted(() => ({
   record: vi.fn(),
   resolve: vi.fn(),
 }))
+const nativeUpdate = vi.hoisted(() => ({ stage: vi.fn(), install: vi.fn(), provider: {} }))
+vi.mock('../src/native-update-installer.ts', () => ({
+  getNativeUpdater: async () => nativeUpdate.provider,
+  stageNativeUpdate: nativeUpdate.stage,
+}))
 const childProcess = vi.hoisted(() => {
   type Listener = (...args: unknown[]) => void
   const listeners = new Map<string, Listener[]>()
@@ -363,6 +368,8 @@ describe('Electron desktop runtime', () => {
     electron.notifications.length = 0
     childProcess.reset()
     vi.clearAllMocks()
+    nativeUpdate.install.mockReset()
+    nativeUpdate.stage.mockReset().mockResolvedValue(nativeUpdate.install)
     updater.download.mockReset()
     updater.filename.mockReset()
     updater.filename.mockImplementation((platform: string, version: string) => (
@@ -2392,38 +2399,14 @@ describe('Electron desktop runtime', () => {
     electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 0, checkboxChecked: false })
     await expect(runtime.updates.confirmDownload('2.1.0')).resolves.toBe(true)
     const controller = new AbortController()
-    electron.dialog.showSaveDialog.mockResolvedValueOnce({
-      canceled: false,
-      filePath: '/tmp/Downloads/ClawClaw-2.1.0-mac.dmg',
-    })
+    electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 1, checkboxChecked: false })
     await runtime.updates.downloadAndOpen('2.1.0', controller.signal)
-    expect(electron.dialog.showSaveDialog).toHaveBeenCalledWith(
-      activeWindow,
-      expect.objectContaining({
-        defaultPath: join('/tmp/Downloads', 'ClawClaw-2.1.0-mac.dmg'),
-        filters: [{ name: 'Disk Image', extensions: ['dmg'] }],
-      }),
-    )
-    expect(updater.download).toHaveBeenCalledWith({
-      platform: 'darwin',
-      version: '2.1.0',
-      destinationPath: '/tmp/Downloads/ClawClaw-2.1.0-mac.dmg',
-      request: expect.any(Function),
-      signal: controller.signal,
-    })
-    expect(electron.shell.openPath).toHaveBeenCalledWith('/tmp/ClawClaw-2.1.0-mac.dmg')
-    expect(updater.record).toHaveBeenCalledWith('/tmp/dsh-desktop-user-data', {
-      platform: 'darwin',
-      version: '2.1.0',
-      path: '/tmp/ClawClaw-2.1.0-mac.dmg',
-    })
-    expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(
-      activeWindow,
-      expect.objectContaining({
-        title: 'ClawClaw Update Downloaded',
-        buttons: ['OK'],
-      }),
-    )
+    expect(nativeUpdate.stage).toHaveBeenCalledWith(nativeUpdate.provider, '2.1.0', controller.signal, expect.any(Function))
+    expect(nativeUpdate.install).not.toHaveBeenCalled()
+    expect(electron.dialog.showSaveDialog).not.toHaveBeenCalled()
+    expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(activeWindow, expect.objectContaining({
+      title: 'ClawClaw Update Downloaded', buttons: ['Restart and Install', 'Later'],
+    }))
 
     runtime.updates.notify({
       title: 'Profile Recovered',
@@ -2444,118 +2427,43 @@ describe('Electron desktop runtime', () => {
     await release()
   })
 
-  it('starts the downloaded Windows installer visibly before requesting orderly exit', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    updater.download.mockResolvedValueOnce('C:\\Updates\\ClawClaw-2.1.0-windows.exe')
+  it.each(['darwin', 'win32'] as const)('installs on %s only after successful Host shutdown', async platform => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
+    electron.app.isPackaged = true
     const requestQuit = vi.fn()
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const runtime = new ElectronDesktopRuntime(async () => {})
     runtime.schedule({ ...spec, requestQuit })
-    electron.dialog.showSaveDialog.mockResolvedValueOnce({
-      canceled: false,
-      filePath: 'C:\\Updates\\ClawClaw-2.1.0-windows.exe',
-    })
-
-    const pending = runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal)
-    await vi.waitFor(() => { expect(childProcess.spawn).toHaveBeenCalledOnce() })
-    expect(childProcess.spawn).toHaveBeenCalledWith(
-      'C:\\Updates\\ClawClaw-2.1.0-windows.exe',
-      ['--updated', '--force-run'],
-      {
-        detached: true,
-        stdio: 'ignore',
-        shell: false,
-        windowsHide: false,
-      },
-    )
-    expect(requestQuit).not.toHaveBeenCalled()
-    childProcess.emit('spawn')
-    await pending
-
-    expect(childProcess.child.unref).toHaveBeenCalledOnce()
-    expect(updater.record).toHaveBeenCalledWith('/tmp/dsh-desktop-user-data', {
-      platform: 'win32',
-      version: '2.1.0',
-      path: 'C:\\Updates\\ClawClaw-2.1.0-windows.exe',
-    })
+    electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 0, checkboxChecked: false })
+    await runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal)
     expect(requestQuit).toHaveBeenCalledWith(0)
+    expect(nativeUpdate.install).not.toHaveBeenCalled()
+    expect(runtime.completeUpdateExit(0)).toBe(true)
+    expect(nativeUpdate.install).toHaveBeenCalledOnce()
+    expect(runtime.completeUpdateExit(0)).toBe(false)
   })
 
-  it('does not exit when the downloaded Windows installer fails to spawn', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    updater.download.mockResolvedValueOnce('C:\\Updates\\ClawClaw-2.1.0-windows.exe')
+  it('does not install after failed Host teardown', async () => {
+    electron.app.isPackaged = true
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    runtime.schedule(spec)
+    electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 0, checkboxChecked: false })
+    await runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal)
+    expect(runtime.completeUpdateExit(1)).toBe(false)
+    expect(nativeUpdate.install).not.toHaveBeenCalled()
+  })
+
+  it('keeps the app running when staging fails', async () => {
+    electron.app.isPackaged = true
+    nativeUpdate.stage.mockRejectedValueOnce(new Error('signature rejected'))
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
     const requestQuit = vi.fn()
-    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
     runtime.schedule({ ...spec, requestQuit })
-    electron.dialog.showSaveDialog.mockResolvedValueOnce({
-      canceled: false,
-      filePath: 'C:\\Updates\\ClawClaw-2.1.0-windows.exe',
-    })
-
-    const pending = runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal)
-    await vi.waitFor(() => { expect(childProcess.spawn).toHaveBeenCalledOnce() })
-    childProcess.emit('error', new Error('blocked'))
-
-    await expect(pending).rejects.toThrow('blocked')
-    expect(updater.record).toHaveBeenCalledWith('/tmp/dsh-desktop-user-data', {
-      platform: 'win32',
-      version: '2.1.0',
-      path: 'C:\\Updates\\ClawClaw-2.1.0-windows.exe',
-    })
-    expect(updater.resolve).not.toHaveBeenCalled()
-    expect(childProcess.child.unref).not.toHaveBeenCalled()
+    await expect(runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal)).rejects.toThrow('signature rejected')
     expect(requestQuit).not.toHaveBeenCalled()
-  })
-
-  it('keeps a downloaded Windows installer idle when installation is deferred', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    updater.download.mockResolvedValueOnce('C:\\Updates\\ClawClaw-2.1.0-windows.exe')
-    electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 1, checkboxChecked: false })
-    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
-    electron.dialog.showSaveDialog.mockResolvedValueOnce({
-      canceled: false,
-      filePath: 'C:\\Updates\\ClawClaw-2.1.0-windows.exe',
-    })
-
-    await runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal)
-
-    expect(childProcess.spawn).not.toHaveBeenCalled()
-    expect(updater.record).toHaveBeenCalledOnce()
-  })
-
-  it('continues the update handoff when cleanup tracking cannot be persisted', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    updater.download.mockResolvedValueOnce('C:\\Updates\\ClawClaw-2.1.0-windows.exe')
-    updater.record.mockRejectedValueOnce(new Error('read-only user data'))
-    electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 1, checkboxChecked: false })
-    electron.dialog.showSaveDialog.mockResolvedValueOnce({
-      canceled: false,
-      filePath: 'C:\\Updates\\ClawClaw-2.1.0-windows.exe',
-    })
-    const logger = { error: vi.fn(), errorCause: vi.fn() }
-    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {}, undefined, logger)
-
-    await expect(runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal))
-      .resolves.toBeUndefined()
-
-    expect(logger.error).toHaveBeenCalledWith(
-      'dsh-plugin-desktop: failed to remember update installer for cleanup: read-only user data',
-    )
-    expect(childProcess.spawn).not.toHaveBeenCalled()
-  })
-
-  it('does not download when the update destination picker is cancelled', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
-
-    await runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal)
-
-    expect(electron.dialog.showSaveDialog).toHaveBeenCalledOnce()
-    expect(updater.download).not.toHaveBeenCalled()
+    expect(nativeUpdate.install).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -2588,44 +2496,20 @@ describe('Electron desktop runtime', () => {
     expect(updater.resolve).toHaveBeenCalledWith('/tmp/dsh-desktop-user-data', artifact, remove)
   })
 
-  it('rejects a macOS handoff when the operating system cannot open the DMG', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
-    updater.download.mockResolvedValueOnce('/tmp/ClawClaw-2.1.0-mac.dmg')
-    electron.shell.openPath.mockResolvedValueOnce('Launch Services rejected the image')
+  it('ignores an install confirmation after generation cancellation', async () => {
+    electron.app.isPackaged = true
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const runtime = new ElectronDesktopRuntime(async () => {})
-    electron.dialog.showSaveDialog.mockResolvedValueOnce({
-      canceled: false,
-      filePath: '/tmp/ClawClaw-2.1.0-mac.dmg',
-    })
-
-    await expect(runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal))
-      .rejects.toThrow('Launch Services rejected the image')
-    expect(electron.dialog.showMessageBox).not.toHaveBeenCalled()
-  })
-
-  it('does not show macOS completion after the update generation is cancelled', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
-    updater.download.mockResolvedValueOnce('/tmp/ClawClaw-2.1.0-mac.dmg')
-    let finishOpen!: (result: string) => void
-    electron.shell.openPath.mockImplementationOnce(async () => new Promise<string>(resolve => {
-      finishOpen = resolve
-    }))
-    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
+    const requestQuit = vi.fn()
+    runtime.schedule({ ...spec, requestQuit })
     const controller = new AbortController()
-    electron.dialog.showSaveDialog.mockResolvedValueOnce({
-      canceled: false,
-      filePath: '/tmp/ClawClaw-2.1.0-mac.dmg',
+    electron.dialog.showMessageBox.mockImplementationOnce(async () => {
+      controller.abort()
+      return { response: 0, checkboxChecked: false }
     })
-
-    const pending = runtime.updates.downloadAndOpen('2.1.0', controller.signal)
-    await vi.waitFor(() => { expect(electron.shell.openPath).toHaveBeenCalledOnce() })
-    controller.abort()
-    finishOpen('')
-
-    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
-    expect(electron.dialog.showMessageBox).not.toHaveBeenCalled()
+    await expect(runtime.updates.downloadAndOpen('2.1.0', controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(requestQuit).not.toHaveBeenCalled()
+    expect(runtime.completeUpdateExit(0)).toBe(false)
   })
 
   it('uses advanced macOS material options and offers compatibility mode', async () => {
