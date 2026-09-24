@@ -88,6 +88,9 @@ export function desktopPreloadPath(moduleUrl: string = import.meta.url): string 
 
 const PRODUCT_VERSION = desktopProductVersion()
 
+/** Unsigned macOS smoke packages are manual-install only until release credentials are configured. */
+const MACOS_NATIVE_AUTO_UPDATE_ENABLED = false
+
 /** Main-process deadline for one Renderer generation to settle its client Loader. */
 export const RENDERER_BOOT_TIMEOUT_MS = 30_000
 
@@ -139,7 +142,11 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     })
     this.updates = {
       get isPackaged() { return app.isPackaged },
-      get canDownload() { return app.isPackaged && platformStrategy.updateDownloadPlatform !== undefined },
+      get canDownload() {
+        return app.isPackaged
+          && platformStrategy.updateDownloadPlatform !== undefined
+          && (platformStrategy.platform !== 'darwin' || MACOS_NATIVE_AUTO_UPDATE_ENABLED)
+      },
       get currentVersion() { return PRODUCT_VERSION },
       get releaseChannel() { return DESKTOP_RELEASE_CHANNEL },
       get statePath() { return join(app.getPath('userData'), 'updates', 'state.json') },

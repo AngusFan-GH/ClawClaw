@@ -50,20 +50,22 @@ function metadataVersion(path) {
 }
 
 /** Return the release files after checking all three update metadata formats agree. */
-export function collectRelease(directory, channel = 'stable') {
+export function collectRelease(directory, channel = 'stable', unsignedMac = false) {
   if (!CHANNEL_PATTERN.test(channel)) throw new Error(`Invalid update channel: ${channel}`)
   const root = resolve(directory)
   const manifest = requiredFile(join(root, 'release.json'))
   const windows = requiredFile(join(root, 'latest.yml'))
-  const mac = requiredFile(join(root, 'latest-mac.yml'))
+  const macPath = join(root, 'latest-mac.yml')
+  const mac = existsSync(macPath) ? requiredFile(macPath) : undefined
+  if (mac === undefined && !unsignedMac) throw new Error(`Required release file is missing: ${macPath}`)
   const version = releaseVersion(readFileSync(manifest, 'utf8'))
-  for (const metadata of [windows, mac]) {
+  for (const metadata of [windows, ...(mac === undefined ? [] : [mac])]) {
     if (metadataVersion(metadata) !== version) throw new Error(`${basename(metadata)} version must match release.json (${version})`)
   }
   const manifestValue = JSON.parse(readFileSync(manifest, 'utf8'))
   const artifacts = manifestValue.artifacts
   if (artifacts === null || typeof artifacts !== 'object') throw new Error('release.json must contain platform artifacts')
-  const files = [manifest, windows, mac]
+  const files = [manifest, windows, ...(mac === undefined ? [] : [mac])]
   for (const platform of ['darwin', 'win32']) {
     const artifact = artifacts[platform]
     if (artifact === null || typeof artifact !== 'object' || typeof artifact.url !== 'string' || typeof artifact.size !== 'number') {
@@ -74,7 +76,7 @@ export function collectRelease(directory, channel = 'stable') {
     if (statSync(path).size !== artifact.size) throw new Error(`${name} size differs from release.json`)
     files.push(path)
   }
-  for (const path of [windows, mac]) {
+  for (const path of [windows, ...(mac === undefined ? [] : [mac])]) {
     for (const line of readFileSync(path, 'utf8').split(/\r?\n/u)) {
       const match = /^\s*-\s+url:\s+['"]?([^'"\r\n]+)['"]?\s*$/u.exec(line)
       if (match === null) continue
@@ -83,11 +85,11 @@ export function collectRelease(directory, channel = 'stable') {
       if (existsSync(`${artifact}.blockmap`)) files.push(`${artifact}.blockmap`)
     }
   }
-  return { files: [...new Set(files)], version }
+  return { files: [...new Set(files)], macMetadata: mac !== undefined, version }
 }
 
 /** Remote transaction: retain an immutable version directory before switching the feed. */
-export function remotePublishScript({ archive, channel, root, version }) {
+export function remotePublishScript({ archive, channel, macMetadata = true, root, version }) {
   return `set -euo pipefail
 root=${shell(root)}
 channel=${shell(channel)}
@@ -100,16 +102,16 @@ trap cleanup EXIT
 tar -xzf "$archive" -C "$staging"
 test -f "$staging/release.json"
 test -f "$staging/latest.yml"
-test -f "$staging/latest-mac.yml"
+${macMetadata ? 'test -f "$staging/latest-mac.yml"' : ''}
 archive_dir="$root/releases/dsh/$version"
 install -d -m 0755 "$stable" "$archive_dir"
 find "$staging" -maxdepth 1 -type f -exec install -m 0644 {} "$archive_dir" \\;
 find "$staging" -maxdepth 1 -type f ! -name '*.yml' ! -name 'release.json' -exec install -m 0644 {} "$stable" \\;
 install -m 0644 "$staging/latest.yml" "$stable/latest.yml.new"
-install -m 0644 "$staging/latest-mac.yml" "$stable/latest-mac.yml.new"
+${macMetadata ? 'install -m 0644 "$staging/latest-mac.yml" "$stable/latest-mac.yml.new"' : ''}
 install -m 0644 "$staging/release.json" "$stable/release.json.new"
 mv "$stable/latest.yml.new" "$stable/latest.yml"
-mv "$stable/latest-mac.yml.new" "$stable/latest-mac.yml"
+${macMetadata ? 'mv "$stable/latest-mac.yml.new" "$stable/latest-mac.yml"' : ''}
 mv "$stable/release.json.new" "$stable/release.json"
 `
 }
@@ -133,7 +135,7 @@ function remoteRunner(password) {
 }
 
 export function uploadUpdate(options) {
-  const release = collectRelease(options.directory, options.channel)
+  const release = collectRelease(options.directory, options.channel, options.unsignedMac)
   console.log(`[upload-update] version ${release.version}; ${release.files.length} files prepared`)
   for (const file of release.files) console.log(`  - ${file}`)
   if (options.dryRun) return release
@@ -149,7 +151,8 @@ export function uploadUpdate(options) {
       env: { ...process.env, SSHPASS: options.password },
     })
     const remote = Buffer.from(remotePublishScript({
-      archive: `/tmp/${archiveName}`, channel: options.channel, root: options.root, version: release.version,
+      archive: `/tmp/${archiveName}`, channel: options.channel, macMetadata: release.macMetadata,
+      root: options.root, version: release.version,
     })).toString('base64')
     run(runner.ssh.command, [...runner.ssh.args, '-o', 'StrictHostKeyChecking=yes', '-p', options.port, destination, `printf %s ${shell(remote)} | base64 -d | bash`], {
       env: { ...process.env, SSHPASS: options.password },
@@ -167,6 +170,7 @@ function main() {
     channel,
     directory,
     dryRun: process.argv.includes('--dry-run') || process.env.UPDATE_DRY_RUN === '1',
+    unsignedMac: process.argv.includes('--unsigned-mac'),
     host: process.env.UPDATE_HOST ?? DEFAULT_HOST,
     user: process.env.UPDATE_USER ?? DEFAULT_USER,
     port: process.env.UPDATE_PORT ?? DEFAULT_PORT,

@@ -25,15 +25,9 @@ jobs:
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm run upstream:prepare-runtime
-      - name: Build signed macOS DMG
+      - name: Build unsigned macOS test DMG
         if: matrix.artifact == 'macos'
-        run: pnpm --filter ${{ matrix.package }} run dist:mac
-        env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: pnpm --filter ${{ matrix.package }} run dist:mac-smoke
       - name: Build Windows installer
         if: matrix.artifact == 'windows'
         run: pnpm --filter ${{ matrix.package }} run dist:win
@@ -66,7 +60,6 @@ jobs:
           test "$(find release -maxdepth 1 -name '*.dmg' -type f | wc -l)" = 1
           test "$(find release -maxdepth 1 -name '*.exe' -type f | wc -l)" = 1
           test "$(find release -maxdepth 1 -name 'latest.yml' -type f | wc -l)" = 1
-          test "$(find release -maxdepth 1 -name 'latest-mac.yml' -type f | wc -l)" = 1
           node scripts/generate-release-manifest.mjs --directory release --output release/release.json --base-url "https://clawclaw.xzinfra.com/updates/dsh/$CHANNEL"
       - uses: actions/upload-artifact@v4
         with: { name: release, path: release/ }
@@ -82,4 +75,4 @@ jobs:
           install -d -m 0700 "$HOME/.ssh"
           printf '%s\n' '101.200.13.235 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPbPPFUw6R3s4V3iV41PNtMR/DRDwTJrZZhl02VtwWuu' > "$HOME/.ssh/known_hosts"
           chmod 0600 "$HOME/.ssh/known_hosts"
-          pnpm run upload:update -- --directory release --channel stable
+          pnpm run upload:update -- --directory release --channel stable --unsigned-mac

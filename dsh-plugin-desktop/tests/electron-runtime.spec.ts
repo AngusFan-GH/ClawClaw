@@ -2337,7 +2337,7 @@ describe('Electron desktop runtime', () => {
     expect(restart).toHaveBeenLastCalledWith('safe-mode')
   })
 
-  it('uses Electron networking and confirmation-gated macOS update handoff', async () => {
+  it('uses Electron networking while unsigned macOS packages remain manual-install only', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const response = Response.json({ version: '2.1.0' })
     electron.net.fetch.mockResolvedValueOnce(response)
@@ -2357,7 +2357,7 @@ describe('Electron desktop runtime', () => {
       statePath: join('/tmp/dsh-desktop-user-data', 'updates', 'state.json'),
     })
     electron.app.isPackaged = true
-    expect(runtime.updates).toMatchObject({ isPackaged: true, canDownload: true })
+    expect(runtime.updates).toMatchObject({ isPackaged: true, canDownload: false })
 
     await runtime.updates.showManualCheckResult({
       status: 'up-to-date',
@@ -2399,13 +2399,13 @@ describe('Electron desktop runtime', () => {
     electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 0, checkboxChecked: false })
     await expect(runtime.updates.confirmDownload('2.1.0')).resolves.toBe(true)
     const controller = new AbortController()
-    electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 1, checkboxChecked: false })
-    await runtime.updates.downloadAndOpen('2.1.0', controller.signal)
-    expect(nativeUpdate.stage).toHaveBeenCalledWith(nativeUpdate.provider, '2.1.0', controller.signal, expect.any(Function))
+    await expect(runtime.updates.downloadAndOpen('2.1.0', controller.signal))
+      .rejects.toThrow('Updates require a packaged macOS or Windows application')
+    expect(nativeUpdate.stage).not.toHaveBeenCalled()
     expect(nativeUpdate.install).not.toHaveBeenCalled()
     expect(electron.dialog.showSaveDialog).not.toHaveBeenCalled()
     expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(activeWindow, expect.objectContaining({
-      title: 'ClawClaw Update Downloaded', buttons: ['Restart and Install', 'Later'],
+      title: 'ClawClaw Update Available', buttons: ['Download', 'Later'],
     }))
 
     runtime.updates.notify({
@@ -2427,7 +2427,8 @@ describe('Electron desktop runtime', () => {
     await release()
   })
 
-  it.each(['darwin', 'win32'] as const)('installs on %s only after successful Host shutdown', async platform => {
+  it('installs on Windows only after successful Host shutdown', async () => {
+    const platform = 'win32'
     vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
     electron.app.isPackaged = true
     const requestQuit = vi.fn()
@@ -2444,6 +2445,7 @@ describe('Electron desktop runtime', () => {
   })
 
   it('does not install after failed Host teardown', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     electron.app.isPackaged = true
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const runtime = new ElectronDesktopRuntime(async () => {})
@@ -2455,6 +2457,7 @@ describe('Electron desktop runtime', () => {
   })
 
   it('keeps the app running when staging fails', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     electron.app.isPackaged = true
     nativeUpdate.stage.mockRejectedValueOnce(new Error('signature rejected'))
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
@@ -2497,6 +2500,7 @@ describe('Electron desktop runtime', () => {
   })
 
   it('ignores an install confirmation after generation cancellation', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     electron.app.isPackaged = true
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const runtime = new ElectronDesktopRuntime(async () => {})

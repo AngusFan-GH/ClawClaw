@@ -22,10 +22,20 @@ function fixture() {
 test('collects matching cross-platform release files', () => {
   const directory = fixture()
   try {
-    assert.deepEqual(collectRelease(directory), { version: '2.0.2', files: [
+    assert.deepEqual(collectRelease(directory), { version: '2.0.2', macMetadata: true, files: [
       join(directory, 'release.json'), join(directory, 'latest.yml'), join(directory, 'latest-mac.yml'),
       join(directory, 'ClawClaw-2.0.2.dmg'), join(directory, 'ClawClaw-2.0.2.exe'),
     ] })
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})
+
+test('accepts an unsigned macOS DMG without native macOS updater metadata', () => {
+  const directory = fixture()
+  try {
+    rmSync(join(directory, 'latest-mac.yml'))
+    const release = collectRelease(directory, 'stable', true)
+    assert.equal(release.macMetadata, false)
+    assert.ok(release.files.includes(join(directory, 'ClawClaw-2.0.2.dmg')))
   } finally { rmSync(directory, { recursive: true, force: true }) }
 })
 
@@ -49,4 +59,9 @@ test('publishes installers before switching all feed metadata', () => {
   const script = remotePublishScript({ archive: '/tmp/a.tgz', channel: 'stable', root: '/var/www/xzinfra', version: '2.0.2' })
   assert.ok(script.indexOf("! -name '*.yml'") < script.indexOf('latest.yml.new'))
   assert.ok(script.indexOf('mv "$stable/latest-mac.yml.new"') < script.indexOf('mv "$stable/release.json.new"'))
+})
+
+test('does not replace signed macOS metadata for an unsigned macOS release', () => {
+  const script = remotePublishScript({ archive: '/tmp/a.tgz', channel: 'stable', macMetadata: false, root: '/var/www/xzinfra', version: '2.0.2' })
+  assert.doesNotMatch(script, /latest-mac\.yml\.new/)
 })
