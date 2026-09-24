@@ -8,3 +8,6 @@ dsh-plugin-desktop/lib/
 dsh-community-market/lib/
 
 .env.pnpm
+
+# Local server credentials
+/.env.server.local

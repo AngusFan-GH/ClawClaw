@@ -71,4 +71,26 @@ describe('ClawClaw release manifest', () => {
       'x'.repeat(MAX_VERSION_RESPONSE_BYTES + 1),
     ))).resolves.toBeNull()
   })
+  it('cancels a stalled manifest read when the caller aborts', async () => {
+    const controller = new AbortController()
+    let reading!: () => void
+    const ready = new Promise<void>(resolve => { reading = resolve })
+    const cancel = vi.fn()
+    const request = async () => new Response(new ReadableStream<Uint8Array>({ pull() { reading() }, cancel }))
+    const check = fetchDesktopReleaseManifest('stable', request, controller.signal)
+    await ready
+    controller.abort()
+    await expect(check).resolves.toBeNull()
+    expect(cancel).toHaveBeenCalledOnce()
+  })
+
+  it('cancels oversized manifest streams without consuming the remaining body', async () => {
+    const cancel = vi.fn()
+    const request = async () => new Response(new ReadableStream<Uint8Array>({
+      start(stream) { stream.enqueue(new Uint8Array(MAX_VERSION_RESPONSE_BYTES + 1)) }, cancel,
+    }))
+    await expect(fetchDesktopReleaseManifest('stable', request)).resolves.toBeNull()
+    expect(cancel).toHaveBeenCalledOnce()
+  })
+
 })

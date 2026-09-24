@@ -149,6 +149,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       request: (url, init) => net.fetch(url, init),
       confirmDownload: version => this.confirmUpdateDownload(version),
       showManualCheckResult: result => this.showManualUpdateCheckResult(result),
+      showUpdateFailure: reason => this.showUpdateFailure(reason),
       downloadAndOpen: (version, signal, channel) => this.downloadAndOpenUpdate(version, signal, channel),
       notify: notification => { this.showNotification(notification) },
     }
@@ -655,6 +656,19 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       title: copy.updateAvailableTitle,
       message: copy.updateAvailableMessage(result.latestVersion),
       detail: copy.installerUnavailable,
+      buttons: [copy.ok],
+      defaultId: 0,
+      noLink: true,
+    })
+  }
+
+  private async showUpdateFailure(reason: 'release-changed' | 'download-failed'): Promise<void> {
+    const copy = desktopNativeCopy(this.currentLocale)
+    await this.showUpdateMessageBox({
+      type: 'warning',
+      title: copy.updateFailedTitle,
+      message: reason === 'release-changed' ? copy.updateReleaseChanged : copy.updateDownloadFailed,
+      detail: copy.updateRetryInstructions,
       buttons: [copy.ok],
       defaultId: 0,
       noLink: true,

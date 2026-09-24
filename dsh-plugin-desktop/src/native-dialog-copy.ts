@@ -20,6 +20,10 @@ export interface DesktopNativeCopy {
   readonly later: string
   readonly updateCheckFailedTitle: string
   readonly updateCheckFailedMessage: string
+  readonly updateFailedTitle: string
+  readonly updateReleaseChanged: string
+  readonly updateDownloadFailed: string
+  readonly updateRetryInstructions: string
   readonly tryAgainLater: string
   readonly upToDateTitle: string
   readonly upToDateMessage: string
@@ -68,6 +72,10 @@ const COPY: Record<DesktopLocale, DesktopNativeCopy> = {
     later: 'Later',
     updateCheckFailedTitle: 'Unable to Check for Updates',
     updateCheckFailedMessage: 'Could not retrieve update information.',
+    updateFailedTitle: 'Unable to Complete Update',
+    updateReleaseChanged: 'The available release has changed. The previously selected version was not downloaded.',
+    updateDownloadFailed: 'Could not download, verify, or open the update installer.',
+    updateRetryInstructions: 'Choose Check for Updates to try again.',
     tryAgainLater: 'Please try again later.',
     upToDateTitle: 'ClawClaw Is Up to Date',
     upToDateMessage: 'You are using the latest version.',
@@ -116,6 +124,10 @@ const COPY: Record<DesktopLocale, DesktopNativeCopy> = {
     later: '稍后',
     updateCheckFailedTitle: '无法检查更新',
     updateCheckFailedMessage: '未能获取更新信息。',
+    updateFailedTitle: '更新未完成',
+    updateReleaseChanged: '可用版本已发生变化，未下载之前选择的版本。',
+    updateDownloadFailed: '未能下载、校验或打开更新安装包。',
+    updateRetryInstructions: '请再次选择“检查更新”重试。',
     tryAgainLater: '请稍后重试。',
     upToDateTitle: 'ClawClaw 已是最新版本',
     upToDateMessage: '当前已是最新版本。',

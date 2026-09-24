@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   UpdateDownloadError, desktopUpdateFilename, downloadDesktopUpdate,
   pendingDesktopUpdateArtifact, recordDesktopUpdateArtifact, resolveDesktopUpdateArtifact,
@@ -76,6 +76,67 @@ describe('ClawClaw installer download', () => {
     })).rejects.toMatchObject({ code: 'invalid-artifact' })
     expect(await readFile(destinationPath, 'utf8')).toBe('existing installer')
     expect((await readdir(directory)).filter(name => name.endsWith('.partial'))).toEqual([])
+  })
+
+  it.each([1023, 1025])('rejects manifest size %i even when the checksum matches', async size => {
+    const directory = await temp()
+    const base = requestFor('2.3.0', { darwin: dmg(), win32: exe() })
+    const request: UpdateArtifactRequest = async (url, init) => {
+      const response = await base(url, init)
+      if (!url.endsWith('release.json')) return response
+      const manifest = await response.json()
+      manifest.artifacts.darwin.size = size
+      return Response.json(manifest)
+    }
+    const destinationPath = join(directory, 'update.dmg')
+    await writeFile(destinationPath, 'previous installer')
+    await expect(downloadDesktopUpdate({ platform: 'darwin', version: '2.3.0', destinationPath, request }))
+      .rejects.toMatchObject({ code: 'invalid-artifact' })
+    expect(await readFile(destinationPath, 'utf8')).toBe('previous installer')
+    expect(await readdir(directory)).toEqual(['update.dmg'])
+  })
+
+  it('cancels a stalled body read and removes its partial file', async () => {
+    const directory = await temp()
+    const controller = new AbortController()
+    let reading!: () => void
+    const ready = new Promise<void>(resolve => { reading = resolve })
+    const cancel = vi.fn()
+    const base = requestFor('2.3.0', { darwin: dmg(), win32: exe() })
+    const request: UpdateArtifactRequest = async (url, init) => url.endsWith('release.json')
+      ? base(url, init)
+      : new Response(new ReadableStream<Uint8Array>({ pull() { reading() }, cancel }))
+    const download = downloadDesktopUpdate({ platform: 'darwin', version: '2.3.0',
+      destinationPath: join(directory, 'update.dmg'), request, signal: controller.signal })
+    const rejected = expect(download).rejects.toMatchObject({ code: 'aborted' })
+    await ready
+    controller.abort()
+    await rejected
+    expect(cancel).toHaveBeenCalledOnce()
+    expect(await readdir(directory)).toEqual([])
+  })
+
+  it('rejects a conflicting Content-Length and cancels the unconsumed body', async () => {
+    const directory = await temp()
+    const cancel = vi.fn()
+    const base = requestFor('2.3.0', { darwin: dmg(), win32: exe() })
+    const request: UpdateArtifactRequest = async (url, init) => url.endsWith('release.json')
+      ? base(url, init)
+      : new Response(new ReadableStream<Uint8Array>({ cancel }), { headers: { 'content-length': '1025' } })
+    await expect(downloadDesktopUpdate({ platform: 'darwin', version: '2.3.0',
+      destinationPath: join(directory, 'update.dmg'), request })).rejects.toMatchObject({ code: 'invalid-artifact' })
+    expect(cancel).toHaveBeenCalledOnce()
+    expect(await readdir(directory)).toEqual([])
+  })
+
+  it('atomically replaces an existing installer after validation', async () => {
+    const directory = await temp()
+    const destinationPath = join(directory, 'update.dmg')
+    await writeFile(destinationPath, 'previous installer')
+    await downloadDesktopUpdate({ platform: 'darwin', version: '2.3.0', destinationPath,
+      request: requestFor('2.3.0', { darwin: dmg(), win32: exe() }) })
+    expect(await readFile(destinationPath)).toEqual(dmg())
+    expect(await readdir(directory)).toEqual(['update.dmg'])
   })
 
   it('retains and resolves a completed installer after the new version starts', async () => {

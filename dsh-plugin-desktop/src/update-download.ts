@@ -111,6 +111,7 @@ export async function downloadDesktopUpdate(options: DownloadDesktopUpdateOption
   throwIfAborted(options.signal)
 
   const manifest = await fetchDesktopReleaseManifest(channel, options.request, options.signal)
+  throwIfAborted(options.signal)
   if (manifest === null || manifest.version !== options.version) {
     throw new UpdateDownloadError('invalid-artifact', 'The selected ClawClaw release is no longer available.')
   }
@@ -136,16 +137,20 @@ export async function downloadDesktopUpdate(options: DownloadDesktopUpdateOption
   if (response.body === null) {
     throw new UpdateDownloadError('empty-body', 'The update download service returned an empty body.')
   }
-  assertDeclaredSize(response)
+  try {
+    assertDeclaredSize(response, artifact.size)
+  } catch (cause) {
+    await response.body.cancel(cause).catch(() => undefined)
+    throw cause
+  }
 
   let failure: unknown
   try {
-    await writeResponseBody(paths.temporary, response.body, options.signal)
+    await writeResponseBody(paths.temporary, response.body, options.signal, artifact.size)
     throwIfAborted(options.signal)
     await validateArtifactChecksum(paths.temporary, artifact.sha512)
     await validateArtifact(paths.temporary, platform)
     throwIfAborted(options.signal)
-    await unlinkIfPresent(paths.completed)
     await rename(paths.temporary, paths.completed)
     return paths.completed
   } catch (cause) {
@@ -378,7 +383,7 @@ async function lstatOptional(filename: string): Promise<Awaited<ReturnType<typeo
   }
 }
 
-function assertDeclaredSize(response: Response): void {
+function assertDeclaredSize(response: Response, expectedSize: number): void {
   const declared = response.headers.get('content-length')
   if (declared === null || !DECIMAL_BYTES.test(declared)) return
   if (BigInt(declared) > BigInt(MAX_UPDATE_DOWNLOAD_BYTES)) {
@@ -387,15 +392,21 @@ function assertDeclaredSize(response: Response): void {
       `The update installer exceeds ${String(MAX_UPDATE_DOWNLOAD_BYTES)} bytes.`,
     )
   }
+  if (BigInt(declared) !== BigInt(expectedSize)) {
+    throw new UpdateDownloadError('invalid-artifact', 'The update installer size does not match the published release.')
+  }
 }
 
 async function writeResponseBody(
   filename: string,
   body: ReadableStream<Uint8Array>,
   signal: AbortSignal | undefined,
+  expectedSize: number,
 ): Promise<void> {
   const handle = await open(filename, 'wx', PRIVATE_FILE_MODE)
   const reader = body.getReader()
+  const cancel = (): void => { void reader.cancel(signal?.reason).catch(() => undefined) }
+  signal?.addEventListener('abort', cancel, { once: true })
   let bytesWritten = 0
   try {
     while (true) {
@@ -409,17 +420,24 @@ async function writeResponseBody(
           `The update installer exceeds ${String(MAX_UPDATE_DOWNLOAD_BYTES)} bytes.`,
         )
       }
+      if (chunk.value.byteLength > expectedSize - bytesWritten) {
+        throw new UpdateDownloadError('invalid-artifact', 'The update installer exceeds its published size.')
+      }
       await writeAll(handle, chunk.value)
       bytesWritten += chunk.value.byteLength
     }
     if (bytesWritten === 0) {
       throw new UpdateDownloadError('empty-body', 'The update download service returned an empty body.')
     }
+    if (bytesWritten !== expectedSize) {
+      throw new UpdateDownloadError('invalid-artifact', 'The update installer size does not match the published release.')
+    }
     await handle.sync()
   } catch (cause) {
     await reader.cancel(cause).catch(() => undefined)
     throw cause
   } finally {
+    signal?.removeEventListener('abort', cancel)
     reader.releaseLock()
     await handle.close()
   }

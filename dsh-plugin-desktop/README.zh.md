@@ -45,6 +45,10 @@ corepack pnpm check
 
 ## 更新与发布
 
-客户端读取 `https://clawclaw.xzinfra.com/updates/stable/release.json`。manifest 必须给出规范发布版本，及带有 `url`、`sha512`、`size` 的 `darwin`/`win32` HTTPS artifact。客户端拒绝重定向、校验 SHA-512 与 DMG/PE 容器，再请求用户确认交接；不发送旧 DSH Desktop 统计 header，也不验证独立 manifest 签名。
+客户端读取 `https://clawclaw.xzinfra.com/updates/stable/release.json`。manifest 必须给出规范发布版本，及带有 `url`、`sha512`、`size` 的 `darwin`/`win32` HTTPS artifact。客户端拒绝重定向、校验安装包的精确大小、SHA-512 与 DMG/PE 容器，再请求用户确认交接；不发送旧 DSH Desktop 统计 header，也不验证独立 manifest 签名。
+
+打包后的应用在启动 60 秒后检查更新，此后每六小时检查一次。后台对每个可用版本通知一次，不自动下载。设置和托盘共用同一套手动检查及下载流程。用户确认后会重新检查版本：发布版本变化、检查失败、下载/校验/打开安装包失败都会显示明确结果，可通过“检查更新”重试。取消保存对话框或释放 Host 不显示错误。
+
+发布清单在跨 Host 进程传输前限制为 16 KiB。取消下载会终止等待中的流读取并删除临时文件；已有目标文件仅在校验成功后被原子替换。macOS 打开 DMG 供用户手动替换应用；Windows 在启动安装器并退出前再次询问。升级后的应用会询问保留或删除已记录的安装包。下载进度、断点续传和无人值守安装尚未实现。
 
 生产 dependency 改动后运行 `verify:notices`。产品背景见根 [README](../README.md)、[架构](../docs/architecture.md)和[用户指南](../docs/user-guide.md)。

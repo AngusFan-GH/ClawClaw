@@ -146,6 +146,7 @@ try {
       request: async () => { throw new Error('profile smoke must not perform update requests') },
       confirmDownload: async () => false,
       showManualCheckResult: async () => {},
+      showUpdateFailure: async () => {},
       downloadAndOpen: async () => {},
       notify: () => {},
     },

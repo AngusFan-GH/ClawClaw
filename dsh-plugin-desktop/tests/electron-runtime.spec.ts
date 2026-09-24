@@ -2375,6 +2375,16 @@ describe('Electron desktop runtime', () => {
       }),
     )
 
+    await runtime.updates.showUpdateFailure('download-failed')
+    expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(activeWindow, expect.objectContaining({
+      title: 'Unable to Complete Update',
+      message: 'Could not download, verify, or open the update installer.',
+    }))
+    await runtime.updates.showUpdateFailure('release-changed')
+    expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(activeWindow, expect.objectContaining({
+      message: 'The available release has changed. The previously selected version was not downloaded.',
+    }))
+
     electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 1, checkboxChecked: false })
     await expect(runtime.updates.confirmDownload('2.1.0')).resolves.toBe(false)
     expect(updater.download).not.toHaveBeenCalled()

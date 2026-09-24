@@ -45,6 +45,10 @@ All platforms disable ASAR. Packaged application files and dependencies remain p
 
 ## Updates and releases
 
-The client checks `https://clawclaw.xzinfra.com/updates/stable/release.json`. The manifest must contain a canonical release version and `darwin`/`win32` HTTPS artifacts with `url`, `sha512`, and `size`. The client rejects redirects, verifies SHA-512 and the DMG/PE container, and asks the user before handoff. It does not send legacy DSH Desktop statistics headers or verify an independent manifest signature.
+The client checks `https://clawclaw.xzinfra.com/updates/stable/release.json`. The manifest must contain a canonical release version and `darwin`/`win32` HTTPS artifacts with `url`, `sha512`, and `size`. The client rejects redirects, verifies the exact artifact size, SHA-512, and the DMG/PE container, and asks the user before handoff. It does not send legacy DSH Desktop statistics headers or verify an independent manifest signature.
+
+Packaged applications check after 60 seconds and then every six hours. Background checks notify once per available version; they never download automatically. Settings and tray actions share one interactive check and download flow. Confirmation is followed by a fresh check: changed releases, failed checks, and download/verification/installer-opening failures receive an explicit result and can be retried through Check for Updates. Cancelling the save dialog or disposing the Host does not show an error.
+
+Manifest reads are limited to 16 KiB before crossing the Host bridge. Cancelled downloads stop pending stream reads and remove partial files; an existing destination is replaced atomically only after validation. macOS opens the DMG for manual replacement; Windows asks before launching the installer and quitting. The upgraded app offers to keep or delete its recorded installer. Download progress, resumable transfers, and unattended installation are not implemented.
 
 Run `verify:notices` after production dependency changes. Current product context is in the root [README](../README.en.md), [architecture](../docs/architecture.en.md), and [user guide](../docs/user-guide.en.md).

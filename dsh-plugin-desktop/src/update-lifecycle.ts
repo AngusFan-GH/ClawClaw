@@ -109,6 +109,7 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
   }
 
   checkNow(): Promise<void> {
+    if (this.disposed) return Promise.resolve()
     return this.runManualCheck()
   }
 
@@ -144,6 +145,7 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
   }
 
   private startCheck(channel: DesktopReleaseChannel = 'stable'): Promise<UpdateCheckResult | null> {
+    if (this.disposed) return Promise.resolve(null)
     if (this.checkTask !== undefined) {
       if (this.checkChannel === channel) return this.checkTask
       return this.checkTask.then(() => this.startCheck(channel))
@@ -214,7 +216,15 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
         ? confirmedResult.latestVersion
         : undefined
       if (channel === (this.options.adapter.releaseChannel ?? 'stable')) this.observeResult(confirmedResult)
-      if (confirmedVersion !== version || this.disposed) return
+      if (this.disposed) return
+      if (confirmedVersion !== version) {
+        if (confirmedResult === null || confirmedResult.status === 'up-to-date') {
+          await this.options.adapter.showManualCheckResult(confirmedResult)
+        } else {
+          await this.options.adapter.showUpdateFailure('release-changed')
+        }
+        return
+      }
 
       const controller = new AbortController()
       this.downloadController = controller
@@ -227,7 +237,9 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
           await this.options.adapter.downloadAndOpen(version, controller.signal, channel)
         }
       } catch {
-        // Network, filesystem, and installer-opening failures are deliberately silent.
+        if (!this.disposed && !controller.signal.aborted) {
+          await this.options.adapter.showUpdateFailure('download-failed')
+        }
       } finally {
         if (this.downloadController === controller) this.downloadController = undefined
         this.downloadingVersion = undefined

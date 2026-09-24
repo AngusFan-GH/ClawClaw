@@ -41,6 +41,7 @@ interface Harness {
   readonly notifications: DesktopNotification[]
   readonly warnings: unknown[][]
   readonly confirmDownload: ReturnType<typeof vi.fn>
+  readonly showUpdateFailure: ReturnType<typeof vi.fn>
   readonly showManualCheckResult: ReturnType<typeof vi.fn>
   readonly downloadAndOpen: ReturnType<typeof vi.fn>
   readonly refresh: ReturnType<typeof vi.fn>
@@ -77,6 +78,7 @@ async function createHarness(options: {
   const refresh = vi.fn()
   const registrationDispose = vi.fn()
   const confirmDownload = vi.fn(options.confirmDownload ?? (async () => false))
+  const showUpdateFailure = vi.fn(async () => {})
   const showManualCheckResult = vi.fn(options.showManualCheckResult ?? (async () => {}))
   const downloadAndOpen = vi.fn(options.downloadAndOpen ?? (async () => {}))
   const requestRejection = vi.fn<(
@@ -97,6 +99,7 @@ async function createHarness(options: {
       request: options.request ?? (async () => versionResponse('2.0.0')),
       confirmDownload,
       showManualCheckResult,
+      showUpdateFailure,
       downloadAndOpen,
       notify: options.notify ?? ((notification: DesktopNotification) => { notifications.push(notification) }),
     },
@@ -134,6 +137,7 @@ async function createHarness(options: {
     warnings,
     confirmDownload,
     showManualCheckResult,
+    showUpdateFailure,
     downloadAndOpen,
     refresh,
     registrationDispose,
@@ -351,7 +355,21 @@ describe('desktop update Host plugin', () => {
     expect(harness.confirmDownload).toHaveBeenCalledWith('2.1.0')
     expect(harness.downloadAndOpen).not.toHaveBeenCalled()
     expect(harness.showManualCheckResult).not.toHaveBeenCalled()
+    expect(harness.showUpdateFailure).toHaveBeenCalledWith('release-changed')
     expect(harness.tray.label()).toBe('ClawClaw 2.2.0 Available')
+  })
+
+  it.each(['offline', 'withdrawn'] as const)('reports a %s release after confirmation', async scenario => {
+    const request = vi.fn()
+      .mockResolvedValueOnce(versionResponse('2.1.0'))
+      .mockResolvedValueOnce(scenario === 'offline' ? new Response('', { status: 503 }) : versionResponse('2.0.0'))
+    const harness = await createHarness({ packaged: false, request, confirmDownload: async () => true })
+    await harness.tray.invoke()
+    expect(harness.downloadAndOpen).not.toHaveBeenCalled()
+    expect(harness.showManualCheckResult).toHaveBeenCalledExactlyOnceWith(scenario === 'offline' ? null : {
+      status: 'up-to-date', currentVersion: '2.0.0', latestVersion: '2.0.0',
+    })
+    await harness.dispose()
   })
 
   it.each([
@@ -463,7 +481,7 @@ describe('desktop update Host plugin', () => {
     expect(harness.tray.label()).toBe('Check for Updates…')
   })
 
-  it('shares one pending download and silently restores availability after failure', async () => {
+  it('shares one pending download, reports failure once, and allows retry', async () => {
     let rejectDownload!: (cause: Error) => void
     const download = new Promise<void>((_resolve, reject) => { rejectDownload = reject })
     const harness = await createHarness({
@@ -477,13 +495,17 @@ describe('desktop update Host plugin', () => {
     await vi.waitFor(() => { expect(harness.downloadAndOpen).toHaveBeenCalledOnce() })
     const second = harness.tray.invoke()
     expect(harness.downloadAndOpen).toHaveBeenCalledOnce()
+    harness.downloadAndOpen.mockResolvedValueOnce(undefined)
     rejectDownload(new Error('offline'))
     await Promise.all([first, second])
 
     expect(harness.downloadAndOpen).toHaveBeenCalledOnce()
     expect(harness.notifications).toEqual([])
     expect(harness.warnings).toEqual([])
+    expect(harness.showUpdateFailure).toHaveBeenCalledExactlyOnceWith('download-failed')
     expect(harness.tray.label()).toBe('ClawClaw 2.1.0 Available')
+    await harness.tray.invoke()
+    expect(harness.downloadAndOpen).toHaveBeenCalledTimes(2)
   })
 
   it('aborts checks and downloads and removes the tray item on effect disposal', async () => {
@@ -525,6 +547,7 @@ describe('desktop update Host plugin', () => {
     expect(downloading.registrationDispose).toHaveBeenCalledOnce()
     expect(downloading.notifications).toEqual([])
     expect(downloading.warnings).toEqual([])
+    expect(downloading.showUpdateFailure).not.toHaveBeenCalled()
   })
 
   it('releases one update generation once and does not restart background polling', async () => {
@@ -534,6 +557,7 @@ describe('desktop update Host plugin', () => {
 
     await harness.dispose()
     await harness.dispose()
+    await harness.tray.invoke()
     await vi.advanceTimersByTimeAsync(testConfig.initialDelayMs + testConfig.intervalMs)
 
     expect(request).not.toHaveBeenCalled()

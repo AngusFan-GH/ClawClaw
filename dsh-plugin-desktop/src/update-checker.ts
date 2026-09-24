@@ -1,4 +1,4 @@
-/** Headless checks against the signed ClawClaw release manifest. */
+/** Headless checks against the HTTPS ClawClaw release manifest. */
 
 /** Public static release-manifest origin. */
 export const CLAWCLAW_UPDATE_BASE_URL = 'https://clawclaw.xzinfra.com/updates'
@@ -91,7 +91,7 @@ export async function fetchDesktopReleaseManifest(
     })
   } catch { return null }
   if (response.status !== 200) return null
-  try { return parseReleaseManifest(await readLimitedBody(response), channel) } catch { return null }
+  try { return parseReleaseManifest(await readDesktopReleaseBody(response, signal), channel) } catch { return null }
 }
 
 /** Check whether a newer release exists in one published channel. */
@@ -115,16 +115,36 @@ export function checkForStableUpdate(options: Omit<UpdateCheckOptions, 'channel'
 
 async function defaultRequest(url: string, init: RequestInit): Promise<Response> { return globalThis.fetch(url, init) }
 
-async function readLimitedBody(response: Response): Promise<string> {
-  const declaredLength = response.headers.get('content-length')
-  if (declaredLength !== null && /^[0-9]+$/u.test(declaredLength) && BigInt(declaredLength) > BigInt(MAX_VERSION_RESPONSE_BYTES)) throw new Error('manifest too large')
+/** Bound the manifest before parsing or transporting it across the Host bridge. */
+export async function readDesktopReleaseBody(response: Response, signal?: AbortSignal): Promise<string> {
   const reader = response.body?.getReader()
   if (reader === undefined) throw new Error('manifest body missing')
-  const decoder = new TextDecoder(); let bytes = 0; let text = ''
+  const cancel = (): void => { void reader.cancel(signal?.reason).catch(() => undefined) }
+  signal?.addEventListener('abort', cancel, { once: true })
+  const decoder = new TextDecoder('utf-8', { fatal: true })
+  let bytes = 0
+  let text = ''
   try {
-    while (true) { const chunk = await reader.read(); if (chunk.done) break; bytes += chunk.value.byteLength; if (bytes > MAX_VERSION_RESPONSE_BYTES) throw new Error('manifest too large'); text += decoder.decode(chunk.value, { stream: true }) }
+    signal?.throwIfAborted()
+    const declaredLength = response.headers.get('content-length')
+    if (declaredLength !== null && /^[0-9]+$/u.test(declaredLength)
+      && BigInt(declaredLength) > BigInt(MAX_VERSION_RESPONSE_BYTES)) throw new Error('manifest too large')
+    while (true) {
+      const chunk = await reader.read()
+      signal?.throwIfAborted()
+      if (chunk.done) break
+      bytes += chunk.value.byteLength
+      if (bytes > MAX_VERSION_RESPONSE_BYTES) throw new Error('manifest too large')
+      text += decoder.decode(chunk.value, { stream: true })
+    }
     return text + decoder.decode()
-  } finally { reader.releaseLock() }
+  } catch (cause) {
+    await reader.cancel(cause).catch(() => undefined)
+    throw cause
+  } finally {
+    signal?.removeEventListener('abort', cancel)
+    reader.releaseLock()
+  }
 }
 
 function parseReleaseManifest(body: string, expectedChannel: DesktopReleaseChannel): DesktopReleaseManifest | null {

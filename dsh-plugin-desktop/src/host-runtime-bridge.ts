@@ -1,9 +1,10 @@
 /** Native capability adapters; frontend HTTP and WebSocket connections are unchanged. */
 import type { DesktopRuntime, DesktopShellSpec, DesktopTrayItem, DesktopTrayItemRegistration, DesktopUpdateAdapter } from './runtime.ts'
+import { readDesktopReleaseBody } from './update-checker.ts'
 import { HostRpc } from './host-rpc.ts'
 
 export type RuntimeSnapshot = Pick<DesktopRuntime, 'platform' | 'windowsBuild' | 'locale'> & {
-  updates: Omit<DesktopUpdateAdapter, 'request' | 'confirmDownload' | 'showManualCheckResult' | 'downloadAndOpen' | 'notify'>
+  updates: Omit<DesktopUpdateAdapter, 'request' | 'confirmDownload' | 'showManualCheckResult' | 'showUpdateFailure' | 'downloadAndOpen' | 'notify'>
 }
 export function runtimeSnapshot(runtime: DesktopRuntime): RuntimeSnapshot {
   const { isPackaged, canDownload, currentVersion, releaseChannel, statePath, installationId } = runtime.updates
@@ -23,7 +24,7 @@ export function createHostRuntime(rpc: HostRpc, snapshot: RuntimeSnapshot): Desk
   const trackSetup = (task: Promise<unknown>) => { if (booting) setup.push(task) }
   const shellSpecs = new Map<string, DesktopShellSpec>()
   const send = <T = void>(method: string, args: unknown[] = [], signal?: AbortSignal): Promise<T> => {
-    const interactive = ['update:confirmDownload', 'update:showManualCheckResult', 'update:downloadAndOpen',
+    const interactive = ['update:confirmDownload', 'update:showManualCheckResult', 'update:showUpdateFailure', 'update:downloadAndOpen',
       'native:pickDirectory', 'native:exportDiagnostics'].includes(method)
     const task = rpc.call<T>(method, args, signal, interactive ? 0 : undefined)
     calls.add(task)
@@ -49,6 +50,7 @@ export function createHostRuntime(rpc: HostRpc, snapshot: RuntimeSnapshot): Desk
       },
       confirmDownload: (version, channel) => send('update:confirmDownload', [version, channel]),
       showManualCheckResult: result => send('update:showManualCheckResult', [result]),
+      showUpdateFailure: reason => send('update:showUpdateFailure', [reason]),
       downloadAndOpen: (version, signal, channel) => send('update:downloadAndOpen', [version, channel], signal),
       notify: notification => { void send('update:notify', [notification]) },
     },
@@ -159,10 +161,13 @@ export function bindNativeRuntime(rpc: HostRpc, runtime: DesktopRuntime): () => 
   handle('tray:dispose', ([id]) => { trays.get(id)?.dispose(); trays.delete(id) })
   handle('update:request', async ([url, init], signal) => {
     const response = await runtime.updates.request(url, { ...init, signal })
-    return { body: await response.text(), status: response.status, headers: [...response.headers.entries()] }
+    const body = response.status === 200 ? await readDesktopReleaseBody(response, signal) : ''
+    if (response.status !== 200) await response.body?.cancel()
+    return { body, status: response.status, headers: [...response.headers.entries()] }
   })
   handle('update:confirmDownload', ([version, channel]) => runtime.updates.confirmDownload(version, channel))
   handle('update:showManualCheckResult', ([result]) => runtime.updates.showManualCheckResult(result))
+  handle('update:showUpdateFailure', ([reason]) => runtime.updates.showUpdateFailure(reason))
   handle('update:downloadAndOpen', ([version, channel], signal) => runtime.updates.downloadAndOpen(version, signal, channel))
   handle('update:notify', ([value]) => runtime.updates.notify(value))
   return async () => {

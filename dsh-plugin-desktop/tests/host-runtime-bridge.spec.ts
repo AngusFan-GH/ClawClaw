@@ -1,5 +1,6 @@
 import { MessageChannel } from 'node:worker_threads'
 import { expect, it, vi } from 'vitest'
+import { MAX_VERSION_RESPONSE_BYTES } from '../src/update-checker.ts'
 import { HostRpc } from '../src/host-rpc.ts'
 import { bindNativeRuntime, createHostRuntime, runtimeSnapshot } from '../src/host-runtime-bridge.ts'
 import type { DesktopRuntime, DesktopShellSpec, DesktopTrayItem } from '../src/runtime.ts'
@@ -17,6 +18,7 @@ it('preserves the Web URL and authentication while projecting shell and tray cal
   const native = {
     platform: 'win32', windowsBuild: 22631, locale: 'en',
     updates: { isPackaged: true, canDownload: true, currentVersion: '2.0.7-beta.1', statePath: '/tmp/update',
+      showUpdateFailure: vi.fn(async () => {}),
       request: vi.fn(async () => new Response('{"version":"2.0.8-beta.1"}', { headers: { 'x-test': 'yes' } })),
     },
     schedule: (value: DesktopShellSpec) => { shell = value; return disposeShell },
@@ -51,6 +53,14 @@ it('preserves the Web URL and authentication while projecting shell and tray cal
     const response = await runtime.updates.request('https://example.invalid', { headers: { accept: 'application/json' } })
     expect(response.headers.get('x-test')).toBe('yes')
     expect(await response.json()).toEqual({ version: '2.0.8-beta.1' })
+    await runtime.updates.showUpdateFailure('download-failed')
+    expect(native.updates.showUpdateFailure).toHaveBeenCalledWith('download-failed')
+    const cancel = vi.fn()
+    vi.mocked(native.updates.request).mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({
+      start(stream) { stream.enqueue(new Uint8Array(MAX_VERSION_RESPONSE_BYTES + 1)) }, cancel,
+    })))
+    await expect(runtime.updates.request('https://example.invalid', {})).rejects.toThrow('manifest too large')
+    expect(cancel).toHaveBeenCalledOnce()
     await stopShell()
     expect(disposeShell).toHaveBeenCalledOnce()
   } finally { await release(); parent.close(); child.close(); port1.close(); port2.close() }
