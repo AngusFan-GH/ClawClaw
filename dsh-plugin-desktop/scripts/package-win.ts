@@ -142,7 +142,7 @@ export function packageWindowsArtifact(
         '/d',
         '/s',
         '/c',
-        'corepack pnpm workspace dsh-plugin-desktop check:win-package',
+        'corepack pnpm --filter dsh-plugin-desktop check:win-package',
       ],
       options.workspaceRoot,
       cleanEnvironment,

@@ -200,7 +200,7 @@ export function buildWindowsNsisAb(options: WindowsNsisAbBuildOptions): WindowsN
     options.log('Running the Windows package gate once before the A/B build.')
     options.run(
       options.commandShell,
-      ['/d', '/s', '/c', 'corepack pnpm workspace dsh-plugin-desktop check:win-package'],
+      ['/d', '/s', '/c', 'corepack pnpm --filter dsh-plugin-desktop check:win-package'],
       options.workspaceRoot,
       withoutWindowsSigningSecrets(options.env),
     )
