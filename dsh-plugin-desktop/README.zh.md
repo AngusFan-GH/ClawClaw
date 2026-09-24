@@ -51,4 +51,6 @@ DSH Desktop 使用 `https://clawclaw.xzinfra.com/updates/dsh/stable/`。静态 `
 
 发布清单在跨 Host 进程传输前限制为 16 KiB。macOS 发布包含用于首次安装的已签名、公证 Universal DMG，以及用于原生更新的 ZIP 和 `latest-mac.yml`。Windows 发布包含 NSIS 安装程序、`latest.yml` 和生成的 blockmap。发布流程会先上传安装包，再发布元数据文件，因此客户端不会先发现尚未可下载的版本。尚未实现断点续传。
 
+两个平台构建完成后，`Release ClawClaw Desktop` 工作流会调用根目录的 `upload:update` 命令。手动发布已准备好的 `release/` 目录时，加载已忽略的 `.env.server.local` 凭据文件，然后运行 `pnpm run upload:update -- --directory release --channel stable`。命令会在传输前校验 `release.json`、两份原生更新元数据、各自引用的安装包及记录的文件大小是否一致；随后在 `/releases/dsh/<version>/` 保留不可变副本，先上传安装包，最后才依次切换 `latest.yml`、`latest-mac.yml` 和 `release.json`。
+
 生产 dependency 改动后运行 `verify:notices`。产品背景见根 [README](../README.md)、[架构](../docs/architecture.md)和[用户指南](../docs/user-guide.md)。
