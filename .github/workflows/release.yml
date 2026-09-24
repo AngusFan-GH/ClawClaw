@@ -25,6 +25,8 @@ jobs:
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm run upstream:prepare-runtime
+      - name: Refresh desktop runtime dependencies
+        run: pnpm install --frozen-lockfile
       - name: Build unsigned macOS test DMG
         if: matrix.artifact == 'macos'
         run: pnpm --filter ${{ matrix.package }} run dist:mac-smoke
