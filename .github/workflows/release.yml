@@ -33,6 +33,9 @@ jobs:
       - name: Build Windows installer
         if: matrix.artifact == 'windows'
         run: pnpm --filter ${{ matrix.package }} run dist:win
+      - name: Generate Windows update metadata
+        if: matrix.artifact == 'windows'
+        run: node scripts/generate-windows-update-metadata.mjs --directory ${{ matrix.package }}/dist
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
@@ -40,7 +43,7 @@ jobs:
             ${{ matrix.package }}/dist/**/*.dmg
             ${{ matrix.package }}/dist/**/*.zip
             ${{ matrix.package }}/dist/**/*.exe
-            ${{ matrix.package }}/dist/**/*.yml
+            ${{ matrix.package }}/dist/latest.yml
             ${{ matrix.package }}/dist/**/*.blockmap
   publish:
     needs: build

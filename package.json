@@ -44,7 +44,7 @@
     "typecheck": "pnpm --filter @clawclaw/dsh-im run typecheck && pnpm --filter dsh-plugin-desktop run typecheck",
     "test": "pnpm --filter @clawclaw/dsh-im run test && pnpm --filter dsh-plugin-desktop run test",
     "test:bilingual-docs": "node --test scripts/bilingual-docs.test.mjs",
-    "test:upload-update": "node --test scripts/upload-update.test.mjs",
+    "test:upload-update": "node --test scripts/upload-update.test.mjs scripts/generate-windows-update-metadata.test.mjs",
     "check:bilingual-docs": "pnpm run test:bilingual-docs && node scripts/verify-bilingual-docs.mjs",
     "check:vendored-runtime": "node scripts/sync-vendored-runtime.mjs --check",
     "check:layout": "pnpm run check:bilingual-docs && pnpm run check:vendored-runtime && node scripts/verify-layout.mjs",
