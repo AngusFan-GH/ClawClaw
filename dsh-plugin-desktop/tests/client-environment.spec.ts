@@ -30,7 +30,6 @@ import {
 vi.mock('../src/client/cron-tasks-settings.ts', () => ({ applyCronTasksSettings: vi.fn() }))
 vi.mock('../src/client/reminders-settings.ts', () => ({ applyRemindersSettings: vi.fn() }))
 vi.mock('../src/client/skills-settings.ts', () => ({ applySkillsSettings: vi.fn() }))
-vi.mock('../src/client/shortcut-menu.tsx', () => ({ applyShortcutMenu: vi.fn() }))
 
 describe('desktop client environment', () => {
   it.each(['darwin', 'win32', 'linux'])('keeps compatibility chrome out of the %s client slot tree', platform => {
@@ -61,14 +60,15 @@ describe('desktop client environment', () => {
   it('does not activate desktop effects for an ordinary browser URL', () => {
     vi.stubGlobal('window', { location: { search: '' } })
     const effect = vi.fn()
+    const inject = vi.fn()
 
     try {
       expect(parseDesktopClientEnvironment('')).toBeUndefined()
-      apply({ effect } as unknown as ClientContext)
+      apply({ effect, inject } as unknown as ClientContext)
       expect(effect.mock.calls.map(([, label]) => label)).toEqual([
-        'dsh-plugin-desktop: shortcut menu styles',
-        'dsh-plugin-desktop: semantic settings navigation icons',
+        'dsh-plugin-desktop: market integration dictionaries',
       ])
+      expect(inject).toHaveBeenCalledWith(['market'], expect.any(Function))
     }
     finally {
       vi.unstubAllGlobals()

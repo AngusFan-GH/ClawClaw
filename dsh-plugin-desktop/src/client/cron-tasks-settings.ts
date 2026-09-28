@@ -3,9 +3,11 @@ import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/c
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from './workspace-client-contract.ts'
-import { CronTasksSettingsSection } from './CronTasksSettingsSection.tsx'
+import { AutomationPanel, AutomationPanelIcon } from './AutomationPanel.tsx'
 import { installCronTaskSessionIcons } from './cron-task-session-icon.ts'
 import { installCronTaskUnreadReminders } from './cron-task-unread.ts'
 import { createCronTasksApi, openCronTaskSession, watchCronTaskSessionDisposals } from './cron-tasks-api.ts'
@@ -13,6 +15,7 @@ import { en, zh, type CronTasksLocaleKey } from './cron-tasks-locales.ts'
 import { installIntegrationsStyles } from './integrations-styles.ts'
 
 export const DESKTOP_CRON_TASKS_LOCALE_NAMESPACE = 'desktop.cron-tasks'
+export const DESKTOP_AUTOMATION_PANEL_ID = 'desktop-automations' as MainPanelId
 interface ClientSessionsNavigation {
   refresh(): Promise<void>
   binding(sessionId: SessionId): { session: { rename(title: string): Promise<{
@@ -51,9 +54,7 @@ export function applyCronTasksSettings(ctx: ClientContext): void {
     }, 'dsh-plugin-desktop: reconcile disposed Cron task Sessions')
   })
   ctx.inject(['uiWorkspace', 'workspaces'], (scope: ClientContext) => {
-    scope.slots.inject('settings.section', () => scope.slots.register({
-      name: 'settings.section', id: 'desktop-cron-tasks', order: 60,
-      label: () => t('nav'), locale: DESKTOP_CRON_TASKS_LOCALE_NAMESPACE, inject: () => ({ api,
+    const injectPanel = () => ({ api,
         localeId: () => scope.locale.getSnapshot().active,
         openSession: async (taskId: string, sessionId: string) => {
           await openCronTaskSession(api, {
@@ -75,7 +76,15 @@ export function applyCronTasksSettings(ctx: ClientContext): void {
             openSession: attachedSessionId => { scope.uiWorkspace.openSession(attachedSessionId as SessionId) },
           }, taskId, sessionId)
         },
-      }),
-    }, CronTasksSettingsSection))
+      })
+    scope.slots.inject('main', () => scope.slots.register({
+      name: 'main', key: DESKTOP_AUTOMATION_PANEL_ID,
+      locale: DESKTOP_CRON_TASKS_LOCALE_NAMESPACE,
+      inject: injectPanel,
+    }, AutomationPanel))
+    scope.slots.inject('sidebar.panellist', () => scope.slots.register({
+      name: 'sidebar.panellist', id: DESKTOP_AUTOMATION_PANEL_ID, order: 10,
+      label: () => t('panel'), locale: DESKTOP_CRON_TASKS_LOCALE_NAMESPACE,
+    }, AutomationPanelIcon))
   })
 }

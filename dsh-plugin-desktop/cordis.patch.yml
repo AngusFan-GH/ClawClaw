@@ -14,8 +14,6 @@
       name: dsh-plugin-desktop/notifications
     - id: desktop-cron-tasks
       name: dsh-plugin-desktop/cron-tasks
-    - id: desktop-shortcuts
-      name: dsh-plugin-desktop/shortcut-menu
     - id: desktop-reminders
       name: dsh-plugin-desktop/reminders
     - id: desktop-default-workspace
@@ -48,13 +46,14 @@
 - id: session-telemetry-otel
   disabled: true
 
-# Surface active durable reminders in the conversation header. Schedule owns
-# creation, persistence, and delivery; this client contribution is read-only.
+# ClawClaw keeps its established Desktop Cron model until a lossless Schedule
+# migration protocol exists. Loading both models produces two unrelated task
+# catalogs, so the upstream pair stays disabled in the Desktop profile.
 - id: schedule
-  disabled: false
+  disabled: true
 
 - id: ui-schedule
-  disabled: false
+  disabled: true
 
 # SpiritX is the product-owned model route. Keep the upstream DeepSeek adapter
 # and its request metadata out of the default Desktop composition.

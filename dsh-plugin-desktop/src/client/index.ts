@@ -20,12 +20,10 @@ import { applyWorkspaceDirectoryFlow } from './workspace-directory-flow.tsx'
 import { parseDesktopClientEnvironment } from './environment.ts'
 import { applyExtendedShell } from './extended-shell.ts'
 import { applyMcpSettings } from './mcp-settings.ts'
+import { applyMarketIntegration } from './market-integration.tsx'
 import { applyCronTasksSettings } from './cron-tasks-settings.ts'
 import { applyRemindersSettings } from './reminders-settings.ts'
 import { applySkillsSettings } from './skills-settings.ts'
-import { installSemanticSettingsNavIcons } from './settings-nav-icons.ts'
-import { applyShortcutMenu } from './shortcut-menu.tsx'
-import { installShortcutMenuStyles } from './shortcut-menu-styles.ts'
 import { applySpiritXOnboarding } from './spiritx-onboarding.tsx'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
 
@@ -39,9 +37,9 @@ export {
 } from './default-workspace-selection.ts'
 export { applyExtendedShell, applyFramedShell } from './extended-shell.ts'
 export { applyMcpSettings } from './mcp-settings.ts'
+export { applyMarketIntegration } from './market-integration.tsx'
 export { applyRemindersSettings } from './reminders-settings.ts'
 export { applySkillsSettings } from './skills-settings.ts'
-export { applyShortcutMenu } from './shortcut-menu.tsx'
 export {
   createDesktopSettingsApi,
   desktopSettingsPaths,
@@ -110,18 +108,11 @@ export function apply(ctx: ClientContext): void {
   // The Desktop-hosted browser client shares the product identity, while
   // native window services and shell effects require the Electron markers.
   applyClawClawBrand(ctx)
+  applyMarketIntegration(ctx)
   applySpiritXOnboarding(ctx)
   applyCronTasksSettings(ctx)
   applyRemindersSettings(ctx)
   applySkillsSettings(ctx)
-  applyShortcutMenu(ctx)
-  ctx.effect(() => installShortcutMenuStyles(), 'dsh-plugin-desktop: shortcut menu styles')
-  ctx.effect(() => installSemanticSettingsNavIcons([
-    { icon: 'marketplace', labels: ['插件市场', 'Plugin Marketplace', 'Plugins'] },
-    { icon: 'skill', labels: ['技能', 'Skills'] },
-    { icon: 'mcp', labels: ['MCP 服务', 'MCP Servers'] },
-    { icon: 'schedule', labels: ['定时任务', 'Scheduled tasks'] },
-  ]), 'dsh-plugin-desktop: semantic settings navigation icons')
   if (!environment) return
   ctx.effect(
     () => provideDesktopWindow(ctx, desktopWindowService(environment)),

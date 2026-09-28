@@ -69,7 +69,7 @@ Opening in a browser does not enable LAN exposure. LAN access is a separate sett
 
 ## Plugins and terminal
 
-Select `dsh-market` or disabled in settings. Third-party plugins run with local user permissions.
+Plugins in the sidebar is the single entry point: it manages installed bundles and, when a market is enabled, exposes Plugin Marketplace for discovery, search, and installation. Desktop settings only selects `dsh-market` as the provider or disables it; it no longer creates a second marketplace page. Third-party plugins run with local user permissions.
 
 Open the desktop terminal to run commands against its active profile:
 
@@ -80,6 +80,12 @@ dsh plugin update
 ```
 
 An explicit `--profile <name>` takes precedence. Restart after plugin changes. Private `dsh`, `pnpm`, and `node` shims and `DSH_HOME` apply to that terminal, not global PATH. Existing terminals retain the profile selected when they opened.
+
+## Automations and reminders
+
+Automations in the sidebar manages ClawClaw scheduled tasks, including timing, activation, immediate runs, history, and task conversations. Upgrading to DSH 0.1.7-rc.2 does not migrate or delete existing tasks. The Desktop profile does not load upstream Schedule at the same time, avoiding two unrelated task catalogs.
+
+Reminders in Settings are standing instructions that apply across workspaces and conversations, not scheduled tasks. They remain in Settings and are managed separately from Automations.
 
 ## Updates
 

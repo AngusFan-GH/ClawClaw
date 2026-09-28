@@ -26,6 +26,8 @@ On macOS/Windows, compatibility and extended modes use two independent WebConten
 
 Compatibility preserves upstream layout; extended composes Desktop layout/sidebar; advanced has its own root and integrated captions. Desktop separately owns confirmation, recovery, and setup windows. See [chrome isolation](../dsh-plugin-desktop/docs/compatibility-chrome-isolation.md) and the [service contract](../dsh-plugin-desktop/docs/plugin-services.md).
 
+On DSH 0.1.7-rc.2, `sidebar.panellist` is the sole extension point for top-level product destinations. The upstream Plugins manager remains enabled; Desktop uses dshmarket's `market` service to embed discovery there and hide the old Settings marketplace entry. `desktop-cron-tasks` owns the Automations panel. The Desktop profile disables upstream `schedule`/`ui-schedule` until a lossless, reversible migration protocol exists. The old `sidebar.shortcuts` integration and translated-text Settings DOM mutation are retired.
+
 ## Workspaces, data, and models
 
 Default Harness home is `~/.clawclaw/data`; the default workspace is `~/.clawclaw/workspaces/default`. See the [user guide](user-guide.en.md) for migration, overrides, and channel sharing. The default workspace is registered through the upstream registry and protected against deletion in Host. Client persists active selection and supplies a bilingual directory flow. A workspace is neither a profile nor a recovery checkpoint.

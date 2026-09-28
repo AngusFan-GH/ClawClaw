@@ -13,7 +13,8 @@ The source version is **0.2.2**, with **0.1.7-rc.2** for the pinned DSH source a
 - **Desktop runtime**: native windows, tray, isolated Host process, three presentation modes, terminal, and recovery tools.
 - **Workspaces**: a protected default workspace, directory browsing, direct path entry, folder creation, and a system directory picker.
 - **Channels**: configuration surfaces for Weixin, WeCom, Feishu, DingTalk, QQ, iMessage, Telegram, WhatsApp, Discord, and Slack. Each platform still requires accounts, credentials, or QR authorization.
-- **Plugin market**: bundled `dshmarket`, selectable or disabled in settings. Listing does not imply a security review.
+- **Plugins**: one top-level Plugins page combines installed-plugin management with the bundled `dshmarket`; select or disable the provider in Desktop settings. Listing does not imply a security review.
+- **Automations**: one top-level entry manages ClawClaw scheduled tasks while preserving existing task data and conversation history.
 - **Updates**: the stable ClawClaw release manifest, SHA-512 download verification, and user-confirmed installation.
 
 Windows x64 and macOS are the primary packaging targets; macOS supports Universal builds. Linux compatibility mode and headless checks do not imply a published Linux distribution.

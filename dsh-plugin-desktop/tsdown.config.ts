@@ -20,7 +20,6 @@ export default defineConfig([
       notifications: 'src/notifications.ts',
       'cron-tasks': 'src/cron-tasks.ts',
       reminders: 'src/reminders.ts',
-      'shortcut-menu': 'src/shortcut-menu.ts',
       'default-workspace': 'src/default-workspace.ts',
       skills: 'src/skills.ts',
       'legacy-agent-presets': 'src/legacy-agent-presets.ts',

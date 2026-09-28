@@ -36,9 +36,9 @@ describe('Desktop Skills and MCP settings registration', () => {
   })
 })
 
-describe('Desktop scheduled tasks settings registration', () => {
+describe('Desktop automation panel registration', () => {
   it('waits for Workspace navigation locally without blocking the desktop shell', () => {
-    const registrations: Array<{ id: string, locale: string }> = []
+    const registrations: Array<{ id?: string, key?: string, name: string, locale: string }> = []
     const inject = vi.fn((_services: string[], install: (scope: ClientContext) => void) => { install(ctx) })
     const ctx = {
       effect: vi.fn(), inject,
@@ -48,7 +48,7 @@ describe('Desktop scheduled tasks settings registration', () => {
       },
       slots: {
         inject: vi.fn((_name: string, install: () => void) => { install() }),
-        register: vi.fn((definition: { id: string, locale: string }) => { registrations.push(definition) }),
+        register: vi.fn((definition: { id?: string, key?: string, name: string, locale: string }) => { registrations.push(definition) }),
       },
     } as unknown as ClientContext
 
@@ -60,7 +60,8 @@ describe('Desktop scheduled tasks settings registration', () => {
     expect(topLevelInject).not.toContain("'workspaces'")
     expect(inject).toHaveBeenCalledWith(['uiWorkspace', 'workspaces'], expect.any(Function))
     expect(registrations).toEqual([
-      expect.objectContaining({ id: 'desktop-cron-tasks', locale: 'desktop.cron-tasks' }),
+      expect.objectContaining({ name: 'main', key: 'desktop-automations', locale: 'desktop.cron-tasks' }),
+      expect.objectContaining({ name: 'sidebar.panellist', id: 'desktop-automations', locale: 'desktop.cron-tasks' }),
     ])
   })
 

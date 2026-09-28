@@ -3,6 +3,7 @@ import { SKILLS_CSS } from './skills-styles.ts'
 const STYLE_ID = 'dsh-desktop-management-styles'
 
 const CSS = `
+.dshAutomationPage{box-sizing:border-box;width:100%;height:100%;overflow:auto;padding:40px clamp(24px,5vw,72px) 56px}.dshAutomationPage>.dshIntegrations{margin:0 auto}
 .dshSkillsPresetMenu{max-width:100%;min-width:0}.dshSkillsPresetMenu button{max-width:100%;min-width:0}.dshSkillsPresetMenu button span{overflow-wrap:anywhere;min-width:0}.dshSkillsPresetMenu svg,.dshIntegrationsEditorHeader>.dshIntegrationsIconButton{flex-shrink:0}
 .dshIntegrations{display:flex;flex-direction:column;gap:20px;width:100%;max-width:880px;min-width:0;box-sizing:border-box;container-type:inline-size;padding:2px 0 36px;color:var(--dsw-alias-label-primary)}
 .dshIntegrationsHeader,.dshIntegrationsEditorHeader,.dshIntegrationsMcpHeader,.dshIntegrationsToolbar,.dshIntegrationsEditorFooter,.dshIntegrationsDetailHeader{display:flex;align-items:center;justify-content:space-between;gap:14px;min-width:0}.dshIntegrationsHeader{align-items:flex-start}.dshIntegrationsHeader h2,.dshIntegrationsEditorHeader h3,.dshIntegrationsEditor h3,.dshIntegrationsSkillInlineDetail h4{margin:0;font-weight:600}.dshIntegrationsHeader h2{font-size:22px;line-height:1.35}.dshIntegrationsEditorHeader h3{font-size:14px}.dshIntegrationsHeader p,.dshIntegrationsEditorHeader p,.dshIntegrationsDetailHeader p,.dshIntegrationsToolbar p{max-width:680px;margin:6px 0 0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.6}

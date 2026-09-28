@@ -26,6 +26,8 @@ macOS/Windows 的兼容和扩展模式在一个原生窗口内使用两个独立
 
 兼容模式保留上游默认布局；扩展模式组合 Desktop layout/sidebar；增强模式使用自己的 root 和集成 caption。确认、恢复和 Setup 等工具窗口由 Desktop 独立管理。详见[标题栏隔离](../dsh-plugin-desktop/docs/compatibility-chrome-isolation.md)与[服务合同](../dsh-plugin-desktop/docs/plugin-services.zh.md)。
 
+DSH 0.1.7-rc.2 的 `sidebar.panellist` 是一级产品入口的唯一扩展点。上游插件管理页保持启用，Desktop 通过 `dshmarket` 的 `market` 服务把市场页面嵌入其中并隐藏旧 Settings 市场入口。自动化一级面板由 `desktop-cron-tasks` 提供；上游 `schedule`/`ui-schedule` 在 Desktop Profile 中禁用，直到存在无损、可回滚的数据迁移协议。旧 `sidebar.shortcuts` 和基于翻译文本修改 Settings DOM 的集成已退役。
+
 ## 工作区、数据与模型
 
 默认 Harness home 是 `~/.clawclaw/data`，默认工作区是 `~/.clawclaw/workspaces/default`。迁移、覆盖和通道共享规则见[用户指南](user-guide.md)。默认工作区通过上游 registry 注册，Host 阻止删除该注册；Client 持久化活动选择并提供中英文目录流程。工作区不是 profile，也不是恢复检查点。

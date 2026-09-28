@@ -28,7 +28,7 @@ The application supplies adapters and settings, not platform accounts. Each plat
 
 ## Is the plugin market implemented?
 
-`dshmarket` is bundled and can be selected or disabled. Fabric remains a community RFC Draft, not an installable SDK. Market installation is not a security review; plugins run with local user permissions.
+`dshmarket` is bundled. Select or disable the provider in Desktop settings; when enabled, open Plugins in the sidebar and then Plugin Marketplace. Fabric remains a community RFC Draft, not an installable SDK. Market installation is not a security review; plugins run with local user permissions.
 
 ## Are profiles and workspaces the same?
 
