@@ -1,6 +1,7 @@
 import { once } from 'node:events'
 import {
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -24,6 +25,7 @@ import {
   DESKTOP_LIFECYCLE_SUMMARY_ENTRY,
   desktopLifecycleEvidencePath,
 } from '../src/lifecycle-events.ts'
+import { writeDesktopFatalReport } from '../src/fatal-crash-report.ts'
 
 const APP_VERSION = '2.0.1-test'
 
@@ -110,6 +112,35 @@ describe('exportDiagnosticsZip', () => {
     expect(zip.readAsText('crash-evidence/active-run.json')).toBe('{"version":"2.0.1"}\n')
     expect(zip.readAsText('system-info.txt')).toContain('included-active-run-marker: true')
     expect(existsSync(join(root, 'logs'))).toBe(true)
+  })
+
+  it('includes bounded structured fatal reports in an explicit diagnostic export', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-dx-fatal-'))
+    const reportPath = writeDesktopFatalReport(join(root, 'crash-evidence', 'fatal'), {
+      source: 'host', error: new Error('Host stopped'), version: APP_VERSION,
+      platform: process.platform, arch: process.arch, processRole: 'host-supervisor',
+      time: new Date('2026-09-28T01:02:03.004Z'),
+    })
+
+    const out = await exportDesktopDiagnostics(root, { appVersion: APP_VERSION })
+    const zip = new AdmZip(out)
+    const entry = `crash-evidence/fatal/${reportPath.split(/[\\/]/u).at(-1)}`
+    expect(zip.getEntry(entry)).not.toBeNull()
+    expect(zip.readAsText(entry)).toContain('"source": "host"')
+  })
+
+  it('excludes linked fatal reports from an explicit diagnostic export', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-dx-fatal-link-'))
+    const directory = join(root, 'crash-evidence', 'fatal')
+    mkdirSync(directory, { recursive: true })
+    const target = join(root, 'outside.json')
+    writeFileSync(target, '{"private":"outside"}\n')
+    const name = 'fatal-2026-09-28T01-02-03-004Z-main-00000000-0000-4000-8000-000000000000.json'
+    linkSync(target, join(directory, name))
+
+    const out = await exportDesktopDiagnostics(root, { appVersion: APP_VERSION })
+    const zip = new AdmZip(out)
+    expect(zip.getEntry(`crash-evidence/fatal/${name}`)).toBeNull()
   })
 
   it('includes lifecycle JSONL and a correlated summary in the diagnostic archive', async () => {

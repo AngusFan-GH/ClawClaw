@@ -23,6 +23,7 @@ import {
   summarizeDesktopLifecycleEvidence,
 } from './lifecycle-events.ts'
 import { isDesktopLogFileName } from './log-files.ts'
+import { DESKTOP_FATAL_REPORT_NAME } from './fatal-crash-report.ts'
 
 const DIAGNOSTIC_ARCHIVE = /^diagnostics-\d+(?:-[0-9a-f-]+)?\.zip$/u
 const MAX_DIAGNOSTIC_ARCHIVES = 3
@@ -36,6 +37,7 @@ interface DiagnosticExportWorkerData {
   readonly crashDumpsDir?: string
   readonly runStatePath?: string
   readonly lifecycleEvidencePath?: string
+  readonly fatalReportsDir?: string
 }
 
 export type DiagnosticExportWorkerResult =
@@ -135,6 +137,22 @@ function crashDumpEntries(crashDumpsDir: string | undefined): LogEntry[] {
   return entries
 }
 
+function fatalReportEntries(directory: string | undefined, userDataDir: string): LogEntry[] {
+  if (directory === undefined) return []
+  try {
+    const stats = lstatSync(directory)
+    if (stats.isSymbolicLink() || !stats.isDirectory() || hasLinkedParent(directory, userDataDir)) return []
+    return readdirSync(directory).flatMap((name) => {
+      if (!DESKTOP_FATAL_REPORT_NAME.test(name)) return []
+      const entry = regularEvidenceEntry(join(directory, name), `crash-evidence/fatal/${name}`, userDataDir)
+      return entry === undefined || entry.stats.nlink > 1 ? [] : [entry]
+    })
+  } catch (cause) {
+    if (skippableFileError(cause)) return []
+    throw cause
+  }
+}
+
 function readStableLog(entry: LogEntry, remainingBytes: number): Buffer | undefined {
   if (entry.stats.size > remainingBytes) return undefined
   let descriptor: number | undefined
@@ -181,6 +199,8 @@ async function createDiagnosticsArchive(data: DiagnosticExportWorkerData): Promi
     .sort((a, b) => b.stats.mtimeMs - a.stats.mtimeMs || b.name.localeCompare(a.name, 'en'))
   const crashCandidates = crashDumpEntries(data.crashDumpsDir)
     .sort((a, b) => b.stats.mtimeMs - a.stats.mtimeMs || b.name.localeCompare(a.name, 'en'))
+  const fatalCandidates = fatalReportEntries(data.fatalReportsDir, data.userDataDir)
+    .sort((a, b) => b.stats.mtimeMs - a.stats.mtimeMs || b.name.localeCompare(a.name, 'en'))
   const runStateCandidate = data.runStatePath === undefined
     ? undefined
     : regularEvidenceEntry(data.runStatePath, 'crash-evidence/active-run.json', data.userDataDir)
@@ -218,7 +238,7 @@ async function createDiagnosticsArchive(data: DiagnosticExportWorkerData): Promi
       }
     }
   }
-  for (const entry of [...(runStateCandidate === undefined ? [] : [runStateCandidate]), ...crashCandidates, ...candidates]) {
+  for (const entry of [...fatalCandidates, ...(runStateCandidate === undefined ? [] : [runStateCandidate]), ...crashCandidates, ...candidates]) {
     const content = readStableLog(entry, data.maxEvidenceBytes - includedBytes)
     if (content === undefined) {
       if (entry.name.startsWith('crash-dumps/')) omittedCrashDumps += 1

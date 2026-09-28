@@ -139,7 +139,7 @@ Blocker: `dist:win` currently removes every signing environment variable and pas
 
 ### Phase 4 (P1): structured fatal crash reports
 
-**Status: Not started**
+**Status: Complete (2026-09-28)**
 
 Goal: supplement the existing abnormal-run marker with local, bounded, diagnosable fatal reports.
 
@@ -147,6 +147,12 @@ Goal: supplement the existing abnormal-run marker with local, bounded, diagnosab
 - Write atomically with fixed file-count and total-size limits. Never persist tokens, environment variables, conversation content, or arbitrary request bodies.
 - Include reports in existing user-initiated diagnostics export; do not upload by default.
 - Test corrupt files, concurrent writes, rotation, path sanitization, and privacy-field exclusion.
+
+Delivered implementation: `fatal-crash-report.ts` writes local structured reports for main-process failures, unexpected isolated Host failures, and Electron native-child termination. The allowlist contains only schema, time, source, process role, application version, platform/architecture, PID, and message/stack after `maskSecrets` and private-path replacement. It does not traverse custom Error properties or read environment variables, request bodies, or conversations. Each UTF-8 JSON document has a hard 128 KiB limit; the directory retains at most 10 reports and 1 MiB in total. Writes use an exclusive temporary file and atomic same-directory rename. Writing and pruning reject symbolic-link directories; rotation and diagnostics export accept only single-link regular files, preventing symbolic or hard links from exposing data outside the directory. Reports appear only in a user-requested diagnostics ZIP and have no upload path.
+
+Integration points: uncaught main exceptions, unexpected Host failure, Electron `child-process-gone`, and startup failure. A report-write failure emits only a sanitized error and does not block the existing exit or recovery flow. Corrupt recognized reports rotate without parsing, and UUID names prevent collisions among writes in the same millisecond.
+
+Verification: `corepack pnpm --filter dsh-plugin-desktop exec vitest run tests/fatal-crash-report.spec.ts tests/diagnostic-export.spec.ts tests/desktop-logger.spec.ts` (33 passing); `corepack pnpm --filter dsh-plugin-desktop run typecheck`; `corepack pnpm --filter dsh-plugin-desktop run build`; `corepack pnpm --filter dsh-plugin-desktop run test` (1258 passing, 6 existing skips).
 
 ### Phase 5 (P1): opt-in update qualification journal
 

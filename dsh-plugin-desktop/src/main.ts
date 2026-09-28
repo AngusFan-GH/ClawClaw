@@ -65,6 +65,7 @@ import {
 } from './lan-https-runtime.ts'
 import { LogFileSink } from './log-files.ts'
 import { maskSecrets } from './mask-secrets.ts'
+import { writeDesktopFatalReport, type DesktopFatalSource } from './fatal-crash-report.ts'
 import { resolveDesktopShellEnvironment } from './shell-environment.ts'
 import { installProfilePackageResolver } from './module-resolution.ts'
 import { packagedDependencyPath } from './packaged-runtime-path.ts'
@@ -437,6 +438,21 @@ async function start(): Promise<void> {
     logSink = undefined
   }
   const electronLogger = new ElectronStderrLogger(logSink)
+  const recordFatal = (source: DesktopFatalSource, error: unknown): void => {
+    try {
+      writeDesktopFatalReport(join(desktopUserDataDir, 'crash-evidence', 'fatal'), {
+        source,
+        error,
+        version: appVersion,
+        platform: process.platform,
+        arch: process.arch,
+        processRole: source === 'host' ? 'host-supervisor' : 'electron-main',
+        privatePaths: [app.getPath('home'), process.cwd(), desktopUserDataDir],
+      })
+    } catch (cause) {
+      electronLogger.error(`${BIN_NAME}: fatal report unavailable: ${cause instanceof Error ? cause.message : String(cause)}`)
+    }
+  }
   if (safeModeRequested) {
     safeModePaths = ensureDesktopSafeModeEnvironment(desktopUserDataDir)
   } else {
@@ -486,7 +502,7 @@ async function start(): Promise<void> {
   } catch (cause) {
     electronLogger.error(`${BIN_NAME}: active run tracking unavailable: ${cause instanceof Error ? cause.message : String(cause)}`)
   }
-  removeChildProcessLogging = installDesktopChildProcessLogging(app, electronLogger)
+  removeChildProcessLogging = installDesktopChildProcessLogging(app, electronLogger, recordFatal)
   const nativeExit = createDesktopExitCoordinator(
     {
       prepareToQuit: () => { runtime.prepareToQuit() },
@@ -571,6 +587,7 @@ async function start(): Promise<void> {
     process,
     electronLogger,
     code => { void shutdown?.request(code) },
+    recordFatal,
   )
   removeShutdownRequests = installShutdownRequests(process, app, requestQuit)
 
@@ -1367,6 +1384,7 @@ async function start(): Promise<void> {
         prepareCertificate: prepareHostCertificate,
         bindHost: host => generation.bindHost(host), requestQuit,
         onFailure: error => {
+          recordFatal('host', error)
           electronLogger.error(error.message)
           runtime.notifyAttention({ title: PRODUCT_NAME, body: error.message })
         },
@@ -1621,6 +1639,7 @@ async function start(): Promise<void> {
     lifecycleRecorder.failRendererBootIfPending(lifecycleRendererFailureReason(runtime.rendererBootFailureReason))
     lifecycleRecorder.failStartup(startupStage, lifecycleStartupFailureReason(cause, runtime))
     electronLogger.errorCause(cause)
+    recordFatal('main', cause)
     let exitCode = 1
     const failureRoute = routeDesktopStartupFailure({
       appReady: app.isReady(),

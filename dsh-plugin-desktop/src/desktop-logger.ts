@@ -38,6 +38,7 @@ export function formatDesktopExitCode(exitCode: number): string {
 export function installDesktopChildProcessLogging(
   app: DesktopChildProcessSource,
   logger: DesktopLogger,
+  recordFatal?: (source: 'native-child', error: Error) => void,
 ): () => void {
   const handler = (_event: unknown, details: DesktopChildProcessDetails): void => {
     const identity = [
@@ -45,9 +46,9 @@ export function installDesktopChildProcessLogging(
       ...(details.name === undefined ? [] : [`name: ${details.name}`]),
       ...(details.serviceName === undefined ? [] : [`service: ${details.serviceName}`]),
     ]
-    logger.error(
-      `dsh-plugin-desktop: child process gone (${identity.join(', ')}, reason: ${details.reason}, exitCode: ${formatDesktopExitCode(details.exitCode)})`,
-    )
+    const message = `dsh-plugin-desktop: child process gone (${identity.join(', ')}, reason: ${details.reason}, exitCode: ${formatDesktopExitCode(details.exitCode)})`
+    logger.error(message)
+    recordFatal?.('native-child', new Error(message))
   }
   app.on('child-process-gone', handler)
   return () => { app.off('child-process-gone', handler) }
@@ -58,12 +59,14 @@ export function installDesktopUncaughtExceptionLogging(
   proc: DesktopUncaughtExceptionProcess,
   logger: DesktopLogger,
   exit: (code: number) => void,
+  recordFatal?: (source: 'main', error: Error) => void,
 ): () => void {
   let handled = false
   const handler = (error: Error): void => {
     if (handled) return
     handled = true
     proc.off('uncaughtException', handler)
+    recordFatal?.('main', error)
     logger.errorCause(error)
     exit(1)
   }

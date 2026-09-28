@@ -27,7 +27,8 @@ describe('ElectronStderrLogger', () => {
   it('logs Electron child process crashes with the Windows exception code', () => {
     const app = new EventEmitter()
     const logger = { error: vi.fn(), errorCause: vi.fn() }
-    const remove = installDesktopChildProcessLogging(app, logger)
+    const recordFatal = vi.fn()
+    const remove = installDesktopChildProcessLogging(app, logger, recordFatal)
 
     app.emit('child-process-gone', {}, {
       type: 'Utility',
@@ -40,6 +41,9 @@ describe('ElectronStderrLogger', () => {
     expect(logger.error).toHaveBeenCalledWith(
       'dsh-plugin-desktop: child process gone (type: Utility, name: Network Service, service: network.mojom.NetworkService, reason: crashed, exitCode: -1073741819 / 0xc0000005)',
     )
+    expect(recordFatal).toHaveBeenCalledWith('native-child', expect.objectContaining({
+      message: expect.stringContaining('child process gone'),
+    }))
     remove()
     expect(app.listenerCount('child-process-gone')).toBe(0)
   })
@@ -105,9 +109,11 @@ describe('ElectronStderrLogger', () => {
     const logger = new ElectronStderrLogger(s)
     const proc = new EventEmitter()
     const exit = vi.fn()
+    const recordFatal = vi.fn()
 
-    const remove = installDesktopUncaughtExceptionLogging(proc, logger, exit)
-    proc.emit('uncaughtException', new Error('fatal Bearer abc.def.secret'))
+    const remove = installDesktopUncaughtExceptionLogging(proc, logger, exit, recordFatal)
+    const fatal = new Error('fatal Bearer abc.def.secret')
+    proc.emit('uncaughtException', fatal)
     proc.emit('uncaughtException', new Error('second failure'))
 
     const day = todaySuffix()
@@ -117,6 +123,8 @@ describe('ElectronStderrLogger', () => {
     expect(text).not.toContain('second failure')
     expect(exit).toHaveBeenCalledOnce()
     expect(exit).toHaveBeenCalledWith(1)
+    expect(recordFatal).toHaveBeenCalledOnce()
+    expect(recordFatal).toHaveBeenCalledWith('main', fatal)
     expect(proc.listenerCount('uncaughtException')).toBe(0)
     remove()
     stderrSpy.mockRestore()

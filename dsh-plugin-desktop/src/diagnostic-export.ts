@@ -23,6 +23,8 @@ export interface DiagnosticExportOptions {
   readonly runStatePath?: string
   /** Current-run lifecycle JSONL written by the Electron launcher. */
   readonly lifecycleEvidencePath?: string
+  /** Directory containing bounded structured fatal reports. */
+  readonly fatalReportsDir?: string
   /** Cancels the short-lived worker when its owning UI or process operation ends. */
   readonly signal?: AbortSignal
 }
@@ -113,6 +115,7 @@ export function exportDiagnosticsZip(
       ...(options.crashDumpsDir === undefined ? {} : { crashDumpsDir: options.crashDumpsDir }),
       ...(options.runStatePath === undefined ? {} : { runStatePath: options.runStatePath }),
       ...(options.lifecycleEvidencePath === undefined ? {} : { lifecycleEvidencePath: options.lifecycleEvidencePath }),
+      ...(options.fatalReportsDir === undefined ? {} : { fatalReportsDir: options.fatalReportsDir }),
     },
     resourceLimits: { maxOldGenerationSizeMb: 256 },
   })
@@ -131,6 +134,7 @@ export function exportDesktopDiagnostics(
     crashDumpsDir: options.crashDumpsDir ?? join(userDataDir, 'Crashpad'),
     runStatePath: join(userDataDir, 'crash-evidence', 'active-run.json'),
     lifecycleEvidencePath: desktopLifecycleEvidencePath(userDataDir),
+    fatalReportsDir: join(userDataDir, 'crash-evidence', 'fatal'),
     ...(options.maxEvidenceBytes === undefined ? {} : { maxEvidenceBytes: options.maxEvidenceBytes }),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })

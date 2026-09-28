@@ -139,7 +139,7 @@ ClawClaw 已有下列能力，因此不再移植同类实现：
 
 ### 阶段 4（P1）：结构化 fatal crash report
 
-**状态：待实施**
+**状态：已完成（2026-09-28）**
 
 目标：在现有 abnormal-run marker 之外保存本地、限额、可诊断的 fatal report。
 
@@ -147,6 +147,12 @@ ClawClaw 已有下列能力，因此不再移植同类实现：
 - 原子写入，固定文件数和总大小；禁止保存 token、环境变量、对话内容和任意请求体。
 - 接入现有诊断导出；默认不上传。
 - 测试损坏文件、并发写入、轮转、路径清洗和隐私字段排除。
+
+已落地：`fatal-crash-report.ts` 为 main、隔离 Host 异常退出和 Electron native child 消失写入本地结构化报告。报告只包含 schema、时间、来源、进程角色、应用版本、平台/架构、PID，以及经 `maskSecrets` 和私有路径替换后的 message/stack；不遍历 Error 自定义属性，也不读取环境变量、请求正文或对话。每份 UTF-8 JSON 硬限制为 128 KiB，目录最多保留 10 份且合计不超过 1 MiB，采用同目录独占临时文件加原子 rename。写入和清理拒绝符号链接目录；轮转与诊断导出只接受单链接普通文件，避免通过符号链接或硬链接访问目录外数据。报告仅在用户主动导出的诊断 ZIP 中出现，没有网络上传路径。
+
+接入点：main 未捕获异常、意外 Host 失败、Electron `child-process-gone` 和启动失败。写报告失败只记录已清洗错误，不阻断原有退出或恢复流程。损坏但命名合法的旧报告无需解析即可轮转；同一毫秒内多次写入使用 UUID 消除冲突。
+
+验证：`corepack pnpm --filter dsh-plugin-desktop exec vitest run tests/fatal-crash-report.spec.ts tests/diagnostic-export.spec.ts tests/desktop-logger.spec.ts`（33 项通过）；`corepack pnpm --filter dsh-plugin-desktop run typecheck`；`corepack pnpm --filter dsh-plugin-desktop run build`；`corepack pnpm --filter dsh-plugin-desktop run test`（1258 项通过，6 项既有跳过）。
 
 ### 阶段 5（P1）：可选的更新资格 journal
 
