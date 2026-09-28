@@ -16,6 +16,13 @@ import { CRON_TASK_HISTORY_LIMIT, createCronTask, nextCronTaskRun, nextTaskRun, 
 import type { CronTask, CronTaskRun } from './cron-task-domain.ts'
 import { cronSessionTitle } from './cron-session-title.ts'
 import { DESKTOP_WORKSPACE_SETTINGS_NAMESPACE } from './workspace-settings.ts'
+import type { DesktopCronInterruptionState } from './interruption-inspection.ts'
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    desktopCronTasksController: CronTaskController
+  }
+}
 
 export const name = 'desktop-cron-tasks'
 export const inject = ['settings', 'agents', 'sessions', 'sessionTitle', 'agentDefaultModel', 'workspaceRegistry', 'webServer', 'connection', 'tools']
@@ -221,6 +228,15 @@ export class CronTaskController {
       defaultWorkspaceId: this.runtime.defaultWorkspaceId?.() ?? null,
       policy: { requiresHost: true, missedRuns: 'skip', interruptedRuns: 'do-not-retry', timeoutMinutes: Math.round(this.runTimeoutMs / 60_000) },
       workspaces: this.runtime.workspaceRegistry.list().map(workspace => ({ id: String(workspace.id), title: workspace.title, path: workspace.path })) }
+  }
+
+  /** Stable process-lifetime facts consumed by pre-quit inspection. */
+  async interruptionState(): Promise<DesktopCronInterruptionState> {
+    await this.queue
+    return Object.freeze({
+      running: this.running.size,
+      scheduled: this.jobs.filter(job => job.enabled && job.nextRunAt !== null).length,
+    })
   }
 
   async action(value: unknown): Promise<object> {
@@ -494,6 +510,7 @@ export function apply(ctx: Context): void {
     },
     ...(ctx.get('desktopRuntime') === undefined ? {} : { desktopRuntime: ctx.get('desktopRuntime') as DesktopRuntime }) }
   const controller = new CronTaskController(runtime, settings)
+  ctx.provide('desktopCronTasksController', controller)
   controller.start()
   const toolDisposers = [
     ctx.tools.register(defineTool({

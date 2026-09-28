@@ -10,7 +10,12 @@ function fixture() {
   const child = Object.assign(new EventEmitter(), {
     stdout: new EventEmitter(), stderr: new EventEmitter(),
     postMessage: vi.fn((message: { kind: string; id: number; method?: string }) => {
-      if (message.kind === 'call') queueMicrotask(() => child.emit('message', { kind: 'result', id: message.id, value: { pid: 123 } }))
+      if (message.kind === 'call') queueMicrotask(() => child.emit('message', {
+        kind: 'result', id: message.id,
+        value: message.method === 'inspect-interruptions'
+          ? { activeAgents: 1, queuedMessages: 0, activeJobs: 0, runningCronTasks: 0, scheduledCronTasks: 2 }
+          : { pid: 123 },
+      }))
     }),
     kill: vi.fn(() => { queueMicrotask(() => child.emit('exit', 0)); return true }),
   })
@@ -40,4 +45,12 @@ it('reports unexpected Host exit without automatically relaunching or replaying 
   expect(f.onFailure).toHaveBeenCalledOnce()
   await f.host().fiber.dispose()
   expect(f.child.kill).not.toHaveBeenCalled()
+})
+it('inspects interruptions through the private Host RPC', async () => {
+  const f = fixture()
+  await startIsolatedDesktopHost(f.options)
+  await expect(f.host().inspectInterruptions?.()).resolves.toEqual({
+    activeAgents: 1, queuedMessages: 0, activeJobs: 0, runningCronTasks: 0, scheduledCronTasks: 2,
+  })
+  await f.host().fiber.dispose()
 })

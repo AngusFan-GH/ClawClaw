@@ -4,6 +4,13 @@ import type { DesktopLocale } from './runtime.ts'
 
 export interface DesktopNativeCopy {
   readonly ok: string
+  readonly quitTitle: string
+  readonly quitMessage: string
+  readonly quitActiveTasks: string
+  readonly quitScheduledTasks: string
+  readonly quitActiveAndScheduledTasks: string
+  readonly quit: string
+  readonly cancel: string
   readonly pluginRecoveryTitle: string
   readonly pluginRecoveryMessage: string
   readonly unknownPlugin: string
@@ -57,6 +64,13 @@ export interface DesktopNativeCopy {
 const COPY: Record<DesktopLocale, DesktopNativeCopy> = {
   en: {
     ok: 'OK',
+    quitTitle: 'Quit ClawClaw?',
+    quitMessage: 'ClawClaw still has work that may be interrupted.',
+    quitActiveTasks: 'Active or queued tasks will stop immediately.',
+    quitScheduledTasks: 'Scheduled tasks will not run while ClawClaw is closed.',
+    quitActiveAndScheduledTasks: 'Active or queued tasks will stop immediately, and scheduled tasks will not run while ClawClaw is closed.',
+    quit: 'Quit',
+    cancel: 'Cancel',
     pluginRecoveryTitle: 'Plugin Load Failed',
     pluginRecoveryMessage: 'Some plugins could not be loaded.',
     unknownPlugin: 'Unknown client plugin',
@@ -110,6 +124,13 @@ const COPY: Record<DesktopLocale, DesktopNativeCopy> = {
   },
   zh: {
     ok: '确定',
+    quitTitle: '退出 ClawClaw？',
+    quitMessage: 'ClawClaw 仍有可能被中断的任务。',
+    quitActiveTasks: '正在执行或排队的任务将立即停止。',
+    quitScheduledTasks: 'ClawClaw 关闭期间，定时任务不会运行。',
+    quitActiveAndScheduledTasks: '正在执行或排队的任务将立即停止，且 ClawClaw 关闭期间定时任务不会运行。',
+    quit: '退出',
+    cancel: '取消',
     pluginRecoveryTitle: '插件加载失败',
     pluginRecoveryMessage: '部分插件未能加载。',
     unknownPlugin: '未知客户端插件',

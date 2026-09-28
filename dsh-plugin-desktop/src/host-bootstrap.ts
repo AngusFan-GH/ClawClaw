@@ -24,6 +24,7 @@ import type { DesktopRuntime } from './runtime.ts'
 import type { DesktopStartupGenerationHost } from './startup-generation.ts'
 import { FileExporter } from './file-exporter.ts'
 import { LogFileSink } from './log-files.ts'
+import { inspectDesktopInterruptions } from './interruption-inspection.ts'
 
 function desktopProfileMarketSnapshot(market: DesktopMarketProvider): DesktopMarketSnapshot {
   return Object.freeze({
@@ -98,7 +99,10 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
         // profile-overlay resolver used by packaged Electron.
         hostCtx.loader.internal = undefined
         hostCtx.provide('profileContext', desktopHarnessProfileContext(prepared, desktopPnpmBootstrap))
-        bindHost(hostCtx)
+        bindHost({
+          fiber: hostCtx.fiber,
+          inspectInterruptions: async () => await inspectDesktopInterruptions(hostCtx),
+        })
         hostCtx.effect(() => () => logSink.close(), 'dsh-plugin-desktop: Host log sink')
         hostCtx.effect(
           () => async () => { await flushProfilePreferencesWrites() },
@@ -232,7 +236,6 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
       releasePackageResolver()
       throw cause
     })
-    bindHost(ctx)
     fileExporter?.setThreshold((ctx.settings.get(DESKTOP_SETTINGS_NAMESPACE) as DesktopSettings | undefined)?.logLevel ?? 'info')
     ctx.on('settings/updated', (namespace, next) => {
       if (namespace === DESKTOP_SETTINGS_NAMESPACE) {

@@ -1,7 +1,7 @@
 /** ClawClaw executable: minimal Electron bootstrap around the Host Cordis root. */
 
 import { startIsolatedDesktopHost } from './host-process.ts'
-import { app, crashReporter, safeStorage, shell } from 'electron'
+import { app, crashReporter, dialog, safeStorage, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -120,6 +120,8 @@ import {
 } from './startup-recovery-window.ts'
 import { routeDesktopStartupFailure } from './startup-failure-routing.ts'
 import { DesktopStartupGeneration } from './startup-generation.ts'
+import { inspectDesktopInterruptions } from './interruption-inspection.ts'
+import { DesktopQuitConfirmation, DesktopQuitRequest } from './quit-confirmation.ts'
 import {
   healDesktopProfileModuleFallback,
   prepareDesktopProfile,
@@ -386,6 +388,8 @@ async function start(): Promise<void> {
   }
 
   let shutdown: DesktopShutdown | undefined
+  let quitConfirmation: DesktopQuitConfirmation | undefined
+  let requestInteractiveQuit: ((code: number) => Promise<void>) | undefined
   let removeShutdownRequests: (() => void) | undefined
   let removeUncaughtExceptionLogging: (() => void) | undefined
   let removeChildProcessLogging: (() => void) | undefined
@@ -492,6 +496,7 @@ async function start(): Promise<void> {
       exit: code => { if (!runtime.completeUpdateExit(code)) app.exit(code) },
     },
     () => {
+      quitConfirmation?.dispose()
       removeShutdownRequests?.()
       removeUncaughtExceptionLogging?.()
       removeChildProcessLogging?.()
@@ -530,7 +535,10 @@ async function start(): Promise<void> {
           ? desktopRecoveryRelaunchArguments()
           : desktopDefaultRelaunchArguments(),
     )
-    await shutdown.request(0)
+    if (requestInteractiveQuit === undefined) {
+      throw new Error('dsh-plugin-desktop: quit confirmation is not ready')
+    }
+    await requestInteractiveQuit(0)
   }, (report) => {
     if (report.status === 'failed') {
       lifecycleRecorder.finishRendererBoot(
@@ -547,11 +555,22 @@ async function start(): Promise<void> {
     async () => { await generation.release() },
     finalExit,
   )
-  const requestQuit = (code: number): void => { void shutdown.request(code) }
+  quitConfirmation = new DesktopQuitConfirmation({
+    locale: () => runtime.locale,
+    inspect: () => generation.inspectInterruptions(),
+    show: async options => await dialog.showMessageBox(options),
+    focus: () => { app.focus({ steal: true }) },
+  })
+  const quitRequest = new DesktopQuitRequest({
+    confirmation: quitConfirmation,
+    shutdown: async code => await shutdown!.request(code),
+  })
+  requestInteractiveQuit = async code => await quitRequest.request(code)
+  const requestQuit = (code: number): void => { void requestInteractiveQuit?.(code) }
   removeUncaughtExceptionLogging = installDesktopUncaughtExceptionLogging(
     process,
     electronLogger,
-    requestQuit,
+    code => { void shutdown?.request(code) },
   )
   removeShutdownRequests = installShutdownRequests(process, app, requestQuit)
 
@@ -1391,7 +1410,10 @@ async function start(): Promise<void> {
           // profile-overlay resolver used by packaged Electron.
           hostCtx.loader.internal = undefined
           hostCtx.provide('profileContext', desktopHarnessProfileContext(prepared, desktopPnpmBootstrap))
-          generation.bindHost(hostCtx)
+          generation.bindHost({
+            fiber: hostCtx.fiber,
+            inspectInterruptions: async () => await inspectDesktopInterruptions(hostCtx),
+          })
           hostCtx.effect(
             () => async () => { await flushProfilePreferencesWrites() },
             'dsh-plugin-desktop: flush Profile preference writes',
@@ -1534,7 +1556,6 @@ async function start(): Promise<void> {
         releasePackageResolver()
         throw cause
       })
-      generation.bindHost(ctx)
       fileExporter?.setThreshold((ctx.settings.get(DESKTOP_SETTINGS_NAMESPACE) as DesktopSettings | undefined)?.logLevel ?? 'info')
       ctx.on('settings/updated', (namespace, next) => {
         if (namespace === DESKTOP_SETTINGS_NAMESPACE) {

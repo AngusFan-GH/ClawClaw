@@ -49,6 +49,20 @@ describe('Desktop startup generation ownership', () => {
     expect(release).toHaveBeenCalledTimes(1)
   })
 
+  it('delegates interruption inspection to the bound Host', async () => {
+    const target = generation()
+    expect(target.value.inspectInterruptions()).toBeUndefined()
+    const snapshot = {
+      activeAgents: 1, queuedMessages: 2, activeJobs: 3, runningCronTasks: 1, scheduledCronTasks: 4,
+    }
+    target.value.bindHost({
+      fiber: { dispose: vi.fn(async () => {}) },
+      inspectInterruptions: vi.fn(async () => snapshot),
+    })
+
+    await expect(target.value.inspectInterruptions()).resolves.toEqual(snapshot)
+  })
+
   it('coalesces recovery quiescence and leaves resources alive until release', async () => {
     const target = generation()
     let finishHost!: () => void

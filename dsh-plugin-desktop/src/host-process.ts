@@ -8,6 +8,9 @@ import type { DesktopHostOptions } from './host-bootstrap.ts'
 import type { DesktopRuntime } from './runtime.ts'
 import type { DesktopStartupGenerationHost } from './startup-generation.ts'
 import type { DesktopLanHttpsRuntimeOptions } from './lan-https-runtime.ts'
+import { parseDesktopInterruptionSnapshot } from './interruption-inspection.ts'
+
+export const DESKTOP_INTERRUPTION_INSPECTION_TIMEOUT_MS = 2_000
 
 export interface IsolatedHostOptions {
   host: DesktopHostOptions
@@ -62,7 +65,18 @@ export async function startIsolatedDesktopHost(options: IsolatedHostOptions): Pr
     await releaseNative()
     rpc.close()
   })()
-  options.bindHost({ fiber: { dispose: stop } })
+  const inspectInterruptions = async () => {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), DESKTOP_INTERRUPTION_INSPECTION_TIMEOUT_MS)
+    try {
+      return parseDesktopInterruptionSnapshot(
+        await rpc.call('inspect-interruptions', [], controller.signal),
+      )
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+  options.bindHost({ fiber: { dispose: stop }, inspectInterruptions })
   try {
     const { desktopLaunchEnvironment, ...host } = options.host
     await rpc.call('boot', [{ ...host, launchEnvironmentLayers: serializeHostEnvironment(desktopLaunchEnvironment) }, runtimeSnapshot(options.runtime), options.rendererToken])

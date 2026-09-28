@@ -1,6 +1,7 @@
 /** Resource ownership for one immutable Desktop startup generation. */
 
 import { randomUUID } from 'node:crypto'
+import type { DesktopInterruptionSnapshot } from './interruption-inspection.ts'
 
 const BIN_NAME = 'dsh-plugin-desktop'
 const DEFAULT_QUIESCE_TIMEOUT_MS = 5_000
@@ -10,6 +11,7 @@ export interface DesktopStartupGenerationHost {
   readonly fiber: {
     dispose(): Promise<void>
   }
+  inspectInterruptions?(): Promise<DesktopInterruptionSnapshot>
 }
 
 /** Minimal logger used when recovery cannot safely stop the Host. */
@@ -51,6 +53,16 @@ export class DesktopStartupGeneration {
       throw new Error(`${BIN_NAME}: startup generation already owns another Host`)
     }
     this.host = host
+  }
+
+  /** Inspect current Host work, or report no inspection while no Host is bound. */
+  inspectInterruptions(): Promise<DesktopInterruptionSnapshot> | undefined {
+    const host = this.host
+    if (host === undefined) return undefined
+    if (host.inspectInterruptions === undefined) {
+      return Promise.reject(new Error(`${BIN_NAME}: bound Host cannot inspect interruptions`))
+    }
+    return host.inspectInterruptions()
   }
 
   /** Register one process-local resource and return its idempotent Host effect. */

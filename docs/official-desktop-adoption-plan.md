@@ -74,7 +74,7 @@ ClawClaw 已有下列能力，因此不再移植同类实现：
 
 ### 阶段 1（P0）：退出和安装更新前的中断检查
 
-**状态：实施中**
+**状态：已完成（2026-09-28）**
 
 目标：没有工作会被中断时静默退出；存在 active agent/job 或正在执行的 ClawClaw Cron Task 时要求用户确认；检查失败或超时必须保守提示。
 
@@ -95,6 +95,10 @@ ClawClaw 已有下列能力，因此不再移植同类实现：
 - headless 单测不创建真实 Electron 窗口。
 
 回滚界线：新增检查和对话框可以整体移除，不能回滚或绕过原有 `DesktopShutdownCoordinator` 的幂等关闭保证。
+
+实际落地：`interruption-inspection.ts` 通过 DSH 公开 registry 统计 running agent、两类 inbox 和去重后的 live job；ClawClaw Cron 控制器同时报告 running 和已启用且有下次触发时间的任务。`startup-generation.ts` 为 in-process/isolated Host 提供同一接口，私有 RPC 使用 2 秒截止和运行时结构校验。`quit-confirmation.ts` 合并检查、对话框和最终 shutdown；未知状态保守提示，取消不会释放 Host。崩溃异常仍直接进入原有有界关闭，不等待交互。
+
+验证：`corepack pnpm --filter dsh-plugin-desktop exec vitest run tests/interruption-inspection.spec.ts tests/quit-confirmation.spec.ts tests/startup-generation.spec.ts tests/host-process.spec.ts tests/shutdown.spec.ts`（33 项通过）；`corepack pnpm --filter dsh-plugin-desktop run typecheck`；`corepack pnpm --filter dsh-plugin-desktop run build`；`corepack pnpm --filter dsh-plugin-desktop run test`（1239 项通过、6 项既有跳过）。
 
 ### 阶段 2（P0）：更新调度抖动、退避和空闲超时
 

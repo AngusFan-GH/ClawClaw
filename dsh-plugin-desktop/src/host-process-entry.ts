@@ -20,6 +20,10 @@ const rpc = new HostRpc({
 let host: DesktopStartupGenerationHost | undefined
 let inspectServices = (): object => ({})
 rpc.handle('status', () => ({ pid: process.pid, services: inspectServices() }))
+rpc.handle('inspect-interruptions', async () => {
+  if (host?.inspectInterruptions === undefined) throw new Error('DSH Host is not ready')
+  return await host.inspectInterruptions()
+})
 let starting = false
 let stopping = false
 let lan: DesktopLanHttpsRuntime | undefined

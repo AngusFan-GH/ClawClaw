@@ -74,7 +74,7 @@ Statuses are `Not started`, `In progress`, `Complete`, or `Blocked`. A phase bec
 
 ### Phase 1 (P0): interruption inspection before quit and update installation
 
-**Status: In progress**
+**Status: Complete (2026-09-28)**
 
 Goal: quit silently when no work can be interrupted; ask for confirmation when an active agent/job or executing ClawClaw Cron Task exists; warn conservatively when inspection fails or times out.
 
@@ -95,6 +95,10 @@ Tests and acceptance:
 - Headless tests create no real Electron window.
 
 Rollback boundary: the new inspection and dialog may be removed together, but the idempotent shutdown guarantee of `DesktopShutdownCoordinator` must not be bypassed or reverted.
+
+Delivered implementation: `interruption-inspection.ts` counts running agents, both inbox queues, and de-duplicated live jobs through public DSH registries. The ClawClaw Cron controller also reports running tasks and enabled tasks with a next trigger. `startup-generation.ts` exposes one interface for in-process and isolated Hosts; private RPC has a two-second deadline and runtime payload validation. `quit-confirmation.ts` coalesces inspection, dialog, and final shutdown. Unknown state warns conservatively and cancellation leaves the Host intact. Fatal exceptions still enter the existing bounded shutdown directly rather than waiting for interaction.
+
+Verification: `corepack pnpm --filter dsh-plugin-desktop exec vitest run tests/interruption-inspection.spec.ts tests/quit-confirmation.spec.ts tests/startup-generation.spec.ts tests/host-process.spec.ts tests/shutdown.spec.ts` (33 passing); `corepack pnpm --filter dsh-plugin-desktop run typecheck`; `corepack pnpm --filter dsh-plugin-desktop run build`; `corepack pnpm --filter dsh-plugin-desktop run test` (1239 passing, 6 existing skips).
 
 ### Phase 2 (P0): update jitter, backoff, and idle timeout
 
