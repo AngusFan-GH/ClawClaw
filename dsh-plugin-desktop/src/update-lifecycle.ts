@@ -24,6 +24,8 @@ export interface DesktopUpdatePolicy {
   readonly enabled: boolean
   readonly initialDelayMs: number
   readonly intervalMs: number
+  readonly maxBackoffMs: number
+  readonly jitter: number
   readonly requestTimeoutMs: number
 }
 
@@ -33,6 +35,7 @@ export interface DesktopUpdateLifecycleOptions {
   readonly policy: DesktopUpdatePolicy
   readonly locale: () => DesktopLocale
   readonly registerTrayItem: (item: DesktopTrayItem) => DesktopTrayItemRegistration
+  readonly random?: () => number
 }
 
 /** Lifecycle handle for one generation's update operations. */
@@ -78,8 +81,16 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
   private downloadTask: Promise<void> | undefined
   private readonly stateReady: Promise<void>
   private readonly registration: DesktopTrayItemRegistration
+  private retryDelayMs: number
 
   constructor(private readonly options: DesktopUpdateLifecycleOptions) {
+    if (!Number.isSafeInteger(options.policy.maxBackoffMs)
+      || options.policy.maxBackoffMs < options.policy.intervalMs
+      || !Number.isFinite(options.policy.jitter)
+      || options.policy.jitter < 0 || options.policy.jitter > 1) {
+      throw new Error('dsh-plugin-desktop: update backoff must cover the interval and jitter must be in [0, 1]')
+    }
+    this.retryDelayMs = options.policy.intervalMs
     this.stateReady = this.loadState()
     this.registration = options.registerTrayItem({
       id: 'check-for-updates',
@@ -277,23 +288,38 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
     return this.manualTask
   }
 
-  private async runBackgroundCheck(): Promise<void> {
-    if (this.checkTask !== undefined || this.disposed) return
+  private async runBackgroundCheck(): Promise<boolean> {
+    if (this.disposed) return false
     try {
-      const version = this.observeResult(await this.startCheck())
+      const result = await this.startCheck()
+      const version = this.observeResult(result)
       if (version !== undefined) await this.announceBackgroundUpdate(version)
+      return result === null
     } catch {
       // Scheduled checks never surface failures to the user or the application log.
+      return true
     }
   }
 
   private scheduleBackgroundCheck(delayMs: number): void {
     this.pollTimer = setTimeout(() => {
       this.pollTimer = undefined
-      void this.runBackgroundCheck().finally(() => {
-        if (!this.disposed) this.scheduleBackgroundCheck(this.options.policy.intervalMs)
+      void this.runBackgroundCheck().then((failed) => {
+        if (this.disposed) return
+        const { intervalMs, maxBackoffMs } = this.options.policy
+        this.retryDelayMs = failed
+          ? Math.min(maxBackoffMs, this.retryDelayMs * 2)
+          : intervalMs
+        this.scheduleBackgroundCheck(this.randomizedDelay(this.retryDelayMs))
       })
     }, delayMs)
+  }
+
+  private randomizedDelay(baseMs: number): number {
+    const { jitter, maxBackoffMs } = this.options.policy
+    const lower = Math.max(1_000, baseMs * (1 - jitter))
+    const upper = Math.min(maxBackoffMs, baseMs * (1 + jitter))
+    return Math.round(lower + (upper - lower) * (this.options.random?.() ?? Math.random()))
   }
 
   private trayLabel(): string {

@@ -25,6 +25,10 @@ export interface Config {
   initialDelayMs: number
   /** Delay between completion of one background check and the next attempt. */
   intervalMs: number
+  /** Maximum failure-backoff delay, including jitter. */
+  maxBackoffMs: number
+  /** Fractional random variation applied to checks after the initial delay. */
+  jitter: number
   /** Maximum duration of one version request before caller-owned cancellation. */
   requestTimeoutMs: number
 }
@@ -34,6 +38,8 @@ export const Config: z<Config> = z.object({
   enabled: z.boolean().default(true),
   initialDelayMs: z.number().step(1).min(0).max(MAX_TIMER_DELAY_MS).default(60_000),
   intervalMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(6 * 60 * 60 * 1000),
+  maxBackoffMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(24 * 60 * 60 * 1000),
+  jitter: z.number().min(0).max(1).default(0.2),
   requestTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(15_000),
 })
 

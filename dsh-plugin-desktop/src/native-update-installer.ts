@@ -1,6 +1,10 @@
 /** Native update staging. Importing this module never starts Electron or network work. */
 import type { AppUpdater } from 'electron-updater'
 import { CLAWCLAW_UPDATE_BASE_URL } from './update-checker.ts'
+import {
+  DesktopUpdateHttpExecutor,
+  resolveDesktopUpdateHttpIdleTimeout,
+} from './update-http-executor.ts'
 
 export type NativeUpdater = Pick<AppUpdater,
   'autoDownload' | 'autoInstallOnAppQuit' | 'allowDowngrade' | 'allowPrerelease' | 'channel' |
@@ -47,6 +51,11 @@ export function getNativeUpdater(): Promise<AppUpdater> {
     // electron-updater is CommonJS; autoUpdater is a lazy accessor on its default export.
     const updater = module.autoUpdater ?? module.default?.autoUpdater
     if (updater === undefined) throw new Error('electron-updater did not provide an auto updater')
+    const transportOwner = updater as AppUpdater & { httpExecutor: DesktopUpdateHttpExecutor }
+    transportOwner.httpExecutor = new DesktopUpdateHttpExecutor(
+      resolveDesktopUpdateHttpIdleTimeout(process.env),
+      (authInfo, callback) => { updater.emit('login', authInfo, callback) },
+    )
     updater.autoDownload = false
     updater.autoInstallOnAppQuit = false
     updater.logger = null

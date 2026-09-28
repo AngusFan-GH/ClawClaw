@@ -102,7 +102,7 @@ Verification: `corepack pnpm --filter dsh-plugin-desktop exec vitest run tests/i
 
 ### Phase 2 (P0): update jitter, backoff, and idle timeout
 
-**Status: Not started**
+**Status: Complete (2026-09-28)**
 
 Goal: preserve ClawClaw's normal six-hour polling policy while preventing synchronized client requests and ensuring that a connected but stalled transfer fails deterministically.
 
@@ -113,6 +113,10 @@ Changes:
 - Use independent response-header and chunk-idle timeouts. Verify the installed `electron-updater` internal API first and upgrade it separately if required.
 
 Acceptance: deterministic random/clock tests cover bounds, backoff reset, manual bypass, and no rearm after disposal; stalled headers/body fail within bounds. Rollback may restore fixed six-hour scheduling but must preserve existing hash, size, container, and redirect validation.
+
+Delivered implementation: the first check remains fixed at 60 seconds after startup. The successful base interval remains six hours with `20%` default jitter. Failures advance through 12 hours to a 24-hour cap and success resets the delay. Manual checks continue to bypass the periodic timer and share in-flight network work through the existing `checkTask`. `DesktopUpdateHttpExecutor` preserves the `electron-updater` Electron session, proxy, and validation chain while applying a 60-second default inactivity deadline before response headers and between response chunks. `DSH_DESKTOP_UPDATE_HTTP_IDLE_TIMEOUT_MS` can override it. The existing 15-second total manifest-request deadline remains independent.
+
+Verification: 39 focused update tests passing; `corepack pnpm --filter dsh-plugin-desktop run typecheck`; `corepack pnpm --filter dsh-plugin-desktop run build`; `corepack pnpm --filter dsh-plugin-desktop run test` (1247 passing, 6 existing skips).
 
 ### Phase 3 (P0): Windows Authenticode publisher qualification
 

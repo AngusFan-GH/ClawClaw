@@ -23,6 +23,8 @@ const testConfig: UpdateConfig = {
   enabled: true,
   initialDelayMs: 10,
   intervalMs: 1000,
+  maxBackoffMs: 4000,
+  jitter: 0,
   requestTimeoutMs: 1000,
 }
 
@@ -158,10 +160,52 @@ describe('desktop update Host plugin', () => {
       enabled: true,
       initialDelayMs: 60_000,
       intervalMs: 21_600_000,
+      maxBackoffMs: 86_400_000,
+      jitter: 0.2,
       requestTimeoutMs: 15_000,
     })
     expect(() => Config({ intervalMs: 0 } as UpdateConfig)).toThrow()
     expect(() => Config({ requestTimeoutMs: 0 } as UpdateConfig)).toThrow()
+  })
+
+  it('backs off failed background checks and resets after success', async () => {
+    vi.useFakeTimers()
+    const request = vi.fn()
+      .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+      .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+      .mockResolvedValue(versionResponse('2.0.0'))
+    const harness = await createHarness({ request })
+
+    await vi.advanceTimersByTimeAsync(testConfig.initialDelayMs)
+    expect(request).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1_999)
+    expect(request).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(request).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(4_000)
+    expect(request).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(testConfig.intervalMs)
+    expect(request).toHaveBeenCalledTimes(4)
+    await harness.dispose()
+  })
+
+  it('applies configured jitter after the fixed initial delay', async () => {
+    vi.useFakeTimers()
+    const random = vi.spyOn(Math, 'random').mockReturnValue(1)
+    const request = vi.fn(async () => versionResponse('2.0.0'))
+    const harness = await createHarness({
+      request,
+      config: { ...testConfig, intervalMs: 10_000, maxBackoffMs: 20_000, jitter: 0.2 },
+    })
+
+    await vi.advanceTimersByTimeAsync(testConfig.initialDelayMs)
+    expect(request).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(11_999)
+    expect(request).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(request).toHaveBeenCalledTimes(2)
+    random.mockRestore()
+    await harness.dispose()
   })
 
   it.each([

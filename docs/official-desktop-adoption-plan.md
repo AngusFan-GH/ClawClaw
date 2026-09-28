@@ -102,7 +102,7 @@ ClawClaw 已有下列能力，因此不再移植同类实现：
 
 ### 阶段 2（P0）：更新调度抖动、退避和空闲超时
 
-**状态：待实施**
+**状态：已完成（2026-09-28）**
 
 目标：保留 ClawClaw 六小时正常轮询策略，同时避免大量客户端同刻请求，并使“连接存在但不再传输”的下载能确定失败。
 
@@ -113,6 +113,10 @@ ClawClaw 已有下列能力，因此不再移植同类实现：
 - 响应头超时和 chunk idle timeout 使用独立配置；先验证 `electron-updater` 当前内部 API，必要时单独升级依赖。
 
 验收：确定性随机源/时钟单测覆盖上下界、退避复位、手动绕过、释放后不重挂 timer；模拟 stalled headers/body 后在界限内失败。回滚时可退回固定六小时调度，但必须保留现有下载哈希、大小、容器和 redirect 检查。
+
+实际落地：首次检查仍固定为启动后 60 秒；成功后的基础间隔仍为 6 小时，默认 `20%` 抖动。失败按 12 小时、24 小时递增并封顶，成功后复位。手动检查继续绕过周期 timer，并通过既有 `checkTask` 共享在途网络请求。`DesktopUpdateHttpExecutor` 保留 `electron-updater` 的 Electron session、代理和校验链路，在响应头前及相邻响应数据块之间施加默认 60 秒空闲截止；可用 `DSH_DESKTOP_UPDATE_HTTP_IDLE_TIMEOUT_MS` 调整。manifest 的既有 15 秒请求总截止保持独立。
+
+验证：更新聚焦测试 39 项通过；`corepack pnpm --filter dsh-plugin-desktop run typecheck`；`corepack pnpm --filter dsh-plugin-desktop run build`；`corepack pnpm --filter dsh-plugin-desktop run test`（1247 项通过、6 项既有跳过）。
 
 ### 阶段 3（P0）：Windows Authenticode 发布者资格验证
 
