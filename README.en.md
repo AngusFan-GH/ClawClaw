@@ -8,7 +8,7 @@ This repository is maintained at [AngusFan-GH/ClawClaw](https://github.com/Angus
 
 ## Current status
 
-The source version is **0.2.2**, with **0.1.7-rc.1** for the pinned DSH source and runtime. These are repository versions, not a claim that every platform has a published installer. Check this project's [Releases](https://github.com/AngusFan-GH/ClawClaw/releases) for actual artifacts. Downloads from the original DSH Desktop website are not ClawClaw releases.
+The source version is **0.2.2**, with **0.1.7-rc.2** for the pinned DSH source and runtime. These are repository versions, not a claim that every platform has a published installer. Check this project's [Releases](https://github.com/AngusFan-GH/ClawClaw/releases) for actual artifacts. Downloads from the original DSH Desktop website are not ClawClaw releases.
 
 - **Desktop runtime**: native windows, tray, isolated Host process, three presentation modes, terminal, and recovery tools.
 - **Workspaces**: a protected default workspace, directory browsing, direct path entry, folder creation, and a system directory picker.

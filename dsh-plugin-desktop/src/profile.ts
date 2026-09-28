@@ -541,6 +541,7 @@ packageName !== LEGACY_COMMUNITY_MARKET_PACKAGE
       layers,
       patchPath,
       patches: existsSync(patchPath) ? loadOverlayPatches(BIN_NAME, patchPath) : [],
+      skippedBundles: [],
     },
     ...(dshMarketFailure === undefined ? {} : { dshMarketFailure }),
   }

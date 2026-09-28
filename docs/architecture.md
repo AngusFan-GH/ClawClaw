@@ -45,7 +45,7 @@ Channels 由 `@clawclaw/dsh-im` 提供，基于固定的 `@xmanrui/dsh-im` 4.20.
 | `vendor/dsh-runtime/` | 固定运行时 tarball 和 manifest |
 | `patches/` | 外层 pnpm 对依赖应用的显式补丁 |
 
-外层使用 pnpm 11.8.0 的 isolated linker。ClawClaw 固定 DSH 0.1.7-rc.1 source/runtime family；`upstream.json` 记录唯一 pin，gitlink 与之对应。根 workspace override 指向 vendored tarball，`patchedDependencies` 应用兼容修补。应用不直接链接上游源码树。
+外层使用 pnpm 11.8.0 的 isolated linker。ClawClaw 固定 DSH 0.1.7-rc.2 source/runtime family；`upstream.json` 记录唯一 pin，gitlink 与之对应。根 workspace override 指向 vendored tarball，`patchedDependencies` 应用兼容修补。应用不直接链接上游源码树。
 
 ## 服务和恢复
 

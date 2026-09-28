@@ -480,6 +480,7 @@ virtualStoreDirMaxLength: 60
     expect(rows.find(row => row.id === 'schedule')).toEqual({
       id: 'schedule',
       name: '@deepseek-ai/dsh-schedule',
+      disabled: false,
     })
     expect(rows.find(row => row.id === 'desktop-default-workspace')).toEqual({
       id: 'desktop-default-workspace',
@@ -518,6 +519,7 @@ virtualStoreDirMaxLength: 60
     expect(rows.find(row => row.id === 'llm-pi-ai')?.disabled).toBe(true)
     for (const id of [
       'llm-deepseek',
+      'llm-deepseek-account',
       'deepseek-llm-api-extensions',
       'session-log-deepseek',
       'plugin-package-inventory-deepseek',

@@ -31,7 +31,7 @@
       "platform": "web"
     },
     "compatibility": {
-      "dsh": "0.1.7-rc.1",
+      "dsh": "0.1.7-rc.2",
       "profiles": ["web"]
     }
   },

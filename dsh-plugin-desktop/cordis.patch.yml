@@ -18,10 +18,6 @@
       name: dsh-plugin-desktop/shortcut-menu
     - id: desktop-reminders
       name: dsh-plugin-desktop/reminders
-    # Durable, session-local reminders. The corresponding client package is
-    # resolved by the upstream Web bundle and enabled in the renderer below.
-    - id: schedule
-      name: '@deepseek-ai/dsh-schedule'
     - id: desktop-default-workspace
       name: dsh-plugin-desktop/default-workspace
       config:
@@ -54,6 +50,9 @@
 
 # Surface active durable reminders in the conversation header. Schedule owns
 # creation, persistence, and delivery; this client contribution is read-only.
+- id: schedule
+  disabled: false
+
 - id: ui-schedule
   disabled: false
 
@@ -112,6 +111,9 @@
     model: DeepSeek-V4-Flash
 
 - id: llm-deepseek
+  disabled: true
+
+- id: llm-deepseek-account
   disabled: true
 
 - id: deepseek-llm-api-extensions
