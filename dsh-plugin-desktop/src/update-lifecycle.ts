@@ -158,7 +158,9 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
     if (this.disposed || this.state.lastNotifiedVersion === version) return
     this.state = { version: 3, lastNotifiedVersion: version }
     await this.persistState()
-    if (!this.disposed) this.options.adapter.notify(updateAvailableNotification(this.options.locale(), version))
+    if (!this.disposed) {
+      this.options.adapter.notifyAttention(updateAvailableNotification(this.options.locale(), version))
+    }
   }
 
   private startCheck(channel: DesktopReleaseChannel = 'stable'): Promise<UpdateCheckResult | null> {

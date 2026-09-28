@@ -67,6 +67,7 @@ async function createHarness(options: {
   readonly showManualCheckResult?: (result: UpdateCheckResult | null) => Promise<void>
   readonly downloadAndOpen?: DesktopRuntime['updates']['downloadAndOpen']
   readonly notify?: (notification: DesktopNotification) => void
+  readonly notifyAttention?: (notification: DesktopNotification) => void
   readonly locale?: DesktopRuntime['locale']
   readonly state?: string
   readonly journalEnabled?: boolean
@@ -108,6 +109,8 @@ async function createHarness(options: {
       showUpdateFailure,
       downloadAndOpen,
       notify: options.notify ?? ((notification: DesktopNotification) => { notifications.push(notification) }),
+      notifyAttention: options.notifyAttention
+        ?? ((notification: DesktopNotification) => { notifications.push(notification) }),
     },
     registerTrayItem: (item: DesktopTrayItem) => {
       tray ??= item
@@ -353,15 +356,18 @@ describe('desktop update Host plugin', () => {
   it('announces a background update once without opening a confirmation dialog', async () => {
     vi.useFakeTimers()
     const request = vi.fn(async () => versionResponse('2.1.0'))
-    const harness = await createHarness({ request })
+    const notify = vi.fn()
+    const notifyAttention = vi.fn()
+    const harness = await createHarness({ request, notify, notifyAttention })
 
     await vi.advanceTimersByTimeAsync(testConfig.initialDelayMs)
     await vi.waitFor(() => {
-      expect(harness.notifications).toEqual([{
+      expect(notifyAttention).toHaveBeenCalledExactlyOnceWith({
         title: 'ClawClaw Update Available',
         body: 'Version 2.1.0 is ready to download. Open ClawClaw to continue.',
-      }])
+      })
     })
+    expect(notify).not.toHaveBeenCalled()
     expect(harness.confirmDownload).not.toHaveBeenCalled()
     expect(harness.downloadAndOpen).not.toHaveBeenCalled()
     expect(harness.tray.label()).toBe('ClawClaw 2.1.0 Available')
@@ -378,7 +384,7 @@ describe('desktop update Host plugin', () => {
     await vi.advanceTimersByTimeAsync(testConfig.intervalMs)
     await vi.waitFor(() => { expect(request).toHaveBeenCalledTimes(2) })
     expect(harness.confirmDownload).not.toHaveBeenCalled()
-    expect(harness.notifications).toHaveLength(1)
+    expect(notifyAttention).toHaveBeenCalledOnce()
     expect(harness.warnings).toEqual([])
   })
 

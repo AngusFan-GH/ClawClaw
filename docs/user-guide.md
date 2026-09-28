@@ -6,7 +6,7 @@
 
 安装包以 [ClawClaw Releases](https://github.com/AngusFan-GH/ClawClaw/releases) 实际发布内容为准。Windows x64 使用 NSIS 安装程序或便携 ZIP；macOS 使用 DMG。安装包包含 Electron、Node、pnpm 和 DSH runtime，无需另装这些开发工具。自行构建见[贡献指南](../CONTRIBUTING.md)。
 
-未初始化的 profile 会先显示 Setup Wizard，可选择窗口模式、材质、市场、通知、浏览器和网络范围，也可以跳过。向导结束前不启动主 Host 和窗口。关闭主窗口通常仅隐藏；从托盘重新打开，选择退出才会结束应用。
+未初始化的 profile 会先显示 Setup Wizard，可选择窗口模式、材质、市场、通知、浏览器和网络范围，也可以跳过。向导结束前不启动主 Host 和窗口。每个 Profile 第一次关闭主窗口时会提示应用仍在后台运行；确认后，后续关闭通常仅隐藏。从托盘可重新打开，选择退出才会结束应用；需要重新显示该提示时，可在桌面设置中重置“后台驻留提示”。
 
 ## 数据目录
 

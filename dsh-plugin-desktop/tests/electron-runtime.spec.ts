@@ -1,7 +1,8 @@
-import { readFileSync, unlinkSync } from 'node:fs'
+import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DesktopShellSpec } from '../src/runtime.ts'
+import { desktopBackgroundCloseNoticePath } from '../src/background-close-notice.ts'
 import { desktopTrayLabel } from '../src/tray-locale.ts'
 import { DESKTOP_FRAME_HEIGHT } from '../src/window-chrome.ts'
 
@@ -46,6 +47,7 @@ const childProcess = vi.hoisted(() => {
 })
 
 const MAIN_WINDOW_STATE_PATH = '/tmp/dsh-desktop-user-data/main-window-state.json'
+const BACKGROUND_NOTICE_PATH = desktopBackgroundCloseNoticePath('/tmp/dsh-desktop-user-data', 'desktop')
 const PRODUCT_VERSION = (JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
 ) as { readonly version: string }).version
@@ -56,6 +58,11 @@ function clearMainWindowState(): void {
   } catch (cause) {
     if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause
   }
+}
+
+function acknowledgeBackgroundCloseNotice(): void {
+  mkdirSync(dirname(BACKGROUND_NOTICE_PATH), { recursive: true })
+  writeFileSync(BACKGROUND_NOTICE_PATH, '', { mode: 0o600 })
 }
 
 vi.mock('../src/desktop-terminal.ts', async (importOriginal) => ({
@@ -327,6 +334,7 @@ vi.mock('electron', () => ({
 }))
 
 const spec: DesktopShellSpec = {
+  profileName: 'desktop',
   mode: 'compatibility',
   macosMaterial: 'transparent',
   windowsMaterial: 'off',
@@ -357,6 +365,7 @@ const spec: DesktopShellSpec = {
 describe('Electron desktop runtime', () => {
   beforeEach(() => {
     clearMainWindowState()
+    acknowledgeBackgroundCloseNotice()
     electron.app.isPackaged = false
     electron.browserWindowOptions.length = 0
     electron.browserWindowThemeSources.length = 0
@@ -388,6 +397,7 @@ describe('Electron desktop runtime', () => {
     electron.sessionFetch.mockResolvedValue(new Response(null, { status: 200 }))
     electron.app.getPreferredSystemLanguages.mockReturnValue(['en-US'])
     electron.dialog.showMessageBox.mockResolvedValue({ response: 0, checkboxChecked: false })
+    electron.Notification.isSupported.mockReturnValue(true)
     electron.dialog.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] })
     electron.dialog.showSaveDialog.mockResolvedValue({ canceled: true, filePath: undefined })
     electron.shell.openPath.mockResolvedValue('')
@@ -398,6 +408,7 @@ describe('Electron desktop runtime', () => {
 
   afterEach(() => {
     clearMainWindowState()
+    try { unlinkSync(BACKGROUND_NOTICE_PATH) } catch {}
     vi.useRealTimers()
     vi.restoreAllMocks()
   })
@@ -411,6 +422,7 @@ describe('Electron desktop runtime', () => {
 
     expect(electron.browserWindowOptions).toHaveLength(0)
     await runtime.mountScheduled()
+    runtime.resetBackgroundCloseNotice()
 
     expect(electron.browserWindowOptions).toHaveLength(1)
     const options = electron.browserWindowOptions[0]
@@ -1434,6 +1446,7 @@ describe('Electron desktop runtime', () => {
     const release = runtime.schedule(spec)
 
     await runtime.mountScheduled()
+    runtime.resetBackgroundCloseNotice()
 
     const window = electron.browserWindows[0]
     const ready = window?.once.mock.calls.find(([event]) => event === 'ready-to-show')?.[1]
@@ -1461,13 +1474,26 @@ describe('Electron desktop runtime', () => {
     const closeEvent = { preventDefault: vi.fn() }
     close(closeEvent)
     expect(closeEvent.preventDefault).toHaveBeenCalledOnce()
-    expect(window?.hide).toHaveBeenCalledOnce()
+    await vi.waitFor(() => {
+      expect(electron.dialog.showMessageBox).toHaveBeenCalledWith(window, expect.objectContaining({
+        title: 'ClawClaw is running in the background',
+        buttons: ['Got it'],
+      }))
+    })
+    await vi.waitFor(() => { expect(window?.hide).toHaveBeenCalledOnce() })
+
+    close({ preventDefault: vi.fn() })
+    expect(window?.hide).toHaveBeenCalledTimes(2)
+    runtime.resetBackgroundCloseNotice()
+    close({ preventDefault: vi.fn() })
+    await vi.waitFor(() => { expect(electron.dialog.showMessageBox).toHaveBeenCalledTimes(2) })
+    await vi.waitFor(() => { expect(window?.hide).toHaveBeenCalledTimes(3) })
 
     runtime.prepareToQuit()
     const quittingCloseEvent = { preventDefault: vi.fn() }
     close(quittingCloseEvent)
     expect(quittingCloseEvent.preventDefault).not.toHaveBeenCalled()
-    expect(window?.hide).toHaveBeenCalledOnce()
+    expect(window?.hide).toHaveBeenCalledTimes(3)
 
     await release()
   })
@@ -1647,8 +1673,10 @@ describe('Electron desktop runtime', () => {
 
     const window = electron.browserWindows[0]
     const focus = electron.browserWindowOn.mock.calls.find(([event]) => event === 'focus')?.[1]
+    electron.Notification.isSupported.mockReturnValue(false)
     runtime.notifyAttention({ title: 'Turn Completed', body: 'A direct user turn has finished.' })
     expect(window?.flashFrame).toHaveBeenLastCalledWith(true)
+    expect(electron.notifications).toHaveLength(0)
     expect(focus).toEqual(expect.any(Function))
     focus()
     expect(window?.flashFrame).toHaveBeenLastCalledWith(false)

@@ -190,13 +190,21 @@ headless 验证：`installer-data-retention.spec.ts`、`native-update-installer.
 
 ### 阶段 7（P2）：后台驻留和更新就绪注意力
 
-**状态：待实施**
+**状态：已完成（2026-09-28）**
 
 目标：首次关闭到后台时只提示一次；更新已准备好时通过托盘/窗口状态温和提示，不抢焦点。
 
 - notice 状态按 Profile/产品设置持久化并支持重置。
 - 遵守系统通知权限；无权限时回退到 tray 状态。
 - 不用教学式永久文案，不在每次关闭时重复通知。
+
+已落地：`background-close-notice.ts` 将官方一次性提示状态机适配到 ClawClaw 的 Electron generation。第一次关闭主窗口时，应用在真正隐藏前显示中英文原生提示；重复 close 在对话框期间只重新聚焦窗口，不创建重叠对话框。只有明确确认才在 Electron `userData` 下写入按 Profile 名称 SHA-256 隔离的私有原子 marker；取消、对话框失败或 generation 释放均保持窗口可见。marker 写入失败不会阻断本次已确认的隐藏，但下次启动会再次提示。设置页通过私有同源 API 和 typed Host RPC 提供显式重置，不向 renderer 暴露文件路径。
+
+更新后台检查继续先持久化每版本一次的通知状态，并把官方 update-attention 行为接到 ClawClaw 既有 `notifyAttention`：聚焦窗口完全静默；Windows 闪烁任务栏，其他平台累加应用徽标；系统原生通知仅在 Electron 报告支持时创建，点击只显示应用而不下载或安装。即使原生通知不可用，任务栏/徽标信号仍先执行，更新托盘项也持续显示可用版本，因此权限或平台能力不足不会移除回退路径。普通 `updates.notify` 保留给不需要额外窗口注意力的状态通知。
+
+与官方实现的有意差异：状态按 Profile 而非全局产品键隔离；重置属于 ClawClaw 设置 API；macOS 全屏退出后隐藏的既有状态机保持不变；不引入永久教程文案，不让通知点击触发安装，也不复制官方 shell 或设置结构。
+
+验证：`background-close-notice.spec.ts`、`electron-runtime.spec.ts`、`client-desktop-settings.spec.ts`、`host-runtime-bridge.spec.ts` 和 `updates.spec.ts` 共 156 项通过；完整 typecheck 和生产 build 通过；完整单测 1272 项通过、6 项既有跳过。测试覆盖首次/后续关闭、显式重置、并发 close、取消/失败/释放、Profile 隔离、符号链接目录拒绝、RPC 投影、后台更新去重、聚焦静默，以及系统通知不可用时的任务栏回退。
 
 ## 6. 通用实施流程
 

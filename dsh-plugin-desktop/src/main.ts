@@ -1567,6 +1567,7 @@ async function start(): Promise<void> {
               }
               journal.clear()
             },
+            resetBackgroundCloseNotice: () => { runtime.resetBackgroundCloseNotice() },
           }))
           provideCmdline(hostCtx, {
             args: [

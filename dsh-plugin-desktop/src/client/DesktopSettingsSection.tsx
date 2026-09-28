@@ -54,7 +54,7 @@ export type DesktopSettingsSectionProps =
   & InjectFace<DesktopSettingsSectionInjected>
 
 type Translate = DesktopSettingsSectionProps['t']
-type BusyOperation = 'load' | 'create-profile' | 'select-profile' | 'delete-profile' | 'select-aa' | 'select-market' | 'mode' | 'material' | 'web' | 'notification' | 'update-journal'
+type BusyOperation = 'load' | 'create-profile' | 'select-profile' | 'delete-profile' | 'select-aa' | 'select-market' | 'mode' | 'material' | 'web' | 'notification' | 'update-journal' | 'background-notice'
 type RestartState = 'none' | 'restarting' | 'required'
 type LanPollWait = (signal: AbortSignal) => Promise<void>
 
@@ -316,6 +316,7 @@ export function DesktopSettingsSection({
   const [pendingProfileDelete, setPendingProfileDelete] = useState<string>()
   const [confirmLan, setConfirmLan] = useState(false)
   const [journalCleared, setJournalCleared] = useState(false)
+  const [backgroundNoticeReset, setBackgroundNoticeReset] = useState(false)
   const lanPoll = useRef<AbortController>()
 
   const refreshView = useCallback(async () => {
@@ -393,6 +394,13 @@ export function DesktopSettingsSection({
     void run('update-journal', async () => {
       await api.clearUpdateJournal()
       setJournalCleared(true)
+    })
+  }
+
+  const resetBackgroundNotice = (): void => {
+    void run('background-notice', async () => {
+      await api.resetBackgroundCloseNotice()
+      setBackgroundNoticeReset(true)
     })
   }
 
@@ -773,6 +781,20 @@ export function DesktopSettingsSection({
             disabled={!notificationValue.enabled || !notificationsWritable || busy !== undefined}
             onChange={checked => { setNotification('notifyOnJobFailure', checked) }}
           />
+        </div>
+      </section>
+      <section className="dshDesktopSettingsGroup" aria-labelledby="dsh-desktop-background-title">
+        <h3 id="dsh-desktop-background-title">{t('backgroundNoticeTitle')}</h3>
+        <div>
+          <button
+            type="button"
+            className="dshDesktopSettingsHeaderButton"
+            disabled={busy !== undefined}
+            onClick={resetBackgroundNotice}
+          >
+            {t(busy === 'background-notice' ? 'resettingBackgroundNotice' : 'resetBackgroundNotice')}
+          </button>
+          {backgroundNoticeReset && <span role="status">{t('backgroundNoticeReset')}</span>}
         </div>
       </section>
       <section className="dshDesktopSettingsGroup" aria-labelledby="dsh-desktop-update-journal-title">

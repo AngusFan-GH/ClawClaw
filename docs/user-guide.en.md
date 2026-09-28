@@ -6,7 +6,7 @@
 
 Use artifacts actually published in [ClawClaw Releases](https://github.com/AngusFan-GH/ClawClaw/releases). Windows x64 uses NSIS or a portable ZIP; macOS uses a DMG. Installers contain Electron, Node, pnpm, and the DSH runtime. See [Contributing](../CONTRIBUTING.en.md) to build from source.
 
-An uninitialized profile first opens Setup Wizard for mode, material, market, notifications, browser, and network preferences, with a skip option. The main Host and window start after setup finishes. Closing the main window normally hides it; reopen through the tray, or choose Quit to stop the application.
+An uninitialized profile first opens Setup Wizard for mode, material, market, notifications, browser, and network preferences, with a skip option. The main Host and window start after setup finishes. The first close for each Profile explains that the application remains active in the background; after acknowledgement, later closes normally hide the window. Reopen it through the tray, or choose Quit to stop the application. Use "Reset background close notice" in Desktop settings to show the notice again.
 
 ## Data directories
 

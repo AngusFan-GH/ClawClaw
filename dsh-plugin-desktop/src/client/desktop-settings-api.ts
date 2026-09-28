@@ -12,6 +12,7 @@ const RENDERER_RELOAD_PATH = '/api/desktop/developer/reload'
 const DEVELOPER_TOOLS_TOGGLE_PATH = '/api/desktop/developer/devtools'
 const UPDATE_CHECK_PATH = '/api/desktop/updates/check'
 const UPDATE_JOURNAL_CLEAR_PATH = '/api/desktop/updates/journal/clear'
+const BACKGROUND_NOTICE_RESET_PATH = '/api/desktop/background-notice/reset'
 const DIAGNOSTICS_EXPORT_PATH = '/api/desktop/diagnostics/export'
 const MAX_PROFILES = 256
 const MAX_PROFILE_NAME_LENGTH = 255
@@ -82,6 +83,7 @@ export interface DesktopSettingsApi {
   toggleDeveloperTools(): Promise<void>
   checkForUpdates(): Promise<void>
   clearUpdateJournal(): Promise<void>
+  resetBackgroundCloseNotice(): Promise<void>
   exportDiagnostics(): Promise<void>
 }
 
@@ -348,6 +350,9 @@ export function createDesktopSettingsApi(fetcher: FetchLike = globalThis.fetch.b
     async clearUpdateJournal() {
       parseDesktopActionAcceptance(await readResponse(await post(fetcher, UPDATE_JOURNAL_CLEAR_PATH, {})))
     },
+    async resetBackgroundCloseNotice() {
+      parseDesktopActionAcceptance(await readResponse(await post(fetcher, BACKGROUND_NOTICE_RESET_PATH, {})))
+    },
     async exportDiagnostics() {
       parseDesktopActionAcceptance(await readResponse(await post(fetcher, DIAGNOSTICS_EXPORT_PATH, {})))
     },
@@ -367,5 +372,6 @@ export const desktopSettingsPaths = Object.freeze({
   developerToolsToggle: DEVELOPER_TOOLS_TOGGLE_PATH,
   updateCheck: UPDATE_CHECK_PATH,
   updateJournalClear: UPDATE_JOURNAL_CLEAR_PATH,
+  backgroundNoticeReset: BACKGROUND_NOTICE_RESET_PATH,
   diagnosticsExport: DIAGNOSTICS_EXPORT_PATH,
 })

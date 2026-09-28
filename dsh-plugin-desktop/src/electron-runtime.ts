@@ -53,6 +53,7 @@ import {
   resolveDesktopUpdateArtifact,
 } from './update-download.ts'
 import { getNativeUpdater, stageNativeUpdate } from './native-update-installer.ts'
+import { desktopBackgroundCloseNoticePath } from './background-close-notice.ts'
 import type { UpdateCheckResult } from './update-checker.ts'
 import type { DesktopInstallationId } from './desktop-installation-id.ts'
 import { DESKTOP_RELEASE_CHANNEL } from './product-identity.ts'
@@ -161,6 +162,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       showUpdateFailure: reason => this.showUpdateFailure(reason),
       downloadAndOpen: (version, signal, channel) => this.downloadAndOpenUpdate(version, signal, channel),
       notify: notification => { this.showNotification(notification) },
+      notifyAttention: notification => { this.notifyAttention(notification) },
     }
   }
 
@@ -253,6 +255,10 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
         rendererRecoveryCopy: () => rendererRecoveryCopy[this.currentLocale],
         logError: message => { this.logError(message) },
         mainWindowState: this.mainWindowState,
+        backgroundCloseNoticePath: desktopBackgroundCloseNoticePath(
+          app.getPath('userData'),
+          spec.profileName,
+        ),
         chromeActions: {
           locale: () => this.locale,
           version: PRODUCT_VERSION,
@@ -290,6 +296,11 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   /** @inheritdoc */
   notifyAttention(notification: DesktopNotification): void {
     this.generation?.notifyAttention(notification)
+  }
+
+  /** @inheritdoc */
+  resetBackgroundCloseNotice(): void {
+    this.generation?.resetBackgroundCloseNotice()
   }
 
   /** @inheritdoc */

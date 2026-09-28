@@ -37,6 +37,9 @@ export const DESKTOP_UPDATE_CHECK_PATH = '/api/desktop/updates/check'
 /** Clear bounded local update-qualification evidence. */
 export const DESKTOP_UPDATE_JOURNAL_CLEAR_PATH = '/api/desktop/updates/journal/clear'
 
+/** Reset the active Profile's one-time background-close acknowledgement. */
+export const DESKTOP_BACKGROUND_NOTICE_RESET_PATH = '/api/desktop/background-notice/reset'
+
 /** Export one local diagnostic archive through the launcher-owned flow. */
 export const DESKTOP_DIAGNOSTICS_EXPORT_PATH = '/api/desktop/diagnostics/export'
 
@@ -178,6 +181,12 @@ export interface DesktopUpdateCheckResponse {
 export type DesktopUpdateJournalClearRequest = Readonly<Record<string, never>>
 
 export interface DesktopUpdateJournalClearResponse {
+  readonly accepted: true
+}
+
+export type DesktopBackgroundNoticeResetRequest = Readonly<Record<string, never>>
+
+export interface DesktopBackgroundNoticeResetResponse {
   readonly accepted: true
 }
 

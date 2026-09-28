@@ -4,7 +4,7 @@ import { readDesktopReleaseBody } from './update-checker.ts'
 import { HostRpc } from './host-rpc.ts'
 
 export type RuntimeSnapshot = Pick<DesktopRuntime, 'platform' | 'windowsBuild' | 'locale'> & {
-  updates: Omit<DesktopUpdateAdapter, 'request' | 'confirmDownload' | 'showManualCheckResult' | 'showUpdateFailure' | 'downloadAndOpen' | 'notify'>
+  updates: Omit<DesktopUpdateAdapter, 'request' | 'confirmDownload' | 'showManualCheckResult' | 'showUpdateFailure' | 'downloadAndOpen' | 'notify' | 'notifyAttention'>
 }
 export function runtimeSnapshot(runtime: DesktopRuntime): RuntimeSnapshot {
   const {
@@ -56,6 +56,7 @@ export function createHostRuntime(rpc: HostRpc, snapshot: RuntimeSnapshot): Desk
       showUpdateFailure: reason => send('update:showUpdateFailure', [reason]),
       downloadAndOpen: (version, signal, channel) => send('update:downloadAndOpen', [version, channel], signal),
       notify: notification => { void send('update:notify', [notification]) },
+      notifyAttention: notification => { void send('update:notifyAttention', [notification]) },
     },
     schedule(spec) {
       const callback = callbacks({ quit: spec.requestQuit, mode: spec.requestModeChange,
@@ -95,6 +96,7 @@ export function createHostRuntime(rpc: HostRpc, snapshot: RuntimeSnapshot): Desk
     },
     show() { void send('native:show') },
     notifyAttention(value) { void send('native:notifyAttention', [value]) },
+    resetBackgroundCloseNotice() { void send('native:resetBackgroundCloseNotice') },
     openTerminal() { void send('native:openTerminal') },
     reloadRenderer() { void send('native:reloadRenderer') },
     toggleDeveloperTools() { void send('native:toggleDeveloperTools') },
@@ -129,7 +131,7 @@ export function bindNativeRuntime(rpc: HostRpc, runtime: DesktopRuntime): () => 
   const report = (promise: Promise<unknown>) => { void promise.catch(error => process.stderr.write(`${String(error)}\n`)) }
   for (const method of ['show', 'notifyAttention', 'openTerminal', 'reloadRenderer', 'toggleDeveloperTools',
     'exportDiagnostics', 'pickDirectory', 'validateDirectory', 'reportRendererBoot', 'setLocalePreference',
-    'setThemeSource', 'prepareToQuit'] as const) {
+    'setThemeSource', 'prepareToQuit', 'resetBackgroundCloseNotice'] as const) {
     handle(`native:${method}`, args => (runtime[method] as (...args: any[]) => unknown).apply(runtime, args))
   }
   // Acknowledge restart before teardown can close the channel used by this call.
@@ -173,6 +175,7 @@ export function bindNativeRuntime(rpc: HostRpc, runtime: DesktopRuntime): () => 
   handle('update:showUpdateFailure', ([reason]) => runtime.updates.showUpdateFailure(reason))
   handle('update:downloadAndOpen', ([version, channel], signal) => runtime.updates.downloadAndOpen(version, signal, channel))
   handle('update:notify', ([value]) => runtime.updates.notify(value))
+  handle('update:notifyAttention', ([value]) => runtime.updates.notifyAttention(value))
   return async () => {
     trays.forEach(tray => tray.dispose()); trays.clear()
     await Promise.all([...shells.values()].map(dispose => dispose())); shells.clear(); preferences.clear()

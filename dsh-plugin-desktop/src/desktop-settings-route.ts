@@ -489,6 +489,29 @@ export async function handleDesktopUpdateJournalClearRequest(
   }
 }
 
+/** Reset the active Profile's background-close acknowledgement. */
+export async function handleDesktopBackgroundNoticeResetRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  expectedOrigin: string,
+  controller: DesktopSettingsController,
+  reportError: (operation: string, cause: unknown) => void = () => {},
+): Promise<void> {
+  if (req.method !== 'POST') return finishJson(res, 405, error('method not allowed'), 'POST')
+  if (!isSameOriginLoopbackRequest(req, expectedOrigin, true)) {
+    return finishJson(res, 403, error('forbidden'))
+  }
+  const value = await parsePostBody(req, res)
+  if (value === INVALID_BODY) return
+  if (!isEmptyRequest(value)) return finishJson(res, 400, error('invalid background notice reset request'))
+  try {
+    finishJson(res, 200, await controller.resetBackgroundCloseNotice())
+  } catch (cause) {
+    reportError('reset background notice', cause)
+    finishJson(res, 500, error('background notice could not be reset'))
+  }
+}
+
 export const desktopSettingsRouteConstants = Object.freeze({
   maxBodyBytes: MAX_SETTINGS_BODY_BYTES,
 })

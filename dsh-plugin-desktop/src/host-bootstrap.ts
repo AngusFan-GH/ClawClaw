@@ -229,6 +229,7 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
             }
             journal.clear()
           },
+          resetBackgroundCloseNotice: () => { runtime.resetBackgroundCloseNotice() },
         }))
         provideCmdline(hostCtx, {
           args: [

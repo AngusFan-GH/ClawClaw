@@ -16,6 +16,7 @@ import {
 } from '../src/window-chrome.ts'
 
 const spec: DesktopShellSpec = {
+  profileName: 'desktop',
   mode: 'compatibility',
   macosMaterial: 'transparent',
   windowsMaterial: 'off',

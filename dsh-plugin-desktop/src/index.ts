@@ -40,6 +40,7 @@ import {
   DESKTOP_SETTINGS_PATH,
   DESKTOP_TERMINAL_OPEN_PATH,
   DESKTOP_UPDATE_JOURNAL_CLEAR_PATH,
+  DESKTOP_BACKGROUND_NOTICE_RESET_PATH,
 } from './desktop-settings-contract.ts'
 import {
   handleDesktopDiagnosticsExportRequest,
@@ -54,6 +55,7 @@ import {
   handleDesktopSettingsRequest,
   handleDesktopTerminalOpenRequest,
   handleDesktopUpdateJournalClearRequest,
+  handleDesktopBackgroundNoticeResetRequest,
 } from './desktop-settings-route.ts'
 import type {} from './desktop-settings-controller.ts'
 import { DESKTOP_LAN_HTTPS_CA_PATH } from './lan-https-runtime.ts'
@@ -315,6 +317,7 @@ export function apply(ctx: Context, config: Config): void {
       [DESKTOP_DEVELOPER_TOOLS_TOGGLE_PATH, handleDesktopDeveloperToolsToggleRequest],
       [DESKTOP_DIAGNOSTICS_EXPORT_PATH, handleDesktopDiagnosticsExportRequest],
       [DESKTOP_UPDATE_JOURNAL_CLEAR_PATH, handleDesktopUpdateJournalClearRequest],
+      [DESKTOP_BACKGROUND_NOTICE_RESET_PATH, handleDesktopBackgroundNoticeResetRequest],
     ] as const
     for (const [path, handler] of settingsRoutes) {
       ctx.effect(
@@ -474,6 +477,7 @@ export function apply(ctx: Context, config: Config): void {
       )
       return runtime.schedule({
         ...config,
+        profileName: ctx.get('profileContext')?.name ?? 'desktop',
         material,
         ...(runtime.windowsBuild === undefined ? {} : { windowsBuild: runtime.windowsBuild }),
         url,

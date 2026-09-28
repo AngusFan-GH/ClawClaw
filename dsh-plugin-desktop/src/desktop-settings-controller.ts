@@ -22,6 +22,7 @@ import type {
   DesktopSettingsWebView,
   DesktopTerminalOpenResponse,
   DesktopUpdateJournalClearResponse,
+  DesktopBackgroundNoticeResetResponse,
 } from './desktop-settings-contract.ts'
 
 /** Launcher capabilities used without exposing their filesystem roots. */
@@ -48,6 +49,8 @@ export interface DesktopSettingsControllerBootstrap {
   exportDiagnostics(): void | Promise<void>
   /** Clear only recognized local update qualification evidence. */
   clearUpdateJournal(): void | Promise<void>
+  /** Reset the active Profile's background-close acknowledgement. */
+  resetBackgroundCloseNotice(): void | Promise<void>
 }
 
 /** A persisted response plus work that must run only after `res.end()`. */
@@ -200,6 +203,11 @@ export class DesktopSettingsController {
 
   async clearUpdateJournal(): Promise<DesktopUpdateJournalClearResponse> {
     await this.bootstrap.clearUpdateJournal()
+    return Object.freeze({ accepted: true })
+  }
+
+  async resetBackgroundCloseNotice(): Promise<DesktopBackgroundNoticeResetResponse> {
+    await this.bootstrap.resetBackgroundCloseNotice()
     return Object.freeze({ accepted: true })
   }
 }

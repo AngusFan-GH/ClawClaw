@@ -190,13 +190,21 @@ Headless verification: 107 tests across `installer-data-retention.spec.ts`, `nat
 
 ### Phase 7 (P2): background residency and update-ready attention
 
-**Status: Not started**
+**Status: Complete (2026-09-28)**
 
 Goal: notify once when the window first closes to the background; signal a prepared update through tray/window state without stealing focus.
 
 - Persist notice state per product/Profile setting and support reset.
 - Respect system notification permission; fall back to tray state.
 - Do not show permanent tutorial copy or repeat a notice on every close.
+
+Delivered implementation: `background-close-notice.ts` adapts the official one-time notice state machine to ClawClaw's Electron generation. The first close of the main window presents a localized native notice before the window actually hides. Repeated close requests while the dialog is pending only refocus the window instead of opening overlapping dialogs. Only explicit acknowledgement writes a private atomic marker beneath Electron `userData`, isolated by a SHA-256 digest of the Profile name. Cancellation, dialog failure, or generation disposal leaves the window visible. A marker-write failure does not block the currently acknowledged hide, but the notice returns on the next launch. Settings expose an explicit reset through the private same-origin API and typed Host RPC without revealing the marker path to the renderer.
+
+Background update checks still persist their once-per-version announcement state first, then route the official update-attention behavior through ClawClaw's existing `notifyAttention`. A focused window stays completely quiet. Windows flashes the taskbar, while other platforms increment the application badge. A native system notification is created only when Electron reports support, and clicking it only reveals the application; it never downloads or installs. Taskbar/badge attention runs before the support check, and the update tray item continues to show the available version, so missing notification capability does not remove the fallback. Ordinary `updates.notify` remains available for status notices that do not require additional window attention.
+
+Intentional differences from upstream: state is isolated per Profile rather than by one product-global key; reset belongs to the ClawClaw settings API; the existing macOS fullscreen-exit-before-hide state machine is retained; no permanent tutorial copy is added; notification clicks cannot start installation; and no official shell or settings structure is copied.
+
+Verification: 156 focused tests across `background-close-notice.spec.ts`, `electron-runtime.spec.ts`, `client-desktop-settings.spec.ts`, `host-runtime-bridge.spec.ts`, and `updates.spec.ts`; complete typecheck and production build; complete unit suite with 1272 passing and 6 existing skips. Coverage includes first/subsequent close, explicit reset, concurrent close requests, cancellation/failure/disposal, Profile isolation, symlink-directory rejection, RPC projection, background update deduplication, focused-window silence, and taskbar fallback when system notifications are unavailable.
 
 ## 6. Common implementation workflow
 

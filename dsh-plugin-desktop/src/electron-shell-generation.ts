@@ -17,6 +17,7 @@ import { showDesktopMessageBox } from './desktop-dialog-window.ts'
 import { applicationNeedsReveal, revealApplication } from './electron-reveal.ts'
 import type { ElectronPlatformStrategy } from './electron-platform.ts'
 import type { DesktopNotification, DesktopShellSpec } from './runtime.ts'
+import { DesktopBackgroundCloseNotice } from './background-close-notice.ts'
 import { prepareTrayIcon } from './tray-icons.ts'
 import { desktopWindowOptions } from './window-options.ts'
 import type { DesktopRestartConfirmationCopy } from './tray-locale.ts'
@@ -177,6 +178,7 @@ export interface ElectronShellGenerationOptions {
   readonly rendererRecoveryCopy: () => DesktopRestartConfirmationCopy
   readonly logError: (message: string) => void
   readonly mainWindowState: MainWindowStateStore
+  readonly backgroundCloseNoticePath: string
   readonly chromeActions: CompatibilityShellActions
 }
 
@@ -201,12 +203,25 @@ export class ElectronShellGeneration {
   private readonly rendererRecovery: DesktopRendererRecovery
   private rendererRecoveryPending = false
   private readonly surfaceWatchdog: RendererSurfaceWatchdog
+  private readonly backgroundCloseNotice: DesktopBackgroundCloseNotice
   private unresponsiveRenderer = false
   private expectedRendererCrash = false
   private recoveryContentLoaded = false
   private recoveryChromeLoaded = false
 
   constructor(private readonly options: ElectronShellGenerationOptions) {
+    this.backgroundCloseNotice = new DesktopBackgroundCloseNotice({
+      markerPath: options.backgroundCloseNoticePath,
+      locale: () => options.spec.readLocalePreference() ?? 'en',
+      show: async dialogOptions => {
+        const window = this.window
+        return window === undefined || window.isDestroyed()
+          ? await dialog.showMessageBox(dialogOptions)
+          : await dialog.showMessageBox(window, dialogOptions)
+      },
+      focus: () => { this.show() },
+      warn: message => { options.logError(message) },
+    })
     this.rendererRecovery = new DesktopRendererRecovery({
       available: () => !this.released && !this.options.isQuitting()
         && this.window !== undefined && !this.window.isDestroyed(),
@@ -380,10 +395,7 @@ export class ElectronShellGeneration {
       restoreFullscreenOnShow = false
     }
     this.prepareFullscreenReveal = prepareFullscreenReveal
-    const close = (event: Electron.Event): void => {
-      persistWindowState()
-      if (this.options.isQuitting()) return
-      event.preventDefault()
+    const hide = (): void => {
       if (platform.platform === 'darwin' && fullscreenExitPending) {
         hideAfterFullscreenExit = true
         restoreAfterFullscreenExit = false
@@ -398,6 +410,12 @@ export class ElectronShellGeneration {
         return
       }
       window.hide()
+    }
+    const close = (event: Electron.Event): void => {
+      persistWindowState()
+      if (this.options.isQuitting()) return
+      event.preventDefault()
+      this.backgroundCloseNotice.close(hide)
     }
     const preserveBlankTitle = (event: Electron.Event): void => { event.preventDefault() }
     const handleZoomShortcut = (event: Electron.Event, input: Electron.Input): void => {
@@ -671,6 +689,10 @@ export class ElectronShellGeneration {
     nativeNotification.show()
   }
 
+  resetBackgroundCloseNotice(): void {
+    this.backgroundCloseNotice.reset()
+  }
+
   async showOpenDialog(options: Electron.OpenDialogOptions): Promise<Electron.OpenDialogReturnValue> {
     const window = this.window
     return window === undefined || window.isDestroyed()
@@ -706,6 +728,7 @@ export class ElectronShellGeneration {
     if (this.released) return
     this.released = true
     this.surfaceWatchdog.stop()
+    this.backgroundCloseNotice.dispose()
     this.rendererRecovery.stop()
     this.options.stopRendererBootMonitoring()
 

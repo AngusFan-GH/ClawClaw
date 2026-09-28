@@ -131,6 +131,8 @@ export interface DesktopUpdateAdapter {
   ): Promise<DesktopUpdateHandoffResult | void>
   /** Present a native status notification without blocking the Host tree. */
   notify(notification: DesktopNotification): void
+  /** Request non-focusing taskbar/tray attention for an update while backgrounded. */
+  notifyAttention(notification: DesktopNotification): void
 }
 
 export interface DesktopUpdateHandoffResult {
@@ -150,6 +152,8 @@ export interface DesktopTerminalSpec {
 
 /** Values the desktop-shell plugin hands to the Electron adapter. */
 export interface DesktopShellSpec extends DesktopWindowConfig {
+  /** Active Profile used to isolate product-owned shell acknowledgement state. */
+  profileName: string
   /** Actual material after platform and Windows-build capability gating. */
   material: DesktopWindowMaterial
   /** Windows build used for material capability reporting, when applicable. */
@@ -212,6 +216,9 @@ export interface DesktopRuntime {
 
   /** Request native attention for background activity while the window is unfocused. */
   notifyAttention(notification: DesktopNotification): void
+
+  /** Reset the active Profile's first-close background notice. */
+  resetBackgroundCloseNotice(): void
 
   /**
    * Contribute one command to the native tray for the current Cordis lifetime.
