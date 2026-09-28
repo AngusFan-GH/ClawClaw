@@ -11,6 +11,8 @@ import {
 } from '@deepseek-ai/dsh-client-locale'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-client-connection'
+import type {} from '@deepseek-ai/dsh-session-projection-cache'
+import type {} from '@deepseek-ai/dsh-session-query'
 import {
   THEME_SETTINGS_NAMESPACE,
   type ThemeSettings,
@@ -81,13 +83,15 @@ import {
   windowsSupportsMica,
 } from './window-material.ts'
 import { DESKTOP_PRODUCT_NAME } from './product-identity.ts'
+import { rebuildLegacyBlankSessionProjections } from './legacy-session-projection-rebuild.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'desktop-shell'
 
-/** Services required before the shell can register its renderer generation. */
 /** Services required by the desktop shell; `desktopRuntime` is probed, not required. */
-export const inject = ['webServer', 'webRuntime', 'appExit', 'settings', 'connection']
+export const inject = [
+  'webServer', 'webRuntime', 'appExit', 'settings', 'connection', 'sessionQuery', 'sessionProjectionCache',
+]
 
 /** Standard settings namespace shared by tray and configuration surfaces. */
 export const DESKTOP_SETTINGS_NAMESPACE = 'dsh-desktop'
@@ -216,7 +220,7 @@ export function desktopRendererUrl(
  * @param ctx - Host context carrying the Electron adapter and Web carrier.
  * @param config - validated native window values.
  */
-export function apply(ctx: Context, config: Config): void {
+export async function apply(ctx: Context, config: Config): Promise<void> {
   const runtime = ctx.get('desktopRuntime')
   if (runtime === undefined) {
     process.stderr.write(
@@ -240,6 +244,31 @@ export function apply(ctx: Context, config: Config): void {
   }
   if (ctx.webServer.host !== desktopWebServerHost(config.networkExposure)) {
     throw new Error('dsh-plugin-desktop: desktop shell WebServer host does not match networkExposure')
+  }
+  const homeDir = process.env.DSH_HOME
+  if (homeDir !== undefined) {
+    try {
+      const repaired = await rebuildLegacyBlankSessionProjections(homeDir, {
+        readSession: sessionId => ctx.sessionQuery.readSession(sessionId),
+        hasCurrentProjection: header => ctx.sessionProjectionCache.cachedSnapshot(header) !== undefined,
+        rebuildProjection: log => {
+          ctx.sessionProjectionCache.coldSnapshot(log.session, log.inheritedEventCount, log.events)
+        },
+      }, {
+        warn: message => { ctx.logger.warn(`dsh-plugin-desktop: legacy projection rebuild: ${message}`) },
+      })
+      if (repaired.candidates > 0) {
+        ctx.logger.info(
+          `dsh-plugin-desktop: legacy projection rebuild examined ${String(repaired.candidates)} candidate(s): `
+          + `${String(repaired.rebuilt)} rebuilt, ${String(repaired.alreadyCurrent)} already current, `
+          + `${String(repaired.mismatched)} lifecycle mismatch, ${String(repaired.failed)} failed`,
+        )
+      }
+    } catch (cause) {
+      ctx.logger.warn(
+        `dsh-plugin-desktop: legacy projection rebuild skipped: ${cause instanceof Error ? cause.message : String(cause)}`,
+      )
+    }
   }
   lanHttps.attach(ctx.webServer.port)
   const iconFilename = process.platform === 'darwin' ? 'app-icon-mac.png' : 'app-icon.png'

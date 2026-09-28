@@ -184,6 +184,17 @@ try {
       })
       host.provide('webRuntime', {})
       host.provide('appExit', () => {})
+      host.provide('sessionQuery', {
+        async readSession() {
+          throw new Error('loader smoke must not read a Session without a projection-cache candidate')
+        },
+      })
+      host.provide('sessionProjectionCache', {
+        cachedSnapshot() { return undefined },
+        coldSnapshot() {
+          throw new Error('loader smoke must not rebuild a projection without a projection-cache candidate')
+        },
+      })
       host.provide('settings', {
         register() {
           return {

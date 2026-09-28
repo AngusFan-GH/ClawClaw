@@ -204,3 +204,24 @@ git -C deepseek-harness status --short
 
 普通 headless 门禁不会启动 GUI，也不替代 Windows/macOS 的签名、真实安装器和平台原生 smoke；
 这些仍属于发布前 qualification。
+
+### 8.4 旧空会话 projection cache 修复
+
+0.1.7 把 Session 日志从 V3 提升到 V4 后，列表只允许从 predecessor projection cache 继承
+跨格式稳定的 `title`，不继承 `sessionListMetadata.blank`。因此未重新生成当前检查点的旧空会话会按
+`blank=false` 显示；其标题缺失时，客户端继续回退到工作目录 basename，默认工作区中表现为大量
+`default` 行。
+
+Desktop 在 Host 暴露列表前执行一次幂等修复：只把旧缓存中明确记录 `blank=true` 且没有 durable
+title 的条目作为候选，再通过 `sessionQuery.readSession()` 读取并迁移权威日志，使用当前
+`sessionProjectionCache.coldSnapshot()` 完整重算投影。旧缓存不决定最终 blank 值；生命周期 identity
+不匹配、已存在当前检查点或读取失败的条目均不改写。修复只替换可丢弃的 projection cache，不修改
+Session 日志、Workspace registry、标题或附件。每条写入完成后才处理下一条；进程中断时已完成部分
+保持有效，剩余 predecessor 条目会在下次启动继续处理。
+
+回归覆盖以下边界：
+
+- predecessor blank 且无 title 才进入候选集；有标题、非 blank、当前格式、符号链接和非标准文件名跳过；
+- 候选 identity 必须与迁移后的当前 Session header 的 id、创建时间、cwd 和 seeded 状态一致；
+- 当前缓存已经存在时不重写；单条读取或写入失败只告警并继续，不能阻断 Desktop 启动；
+- 修复后所有桌面模式继续消费官方 Session list，无 Client store 或 UI 过滤覆盖。
