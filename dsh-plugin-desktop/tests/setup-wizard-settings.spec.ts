@@ -1,5 +1,6 @@
 import {
   lstatSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -14,6 +15,7 @@ import { parseDocument } from 'yaml'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   defaultDesktopSetupWizardSettings,
+  importLegacyDesktopSetupWizardSettings,
   migrateDesktopBrowserAccessSettings,
   migrateDesktopWindowMaterialSettings,
   readDesktopSetupWizardSettings,
@@ -134,6 +136,66 @@ describe('Desktop Setup Wizard settings document', () => {
     expect(readDesktopSetupWizardSettings(path)).toEqual(next)
     expect(readdirSync(root)).toEqual(['settings.yaml'])
     if (process.platform !== 'win32') expect(statSync(path).mode & 0o777).toBe(0o600)
+  })
+
+  it('updates 0.1.7 Profile rows while preserving unrelated patches, comments, and JavaScript tags', async () => {
+    const root = temporaryDirectory()
+    const profile = join(root, 'profiles', 'desktop')
+    const path = join(profile, 'cordis.patch.yml')
+    mkdirSync(profile, { recursive: true })
+    writeFileSync(path, [
+      '# profile owner comment',
+      '- id: unrelated',
+      '  config:',
+      '    path: !!js process.cwd()',
+      '- id: desktop-shell',
+      '  config:',
+      '    mode: extended',
+      '    futureField: preserved',
+      '- id: desktop-notifications',
+      '  config:',
+      '    futureNotification: keep',
+      '',
+    ].join('\n'))
+
+    const next = values({ windowsMaterial: 'off' })
+    await updateDesktopSetupWizardSettings(path, next)
+
+    const text = readFileSync(path, 'utf8')
+    expect(text).toContain('# profile owner comment')
+    expect(text).toContain('path: !!js process.cwd()')
+    expect(text).toContain('futureField: preserved')
+    expect(text).toContain('futureNotification: keep')
+    expect(readDesktopSetupWizardSettings(path)).toEqual(next)
+  })
+
+  it('seeds an empty Profile patch from legacy settings without consuming the upstream import file', async () => {
+    const root = temporaryDirectory()
+    const profile = join(root, 'profiles', 'desktop')
+    const path = join(profile, 'cordis.patch.yml')
+    mkdirSync(profile, { recursive: true })
+    writeFileSync(path, '[]\n')
+    writeFileSync(join(root, 'settings.yaml'), [
+      'dsh-desktop:',
+      '  mode: extended',
+      '  macosMaterial: off',
+      '  windowsMaterial: mica',
+      '  openBrowser: false',
+      '  networkExposure: loopback',
+      'dsh-desktop-notifications:',
+      '  enabled: false',
+      '',
+    ].join('\n'))
+
+    expect(readDesktopSetupWizardSettings(path)).toMatchObject({ mode: 'extended', windowsMaterial: 'mica' })
+    await expect(importLegacyDesktopSetupWizardSettings(path)).resolves.toBe(true)
+    await expect(importLegacyDesktopSetupWizardSettings(path)).resolves.toBe(false)
+    expect(readDesktopSetupWizardSettings(path)).toMatchObject({
+      mode: 'extended',
+      windowsMaterial: 'mica',
+      notifications: { enabled: false },
+    })
+    expect(readFileSync(join(root, 'settings.yaml'), 'utf8')).toContain('dsh-desktop:')
   })
 
   it('creates and updates JSON without dropping unrelated namespaces or unknown leaves', async () => {

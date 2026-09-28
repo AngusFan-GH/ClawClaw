@@ -103,10 +103,12 @@ export const REQUIRED_DSH_CLI_RUNTIME_ENTRIES = Object.freeze(
     .sort(),
 )
 
-/** PTC preset inputs selected by upstream's historical Session migration. */
+/** Declarative preset inputs composed by the upstream Web bundle. */
 export const REQUIRED_AGENT_PRESET_RUNTIME_ENTRIES = [
-  'node_modules/@deepseek-ai/dsh-agent-presets/presets/ptc/agent.cordis.yml',
-  'node_modules/@deepseek-ai/dsh-agent-presets/presets/ptc/preset.yml',
+  'node_modules/@deepseek-ai/dsh-web-app/presets/standard.patch.yml',
+  'node_modules/@deepseek-ai/dsh-web-app/presets/ptc.patch.yml',
+  'node_modules/@deepseek-ai/dsh-web-app/presets/minimal.patch.yml',
+  'node_modules/@deepseek-ai/dsh-web-app/presets/cordis.patch.yml',
 ] as const
 
 /** AfterPack fields consumed without importing Electron Builder's incomplete declaration graph. */

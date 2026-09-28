@@ -227,6 +227,20 @@ describe('desktop Cron task controller', () => {
     controller.dispose()
   })
 
+  it('does not rewrite an already normalized registry during startup', async () => {
+    const replace = vi.fn(async () => {})
+    const controller = new CronTaskController(
+      { workspaceRegistry: { list: () => [] } } as never,
+      { get: () => ({ jobs: [] }), replace },
+    )
+
+    controller.start()
+    await controller.read()
+
+    expect(replace).not.toHaveBeenCalled()
+    await controller.dispose()
+  })
+
   it('recovers saved schedules and runs a due task once after the next firing time', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-09-18T09:00:10Z'))

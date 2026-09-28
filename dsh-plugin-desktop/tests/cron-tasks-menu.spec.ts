@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', async () => {
   const React = await import('react')
   return {
-    IconChevronDownOutline14: (props: object) => React.createElement('svg', props),
+    IconChevronDownOutlineMedium: (props: object) => React.createElement('svg', props),
     Menu: ({ open, anchor, items, onSelect }: {
       open: boolean
       anchor: ReactNode

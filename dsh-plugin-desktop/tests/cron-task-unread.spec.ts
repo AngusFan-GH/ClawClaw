@@ -22,17 +22,17 @@ function memoryStorage(initial?: readonly string[]) {
   }
 }
 
-function sessionState(current?: string, completed = false) {
+function sessionState(current?: string, _completed = false) {
   const id = SessionId('cron-1')
   return {
-    ids: [id], byId: { [id]: { id, displayTitle: 'Report', running: false, completed, blank: false, updatedAt: 1 } },
-    current: current === undefined ? undefined : SessionId(current), phase: 'ready' as const,
-    subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
+    ids: [id], byId: { [id]: { id, displayTitle: 'Report', running: false, blank: false, updatedAt: 1,
+      retainedBy: current === id ? { mainView: 1 } : {} } },
+    phase: 'ready' as const, projectionsBySession: {},
   }
 }
 
 function workspaceState(archivedSessionIds: readonly string[] = []) {
-  return { items: [], archivedSessionIds: archivedSessionIds.map(SessionId), state: 'idle' as const,
+  return { items: [], archivedSessionIds: archivedSessionIds.map(SessionId), pinnedSessionIds: [], state: 'idle' as const,
     phase: 'ready' as const, error: null }
 }
 

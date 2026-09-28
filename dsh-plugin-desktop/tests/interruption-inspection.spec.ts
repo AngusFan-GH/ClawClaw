@@ -8,8 +8,8 @@ import {
 
 function fixture() {
   const agents = [
-    { status: 'idle', inbox: { nextTurn: [{}], nextStep: [] } },
-    { status: 'running', inbox: { nextTurn: [], nextStep: [{}, {}] } },
+    { id: 'idle-agent', status: 'idle', inbox: { nextTurn: [{}], nextStep: [] } },
+    { id: 'running-agent', status: 'running', inbox: { nextTurn: [], nextStep: [{}, {}] } },
   ]
   const cron = { interruptionState: vi.fn(async () => ({ running: 1, scheduled: 3 })) }
   const jobs = {

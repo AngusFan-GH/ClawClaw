@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { JobId, JobSnapshot } from '@deepseek-ai/dsh-jobs'
+import type { JobId, JobView } from '@deepseek-ai/dsh-jobs'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import { describe, expect, it, vi } from 'vitest'
 import {
@@ -19,7 +19,7 @@ interface NotificationHarness {
   readonly registerSettings: ReturnType<typeof vi.fn>
   readonly stopJobs: ReturnType<typeof vi.fn>
   readonly stopSessions: ReturnType<typeof vi.fn>
-  jobDone(snapshot: JobSnapshot): Promise<void>
+  jobDone(snapshot: JobView): Promise<void>
   sessionEvent(session: Session, event: SessionEvent): Promise<void>
   sessionDisposed(session: Session): Promise<void>
   updateSettings(settings: DesktopNotificationSettings): Promise<void>
@@ -36,7 +36,7 @@ function createHarness(available: readonly OptionalService[] = ['jobs', 'session
   const injections = new Map<OptionalService, (ctx: Context) => void>()
   const disposers = new Map<OptionalService, Array<() => void>>()
   let activeService: OptionalService | undefined
-  let jobListener: ((snapshot: JobSnapshot) => void | PromiseLike<void>) | undefined
+  let jobListener: ((event: { type: 'settled', job: JobView, cause: 'producer', awaited: false }) => void | PromiseLike<void>) | undefined
   let sessionListener: ((session: Session, event: SessionEvent) => void | PromiseLike<void>) | undefined
   let sessionDisposedListener: ((session: Session) => void | PromiseLike<void>) | undefined
   let settingsWatcher:
@@ -64,13 +64,10 @@ function createHarness(available: readonly OptionalService[] = ['jobs', 'session
     desktopRuntime: runtime,
     settings: { register: registerSettings },
     jobs: {
-      onJobDone: (listener: typeof jobListener) => {
+      events: { subscribe: (_filter: unknown, listener: typeof jobListener) => {
         jobListener = listener
-        return () => {
-          jobListener = undefined
-          stopJobs()
-        }
-      },
+        return () => { jobListener = undefined; stopJobs() }
+      } },
     },
     on: (event: string, listener: typeof sessionListener | typeof sessionDisposedListener) => {
       if (event === 'session/event') sessionListener = listener as typeof sessionListener
@@ -112,7 +109,7 @@ function createHarness(available: readonly OptionalService[] = ['jobs', 'session
     registerSettings,
     stopJobs,
     stopSessions,
-    async jobDone(snapshot) { await jobListener?.(snapshot) },
+    async jobDone(snapshot) { await jobListener?.({ type: 'settled', job: snapshot, cause: 'producer', awaited: false }) },
     async sessionEvent(session, event) { await sessionListener?.(session, event) },
     async sessionDisposed(session) { await sessionDisposedListener?.(session) },
     async updateSettings(next) {
@@ -193,11 +190,10 @@ describe('desktop notifications Host plugin', () => {
       label: 'node /Users/example/private.js --token secret',
       status: 'completed',
       detail: 'session-123',
-      output: 'private output',
+      output: { total: 0, earliest: 0 },
       startedAt: 1,
       finishedAt: 2,
-      reported: false,
-    } satisfies JobSnapshot & { output: string }
+    } satisfies JobView
 
     await harness.jobDone(snapshot)
     await harness.jobDone({ ...snapshot, status: 'failed' })
@@ -217,10 +213,10 @@ describe('desktop notifications Host plugin', () => {
       kind: 'bash',
       label: 'build',
       status: 'completed',
+      output: { total: 0, earliest: 0 },
       startedAt: 1,
       finishedAt: 2,
-      reported: false,
-    } satisfies JobSnapshot
+    } satisfies JobView
 
     await harness.updateSettings({
       enabled: true,
@@ -256,10 +252,10 @@ describe('desktop notifications Host plugin', () => {
       kind: 'bash',
       label: 'build',
       status: 'completed',
+      output: { total: 0, earliest: 0 },
       startedAt: 1,
       finishedAt: 2,
-      reported: false,
-    } satisfies JobSnapshot
+    } satisfies JobView
 
     await harness.updateSettings({
       enabled: false,

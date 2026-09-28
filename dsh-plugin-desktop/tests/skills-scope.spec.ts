@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rename, readFile, rm, writeFile, access } from 'node:fs/promises'
+import { mkdtemp, mkdir, rename, readFile, realpath, rm, writeFile, access } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Context } from '@deepseek-ai/cordis'
@@ -28,7 +28,7 @@ describe('Skill discovery scope', () => {
         ? { get: () => ({ path: layout.defaultWorkspace, status: async () => 'ok' }) } : undefined } as unknown as Context
       const controller = new DesktopSkillsController(host, undefined, { workspaceId: 'default' })
       expect((await controller.read()).locations).toEqual({ userLibrary: join(activeHome, 'skills'), recycleBin: join(activeHome, 'skills', '.recycle'), cwd: layout.defaultWorkspace })
-      expect((await controller.detail('legacy-skill')).path).toBe(join(activeHome, 'skills', 'legacy-skill', 'SKILL.md'))
+      expect((await controller.detail('legacy-skill')).path).toBe(await realpath(join(activeHome, 'skills', 'legacy-skill', 'SKILL.md')))
       await controller.create({ name: 'new-skill', description: 'Created skill', instructions: 'New instructions' })
       await vi.waitFor(async () => { expect((await controller.detail('new-skill')).content).toContain('New instructions') })
       expect(await readFile(join(activeHome, 'skills', 'new-skill', 'SKILL.md'), 'utf8')).toContain('New instructions')
@@ -51,18 +51,20 @@ describe('Skill discovery scope', () => {
     const scope = {}
     const snapshot = vi.fn(async () => ({ skills: [], complete: true }))
     const get = vi.fn(async () => undefined)
-    const dispose = vi.fn()
-    const standingKeyFor = vi.fn(async () => scope)
-    const observeSession = vi.fn(async () => ({ header: { cwd: '/project/a' }, projections: { values: { agentPreset: 'custom' } }, [Symbol.dispose]: dispose }))
-    const ctx = { skills: { snapshot, get }, get: (name: string) => name === 'agentPresets' ? { standingKeyFor } : name === 'sessionQuery' ? { observeSession } : undefined } as unknown as Context
+    const disposeScope = vi.fn(async () => {})
+    const disposeObservation = vi.fn()
+    const acquireScope = vi.fn(async () => ({ key: scope, [Symbol.asyncDispose]: disposeScope }))
+    const observeSession = vi.fn(async () => ({ header: { cwd: '/project/a' }, projections: { values: { agentPreset: 'custom' } }, [Symbol.dispose]: disposeObservation }))
+    const ctx = { skills: { snapshot, get }, get: (name: string) => name === 'agentPresets' ? { acquireScope } : name === 'sessionQuery' ? { observeSession } : undefined } as unknown as Context
     const controller = new DesktopSkillsController(ctx, undefined, { sessionId: 'session-a' })
     expect((await controller.read()).locations).toMatchObject({ cwd: '/project/a', preset: 'custom' })
     await expect(controller.detail('review')).rejects.toThrow('Skill not found')
     expect(observeSession).toHaveBeenCalledWith('session-a')
-    expect(standingKeyFor).toHaveBeenCalledWith('custom')
+    expect(acquireScope).toHaveBeenCalledWith('custom')
     expect(snapshot).toHaveBeenCalledWith({ cwd: '/project/a', scope })
     expect(get).toHaveBeenCalledWith('review', { cwd: '/project/a', scope })
-    expect(dispose).toHaveBeenCalledTimes(2)
+    expect(disposeScope).toHaveBeenCalledTimes(2)
+    expect(disposeObservation).toHaveBeenCalledTimes(2)
   })
   it('uses the live Session registry, matching the conversation catalog', async () => {
     const live = {}
@@ -114,7 +116,7 @@ describe('Skill discovery scope', () => {
         expect((await b.read()).skills).toContainEqual(expect.objectContaining({ name: 'project-review', source: 'user-dsh' }))
       }, { timeout: 5000 })
       expect((await a.detail('project-review')).content).toContain('Project A instructions')
-      expect((await a.read()).installed).toContainEqual(expect.objectContaining({ name: 'project-review', status: 'overridden', effectiveSource: 'project-agents', effectivePath: join(first, '.agents', 'skills', 'project-review', 'SKILL.md') }))
+      expect((await a.read()).installed).toContainEqual(expect.objectContaining({ name: 'project-review', status: 'overridden', effectiveSource: 'project-agents', effectivePath: await realpath(join(first, '.agents', 'skills', 'project-review', 'SKILL.md')) }))
       expect((await b.read()).installed).toContainEqual(expect.objectContaining({ name: 'project-review', status: 'effective' }))
       await mkdir(join(home, 'user', 'skills', 'broken'), { recursive: true })
       await writeFile(join(home, 'user', 'skills', 'broken', 'SKILL.md'), 'Not a valid document')

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { installDefaultWorkspaceMenu } from '../src/client/default-workspace-menu.ts'
 import { installDefaultWorkspaceLocale } from '../src/client/default-workspace-locale.ts'
 import type { WorkspaceId, WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
-import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   installDesktopWorkspaceSelection,
   resolveDesktopWorkspaceSelection,
@@ -101,13 +101,14 @@ function workspaceSnapshot(ids = [defaultId, projectId]): WorkspaceSnapshot {
       updatedAt: '2026-09-16T00:00:00.000Z',
     })),
     archivedSessionIds: [],
+    pinnedSessionIds: [],
     state: 'idle',
     phase: 'ready',
     error: null,
   }
 }
 
-function settingsSnapshot(activeWorkspaceId = ''): SettingsScopeSnapshot<DesktopWorkspaceSettings> {
+function settingsSnapshot(activeWorkspaceId = ''): ConfigFormSnapshot<DesktopWorkspaceSettings> {
   return {
     status: 'ready',
     value: { defaultWorkspaceId: defaultId, activeWorkspaceId },

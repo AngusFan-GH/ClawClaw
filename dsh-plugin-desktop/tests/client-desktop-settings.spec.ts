@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   DesktopDeveloperMenuItems,
   DesktopNativeActions,
@@ -591,16 +591,16 @@ describe('Desktop settings Slot registration', () => {
         mode: 'host' as const,
       }),
       subscribe: () => () => {},
-      set: vi.fn(async () => {}),
-      unset: vi.fn(async () => {}),
-      mutate: vi.fn(async () => {}),
-    } satisfies SettingsScope<unknown>
-    const bind = vi.fn(() => scope)
+      set: vi.fn(async () => true),
+      unset: vi.fn(async () => true),
+      mutate: vi.fn(async () => true),
+    } satisfies ConfigForm<unknown>
+    const get = vi.fn(() => scope)
     const register = vi.fn(() => () => {})
     const inject = vi.fn((_name: string, mount: () => unknown) => mount())
     const localeRegister = vi.fn(() => () => {})
     const ctx = {
-      settingsScope: { bind },
+      configForms: { get },
       locale: {
         bind: (namespace: string) => (key: string) => `${namespace}:${key}`,
         register: localeRegister,
@@ -617,8 +617,8 @@ describe('Desktop settings Slot registration', () => {
       micaSupported: false,
     })
 
-    expect(bind).toHaveBeenNthCalledWith(1, { namespace: DESKTOP_SHELL_SETTINGS_NAMESPACE })
-    expect(bind).toHaveBeenNthCalledWith(2, { namespace: DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE })
+    expect(get).toHaveBeenNthCalledWith(1, DESKTOP_SHELL_SETTINGS_NAMESPACE)
+    expect(get).toHaveBeenNthCalledWith(2, DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE)
     expect(inject).toHaveBeenCalledWith('settings.section', expect.any(Function))
     expect(inject).toHaveBeenCalledWith('settings.action', expect.any(Function))
     const [options, component] = register.mock.calls[0] as unknown as [

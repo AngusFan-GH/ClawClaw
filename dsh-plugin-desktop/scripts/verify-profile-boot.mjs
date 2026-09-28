@@ -1,6 +1,6 @@
 /** Headless smoke for the complete published DSH Web profile and renderer manifest. */
 
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -16,6 +16,7 @@ import { installDesktopPnpmRuntime } from '../lib/desktop-runtime-environment.js
 import { installProfilePackageResolver } from '../lib/module-resolution.js'
 import { desktopHarnessProfileContext, prepareDesktopProfile } from '../lib/profile.js'
 import { DesktopProfileService } from '../lib/profile-service.js'
+import { importLegacyDesktopSetupWizardSettings } from '../lib/setup-wizard-settings.js'
 
 const BIN_NAME = 'dsh-plugin-desktop-profile-smoke'
 const HOST_SERVICE_PLUGIN_NAME = 'dsh-desktop-host-services-smoke-plugin'
@@ -59,7 +60,9 @@ try {
     '  default: minimal',
     '',
   ].join('\n'))
-  const prepared = prepareDesktopProfile(undefined, home, 'win32')
+  let prepared = prepareDesktopProfile(undefined, home, 'win32')
+  await importLegacyDesktopSetupWizardSettings(prepared.profile.patchPath)
+  prepared = prepareDesktopProfile(undefined, home, 'win32')
   const hostServicePluginDir = join(
     prepared.profile.dir,
     'node_modules',
@@ -71,15 +74,16 @@ try {
     hostServicePluginDir,
     { recursive: true, force: false, errorOnExist: true },
   )
+  // Deliberately compose the consumer before the desktop-pnpm provider row.
+  // Its required injection must keep it pending until that service mounts.
+  const hostServicePatch = {
+    insert: [{
+      id: 'desktop-host-services-smoke-plugin',
+      name: HOST_SERVICE_PLUGIN_NAME,
+    }],
+  }
   const patches = [
-    // Deliberately compose the consumer before the desktop-pnpm provider row.
-    // Its required injection must keep it pending until that service mounts.
-    {
-      insert: [{
-        id: 'desktop-host-services-smoke-plugin',
-        name: HOST_SERVICE_PLUGIN_NAME,
-      }],
-    },
+    hostServicePatch,
     ...prepared.patches,
   ]
   const packageRoot = new URL('../', import.meta.url)
@@ -104,16 +108,22 @@ try {
     }
   }
   const desktopRequire = createRequire(new URL('package.json', packageRoot))
-  const presetManifestPath = desktopRequire.resolve('@deepseek-ai/dsh-agent-presets/package.json')
-  const presetRequire = createRequire(presetManifestPath)
-  const presetsDirectory = join(dirname(presetManifestPath), 'presets')
-  const presetPackages = new Set(readdirSync(presetsDirectory, { recursive: true })
-    .filter(file => String(file).endsWith('.yml'))
-    .flatMap(file => [...readFileSync(join(presetsDirectory, String(file)), 'utf8')
+  const webManifestPath = desktopRequire.resolve('@deepseek-ai/dsh-web-app/package.json')
+  const webManifest = JSON.parse(readFileSync(webManifestPath, 'utf8'))
+  const presetPatches = webManifest.dsh?.bundle?.patch
+  if (!Array.isArray(presetPatches)) {
+    throw new Error('Web bundle does not declare its preset patches')
+  }
+  const presetPackages = new Set(presetPatches
+    .filter(file => typeof file === 'string' && file.startsWith('./presets/') && file.endsWith('.patch.yml'))
+    .flatMap(file => [...readFileSync(join(dirname(webManifestPath), file), 'utf8')
       .matchAll(/@deepseek-ai\/dsh-[\w-]+/gu)]
       .map(match => match[0])))
   for (const packageName of presetPackages) {
-    const installedPath = presetRequire.resolve(`${packageName}/package.json`)
+    if (packageManifest.dependencies?.[packageName] === undefined) {
+      throw new Error(`agent preset package ${packageName} is not a direct Desktop dependency`)
+    }
+    const installedPath = desktopRequire.resolve(`${packageName}/package.json`)
     const installed = JSON.parse(readFileSync(installedPath, 'utf8'))
     if (installed.version !== harnessVersion) {
       throw new Error(
@@ -199,7 +209,11 @@ try {
         clearEnvironmentPath: pnpmRuntime.clearEnvironmentPath,
         dshBootstrapPath: fileURLToPath(new URL('../lib/desktop-cli.js', import.meta.url)),
       })
-      host.provide('profileContext', desktopHarnessProfileContext(prepared, host.desktopPnpmBootstrap))
+      const profileContext = desktopHarnessProfileContext(prepared, host.desktopPnpmBootstrap)
+      host.provide('profileContext', {
+        ...profileContext,
+        overlays: [hostServicePatch, ...profileContext.overlays],
+      })
       await host.plugin(DesktopProfileService, {
         current: {
           name: 'desktop',
@@ -223,6 +237,17 @@ try {
     prepared.bareModuleBaseUrl,
   )
   await runtime.mountScheduled()
+  let legacyImportCompleted = false
+  for (let attempt = 0; attempt < 100; attempt++) {
+    legacyImportCompleted = existsSync(join(home, 'settings.yaml.imported'))
+      && readFileSync(prepared.profile.patchPath, 'utf8').includes('selectedDefault')
+    if (legacyImportCompleted) break
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+  if (!legacyImportCompleted) {
+    throw new Error('legacy settings import did not complete')
+  }
+  await ctx.loader.await()
 
   if (ctx.get('desktopPnpm') === undefined) {
     throw new Error('assembled desktop profile is missing the desktop pnpm Host capability')
@@ -262,11 +287,15 @@ try {
   }
   const minimalPreset = await agentPresets.resolve('minimal')
   for (const presetId of presetIds) {
-    const scope = await agentPresets.standingKeyFor(presetId)
-    const snapshot = await ctx.skills.snapshot({ scope })
-    if (presetId === 'cordis'
-      && !snapshot.skills.some(skill => skill.name === 'editing-cordis-compositions')) {
-      throw new Error('Creator preset mounted but its scoped skills are not visible')
+    const lease = await agentPresets.acquireScope(presetId)
+    try {
+      const snapshot = await ctx.skills.snapshot({ scope: lease.key })
+      if (presetId === 'cordis'
+        && !snapshot.skills.some(skill => skill.name === 'editing-cordis-compositions')) {
+        throw new Error('Creator preset mounted but its scoped skills are not visible')
+      }
+    } finally {
+      await lease[Symbol.asyncDispose]()
     }
   }
   if (ctx.get('hmr') !== undefined) {
@@ -363,7 +392,7 @@ try {
     redirect: 'manual',
   })
   await exchange.body?.cancel()
-  if (exchange.status !== 303 || exchange.headers.get('location') !== '/') {
+  if (exchange.status !== 303 || exchange.headers.get('location') !== './') {
     throw new Error(
       `browser authentication exchange returned HTTP ${String(exchange.status)} instead of a root redirect`,
     )

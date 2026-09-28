@@ -13,6 +13,7 @@ function shellSpec(env?: Record<string, string>): ShellExecSpec {
     command: 'Write-Output ok',
     workdir: 'C:\\workspace',
     timeoutMs: 60_000,
+    onExpiry: 'kill',
     stdoutMaxBytes: 64_000,
     sandboxPolicy: undefined,
     ...(env === undefined ? {} : { env }),

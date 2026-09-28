@@ -22,15 +22,21 @@ describe('pre-alpha.2 settings compatibility', () => {
     expect(deepEqualJson({ nested: [1] }, { nested: [2] })).toBe(false)
   })
 
-  it('delegates the legacy section helper to the alpha.2 provider method', () => {
+  it('adapts the legacy section helper to the 0.1.7 form provider', async () => {
     const schema = z.object({ enabled: z.boolean().default(true) })
     const entry = { enabled: true }
     const hooks: SettingsSectionHooks<typeof entry> = {
       setSource: vi.fn(),
       onChange: vi.fn(),
     }
-    const installSection = vi.fn()
-    const settingsContext = { settings: { installSection } }
+    const get = vi.fn(() => entry)
+    let watcher: ((next: typeof entry, previous: typeof entry) => void) | undefined
+    const watch = vi.fn((callback: typeof watcher) => {
+      watcher = callback
+      return vi.fn()
+    })
+    const register = vi.fn(() => ({ get, watch }))
+    const settingsContext = { settings: { register } }
     const inject = vi.fn((services: string[], callback: (ctx: typeof settingsContext) => void) => {
       expect(services).toEqual(['settings'])
       callback(settingsContext)
@@ -39,8 +45,13 @@ describe('pre-alpha.2 settings compatibility', () => {
 
     installSettingsSection(owner, settingsNamespace('dsh-market'), schema, entry, hooks)
 
-    expect(installSection).toHaveBeenCalledOnce()
-    expect(installSection).toHaveBeenCalledWith(owner, 'dsh-market', schema, entry, hooks)
+    expect(register).toHaveBeenCalledOnce()
+    expect(register).toHaveBeenCalledWith('dsh-market', schema, { base: entry })
+    expect(hooks.setSource).toHaveBeenCalledWith(entry)
+    expect(watch).toHaveBeenCalledOnce()
+    expect(watcher).toBeTypeOf('function')
+    watcher!(entry, entry)
+    expect(hooks.onChange).toHaveBeenCalledWith(entry)
   })
 
   it('allows the bundled legacy dshmarket settings module to instantiate', async () => {

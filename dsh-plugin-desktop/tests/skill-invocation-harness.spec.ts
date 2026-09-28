@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it, vi } from 'vitest'
@@ -31,7 +31,7 @@ it.each([false, true])('loads a user-only Skill from the active data directory t
     await ctx.plugin(toolSkill)
     const controller = new DesktopSkillsController(ctx)
     await controller.importDocument('---\nname: desktop-review\ndescription: Review code\ndisable-model-invocation: true\n---\nCheck all public interfaces before changing code.\n')
-    await vi.waitFor(async () => { expect((await controller.detail('desktop-review')).path).toBe(join(dataHome, 'skills', 'desktop-review', 'SKILL.md')) })
+    await vi.waitFor(async () => { expect((await controller.detail('desktop-review')).path).toBe(await realpath(join(dataHome, 'skills', 'desktop-review', 'SKILL.md'))) })
     const skills = await ctx.skills.list({ cwd: layout.defaultWorkspace })
     const catalog = { skills: skills.filter(skill => skill.invocation?.userInvocable !== false).map(skill => ({ name: skill.name, description: skill.description, modelInvocable: skill.invocation?.modelInvocable !== false })), commands: [] }
     const draft = 'Review this change.'

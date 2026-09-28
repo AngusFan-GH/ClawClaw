@@ -160,16 +160,18 @@ describe('Desktop Skills preset catalog', () => {
 
   it('reads the default preset layer for both inventory and details without an active session', async () => {
     const scope = {}
-    const standingKeyFor = vi.fn(async () => scope)
+    const dispose = vi.fn(async () => {})
+    const acquireScope = vi.fn(async () => ({ key: scope, [Symbol.asyncDispose]: dispose }))
     const snapshot = vi.fn(async (options: { scope?: object }) => ({
       skills: options.scope === scope ? [skill] : [], complete: true,
     }))
     const get = vi.fn(async (_name: string, options: { scope?: object }) => options.scope === scope ? skill : undefined)
-    const ctx = { get: () => ({ standingKeyFor }), skills: { snapshot, get } } as unknown as Context
+    const ctx = { get: () => ({ acquireScope }), skills: { snapshot, get } } as unknown as Context
     const controller = new DesktopSkillsController(ctx)
     expect((await controller.read()).skills).toEqual([expect.objectContaining({ name: 'review', editable: false })])
     expect(await controller.detail('review')).toEqual(expect.objectContaining({ content: 'Review instructions.' }))
-    expect(standingKeyFor).toHaveBeenCalledWith()
+    expect(acquireScope).toHaveBeenCalledWith(undefined)
+    expect(dispose).toHaveBeenCalledTimes(2)
     expect(get).toHaveBeenCalledWith('review', { scope })
     await expect(controller.setModelInvocable('review', false)).rejects.toThrow('Only Skills in a user library')
     expect(get).toHaveBeenLastCalledWith('review', { scope })
@@ -185,10 +187,11 @@ describe('Desktop Skills preset catalog', () => {
   })
 
   it('keeps independent request selections for inventory, details, and mutations', async () => {
-    const standingKeyFor = vi.fn(async (id?: string) => ({ id }))
+    const dispose = vi.fn(async () => {})
+    const acquireScope = vi.fn(async (id?: string) => ({ key: { id }, [Symbol.asyncDispose]: dispose }))
     const get = vi.fn(async () => skill)
     const snapshot = vi.fn(async () => ({ skills: [skill], complete: true }))
-    const ctx = { get: () => ({ standingKeyFor }), skills: { get, snapshot } } as unknown as Context
+    const ctx = { get: () => ({ acquireScope }), skills: { get, snapshot } } as unknown as Context
     const standard = new DesktopSkillsController(ctx, 'standard')
     const minimal = new DesktopSkillsController(ctx, 'minimal')
     await standard.read()
@@ -196,7 +199,8 @@ describe('Desktop Skills preset catalog', () => {
     await expect(standard.setUserInvocable('review', false)).rejects.toThrow('Only Skills')
     expect(snapshot).toHaveBeenCalledWith({ scope: { id: 'standard' } })
     expect(get.mock.calls).toEqual([['review', { scope: { id: 'minimal' } }], ['review', { scope: { id: 'standard' } }]])
-    expect(standingKeyFor.mock.calls).toEqual([['standard'], ['minimal'], ['standard']])
+    expect(acquireScope.mock.calls).toEqual([['standard'], ['minimal'], ['standard']])
+    expect(dispose).toHaveBeenCalledTimes(3)
   })
 
   it('does not silently fall back when an explicit preset is unavailable', async () => {
@@ -209,7 +213,7 @@ describe('Desktop Skills preset catalog', () => {
   it('surfaces a broken default preset instead of falling back to the empty global layer', async () => {
     const snapshot = vi.fn()
     const controller = new DesktopSkillsController({
-      get: () => ({ standingKeyFor: async () => { throw new Error('preset unavailable') } }), skills: { snapshot },
+      get: () => ({ acquireScope: async () => { throw new Error('preset unavailable') } }), skills: { snapshot },
     } as unknown as Context)
     await expect(controller.read()).rejects.toThrow('preset unavailable')
     expect(snapshot).not.toHaveBeenCalled()
