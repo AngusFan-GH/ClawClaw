@@ -23,6 +23,10 @@ import {
   combineChannelOverviewStates,
 } from './overview-state.js'
 import { installClawClawChannelStyles } from './styles.js'
+import {
+  ChannelSessionLeading,
+  installChannelSessionPresentation,
+} from './session-presentation.js'
 
 export const inject = ['slots', 'connection', 'locale', 'workspaces']
 
@@ -201,6 +205,11 @@ function interceptedContext(ctx) {
     get(target, property) {
       if (property === 'slots') return slots
       if (property === 'locale') return locale
+      if (property === 'effect') {
+        return (factory, label) => label === 'im-settings: Session channel logos'
+          ? undefined
+          : target.effect(factory, label)
+      }
       const value = Reflect.get(target, property, target)
       return typeof value === 'function' ? value.bind(target) : value
     },
@@ -210,4 +219,14 @@ function interceptedContext(ctx) {
 export function apply(ctx) {
   ctx.effect(installClawClawChannelStyles, 'clawclaw channels: overview styles')
   applyDshImClient(interceptedContext(ctx))
+  ctx.effect(
+    () => installChannelSessionPresentation(LOGOS),
+    'clawclaw channels: rc.2 Session presentation',
+  )
+  ctx.slots.inject('sidebar.session.row.leading', () => ctx.slots.register({
+    name: 'sidebar.session.row.leading',
+    id: 'clawclaw-channel-session-source',
+    order: -10,
+    inject: () => ({ logos: LOGOS }),
+  }, ChannelSessionLeading))
 }

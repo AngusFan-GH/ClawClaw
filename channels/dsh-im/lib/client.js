@@ -383,8 +383,8 @@ var require_semver = __commonJS({
       }
       // preminor will bump the version up to the next minor release, and immediately
       // down to pre-release. premajor and prepatch work the same way.
-      inc(release, identifier, identifierBase) {
-        if (release.startsWith("pre")) {
+      inc(release2, identifier, identifierBase) {
+        if (release2.startsWith("pre")) {
           if (!identifier && identifierBase === false) {
             throw new Error("invalid increment argument: identifier is empty");
           }
@@ -395,7 +395,7 @@ var require_semver = __commonJS({
             }
           }
         }
-        switch (release) {
+        switch (release2) {
           case "premajor":
             this.prerelease.length = 0;
             this.patch = 0;
@@ -487,7 +487,7 @@ var require_semver = __commonJS({
             break;
           }
           default:
-            throw new Error(`invalid increment argument: ${release}`);
+            throw new Error(`invalid increment argument: ${release2}`);
         }
         this.raw = this.format();
         if (this.build.length) {
@@ -563,7 +563,7 @@ __export(index_exports, {
   inject: () => inject
 });
 module.exports = __toCommonJS(index_exports);
-var React32 = __toESM(require("react"), 1);
+var React33 = __toESM(require("react"), 1);
 
 // ../../node_modules/.pnpm/@xmanrui+dsh-im@4.20.2/node_modules/@xmanrui/dsh-im/src/channels/weixin/connection-error.en.mjs
 var connection_error_en_default = {
@@ -18975,6 +18975,161 @@ function installClawClawChannelStyles() {
   return () => style.remove();
 }
 
+// client/session-presentation.js
+var React32 = __toESM(require("react"), 1);
+var SOURCE_ATTR = "data-dsh-im-session-channel";
+var RAW_TITLE_ATTR = "data-dsh-im-session-raw-title";
+var PRESENTATION_SELECTOR = '[class*="title"], [class*="Title"], [class*="crumbCurrent"]';
+var CHANNEL_IDS = Object.freeze([
+  "weixin",
+  "feishu",
+  "dingtalk",
+  "wecom",
+  "qq",
+  "slack",
+  "telegram",
+  "discord",
+  "whatsapp",
+  "imessage",
+  "office"
+]);
+var SESSION_ID = new RegExp(`^(${CHANNEL_IDS.join("|")})-`, "u");
+var installations2 = /* @__PURE__ */ new WeakMap();
+function channelFromSessionId(sessionId) {
+  return SESSION_ID.exec(String(sessionId))?.[1] ?? null;
+}
+function hasClassPart2(element, part) {
+  const match = new RegExp(`(?:^|[_-])${part}(?:$|[_-])`, "u");
+  return [...element.classList].some((token) => match.test(token));
+}
+function surfaceOf(element) {
+  if (hasClassPart2(element, "searchResultTitle")) return "search";
+  if (hasClassPart2(element, "hoverTitle")) return "hover";
+  if (hasClassPart2(element, "crumbCurrent")) return "header";
+  if (hasClassPart2(element, "title") && element.closest('[role="treeitem"][aria-selected]')) return "row";
+  return null;
+}
+function domNode(document2, reactNode) {
+  if (typeof reactNode === "string") return document2.createTextNode(reactNode);
+  if (!reactNode || typeof reactNode.type !== "string") throw new Error("Unsupported channel logo element");
+  const element = document2.createElementNS("http://www.w3.org/2000/svg", reactNode.type);
+  for (const [name, value] of Object.entries(reactNode.props)) {
+    if (name === "children" || value == null || typeof value === "boolean") continue;
+    const attribute = name.replace(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`);
+    element.setAttribute(attribute, String(value));
+  }
+  for (const child of [reactNode.props.children].flat(Infinity).filter(Boolean)) element.append(domNode(document2, child));
+  return element;
+}
+function logoNode(document2, Logo, channel5) {
+  const svg = domNode(document2, Logo({ size: 16 }));
+  svg.setAttribute("data-dsh-session-source-icon", channel5);
+  return svg;
+}
+function ChannelSessionLeading({ sessionId, logos }) {
+  const channel5 = channelFromSessionId(sessionId);
+  const Logo = channel5 && logos[channel5];
+  if (!Logo) return null;
+  return React32.createElement("span", {
+    "data-dsh-im-session-leading": channel5,
+    "aria-hidden": "true"
+  }, React32.createElement(Logo, { size: 16 }));
+}
+function installChannelSessionPresentation(logos, document2 = globalThis.document) {
+  let entry = installations2.get(document2);
+  if (entry) {
+    entry.references += 1;
+    return () => release(document2, entry);
+  }
+  const owned = /* @__PURE__ */ new Set();
+  const queued = /* @__PURE__ */ new Set();
+  let closed = false;
+  let scheduled = false;
+  const style = document2.createElement("style");
+  style.dataset.pluginCss = "clawclaw-im-session-presentation";
+  style.textContent = `
+[${SOURCE_ATTR}]:not([data-dsh-session-source-surface="row"]){display:inline-flex;align-items:center;gap:6px;min-width:0}
+[${SOURCE_ATTR}]>[data-dsh-session-source-icon]{flex:0 0 16px}
+[data-dsh-im-session-leading]{display:inline-flex;align-items:center;justify-content:center;width:16px;height:20px;color:var(--dsw-alias-label-tertiary)}
+`;
+  document2.head.append(style);
+  const restore = (element) => {
+    if (!owned.delete(element)) return;
+    const raw = element.getAttribute(RAW_TITLE_ATTR);
+    if (raw !== null) element.textContent = raw;
+    element.removeAttribute(SOURCE_ATTR);
+    element.removeAttribute(RAW_TITLE_ATTR);
+    element.removeAttribute("data-dsh-session-source-surface");
+  };
+  const update = (element) => {
+    if (!(element instanceof HTMLElement) || !element.isConnected) return;
+    const surface = surfaceOf(element);
+    if (!surface) {
+      restore(element);
+      return;
+    }
+    const text7 = element.textContent ?? "";
+    const parsed = parseSessionChannelTitle(text7);
+    if (!parsed) {
+      if (!element.hasAttribute(SOURCE_ATTR)) return;
+      return;
+    }
+    const Logo = logos[parsed.channel];
+    if (!Logo) return;
+    owned.add(element);
+    element.setAttribute(SOURCE_ATTR, parsed.channel);
+    element.setAttribute(RAW_TITLE_ATTR, text7);
+    element.setAttribute("data-dsh-session-source-surface", surface);
+    element.replaceChildren(...surface === "row" ? [] : [logoNode(document2, Logo, parsed.channel)], document2.createTextNode(parsed.title));
+  };
+  const schedule = () => {
+    if (closed || scheduled || queued.size === 0) return;
+    scheduled = true;
+    queueMicrotask(() => {
+      scheduled = false;
+      if (closed) return;
+      const elements = [...queued];
+      queued.clear();
+      for (const element of elements) update(element);
+    });
+  };
+  const collect = (node, descendants = false) => {
+    const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    if (!element) return;
+    if (element.matches(PRESENTATION_SELECTOR)) queued.add(element);
+    const closest = element.closest(PRESENTATION_SELECTOR);
+    if (closest) queued.add(closest);
+    if (descendants) for (const child of element.querySelectorAll(PRESENTATION_SELECTOR)) queued.add(child);
+    schedule();
+  };
+  const observer = new MutationObserver((records) => {
+    for (const record2 of records) {
+      collect(record2.target);
+      if (record2.type === "childList") for (const node of record2.addedNodes) collect(node, true);
+    }
+  });
+  observer.observe(document2.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["class"] });
+  collect(document2.body, true);
+  entry = {
+    references: 1,
+    close: () => {
+      closed = true;
+      observer.disconnect();
+      queued.clear();
+      for (const element of [...owned]) restore(element);
+      style.remove();
+    }
+  };
+  installations2.set(document2, entry);
+  return () => release(document2, entry);
+}
+function release(document2, entry) {
+  entry.references -= 1;
+  if (entry.references > 0) return;
+  entry.close();
+  installations2.delete(document2);
+}
+
 // client/index.js
 var inject = ["slots", "connection", "locale", "workspaces"];
 var LOGOS = Object.freeze({
@@ -19017,8 +19172,8 @@ function ChannelCard({ channel: channel5, status, onOpen }) {
   );
 }
 function useChannelStatuses(injected) {
-  const [statuses, setStatuses] = React32.useState({});
-  React32.useEffect(() => {
+  const [statuses, setStatuses] = React33.useState({});
+  React33.useEffect(() => {
     const controller = new AbortController();
     let timer;
     const read = async () => {
@@ -19051,10 +19206,10 @@ function useChannelStatuses(injected) {
   return statuses;
 }
 function DshImDetail({ channelId, injected, onBack }) {
-  const rootRef = React32.useRef(null);
-  const [wecomMode, setWecomMode] = React32.useState("wecom");
+  const rootRef = React33.useRef(null);
+  const [wecomMode, setWecomMode] = React33.useState("wecom");
   const detailChannelId = channelId === "wecom" ? wecomMode : channelId;
-  React32.useEffect(() => {
+  React33.useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       rootRef.current?.querySelector(`#dim-tab-${detailChannelId}`)?.click();
     });
@@ -19090,7 +19245,7 @@ function DshImDetail({ channelId, injected, onBack }) {
   );
 }
 function ClawClawChannelSettings(injected) {
-  const [selected, setSelected] = React32.useState(null);
+  const [selected, setSelected] = React33.useState(null);
   const statuses = useChannelStatuses(injected);
   if (selected !== null) {
     return h(DshImDetail, { channelId: selected, injected, onBack: () => setSelected(null) });
@@ -19182,6 +19337,9 @@ function interceptedContext(ctx) {
     get(target, property) {
       if (property === "slots") return slots;
       if (property === "locale") return locale;
+      if (property === "effect") {
+        return (factory, label) => label === "im-settings: Session channel logos" ? void 0 : target.effect(factory, label);
+      }
       const value = Reflect.get(target, property, target);
       return typeof value === "function" ? value.bind(target) : value;
     }
@@ -19190,6 +19348,16 @@ function interceptedContext(ctx) {
 function apply2(ctx) {
   ctx.effect(installClawClawChannelStyles, "clawclaw channels: overview styles");
   apply(interceptedContext(ctx));
+  ctx.effect(
+    () => installChannelSessionPresentation(LOGOS),
+    "clawclaw channels: rc.2 Session presentation"
+  );
+  ctx.slots.inject("sidebar.session.row.leading", () => ctx.slots.register({
+    name: "sidebar.session.row.leading",
+    id: "clawclaw-channel-session-source",
+    order: -10,
+    inject: () => ({ logos: LOGOS })
+  }, ChannelSessionLeading));
 }
 
     return module.exports;

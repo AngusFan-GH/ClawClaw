@@ -59,9 +59,13 @@ describe('Desktop automation panel registration', () => {
     expect(topLevelInject).not.toContain("'uiWorkspace'")
     expect(topLevelInject).not.toContain("'workspaces'")
     expect(inject).toHaveBeenCalledWith(['uiWorkspace', 'workspaces'], expect.any(Function))
-    expect(registrations).toEqual([
+    expect(registrations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        name: 'sidebar.session.row.leading',
+        id: 'desktop-cron-session-source',
+      }),
       expect.objectContaining({ name: 'main', key: 'desktop-automations', locale: 'desktop.cron-tasks' }),
-    ])
+    ]))
   })
 
   it('closes Settings only after the scheduled Session opens successfully', async () => {

@@ -2,7 +2,8 @@
 
 import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { installCronTaskSessionIcons } from '../src/client/cron-task-session-icon.ts'
+import { CronSessionLeading, installCronTaskSessionIcons } from '../src/client/cron-task-session-icon.tsx'
+import { DesktopFeatureIcon } from '../src/client/desktop-feature-icon.tsx'
 import { cronSessionTitle, isCronSessionId, parseCronSessionTitle } from '../src/cron-session-title.ts'
 
 const disposers: Array<() => void> = []
@@ -24,6 +25,16 @@ describe('scheduled task conversation source', () => {
     expect(entry.indexOf('applyCronTasksSettings(ctx)')).toBeLessThan(entry.indexOf('if (!environment) return'))
   })
 
+  it('reuses the canonical Automation menu icon for Cron Session rows', () => {
+    const leading = CronSessionLeading({ sessionId: 'cron-123' as never })
+    expect(leading?.props.children.type).toBe(DesktopFeatureIcon)
+    expect(leading?.props.children.props).toMatchObject({
+      featureId: 'desktop-automations',
+      kind: 'panel',
+    })
+    expect(CronSessionLeading({ sessionId: 'ordinary-123' as never })).toBeNull()
+  })
+
   it('decorates sidebar titles and migrates existing Cron sessions', async () => {
     const title = document.createElement('span')
     title.className = 'title_hash'
@@ -34,9 +45,8 @@ describe('scheduled task conversation source', () => {
     row.setAttribute('aria-selected', 'false')
     row.append(title)
     document.body.append(row)
-    const header = document.createElement('button')
+    const header = document.createElement('span')
     header.className = 'crumb_hash crumbCurrent_hash'
-    header.disabled = true
     header.textContent = '[Cron] Daily report'
     document.body.append(header)
 
@@ -52,18 +62,19 @@ describe('scheduled task conversation source', () => {
     disposers.push(dispose)
     await Promise.resolve()
 
-    expect(title.dataset.dshCronSessionTitle).toBe('Daily report')
+    expect(title.textContent).toBe('Daily report')
     expect(title.getAttribute('aria-label')).toBe('Scheduled task conversation: Daily report')
-    expect(header.dataset.dshCronSessionTitle).toBe('Daily report')
-    expect(document.head.textContent).toContain('display:inline-flex;align-items:center;justify-content:flex-start;gap:8px')
-    expect(header.style.getPropertyValue('--dsh-cron-session-title-font-size')).not.toBe('')
+    expect(header.textContent).toBe('Daily report')
+    expect(header.querySelector('[data-dsh-session-source-icon="cron"]')).not.toBeNull()
+    expect(document.head.textContent).not.toContain('text-overflow:ellipsis')
     expect(rename).toHaveBeenCalledWith('[Cron] Legacy report')
 
     dispose()
     disposers.pop()
+    expect(title.textContent).toBe('[Cron] Daily report')
     expect(title.hasAttribute('data-dsh-cron-session')).toBe(false)
     expect(title.getAttribute('aria-label')).toBeNull()
     expect(header.hasAttribute('data-dsh-cron-session')).toBe(false)
-    expect(header.getAttribute('style')).toBeNull()
+    expect(header.textContent).toBe('[Cron] Daily report')
   })
 })

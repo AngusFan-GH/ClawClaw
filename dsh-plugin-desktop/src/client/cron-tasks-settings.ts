@@ -8,7 +8,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from './workspace-client-contract.ts'
 import { AutomationPanel } from './AutomationPanel.tsx'
-import { installCronTaskSessionIcons } from './cron-task-session-icon.ts'
+import { CronSessionLeading, installCronTaskSessionIcons } from './cron-task-session-icon.tsx'
 import { installCronTaskUnreadReminders } from './cron-task-unread.ts'
 import { createCronTasksApi, openCronTaskSession, watchCronTaskSessionDisposals } from './cron-tasks-api.ts'
 import { en, zh, type CronTasksLocaleKey } from './cron-tasks-locales.ts'
@@ -29,12 +29,24 @@ interface ClientCronSessions extends ClientSessionsNavigation {
 }
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap { 'desktop.cron-tasks': CronTasksLocaleKey }
+  interface SlotMap {
+    'sidebar.session.row.leading': {
+      kind: 'list'
+      scope: 'root'
+      owner: { readonly sessionId: SessionId }
+    }
+  }
 }
 export function applyCronTasksSettings(ctx: ClientContext): void {
   const api = createCronTasksApi()
   const t = ctx.locale.bind(DESKTOP_CRON_TASKS_LOCALE_NAMESPACE)
   ctx.effect(() => ctx.locale.register(DESKTOP_CRON_TASKS_LOCALE_NAMESPACE, { zh, en }), 'dsh-plugin-desktop: Cron task dictionaries')
   ctx.effect(() => installIntegrationsStyles(), 'dsh-plugin-desktop: Cron task styles')
+  ctx.slots.inject('sidebar.session.row.leading', () => ctx.slots.register({
+    name: 'sidebar.session.row.leading',
+    id: 'desktop-cron-session-source',
+    order: -20,
+  }, CronSessionLeading))
   ctx.inject(['sessions', 'workspaces'], (scope: ClientContext) => {
     scope.effect(() => {
       const sessions = scope.get('sessions') as unknown as ClientCronSessions
