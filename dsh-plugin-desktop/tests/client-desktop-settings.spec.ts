@@ -313,6 +313,7 @@ describe('Desktop settings API', () => {
           openBrowser: true,
           networkExposure: 'lan' as const,
           logLevel: 'info' as const,
+          updateQualificationJournal: false,
         },
         base: undefined,
         user: undefined,
@@ -364,6 +365,7 @@ describe('Desktop settings API', () => {
         || path === desktopSettingsPaths.rendererReload
         || path === desktopSettingsPaths.developerToolsToggle
         || path === desktopSettingsPaths.updateCheck
+        || path === desktopSettingsPaths.updateJournalClear
         || path === desktopSettingsPaths.diagnosticsExport) {
         return json({ accepted: true })
       }
@@ -384,6 +386,7 @@ describe('Desktop settings API', () => {
     await expect(api.reloadRenderer()).resolves.toBeUndefined()
     await expect(api.toggleDeveloperTools()).resolves.toBeUndefined()
     await expect(api.checkForUpdates()).resolves.toBeUndefined()
+    await expect(api.clearUpdateJournal()).resolves.toBeUndefined()
     await expect(api.exportDiagnostics()).resolves.toBeUndefined()
 
     expect(fetcher.mock.calls.map(call => call[0])).toEqual([
@@ -398,6 +401,7 @@ describe('Desktop settings API', () => {
       desktopSettingsPaths.rendererReload,
       desktopSettingsPaths.developerToolsToggle,
       desktopSettingsPaths.updateCheck,
+      desktopSettingsPaths.updateJournalClear,
       desktopSettingsPaths.diagnosticsExport,
     ])
     expect(fetcher.mock.calls[1]?.[1]).toMatchObject({

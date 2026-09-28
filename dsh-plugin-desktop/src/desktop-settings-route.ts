@@ -466,6 +466,29 @@ export async function handleDesktopDiagnosticsExportRequest(
   }
 }
 
+/** Clear update qualification evidence from an exact empty same-origin request. */
+export async function handleDesktopUpdateJournalClearRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  expectedOrigin: string,
+  controller: DesktopSettingsController,
+  reportError: (operation: string, cause: unknown) => void = () => {},
+): Promise<void> {
+  if (req.method !== 'POST') return finishJson(res, 405, error('method not allowed'), 'POST')
+  if (!isSameOriginLoopbackRequest(req, expectedOrigin, true)) {
+    return finishJson(res, 403, error('forbidden'))
+  }
+  const value = await parsePostBody(req, res)
+  if (value === INVALID_BODY) return
+  if (!isEmptyRequest(value)) return finishJson(res, 400, error('invalid update journal clear request'))
+  try {
+    finishJson(res, 200, await controller.clearUpdateJournal())
+  } catch (cause) {
+    reportError('clear update journal', cause)
+    finishJson(res, 500, error('update journal could not be cleared'))
+  }
+}
+
 export const desktopSettingsRouteConstants = Object.freeze({
   maxBodyBytes: MAX_SETTINGS_BODY_BYTES,
 })

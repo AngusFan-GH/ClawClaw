@@ -30,6 +30,7 @@ import type {
   DesktopTrayItemGroup,
   DesktopTrayItemRegistration,
   DesktopUpdateAdapter,
+  DesktopUpdateHandoffResult,
 } from './runtime.ts'
 import type { RendererBootReport } from './renderer-boot-contract.ts'
 import {
@@ -150,6 +151,9 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       get currentVersion() { return PRODUCT_VERSION },
       get releaseChannel() { return DESKTOP_RELEASE_CHANNEL },
       get statePath() { return join(app.getPath('userData'), 'updates', 'state.json') },
+      get qualificationJournalDirectory() {
+        return join(app.getPath('userData'), 'updates', 'qualification-journal')
+      },
       ...(installationId === undefined ? {} : { installationId }),
       request: (url, init) => net.fetch(url, init),
       confirmDownload: version => this.confirmUpdateDownload(version),
@@ -690,10 +694,13 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     version: string,
     signal: AbortSignal,
     _channel: DesktopReleaseChannel = 'stable',
-  ): Promise<void> {
+  ): Promise<DesktopUpdateHandoffResult> {
     if (!this.updates.canDownload) throw new Error('Updates require a packaged macOS or Windows application')
-    const install = await stageNativeUpdate(await getNativeUpdater(), version, signal,
+    const stagedResult = await stageNativeUpdate(await getNativeUpdater(), version, signal,
       fraction => { this.generation?.setProgressBar(fraction) })
+    const staged = typeof stagedResult === 'function'
+      ? { install: stagedResult }
+      : stagedResult
     signal.throwIfAborted()
     const copy = desktopNativeCopy(this.currentLocale)
     const result = await this.showUpdateMessageBox({
@@ -702,11 +709,20 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       defaultId: 1, cancelId: 1, noLink: true,
     })
     signal.throwIfAborted()
-    if (result.response !== 0) return
+    if (result.response !== 0) {
+      return {
+        status: 'deferred' as const,
+        ...(staged.artifactDigest === undefined ? {} : { artifactDigest: staged.artifactDigest }),
+      }
+    }
     const spec = this.scheduled
     if (spec === undefined) throw new Error('No active shell can exit for update installation')
-    this.installOnExit = install
+    this.installOnExit = staged.install
     spec.requestQuit(0)
+    return {
+      status: 'install-requested' as const,
+      ...(staged.artifactDigest === undefined ? {} : { artifactDigest: staged.artifactDigest }),
+    }
   }
 
   private offerUpdateArtifactCleanup(): Promise<void> {

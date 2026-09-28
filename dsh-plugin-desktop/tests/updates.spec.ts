@@ -38,6 +38,7 @@ function versionResponse(version: unknown, channel: 'stable' = 'stable'): Respon
 
 interface Harness {
   readonly statePath: string
+  readonly journalDirectory: string
   readonly tray: DesktopTrayItem
   readonly trays: readonly DesktopTrayItem[]
   readonly notifications: DesktopNotification[]
@@ -64,13 +65,15 @@ async function createHarness(options: {
   readonly currentVersion?: string
   readonly confirmDownload?: (version: string, channel?: 'stable') => Promise<boolean>
   readonly showManualCheckResult?: (result: UpdateCheckResult | null) => Promise<void>
-  readonly downloadAndOpen?: (version: string, signal: AbortSignal, channel?: 'stable') => Promise<void>
+  readonly downloadAndOpen?: DesktopRuntime['updates']['downloadAndOpen']
   readonly notify?: (notification: DesktopNotification) => void
   readonly locale?: DesktopRuntime['locale']
   readonly state?: string
+  readonly journalEnabled?: boolean
 } = {}): Promise<Harness> {
   const root = await mkdtemp(join(tmpdir(), 'dsh-updates-'))
   const statePath = join(root, 'private', 'state.json')
+  const journalDirectory = join(root, 'private', 'qualification-journal')
   if (options.state !== undefined) {
     await mkdir(join(root, 'private'), { recursive: true })
     await writeFile(statePath, options.state, { mode: 0o600 })
@@ -97,6 +100,7 @@ async function createHarness(options: {
       currentVersion: options.currentVersion ?? '2.0.0',
       ...(options.releaseChannel === undefined ? {} : { releaseChannel: options.releaseChannel }),
       statePath,
+      qualificationJournalDirectory: journalDirectory,
       canDownload: options.canDownload ?? true,
       request: options.request ?? (async () => versionResponse('2.0.0')),
       confirmDownload,
@@ -121,6 +125,11 @@ async function createHarness(options: {
       },
     },
     connection: { requestRejection },
+    settings: {
+      get: () => ({ updateQualificationJournal: options.journalEnabled ?? false }),
+    },
+    provide: vi.fn(),
+    on: vi.fn(),
     logger: { warn: (...args: unknown[]) => { warnings.push(args) } },
     effect: (register: () => (() => void | Promise<void>)) => {
       disposer = register()
@@ -133,6 +142,7 @@ async function createHarness(options: {
   if (route === undefined) throw new Error('Update route was not registered.')
   return {
     statePath,
+    journalDirectory,
     tray,
     trays,
     notifications,
@@ -155,7 +165,7 @@ afterEach(() => {
 
 describe('desktop update Host plugin', () => {
   it('exposes the packaged 60-second and six-hour background policy', () => {
-    expect(inject).toEqual(['desktopRuntime', 'webServer', 'connection'])
+    expect(inject).toEqual(['desktopRuntime', 'webServer', 'connection', 'settings'])
     expect(Config({} as UpdateConfig)).toEqual({
       enabled: true,
       initialDelayMs: 60_000,
@@ -272,6 +282,43 @@ describe('desktop update Host plugin', () => {
 
     expect(harness.tray.label()).toBe('检查更新…')
 
+    await harness.dispose()
+  })
+
+  it('records only classified update milestones after explicit opt-in', async () => {
+    const harness = await createHarness({
+      packaged: false,
+      journalEnabled: true,
+      request: async () => versionResponse('2.1.0'),
+      confirmDownload: async () => true,
+      downloadAndOpen: async () => ({
+        status: 'install-requested',
+        artifactDigest: 'a'.repeat(64),
+      }),
+    })
+
+    await harness.tray.invoke()
+
+    const files = await import('node:fs/promises').then(fs => fs.readdir(harness.journalDirectory))
+    expect(files).toHaveLength(1)
+    const journal = JSON.parse(await readFile(join(harness.journalDirectory, files[0]!), 'utf8')) as {
+      events: Array<Record<string, unknown>>
+    }
+    expect(journal.events.map(event => event.phase)).toEqual([
+      'launch-ready',
+      'check-requested',
+      'check-completed',
+      'download-confirmed',
+      'check-requested',
+      'check-completed',
+      'release-reconfirmed',
+      'stage-completed',
+      'install-handoff',
+    ])
+    expect(journal.events.at(-1)).toMatchObject({
+      targetVersion: '2.1.0', artifactDigest: 'a'.repeat(64), outcome: 'completed',
+    })
+    expect(JSON.stringify(journal)).not.toContain('clawclaw.xzinfra.com')
     await harness.dispose()
   })
 

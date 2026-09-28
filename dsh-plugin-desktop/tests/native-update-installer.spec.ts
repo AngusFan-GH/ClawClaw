@@ -8,7 +8,11 @@ function provider(version = '2.1.0') {
   const updater = Object.assign(emitter, {
     autoDownload: true, autoInstallOnAppQuit: true, allowDowngrade: true, allowPrerelease: true, channel: '',
     setFeedURL: vi.fn(),
-    checkForUpdates: vi.fn(async () => ({ isUpdateAvailable: true, updateInfo: { version }, cancellationToken: { cancel } })),
+    checkForUpdates: vi.fn(async () => ({
+      isUpdateAvailable: true,
+      updateInfo: { version, files: [{ url: 'ClawClaw.exe', sha512: 'signed-artifact-digest' }] },
+      cancellationToken: { cancel },
+    })),
     downloadUpdate: vi.fn(async (_token?: unknown) => [] as string[]),
     quitAndInstall: vi.fn(),
   })
@@ -19,7 +23,7 @@ describe('native installer ownership', () => {
     const { updater, native } = provider()
     const progress = vi.fn()
     updater.downloadUpdate.mockImplementationOnce(async () => { updater.emit('download-progress', { percent: 42 }); return [] })
-    const install = await stageNativeUpdate(native, '2.1.0', new AbortController().signal, progress)
+    const staged = await stageNativeUpdate(native, '2.1.0', new AbortController().signal, progress)
     expect(updater.autoInstallOnAppQuit).toBe(false)
     expect(updater.autoDownload).toBe(false)
     expect(updater.allowDowngrade).toBe(false)
@@ -28,7 +32,8 @@ describe('native installer ownership', () => {
     expect(progress).toHaveBeenLastCalledWith(-1)
     expect(updater.listenerCount('download-progress')).toBe(0)
     expect(updater.quitAndInstall).not.toHaveBeenCalled()
-    install()
+    expect(staged.artifactDigest).toMatch(/^[0-9a-f]{64}$/u)
+    staged.install()
     expect(updater.quitAndInstall).toHaveBeenCalledWith(false, true)
   })
   it('rejects a rotated release before downloading', async () => {

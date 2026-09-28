@@ -21,6 +21,7 @@ import type {
   DesktopSettingsResponse,
   DesktopSettingsWebView,
   DesktopTerminalOpenResponse,
+  DesktopUpdateJournalClearResponse,
 } from './desktop-settings-contract.ts'
 
 /** Launcher capabilities used without exposing their filesystem roots. */
@@ -45,6 +46,8 @@ export interface DesktopSettingsControllerBootstrap {
   toggleDeveloperTools(): void
   /** Export diagnostics through the launcher-owned privacy flow. */
   exportDiagnostics(): void | Promise<void>
+  /** Clear only recognized local update qualification evidence. */
+  clearUpdateJournal(): void | Promise<void>
 }
 
 /** A persisted response plus work that must run only after `res.end()`. */
@@ -192,6 +195,11 @@ export class DesktopSettingsController {
   /** Export diagnostics through the native confirmation and reveal flow. */
   async exportDiagnostics(): Promise<DesktopDiagnosticsExportResponse> {
     await this.bootstrap.exportDiagnostics()
+    return Object.freeze({ accepted: true })
+  }
+
+  async clearUpdateJournal(): Promise<DesktopUpdateJournalClearResponse> {
+    await this.bootstrap.clearUpdateJournal()
     return Object.freeze({ accepted: true })
   }
 }

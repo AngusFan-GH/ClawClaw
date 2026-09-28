@@ -74,6 +74,8 @@ An explicit `--profile <name>` takes precedence. Restart after plugin changes. P
 
 Packaged applications read `https://clawclaw.xzinfra.com/updates/stable/release.json`. Background failures or unchanged versions are silent; manual checks show a result.
 
+Update qualification evidence in Desktop settings is off by default. When explicitly enabled, it keeps bounded local records of versions, update stages, classified outcomes, durations, and artifact summaries. Full URLs, raw errors, device identity, and user content are excluded. Evidence can be cleared at any time and is included only in a user-requested diagnostic ZIP.
+
 After download confirmation and destination selection, the application fetches the manifest's HTTPS artifact and verifies SHA-512 and its DMG/PE container. Requests do not send the original project's `X-DSH-Desktop-*` statistics headers. Digest verification is not publisher-signature verification. On macOS, replace the application using the opened DMG; Windows hands off to NSIS after confirmation. Downloaded installers can be removed after installation. Actual checks determine whether the service and artifacts are available.
 
 ## Troubleshooting
@@ -87,6 +89,6 @@ After download confirmation and destination selection, the application fetches t
   & "$env:LOCALAPPDATA\Programs\ClawClaw\ClawClaw.exe" --export-diagnostics
   ```
 
-- Logs live under application data in `logs/`; exported ZIPs use `diagnostics/`. Review exports before sharing: they can contain paths, session content, and crash-memory fragments.
+- Logs live under application data in `logs/`; exported ZIPs use `diagnostics/`. Review exports before sharing: they can contain paths, session content, structured fatal reports, explicitly enabled update qualification evidence, and crash-memory fragments.
 
 Report unresolved problems at [ClawClaw Issues](https://github.com/AngusFan-GH/ClawClaw/issues) with operating system, version, reproduction steps, and sanitized errors.

@@ -156,13 +156,19 @@ Verification: `corepack pnpm --filter dsh-plugin-desktop exec vitest run tests/f
 
 ### Phase 5 (P1): opt-in update qualification journal
 
-**Status: Not started**
+**Status: Complete (2026-09-28)**
 
 Goal: after explicit opt-in, record local check, download, validation, staging, install handoff, and next-launch outcomes to diagnose update quality.
 
 - Default off; update settings copy and privacy documentation together.
 - Record versions, phase, error category, duration, and artifact identity digest only; omit full URL queries, device identity, and user content.
 - Add schema versioning, size limit, atomic writes, and clear action. Include it only in user-initiated diagnostic exports.
+
+Delivered implementation: Desktop settings now provides an off-by-default, live-toggleable Update qualification evidence option and a one-click clear action. `update-qualification-journal.ts` accepts fixed event enums and explicitly projects every persisted field. It covers launch readiness, check request/result, download confirmation/decline, release reconfirmation, completed staging, installation handoff, and classified failures. Records contain installed/target versions, integer durations, and a SHA-256 derived again from artifact digests in publisher metadata. URLs, raw errors, arbitrary extension fields, device identity, and user content cannot enter the persistence contract. The isolated Host receives the Electron-owned private directory through the existing typed runtime bridge; the in-process Host uses the same contract.
+
+Every event flushes a complete JSON snapshot through an exclusive same-directory temporary file and atomic rename. A file is limited to 64 KiB; at most four files and 256 KiB total are retained. Directory creation, rotation, clearing, and diagnostics export reject symbolic-link directories and skip symbolic-link or multi-link files. Clearing an active journal cannot resurrect its old in-memory events. Storage failure produces a classified warning without blocking startup or updates. Existing journals enter only a user-requested diagnostics ZIP and have no automatic upload path. The root privacy notice, user guide, recovery copy, and bilingual settings copy now match this behavior.
+
+Verification: 202 focused tests across the journal, update lifecycle, native installer, settings/API, diagnostics Worker, isolated bridge, and Electron runtime; `corepack pnpm --filter dsh-plugin-desktop run typecheck`; `corepack pnpm --filter dsh-plugin-desktop run build`; `corepack pnpm --filter dsh-plugin-desktop run test` (1264 passing, 6 existing skips).
 
 ### Phase 6 (P1): installer transaction, rollback, and uninstall tests
 

@@ -24,6 +24,7 @@ import {
 } from './lifecycle-events.ts'
 import { isDesktopLogFileName } from './log-files.ts'
 import { DESKTOP_FATAL_REPORT_NAME } from './fatal-crash-report.ts'
+import { DESKTOP_UPDATE_JOURNAL_NAME } from './update-qualification-journal.ts'
 
 const DIAGNOSTIC_ARCHIVE = /^diagnostics-\d+(?:-[0-9a-f-]+)?\.zip$/u
 const MAX_DIAGNOSTIC_ARCHIVES = 3
@@ -38,6 +39,7 @@ interface DiagnosticExportWorkerData {
   readonly runStatePath?: string
   readonly lifecycleEvidencePath?: string
   readonly fatalReportsDir?: string
+  readonly updateJournalsDir?: string
 }
 
 export type DiagnosticExportWorkerResult =
@@ -153,6 +155,22 @@ function fatalReportEntries(directory: string | undefined, userDataDir: string):
   }
 }
 
+function updateJournalEntries(directory: string | undefined, userDataDir: string): LogEntry[] {
+  if (directory === undefined) return []
+  try {
+    const stats = lstatSync(directory)
+    if (stats.isSymbolicLink() || !stats.isDirectory() || hasLinkedParent(directory, userDataDir)) return []
+    return readdirSync(directory).flatMap((name) => {
+      if (!DESKTOP_UPDATE_JOURNAL_NAME.test(name)) return []
+      const entry = regularEvidenceEntry(join(directory, name), `update-qualification/${name}`, userDataDir)
+      return entry === undefined || entry.stats.nlink > 1 ? [] : [entry]
+    })
+  } catch (cause) {
+    if (skippableFileError(cause)) return []
+    throw cause
+  }
+}
+
 function readStableLog(entry: LogEntry, remainingBytes: number): Buffer | undefined {
   if (entry.stats.size > remainingBytes) return undefined
   let descriptor: number | undefined
@@ -201,6 +219,8 @@ async function createDiagnosticsArchive(data: DiagnosticExportWorkerData): Promi
     .sort((a, b) => b.stats.mtimeMs - a.stats.mtimeMs || b.name.localeCompare(a.name, 'en'))
   const fatalCandidates = fatalReportEntries(data.fatalReportsDir, data.userDataDir)
     .sort((a, b) => b.stats.mtimeMs - a.stats.mtimeMs || b.name.localeCompare(a.name, 'en'))
+  const updateJournalCandidates = updateJournalEntries(data.updateJournalsDir, data.userDataDir)
+    .sort((a, b) => b.stats.mtimeMs - a.stats.mtimeMs || b.name.localeCompare(a.name, 'en'))
   const runStateCandidate = data.runStatePath === undefined
     ? undefined
     : regularEvidenceEntry(data.runStatePath, 'crash-evidence/active-run.json', data.userDataDir)
@@ -238,7 +258,7 @@ async function createDiagnosticsArchive(data: DiagnosticExportWorkerData): Promi
       }
     }
   }
-  for (const entry of [...fatalCandidates, ...(runStateCandidate === undefined ? [] : [runStateCandidate]), ...crashCandidates, ...candidates]) {
+  for (const entry of [...updateJournalCandidates, ...fatalCandidates, ...(runStateCandidate === undefined ? [] : [runStateCandidate]), ...crashCandidates, ...candidates]) {
     const content = readStableLog(entry, data.maxEvidenceBytes - includedBytes)
     if (content === undefined) {
       if (entry.name.startsWith('crash-dumps/')) omittedCrashDumps += 1
@@ -271,7 +291,7 @@ async function createDiagnosticsArchive(data: DiagnosticExportWorkerData): Promi
     `included-lifecycle-summary: ${String(includedLifecycleSummary)}`,
     `omitted-lifecycle-summary: ${String(omittedLifecycleSummary)}`,
     `evidence-byte-limit: ${String(data.maxEvidenceBytes)}`,
-    'privacy: logs may contain local paths, workspace IDs, and session IDs; crash dumps may contain process memory; lifecycle evidence contains startup timings and bounded plugin IDs',
+    'privacy: logs may contain local paths, workspace IDs, and session IDs; crash dumps may contain process memory; lifecycle evidence contains startup timings and bounded plugin IDs; opt-in update qualification contains versions, classified outcomes, timings, and artifact digests',
   ].join('\n')
   zip.addFile('system-info.txt', Buffer.from(`${info}\n`, 'utf8'))
 

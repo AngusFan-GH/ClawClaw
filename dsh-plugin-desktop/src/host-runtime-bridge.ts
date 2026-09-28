@@ -7,9 +7,12 @@ export type RuntimeSnapshot = Pick<DesktopRuntime, 'platform' | 'windowsBuild' |
   updates: Omit<DesktopUpdateAdapter, 'request' | 'confirmDownload' | 'showManualCheckResult' | 'showUpdateFailure' | 'downloadAndOpen' | 'notify'>
 }
 export function runtimeSnapshot(runtime: DesktopRuntime): RuntimeSnapshot {
-  const { isPackaged, canDownload, currentVersion, releaseChannel, statePath, installationId } = runtime.updates
+  const {
+    isPackaged, canDownload, currentVersion, releaseChannel, statePath,
+    qualificationJournalDirectory, installationId,
+  } = runtime.updates
   return { platform: runtime.platform, windowsBuild: runtime.windowsBuild, locale: runtime.locale,
-    updates: { isPackaged, canDownload, currentVersion, statePath,
+    updates: { isPackaged, canDownload, currentVersion, statePath, qualificationJournalDirectory,
       ...(releaseChannel ? { releaseChannel } : {}), ...(installationId ? { installationId } : {}) } }
 }
 

@@ -1560,6 +1560,13 @@ async function start(): Promise<void> {
             reloadRenderer: () => { runtime.reloadRenderer() },
             toggleDeveloperTools: () => { runtime.toggleDeveloperTools() },
             exportDiagnostics: () => runtime.exportDiagnostics(),
+            clearUpdateJournal: () => {
+              const journal = hostCtx.get('desktopUpdateQualificationJournal')
+              if (journal === undefined) {
+                throw new Error(`${BIN_NAME}: update qualification journal is unavailable`)
+              }
+              journal.clear()
+            },
           }))
           provideCmdline(hostCtx, {
             args: [

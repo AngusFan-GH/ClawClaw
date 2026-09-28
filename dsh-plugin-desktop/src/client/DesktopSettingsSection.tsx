@@ -24,6 +24,7 @@ export interface DesktopShellSettings {
   readonly openBrowser: boolean
   readonly networkExposure: 'loopback' | 'lan'
   readonly logLevel: 'debug' | 'info' | 'warn' | 'error'
+  readonly updateQualificationJournal: boolean
 }
 
 /** Browser view of the Host `dsh-desktop-notifications` settings namespace. */
@@ -53,7 +54,7 @@ export type DesktopSettingsSectionProps =
   & InjectFace<DesktopSettingsSectionInjected>
 
 type Translate = DesktopSettingsSectionProps['t']
-type BusyOperation = 'load' | 'create-profile' | 'select-profile' | 'delete-profile' | 'select-aa' | 'select-market' | 'mode' | 'material' | 'web' | 'notification'
+type BusyOperation = 'load' | 'create-profile' | 'select-profile' | 'delete-profile' | 'select-aa' | 'select-market' | 'mode' | 'material' | 'web' | 'notification' | 'update-journal'
 type RestartState = 'none' | 'restarting' | 'required'
 type LanPollWait = (signal: AbortSignal) => Promise<void>
 
@@ -314,6 +315,7 @@ export function DesktopSettingsSection({
   const [restart, setRestart] = useState<RestartState>('none')
   const [pendingProfileDelete, setPendingProfileDelete] = useState<string>()
   const [confirmLan, setConfirmLan] = useState(false)
+  const [journalCleared, setJournalCleared] = useState(false)
   const lanPoll = useRef<AbortController>()
 
   const refreshView = useCallback(async () => {
@@ -378,6 +380,20 @@ export function DesktopSettingsSection({
     notifyOnTurnFailure: true,
     notifyOnJobCompletion: true,
     notifyOnJobFailure: true,
+  }
+
+  const setUpdateJournal = (enabled: boolean): void => {
+    void run('update-journal', async () => {
+      await desktopSettings.set('updateQualificationJournal', enabled)
+      setJournalCleared(false)
+    })
+  }
+
+  const clearUpdateJournal = (): void => {
+    void run('update-journal', async () => {
+      await api.clearUpdateJournal()
+      setJournalCleared(true)
+    })
   }
 
   const createProfile = (event: FormEvent): void => {
@@ -757,6 +773,29 @@ export function DesktopSettingsSection({
             disabled={!notificationValue.enabled || !notificationsWritable || busy !== undefined}
             onChange={checked => { setNotification('notifyOnJobFailure', checked) }}
           />
+        </div>
+      </section>
+      <section className="dshDesktopSettingsGroup" aria-labelledby="dsh-desktop-update-journal-title">
+        <div>
+          <h3 id="dsh-desktop-update-journal-title">{t('updateJournalTitle')}</h3>
+          <p className="dshDesktopSettingsGroupIntro">{t('updateJournalIntro')}</p>
+        </div>
+        <ToggleRow
+          label={t('updateJournalEnabled')}
+          checked={desktop.value?.updateQualificationJournal ?? false}
+          disabled={!settingsWritable || busy !== undefined}
+          onChange={setUpdateJournal}
+        />
+        <div>
+          <button
+            type="button"
+            className="dshDesktopSettingsHeaderButton"
+            disabled={busy !== undefined}
+            onClick={clearUpdateJournal}
+          >
+            {t(busy === 'update-journal' ? 'clearingUpdateJournal' : 'clearUpdateJournal')}
+          </button>
+          {journalCleared && <span role="status">{t('updateJournalCleared')}</span>}
         </div>
       </section>
       {confirmLan && (

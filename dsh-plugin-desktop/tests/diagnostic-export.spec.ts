@@ -26,6 +26,7 @@ import {
   desktopLifecycleEvidencePath,
 } from '../src/lifecycle-events.ts'
 import { writeDesktopFatalReport } from '../src/fatal-crash-report.ts'
+import { DesktopUpdateQualificationJournal } from '../src/update-qualification-journal.ts'
 
 const APP_VERSION = '2.0.1-test'
 
@@ -141,6 +142,23 @@ describe('exportDiagnosticsZip', () => {
     const out = await exportDesktopDiagnostics(root, { appVersion: APP_VERSION })
     const zip = new AdmZip(out)
     expect(zip.getEntry(`crash-evidence/fatal/${name}`)).toBeNull()
+  })
+
+  it('includes opt-in update qualification evidence only through explicit diagnostics', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-dx-update-journal-'))
+    const journal = new DesktopUpdateQualificationJournal(
+      join(root, 'updates', 'qualification-journal'),
+      APP_VERSION,
+    )
+    journal.record({ phase: 'check-completed', targetVersion: '2.1.0', outcome: 'available', durationMs: 25 })
+
+    const out = await exportDesktopDiagnostics(root, { appVersion: APP_VERSION })
+    const zip = new AdmZip(out)
+    const name = journal.path.split(/[\\/]/u).at(-1)!
+    const entry = `update-qualification/${name}`
+    expect(zip.getEntry(entry)).not.toBeNull()
+    expect(zip.readAsText(entry)).toContain('"phase": "check-completed"')
+    expect(zip.readAsText('system-info.txt')).toContain('opt-in update qualification')
   })
 
   it('includes lifecycle JSONL and a correlated summary in the diagnostic archive', async () => {

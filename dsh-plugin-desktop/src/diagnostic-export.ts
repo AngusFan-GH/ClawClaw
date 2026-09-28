@@ -25,6 +25,8 @@ export interface DiagnosticExportOptions {
   readonly lifecycleEvidencePath?: string
   /** Directory containing bounded structured fatal reports. */
   readonly fatalReportsDir?: string
+  /** Directory containing opt-in update qualification journals. */
+  readonly updateJournalsDir?: string
   /** Cancels the short-lived worker when its owning UI or process operation ends. */
   readonly signal?: AbortSignal
 }
@@ -116,6 +118,7 @@ export function exportDiagnosticsZip(
       ...(options.runStatePath === undefined ? {} : { runStatePath: options.runStatePath }),
       ...(options.lifecycleEvidencePath === undefined ? {} : { lifecycleEvidencePath: options.lifecycleEvidencePath }),
       ...(options.fatalReportsDir === undefined ? {} : { fatalReportsDir: options.fatalReportsDir }),
+      ...(options.updateJournalsDir === undefined ? {} : { updateJournalsDir: options.updateJournalsDir }),
     },
     resourceLimits: { maxOldGenerationSizeMb: 256 },
   })
@@ -135,6 +138,7 @@ export function exportDesktopDiagnostics(
     runStatePath: join(userDataDir, 'crash-evidence', 'active-run.json'),
     lifecycleEvidencePath: desktopLifecycleEvidencePath(userDataDir),
     fatalReportsDir: join(userDataDir, 'crash-evidence', 'fatal'),
+    updateJournalsDir: join(userDataDir, 'updates', 'qualification-journal'),
     ...(options.maxEvidenceBytes === undefined ? {} : { maxEvidenceBytes: options.maxEvidenceBytes }),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })

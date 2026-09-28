@@ -156,13 +156,19 @@ ClawClaw 已有下列能力，因此不再移植同类实现：
 
 ### 阶段 5（P1）：可选的更新资格 journal
 
-**状态：待实施**
+**状态：已完成（2026-09-28）**
 
 目标：用户明确开启后，在本机记录检查、下载、校验、stage、安装交接和下次启动结果，便于判断更新链路质量。
 
 - 默认关闭；设置文案和隐私说明同步更新。
 - 只记录版本、阶段、错误分类、耗时和制品身份摘要，不记录完整 URL 查询、设备身份或用户内容。
 - 有 schema 版本、大小上限、原子写入和一键清除；可包含在用户主动导出的诊断包中。
+
+已落地：桌面设置新增默认关闭、可热切换的“更新资格记录”及一键清除操作。`update-qualification-journal.ts` 只接受固定枚举事件和显式投影字段，覆盖本次启动就绪、检查请求/结果、下载确认/拒绝、release 二次确认、stage 完成、安装交接和分类失败；记录安装/目标版本、整数耗时，以及由发布元数据中的制品 digest 再派生的 SHA-256，不接受 URL、错误原文、任意扩展字段、设备身份或用户内容。隔离 Host 通过既有 typed runtime bridge 获取 Electron 拥有的私有目录，进程内 Host 使用同一 contract。
+
+每次事件以同目录临时文件和原子 rename 刷新完整 JSON 快照；单文件不超过 64 KiB，最多 4 份且合计不超过 256 KiB。目录、轮转、清除和诊断导出拒绝符号链接目录，并跳过符号链接或多链接文件。清除活动 journal 后不会恢复旧内存事件。存储故障只产生已分类警告，不阻断启动或更新。只有用户主动导出诊断 ZIP 时才包含现存 journal，应用没有自动上传路径；根隐私说明、用户指南、恢复窗口文案和中英文设置文案已同步。
+
+验证：更新 journal、状态机、native installer、设置/API、诊断 Worker、隔离桥和 Electron runtime 聚焦测试 202 项通过；`corepack pnpm --filter dsh-plugin-desktop run typecheck`；`corepack pnpm --filter dsh-plugin-desktop run build`；`corepack pnpm --filter dsh-plugin-desktop run test`（1264 项通过，6 项既有跳过）。
 
 ### 阶段 6（P1）：安装事务、回滚和卸载测试
 

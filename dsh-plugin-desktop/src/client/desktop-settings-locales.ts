@@ -102,6 +102,12 @@ export const zh = {
   turnFailure: '本轮任务失败',
   jobCompletion: '后台任务完成',
   jobFailure: '后台任务失败',
+  updateJournalTitle: '更新资格记录',
+  updateJournalIntro: '可选地在本机记录更新阶段、版本、分类结果、耗时和制品摘要。不会记录 URL、错误原文、设备身份或用户内容；仅在你主动导出诊断信息时包含。',
+  updateJournalEnabled: '启用本地更新资格记录',
+  clearUpdateJournal: '清除更新资格记录',
+  clearingUpdateJournal: '正在清除…',
+  updateJournalCleared: '更新资格记录已清除。',
 } as const
 
 export type DesktopSettingsLocaleKey = keyof typeof zh
@@ -208,4 +214,10 @@ export const en: Record<DesktopSettingsLocaleKey, string> = {
   turnFailure: 'Current turn failed',
   jobCompletion: 'Background job completed',
   jobFailure: 'Background job failed',
+  updateJournalTitle: 'Update qualification evidence',
+  updateJournalIntro: 'Optionally record update stages, versions, classified outcomes, durations, and artifact summaries on this device. URLs, raw errors, device identity, and user content are excluded. Evidence is included only when you explicitly export diagnostics.',
+  updateJournalEnabled: 'Record local update qualification evidence',
+  clearUpdateJournal: 'Clear update qualification evidence',
+  clearingUpdateJournal: 'Clearing…',
+  updateJournalCleared: 'Update qualification evidence was cleared.',
 }

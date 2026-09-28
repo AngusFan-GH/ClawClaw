@@ -1,4 +1,5 @@
 /** Native update staging. Importing this module never starts Electron or network work. */
+import { createHash } from 'node:crypto'
 import type { AppUpdater } from 'electron-updater'
 import { CLAWCLAW_UPDATE_BASE_URL } from './update-checker.ts'
 import {
@@ -10,13 +11,19 @@ export type NativeUpdater = Pick<AppUpdater,
   'autoDownload' | 'autoInstallOnAppQuit' | 'allowDowngrade' | 'allowPrerelease' | 'channel' |
   'setFeedURL' | 'checkForUpdates' | 'downloadUpdate' | 'quitAndInstall' | 'on' | 'removeListener'>
 
+export interface StagedNativeUpdate {
+  readonly install: () => void
+  /** SHA-256 over validated publisher-provided artifact digests, never over an URL. */
+  readonly artifactDigest?: string
+}
+
 /** Only an explicit successful Host shutdown may call the returned installer action. */
 export async function stageNativeUpdate(
   updater: NativeUpdater,
   version: string,
   signal: AbortSignal,
   progress: (fraction: number) => void = () => {},
-): Promise<() => void> {
+): Promise<StagedNativeUpdate> {
   signal.throwIfAborted()
   updater.autoDownload = false
   updater.autoInstallOnAppQuit = false
@@ -29,6 +36,13 @@ export async function stageNativeUpdate(
   if (result === null || !result.isUpdateAvailable || result.updateInfo.version !== version) {
     throw new Error('The selected release is no longer available. Check for updates again.')
   }
+  const artifactDigests = (result.updateInfo.files ?? [])
+    .map(file => file.sha512)
+    .filter((value): value is string => typeof value === 'string')
+    .sort()
+  const artifactDigest = artifactDigests.length === 0
+    ? undefined
+    : createHash('sha256').update(artifactDigests.join('\0')).digest('hex')
   const cancel = (): void => { result.cancellationToken?.cancel() }
   const onProgress = (info: { percent: number }): void => { progress(Math.min(1, Math.max(0, info.percent / 100))) }
   signal.addEventListener('abort', cancel, { once: true })
@@ -36,7 +50,10 @@ export async function stageNativeUpdate(
   try {
     await updater.downloadUpdate(result.cancellationToken)
     signal.throwIfAborted()
-    return () => { updater.quitAndInstall(false, true) }
+    return {
+      install: () => { updater.quitAndInstall(false, true) },
+      ...(artifactDigest === undefined ? {} : { artifactDigest }),
+    }
   } finally {
     signal.removeEventListener('abort', cancel)
     updater.removeListener('download-progress', onProgress)

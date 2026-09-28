@@ -34,6 +34,9 @@ export const DESKTOP_DEVELOPER_TOOLS_TOGGLE_PATH = '/api/desktop/developer/devto
 /** Run the generation-owned manual update check. */
 export const DESKTOP_UPDATE_CHECK_PATH = '/api/desktop/updates/check'
 
+/** Clear bounded local update-qualification evidence. */
+export const DESKTOP_UPDATE_JOURNAL_CLEAR_PATH = '/api/desktop/updates/journal/clear'
+
 /** Export one local diagnostic archive through the launcher-owned flow. */
 export const DESKTOP_DIAGNOSTICS_EXPORT_PATH = '/api/desktop/diagnostics/export'
 
@@ -169,6 +172,12 @@ export type DesktopUpdateCheckRequest = Readonly<Record<string, never>>
 
 /** Successful completion of the interactive update-check flow. */
 export interface DesktopUpdateCheckResponse {
+  readonly accepted: true
+}
+
+export type DesktopUpdateJournalClearRequest = Readonly<Record<string, never>>
+
+export interface DesktopUpdateJournalClearResponse {
   readonly accepted: true
 }
 

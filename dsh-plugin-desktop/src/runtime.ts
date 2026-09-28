@@ -111,6 +111,8 @@ export interface DesktopUpdateAdapter {
   readonly releaseChannel?: DesktopReleaseChannel
   /** Private file used to suppress repeated background update announcements. */
   readonly statePath: string
+  /** Private directory for explicitly enabled update-qualification evidence. */
+  readonly qualificationJournalDirectory: string
   /** Pseudonymous installation UUID attached only to the fixed version endpoint. */
   readonly installationId?: DesktopInstallationId
   /** Request adapter backed by Electron's native network session. */
@@ -122,9 +124,18 @@ export interface DesktopUpdateAdapter {
   /** Explain a failed interactive update without exposing transport details. */
   showUpdateFailure(reason: 'release-changed' | 'download-failed'): Promise<void>
   /** Download and hand one confirmed update to the platform installer. */
-  downloadAndOpen(version: string, signal: AbortSignal, channel?: DesktopReleaseChannel): Promise<void>
+  downloadAndOpen(
+    version: string,
+    signal: AbortSignal,
+    channel?: DesktopReleaseChannel,
+  ): Promise<DesktopUpdateHandoffResult | void>
   /** Present a native status notification without blocking the Host tree. */
   notify(notification: DesktopNotification): void
+}
+
+export interface DesktopUpdateHandoffResult {
+  readonly status: 'deferred' | 'install-requested'
+  readonly artifactDigest?: string
 }
 
 /** Profile identity needed to open the packaged DSH command environment. */

@@ -39,6 +39,7 @@ import {
   DESKTOP_RENDERER_RELOAD_PATH,
   DESKTOP_SETTINGS_PATH,
   DESKTOP_TERMINAL_OPEN_PATH,
+  DESKTOP_UPDATE_JOURNAL_CLEAR_PATH,
 } from './desktop-settings-contract.ts'
 import {
   handleDesktopDiagnosticsExportRequest,
@@ -52,6 +53,7 @@ import {
   handleDesktopRendererReloadRequest,
   handleDesktopSettingsRequest,
   handleDesktopTerminalOpenRequest,
+  handleDesktopUpdateJournalClearRequest,
 } from './desktop-settings-route.ts'
 import type {} from './desktop-settings-controller.ts'
 import { DESKTOP_LAN_HTTPS_CA_PATH } from './lan-https-runtime.ts'
@@ -125,6 +127,8 @@ export interface DesktopSettings {
   networkExposure: DesktopNetworkExposure
   /** Log verbosity threshold applied to the file logger. */
   logLevel: 'debug' | 'info' | 'warn' | 'error'
+  /** Persist bounded local update qualification evidence for explicit diagnostics. */
+  updateQualificationJournal: boolean
 }
 
 /** Schema registered with the standard settings service. */
@@ -136,6 +140,7 @@ export const DesktopSettingsSchema: z<DesktopSettings> = z.object({
   openBrowser: z.boolean().default(false),
   networkExposure: z.union(['loopback', 'lan'] as const).default('loopback'),
   logLevel: z.union(['debug', 'info', 'warn', 'error'] as const).default('info'),
+  updateQualificationJournal: z.boolean().default(false),
 })
 
 /** Native window configuration. */
@@ -309,6 +314,7 @@ export function apply(ctx: Context, config: Config): void {
       [DESKTOP_RENDERER_RELOAD_PATH, handleDesktopRendererReloadRequest],
       [DESKTOP_DEVELOPER_TOOLS_TOGGLE_PATH, handleDesktopDeveloperToolsToggleRequest],
       [DESKTOP_DIAGNOSTICS_EXPORT_PATH, handleDesktopDiagnosticsExportRequest],
+      [DESKTOP_UPDATE_JOURNAL_CLEAR_PATH, handleDesktopUpdateJournalClearRequest],
     ] as const
     for (const [path, handler] of settingsRoutes) {
       ctx.effect(

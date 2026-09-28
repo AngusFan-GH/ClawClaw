@@ -6,14 +6,16 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { DESKTOP_UPDATE_CHECK_PATH } from './desktop-settings-contract.ts'
 import { handleDesktopUpdateCheckRequest } from './desktop-settings-route.ts'
+import { DESKTOP_SETTINGS_NAMESPACE, type DesktopSettings } from './index.ts'
 import type {} from './runtime.ts'
 import { startDesktopUpdateLifecycle } from './update-lifecycle.ts'
+import { DesktopUpdateQualificationJournalManager } from './update-qualification-journal.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'desktop-updates'
 
 /** Native adapter required for network, tray, confirmation, and installer access. */
-export const inject = ['desktopRuntime', 'webServer', 'connection']
+export const inject = ['desktopRuntime', 'webServer', 'connection', 'settings']
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647
 
@@ -49,12 +51,40 @@ export const Config: z<Config> = z.object({
  * @param config - validated polling and timeout values.
  */
 export function apply(ctx: Context, config: Config): void {
+  const journal = new DesktopUpdateQualificationJournalManager(
+    ctx.desktopRuntime.updates.qualificationJournalDirectory,
+    ctx.desktopRuntime.updates.currentVersion,
+  )
+  const journalEnabled = (): boolean => {
+    return (ctx.settings.get(DESKTOP_SETTINGS_NAMESPACE) as DesktopSettings | undefined)
+      ?.updateQualificationJournal ?? false
+  }
+  try {
+    journal.setEnabled(journalEnabled())
+  } catch (cause) {
+    ctx.logger.warn(
+      `dsh-plugin-desktop: update qualification journal unavailable: ${cause instanceof Error ? cause.message : String(cause)}`,
+    )
+  }
+  ctx.provide('desktopUpdateQualificationJournal', journal)
+  ctx.on('settings/updated', (namespace, next) => {
+    if (namespace === DESKTOP_SETTINGS_NAMESPACE) {
+      try {
+        journal.setEnabled((next as DesktopSettings).updateQualificationJournal)
+      } catch (cause) {
+        ctx.logger.warn(
+          `dsh-plugin-desktop: update qualification journal unavailable: ${cause instanceof Error ? cause.message : String(cause)}`,
+        )
+      }
+    }
+  })
   ctx.effect(() => {
     const lifecycle = startDesktopUpdateLifecycle({
       adapter: ctx.desktopRuntime.updates,
       policy: config,
       locale: () => ctx.desktopRuntime.locale,
       registerTrayItem: item => ctx.desktopRuntime.registerTrayItem(item),
+      journal,
     })
     const rendererOrigin = `http://127.0.0.1:${String(ctx.webServer.port)}`
     const unregister = ctx.webServer.register({

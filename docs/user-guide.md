@@ -74,6 +74,8 @@ dsh plugin update
 
 打包应用读取 `https://clawclaw.xzinfra.com/updates/stable/release.json`。后台检查失败或无新版本时静默；手动检查会显示结果。
 
+桌面设置中的“更新资格记录”默认关闭。明确开启后，它只在本机限额记录版本、更新阶段、分类结果、耗时和制品摘要，不记录完整 URL、错误原文、设备身份或用户内容；可随时一键清除。记录仅在用户主动导出诊断 ZIP 时包含。
+
 确认下载并选择保存位置后，应用从 manifest 指定的 HTTPS 地址获取安装包，校验 SHA-512 和 DMG/PE 容器。当前请求不发送旧项目的 `X-DSH-Desktop-*` 统计 header。校验摘要不等于验证发布者数字签名。macOS 打开 DMG 后由用户替换应用；Windows 确认后交给 NSIS。安装后可选择删除下载文件。服务或产物是否已发布，以检查实际结果为准。
 
 ## 排查
@@ -87,6 +89,6 @@ dsh plugin update
   & "$env:LOCALAPPDATA\Programs\ClawClaw\ClawClaw.exe" --export-diagnostics
   ```
 
-- 日志在应用数据目录的 `logs/`，诊断 ZIP 在 `diagnostics/`。导出可能包含路径、会话内容和崩溃内存片段，分享前先检查。
+- 日志在应用数据目录的 `logs/`，诊断 ZIP 在 `diagnostics/`。导出可能包含路径、会话内容、结构化 fatal report、选择启用的更新资格记录和崩溃内存片段，分享前先检查。
 
 仍无法解决时，在 [ClawClaw Issues](https://github.com/AngusFan-GH/ClawClaw/issues) 提供操作系统、版本、复现步骤和脱敏后的错误。

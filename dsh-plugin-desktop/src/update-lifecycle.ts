@@ -16,6 +16,10 @@ import {
   type DesktopReleaseChannel,
   type UpdateCheckResult,
 } from './update-checker.ts'
+import type {
+  DesktopUpdateQualificationEvent,
+  DesktopUpdateQualificationJournalManager,
+} from './update-qualification-journal.ts'
 
 const MAX_STATE_BYTES = 4 * 1024
 
@@ -36,6 +40,8 @@ export interface DesktopUpdateLifecycleOptions {
   readonly locale: () => DesktopLocale
   readonly registerTrayItem: (item: DesktopTrayItem) => DesktopTrayItemRegistration
   readonly random?: () => number
+  readonly monotonicNow?: () => number
+  readonly journal?: Pick<DesktopUpdateQualificationJournalManager, 'record'>
 }
 
 /** Lifecycle handle for one generation's update operations. */
@@ -166,13 +172,15 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
     this.registration.refresh()
     const controller = new AbortController()
     this.requestController = controller
+    const startedAt = this.monotonicNow()
+    this.record({ phase: 'check-requested' })
 
     const task = (async () => {
       this.requestTimer = setTimeout(() => {
         controller.abort()
       }, this.options.policy.requestTimeoutMs)
       try {
-        return await checkForDesktopUpdate({
+        const result = await checkForDesktopUpdate({
           currentVersion: this.options.adapter.currentVersion,
           channel,
           ...(this.options.adapter.installationId === undefined
@@ -181,7 +189,20 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
           signal: controller.signal,
           request: this.options.adapter.request,
         })
+        this.record({
+          phase: 'check-completed',
+          outcome: result === null ? 'unavailable' : result.status === 'up-to-date' ? 'up-to-date' : 'available',
+          ...(result?.latestVersion === undefined ? {} : { targetVersion: result.latestVersion }),
+          durationMs: this.durationSince(startedAt),
+        })
+        return result
       } catch {
+        this.record({
+          phase: 'operation-failed',
+          errorCategory: controller.signal.aborted ? 'cancelled' : 'check-unavailable',
+          outcome: controller.signal.aborted ? 'cancelled' : 'unavailable',
+          durationMs: this.durationSince(startedAt),
+        })
         return null
       }
     })().finally(() => {
@@ -220,7 +241,11 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
       } catch {
         return
       }
-      if (!confirmed || this.disposed) return
+      if (!confirmed || this.disposed) {
+        if (!this.disposed) this.record({ phase: 'download-declined', targetVersion: version, outcome: 'cancelled' })
+        return
+      }
+      this.record({ phase: 'download-confirmed', targetVersion: version })
 
       const confirmedResult = await this.startCheck(channel)
       const confirmedVersion = confirmedResult?.status === 'update-available'
@@ -228,12 +253,23 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
         : undefined
       if (channel === (this.options.adapter.releaseChannel ?? 'stable')) this.observeResult(confirmedResult)
       if (this.disposed) return
+      this.record({
+        phase: 'release-reconfirmed',
+        targetVersion: confirmedVersion ?? version,
+        outcome: confirmedResult === null ? 'unavailable'
+          : confirmedVersion === version ? 'available' : 'up-to-date',
+      })
       if (confirmedVersion !== version) {
         if (confirmedResult === null || confirmedResult.status === 'up-to-date') {
           await this.options.adapter.showManualCheckResult(confirmedResult)
         } else {
           await this.options.adapter.showUpdateFailure('release-changed')
         }
+        this.record({
+          phase: 'operation-failed',
+          targetVersion: version,
+          errorCategory: 'release-changed',
+        })
         return
       }
 
@@ -241,13 +277,37 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
       this.downloadController = controller
       this.downloadingVersion = version
       this.registration.refresh()
+      const startedAt = this.monotonicNow()
       try {
+        let result: Awaited<ReturnType<DesktopUpdateAdapter['downloadAndOpen']>>
         if (this.options.adapter.releaseChannel === undefined && channel === 'stable') {
-          await this.options.adapter.downloadAndOpen(version, controller.signal)
+          result = await this.options.adapter.downloadAndOpen(version, controller.signal)
         } else {
-          await this.options.adapter.downloadAndOpen(version, controller.signal, channel)
+          result = await this.options.adapter.downloadAndOpen(version, controller.signal, channel)
+        }
+        this.record({
+          phase: 'stage-completed',
+          targetVersion: version,
+          outcome: result?.status === 'deferred' ? 'deferred' : 'completed',
+          durationMs: this.durationSince(startedAt),
+          ...(result?.artifactDigest === undefined ? {} : { artifactDigest: result.artifactDigest }),
+        })
+        if (result?.status === 'install-requested') {
+          this.record({
+            phase: 'install-handoff',
+            targetVersion: version,
+            outcome: 'completed',
+            ...(result.artifactDigest === undefined ? {} : { artifactDigest: result.artifactDigest }),
+          })
         }
       } catch {
+        this.record({
+          phase: 'operation-failed',
+          targetVersion: version,
+          ...(controller.signal.aborted ? { outcome: 'cancelled' as const } : {}),
+          errorCategory: controller.signal.aborted ? 'cancelled' : 'download-failed',
+          durationMs: this.durationSince(startedAt),
+        })
         if (!this.disposed && !controller.signal.aborted) {
           await this.options.adapter.showUpdateFailure('download-failed')
         }
@@ -320,6 +380,18 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
     const lower = Math.max(1_000, baseMs * (1 - jitter))
     const upper = Math.min(maxBackoffMs, baseMs * (1 + jitter))
     return Math.round(lower + (upper - lower) * (this.options.random?.() ?? Math.random()))
+  }
+
+  private monotonicNow(): number {
+    return this.options.monotonicNow?.() ?? performance.now()
+  }
+
+  private durationSince(startedAt: number): number {
+    return Math.max(0, Math.round(this.monotonicNow() - startedAt))
+  }
+
+  private record(event: DesktopUpdateQualificationEvent): void {
+    try { this.options.journal?.record(event) } catch { /* qualification evidence cannot block updates */ }
   }
 
   private trayLabel(): string {
