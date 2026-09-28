@@ -35,11 +35,19 @@ if ($taskExistingProcesses.Count -gt 0 -or $taskExistingInstalls.Count -gt 0) {
 $taskTempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
 $taskRoot = Join-Path $taskTempRoot ("dsh-installer-upgrade-" + [guid]::NewGuid().ToString('N'))
 $taskInstallRoot = Join-Path $taskRoot 'app'
+$taskRetentionRoot = Join-Path $taskTempRoot ("dsh-installer-retention-" + [guid]::NewGuid().ToString('N'))
 $taskUserData = Join-Path $env:APPDATA 'ClawClaw'
-$taskDshHome = Join-Path $taskRoot 'dsh-home'
+$taskDshHome = Join-Path $taskRetentionRoot 'dsh-home'
+$taskWorkspace = Join-Path $taskRetentionRoot 'workspace'
 $taskActiveRunMarker = Join-Path $taskUserData 'crash-evidence\active-run.json'
 $taskAppPath = Join-Path $taskInstallRoot 'ClawClaw.exe'
 $taskUninstallerPath = Join-Path $taskInstallRoot 'Uninstall ClawClaw.exe'
+$taskMarkerToken = [guid]::NewGuid().ToString('N')
+$taskApplicationCacheMarker = Join-Path $taskUserData "Cache\installer-retention-$taskMarkerToken.txt"
+$taskLogMarker = Join-Path $taskUserData "logs\installer-retention-$taskMarkerToken.txt"
+$taskProfileMarker = Join-Path $taskDshHome "profiles\installer-retention-$taskMarkerToken.txt"
+$taskWorkspaceMarker = Join-Path $taskWorkspace "installer-retention-$taskMarkerToken.txt"
+$taskCorruptInstaller = Join-Path $taskRoot 'corrupt-candidate.exe'
 if (Test-Path -LiteralPath $taskActiveRunMarker) {
   throw 'Refusing to overwrite an existing ClawClaw active run marker.'
 }
@@ -56,6 +64,11 @@ $taskResult = [ordered]@{
   baseInstallExitCode = $null
   baseInstallElapsedMs = $null
   baseInstalledVersion = $null
+  corruptInstallerRejected = $false
+  corruptInstallerExitCode = $null
+  corruptInstallerError = $null
+  baseVersionPreservedAfterCorruptInstaller = $false
+  baseLaunchableAfterCorruptInstaller = $false
   baseProcessId = $null
   baseProcessStarted = $false
   upgradeExitCode = $null
@@ -74,6 +87,10 @@ $taskResult = [ordered]@{
   installRootRemoved = $false
   uninstallEntryRemoved = $false
   shortcutsRemoved = $false
+  applicationCachePreserved = $false
+  logsPreserved = $false
+  profilesPreserved = $false
+  workspacePreserved = $false
   testProcessesRemaining = $null
   activeRunMarkerAbsentAfterCleanup = $false
   error = $null
@@ -100,6 +117,7 @@ function Start-TaskDesktop {
   $taskStartInfo.WorkingDirectory = $taskInstallRoot
   $taskStartInfo.UseShellExecute = $false
   $taskStartInfo.EnvironmentVariables['DSH_HOME'] = $taskDshHome
+  $taskStartInfo.EnvironmentVariables['CLAWCLAW_DEFAULT_WORKSPACE'] = $taskWorkspace
   $taskStartInfo.EnvironmentVariables['ELECTRON_ENABLE_LOGGING'] = '1'
   return [System.Diagnostics.Process]::Start($taskStartInfo)
 }
@@ -146,6 +164,15 @@ function Test-TaskVersionEquals([string]$taskActualVersion, [string]$taskExpecte
 
 try {
   New-Item -ItemType Directory -Path $taskRoot | Out-Null
+  foreach ($taskMarker in @(
+    $taskApplicationCacheMarker,
+    $taskLogMarker,
+    $taskProfileMarker,
+    $taskWorkspaceMarker
+  )) {
+    New-Item -ItemType Directory -Path (Split-Path -Parent $taskMarker) -Force | Out-Null
+    Set-Content -LiteralPath $taskMarker -Value $taskMarkerToken -Encoding Ascii
+  }
 
   $taskBaseInstall = Start-TaskInstaller $taskBaseInstaller
   $taskResult.baseInstallExitCode = $taskBaseInstall.exitCode
@@ -158,10 +185,42 @@ try {
     throw "Expected base version $taskBaseExpectedVersion but installed $($taskResult.baseInstalledVersion)."
   }
 
+  Copy-Item -LiteralPath $taskCandidateInstaller -Destination $taskCorruptInstaller
+  $taskCorruptStream = [System.IO.File]::Open(
+    $taskCorruptInstaller,
+    [System.IO.FileMode]::Open,
+    [System.IO.FileAccess]::Write,
+    [System.IO.FileShare]::None
+  )
+  try {
+    [long]$taskCorruptLength = [Math]::Min(4096, [Math]::Max(1, [Math]::Floor($taskCorruptStream.Length / 4)))
+    $taskCorruptStream.SetLength($taskCorruptLength)
+  } finally {
+    $taskCorruptStream.Dispose()
+  }
+  try {
+    $taskCorruptAttempt = Start-TaskInstaller $taskCorruptInstaller
+    $taskResult.corruptInstallerExitCode = $taskCorruptAttempt.exitCode
+    $taskResult.corruptInstallerRejected = $taskCorruptAttempt.exitCode -ne 0
+  } catch {
+    $taskResult.corruptInstallerError = $_.Exception.Message
+    $taskResult.corruptInstallerRejected = $true
+  }
+  if (-not $taskResult.corruptInstallerRejected) {
+    throw 'Corrupted candidate installer was accepted.'
+  }
+  $taskVersionAfterCorrupt = (Get-Item -LiteralPath $taskAppPath).VersionInfo.ProductVersion
+  $taskResult.baseVersionPreservedAfterCorruptInstaller = Test-TaskVersionEquals `
+    $taskVersionAfterCorrupt $taskBaseExpectedVersion
+  if (-not $taskResult.baseVersionPreservedAfterCorruptInstaller) {
+    throw 'Corrupted candidate installer changed the installed base version.'
+  }
+
   $taskBaseProcess = Start-TaskDesktop
   Wait-TaskProcess $true | Out-Null
   $taskResult.baseProcessId = $taskBaseProcess.Id
   $taskResult.baseProcessStarted = -not $taskBaseProcess.HasExited
+  $taskResult.baseLaunchableAfterCorruptInstaller = $taskResult.baseProcessStarted
 
   $taskUpgrade = Start-TaskInstaller $taskCandidateInstaller
   $taskResult.upgradeExitCode = $taskUpgrade.exitCode
@@ -250,6 +309,11 @@ try {
   })
   $taskResult.shortcutsRemoved = $taskRemainingShortcuts.Count -eq 0
 
+  $taskResult.applicationCachePreserved = Test-Path -LiteralPath $taskApplicationCacheMarker -PathType Leaf
+  $taskResult.logsPreserved = Test-Path -LiteralPath $taskLogMarker -PathType Leaf
+  $taskResult.profilesPreserved = Test-Path -LiteralPath $taskProfileMarker -PathType Leaf
+  $taskResult.workspacePreserved = Test-Path -LiteralPath $taskWorkspaceMarker -PathType Leaf
+
   if (Test-Path -LiteralPath $taskActiveRunMarker) {
     try {
       $taskMarkerRecord = Get-Content -LiteralPath $taskActiveRunMarker -Raw | ConvertFrom-Json
@@ -260,12 +324,21 @@ try {
     } catch {}
   }
   $taskResult.activeRunMarkerAbsentAfterCleanup = -not (Test-Path -LiteralPath $taskActiveRunMarker)
+  foreach ($taskMarker in @($taskApplicationCacheMarker, $taskLogMarker)) {
+    Remove-Item -LiteralPath $taskMarker -Force -ErrorAction SilentlyContinue
+  }
+  if (Test-Path -LiteralPath $taskRetentionRoot) {
+    Remove-Item -LiteralPath $taskRetentionRoot -Recurse -Force
+  }
 }
 
 $taskResult.success = (
   $null -eq $taskResult.error -and
   $taskResult.baseInstallExitCode -eq 0 -and
   (Test-TaskVersionEquals $taskResult.baseInstalledVersion $taskBaseExpectedVersion) -and
+  $taskResult.corruptInstallerRejected -and
+  $taskResult.baseVersionPreservedAfterCorruptInstaller -and
+  $taskResult.baseLaunchableAfterCorruptInstaller -and
   $taskResult.baseProcessStarted -and
   $taskResult.upgradeExitCode -eq 0 -and
   (Test-TaskVersionEquals $taskResult.upgradedVersion $taskCandidateExpectedVersion) -and
@@ -280,6 +353,10 @@ $taskResult.success = (
   $taskResult.installRootRemoved -and
   $taskResult.uninstallEntryRemoved -and
   $taskResult.shortcutsRemoved -and
+  $taskResult.applicationCachePreserved -and
+  $taskResult.logsPreserved -and
+  $taskResult.profilesPreserved -and
+  $taskResult.workspacePreserved -and
   $taskResult.testProcessesRemaining -eq 0 -and
   $taskResult.activeRunMarkerAbsentAfterCleanup
 )

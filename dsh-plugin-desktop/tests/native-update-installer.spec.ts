@@ -50,4 +50,12 @@ describe('native installer ownership', () => {
     expect(updater.listenerCount('download-progress')).toBe(0)
     expect(updater.quitAndInstall).not.toHaveBeenCalled()
   })
+  it('keeps the current installation active when native staging fails', async () => {
+    const { native, updater } = provider()
+    updater.downloadUpdate.mockRejectedValueOnce(new Error('artifact verification failed'))
+    await expect(stageNativeUpdate(native, '2.1.0', new AbortController().signal))
+      .rejects.toThrow('artifact verification failed')
+    expect(updater.listenerCount('download-progress')).toBe(0)
+    expect(updater.quitAndInstall).not.toHaveBeenCalled()
+  })
 })

@@ -172,13 +172,21 @@ Verification: 202 focused tests across the journal, update lifecycle, native ins
 
 ### Phase 6 (P1): installer transaction, rollback, and uninstall tests
 
-**Status: Not started**
+**Status: Complete (2026-09-28; real-platform cases run as release qualification)**
 
 Goal: prove automatically that failed installation preserves a bootable version and that uninstall behavior matches user-data retention policy.
 
 - Expand Windows VM coverage for upgrades, interruption, corrupt packages, completion after restart, and old-version launchability.
 - Document and test the preservation matrix for app files, cache, logs, Profiles, and workspaces.
 - Add equivalent macOS smokes for staged artifacts, replacement failure, and relaunch.
+
+Delivered implementation: `installer-data-retention.ts` makes five uninstall boundaries executable policy: application files, uninstall registration, and shortcuts are removed; application cache, logs, Harness/Profile data, and workspaces are preserved. A unit test prevents the NSIS configuration in `package.json` from enabling `deleteAppDataOnUninstall`, and both user guides publish the same matrix.
+
+The existing Windows NSIS A/B lab already covers normal upgrades, target-content integrity, mid-operation process-tree interruption, a locked `app.asar`, old/candidate coherence after interruption, and an actual startup probe. This phase extends `smoke-windows-installer-upgrade.ps1` to truncate a copy of the candidate and require Windows to reject it, then prove that the base version is unchanged and still launchable before proceeding through running-app upgrade, candidate relaunch, same-version overwrite, and uninstall. Before uninstall it writes unique markers into `%APPDATA%\ClawClaw` cache/log locations, an isolated `DSH_HOME` Profile, and an isolated workspace. It requires application files, registration, and shortcuts to disappear while all four data markers survive, then removes only its own markers. `check:win-package` now includes the policy test.
+
+macOS native auto-update remains disabled; the product opens a user-confirmed DMG rather than claiming an in-app atomic replacement/rollback path. Existing release smokes verify the mounted DMG, universal architectures, embedded native files, codesign, Gatekeeper, and the stapled notarization ticket. Shared native-staging tests prove that download/validation failure, cancellation, or failed Host teardown cannot produce an installer handoff. Preserving the prior application after a DMG replacement failure and relaunching it remains a manual qualification on the signed macOS release host.
+
+Headless verification: 107 tests across `installer-data-retention.spec.ts`, `native-update-installer.spec.ts`, and `electron-runtime.spec.ts`; complete typecheck and production build; complete unit suite with 1268 passing and 6 existing skips. This macOS development host cannot execute the Windows PowerShell/NSIS VM smoke. A real Windows report and signed macOS DMG replacement result must accompany the corresponding release and cannot be substituted by the headless result.
 
 ### Phase 7 (P2): background residency and update-ready attention
 

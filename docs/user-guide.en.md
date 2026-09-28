@@ -21,6 +21,17 @@ An uninitialized profile first opens Setup Wizard for mode, material, market, no
 
 Harness data and workspace files are separate: changing the data directory does not move the default workspace. Portable ZIPs do not provide self-contained data storage.
 
+ClawClaw uses a conservative data-retention policy when the desktop application is uninstalled:
+
+| Data | Uninstall behavior |
+| --- | --- |
+| Program files in the installation directory, uninstall entry, and shortcuts | Remove |
+| Application cache, update state, and logs | Preserve |
+| Harness data, Profiles, settings, sessions, and plugin state | Preserve |
+| Workspaces and user files inside them | Preserve |
+
+Uninstalling is therefore not the same as deleting local data. For complete removal, back up anything needed and then explicitly delete those data directories; never rely on the installer to delete a workspace.
+
 ## Workspaces
 
 The application registers a protected default workspace, stored with the title “默认”. Its registration cannot be deleted. Existing workspaces remain available; selection for new sessions considers persisted activity, the current selection, and the default workspace.

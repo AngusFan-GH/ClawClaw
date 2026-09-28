@@ -172,13 +172,21 @@ ClawClaw 已有下列能力，因此不再移植同类实现：
 
 ### 阶段 6（P1）：安装事务、回滚和卸载测试
 
-**状态：待实施**
+**状态：已完成（2026-09-28；真实平台场景作为 release qualification 执行）**
 
 目标：用自动化证明安装失败不会破坏可启动版本，卸载行为与用户数据保留政策一致。
 
 - 扩展 Windows VM 测试：覆盖版本升级、中途中止、损坏包、重启后完成和旧版本仍可启动。
 - 明确应用文件、缓存、日志、Profile/工作区的卸载保留矩阵并测试。
 - macOS 对 staged artifact、替换失败和重新启动补充等价 smoke。
+
+已落地：`installer-data-retention.ts` 将卸载边界固化为可测试的五项策略：安装文件、卸载注册项和快捷方式删除；应用缓存、日志、Harness/Profile 数据及工作区保留。`package.json` 的 NSIS 配置由单测约束为不得启用 `deleteAppDataOnUninstall`，中英文用户指南公开同一矩阵。
+
+Windows 的既有 NSIS A/B 实验已覆盖正常升级、目标内容完整性、安装进程树中途中止、锁定 `app.asar`、中断后旧版/新版一致性判定和实际启动验证。本阶段进一步扩展 `smoke-windows-installer-upgrade.ps1`：先截断 candidate 的副本并要求 Windows 拒绝，随后验证旧版版本未改变且仍能启动；再执行运行中升级、候选版本重启、同版本覆盖和卸载。卸载前分别在 `%APPDATA%\ClawClaw` 的缓存/日志、隔离 `DSH_HOME` 的 Profile 及隔离工作区写入唯一 marker，卸载后要求应用目录、注册项、快捷方式消失而四类 marker 仍存在，最后只清理本次 marker。`check:win-package` 已纳入策略测试。
+
+macOS 当前未开启 native auto-update，发布物仍是经用户确认后打开的 DMG，因此不伪造应用内原子替换/rollback 能力。现有 release smoke 对 mounted DMG、universal 架构、嵌入 native 文件、codesign、Gatekeeper 与 stapled notarization ticket 做验证；通用 native staging 单测证明下载/校验失败、取消或 Host 关闭失败都不会产生安装交接。DMG 替换失败后保留原应用及重新打开验证，继续作为签名 macOS 发布机上的人工 release qualification。
+
+headless 验证：`installer-data-retention.spec.ts`、`native-update-installer.spec.ts` 和 `electron-runtime.spec.ts` 共 107 项通过；完整 typecheck 和生产 build 通过；完整单测 1268 项通过、6 项既有跳过。当前 macOS 开发机无法执行 Windows PowerShell/NSIS VM smoke；真实 Windows 报告和签名 macOS DMG 替换结果必须随对应发布保存，不能用 headless 结果替代。
 
 ### 阶段 7（P2）：后台驻留和更新就绪注意力
 
