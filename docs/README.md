@@ -10,6 +10,7 @@
 | 常见问题 | [FAQ](faq.md) |
 | 本地数据、模型、Channels、市场和更新请求 | [隐私与数据处理](../PRIVACY.zh.md) |
 | 进程、运行时、模型与更新协议 | [架构](architecture.md) |
+| 官方 Desktop 借鉴范围与分阶段落地 | [落地指南](official-desktop-adoption-plan.md) |
 | 为 ClawClaw/DSH 开发插件 | [插件开发](plugin-development.md) |
 | 产品边界与取舍 | [为什么做 ClawClaw](why-desktop.md) |
 | 插件生态原则 | [插件生态](plugin-ecosystem.md) |

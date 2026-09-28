@@ -10,6 +10,7 @@ This directory contains current product documentation. The root [README](../READ
 | Common questions | [FAQ](faq.en.md) |
 | Local data, models, Channels, markets, updates | [Privacy and data handling](../PRIVACY.md) |
 | Processes, runtime, models, update protocol | [Architecture](architecture.en.md) |
+| Official Desktop adoption scope and phased delivery | [Adoption guide](official-desktop-adoption-plan.en.md) |
 | Develop ClawClaw/DSH plugins | [Plugin development](plugin-development.en.md) |
 | Product boundaries and decisions | [Why ClawClaw](why-desktop.en.md) |
 | Plugin ecosystem principles | [Plugin ecosystem](plugin-ecosystem.en.md) |
