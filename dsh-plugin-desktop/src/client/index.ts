@@ -21,9 +21,12 @@ import { parseDesktopClientEnvironment } from './environment.ts'
 import { applyExtendedShell } from './extended-shell.ts'
 import { applyMcpSettings } from './mcp-settings.ts'
 import { applyMarketIntegration } from './market-integration.tsx'
+import { applyManagedPluginManager } from './plugin-manager.ts'
 import { applyCronTasksSettings } from './cron-tasks-settings.ts'
 import { applyRemindersSettings } from './reminders-settings.ts'
 import { applySkillsSettings } from './skills-settings.ts'
+import { applyShortcutMenu } from './shortcut-menu.tsx'
+import { installShortcutMenuStyles } from './shortcut-menu-styles.ts'
 import { applySpiritXOnboarding } from './spiritx-onboarding.tsx'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
 
@@ -38,8 +41,10 @@ export {
 export { applyExtendedShell, applyFramedShell } from './extended-shell.ts'
 export { applyMcpSettings } from './mcp-settings.ts'
 export { applyMarketIntegration } from './market-integration.tsx'
+export { applyManagedPluginManager } from './plugin-manager.ts'
 export { applyRemindersSettings } from './reminders-settings.ts'
 export { applySkillsSettings } from './skills-settings.ts'
+export { applyShortcutMenu } from './shortcut-menu.tsx'
 export {
   createDesktopSettingsApi,
   desktopSettingsPaths,
@@ -105,14 +110,23 @@ export const inject = [
 /** Register product identity and, in Electron, native client surfaces. @param ctx - browser Cordis context. */
 export function apply(ctx: ClientContext): void {
   const environment = parseDesktopClientEnvironment(window.location.search)
+  if (environment) {
+    ctx.effect(
+      () => startRendererBootReporter(ctx.loader),
+      'dsh-plugin-desktop: renderer boot health report',
+    )
+  }
   // The Desktop-hosted browser client shares the product identity, while
   // native window services and shell effects require the Electron markers.
   applyClawClawBrand(ctx)
   applyMarketIntegration(ctx)
+  applyManagedPluginManager(ctx)
   applySpiritXOnboarding(ctx)
   applyCronTasksSettings(ctx)
   applyRemindersSettings(ctx)
   applySkillsSettings(ctx)
+  applyShortcutMenu(ctx)
+  ctx.effect(() => installShortcutMenuStyles(), 'dsh-plugin-desktop: shortcut menu styles')
   if (!environment) return
   ctx.effect(
     () => provideDesktopWindow(ctx, desktopWindowService(environment)),
@@ -121,10 +135,6 @@ export function apply(ctx: ClientContext): void {
   applyDefaultWorkspaceSelection(ctx)
   applyMcpSettings(ctx)
   const desktopSettings = applyDesktopSettings(ctx, environment)
-  ctx.effect(
-    () => startRendererBootReporter(ctx.loader),
-    'dsh-plugin-desktop: renderer boot health report',
-  )
   if (environment.platform === 'win32' || environment.platform === 'darwin') {
     ctx.effect(
       () => installDesktopDirectoryPickerBridge(),

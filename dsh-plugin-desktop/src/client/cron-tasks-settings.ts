@@ -7,7 +7,7 @@ import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from './workspace-client-contract.ts'
-import { AutomationPanel, AutomationPanelIcon } from './AutomationPanel.tsx'
+import { AutomationPanel } from './AutomationPanel.tsx'
 import { installCronTaskSessionIcons } from './cron-task-session-icon.ts'
 import { installCronTaskUnreadReminders } from './cron-task-unread.ts'
 import { createCronTasksApi, openCronTaskSession, watchCronTaskSessionDisposals } from './cron-tasks-api.ts'
@@ -82,9 +82,5 @@ export function applyCronTasksSettings(ctx: ClientContext): void {
       locale: DESKTOP_CRON_TASKS_LOCALE_NAMESPACE,
       inject: injectPanel,
     }, AutomationPanel))
-    scope.slots.inject('sidebar.panellist', () => scope.slots.register({
-      name: 'sidebar.panellist', id: DESKTOP_AUTOMATION_PANEL_ID, order: 10,
-      label: () => t('panel'), locale: DESKTOP_CRON_TASKS_LOCALE_NAMESPACE,
-    }, AutomationPanelIcon))
   })
 }

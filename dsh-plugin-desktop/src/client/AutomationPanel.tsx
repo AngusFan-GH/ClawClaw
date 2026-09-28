@@ -1,9 +1,9 @@
 /** Desktop automation panel backed by the established Cron task model. */
 
-import { IconClockOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { CronTasksSettingsInjected } from './CronTasksSettingsSection.tsx'
 import { CronTasksSettingsSection } from './CronTasksSettingsSection.tsx'
+import { DesktopFeatureIcon } from './desktop-feature-icon.tsx'
 
 export type AutomationPanelProps = PropsRuntime<'main'>
   & PropsLocale<'desktop.cron-tasks'>
@@ -15,5 +15,5 @@ export function AutomationPanel(props: AutomationPanelProps): JSX.Element {
 }
 
 export function AutomationPanelIcon({ size }: PropsRuntime<'sidebar.panellist'>): JSX.Element {
-  return <IconClockOutlineRegular size={size} />
+  return <DesktopFeatureIcon featureId="desktop-automations" kind="panel" size={size} />
 }

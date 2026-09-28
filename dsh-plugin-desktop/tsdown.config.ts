@@ -1,6 +1,35 @@
 import { defineConfig } from 'tsdown'
+import { readFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 
 const PACKAGE_NAME = 'dsh-plugin-desktop'
+const PLUGIN_MANAGER_MODULE_ID = 'clawclaw:plugin-manager-client'
+const RESOLVED_PLUGIN_MANAGER_MODULE_ID = `\0${PLUGIN_MANAGER_MODULE_ID}`
+const localRequire = createRequire(import.meta.url)
+const pluginManagerClientPath = localRequire.resolve(
+  '@deepseek-ai/dsh-client-ui-plugin-manager/client',
+)
+
+function publishedPluginManagerClient() {
+  return {
+    name: 'clawclaw-published-plugin-manager-client',
+    resolveId(source: string) {
+      return source === PLUGIN_MANAGER_MODULE_ID ? RESOLVED_PLUGIN_MANAGER_MODULE_ID : null
+    },
+    async load(id: string) {
+      if (id !== RESOLVED_PLUGIN_MANAGER_MODULE_ID) return null
+      this.addWatchFile(pluginManagerClientPath)
+      const artifact = await readFile(pluginManagerClientPath, 'utf8')
+      const match = artifact.match(
+        /^window\.__ModuleLoader__\.load\(\{\s*id:\s*["']@deepseek-ai\/dsh-client-ui-plugin-manager["'],\s*factory:\s*((?:\(require\)|require)\s*=>\s*\{[\s\S]*\})\s*\}\);\s*(?:\/\/# sourceMappingURL=.*)?\s*$/,
+      )
+      if (match?.[1] === undefined) {
+        throw new Error(`Unexpected published Plugins client wrapper: ${pluginManagerClientPath}`)
+      }
+      return `export default ${match[1]};`
+    },
+  }
+}
 
 export default defineConfig([
   {
@@ -20,6 +49,8 @@ export default defineConfig([
       notifications: 'src/notifications.ts',
       'cron-tasks': 'src/cron-tasks.ts',
       reminders: 'src/reminders.ts',
+      'shortcut-menu': 'src/shortcut-menu.ts',
+      'plugin-registry-probe': 'src/plugin-registry-probe.ts',
       'default-workspace': 'src/default-workspace.ts',
       skills: 'src/skills.ts',
       'legacy-agent-presets': 'src/legacy-agent-presets.ts',
@@ -81,6 +112,7 @@ export default defineConfig([
     dts: false,
     clean: false,
     sourcemap: true,
+    plugins: [publishedPluginManagerClient()],
     external: [
       'react',
       'react/jsx-runtime',

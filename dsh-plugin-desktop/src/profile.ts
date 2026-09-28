@@ -36,7 +36,7 @@ import {
   type ProfileManifest,
 } from '@deepseek-ai/dsh-app-boot'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import { parseAllDocuments, parseDocument } from 'yaml'
+import { isSeq, parseAllDocuments, parseDocument } from 'yaml'
 import { findOverlayPackage, resolveOverlayPackage } from './package-overlay.ts'
 import { DESKTOP_DEFAULT_WEB_PORT } from './desktop-port.ts'
 import {
@@ -92,6 +92,8 @@ const OBSOLETE_DESKTOP_BUNDLE_SET = new Set(['@deepseek-ai/dsh-desktop-app'])
 // installation without materializing an incomplete ESM-only proxy tree.
 const INSTALL_ANCHOR = fileURLToPath(new URL('../package.json', import.meta.url))
 const DESKTOP_PATCH_PATH = fileURLToPath(new URL('../cordis.patch.yml', import.meta.url))
+const DESKTOP_SHORTCUTS_ROW_ID = 'desktop-shortcuts'
+const DESKTOP_SHORTCUTS_PACKAGE = `${DESKTOP_PACKAGE_NAME}/shortcut-menu`
 const DIRECTORY_PICKER_ROW_ID = 'directory-picker'
 const AUTO_PICKER_PACKAGE = '@deepseek-ai/dsh-host-directory-picker-auto'
 const BROWSE_PICKER_BACKEND = '@deepseek-ai/dsh-host-directory-picker-browse'
@@ -784,6 +786,54 @@ function loadDesktopMachinePatches(home: string): PatchOptions[] {
 }
 
 /**
+ * Keep the configurable shortcuts entry below the Profile's editable config
+ * rows. A launcher overlay would be applied after those rows and reset every
+ * ConfigEditor write back to the entry's inherited value.
+ */
+function ensureDesktopShortcutsProfileEntry(profileDir: string): boolean {
+  const path = join(profileDir, PROFILE_PATCH_FILENAME)
+  const content = existsSync(path) ? readFileSync(path, 'utf8') : '[]\n'
+  const document = parseDocument(content, {
+    prettyErrors: true,
+    customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: (value: string) => value }],
+  })
+  if (document.errors.length > 0) {
+    throw new Error(`${BIN_NAME}: invalid profile patch at ${path}: ${document.errors.map(error => error.message).join('; ')}`)
+  }
+  if (!isSeq(document.contents)) {
+    throw new Error(`${BIN_NAME}: profile patch ${path} must be a YAML sequence`)
+  }
+  const patches = document.toJS() as unknown[]
+  for (const patch of patches) {
+    if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) continue
+    const insert = (patch as { insert?: unknown }).insert
+    if (!Array.isArray(insert)) continue
+    for (const row of insert) {
+      if (row === null || typeof row !== 'object' || Array.isArray(row)
+        || (row as { id?: unknown }).id !== DESKTOP_SHORTCUTS_ROW_ID) continue
+      if ((row as { name?: unknown }).name !== DESKTOP_SHORTCUTS_PACKAGE) {
+        throw new Error(`${BIN_NAME}: reserved ${DESKTOP_SHORTCUTS_ROW_ID} row has a conflicting package identity`)
+      }
+      return false
+    }
+  }
+  document.contents.items.unshift(document.createNode({
+    insert: [{ id: DESKTOP_SHORTCUTS_ROW_ID, name: DESKTOP_SHORTCUTS_PACKAGE }],
+  }) as never)
+  writeFileSync(path, String(document))
+  return true
+}
+
+/** Remove only the editable shortcuts insertion from launcher-owned overlays. */
+function withoutDesktopShortcutsInsertion(patches: readonly PatchOptions[]): PatchOptions[] {
+  return patches.flatMap((patch) => {
+    if (!Array.isArray(patch.insert)) return [{ ...patch }]
+    const insert = patch.insert.filter(row => row.id !== DESKTOP_SHORTCUTS_ROW_ID)
+    return insert.length === 0 ? [] : [{ ...patch, insert }]
+  })
+}
+
+/**
  * Load and compose one desktop profile generation.
  * @param telemetryDisabled - inherited DSH telemetry opt-out value.
  * @param home - Harness home containing profiles and the machine-wide patch.
@@ -812,18 +862,26 @@ export function prepareDesktopProfile(
     ? new Set<string>()
     : readDesktopDisabledBundles(_pluginStatePath, profileName)
   const disabledBundles = new Set(managedDisabledBundles)
-  const loadedProfile = loadRecoveryFilteredProfile(
+  let loadedProfile = loadRecoveryFilteredProfile(
     profileName,
     profileDir,
     disabledBundles,
     marketSelection.requested,
   )
+  if (ensureDesktopShortcutsProfileEntry(profileDir)) {
+    loadedProfile = loadRecoveryFilteredProfile(
+      profileName,
+      profileDir,
+      disabledBundles,
+      marketSelection.requested,
+    )
+  }
   const profile = loadedProfile.profile
   const rootConfig = join(profileDir, DESKTOP_PROFILE_ROOT)
   const bareModuleBaseUrl = pathToFileURL(join(profile.dir, 'package.json')).href
   writeFileSync(rootConfig, '[]\n')
 
-  const desktopPatches = loadOverlayPatches(BIN_NAME, DESKTOP_PATCH_PATH)
+  const desktopPatches = withoutDesktopShortcutsInsertion(loadOverlayPatches(BIN_NAME, DESKTOP_PATCH_PATH))
   const bundlePatches: PatchOptions[] = []
   let dshMarketPatches: PatchOptions[] | undefined
   let desktopLayerInserted = false

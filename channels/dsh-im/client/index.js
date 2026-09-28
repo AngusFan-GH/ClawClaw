@@ -22,7 +22,6 @@ import {
   channelStatusLabel,
   combineChannelOverviewStates,
 } from './overview-state.js'
-import { installChannelNavIcon } from './nav-icon.js'
 import { installClawClawChannelStyles } from './styles.js'
 
 export const inject = ['slots', 'connection', 'locale', 'workspaces']
@@ -210,6 +209,5 @@ function interceptedContext(ctx) {
 
 export function apply(ctx) {
   ctx.effect(installClawClawChannelStyles, 'clawclaw channels: overview styles')
-  ctx.effect(installChannelNavIcon, 'clawclaw channels: settings navigation icon')
   applyDshImClient(interceptedContext(ctx))
 }

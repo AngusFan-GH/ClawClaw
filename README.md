@@ -15,6 +15,7 @@
 - **Channels**：微信、企业微信、飞书、钉钉、QQ、iMessage、Telegram、WhatsApp、Discord 和 Slack 的配置入口；各平台仍需账号、凭据或扫码授权。
 - **插件**：一级“插件”页面统一承载已安装插件管理和 `dshmarket` 市场；市场提供方可在桌面设置中选择或关闭，目录收录不等于安全审核。
 - **自动化任务**：一级入口管理 ClawClaw 定时任务，继续使用现有任务数据与会话记录。
+- **快捷入口**：统一配置插件、自动化任务和 Settings section，最多固定 4 项到侧栏并自由排序。
 - **更新**：通过 ClawClaw 的稳定版静态 manifest 发现版本，验证下载的 SHA-512，再由用户确认安装。
 
 Windows x64 和 macOS 是主要打包目标；macOS 支持 Universal 构建。Linux 有兼容模式和 headless 检查路径，不能据此推断已有 Linux 发行包。

@@ -26,7 +26,7 @@ macOS/Windows 的兼容和扩展模式在一个原生窗口内使用两个独立
 
 兼容模式保留上游默认布局；扩展模式组合 Desktop layout/sidebar；增强模式使用自己的 root 和集成 caption。确认、恢复和 Setup 等工具窗口由 Desktop 独立管理。详见[标题栏隔离](../dsh-plugin-desktop/docs/compatibility-chrome-isolation.md)与[服务合同](../dsh-plugin-desktop/docs/plugin-services.zh.md)。
 
-DSH 0.1.7-rc.2 的 `sidebar.panellist` 是一级产品入口的唯一扩展点。上游插件管理页保持启用，Desktop 通过 `dshmarket` 的 `market` 服务把市场页面嵌入其中并隐藏旧 Settings 市场入口。自动化一级面板由 `desktop-cron-tasks` 提供；上游 `schedule`/`ui-schedule` 在 Desktop Profile 中禁用，直到存在无损、可回滚的数据迁移协议。旧 `sidebar.shortcuts` 和基于翻译文本修改 Settings DOM 的集成已退役。
+DSH 0.1.7-rc.2 的 `sidebar.panellist` 是一级产品入口的唯一扩展点。Desktop 复用上游插件管理器的主面板实现并接管其侧栏入口，通过 `dshmarket` 的 `market` 服务把市场页面嵌入其中，同时隐藏旧 Settings 市场入口。自动化主面板由 `desktop-cron-tasks` 提供；上游 `schedule`/`ui-schedule` 在 Desktop Profile 中禁用，直到存在无损、可回滚的数据迁移协议。旧 `sidebar.shortcuts` 已退役；可配置快捷菜单统一投影插件、自动化任务和 Settings section：已有主面板直接注册侧栏入口，Settings 项动态注册 `sidebar.panellist` / `main` 转接入口并通过 Settings root store 定向打开 section。运行时不再按翻译文本修改 Settings DOM。
 
 ## 工作区、数据与模型
 

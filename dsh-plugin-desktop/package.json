@@ -75,6 +75,14 @@
       "types": "./lib/types/reminders.d.ts",
       "default": "./lib/reminders.js"
     },
+    "./shortcut-menu": {
+      "types": "./lib/types/shortcut-menu.d.ts",
+      "default": "./lib/shortcut-menu.js"
+    },
+    "./plugin-registry-probe": {
+      "types": "./lib/types/plugin-registry-probe.d.ts",
+      "default": "./lib/plugin-registry-probe.js"
+    },
     "./default-workspace": {
       "types": "./lib/types/default-workspace.d.ts",
       "default": "./lib/default-workspace.js"

@@ -87,6 +87,12 @@ Automations in the sidebar manages ClawClaw scheduled tasks, including timing, a
 
 Reminders in Settings are standing instructions that apply across workspaces and conversations, not scheduled tasks. They remain in Settings and are managed separately from Automations.
 
+## Sidebar shortcuts
+
+Use **Settings → General → Shortcuts** to pin, remove, and reorder up to four features or Settings sections. Pinned entries appear in the sidebar's top-level destination area. Panel entries open their feature directly, while settings entries open the matching section. Their icons and tooltips remain available when the sidebar is collapsed.
+
+Shortcuts manage Plugins, Automations, and the Settings sections that currently exist through one list. The sidebar shows only pinned entries; new installs pin Plugins, Automations, Skills, and Reminders by default. Sidebar shortcuts are independent from the keyboard bindings under **Edit shortcuts**.
+
 ## Updates
 
 Packaged applications read `https://clawclaw.xzinfra.com/updates/stable/release.json`. Background failures or unchanged versions are silent; manual checks show a result.

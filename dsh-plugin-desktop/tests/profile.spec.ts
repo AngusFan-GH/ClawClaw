@@ -486,7 +486,19 @@ virtualStoreDirMaxLength: 60
       name: '@deepseek-ai/dsh-client-ui-schedule',
       disabled: true,
     })
-    expect(rows.map(row => row.id)).not.toContain('desktop-shortcuts')
+    expect(rows.find(row => row.id === 'ui-plugin-manager')).toEqual({
+      id: 'ui-plugin-manager',
+      name: '@deepseek-ai/dsh-client-ui-plugin-manager',
+      disabled: true,
+    })
+    expect(rows.find(row => row.id === 'desktop-shortcuts')).toEqual({
+      id: 'desktop-shortcuts',
+      name: 'dsh-plugin-desktop/shortcut-menu',
+    })
+    expect(rows.find(row => row.id === 'desktop-plugin-registry-probe')).toEqual({
+      id: 'desktop-plugin-registry-probe',
+      name: 'dsh-plugin-desktop/plugin-registry-probe',
+    })
     expect(rows.find(row => row.id === 'desktop-default-workspace')).toEqual({
       id: 'desktop-default-workspace',
       name: 'dsh-plugin-desktop/default-workspace',
@@ -537,6 +549,32 @@ virtualStoreDirMaxLength: 60
     expect(rows.find(row => row.id === 'web')).toEqual(expect.objectContaining({
       config: { fetchProvider: 'http' },
     }))
+  })
+
+  it('keeps editable shortcuts in the Profile layer instead of launcher overlays', () => {
+    const home = temporaryHome()
+    const profileDir = ensureDesktopProfile(home)
+    writeFileSync(join(profileDir, 'cordis.patch.yml'), [
+      '- id: desktop-shortcuts',
+      '  config:',
+      '    items:',
+      '      - desktop-reminders',
+      '',
+    ].join('\n'))
+
+    const prepared = prepareDesktopProfile(undefined, home, 'darwin')
+    const rows = composeEntries([prepared.patches])
+    const persisted = readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8')
+
+    expect(rows.find(row => row.id === 'desktop-shortcuts')).toEqual({
+      id: 'desktop-shortcuts',
+      name: 'dsh-plugin-desktop/shortcut-menu',
+      config: { items: ['desktop-reminders'] },
+    })
+    expect(persisted.indexOf('insert:')).toBeLessThan(persisted.indexOf('id: desktop-shortcuts\n  config:'))
+    expect(prepared.overlays.some(patch => patch.id === 'desktop-shell')).toBe(true)
+    expect(prepared.overlays.some(patch => Array.isArray(patch.insert)
+      && patch.insert.some(row => row.id === 'desktop-shortcuts'))).toBe(false)
   })
 
   it('merges a frozen LAN IPv4 snapshot into existing Web runtime trust', () => {

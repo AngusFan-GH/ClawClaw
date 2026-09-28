@@ -14,6 +14,10 @@
       name: dsh-plugin-desktop/notifications
     - id: desktop-cron-tasks
       name: dsh-plugin-desktop/cron-tasks
+    - id: desktop-shortcuts
+      name: dsh-plugin-desktop/shortcut-menu
+    - id: desktop-plugin-registry-probe
+      name: dsh-plugin-desktop/plugin-registry-probe
     - id: desktop-reminders
       name: dsh-plugin-desktop/reminders
     - id: desktop-default-workspace
@@ -53,6 +57,12 @@
   disabled: true
 
 - id: ui-schedule
+  disabled: true
+
+# Desktop reuses the rc.2 Plugins panel implementation but lets the configurable
+# shortcut menu own its sidebar entry, so the upstream Client row must not also
+# register a fixed entry.
+- id: ui-plugin-manager
   disabled: true
 
 # SpiritX is the product-owned model route. Keep the upstream DeepSeek adapter

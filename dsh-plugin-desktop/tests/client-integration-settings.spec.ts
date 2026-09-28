@@ -61,7 +61,6 @@ describe('Desktop automation panel registration', () => {
     expect(inject).toHaveBeenCalledWith(['uiWorkspace', 'workspaces'], expect.any(Function))
     expect(registrations).toEqual([
       expect.objectContaining({ name: 'main', key: 'desktop-automations', locale: 'desktop.cron-tasks' }),
-      expect.objectContaining({ name: 'sidebar.panellist', id: 'desktop-automations', locale: 'desktop.cron-tasks' }),
     ])
   })
 
