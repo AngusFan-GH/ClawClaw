@@ -71,8 +71,8 @@
 
 - 沿用旧版的目录名、metadata 和 Cordis entry-list 校验规则。
 - 通过公开 `ctx.agentPresets.register()` 注册，不修改、移动或删除用户文件。
-- 与内置 ID 冲突时沿用旧版用户覆盖语义：由 Profile 组合显式决定唯一声明，不能让 registry
-  出现重复 ID。
+- 与内置 ID 冲突时官方 preset 优先，legacy registrar 记录明确告警并跳过同名用户项，不能让
+  registry 出现重复 ID 或让用户目录替换产品核心 preset。
 - 解析失败的 preset 保持可诊断，不影响其他 preset 或 Desktop 启动。
 - 兼容层有明确移除条件：产品提供可审阅的 bundle 转换器并完成至少一个发布周期告警后，
   才能另行决策；本次升级不迁移用户数据。
@@ -157,3 +157,50 @@ git -C deepseek-harness status --short
 - 三种桌面模式、隔离 Host、打包 runtime 和 Loader smoke 通过。
 - 完整 `corepack pnpm check` 通过，submodule 无本地修改。
 - 本文各阶段写回实际结果、偏差和验证命令。
+
+## 8. 实际落地结果（2026-09-28）
+
+### 8.1 已完成
+
+- submodule 已固定到 tag `dsh-v0.1.7-rc.1` / commit
+  `46a7f68b0922371ce7144b668b90e377d8e799f4`，上游工作树保持只读且干净。
+- 已生成并校验 `vendor/dsh-runtime/0.1.7-rc.1` 的 309 个包；Desktop、Channel、patch、
+  compatibility metadata 和 lockfile 均切换到目标版本。
+- 已迁移 Profile/config editor、声明式 agent preset registry、PTC runtime、Session V4、Jobs
+  事件订阅、Skills scope lease 和 Windows argv 执行接口。
+- 已提供旧 `settings.yaml`、旧 Settings API 和 `.agent-presets` 的兼容桥；旧 preset 默认值迁移到
+  `agent-preset-registry.selectedDefault`，同名时官方 preset 优先。
+- Desktop 启动 overlays 会通过 `profileContext.overlays` 在 Config Editor reload 后重放；Cron
+  仅在 rehydrate 后内容变化时写回，避免 reload 循环。
+- Profile smoke 精确验证 0.1.7 的浏览器认证协议：token 兑换必须返回 `303`、`Location: ./`
+  和 authority-bound cookie。
+- 打包闭包包含 285 个可达的一方包节点；第三方声明覆盖 645 个生产依赖。
+
+### 8.2 与原计划的偏差
+
+- legacy preset 与官方 ID 冲突时没有保留旧版“用户覆盖”行为。0.1.7 registry 拒绝重复 ID，
+  因此采用官方优先并告警；自定义且不冲突的 preset 继续原样注册，用户文件不会被修改。
+- Settings compatibility patch 必须同时保留运行时原始 schema 和 volatile 表单 schema；若共用
+  volatile schema，boolean/array 会以表单包装值进入 Desktop、Cron、Reminders 和 MCP。
+- Config Editor reload 与旧设置导入可能发生短暂 revision 竞争；实现对三类已知 stale-entry 错误
+  最多重试 10 个 event-loop tick，未使用会与 dispose 死锁的 `loader.await()`。
+- 上游发布包缺少 `dsh-client-ui-primitives` source map，Vitest 会输出非致命 Vite 警告；构建、
+  类型检查和测试结果不受影响。
+
+### 8.3 验证结果
+
+以下命令已通过：
+
+```text
+corepack pnpm install --frozen-lockfile
+corepack pnpm typecheck
+corepack pnpm test                 # 159 files, 1275 passed, 6 skipped
+corepack pnpm build
+corepack pnpm check                # 含 layout、vendored runtime、CLI、Loader、Profile、license、operations
+corepack pnpm --filter dsh-plugin-desktop verify:notices
+git diff --check
+git -C deepseek-harness status --short
+```
+
+普通 headless 门禁不会启动 GUI，也不替代 Windows/macOS 的签名、真实安装器和平台原生 smoke；
+这些仍属于发布前 qualification。

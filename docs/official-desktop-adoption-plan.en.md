@@ -7,7 +7,7 @@
 This guide directs selective adoption from the official DeepSeek Harness Desktop while keeping ClawClaw a fully independent desktop shell. It is both the implementation sequence and the acceptance checklist.
 
 - ClawClaw baseline: the `dsh-desktop` branch, product version `0.2.2`.
-- Runtime baseline: the read-only submodule and vendored runtime are DSH `0.1.5-rc.2`.
+- Runtime baseline: the read-only submodule and vendored runtime are DSH `0.1.7-rc.1`.
 - Official baseline reviewed: `deepseek-ai/deepseek-harness` `master` at `21638c5631` (2026-09-27).
 - Official reference directory: `apps/desktop/`. Upstream is MIT licensed; substantial source reuse must preserve required attribution and notices.
 

@@ -45,7 +45,7 @@ The Desktop patch composes `spiritx` by default using the upstream pi-ai transpo
 | `vendor/dsh-runtime/` | Pinned runtime tarballs and manifests |
 | `patches/` | Explicit dependency patches applied by outer pnpm |
 
-The outer workspace uses pnpm 11.8.0 with the isolated linker. ClawClaw pins the DSH 0.1.5-rc.2 source/runtime family; `upstream.json` records the single pin and the gitlink matches it. Root overrides select vendored tarballs, with compatibility fixes in `patchedDependencies`. Applications do not source-link the upstream checkout.
+The outer workspace uses pnpm 11.8.0 with the isolated linker. ClawClaw pins the DSH 0.1.7-rc.1 source/runtime family; `upstream.json` records the single pin and the gitlink matches it. Root overrides select vendored tarballs, with compatibility fixes in `patchedDependencies`. Applications do not source-link the upstream checkout.
 
 ## Services and recovery
 
