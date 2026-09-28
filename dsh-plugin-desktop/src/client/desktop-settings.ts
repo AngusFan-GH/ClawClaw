@@ -2,7 +2,6 @@
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { DesktopSettingsSection, type DesktopNotificationSettings, type DesktopShellSettings } from './DesktopSettingsSection.tsx'
 import { DesktopTerminalSettingsAction } from './DesktopTerminalSettingsAction.tsx'
 import { createDesktopSettingsApi } from './desktop-settings-api.ts'
@@ -14,8 +13,8 @@ import type { DesktopClientEnvironment } from './environment.ts'
 export const DESKTOP_SETTINGS_LOCALE_NAMESPACE = 'desktop.settings'
 
 /** Host settings namespaces bound through the standard client settings service. */
-export const DESKTOP_SHELL_SETTINGS_NAMESPACE = 'dsh-desktop'
-export const DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE = 'dsh-desktop-notifications'
+export const DESKTOP_SHELL_SETTINGS_NAMESPACE = 'desktop-shell'
+export const DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE = 'desktop-notifications'
 
 /** Shared client controls consumed by settings and Desktop-owned window chrome. */
 export interface DesktopSettingsClientControl {
@@ -23,13 +22,15 @@ export interface DesktopSettingsClientControl {
   setMode(mode: DesktopShellSettings['mode']): Promise<void>
 }
 
+interface DesktopSettingsWriter { set(field: string, value: unknown): Promise<unknown> }
+
 /**
  * Persist a native mode choice without leaving browser access in a mode the
  * marker-free client cannot render. Custom modes withdraw browser and LAN
  * access in ordered writes; the Host compares only effective generation state.
  */
 export async function persistDesktopModeSelection(
-  desktopSettings: Pick<SettingsScope<DesktopShellSettings>, 'set'>,
+  desktopSettings: DesktopSettingsWriter,
   mode: DesktopShellSettings['mode'],
 ): Promise<void> {
   if (mode === 'compatibility') {
@@ -58,12 +59,8 @@ export function applyDesktopSettings(
   ctx: ClientContext,
   environment: DesktopClientEnvironment,
 ): DesktopSettingsClientControl {
-  const desktopSettings = ctx.settingsScope.bind<DesktopShellSettings>({
-    namespace: DESKTOP_SHELL_SETTINGS_NAMESPACE,
-  })
-  const notificationSettings = ctx.settingsScope.bind<DesktopNotificationSettings>({
-    namespace: DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE,
-  })
+  const desktopSettings = ctx.configForms.get<DesktopShellSettings>(DESKTOP_SHELL_SETTINGS_NAMESPACE)
+  const notificationSettings = ctx.configForms.get<DesktopNotificationSettings>(DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE)
   const api = createDesktopSettingsApi()
   const t = ctx.locale.bind(DESKTOP_SETTINGS_LOCALE_NAMESPACE)
   const setMode = async (mode: DesktopShellSettings['mode']): Promise<void> => {

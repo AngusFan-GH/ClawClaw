@@ -128,7 +128,7 @@ export function applySpiritXOnboarding(ctx: ClientContext): void {
     const active = new Set(registered.value.map(provider => provider.id))
     const target = directory.value.find(entry => entry.provider === 'spiritx')
     if (target === undefined || !active.has(target.provider)) return { kind: 'unavailable' }
-    const mirror = ctx.settingsScope.describe()
+    const mirror = ctx.configForms.describe()
     await mirror.ensure()
     const settings = mirror.getSnapshot().view
     if (settings === undefined) return { kind: 'unavailable' }

@@ -6,7 +6,7 @@ import * as PiAi from '@deepseek-ai/dsh-llm-pi-ai'
 
 export const name = 'spiritx'
 export const inject = PiAi.inject
-export const Config = PiAi.Config
+export const Config: typeof PiAi.Config = PiAi.Config
 export type Config = PiAi.Config
 
 /** Mark the product route as built in while preserving the upstream catalog. */

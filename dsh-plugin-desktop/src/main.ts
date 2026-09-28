@@ -140,6 +140,7 @@ import {
 import {
   migrateDesktopBrowserAccessSettings,
   migrateDesktopWindowMaterialSettings,
+  importLegacyDesktopSetupWizardSettings,
   readDesktopSetupWizardSettings,
   updateDesktopSetupWizardSettings,
   type DesktopSetupWizardSettings,
@@ -1091,6 +1092,9 @@ async function start(): Promise<void> {
       },
     }
     await healDesktopProfileModuleFallback(homeDir)
+    if (profilePreferences === undefined) {
+      await importLegacyDesktopSetupWizardSettings(join(activeProfileDir, PROFILE_PATCH_FILENAME))
+    }
     let prepared = prepareDesktopProfile(
       process.env.DSH_TELEMETRY_DISABLED,
       homeDir,

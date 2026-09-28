@@ -7,7 +7,6 @@ import type {} from './workspace-client-contract.ts'
 import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { ChevronRight, Folder, FolderOpen, FolderPlus } from 'lucide-react'
 import type { DesktopWorkspaceSettings } from '../workspace-settings.ts'
-import { DESKTOP_WORKSPACE_SETTINGS_NAMESPACE } from '../workspace-settings.ts'
 import type { DesktopDirectoryPickerWindow } from './directory-picker.ts'
 
 const NS = 'desktop.directory-picker'
@@ -160,8 +159,8 @@ export function WorkspaceDirectoryFlow(props: DirectoryFlowOwnerProps & Director
 }
 
 export function applyWorkspaceDirectoryFlow(ctx: Context) {
-  ctx.inject(['uiWorkspace', 'workspaces', 'settingsScope', 'locale', 'slots'], scope => {
-    const settings = scope.settingsScope.bind<DesktopWorkspaceSettings>({ namespace: DESKTOP_WORKSPACE_SETTINGS_NAMESPACE })
+  ctx.inject(['uiWorkspace', 'workspaces', 'configForms', 'locale', 'slots'], scope => {
+    const settings = scope.configForms.get<DesktopWorkspaceSettings>('desktop-default-workspace')
     scope.effect(() => scope.locale.register(NS, COPY))
     const injected = (): DirectoryFlowServices => ({
       startPath: () => {

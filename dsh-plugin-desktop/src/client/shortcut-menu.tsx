@@ -2,16 +2,16 @@
 
 import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  IconAgentPresetOutline16, IconDataOutline16, IconListPenOutline16, IconPersonalizationOutline16, IconSettingsOutline16,
+  IconAgentPresetOutlineMedium, IconDataOutlineMedium, IconListPenOutlineMedium, IconPersonalizationOutlineMedium, IconSettingsOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SETTINGS_NAV_ICON_ATTRIBUTE, type DesktopSettingsNavIcon } from './settings-nav-icons.ts'
 
 export const DESKTOP_SHORTCUTS_LOCALE_NAMESPACE = 'desktop.shortcuts'
-export const DESKTOP_SHORTCUTS_SETTINGS_NAMESPACE = 'dsh-desktop-shortcuts'
+export const DESKTOP_SHORTCUTS_SETTINGS_NAMESPACE = 'desktop-shortcuts'
 const OPEN_SETTINGS_EVENT = 'clawclaw:open-settings-section'
 const MAX_SHORTCUTS = 4
 
@@ -34,10 +34,10 @@ export const en: Record<DesktopShortcutsLocaleKey, string> = {
 
 function shortcutIcon(section: SettingsSection): ShortcutIcon {
   switch (section.id) {
-    case 'models': return <IconDataOutline16 />
-    case 'agent-presets': return <IconAgentPresetOutline16 />
-    case 'plugins': return <IconPersonalizationOutline16 />
-    case 'desktop-reminders': return <IconListPenOutline16 />
+    case 'models': return <IconDataOutlineMedium />
+    case 'agent-presets': return <IconAgentPresetOutlineMedium />
+    case 'plugins': return <IconPersonalizationOutlineMedium />
+    case 'desktop-reminders': return <IconListPenOutlineMedium />
     case 'desktop': return <DesktopSettingsIcon />
   }
   // These are the same semantic glyphs applied to their navigation rows.
@@ -45,7 +45,7 @@ function shortcutIcon(section: SettingsSection): ShortcutIcon {
   if (['技能', 'Skills'].includes(section.label)) return 'skill'
   if (['MCP 服务', 'MCP Servers'].includes(section.label)) return 'mcp'
   if (['定时任务', 'Scheduled tasks'].includes(section.label)) return 'schedule'
-  return <IconSettingsOutline16 />
+  return <IconSettingsOutlineMedium />
 }
 
 function sectionsToShortcuts(sections: readonly SettingsSection[]): readonly ShortcutDefinition[] {
@@ -58,7 +58,7 @@ function normalize(items: readonly string[] | undefined, shortcuts: readonly Sho
   return input.filter((item, index) => known.has(item) && input.indexOf(item) === index).slice(0, MAX_SHORTCUTS)
 }
 
-function useScope<T>(scope: SettingsScope<T>): T | undefined {
+function useScope<T>(scope: ConfigForm<T>): T | undefined {
   const subscribe = useCallback((listener: () => void) => scope.subscribe(listener), [scope])
   const snapshot = useCallback(() => scope.getSnapshot(), [scope])
   return useSyncExternalStore(subscribe, snapshot, snapshot).value
@@ -82,7 +82,7 @@ function ShortcutIcon({ icon }: { readonly icon: ShortcutIcon }): JSX.Element {
 }
 
 type ShortcutMenuProps = PropsRuntime<'settings.general.item'> & PropsLocale<'desktop.shortcuts'> & {
-  readonly shortcutSettings: SettingsScope<DesktopShortcutSettings>
+  readonly shortcutSettings: ConfigForm<DesktopShortcutSettings>
   readonly settingsSections: SettingsSections
 }
 
@@ -113,7 +113,7 @@ export function ShortcutSettingsRow({ t, shortcutSettings, settingsSections }: S
   </section>
 }
 
-export function SidebarShortcuts({ wide, t, shortcutSettings, settingsSections }: PropsRuntime<'sidebar.shortcuts'> & PropsLocale<'desktop.shortcuts'> & { readonly shortcutSettings: SettingsScope<DesktopShortcutSettings>; readonly settingsSections: SettingsSections }): JSX.Element {
+export function SidebarShortcuts({ wide, t, shortcutSettings, settingsSections }: PropsRuntime<'sidebar.shortcuts'> & PropsLocale<'desktop.shortcuts'> & { readonly shortcutSettings: ConfigForm<DesktopShortcutSettings>; readonly settingsSections: SettingsSections }): JSX.Element {
   const settings = useScope(shortcutSettings)
   const sections = useSections(settingsSections)
   const shortcuts = useMemo(() => sectionsToShortcuts(sections), [sections])
@@ -135,7 +135,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 export function applyShortcutMenu(ctx: ClientContext): void {
-  const shortcutSettings = ctx.settingsScope.bind<DesktopShortcutSettings>({ namespace: DESKTOP_SHORTCUTS_SETTINGS_NAMESPACE })
+  const shortcutSettings = ctx.configForms.get<DesktopShortcutSettings>(DESKTOP_SHORTCUTS_SETTINGS_NAMESPACE)
   let sectionsVersion = -1
   let sectionsLocaleRevision = -1
   let sectionsSnapshot: readonly SettingsSection[] = []

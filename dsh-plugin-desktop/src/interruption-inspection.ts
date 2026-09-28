@@ -71,7 +71,7 @@ export async function inspectDesktopInterruptions(ctx: Context): Promise<Desktop
     0,
   )
   const activeJobIds = new Set<string>()
-  for (const caller of [undefined, ...liveAgents]) {
+  for (const caller of [undefined, ...liveAgents.map(agent => agent.id)]) {
     for (const job of jobs.list(caller)) {
       if (job.status === 'running' || job.status === 'stopping') activeJobIds.add(String(job.id))
     }

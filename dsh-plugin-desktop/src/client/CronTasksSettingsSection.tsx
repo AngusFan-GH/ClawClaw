@@ -21,7 +21,7 @@ import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw.mjs'
 import Search from 'lucide-react/dist/esm/icons/search.mjs'
 // @ts-expect-error package subpath has no declaration file
 import X from 'lucide-react/dist/esm/icons/x.mjs'
-import { IconChevronDownOutline14, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronDownOutlineMedium, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { CronTaskInputView, CronTaskPolicyView, CronTaskRunView, CronTaskView, CronTasksApi, CronTaskWorkspaceView } from './cron-tasks-api.ts'
 import { friendlyCronExpression, localDateTimeInput, parseFriendlyCronSchedule,
@@ -82,7 +82,7 @@ function TimeSegment({ label, value, options, onChange }: {
     items={options.map(option => ({ id: option, label: option }))}
     onSelect={next => { onChange(next); setOpen(false) }}
     anchor={<button className="dshCronTimeSegment" type="button" aria-label={label} aria-haspopup="menu"
-      aria-expanded={open} onClick={() => { setOpen(current => !current) }}><span>{value}</span><IconChevronDownOutline14 /></button>} />
+      aria-expanded={open} onClick={() => { setOpen(current => !current) }}><span>{value}</span><IconChevronDownOutlineMedium /></button>} />
 }
 
 export function CronTimePicker({ value, label, hourLabel, minuteLabel, onChange }: {

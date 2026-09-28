@@ -3,7 +3,8 @@
 import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
 import { win32 } from 'node:path'
-import type { ShellExecSpec, ShellProcess, ShellRunResult } from '@deepseek-ai/dsh-shell'
+import type { ShellExecSpec, ShellExecution } from '@deepseek-ai/dsh-shell'
+import { createVolatile } from '@deepseek-ai/cosmokit'
 import { SandboxPwshExecutor } from '@deepseek-ai/dsh-pwsh-sandbox'
 import type { Config as PwshConfig } from '@deepseek-ai/dsh-pwsh-local'
 
@@ -51,11 +52,11 @@ export function desktopWindowsPwshPath(
 
 /** Keep explicit user config, otherwise avoid PATH-resolved portable pwsh in the Windows ACL sandbox. */
 export function desktopWindowsPwshConfig(
-  config: PwshConfig,
+  config: { readonly cwd?: string, readonly pwshPath?: string },
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
   exists: (path: string) => boolean = existsSync,
-): PwshConfig {
+): { readonly cwd?: string, readonly pwshPath?: string } {
   if (config.pwshPath !== undefined && config.pwshPath.length > 0) return config
   const pwshPath = desktopWindowsPwshPath(env, platform, exists)
   return pwshPath === undefined ? config : { ...config, pwshPath }
@@ -95,7 +96,11 @@ export function adaptWindowsAclExecution(
 /** PowerShell sandbox provider that repairs only Electron-hosted Windows ACL launches. */
 export class DesktopWindowsPwshSandbox extends SandboxPwshExecutor {
   constructor(ctx: ConstructorParameters<typeof SandboxPwshExecutor>[0], config: PwshConfig) {
-    super(ctx, desktopWindowsPwshConfig(config, process.env, process.platform))
+    const configured = config.pwshPath.get()
+    const stable = configured === undefined || configured.length === 0
+      ? desktopWindowsPwshPath(process.env, process.platform)
+      : configured
+    super(ctx, stable === configured ? config : { ...config, pwshPath: createVolatile(stable) })
   }
 
   private adapt(spec: ShellExecSpec, argv: readonly string[]): AdaptedWindowsAclExecution {
@@ -108,14 +113,17 @@ export class DesktopWindowsPwshSandbox extends SandboxPwshExecutor {
     })
   }
 
-  protected override async runArgv(spec: ShellExecSpec, argv: readonly string[]): Promise<ShellRunResult> {
-    const adapted = this.adapt(spec, argv)
-    return super.runArgv(adapted.spec, adapted.argv)
-  }
-
-  protected override startArgv(spec: ShellExecSpec, argv: readonly string[]): ShellProcess {
-    const adapted = this.adapt(spec, argv)
-    return super.startArgv(adapted.spec, adapted.argv)
+  protected override async executeArgv(
+    spec: ShellExecSpec,
+    argvOrPrepare: readonly string[] | ((signal: AbortSignal) => Promise<readonly string[]>),
+    onStarted?: (process: ShellExecution) => void,
+  ): Promise<ShellExecution> {
+    return super.executeArgv(spec, async (signal) => {
+      const argv = typeof argvOrPrepare === 'function' ? await argvOrPrepare(signal) : argvOrPrepare
+      const adapted = this.adapt(spec, argv)
+      Object.assign(spec, adapted.spec)
+      return adapted.argv
+    }, onStarted)
   }
 }
 

@@ -14,7 +14,7 @@ import {
   openSync,
   readSync,
 } from 'node:fs'
-import { dirname, extname, isAbsolute, resolve } from 'node:path'
+import { dirname, extname, isAbsolute, join, resolve } from 'node:path'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { parseDocument } from 'yaml'
 import {
@@ -34,6 +34,8 @@ import type {
 const BIN_NAME = 'dsh-plugin-desktop'
 const DESKTOP_NAMESPACE = 'dsh-desktop'
 const NOTIFICATIONS_NAMESPACE = 'dsh-desktop-notifications'
+const DESKTOP_ROW_ID = 'desktop-shell'
+const NOTIFICATIONS_ROW_ID = 'desktop-notifications'
 const MAX_DOCUMENT_BYTES = 4 * 1024 * 1024
 const DOCUMENT_FILE_MODE = 0o600
 const DOCUMENT_DIRECTORY_MODE = 0o700
@@ -59,7 +61,7 @@ export interface DesktopSetupWizardSettings {
 
 interface LoadedSettingsDocument {
   readonly format: SettingsFormat
-  readonly root: Record<string, unknown>
+  readonly root: Record<string, unknown> | unknown[]
   readonly yaml?: ReturnType<typeof parseDocument>
 }
 
@@ -140,7 +142,8 @@ function loadSettingsDocument(path: string): LoadedSettingsDocument {
         throw invalid('JSON could not be parsed')
       }
     }
-    if (!isRecord(value)) throw invalid('root must be a map of namespace sections')
+    if (!isRecord(value) && !Array.isArray(value)) throw invalid('root must be a settings map or Loader patch sequence')
+    if (Array.isArray(value) && value.some(item => !isRecord(item))) throw invalid('Loader patch entries must be maps')
     return { format, root: value }
   }
 
@@ -149,8 +152,46 @@ function loadSettingsDocument(path: string): LoadedSettingsDocument {
     throw invalid(`YAML could not be parsed: ${yaml.errors.map(error => error.message).join('; ')}`)
   }
   const value: unknown = yaml.toJS() ?? {}
-  if (!isRecord(value)) throw invalid('root must be a map of namespace sections')
+  if (!isRecord(value) && !Array.isArray(value)) throw invalid('root must be a settings map or Loader patch sequence')
+  if (Array.isArray(value) && value.some(item => !isRecord(item))) throw invalid('Loader patch entries must be maps')
   return { format, root: value, yaml }
+}
+
+function patchRow(root: readonly unknown[], id: string): Record<string, unknown> | undefined {
+  let result: Record<string, unknown> | undefined
+  for (const patch of root) {
+    if (!isRecord(patch)) continue
+    if (patch.id === id) result = patch
+    if (!Array.isArray(patch.insert)) continue
+    for (const inserted of patch.insert) {
+      if (isRecord(inserted) && inserted.id === id) result = inserted
+    }
+  }
+  return result
+}
+
+function patchConfig(root: readonly unknown[], id: string): Record<string, unknown> {
+  const config = patchRow(root, id)?.config
+  if (config === undefined) return {}
+  if (!isRecord(config)) throw invalid(`${id}.config must be a map`)
+  return config
+}
+
+function settingsRoot(root: Record<string, unknown> | unknown[]): Record<string, unknown> {
+  if (!Array.isArray(root)) return root
+  return {
+    [DESKTOP_NAMESPACE]: patchConfig(root, DESKTOP_ROW_ID),
+    [NOTIFICATIONS_NAMESPACE]: patchConfig(root, NOTIFICATIONS_ROW_ID),
+  }
+}
+
+function hasDesktopPatch(root: Record<string, unknown> | unknown[]): boolean {
+  return Array.isArray(root)
+    && (patchRow(root, DESKTOP_ROW_ID) !== undefined || patchRow(root, NOTIFICATIONS_ROW_ID) !== undefined)
+}
+
+function legacySettingsPath(path: string): string {
+  return join(dirname(dirname(dirname(path))), 'settings.yaml')
 }
 
 function section(root: Record<string, unknown>, namespace: string): Record<string, unknown> {
@@ -189,9 +230,8 @@ function notificationSettings(values: Record<string, unknown>): DesktopSetupWiza
   })
 }
 
-function projectSettings(
-  root: Record<string, unknown>,
-): DesktopSetupWizardSettings {
+function projectSettings(root: Record<string, unknown> | unknown[]): DesktopSetupWizardSettings {
+  root = settingsRoot(root)
   const desktop = section(root, DESKTOP_NAMESPACE)
   const notifications = section(root, NOTIFICATIONS_NAMESPACE)
   const mode = parseMode(desktop.mode)
@@ -281,6 +321,27 @@ function applyYamlUpdate(
   document: NonNullable<LoadedSettingsDocument['yaml']>,
   next: DesktopSetupWizardSettings,
 ): string {
+  const root = document.toJS() as unknown
+  if (Array.isArray(root)) {
+    const rowIndex = (id: string): number => {
+      const existing = root.findLastIndex(value => isRecord(value) && value.id === id)
+      if (existing >= 0) return existing
+      document.add(document.createNode({ id, config: {} }))
+      root.push({ id, config: {} })
+      return root.length - 1
+    }
+    const desktop = rowIndex(DESKTOP_ROW_ID)
+    document.setIn([desktop, 'config', 'mode'], next.mode)
+    document.setIn([desktop, 'config', 'macosMaterial'], next.macosMaterial)
+    document.setIn([desktop, 'config', 'windowsMaterial'], next.windowsMaterial)
+    document.setIn([desktop, 'config', 'openBrowser'], next.openBrowser)
+    document.setIn([desktop, 'config', 'networkExposure'], next.networkExposure)
+    const notifications = rowIndex(NOTIFICATIONS_ROW_ID)
+    for (const [key, value] of Object.entries(next.notifications)) {
+      document.setIn([notifications, 'config', key], value)
+    }
+    return document.toString()
+  }
   document.setIn([DESKTOP_NAMESPACE, 'mode'], next.mode)
   document.setIn([DESKTOP_NAMESPACE, 'macosMaterial'], next.macosMaterial)
   document.setIn([DESKTOP_NAMESPACE, 'windowsMaterial'], next.windowsMaterial)
@@ -293,10 +354,31 @@ function applyYamlUpdate(
 }
 
 function applyJsonUpdate(
-  root: Record<string, unknown>,
+  root: Record<string, unknown> | unknown[],
   next: DesktopSetupWizardSettings,
 ): string {
   const output = structuredClone(root)
+  if (Array.isArray(output)) {
+    const ensureRow = (id: string): Record<string, unknown> => {
+      let row = output.findLast(value => isRecord(value) && value.id === id) as Record<string, unknown> | undefined
+      if (row === undefined) {
+        row = { id, config: {} }
+        output.push(row)
+      }
+      if (row.config !== undefined && !isRecord(row.config)) throw invalid(`${id}.config must be a map`)
+      row.config = { ...(row.config as Record<string, unknown> | undefined) }
+      return row.config as Record<string, unknown>
+    }
+    Object.assign(ensureRow(DESKTOP_ROW_ID), {
+      mode: next.mode,
+      macosMaterial: next.macosMaterial,
+      windowsMaterial: next.windowsMaterial,
+      openBrowser: next.openBrowser,
+      networkExposure: next.networkExposure,
+    })
+    Object.assign(ensureRow(NOTIFICATIONS_ROW_ID), next.notifications)
+    return `${JSON.stringify(output, undefined, 2)}\n`
+  }
   const desktop = { ...section(output, DESKTOP_NAMESPACE) }
   desktop.mode = next.mode
   desktop.macosMaterial = next.macosMaterial
@@ -325,7 +407,12 @@ export function readDesktopSetupWizardSettings(
   documentPath: string,
 ): DesktopSetupWizardSettings {
   const path = settingsPath(documentPath)
-  return projectSettings(loadSettingsDocument(path).root)
+  const loaded = loadSettingsDocument(path)
+  if (Array.isArray(loaded.root) && !hasDesktopPatch(loaded.root)) {
+    const legacyPath = legacySettingsPath(path)
+    if (readDocumentText(legacyPath) !== undefined) return projectSettings(loadSettingsDocument(legacyPath).root)
+  }
+  return projectSettings(loaded.root)
 }
 
 /**
@@ -359,6 +446,25 @@ export async function updateDesktopSetupWizardSettings(
 }
 
 /**
+ * Seed Desktop's Profile rows from the removed settings document before the
+ * first 0.1.7 composition. The upstream settings importer remains responsible
+ * for renaming and importing every legacy section after the Host starts.
+ */
+export async function importLegacyDesktopSetupWizardSettings(
+  documentPath: string,
+): Promise<boolean> {
+  const path = settingsPath(documentPath)
+  const loaded = loadSettingsDocument(path)
+  if (!Array.isArray(loaded.root) || hasDesktopPatch(loaded.root)) return false
+  const legacyPath = legacySettingsPath(path)
+  if (readDocumentText(legacyPath) === undefined) return false
+  const legacy = projectSettings(loadSettingsDocument(legacyPath).root)
+  if (sameDesktopSetupWizardSettings(projectSettings(loaded.root), legacy)) return false
+  await updateDesktopSetupWizardSettings(path, legacy)
+  return true
+}
+
+/**
  * Atomically migrate settings written with the former browser-handoff
  * semantics before the Host reads them. Existing LAN exposure becomes an
  * explicit browser-access grant only for an already-selected compatibility
@@ -373,7 +479,7 @@ export async function migrateDesktopBrowserAccessSettings(
   const migrationValues = (loaded: LoadedSettingsDocument) => {
     // Validate every known Wizard-owned value before migrating any leaf.
     projectSettings(loaded.root)
-    const desktop = section(loaded.root, DESKTOP_NAMESPACE)
+    const desktop = section(settingsRoot(loaded.root), DESKTOP_NAMESPACE)
     const storedMode = parseMode(desktop.mode)
     const storedOpenBrowser = optionalBoolean(desktop, 'openBrowser', false)
     const storedExposure = parseExposure(desktop.networkExposure)
@@ -398,16 +504,17 @@ export async function migrateDesktopBrowserAccessSettings(
 
   let output: string
   if (loaded.format === 'yaml') {
-    loaded.yaml!.setIn([DESKTOP_NAMESPACE, 'openBrowser'], migration.browserAccess)
-    loaded.yaml!.setIn([DESKTOP_NAMESPACE, 'networkExposure'], migration.networkExposure)
-    output = loaded.yaml!.toString()
+    output = applyYamlUpdate(loaded.yaml!, {
+      ...projectSettings(loaded.root),
+      openBrowser: migration.browserAccess,
+      networkExposure: migration.networkExposure,
+    })
   } else {
-    const root = structuredClone(loaded.root)
-    const nextDesktop = { ...section(root, DESKTOP_NAMESPACE) }
-    nextDesktop.openBrowser = migration.browserAccess
-    nextDesktop.networkExposure = migration.networkExposure
-    root[DESKTOP_NAMESPACE] = nextDesktop
-    output = `${JSON.stringify(root, undefined, 2)}\n`
+    output = applyJsonUpdate(loaded.root, {
+      ...projectSettings(loaded.root),
+      openBrowser: migration.browserAccess,
+      networkExposure: migration.networkExposure,
+    })
   }
   await writeFileAtomic(path, output, {
     mode: DOCUMENT_FILE_MODE,
@@ -429,7 +536,7 @@ export async function migrateDesktopWindowMaterialSettings(
   const needsMigration = (loaded: LoadedSettingsDocument): boolean => {
     // Validate every known Wizard-owned value before changing the legacy leaf.
     projectSettings(loaded.root)
-    return section(loaded.root, DESKTOP_NAMESPACE).windowsMaterial === 'acrylic'
+    return section(settingsRoot(loaded.root), DESKTOP_NAMESPACE).windowsMaterial === 'acrylic'
   }
 
   if (!needsMigration(loadSettingsDocument(path))) return false
@@ -440,13 +547,9 @@ export async function migrateDesktopWindowMaterialSettings(
 
   let output: string
   if (loaded.format === 'yaml') {
-    loaded.yaml!.setIn([DESKTOP_NAMESPACE, 'windowsMaterial'], 'off')
-    output = loaded.yaml!.toString()
+    output = applyYamlUpdate(loaded.yaml!, { ...projectSettings(loaded.root), windowsMaterial: 'off' })
   } else {
-    const root = structuredClone(loaded.root)
-    const desktop = { ...section(root, DESKTOP_NAMESPACE), windowsMaterial: 'off' }
-    root[DESKTOP_NAMESPACE] = desktop
-    output = `${JSON.stringify(root, undefined, 2)}\n`
+    output = applyJsonUpdate(loaded.root, { ...projectSettings(loaded.root), windowsMaterial: 'off' })
   }
   await writeFileAtomic(path, output, {
     mode: DOCUMENT_FILE_MODE,

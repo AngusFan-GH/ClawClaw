@@ -47,7 +47,7 @@ function rejectBrowserUpgrade(socket: Duplex): void {
 
 /** Reuse the upstream WebServer while retrying only real bind collisions. */
 export class DesktopWebServer extends WebServer {
-  static override Config = WebServer.Config
+  static override Config: typeof WebServer.Config = WebServer.Config
 
   private readonly desktopConfig: Config
 

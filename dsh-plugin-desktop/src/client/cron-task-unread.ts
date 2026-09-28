@@ -76,7 +76,7 @@ export function installCronTaskUnreadReminders(options: CronTaskUnreadReminderOp
       const archived = new Set(workspaces.list.getSnapshot().archivedSessionIds.map(String))
       let changed = false
       for (const sessionId of unread) {
-        if (sessionId === snapshot.current || archived.has(sessionId)) {
+        if ((snapshot.byId[sessionId as SessionId]?.retainedBy.mainView ?? 0) > 0 || archived.has(sessionId)) {
           unread.delete(sessionId)
           armed.delete(sessionId)
           changed = true
@@ -89,7 +89,7 @@ export function installCronTaskUnreadReminders(options: CronTaskUnreadReminderOp
           armed.delete(sessionId)
           continue
         }
-        if (summary.completed || armed.has(sessionId)) continue
+        if (armed.has(sessionId)) continue
         armed.add(sessionId)
         // The manager owns the existing green completion reminder. A batched
         // synthetic edge restores it without introducing a second row UI.
@@ -106,7 +106,8 @@ export function installCronTaskUnreadReminders(options: CronTaskUnreadReminderOp
   reconcile()
   return {
     markUnread(sessionId) {
-      if (disposed || sessionId === '' || sessions.list.getSnapshot().current === sessionId) return
+      if (disposed || sessionId === ''
+        || (sessions.list.getSnapshot().byId[sessionId as SessionId]?.retainedBy.mainView ?? 0) > 0) return
       if (!unread.has(sessionId)) {
         unread.add(sessionId)
         persist()

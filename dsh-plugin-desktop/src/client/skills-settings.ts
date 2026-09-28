@@ -20,7 +20,8 @@ export function applySkillsSettings(ctx: ClientContext): void {
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'desktop-skills', order: 30,
     label: () => t('nav'), locale: DESKTOP_SKILLS_LOCALE_NAMESPACE, inject: () => {
-      const current = (ctx.get('sessions') as unknown as ISessions | undefined)?.list.getSnapshot().current
+      const sessionList = (ctx.get('sessions') as unknown as ISessions | undefined)?.list.getSnapshot()
+      const current = sessionList?.ids.find(id => (sessionList.byId[id]?.retainedBy.mainView ?? 0) > 0)
       return { api, ...(current === undefined ? {} : { initialSessionId: current as string }) }
     },
   }, SkillsSettingsSection))

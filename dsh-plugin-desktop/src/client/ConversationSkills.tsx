@@ -1,10 +1,10 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from 'react'
-import { IconSkillOutline16, Modal, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconSkillOutlineMedium, Modal, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 // @ts-expect-error package subpath has no declaration file
 import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw.mjs'
 import { SettingsIconButton } from './settings-controls.tsx'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type {} from '@deepseek-ai/dsh-agent-presets/types'
+import type {} from '@deepseek-ai/dsh-agent-preset-registry/types'
 import type { DesktopSkillsLocaleKey } from './skills-locales.ts'
 import { rankConversationSkills, SkillPickError, type ConversationSkillCatalog, type ConversationSkillsApi } from './conversation-skills.ts'
 
@@ -115,7 +115,7 @@ export function SkillPicker({ api, t, disabled }: { api: ConversationSkillsApi; 
     buttons[next]?.focus(); buttons[next]?.scrollIntoView?.({ block: 'nearest' })
   }
   return <>
-    <Tooltip label={t('chooseSkill')} disabled={open || suppressTooltip}><button ref={trigger} type="button" className="dshSkillPickerTrigger" aria-label={t('chooseSkill')} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => { setQuery(''); setOpen(true) }}><IconSkillOutline16 /></button></Tooltip>
+    <Tooltip label={t('chooseSkill')} disabled={open || suppressTooltip}><button ref={trigger} type="button" className="dshSkillPickerTrigger" aria-label={t('chooseSkill')} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => { setQuery(''); setOpen(true) }}><IconSkillOutlineMedium /></button></Tooltip>
     <Modal open={open} onClose={close} title={t('chooseSkill')} closeLabel={t('close')} className="dshSkillsDialog dshSkillPicker" contentClassName="dshSkillsDialogContent">
       <div className="dshSkillPickerToolbar"><input ref={search} type="search" aria-label={t('searchSkills')} placeholder={t('searchSkills')} value={query} onKeyDown={navigate} onChange={event => { setQuery(event.target.value) }} />
         <SettingsIconButton label={t('refresh')} disabled={busy} onClick={() => { setReload(value => value + 1) }}><RefreshCw /></SettingsIconButton>
@@ -127,7 +127,7 @@ export function SkillPicker({ api, t, disabled }: { api: ConversationSkillsApi; 
         {skills.map(skill => {
           const conflict = catalog!.commands.includes(skill.name)
           return <button type="button" key={skill.name} className="dshSkillPickerItem" disabled={busy || conflict} onClick={() => { void select(skill.name) }}>
-            <IconSkillOutline16 /><span><strong>{skill.name}</strong><span>{conflict ? t('skillCommandConflict') : skill.description}</span></span>
+            <IconSkillOutlineMedium /><span><strong>{skill.name}</strong><span>{conflict ? t('skillCommandConflict') : skill.description}</span></span>
           </button>
         })}
       </div>

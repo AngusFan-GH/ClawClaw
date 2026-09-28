@@ -8,7 +8,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-session-query'
-import type {} from '@deepseek-ai/dsh-agent-presets/types'
+import type {} from '@deepseek-ai/dsh-agent-preset-registry/types'
 import type { SkillDefinition, SkillSummary, SkillViewOptions } from '@deepseek-ai/dsh-skill'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { parseDocument } from 'yaml'
@@ -188,7 +188,7 @@ async function atomicWrite(target: string, text: string, mode: number): Promise<
 
 export class DesktopSkillsController {
   constructor(private readonly ctx: Context, private readonly preset?: string, private readonly selection: DesktopSkillsScope = {}) {}
-  private async view(): Promise<{ registry: Context['skills']; options: SkillViewOptions; preset?: string }> {
+  private async view(): Promise<{ registry: Context['skills']; options: SkillViewOptions; preset?: string; [Symbol.asyncDispose](): Promise<void> }> {
     // Filesystem providers belong to preset layers in the Web composition.
     // Each request has its own selection; browsing never changes the default.
     const presets = this.ctx.get('agentPresets')
@@ -205,7 +205,8 @@ export class DesktopSkillsController {
       cwd = observation.header.cwd
       preset = observation.projections.values.agentPreset ?? undefined
       const live = this.ctx.get('agents')?.get(sessionId)
-      if (live !== undefined) return { registry: presets?.serviceFor(live, 'skills') ?? this.ctx.skills, options: { cwd, scope: live }, ...(preset === undefined ? {} : { preset }) }
+      if (live !== undefined) return { registry: presets?.serviceFor(live, 'skills') ?? this.ctx.skills, options: { cwd, scope: live },
+        ...(preset === undefined ? {} : { preset }), [Symbol.asyncDispose]: async () => {} }
     } else if (this.selection.workspaceId !== undefined) {
       const workspace = this.ctx.get('workspaceRegistry')?.get(this.selection.workspaceId as WorkspaceId)
       if (workspace === undefined) throw new Error('Workspace not found')
@@ -215,18 +216,22 @@ export class DesktopSkillsController {
     const options: SkillViewOptions = cwd === undefined ? {} : { cwd }
     if (presets === undefined) {
       if (preset !== undefined) throw new Error('Agent presets are unavailable')
-      return { registry: this.ctx.skills, options }
+      return { registry: this.ctx.skills, options, [Symbol.asyncDispose]: async () => {} }
     }
     const resolvedPreset = preset ?? presets.defaultId
-    return { registry: this.ctx.skills, options: { ...options, scope: await (resolvedPreset === undefined ? presets.standingKeyFor() : presets.standingKeyFor(resolvedPreset)) },
-      ...(resolvedPreset === undefined ? {} : { preset: resolvedPreset }) }
+    const lease = await presets.acquireScope(resolvedPreset)
+    return { registry: this.ctx.skills, options: { ...options, scope: lease.key },
+      ...(resolvedPreset === undefined ? {} : { preset: resolvedPreset }),
+      [Symbol.asyncDispose]: async () => { await lease[Symbol.asyncDispose]() } }
   }
   private async getSkill(name: string): Promise<SkillDefinition | undefined> {
-    const { registry, options } = await this.view()
+    await using view = await this.view()
+    const { registry, options } = view
     return registry.get(name, options)
   }
   async read(): Promise<DesktopSkillsView> {
-    const { registry, options, preset } = await this.view()
+    await using view = await this.view()
+    const { registry, options, preset } = view
     const snapshot = await registry.snapshot(options)
     if (!snapshot.complete) throw new Error('Skill discovery is incomplete. Please refresh to retry.')
     const installed = await this.installations(registry, options, new Set(snapshot.skills.map(skill => skill.name)))

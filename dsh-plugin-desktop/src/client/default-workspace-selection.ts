@@ -2,12 +2,11 @@
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { IWorkspaces, WorkspaceId, WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type {} from './workspace-client-contract.ts'
 import type { DesktopWorkspaceSettings } from '../workspace-settings.ts'
-import { DESKTOP_WORKSPACE_SETTINGS_NAMESPACE } from '../workspace-settings.ts'
 import { installDefaultWorkspaceMenu } from './default-workspace-menu.ts'
 import { DEFAULT_WORKSPACE_LOCALE_NAMESPACE, DEFAULT_WORKSPACE_LOCALES, installDefaultWorkspaceLocale } from './default-workspace-locale.ts'
 
@@ -27,14 +26,14 @@ interface WorkspaceMenuLocale {
 interface WorkspaceSelectionOptions {
   readonly uiWorkspace: DesktopUiWorkspace
   readonly workspaces: IWorkspaces
-  readonly settings: SettingsScope<DesktopWorkspaceSettings>
+  readonly settings: ConfigForm<DesktopWorkspaceSettings>
   readonly warn?: (message: string, reason: unknown) => void
 }
 
 /** Resolve a valid explicit selection, then the persisted selection, then the product default. */
 export function resolveDesktopWorkspaceSelection(
   workspace: Pick<WorkspaceSnapshot, 'items' | 'phase'>,
-  settings: Pick<SettingsScopeSnapshot<DesktopWorkspaceSettings>, 'status' | 'value'>,
+  settings: Pick<ConfigFormSnapshot<DesktopWorkspaceSettings>, 'status' | 'value'>,
   explicit?: WorkspaceId,
 ): WorkspaceId | undefined {
   if (workspace.phase !== 'ready' || settings.status !== 'ready' || settings.value === undefined) {
@@ -135,10 +134,8 @@ export function installDesktopWorkspaceSelection(options: WorkspaceSelectionOpti
 
 /** Install after the upstream Workspace services become available. */
 export function applyDefaultWorkspaceSelection(ctx: ClientContext): void {
-  ctx.inject(['uiWorkspace', 'workspaces', 'settingsScope', 'locale'], (scope: ClientContext) => {
-    const settings = scope.settingsScope.bind<DesktopWorkspaceSettings>({
-      namespace: DESKTOP_WORKSPACE_SETTINGS_NAMESPACE,
-    })
+  ctx.inject(['uiWorkspace', 'workspaces', 'configForms', 'locale'], (scope: ClientContext) => {
+    const settings = scope.configForms.get<DesktopWorkspaceSettings>('desktop-default-workspace')
     const locale = (scope as ClientContext & { locale: WorkspaceMenuLocale }).locale
     scope.effect(() => locale.register(DEFAULT_WORKSPACE_LOCALE_NAMESPACE, DEFAULT_WORKSPACE_LOCALES),
       'dsh-plugin-desktop: default Workspace dictionary')

@@ -28,6 +28,8 @@
         path: !!js process.env.CLAWCLAW_DEFAULT_WORKSPACE
     - id: desktop-skills
       name: dsh-plugin-desktop/skills
+    - id: desktop-legacy-agent-presets
+      name: dsh-plugin-desktop/legacy-agent-presets
     - id: desktop-mcp
       name: dsh-plugin-desktop/mcp
     - id: desktop-pnpm

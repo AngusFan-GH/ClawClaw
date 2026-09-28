@@ -1,7 +1,7 @@
 /** Privacy-safe desktop attention for completed user turns and background jobs. */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { JobSnapshot } from '@deepseek-ai/dsh-jobs'
+import type { JobView } from '@deepseek-ai/dsh-jobs'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import z from '@deepseek-ai/schemastery'
 import type { DesktopLocale, DesktopNotification } from './runtime.ts'
@@ -54,7 +54,7 @@ interface OpenTurn {
 function notifyJob(
   runtime: Context['desktopRuntime'],
   settings: DesktopNotificationSettings,
-  snapshot: JobSnapshot,
+  snapshot: JobView,
 ): void {
   if (!settings.enabled) return
   if (snapshot.status === 'completed' && settings.notifyOnJobCompletion) {
@@ -121,7 +121,9 @@ export function apply(ctx: Context): void {
 
   ctx.inject(['jobs'], (jobsCtx) => {
     jobsCtx.effect(
-      () => jobsCtx.jobs.onJobDone(snapshot => { notifyJob(jobsCtx.desktopRuntime, settings, snapshot) }),
+      () => jobsCtx.jobs.events.subscribe({ owners: 'all' }, event => {
+        if (event.type === 'settled') notifyJob(jobsCtx.desktopRuntime, settings, event.job)
+      }),
       'dsh-plugin-desktop: background job attention',
     )
   })

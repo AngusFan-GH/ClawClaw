@@ -3,7 +3,7 @@
 import {
   useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode,
 } from 'react'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
   DesktopMarketProvider, DesktopProfileView, DesktopSettingsApi, DesktopSettingsView,
@@ -43,8 +43,8 @@ export interface DesktopSettingsSectionInjected {
   readonly initialMode: DesktopShellSettings['mode']
   readonly micaSupported: boolean
   readonly setMode: (mode: DesktopShellSettings['mode']) => Promise<void>
-  readonly desktopSettings: SettingsScope<DesktopShellSettings>
-  readonly notificationSettings: SettingsScope<DesktopNotificationSettings>
+  readonly desktopSettings: ConfigForm<DesktopShellSettings>
+  readonly notificationSettings: ConfigForm<DesktopNotificationSettings>
 }
 
 /** Renderer-composed props for the official settings section entry. */
@@ -57,6 +57,7 @@ type Translate = DesktopSettingsSectionProps['t']
 type BusyOperation = 'load' | 'create-profile' | 'select-profile' | 'delete-profile' | 'select-aa' | 'select-market' | 'mode' | 'material' | 'web' | 'notification' | 'update-journal' | 'background-notice'
 type RestartState = 'none' | 'restarting' | 'required'
 type LanPollWait = (signal: AbortSignal) => Promise<void>
+interface DesktopSettingsWriter { set(field: string, value: unknown): Promise<unknown> }
 
 const LAN_POLL_INTERVAL_MS = 250
 const LAN_POLL_MAX_READS = 21
@@ -111,7 +112,7 @@ export async function readDesktopSettingsUntilLanSettled(
 
 /** Persist ordinary-browser permission and refresh the already-running edge. */
 export async function persistDesktopBrowserAccessHot(
-  settings: Pick<SettingsScope<DesktopShellSettings>, 'set'>,
+  settings: DesktopSettingsWriter,
   checked: boolean,
   currentExposure: DesktopShellSettings['networkExposure'],
   refresh: () => Promise<DesktopSettingsView>,
@@ -125,7 +126,7 @@ export async function persistDesktopBrowserAccessHot(
 
 /** Persist LAN intent and refresh its hot HTTPS ingress state. */
 export async function persistDesktopNetworkExposureHot(
-  settings: Pick<SettingsScope<DesktopShellSettings>, 'set'>,
+  settings: DesktopSettingsWriter,
   exposure: DesktopShellSettings['networkExposure'],
   refresh: () => Promise<DesktopSettingsView>,
 ): Promise<DesktopSettingsView> {
@@ -151,7 +152,7 @@ export function resolveDesktopLanConfirmation(
   if (confirmed) enableLan()
 }
 
-function useScope<T>(scope: SettingsScope<T>) {
+function useScope<T>(scope: ConfigForm<T>) {
   const subscribe = useCallback((listener: () => void) => scope.subscribe(listener), [scope])
   const snapshot = useCallback(() => scope.getSnapshot(), [scope])
   return useSyncExternalStore(subscribe, snapshot)

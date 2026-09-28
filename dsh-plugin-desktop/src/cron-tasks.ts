@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import { deepEqualJson } from '@deepseek-ai/dsh-settings'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
@@ -165,7 +166,7 @@ export async function runCronTask(
     await onSessionResolved?.(String(sessionId), String(workspace.id))
     const message = createUserMessage({
       content: [{ type: 'text', text: task.prompt }],
-      source: { kind: 'plugin', plugin: 'dsh-plugin-desktop/cron-tasks' },
+      source: { kind: 'user' },
     })
     if (handle === undefined) await admitFollowup(agent, message, signal)
     else agent.followup(message)
@@ -194,6 +195,7 @@ export class CronTaskController {
   private readonly activeAbort = new Map<string, AbortController>()
   private readonly activePromises = new Set<Promise<object>>()
   private readonly activeByTask = new Map<string, Promise<object>>()
+  private readonly persistRehydratedJobs: boolean
 
   constructor(
     private readonly runtime: CronRuntime,
@@ -203,12 +205,14 @@ export class CronTaskController {
       = (task, signal, onSessionResolved) => runCronTask(runtime, task, signal, onSessionResolved),
     private readonly runTimeoutMs = RUN_TIMEOUT_MS,
   ) {
-    this.jobs = settings.get().jobs.map(job => rehydrateCronTask(job, now()))
+    const storedJobs = settings.get().jobs
+    this.jobs = storedJobs.map(job => rehydrateCronTask(job, now()))
+    this.persistRehydratedJobs = !deepEqualJson(storedJobs, this.jobs)
   }
 
   start(): void {
     void this.serialized(async () => {
-      await this.settings.replace({ jobs: this.jobs })
+      if (this.persistRehydratedJobs) await this.settings.replace({ jobs: this.jobs })
       this.arm()
     })
   }
