@@ -120,7 +120,7 @@ Verification: 39 focused update tests passing; `corepack pnpm --filter dsh-plugi
 
 ### Phase 3 (P0): Windows Authenticode publisher qualification
 
-**Status: Not started**
+**Status: Blocked (qualification implemented; Windows signing identity and credentialed release path missing)**
 
 Goal: distinguish a structurally valid PE from a trusted Authenticode identity. Update metadata `publisherName` must match the actual signing certificate.
 
@@ -132,6 +132,10 @@ Changes and acceptance:
 - Local unsigned development builds skip explicitly; formal release channels may not skip.
 
 Rollback may remove qualification wiring only; it must not weaken publisher validation already configured in the production updater.
+
+Delivered portion: `qualify:win-signature` runs only on native Windows against a signed installer, an independent unsigned negative control, and packaged `app-update.yml`. It requires `CLAWCLAW_WINDOWS_PUBLISHER_NAME` to match metadata exactly, calls the real `NsisUpdater.verifySignature()` for matching, wrong, and unsigned controls, and checks SHA-512 before and after. The old `verify-win-installer.ts` is now explicitly described as a PE/COFF structure check.
+
+Blocker: `dist:win` currently removes every signing environment variable and passes `win.signExecutable=false`; tag releases use the same unsigned path. The repository has no verifiable legal publisher string, code-signing certificate, or credentialed Windows release command, and those facts cannot be fabricated. Unblocking requires selecting the publisher identity, configuring a credentialed signed artifact and independent unsigned control, wiring qualification into the formal release job, and refusing Windows stable upload without a passing report. Seven focused tests and full typecheck pass; real Authenticode positive/negative controls must run on Windows once those prerequisites exist.
 
 ### Phase 4 (P1): structured fatal crash reports
 

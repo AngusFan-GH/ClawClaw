@@ -41,6 +41,8 @@ corepack pnpm check
 
 `package:dir` creates an unpacked host-platform artifact. `dist:mac-smoke` performs unsigned macOS packaging smoke; `dist:mac` is the credentialed macOS release path. `dist:win` and `dist:win-portable` require native Windows x64. Local unsigned artifacts may show Gatekeeper, SmartScreen, or Unknown Publisher warnings and are not release evidence.
 
+The current `dist:win` path deliberately removes signing credentials and produces an unsigned smoke artifact; it is not directly eligible for a trusted stable-channel update. Once a signed installer, a separate unsigned negative control, and the packaged `resources/app-update.yml` are available, set `CLAWCLAW_WINDOWS_PUBLISHER_NAME` on native Windows and run `corepack pnpm --filter dsh-plugin-desktop run qualify:win-signature -- <signed.exe> <unsigned.exe> <app-update.yml>`. This qualification uses `NsisUpdater.verifySignature()` for matching-publisher, wrong-publisher, and unsigned controls and confirms that input SHA-512 digests do not change. Formal Windows release qualification remains blocked until a signing identity and credentialed Windows release path are configured.
+
 All platforms disable ASAR. Packaged application files and dependencies remain physically accessible under `resources/app/` (or `Contents/Resources/app/`) for Host, DSH CLI, pnpm, native modules, and profile fallback. Verify with `check`, then use the platform-specific packaging command on its target OS.
 
 ## Updates and releases

@@ -120,7 +120,7 @@ ClawClaw 已有下列能力，因此不再移植同类实现：
 
 ### 阶段 3（P0）：Windows Authenticode 发布者资格验证
 
-**状态：待实施**
+**状态：阻塞（资格门禁已实现；缺少 Windows 签名身份和凭据化 release 路径）**
 
 目标：区分 PE 格式有效与 Authenticode 身份可信；更新元数据中的 `publisherName` 必须对应实际签名证书。
 
@@ -132,6 +132,10 @@ ClawClaw 已有下列能力，因此不再移植同类实现：
 - 未提供签名身份的本地开发构建明确 skip；正式发布通道不得 skip。
 
 回滚只允许移除测试接线，不允许降低生产 updater 已配置的发布者校验。
+
+已落地部分：新增 `qualify:win-signature`，仅允许在原生 Windows 上针对已签名安装器、独立未签名负例和打包后的 `app-update.yml` 运行；它要求 `CLAWCLAW_WINDOWS_PUBLISHER_NAME` 与元数据完全一致，真实调用 `NsisUpdater.verifySignature()` 覆盖匹配、错误和未签名三种控制，并检查前后 SHA-512。原 `verify-win-installer.ts` 已明确改称 PE/COFF 结构检查。
+
+阻塞原因：当前 `dist:win` 明确删除所有签名环境变量并传入 `win.signExecutable=false`，tag release 也沿用该未签名路径。仓库没有可验证的法定发布者字符串、代码签名证书或凭据化 Windows release 命令，不能伪造这些事实。解除阻塞需要选定发布主体，配置凭据化签名产物和独立未签名控制，将资格命令接入正式 release job，并禁止未通过报告的 Windows stable 上传。当前聚焦测试 7 项和完整 typecheck 已通过；真实 Authenticode 正/负例必须在上述条件具备后于 Windows 执行。
 
 ### 阶段 4（P1）：结构化 fatal crash report
 

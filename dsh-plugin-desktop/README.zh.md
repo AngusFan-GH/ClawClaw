@@ -41,6 +41,8 @@ corepack pnpm check
 
 `package:dir` 生成当前平台的未封装产物。`dist:mac-smoke` 做未签名 macOS packaging smoke，`dist:mac` 是具备凭据时的 macOS release 路径。`dist:win`、`dist:win-portable` 需要原生 Windows x64。未签名本地产物可能触发 Gatekeeper、SmartScreen 或 Unknown Publisher，不能作为发布证据。
 
+当前 `dist:win` 会主动移除签名凭据并生成未签名 smoke 产物，不能直接作为受信任的稳定通道更新发布。准备好已签名安装器、独立的未签名负例和打包应用内的 `resources/app-update.yml` 后，在原生 Windows 上设置 `CLAWCLAW_WINDOWS_PUBLISHER_NAME`，再运行 `corepack pnpm --filter dsh-plugin-desktop run qualify:win-signature -- <signed.exe> <unsigned.exe> <app-update.yml>`。该资格门禁使用 `NsisUpdater.verifySignature()` 验证匹配发布者、错误发布者和未签名文件，并确认输入 SHA-512 未变化。在签名身份和凭据化 Windows release 路径完成前，正式 Windows 发布门禁仍处于阻塞状态。
+
 所有平台禁用 ASAR。应用与依赖以物理文件放在 `resources/app/`（macOS 为 `Contents/Resources/app/`），供 Host、DSH CLI、pnpm、native module 和 profile fallback 使用。先跑 `check`，再在目标系统运行平台打包命令。
 
 ## 更新与发布

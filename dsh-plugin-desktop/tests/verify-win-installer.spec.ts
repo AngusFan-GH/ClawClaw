@@ -62,13 +62,13 @@ describe('Windows installer artifact verification', () => {
       .toThrow('does not have a Windows PE header')
   })
 
-  it('rejects an unpacked application without a Windows PE signature', () => {
+  it('rejects an unpacked application without a Windows PE/COFF signature', () => {
     const value = fixture()
     const invalid = portableExecutable()
     invalid.fill(0, 128, 132)
     writeFileSync(value.application, invalid)
 
     expect(() => verifyWindowsInstaller({ desktopRoot: value.root, version: '2.0.0' }))
-      .toThrow('does not have a Windows PE signature')
+      .toThrow('does not have a Windows PE/COFF signature')
   })
 })

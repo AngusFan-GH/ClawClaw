@@ -1,4 +1,4 @@
-/** Verify the unsigned Windows x64 NSIS installer and unpacked executable. */
+/** Verify the PE/COFF structure of the unsigned Windows NSIS installer and application. */
 
 import { closeSync, openSync, readFileSync, readSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -14,7 +14,7 @@ export function assertPortableExecutableBuffer(data: Buffer, label: string, sour
     throw new Error(`${label} has an invalid Windows PE offset: ${source}`)
   }
   if (!data.subarray(peOffset, peOffset + 4).equals(Buffer.from('PE\0\0'))) {
-    throw new Error(`${label} does not have a Windows PE signature: ${source}`)
+    throw new Error(`${label} does not have a Windows PE/COFF signature: ${source}`)
   }
 }
 
@@ -64,7 +64,7 @@ export function assertPortableExecutable(path: string, label: string): void {
     const signature = Buffer.alloc(4)
     const signatureBytesRead = readSync(descriptor, signature, 0, signature.byteLength, peOffset)
     if (signatureBytesRead !== signature.byteLength || !signature.equals(Buffer.from('PE\0\0'))) {
-      throw new Error(`${label} does not have a Windows PE signature: ${path}`)
+      throw new Error(`${label} does not have a Windows PE/COFF signature: ${path}`)
     }
   } finally {
     closeSync(descriptor)
