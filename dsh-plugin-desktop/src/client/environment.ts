@@ -26,6 +26,18 @@ const PLATFORMS = new Set<DesktopClientPlatform>(['darwin', 'win32', 'linux'])
 const MATERIAL_MARKERS = new Set(['off', 'transparent', 'acrylic', 'mica'])
 const VERSION_PATTERN = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u
 
+/** Resolve the ClawClaw version for both native and ordinary-browser clients. */
+export function resolveDesktopClientProductVersion(
+  environment: DesktopClientEnvironment | undefined,
+): string | undefined {
+  const version = environment?.version ?? process.env.DSH_DESKTOP_PRODUCT_VERSION
+  if (version === undefined) return undefined
+  if (version.length > 64 || !VERSION_PATTERN.test(version)) {
+    throw new Error(`dsh-plugin-desktop: invalid product version ${JSON.stringify(version)}`)
+  }
+  return version
+}
+
 /**
  * Validate the Electron-owned query marker before any desktop client effects run.
  * @param search - URL search string, including or omitting the leading question mark.

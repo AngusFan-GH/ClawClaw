@@ -18,8 +18,10 @@ import {
   importLegacyDesktopSetupWizardSettings,
   migrateDesktopBrowserAccessSettings,
   migrateDesktopWindowMaterialSettings,
+  readDesktopQualificationJournalSetting,
   readDesktopSetupWizardSettings,
   sameDesktopSetupWizardSettings,
+  updateDesktopQualificationJournalSetting,
   updateDesktopSetupWizardSettings,
   type DesktopSetupWizardSettings,
 } from '../src/setup-wizard-settings.ts'
@@ -167,6 +169,62 @@ describe('Desktop Setup Wizard settings document', () => {
     expect(text).toContain('futureField: preserved')
     expect(text).toContain('futureNotification: keep')
     expect(readDesktopSetupWizardSettings(path)).toEqual(next)
+  })
+
+  it('patches only the update journal leaf in YAML and JSON Profile documents', async () => {
+    for (const extension of ['yml', 'json']) {
+      const root = temporaryDirectory()
+      const path = join(root, `cordis.patch.${extension}`)
+      const rows = [
+        { id: 'unrelated', config: { keep: true } },
+        { id: 'desktop-shell', config: { mode: 'compatibility', future: 'retained' } },
+        { id: 'desktop-notifications', config: { enabled: false } },
+      ]
+      writeFileSync(path, extension === 'json'
+        ? `${JSON.stringify(rows, null, 2)}\n`
+        : [
+            '# preserve journal comments',
+            '- id: unrelated',
+            '  config:',
+            '    keep: true',
+            '- id: desktop-shell',
+            '  config:',
+            '    mode: compatibility',
+            '    future: retained',
+            '- id: desktop-notifications',
+            '  config:',
+            '    enabled: false',
+            '',
+          ].join('\n'))
+
+      await updateDesktopQualificationJournalSetting(path, true)
+      expect(readDesktopQualificationJournalSetting(path)).toBe(true)
+
+      const text = readFileSync(path, 'utf8')
+      if (extension === 'yml') expect(text).toContain('# preserve journal comments')
+      const document = extension === 'json' ? JSON.parse(text) as unknown[] : parseDocument(text).toJS() as unknown[]
+      expect(document).toEqual(expect.arrayContaining([
+        { id: 'unrelated', config: { keep: true } },
+        {
+          id: 'desktop-shell',
+          config: { mode: 'compatibility', future: 'retained', updateQualificationJournal: true },
+        },
+        { id: 'desktop-notifications', config: { enabled: false } },
+      ]))
+    }
+  })
+
+  it('rejects an invalid existing update journal leaf without rewriting the document', async () => {
+    const root = temporaryDirectory()
+    const path = join(root, 'cordis.patch.yml')
+    const contents = '- id: desktop-shell\n  config:\n    updateQualificationJournal: yes\n'
+    writeFileSync(path, contents)
+
+    await expect(updateDesktopQualificationJournalSetting(path, false))
+      .rejects.toThrow('updateQualificationJournal must be a boolean')
+    expect(readFileSync(path, 'utf8')).toBe(contents)
+    await expect(updateDesktopQualificationJournalSetting(path, 'yes' as never))
+      .rejects.toThrow('must be a boolean')
   })
 
   it('seeds an empty Profile patch from legacy settings without consuming the upstream import file', async () => {

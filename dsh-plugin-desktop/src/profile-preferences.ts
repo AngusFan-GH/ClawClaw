@@ -88,6 +88,20 @@ export function desktopProfilePreferencesFromSettings(
   })
 }
 
+/** Select a startup mode while preserving the browser-access invariant. */
+export function desktopProfilePreferencesWithMode(
+  current: DesktopProfilePreferences,
+  mode: DesktopShellMode,
+): DesktopProfilePreferences {
+  return Object.freeze({
+    mode,
+    openBrowser: mode === 'compatibility' ? current.openBrowser : false,
+    networkExposure: mode === 'compatibility' ? current.networkExposure : 'loopback',
+    notifications: Object.freeze({ ...current.notifications }),
+    market: current.market,
+  })
+}
+
 type ErrorFactory = (message: string) => Error
 
 function invalid(message: string): Error {

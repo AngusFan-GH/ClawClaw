@@ -8,6 +8,9 @@ import type { DesktopProfileSummary } from './profile-manager.ts'
 import type { DesktopProfiles } from './profile-service.ts'
 import type {
   DesktopMarketSelectResponse,
+  DesktopModeSelectResponse,
+  DesktopPreferenceUpdateRequest,
+  DesktopPreferenceUpdateResponse,
   DesktopDeveloperToolsToggleResponse,
   DesktopDiagnosticsExportResponse,
   DesktopProfileCreateResponse,
@@ -18,12 +21,14 @@ import type {
   DesktopRendererReloadResponse,
   DesktopSettingsMarketView,
   DesktopSettingsProfileView,
+  DesktopSettingsPreferencesView,
   DesktopSettingsResponse,
   DesktopSettingsWebView,
   DesktopTerminalOpenResponse,
   DesktopUpdateJournalClearResponse,
   DesktopBackgroundNoticeResetResponse,
 } from './desktop-settings-contract.ts'
+import type { DesktopShellMode } from './runtime.ts'
 
 /** Launcher capabilities used without exposing their filesystem roots. */
 export interface DesktopSettingsControllerBootstrap {
@@ -33,6 +38,10 @@ export interface DesktopSettingsControllerBootstrap {
   readMarket(): DesktopMarketSnapshot
   /** Persist an explicit provider request. */
   selectMarket(provider: DesktopMarketProvider): Promise<DesktopMarketSnapshot>
+  /** Persist a window mode into the active Profile's startup preferences. */
+  selectMode(mode: DesktopShellMode): Promise<void>
+  readPreferences(): DesktopSettingsPreferencesView
+  updatePreference(update: DesktopPreferenceUpdateRequest): Promise<void>
   /** Read marker-free URLs from the generation's actual WebServer and LAN snapshot. */
   readWeb(): DesktopSettingsWebView
   /** Queue an orderly restart after a response confirms persisted selection. */
@@ -110,6 +119,7 @@ export class DesktopSettingsController {
         )),
       ),
       market: projectMarket(this.bootstrap.readMarket(), this.effectiveMarket),
+      preferences: Object.freeze(this.bootstrap.readPreferences()),
       web: Object.freeze({
         localUrl: web.localUrl,
         lanUrls: Object.freeze([...web.lanUrls]),
@@ -157,6 +167,18 @@ export class DesktopSettingsController {
       response: Object.freeze({ accepted: true, restartRequired }),
       ...(restartRequired ? { afterResponse: () => { this.bootstrap.scheduleRestart() } } : {}),
     })
+  }
+
+  /** Persist a window mode before the renderer opens the standard restart confirmation. */
+  async selectMode(mode: DesktopShellMode): Promise<DesktopModeSelectResponse> {
+    await this.bootstrap.selectMode(mode)
+    return Object.freeze({ accepted: true })
+  }
+
+  /** Persist one page preference and return the new authoritative state. */
+  async updatePreference(update: DesktopPreferenceUpdateRequest): Promise<DesktopPreferenceUpdateResponse> {
+    await this.bootstrap.updatePreference(update)
+    return this.read()
   }
 
   /** Open the native terminal through the launcher-owned action. */

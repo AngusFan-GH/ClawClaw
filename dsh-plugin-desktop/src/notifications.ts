@@ -7,7 +7,7 @@ import z from '@deepseek-ai/schemastery'
 import type { DesktopLocale, DesktopNotification } from './runtime.ts'
 
 export const name = 'desktop-notifications'
-export const inject = ['desktopRuntime']
+export const inject = ['desktopRuntime', 'settings']
 
 export const DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE = 'dsh-desktop-notifications'
 
@@ -17,6 +17,12 @@ export interface DesktopNotificationSettings {
   notifyOnTurnFailure: boolean
   notifyOnJobCompletion: boolean
   notifyOnJobFailure: boolean
+}
+
+/** Live notification preferences owned by the active Desktop generation. */
+export interface DesktopNotificationSettingsControl {
+  read(): Readonly<DesktopNotificationSettings>
+  update(next: Readonly<DesktopNotificationSettings>): void
 }
 
 export const DesktopNotificationSettingsSchema: z<DesktopNotificationSettings> = z.object({
@@ -102,22 +108,26 @@ function trackTurn(
 /** Register independently optional settings, job, and live-session observers. */
 export function apply(ctx: Context): void {
   let settings = DEFAULT_SETTINGS
-
-  ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.effect(() => {
-      const scope = settingsCtx.settings.register(
-        DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE,
-        DesktopNotificationSettingsSchema,
-        { applies: 'live' },
-      )
-      settings = scope.get()
-      const stopWatching = scope.watch((next) => { settings = next })
-      return () => {
-        stopWatching()
-        settings = DEFAULT_SETTINGS
-      }
-    }, 'dsh-plugin-desktop: native notification settings')
+  const control: DesktopNotificationSettingsControl = Object.freeze({
+    read: () => Object.freeze({ ...settings }),
+    update: (next: Readonly<DesktopNotificationSettings>) => {
+      settings = DesktopNotificationSettingsSchema({ ...next })
+    },
   })
+  ctx.provide('desktopNotificationSettings', control)
+  ctx.effect(() => {
+    const scope = ctx.settings.register(
+      DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE,
+      DesktopNotificationSettingsSchema,
+      { applies: 'live' },
+    )
+    settings = scope.get()
+    const stopWatching = scope.watch((next: DesktopNotificationSettings) => { settings = next })
+    return () => {
+      stopWatching()
+      settings = DEFAULT_SETTINGS
+    }
+  }, 'dsh-plugin-desktop: native notification settings')
 
   ctx.inject(['jobs'], (jobsCtx) => {
     jobsCtx.effect(
@@ -143,4 +153,11 @@ export function apply(ctx: Context): void {
       }
     }, 'dsh-plugin-desktop: direct user turn attention')
   })
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Generation-scoped notification preferences used by native observers. */
+    desktopNotificationSettings: DesktopNotificationSettingsControl
+  }
 }

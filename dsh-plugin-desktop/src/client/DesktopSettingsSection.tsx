@@ -1,15 +1,15 @@
 /** Desktop-owned settings section registered into the official Settings shell. */
 
 import {
-  useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode,
+  useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode,
 } from 'react'
-import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
   DesktopMarketProvider, DesktopProfileView, DesktopSettingsApi, DesktopSettingsView,
 } from './desktop-settings-api.ts'
 import type { DesktopSettingsLocaleKey } from './desktop-settings-locales.ts'
 import type { DesktopClientPlatform } from './environment.ts'
+import { selectDesktopFrameMode } from './DesktopFrameTitlebarView.tsx'
 import {
   desktopBrowserAccessAvailable,
   desktopBrowserAccessEnabled,
@@ -43,8 +43,6 @@ export interface DesktopSettingsSectionInjected {
   readonly initialMode: DesktopShellSettings['mode']
   readonly micaSupported: boolean
   readonly setMode: (mode: DesktopShellSettings['mode']) => Promise<void>
-  readonly desktopSettings: ConfigForm<DesktopShellSettings>
-  readonly notificationSettings: ConfigForm<DesktopNotificationSettings>
 }
 
 /** Renderer-composed props for the official settings section entry. */
@@ -57,7 +55,6 @@ type Translate = DesktopSettingsSectionProps['t']
 type BusyOperation = 'load' | 'create-profile' | 'select-profile' | 'delete-profile' | 'select-aa' | 'select-market' | 'mode' | 'material' | 'web' | 'notification' | 'update-journal' | 'background-notice'
 type RestartState = 'none' | 'restarting' | 'required'
 type LanPollWait = (signal: AbortSignal) => Promise<void>
-interface DesktopSettingsWriter { set(field: string, value: unknown): Promise<unknown> }
 
 const LAN_POLL_INTERVAL_MS = 250
 const LAN_POLL_MAX_READS = 21
@@ -110,30 +107,6 @@ export async function readDesktopSettingsUntilLanSettled(
   throw new Error('dsh-plugin-desktop: unreachable LAN settings polling state')
 }
 
-/** Persist ordinary-browser permission and refresh the already-running edge. */
-export async function persistDesktopBrowserAccessHot(
-  settings: DesktopSettingsWriter,
-  checked: boolean,
-  currentExposure: DesktopShellSettings['networkExposure'],
-  refresh: () => Promise<DesktopSettingsView>,
-): Promise<DesktopSettingsView> {
-  if (!checked && currentExposure === 'lan') {
-    await settings.set('networkExposure', 'loopback')
-  }
-  await settings.set('openBrowser', checked)
-  return refresh()
-}
-
-/** Persist LAN intent and refresh its hot HTTPS ingress state. */
-export async function persistDesktopNetworkExposureHot(
-  settings: DesktopSettingsWriter,
-  exposure: DesktopShellSettings['networkExposure'],
-  refresh: () => Promise<DesktopSettingsView>,
-): Promise<DesktopSettingsView> {
-  await settings.set('networkExposure', exposure)
-  return refresh()
-}
-
 /** URLs are advertised only after the user explicitly enables browser access. */
 export function desktopBrowserUrlsShouldRender(
   browserAccess: boolean,
@@ -150,12 +123,6 @@ export function resolveDesktopLanConfirmation(
 ): void {
   dismiss()
   if (confirmed) enableLan()
-}
-
-function useScope<T>(scope: ConfigForm<T>) {
-  const subscribe = useCallback((listener: () => void) => scope.subscribe(listener), [scope])
-  const snapshot = useCallback(() => scope.getSnapshot(), [scope])
-  return useSyncExternalStore(subscribe, snapshot)
 }
 
 function Choice({
@@ -303,11 +270,7 @@ export function DesktopSettingsSection({
   initialMode,
   micaSupported,
   setMode: persistMode,
-  desktopSettings,
-  notificationSettings,
 }: DesktopSettingsSectionProps) {
-  const desktop = useScope(desktopSettings)
-  const notifications = useScope(notificationSettings)
   const [view, setView] = useState<DesktopSettingsView>()
   const [profileName, setProfileName] = useState('')
   const [busy, setBusy] = useState<BusyOperation | undefined>('load')
@@ -365,18 +328,18 @@ export function DesktopSettingsSection({
   }, [])
 
   const requestRestart = (): void => { setRestart('restarting') }
-  const settingsWritable = desktop.status === 'ready' && desktop.writable
-  const notificationsWritable = notifications.status === 'ready' && notifications.writable
-  const storedMode = desktop.value?.mode ?? initialMode
-  const configuredNetworkExposure = desktop.value?.networkExposure ?? 'loopback'
+  const settingsWritable = view !== undefined
+  const preferences = view?.preferences
+  const storedMode = preferences?.mode ?? initialMode
+  const configuredNetworkExposure = preferences?.networkExposure ?? 'loopback'
   const browserAccess = desktopBrowserAccessEnabled(
     storedMode,
-    desktop.value?.openBrowser ?? false,
+    preferences?.openBrowser ?? false,
     configuredNetworkExposure,
   )
   const mode = storedMode
   const networkExposure = browserAccess ? configuredNetworkExposure : 'loopback'
-  const notificationValue = notifications.value ?? {
+  const notificationValue = preferences?.notifications ?? {
     enabled: true,
     notifyOnTurnCompletion: true,
     notifyOnTurnFailure: true,
@@ -386,7 +349,7 @@ export function DesktopSettingsSection({
 
   const setUpdateJournal = (enabled: boolean): void => {
     void run('update-journal', async () => {
-      await desktopSettings.set('updateQualificationJournal', enabled)
+      setView(await api.updatePreference({ field: 'updateQualificationJournal', value: enabled }))
       setJournalCleared(false)
     })
   }
@@ -442,8 +405,20 @@ export function DesktopSettingsSection({
 
   const setMode = (next: DesktopShellSettings['mode']): void => {
     void run('mode', async () => {
-      await persistMode(next)
-      requestRestart()
+      await selectDesktopFrameMode(next, async (mode) => {
+        await persistMode(mode)
+        setView(current => current === undefined ? current : {
+          ...current,
+          preferences: {
+            ...current.preferences,
+            mode,
+            openBrowser: mode === 'compatibility' ? current.preferences.openBrowser : false,
+            networkExposure: mode === 'compatibility'
+              ? current.preferences.networkExposure
+              : 'loopback',
+          },
+        })
+      }, api.restart)
     })
   }
 
@@ -453,36 +428,44 @@ export function DesktopSettingsSection({
         if (next !== 'off' && next !== 'transparent') {
           throw new Error(`dsh-plugin-desktop: invalid macOS material ${JSON.stringify(next)}`)
         }
-        await desktopSettings.set('macosMaterial', next)
+        setView(await api.updatePreference({ field: 'macosMaterial', value: next }))
       } else if (platform === 'win32') {
         if (next !== 'off' && (next !== 'mica' || !micaSupported)) {
           throw new Error(`dsh-plugin-desktop: unavailable Windows material ${JSON.stringify(next)}`)
         }
-        await desktopSettings.set('windowsMaterial', next)
+        setView(await api.updatePreference({ field: 'windowsMaterial', value: next }))
       }
-      requestRestart()
+      await api.restart()
     })
   }
 
   const setNotification = (field: keyof DesktopNotificationSettings, checked: boolean): void => {
-    void run('notification', async () => { await notificationSettings.set(field, checked) })
+    void run('notification', async () => {
+      setView(await api.updatePreference({
+        field: 'notifications',
+        value: { ...notificationValue, [field]: checked },
+      }))
+    })
   }
 
   const setBrowserAccess = (checked: boolean): void => {
     void run('web', async () => {
       if (checked) {
         if (!desktopBrowserAccessAvailable(mode)) return
-        await persistDesktopBrowserAccessHot(desktopSettings, true, configuredNetworkExposure, refreshView)
+        setView(await api.updatePreference({ field: 'openBrowser', value: true }))
+        await refreshView()
         return
       }
-      await persistDesktopBrowserAccessHot(desktopSettings, false, configuredNetworkExposure, refreshView)
+      setView(await api.updatePreference({ field: 'openBrowser', value: false }))
+      await refreshView()
     })
   }
 
   const setNetworkExposure = (exposure: DesktopShellSettings['networkExposure']): void => {
     void run('web', async () => {
       if (exposure === 'lan' && (!desktopBrowserAccessAvailable(mode) || !browserAccess)) return
-      await persistDesktopNetworkExposureHot(desktopSettings, exposure, refreshView)
+      setView(await api.updatePreference({ field: 'networkExposure', value: exposure }))
+      await refreshView()
     })
   }
 
@@ -626,7 +609,6 @@ export function DesktopSettingsSection({
           <h3 id="dsh-desktop-presentation-title">{t('presentationTitle')}</h3>
           <p className="dshDesktopSettingsGroupIntro">{t('presentationIntro')}</p>
         </div>
-        {desktop.status === 'unavailable' && <p className="dshDesktopSettingsNotice">{t('readOnly')}</p>}
         <div className="dshDesktopSettingsList" role="radiogroup" aria-labelledby="dsh-desktop-presentation-title">
           <Choice
             title={t('compatibilityMode')}
@@ -662,11 +644,11 @@ export function DesktopSettingsSection({
             <select
               className="dshDesktopSettingsSelect"
               value={platform === 'darwin'
-                ? desktop.value?.macosMaterial ?? 'transparent'
-                : desktop.value?.windowsMaterial === 'acrylic'
-                  || (!micaSupported && desktop.value?.windowsMaterial === 'mica')
+                ? preferences?.macosMaterial ?? 'transparent'
+                : preferences?.windowsMaterial === 'acrylic'
+                  || (!micaSupported && preferences?.windowsMaterial === 'mica')
                   ? 'off'
-                  : desktop.value?.windowsMaterial ?? 'off'}
+                  : preferences?.windowsMaterial ?? 'off'}
               disabled={!settingsWritable || busy !== undefined || restart !== 'none'}
               onChange={event => { setMaterial(event.currentTarget.value) }}
             >
@@ -750,36 +732,35 @@ export function DesktopSettingsSection({
           <h3 id="dsh-desktop-notifications-title">{t('notificationsTitle')}</h3>
           <p className="dshDesktopSettingsGroupIntro">{t('notificationsIntro')}</p>
         </div>
-        {notifications.status === 'unavailable' && <p className="dshDesktopSettingsNotice">{t('readOnly')}</p>}
         <ToggleRow
           label={t('notificationsEnabled')}
           checked={notificationValue.enabled}
-          disabled={!notificationsWritable || busy !== undefined}
+          disabled={!settingsWritable || busy !== undefined}
           onChange={checked => { setNotification('enabled', checked) }}
         />
         <div className="dshDesktopSettingsDetails">
           <ToggleRow
             label={t('turnCompletion')}
             checked={notificationValue.notifyOnTurnCompletion}
-            disabled={!notificationValue.enabled || !notificationsWritable || busy !== undefined}
+            disabled={!notificationValue.enabled || !settingsWritable || busy !== undefined}
             onChange={checked => { setNotification('notifyOnTurnCompletion', checked) }}
           />
           <ToggleRow
             label={t('turnFailure')}
             checked={notificationValue.notifyOnTurnFailure}
-            disabled={!notificationValue.enabled || !notificationsWritable || busy !== undefined}
+            disabled={!notificationValue.enabled || !settingsWritable || busy !== undefined}
             onChange={checked => { setNotification('notifyOnTurnFailure', checked) }}
           />
           <ToggleRow
             label={t('jobCompletion')}
             checked={notificationValue.notifyOnJobCompletion}
-            disabled={!notificationValue.enabled || !notificationsWritable || busy !== undefined}
+            disabled={!notificationValue.enabled || !settingsWritable || busy !== undefined}
             onChange={checked => { setNotification('notifyOnJobCompletion', checked) }}
           />
           <ToggleRow
             label={t('jobFailure')}
             checked={notificationValue.notifyOnJobFailure}
-            disabled={!notificationValue.enabled || !notificationsWritable || busy !== undefined}
+            disabled={!notificationValue.enabled || !settingsWritable || busy !== undefined}
             onChange={checked => { setNotification('notifyOnJobFailure', checked) }}
           />
         </div>
@@ -805,7 +786,7 @@ export function DesktopSettingsSection({
         </div>
         <ToggleRow
           label={t('updateJournalEnabled')}
-          checked={desktop.value?.updateQualificationJournal ?? false}
+          checked={preferences?.updateQualificationJournal ?? false}
           disabled={!settingsWritable || busy !== undefined}
           onChange={setUpdateJournal}
         />

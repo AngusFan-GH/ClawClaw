@@ -18,7 +18,7 @@ import { applyDesktopVersionRow } from './desktop-version-row.tsx'
 import { applyDefaultWorkspaceSelection } from './default-workspace-selection.ts'
 import { installDesktopDirectoryPickerBridge } from './directory-picker.ts'
 import { applyWorkspaceDirectoryFlow } from './workspace-directory-flow.tsx'
-import { parseDesktopClientEnvironment } from './environment.ts'
+import { parseDesktopClientEnvironment, resolveDesktopClientProductVersion } from './environment.ts'
 import { applyExtendedShell } from './extended-shell.ts'
 import { applyMcpSettings } from './mcp-settings.ts'
 import { applyMarketIntegration } from './market-integration.tsx'
@@ -81,7 +81,7 @@ export {
   startRendererBootReporter,
 } from './boot-health.ts'
 export type { RendererBootLoader, RendererBootReport } from './boot-health.ts'
-export { parseDesktopClientEnvironment } from './environment.ts'
+export { parseDesktopClientEnvironment, resolveDesktopClientProductVersion } from './environment.ts'
 export type {
   DesktopClientEnvironment,
   DesktopClientMaterial,
@@ -112,6 +112,7 @@ export const inject = [
 /** Register product identity and, in Electron, native client surfaces. @param ctx - browser Cordis context. */
 export function apply(ctx: ClientContext): void {
   const environment = parseDesktopClientEnvironment(window.location.search)
+  const productVersion = resolveDesktopClientProductVersion(environment)
   if (environment) {
     ctx.effect(
       () => startRendererBootReporter(ctx.loader),
@@ -128,9 +129,9 @@ export function apply(ctx: ClientContext): void {
   applyRemindersSettings(ctx)
   applySkillsSettings(ctx)
   applyShortcutMenu(ctx)
+  if (productVersion !== undefined) applyDesktopVersionRow(ctx, productVersion)
   ctx.effect(() => installShortcutMenuStyles(), 'dsh-plugin-desktop: shortcut menu styles')
   if (!environment) return
-  applyDesktopVersionRow(ctx, environment.version)
   ctx.effect(
     () => provideDesktopWindow(ctx, desktopWindowService(environment)),
     'dsh-plugin-desktop: native window geometry service',

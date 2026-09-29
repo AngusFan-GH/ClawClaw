@@ -1,6 +1,9 @@
 /** Private same-origin Desktop settings API shared with the bundled renderer. */
 
 import type { DesktopMarketProvider } from './desktop-market.ts'
+import type { DesktopNotificationSettings } from './notifications.ts'
+import type { DesktopShellMode } from './runtime.ts'
+import type { MacosWindowMaterial, PersistedWindowsWindowMaterial } from './window-material.ts'
 
 /** Read the current Desktop-owned settings state. */
 export const DESKTOP_SETTINGS_PATH = '/api/desktop/settings'
@@ -15,6 +18,12 @@ export const DESKTOP_PROFILE_SELECT_PATH = '/api/desktop/profiles/select'
 export const DESKTOP_PROFILE_DELETE_PATH = '/api/desktop/profiles/delete'
 
 export const DESKTOP_MARKET_SELECT_PATH = '/api/desktop/market/select'
+
+/** Persist the window mode used by the next Desktop generation. */
+export const DESKTOP_MODE_SELECT_PATH = '/api/desktop/mode/select'
+
+/** Persist one Desktop-owned preference without using the root Config editor. */
+export const DESKTOP_PREFERENCE_UPDATE_PATH = '/api/desktop/preferences/update'
 
 /** Open the launcher-owned DSH terminal without accepting command text. */
 export const DESKTOP_TERMINAL_OPEN_PATH = '/api/desktop/terminal/open'
@@ -83,6 +92,17 @@ export interface DesktopSettingsWebView {
   readonly lanCaUrls: readonly string[]
 }
 
+/** Profile-owned values shown and edited by the Desktop settings page. */
+export interface DesktopSettingsPreferencesView {
+  readonly mode: DesktopShellMode
+  readonly macosMaterial: MacosWindowMaterial
+  readonly windowsMaterial: PersistedWindowsWindowMaterial
+  readonly openBrowser: boolean
+  readonly networkExposure: 'loopback' | 'lan'
+  readonly notifications: Readonly<DesktopNotificationSettings>
+  readonly updateQualificationJournal: boolean
+}
+
 /** Complete renderer-safe Desktop settings state. */
 export interface DesktopSettingsResponse {
   /** Profile backing the currently running generation. */
@@ -90,6 +110,7 @@ export interface DesktopSettingsResponse {
   /** Fresh profile discovery without filesystem paths or manifest details. */
   readonly profiles: readonly DesktopSettingsProfileView[]
   readonly market: DesktopSettingsMarketView
+  readonly preferences: DesktopSettingsPreferencesView
   /** Actual browser URLs for the current WebServer generation. */
   readonly web: DesktopSettingsWebView
 }
@@ -131,6 +152,27 @@ export interface DesktopMarketSelectRequest {
 
 /** Successful Market selection handoff. */
 export type DesktopMarketSelectResponse = DesktopRestartAcceptance
+
+/** Exact body accepted by the window-mode endpoint. */
+export interface DesktopModeSelectRequest {
+  readonly mode: DesktopShellMode
+}
+
+/** Successful window-mode persistence. Restart is requested separately. */
+export interface DesktopModeSelectResponse {
+  readonly accepted: true
+}
+
+export type DesktopPreferenceUpdateRequest =
+  | { readonly field: 'macosMaterial'; readonly value: MacosWindowMaterial }
+  | { readonly field: 'windowsMaterial'; readonly value: PersistedWindowsWindowMaterial }
+  | { readonly field: 'openBrowser'; readonly value: boolean }
+  | { readonly field: 'networkExposure'; readonly value: 'loopback' | 'lan' }
+  | { readonly field: 'notifications'; readonly value: DesktopNotificationSettings }
+  | { readonly field: 'updateQualificationJournal'; readonly value: boolean }
+
+/** A preference update returns the fresh authoritative Desktop view. */
+export type DesktopPreferenceUpdateResponse = DesktopSettingsResponse
 
 /** Exact empty body accepted by the terminal endpoint. */
 export type DesktopTerminalOpenRequest = Readonly<Record<string, never>>

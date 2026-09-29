@@ -8,7 +8,8 @@ import { apply } from '../src/client/index.ts'
 import { AdvancedFrame, type AdvancedFrameProps } from '../src/client/AdvancedFrame.tsx'
 import { applyAdvancedShell } from '../src/client/advanced-shell.ts'
 import { installDesktopLayout } from '../src/client/layout-service.ts'
-import { parseDesktopClientEnvironment } from '../src/client/environment.ts'
+import { parseDesktopClientEnvironment, resolveDesktopClientProductVersion } from '../src/client/environment.ts'
+import { applyDesktopVersionRow } from '../src/client/desktop-version-row.tsx'
 import { ExtendedFrame } from '../src/client/ExtendedFrame.tsx'
 import { applyExtendedShell, applyFramedShell } from '../src/client/extended-shell.ts'
 import { installExtendedStyles } from '../src/client/extended-styles.ts'
@@ -76,6 +77,38 @@ describe('desktop client environment', () => {
     }
     finally {
       vi.unstubAllGlobals()
+    }
+  })
+
+  it('uses the embedded ClawClaw product version in an ordinary browser', () => {
+    vi.stubEnv('DSH_DESKTOP_PRODUCT_VERSION', '0.2.2')
+    vi.stubGlobal('window', { location: { search: '' } })
+    const ctx = { effect: vi.fn(), inject: vi.fn() } as unknown as ClientContext
+    vi.mocked(applyDesktopVersionRow).mockClear()
+    try {
+      expect(resolveDesktopClientProductVersion(undefined)).toBe('0.2.2')
+      apply(ctx)
+      expect(applyDesktopVersionRow).toHaveBeenCalledWith(ctx, '0.2.2')
+    }
+    finally {
+      vi.unstubAllEnvs()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('prefers the Electron Host product version over embedded build metadata', () => {
+    vi.stubEnv('DSH_DESKTOP_PRODUCT_VERSION', '0.2.1')
+    try {
+      expect(resolveDesktopClientProductVersion({
+        version: '0.2.2',
+        mode: 'compatibility',
+        platform: 'darwin',
+        material: 'off',
+        micaSupported: false,
+      })).toBe('0.2.2')
+    }
+    finally {
+      vi.unstubAllEnvs()
     }
   })
 

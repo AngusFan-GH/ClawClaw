@@ -3,10 +3,14 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { assertDesktopProfileName } from './profile-manager.ts'
 import type { DesktopMarketProvider } from './desktop-market.ts'
+import type { DesktopNotificationSettings } from './notifications.ts'
+import type { DesktopShellMode } from './runtime.ts'
 import type DesktopSettingsController from './desktop-settings-controller.ts'
 import type { DesktopSettingsPostResponse } from './desktop-settings-controller.ts'
 import type {
   DesktopMarketSelectRequest,
+  DesktopModeSelectRequest,
+  DesktopPreferenceUpdateRequest,
   DesktopProfileCreateRequest,
   DesktopProfileDeleteRequest,
   DesktopProfileSelectRequest,
@@ -146,6 +150,46 @@ function isMarketProvider(value: unknown): value is DesktopMarketProvider {
 function parseMarketRequest(value: unknown): DesktopMarketSelectRequest | undefined {
   if (!isExactRecord(value, 'provider') || !isMarketProvider(value.provider)) return undefined
   return { provider: value.provider }
+}
+
+function isDesktopShellMode(value: unknown): value is DesktopShellMode {
+  return value === 'compatibility' || value === 'extended' || value === 'advanced'
+}
+
+function parseModeRequest(value: unknown): DesktopModeSelectRequest | undefined {
+  if (!isExactRecord(value, 'mode') || !isDesktopShellMode(value.mode)) return undefined
+  return { mode: value.mode }
+}
+
+function isNotificationSettings(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    && Object.keys(value).sort().join(',') === [
+      'enabled', 'notifyOnJobCompletion', 'notifyOnJobFailure',
+      'notifyOnTurnCompletion', 'notifyOnTurnFailure',
+    ].sort().join(',')
+    && Object.values(value).every(item => typeof item === 'boolean')
+}
+
+function parsePreferenceRequest(value: unknown): DesktopPreferenceUpdateRequest | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)
+    || Object.keys(value).length !== 2 || !Object.hasOwn(value, 'field') || !Object.hasOwn(value, 'value')) return undefined
+  const request = value as Record<string, unknown>
+  if (request.field === 'macosMaterial' && (request.value === 'off' || request.value === 'transparent')) {
+    return { field: request.field, value: request.value }
+  }
+  if (request.field === 'windowsMaterial'
+    && (request.value === 'off' || request.value === 'acrylic' || request.value === 'mica')) {
+    return { field: request.field, value: request.value }
+  }
+  if ((request.field === 'openBrowser' || request.field === 'updateQualificationJournal')
+    && typeof request.value === 'boolean') return { field: request.field, value: request.value }
+  if (request.field === 'networkExposure' && (request.value === 'loopback' || request.value === 'lan')) {
+    return { field: request.field, value: request.value }
+  }
+  if (request.field === 'notifications' && isNotificationSettings(request.value)) {
+    return { field: request.field, value: request.value as DesktopNotificationSettings }
+  }
+  return undefined
 }
 
 function isEmptyRequest(value: unknown): boolean {
@@ -316,6 +360,52 @@ export async function handleDesktopMarketSelectRequest(
   } catch (cause) {
     reportError('select Market provider', cause)
     finishJson(res, 500, error('Market selection could not be saved'))
+  }
+}
+
+/** Persist one window mode before the renderer requests a confirmed restart. */
+export async function handleDesktopModeSelectRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  expectedOrigin: string,
+  controller: DesktopSettingsController,
+  reportError: (operation: string, cause: unknown) => void = () => {},
+): Promise<void> {
+  if (req.method !== 'POST') return finishJson(res, 405, error('method not allowed'), 'POST')
+  if (!isSameOriginLoopbackRequest(req, expectedOrigin, true)) {
+    return finishJson(res, 403, error('forbidden'))
+  }
+  const value = await parsePostBody(req, res)
+  if (value === INVALID_BODY) return
+  const request = parseModeRequest(value)
+  if (request === undefined) return finishJson(res, 400, error('invalid window mode request'))
+  try {
+    finishJson(res, 200, await controller.selectMode(request.mode))
+  } catch (cause) {
+    reportError('select window mode', cause)
+    finishJson(res, 500, error('window mode could not be saved'))
+  }
+}
+
+/** Persist one Desktop-owned preference through the launcher-owned Profile path. */
+export async function handleDesktopPreferenceUpdateRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  expectedOrigin: string,
+  controller: DesktopSettingsController,
+  reportError: (operation: string, cause: unknown) => void = () => {},
+): Promise<void> {
+  if (req.method !== 'POST') return finishJson(res, 405, error('method not allowed'), 'POST')
+  if (!isSameOriginLoopbackRequest(req, expectedOrigin, true)) return finishJson(res, 403, error('forbidden'))
+  const value = await parsePostBody(req, res)
+  if (value === INVALID_BODY) return
+  const request = parsePreferenceRequest(value)
+  if (request === undefined) return finishJson(res, 400, error('invalid Desktop preference request'))
+  try {
+    finishJson(res, 200, await controller.updatePreference(request))
+  } catch (cause) {
+    reportError('update Desktop preference', cause)
+    finishJson(res, 500, error('Desktop preference could not be saved'))
   }
 }
 

@@ -5,6 +5,8 @@ const PROFILE_CREATE_PATH = '/api/desktop/profiles/create'
 const PROFILE_SELECT_PATH = '/api/desktop/profiles/select'
 const PROFILE_DELETE_PATH = '/api/desktop/profiles/delete'
 const MARKET_SELECT_PATH = '/api/desktop/market/select'
+const MODE_SELECT_PATH = '/api/desktop/mode/select'
+const PREFERENCE_UPDATE_PATH = '/api/desktop/preferences/update'
 const TERMINAL_OPEN_PATH = '/api/desktop/terminal/open'
 const RESTART_PATH = '/api/desktop/restart'
 const RECOVERY_RESTART_PATH = '/api/desktop/restart/recovery'
@@ -60,8 +62,31 @@ export interface DesktopSettingsView {
   readonly current: string
   readonly profiles: readonly DesktopProfileView[]
   readonly market: DesktopMarketView
+  readonly preferences: {
+    readonly mode: 'compatibility' | 'extended' | 'advanced'
+    readonly macosMaterial: 'off' | 'transparent'
+    readonly windowsMaterial: 'off' | 'acrylic' | 'mica'
+    readonly openBrowser: boolean
+    readonly networkExposure: 'loopback' | 'lan'
+    readonly notifications: {
+      readonly enabled: boolean
+      readonly notifyOnTurnCompletion: boolean
+      readonly notifyOnTurnFailure: boolean
+      readonly notifyOnJobCompletion: boolean
+      readonly notifyOnJobFailure: boolean
+    }
+    readonly updateQualificationJournal: boolean
+  }
   readonly web: DesktopWebView
 }
+
+export type DesktopPreferenceUpdate =
+  | { readonly field: 'macosMaterial'; readonly value: 'off' | 'transparent' }
+  | { readonly field: 'windowsMaterial'; readonly value: 'off' | 'acrylic' | 'mica' }
+  | { readonly field: 'openBrowser'; readonly value: boolean }
+  | { readonly field: 'networkExposure'; readonly value: 'loopback' | 'lan' }
+  | { readonly field: 'notifications'; readonly value: DesktopSettingsView['preferences']['notifications'] }
+  | { readonly field: 'updateQualificationJournal'; readonly value: boolean }
 
 /** A persisted selection that requires a new Desktop generation. */
 export interface DesktopRestartAcceptance {
@@ -76,6 +101,8 @@ export interface DesktopSettingsApi {
   selectProfile(name: string): Promise<DesktopRestartAcceptance>
   deleteProfile(name: string): Promise<DesktopSettingsView>
   selectMarket(provider: DesktopMarketProvider): Promise<DesktopRestartAcceptance>
+  selectMode(mode: 'compatibility' | 'extended' | 'advanced'): Promise<void>
+  updatePreference(update: DesktopPreferenceUpdate): Promise<DesktopSettingsView>
   openTerminal(): Promise<void>
   restart(): Promise<void>
   restartToRecovery(): Promise<void>
@@ -99,6 +126,43 @@ function isMarketProvider(value: unknown): value is DesktopMarketProvider {
 
 function isLanState(value: unknown): value is DesktopLanState {
   return value === 'inactive' || value === 'starting' || value === 'ready' || value === 'failed'
+}
+
+function parsePreferences(value: unknown): DesktopSettingsView['preferences'] {
+  if (!isObject(value)
+    || !hasExactKeys(value, [
+      'mode', 'macosMaterial', 'windowsMaterial', 'openBrowser', 'networkExposure',
+      'notifications', 'updateQualificationJournal',
+    ])
+    || (value.mode !== 'compatibility' && value.mode !== 'extended' && value.mode !== 'advanced')
+    || (value.macosMaterial !== 'off' && value.macosMaterial !== 'transparent')
+    || (value.windowsMaterial !== 'off' && value.windowsMaterial !== 'acrylic' && value.windowsMaterial !== 'mica')
+    || typeof value.openBrowser !== 'boolean'
+    || (value.networkExposure !== 'loopback' && value.networkExposure !== 'lan')
+    || typeof value.updateQualificationJournal !== 'boolean'
+    || !isObject(value.notifications)
+    || !hasExactKeys(value.notifications, [
+      'enabled', 'notifyOnTurnCompletion', 'notifyOnTurnFailure',
+      'notifyOnJobCompletion', 'notifyOnJobFailure',
+    ])
+    || Object.values(value.notifications).some(item => typeof item !== 'boolean')) {
+    throw new Error('dsh-plugin-desktop: invalid Desktop preferences response')
+  }
+  return Object.freeze({
+    mode: value.mode,
+    macosMaterial: value.macosMaterial,
+    windowsMaterial: value.windowsMaterial,
+    openBrowser: value.openBrowser,
+    networkExposure: value.networkExposure,
+    notifications: Object.freeze({
+      enabled: value.notifications.enabled as boolean,
+      notifyOnTurnCompletion: value.notifications.notifyOnTurnCompletion as boolean,
+      notifyOnTurnFailure: value.notifications.notifyOnTurnFailure as boolean,
+      notifyOnJobCompletion: value.notifications.notifyOnJobCompletion as boolean,
+      notifyOnJobFailure: value.notifications.notifyOnJobFailure as boolean,
+    }),
+    updateQualificationJournal: value.updateQualificationJournal,
+  })
 }
 
 function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
@@ -210,6 +274,7 @@ export function parseDesktopSettingsView(value: unknown): DesktopSettingsView {
     || !isMarketProvider(value.market.requested)
     || !isMarketProvider(value.market.effective)
     || typeof value.market.legacyDefaulted !== 'boolean'
+    || !isObject(value.preferences)
     || !isObject(value.web)
     || !hasExactKeys(value.web, [
       'localUrl',
@@ -227,6 +292,7 @@ export function parseDesktopSettingsView(value: unknown): DesktopSettingsView {
     throw new Error('dsh-plugin-desktop: invalid Desktop settings response')
   }
   const profiles = value.profiles.map(parseProfile)
+  const preferences = parsePreferences(value.preferences)
   const localUrl = parseBrowserUrl(value.web.localUrl, true)
   const lanUrls = value.web.lanUrls.map(url => parseBrowserUrl(url, false))
   const lanCaUrls = value.web.lanCaUrls.map(parseLanCaUrl)
@@ -252,6 +318,7 @@ export function parseDesktopSettingsView(value: unknown): DesktopSettingsView {
       effective: value.market.effective,
       legacyDefaulted: value.market.legacyDefaulted,
     }),
+    preferences,
     web: Object.freeze({
       localUrl,
       lanUrls: Object.freeze(lanUrls),
@@ -329,6 +396,12 @@ export function createDesktopSettingsApi(fetcher: FetchLike = globalThis.fetch.b
     async selectMarket(provider: DesktopMarketProvider) {
       return parseDesktopRestartAcceptance(await readResponse(await post(fetcher, MARKET_SELECT_PATH, { provider })))
     },
+    async selectMode(mode: 'compatibility' | 'extended' | 'advanced') {
+      parseDesktopActionAcceptance(await readResponse(await post(fetcher, MODE_SELECT_PATH, { mode })))
+    },
+    async updatePreference(update: DesktopPreferenceUpdate) {
+      return parseDesktopSettingsView(await readResponse(await post(fetcher, PREFERENCE_UPDATE_PATH, update)))
+    },
     async openTerminal() {
       parseDesktopActionAcceptance(await readResponse(await post(fetcher, TERMINAL_OPEN_PATH, {})))
     },
@@ -365,6 +438,8 @@ export const desktopSettingsPaths = Object.freeze({
   profileSelect: PROFILE_SELECT_PATH,
   profileDelete: PROFILE_DELETE_PATH,
   marketSelect: MARKET_SELECT_PATH,
+  modeSelect: MODE_SELECT_PATH,
+  preferenceUpdate: PREFERENCE_UPDATE_PATH,
   terminalOpen: TERMINAL_OPEN_PATH,
   restart: RESTART_PATH,
   recoveryRestart: RECOVERY_RESTART_PATH,

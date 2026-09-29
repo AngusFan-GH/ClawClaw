@@ -63,6 +63,9 @@ function createHarness(available: readonly OptionalService[] = ['jobs', 'session
   const ctx = {
     desktopRuntime: runtime,
     settings: { register: registerSettings },
+    provide: vi.fn((key: string, value: unknown) => {
+      Object.assign(ctx, { [key]: value })
+    }),
     jobs: {
       events: { subscribe: (_filter: unknown, listener: typeof jobListener) => {
         jobListener = listener
@@ -90,8 +93,9 @@ function createHarness(available: readonly OptionalService[] = ['jobs', 'session
     },
     effect: (register: () => void | (() => void)) => {
       const dispose = register()
-      if (activeService !== undefined && typeof dispose === 'function') {
-        disposers.set(activeService, [...(disposers.get(activeService) ?? []), dispose])
+      if (typeof dispose === 'function') {
+        const owner = activeService ?? 'settings'
+        disposers.set(owner, [...(disposers.get(owner) ?? []), dispose])
       }
       return dispose
     },
@@ -166,7 +170,7 @@ describe('desktop notifications Host plugin', () => {
     const harness = createHarness(['settings'])
 
     expect(name).toBe('desktop-notifications')
-    expect(inject).toEqual(['desktopRuntime'])
+    expect(inject).toEqual(['desktopRuntime', 'settings'])
     expect(String(DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE)).toBe('dsh-desktop-notifications')
     expect(DesktopNotificationSettingsSchema({} as DesktopNotificationSettings)).toEqual({
       enabled: true,

@@ -102,6 +102,7 @@ import { resetDesktopDataDirectory } from './desktop-factory-reset.ts'
 import {
   clearDesktopProfilePreferences,
   desktopProfilePreferencesFromSettings,
+  desktopProfilePreferencesWithMode,
   readDesktopProfilePreferences,
   writeDesktopProfilePreferences,
   type DesktopProfilePreferences,
@@ -141,7 +142,9 @@ import {
   migrateDesktopBrowserAccessSettings,
   migrateDesktopWindowMaterialSettings,
   importLegacyDesktopSetupWizardSettings,
+  readDesktopQualificationJournalSetting,
   readDesktopSetupWizardSettings,
+  updateDesktopQualificationJournalSetting,
   updateDesktopSetupWizardSettings,
   type DesktopSetupWizardSettings,
 } from './setup-wizard-settings.ts'
@@ -176,6 +179,10 @@ import {
   DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE,
   type DesktopNotificationSettings,
 } from './notifications.ts'
+import type {
+  DesktopPreferenceUpdateRequest,
+  DesktopSettingsPreferencesView,
+} from './desktop-settings-contract.ts'
 import {
   desktopDefaultRelaunchArguments,
   desktopRecoveryModeRequested,
@@ -1395,7 +1402,11 @@ async function start(): Promise<void> {
       })
     } else {
       let currentProfilePreferences: DesktopProfilePreferences = profilePreferences
+      let currentMacosMaterial = prepared.macosMaterial
+      let currentWindowsMaterial = prepared.windowsMaterial
+      let updateQualificationJournal = readDesktopQualificationJournalSetting(prepared.settingsDocument)
       let profilePreferencesWriteTail: Promise<void> = Promise.resolve()
+      let settingsDocumentWriteTail: Promise<void> = Promise.resolve()
       let profilePreferencesStopping = false
       const enqueueProfilePreferencesWrite = (
         update: (current: DesktopProfilePreferences) => DesktopProfilePreferences,
@@ -1416,9 +1427,14 @@ async function start(): Promise<void> {
         profilePreferencesWriteTail = write.then(() => undefined, () => undefined)
         return write
       }
+      const enqueueSettingsDocumentWrite = (write: () => Promise<void>): Promise<void> => {
+        const operation = settingsDocumentWriteTail.then(write)
+        settingsDocumentWriteTail = operation.then(() => undefined, () => undefined)
+        return operation
+      }
       const flushProfilePreferencesWrites = async (): Promise<void> => {
         profilePreferencesStopping = true
-        await profilePreferencesWriteTail
+        await Promise.all([profilePreferencesWriteTail, settingsDocumentWriteTail])
       }
       startupStage = 'host-boot'
       lifecycleRecorder.transitionStartupStage(startupStage)
@@ -1520,6 +1536,74 @@ async function start(): Promise<void> {
             desktopProfileMarketSnapshot(currentProfilePreferences.market),
             prepared.market.effective,
           )
+          const readPreferences = (): DesktopSettingsPreferencesView => Object.freeze({
+            mode: currentProfilePreferences.mode,
+            macosMaterial: currentMacosMaterial,
+            windowsMaterial: currentWindowsMaterial,
+            openBrowser: currentProfilePreferences.openBrowser,
+            networkExposure: currentProfilePreferences.networkExposure,
+            notifications: Object.freeze({ ...currentProfilePreferences.notifications }),
+            updateQualificationJournal,
+          })
+          const updatePreference = async (update: DesktopPreferenceUpdateRequest): Promise<void> => {
+            if (update.field === 'macosMaterial' || update.field === 'windowsMaterial') {
+              await enqueueSettingsDocumentWrite(async () => {
+                const current = readDesktopSetupWizardSettings(prepared.settingsDocument)
+                await updateDesktopSetupWizardSettings(prepared.settingsDocument, {
+                  ...current,
+                  [update.field]: update.value === 'acrylic' ? 'off' : update.value,
+                })
+              })
+              if (update.field === 'macosMaterial') currentMacosMaterial = update.value
+              else currentWindowsMaterial = update.value === 'acrylic' ? 'off' : update.value
+              return
+            }
+            if (update.field === 'updateQualificationJournal') {
+              await enqueueSettingsDocumentWrite(() => updateDesktopQualificationJournalSetting(
+                prepared.settingsDocument,
+                update.value,
+              ))
+              updateQualificationJournal = update.value
+              hostCtx.get('desktopUpdateQualificationJournal')?.setEnabled(update.value)
+              return
+            }
+            if (update.field === 'notifications') {
+              await enqueueProfilePreferencesWrite(current => desktopProfilePreferencesFromSettings(
+                current,
+                update.value,
+                current.market,
+              ))
+              hostCtx.get('desktopNotificationSettings')?.update(update.value)
+              return
+            }
+            if (update.field === 'openBrowser') {
+              if (update.value && currentProfilePreferences.mode !== 'compatibility') {
+                throw new Error(`${BIN_NAME}: ordinary browser access requires compatibility mode`)
+              }
+              const next = await enqueueProfilePreferencesWrite(current => desktopProfilePreferencesFromSettings(
+                {
+                  ...current,
+                  openBrowser: update.value,
+                  networkExposure: update.value ? current.networkExposure : 'loopback',
+                },
+                current.notifications,
+                current.market,
+              ))
+              browserAccess.setOrdinaryBrowserEnabled(next.openBrowser)
+              await lanHttps.setEnabled(next.openBrowser && next.networkExposure === 'lan')
+              return
+            }
+            if (update.value === 'lan'
+              && (currentProfilePreferences.mode !== 'compatibility' || !currentProfilePreferences.openBrowser)) {
+              throw new Error(`${BIN_NAME}: LAN exposure requires compatibility browser access`)
+            }
+            const next = await enqueueProfilePreferencesWrite(current => desktopProfilePreferencesFromSettings(
+              { ...current, networkExposure: update.value },
+              current.notifications,
+              current.market,
+            ))
+            await lanHttps.setEnabled(next.openBrowser && next.networkExposure === 'lan')
+          }
           hostCtx.provide('desktopSettingsController', new DesktopSettingsController({
             profiles: hostCtx.desktopProfiles,
             readMarket,
@@ -1552,6 +1636,11 @@ async function start(): Promise<void> {
                 prepared.market.effective,
               )
             },
+            selectMode: async mode => {
+              await enqueueProfilePreferencesWrite(current => desktopProfilePreferencesWithMode(current, mode))
+            },
+            readPreferences,
+            updatePreference,
             scheduleRestart: scheduleSettingsRestart,
             scheduleRecoveryRestart: () => {
               void runtime.requestRecoveryRestart().catch((cause: unknown) => {

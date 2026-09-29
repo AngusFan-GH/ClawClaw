@@ -393,6 +393,66 @@ function applyJsonUpdate(
   return `${JSON.stringify(output, undefined, 2)}\n`
 }
 
+function applyQualificationJournalUpdate(
+  document: LoadedSettingsDocument,
+  enabled: boolean,
+): string {
+  if (document.format === 'yaml') {
+    const yaml = document.yaml!
+    const root = yaml.toJS() as unknown
+    if (Array.isArray(root)) {
+      let desktop = root.findLastIndex(value => isRecord(value) && value.id === DESKTOP_ROW_ID)
+      if (desktop < 0) {
+        yaml.add(yaml.createNode({ id: DESKTOP_ROW_ID, config: {} }))
+        desktop = root.length
+      }
+      const existing = desktop < root.length && isRecord(root[desktop])
+        ? (root[desktop] as Record<string, unknown>).config
+        : undefined
+      if (existing !== undefined && !isRecord(existing)) {
+        throw invalid(`${DESKTOP_ROW_ID}.config must be a map`)
+      }
+      if (isRecord(existing) && existing.updateQualificationJournal !== undefined
+        && typeof existing.updateQualificationJournal !== 'boolean') {
+        throw invalid('updateQualificationJournal must be a boolean')
+      }
+      yaml.setIn([desktop, 'config', 'updateQualificationJournal'], enabled)
+    } else {
+      const desktop = section(root as Record<string, unknown>, DESKTOP_NAMESPACE)
+      if (desktop.updateQualificationJournal !== undefined
+        && typeof desktop.updateQualificationJournal !== 'boolean') {
+        throw invalid('updateQualificationJournal must be a boolean')
+      }
+      yaml.setIn([DESKTOP_NAMESPACE, 'updateQualificationJournal'], enabled)
+    }
+    return String(yaml)
+  }
+
+  const root = document.root
+  if (Array.isArray(root)) {
+    let row = patchRow(root, DESKTOP_ROW_ID)
+    if (row === undefined) {
+      row = { id: DESKTOP_ROW_ID, config: {} }
+      root.push(row)
+    }
+    const config = row.config ?? {}
+    if (!isRecord(config)) throw invalid(`${DESKTOP_ROW_ID}.config must be a map`)
+    if (config.updateQualificationJournal !== undefined
+      && typeof config.updateQualificationJournal !== 'boolean') {
+      throw invalid('updateQualificationJournal must be a boolean')
+    }
+    row.config = { ...config, updateQualificationJournal: enabled }
+  } else {
+    const desktop = section(root, DESKTOP_NAMESPACE)
+    if (desktop.updateQualificationJournal !== undefined
+      && typeof desktop.updateQualificationJournal !== 'boolean') {
+      throw invalid('updateQualificationJournal must be a boolean')
+    }
+    root[DESKTOP_NAMESPACE] = { ...desktop, updateQualificationJournal: enabled }
+  }
+  return `${JSON.stringify(root, null, 2)}\n`
+}
+
 function ensureDocumentDirectory(path: string): void {
   const directory = dirname(path)
   mkdirSync(directory, { recursive: true, mode: DOCUMENT_DIRECTORY_MODE })
@@ -413,6 +473,12 @@ export function readDesktopSetupWizardSettings(
     if (readDocumentText(legacyPath) !== undefined) return projectSettings(loadSettingsDocument(legacyPath).root)
   }
   return projectSettings(loaded.root)
+}
+
+/** Read the Desktop update-journal preference without requiring the Host settings service. */
+export function readDesktopQualificationJournalSetting(documentPath: string): boolean {
+  const root = settingsRoot(loadSettingsDocument(settingsPath(documentPath)).root)
+  return optionalBoolean(section(root, DESKTOP_NAMESPACE), 'updateQualificationJournal', false)
 }
 
 /**
@@ -443,6 +509,21 @@ export async function updateDesktopSetupWizardSettings(
     dirMode: DOCUMENT_DIRECTORY_MODE,
   })
   return next
+}
+
+/** Atomically patch only the Desktop update-qualification journal preference. */
+export async function updateDesktopQualificationJournalSetting(
+  documentPath: string,
+  enabled: boolean,
+): Promise<void> {
+  if (typeof enabled !== 'boolean') {
+    throw new TypeError(`${BIN_NAME}: update qualification journal must be a boolean`)
+  }
+  const path = settingsPath(documentPath)
+  const document = loadSettingsDocument(path)
+  const output = applyQualificationJournalUpdate(document, enabled)
+  ensureDocumentDirectory(path)
+  await writeFileAtomic(path, output, { mode: DOCUMENT_FILE_MODE })
 }
 
 /**

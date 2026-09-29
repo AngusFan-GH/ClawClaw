@@ -1,8 +1,15 @@
 import { defineConfig } from 'tsdown'
+import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 
 const PACKAGE_NAME = 'dsh-plugin-desktop'
+const PRODUCT_VERSION = (JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
+) as { version?: unknown }).version
+if (typeof PRODUCT_VERSION !== 'string') {
+  throw new Error('dsh-plugin-desktop package.json has no product version')
+}
 const PLUGIN_MANAGER_MODULE_ID = 'clawclaw:plugin-manager-client'
 const RESOLVED_PLUGIN_MANAGER_MODULE_ID = `\0${PLUGIN_MANAGER_MODULE_ID}`
 const localRequire = createRequire(import.meta.url)
@@ -107,6 +114,7 @@ export default defineConfig([
     target: 'es2022',
     define: {
       'process.env.NODE_ENV': JSON.stringify('production'),
+      'process.env.DSH_DESKTOP_PRODUCT_VERSION': JSON.stringify(PRODUCT_VERSION),
     },
     fixedExtension: false,
     dts: false,

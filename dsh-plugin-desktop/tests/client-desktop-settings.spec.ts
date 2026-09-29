@@ -16,8 +16,6 @@ import {
 import {
   desktopBrowserUrlsShouldRender,
   DesktopSettingsSection,
-  persistDesktopBrowserAccessHot,
-  persistDesktopNetworkExposureHot,
   readDesktopSettingsUntilLanSettled,
   resolveDesktopLanConfirmation,
 } from '../src/client/DesktopSettingsSection.tsx'
@@ -35,7 +33,6 @@ import {
   DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE,
   DESKTOP_SETTINGS_LOCALE_NAMESPACE,
   DESKTOP_SHELL_SETTINGS_NAMESPACE,
-  persistDesktopModeSelection,
 } from '../src/client/desktop-settings.ts'
 import { en, zh, type DesktopSettingsLocaleKey } from '../src/client/desktop-settings-locales.ts'
 import { installDesktopSettingsStyles } from '../src/client/desktop-settings-styles.ts'
@@ -51,6 +48,21 @@ const VIEW: DesktopSettingsView = {
     { name: 'work', exists: true, webCapable: true, selectable: true, deletable: true },
   ],
   market: { requested: 'disabled', effective: 'disabled', legacyDefaulted: true },
+  preferences: {
+    mode: 'compatibility',
+    macosMaterial: 'transparent',
+    windowsMaterial: 'off',
+    openBrowser: false,
+    networkExposure: 'loopback',
+    notifications: {
+      enabled: true,
+      notifyOnTurnCompletion: true,
+      notifyOnTurnFailure: true,
+      notifyOnJobCompletion: true,
+      notifyOnJobFailure: true,
+    },
+    updateQualificationJournal: false,
+  },
   web: {
     localUrl: `http://127.0.0.1:43120/?token=${BROWSER_AUTH_TOKEN}`,
     lanUrls: [],
@@ -239,31 +251,6 @@ describe('Desktop settings API', () => {
     expect(publish.mock.calls.map(call => call[0].web.lanState)).toEqual(['starting', 'starting', 'ready'])
   })
 
-  it('hot-applies browser and LAN settings, then refreshes without a restart callback', async () => {
-    const order: string[] = []
-    const settings = {
-      set: vi.fn(async (key: string, value: unknown) => { order.push(`set:${key}:${String(value)}`) }),
-    }
-    const refresh = vi.fn(async () => {
-      order.push('read')
-      return VIEW
-    })
-
-    await persistDesktopBrowserAccessHot(settings, true, 'loopback', refresh)
-    await persistDesktopNetworkExposureHot(settings, 'lan', refresh)
-    await persistDesktopBrowserAccessHot(settings, false, 'lan', refresh)
-
-    expect(order).toEqual([
-      'set:openBrowser:true',
-      'read',
-      'set:networkExposure:lan',
-      'read',
-      'set:networkExposure:loopback',
-      'set:openBrowser:false',
-      'read',
-    ])
-  })
-
   it('clears its pending LAN poll timer when the settings section is disposed', async () => {
     vi.useFakeTimers()
     try {
@@ -300,62 +287,6 @@ describe('Desktop settings API', () => {
     expect(enableLan).toHaveBeenCalledOnce()
   })
 
-  it('withdraws browser and LAN access before selecting a custom Desktop mode', async () => {
-    const set = vi.fn(async () => {})
-    const scope = {
-      getSnapshot: () => ({
-        status: 'ready' as const,
-        value: {
-          mode: 'compatibility' as const,
-          macosMaterial: 'transparent' as const,
-          windowsMaterial: 'off' as const,
-          port: 43_120,
-          openBrowser: true,
-          networkExposure: 'lan' as const,
-          logLevel: 'info' as const,
-          updateQualificationJournal: false,
-        },
-        base: undefined,
-        user: undefined,
-        revision: 1,
-        writable: true,
-        mode: 'host' as const,
-      }),
-      set,
-    }
-
-    await persistDesktopModeSelection(scope, 'advanced')
-    expect(set.mock.calls).toEqual([
-      ['networkExposure', 'loopback'],
-      ['openBrowser', false],
-      ['mode', 'advanced'],
-    ])
-  })
-
-  it('withdraws browser and LAN access while the settings mirror is still loading', async () => {
-    const set = vi.fn(async () => {})
-    const scope = {
-      getSnapshot: () => ({
-        status: 'loading' as const,
-        value: undefined,
-        base: undefined,
-        user: undefined,
-        revision: undefined,
-        writable: false,
-        mode: 'host' as const,
-      }),
-      set,
-    }
-
-    await persistDesktopModeSelection(scope, 'extended')
-
-    expect(set.mock.calls).toEqual([
-      ['networkExposure', 'loopback'],
-      ['openBrowser', false],
-      ['mode', 'extended'],
-    ])
-  })
-
   it('uses the strict same-origin routes and request bodies', async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const path = String(input)
@@ -367,10 +298,14 @@ describe('Desktop settings API', () => {
         || path === desktopSettingsPaths.updateCheck
         || path === desktopSettingsPaths.updateJournalClear
         || path === desktopSettingsPaths.backgroundNoticeReset
+        || path === desktopSettingsPaths.modeSelect
         || path === desktopSettingsPaths.diagnosticsExport) {
         return json({ accepted: true })
       }
-      return path === desktopSettingsPaths.settings || path === desktopSettingsPaths.profileCreate || path === desktopSettingsPaths.profileDelete
+      return path === desktopSettingsPaths.settings
+        || path === desktopSettingsPaths.profileCreate
+        || path === desktopSettingsPaths.profileDelete
+        || path === desktopSettingsPaths.preferenceUpdate
         ? json(VIEW)
         : json({ accepted: true, restartRequired: true })
     })
@@ -381,6 +316,8 @@ describe('Desktop settings API', () => {
     await expect(api.selectProfile('work')).resolves.toEqual({ accepted: true, restartRequired: true })
     await expect(api.deleteProfile('work')).resolves.toEqual(VIEW)
     await expect(api.selectMarket('dsh-market')).resolves.toEqual({ accepted: true, restartRequired: true })
+    await expect(api.selectMode('extended')).resolves.toBeUndefined()
+    await expect(api.updatePreference({ field: 'openBrowser', value: true })).resolves.toEqual(VIEW)
     await expect(api.openTerminal()).resolves.toBeUndefined()
     await expect(api.restart()).resolves.toBeUndefined()
     await expect(api.restartToRecovery()).resolves.toBeUndefined()
@@ -397,6 +334,8 @@ describe('Desktop settings API', () => {
       desktopSettingsPaths.profileSelect,
       desktopSettingsPaths.profileDelete,
       desktopSettingsPaths.marketSelect,
+      desktopSettingsPaths.modeSelect,
+      desktopSettingsPaths.preferenceUpdate,
       desktopSettingsPaths.terminalOpen,
       desktopSettingsPaths.restart,
       desktopSettingsPaths.recoveryRestart,
@@ -420,12 +359,10 @@ describe('Desktop settings API', () => {
       body: JSON.stringify({ provider: 'dsh-market' }),
     })
     expect(fetcher.mock.calls[5]?.[1]).toMatchObject({
-      method: 'POST',
-      body: JSON.stringify({}),
+      body: JSON.stringify({ mode: 'extended' }),
     })
     expect(fetcher.mock.calls[6]?.[1]).toMatchObject({
-      method: 'POST',
-      body: JSON.stringify({}),
+      body: JSON.stringify({ field: 'openBrowser', value: true }),
     })
     expect(fetcher.mock.calls[7]?.[1]).toMatchObject({
       method: 'POST',
@@ -440,6 +377,14 @@ describe('Desktop settings API', () => {
       body: JSON.stringify({}),
     })
     expect(fetcher.mock.calls[10]?.[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    expect(fetcher.mock.calls[11]?.[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    expect(fetcher.mock.calls[12]?.[1]).toMatchObject({
       method: 'POST',
       body: JSON.stringify({}),
     })
@@ -580,6 +525,10 @@ describe('Desktop native action presentation', () => {
 
 describe('Desktop settings Slot registration', () => {
   it('registers the official Desktop section, native actions, and both settings scopes', async () => {
+    const fetcher = vi.fn(async () => json({ accepted: true }))
+    vi.stubGlobal('fetch', fetcher)
+    expect(DESKTOP_SHELL_SETTINGS_NAMESPACE).toBe('desktop-shell')
+    expect(DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE).toBe('desktop-notifications')
     const scope = {
       getSnapshot: () => ({
         status: 'loading' as const,
@@ -617,8 +566,7 @@ describe('Desktop settings Slot registration', () => {
       micaSupported: false,
     })
 
-    expect(get).toHaveBeenNthCalledWith(1, DESKTOP_SHELL_SETTINGS_NAMESPACE)
-    expect(get).toHaveBeenNthCalledWith(2, DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE)
+    expect(get).not.toHaveBeenCalled()
     expect(inject).toHaveBeenCalledWith('settings.section', expect.any(Function))
     expect(inject).toHaveBeenCalledWith('settings.action', expect.any(Function))
     const [options, component] = register.mock.calls[0] as unknown as [
@@ -653,6 +601,11 @@ describe('Desktop settings Slot registration', () => {
     expect(actionOptions.inject()).toHaveProperty('api')
     expect(actionComponent).toBe(DesktopTerminalSettingsAction)
     await control.setMode('extended')
-    expect(scope.set).toHaveBeenCalledWith('mode', 'extended')
+    expect(fetcher).toHaveBeenCalledWith(desktopSettingsPaths.modeSelect, expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ mode: 'extended' }),
+    }))
+    expect(scope.set).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
   })
 })
