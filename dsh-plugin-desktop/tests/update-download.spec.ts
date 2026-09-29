@@ -30,7 +30,11 @@ describe('ClawClaw installer download', () => {
     const destination = await desktopUpdateDestination(directory, 'win32', '2.1.0')
     const installerDirectory = join(directory, 'updates', 'installers')
     expect(destination).toBe(join(installerDirectory, 'ClawClaw-2.1.0-windows.exe'))
-    expect((await lstat(installerDirectory)).mode & 0o777).toBe(0o700)
+    const directoryStat = await lstat(installerDirectory)
+    expect(directoryStat.isDirectory()).toBe(true)
+    if (process.platform !== 'win32') {
+      expect(directoryStat.mode & 0o777).toBe(0o700)
+    }
   })
 
   it('downloads a manifest-declared DMG atomically and verifies SHA-512', async () => {
