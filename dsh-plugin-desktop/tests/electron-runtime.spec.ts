@@ -573,6 +573,25 @@ describe('Electron desktop runtime', () => {
       },
     })
 
+    const missingFrameCallback = vi.fn()
+    listener({
+      id: 8,
+      url: 'http://127.0.0.1:43120/api/desktop/cron-tasks',
+      method: 'GET',
+      webContentsId: 73,
+      frame: null,
+      resourceType: 'xhr',
+      referrer: 'http://127.0.0.1:43120/',
+      timestamp: 8,
+      requestHeaders: { Accept: 'application/json' },
+    }, missingFrameCallback)
+    expect(missingFrameCallback).toHaveBeenCalledWith({
+      requestHeaders: {
+        Accept: 'application/json',
+        [spec.rendererAccessHeader.name]: spec.rendererAccessHeader.value,
+      },
+    })
+
     for (const details of [
       {
         id: 3,
@@ -649,6 +668,17 @@ describe('Electron desktop runtime', () => {
         resourceType: 'xhr',
         referrer: 'http://127.0.0.1:43120/',
         timestamp: 7,
+        requestHeaders: {},
+      },
+      {
+        id: 9,
+        url: 'http://127.0.0.1:43120/api/private',
+        method: 'GET',
+        webContentsId: 73,
+        frame: null,
+        resourceType: 'xhr',
+        referrer: 'https://untrusted.example/',
+        timestamp: 9,
         requestHeaders: {},
       },
     ]) {

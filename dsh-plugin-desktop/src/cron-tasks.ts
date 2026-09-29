@@ -21,21 +21,32 @@ import type { DesktopCronInterruptionState } from './interruption-inspection.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
+    desktopCronAgentHost: DesktopCronAgentHost
     desktopCronTasksController: CronTaskController
   }
 }
 
 export const name = 'desktop-cron-tasks'
-export const inject = ['settings', 'agents', 'sessions', 'sessionTitle', 'agentDefaultModel', 'workspaceRegistry', 'webServer', 'connection', 'tools']
+export const inject = ['settings', 'agents', 'sessions', 'sessionTitle', 'agentDefaultModel', 'workspaceRegistry', 'tools', 'desktopCronAgentHost']
 
 export const DESKTOP_CRON_TASKS_SETTINGS_NAMESPACE = 'dsh-desktop-cron-tasks'
 
 const MAX_TIMER_DELAY_MS = 2_147_000_000
 const RUN_TIMEOUT_MS = 60 * 60 * 1_000
+const CRON_TASK_MANAGEMENT_TOOLS = [
+  'cron_task_create', 'cron_task_list', 'cron_task_update', 'cron_task_delete', 'cron_task_run',
+] as const
+export const CRON_EXECUTION_POLICY = [
+  'You are executing an existing ClawClaw automation, not configuring an automation.',
+  'Perform the scheduled task now. Do not create, inspect, update, delete, run, or describe scheduled tasks.',
+  'ClawClaw records run history automatically; ignore any request in the task text to record or manage automation history.',
+  'Return only the actual result of the requested work.',
+].join('\n')
 
 interface CronTasksSettings { jobs: CronTask[] }
 interface CronTasksSettingsScope {
   get(): CronTasksSettings
+  watch?(callback: (next: CronTasksSettings, previous: CronTasksSettings) => void | Promise<void>): () => void
   replace(section: object): Promise<void>
 }
 
@@ -67,6 +78,17 @@ function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted === true) throw signal.reason
 }
 
+/** Keep task-management intent out of both the visible prompt and tool surface. */
+function installCronExecutionScope(agentCtx: Context): () => void {
+  const liftTools = agentCtx.tools.restrict({ deny: [...CRON_TASK_MANAGEMENT_TOOLS] })
+  const liftPrompt = agentCtx.systemPrompt.section({
+    name: 'desktop-cron-execution-policy',
+    order: agentCtx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_SUFFIX') + 1,
+    text: CRON_EXECUTION_POLICY,
+  })
+  return () => { liftPrompt(); liftTools() }
+}
+
 function archivedSessionIds(runtime: CronRuntime): readonly SessionId[] {
   return (runtime.workspaceRegistry as Context['workspaceRegistry'] & { archivedSessionIds?: readonly SessionId[] })
     .archivedSessionIds ?? []
@@ -77,6 +99,13 @@ function isArchived(runtime: CronRuntime, sessionId: string): boolean {
 }
 
 type LiveAgent = NonNullable<ReturnType<Context['agents']['get']>>
+
+/** Agent operations bound to the stable Desktop Host instead of this reloadable Settings plugin. */
+export interface DesktopCronAgentHost {
+  get(sessionId: SessionId): ReturnType<Context['agents']['get']>
+  create(options: Parameters<Context['agents']['create']>[0]): ReturnType<Context['agents']['create']>
+  resume(options: Parameters<Context['agents']['resume']>[0]): ReturnType<Context['agents']['resume']>
+}
 
 async function waitForIdle(agent: LiveAgent, signal?: AbortSignal): Promise<void> {
   throwIfAborted(signal)
@@ -110,6 +139,7 @@ async function admitFollowup(
 
 type CronRuntime = {
   readonly agents: Context['agents']
+  readonly agentHost?: DesktopCronAgentHost
   readonly sessions: Context['sessions']
   readonly sessionTitle: Context['sessionTitle']
   readonly agentDefaultModel: Context['agentDefaultModel']
@@ -137,27 +167,39 @@ export async function runCronTask(
     && !isArchived(runtime, task.activeSessionId)
     ? SessionId(task.activeSessionId)
     : undefined
+  const agents = runtime.agentHost ?? runtime.agents
   let handle: Awaited<ReturnType<CronRuntime['agents']['create']>> | undefined
-  let agent = reusableId === undefined ? undefined : runtime.agents.get(reusableId)
+  let releaseExecutionScope = (): void => {}
+  let agent = reusableId === undefined ? undefined : agents.get(reusableId)
+  const configureExecutionScope = (agentCtx: Context): void => {
+    releaseExecutionScope = installCronExecutionScope(agentCtx)
+  }
   if (agent === undefined) {
     if (reusableId === undefined) {
       const sessionId = SessionId(`cron-${randomUUID()}`)
-      handle = await runtime.agents.create({ sessionId, meta: { cwd: workspace.path },
-        agentOptions: { provider: selection.provider, model: selection.model }, ...(signal === undefined ? {} : { signal }) })
+      handle = await agents.create({ sessionId, meta: { cwd: workspace.path },
+        agentOptions: { provider: selection.provider, model: selection.model }, setup: configureExecutionScope,
+        ...(signal === undefined ? {} : { signal }) })
     } else {
       try {
-        handle = await runtime.agents.resume({ resumeSessionId: reusableId,
-          agentOptions: { provider: selection.provider, model: selection.model }, ...(signal === undefined ? {} : { signal }) })
+        handle = await agents.resume({ resumeSessionId: reusableId,
+          agentOptions: { provider: selection.provider, model: selection.model }, setup: configureExecutionScope,
+          ...(signal === undefined ? {} : { signal }) })
       } catch (error) {
         if (!(error instanceof Error) || error.name !== 'SessionPersistenceNotFoundError') throw error
         const sessionId = SessionId(`cron-${randomUUID()}`)
-        handle = await runtime.agents.create({ sessionId, meta: { cwd: workspace.path },
-          agentOptions: { provider: selection.provider, model: selection.model }, ...(signal === undefined ? {} : { signal }) })
+        handle = await agents.create({ sessionId, meta: { cwd: workspace.path },
+          agentOptions: { provider: selection.provider, model: selection.model }, setup: configureExecutionScope,
+          ...(signal === undefined ? {} : { signal }) })
       }
     }
     agent = handle.agent
   }
   const sessionId = agent.id
+  if (handle === undefined) {
+    const agentCtx = (agent as LiveAgent & { readonly ctx?: Context }).ctx
+    releaseExecutionScope = agentCtx === undefined ? () => {} : installCronExecutionScope(agentCtx)
+  }
   const cancel = (): void => { agent.cancel({ kind: 'hook', reason: 'scheduled task cancelled' }, { keepInbox: true }) }
   try {
     throwIfAborted(signal)
@@ -181,7 +223,10 @@ export async function runCronTask(
     return String(sessionId)
   } finally {
     signal?.removeEventListener('abort', cancel)
-    await handle?.dispose()
+    releaseExecutionScope()
+    // Keep the Agent alive under desktopCronAgentHost. Disposing its handle
+    // emits session/disposed, making the sidebar remove the conversation until
+    // the persisted projection discovers and adds the same session again.
   }
 }
 
@@ -212,22 +257,31 @@ export class CronTaskController {
 
   start(): void {
     void this.serialized(async () => {
+      this.refreshFromSettings()
       if (this.persistRehydratedJobs) await this.settings.replace({ jobs: this.jobs })
       this.arm()
     })
   }
 
-  async dispose(): Promise<void> {
+  syncFromSettings(next: CronTasksSettings): void {
+    if (this.disposed) return
+    void this.serialized(async () => { this.replaceFromSettings(next) })
+  }
+
+  dispose(): void {
     this.disposed = true
     if (this.timer !== undefined) clearTimeout(this.timer)
     this.timer = undefined
     for (const controller of this.activeAbort.values()) controller.abort(new Error('ClawClaw is shutting down'))
-    await Promise.allSettled([...this.activePromises])
-    await this.queue.catch(() => {})
+    // ConfigEditor reconciles this plugin while settings.replace() is still
+    // awaiting the reload. Waiting for the queue here would wait on that same
+    // settings.replace() and deadlock every create/update/delete. In-flight
+    // operations retain their own promises and observe disposed/abort state.
   }
 
   async read(): Promise<object> {
     await this.queue
+    this.refreshFromSettings()
     return { jobs: this.jobs, running: [...this.running], archivedSessionIds: archivedSessionIds(this.runtime).map(String),
       defaultWorkspaceId: this.runtime.defaultWorkspaceId?.() ?? null,
       policy: { requiresHost: true, missedRuns: 'skip', interruptedRuns: 'do-not-retry', timeoutMinutes: Math.round(this.runTimeoutMs / 60_000) },
@@ -299,6 +353,8 @@ export class CronTaskController {
   private async create(raw: unknown): Promise<CronTask> {
     const input = normalizeCronTaskInput(raw)
     return await this.serialized(async () => {
+      this.assertRegistryMutable()
+      this.refreshFromSettings()
       const task = createCronTask(input, this.now())
       await this.commit([...this.jobs, task])
       return task
@@ -309,6 +365,7 @@ export class CronTaskController {
     if (typeof id !== 'string' || !id) throw new TypeError('Task id is required')
     const input = normalizeCronTaskInput(raw)
     return await this.serialized(async () => {
+      this.assertRegistryMutable()
       const current = this.requireTask(id)
       const updatedAt = new Date(this.now()).toISOString()
       const workspaceChanged = input.workspaceId !== current.workspaceId
@@ -325,8 +382,8 @@ export class CronTaskController {
   private async delete(id: unknown): Promise<object> {
     if (typeof id !== 'string' || !id) throw new TypeError('Task id is required')
     return await this.serialized(async () => {
+      this.assertRegistryMutable()
       if (!this.jobs.some(job => job.id === id)) throw new TypeError('Cron task not found')
-      if (this.running.has(id)) throw new TypeError('A running Cron task cannot be deleted')
       await this.commit(this.jobs.filter(job => job.id !== id))
       return { id, deleted: true }
     })
@@ -335,6 +392,7 @@ export class CronTaskController {
   private async toggle(id: unknown, enabled: unknown): Promise<CronTask> {
     if (typeof id !== 'string' || !id || typeof enabled !== 'boolean') throw new TypeError('Task id and enabled state are required')
     return await this.serialized(async () => {
+      this.assertRegistryMutable()
       const current = this.requireTask(id)
       const updatedAt = new Date(this.now()).toISOString()
       const next: CronTask = Object.freeze({ ...current, enabled, updatedAt,
@@ -345,13 +403,41 @@ export class CronTaskController {
   }
 
   private requireTask(id: string): CronTask {
+    this.refreshFromSettings()
     const task = this.jobs.find(job => job.id === id)
     if (task === undefined) throw new TypeError('Cron task not found')
     return task
   }
 
+  private assertRegistryMutable(): void {
+    if (this.activePromises.size > 0 || this.running.size > 0) {
+      throw new TypeError('Wait for the active Cron task run to finish before changing scheduled tasks')
+    }
+  }
+
+  private refreshFromSettings(): void {
+    this.replaceFromSettings(this.settings.get())
+  }
+
+  private replaceFromSettings(settings: CronTasksSettings): void {
+    const jobs = settings.jobs.map(job => {
+      // A live run deliberately keeps its claimed state in memory until the
+      // Agent finishes. Persisting that claim through Settings would reload
+      // this plugin and abort the very run that initiated the write. Reads and
+      // watcher callbacks must therefore not replace a running task with its
+      // pre-run persisted snapshot.
+      if (this.running.has(job.id)) return this.jobs.find(current => current.id === job.id) ?? job
+      return rehydrateCronTask(job, this.now())
+    })
+    if (deepEqualJson(jobs, this.jobs)) return
+    this.jobs = jobs
+    this.arm()
+  }
+
   private run(id: unknown, scheduled: boolean): Promise<object> {
-    if (typeof id === 'string' && this.activeByTask.has(id)) return Promise.reject(new TypeError('Cron task is already running'))
+    if (this.activePromises.size > 0) return Promise.reject(new TypeError(
+      typeof id === 'string' && this.activeByTask.has(id) ? 'Cron task is already running' : 'Another Cron task is already running',
+    ))
     const operation = this.runOwned(id, scheduled)
     this.activePromises.add(operation)
     if (typeof id === 'string') this.activeByTask.set(id, operation)
@@ -402,8 +488,9 @@ export class CronTaskController {
         ? current.oneTimeAt === undefined ? nextCronTaskRun(current.expression, current.timeZone, this.now()).toISOString() : null
         : current.nextRunAt
       const claimed = Object.freeze({ ...current, pendingRunAt, pendingRunStartedAt: new Date(this.now()).toISOString(), nextRunAt })
-      await this.commit(this.jobs.map(job => job.id === id ? claimed : job))
       this.running.add(id)
+      this.jobs = this.jobs.map(job => job.id === id ? claimed : job)
+      this.arm()
       return claimed
     })
     const startedAt = new Date(this.now()).toISOString()
@@ -420,14 +507,10 @@ export class CronTaskController {
     try {
       const sessionId = await this.execute(task, abort.signal, async (sessionIdForRun, workspaceIdForRun) => {
         resolvedSessionId = sessionIdForRun
-        await this.serialized(async () => {
-          const current = this.jobs.find(job => job.id === id)
-          if (current === undefined || (current.activeSessionId === sessionIdForRun
-            && current.activeSessionWorkspaceId === workspaceIdForRun)) return
-          await this.commit(this.jobs.map(job => job.id === id
-            ? Object.freeze({ ...job, activeSessionId: sessionIdForRun, activeSessionWorkspaceId: workspaceIdForRun })
-            : job))
-        })
+        const current = this.jobs.find(job => job.id === id)
+        if (current !== undefined) this.jobs = this.jobs.map(job => job.id === id
+          ? Object.freeze({ ...job, activeSessionId: sessionIdForRun, activeSessionWorkspaceId: workspaceIdForRun })
+          : job)
       })
       run = { scheduledFor: task.pendingRunAt ?? startedAt, trigger: scheduled ? 'schedule' : 'manual',
         startedAt, finishedAt: new Date(this.now()).toISOString(), status: 'completed', sessionId }
@@ -442,26 +525,29 @@ export class CronTaskController {
     } finally {
       clearTimeout(timeout)
       this.activeAbort.delete(id)
+    }
+    try {
+      return await this.serialized(async () => {
+        const current = this.jobs.find(job => job.id === id)
+        if (current !== undefined) {
+          const enabled = scheduled && current.oneTimeAt !== undefined ? false : current.enabled
+          const nextRunAt = enabled
+            ? current.nextRunAt !== null && Date.parse(current.nextRunAt) > this.now()
+              ? current.nextRunAt
+              : nextCronTaskRun(current.expression, current.timeZone, this.now()).toISOString()
+            : null
+          const updated: CronTask = Object.freeze({ ...current, enabled, lastRun: run,
+            ...(run.sessionId === undefined ? {} : { activeSessionId: run.sessionId }),
+            nextRunAt, pendingRunAt: null, pendingRunStartedAt: undefined })
+          await this.commit(this.jobs.map(job => job.id === id
+            ? Object.freeze({ ...updated, history: [run, ...current.history].slice(0, CRON_TASK_HISTORY_LIMIT) })
+            : job))
+        }
+        return { id, run }
+      })
+    } finally {
       this.running.delete(id)
     }
-    return await this.serialized(async () => {
-      const current = this.jobs.find(job => job.id === id)
-      if (current !== undefined) {
-        const enabled = scheduled && current.oneTimeAt !== undefined ? false : current.enabled
-        const nextRunAt = enabled
-          ? current.nextRunAt !== null && Date.parse(current.nextRunAt) > this.now()
-            ? current.nextRunAt
-            : nextCronTaskRun(current.expression, current.timeZone, this.now()).toISOString()
-          : null
-        const updated: CronTask = Object.freeze({ ...current, enabled, lastRun: run,
-          ...(run.sessionId === undefined ? {} : { activeSessionId: run.sessionId }),
-          nextRunAt, pendingRunAt: null, pendingRunStartedAt: undefined })
-        await this.commit(this.jobs.map(job => job.id === id
-          ? Object.freeze({ ...updated, history: [run, ...current.history].slice(0, CRON_TASK_HISTORY_LIMIT) })
-          : job))
-      }
-      return { id, run }
-    })
   }
 
   private preview(raw: unknown): object {
@@ -502,10 +588,32 @@ export class CronTaskController {
   }
 }
 
+/**
+ * Mount the stable Desktop HTTP facade for the reloadable Cron controller.
+ * The owner context must outlive the editable Cron plugin entry; each request
+ * resolves the current service instance so a Settings reconciliation cannot
+ * take the routes down with the controller it replaces.
+ */
+export function registerCronTasksJsonApi(ctx: Context): void {
+  ctx.provide('desktopCronAgentHost', {
+    get: sessionId => ctx.agents.get(sessionId),
+    create: options => ctx.agents.create(options),
+    resume: options => ctx.agents.resume(options),
+  })
+  const current = (): CronTaskController => {
+    const controller = ctx.get('desktopCronTasksController')
+    if (controller === undefined) throw new Error('Cron task service is temporarily unavailable')
+    return controller
+  }
+  registerDesktopJsonApi(ctx, { label: 'Cron tasks', readPath: DESKTOP_CRON_TASKS_PATH,
+    actionPath: DESKTOP_CRON_TASKS_ACTION_PATH, read: () => current().read(), action: value => current().action(value) })
+}
+
 export function apply(ctx: Context): void {
   const settings = ctx.settings.register(DESKTOP_CRON_TASKS_SETTINGS_NAMESPACE, CronTasksSettingsSchema,
     { applies: 'live' })
   const runtime: CronRuntime = { agents: ctx.agents, sessions: ctx.sessions, sessionTitle: ctx.sessionTitle,
+    agentHost: ctx.desktopCronAgentHost,
     agentDefaultModel: ctx.agentDefaultModel, workspaceRegistry: ctx.workspaceRegistry,
     defaultWorkspaceId: () => {
       const descriptor = ctx.settings.describe().find(item => String(item.ns) === DESKTOP_WORKSPACE_SETTINGS_NAMESPACE)
@@ -515,14 +623,15 @@ export function apply(ctx: Context): void {
     ...(ctx.get('desktopRuntime') === undefined ? {} : { desktopRuntime: ctx.get('desktopRuntime') as DesktopRuntime }) }
   const controller = new CronTaskController(runtime, settings)
   ctx.provide('desktopCronTasksController', controller)
+  const stopSettings = settings.watch?.(next => { controller.syncFromSettings(next) }) ?? (() => {})
   controller.start()
   const toolDisposers = [
     ctx.tools.register(defineTool({
       name: 'cron_task_create',
-      description: 'Create a persistent desktop scheduled task that appears in ClawClaw Settings. Supports recurring Cron schedules and exact one-time runs. Use schedule_create only for a reminder scoped to the current conversation.',
+      description: 'Create a persistent desktop scheduled task that appears in ClawClaw Automations. Supports recurring Cron schedules and exact one-time runs.',
       parameters: {
         name: { type: 'string', required: true, description: 'Short task name.' },
-        prompt: { type: 'string', required: true, description: 'Instructions to run on each occurrence.' },
+        prompt: { type: 'string', required: true, description: 'The actual work and result to produce on each occurrence. Do not mention creating, managing, describing, or recording the automation itself; run history is automatic.' },
         expression: { type: 'string', required: true, description: 'Five-field cron expression, for example 0 9 * * 1-5.' },
         one_time_at: { type: 'string', description: 'Optional ISO 8601 instant for a one-time task. The task disables itself after this scheduled run.' },
         time_zone: { type: 'string', description: 'IANA timezone, for example Asia/Shanghai.' },
@@ -543,7 +652,7 @@ export function apply(ctx: Context): void {
     })),
     ctx.tools.register(defineTool({
       name: 'cron_task_list',
-      description: 'List persistent desktop scheduled tasks managed by ClawClaw Settings. This does not list session-local schedule_create reminders.',
+      description: 'List persistent desktop scheduled tasks managed by ClawClaw Automations.',
       parameters: {},
       output: { schema: { type: 'string' as const }, render: (_args, value) => [{ type: 'text' as const, text: value }] },
       async execute(_args, exec) {
@@ -591,7 +700,9 @@ export function apply(ctx: Context): void {
       presentCall: args => ({ card: 'generic', title: 'Run scheduled task', kind: 'other', rawInput: args }),
     })),
   ]
-  registerDesktopJsonApi(ctx, { label: 'Cron tasks', readPath: DESKTOP_CRON_TASKS_PATH,
-    actionPath: DESKTOP_CRON_TASKS_ACTION_PATH, read: () => controller.read(), action: value => controller.action(value) })
-  ctx.effect(() => async () => { for (const dispose of toolDisposers) dispose(); await controller.dispose() }, 'dsh-plugin-desktop: Cron task scheduler')
+  ctx.effect(() => () => {
+    stopSettings()
+    for (const dispose of toolDisposers) dispose()
+    controller.dispose()
+  }, 'dsh-plugin-desktop: Cron task scheduler')
 }

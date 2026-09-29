@@ -67,8 +67,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 async function responseJson(response: Response): Promise<unknown> {
+  const body = await response.text()
   let value: unknown
-  try { value = await response.json() as unknown } catch { throw new Error('Cron task response was not JSON') }
+  try { value = JSON.parse(body) as unknown } catch {
+    const detail = body.trim()
+    throw new Error(`Cron task request returned HTTP ${String(response.status)} with a non-JSON response${detail === '' ? '' : `: ${detail}`}`)
+  }
   if (!response.ok) throw new Error(isRecord(value) && typeof value.error === 'string' ? value.error : `HTTP ${String(response.status)}`)
   return value
 }

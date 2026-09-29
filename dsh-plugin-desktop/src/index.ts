@@ -88,13 +88,14 @@ import {
 } from './window-material.ts'
 import { DESKTOP_PRODUCT_NAME } from './product-identity.ts'
 import { rebuildLegacyBlankSessionProjections } from './legacy-session-projection-rebuild.ts'
+import { registerCronTasksJsonApi } from './cron-tasks.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'desktop-shell'
 
 /** Services required by the desktop shell; `desktopRuntime` is probed, not required. */
 export const inject = [
-  'webServer', 'webRuntime', 'appExit', 'settings', 'connection', 'sessionQuery', 'sessionProjectionCache',
+  'webServer', 'webRuntime', 'appExit', 'settings', 'connection', 'sessionQuery', 'sessionProjectionCache', 'agents',
 ]
 
 /** Standard settings namespace shared by tray and configuration surfaces. */
@@ -297,6 +298,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     },
   )
   const rendererOrigin = `http://127.0.0.1:${String(ctx.webServer.port)}`
+  registerCronTasksJsonApi(ctx)
   ctx.effect(
     () => ctx.webServer.register({
       kind: 'exact',

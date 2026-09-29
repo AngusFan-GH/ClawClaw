@@ -1,9 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createCronTask, nextCronTaskRun, normalizeCronTaskInput, rehydrateCronTask } from '../src/cron-task-domain.ts'
-import { CronTaskController, CronTasksSettingsSchema, runCronTask } from '../src/cron-tasks.ts'
+import { CRON_EXECUTION_POLICY, CronTaskController, CronTasksSettingsSchema, runCronTask } from '../src/cron-tasks.ts'
 import type { CronTask } from '../src/cron-task-domain.ts'
 
 describe('desktop Cron task schedule domain', () => {
+  it('frames stored prompts as execution work instead of automation management', () => {
+    expect(CRON_EXECUTION_POLICY).toContain('executing an existing ClawClaw automation')
+    expect(CRON_EXECUTION_POLICY).toContain('Return only the actual result')
+    expect(CRON_EXECUTION_POLICY).toContain('records run history automatically')
+  })
+
   it('validates standard expressions and computes future IANA-local occurrences', () => {
     expect(nextCronTaskRun('30 9 * * 1-5', 'Asia/Shanghai', Date.parse('2026-09-18T00:00:00Z')).toISOString())
       .toBe('2026-09-18T01:30:00.000Z')
@@ -55,6 +61,66 @@ describe('desktop Cron task schedule domain', () => {
 describe('desktop Cron task controller', () => {
   afterEach(() => { vi.useRealTimers() })
 
+  it('does not deadlock when ConfigEditor disposes the plugin during its own settings write', async () => {
+    let controller: CronTaskController
+    const settings = {
+      get: () => ({ jobs: [] }),
+      replace: vi.fn(async () => { controller.dispose() }),
+    }
+    controller = new CronTaskController({
+      workspaceRegistry: { list: () => [] },
+      defaultWorkspaceId: () => undefined,
+    } as never, settings)
+
+    await expect(controller.action({ action: 'create', input: {
+      name: 'Daily', prompt: 'Check', expression: '0 9 * * *', timeZone: 'UTC',
+    } })).resolves.toMatchObject({ name: 'Daily' })
+    expect(settings.replace).toHaveBeenCalledOnce()
+  })
+
+  it('finishes an immediate run before its final Settings write reloads the plugin', async () => {
+    const task = createCronTask({ name: 'Daily', prompt: 'Check', expression: '0 9 * * *', timeZone: 'UTC' },
+      Date.parse('2026-09-18T02:00:00Z'))
+    let stored = { jobs: [task] }
+    let controller: CronTaskController
+    const execute = vi.fn(async () => 'cron-session-finished')
+    const settings = {
+      get: () => stored,
+      replace: vi.fn(async (next: { jobs: CronTask[] }) => {
+        stored = next
+        controller.dispose()
+      }),
+    }
+    controller = new CronTaskController({ workspaceRegistry: { list: () => [] } } as never, settings,
+      () => Date.parse('2026-09-18T02:00:00Z'), execute)
+
+    await expect(controller.action({ action: 'run', id: task.id })).resolves.toMatchObject({
+      run: { status: 'completed', sessionId: 'cron-session-finished' },
+    })
+    expect(execute).toHaveBeenCalledOnce()
+    expect(settings.replace).toHaveBeenCalledOnce()
+    expect(stored.jobs[0]?.lastRun).toMatchObject({ status: 'completed', sessionId: 'cron-session-finished' })
+  })
+
+  it('refreshes a reloaded controller from the current persisted settings snapshot', async () => {
+    let stored = { jobs: [] as CronTask[] }
+    const settings = {
+      get: () => stored,
+      replace: vi.fn(async (next: { jobs: CronTask[] }) => { stored = next }),
+    }
+    const controller = new CronTaskController({
+      workspaceRegistry: { list: () => [] },
+      defaultWorkspaceId: () => undefined,
+    } as never, settings)
+    stored = { jobs: [createCronTask({
+      name: 'Persisted', prompt: 'Check', expression: '0 9 * * *', timeZone: 'UTC',
+    }, Date.parse('2026-09-18T02:00:00Z'))] }
+
+    await expect(controller.listForModel()).resolves.toEqual([
+      expect.objectContaining({ name: 'Persisted', enabled: true }),
+    ])
+  })
+
   it('resolves the configured default workspace instead of registry order', async () => {
     const first = { id: 'workspace-first', path: '/work/first' }
     const attachSession = vi.fn(async () => {})
@@ -62,11 +128,17 @@ describe('desktop Cron task controller', () => {
     const get = vi.fn((id: string) => id === configured.id ? configured : undefined)
     const dispose = vi.fn(async () => {})
     const session = { ownEvents: () => [{ type: 'turn/end', data: { reason: { kind: 'completed' } } }] }
-    const create = vi.fn(async (options: { sessionId: string; meta: { cwd: string } }) => ({
-      agent: { id: options.sessionId, followup: vi.fn(), whenIdle: vi.fn(async () => {}), cancel: vi.fn(),
-        session },
-      dispose,
-    }))
+    const liftTools = vi.fn()
+    const restrict = vi.fn(() => liftTools)
+    const section = vi.fn(() => vi.fn())
+    const followup = vi.fn()
+    const create = vi.fn(async (options: { sessionId: string; meta: { cwd: string }; setup?: (ctx: unknown, agent: unknown) => void }) => {
+      const agent = { id: options.sessionId, followup, whenIdle: vi.fn(async () => {}), cancel: vi.fn(), session }
+      options.setup?.({ tools: { restrict }, systemPrompt: {
+        getSectionOrder: () => 100, section,
+      } }, agent)
+      return { agent, dispose }
+    })
     const flush = vi.fn(async () => {})
     const rename = vi.fn()
     const runtime = {
@@ -82,10 +154,21 @@ describe('desktop Cron task controller', () => {
     await expect(runCronTask(runtime, task)).resolves.toMatch(/^cron-/)
     expect(get).toHaveBeenCalledWith(configured.id)
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ meta: { cwd: configured.path } }))
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ setup: expect.any(Function) }))
+    expect(restrict).toHaveBeenCalledWith({ deny: [
+      'cron_task_create', 'cron_task_list', 'cron_task_update', 'cron_task_delete', 'cron_task_run',
+    ] })
+    expect(section).toHaveBeenCalledWith({
+      name: 'desktop-cron-execution-policy', order: 101, text: CRON_EXECUTION_POLICY,
+    })
+    expect(followup).toHaveBeenCalledWith(expect.objectContaining({
+      content: [{ type: 'text', text: 'Check' }],
+    }))
     expect(rename).toHaveBeenCalledWith(session, '[Cron] Default')
     expect(attachSession).toHaveBeenCalledWith(expect.stringMatching(/^cron-/))
     expect(attachSession.mock.invocationCallOrder[0]).toBeLessThan(flush.mock.invocationCallOrder[0] as number)
-    expect(dispose).toHaveBeenCalledOnce()
+    expect(liftTools).toHaveBeenCalledOnce()
+    expect(dispose).not.toHaveBeenCalled()
   })
 
   it('resumes the task conversation instead of creating a session for every run', async () => {
@@ -109,7 +192,37 @@ describe('desktop Cron task controller', () => {
     expect(resume).toHaveBeenCalledWith(expect.objectContaining({ resumeSessionId: 'cron-existing' }))
     expect(create).not.toHaveBeenCalled()
     expect(agent.followup).toHaveBeenCalledOnce()
-    expect(dispose).toHaveBeenCalledOnce()
+    expect(dispose).not.toHaveBeenCalled()
+  })
+
+  it('creates the durable conversation through the stable Desktop owner', async () => {
+    const workspace = { id: 'workspace-1', path: '/work/project', attachSession: vi.fn(async () => {}) }
+    const session = { ownEvents: () => [{ type: 'turn/end', data: { reason: { kind: 'completed' } } }] }
+    const dispose = vi.fn(async () => {})
+    const create = vi.fn(async (options: { sessionId: string; setup?: (ctx: unknown) => void }) => {
+      options.setup?.({ tools: { restrict: () => () => {} }, systemPrompt: {
+        getSectionOrder: () => 100, section: () => () => {},
+      } })
+      return {
+        agent: { id: options.sessionId, session, followup: vi.fn(), whenIdle: vi.fn(async () => {}), cancel: vi.fn() },
+        dispose,
+      }
+    })
+    const fallbackCreate = vi.fn()
+    const runtime = {
+      workspaceRegistry: { list: () => [workspace], get: () => workspace },
+      agentDefaultModel: { currentSelection: () => ({ provider: 'test', model: 'test-model' }) },
+      sessionTitle: { rename: vi.fn() }, sessions: { flush: vi.fn(async () => {}) },
+      agents: { get: vi.fn(), resume: vi.fn(), create: fallbackCreate },
+      agentHost: { get: vi.fn(), resume: vi.fn(), create },
+    } as never
+    const task = createCronTask({ name: 'Daily', prompt: 'Check', expression: '0 9 * * *', timeZone: 'UTC' },
+      Date.parse('2026-09-18T02:00:00Z'))
+
+    await expect(runCronTask(runtime, task)).resolves.toMatch(/^cron-/)
+    expect(create).toHaveBeenCalledOnce()
+    expect(fallbackCreate).not.toHaveBeenCalled()
+    expect(dispose).not.toHaveBeenCalled()
   })
 
   it('queues a run on the existing live Agent without taking a second write owner', async () => {
@@ -328,6 +441,32 @@ describe('desktop Cron task controller', () => {
     expect(execute).toHaveBeenCalledOnce()
     expect(state.jobs[0]?.lastRun?.status).toBe('cancelled')
     await controller.dispose()
+  })
+
+  it('defers every registry mutation and second task run while an Agent run is active', async () => {
+    const first = createCronTask({ name: 'First', prompt: 'Wait', expression: '0 9 * * *', timeZone: 'UTC' },
+      Date.parse('2026-09-18T02:00:00Z'))
+    const second = createCronTask({ name: 'Second', prompt: 'Wait', expression: '0 10 * * *', timeZone: 'UTC' },
+      Date.parse('2026-09-18T02:00:00Z'))
+    const state: { jobs: CronTask[] } = { jobs: [first, second] }
+    const settings = { get: () => state, replace: vi.fn(async (value: object) => { Object.assign(state, value) }) }
+    const execute = vi.fn(async (_task: CronTask, signal?: AbortSignal) => await new Promise<string>((_resolve, reject) => {
+      signal?.addEventListener('abort', () => { reject(signal.reason) }, { once: true })
+    }))
+    const controller = new CronTaskController({ workspaceRegistry: { list: () => [] } } as never, settings,
+      () => Date.parse('2026-09-18T02:00:00Z'), execute)
+
+    const run = controller.action({ action: 'run', id: first.id })
+    await vi.waitFor(() => { expect(execute).toHaveBeenCalledOnce() })
+    await expect(controller.action({ action: 'run', id: second.id })).rejects.toThrow(/Another Cron task/)
+    await expect(controller.action({ action: 'toggle', id: second.id, enabled: false })).rejects.toThrow(/active Cron task/)
+    await expect(controller.action({ action: 'create', input: {
+      name: 'Third', prompt: 'Check', expression: '0 11 * * *', timeZone: 'UTC',
+    } })).rejects.toThrow(/active Cron task/)
+    expect(settings.replace).not.toHaveBeenCalled()
+    await controller.action({ action: 'cancel', id: first.id })
+    await run
+    expect(settings.replace).toHaveBeenCalledOnce()
   })
 
   it('fails a run that exceeds its execution time limit', async () => {

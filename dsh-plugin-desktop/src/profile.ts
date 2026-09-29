@@ -94,6 +94,13 @@ const INSTALL_ANCHOR = fileURLToPath(new URL('../package.json', import.meta.url)
 const DESKTOP_PATCH_PATH = fileURLToPath(new URL('../cordis.patch.yml', import.meta.url))
 const DESKTOP_SHORTCUTS_ROW_ID = 'desktop-shortcuts'
 const DESKTOP_SHORTCUTS_PACKAGE = `${DESKTOP_PACKAGE_NAME}/shortcut-menu`
+const DESKTOP_CRON_TASKS_ROW_ID = 'desktop-cron-tasks'
+const DESKTOP_CRON_TASKS_PACKAGE = `${DESKTOP_PACKAGE_NAME}/cron-tasks`
+const DESKTOP_EDITABLE_PROFILE_ENTRIES = [
+  { id: DESKTOP_SHORTCUTS_ROW_ID, name: DESKTOP_SHORTCUTS_PACKAGE },
+  { id: DESKTOP_CRON_TASKS_ROW_ID, name: DESKTOP_CRON_TASKS_PACKAGE },
+] as const
+const DESKTOP_EDITABLE_PROFILE_ENTRY_IDS = new Set<string>(DESKTOP_EDITABLE_PROFILE_ENTRIES.map(entry => entry.id))
 const DIRECTORY_PICKER_ROW_ID = 'directory-picker'
 const AUTO_PICKER_PACKAGE = '@deepseek-ai/dsh-host-directory-picker-auto'
 const BROWSE_PICKER_BACKEND = '@deepseek-ai/dsh-host-directory-picker-browse'
@@ -786,11 +793,11 @@ function loadDesktopMachinePatches(home: string): PatchOptions[] {
 }
 
 /**
- * Keep the configurable shortcuts entry below the Profile's editable config
- * rows. A launcher overlay would be applied after those rows and reset every
- * ConfigEditor write back to the entry's inherited value.
+ * Keep configurable Desktop entries in the Profile layer before their editable
+ * config rows. A launcher overlay would be applied after those rows and reset
+ * every ConfigEditor write back to the entry's inherited value.
  */
-function ensureDesktopShortcutsProfileEntry(profileDir: string): boolean {
+function ensureDesktopEditableProfileEntries(profileDir: string): boolean {
   const path = join(profileDir, PROFILE_PATCH_FILENAME)
   const content = existsSync(path) ? readFileSync(path, 'utf8') : '[]\n'
   const document = parseDocument(content, {
@@ -804,31 +811,36 @@ function ensureDesktopShortcutsProfileEntry(profileDir: string): boolean {
     throw new Error(`${BIN_NAME}: profile patch ${path} must be a YAML sequence`)
   }
   const patches = document.toJS() as unknown[]
+  const present = new Set<string>()
   for (const patch of patches) {
     if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) continue
     const insert = (patch as { insert?: unknown }).insert
     if (!Array.isArray(insert)) continue
     for (const row of insert) {
-      if (row === null || typeof row !== 'object' || Array.isArray(row)
-        || (row as { id?: unknown }).id !== DESKTOP_SHORTCUTS_ROW_ID) continue
-      if ((row as { name?: unknown }).name !== DESKTOP_SHORTCUTS_PACKAGE) {
-        throw new Error(`${BIN_NAME}: reserved ${DESKTOP_SHORTCUTS_ROW_ID} row has a conflicting package identity`)
+      if (row === null || typeof row !== 'object' || Array.isArray(row)) continue
+      const id = (row as { id?: unknown }).id
+      const entry = DESKTOP_EDITABLE_PROFILE_ENTRIES.find(candidate => candidate.id === id)
+      if (entry === undefined) continue
+      if ((row as { name?: unknown }).name !== entry.name) {
+        throw new Error(`${BIN_NAME}: reserved ${entry.id} row has a conflicting package identity`)
       }
-      return false
+      present.add(entry.id)
     }
   }
+  const missing = DESKTOP_EDITABLE_PROFILE_ENTRIES.filter(entry => !present.has(entry.id))
+  if (missing.length === 0) return false
   document.contents.items.unshift(document.createNode({
-    insert: [{ id: DESKTOP_SHORTCUTS_ROW_ID, name: DESKTOP_SHORTCUTS_PACKAGE }],
+    insert: missing.map(entry => ({ ...entry })),
   }) as never)
   writeFileSync(path, String(document))
   return true
 }
 
-/** Remove only the editable shortcuts insertion from launcher-owned overlays. */
-function withoutDesktopShortcutsInsertion(patches: readonly PatchOptions[]): PatchOptions[] {
+/** Remove editable Profile-owned insertions from launcher-owned overlays. */
+function withoutDesktopEditableInsertions(patches: readonly PatchOptions[]): PatchOptions[] {
   return patches.flatMap((patch) => {
     if (!Array.isArray(patch.insert)) return [{ ...patch }]
-    const insert = patch.insert.filter(row => row.id !== DESKTOP_SHORTCUTS_ROW_ID)
+    const insert = patch.insert.filter(row => !DESKTOP_EDITABLE_PROFILE_ENTRY_IDS.has(row.id))
     return insert.length === 0 ? [] : [{ ...patch, insert }]
   })
 }
@@ -868,7 +880,7 @@ export function prepareDesktopProfile(
     disabledBundles,
     marketSelection.requested,
   )
-  if (ensureDesktopShortcutsProfileEntry(profileDir)) {
+  if (ensureDesktopEditableProfileEntries(profileDir)) {
     loadedProfile = loadRecoveryFilteredProfile(
       profileName,
       profileDir,
@@ -881,7 +893,7 @@ export function prepareDesktopProfile(
   const bareModuleBaseUrl = pathToFileURL(join(profile.dir, 'package.json')).href
   writeFileSync(rootConfig, '[]\n')
 
-  const desktopPatches = withoutDesktopShortcutsInsertion(loadOverlayPatches(BIN_NAME, DESKTOP_PATCH_PATH))
+  const desktopPatches = withoutDesktopEditableInsertions(loadOverlayPatches(BIN_NAME, DESKTOP_PATCH_PATH))
   const bundlePatches: PatchOptions[] = []
   let dshMarketPatches: PatchOptions[] | undefined
   let desktopLayerInserted = false

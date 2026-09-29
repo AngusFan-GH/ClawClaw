@@ -31,6 +31,14 @@ describe('desktop Cron task client API', () => {
     }))
   })
 
+  it('surfaces the HTTP status and body when an access rejection is not JSON', async () => {
+    const api = createCronTasksApi(async () => new Response('forbidden', {
+      status: 403,
+      headers: { 'content-type': 'text/plain' },
+    }))
+    await expect(api.read()).rejects.toThrow('HTTP 403 with a non-JSON response: forbidden')
+  })
+
   it('rejects malformed response projections before rendering them', async () => {
     const api = createCronTasksApi(async () => response({ jobs: [], running: [], archivedSessionIds: [], workspaces: [{ id: 1 }], defaultWorkspaceId: null, policy }))
     await expect(api.read()).rejects.toThrow('Invalid Cron task workspace')

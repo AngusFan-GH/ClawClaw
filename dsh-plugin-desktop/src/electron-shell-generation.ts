@@ -107,7 +107,14 @@ function requestComesFromRendererOrigin(
 ): boolean {
   if (details.resourceType === 'mainFrame') return true
   const frame = details.frame
-  if (frame === undefined || frame === null || frame.detached || frame.origin !== origin) return false
+  // Electron may omit the requesting frame for WebContentsView fetches even
+  // while their owning WebContents is still alive. Keep those requests usable
+  // only when Chromium also supplies a same-origin referrer; the target origin
+  // and WebContents identity are checked independently by the caller.
+  if (frame === undefined || frame === null) {
+    try { return new URL(details.referrer).origin === origin } catch { return false }
+  }
+  if (frame.detached || frame.origin !== origin) return false
   const top = frame.top ?? (frame.parent === null ? frame : undefined)
   return top !== undefined && !top.detached && top.origin === origin
 }

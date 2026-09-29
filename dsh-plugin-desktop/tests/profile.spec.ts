@@ -554,7 +554,7 @@ virtualStoreDirMaxLength: 60
     }))
   })
 
-  it('keeps editable shortcuts in the Profile layer instead of launcher overlays', () => {
+  it('keeps editable shortcuts and Cron tasks in the Profile layer instead of launcher overlays', () => {
     const home = temporaryHome()
     const profileDir = ensureDesktopProfile(home)
     writeFileSync(join(profileDir, 'cordis.patch.yml'), [
@@ -562,11 +562,18 @@ virtualStoreDirMaxLength: 60
       '  config:',
       '    items:',
       '      - desktop-reminders',
+      '- id: desktop-cron-tasks',
+      '  config:',
+      '    jobs:',
+      '      - id: morning-briefing',
+      '        name: Morning briefing',
       '',
     ].join('\n'))
 
     const prepared = prepareDesktopProfile(undefined, home, 'darwin')
     const rows = composeEntries([prepared.patches])
+    const firstPersisted = readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8')
+    const preparedAgain = prepareDesktopProfile(undefined, home, 'darwin')
     const persisted = readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8')
 
     expect(rows.find(row => row.id === 'desktop-shortcuts')).toEqual({
@@ -574,10 +581,21 @@ virtualStoreDirMaxLength: 60
       name: 'dsh-plugin-desktop/shortcut-menu',
       config: { items: ['desktop-reminders'] },
     })
+    expect(rows.find(row => row.id === 'desktop-cron-tasks')).toEqual({
+      id: 'desktop-cron-tasks',
+      name: 'dsh-plugin-desktop/cron-tasks',
+      config: { jobs: [{ id: 'morning-briefing', name: 'Morning briefing' }] },
+    })
+    expect(firstPersisted).toBe(persisted)
     expect(persisted.indexOf('insert:')).toBeLessThan(persisted.indexOf('id: desktop-shortcuts\n  config:'))
+    expect(persisted.indexOf('insert:')).toBeLessThan(persisted.indexOf('id: desktop-cron-tasks\n  config:'))
+    expect(persisted.match(/id: desktop-shortcuts\n/g)).toHaveLength(2)
+    expect(persisted.match(/id: desktop-cron-tasks\n/g)).toHaveLength(2)
     expect(prepared.overlays.some(patch => patch.id === 'desktop-shell')).toBe(true)
     expect(prepared.overlays.some(patch => Array.isArray(patch.insert)
-      && patch.insert.some(row => row.id === 'desktop-shortcuts'))).toBe(false)
+      && patch.insert.some(row => row.id === 'desktop-shortcuts' || row.id === 'desktop-cron-tasks'))).toBe(false)
+    expect(composeEntries([preparedAgain.patches]).find(row => row.id === 'desktop-cron-tasks'))
+      .toEqual(rows.find(row => row.id === 'desktop-cron-tasks'))
   })
 
   it('merges a frozen LAN IPv4 snapshot into existing Web runtime trust', () => {
