@@ -65,8 +65,9 @@
 - id: ui-plugin-manager
   disabled: true
 
-# SpiritX is the product-owned model route. Keep the upstream DeepSeek adapter
-# and its request metadata out of the default Desktop composition.
+# SpiritX is the product-owned default route. The official dormant llm-pi-ai
+# instance remains enabled so the Models page retains its third-party catalog
+# and custom API flow under the canonical llm-pi-ai settings namespace.
 - insert:
     - id: spiritx
       name: dsh-plugin-desktop/spiritx
@@ -110,9 +111,6 @@
                 name: Qwen3.6-27B
               - id: gpt-6-astra
                 name: gpt-6-astra
-
-- id: llm-pi-ai
-  disabled: true
 
 - id: agent-default-model
   config:

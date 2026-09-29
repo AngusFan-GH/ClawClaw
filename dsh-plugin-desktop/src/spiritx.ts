@@ -9,13 +9,12 @@ export const inject = PiAi.inject
 export const Config: typeof PiAi.Config = PiAi.Config
 export type Config = PiAi.Config
 
-/** Mark the product route as built in while preserving the upstream catalog. */
+/** Publish only the built-in product route; official llm-pi-ai owns its catalog. */
 export function productProviderDirectory(
   entries: readonly LlmConfigurableProvider[],
 ): LlmConfigurableProvider[] {
   const spiritx = entries.find(entry => entry.provider === 'spiritx')
-  const remaining = entries.filter(entry => entry.provider !== 'spiritx').map(entry => ({ ...entry }))
-  return spiritx === undefined ? remaining : [{ ...spiritx, declared: false }, ...remaining]
+  return spiritx === undefined ? [] : [{ ...spiritx, declared: false }]
 }
 
 /** Register SpiritX through pi-ai with a product-owned provider identity. */

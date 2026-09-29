@@ -29,6 +29,7 @@ import { applySkillsSettings } from './skills-settings.ts'
 import { applyShortcutMenu } from './shortcut-menu.tsx'
 import { installShortcutMenuStyles } from './shortcut-menu-styles.ts'
 import { applySpiritXOnboarding } from './spiritx-onboarding.tsx'
+import { applySpiritXProviderPriority } from './spiritx-provider-priority.tsx'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
 
 export { applyAdvancedShell } from './advanced-shell.ts'
@@ -44,6 +45,7 @@ export { applyExtendedShell, applyFramedShell } from './extended-shell.ts'
 export { applyMcpSettings } from './mcp-settings.ts'
 export { applyMarketIntegration } from './market-integration.tsx'
 export { applyManagedPluginManager } from './plugin-manager.ts'
+export { applySpiritXProviderPriority, SpiritXProviderPriorityMarker } from './spiritx-provider-priority.tsx'
 export { applyRemindersSettings } from './reminders-settings.ts'
 export { applySkillsSettings } from './skills-settings.ts'
 export { applyShortcutMenu } from './shortcut-menu.tsx'
@@ -125,6 +127,7 @@ export function apply(ctx: ClientContext): void {
   applyMarketIntegration(ctx)
   applyManagedPluginManager(ctx)
   applySpiritXOnboarding(ctx)
+  applySpiritXProviderPriority(ctx)
   applyCronTasksSettings(ctx)
   applyRemindersSettings(ctx)
   applySkillsSettings(ctx)

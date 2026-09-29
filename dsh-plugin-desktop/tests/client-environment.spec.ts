@@ -34,6 +34,7 @@ vi.mock('../src/client/skills-settings.ts', () => ({ applySkillsSettings: vi.fn(
 vi.mock('../src/client/shortcut-menu.tsx', () => ({ applyShortcutMenu: vi.fn() }))
 vi.mock('../src/client/desktop-version-row.tsx', () => ({ applyDesktopVersionRow: vi.fn() }))
 vi.mock('../src/client/plugin-manager.ts', () => ({ applyManagedPluginManager: vi.fn() }))
+vi.mock('../src/client/spiritx-provider-priority.tsx', () => ({ applySpiritXProviderPriority: vi.fn() }))
 
 describe('desktop client environment', () => {
   it.each(['darwin', 'win32', 'linux'])('keeps compatibility chrome out of the %s client slot tree', platform => {

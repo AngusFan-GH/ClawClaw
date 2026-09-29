@@ -262,9 +262,20 @@ try {
     throw new Error(`assembled profile exposes unexpected model providers: ${JSON.stringify(providers)}`)
   }
   const configurableProviders = ctx.llm.listConfigurableProviders()
-  const spiritxDirectory = configurableProviders[0]
-  if (spiritxDirectory?.displayName !== 'SpiritX' || spiritxDirectory.declared !== false) {
-    throw new Error(`assembled profile does not present SpiritX first and built in: ${JSON.stringify(configurableProviders)}`)
+  const spiritxDirectory = configurableProviders.find(provider => provider.provider === 'spiritx')
+  if (spiritxDirectory?.displayName !== 'SpiritX'
+    || spiritxDirectory.declared !== false
+    || spiritxDirectory.settingsNs !== 'spiritx') {
+    throw new Error(`assembled profile does not present SpiritX as built in: ${JSON.stringify(configurableProviders)}`)
+  }
+  const officialCatalog = configurableProviders.filter(provider => provider.settingsNs === 'llm-pi-ai')
+  if (!officialCatalog.some(provider => provider.provider === 'openai')
+    || !officialCatalog.some(provider => provider.provider === 'anthropic')
+    || !officialCatalog.some(provider => provider.provider === 'amazon-bedrock')) {
+    throw new Error(`assembled profile is missing the official pi-ai provider catalog: ${JSON.stringify(configurableProviders)}`)
+  }
+  if (new Set(configurableProviders.map(provider => provider.provider)).size !== configurableProviders.length) {
+    throw new Error(`assembled profile has duplicate configurable providers: ${JSON.stringify(configurableProviders)}`)
   }
   const spiritxModels = await ctx.llm.listModels('spiritx')
   if (!spiritxModels.some(model => model.id === 'DeepSeek-V4-Flash')) {

@@ -533,7 +533,10 @@ virtualStoreDirMaxLength: 60
         },
       },
     }))
-    expect(rows.find(row => row.id === 'llm-pi-ai')?.disabled).toBe(true)
+    expect(rows.find(row => row.id === 'llm-pi-ai')).toEqual(expect.objectContaining({
+      name: '@deepseek-ai/dsh-llm-pi-ai',
+    }))
+    expect(rows.find(row => row.id === 'llm-pi-ai')?.disabled).not.toBe(true)
     for (const id of [
       'llm-deepseek',
       'llm-deepseek-account',

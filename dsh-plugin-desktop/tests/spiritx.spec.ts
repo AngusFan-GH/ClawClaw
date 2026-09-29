@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { productProviderDirectory } from '../src/spiritx.ts'
 
 describe('SpiritX provider directory', () => {
-  it('presents SpiritX as a built-in provider', () => {
+  it('presents only SpiritX and leaves the official catalog to llm-pi-ai', () => {
     expect(productProviderDirectory([
       {
         provider: 'openai',
@@ -18,9 +18,16 @@ describe('SpiritX provider directory', () => {
         settingsPath: ['providers', 'spiritx'],
         declared: true,
       },
-    ])).toEqual([
-      expect.objectContaining({ provider: 'spiritx', declared: false }),
-      expect.objectContaining({ provider: 'openai', declared: false }),
-    ])
+    ])).toEqual([expect.objectContaining({ provider: 'spiritx', declared: false })])
+  })
+
+  it('publishes no catalog entries when the product route is absent', () => {
+    expect(productProviderDirectory([{
+      provider: 'anthropic',
+      displayName: 'Anthropic',
+      settingsNs: 'llm-pi-ai',
+      settingsPath: ['providers', 'anthropic'],
+      declared: false,
+    }])).toEqual([])
   })
 })

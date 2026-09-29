@@ -10,6 +10,7 @@ vi.mock('../src/client/desktop-settings.ts', () => ({ applyDesktopSettings: vi.f
 vi.mock('../src/client/DesktopSettingsSection.tsx', () => ({ DesktopSettingsSection: vi.fn() }))
 vi.mock('../src/client/DesktopTerminalSettingsAction.tsx', () => ({ DesktopTerminalSettingsAction: vi.fn() }))
 vi.mock('../src/client/spiritx-onboarding.tsx', () => ({ applySpiritXOnboarding: vi.fn() }))
+vi.mock('../src/client/spiritx-provider-priority.tsx', () => ({ applySpiritXProviderPriority: vi.fn() }))
 vi.mock('../src/client/workspace-directory-flow.tsx', () => ({ applyWorkspaceDirectoryFlow: vi.fn() }))
 vi.mock('../src/client/cron-tasks-settings.ts', () => ({ applyCronTasksSettings: vi.fn() }))
 vi.mock('../src/client/reminders-settings.ts', () => ({ applyRemindersSettings: vi.fn() }))
