@@ -1,0 +1,5 @@
+# Bilingual-pair consistency record: the git blob hash of each side as of the last
+# confirmed-consistent state. Both languages carry equal authority. Update both files
+# and re-record their hashes with git hash-object after editing either side.
+2026-08-15-pinned-upstream-and-isolated-pnpm-workspace.md: c47f8a6efa920098fad3694a5009191220014485
+2026-08-15-pinned-upstream-and-isolated-pnpm-workspace.zh.md: 6d318eef05d79867edf72c71be83dac4886759ac

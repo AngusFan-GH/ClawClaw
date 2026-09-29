@@ -1,0 +1,81 @@
+import { readFileSync } from 'node:fs'
+import { describe, expect, it, vi } from 'vitest'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import { openCronRunSession } from '../src/client/CronTasksSettingsSection.tsx'
+import { applyCronTasksSettings } from '../src/client/cron-tasks-settings.ts'
+import { zh as mcpZh } from '../src/client/mcp-locales.ts'
+import { applyMcpSettings } from '../src/client/mcp-settings.ts'
+import { applySkillsSettings } from '../src/client/skills-settings.ts'
+
+describe('Desktop Skills and MCP settings registration', () => {
+  it('localizes the MCP settings label and title in Chinese', () => {
+    expect(mcpZh.nav).toBe('MCP 服务')
+    expect(mcpZh.title).toBe('MCP 服务')
+  })
+
+  it('registers independent menu entries and sections', () => {
+    const registrations: Array<{ id: string, locale: string }> = []
+    const ctx = {
+      effect: vi.fn(),
+      inject: vi.fn(),
+      locale: { bind: (namespace: string) => (key: string) => `${namespace}.${key}`, register: vi.fn() },
+      slots: {
+        inject: vi.fn((_name: string, install: () => void) => { install() }),
+        register: vi.fn((definition: { id: string, locale: string }) => { registrations.push(definition) }),
+      },
+    } as unknown as ClientContext
+
+    applySkillsSettings(ctx)
+    applyMcpSettings(ctx)
+    expect(ctx.inject).toHaveBeenCalledWith(['conversation', 'remote.skills', 'remote.commands'], expect.any(Function))
+
+    expect(registrations).toEqual([
+      expect.objectContaining({ id: 'desktop-skills', locale: 'desktop.skills' }),
+      expect.objectContaining({ id: 'desktop-mcp', locale: 'desktop.mcp' }),
+    ])
+  })
+})
+
+describe('Desktop automation panel registration', () => {
+  it('waits for Workspace navigation locally without blocking the desktop shell', () => {
+    const registrations: Array<{ id?: string, key?: string, name: string, locale: string }> = []
+    const inject = vi.fn((_services: string[], install: (scope: ClientContext) => void) => { install(ctx) })
+    const ctx = {
+      effect: vi.fn(), inject,
+      locale: {
+        bind: (namespace: string) => (key: string) => `${namespace}.${key}`,
+        register: vi.fn(), getSnapshot: () => ({ active: 'en' }),
+      },
+      slots: {
+        inject: vi.fn((_name: string, install: () => void) => { install() }),
+        register: vi.fn((definition: { id?: string, key?: string, name: string, locale: string }) => { registrations.push(definition) }),
+      },
+    } as unknown as ClientContext
+
+    applyCronTasksSettings(ctx)
+
+    const entry = readFileSync(new URL('../src/client/index.ts', import.meta.url), 'utf8')
+    const topLevelInject = entry.match(/export const inject = \[([\s\S]*?)\]/)?.[1]
+    expect(topLevelInject).not.toContain("'uiWorkspace'")
+    expect(topLevelInject).not.toContain("'workspaces'")
+    expect(inject).toHaveBeenCalledWith(['uiWorkspace', 'workspaces'], expect.any(Function))
+    expect(registrations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        name: 'sidebar.session.row.leading',
+        id: 'desktop-cron-session-source',
+      }),
+      expect.objectContaining({ name: 'main', key: 'desktop-automations', locale: 'desktop.cron-tasks' }),
+    ]))
+  })
+
+  it('closes Settings only after the scheduled Session opens successfully', async () => {
+    const calls: string[] = []
+    await openCronRunSession(async () => { calls.push('open') }, () => { calls.push('close') }, 'task-1', 'session-1')
+    expect(calls).toEqual(['open', 'close'])
+
+    const close = vi.fn()
+    await expect(openCronRunSession(async () => { throw new Error('unknown session') }, close, 'task-1', 'session-1'))
+      .rejects.toThrow('unknown session')
+    expect(close).not.toHaveBeenCalled()
+  })
+})

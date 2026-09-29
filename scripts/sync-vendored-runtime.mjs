@@ -1,0 +1,221 @@
+import { createHash } from 'node:crypto'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
+import { basename, join, relative, resolve } from 'node:path'
+import YAML from 'yaml'
+
+const root = resolve(import.meta.dirname, '..')
+const upstreamPath = join(root, 'upstream.json')
+const pnpmWorkspacePath = join(root, 'pnpm-workspace.yaml')
+const mode = process.argv[2]
+
+if (mode !== '--write' && mode !== '--check') {
+  throw new Error('usage: node scripts/sync-vendored-runtime.mjs <--write|--check>')
+}
+
+const readJson = path => JSON.parse(readFileSync(path, 'utf8'))
+const writeJson = (path, value) => writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`)
+const sha256 = path => createHash('sha256').update(readFileSync(path)).digest('hex')
+const isDshPackage = name => name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-')
+const overridePackageName = key => {
+  const versionSeparator = key.lastIndexOf('@')
+  return versionSeparator > 0 ? key.slice(0, versionSeparator) : key
+}
+const isDshOverride = key => isDshPackage(overridePackageName(key))
+const fail = message => { throw new Error(`sync-vendored-runtime: ${message}`) }
+
+const upstreamDocument = readJson(upstreamPath)
+const upstream = upstreamDocument
+const pluginPaths = [
+  join(root, upstream.package, 'package.json'),
+]
+const version = upstream.sourceVersion
+if (typeof version !== 'string' || !/^[0-9A-Za-z][0-9A-Za-z.-]*$/u.test(version)) {
+  fail(`unsafe source version ${JSON.stringify(version)}`)
+}
+
+const vendorRelative = `vendor/dsh-runtime/${version}`
+const vendorDirectory = join(root, ...vendorRelative.split('/'))
+const manifestPath = join(vendorDirectory, 'manifest.json')
+const readPnpmWorkspace = () => YAML.parse(readFileSync(pnpmWorkspacePath, 'utf8'))
+const writePnpmWorkspace = value => writeFileSync(pnpmWorkspacePath, YAML.stringify(value))
+
+function packageName(filename) {
+  const suffix = `-${version}.tgz`
+  if (!filename.startsWith('deepseek-ai-') || !filename.endsWith(suffix)) {
+    fail(`unexpected upstream tarball name ${JSON.stringify(filename)}`)
+  }
+  const unscoped = filename.slice('deepseek-ai-'.length, -suffix.length)
+  if (unscoped.length === 0) fail(`empty package name in ${JSON.stringify(filename)}`)
+  return `@deepseek-ai/${unscoped}`
+}
+
+function expectedResolution(entry) {
+  const source = `file:${vendorRelative}/${entry.filename}`
+  return source
+}
+
+function expectedPatch(entry) {
+  const unscoped = entry.name.slice('@deepseek-ai/'.length)
+  const patch = `patches/${unscoped}@${version}.patch`
+  return existsSync(join(root, patch)) ? patch : undefined
+}
+
+function writeVendor() {
+  const packedDirectory = join(root, 'deepseek-harness', 'dist', 'npm')
+  const orderPath = join(packedDirectory, 'publish-order.txt')
+  if (!existsSync(orderPath)) {
+    fail('upstream release tarballs are missing; run pnpm run upstream:prepare-runtime first')
+  }
+  const filenames = readFileSync(orderPath, 'utf8').trim().split(/\r?\n/u).filter(Boolean)
+  if (filenames.length === 0 || new Set(filenames).size !== filenames.length) {
+    fail('upstream publish order is empty or contains duplicate tarballs')
+  }
+
+  mkdirSync(vendorDirectory, { recursive: true })
+  const packages = filenames.map((filename) => {
+    if (basename(filename) !== filename) fail(`tarball path escapes its directory: ${JSON.stringify(filename)}`)
+    const source = join(packedDirectory, filename)
+    if (!existsSync(source) || !statSync(source).isFile()) fail(`missing packed tarball ${filename}`)
+    const target = join(vendorDirectory, filename)
+    copyFileSync(source, target)
+    return {
+      name: packageName(filename),
+      version,
+      filename,
+      size: statSync(source).size,
+      sha256: sha256(source),
+    }
+  })
+  const names = packages.map(entry => entry.name)
+  if (new Set(names).size !== names.length) fail('two tarballs map to the same package name')
+
+  const expectedFiles = new Set([...filenames, 'manifest.json'])
+  for (const entry of readdirSync(vendorDirectory, { withFileTypes: true })) {
+    if (expectedFiles.has(entry.name)) continue
+    if (!entry.isFile()) fail(`unexpected directory in vendored runtime: ${entry.name}`)
+    unlinkSync(join(vendorDirectory, entry.name))
+  }
+
+  const manifest = {
+    formatVersion: 1,
+    repository: upstreamDocument.repository,
+    commit: upstream.commit,
+    version,
+    buildProfile: 'official',
+    packages,
+  }
+  writeJson(manifestPath, manifest)
+
+  upstream.runtimePackageVersion = version
+  upstream.runtimeSource = `${vendorRelative}/manifest.json`
+  writeJson(upstreamPath, upstreamDocument)
+
+  const pnpmWorkspace = readPnpmWorkspace()
+  const overrides = Object.fromEntries(Object.entries(pnpmWorkspace.overrides ?? {})
+    .filter(([name]) => !isDshOverride(name)))
+  const patchedDependencies = { ...(pnpmWorkspace.patchedDependencies ?? {}) }
+  for (const name of Object.keys(patchedDependencies)) {
+    if (isDshPackage(name.slice(0, name.lastIndexOf('@')))) delete patchedDependencies[name]
+  }
+  for (const entry of packages) {
+    overrides[`${entry.name}@${version}`] = expectedResolution(entry)
+    overrides[`${entry.name}@^${version}`] = expectedResolution(entry)
+    const patch = expectedPatch(entry)
+    if (patch !== undefined) patchedDependencies[`${entry.name}@${version}`] = patch
+  }
+  pnpmWorkspace.overrides = overrides
+  pnpmWorkspace.patchedDependencies = patchedDependencies
+  writePnpmWorkspace(pnpmWorkspace)
+
+  const packageNames = new Set(packages.map(entry => entry.name))
+  for (const path of pluginPaths) {
+    const plugin = readJson(path)
+    for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
+      for (const name of Object.keys(plugin[field] ?? {})) {
+        if (isDshPackage(name) && packageNames.has(name)) plugin[field][name] = version
+      }
+    }
+    writeJson(path, plugin)
+  }
+}
+
+function checkVendor() {
+  if (!existsSync(manifestPath)) fail(`missing ${relative(root, manifestPath)}`)
+  const manifest = readJson(manifestPath)
+  if (manifest.formatVersion !== 1) fail('unsupported vendored runtime manifest format')
+  for (const field of ['repository', 'commit']) {
+    const expected = field === 'repository' ? upstreamDocument.repository : upstream[field]
+    if (manifest[field] !== expected) fail(`manifest ${field} differs from upstream.json`)
+  }
+  if (manifest.version !== version || upstream.runtimePackageVersion !== version) {
+    fail('source, runtime, and manifest versions must match')
+  }
+  if (manifest.buildProfile !== 'official') fail('vendored runtime must use the official client build profile')
+  if (upstream.runtimeSource !== `${vendorRelative}/manifest.json`) {
+    fail('upstream.json points at the wrong runtime manifest')
+  }
+  if (!Array.isArray(manifest.packages) || manifest.packages.length === 0) fail('runtime manifest has no packages')
+
+  const pnpmWorkspace = readPnpmWorkspace()
+  const overrides = pnpmWorkspace.overrides ?? {}
+  const patchedDependencies = pnpmWorkspace.patchedDependencies ?? {}
+  const expectedFiles = new Set(['manifest.json'])
+  const names = new Set()
+  for (const entry of manifest.packages) {
+    if (entry.version !== version || packageName(entry.filename) !== entry.name || names.has(entry.name)) {
+      fail(`invalid manifest package ${JSON.stringify(entry.name)}`)
+    }
+    names.add(entry.name)
+    expectedFiles.add(entry.filename)
+    const path = join(vendorDirectory, entry.filename)
+    if (!existsSync(path) || !statSync(path).isFile()) fail(`missing vendored tarball ${entry.filename}`)
+    if (statSync(path).size !== entry.size || sha256(path) !== entry.sha256) {
+      fail(`vendored tarball integrity differs for ${entry.filename}`)
+    }
+    if (overrides[`${entry.name}@${version}`] !== expectedResolution(entry)
+      || overrides[`${entry.name}@^${version}`] !== expectedResolution(entry)) {
+      fail(`workspace override differs for ${entry.name}`)
+    }
+    const patchKey = `${entry.name}@${version}`
+    const registeredPatch = patchedDependencies[patchKey]
+    if (registeredPatch !== undefined && registeredPatch !== `patches/${entry.name.slice('@deepseek-ai/'.length)}@${version}.patch`) {
+      fail(`workspace patch differs for ${entry.name}`)
+    }
+  }
+  for (const key of Object.keys(overrides).filter(isDshOverride)) {
+    if (!names.has(overridePackageName(key))) fail(`workspace has a stale DSH override for ${key}`)
+  }
+  for (const entry of readdirSync(vendorDirectory, { withFileTypes: true })) {
+    if (!entry.isFile() || !expectedFiles.has(entry.name)) fail(`unexpected vendored runtime entry ${entry.name}`)
+  }
+
+  for (const path of pluginPaths) {
+    const plugin = readJson(path)
+    for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
+      for (const [name, range] of Object.entries(plugin[field] ?? {})) {
+        if (!isDshPackage(name)) continue
+        if (!names.has(name)) fail(`${relative(root, path)} references absent runtime package ${name}`)
+        const entry = manifest.packages.find(candidate => candidate.name === name)
+        const vendoredRange = entry === undefined ? undefined : `file:../${vendorRelative}/${entry.filename}`
+        if (range !== version && range !== vendoredRange) {
+          fail(`${relative(root, path)} ${field}.${name} must use ${version}`)
+        }
+      }
+    }
+  }
+  process.stdout.write(
+    `sync-vendored-runtime: ${String(manifest.packages.length)} packages from ${manifest.commit.slice(0, 10)} are verified\n`,
+  )
+}
+
+if (mode === '--write') writeVendor()
+checkVendor()

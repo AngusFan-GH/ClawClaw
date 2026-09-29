@@ -1,446 +1,178 @@
-# ClawClaw Release Workflow
-# Builds and publishes releases for macOS, Windows, and Linux
-
-name: Release
+name: Release ClawClaw Desktop
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version to release (e.g., 1.0.0)'
+      publish:
+        description: Publish the assembled release to the stable update origin
         required: true
+        type: boolean
+        default: false
+  push:
+    tags: ['clawclaw-v*']
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: desktop-stable-release
+  cancel-in-progress: false
+
+env:
+  DSH_TELEMETRY_DISABLED: '1'
 
 jobs:
-  release:
+  validate:
+    name: Validate release ref
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.2
+      - name: Match a release tag to the desktop package version
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./dsh-plugin-desktop/package.json').version")"
+          test "$REF_NAME" = "clawclaw-v$version" || {
+            echo "Release tag $REF_NAME does not match desktop package version $version" >&2
+            exit 1
+          }
+
+  build:
+    name: Build ${{ matrix.artifact }}
+    needs: validate
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: macos-latest
-            platform: mac
+            artifact: macos
           - os: windows-latest
-            platform: win
-          - os: ubuntu-latest
-            platform: linux
-
+            artifact: windows
     runs-on: ${{ matrix.os }}
-
+    timeout-minutes: 90
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
+          node-version: 22.23.2
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run upstream:prepare-runtime
+      - name: Refresh desktop runtime dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build unsigned macOS Universal DMG
+        if: matrix.artifact == 'macos'
+        run: pnpm --filter dsh-plugin-desktop run dist:mac
+      - name: Build unsigned Windows NSIS installer
+        if: matrix.artifact == 'windows'
+        run: pnpm --filter dsh-plugin-desktop run dist:win
+      - uses: actions/upload-artifact@v4
         with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Download uv binaries for macOS
-        if: matrix.platform == 'mac'
-        run: pnpm run uv:download:mac
-
-      - name: Download uv binaries for Windows
-        if: matrix.platform == 'win'
-        run: pnpm run uv:download:win
-
-      - name: Download uv binaries for Linux
-        if: matrix.platform == 'linux'
-        run: pnpm run uv:download:linux
-
-      # macOS specific steps
-      # --publish never: prevent electron-builder from auto-publishing to GitHub.
-      # All artifacts are collected and published atomically in the publish job.
-      - name: Build macOS
-        if: matrix.platform == 'mac'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ secrets.MAC_CERTS }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTS_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          ulimit -n 65536
-          echo "File descriptor limit: $(ulimit -n)"
-          pnpm run package:prepare
-          pnpm run package:mac:raw -- --publish never
-          pnpm run package:organize
-
-      # Windows specific steps
-      - name: Build Windows
-        if: matrix.platform == 'win'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          pnpm run package:prepare
-          pnpm run package:win:raw
-          pnpm run package:organize
-
-      # Linux specific steps
-      - name: Build Linux
-        if: matrix.platform == 'linux'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          pnpm run package:prepare
-          pnpm run package:linux:raw -- --publish never
-          pnpm run package:organize
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-${{ matrix.platform }}
+          name: desktop-${{ matrix.artifact }}
+          if-no-files-found: error
+          retention-days: 14
           path: |
-            release/v*/**
-            !release/v*/metadata/builder-debug.yml
-          retention-days: 7
+            dsh-plugin-desktop/dist/**/*.dmg
+            dsh-plugin-desktop/dist/**/*.exe
 
-  # ──────────────────────────────────────────────────────────────
-  # Job: Publish to GitHub Releases
-  # ──────────────────────────────────────────────────────────────
-  publish:
-    needs: release
+  assemble:
+    name: Assemble release
+    needs: build
     runs-on: ubuntu-latest
-
+    timeout-minutes: 10
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v6
         with:
-          path: release-artifacts
-
-      - name: List all downloaded artifacts
-        run: |
-          echo "=== All artifacts downloaded ==="
-          find release-artifacts/ -type f -exec ls -lh {} \;
-          echo ""
-          echo "=== File tree ==="
-          tree release-artifacts/ || find release-artifacts/ -print
-
-      - name: Remove duplicate builder-debug files
-        run: |
-          echo "Removing builder-debug.yml files to avoid duplicate asset upload conflicts..."
-          find release-artifacts/ -name "builder-debug.yml" -delete -print || true
-
-      - name: Create GitHub Release (as pre-release)
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+          persist-credentials: false
+      - uses: actions/setup-node@v6
         with:
-          files: |
-            release-artifacts/**/*.dmg
-            release-artifacts/**/*.zip
-            release-artifacts/**/*.exe
-            release-artifacts/**/windows-installer/**
-            release-artifacts/**/*.AppImage
-            release-artifacts/**/*.deb
-            release-artifacts/**/*.rpm
-            release-artifacts/**/*.yml
-          draft: false
-          prerelease: true
-          make_latest: false
-          generate_release_notes: true
-          body: |
-            ## 🚀 ClawClaw ${{ github.ref_name }}
-
-            ClawClaw - Graphical AI Assistant based on OpenClaw
-
-            ### 📦 Downloads
-
-            Please select the appropriate installer for your operating system and architecture:
-
-            #### macOS
-            - **Apple Silicon (M1/M2/M3/M4)**: `ClawClaw-v*-arm64.zip`
-            - **Intel (x64)**: `ClawClaw-v*-x64.zip`
-
-            #### Windows
-            - **Installer (x64)**: `ClawClaw-Setup-v*-x64.exe`
-            - **Installer (ARM64)**: `ClawClaw-Setup-v*-arm64.exe`
-
-            #### Linux
-            - **AppImage (x64)**: `ClawClaw-*-linux-x86_64.AppImage` (Universal format, recommended)
-            - **AppImage (ARM64)**: `ClawClaw-*-linux-arm64.AppImage`
-            - **Debian/Ubuntu (x64)**: `ClawClaw-*-linux-amd64.deb`
-            - **Debian/Ubuntu (ARM64)**: `ClawClaw-*-linux-arm64.deb`
-            - **RPM (x64)**: `ClawClaw-*-linux-x86_64.rpm`
-
-            ### 📝 Release Notes
-
-            See the auto-generated release notes below for detailed changes.
-
-            ### ⚠️ Installation Notes
-
-            - **macOS**: On first launch, you may see "cannot verify developer". Go to System Preferences → Security & Privacy to allow the app to run
-            - **Windows**: SmartScreen may block the app. Click "More info" → "Run anyway" to proceed
-            - **Linux AppImage**: First run `chmod +x ClawClaw-*.AppImage` to add execute permission. On Ubuntu 22.04 you may also need `sudo apt install libfuse2`; on Ubuntu 24.04 use `sudo apt install libfuse2t64`
-            - **Linux .deb (Ubuntu 24.04)**: If installation fails due to missing dependencies, use `sudo apt install libgtk-3-0t64 libnotify4t64 libxss1t64` before installing
-
-            ---
-
-            💬 Found an issue? Please submit an [Issue](https://github.com/${{ github.repository }}/issues)
+          node-version: 22.23.2
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: artifacts
+      - name: Validate version and generate release.json
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          UPDATE_BASE_URL: ${{ vars.UPDATE_BASE_URL || 'https://clawclaw.xzinfra.com/updates/dsh/stable' }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./dsh-plugin-desktop/package.json').version")"
+          if [[ "$EVENT_NAME" == "push" && "$REF_NAME" != "clawclaw-v$version" ]]; then
+            echo "Release tag $REF_NAME does not match desktop package version $version" >&2
+            exit 1
+          fi
+          mkdir release
+          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' \) -exec cp {} release/ \;
+          test "$(find release -maxdepth 1 -name '*.dmg' -type f | wc -l)" = 1
+          test "$(find release -maxdepth 1 -name '*.exe' -type f | wc -l)" = 1
+          node scripts/generate-release-manifest.mjs \
+            --directory release \
+            --output release/release.json \
+            --base-url "$UPDATE_BASE_URL"
+          node scripts/upload-update.mjs --directory release --channel stable --dry-run
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release
+          if-no-files-found: error
+          retention-days: 30
+          path: release/
 
-  # ──────────────────────────────────────────────────────────────
-  # Job: Upload to Alibaba Cloud OSS
-  # Uploads all release artifacts to OSS for:
-  #   - Official website downloads (via release-info.json)
-  #   - electron-updater auto-update (via {channel}-*.yml)
-  #
-  # Directory structure on OSS (channel-separated):
-  #   latest/          → stable releases (latest.yml, latest-mac.yml, …)
-  #   alpha/           → alpha  releases (alpha.yml,  alpha-mac.yml, …)
-  #   beta/            → beta   releases (beta.yml,   beta-mac.yml,  …)
-  #   releases/vX.Y.Z/ → permanent archive, never deleted
-  # ──────────────────────────────────────────────────────────────
-  upload-oss:
-    needs: release
+  deploy:
+    name: Publish stable update
+    needs: assemble
+    if: github.event_name == 'push' || inputs.publish
     runs-on: ubuntu-latest
-
+    timeout-minutes: 15
+    environment: stable-update
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v6
         with:
-          path: release-artifacts
-
-      - name: Extract version and channel
-        id: version
-        run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/v}"
-          else
-            VERSION="${{ github.event.inputs.version }}"
-          fi
-
-          # Detect channel from semver prerelease tag
-          # e.g. 0.1.8-alpha.0 → alpha, 1.0.0-beta.1 → beta, 1.0.0 → latest
-          if [[ "$VERSION" =~ -([a-zA-Z]+) ]]; then
-            CHANNEL="${BASH_REMATCH[1]}"
-          else
-            CHANNEL="latest"
-          fi
-
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
-          echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
-          echo "Detected version: ${VERSION}, channel: ${CHANNEL}"
-
-      - name: Prepare upload directories
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          TAG="${{ steps.version.outputs.tag }}"
-          CHANNEL="${{ steps.version.outputs.channel }}"
-
-          mkdir -p staging/${CHANNEL}
-          mkdir -p staging/releases/${TAG}
-
-          # Flatten platform binaries, but preserve the custom Windows installer
-          # directory because its UI, runner, manifest, and shell assets are a
-          # structured bundle.
-          find release-artifacts/ -type f | while read file; do
-            filename=$(basename "$file")
-            if [[ "$file" == *"/windows-installer/"* ]]; then
-              rel="${file#*/windows-installer/}"
-              mkdir -p "staging/${CHANNEL}/windows-installer/$(dirname "$rel")"
-              mkdir -p "staging/releases/${TAG}/windows-installer/$(dirname "$rel")"
-              cp "$file" "staging/${CHANNEL}/windows-installer/${rel}"
-              cp "$file" "staging/releases/${TAG}/windows-installer/${rel}"
-            else
-              cp "$file" "staging/${CHANNEL}/${filename}"
-              cp "$file" "staging/releases/${TAG}/${filename}"
-            fi
-          done
-
-          echo "=== staging/${CHANNEL}/ ==="
-          ls -lh staging/${CHANNEL}/
-          echo ""
-          echo "=== staging/releases/${TAG}/ ==="
-          ls -lh staging/releases/${TAG}/
-
-      # Note: Do NOT rename yml files. electron-updater (generic provider) always
-      # requests "latest-mac.yml", "latest.yml", etc. regardless of feed URL.
-      # Channel separation is achieved by directory: /alpha/, /beta/, /latest/.
-      - name: Verify yml files present
-        run: |
-          CHANNEL="${{ steps.version.outputs.channel }}"
-          echo "=== staging/${CHANNEL}/ (update metadata) ==="
-          ls -la staging/${CHANNEL}/*.yml 2>/dev/null || echo "No yml files found (check electron-builder outputs)"
-
-      - name: Generate release-info.json
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          CHANNEL="${{ steps.version.outputs.channel }}"
-          BASE_URL="https://oss.intelli-spectrum.com/${CHANNEL}"
-
-          jq -n \
-            --arg version "$VERSION" \
-            --arg channel "$CHANNEL" \
-            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --arg base "$BASE_URL" \
-            --arg changelog "https://github.com/${{ github.repository }}/releases/tag/v${VERSION}" \
-            '{
-              version: $version,
-              channel: $channel,
-              releaseDate: $date,
-              downloads: {
-                mac: {
-                  x64: ($base + "/ClawClaw-v" + $version + "-x64.zip"),
-                  arm64: ($base + "/ClawClaw-v" + $version + "-arm64.zip")
-                },
-                win: {
-                  x64: ($base + "/ClawClaw-Setup-v" + $version + "-x64.exe"),
-                  arm64: ($base + "/ClawClaw-Setup-v" + $version + "-arm64.exe")
-                },
-                linux: {
-                  deb_amd64: ($base + "/ClawClaw-" + $version + "-linux-amd64.deb"),
-                  deb_arm64: ($base + "/ClawClaw-" + $version + "-linux-arm64.deb"),
-                  appimage_x64: ($base + "/ClawClaw-" + $version + "-linux-x86_64.AppImage"),
-                  appimage_arm64: ($base + "/ClawClaw-" + $version + "-linux-arm64.AppImage"),
-                  rpm_x64: ($base + "/ClawClaw-" + $version + "-linux-x86_64.rpm")
-                }
-              },
-              changelog: $changelog
-            }' > staging/${CHANNEL}/release-info.json
-
-          echo "=== release-info.json ==="
-          cat staging/${CHANNEL}/release-info.json
-
-      - name: Install and configure ossutil
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.2
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-release
+          path: release
+      - name: Configure update-origin SSH identity
+        shell: bash
         env:
-          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          UPDATE_SSH_PRIVATE_KEY: ${{ secrets.UPDATE_SSH_PRIVATE_KEY }}
+          UPDATE_KNOWN_HOSTS: ${{ secrets.UPDATE_KNOWN_HOSTS }}
         run: |
-          curl -sL https://gosspublic.alicdn.com/ossutil/install.sh | sudo bash
-
-          # Write config file for non-interactive use
-          cat > $HOME/.ossutilconfig << EOF
-          [Credentials]
-          language=EN
-          endpoint=oss-cn-hangzhou.aliyuncs.com
-          accessKeyID=${OSS_ACCESS_KEY_ID}
-          accessKeySecret=${OSS_ACCESS_KEY_SECRET}
-          EOF
-
-          ossutil --version
-
-      - name: 'Upload to OSS: {channel}/ (overwrite)'
-        run: |
-          CHANNEL="${{ steps.version.outputs.channel }}"
-
-          # Only clean the current channel's directory — never touch other channels
-          ossutil rm -r -f oss://xzinfra-clawclaw/${CHANNEL}/ || true
-
-          # Upload all files with no-cache so clients always get the freshest version
-          ossutil cp -r -f \
-            --meta="Cache-Control:no-cache,no-store,must-revalidate" \
-            staging/${CHANNEL}/ \
-            oss://xzinfra-clawclaw/${CHANNEL}/
-
-          echo "Uploaded to ${CHANNEL}/"
-
-      - name: 'Upload to OSS: releases/vX.Y.Z/ (archive)'
-        run: |
-          TAG="${{ steps.version.outputs.tag }}"
-
-          # Upload to permanent archive (long cache, immutable)
-          ossutil cp -r \
-            staging/releases/${TAG}/ \
-            oss://xzinfra-clawclaw/releases/${TAG}/ \
-            --meta "Cache-Control:public,max-age=31536000,immutable"
-
-          echo "Uploaded to releases/${TAG}/"
-
-      - name: Verify OSS upload
-        run: |
-          TAG="${{ steps.version.outputs.tag }}"
-          CHANNEL="${{ steps.version.outputs.channel }}"
-
-          echo "=== ${CHANNEL}/ ==="
-          ossutil ls oss://xzinfra-clawclaw/${CHANNEL}/ --short
-
-          echo ""
-          echo "=== releases/${TAG}/ ==="
-          ossutil ls oss://xzinfra-clawclaw/releases/${TAG}/ --short
-
-          echo ""
-          echo "=== Verify release-info.json ==="
-          ossutil cp oss://xzinfra-clawclaw/${CHANNEL}/release-info.json /tmp/release-info.json -f
-          jq . /tmp/release-info.json
-
-          echo ""
-          echo "=== Verify update yml ==="
-          if [ "${CHANNEL}" = "latest" ]; then
-            YML_PREFIX="latest"
-          else
-            YML_PREFIX="${CHANNEL}"
-          fi
-          echo "electron-updater expects ${YML_PREFIX}-mac.yml, ${YML_PREFIX}.yml, etc. in ${CHANNEL}/:"
-          ossutil ls oss://xzinfra-clawclaw/${CHANNEL}/ --short | grep "${YML_PREFIX}.*\\.yml" || echo "(none found)"
-
-          echo ""
-          echo "All files uploaded and verified successfully!"
-
-  # ──────────────────────────────────────────────────────────────
-  # Job: Finalize Release
-  # Promotes the GitHub Release from pre-release to latest AFTER
-  # both GitHub Release assets and OSS uploads are fully complete.
-  # This ensures /releases/latest API never returns an incomplete
-  # release — the website and electron-updater only see it when
-  # all platform artifacts are ready.
-  # ──────────────────────────────────────────────────────────────
-  finalize:
-    needs: [publish, upload-oss]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-
-    steps:
-      - name: Promote release from pre-release to latest
+          set -euo pipefail
+          test -n "$UPDATE_SSH_PRIVATE_KEY"
+          test -n "$UPDATE_KNOWN_HOSTS"
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$UPDATE_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$UPDATE_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+          ssh-keygen -y -f "$HOME/.ssh/id_ed25519" >/dev/null
+      - name: Upload installers and switch release.json
+        shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATE_HOST: ${{ vars.UPDATE_HOST }}
+          UPDATE_USER: ${{ vars.UPDATE_USER }}
+          UPDATE_PORT: ${{ vars.UPDATE_PORT || '22' }}
+          UPDATE_REMOTE_ROOT: ${{ vars.UPDATE_REMOTE_ROOT || '/var/www/xzinfra' }}
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          IS_PRERELEASE_CHANNEL=false
-
-          if [[ "$TAG" == *"alpha"* ]] || [[ "$TAG" == *"beta"* ]]; then
-            IS_PRERELEASE_CHANNEL=true
-          fi
-
-          if [ "$IS_PRERELEASE_CHANNEL" = "true" ]; then
-            echo "Tag $TAG is an alpha/beta release — keeping as pre-release."
-          else
-            echo "Promoting $TAG from pre-release to latest release..."
-            gh release edit "$TAG" \
-              --prerelease=false \
-              --latest \
-              --repo "${{ github.repository }}"
-            echo "Release $TAG is now the latest release."
-          fi
+          set -euo pipefail
+          test -n "$UPDATE_HOST"
+          test -n "$UPDATE_USER"
+          node scripts/upload-update.mjs --directory release --channel stable

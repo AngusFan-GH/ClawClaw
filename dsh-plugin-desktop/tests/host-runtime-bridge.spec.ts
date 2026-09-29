@@ -1,0 +1,82 @@
+import { MessageChannel } from 'node:worker_threads'
+import { expect, it, vi } from 'vitest'
+import { MAX_VERSION_RESPONSE_BYTES } from '../src/update-checker.ts'
+import { HostRpc } from '../src/host-rpc.ts'
+import { bindNativeRuntime, createHostRuntime, runtimeSnapshot } from '../src/host-runtime-bridge.ts'
+import type { DesktopRuntime, DesktopShellSpec, DesktopTrayItem } from '../src/runtime.ts'
+
+it('preserves the Web URL and authentication while projecting shell and tray callbacks', async () => {
+  const { port1, port2 } = new MessageChannel()
+  const [parent, child] = [port1, port2].map(port => new HostRpc({
+    send: value => port.postMessage(value),
+    listen: receive => { port.on('message', receive); return () => { port.off('message', receive) } },
+  })) as [HostRpc, HostRpc]
+  let shell!: DesktopShellSpec
+  let tray!: DesktopTrayItem
+  const disposeShell = vi.fn(async () => {})
+  const disposeTray = vi.fn()
+  const notifyAttention = vi.fn()
+  const resetBackgroundCloseNotice = vi.fn()
+  const updateNotifyAttention = vi.fn()
+  const native = {
+    platform: 'win32', windowsBuild: 22631, locale: 'en',
+    updates: { isPackaged: true, canDownload: true, currentVersion: '2.0.7-beta.1', statePath: '/tmp/update',
+      showUpdateFailure: vi.fn(async () => {}),
+      notifyAttention: updateNotifyAttention,
+      request: vi.fn(async () => new Response('{"version":"2.0.8-beta.1"}', { headers: { 'x-test': 'yes' } })),
+    },
+    notifyAttention,
+    resetBackgroundCloseNotice,
+    schedule: (value: DesktopShellSpec) => { shell = value; return disposeShell },
+    registerTrayItem: (value: DesktopTrayItem) => { tray = value; return { refresh() {}, dispose: disposeTray } },
+  } as unknown as DesktopRuntime
+  const release = bindNativeRuntime(parent, native)
+  try {
+    const runtime = createHostRuntime(child, runtimeSnapshot(native))
+    let language: 'zh' | undefined
+    const mode = vi.fn(async () => {})
+    const invoke = vi.fn(async () => {})
+    const spec = { url: 'http://127.0.0.1:1234/?dsh-desktop-mode=advanced',
+      authenticationUrl: 'http://127.0.0.1:1234/?token=fixture',
+      rendererAccessHeader: { name: 'x-dsh-desktop-renderer', value: 'fixture' },
+      readLocalePreference: () => language, readThemeSource: () => 'dark',
+      requestQuit() {}, requestModeChange: mode,
+    } as unknown as DesktopShellSpec
+    const stopShell = runtime.schedule(spec)
+    runtime.registerTrayItem({ group: 'tools', order: 1, label: () => 'Plugin action', invoke,
+      submenu: () => [{ label: () => 'Child', invoke }] })
+    language = 'zh'
+    await runtime.mountScheduled()
+    expect(shell.url).toBe(spec.url)
+    expect(shell.authenticationUrl).toBe(spec.authenticationUrl)
+    expect(shell.rendererAccessHeader).toEqual(spec.rendererAccessHeader)
+    expect(shell.readLocalePreference()).toBe('zh')
+    await shell.requestModeChange('extended')
+    expect(mode).toHaveBeenCalledWith('extended')
+    expect(tray.label()).toBe('Plugin action')
+    await tray.submenu?.()[0]?.invoke()
+    expect(invoke).toHaveBeenCalledOnce()
+    const response = await runtime.updates.request('https://example.invalid', { headers: { accept: 'application/json' } })
+    expect(response.headers.get('x-test')).toBe('yes')
+    expect(await response.json()).toEqual({ version: '2.0.8-beta.1' })
+    await runtime.updates.showUpdateFailure('download-failed')
+    expect(native.updates.showUpdateFailure).toHaveBeenCalledWith('download-failed')
+    const attention = { title: 'ClawClaw Update Available', body: 'Version 2.0.8 is ready.' }
+    runtime.notifyAttention(attention)
+    runtime.resetBackgroundCloseNotice()
+    runtime.updates.notifyAttention(attention)
+    await vi.waitFor(() => {
+      expect(notifyAttention).toHaveBeenCalledWith(attention)
+      expect(resetBackgroundCloseNotice).toHaveBeenCalledOnce()
+      expect(updateNotifyAttention).toHaveBeenCalledWith(attention)
+    })
+    const cancel = vi.fn()
+    vi.mocked(native.updates.request).mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({
+      start(stream) { stream.enqueue(new Uint8Array(MAX_VERSION_RESPONSE_BYTES + 1)) }, cancel,
+    })))
+    await expect(runtime.updates.request('https://example.invalid', {})).rejects.toThrow('manifest too large')
+    expect(cancel).toHaveBeenCalledOnce()
+    await stopShell()
+    expect(disposeShell).toHaveBeenCalledOnce()
+  } finally { await release(); parent.close(); child.close(); port1.close(); port2.close() }
+})

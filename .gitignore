@@ -1,67 +1,13 @@
-# Dependencies
-node_modules/
-.pnp
-.pnp.js
-
-# Build outputs
-dist/
-dist-electron/
-release/
-packages/windows-installer/dist-runner/
-*.local
-
-# IDE
-.vscode/*
-!.vscode/extensions.json
-.idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Logs
-logs
-*.log
-npm-debug.log*
-pnpm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# OS files
 .DS_Store
-Thumbs.db
-
-# Test coverage
-coverage/
-
-# Cache
-.cache/
-.turbo/
+node_modules/
 *.tsbuildinfo
+.build/
 
-# Electron
-*.dmg
-*.exe
-*.AppImage
-*.deb
-*.rpm
+dsh-plugin-desktop/dist/
+dsh-plugin-desktop/lib/
+dsh-community-market/lib/
 
-resources/bin
-resources/python
+.env.pnpm
 
-# Secrets
-*.p12
-*.pem
-*.key
-
-build/
-
-.cursor/
-.claude/settings.local.json
-.pnpm-store/
+# Local server credentials
+/.env.server.local

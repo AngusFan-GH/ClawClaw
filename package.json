@@ -1,138 +1,69 @@
 {
-  "name": "clawclaw",
-  "version": "0.1.23",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@discordjs/opus",
-      "@whiskeysockets/baileys",
-      "clawdbot",
-      "electron",
-      "electron-winstaller",
-      "esbuild",
-      "koffi",
-      "node-llama-cpp",
-      "protobufjs",
-      "sharp"
-    ],
-    "ignoredBuiltDependencies": [
-      "@matrix-org/matrix-sdk-crypto-nodejs",
-      "electron",
-      "esbuild",
-      "ffmpeg-static",
-      "openclaw"
-    ]
-  },
-  "description": "ClawClaw - Graphical AI Assistant based on OpenClaw",
-  "homepage": "https://clawclaw.xzinfra.com",
-  "main": "dist-electron/main/index.js",
-  "author": "ClawClaw Team",
-  "license": "MIT",
+  "name": "deepseek-harness-desktop",
   "private": true,
-  "scripts": {
-    "init": "pnpm install && pnpm run uv:download",
-    "dev": "vite",
-    "package:prepare": "vite build && zx scripts/bundle-openclaw.mjs && pnpm run bundle:openclaw-plugins && node scripts/clean-builder-output.mjs",
-    "package:organize": "node scripts/release-organize.mjs",
-    "package:mac:raw": "electron-builder --mac",
-    "package:win:raw": "node scripts/package-win.mjs",
-    "package:linux:raw": "electron-builder --linux",
-    "build": "pnpm run package:prepare",
-    "build:vite": "vite build",
-    "bundle:openclaw-plugins": "zx scripts/bundle-openclaw-plugins.mjs",
-    "lint": "eslint . --fix",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "release:check": "node scripts/release-gate.mjs",
-    "uv:download": "zx scripts/download-bundled-uv.mjs",
-    "uv:download:mac": "zx scripts/download-bundled-uv.mjs --platform=mac",
-    "uv:download:win": "zx scripts/download-bundled-uv.mjs --platform=win",
-    "uv:download:linux": "zx scripts/download-bundled-uv.mjs --platform=linux",
-    "python:download:win": "zx scripts/download-bundled-python.mjs --platform=win",
-    "node:download:win": "zx scripts/download-bundled-node.mjs --platform=win",
-    "icons": "zx scripts/generate-icons.mjs",
-    "branding:apply": "node scripts/apply-branding.mjs",
-    "package:mac": "pnpm run package:prepare && pnpm run package:mac:raw && pnpm run package:organize",
-    "package:win": "pnpm run package:prepare && pnpm run package:win:raw && pnpm run package:organize",
-    "upload:update": "node scripts/upload-update.mjs",
-    "package:linux": "pnpm run package:prepare && pnpm run package:linux:raw && pnpm run package:organize"
+  "description": "DSH Desktop product workspace",
+  "license": "MIT",
+  "packageManager": "pnpm@11.8.0",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
-  "dependencies": {
-    "@dnd-kit/core": "^6.3.1",
-    "@dnd-kit/sortable": "^10.0.0",
-    "@dnd-kit/utilities": "^3.2.2",
-    "@earendil-works/pi-ai": "^0.78.1",
-    "clawhub": "^0.5.0",
-    "dompurify": "^3.3.3",
-    "electron-store": "^11.0.2",
-    "electron-updater": "^6.8.3",
-    "ms": "^2.1.3",
-    "tar": "^6.2.1",
-    "ws": "^8.19.0"
+  "dependenciesMeta": {
+    "@deepseek-ai/dsh-subprocess-local": {
+      "built": true
+    },
+    "@google/genai": {
+      "built": false
+    },
+    "@whiskeysockets/baileys": {
+      "built": false
+    },
+    "electron": {
+      "built": true
+    },
+    "electron-winstaller": {
+      "built": false
+    },
+    "esbuild": {
+      "built": true
+    },
+    "fs-ext": {
+      "built": true
+    },
+    "koffi": {
+      "built": true
+    },
+    "node-pty": {
+      "built": true
+    },
+    "protobufjs": {
+      "built": false
+    }
+  },
+  "scripts": {
+    "build": "pnpm --filter @clawclaw/dsh-im run build && pnpm --filter dsh-plugin-desktop run build",
+    "typecheck": "pnpm --filter @clawclaw/dsh-im run typecheck && pnpm --filter dsh-plugin-desktop run typecheck",
+    "test": "pnpm --filter @clawclaw/dsh-im run test && pnpm --filter dsh-plugin-desktop run test",
+    "test:bilingual-docs": "node --test scripts/bilingual-docs.test.mjs",
+    "test:upload-update": "node --test scripts/upload-update.test.mjs",
+    "check:bilingual-docs": "pnpm run test:bilingual-docs && node scripts/verify-bilingual-docs.mjs",
+    "check:vendored-runtime": "node scripts/sync-vendored-runtime.mjs --check",
+    "check:layout": "pnpm run check:bilingual-docs && pnpm run check:vendored-runtime && node scripts/verify-layout.mjs",
+    "check": "pnpm run check:layout && pnpm run test:upload-update && pnpm --filter dsh-community-fabric run check && pnpm --filter dsh-plugin-desktop run check",
+    "dev": "pnpm --filter dsh-plugin-desktop run dev",
+    "start": "pnpm --filter dsh-plugin-desktop run start",
+    "package:dir": "pnpm --filter dsh-plugin-desktop run package:dir",
+    "dist:mac": "pnpm --filter dsh-plugin-desktop run dist:mac",
+    "dist:win": "pnpm --filter dsh-plugin-desktop run dist:win",
+    "dist:win-portable": "pnpm --filter dsh-plugin-desktop run dist:win-portable",
+    "upload:update": "node --env-file-if-exists=.env.server.local scripts/upload-update.mjs",
+    "upstream:version": "node scripts/run-upstream.mjs version",
+    "upstream:install": "node scripts/run-upstream.mjs install",
+    "upstream:build": "node scripts/run-upstream.mjs build",
+    "upstream:build:official": "node scripts/run-upstream.mjs build-official",
+    "upstream:pack:dsh": "node scripts/run-upstream.mjs pack-dsh",
+    "upstream:prepare-runtime": "pnpm run upstream:install && pnpm run upstream:build:official && pnpm run upstream:pack:dsh"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@larksuite/openclaw-lark": "2026.5.20",
-    "@openclaw-china/dingtalk": "2026.4.24",
-    "@openclaw-china/wecom": "2026.4.24",
-    "@openclaw/discord": "2026.5.28",
-    "@openclaw/qqbot": "2026.5.28",
-    "@openclaw/whatsapp": "2026.5.28",
-    "@radix-ui/react-dialog": "^1.1.15",
-    "@radix-ui/react-dropdown-menu": "^2.1.16",
-    "@radix-ui/react-label": "^2.1.8",
-    "@radix-ui/react-progress": "^1.1.8",
-    "@radix-ui/react-radio-group": "^1.3.8",
-    "@radix-ui/react-select": "^2.2.6",
-    "@radix-ui/react-separator": "^1.1.8",
-    "@radix-ui/react-slot": "^1.2.4",
-    "@radix-ui/react-switch": "^1.2.6",
-    "@radix-ui/react-tabs": "^1.1.13",
-    "@radix-ui/react-toast": "^1.2.15",
-    "@radix-ui/react-tooltip": "^1.2.8",
-    "@tencent-weixin/openclaw-weixin": "^2.4.3",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
-    "@types/node": "^25.3.0",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@types/ws": "^8.18.1",
-    "@typescript-eslint/eslint-plugin": "^8.56.0",
-    "@typescript-eslint/parser": "^8.56.0",
-    "@vitejs/plugin-react": "^5.1.4",
-    "autoprefixer": "^10.4.24",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "electron": "^40.6.0",
-    "electron-builder": "^26.8.1",
-    "eslint": "^10.0.0",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-react-refresh": "^0.5.0",
-    "framer-motion": "^12.34.2",
-    "globals": "^17.3.0",
-    "i18next": "^25.8.11",
-    "jsdom": "^28.1.0",
-    "lucide-react": "^0.563.0",
-    "openclaw": "2026.5.28",
-    "png2icons": "^2.0.1",
-    "postcss": "^8.5.6",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "react-i18next": "^16.5.4",
-    "react-markdown": "^10.1.0",
-    "react-router-dom": "^7.13.0",
-    "remark-gfm": "^4.0.1",
-    "sharp": "^0.34.5",
-    "sonner": "^2.0.7",
-    "tailwind-merge": "^3.5.0",
-    "tailwindcss": "^3.4.19",
-    "tailwindcss-animate": "^1.0.7",
-    "typescript": "^5.9.3",
-    "vite": "^7.3.1",
-    "vite-plugin-electron": "^0.29.0",
-    "vite-plugin-electron-renderer": "^0.14.6",
-    "vitest": "^4.0.18",
-    "zustand": "^5.0.11",
-    "zx": "^8.8.5"
-  },
-  "packageManager": "pnpm@10.31.0+sha512.e3927388bfaa8078ceb79b748ffc1e8274e84d75163e67bc22e06c0d3aed43dd153151cbf11d7f8301ff4acb98c68bdc5cadf6989532801ffafe3b3e4a63c268"
+    "yaml": "2.9.0"
+  }
 }
