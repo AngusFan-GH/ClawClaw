@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
-import { GripVertical, Plus, X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { DesktopFeatureIcon } from './desktop-feature-icon.tsx'
@@ -29,6 +29,11 @@ export interface ShortcutTarget {
   readonly kind: 'panel' | 'settings'
 }
 interface ShortcutTargets { getSnapshot(): readonly ShortcutTarget[]; subscribe(listener: () => void): () => void }
+
+interface ShortcutDragState {
+  readonly id: string
+  readonly over: { readonly id: string; readonly half: 'before' | 'after' } | null
+}
 
 interface SettingsNavIconMount {
   readonly id: string
@@ -100,6 +105,29 @@ function useTargets(targets: ShortcutTargets): readonly ShortcutTarget[] {
   return useSyncExternalStore(listener => targets.subscribe(listener), () => targets.getSnapshot(), () => targets.getSnapshot())
 }
 
+/** Match the native drag acceptance used by the session history list. */
+function useNativeDragAcceptance(active: boolean): void {
+  useEffect(() => {
+    if (!active) return
+    const acceptDrag = (event: globalThis.DragEvent): void => {
+      event.preventDefault()
+      if (event.dataTransfer !== null) event.dataTransfer.dropEffect = 'move'
+    }
+    const acceptDrop = (event: globalThis.DragEvent): void => { event.preventDefault() }
+    document.addEventListener('dragover', acceptDrag)
+    document.addEventListener('drop', acceptDrop)
+    return () => {
+      document.removeEventListener('dragover', acceptDrag)
+      document.removeEventListener('drop', acceptDrop)
+    }
+  }, [active])
+}
+
+function rowHalf(event: { readonly clientY: number; readonly currentTarget: HTMLElement }): 'before' | 'after' {
+  const bounds = event.currentTarget.getBoundingClientRect()
+  return event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after'
+}
+
 function ShortcutIcon({ target, size = 16 }: { readonly target: ShortcutTarget; readonly size?: number }): JSX.Element {
   return <DesktopFeatureIcon featureId={target.targetId} kind={target.kind} size={size} />
 }
@@ -124,13 +152,15 @@ export function ShortcutSettingsRow({ t, shortcutSettings, shortcutTargets }: Sh
   const items = normalizeShortcutItems(settings?.items, targets)
   const save = (next: readonly string[]): void => { void shortcutSettings.set('items', next) }
   const definitions = useMemo(() => new Map(targets.map(item => [item.id, item])), [targets])
-  const draggedId = useRef<string>()
-  const [dragging, setDragging] = useState<string>()
-  const [dropTarget, setDropTarget] = useState<{ readonly id: string; readonly placement: 'before' | 'after' }>()
-  const finishDrag = (): void => {
-    draggedId.current = undefined
-    setDragging(undefined)
-    setDropTarget(undefined)
+  const [drag, setDrag] = useState<ShortcutDragState | null>(null)
+  const dropCommitted = useRef(false)
+  useNativeDragAcceptance(drag !== null)
+  const commitDrag = (activeDrag: ShortcutDragState, over: NonNullable<ShortcutDragState['over']>): void => {
+    if (dropCommitted.current) return
+    dropCommitted.current = true
+    setDrag(null)
+    const next = reorderShortcutItems(items, activeDrag.id, over.id, over.half)
+    if (next !== items) save(next)
   }
   const shift = (id: string, offset: -1 | 1): void => {
     const index = items.indexOf(id)
@@ -140,33 +170,31 @@ export function ShortcutSettingsRow({ t, shortcutSettings, shortcutTargets }: Sh
     ;[next[index], next[target]] = [next[target]!, next[index]!]
     save(next)
   }
-  const startDrag = (event: DragEvent<HTMLButtonElement>, id: string): void => {
-    draggedId.current = id
-    setDragging(id)
+  const startDrag = (event: DragEvent<HTMLDivElement>, id: string): void => {
+    dropCommitted.current = false
+    setDrag({ id, over: null })
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('text/plain', id)
   }
   const updateDropTarget = (event: DragEvent<HTMLDivElement>, id: string): void => {
-    const dragged = draggedId.current
-    if (dragged === undefined || dragged === id) return
+    if (drag === null) return
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
-    const bounds = event.currentTarget.getBoundingClientRect()
-    const placement = event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after'
-    setDropTarget(current => current?.id === id && current.placement === placement ? current : { id, placement })
+    const half = rowHalf(event)
+    setDrag(current => current === null ? current : { ...current, over: { id, half } })
   }
   const drop = (event: DragEvent<HTMLDivElement>, id: string): void => {
+    if (drag === null) return
     event.preventDefault()
-    const dragged = draggedId.current
-    if (dragged !== undefined) {
-      const bounds = event.currentTarget.getBoundingClientRect()
-      const placement = event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after'
-      const next = reorderShortcutItems(items, dragged, id, placement)
-      if (next !== items) save(next)
-    }
-    finishDrag()
+    commitDrag(drag, { id, half: rowHalf(event) })
   }
-  const reorderWithKeyboard = (event: KeyboardEvent<HTMLButtonElement>, id: string): void => {
+  const finishDrag = (): void => {
+    if (drag?.over !== null && drag?.over !== undefined) commitDrag(drag, drag.over)
+    else setDrag(null)
+    dropCommitted.current = false
+  }
+  const reorderWithKeyboard = (event: KeyboardEvent<HTMLDivElement>, id: string): void => {
+    if (event.currentTarget !== event.target) return
     if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
     event.preventDefault()
     shift(id, event.key === 'ArrowUp' ? -1 : 1)
@@ -177,9 +205,8 @@ export function ShortcutSettingsRow({ t, shortcutSettings, shortcutTargets }: Sh
       <div className="dshShortcutGroup"><h4>{t('available')}</h4>{targets.filter(item => !items.includes(item.id)).map(item => <div className="dshShortcutRow" key={item.id}><ShortcutIcon target={item} /><span>{item.label}</span><IconButton label={`${t('add')}: ${item.label}`} disabled={items.length >= MAX_SHORTCUTS} onClick={() => { save([...items, item.id]) }}><Plus size={14} /></IconButton></div>)}</div>
       <div className="dshShortcutGroup"><h4>{t('selected')}</h4>{items.map(id => {
         const item = definitions.get(id)!
-        const placement = dropTarget?.id === id ? dropTarget.placement : undefined
-        return <div className="dshShortcutRow dshShortcutSelectedRow" data-dragging={dragging === id || undefined} data-drop-position={placement} key={id} onDragOver={event => { updateDropTarget(event, id) }} onDrop={event => { drop(event, id) }}>
-          <button className="dshShortcutDragHandle" type="button" draggable title={`${t('reorder')}: ${item.label}`} aria-label={`${t('reorder')}: ${item.label}`} onDragStart={event => { startDrag(event, id) }} onDragEnd={finishDrag} onKeyDown={event => { reorderWithKeyboard(event, id) }}><GripVertical size={16} /></button>
+        const placement = drag?.over?.id === id ? drag.over.half : undefined
+        return <div className="dshShortcutRow dshShortcutSelectedRow" data-dragging={drag?.id === id || undefined} data-drop-position={placement} key={id} draggable tabIndex={0} title={`${t('reorder')}: ${item.label}`} aria-label={`${t('reorder')}: ${item.label}`} onDragStart={event => { startDrag(event, id) }} onDragEnd={finishDrag} onDragOver={event => { updateDropTarget(event, id) }} onDrop={event => { drop(event, id) }} onKeyDown={event => { reorderWithKeyboard(event, id) }}>
           <ShortcutIcon target={item} /><span>{item.label}</span><div className="dshShortcutActions"><IconButton label={`${t('remove')}: ${item.label}`} onClick={() => { save(items.filter(current => current !== id)) }}><X size={14} /></IconButton></div>
         </div>
       })}</div>

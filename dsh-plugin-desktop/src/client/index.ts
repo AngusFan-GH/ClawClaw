@@ -14,6 +14,7 @@ import { applyAdvancedShell } from './advanced-shell.ts'
 import { applyClawClawBrand } from './clawclaw-brand.tsx'
 import { startRendererBootReporter } from './boot-health.ts'
 import { applyDesktopSettings } from './desktop-settings.ts'
+import { applyDesktopVersionRow } from './desktop-version-row.tsx'
 import { applyDefaultWorkspaceSelection } from './default-workspace-selection.ts'
 import { installDesktopDirectoryPickerBridge } from './directory-picker.ts'
 import { applyWorkspaceDirectoryFlow } from './workspace-directory-flow.tsx'
@@ -33,6 +34,7 @@ import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
 export { applyAdvancedShell } from './advanced-shell.ts'
 export { applyClawClawBrand } from './clawclaw-brand.tsx'
 export { applyDesktopSettings } from './desktop-settings.ts'
+export { applyDesktopVersionRow, DesktopCurrentVersionRow } from './desktop-version-row.tsx'
 export {
   applyDefaultWorkspaceSelection,
   installDesktopWorkspaceSelection,
@@ -128,6 +130,7 @@ export function apply(ctx: ClientContext): void {
   applyShortcutMenu(ctx)
   ctx.effect(() => installShortcutMenuStyles(), 'dsh-plugin-desktop: shortcut menu styles')
   if (!environment) return
+  applyDesktopVersionRow(ctx, environment.version)
   ctx.effect(
     () => provideDesktopWindow(ctx, desktopWindowService(environment)),
     'dsh-plugin-desktop: native window geometry service',
