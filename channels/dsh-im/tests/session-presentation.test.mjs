@@ -31,4 +31,6 @@ test('replaces the legacy pseudo-title effect with the rc.2 leading slot', () =>
   assert.match(entry, /sidebar\.session\.row\.leading/u)
   assert.doesNotMatch(presentation, /text-overflow\s*:\s*ellipsis/u)
   assert.match(presentation, /replaceChildren/u)
+  assert.match(presentation, /data-dsh-im-session-leading="weixin"[^}]+color:#07c160/u)
+  assert.match(presentation, /data-dsh-session-source-icon="weixin"[^}]+color:#07c160/u)
 })

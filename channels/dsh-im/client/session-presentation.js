@@ -82,6 +82,7 @@ export function installChannelSessionPresentation(logos, document = globalThis.d
 [${SOURCE_ATTR}]:not([data-dsh-session-source-surface="row"]){display:inline-flex;align-items:center;gap:6px;min-width:0}
 [${SOURCE_ATTR}]>[data-dsh-session-source-icon]{flex:0 0 16px}
 [data-dsh-im-session-leading]{display:inline-flex;align-items:center;justify-content:center;width:16px;height:20px;color:var(--dsw-alias-label-tertiary)}
+[data-dsh-im-session-leading="weixin"],[data-dsh-session-source-icon="weixin"]{color:#07c160}
 `
   document.head.append(style)
 
