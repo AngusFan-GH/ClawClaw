@@ -6,7 +6,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { electronBuilderEnvironment } from './electron-builder-environment.ts'
 import { withoutWindowsSigningSecrets } from './package-win.ts'
-import { withoutMacReleaseSecrets } from './release-preflight.ts'
+import { withoutMacSigningSecrets } from './package-mac.ts'
 
 const require = createRequire(import.meta.url)
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -31,7 +31,7 @@ export const UNSIGNED_DIRECTORY_BUILD_ARGS = Object.freeze([
  */
 export function unsignedDirectoryBuildEnvironment(environment) {
   return electronBuilderEnvironment({
-    ...withoutWindowsSigningSecrets(withoutMacReleaseSecrets(environment)),
+    ...withoutWindowsSigningSecrets(withoutMacSigningSecrets(environment)),
     CSC_IDENTITY_AUTO_DISCOVERY: 'false',
   })
 }

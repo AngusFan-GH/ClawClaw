@@ -1,4 +1,4 @@
-/** Verify the unsigned application structure sealed inside one macOS smoke DMG. */
+/** Verify the unsigned application structure sealed inside one macOS DMG. */
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readdirSync, rmdirSync, statSync } from 'node:fs'
@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 
 /** Injectable filesystem and command boundaries for smoke verification. */
 export interface MacSmokeVerificationOptions {
-  /** Directory containing exactly one smoke DMG. */
+  /** Directory containing exactly one unsigned DMG. */
   readonly distDir: string
   /** Installed application name inside the mounted image. */
   readonly productName: string
@@ -65,9 +65,9 @@ function defaultOptions(): MacSmokeVerificationOptions {
 }
 
 /**
- * Mount and verify the application structure of the unique smoke DMG without
- * requiring code-signing material: signature, Gatekeeper, and stapler checks
- * remain exclusive to the signed release verification.
+ * Mount and verify the application structure and both architectures of the
+ * unique unsigned DMG. Publisher-signature and notarization checks are outside
+ * the product's current release policy.
  * @param options - Filesystem and command boundaries.
  * @returns The verified DMG and application paths.
  */
@@ -113,7 +113,7 @@ export function verifyMacSmoke(
     ) {
       throw new Error(`packaged application has an invalid main executable: ${executablePath}`)
     }
-    options.run('lipo', [executablePath, '-verify_arch', 'arm64'])
+    options.run('lipo', [executablePath, '-verify_arch', 'arm64', 'x86_64'])
 
     const unpackedRoot = join(appPath, 'Contents', 'Resources', 'app')
     for (const entry of ['package.json', 'lib/main.js']) {

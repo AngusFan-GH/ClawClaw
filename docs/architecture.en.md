@@ -61,6 +61,6 @@ The Desktop package disables ASAR on all platforms. Root manifest, `lib`, and de
 
 The package is `dsh-plugin-desktop`, the product is ClawClaw, and its appId is `com.clawclaw.desktop`.
 
-Updates read `https://clawclaw.xzinfra.com/updates/stable/release.json`. Manifests require the `stable` channel, a canonical version, and `darwin`/`win32` artifacts with HTTPS `url`, base64 `sha512`, and `size`. Manifest bodies are capped at 16 KiB, installers at 1 GiB. Manifest and artifact requests reject redirects and omit original-project statistics headers. Downloads verify SHA-512 and container format. There is no independent manifest digital-signature verification; a digest check must not be described as signature verification.
+Updates read `https://clawclaw.xzinfra.com/updates/dsh/stable/release.json`. Manifests require the `stable` channel, a canonical version, and `darwin`/`win32` artifacts with HTTPS `url`, base64 `sha512`, and `size`. Manifest bodies are capped at 16 KiB, installers at 1 GiB. Manifest and artifact requests reject redirects and omit original-project statistics headers. Downloads verify SHA-512 and container format. There is no independent manifest digital-signature verification; a digest check must not be described as signature verification.
 
 See [package reference](../dsh-plugin-desktop/README.md) for release commands. This describes the client protocol, not proof that the remote service or artifacts are deployed.

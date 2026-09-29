@@ -38,7 +38,7 @@ ClawClaw already provides the following capabilities, so equivalent systems will
 | Graceful Host shutdown | `shutdown.ts`, `startup-generation.ts` | Extend inspection, do not replace |
 | Abnormal-run marker, bounded logs, diagnostics export | `crash-evidence.ts`, `log-files.ts` | Harden incrementally |
 | Cron Tasks and reminders | ClawClaw-owned controllers and client plugins | Include in quit inspection |
-| Windows NSIS and macOS signing/notarization preflight | package/release scripts | Harden incrementally |
+| Windows NSIS and macOS Universal DMG | package/release scripts | Keep unsigned and harden structural validation |
 
 ## 4. Adoption classification
 
@@ -48,8 +48,7 @@ ClawClaw already provides the following capabilities, so equivalent systems will
 | --- | --- | --- |
 | `quit-confirmation.ts` | Pre-quit inspection, conservative fallback, request coalescing, ownerless native dialog | New interruption snapshot and confirmation integrated with shutdown |
 | `update-schedule.ts` | Monotonic clock, jitter, exponential backoff, in-flight joining | Extend periodic scheduling in `update-lifecycle.ts` |
-| `update-http-executor.ts` | Response-header and body-chunk idle timeouts | Adapt to the installed `electron-updater` before connecting to downloads |
-| `test-windows-update-signature.mjs` | Exercise `NsisUpdater.verifySignature()` for correct, wrong, and missing publishers | New Windows release qualification |
+| Update download behavior | Private storage, progress, size/digest/container validation, and safe installer handoff | Extend `update-download.ts` and the Electron runtime |
 | `crash-report.ts` | Structured, bounded, atomically written fatal reports | Extend existing crash evidence without upload |
 | `update-journal.ts` | Local opt-in update qualification journal | Add an opt-in local journal |
 | installer tests | Installation transaction, failed rollback, uninstall preservation/removal boundaries | Expand the ClawClaw NSIS test matrix |
@@ -65,6 +64,7 @@ ClawClaw already provides the following capabilities, so equivalent systems will
 - The `dsh-app://` shell architecture or wholesale replacement with the official window/client.
 - Official ASAR and runtime-resolution layout.
 - SafeNet-specific signing orchestration.
+- Native auto-update frameworks and their `latest.yml`, `latest-mac.yml`, and blockmap protocols.
 
 Any future need for these requires a separate design record; it cannot enter as incidental scope in this plan.
 
@@ -100,42 +100,38 @@ Delivered implementation: `interruption-inspection.ts` counts running agents, bo
 
 Verification: `corepack pnpm --filter dsh-plugin-desktop exec vitest run tests/interruption-inspection.spec.ts tests/quit-confirmation.spec.ts tests/startup-generation.spec.ts tests/host-process.spec.ts tests/shutdown.spec.ts` (33 passing); `corepack pnpm --filter dsh-plugin-desktop run typecheck`; `corepack pnpm --filter dsh-plugin-desktop run build`; `corepack pnpm --filter dsh-plugin-desktop run test` (1239 passing, 6 existing skips).
 
-### Phase 2 (P0): update jitter, backoff, and idle timeout
+### Phase 2 (P0): update jitter, backoff, and direct downloads
 
 **Status: Complete (2026-09-28)**
 
-Goal: preserve ClawClaw's normal six-hour polling policy while preventing synchronized client requests and ensuring that a connected but stalled transfer fails deterministically.
+Goal: preserve ClawClaw's normal six-hour polling policy while preventing synchronized client requests and validating installers through a product-owned download path.
 
 Changes:
 
 - Schedule against `performance.now()`, default to `20%` jitter, and exponentially back off failures to a configurable cap.
 - Automatic, foreground-resume, and explicit checks join in-flight work. Manual checks bypass the deadline without starting a second request.
-- Use independent response-header and chunk-idle timeouts. Verify the installed `electron-updater` internal API first and upgrade it separately if required.
+- Keep a bounded manifest request; installer downloads support cancellation, a size cap, progress, and atomic persistence.
 
-Acceptance: deterministic random/clock tests cover bounds, backoff reset, manual bypass, and no rearm after disposal; stalled headers/body fail within bounds. Rollback may restore fixed six-hour scheduling but must preserve existing hash, size, container, and redirect validation.
+Acceptance: deterministic random/clock tests cover bounds, backoff reset, manual bypass, and no rearm after disposal. Download tests cover cancellation, oversize responses, size mismatch, digest mismatch, and container mismatch. Rollback may restore fixed six-hour scheduling but must preserve existing hash, size, container, and redirect validation.
 
-Delivered implementation: the first check remains fixed at 60 seconds after startup. The successful base interval remains six hours with `20%` default jitter. Failures advance through 12 hours to a 24-hour cap and success resets the delay. Manual checks continue to bypass the periodic timer and share in-flight network work through the existing `checkTask`. `DesktopUpdateHttpExecutor` preserves the `electron-updater` Electron session, proxy, and validation chain while applying a 60-second default inactivity deadline before response headers and between response chunks. `DSH_DESKTOP_UPDATE_HTTP_IDLE_TIMEOUT_MS` can override it. The existing 15-second total manifest-request deadline remains independent.
+Delivered implementation: the first check remains fixed at 60 seconds after startup. The successful base interval remains six hours with `20%` default jitter. Failures advance through 12 hours to a 24-hour cap and success resets the delay. Manual checks continue to bypass the periodic timer and share in-flight network work through the existing `checkTask`. `update-download.ts` fetches installers directly through the Electron network boundary into a private temporary file under application data. It atomically replaces the destination only after size, SHA-512, and DMG/PE container validation. The existing 15-second total manifest-request deadline remains independent.
 
 Verification: 39 focused update tests passing; `corepack pnpm --filter dsh-plugin-desktop run typecheck`; `corepack pnpm --filter dsh-plugin-desktop run build`; `corepack pnpm --filter dsh-plugin-desktop run test` (1247 passing, 6 existing skips).
 
-### Phase 3 (P0): Windows Authenticode publisher qualification
+### Phase 3 (P0): unsigned cross-platform publishing and installer handoff
 
-**Status: Blocked (qualification implemented; Windows signing identity and credentialed release path missing)**
+**Status: Complete (2026-09-29)**
 
-Goal: distinguish a structurally valid PE from a trusted Authenticode identity. Update metadata `publisherName` must match the actual signing certificate.
+Goal: with both Windows and macOS intentionally unsigned, use one `release.json` protocol for download, content validation, and platform-appropriate handoff.
 
 Changes and acceptance:
 
-- Keep `verify-win-installer.ts` as a PE/container smoke and do not describe it as signature verification.
-- Add Windows-only release qualification using `NsisUpdater.verifySignature()`.
-- Test matching publisher accepted, wrong publisher rejected, unsigned artifact rejected, and SHA-512 unchanged.
-- Local unsigned development builds skip explicitly; formal release channels may not skip.
+- `release.json` is the only update pointer and declares HTTPS URLs, byte sizes, and SHA-512 digests for the Windows NSIS installer and macOS Universal DMG.
+- Publishing uploads both versioned installers first, recomputes size and digest, and atomically switches `release.json` last. It does not generate or upload YAML/blockmap metadata.
+- Windows starts the verified NSIS installer only after successful Host shutdown; shutdown failure must not start it.
+- macOS opens the verified DMG for manual application replacement and makes no native auto-replacement or rollback claim.
 
-Rollback may remove qualification wiring only; it must not weaken publisher validation already configured in the production updater.
-
-Delivered portion: `qualify:win-signature` runs only on native Windows against a signed installer, an independent unsigned negative control, and packaged `app-update.yml`. It requires `CLAWCLAW_WINDOWS_PUBLISHER_NAME` to match metadata exactly, calls the real `NsisUpdater.verifySignature()` for matching, wrong, and unsigned controls, and checks SHA-512 before and after. The old `verify-win-installer.ts` is now explicitly described as a PE/COFF structure check.
-
-Blocker: `dist:win` currently removes every signing environment variable and passes `win.signExecutable=false`; tag releases use the same unsigned path. The repository has no verifiable legal publisher string, code-signing certificate, or credentialed Windows release command, and those facts cannot be fabricated. Unblocking requires selecting the publisher identity, configuring a credentialed signed artifact and independent unsigned control, wiring qualification into the formal release job, and refusing Windows stable upload without a passing report. Seven focused tests and full typecheck pass; real Authenticode positive/negative controls must run on Windows once those prerequisites exist.
+Delivered implementation: the runtime no longer depends on a native updater. Windows and macOS share `update-download.ts` private storage, atomic download, size/SHA-512/container validation, and retained-artifact state. Windows waits for quit approval and Host shutdown before visibly spawning NSIS; macOS opens an unsigned Universal DMG after download. The GitHub Actions `release.yml` dispatches native Windows and macOS runners from one tag and collects only EXE, DMG, and generated `release.json`. `upload-update.mjs` uses an SSH key, verifies the manifest against actual files, refuses to overwrite a version archive, and publishes the manifest last. This trust model uses HTTPS and published digests but does not authenticate a publisher identity; that is an explicitly accepted current product constraint and remains disclosed in user documentation.
 
 ### Phase 4 (P1): structured fatal crash reports
 
@@ -184,9 +180,9 @@ Delivered implementation: `installer-data-retention.ts` makes five uninstall bou
 
 The existing Windows NSIS A/B lab already covers normal upgrades, target-content integrity, mid-operation process-tree interruption, a locked `app.asar`, old/candidate coherence after interruption, and an actual startup probe. This phase extends `smoke-windows-installer-upgrade.ps1` to truncate a copy of the candidate and require Windows to reject it, then prove that the base version is unchanged and still launchable before proceeding through running-app upgrade, candidate relaunch, same-version overwrite, and uninstall. Before uninstall it writes unique markers into `%APPDATA%\ClawClaw` cache/log locations, an isolated `DSH_HOME` Profile, and an isolated workspace. It requires application files, registration, and shortcuts to disappear while all four data markers survive, then removes only its own markers. `check:win-package` now includes the policy test.
 
-macOS native auto-update remains disabled; the product opens a user-confirmed DMG rather than claiming an in-app atomic replacement/rollback path. Existing release smokes verify the mounted DMG, universal architectures, embedded native files, codesign, Gatekeeper, and the stapled notarization ticket. Shared native-staging tests prove that download/validation failure, cancellation, or failed Host teardown cannot produce an installer handoff. Preserving the prior application after a DMG replacement failure and relaunching it remains a manual qualification on the signed macOS release host.
+macOS native auto-update remains disabled. The product opens a user-confirmed unsigned Universal DMG rather than claiming an in-app atomic replacement/rollback path. Package smokes verify the mounted DMG, both `arm64` and `x86_64` architectures, and embedded native files. Download and Electron runtime tests prove that download/validation failure, cancellation, or failed Host teardown cannot produce an incorrect installer handoff. Manual DMG replacement and relaunch remain real macOS release qualifications.
 
-Headless verification: 107 tests across `installer-data-retention.spec.ts`, `native-update-installer.spec.ts`, and `electron-runtime.spec.ts`; complete typecheck and production build; complete unit suite with 1268 passing and 6 existing skips. This macOS development host cannot execute the Windows PowerShell/NSIS VM smoke. A real Windows report and signed macOS DMG replacement result must accompany the corresponding release and cannot be substituted by the headless result.
+Headless verification covers `installer-data-retention.spec.ts`, `update-download.spec.ts`, `electron-runtime.spec.ts`, and macOS package smokes; complete typecheck, production build, and unit tests form the final gate. This macOS development host cannot execute the Windows PowerShell/NSIS VM smoke. A real Windows installation report and macOS manual DMG replacement result must accompany the corresponding release and cannot be substituted by the headless result.
 
 ### Phase 7 (P2): background residency and update-ready attention
 
@@ -216,7 +212,7 @@ For every phase:
 4. Update this file with status, actual deviations, and verification commands.
 5. Commit each phase separately. Always commit a submodule pin change on its own.
 
-The complete headless pre-release gate is `corepack pnpm check`. Tests requiring real signing identities, Windows VMs, notarization services, or a GUI are explicit release qualifications; ordinary headless gates must neither launch a GUI nor depend on secrets.
+The complete headless pre-release gate is `corepack pnpm check`. Tests requiring Windows VMs or a GUI are explicit release qualifications; ordinary headless gates must not launch a GUI.
 
 ## 7. Definition of done
 
@@ -234,13 +230,10 @@ Primary references, all under official `apps/desktop/`:
 
 - `src/quit-confirmation.ts`
 - `src/update-schedule.ts`
-- `src/update-http-executor.ts`
 - `src/update-journal.ts`
 - `src/crash-report.ts`
 - `src/background-notice.ts`
 - `src/update-attention.ts`
-- `scripts/test-windows-update-signature.mjs`
-- `scripts/windows-sign.mjs`
 - `tests/README.zh.md`
 
 If a reference changes upstream during implementation, record the new commit in the implementation commit instead of silently moving this document's baseline.

@@ -95,11 +95,11 @@ Settings 中的“叮嘱”是跨工作区、跨会话持续生效的长期指�
 
 ## 更新
 
-打包应用读取 `https://clawclaw.xzinfra.com/updates/stable/release.json`。后台检查失败或无新版本时静默；手动检查会显示结果。
+打包应用只读取 `https://clawclaw.xzinfra.com/updates/dsh/stable/release.json`，不使用 `latest.yml` 或 `latest-mac.yml`。后台检查失败或无新版本时静默；手动检查会显示结果。
 
 桌面设置中的“更新资格记录”默认关闭。明确开启后，它只在本机限额记录版本、更新阶段、分类结果、耗时和制品摘要，不记录完整 URL、错误原文、设备身份或用户内容；可随时一键清除。记录仅在用户主动导出诊断 ZIP 时包含。
 
-确认下载并选择保存位置后，应用从 manifest 指定的 HTTPS 地址获取安装包，校验 SHA-512 和 DMG/PE 容器。当前请求不发送旧项目的 `X-DSH-Desktop-*` 统计 header。校验摘要不等于验证发布者数字签名。macOS 打开 DMG 后由用户替换应用；Windows 确认后交给 NSIS。安装后可选择删除下载文件。服务或产物是否已发布，以检查实际结果为准。
+确认下载后，应用把 manifest 指定的安装包保存到应用数据目录下的私有 `updates/installers/`，并校验大小、SHA-512 和 DMG/PE 容器。当前请求不发送旧项目的 `X-DSH-Desktop-*` 统计 header。Windows 和 macOS 产物都有意保持未签名；HTTPS 与摘要校验只证明下载内容和发布清单一致，不验证发布者身份。Windows 会先安全关闭 Host，只有关闭成功才启动 NSIS；macOS 会打开已校验的 Universal DMG，由用户手动替换应用。升级后的应用会询问是否删除保留的安装包。服务或产物是否已发布，以检查实际结果为准。
 
 ## 排查
 

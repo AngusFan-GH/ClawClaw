@@ -49,10 +49,13 @@ import {
   rendererRecoveryCopy,
 } from './tray-locale.ts'
 import {
+  desktopUpdateDestination,
+  downloadDesktopUpdate,
   pendingDesktopUpdateArtifact,
+  recordDesktopUpdateArtifact,
   resolveDesktopUpdateArtifact,
+  type DesktopUpdateArtifact,
 } from './update-download.ts'
-import { getNativeUpdater, stageNativeUpdate } from './native-update-installer.ts'
 import { desktopBackgroundCloseNoticePath } from './background-close-notice.ts'
 import type { UpdateCheckResult } from './update-checker.ts'
 import type { DesktopInstallationId } from './desktop-installation-id.ts'
@@ -89,9 +92,6 @@ export function desktopPreloadPath(moduleUrl: string = import.meta.url): string 
 }
 
 const PRODUCT_VERSION = desktopProductVersion()
-
-/** Unsigned macOS smoke packages are manual-install only until release credentials are configured. */
-const MACOS_NATIVE_AUTO_UPDATE_ENABLED = false
 
 /** Main-process deadline for one Renderer generation to settle its client Loader. */
 export const RENDERER_BOOT_TIMEOUT_MS = 30_000
@@ -147,7 +147,6 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       get canDownload() {
         return app.isPackaged
           && platformStrategy.updateDownloadPlatform !== undefined
-          && (platformStrategy.platform !== 'darwin' || MACOS_NATIVE_AUTO_UPDATE_ENABLED)
       },
       get currentVersion() { return PRODUCT_VERSION },
       get releaseChannel() { return DESKTOP_RELEASE_CHANNEL },
@@ -700,40 +699,71 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     }
   }
 
-  /** Stage a verified native update, then request a graceful Host shutdown on confirmation. */
+  /** Download and verify one unsigned installer, then hand off to the platform's visible installer flow. */
   private async downloadAndOpenUpdate(
     version: string,
     signal: AbortSignal,
-    _channel: DesktopReleaseChannel = 'stable',
+    channel: DesktopReleaseChannel = 'stable',
   ): Promise<DesktopUpdateHandoffResult> {
     if (!this.updates.canDownload) throw new Error('Updates require a packaged macOS or Windows application')
-    const stagedResult = await stageNativeUpdate(await getNativeUpdater(), version, signal,
-      fraction => { this.generation?.setProgressBar(fraction) })
-    const staged = typeof stagedResult === 'function'
-      ? { install: stagedResult }
-      : stagedResult
+    const platform = this.platformStrategy.updateDownloadPlatform
+    if (platform === undefined) throw new Error(`dsh-plugin-desktop: updates are unavailable on ${this.platform}`)
+    const userDataPath = app.getPath('userData')
+    const destinationPath = await desktopUpdateDestination(userDataPath, platform, version, channel)
+    const artifactPath = await downloadDesktopUpdate({
+      platform,
+      version,
+      ...(channel === 'stable' ? {} : { channel }),
+      destinationPath,
+      request: (url, init) => net.fetch(url, init),
+      signal,
+      progress: fraction => { this.generation?.setProgressBar(fraction) },
+    })
     signal.throwIfAborted()
+    const artifact: DesktopUpdateArtifact = { platform, version, path: artifactPath }
+    await recordDesktopUpdateArtifact(userDataPath, artifact)
     const copy = desktopNativeCopy(this.currentLocale)
+
+    if (platform === 'darwin') {
+      const openError = await shell.openPath(artifactPath)
+      if (openError !== '') throw new Error(`dsh-plugin-desktop: failed to open update disk image: ${openError}`)
+      signal.throwIfAborted()
+      await this.showUpdateMessageBox({
+        type: 'info', title: copy.updateDownloadedTitle, message: copy.updateReady(version),
+        detail: copy.macInstallInstructions, buttons: [copy.ok], defaultId: 0, noLink: true,
+      })
+      return { status: 'deferred' }
+    }
+
     const result = await this.showUpdateMessageBox({
       type: 'info', title: copy.updateDownloadedTitle, message: copy.updateReady(version),
-      detail: copy.restartInstallQuestion, buttons: [copy.restartAndInstall, copy.later],
+      detail: copy.windowsInstallQuestion, buttons: [copy.restartAndInstall, copy.later],
       defaultId: 1, cancelId: 1, noLink: true,
     })
     signal.throwIfAborted()
-    if (result.response !== 0) {
-      return {
-        status: 'deferred' as const,
-        ...(staged.artifactDigest === undefined ? {} : { artifactDigest: staged.artifactDigest }),
-      }
-    }
+    if (result.response !== 0) return { status: 'deferred' }
     const spec = this.scheduled
     if (spec === undefined) throw new Error('No active shell can exit for update installation')
-    this.installOnExit = staged.install
-    spec.requestQuit(0)
-    return {
-      status: 'install-requested' as const,
-      ...(staged.artifactDigest === undefined ? {} : { artifactDigest: staged.artifactDigest }),
+    this.installOnExit = () => {
+      this.launchWindowsUpdateInstaller(artifactPath)
+      app.exit(0)
     }
+    spec.requestQuit(0)
+    return { status: 'install-requested' }
+  }
+
+  /** Start the verified NSIS installer only after the Host has shut down successfully. */
+  private launchWindowsUpdateInstaller(installerPath: string): void {
+    const child = spawn(installerPath, ['--updated', '--force-run'], {
+      detached: true,
+      stdio: 'ignore',
+      shell: false,
+      windowsHide: false,
+    })
+    child.once('error', cause => {
+      this.logError(`dsh-plugin-desktop: update installer failed after launch: ${cause.message}`)
+    })
+    child.unref()
   }
 
   private offerUpdateArtifactCleanup(): Promise<void> {

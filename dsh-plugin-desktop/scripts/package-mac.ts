@@ -1,13 +1,29 @@
-/** Build an unsigned macOS DMG smoke artifact on a native macOS host. */
+/** Build the unsigned universal macOS DMG on a native macOS host. */
 
 import { spawnSync } from 'node:child_process'
 import { rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { withoutMacReleaseSecrets } from './release-preflight.ts'
 import { prepareFsExtForElectron } from './prepare-fs-ext.ts'
 import { electronBuilderEnvironment } from './electron-builder-environment.ts'
+import { prepareInstalledMacUniversalRuntime } from './mac-universal.ts'
+
+const MAC_SIGNING_VARIABLES = [
+  'APPLE_API_ISSUER', 'APPLE_API_KEY', 'APPLE_API_KEY_ID',
+  'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_ID', 'APPLE_KEYCHAIN',
+  'APPLE_KEYCHAIN_PROFILE', 'APPLE_TEAM_ID', 'CSC_IDENTITY_AUTO_DISCOVERY',
+  'CSC_FOR_PULL_REQUEST', 'CSC_INSTALLER_KEY_PASSWORD', 'CSC_INSTALLER_LINK',
+  'CSC_KEYCHAIN', 'CSC_KEY_PASSWORD', 'CSC_LINK', 'CSC_NAME', 'MACOS_SIGN_IDENTITY',
+  'MAC_CERT_P12_BASE64',
+] as const
+
+/** Remove every signing and notarization input from an intentionally unsigned package build. */
+export function withoutMacSigningSecrets(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const sanitized = { ...env }
+  for (const name of MAC_SIGNING_VARIABLES) delete sanitized[name]
+  return sanitized
+}
 
 /** Injectable native macOS packaging boundary used by focused tests. */
 export interface MacSmokePackageOptions {
@@ -23,9 +39,9 @@ export interface MacSmokePackageOptions {
   readonly workspaceRoot: string
   /** Desktop package root containing electron-builder configuration. */
   readonly desktopRoot: string
-  /** Dedicated smoke output directory, isolated from signed release artifacts. */
+  /** Dedicated output directory for the unsigned Universal DMG. */
   readonly outputDir: string
-  /** Remove only the dedicated generated smoke output before packaging. */
+  /** Remove only the dedicated generated output before packaging. */
   readonly resetOutput: () => void
   /** Validate and prepare both architecture-specific runtime trees. */
   readonly prepareRuntime: () => void
@@ -75,6 +91,8 @@ function defaultOptions(): MacSmokePackageOptions {
     resetOutput: () => rmSync(outputDir, { recursive: true, force: true }),
     prepareRuntime: () => {
       prepareFsExtForElectron({ platform: 'darwin', arch: 'arm64', desktopRoot })
+      prepareFsExtForElectron({ platform: 'darwin', arch: 'x64', desktopRoot })
+      prepareInstalledMacUniversalRuntime(desktopRoot)
     },
     builderCli: require.resolve('electron-builder/cli.js'),
     verifier: fileURLToPath(new URL('./verify-mac-smoke.ts', import.meta.url)),
@@ -85,12 +103,7 @@ function defaultOptions(): MacSmokePackageOptions {
 }
 
 /**
- * Run the headless release gates and package one unsigned macOS DMG smoke.
- *
- * The signed and notarized release stays a manual step on a credentialed
- * machine; this smoke exists so macOS packaging regressions fail in CI before
- * a manual release. It targets Apple Silicon, which is the runner's native
- * architecture; the signed release remains the universal distribution path.
+ * Run the headless release gates and package one unsigned universal macOS DMG.
  * @param options - Injectable process and command boundaries.
  */
 export function packageMacSmoke(options: MacSmokePackageOptions = defaultOptions()): void {
@@ -109,8 +122,8 @@ export function packageMacSmoke(options: MacSmokePackageOptions = defaultOptions
     )
   }
 
-  const cleanEnvironment = withoutMacReleaseSecrets(options.env)
-  options.log('Building an unsigned macOS DMG smoke; signing and notarization are release-only steps.')
+  const cleanEnvironment = withoutMacSigningSecrets(options.env)
+  options.log('Building an unsigned universal macOS DMG; signing and notarization are disabled by product policy.')
   if (options.env.DSH_PACKAGE_CHECK_ALREADY_RAN !== '1') {
     options.run(
       'corepack',
@@ -129,10 +142,11 @@ export function packageMacSmoke(options: MacSmokePackageOptions = defaultOptions
       options.builderCli,
       '--mac',
       'dmg',
-      '--arm64',
+      '--universal',
       '--publish',
       'never',
       '--config.mac.notarize=false',
+      '--config.dmg.writeUpdateInfo=false',
       '--config.npmRebuild=false',
       `--config.directories.output=${options.outputDir}`,
     ],

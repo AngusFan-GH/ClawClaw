@@ -39,20 +39,22 @@ corepack pnpm check
 
 ## 打包
 
-`package:dir` 生成当前平台的未封装产物。`dist:mac-smoke` 做未签名 macOS packaging smoke，`dist:mac` 是具备凭据时的 macOS release 路径。`dist:win`、`dist:win-portable` 需要原生 Windows x64。未签名本地产物可能触发 Gatekeeper、SmartScreen 或 Unknown Publisher，不能作为发布证据。
+`package:dir` 生成当前平台的未封装产物。`dist:mac` 生成未签名 Universal DMG；`dist:win`、`dist:win-portable` 需要原生 Windows x64。未签名产物可能触发 Gatekeeper、SmartScreen 或 Unknown Publisher。
 
-当前 `dist:win` 会主动移除签名凭据并生成未签名 smoke 产物，不能直接作为受信任的稳定通道更新发布。准备好已签名安装器、独立的未签名负例和打包应用内的 `resources/app-update.yml` 后，在原生 Windows 上设置 `CLAWCLAW_WINDOWS_PUBLISHER_NAME`，再运行 `corepack pnpm --filter dsh-plugin-desktop run qualify:win-signature -- <signed.exe> <unsigned.exe> <app-update.yml>`。该资格门禁使用 `NsisUpdater.verifySignature()` 验证匹配发布者、错误发布者和未签名文件，并确认输入 SHA-512 未变化。在签名身份和凭据化 Windows release 路径完成前，正式 Windows 发布门禁仍处于阻塞状态。
+两个平台命令都会主动移除签名、公证凭据，分别生成未签名 NSIS 与 Universal DMG。Windows 可能显示 SmartScreen/Unknown Publisher，macOS 可能要求用户在“隐私与安全性”中允许打开；这些提示是无签名发布模型的一部分，SHA-512 完整性校验不等同于系统发布者认证。
 
 所有平台禁用 ASAR。应用与依赖以物理文件放在 `resources/app/`（macOS 为 `Contents/Resources/app/`），供 Host、DSH CLI、pnpm、native module 和 profile fallback 使用。先跑 `check`，再在目标系统运行平台打包命令。
 
 ## 更新与发布
 
-DSH Desktop 使用 `https://clawclaw.xzinfra.com/updates/dsh/stable/`。静态 `release.json` 用于受限的版本检查；`latest.yml` 提供 Windows 原生安装包元数据。在配置 macOS 发布凭据前，macOS 产物是未签名、仅能手动安装的 DMG，DSH Desktop 会禁用 macOS 原生自动更新。旧 OpenClaw 产品的 Windows 更新源保留在 `/updates/stable/`，DSH Desktop 不会使用它。
+DSH Desktop 使用 `https://clawclaw.xzinfra.com/updates/dsh/stable/`，并只消费这一目录中的 `release.json`。清单同时声明 Windows NSIS 与 macOS Universal DMG 的 HTTPS 地址、大小和 SHA-512；DSH Desktop 不使用 `latest.yml`、`latest-mac.yml` 或旧 OpenClaw 的 `/updates/stable/` 更新源。
 
-打包后的应用在启动 60 秒后检查更新，此后每六小时检查一次。后台对每个可用版本通知一次，不自动下载。设置和托盘共用同一套手动检查及下载流程。确认后，原生更新器会重新检查所选版本、校验平台安装包、显示下载进度，并询问是否重启。只有 Host 正常关闭后才会开始安装；取消或关闭过程不会安装待处理更新。
+打包后的应用在启动 60 秒后检查更新，此后每六小时检查一次。后台对每个可用版本通知一次，不自动下载。设置和托盘共用同一套手动检查及下载流程。确认后，应用会再次读取 `release.json`，把安装包下载到私有更新目录，校验声明大小、SHA-512 和 DMG/PE 容器并显示进度。Windows 只有在用户再次确认且 Host 正常关闭后才启动 NSIS；macOS 会打开 DMG，由用户退出当前应用并拖入“应用程序”完成替换。
 
-发布清单在跨 Host 进程传输前限制为 16 KiB。当前 macOS 构建是用于手动安装的未签名 Apple Silicon DMG；用户需自行绕过 Gatekeeper，并手动下载每次更新。签名并公证的 macOS 发布会增加用于原生更新的 Universal ZIP 和 `latest-mac.yml`。Windows 发布包含 NSIS 安装程序、`latest.yml` 和生成的 blockmap。发布流程会先上传安装包，再发布元数据文件，因此客户端不会先发现尚未可下载的版本。尚未实现断点续传。
+发布清单在跨 Host 进程传输前限制为 16 KiB。Windows 发布包含未签名 NSIS，macOS 发布包含未签名 Universal DMG；二者都由同一份 `release.json` 描述。上传命令会重新计算实际安装包的 SHA-512 并核对大小，保留版本化副本，先上传安装包，最后原子切换 `release.json`。尚未实现断点续传。
 
-两个平台构建完成后，`Release ClawClaw Desktop` 工作流会调用根目录的 `upload:update` 命令。手动发布已准备好的已签名 `release/` 目录时，加载已忽略的 `.env.server.local` 凭据文件，然后运行 `pnpm run upload:update -- --directory release --channel stable`。命令会在传输前校验 `release.json`、两份原生更新元数据、各自引用的安装包及记录的文件大小是否一致。发布未签名 macOS DMG 时加上 `--unsigned-mac`；它会保留服务器上已有的已签名 macOS 元数据，同时上传 DMG 并发布 Windows 更新源。每次发布都会在 `/releases/dsh/<version>/` 保留不可变副本，先上传安装包，最后才切换元数据。
+GitHub Actions 的 `Release ClawClaw Desktop` 工作流会在托管的 macOS 与 Windows Runner 上从同一 commit 构建两个安装包。`clawclaw-v<version>` tag 必须与 `dsh-plugin-desktop/package.json` 完全一致；匹配的 tag 会自动发布。手动运行默认只构建和汇总，只有勾选 `publish` 输入才会正式发布。请在 GitHub 的 `stable-update` Environment 中配置 `UPDATE_SSH_PRIVATE_KEY`、`UPDATE_KNOWN_HOSTS` Secrets；在仓库 Variables 中配置 `UPDATE_HOST`、`UPDATE_USER`，并按需配置 `UPDATE_PORT`、`UPDATE_REMOTE_ROOT`、`UPDATE_BASE_URL`。
+
+更新服务器应使用对配置目录有写权限的专用非 root SSH 用户。完成这一次服务器初始化后，日常发布由 GitHub 完成，不需要交互登录服务器。手动发布已准备好的 `release/` 目录时，通过 SSH agent 提供密钥，加载已忽略的 `.env.server.local`，再运行 `pnpm run upload:update -- --directory release --channel stable`；脚本有意不支持基于 `sshpass` 的密码发布。传输前会校验版本、HTTPS URL、文件大小和 SHA-512，并拒绝覆盖已有的 `/releases/dsh/<version>/`，先上传安装包，最后切换清单。
 
 生产 dependency 改动后运行 `verify:notices`。产品背景见根 [README](../README.md)、[架构](../docs/architecture.md)和[用户指南](../docs/user-guide.md)。

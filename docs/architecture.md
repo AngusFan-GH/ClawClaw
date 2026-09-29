@@ -61,6 +61,6 @@ Desktop 包在所有平台均禁用 ASAR。应用主 manifest、`lib` 和依赖�
 
 包名为 `dsh-plugin-desktop`，产品名为 ClawClaw，appId 为 `com.clawclaw.desktop`。
 
-更新读取 `https://clawclaw.xzinfra.com/updates/stable/release.json`。manifest 必须提供 `stable` channel、规范版本和 `darwin`/`win32` 的 HTTPS `url`、base64 `sha512`、`size`；正文最多 16 KiB，安装包最多 1 GiB。版本与下载请求均拒绝重定向，不发送原项目的统计 header。下载校验 SHA-512 与容器格式；实现不验证 manifest 的独立数字签名，不能将摘要校验描述为签名验证。
+更新读取 `https://clawclaw.xzinfra.com/updates/dsh/stable/release.json`。manifest 必须提供 `stable` channel、规范版本和 `darwin`/`win32` 的 HTTPS `url`、base64 `sha512`、`size`；正文最多 16 KiB，安装包最多 1 GiB。版本与下载请求均拒绝重定向，不发送原项目的统计 header。下载校验 SHA-512 与容器格式；实现不验证 manifest 的独立数字签名，不能将摘要校验描述为签名验证。
 
 发布步骤见[包级参考](../dsh-plugin-desktop/README.zh.md)。本页描述客户端协议，不证明远程端点或发行产物已经上线。

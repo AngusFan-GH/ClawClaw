@@ -106,7 +106,7 @@ describe('macOS DMG smoke artifact verification', () => {
         ],
       },
       { command: 'plutil', args: ['-lint', value.infoPlist] },
-      { command: 'lipo', args: [value.executable, '-verify_arch', 'arm64'] },
+      { command: 'lipo', args: [value.executable, '-verify_arch', 'arm64', 'x86_64'] },
       { command: 'hdiutil', args: ['detach', value.root] },
     ])
     expect(harness.removeMountPoint).toHaveBeenCalledWith(value.root)

@@ -47,7 +47,7 @@ function options(calls: CommandCall[], logs: string[] = []): MacSmokePackageOpti
 }
 
 describe('macOS DMG smoke packaging', () => {
-  it('checks without credentials, builds an unsigned DMG, then verifies it', () => {
+  it('checks without credentials, builds an unsigned universal DMG, then verifies it', () => {
     const calls: CommandCall[] = []
     const logs: string[] = []
     const prepareRuntime = vi.fn()
@@ -68,10 +68,11 @@ describe('macOS DMG smoke packaging', () => {
         '/repo/node_modules/electron-builder/cli.js',
         '--mac',
         'dmg',
-        '--arm64',
+        '--universal',
         '--publish',
         'never',
         '--config.mac.notarize=false',
+        '--config.dmg.writeUpdateInfo=false',
         '--config.npmRebuild=false',
         '--config.directories.output=/repo/dsh-plugin-desktop/dist/mac-smoke',
       ],
@@ -93,7 +94,7 @@ describe('macOS DMG smoke packaging', () => {
       env: { PATH: '/usr/bin:/bin', SAFE_VALUE: 'kept' },
     })
     expect(logs).toEqual([
-      'Building an unsigned macOS DMG smoke; signing and notarization are release-only steps.',
+      'Building an unsigned universal macOS DMG; signing and notarization are disabled by product policy.',
     ])
   })
 
@@ -115,15 +116,16 @@ describe('macOS DMG smoke packaging', () => {
       '/repo/node_modules/electron-builder/cli.js',
       '--mac',
       'dmg',
-        '--arm64',
+        '--universal',
       '--publish',
       'never',
       '--config.mac.notarize=false',
+      '--config.dmg.writeUpdateInfo=false',
       '--config.npmRebuild=false',
       '--config.directories.output=/repo/dsh-plugin-desktop/dist/mac-smoke',
     ])
     expect(logs).toEqual([
-      'Building an unsigned macOS DMG smoke; signing and notarization are release-only steps.',
+      'Building an unsigned universal macOS DMG; signing and notarization are disabled by product policy.',
       'Skipping the macOS package preflight; the package gate already passed.',
     ])
   })

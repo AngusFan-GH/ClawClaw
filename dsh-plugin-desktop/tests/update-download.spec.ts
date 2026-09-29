@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  UpdateDownloadError, desktopUpdateFilename, downloadDesktopUpdate,
+  UpdateDownloadError, desktopUpdateDestination, desktopUpdateFilename, downloadDesktopUpdate,
   pendingDesktopUpdateArtifact, recordDesktopUpdateArtifact, resolveDesktopUpdateArtifact,
   type DesktopDownloadPlatform, type UpdateArtifactRequest,
 } from '../src/update-download.ts'
@@ -25,12 +25,40 @@ function requestFor(version: string, artifacts: Record<DesktopDownloadPlatform, 
 }
 
 describe('ClawClaw installer download', () => {
+  it('creates a private app-owned installer destination', async () => {
+    const directory = await temp()
+    const destination = await desktopUpdateDestination(directory, 'win32', '2.1.0')
+    const installerDirectory = join(directory, 'updates', 'installers')
+    expect(destination).toBe(join(installerDirectory, 'ClawClaw-2.1.0-windows.exe'))
+    expect((await lstat(installerDirectory)).mode & 0o777).toBe(0o700)
+  })
+
   it('downloads a manifest-declared DMG atomically and verifies SHA-512', async () => {
     const directory = await temp(); const artifact = dmg()
     const destinationPath = join(directory, desktopUpdateFilename('darwin', '2.1.0'))
     const result = await downloadDesktopUpdate({ platform: 'darwin', version: '2.1.0', destinationPath, request: requestFor('2.1.0', { darwin: artifact, win32: exe() }) })
     expect(result).toBe(join(directory, 'ClawClaw-2.1.0-mac.dmg'))
     expect(await readFile(result)).toEqual(artifact)
+  })
+
+  it('reports byte progress and clears native progress after completion', async () => {
+    const directory = await temp(); const artifact = dmg(); const progress = vi.fn()
+    const base = requestFor('2.1.0', { darwin: artifact, win32: exe() })
+    const request: UpdateArtifactRequest = async (url, init) => {
+      if (url.endsWith('release.json')) return base(url, init)
+      return new Response(new ReadableStream<Uint8Array>({
+        start(stream) {
+          stream.enqueue(artifact.subarray(0, 256))
+          stream.enqueue(artifact.subarray(256))
+          stream.close()
+        },
+      }))
+    }
+    await downloadDesktopUpdate({
+      platform: 'darwin', version: '2.1.0',
+      destinationPath: join(directory, 'ClawClaw-2.1.0-mac.dmg'), request, progress,
+    })
+    expect(progress.mock.calls.map(call => call[0])).toEqual([0, 0.25, 1, -1])
   })
 
   it('rejects an installer whose content does not match the published checksum', async () => {

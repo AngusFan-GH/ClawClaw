@@ -427,7 +427,6 @@ the package names, versions, and licenses for transparency.
 | bowser | 2.14.1 | MIT |
 | brotli | 1.3.3 | MIT |
 | buffer-equal-constant-time | 1.0.1 | BSD-3-Clause |
-| builder-util-runtime | 9.5.1 | MIT |
 | bundle-name | 4.1.0 | MIT |
 | bytes | 3.1.2 | MIT |
 | bytestreamjs | 2.0.1 | BSD-3-Clause |
@@ -463,7 +462,6 @@ the package names, versions, and licenses for transparency.
 | dshmarket | 1.38.1 | MIT |
 | dunder-proto | 1.0.1 | MIT |
 | ecdsa-sig-formatter | 1.0.11 | Apache-2.0 |
-| electron-updater | 6.8.3 | MIT |
 | emoji-regex | 8.0.0 | MIT |
 | es-define-property | 1.0.1 | MIT |
 | es-errors | 1.3.0 | MIT |
@@ -487,7 +485,6 @@ the package names, versions, and licenses for transparency.
 | form-data | 4.0.6 | MIT |
 | formdata-polyfill | 4.0.10 | MIT |
 | fs-ext | 2.1.1 | MIT |
-| fs-extra | 10.1.0 | MIT |
 | function-bind | 1.1.2 | MIT |
 | gaxios | 7.3.1 | Apache-2.0 |
 | gcp-metadata | 8.1.2 | Apache-2.0 |
@@ -498,7 +495,6 @@ the package names, versions, and licenses for transparency.
 | google-auth-library | 10.9.1 | Apache-2.0 |
 | google-logging-utils | 1.1.3 | Apache-2.0 |
 | gopd | 1.2.0 | MIT |
-| graceful-fs | 4.2.11 | ISC |
 | has-symbols | 1.1.0 | MIT |
 | has-tostringtag | 1.0.2 | MIT |
 | hashery | 1.5.1 | MIT |
@@ -525,16 +521,12 @@ the package names, versions, and licenses for transparency.
 | json-bigint | 1.0.0 | MIT |
 | json-schema-to-ts | 3.1.1 | MIT |
 | json-schema-traverse | 1.0.0 | MIT |
-| jsonfile | 6.2.1 | MIT |
 | jwa | 2.0.1 | MIT |
 | jws | 4.0.1 | MIT |
 | keyv | 5.6.0 | MIT |
 | koffi | 3.1.5 | MIT |
-| lazy-val | 1.0.5 | MIT |
 | libsignal | 6.0.0 | GPL-3.0 |
 | locate-path | 5.0.0 | MIT |
-| lodash.escaperegexp | 4.1.2 | MIT |
-| lodash.isequal | 4.5.0 | MIT |
 | long | 5.3.2 | Apache-2.0 |
 | loose-envify | 1.4.0 | MIT |
 | lru-cache | 11.5.2 | BlueOak-1.0.0 |
@@ -548,10 +540,10 @@ the package names, versions, and licenses for transparency.
 | nan | 2.28.0 | MIT |
 | negotiator | 1.1.0 | MIT |
 | node-addon-api | 7.1.1 | MIT |
-| node-addon-native-custom-loader | 0.1.5 | MIT |
-| node-addon-require-builtin | 0.1.5 | MIT |
-| node-addon-require-builtin-darwin-arm64 | 0.1.5 | MIT |
-| node-addon-require-builtin-darwin-x64 | 0.1.5 | MIT |
+| node-addon-native-custom-loader | 0.1.6 | MIT |
+| node-addon-require-builtin | 0.1.6 | MIT |
+| node-addon-require-builtin-darwin-arm64 | 0.1.6 | MIT |
+| node-addon-require-builtin-darwin-x64 | 0.1.6 | MIT |
 | node-domexception | 1.0.0 | MIT |
 | node-fetch | 3.3.2 | MIT |
 | node-pty | 1.2.0-beta.15 | MIT |
@@ -604,7 +596,6 @@ the package names, versions, and licenses for transparency.
 | run-applescript | 7.1.0 | MIT |
 | safe-buffer | 5.2.1 | MIT |
 | safe-stable-stringify | 2.5.0 | MIT |
-| sax | 1.6.1 | BlueOak-1.0.0 |
 | saxes | 6.0.0 | ISC |
 | selfsigned | 5.5.0 | MIT |
 | semver | 7.8.5 | ISC |
@@ -626,7 +617,6 @@ the package names, versions, and licenses for transparency.
 | strtok3 | 10.3.5 | MIT |
 | thread-stream | 3.2.0 | MIT |
 | tiny-inflate | 1.0.3 | MIT |
-| tiny-typed-emitter | 2.1.0 | MIT |
 | token-types | 6.1.2 | MIT |
 | ts-algebra | 2.0.0 | MIT |
 | tslib | 2.8.1 | 0BSD |
@@ -639,7 +629,6 @@ the package names, versions, and licenses for transparency.
 | unicode-properties | 1.4.1 | MIT |
 | unicode-trie | 2.0.0 | MIT |
 | unicorn-magic | 0.3.0 | MIT |
-| universalify | 2.0.1 | MIT |
 | vary | 1.1.2 | MIT |
 | web-streams-polyfill | 3.3.3 | MIT |
 | whatsapp-rust-bridge | 0.5.4 | MIT |

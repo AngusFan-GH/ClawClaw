@@ -1,83 +1,178 @@
 name: Release ClawClaw Desktop
+
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the assembled release to the stable update origin
+        required: true
+        type: boolean
+        default: false
   push:
     tags: ['clawclaw-v*']
-permissions: { contents: write }
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-stable-release
+  cancel-in-progress: false
+
+env:
+  DSH_TELEMETRY_DISABLED: '1'
+
 jobs:
+  validate:
+    name: Validate release ref
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.2
+      - name: Match a release tag to the desktop package version
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./dsh-plugin-desktop/package.json').version")"
+          test "$REF_NAME" = "clawclaw-v$version" || {
+            echo "Release tag $REF_NAME does not match desktop package version $version" >&2
+            exit 1
+          }
+
   build:
+    name: Build ${{ matrix.artifact }}
+    needs: validate
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: macos-latest
-            package: dsh-plugin-desktop
             artifact: macos
           - os: windows-latest
-            package: dsh-plugin-desktop
             artifact: windows
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v6
-        with: { submodules: recursive }
+        with:
+          submodules: recursive
+          persist-credentials: false
       - uses: actions/setup-node@v6
-        with: { node-version: 22.23.2 }
+        with:
+          node-version: 22.23.2
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm run upstream:prepare-runtime
       - name: Refresh desktop runtime dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build unsigned macOS test DMG
+      - name: Build unsigned macOS Universal DMG
         if: matrix.artifact == 'macos'
-        run: pnpm --filter ${{ matrix.package }} run dist:mac-smoke
-      - name: Build Windows installer
+        run: pnpm --filter dsh-plugin-desktop run dist:mac
+      - name: Build unsigned Windows NSIS installer
         if: matrix.artifact == 'windows'
-        run: pnpm --filter ${{ matrix.package }} run dist:win
-      - name: Generate Windows update metadata
-        if: matrix.artifact == 'windows'
-        run: node scripts/generate-windows-update-metadata.mjs --directory ${{ matrix.package }}/dist
+        run: pnpm --filter dsh-plugin-desktop run dist:win
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
+          name: desktop-${{ matrix.artifact }}
+          if-no-files-found: error
+          retention-days: 14
           path: |
-            ${{ matrix.package }}/dist/**/*.dmg
-            ${{ matrix.package }}/dist/**/*.zip
-            ${{ matrix.package }}/dist/**/*.exe
-            ${{ matrix.package }}/dist/latest.yml
-            ${{ matrix.package }}/dist/**/*.blockmap
-  publish:
+            dsh-plugin-desktop/dist/**/*.dmg
+            dsh-plugin-desktop/dist/**/*.exe
+
+  assemble:
+    name: Assemble release
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v6
-        with: { node-version: 22.23.2 }
-      - run: corepack enable
+        with:
+          node-version: 22.23.2
       - uses: actions/download-artifact@v4
-        with: { path: artifacts }
-      - name: Assemble release metadata
+        with:
+          pattern: desktop-*
+          path: artifacts
+      - name: Validate version and generate release.json
         shell: bash
-        env: { CHANNEL: stable }
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          UPDATE_BASE_URL: ${{ vars.UPDATE_BASE_URL || 'https://clawclaw.xzinfra.com/updates/dsh/stable' }}
         run: |
           set -euo pipefail
-          mkdir -p release
-          find artifacts -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.yml' -o -name '*.blockmap' \) -exec cp {} release/ \;
+          version="$(node -p "require('./dsh-plugin-desktop/package.json').version")"
+          if [[ "$EVENT_NAME" == "push" && "$REF_NAME" != "clawclaw-v$version" ]]; then
+            echo "Release tag $REF_NAME does not match desktop package version $version" >&2
+            exit 1
+          fi
+          mkdir release
+          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' \) -exec cp {} release/ \;
           test "$(find release -maxdepth 1 -name '*.dmg' -type f | wc -l)" = 1
           test "$(find release -maxdepth 1 -name '*.exe' -type f | wc -l)" = 1
-          test "$(find release -maxdepth 1 -name 'latest.yml' -type f | wc -l)" = 1
-          node scripts/generate-release-manifest.mjs --directory release --output release/release.json --base-url "https://clawclaw.xzinfra.com/updates/dsh/$CHANNEL"
+          node scripts/generate-release-manifest.mjs \
+            --directory release \
+            --output release/release.json \
+            --base-url "$UPDATE_BASE_URL"
+          node scripts/upload-update.mjs --directory release --channel stable --dry-run
       - uses: actions/upload-artifact@v4
-        with: { name: release, path: release/ }
-      - name: Publish stable release to the update origin
+        with:
+          name: desktop-release
+          if-no-files-found: error
+          retention-days: 30
+          path: release/
+
+  deploy:
+    name: Publish stable update
+    needs: assemble
+    if: github.event_name == 'push' || inputs.publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: stable-update
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.2
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-release
+          path: release
+      - name: Configure update-origin SSH identity
+        shell: bash
         env:
-          UPDATE_PASSWORD: ${{ secrets.UPDATE_PASSWORD }}
-          UPDATE_CHANNEL: stable
+          UPDATE_SSH_PRIVATE_KEY: ${{ secrets.UPDATE_SSH_PRIVATE_KEY }}
+          UPDATE_KNOWN_HOSTS: ${{ secrets.UPDATE_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
-          test -n "$UPDATE_PASSWORD"
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq sshpass
+          test -n "$UPDATE_SSH_PRIVATE_KEY"
+          test -n "$UPDATE_KNOWN_HOSTS"
           install -d -m 0700 "$HOME/.ssh"
-          printf '%s\n' '101.200.13.235 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPbPPFUw6R3s4V3iV41PNtMR/DRDwTJrZZhl02VtwWuu' > "$HOME/.ssh/known_hosts"
-          chmod 0600 "$HOME/.ssh/known_hosts"
-          pnpm run upload:update -- --directory release --channel stable --unsigned-mac
+          printf '%s\n' "$UPDATE_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$UPDATE_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+          ssh-keygen -y -f "$HOME/.ssh/id_ed25519" >/dev/null
+      - name: Upload installers and switch release.json
+        shell: bash
+        env:
+          UPDATE_HOST: ${{ vars.UPDATE_HOST }}
+          UPDATE_USER: ${{ vars.UPDATE_USER }}
+          UPDATE_PORT: ${{ vars.UPDATE_PORT || '22' }}
+          UPDATE_REMOTE_ROOT: ${{ vars.UPDATE_REMOTE_ROOT || '/var/www/xzinfra' }}
+        run: |
+          set -euo pipefail
+          test -n "$UPDATE_HOST"
+          test -n "$UPDATE_USER"
+          node scripts/upload-update.mjs --directory release --channel stable

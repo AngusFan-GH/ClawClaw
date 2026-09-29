@@ -10,15 +10,10 @@ const terminal = vi.hoisted(() => ({ open: vi.fn() }))
 const diagnostics = vi.hoisted(() => ({ export: vi.fn() }))
 const updater = vi.hoisted(() => ({
   download: vi.fn(),
-  filename: vi.fn(),
+  destination: vi.fn(),
   pending: vi.fn(),
   record: vi.fn(),
   resolve: vi.fn(),
-}))
-const nativeUpdate = vi.hoisted(() => ({ stage: vi.fn(), install: vi.fn(), provider: {} }))
-vi.mock('../src/native-update-installer.ts', () => ({
-  getNativeUpdater: async () => nativeUpdate.provider,
-  stageNativeUpdate: nativeUpdate.stage,
 }))
 const childProcess = vi.hoisted(() => {
   type Listener = (...args: unknown[]) => void
@@ -76,7 +71,7 @@ vi.mock('../src/diagnostic-export.ts', () => ({
 
 
 vi.mock('../src/update-download.ts', () => ({
-  desktopUpdateFilename: updater.filename,
+  desktopUpdateDestination: updater.destination,
   downloadDesktopUpdate: updater.download,
   pendingDesktopUpdateArtifact: updater.pending,
   recordDesktopUpdateArtifact: updater.record,
@@ -245,6 +240,7 @@ const electron = vi.hoisted(() => {
         return '/tmp/dsh-desktop-user-data'
       }),
       getVersion: vi.fn(() => '43.4.0'),
+      exit: vi.fn(),
       isPackaged: false,
       isHidden: vi.fn(() => false),
       show: vi.fn(),
@@ -377,13 +373,12 @@ describe('Electron desktop runtime', () => {
     electron.notifications.length = 0
     childProcess.reset()
     vi.clearAllMocks()
-    nativeUpdate.install.mockReset()
-    nativeUpdate.stage.mockReset().mockResolvedValue(nativeUpdate.install)
     updater.download.mockReset()
-    updater.filename.mockReset()
-    updater.filename.mockImplementation((platform: string, version: string) => (
-      `ClawClaw-${version}-${platform === 'darwin' ? 'mac.dmg' : 'windows.exe'}`
+    updater.destination.mockReset()
+    updater.destination.mockImplementation((_userData: string, platform: string, version: string) => (
+      `/tmp/dsh-desktop-user-data/updates/installers/ClawClaw-${version}-${platform === 'darwin' ? 'mac.dmg' : 'windows.exe'}`
     ))
+    updater.download.mockImplementation(async (options: { destinationPath: string }) => options.destinationPath)
     updater.pending.mockReset()
     updater.pending.mockResolvedValue(undefined)
     updater.record.mockReset()
@@ -2365,7 +2360,7 @@ describe('Electron desktop runtime', () => {
     expect(restart).toHaveBeenLastCalledWith('safe-mode')
   })
 
-  it('uses Electron networking while unsigned macOS packages remain manual-install only', async () => {
+  it('downloads, verifies, and opens unsigned macOS updates for manual installation', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const response = Response.json({ version: '2.1.0' })
     electron.net.fetch.mockResolvedValueOnce(response)
@@ -2385,7 +2380,7 @@ describe('Electron desktop runtime', () => {
       statePath: join('/tmp/dsh-desktop-user-data', 'updates', 'state.json'),
     })
     electron.app.isPackaged = true
-    expect(runtime.updates).toMatchObject({ isPackaged: true, canDownload: false })
+    expect(runtime.updates).toMatchObject({ isPackaged: true, canDownload: true })
 
     await runtime.updates.showManualCheckResult({
       status: 'up-to-date',
@@ -2427,13 +2422,20 @@ describe('Electron desktop runtime', () => {
     electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 0, checkboxChecked: false })
     await expect(runtime.updates.confirmDownload('2.1.0')).resolves.toBe(true)
     const controller = new AbortController()
-    await expect(runtime.updates.downloadAndOpen('2.1.0', controller.signal))
-      .rejects.toThrow('Updates require a packaged macOS or Windows application')
-    expect(nativeUpdate.stage).not.toHaveBeenCalled()
-    expect(nativeUpdate.install).not.toHaveBeenCalled()
+    await expect(runtime.updates.downloadAndOpen('2.1.0', controller.signal)).resolves.toEqual({ status: 'deferred' })
+    expect(updater.destination).toHaveBeenCalledWith(
+      '/tmp/dsh-desktop-user-data', 'darwin', '2.1.0', 'stable',
+    )
+    expect(updater.download).toHaveBeenCalledWith(expect.objectContaining({
+      platform: 'darwin', version: '2.1.0', signal: controller.signal,
+    }))
+    expect(updater.record).toHaveBeenCalledWith('/tmp/dsh-desktop-user-data', {
+      platform: 'darwin', version: '2.1.0', path: '/tmp/ClawClaw-2.1.0-mac.dmg',
+    })
+    expect(electron.shell.openPath).toHaveBeenCalledWith('/tmp/ClawClaw-2.1.0-mac.dmg')
     expect(electron.dialog.showSaveDialog).not.toHaveBeenCalled()
     expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(activeWindow, expect.objectContaining({
-      title: 'ClawClaw Update Available', buttons: ['Download', 'Later'],
+      title: 'ClawClaw Update Downloaded', detail: expect.stringContaining('Replace ClawClaw in Applications'),
     }))
 
     runtime.updates.notify({
@@ -2463,12 +2465,18 @@ describe('Electron desktop runtime', () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const runtime = new ElectronDesktopRuntime(async () => {})
     runtime.schedule({ ...spec, requestQuit })
+    updater.download.mockResolvedValueOnce('C:\\Updates\\ClawClaw-2.1.0-windows.exe')
     electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 0, checkboxChecked: false })
     await runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal)
     expect(requestQuit).toHaveBeenCalledWith(0)
-    expect(nativeUpdate.install).not.toHaveBeenCalled()
+    expect(childProcess.spawn).not.toHaveBeenCalled()
     expect(runtime.completeUpdateExit(0)).toBe(true)
-    expect(nativeUpdate.install).toHaveBeenCalledOnce()
+    expect(childProcess.spawn).toHaveBeenCalledWith(
+      'C:\\Updates\\ClawClaw-2.1.0-windows.exe',
+      ['--updated', '--force-run'],
+      expect.objectContaining({ detached: true, shell: false, windowsHide: false }),
+    )
+    expect(electron.app.exit).toHaveBeenCalledWith(0)
     expect(runtime.completeUpdateExit(0)).toBe(false)
   })
 
@@ -2478,23 +2486,24 @@ describe('Electron desktop runtime', () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const runtime = new ElectronDesktopRuntime(async () => {})
     runtime.schedule(spec)
+    updater.download.mockResolvedValueOnce('C:\\Updates\\ClawClaw-2.1.0-windows.exe')
     electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 0, checkboxChecked: false })
     await runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal)
     expect(runtime.completeUpdateExit(1)).toBe(false)
-    expect(nativeUpdate.install).not.toHaveBeenCalled()
+    expect(childProcess.spawn).not.toHaveBeenCalled()
   })
 
-  it('keeps the app running when staging fails', async () => {
+  it('keeps the app running when download or verification fails', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     electron.app.isPackaged = true
-    nativeUpdate.stage.mockRejectedValueOnce(new Error('signature rejected'))
+    updater.download.mockRejectedValueOnce(new Error('checksum rejected'))
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const runtime = new ElectronDesktopRuntime(async () => {})
     const requestQuit = vi.fn()
     runtime.schedule({ ...spec, requestQuit })
-    await expect(runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal)).rejects.toThrow('signature rejected')
+    await expect(runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal)).rejects.toThrow('checksum rejected')
     expect(requestQuit).not.toHaveBeenCalled()
-    expect(nativeUpdate.install).not.toHaveBeenCalled()
+    expect(childProcess.spawn).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -2534,6 +2543,7 @@ describe('Electron desktop runtime', () => {
     const runtime = new ElectronDesktopRuntime(async () => {})
     const requestQuit = vi.fn()
     runtime.schedule({ ...spec, requestQuit })
+    updater.download.mockResolvedValueOnce('C:\\Updates\\ClawClaw-2.1.0-windows.exe')
     const controller = new AbortController()
     electron.dialog.showMessageBox.mockImplementationOnce(async () => {
       controller.abort()

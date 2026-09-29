@@ -39,13 +39,8 @@ export interface DesktopNativeCopy {
   readonly updateDownloadedTitle: string
   readonly updateReady: (version: string) => string
   readonly macInstallInstructions: string
-  readonly restartInstallQuestion: string
   readonly windowsInstallQuestion: string
   readonly restartAndInstall: string
-  readonly saveInstallerTitle: string
-  readonly saveAndDownload: string
-  readonly diskImage: string
-  readonly windowsInstaller: string
   readonly removeInstallerTitle: string
   readonly updateInstalled: (version: string) => string
   readonly removeInstallerQuestion: (path: string) => string
@@ -99,13 +94,8 @@ const COPY: Record<DesktopLocale, DesktopNativeCopy> = {
     updateDownloadedTitle: 'ClawClaw Update Downloaded',
     updateReady: version => `ClawClaw ${version} is ready to install.`,
     macInstallInstructions: 'The disk image has opened. Replace ClawClaw in Applications, then reopen it.',
-    restartInstallQuestion: 'Restart ClawClaw and install the update now?',
     windowsInstallQuestion: 'Restart ClawClaw and run the installer now?',
     restartAndInstall: 'Restart and Install',
-    saveInstallerTitle: 'Save Update Installer',
-    saveAndDownload: 'Save and Download',
-    diskImage: 'Disk Image',
-    windowsInstaller: 'Windows Installer',
     removeInstallerTitle: 'Remove Update Installer',
     updateInstalled: version => `ClawClaw ${version} has been installed.`,
     removeInstallerQuestion: path => `Delete the downloaded installer to free disk space?\n\n${path}`,
@@ -159,13 +149,8 @@ const COPY: Record<DesktopLocale, DesktopNativeCopy> = {
     updateDownloadedTitle: 'ClawClaw 更新已下载',
     updateReady: version => `ClawClaw ${version} 已可安装。`,
     macInstallInstructions: '磁盘映像已打开。请替换“应用程序”中的 ClawClaw，然后重新打开。',
-    restartInstallQuestion: '现在重启 ClawClaw 并安装更新？',
     windowsInstallQuestion: '现在重启 ClawClaw 并运行安装程序？',
     restartAndInstall: '重启并安装',
-    saveInstallerTitle: '保存更新安装包',
-    saveAndDownload: '保存并下载',
-    diskImage: '磁盘映像',
-    windowsInstaller: 'Windows 安装程序',
     removeInstallerTitle: '删除更新安装包',
     updateInstalled: version => `ClawClaw ${version} 已安装。`,
     removeInstallerQuestion: path => `是否删除下载的安装包以释放磁盘空间？\n\n${path}`,

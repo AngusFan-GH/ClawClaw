@@ -95,11 +95,11 @@ Shortcuts manage Plugins, Automations, and the Settings sections that currently 
 
 ## Updates
 
-Packaged applications read `https://clawclaw.xzinfra.com/updates/stable/release.json`. Background failures or unchanged versions are silent; manual checks show a result.
+Packaged applications consume only `https://clawclaw.xzinfra.com/updates/dsh/stable/release.json`; they do not use `latest.yml` or `latest-mac.yml`. Background failures or unchanged versions are silent; manual checks show a result.
 
 Update qualification evidence in Desktop settings is off by default. When explicitly enabled, it keeps bounded local records of versions, update stages, classified outcomes, durations, and artifact summaries. Full URLs, raw errors, device identity, and user content are excluded. Evidence can be cleared at any time and is included only in a user-requested diagnostic ZIP.
 
-After download confirmation and destination selection, the application fetches the manifest's HTTPS artifact and verifies SHA-512 and its DMG/PE container. Requests do not send the original project's `X-DSH-Desktop-*` statistics headers. Digest verification is not publisher-signature verification. On macOS, replace the application using the opened DMG; Windows hands off to NSIS after confirmation. Downloaded installers can be removed after installation. Actual checks determine whether the service and artifacts are available.
+After confirmation, the application saves the manifest's installer in the private `updates/installers/` directory under application data and verifies its size, SHA-512 digest, and DMG/PE container. Requests do not send the original project's `X-DSH-Desktop-*` statistics headers. Windows and macOS artifacts are intentionally unsigned; HTTPS and digest verification establish consistency with the release manifest, not publisher identity. Windows starts NSIS only after the Host shuts down successfully. macOS opens the verified Universal DMG for the user to replace the application manually. After upgrading, the application offers to remove the retained installer. Actual checks determine whether the service and artifacts are available.
 
 ## Troubleshooting
 

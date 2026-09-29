@@ -128,10 +128,9 @@ jobs:
           DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
         run: pnpm --filter dsh-plugin-desktop run dist:win-portable
 
-  # macOS-only universal packaging smoke on a real macOS runner: the signed
-  # release is built manually on a credentialed machine, so an unsigned DMG
-  # here catches Intel and Apple Silicon packaging regressions before a manual
-  # release. No signing secrets ever reach this job.
+  # Build the intentionally unsigned Universal DMG on a real macOS runner and
+  # catch Intel and Apple Silicon packaging regressions. Signing secrets are
+  # neither required nor exposed to this job.
   desktop-macos:
     needs: changes
     if: needs.changes.outputs.product == 'true'
@@ -156,10 +155,10 @@ jobs:
           key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml') }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter dsh-plugin-desktop run check:mac-package
-      - name: Build macOS smoke artifact
+      - name: Build unsigned macOS Universal DMG
         env:
           DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
-        run: pnpm --filter dsh-plugin-desktop run dist:mac-smoke
+        run: pnpm --filter dsh-plugin-desktop run dist:mac
 
   # Upstream toolchain smoke: the portable-shell scripts must resolve the
   # pinned submodule's own pnpm release on Windows.

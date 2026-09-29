@@ -44,6 +44,8 @@ export interface DownloadDesktopUpdateOptions {
   readonly request: UpdateArtifactRequest
   /** Optional cancellation signal owned by the update coordinator. */
   readonly signal?: AbortSignal
+  /** Optional native progress sink; receives 0..1 while downloading and -1 when finished. */
+  readonly progress?: (fraction: number) => void
 }
 
 /** Typed failure from installer request, validation, or cancellation. */
@@ -145,8 +147,9 @@ export async function downloadDesktopUpdate(options: DownloadDesktopUpdateOption
   }
 
   let failure: unknown
+  options.progress?.(0)
   try {
-    await writeResponseBody(paths.temporary, response.body, options.signal, artifact.size)
+    await writeResponseBody(paths.temporary, response.body, options.signal, artifact.size, options.progress)
     throwIfAborted(options.signal)
     await validateArtifactChecksum(paths.temporary, artifact.sha512)
     await validateArtifact(paths.temporary, platform)
@@ -157,6 +160,7 @@ export async function downloadDesktopUpdate(options: DownloadDesktopUpdateOption
     failure = options.signal?.aborted === true || isAbortFailure(cause) ? aborted(cause) : cause
     throw failure
   } finally {
+    options.progress?.(-1)
     try {
       await unlinkIfPresent(paths.temporary)
     } catch (cleanupCause) {
@@ -164,6 +168,25 @@ export async function downloadDesktopUpdate(options: DownloadDesktopUpdateOption
       throw new AggregateError([failure, cleanupCause], 'Failed to download and clean up the update installer.')
     }
   }
+}
+
+/** Prepare the private, product-owned destination used for one downloaded installer. */
+export async function desktopUpdateDestination(
+  userDataPath: string,
+  platform: DesktopDownloadPlatform,
+  version: string,
+  channel: DesktopReleaseChannel = 'stable',
+): Promise<string> {
+  const root = validatedUserDataPath(userDataPath)
+  validatedPlatform(platform)
+  validatedVersion(version, channel)
+  const rootStat = await lstat(root)
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+    throw new UpdateDownloadError('invalid-options', 'The update user-data path must be a real directory.')
+  }
+  const directory = join(root, 'updates', 'installers')
+  await preparePrivateDirectory(directory)
+  return join(directory, desktopUpdateFilename(platform, version, channel))
 }
 
 /** Fixed default filename shown by the native destination picker. */
@@ -402,6 +425,7 @@ async function writeResponseBody(
   body: ReadableStream<Uint8Array>,
   signal: AbortSignal | undefined,
   expectedSize: number,
+  progress?: (fraction: number) => void,
 ): Promise<void> {
   const handle = await open(filename, 'wx', PRIVATE_FILE_MODE)
   const reader = body.getReader()
@@ -425,6 +449,7 @@ async function writeResponseBody(
       }
       await writeAll(handle, chunk.value)
       bytesWritten += chunk.value.byteLength
+      progress?.(bytesWritten / expectedSize)
     }
     if (bytesWritten === 0) {
       throw new UpdateDownloadError('empty-body', 'The update download service returned an empty body.')

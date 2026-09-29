@@ -5,6 +5,7 @@ packages:
 linkWorkspacePackages: true
 overrides:
   app-builder-lib: 26.15.7
+  node-addon-require-builtin: 0.1.6
   open: 11.0.1
   dshmarket: 1.38.1
   fs-ext: 2.1.1

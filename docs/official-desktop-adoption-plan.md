@@ -38,7 +38,7 @@ ClawClaw 已有下列能力，因此不再移植同类实现：
 | Host 优雅关闭 | `shutdown.ts`、`startup-generation.ts` | 扩展检查，不替换 |
 | 异常运行标记、日志和诊断导出 | `crash-evidence.ts`、`log-files.ts` | 增量强化 |
 | Cron Tasks 和提醒 | ClawClaw 自有控制器和客户端插件 | 纳入退出检查 |
-| Windows NSIS、macOS 签名/公证预检 | package/release scripts | 增量强化 |
+| Windows NSIS、macOS Universal DMG | package/release scripts | 保持未签名并强化结构校验 |
 
 ## 4. 借鉴分类
 
@@ -48,8 +48,7 @@ ClawClaw 已有下列能力，因此不再移植同类实现：
 | --- | --- | --- |
 | `quit-confirmation.ts` | 退出前检查、保守降级、重复请求合并、无 owner 原生对话框 | 新增中断快照和确认器，接入现有 shutdown |
 | `update-schedule.ts` | 单调时钟、抖动、指数退避、并发检查合并 | 扩展 `update-lifecycle.ts` 周期调度 |
-| `update-http-executor.ts` | 响应头和下载块空闲超时 | 适配当前 `electron-updater` 后接入下载器 |
-| `test-windows-update-signature.mjs` | 用 `NsisUpdater.verifySignature()` 验证发布者、错签和未签名拒绝 | 新增 Windows 发布资格测试 |
+| 更新下载行为 | 私有目录、进度、大小/摘要/容器校验和安全安装交接 | 扩展 `update-download.ts` 与 Electron runtime |
 | `crash-report.ts` | 结构化 fatal report、限额、原子写入 | 扩展现有 crash evidence，不上传 |
 | `update-journal.ts` | 本地、可选的更新资格日志 | 新增 opt-in 本地 journal |
 | installer tests | 安装事务、失败回滚、卸载保留/清理边界 | 加强 ClawClaw NSIS 测试矩阵 |
@@ -65,6 +64,7 @@ ClawClaw 已有下列能力，因此不再移植同类实现：
 - `dsh-app://` shell 架构及官方窗口/客户端整体替换。
 - 官方 ASAR 和运行时解析布局。
 - SafeNet 专用签名编排。
+- 原生自动更新框架及其 `latest.yml`、`latest-mac.yml` 和 blockmap 协议。
 
 若未来确需以上能力，必须单独写设计记录，不能作为本计划的顺带变更。
 
@@ -100,42 +100,38 @@ ClawClaw 已有下列能力，因此不再移植同类实现：
 
 验证：`corepack pnpm --filter dsh-plugin-desktop exec vitest run tests/interruption-inspection.spec.ts tests/quit-confirmation.spec.ts tests/startup-generation.spec.ts tests/host-process.spec.ts tests/shutdown.spec.ts`（33 项通过）；`corepack pnpm --filter dsh-plugin-desktop run typecheck`；`corepack pnpm --filter dsh-plugin-desktop run build`；`corepack pnpm --filter dsh-plugin-desktop run test`（1239 项通过、6 项既有跳过）。
 
-### 阶段 2（P0）：更新调度抖动、退避和空闲超时
+### 阶段 2（P0）：更新调度抖动、退避和直接下载
 
 **状态：已完成（2026-09-28）**
 
-目标：保留 ClawClaw 六小时正常轮询策略，同时避免大量客户端同刻请求，并使“连接存在但不再传输”的下载能确定失败。
+目标：保留 ClawClaw 六小时正常轮询策略，同时避免大量客户端同刻请求，并通过产品自有下载链路校验安装包。
 
 改动：
 
 - 调度使用 `performance.now()`，默认抖动 `20%`，失败指数退避到可配置上限。
 - 自动、前台恢复和显式检查共享在途请求；手动检查绕过 deadline，但不启动第二个网络请求。
-- 响应头超时和 chunk idle timeout 使用独立配置；先验证 `electron-updater` 当前内部 API，必要时单独升级依赖。
+- manifest 请求保留有界超时；安装包下载支持取消、大小上限、进度和原子落盘。
 
-验收：确定性随机源/时钟单测覆盖上下界、退避复位、手动绕过、释放后不重挂 timer；模拟 stalled headers/body 后在界限内失败。回滚时可退回固定六小时调度，但必须保留现有下载哈希、大小、容器和 redirect 检查。
+验收：确定性随机源/时钟单测覆盖上下界、退避复位、手动绕过、释放后不重挂 timer；下载测试覆盖取消、超限、大小不符、摘要不符和容器不符。回滚时可退回固定六小时调度，但必须保留现有下载哈希、大小、容器和 redirect 检查。
 
-实际落地：首次检查仍固定为启动后 60 秒；成功后的基础间隔仍为 6 小时，默认 `20%` 抖动。失败按 12 小时、24 小时递增并封顶，成功后复位。手动检查继续绕过周期 timer，并通过既有 `checkTask` 共享在途网络请求。`DesktopUpdateHttpExecutor` 保留 `electron-updater` 的 Electron session、代理和校验链路，在响应头前及相邻响应数据块之间施加默认 60 秒空闲截止；可用 `DSH_DESKTOP_UPDATE_HTTP_IDLE_TIMEOUT_MS` 调整。manifest 的既有 15 秒请求总截止保持独立。
+实际落地：首次检查仍固定为启动后 60 秒；成功后的基础间隔仍为 6 小时，默认 `20%` 抖动。失败按 12 小时、24 小时递增并封顶，成功后复位。手动检查继续绕过周期 timer，并通过既有 `checkTask` 共享在途网络请求。安装包由 `update-download.ts` 直接通过 Electron 网络边界获取，写入应用数据目录的私有临时文件；只有大小、SHA-512 和 DMG/PE 容器全部通过后才原子替换目标文件。manifest 的既有 15 秒请求总截止保持独立。
 
 验证：更新聚焦测试 39 项通过；`corepack pnpm --filter dsh-plugin-desktop run typecheck`；`corepack pnpm --filter dsh-plugin-desktop run build`；`corepack pnpm --filter dsh-plugin-desktop run test`（1247 项通过、6 项既有跳过）。
 
-### 阶段 3（P0）：Windows Authenticode 发布者资格验证
+### 阶段 3（P0）：未签名跨平台发布与安装交接
 
-**状态：阻塞（资格门禁已实现；缺少 Windows 签名身份和凭据化 release 路径）**
+**状态：已完成（2026-09-29）**
 
-目标：区分 PE 格式有效与 Authenticode 身份可信；更新元数据中的 `publisherName` 必须对应实际签名证书。
+目标：在 Windows 与 macOS 都不签名的前提下，使用单一 `release.json` 协议完成下载、内容校验和平台适配的安全交接。
 
 改动和验收：
 
-- 保留 `verify-win-installer.ts` 作为 PE/容器 smoke，避免把格式检查误称为签名检查。
-- 新增只在 Windows release qualification 运行的 `NsisUpdater.verifySignature()` 测试。
-- 测试匹配发布者成功、错误发布者失败、未签名文件失败，并继续验证 SHA-512。
-- 未提供签名身份的本地开发构建明确 skip；正式发布通道不得 skip。
+- `release.json` 是唯一的更新指针，声明 Windows NSIS 和 macOS Universal DMG 的 HTTPS URL、字节数与 SHA-512。
+- 发布脚本先上传两个带版本安装包，逐项复算大小与摘要，最后原子切换 `release.json`；不生成或上传 YAML/blockmap 元数据。
+- Windows 在 Host 成功关闭后启动已校验的 NSIS；关闭失败时不得启动安装器。
+- macOS 打开已校验的 DMG，由用户手动替换应用，不宣称原生自动替换或回滚。
 
-回滚只允许移除测试接线，不允许降低生产 updater 已配置的发布者校验。
-
-已落地部分：新增 `qualify:win-signature`，仅允许在原生 Windows 上针对已签名安装器、独立未签名负例和打包后的 `app-update.yml` 运行；它要求 `CLAWCLAW_WINDOWS_PUBLISHER_NAME` 与元数据完全一致，真实调用 `NsisUpdater.verifySignature()` 覆盖匹配、错误和未签名三种控制，并检查前后 SHA-512。原 `verify-win-installer.ts` 已明确改称 PE/COFF 结构检查。
-
-阻塞原因：当前 `dist:win` 明确删除所有签名环境变量并传入 `win.signExecutable=false`，tag release 也沿用该未签名路径。仓库没有可验证的法定发布者字符串、代码签名证书或凭据化 Windows release 命令，不能伪造这些事实。解除阻塞需要选定发布主体，配置凭据化签名产物和独立未签名控制，将资格命令接入正式 release job，并禁止未通过报告的 Windows stable 上传。当前聚焦测试 7 项和完整 typecheck 已通过；真实 Authenticode 正/负例必须在上述条件具备后于 Windows 执行。
+实际落地：运行时不再依赖原生 updater；Windows 与 macOS 共用 `update-download.ts` 的私有目录、原子下载、大小/SHA-512/容器校验和保留制品状态。Windows 下载完成后等待退出确认与 Host 关闭，随后以可见方式启动 NSIS；macOS 下载完成后打开 unsigned Universal DMG。GitHub Actions 的 `release.yml` 从同一 tag 分派原生 Windows/macOS Runner，只收集 EXE、DMG 和生成的 `release.json`；`upload-update.mjs` 使用 SSH key 校验清单与实际文件一致、拒绝覆盖版本归档，并将清单作为最后一步发布。此模型的信任边界是 HTTPS 与发布摘要，不提供发布者身份认证；这是当前明确接受的产品约束，必须在用户文档中持续披露。
 
 ### 阶段 4（P1）：结构化 fatal crash report
 
@@ -184,9 +180,9 @@ ClawClaw 已有下列能力，因此不再移植同类实现：
 
 Windows 的既有 NSIS A/B 实验已覆盖正常升级、目标内容完整性、安装进程树中途中止、锁定 `app.asar`、中断后旧版/新版一致性判定和实际启动验证。本阶段进一步扩展 `smoke-windows-installer-upgrade.ps1`：先截断 candidate 的副本并要求 Windows 拒绝，随后验证旧版版本未改变且仍能启动；再执行运行中升级、候选版本重启、同版本覆盖和卸载。卸载前分别在 `%APPDATA%\ClawClaw` 的缓存/日志、隔离 `DSH_HOME` 的 Profile 及隔离工作区写入唯一 marker，卸载后要求应用目录、注册项、快捷方式消失而四类 marker 仍存在，最后只清理本次 marker。`check:win-package` 已纳入策略测试。
 
-macOS 当前未开启 native auto-update，发布物仍是经用户确认后打开的 DMG，因此不伪造应用内原子替换/rollback 能力。现有 release smoke 对 mounted DMG、universal 架构、嵌入 native 文件、codesign、Gatekeeper 与 stapled notarization ticket 做验证；通用 native staging 单测证明下载/校验失败、取消或 Host 关闭失败都不会产生安装交接。DMG 替换失败后保留原应用及重新打开验证，继续作为签名 macOS 发布机上的人工 release qualification。
+macOS 未开启原生自动更新，发布物是经用户确认后打开的 unsigned Universal DMG，因此不伪造应用内原子替换/rollback 能力。package smoke 验证 mounted DMG、`arm64`/`x86_64` 双架构和嵌入 native 文件；下载与 Electron runtime 单测证明下载/校验失败、取消或 Host 关闭失败都不会产生错误的安装交接。DMG 手动替换与重新打开仍属于真实 macOS 发布资格检查。
 
-headless 验证：`installer-data-retention.spec.ts`、`native-update-installer.spec.ts` 和 `electron-runtime.spec.ts` 共 107 项通过；完整 typecheck 和生产 build 通过；完整单测 1268 项通过、6 项既有跳过。当前 macOS 开发机无法执行 Windows PowerShell/NSIS VM smoke；真实 Windows 报告和签名 macOS DMG 替换结果必须随对应发布保存，不能用 headless 结果替代。
+headless 验证覆盖 `installer-data-retention.spec.ts`、`update-download.spec.ts`、`electron-runtime.spec.ts` 和 macOS package smoke；完整 typecheck、生产 build 与单测作为最终门禁。当前 macOS 开发机无法执行 Windows PowerShell/NSIS VM smoke；真实 Windows 安装报告与 macOS DMG 手动替换结果仍须随对应发布保存，不能用 headless 结果替代。
 
 ### 阶段 7（P2）：后台驻留和更新就绪注意力
 
@@ -216,7 +212,7 @@ headless 验证：`installer-data-retention.spec.ts`、`native-update-installer.
 4. 回写本文件的状态、实际偏差和验证命令。
 5. 每个阶段单独提交；子模块 pin 变更永远另提提交。
 
-完整 headless 发布前门禁为 `corepack pnpm check`。需要真实签名证书、Windows VM、公证服务或 GUI 的测试必须是显式 release qualification，不能让普通 headless gate 隐式启动图形界面或依赖秘密。
+完整 headless 发布前门禁为 `corepack pnpm check`。需要 Windows VM 或 GUI 的测试必须是显式 release qualification，不能让普通 headless gate 隐式启动图形界面。
 
 ## 7. 完成定义
 
@@ -234,13 +230,10 @@ headless 验证：`installer-data-retention.spec.ts`、`native-update-installer.
 
 - `src/quit-confirmation.ts`
 - `src/update-schedule.ts`
-- `src/update-http-executor.ts`
 - `src/update-journal.ts`
 - `src/crash-report.ts`
 - `src/background-notice.ts`
 - `src/update-attention.ts`
-- `scripts/test-windows-update-signature.mjs`
-- `scripts/windows-sign.mjs`
 - `tests/README.zh.md`
 
 实现时若参考文件在上游发生变化，应在提交说明中记录新的 commit，而不是让本文的基线静默漂移。
