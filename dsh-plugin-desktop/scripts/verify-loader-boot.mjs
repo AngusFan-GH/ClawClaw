@@ -182,6 +182,15 @@ try {
         },
         requestRejection() { return undefined },
       })
+      host.provide('agents', {
+        get() { return undefined },
+        async create() {
+          throw new Error('loader smoke must not create an Agent')
+        },
+        async resume() {
+          throw new Error('loader smoke must not resume an Agent')
+        },
+      })
       host.provide('webRuntime', {})
       host.provide('appExit', () => {})
       host.provide('sessionQuery', {
