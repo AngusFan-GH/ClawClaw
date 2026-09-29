@@ -14,6 +14,10 @@ export function channelFromSessionId(sessionId) {
   return SESSION_ID.exec(String(sessionId))?.[1] ?? null
 }
 
+export function channelForSession(sessionId, title) {
+  return parseSessionChannelTitle(title)?.channel ?? channelFromSessionId(sessionId)
+}
+
 function hasClassPart(element, part) {
   const match = new RegExp(`(?:^|[_-])${part}(?:$|[_-])`, 'u')
   return [...element.classList].some(token => match.test(token))
@@ -46,8 +50,14 @@ function logoNode(document, Logo, channel) {
   return svg
 }
 
-export function ChannelSessionLeading({ sessionId, logos }) {
-  const channel = channelFromSessionId(sessionId)
+export function ChannelSessionLeading({ sessionId, logos, sessions }) {
+  const list = React.useSyncExternalStore(
+    listener => sessions.list.subscribe(listener),
+    () => sessions.list.getSnapshot(),
+    () => sessions.list.getSnapshot(),
+  )
+  const summary = list.byId[sessionId]
+  const channel = channelForSession(sessionId, summary?.title ?? summary?.displayTitle)
   const Logo = channel && logos[channel]
   if (!Logo) return null
   return React.createElement('span', {

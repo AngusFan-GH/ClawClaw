@@ -18998,6 +18998,9 @@ var installations2 = /* @__PURE__ */ new WeakMap();
 function channelFromSessionId(sessionId) {
   return SESSION_ID.exec(String(sessionId))?.[1] ?? null;
 }
+function channelForSession(sessionId, title) {
+  return parseSessionChannelTitle(title)?.channel ?? channelFromSessionId(sessionId);
+}
 function hasClassPart2(element, part) {
   const match = new RegExp(`(?:^|[_-])${part}(?:$|[_-])`, "u");
   return [...element.classList].some((token) => match.test(token));
@@ -19026,8 +19029,14 @@ function logoNode(document2, Logo, channel5) {
   svg.setAttribute("data-dsh-session-source-icon", channel5);
   return svg;
 }
-function ChannelSessionLeading({ sessionId, logos }) {
-  const channel5 = channelFromSessionId(sessionId);
+function ChannelSessionLeading({ sessionId, logos, sessions }) {
+  const list = React32.useSyncExternalStore(
+    (listener) => sessions.list.subscribe(listener),
+    () => sessions.list.getSnapshot(),
+    () => sessions.list.getSnapshot()
+  );
+  const summary2 = list.byId[sessionId];
+  const channel5 = channelForSession(sessionId, summary2?.title ?? summary2?.displayTitle);
   const Logo = channel5 && logos[channel5];
   if (!Logo) return null;
   return React32.createElement("span", {
@@ -19131,7 +19140,7 @@ function release(document2, entry) {
 }
 
 // client/index.js
-var inject = ["slots", "connection", "locale", "workspaces"];
+var inject = ["slots", "connection", "locale", "workspaces", "sessions"];
 var LOGOS = Object.freeze({
   dingtalk: DingtalkLogoGlyph,
   discord: DiscordLogoGlyph,
@@ -19356,7 +19365,7 @@ function apply2(ctx) {
     name: "sidebar.session.row.leading",
     id: "clawclaw-channel-session-source",
     order: -10,
-    inject: () => ({ logos: LOGOS })
+    inject: () => ({ logos: LOGOS, sessions: ctx.sessions })
   }, ChannelSessionLeading));
 }
 

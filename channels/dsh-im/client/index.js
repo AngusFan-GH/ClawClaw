@@ -28,7 +28,7 @@ import {
   installChannelSessionPresentation,
 } from './session-presentation.js'
 
-export const inject = ['slots', 'connection', 'locale', 'workspaces']
+export const inject = ['slots', 'connection', 'locale', 'workspaces', 'sessions']
 
 const LOGOS = Object.freeze({
   dingtalk: DingtalkLogoGlyph,
@@ -227,6 +227,6 @@ export function apply(ctx) {
     name: 'sidebar.session.row.leading',
     id: 'clawclaw-channel-session-source',
     order: -10,
-    inject: () => ({ logos: LOGOS }),
+    inject: () => ({ logos: LOGOS, sessions: ctx.sessions }),
   }, ChannelSessionLeading))
 }
