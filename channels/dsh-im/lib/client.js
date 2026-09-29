@@ -19012,13 +19012,17 @@ function surfaceOf(element) {
   if (hasClassPart2(element, "title") && element.closest('[role="treeitem"][aria-selected]')) return "row";
   return null;
 }
+function svgAttributeName(name) {
+  if (name === "viewBox" || name === "preserveAspectRatio") return name;
+  return name.replace(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`);
+}
 function domNode(document2, reactNode) {
   if (typeof reactNode === "string") return document2.createTextNode(reactNode);
   if (!reactNode || typeof reactNode.type !== "string") throw new Error("Unsupported channel logo element");
   const element = document2.createElementNS("http://www.w3.org/2000/svg", reactNode.type);
   for (const [name, value] of Object.entries(reactNode.props)) {
     if (name === "children" || value == null || typeof value === "boolean") continue;
-    const attribute = name.replace(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`);
+    const attribute = svgAttributeName(name);
     element.setAttribute(attribute, String(value));
   }
   for (const child of [reactNode.props.children].flat(Infinity).filter(Boolean)) element.append(domNode(document2, child));
@@ -19060,9 +19064,7 @@ function installChannelSessionPresentation(logos, document2 = globalThis.documen
 [${SOURCE_ATTR}]:not([data-dsh-session-source-surface="row"]){display:inline-flex;align-items:center;gap:6px;min-width:0}
 [${SOURCE_ATTR}]>[data-dsh-session-source-icon]{flex:0 0 16px}
 [data-dsh-im-session-leading]{display:inline-flex;align-items:center;justify-content:center;width:16px;height:20px;color:var(--dsw-alias-label-tertiary)}
-[data-dsh-im-session-leading="weixin"]{height:16px;border-radius:4px;background:#07c160;color:#fff}
-[data-dsh-im-session-leading="weixin"]>svg{width:12px;height:12px}
-[data-dsh-session-source-icon="weixin"]{box-sizing:border-box;width:16px;height:16px;padding:2px;border-radius:4px;background:#07c160;color:#fff}
+[data-dsh-im-session-leading="weixin"],[data-dsh-session-source-icon="weixin"]{color:#07c160}
 `;
   document2.head.append(style);
   const restore = (element) => {

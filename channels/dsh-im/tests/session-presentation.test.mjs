@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { channelForSession, channelFromSessionId } from '../client/session-presentation.js'
+import { channelForSession, channelFromSessionId, svgAttributeName } from '../client/session-presentation.js'
 import { SESSION_CHANNEL_LABELS } from '../node_modules/@xmanrui/dsh-im/src/channels/shared/session-channel-labels.mjs'
 
 test('maps channel Session ids to their canonical source logos', () => {
@@ -23,6 +23,12 @@ test('maps every supported channel title in Chinese and English', () => {
   }
 })
 
+test('preserves case-sensitive SVG viewport attributes', () => {
+  assert.equal(svgAttributeName('viewBox'), 'viewBox')
+  assert.equal(svgAttributeName('preserveAspectRatio'), 'preserveAspectRatio')
+  assert.equal(svgAttributeName('strokeWidth'), 'stroke-width')
+})
+
 test('replaces the legacy pseudo-title effect with the rc.2 leading slot', () => {
   const entry = readFileSync(new URL('../client/index.js', import.meta.url), 'utf8')
   const presentation = readFileSync(new URL('../client/session-presentation.js', import.meta.url), 'utf8')
@@ -31,7 +37,7 @@ test('replaces the legacy pseudo-title effect with the rc.2 leading slot', () =>
   assert.match(entry, /sidebar\.session\.row\.leading/u)
   assert.doesNotMatch(presentation, /text-overflow\s*:\s*ellipsis/u)
   assert.match(presentation, /replaceChildren/u)
-  assert.match(presentation, /data-dsh-im-session-leading="weixin"[^}]+background:#07c160;color:#fff/u)
-  assert.match(presentation, /data-dsh-im-session-leading="weixin"[^}]+>svg\{width:12px;height:12px/u)
-  assert.match(presentation, /data-dsh-session-source-icon="weixin"[^}]+width:16px;height:16px;padding:2px[^}]+background:#07c160;color:#fff/u)
+  assert.match(presentation, /data-dsh-im-session-leading="weixin"[^}]+color:#07c160/u)
+  assert.match(presentation, /data-dsh-session-source-icon="weixin"[^}]+color:#07c160/u)
+  assert.doesNotMatch(presentation, /data-dsh-session-source-icon="weixin"[^}]+(?:padding|background)/u)
 })
