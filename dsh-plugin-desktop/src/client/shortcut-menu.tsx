@@ -1,11 +1,12 @@
 /** Configurable panel and Settings shortcuts projected through rc.2 sidebar entries. */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import type { DragEvent, KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
-import { ArrowDown, ArrowUp, Plus, X } from 'lucide-react'
+import { GripVertical, Plus, X } from 'lucide-react'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { DesktopFeatureIcon } from './desktop-feature-icon.tsx'
@@ -47,11 +48,11 @@ function sameShortcutTargets(left: readonly ShortcutTarget[], right: readonly Sh
 }
 
 export const zh = {
-  title: '快捷入口', intro: '将常用功能和设置固定到侧栏，最多显示 4 项。', selected: '已固定', available: '可添加', add: '添加', remove: '移除', moveUp: '上移', moveDown: '下移', plugins: '插件', automations: '自动化任务', unavailableTitle: '无法打开设置', unavailableHint: '设置外壳尚未就绪，请稍后重试。',
+  title: '快捷入口', intro: '将常用功能和设置固定到侧栏，最多显示 4 项。', selected: '已固定', available: '可添加', add: '添加', remove: '移除', reorder: '拖拽排序', plugins: '插件', automations: '自动化任务', unavailableTitle: '无法打开设置', unavailableHint: '设置外壳尚未就绪，请稍后重试。',
 } as const
 export type DesktopShortcutsLocaleKey = keyof typeof zh
 export const en: Record<DesktopShortcutsLocaleKey, string> = {
-  title: 'Shortcuts', intro: 'Pin frequently used features and settings to the sidebar. You can show up to 4.', selected: 'Pinned', available: 'Available', add: 'Add', remove: 'Remove', moveUp: 'Move up', moveDown: 'Move down', plugins: 'Plugins', automations: 'Automations', unavailableTitle: 'Settings unavailable', unavailableHint: 'The Settings shell is not ready yet. Try again shortly.',
+  title: 'Shortcuts', intro: 'Pin frequently used features and settings to the sidebar. You can show up to 4.', selected: 'Pinned', available: 'Available', add: 'Add', remove: 'Remove', reorder: 'Drag to reorder', plugins: 'Plugins', automations: 'Automations', unavailableTitle: 'Settings unavailable', unavailableHint: 'The Settings shell is not ready yet. Try again shortly.',
 }
 
 export function normalizeShortcutItems(
@@ -74,6 +75,19 @@ export function normalizeShortcutItems(
 
 export function shortcutPanelId(sectionId: string): MainPanelId {
   return `desktop-shortcut:${sectionId}` as MainPanelId
+}
+
+export function reorderShortcutItems(
+  items: readonly string[],
+  draggedId: string,
+  targetId: string,
+  placement: 'before' | 'after',
+): readonly string[] {
+  if (draggedId === targetId || !items.includes(draggedId) || !items.includes(targetId)) return items
+  const next = items.filter(id => id !== draggedId)
+  const targetIndex = next.indexOf(targetId)
+  next.splice(targetIndex + (placement === 'after' ? 1 : 0), 0, draggedId)
+  return next.every((id, index) => id === items[index]) ? items : next
 }
 
 function useScope<T>(scope: ConfigForm<T>): T | undefined {
@@ -110,6 +124,14 @@ export function ShortcutSettingsRow({ t, shortcutSettings, shortcutTargets }: Sh
   const items = normalizeShortcutItems(settings?.items, targets)
   const save = (next: readonly string[]): void => { void shortcutSettings.set('items', next) }
   const definitions = useMemo(() => new Map(targets.map(item => [item.id, item])), [targets])
+  const draggedId = useRef<string>()
+  const [dragging, setDragging] = useState<string>()
+  const [dropTarget, setDropTarget] = useState<{ readonly id: string; readonly placement: 'before' | 'after' }>()
+  const finishDrag = (): void => {
+    draggedId.current = undefined
+    setDragging(undefined)
+    setDropTarget(undefined)
+  }
   const shift = (id: string, offset: -1 | 1): void => {
     const index = items.indexOf(id)
     const target = index + offset
@@ -118,13 +140,48 @@ export function ShortcutSettingsRow({ t, shortcutSettings, shortcutTargets }: Sh
     ;[next[index], next[target]] = [next[target]!, next[index]!]
     save(next)
   }
+  const startDrag = (event: DragEvent<HTMLButtonElement>, id: string): void => {
+    draggedId.current = id
+    setDragging(id)
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', id)
+  }
+  const updateDropTarget = (event: DragEvent<HTMLDivElement>, id: string): void => {
+    const dragged = draggedId.current
+    if (dragged === undefined || dragged === id) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const placement = event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after'
+    setDropTarget(current => current?.id === id && current.placement === placement ? current : { id, placement })
+  }
+  const drop = (event: DragEvent<HTMLDivElement>, id: string): void => {
+    event.preventDefault()
+    const dragged = draggedId.current
+    if (dragged !== undefined) {
+      const bounds = event.currentTarget.getBoundingClientRect()
+      const placement = event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after'
+      const next = reorderShortcutItems(items, dragged, id, placement)
+      if (next !== items) save(next)
+    }
+    finishDrag()
+  }
+  const reorderWithKeyboard = (event: KeyboardEvent<HTMLButtonElement>, id: string): void => {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+    event.preventDefault()
+    shift(id, event.key === 'ArrowUp' ? -1 : 1)
+  }
   return <section className="dshShortcutSettings">
     <header><h3>{t('title')}</h3><p>{t('intro')}</p></header>
     <div className="dshShortcutGroups">
       <div className="dshShortcutGroup"><h4>{t('available')}</h4>{targets.filter(item => !items.includes(item.id)).map(item => <div className="dshShortcutRow" key={item.id}><ShortcutIcon target={item} /><span>{item.label}</span><IconButton label={`${t('add')}: ${item.label}`} disabled={items.length >= MAX_SHORTCUTS} onClick={() => { save([...items, item.id]) }}><Plus size={14} /></IconButton></div>)}</div>
-      <div className="dshShortcutGroup"><h4>{t('selected')}</h4>{items.map((id, index) => {
+      <div className="dshShortcutGroup"><h4>{t('selected')}</h4>{items.map(id => {
         const item = definitions.get(id)!
-        return <div className="dshShortcutRow" key={id}><ShortcutIcon target={item} /><span>{item.label}</span><div className="dshShortcutActions"><IconButton label={`${t('moveUp')}: ${item.label}`} disabled={index === 0} onClick={() => { shift(id, -1) }}><ArrowUp size={14} /></IconButton><IconButton label={`${t('moveDown')}: ${item.label}`} disabled={index === items.length - 1} onClick={() => { shift(id, 1) }}><ArrowDown size={14} /></IconButton><IconButton label={`${t('remove')}: ${item.label}`} onClick={() => { save(items.filter(current => current !== id)) }}><X size={14} /></IconButton></div></div>
+        const placement = dropTarget?.id === id ? dropTarget.placement : undefined
+        return <div className="dshShortcutRow dshShortcutSelectedRow" data-dragging={dragging === id || undefined} data-drop-position={placement} key={id} onDragOver={event => { updateDropTarget(event, id) }} onDrop={event => { drop(event, id) }}>
+          <button className="dshShortcutDragHandle" type="button" draggable title={`${t('reorder')}: ${item.label}`} aria-label={`${t('reorder')}: ${item.label}`} onDragStart={event => { startDrag(event, id) }} onDragEnd={finishDrag} onKeyDown={event => { reorderWithKeyboard(event, id) }}><GripVertical size={16} /></button>
+          <ShortcutIcon target={item} /><span>{item.label}</span><div className="dshShortcutActions"><IconButton label={`${t('remove')}: ${item.label}`} onClick={() => { save(items.filter(current => current !== id)) }}><X size={14} /></IconButton></div>
+        </div>
       })}</div>
     </div>
   </section>

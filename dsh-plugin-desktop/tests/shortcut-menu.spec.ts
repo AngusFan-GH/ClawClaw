@@ -4,6 +4,7 @@ import {
   applyShortcutMenu,
   normalizeShortcutItems,
   openSettingsSection,
+  reorderShortcutItems,
   shortcutPanelId,
 } from '../src/client/shortcut-menu.tsx'
 import { DesktopShortcutSettingsSchema } from '../src/shortcut-menu.ts'
@@ -50,6 +51,19 @@ describe('Desktop sidebar shortcuts', () => {
 
     expect(openSettingsSection(ctx, 'desktop-skills')).toBe(true)
     expect(openSection).toHaveBeenCalledWith('desktop-skills')
+  })
+
+  it('reorders pinned shortcuts at the requested drop edge', () => {
+    const items = ['plugins', 'desktop-automations', 'settings:desktop-skills', 'settings:desktop-reminders']
+
+    expect(reorderShortcutItems(items, 'plugins', 'settings:desktop-skills', 'after')).toEqual([
+      'desktop-automations', 'settings:desktop-skills', 'plugins', 'settings:desktop-reminders',
+    ])
+    expect(reorderShortcutItems(items, 'settings:desktop-reminders', 'desktop-automations', 'before')).toEqual([
+      'plugins', 'settings:desktop-reminders', 'desktop-automations', 'settings:desktop-skills',
+    ])
+    expect(reorderShortcutItems(items, 'plugins', 'plugins', 'before')).toBe(items)
+    expect(reorderShortcutItems(items, 'missing', 'plugins', 'before')).toBe(items)
   })
 
   it('returns false while the Settings root store is unavailable', () => {
