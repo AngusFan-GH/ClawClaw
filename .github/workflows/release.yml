@@ -84,8 +84,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           path: |
-            dsh-plugin-desktop/dist/**/*.dmg
-            dsh-plugin-desktop/dist/**/*.exe
+            dsh-plugin-desktop/dist/mac-smoke/ClawClaw-*-universal.dmg
+            dsh-plugin-desktop/dist/ClawClaw-*-x64-Setup.exe
 
   assemble:
     name: Assemble release
@@ -117,9 +117,13 @@ jobs:
             exit 1
           fi
           mkdir release
-          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' \) -exec cp {} release/ \;
-          test "$(find release -maxdepth 1 -name '*.dmg' -type f | wc -l)" = 1
-          test "$(find release -maxdepth 1 -name '*.exe' -type f | wc -l)" = 1
+          find artifacts -type f \
+            \( -name "ClawClaw-$version-universal.dmg" \
+              -o -name "ClawClaw-$version-x64-Setup.exe" \) \
+            -exec cp {} release/ \;
+          test -f "release/ClawClaw-$version-universal.dmg"
+          test -f "release/ClawClaw-$version-x64-Setup.exe"
+          test "$(find release -maxdepth 1 -type f | wc -l)" = 2
           node scripts/generate-release-manifest.mjs \
             --directory release \
             --output release/release.json \
