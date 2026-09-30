@@ -60,6 +60,7 @@ export default defineConfig([
       'plugin-registry-probe': 'src/plugin-registry-probe.ts',
       'default-workspace': 'src/default-workspace.ts',
       skills: 'src/skills.ts',
+      experts: 'src/experts.ts',
       'legacy-agent-presets': 'src/legacy-agent-presets.ts',
       mcp: 'src/mcp.ts',
       spiritx: 'src/spiritx.ts',

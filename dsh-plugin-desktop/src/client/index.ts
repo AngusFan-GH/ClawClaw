@@ -19,6 +19,7 @@ import { applyDefaultWorkspaceSelection } from './default-workspace-selection.ts
 import { installDesktopDirectoryPickerBridge } from './directory-picker.ts'
 import { applyWorkspaceDirectoryFlow } from './workspace-directory-flow.tsx'
 import { parseDesktopClientEnvironment, resolveDesktopClientProductVersion } from './environment.ts'
+import { applyExperts } from './experts-settings.ts'
 import { applyExtendedShell } from './extended-shell.ts'
 import { applyMcpSettings } from './mcp-settings.ts'
 import { applyMarketIntegration } from './market-integration.tsx'
@@ -41,6 +42,7 @@ export {
   installDesktopWorkspaceSelection,
   resolveDesktopWorkspaceSelection,
 } from './default-workspace-selection.ts'
+export { applyExperts, DESKTOP_EXPERTS_PANEL_ID } from './experts-settings.ts'
 export { applyExtendedShell, applyFramedShell } from './extended-shell.ts'
 export { applyMcpSettings } from './mcp-settings.ts'
 export { applyMarketIntegration } from './market-integration.tsx'
@@ -131,6 +133,7 @@ export function apply(ctx: ClientContext): void {
   applyCronTasksSettings(ctx)
   applyRemindersSettings(ctx)
   applySkillsSettings(ctx)
+  applyExperts(ctx)
   applyShortcutMenu(ctx)
   if (productVersion !== undefined) applyDesktopVersionRow(ctx, productVersion)
   ctx.effect(() => installShortcutMenuStyles(), 'dsh-plugin-desktop: shortcut menu styles')

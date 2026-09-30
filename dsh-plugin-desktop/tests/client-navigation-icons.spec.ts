@@ -11,6 +11,7 @@ import {
   IconPluginPinwheelOutlineRegular,
   IconSettingsOutlineMedium,
   IconSkillOutlineMedium,
+  IconUsersOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Cable, MessageCirclePlus, MonitorCog } from 'lucide-react'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -28,6 +29,7 @@ describe('Desktop navigation icons', () => {
   it.each([
     ['plugins', 'panel', IconPluginPinwheelOutlineRegular],
     ['desktop-automations', 'panel', IconClockOutlineRegular],
+    ['desktop-experts', 'panel', IconUsersOutlineMedium],
     ['general', 'settings', IconSettingsOutlineMedium],
     ['models', 'settings', IconDataOutlineMedium],
     ['plugins', 'settings', IconPersonalizationOutlineMedium],

@@ -10,6 +10,7 @@ import { Plus, X } from 'lucide-react'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { DesktopFeatureIcon } from './desktop-feature-icon.tsx'
+import { DESKTOP_EXPERTS_PANEL_ID } from './experts-settings.ts'
 
 export const DESKTOP_SHORTCUTS_LOCALE_NAMESPACE = 'desktop.shortcuts'
 export const DESKTOP_SHORTCUTS_SETTINGS_ENTRY_ID = 'desktop-shortcuts'
@@ -53,11 +54,11 @@ function sameShortcutTargets(left: readonly ShortcutTarget[], right: readonly Sh
 }
 
 export const zh = {
-  title: '快捷入口', intro: '将常用功能和设置固定到侧栏，最多显示 4 项。', selected: '已固定', available: '可添加', add: '添加', remove: '移除', reorder: '拖拽排序', plugins: '插件', automations: '自动化任务', unavailableTitle: '无法打开设置', unavailableHint: '设置外壳尚未就绪，请稍后重试。',
+  title: '快捷入口', intro: '将常用功能和设置固定到侧栏，最多显示 4 项。', selected: '已固定', available: '可添加', add: '添加', remove: '移除', reorder: '拖拽排序', plugins: '插件', automations: '自动化任务', experts: '专家', unavailableTitle: '无法打开设置', unavailableHint: '设置外壳尚未就绪，请稍后重试。',
 } as const
 export type DesktopShortcutsLocaleKey = keyof typeof zh
 export const en: Record<DesktopShortcutsLocaleKey, string> = {
-  title: 'Shortcuts', intro: 'Pin frequently used features and settings to the sidebar. You can show up to 4.', selected: 'Pinned', available: 'Available', add: 'Add', remove: 'Remove', reorder: 'Drag to reorder', plugins: 'Plugins', automations: 'Automations', unavailableTitle: 'Settings unavailable', unavailableHint: 'The Settings shell is not ready yet. Try again shortly.',
+  title: 'Shortcuts', intro: 'Pin frequently used features and settings to the sidebar. You can show up to 4.', selected: 'Pinned', available: 'Available', add: 'Add', remove: 'Remove', reorder: 'Drag to reorder', plugins: 'Plugins', automations: 'Automations', experts: 'Experts', unavailableTitle: 'Settings unavailable', unavailableHint: 'The Settings shell is not ready yet. Try again shortly.',
 }
 
 export function normalizeShortcutItems(
@@ -323,6 +324,7 @@ function createShortcutTargets(ctx: ClientContext): ShortcutTargets {
         const panelCandidates: ShortcutTarget[] = [
           { id: PLUGINS_PANEL_ID, targetId: PLUGINS_PANEL_ID, label: t('plugins'), kind: 'panel' },
           { id: AUTOMATIONS_PANEL_ID, targetId: AUTOMATIONS_PANEL_ID, label: t('automations'), kind: 'panel' },
+          { id: DESKTOP_EXPERTS_PANEL_ID, targetId: DESKTOP_EXPERTS_PANEL_ID, label: t('experts'), kind: 'panel' },
         ]
         const panels = panelCandidates.filter(target => mainPanels.has(target.id))
         const sections = ctx.slots.entries('settings.section').map(entry => ({

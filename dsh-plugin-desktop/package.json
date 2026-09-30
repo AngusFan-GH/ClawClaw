@@ -91,6 +91,10 @@
       "types": "./lib/types/skills.d.ts",
       "default": "./lib/skills.js"
     },
+    "./experts": {
+      "types": "./lib/types/experts.d.ts",
+      "default": "./lib/experts.js"
+    },
     "./legacy-agent-presets": {
       "types": "./lib/types/legacy-agent-presets.d.ts",
       "default": "./lib/legacy-agent-presets.js"

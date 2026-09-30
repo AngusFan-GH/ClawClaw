@@ -29,6 +29,7 @@ import {
 } from '../src/window-chrome.ts'
 
 vi.mock('../src/client/cron-tasks-settings.ts', () => ({ applyCronTasksSettings: vi.fn() }))
+vi.mock('../src/client/experts-settings.ts', () => ({ applyExperts: vi.fn(), DESKTOP_EXPERTS_PANEL_ID: 'desktop-experts' }))
 vi.mock('../src/client/reminders-settings.ts', () => ({ applyRemindersSettings: vi.fn() }))
 vi.mock('../src/client/skills-settings.ts', () => ({ applySkillsSettings: vi.fn() }))
 vi.mock('../src/client/shortcut-menu.tsx', () => ({ applyShortcutMenu: vi.fn() }))
