@@ -106,7 +106,7 @@ cleanup() { rm -rf "\${staging:-}" "\${version_staging:-}" "$archive"; }
 trap cleanup EXIT
 test ! -e "$archive_dir" || { echo "release archive already exists: $archive_dir" >&2; exit 1; }
 install -d -m 0755 "$root/updates" "$stable" "$versions"
-staging=$(mktemp -d "$root/updates/.incoming.XXXXXX")
+staging=$(mktemp -d "$stable/.incoming.XXXXXX")
 version_staging=$(mktemp -d "$versions/.$version.incoming.XXXXXX")
 tar -xzf "$archive" -C "$staging"
 test -f "$staging/release.json"

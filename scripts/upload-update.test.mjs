@@ -68,6 +68,7 @@ test('publishes installers before atomically switching release.json', () => {
   assert.ok(script.indexOf("! -name 'release.json'") < script.indexOf('release.json.new'))
   assert.ok(script.indexOf('release.json.new') < script.indexOf('mv "$stable/release.json.new"'))
   assert.ok(script.indexOf('test ! -e "$archive_dir"') < script.indexOf('mv -T "$version_staging" "$archive_dir"'))
+  assert.match(script, /mktemp -d "\$stable\/\.incoming\.XXXXXX"/u)
   assert.doesNotMatch(script, /latest(?:-mac)?\.yml/u)
 })
 
