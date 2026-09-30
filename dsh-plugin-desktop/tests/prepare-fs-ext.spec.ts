@@ -62,7 +62,7 @@ describe('fs-ext Electron binding preparation', () => {
       nanRoot: value.nanRoot,
       nodeGypCli: value.nodeGypCli,
       nodeExecutable: '/test/node',
-      electronVersion: '43.3.0',
+      electronVersion: '44.0.0',
       env: { SAFE_VALUE: 'kept' },
       runBuild: invocation => {
         invocations.push(invocation)
@@ -74,7 +74,7 @@ describe('fs-ext Electron binding preparation', () => {
         writeFileSync(join(invocation.cwd, 'build', 'Release', 'fs_ext.node'), 'electron-binding')
         writeFileSync(
           join(invocation.cwd, 'build', 'config.gypi'),
-          JSON.stringify({ variables: { node_module_version: 148, target_arch: 'x64' } }),
+          JSON.stringify({ variables: { node_module_version: 149, target_arch: 'x64' } }),
         )
       },
       log,
@@ -87,7 +87,7 @@ describe('fs-ext Electron binding preparation', () => {
         'rebuild',
         '--release',
         '--runtime=electron',
-        '--target=43.3.0',
+        '--target=44.0.0',
         '--dist-url=https://electronjs.org/headers',
         '--arch=x64',
       ],
@@ -99,13 +99,13 @@ describe('fs-ext Electron binding preparation', () => {
         value.fsExtRoot,
         'prebuilds',
         'linux-x64',
-        'electron.abi148.node',
+        'electron.abi149.node',
       ),
       status: 'prepared',
       platform: 'linux',
       arch: 'x64',
-      electronVersion: '43.3.0',
-      abi: '148',
+      electronVersion: '44.0.0',
+      abi: '149',
     })
     expect(result.status).toBe('prepared')
     if (result.status !== 'prepared') throw new Error('expected a prepared POSIX binding')
@@ -113,7 +113,7 @@ describe('fs-ext Electron binding preparation', () => {
     expect(readFileSync(value.nodeBinding, 'utf8')).toBe('node-abi-binding')
     expect(existsSync(temporarySource)).toBe(false)
     expect(readdirSync(join(value.fsExtRoot, 'prebuilds', 'linux-x64')))
-      .toEqual(['electron.abi148.node'])
+      .toEqual(['electron.abi149.node'])
     expect(log).toHaveBeenCalledOnce()
   })
 

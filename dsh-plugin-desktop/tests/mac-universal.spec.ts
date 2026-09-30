@@ -5,6 +5,7 @@ import {
   MACOS_UNIVERSAL_NATIVE_ENTRIES,
   prepareMacUniversalRuntime,
 } from '../scripts/mac-universal.ts'
+import { REQUIRED_POSIX_FS_EXT_ENTRIES } from '../scripts/verify-packaged-runtime.ts'
 
 describe('universal macOS native runtime preparation', () => {
   it('owns every thin runtime package required by a clean isolated install', () => {
@@ -42,6 +43,10 @@ describe('universal macOS native runtime preparation', () => {
         path: 'node_modules/fs-ext/prebuilds/darwin-x64/electron.abi149.node',
       },
     ]))
+    expect(REQUIRED_POSIX_FS_EXT_ENTRIES.darwin).toEqual({
+      arm64: 'node_modules/fs-ext/prebuilds/darwin-arm64/electron.abi149.node',
+      x64: 'node_modules/fs-ext/prebuilds/darwin-x64/electron.abi149.node',
+    })
   })
 
   it('requires every CPU-specific file and repairs both node-pty helpers', () => {
