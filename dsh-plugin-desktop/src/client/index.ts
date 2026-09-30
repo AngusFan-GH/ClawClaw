@@ -26,6 +26,7 @@ import { applyManagedPluginManager } from './plugin-manager.ts'
 import { applyCronTasksSettings } from './cron-tasks-settings.ts'
 import { applyRemindersSettings } from './reminders-settings.ts'
 import { applySkillsSettings } from './skills-settings.ts'
+import { applyExperts } from './experts-settings.tsx'
 import { applyShortcutMenu } from './shortcut-menu.tsx'
 import { installShortcutMenuStyles } from './shortcut-menu-styles.ts'
 import { applySpiritXOnboarding } from './spiritx-onboarding.tsx'
@@ -131,6 +132,7 @@ export function apply(ctx: ClientContext): void {
   applyCronTasksSettings(ctx)
   applyRemindersSettings(ctx)
   applySkillsSettings(ctx)
+  applyExperts(ctx)
   applyShortcutMenu(ctx)
   if (productVersion !== undefined) applyDesktopVersionRow(ctx, productVersion)
   ctx.effect(() => installShortcutMenuStyles(), 'dsh-plugin-desktop: shortcut menu styles')

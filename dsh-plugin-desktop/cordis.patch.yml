@@ -28,6 +28,8 @@
       name: dsh-plugin-desktop/skills
     - id: desktop-legacy-agent-presets
       name: dsh-plugin-desktop/legacy-agent-presets
+    - id: desktop-experts
+      name: dsh-plugin-desktop/experts
     - id: desktop-mcp
       name: dsh-plugin-desktop/mcp
     - id: desktop-pnpm

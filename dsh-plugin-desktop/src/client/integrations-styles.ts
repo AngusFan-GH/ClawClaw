@@ -33,6 +33,46 @@ const CSS = `
 .dshIntegrationsSkillName.dshIntegrationsTextButton{font-size:14px;font-weight:600;color:inherit;text-align:start}.dshIntegrationsSkillName:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px}
 `
 
+
+const EXPERTS_CSS = `
+.dshExpertsPage{box-sizing:border-box;width:100%;height:100%;overflow:auto;padding:40px clamp(24px,5vw,72px) 56px}
+.dshExpertsPage>.dshIntegrations{margin:0 auto}
+.dshExperts{gap:16px}
+.dshExpertsNotice{margin:0;padding:14px;border:1px dashed var(--dsw-alias-border-l2);border-radius:10px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.6}
+.dshExpertsToolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.dshExpertsToolbar .dshIntegrationsSearch{flex:1;min-width:220px}
+.dshExpertsToolbar select{box-sizing:border-box;min-height:36px;padding:7px 11px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px}
+.dshExpertsGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.dshExpertsCard{display:flex;flex-direction:column;gap:8px;padding:16px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}
+.dshExpertsCard[data-available=false]{opacity:.72}
+.dshExpertsCardHead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.dshExpertsCardHead h3{margin:0;font-size:15px;font-weight:600}
+.dshExpertsStatus{padding:2px 8px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:11px;white-space:nowrap}
+.dshExpertsStatus[data-available=true]{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 12%,transparent);color:var(--dsw-alias-brand-primary)}
+.dshExpertsTitle{margin:0;color:var(--dsw-alias-label-secondary);font-size:12px}
+.dshExpertsDescription{margin:0;white-space:pre-wrap;font-size:13px;line-height:1.55}
+.dshExpertsTags{display:flex;flex-wrap:wrap;gap:6px}
+.dshExpertsTag{padding:2px 8px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:11px}
+.dshExpertsMeta{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--dsw-alias-label-secondary);font-size:11px}
+.dshExpertsUnavailableReason{margin:0;color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:1.5}
+.dshExpertsInvalid{padding:14px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}
+.dshExpertsInvalid summary{cursor:pointer;font-size:13px;font-weight:600}
+.dshExpertsInvalid p{margin:8px 0;color:var(--dsw-alias-label-secondary);font-size:12px}
+.dshExpertsInvalid ul{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.dshExpertsInvalid li{font-size:12px;line-height:1.5;word-break:break-all}
+.dshExpertsDetail{display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}
+.dshExpertsDetail h3{margin:6px 0 0;font-size:14px}
+.dshExpertsPrompt{margin:0;padding:10px 12px;border-radius:8px;background:var(--dsw-alias-bg-layer-2);white-space:pre-wrap;font-size:13px;line-height:1.55}
+.dshExpertsQuickTasks{display:flex;flex-direction:column;gap:6px}
+.dshExpertsQuickTask{padding:9px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:13px;text-align:left}
+.dshExpertsQuickTask:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
+.dshExpertsQuickTask:disabled{cursor:default;opacity:.45}
+.dshExpertsMetaGrid{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;font-size:12px}
+.dshExpertsMetaGrid dt{color:var(--dsw-alias-label-secondary)}
+.dshExpertsMetaGrid dd{margin:0;word-break:break-all}
+@media(max-width:720px){.dshExpertsGrid{grid-template-columns:1fr}}
+`
+
 const REMINDERS_CSS = `
 .dshReminders{gap:16px}.dshRemindersNotice{margin:0;padding:10px 12px;border-left:3px solid var(--dsw-alias-brand-primary);border-radius:8px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.5}.dshRemindersGrid{display:grid;grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:14px}.dshRemindersPanel{display:flex;flex-direction:column;gap:13px;padding:16px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}.dshRemindersPanel h3,.dshRemindersPanel h4{margin:0;font-size:14px}.dshRemindersPanel h4{margin-top:4px}.dshRemindersPanelHeader{display:flex;align-items:center;justify-content:space-between;gap:12px}.dshRemindersPanelHeader span,.dshRemindersStatus{padding:2px 7px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:11px}.dshRemindersInput{box-sizing:border-box;width:100%;min-height:118px;resize:vertical;padding:10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:1.5}.dshRemindersInput:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}.dshRemindersPresets{display:flex;flex-wrap:wrap;gap:6px}.dshRemindersPresets button{padding:6px 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:11px;text-align:left}.dshRemindersPresets button:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}.dshRemindersPresets button:disabled{cursor:default;opacity:.45}.dshRemindersList{display:flex;flex-direction:column;gap:8px}.dshRemindersRow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:flex-start;gap:12px;padding:13px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}.dshRemindersRow[data-enabled=false]{opacity:.68}.dshRemindersBody{min-width:0}.dshRemindersBody p{margin:8px 0 0;white-space:pre-wrap;font-size:13px;line-height:1.55}.dshRemindersBody .dshIntegrationsRowActions{margin-top:10px}@container(max-width:720px){.dshRemindersGrid{grid-template-columns:1fr}}@container(max-width:520px){.dshRemindersRow{grid-template-columns:auto minmax(0,1fr)}.dshRemindersRow>.dshIntegrationsRowActions{grid-column:2;justify-content:flex-start}}
 `
@@ -42,7 +82,7 @@ export function installIntegrationsStyles(document: Document = globalThis.docume
   if (existing !== null) return () => {}
   const style = document.createElement('style')
   style.id = STYLE_ID
-  style.textContent = CSS + SKILLS_CSS + REMINDERS_CSS
+  style.textContent = CSS + SKILLS_CSS + REMINDERS_CSS + EXPERTS_CSS
   document.head.append(style)
   return () => { style.remove() }
 }
