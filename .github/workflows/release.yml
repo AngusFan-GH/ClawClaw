@@ -141,7 +141,7 @@ jobs:
     needs: assemble
     if: github.event_name == 'push' || inputs.publish
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     environment: stable-update
     steps:
       - uses: actions/checkout@v6
