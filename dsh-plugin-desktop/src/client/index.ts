@@ -24,6 +24,7 @@ import { applyMcpSettings } from './mcp-settings.ts'
 import { applyMarketIntegration } from './market-integration.tsx'
 import { applyManagedPluginManager } from './plugin-manager.ts'
 import { applyCronTasksSettings } from './cron-tasks-settings.ts'
+import { applyExpertCenter } from './experts-settings.ts'
 import { applyRemindersSettings } from './reminders-settings.ts'
 import { applySkillsSettings } from './skills-settings.ts'
 import { applyShortcutMenu } from './shortcut-menu.tsx'
@@ -129,6 +130,7 @@ export function apply(ctx: ClientContext): void {
   applySpiritXOnboarding(ctx)
   applySpiritXProviderPriority(ctx)
   applyCronTasksSettings(ctx)
+  applyExpertCenter(ctx)
   applyRemindersSettings(ctx)
   applySkillsSettings(ctx)
   applyShortcutMenu(ctx)

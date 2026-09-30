@@ -12,7 +12,7 @@ import {
   IconSkillOutlineMedium,
   IconUserOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { Cable, MessageCirclePlus, MonitorCog } from 'lucide-react'
+import { Cable, GraduationCap, MessageCirclePlus, MonitorCog } from 'lucide-react'
 
 export interface DesktopFeatureIconProps {
   readonly featureId: string
@@ -27,6 +27,7 @@ export function DesktopFeatureIcon({ featureId, kind, size = 16, className }: De
   if (kind === 'panel') {
     if (featureId === 'plugins') return <IconPluginPinwheelOutlineRegular {...props} />
     if (featureId === 'desktop-automations') return <IconClockOutlineRegular {...props} />
+    if (featureId === 'desktop-experts') return <GraduationCap {...props} strokeWidth={1.5} />
     return <IconSettingsOutlineMedium {...props} />
   }
   if (featureId === 'account') return <IconUserOutlineMedium {...props} />

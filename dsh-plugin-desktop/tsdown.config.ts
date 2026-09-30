@@ -61,6 +61,7 @@ export default defineConfig([
       'default-workspace': 'src/default-workspace.ts',
       skills: 'src/skills.ts',
       'legacy-agent-presets': 'src/legacy-agent-presets.ts',
+      'expert-center': 'src/expert-center.ts',
       mcp: 'src/mcp.ts',
       spiritx: 'src/spiritx.ts',
       'diagnostic-export-worker': 'src/diagnostic-export-worker.ts',

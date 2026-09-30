@@ -72,6 +72,8 @@ describe('desktop client environment', () => {
       apply({ effect, inject } as unknown as ClientContext)
       expect(effect.mock.calls.map(([, label]) => label)).toEqual([
         'dsh-plugin-desktop: market integration dictionaries',
+        'dsh-plugin-desktop: expert center dictionaries',
+        'dsh-plugin-desktop: expert center styles',
         'dsh-plugin-desktop: shortcut menu styles',
       ])
       expect(inject).toHaveBeenCalledWith(['market'], expect.any(Function))

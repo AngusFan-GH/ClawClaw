@@ -95,6 +95,10 @@
       "types": "./lib/types/legacy-agent-presets.d.ts",
       "default": "./lib/legacy-agent-presets.js"
     },
+    "./expert-center": {
+      "types": "./lib/types/expert-center.d.ts",
+      "default": "./lib/expert-center.js"
+    },
     "./mcp": {
       "types": "./lib/types/mcp.d.ts",
       "default": "./lib/mcp.js"

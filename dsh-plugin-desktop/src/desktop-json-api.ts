@@ -51,7 +51,7 @@ export interface DesktopJsonApiOptions {
   readonly readPath: string
   readonly actionPath: string
   readonly maxBodyBytes?: number
-  readonly read: () => Promise<object>
+  readonly read: (req: IncomingMessage) => Promise<object>
   readonly action: (value: unknown) => Promise<object>
 }
 
@@ -72,7 +72,7 @@ export function registerDesktopJsonApi(ctx: Context, options: DesktopJsonApiOpti
           return finishJson(res, 415, { error: 'content type must be application/json' })
         }
         try {
-          finishJson(res, 200, action ? await options.action(await readJson(req, options.maxBodyBytes ?? MAX_BODY_BYTES)) : await options.read())
+          finishJson(res, 200, action ? await options.action(await readJson(req, options.maxBodyBytes ?? MAX_BODY_BYTES)) : await options.read(req))
         } catch (cause) {
           const status = cause instanceof BodyTooLargeError ? 413 : cause instanceof TypeError ? 400 : 409
           finishJson(res, status, { error: cause instanceof Error ? cause.message : `${options.label} operation failed` })

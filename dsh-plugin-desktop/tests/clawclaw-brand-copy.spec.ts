@@ -44,6 +44,8 @@ describe('ClawClaw product copy', () => {
       expect(effect.mock.calls.map(([, label]) => label)).toEqual([
         'dsh-plugin-desktop: ClawClaw page identity',
         'dsh-plugin-desktop: market integration dictionaries',
+        'dsh-plugin-desktop: expert center dictionaries',
+        'dsh-plugin-desktop: expert center styles',
         'dsh-plugin-desktop: shortcut menu styles',
       ])
 

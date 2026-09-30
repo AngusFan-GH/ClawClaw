@@ -1,5 +1,0 @@
-# Bilingual-pair consistency record: the git blob hash of each side as of the last
-# confirmed-consistent state. Both languages carry equal authority. Update both files
-# and re-record their hashes with git hash-object after editing either side.
-2026-08-19-desktop-system-architecture-atlas.md: 674164cfcf288741fa09a9119a9ba0bc9fa57088
-2026-08-19-desktop-system-architecture-atlas.zh.md: d2358ec60d6bc9ec62bcde87d3e9f531604999ab
