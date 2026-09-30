@@ -1,7 +1,8 @@
 /** Read-only compatibility registration for pre-0.1.7 user preset directories. */
 
 import { lstat, readFile, readdir } from 'node:fs/promises'
-import { isAbsolute, join, resolve } from 'node:path'
+import { createRequire } from 'node:module'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type { PresetDefinition } from '@deepseek-ai/dsh-agent-preset-registry'
@@ -11,6 +12,12 @@ import { parseDocument } from 'yaml'
 
 const MAX_PRESET_FILE_BYTES = 4 * 1024 * 1024
 const PRESET_ID = /^[A-Za-z0-9_-]{1,128}$/u
+const SKILL_FILESYSTEM_ID = 'skill-filesystem'
+const SKILL_FILESYSTEM_PACKAGE = '@deepseek-ai/dsh-skill-filesystem'
+const CLAWCLAW_SKILL_FILESYSTEM_ID = 'clawclaw-skill-filesystem'
+const CLAWCLAW_SKILL_FILESYSTEM_PACKAGE = 'dsh-plugin-desktop/clawclaw-skill-filesystem'
+const require = createRequire(import.meta.url)
+const BUNDLED_SKILL_ROOT = join(dirname(require.resolve('@deepseek-ai/dsh-agent-preset/package.json')), 'skills')
 
 export const name = 'desktop-legacy-agent-presets'
 export const inject = ['agentPresets']
@@ -57,6 +64,34 @@ function anchorPluginNames(rows: unknown[], directory: string): void {
   }
 }
 
+function isolateSkillRoots(rows: PresetDefinition['plugins']): PresetDefinition['plugins'] {
+  const plugins = [...rows]
+  const filesystemIndex = plugins.findIndex(row => row.id === SKILL_FILESYSTEM_ID)
+  if (filesystemIndex >= 0 && plugins[filesystemIndex]?.name !== SKILL_FILESYSTEM_PACKAGE) {
+    throw new Error(`${SKILL_FILESYSTEM_ID} has a conflicting package identity`)
+  }
+  const existingFilesystem = filesystemIndex < 0 ? undefined : plugins[filesystemIndex]
+  const filesystem = {
+    ...(existingFilesystem ?? {}),
+    id: SKILL_FILESYSTEM_ID,
+    name: SKILL_FILESYSTEM_PACKAGE,
+    config: {
+      includeDefaultRoots: false,
+      customSkillDirs: [join(resolveDshHome(), 'skills')],
+      bundledSkillDir: BUNDLED_SKILL_ROOT,
+    },
+  }
+  if (filesystemIndex < 0) plugins.push(filesystem)
+  else plugins[filesystemIndex] = filesystem
+
+  const projectIndex = plugins.findIndex(row => row.id === CLAWCLAW_SKILL_FILESYSTEM_ID)
+  if (projectIndex >= 0 && plugins[projectIndex]?.name !== CLAWCLAW_SKILL_FILESYSTEM_PACKAGE) {
+    throw new Error(`${CLAWCLAW_SKILL_FILESYSTEM_ID} has a conflicting package identity`)
+  }
+  if (projectIndex < 0) plugins.push({ id: CLAWCLAW_SKILL_FILESYSTEM_ID, name: CLAWCLAW_SKILL_FILESYSTEM_PACKAGE })
+  return plugins
+}
+
 /** Parse one historical directory without modifying any user-owned files. */
 export async function readLegacyAgentPreset(directory: string, id: string): Promise<PresetDefinition> {
   if (!PRESET_ID.test(id)) throw new Error(`invalid preset directory id: ${id}`)
@@ -86,7 +121,7 @@ export async function readLegacyAgentPreset(directory: string, id: string): Prom
     ...(presetName === undefined ? {} : { name: presetName }),
     ...(description === undefined ? {} : { description }),
     ...(order === undefined ? {} : { order }),
-    plugins: rows as PresetDefinition['plugins'],
+    plugins: isolateSkillRoots(rows as unknown as PresetDefinition['plugins']),
   }
 }
 

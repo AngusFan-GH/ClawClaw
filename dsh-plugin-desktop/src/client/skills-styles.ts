@@ -4,15 +4,21 @@ export const SKILLS_CSS = `
 .dshSkillPickerTrigger:hover:not(:disabled),.dshSkillPickerItem:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dshSkillPickerTrigger:disabled,.dshSkillPickerItem:disabled{opacity:.5;cursor:default}
 .dshSkillPickerTrigger:focus-visible,.dshSkillPickerItem:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
-.dshSkillsDialog.dshSkillPicker{width:min(480px,calc(100vw - 32px))}
-.dshSkillPickerResults{margin-top:12px;min-height:160px;max-height:360px;overflow:auto;overscroll-behavior:contain}
-.dshSkillPickerToolbar{display:flex;align-items:center;gap:8px;min-width:0}.dshSkillPickerToolbar input{box-sizing:border-box;flex:1;min-width:0;height:36px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px}.dshSkillPickerToolbar input:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
-.dshSkillPickerResults>p,.dshSkillPickerError{font-size:13px;line-height:20px;color:var(--dsw-alias-label-secondary)}
+.dshSkillsDialog.dshSkillPicker{width:min(560px,calc(100vw - 32px))}
+.dshSkillPickerContext{margin:0 0 10px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
+.dshSkillPickerResults{margin-top:8px;min-height:140px;max-height:380px;overflow:auto;overscroll-behavior:contain}
+.dshSkillPickerToolbar{display:flex;align-items:center;gap:8px;min-width:0}.dshSkillPickerSearch{position:relative;display:flex;align-items:center;flex:1;min-width:0}.dshSkillPickerSearch>svg{position:absolute;left:10px;width:16px;height:16px;color:var(--dsw-alias-label-secondary);pointer-events:none}.dshSkillPickerToolbar input{box-sizing:border-box;width:100%;min-width:0;height:36px;padding:8px 10px 8px 34px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px}.dshSkillPickerToolbar input:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+.dshSkillPickerResults>p,.dshSkillPickerError,.dshSkillPickerConflicts{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
 .dshSkillPickerError{display:flex;align-items:center;gap:12px;margin-top:12px}
-.dshSkillPickerItem{display:flex;align-items:flex-start;gap:10px;width:100%;padding:10px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;text-align:start;cursor:pointer}
+.dshSkillPickerConflicts{margin:8px 0 0;padding-top:8px;border-top:1px solid var(--dsw-alias-border-l1)}
+.dshSkillPickerItem{display:flex;align-items:flex-start;gap:10px;width:100%;min-height:64px;padding:10px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;text-align:start;cursor:pointer}
 .dshSkillPickerItem>svg{flex:none;margin-top:2px}.dshSkillPickerItem>span{display:flex;flex-direction:column;gap:4px;min-width:0;overflow-wrap:anywhere}
-.dshSkillPickerItem strong{font-size:14px;font-weight:500;line-height:20px}.dshSkillPickerItem span span{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
-.dshSkillsPage{max-width:880px;gap:14px}
+.dshSkillPickerItem strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:500;line-height:20px}.dshSkillPickerItem span span{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
+.dshSkillsPage{max-width:960px;gap:14px}
+.dshSkillsDirectories{display:flex;flex-direction:column;gap:10px;padding:0 0 10px;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.dshSkillsDirectories[data-open=true]{padding-bottom:14px}.dshSkillsDirectories>header{display:flex;align-items:center;justify-content:space-between;gap:14px}.dshSkillsDirectories>header>div{min-width:0}.dshSkillsDirectories header p{margin:5px 0 0;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:17px}
+.dshSkillsDirectoryToggle{display:inline-flex;align-items:center;gap:7px;padding:5px 0;border:0;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;font-weight:600;cursor:pointer}.dshSkillsDirectoryToggle svg{width:16px;height:16px;transition:transform .15s ease}.dshSkillsDirectoryToggle[aria-expanded=true] svg{transform:rotate(180deg)}.dshSkillsDirectoryToggle small{font-size:11px;font-weight:400;color:var(--dsw-alias-label-secondary)}.dshSkillsDirectoryToggle:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px;border-radius:4px}
+.dshSkillsDirectories ul{display:flex;flex-direction:column;margin:0;padding:0;list-style:none}.dshSkillsDirectories li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;min-width:0;padding:8px 0;border-top:1px solid var(--dsw-alias-border-l1)}.dshSkillsDirectories li>div{display:grid;grid-template-columns:minmax(190px,220px) max-content minmax(0,1fr);align-items:center;gap:12px;min-width:0}.dshSkillsDirectoryName{min-width:0;font-size:12px;line-height:18px;white-space:nowrap}.dshSkillsDirectories li small{padding:1px 5px;border:1px solid var(--dsw-alias-border-l2);border-radius:4px;color:var(--dsw-alias-label-secondary);font-size:10px;line-height:16px;white-space:nowrap}.dshSkillsDirectories code{min-width:0;overflow:hidden;font:11px/18px var(--ds-font-family-code,monospace);text-overflow:ellipsis;white-space:nowrap}
 .dshSkillsPage .dshIntegrationsHeader{align-items:center}
 .dshSkillsPage .dshIntegrationsHeader h2{font-size:18px;line-height:26px}
 .dshSkillsTabs{display:flex;gap:22px;border-bottom:1px solid var(--dsw-alias-border-l2)}
@@ -28,14 +34,13 @@ export const SKILLS_CSS = `
 .dshSkillsToolbar .dshSkillsPresetMenu button{height:36px;background:var(--dsw-alias-bg-module-platform);border:0}
 .dshSkillsToolbar .dshSkillsPresetMenu button span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .dshSkillsToolbar>.dshIntegrationsIconButton{flex-shrink:0}
-.dshSkillsContext,.dshSkillsDiagnostics{min-width:0;font-size:12px;line-height:19px;color:var(--dsw-alias-label-secondary)}
-.dshSkillsContext summary,.dshSkillsDiagnostics summary{cursor:pointer;overflow-wrap:anywhere;padding:3px 0}
-.dshSkillsContext summary:focus-visible,.dshSkillsDiagnostics summary:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px;border-radius:4px}
-.dshSkillsContextPreset{margin-inline-start:16px}
-.dshSkillsContext[open] .dshSkillsFacts,.dshSkillsDiagnostics[open] .dshSkillsFacts{margin-top:10px;padding:10px 0;border-top:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary)}
+.dshSkillsDiagnostics{min-width:0;font-size:12px;line-height:19px;color:var(--dsw-alias-label-secondary)}
+.dshSkillsDiagnostics summary{cursor:pointer;overflow-wrap:anywhere;padding:3px 0}
+.dshSkillsDiagnostics summary:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px;border-radius:4px}
+.dshSkillsDiagnostics[open] .dshSkillsFacts{margin-top:10px;padding:10px 0;border-top:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary)}
 .dshSkillsDiagnostics .dshSkillsFacts p{margin:5px 0}
 .dshSkillsDiagnostics .dshIntegrationsCommand{max-width:100%;white-space:normal;overflow-wrap:anywhere;margin-top:6px}
-.dshSkillsGroup{min-width:0}
+.dshSkillsGroups{display:flex;flex-direction:column;gap:18px;min-width:0}.dshSkillsGroup{min-width:0}
 .dshSkillsGroup h3{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:13px;font-weight:500;line-height:20px}
 .dshSkillsGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;list-style:none;margin:0;padding:0}
 .dshSkillsGrid li{min-width:0;position:relative}
@@ -46,14 +51,13 @@ export const SKILLS_CSS = `
 .dshSkillsCardDelete .dshIntegrationsIconButton:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
 .dshSkillsDeleteAction{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0;max-width:100%}
 .dshSkillsDeleteAction .dshSkillsNote{overflow-wrap:anywhere}
-.dshSkillsCard{display:flex;flex-direction:column;gap:8px;box-sizing:border-box;width:100%;height:100%;min-height:120px;padding:12px;text-align:left;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;cursor:pointer}
+.dshSkillsCard{display:flex;flex-direction:column;gap:8px;box-sizing:border-box;width:100%;height:100%;min-height:112px;padding:12px;text-align:left;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;cursor:pointer}
 .dshSkillsCard:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
 .dshSkillsCard:disabled{cursor:wait;opacity:.65}
 .dshSkillsCardHeading{display:flex;align-items:center;gap:8px;min-width:0;width:100%;padding-right:32px;box-sizing:border-box}
 .dshSkillsCardHeading>svg{flex:none;color:var(--dsw-alias-label-secondary)}
 .dshSkillsGrid li[data-recyclable=false] .dshSkillsCardHeading{padding-right:0}
-.dshSkillsCardSource{font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}
-.dshSkillsCardHeading strong{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:600;line-height:20px}
+.dshSkillsCardHeading strong{display:-webkit-box;flex:1;min-width:0;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow-wrap:anywhere;font-size:14px;font-weight:600;line-height:20px}
 .dshSkillsReadOnly{flex:none;font-size:11px;color:var(--dsw-alias-label-secondary)}
 .dshSkillsSummary{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;min-height:38px;overflow:hidden;overflow-wrap:anywhere;font-size:12px;line-height:19px;color:var(--dsw-alias-label-secondary)}
 .dshSkillsBadges{display:flex;flex-wrap:wrap;gap:7px 12px;margin-top:auto;font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary)}
@@ -120,6 +124,9 @@ export const SKILLS_CSS = `
 .dshSkillsConfirmation{display:flex;flex-direction:column;gap:10px;width:100%;font-size:13px;line-height:20px}
 .dshSkillsConfirmation .dshIntegrationsRowActions{justify-content:flex-end;flex-wrap:wrap}
 @container(max-width:540px){.dshSkillsGrid{grid-template-columns:minmax(0,1fr)}.dshSkillsToolbar{flex-wrap:wrap}.dshSkillsToolbar .dshIntegrationsSearch{flex-basis:100%}.dshSkillsToolbar>.dshIntegrationsIconButton{margin-left:auto}.dshSkillsPage .dshIntegrationsHeader{align-items:flex-start}.dshSkillsPage .dshIntegrationsHeader .dshIntegrationsRowActions{width:auto}.dshSkillsCard{min-height:120px}}
-@container(max-width:380px){.dshSkillsContextPreset{display:block;margin-inline-start:16px}.dshSkillsToolbar .dshSkillsPresetMenu{max-width:calc(100% - 38px)}.dshSkillsCardHeading{flex-wrap:wrap}.dshSkillsCardHeading strong{flex-basis:calc(100% - 24px)}.dshSkillsReadOnly{margin-inline-start:24px}}
+@container(max-width:700px){.dshSkillsDirectories li>div{display:flex;align-items:center;justify-content:flex-start;flex-wrap:wrap;gap:4px 8px}.dshSkillsDirectoryName{flex:0 1 auto}.dshSkillsDirectories li small{flex:none}.dshSkillsDirectories code{flex:0 0 100%;width:auto}}
+@container(max-width:540px){.dshSkillsDirectories>header{flex-direction:column}.dshSkillsDirectories>header .dshIntegrationsCommand{align-self:flex-start}.dshSkillsDirectories code{white-space:normal;overflow-wrap:anywhere}}
+@container(max-width:380px){.dshSkillsDirectoryName{white-space:normal}}
+@container(max-width:380px){.dshSkillsToolbar .dshSkillsPresetMenu{max-width:calc(100% - 38px)}.dshSkillsCardHeading{flex-wrap:wrap}.dshSkillsCardHeading strong{flex-basis:calc(100% - 24px)}.dshSkillsReadOnly{margin-inline-start:24px}}
 @media(max-width:480px){.dshSkillsFacts>div{grid-template-columns:70px minmax(0,1fr)}.dshSkillsDialogFooter .dshIntegrationsCommand,.dshSkillsDialogFooter .dshIntegrationsDanger{padding:5px 10px}.dshSkillsDialog .dshIntegrationsRowActions{flex-wrap:wrap}}
 `

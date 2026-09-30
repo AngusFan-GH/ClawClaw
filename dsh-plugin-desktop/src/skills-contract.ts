@@ -44,6 +44,7 @@ export interface DesktopSkillPurgeResult {
 }
 
 export interface DesktopSkillsView {
+  readonly scanPaths?: readonly string[]
   readonly installed?: readonly DesktopSkillInstallation[]
   readonly refreshPending?: boolean
   readonly skills: readonly DesktopSkillView[]
@@ -51,6 +52,7 @@ export interface DesktopSkillsView {
   readonly locations?: {
     readonly userLibrary: string
     readonly recycleBin: string
+    readonly projectLibrary?: string
     readonly cwd?: string
     readonly preset?: string
   }

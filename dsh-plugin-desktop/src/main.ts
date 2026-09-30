@@ -15,7 +15,6 @@ import {
   type FailLoudProcess,
 } from '@deepseek-ai/dsh-app-boot'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
-import { defaultDshHome, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import {
   DSH_LAUNCH_ENVIRONMENT_KEY,
   type LaunchEnvironmentSnapshot,
@@ -214,6 +213,9 @@ import { desktopRecoveryCopy } from './recovery-copy.ts'
 
 const BIN_NAME = DESKTOP_PACKAGE_NAME
 const PRODUCT_NAME = DESKTOP_PRODUCT_NAME
+const CLAWCLAW_HOME = 'CLAWCLAW_HOME'
+const DSH_HOME = 'DSH_HOME'
+const DSH_AGENTS_HOME = 'DSH_AGENTS_HOME'
 
 function withDesktopDshHome(
   environment: LaunchEnvironmentSnapshot,
@@ -221,11 +223,17 @@ function withDesktopDshHome(
 ): LaunchEnvironmentSnapshot {
   const entry = Object.freeze({ value: homeDir, source: 'process' as const })
   return Object.freeze({
-    get: (name: string) => name.toUpperCase() === 'DSH_HOME' ? entry : environment.get(name),
+    get: (name: string) => {
+      const normalized = name.toUpperCase()
+      if (normalized === DSH_HOME) return entry
+      if (normalized === DSH_AGENTS_HOME) return undefined
+      return environment.get(name)
+    },
     getFrom: (name: string, sources: Parameters<LaunchEnvironmentSnapshot['getFrom']>[1]) => {
-      return name.toUpperCase() === 'DSH_HOME' && sources.includes('process')
-        ? entry
-        : environment.getFrom(name, sources)
+      const normalized = name.toUpperCase()
+      if (normalized === DSH_HOME) return sources.includes('process') ? entry : undefined
+      if (normalized === DSH_AGENTS_HOME) return undefined
+      return environment.getFrom(name, sources)
     },
   })
 }
@@ -431,6 +439,9 @@ async function start(): Promise<void> {
   const recoveryModeRequested = desktopRecoveryModeRequested()
   const safeModeRequested = desktopSafeModeRequested()
   const inheritedDshHome = process.env.DSH_HOME
+  const inheritedDshAgentsHome = process.env.DSH_AGENTS_HOME
+  delete process.env.DSH_HOME
+  delete process.env.DSH_AGENTS_HOME
   const safeModeHomeDir = desktopSafeModePaths(desktopUserDataDir).homeDir
   try {
     logSink = new LogFileSink(join(app.getPath('userData'), 'logs'), {
@@ -524,9 +535,11 @@ async function start(): Promise<void> {
       removeShutdownRequests?.()
       removeUncaughtExceptionLogging?.()
       removeChildProcessLogging?.()
+      if (inheritedDshHome === undefined) delete process.env.DSH_HOME
+      else process.env.DSH_HOME = inheritedDshHome
+      if (inheritedDshAgentsHome === undefined) delete process.env.DSH_AGENTS_HOME
+      else process.env.DSH_AGENTS_HOME = inheritedDshAgentsHome
       if (safeModePaths !== undefined) {
-        if (inheritedDshHome === undefined) delete process.env.DSH_HOME
-        else process.env.DSH_HOME = inheritedDshHome
         try {
           cleanupDesktopSafeModeEnvironment(desktopUserDataDir)
         } catch (cause) {
@@ -722,27 +735,14 @@ async function start(): Promise<void> {
     const releasePnpmRuntime = generation.own(() => { pnpmRuntime.dispose() })
     const productLayout = clawClawDataLayout(app.getPath('home'))
     const defaultHome = productLayout.dshHome
-    const fallbackSource = process.env.DSH_HOME === undefined ? 'default' : 'environment'
+    const configuredHome = process.env[CLAWCLAW_HOME]?.trim()
+    const fallbackSource = configuredHome === undefined || configuredHome === '' ? 'default' : 'environment'
     const desktopDataState = safeModePaths === undefined
       ? readDesktopDataDirectoryState(desktopUserDataDir)
       : undefined
-    let fallbackHome: string
-    if (process.env.DSH_HOME !== undefined) {
-      fallbackHome = resolveDshHome()
-    } else if (desktopDataState !== undefined) {
-      fallbackHome = defaultHome
-    } else {
-      const preparedLayout = prepareClawClawDataLayout(
-        app.getPath('home'),
-        resolve(defaultDshHome()),
-      )
-      fallbackHome = preparedLayout.dshHome
-      if (preparedLayout.legacyHomeConflict) {
-        electronLogger.error(
-          `${BIN_NAME}: both the legacy and ClawClaw data directories exist; using ${preparedLayout.dshHome}`,
-        )
-      }
-    }
+    const fallbackHome = configuredHome === undefined || configuredHome === ''
+      ? desktopDataState === undefined ? prepareClawClawDataLayout(app.getPath('home')).dshHome : defaultHome
+      : resolve(configuredHome)
     let dataDirectoryLocation: DesktopDataDirectoryLocation | undefined
     let homeDir: string
     if (safeModePaths !== undefined) {

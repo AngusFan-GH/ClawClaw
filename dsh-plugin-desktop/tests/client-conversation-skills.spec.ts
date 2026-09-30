@@ -10,7 +10,8 @@ const state = { draft: 'Check @file please', draftRev: 7, phase: 'plain' as cons
 describe('conversation skill invocation', () => {
   it('ranks exact names ahead of prefixes, substrings and descriptions without mutating the catalog', () => {
     const skills = ['other', 'pre-review', 'review-more', 'review'].map(name => ({ name, description: 'review code', modelInvocable: true }))
-    expect(rankConversationSkills(skills, ' REVIEW ').map(skill => skill.name)).toEqual(['review', 'review-more', 'pre-review', 'other'])
+    const routed = { name: 'release', description: 'Ship changes', whenToUse: 'review a release', modelInvocable: true }
+    expect(rankConversationSkills([...skills, routed], ' REVIEW ').map(skill => skill.name)).toEqual(['review', 'review-more', 'pre-review', 'other', 'release'])
     expect(skills[0]?.name).toBe('other')
     expect(rankConversationSkills(skills, 'missing')).toEqual([])
   })

@@ -39,6 +39,12 @@ export function parseDesktopSkillsView(value: unknown): DesktopSkillsView {
     })
   }
   if (value.refreshPending !== undefined && typeof value.refreshPending !== 'boolean') throw new Error('Invalid Skill refresh state')
+  let scanPaths: readonly string[] | undefined
+  if (value.scanPaths !== undefined) {
+    if (!Array.isArray(value.scanPaths) || value.scanPaths.length > 32
+      || value.scanPaths.some(path => !text(path, 8192) || path === '')) throw new Error('Invalid Skill scan paths')
+    scanPaths = Object.freeze([...(value.scanPaths as string[])])
+  }
   if (new Set(skills.map(skill => skill.name)).size !== skills.length) throw new Error('dsh-plugin-desktop: duplicate Skill response row')
   if (!Array.isArray(value.recycled) || value.recycled.length > 10_000) throw new Error('dsh-plugin-desktop: invalid Skills recycle response')
   const recycled = value.recycled.map(value => {
@@ -50,13 +56,16 @@ export function parseDesktopSkillsView(value: unknown): DesktopSkillsView {
     const paths = value.locations
     if (!isRecord(paths) || !text(paths.userLibrary, 8192) || paths.userLibrary === ''
       || !text(paths.recycleBin, 8192) || paths.recycleBin === ''
+      || (paths.projectLibrary !== undefined && (!text(paths.projectLibrary, 8192) || paths.projectLibrary === ''))
       || (paths.preset !== undefined && (!text(paths.preset, 512) || paths.preset === ''))
       || (paths.cwd !== undefined && (!text(paths.cwd, 8192) || paths.cwd === ''))) throw new Error('Invalid Skill locations')
     locations = Object.freeze({ userLibrary: paths.userLibrary, recycleBin: paths.recycleBin,
+      ...(paths.projectLibrary === undefined ? {} : { projectLibrary: paths.projectLibrary }),
       ...(paths.cwd === undefined ? {} : { cwd: paths.cwd }),
       ...(paths.preset === undefined ? {} : { preset: paths.preset }) })
   }
   return Object.freeze({ skills: Object.freeze(skills), recycled: Object.freeze(recycled),
+    ...(scanPaths === undefined ? {} : { scanPaths }),
     ...(installed === undefined ? {} : { installed }),
     ...(value.refreshPending === true ? { refreshPending: true } : {}),
     ...(locations === undefined ? {} : { locations }) })
@@ -95,6 +104,8 @@ export interface DesktopSkillsApi {
   update(name: string, input: DesktopSkillInput, revision?: string): Promise<DesktopSkillsView>
   recycle(name: string): Promise<DesktopSkillsView>
   restore(id: string): Promise<DesktopSkillsView>
+  addScanPath(path: string): Promise<DesktopSkillsView>
+  removeScanPath(path: string): Promise<DesktopSkillsView>
 }
 export function createDesktopSkillsApi(fetcher: FetchLike = globalThis.fetch.bind(globalThis), preset?: string, scope: DesktopSkillsScope = {}): DesktopSkillsApi {
   const selection = { ...scope }
@@ -172,5 +183,7 @@ export function createDesktopSkillsApi(fetcher: FetchLike = globalThis.fetch.bin
     async update(name: string, input: DesktopSkillInput, revision?: string) { return parseDesktopSkillsView(await post({ action: 'update', name, input, ...(revision === undefined ? {} : { revision }) })) },
     async recycle(name: string) { return parseDesktopSkillsView(await post({ action: 'recycle', name })) },
     async restore(id: string) { return parseDesktopSkillsView(await post({ action: 'restore', id })) },
+    async addScanPath(path: string) { return parseDesktopSkillsView(await post({ action: 'add-scan-path', path })) },
+    async removeScanPath(path: string) { return parseDesktopSkillsView(await post({ action: 'remove-scan-path', path })) },
   })
 }

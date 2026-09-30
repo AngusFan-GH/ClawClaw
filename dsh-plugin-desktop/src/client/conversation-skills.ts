@@ -19,9 +19,10 @@ export function rankConversationSkills(skills: readonly SkillEntry[], query: str
     if (needle === '' || name === needle) return 0
     if (name.startsWith(needle)) return 1
     if (name.includes(needle)) return 2
-    return skill.description.toLocaleLowerCase().includes(needle) ? 3 : 4
+    if (skill.description.toLocaleLowerCase().includes(needle)) return 3
+    return skill.whenToUse?.toLocaleLowerCase().includes(needle) === true ? 4 : 5
   }
-  return skills.map(skill => ({ skill, score: score(skill) })).filter(item => item.score < 4)
+  return skills.map(skill => ({ skill, score: score(skill) })).filter(item => item.score < 5)
     .sort((left, right) => left.score - right.score || left.skill.name.localeCompare(right.skill.name)).map(item => item.skill)
 }
 export interface ConversationSkillsApi {

@@ -8,10 +8,10 @@ import { zh } from '../src/client/skills-locales.ts'
 
 let root: Root | undefined
 const catalog = { skills: [{ name: 'review', description: 'Review code', modelInvocable: false }], commands: [] }
-async function mount(api: ConversationSkillsApi, disabled = false) {
+async function mount(api: ConversationSkillsApi, disabled = false, preset?: string) {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   const container = document.createElement('div'); document.body.append(container); root = createRoot(container)
-  await act(async () => { root!.render(createElement(SkillPicker, { api, disabled, t: key => zh[key] })) })
+  await act(async () => { root!.render(createElement(SkillPicker, { api, disabled, preset, t: key => zh[key] })) })
 }
 function button(name: string) {
   const result = [...document.querySelectorAll('button')].find(button => button.getAttribute('aria-label') === name || button.textContent?.includes(name))
@@ -35,29 +35,26 @@ describe('conversation Skill picker', () => {
     expect(api.select).toHaveBeenCalledWith('review', expect.any(AbortSignal))
     expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
-  it('refreshes an open picker without closing it and stops polling after close', async () => {
-    vi.useFakeTimers()
-    try {
-      const api = { list: vi.fn(async () => catalog), select: vi.fn(async () => {}) }
-      await mount(api); await click('选择技能')
-      api.list.mockResolvedValue({ skills: [{ name: 'new-skill', description: 'New skill', modelInvocable: true }], commands: [] })
-      await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
-      expect(button('new-skill')).toBeDefined()
-      expect(document.querySelector('[role="dialog"]')).not.toBeNull()
-      await click('刷新')
-      expect(api.list).toHaveBeenCalledTimes(3)
-      await click('关闭')
-      await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
-      expect(api.list).toHaveBeenCalledTimes(3)
-    } finally { vi.useRealTimers() }
+  it('refreshes an open picker when the window regains focus and stops after close', async () => {
+    const api = { list: vi.fn(async () => catalog), select: vi.fn(async () => {}) }
+    await mount(api); await click('选择技能')
+    api.list.mockResolvedValue({ skills: [{ name: 'new-skill', description: 'New skill', modelInvocable: true }], commands: [] })
+    await act(async () => { window.dispatchEvent(new Event('focus')); await Promise.resolve() })
+    expect(button('new-skill')).toBeDefined()
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+    expect([...document.querySelectorAll('button')].some(item => item.getAttribute('aria-label') === zh.refresh)).toBe(false)
+    await click('关闭')
+    await act(async () => { window.dispatchEvent(new Event('focus')); await Promise.resolve() })
+    expect(api.list).toHaveBeenCalledTimes(2)
   })
   it('loads on each open, focuses search, inserts only the chosen Skill and closes', async () => {
     const api = { list: vi.fn(async () => catalog), select: vi.fn(async () => {}) }
-    await mount(api)
+    await mount(api, false, 'standard')
     await act(async () => { button('选择技能').focus() })
     expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('选择技能')
     await click('选择技能')
     expect(document.activeElement?.getAttribute('type')).toBe('search')
+    expect(document.querySelector('.dshSkillPickerContext')?.textContent).toBe(`${zh.scopeSession} · standard · ${zh.availableSkills} · 1`)
     expect(document.body.style.overflow).toBe('hidden')
     await click('review')
     expect(api.select).toHaveBeenCalledWith('review', expect.any(AbortSignal))
@@ -76,14 +73,15 @@ describe('conversation Skill picker', () => {
     expect(signal?.aborted).toBe(true)
     expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
-  it('shows recoverable errors and empty catalogs, and disables command-name collisions', async () => {
+  it('shows recoverable errors and empty catalogs, and summarizes command-name collisions', async () => {
     const api = { list: vi.fn<ConversationSkillsApi['list']>().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ skills: [], commands: [] }).mockResolvedValueOnce({ ...catalog, commands: ['review'] }), select: vi.fn(async () => {}) }
     await mount(api); await click('选择技能')
     expect(document.querySelector('[role="alert"]')?.textContent).toContain(zh.unavailable)
     await click('刷新')
     expect(document.querySelector('[role="status"]')?.textContent).toBe(zh.noSessionSkills)
     await click('关闭'); await click('选择技能')
-    expect(button('review').disabled).toBe(true)
+    expect(document.querySelector('.dshSkillPickerItem')).toBeNull()
+    expect(document.querySelector('.dshSkillPickerConflicts')?.textContent).toBe(`${zh.conflictingSkills} · 1`)
     expect(api.select).not.toHaveBeenCalled()
   })
   it('keeps selection failure in the dialog without losing the draft', async () => {

@@ -554,7 +554,7 @@ virtualStoreDirMaxLength: 60
     }))
   })
 
-  it('keeps editable shortcuts and Cron tasks in the Profile layer instead of launcher overlays', () => {
+  it('keeps editable shortcuts, Cron tasks, and Skill paths in the Profile layer instead of launcher overlays', () => {
     const home = temporaryHome()
     const profileDir = ensureDesktopProfile(home)
     writeFileSync(join(profileDir, 'cordis.patch.yml'), [
@@ -567,6 +567,10 @@ virtualStoreDirMaxLength: 60
       '    jobs:',
       '      - id: morning-briefing',
       '        name: Morning briefing',
+      '- id: desktop-skills',
+      '  config:',
+      '    paths:',
+      '      - /opt/team-skills',
       '',
     ].join('\n'))
 
@@ -586,16 +590,25 @@ virtualStoreDirMaxLength: 60
       name: 'dsh-plugin-desktop/cron-tasks',
       config: { jobs: [{ id: 'morning-briefing', name: 'Morning briefing' }] },
     })
+    expect(rows.find(row => row.id === 'desktop-skills')).toEqual({
+      id: 'desktop-skills',
+      name: 'dsh-plugin-desktop/skills',
+      config: { paths: ['/opt/team-skills'] },
+    })
     expect(firstPersisted).toBe(persisted)
     expect(persisted.indexOf('insert:')).toBeLessThan(persisted.indexOf('id: desktop-shortcuts\n  config:'))
     expect(persisted.indexOf('insert:')).toBeLessThan(persisted.indexOf('id: desktop-cron-tasks\n  config:'))
     expect(persisted.match(/id: desktop-shortcuts\n/g)).toHaveLength(2)
     expect(persisted.match(/id: desktop-cron-tasks\n/g)).toHaveLength(2)
+    expect(persisted.match(/id: desktop-skills\n/g)).toHaveLength(2)
     expect(prepared.overlays.some(patch => patch.id === 'desktop-shell')).toBe(true)
     expect(prepared.overlays.some(patch => Array.isArray(patch.insert)
-      && patch.insert.some(row => row.id === 'desktop-shortcuts' || row.id === 'desktop-cron-tasks'))).toBe(false)
+      && patch.insert.some(row => row.id === 'desktop-shortcuts' || row.id === 'desktop-cron-tasks'
+        || row.id === 'desktop-skills'))).toBe(false)
     expect(composeEntries([preparedAgain.patches]).find(row => row.id === 'desktop-cron-tasks'))
       .toEqual(rows.find(row => row.id === 'desktop-cron-tasks'))
+    expect(composeEntries([preparedAgain.patches]).find(row => row.id === 'desktop-skills'))
+      .toEqual(rows.find(row => row.id === 'desktop-skills'))
   })
 
   it('merges a frozen LAN IPv4 snapshot into existing Web runtime trust', () => {
@@ -882,6 +895,27 @@ virtualStoreDirMaxLength: 60
       name: 'dsh-plugin-desktop',
       config: expect.objectContaining({ mode: 'compatibility' }),
     }))
+  })
+
+  it('isolates every Skill-capable preset from Harness and shared Agent roots', () => {
+    const prepared = prepareDesktopProfile(undefined, temporaryHome(), 'darwin')
+    const rows = composeEntries([prepared.patches])
+
+    for (const preset of ['standard', 'ptc', 'cordis']) {
+      const row = rows.find(candidate => candidate.id === `preset-${preset}`) as {
+        config?: { plugins?: Array<{ id?: string; config?: Record<string, unknown> }> }
+      } | undefined
+      const filesystem = row?.config?.plugins?.find(plugin => plugin.id === 'skill-filesystem')
+      const projectFilesystem = row?.config?.plugins?.find(plugin => plugin.id === 'clawclaw-skill-filesystem')
+      expect(filesystem?.config).toEqual(expect.objectContaining({
+        includeDefaultRoots: false,
+        customSkillDirs: [join(prepared.homeDir, 'skills')],
+      }))
+      expect(filesystem?.config?.bundledSkillDir).toEqual(expect.objectContaining({ __jsExpr: expect.any(String) }))
+      expect(projectFilesystem).toEqual(expect.objectContaining({
+        name: 'dsh-plugin-desktop/clawclaw-skill-filesystem',
+      }))
+    }
   })
 
   it('keeps a custom layout and withdraws incompatible browser and LAN access', () => {

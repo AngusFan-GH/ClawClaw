@@ -36,6 +36,18 @@ describe('legacy Agent preset registrar', () => {
       name: expect.stringMatching(/^file:/),
       disabled: { __jsExpr: 'process.platform === "win32"' },
     })
+    expect(definition.plugins.find(row => row.id === 'skill-filesystem')).toMatchObject({
+      name: '@deepseek-ai/dsh-skill-filesystem',
+      config: {
+        includeDefaultRoots: false,
+        customSkillDirs: [expect.stringContaining('skills')],
+        bundledSkillDir: expect.stringContaining('skills'),
+      },
+    })
+    expect(definition.plugins.find(row => row.id === 'clawclaw-skill-filesystem')).toEqual({
+      id: 'clawclaw-skill-filesystem',
+      name: 'dsh-plugin-desktop/clawclaw-skill-filesystem',
+    })
   })
 
   it('isolates invalid presets, lets official ids win, and disposes successful registrations', async () => {

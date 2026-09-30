@@ -39,29 +39,26 @@ describe('ClawClaw product data layout', () => {
 
   it('creates a fresh private product data directory', () => {
     const prepared = prepareClawClawDataLayout(temporaryHome())
-    expect(prepared.migratedLegacyHome).toBe(false)
-    expect(prepared.legacyHomeConflict).toBe(false)
     expect(lstatSync(prepared.dshHome).isDirectory()).toBe(true)
   })
 
-  it('moves a sole legacy DSH home without copying its state', () => {
+  it('does not inspect, move, or copy another application\'s DSH home', () => {
     const home = temporaryHome()
     const legacy = join(home, '.dsh')
     mkdirSync(legacy)
     writeFileSync(join(legacy, 'marker.txt'), 'legacy\n')
     const prepared = prepareClawClawDataLayout(home)
-    expect(prepared.migratedLegacyHome).toBe(true)
-    expect(existsSync(legacy)).toBe(false)
-    expect(readFileSync(join(prepared.dshHome, 'marker.txt'), 'utf8')).toBe('legacy\n')
+    expect(readFileSync(join(legacy, 'marker.txt'), 'utf8')).toBe('legacy\n')
+    expect(existsSync(join(prepared.dshHome, 'marker.txt'))).toBe(false)
   })
 
-  it('never merges two independently populated data directories', () => {
+  it('preserves independently populated product and DSH directories', () => {
     const home = temporaryHome()
     const layout = clawClawDataLayout(home)
     mkdirSync(join(home, '.dsh'))
     mkdirSync(layout.dshHome, { recursive: true })
-    const prepared = prepareClawClawDataLayout(home)
-    expect(prepared.legacyHomeConflict).toBe(true)
+    prepareClawClawDataLayout(home)
     expect(existsSync(join(home, '.dsh'))).toBe(true)
+    expect(lstatSync(layout.dshHome).isDirectory()).toBe(true)
   })
 })

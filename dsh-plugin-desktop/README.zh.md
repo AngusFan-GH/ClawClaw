@@ -10,7 +10,9 @@
 
 Electron main 默认通过 `startIsolatedDesktopHost()` 启动 Host；`DSH_DESKTOP_ISOLATED_HOST=0` 是同进程排查路径。Host 拥有 Cordis 和 Web 服务，Electron main 拥有原生资源。浏览器内容通过普通 loopback HTTP/WebSocket 工作，没有通用 Electron bridge。
 
-Launcher 默认准备 `~/.clawclaw/data` 与 `~/.clawclaw/workspaces/default`；已保存的数据目录、`DSH_HOME` 或安全模式可以覆盖。仅有旧 `~/.dsh` 时会迁移；两个根目录并存时保留两者、不合并。
+Launcher 默认准备 `~/.clawclaw/data` 与 `~/.clawclaw/workspaces/default`；已保存的数据目录、`CLAWCLAW_HOME` 或安全模式可以覆盖。它不会读取、移动或修改其他应用的 `~/.dsh` 数据。
+
+ClawClaw 从 `<CLAWCLAW_HOME>/skills`（默认 `~/.clawclaw/data/skills`）发现用户 Skill，从当前所选 Workspace 的 `.clawclaw/skills` 发现项目 Skill。默认不会扫描 `.dsh/skills`、`.agents/skills`、`.codex/skills` 或其他应用的 Skill 目录。用户可以在技能页面显式添加只读扫描目录；这些路径只保存在 ClawClaw 自有配置中，ClawClaw 不会修改外部文件。
 
 macOS/Windows 的兼容、扩展模式用独立 WebContentsView 隔离桌面标题栏和内容；增强模式使用集成呈现。窗口/profile 改变会重启 generation。公开插件 contract 是 `./profile-service`、`./pnpm`、`./client`，详见[插件 service](docs/plugin-services.zh.md)。
 

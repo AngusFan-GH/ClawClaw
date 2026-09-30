@@ -10,7 +10,9 @@ This package is part of the root pnpm workspace. Do not install it as a standalo
 
 Electron main starts the Host through `startIsolatedDesktopHost()` by default. `DSH_DESKTOP_ISOLATED_HOST=0` is an in-process diagnostic route. The Host owns Cordis and Web services; Electron main owns native resources. The browser content uses ordinary loopback HTTP/WebSocket and has no general Electron bridge.
 
-The launcher prepares `~/.clawclaw/data` and `~/.clawclaw/workspaces/default` unless saved data-directory configuration, `DSH_HOME`, or safe mode selects another path. A sole legacy `~/.dsh` is moved; two existing roots are preserved without merging.
+The launcher prepares `~/.clawclaw/data` and `~/.clawclaw/workspaces/default` unless saved data-directory configuration, `CLAWCLAW_HOME`, or safe mode selects another path. It never reads, moves, or modifies another application's `~/.dsh` data.
+
+ClawClaw discovers user Skills from `<CLAWCLAW_HOME>/skills` (by default `~/.clawclaw/data/skills`) and project Skills from the selected Workspace's `.clawclaw/skills`. It does not scan `.dsh/skills`, `.agents/skills`, `.codex/skills`, or other applications' Skill directories by default. Users may explicitly add read-only scan directories from the Skills page; those paths remain ClawClaw-owned configuration and never alter the external files.
 
 Compatibility and extended modes isolate desktop chrome from content in separate WebContentsViews on macOS/Windows. Advanced mode uses an integrated presentation. Window/profile changes restart the generation. The public plugin contracts are `./profile-service`, `./pnpm`, and `./client`; see [plugin services](docs/plugin-services.md).
 

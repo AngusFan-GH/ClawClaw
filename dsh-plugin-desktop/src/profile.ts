@@ -96,9 +96,12 @@ const DESKTOP_SHORTCUTS_ROW_ID = 'desktop-shortcuts'
 const DESKTOP_SHORTCUTS_PACKAGE = `${DESKTOP_PACKAGE_NAME}/shortcut-menu`
 const DESKTOP_CRON_TASKS_ROW_ID = 'desktop-cron-tasks'
 const DESKTOP_CRON_TASKS_PACKAGE = `${DESKTOP_PACKAGE_NAME}/cron-tasks`
+const DESKTOP_SKILLS_ROW_ID = 'desktop-skills'
+const DESKTOP_SKILLS_PACKAGE = `${DESKTOP_PACKAGE_NAME}/skills`
 const DESKTOP_EDITABLE_PROFILE_ENTRIES = [
   { id: DESKTOP_SHORTCUTS_ROW_ID, name: DESKTOP_SHORTCUTS_PACKAGE },
   { id: DESKTOP_CRON_TASKS_ROW_ID, name: DESKTOP_CRON_TASKS_PACKAGE },
+  { id: DESKTOP_SKILLS_ROW_ID, name: DESKTOP_SKILLS_PACKAGE },
 ] as const
 const DESKTOP_EDITABLE_PROFILE_ENTRY_IDS = new Set<string>(DESKTOP_EDITABLE_PROFILE_ENTRIES.map(entry => entry.id))
 const DIRECTORY_PICKER_ROW_ID = 'directory-picker'
@@ -133,6 +136,12 @@ const MARKET_PACKAGE_NAMES: ReadonlySet<string> = new Set([
   LEGACY_COMMUNITY_MARKET_PACKAGE,
   DESKTOP_MARKET_IDENTITIES.dshMarket.packageName,
 ])
+const SKILL_CAPABLE_PRESET_ROWS = ['preset-standard', 'preset-ptc', 'preset-cordis'] as const
+const UPSTREAM_SKILL_FILESYSTEM_PACKAGE = '@deepseek-ai/dsh-skill-filesystem'
+const DESKTOP_PROJECT_SKILL_FILESYSTEM_PACKAGE = `${DESKTOP_PACKAGE_NAME}/clawclaw-skill-filesystem`
+const BUNDLED_AGENT_SKILL_ROOT = {
+  __jsExpr: "process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('@deepseek-ai/dsh-agent-preset/package.json')), 'skills')",
+}
 
 /**
  * Parse desktop presentation state and reject corrupted values.
@@ -623,6 +632,42 @@ function assertUniqueEntryIds(rows: readonly EntryOptions[]): void {
   }
 }
 
+/** Preserve complete preset definitions while replacing only their Skill roots. */
+function isolatedSkillPresetPatches(rows: ReadonlyMap<string, EntryOptions>, home: string): PatchOptions[] {
+  return SKILL_CAPABLE_PRESET_ROWS.map((id) => {
+    const row = rows.get(id)
+    if (row === undefined) throw new Error(`${BIN_NAME}: desktop profile is missing ${id}`)
+    const config = rowConfig(row)
+    if (!Array.isArray(config.plugins)) throw new Error(`${BIN_NAME}: ${id} has no plugin list`)
+    const plugins = config.plugins as EntryOptions[]
+    const upstream = plugins.find(plugin => plugin.id === 'skill-filesystem')
+    if (upstream !== undefined && upstream.name !== UPSTREAM_SKILL_FILESYSTEM_PACKAGE) {
+      throw new Error(`${BIN_NAME}: ${id} reserves skill-filesystem for ${UPSTREAM_SKILL_FILESYSTEM_PACKAGE}`)
+    }
+    const desktop = plugins.find(plugin => plugin.id === 'clawclaw-skill-filesystem')
+    if (desktop !== undefined && desktop.name !== DESKTOP_PROJECT_SKILL_FILESYSTEM_PACKAGE) {
+      throw new Error(`${BIN_NAME}: ${id} has a conflicting clawclaw-skill-filesystem plugin`)
+    }
+    const isolated: EntryOptions = {
+      ...(upstream ?? { id: 'skill-filesystem', name: UPSTREAM_SKILL_FILESYSTEM_PACKAGE }),
+      config: {
+        includeDefaultRoots: false,
+        customSkillDirs: [join(home, 'skills')],
+        bundledSkillDir: BUNDLED_AGENT_SKILL_ROOT,
+      },
+    }
+    const project: EntryOptions = desktop ?? {
+      id: 'clawclaw-skill-filesystem',
+      name: DESKTOP_PROJECT_SKILL_FILESYSTEM_PACKAGE,
+    }
+    const rewritten = plugins
+      .filter(plugin => plugin.id !== 'skill-filesystem' && plugin.id !== 'clawclaw-skill-filesystem')
+    const insertion = plugins.findIndex(plugin => plugin.id === 'skill-filesystem')
+    rewritten.splice(insertion < 0 ? rewritten.length : insertion, 0, isolated, project)
+    return { id, config: { ...config, plugins: rewritten } }
+  })
+}
+
 /** Return whether a Loader specifier names an npm package. */
 function isBarePackageSpecifier(name: string): boolean {
   return !name.startsWith('.')
@@ -960,6 +1005,9 @@ export function prepareDesktopProfile(
   for (const row of composedRows) {
     if (typeof row.id === 'string') rows.set(row.id, row)
   }
+  // A Loader patch replaces a complete config object. Derive these patches
+  // from the effective rows so preset identity, tools, and user overrides stay intact.
+  patches.push(...isolatedSkillPresetPatches(rows, home))
   // Desktop owns generation restarts and uses the public Node resolver.
   // Upstream HMR requires Node internals that Electron does not expose.
   if (rows.has('hmr')) patches.push({ id: 'hmr', disabled: true })

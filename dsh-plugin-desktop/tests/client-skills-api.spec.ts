@@ -23,12 +23,25 @@ describe('Desktop Skills client API', () => {
     expect(() => parseDesktopSkillsView({ ...view, installed: [{ ...installed[0], effectivePath: 123 }] })).toThrow('Invalid Skill installation')
   })
   it('preserves server-resolved directories and rejects malformed location metadata', () => {
-    const locations = { userLibrary: '/custom/data/skills', recycleBin: '/custom/data/skills/.recycle', cwd: '/workspaces/default', preset: 'custom' }
+    const locations = { userLibrary: '/custom/data/skills', recycleBin: '/custom/data/skills/.recycle', cwd: '/workspaces/default', projectLibrary: '/workspaces/default/.clawclaw/skills', preset: 'custom' }
     expect(parseDesktopSkillsView({ ...view, locations }).locations).toEqual(locations)
     expect(parseDesktopSkillsView(view).locations).toBeUndefined()
     expect(() => parseDesktopSkillsView({ ...view, locations: { ...locations, cwd: 42 } })).toThrow('Invalid Skill locations')
+    expect(() => parseDesktopSkillsView({ ...view, locations: { ...locations, projectLibrary: 42 } })).toThrow('Invalid Skill locations')
     expect(() => parseDesktopSkillsView({ ...view, locations: { ...locations, preset: 42 } })).toThrow('Invalid Skill locations')
     expect(() => parseDesktopSkillsView({ ...view, locations: { ...locations, userLibrary: '' } })).toThrow('Invalid Skill locations')
+  })
+  it('validates and manages explicit scan paths', async () => {
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
+      ...view, scanPaths: ['/opt/team-skills'],
+    })))
+    const api = createDesktopSkillsApi(fetcher)
+    expect((await api.readView()).scanPaths).toEqual(['/opt/team-skills'])
+    await api.addScanPath('/opt/extra-skills')
+    expect(JSON.parse(String(fetcher.mock.lastCall?.[1]?.body))).toEqual({ action: 'add-scan-path', path: '/opt/extra-skills' })
+    await api.removeScanPath('/opt/team-skills')
+    expect(JSON.parse(String(fetcher.mock.lastCall?.[1]?.body))).toEqual({ action: 'remove-scan-path', path: '/opt/team-skills' })
+    expect(() => parseDesktopSkillsView({ ...view, scanPaths: [42] })).toThrow('Invalid Skill scan paths')
   })
   it('preserves Workspace scope across preset changes and every request', async () => {
     const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => new Response(JSON.stringify(JSON.parse(String(init?.body ?? '{}')).action === 'detail' ? { ...view.skills[0], content: 'Instructions' } : view)))

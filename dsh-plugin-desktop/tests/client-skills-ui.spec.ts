@@ -20,6 +20,7 @@ async function mount(overrides: Partial<typeof skill> = {}, options: { initialSe
     setUserInvocable: vi.fn(async (_name, enabled) => [{ ...skill, userInvocable: enabled }]),
     create: vi.fn(async () => view), update: vi.fn(async () => view), importDocument: vi.fn(async () => view),
     recycle: vi.fn(async () => ({ ...view, skills: [] })), restore: vi.fn(async () => ({ ...view, recycled: [] })),
+    addScanPath: vi.fn(async () => view), removeScanPath: vi.fn(async () => view),
   }
   options.configure?.(api)
   const container = document.createElement('div'); document.body.append(container); root = createRoot(container)
@@ -35,17 +36,36 @@ async function click(text: string) { await act(async () => { button(text).click(
 afterEach(async () => { await act(async () => { root?.unmount() }); root = undefined; document.body.replaceChildren(); vi.unstubAllGlobals() })
 
 describe('Skills catalog UI', () => {
-  it('shows one name-sorted list with source labels and hides redundant labels when filtered', async () => {
+  it('adds and removes explicit read-only scan directories', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ path: '/opt/team-skills' }))))
+    let scanPaths: readonly string[] = []
+    const api = await mount({}, { configure: api => {
+      vi.mocked(api.readView).mockImplementation(async () => ({ ...view, scanPaths }))
+      vi.mocked(api.addScanPath).mockImplementation(async () => { scanPaths = ['/opt/team-skills']; return { ...view, skills: [], scanPaths } })
+      vi.mocked(api.removeScanPath).mockImplementation(async () => { scanPaths = []; return { ...view, skills: [], scanPaths } })
+    } })
+    expect(button(zh.skillLocations).getAttribute('aria-expanded')).toBe('false')
+    await click(zh.skillLocations)
+    expect(document.body.textContent).toContain(zh.noScanPaths)
+    await click(zh.addScanPath)
+    expect(api.addScanPath).toHaveBeenCalledWith('/opt/team-skills')
+    expect(document.querySelector('.dshSkillsDirectories code')?.textContent).toBe('/opt/team-skills')
+    expect(document.querySelectorAll('.dshSkillsCard')).toHaveLength(1)
+    await click(`${zh.removeScanPath}: /opt/team-skills`)
+    expect(api.removeScanPath).toHaveBeenCalledWith('/opt/team-skills')
+    expect(document.body.textContent).toContain(zh.noScanPaths)
+  })
+  it('groups name-sorted Skills by source and narrows groups when filtered', async () => {
     await mount({}, { configure: api => { vi.mocked(api.readView).mockResolvedValue({ ...view, skills: [
       { ...skill, name: 'z-local' }, { ...skill, name: 'a-shared', source: 'user-agents' },
     ] }) } })
-    expect(document.querySelectorAll('.dshSkillsGrid')).toHaveLength(1)
-    expect([...document.querySelectorAll('.dshSkillsCardHeading strong')].map(item => item.textContent)).toEqual(['a-shared', 'z-local'])
-    expect([...document.querySelectorAll('.dshSkillsCardSource')].map(item => item.textContent)).toEqual([zh.sourceUserAgents, zh.sourceUserDsh])
+    expect(document.querySelectorAll('.dshSkillsGrid')).toHaveLength(2)
+    expect([...document.querySelectorAll('.dshSkillsCardHeading strong')].map(item => item.textContent)).toEqual(['z-local', 'a-shared'])
+    expect([...document.querySelectorAll('.dshSkillsGroup h3')].map(item => item.textContent)).toEqual([`${zh.sourceUserDsh}1`, `${zh.sourceUserAgents}1`])
     expect(document.querySelectorAll('.dshSkillsCardDelete')).toHaveLength(1)
     await click(zh.filterSource); await click(`${zh.sourceUserAgents} · 1`)
     expect(document.querySelectorAll('.dshSkillsCard')).toHaveLength(1)
-    expect(document.querySelector('.dshSkillsCardSource')).toBeNull()
+    expect(document.querySelectorAll('.dshSkillsGroup')).toHaveLength(1)
   })
   it('requires confirmation for permanent deletion and supports cancellation', async () => {
     const purge = vi.fn(async (ids: readonly string[]) => ({ deleted: ids, failed: [] }))
@@ -139,19 +159,20 @@ describe('Skills catalog UI', () => {
     await act(async () => { finish({ path: 'a.md', content: 'Old content', unavailable: false }) })
     expect(document.querySelector('.dshSkillFilePreview pre')?.textContent).toBe('New content')
   })
-  it('collapses directories by default while keeping the effective preset visible', async () => {
+  it('combines managed, project, and additional Skill directories while keeping the effective preset visible', async () => {
     await mount({}, { configure: api => { vi.mocked(api.readView).mockResolvedValue({ ...view, locations: {
-      userLibrary: '/data/skills', recycleBin: '/data/skills/.recycle', cwd: '/workspaces/default', preset: 'standard',
-    } }) } })
-    const context = document.querySelector<HTMLDetailsElement>('.dshSkillsContext')!
-    expect(context.open).toBe(false)
-    expect(context.querySelector('summary')?.textContent).toContain('standard')
-    await act(async () => { context.querySelector('summary')!.click() })
-    expect(context.open).toBe(true)
-    expect(context.querySelector('dl')?.textContent).toContain('/workspaces/default')
+      userLibrary: '/data/skills', recycleBin: '/data/skills/.recycle', cwd: '/workspaces/default', projectLibrary: '/workspaces/default/.clawclaw/skills', preset: 'standard',
+    }, scanPaths: ['/opt/team-skills'] }) } })
+    const directories = document.querySelector('.dshSkillsDirectories')!
+    expect(directories.textContent).not.toContain('/data/skills')
+    await click(zh.skillLocations)
+    expect(directories.textContent).toContain('/data/skills')
+    expect(directories.textContent).toContain('/workspaces/default/.clawclaw/skills')
+    expect(directories.textContent).toContain('/opt/team-skills')
+    expect(button(zh.agentPreset).textContent).toContain('standard')
     await act(async () => { (document.querySelectorAll('[role="tab"]')[1] as HTMLButtonElement).click() })
-    expect(document.querySelector<HTMLDetailsElement>('.dshSkillsContext')?.open).toBe(false)
-    expect(document.querySelector('.dshSkillsContext summary')?.textContent).not.toContain('standard')
+    expect(document.querySelector('.dshSkillsDirectories')?.textContent).toContain('/data/skills/.recycle')
+    expect(document.querySelector('.dshSkillsDirectories')?.textContent).not.toContain('/opt/team-skills')
   })
   it('keeps installation diagnostics separate from callable catalog cards', async () => {
     const api = await mount({}, { configure: api => { vi.mocked(api.readView).mockResolvedValue({ ...view, installed: [
@@ -195,8 +216,9 @@ describe('Skills catalog UI', () => {
     expect(api.update).toHaveBeenLastCalledWith('review', expect.objectContaining({ instructions: 'My draft' }), 'b'.repeat(64))
   })
   it('shows resolved data and working directories and the user-library install destination', async () => {
-    const locations = { userLibrary: '/custom/data/skills', recycleBin: '/custom/data/skills/.recycle', cwd: '/projects/current' }
+    const locations = { userLibrary: '/custom/data/skills', recycleBin: '/custom/data/skills/.recycle', cwd: '/projects/current', projectLibrary: '/projects/current/.clawclaw/skills' }
     await mount({}, { configure: api => { vi.mocked(api.readView).mockResolvedValue({ ...view, locations }) } })
+    await click(zh.skillLocations)
     expect(document.querySelector('[aria-label="技能目录"]')?.textContent).toContain(locations.cwd)
     await click(zh.newSkill)
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(zh.installDestination)
@@ -207,13 +229,16 @@ describe('Skills catalog UI', () => {
     await click(zh.cancel)
     await act(async () => { (document.querySelectorAll('[role="tab"]')[1] as HTMLButtonElement).click() })
     expect(document.querySelector('[aria-label="技能目录"]')?.textContent).toContain(locations.recycleBin)
-    expect(document.querySelector('[aria-label="技能目录"]')?.textContent).not.toContain(locations.cwd)
+    expect(document.querySelector('[aria-label="技能目录"]')?.textContent).not.toContain(locations.projectLibrary)
   })
   it('starts in the current Session scope and uses its preset', async () => {
-    const api = await mount({}, { initialSessionId: 'current-session' })
+    const api = await mount({}, { initialSessionId: 'current-session', configure: api => {
+      vi.mocked(api.readView).mockResolvedValue({ ...view, locations: { userLibrary: '/data/skills', recycleBin: '/data/skills/.recycle', preset: 'standard' } })
+    } })
     expect(api.forScope).toHaveBeenCalledWith({ sessionId: 'current-session' })
     expect(api.forPreset).toHaveBeenCalledWith()
-    expect(button(zh.skillScope).textContent).toBe(zh.scopeSession)
+    expect(button(zh.skillScope).textContent).toContain(zh.scopeSession)
+    expect(button(zh.skillScope).textContent).toContain('standard')
     expect(document.querySelector('.dshSkillsToolbar')?.textContent).not.toContain(zh.sessionPreset)
   })
   it('switches Workspace scope and groups project Skills separately', async () => {
@@ -225,8 +250,8 @@ describe('Skills catalog UI', () => {
     } })
     await click(zh.skillScope); await click('Project A · /project/a')
     expect(api.forScope).toHaveBeenCalledWith({ workspaceId: 'a' })
-    expect(document.querySelector('.dshSkillsCardSource')?.textContent).toContain(zh.sourceProjectAgents)
-    expect(button(zh.skillScope).textContent).toBe('Project A')
+    expect(document.querySelector('.dshSkillsGroup h3')?.textContent).toContain(zh.sourceProjectAgents)
+    expect(button(zh.skillScope).textContent).toContain('Project A')
   })
   it('refreshes in the background without interrupting an open Skill', async () => {
     vi.useFakeTimers()
@@ -257,7 +282,7 @@ describe('Skills catalog UI', () => {
   })
   it('explains shared origins and edit impact without offering unsupported deletion', async () => {
     await mount({ source: 'user-agents' })
-    expect(document.querySelector('.dshSkillsCardSource')?.textContent).toBe(zh.sourceUserAgents)
+    expect(document.querySelector('.dshSkillsGroup h3')?.textContent).toContain(zh.sourceUserAgents)
     expect(document.querySelector('.dshSkillsCardDelete')).toBeNull()
     await click('查看详情: review')
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(zh.recycleSharedRestricted)

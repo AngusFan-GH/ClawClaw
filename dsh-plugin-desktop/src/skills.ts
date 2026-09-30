@@ -3,8 +3,9 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { chmod, lstat, stat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, dirname, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+import type { SettingsScope } from '@deepseek-ai/dsh-settings'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-session-query'
@@ -15,13 +16,19 @@ import { parseDocument } from 'yaml'
 import { registerDesktopJsonApi } from './desktop-json-api.ts'
 import { decodeSkillBundle, listSkillFiles, previewSkillFile } from './skill-bundle.ts'
 import {
+  DESKTOP_SKILL_SCAN_SETTINGS_NAMESPACE,
+  DesktopSkillScanSettingsSchema,
+  validateDesktopSkillScanSettings,
+  type DesktopSkillScanSettings,
+} from './skill-scan-settings.ts'
+import {
   DESKTOP_SKILLS_ACTION_PATH, DESKTOP_SKILLS_PATH, MAX_SKILL_BUNDLE_BYTES,
   type DesktopRecycledSkill, type DesktopSkillDetail, type DesktopSkillInput, type DesktopSkillsView, type DesktopSkillView, type DesktopSkillsScope, type DesktopSkillInstallation,
 } from './skills-contract.ts'
 
 export * from './skills-contract.ts'
 export const name = 'desktop-skills'
-export const inject = ['skills', 'webServer', 'connection']
+export const inject = ['skills', 'webServer', 'connection', 'settings']
 
 const MAX_SKILL_CONTENT_BYTES = 256 * 1024
 const revisionOf = (path: string, text: string): string => createHash('sha256').update(path).update('\0').update(text).digest('hex')
@@ -34,7 +41,7 @@ function projectSkill(skill: SkillSummary): DesktopSkillView {
     ...(skill.whenToUse === undefined ? {} : { whenToUse: skill.whenToUse }),
     source: skill.source, provider: skill.provider,
     modelInvocable: skill.invocation.modelInvocable, userInvocable: skill.invocation.userInvocable,
-    editable: (skill.source === 'user-dsh' || skill.source === 'user-agents') && skill.provider === 'filesystem' })
+    editable: (skill.source === 'user-dsh' || skill.source === 'user-agents' || skill.source === 'custom') && skill.provider === 'filesystem' })
 }
 function projectSkillDetail(skill: SkillDefinition): DesktopSkillDetail {
   return Object.freeze({ ...projectSkill(skill), content: skill.content,
@@ -161,10 +168,10 @@ async function writeSkillInvocation(skill: SkillDefinition, key: 'model' | 'user
 }
 
 async function writableSkillFile(skill: SkillDefinition): Promise<{ readonly target: string, readonly mode: number }> {
-  if ((skill.source !== 'user-dsh' && skill.source !== 'user-agents') || skill.provider !== 'filesystem' || skill.path === undefined) {
+  if ((skill.source !== 'user-dsh' && skill.source !== 'user-agents' && skill.source !== 'custom') || skill.provider !== 'filesystem' || skill.path === undefined) {
     throw new Error('Only Skills in a user library can be changed here')
   }
-  const root = await realpath(skill.source === 'user-dsh' ? skillLibraryRoot() : agentsSkillLibraryRoot())
+  const root = await realpath(skill.source === 'user-agents' ? agentsSkillLibraryRoot() : skillLibraryRoot())
   const presentedInfo = await lstat(skill.path)
   if (presentedInfo.isSymbolicLink()) throw new Error('Skill file must not be a symbolic link')
   const target = await realpath(skill.path)
@@ -187,7 +194,12 @@ async function atomicWrite(target: string, text: string, mode: number): Promise<
 }
 
 export class DesktopSkillsController {
-  constructor(private readonly ctx: Context, private readonly preset?: string, private readonly selection: DesktopSkillsScope = {}) {}
+  constructor(
+    private readonly ctx: Context,
+    private readonly preset?: string,
+    private readonly selection: DesktopSkillsScope = {},
+    private readonly scanSettings?: SettingsScope<DesktopSkillScanSettings>,
+  ) {}
   private async view(): Promise<{ registry: Context['skills']; options: SkillViewOptions; preset?: string; [Symbol.asyncDispose](): Promise<void> }> {
     // Filesystem providers belong to preset layers in the Web composition.
     // Each request has its own selection; browsing never changes the default.
@@ -236,9 +248,10 @@ export class DesktopSkillsController {
     if (!snapshot.complete) throw new Error('Skill discovery is incomplete. Please refresh to retry.')
     const installed = await this.installations(registry, options, new Set(snapshot.skills.map(skill => skill.name)))
     return Object.freeze({ skills: Object.freeze(snapshot.skills.map(projectSkill)), recycled: await this.recycled(), installed,
+      scanPaths: Object.freeze([...(this.scanSettings?.get().paths ?? [])]),
       locations: Object.freeze({ userLibrary: skillLibraryRoot(), recycleBin: recycleRoot(),
         ...(preset === undefined ? {} : { preset }),
-        ...(options.cwd === undefined ? {} : { cwd: options.cwd }) }) })
+        ...(options.cwd === undefined ? {} : { cwd: options.cwd, projectLibrary: join(resolve(options.cwd), '.clawclaw', 'skills') }) }) })
   }
   private async installations(registry: Context['skills'], options: SkillViewOptions, names: ReadonlySet<string>): Promise<readonly DesktopSkillInstallation[]> {
     // This is a managed-library inventory, never an alternative invocation catalog.
@@ -381,11 +394,32 @@ export class DesktopSkillsController {
   }
   private async bundleDocument(name: string): Promise<string> {
     const skill = await this.getSkill(name)
-    if (skill?.provider !== 'filesystem' || skill.path === undefined) throw new Error('skillFilesUnavailable')
+    if ((skill?.provider !== 'filesystem' && skill?.provider !== 'clawclaw-project-filesystem') || skill.path === undefined) throw new Error('skillFilesUnavailable')
     return skill.path
   }
   async files(name: string) { return { files: await listSkillFiles(await this.bundleDocument(name)) } }
   async file(name: string, path: string) { return await previewSkillFile(await this.bundleDocument(name), path) }
+  async addScanPath(input: string): Promise<DesktopSkillsView> {
+    if (this.scanSettings === undefined) throw new Error('Skill scan settings are unavailable')
+    if (input === '' || input.includes('\0') || !isAbsolute(input)) throw new TypeError('Skill scan path must be absolute')
+    const path = await realpath(resolve(input))
+    const info = await lstat(path)
+    if (!info.isDirectory()) throw new TypeError('Skill scan path must be a directory')
+    const userRoot = await realpath(skillLibraryRoot()).catch(() => resolve(skillLibraryRoot()))
+    if (path === userRoot) throw new Error('The ClawClaw user Skill directory is already scanned')
+    const current = this.scanSettings.get().paths
+    const key = process.platform === 'win32' ? path.toLocaleLowerCase('en-US') : path
+    if (current.some(item => (process.platform === 'win32' ? item.toLocaleLowerCase('en-US') : item) === key)) return await this.read()
+    await this.scanSettings.update({ paths: [...current, path] })
+    return await this.read()
+  }
+  async removeScanPath(input: string): Promise<DesktopSkillsView> {
+    if (this.scanSettings === undefined) throw new Error('Skill scan settings are unavailable')
+    const current = this.scanSettings.get().paths
+    if (!current.includes(input)) throw new Error('Skill scan path not found')
+    await this.scanSettings.update({ paths: current.filter(path => path !== input) })
+    return await this.read()
+  }
   async create(inputValue: DesktopSkillInput): Promise<DesktopSkillsView> {
     const input = skillInput(inputValue)
     const text = createStructuredSkillDocument(input)
@@ -408,9 +442,9 @@ export class DesktopSkillsController {
   }
   async recycle(name: string): Promise<DesktopSkillsView> {
     const skill = await this.getSkill(name)
-    if (skill === undefined || skill.source !== 'user-dsh' || skill.provider !== 'filesystem' || skill.path === undefined) throw new Error('Only Skills in the DSH user library can be deleted here')
+    if (skill === undefined || (skill.source !== 'user-dsh' && skill.source !== 'custom') || skill.provider !== 'filesystem' || skill.path === undefined) throw new Error('Only Skills in the ClawClaw user library can be deleted here')
     const root = await realpath(skillLibraryRoot()); const target = await realpath(skill.path)
-    if (!isPathInside(root, target)) throw new Error('Skill file is outside the DSH user library')
+    if (!isPathInside(root, target)) throw new Error('Skill file is outside the ClawClaw user library')
     const parent = dirname(target); const source = basename(target) === 'SKILL.md' ? parent : target
     if (dirname(source) !== root || source === root) throw new Error('Only top-level user Skill bundles can be deleted here')
     const destination = resolve(recycleRoot(), `${safeSkillName(name)}--${randomUUID()}`)
@@ -468,6 +502,8 @@ async function handleAction(controller: DesktopSkillsController, value: unknown)
   if (value.action === 'import-bundle') return controller.importBundle(value.files)
   if (value.action === 'files' && typeof value.name === 'string') return controller.files(value.name)
   if (value.action === 'file' && typeof value.name === 'string' && typeof value.path === 'string') return controller.file(value.name, value.path)
+  if (value.action === 'add-scan-path' && typeof value.path === 'string') return await controller.addScanPath(value.path)
+  if (value.action === 'remove-scan-path' && typeof value.path === 'string') return await controller.removeScanPath(value.path)
   if (value.action === 'detail' && typeof value.name === 'string') return await controller.detail(value.name)
   if (value.action === 'set-model-invocable' && typeof value.name === 'string' && typeof value.enabled === 'boolean') {
     return await controller.setModelInvocable(value.name, value.enabled)
@@ -485,7 +521,9 @@ async function handleAction(controller: DesktopSkillsController, value: unknown)
 }
 
 export function apply(ctx: Context): void {
-  const controller = new DesktopSkillsController(ctx)
+  const settings = ctx.settings.register(DESKTOP_SKILL_SCAN_SETTINGS_NAMESPACE, DesktopSkillScanSettingsSchema,
+    { applies: 'live', validate: validateDesktopSkillScanSettings })
+  const controller = new DesktopSkillsController(ctx, undefined, {}, settings)
   registerDesktopJsonApi(ctx, { label: 'Skills', readPath: DESKTOP_SKILLS_PATH, actionPath: DESKTOP_SKILLS_ACTION_PATH,
     maxBodyBytes: MAX_SKILL_BUNDLE_BYTES * 2,
     read: () => controller.read(), action: async value => {
@@ -503,7 +541,7 @@ export function apply(ctx: Context): void {
         ...(typeof value.workspaceId === 'string' ? { workspaceId: value.workspaceId } : {}),
         ...(typeof value.sessionId === 'string' ? { sessionId: value.sessionId } : {}),
       }
-      const scoped = new DesktopSkillsController(ctx, value.preset as string | undefined, selection)
+      const scoped = new DesktopSkillsController(ctx, value.preset as string | undefined, selection, settings)
       return value.action === 'read' ? scoped.read() : handleAction(scoped, value)
     } })
 }

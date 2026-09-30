@@ -2,6 +2,8 @@ import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState }
 import { IconSkillOutlineMedium, Modal, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 // @ts-expect-error package subpath has no declaration file
 import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw.mjs'
+// @ts-expect-error package subpath has no declaration file
+import Search from 'lucide-react/dist/esm/icons/search.mjs'
 import { SettingsIconButton } from './settings-controls.tsx'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry/types'
@@ -16,10 +18,10 @@ export function ConversationSkills({ api, t, useInput, useSession, useProjection
   const sessionId = useSession(state => state.sessionId)
   const removed = useSession(state => state.removed)
   const preset = useProjection('agentPreset')
-  return <SkillPicker key={`${sessionId}:${preset}`} api={api} t={t} disabled={phase !== 'plain' || subagent !== null || removed} />
+  return <SkillPicker key={`${sessionId}:${preset}`} api={api} t={t} preset={preset} disabled={phase !== 'plain' || subagent !== null || removed} />
 }
 
-export function SkillPicker({ api, t, disabled }: { api: ConversationSkillsApi; t: (key: DesktopSkillsLocaleKey) => string; disabled: boolean }) {
+export function SkillPicker({ api, t, disabled, preset }: { api: ConversationSkillsApi; t: (key: DesktopSkillsLocaleKey) => string; disabled: boolean; preset?: string | null | undefined }) {
   const apiRef = useRef(api)
   apiRef.current = api
   const [open, setOpen] = useState(false)
@@ -57,11 +59,10 @@ export function SkillPicker({ api, t, disabled }: { api: ConversationSkillsApi; 
       }, cause => { if (!abort.signal.aborted) setError(message(cause)) }).finally(() => { pending = false })
     }
     load()
-    const timer = window.setInterval(load, 5000)
     window.addEventListener('focus', load)
     document.addEventListener('visibilitychange', load)
     return () => {
-      request.current?.abort(); window.clearInterval(timer)
+      request.current?.abort()
       window.removeEventListener('focus', load); document.removeEventListener('visibilitychange', load)
     }
   // Session/preset changes remount the picker. An ordinary parent render
@@ -100,7 +101,11 @@ export function SkillPicker({ api, t, disabled }: { api: ConversationSkillsApi; 
     catch (cause) { if (!abort.signal.aborted) setError(message(cause)) }
     finally { selecting.current = false; if (!abort.signal.aborted) setBusy(false) }
   }
-  const skills = rankConversationSkills(catalog?.skills ?? [], query)
+  const rankedSkills = rankConversationSkills(catalog?.skills ?? [], query)
+  const conflictingNames = new Set(catalog?.commands ?? [])
+  const skills = rankedSkills.filter(skill => !conflictingNames.has(skill.name))
+  const conflictCount = catalog?.skills.filter(skill => conflictingNames.has(skill.name)).length ?? 0
+  const availableCount = (catalog?.skills.length ?? 0) - conflictCount
   const navigate = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.nativeEvent.isComposing || busy) return
     const buttons = [...(results.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])]
@@ -117,20 +122,21 @@ export function SkillPicker({ api, t, disabled }: { api: ConversationSkillsApi; 
   return <>
     <Tooltip label={t('chooseSkill')} disabled={open || suppressTooltip}><button ref={trigger} type="button" className="dshSkillPickerTrigger" aria-label={t('chooseSkill')} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => { setQuery(''); setOpen(true) }}><IconSkillOutlineMedium /></button></Tooltip>
     <Modal open={open} onClose={close} title={t('chooseSkill')} closeLabel={t('close')} className="dshSkillsDialog dshSkillPicker" contentClassName="dshSkillsDialogContent">
-      <div className="dshSkillPickerToolbar"><input ref={search} type="search" aria-label={t('searchSkills')} placeholder={t('searchSkills')} value={query} onKeyDown={navigate} onChange={event => { setQuery(event.target.value) }} />
-        <SettingsIconButton label={t('refresh')} disabled={busy} onClick={() => { setReload(value => value + 1) }}><RefreshCw /></SettingsIconButton>
+      {catalog && <p className="dshSkillPickerContext">{t('scopeSession')} · {preset || t('defaultPreset')} · {t('availableSkills')} · {availableCount}</p>}
+      <div className="dshSkillPickerToolbar"><label className="dshSkillPickerSearch"><Search aria-hidden="true" /><input ref={search} type="search" aria-label={t('searchSkills')} placeholder={t('searchSkills')} value={query} onKeyDown={navigate} onChange={event => { setQuery(event.target.value) }} /></label>
+        {(error || catalog?.skills.length === 0) && <SettingsIconButton label={t('refresh')} disabled={busy} onClick={() => { setReload(value => value + 1) }}><RefreshCw /></SettingsIconButton>}
       </div>
       {error && <div className="dshSkillPickerError" role="alert">{error}</div>}
       <div ref={results} className="dshSkillPickerResults" onKeyDown={navigate} aria-busy={busy || (!catalog && !error)}>
         {!catalog && !error && <p role="status">{t('loading')}</p>}
-        {catalog && skills.length === 0 && <p role="status">{t(catalog.skills.length === 0 ? 'noSessionSkills' : 'noMatches')}</p>}
+        {catalog && skills.length === 0 && <p role="status">{t(availableCount === 0 && query.trim() === '' ? 'noSessionSkills' : 'noMatches')}</p>}
         {skills.map(skill => {
-          const conflict = catalog!.commands.includes(skill.name)
-          return <button type="button" key={skill.name} className="dshSkillPickerItem" disabled={busy || conflict} onClick={() => { void select(skill.name) }}>
-            <IconSkillOutlineMedium /><span><strong>{skill.name}</strong><span>{conflict ? t('skillCommandConflict') : skill.description}</span></span>
+          return <button type="button" key={skill.name} className="dshSkillPickerItem" disabled={busy} onClick={() => { void select(skill.name) }}>
+            <IconSkillOutlineMedium /><span><strong>{skill.name}</strong><span>{skill.description}</span></span>
           </button>
         })}
       </div>
+      {conflictCount > 0 && <p className="dshSkillPickerConflicts" role="status">{t('conflictingSkills')} · {conflictCount}</p>}
     </Modal>
   </>
 }

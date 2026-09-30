@@ -41,4 +41,15 @@ describe('Desktop DSH home launch environment', () => {
     expect(launch.getFrom('VALUE', ['user-env'])).toEqual(environment.getFrom('VALUE', ['user-env']))
     expect(launch.get('MISSING')).toBeUndefined()
   })
+
+  it.each(['DSH_AGENTS_HOME', 'dsh_agents_home'])('does not expose inherited %s to the embedded Host', name => {
+    const environment = createLaunchEnvironmentSnapshot([
+      { source: 'process', values: { DSH_AGENTS_HOME: 'C:\\Users\\Desktop User\\.agents' } },
+      { source: 'project-env', path: 'C:\\Project\\.env', values: { DSH_AGENTS_HOME: 'C:\\Project\\.agents' } },
+    ])
+    const launch = withDesktopDshHome(environment, homeDir)
+
+    expect(launch.get(name)).toBeUndefined()
+    expect(launch.getFrom(name, ['process', 'project-env'])).toBeUndefined()
+  })
 })
