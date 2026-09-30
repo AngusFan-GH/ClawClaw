@@ -8,7 +8,7 @@ This repository is maintained at [AngusFan-GH/ClawClaw](https://github.com/Angus
 
 ## Current status
 
-The source version is **0.2.3**, with **0.1.7-rc.2** for the pinned DSH source and runtime. These are repository versions, not a claim that every platform has a published installer. Check this project's [Releases](https://github.com/AngusFan-GH/ClawClaw/releases) for actual artifacts. Downloads from the original DSH Desktop website are not ClawClaw releases.
+The source version is **0.2.3**, with **0.1.7-rc.2** for the pinned DSH source and runtime. Stable installers are published through the project's own [update origin](https://clawclaw.xzinfra.com/updates/dsh/stable/release.json). Downloads from the original DSH Desktop website are not ClawClaw releases.
 
 - **Desktop runtime**: native windows, tray, isolated Host process, three presentation modes, terminal, and recovery tools.
 - **Workspaces**: a protected default workspace, directory browsing, direct path entry, folder creation, and a system directory picker.
@@ -36,6 +36,17 @@ corepack pnpm dev
 corepack pnpm check
 corepack pnpm --filter @clawclaw/dsh-im run check
 ```
+
+## Build and release
+
+The unsigned Universal DMG must be built on native macOS, and the unsigned NSIS installer must be built on native Windows x64. One local machine cannot reliably produce both artifacts. Run the complete gate first, then use GitHub Actions to build both platforms from the same commit:
+
+```sh
+corepack pnpm check
+gh workflow run release.yml --ref dsh-desktop -f publish=false
+```
+
+After the macOS, Windows, and `Assemble release` jobs all succeed, push a `clawclaw-v<version>` tag that exactly matches `dsh-plugin-desktop/package.json` to publish. See the [Desktop package release procedure](dsh-plugin-desktop/README.md#complete-build-and-release-procedure) for one-time server and GitHub Environment setup, native packaging, artifact locations, verification, and recovery.
 
 ## Data and configuration
 

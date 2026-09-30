@@ -8,7 +8,7 @@
 
 ## 当前状态
 
-当前源码版本为 **0.2.3**，固定 DSH 源码和运行时版本为 **0.1.7-rc.2**。这是仓库版本说明，不表示每个平台都已有公开安装包；发布产物以本项目 [Releases](https://github.com/AngusFan-GH/ClawClaw/releases) 为准。原 DSH Desktop 官网的安装包不属于本项目。
+当前源码版本为 **0.2.3**，固定 DSH 源码和运行时版本为 **0.1.7-rc.2**。稳定版安装包由项目自己的[更新源](https://clawclaw.xzinfra.com/updates/dsh/stable/release.json)发布；原 DSH Desktop 官网的安装包不属于本项目。
 
 - **桌面运行**：原生窗口、托盘、隔离 Host 进程、三种窗口模式、终端和恢复工具。
 - **工作区**：内置受保护的默认工作区，支持浏览目录、输入路径、新建文件夹和系统目录选择器。
@@ -36,6 +36,17 @@ corepack pnpm dev
 corepack pnpm check
 corepack pnpm --filter @clawclaw/dsh-im run check
 ```
+
+## 构建与发布
+
+macOS 必须在原生 macOS 主机上构建未签名 Universal DMG，Windows 必须在原生 Windows x64 主机上构建未签名 NSIS；本地不能从一台电脑可靠地产出两个平台。推荐先运行完整门禁，再用 GitHub Actions 从同一 commit 并行构建：
+
+```sh
+corepack pnpm check
+gh workflow run release.yml --ref dsh-desktop -f publish=false
+```
+
+确认预构建的 macOS、Windows 和 `Assemble release` 三个 job 全部成功后，推送与 `dsh-plugin-desktop/package.json` 版本严格一致的 `clawclaw-v<版本>` tag 即可正式发布。首次服务器与 GitHub Environment 配置、本地分平台打包、产物路径、发布验证和失败恢复的完整步骤见 [Desktop 包发布流程](dsh-plugin-desktop/README.zh.md#完整构建与发布流程)。
 
 ## 数据与配置
 
