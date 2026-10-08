@@ -107,7 +107,9 @@ export function TeamMenu(props: {
             .toLowerCase()
             .includes(query.toLowerCase())) ?? [];
     return (<div className="agt-compact">
-      <input autoFocus aria-label={tx("搜索专家团")} placeholder={tx("搜索团队或工作目标")} value={query} onChange={(e) => setQuery(e.target.value)}/>
+      <div className="aag-discovery-tools">
+        <input type="search" autoFocus aria-label={tx("搜索专家团")} placeholder={tx("搜索团队或工作目标")} value={query} onChange={(e) => setQuery(e.target.value)}/>
+      </div>
       {error && (<div role="alert">
           {error}
           <button type="button" onClick={() => void load()}>{tx("刷新")}</button>
@@ -127,7 +129,7 @@ export function TeamMenu(props: {
               <IconEye size={16}/>
             </button>
           </div>))}
-        {!teams.length && (<p className="aag-note">
+        {!teams.length && (<p className="aag-menu-empty" role="status">
             {snapshot ? tx("搜索并启用一个专家团。") : tx("正在加载…")}
           </p>)}
       </div>

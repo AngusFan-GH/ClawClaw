@@ -24,14 +24,14 @@ describe('Desktop sidebar shortcuts', () => {
     ]
 
     expect(DesktopShortcutSettingsSchema({} as { items: string[] })).toEqual({
-      items: ['plugins', 'desktop-automations', 'desktop-skills', 'desktop-reminders'],
+      items: ['plugins', 'desktop-automations', 'settings:clawclaw-experts'],
     })
     expect(normalizeShortcutItems(undefined, targets)).toEqual([
-      'plugins', 'desktop-automations', 'settings:clawclaw-experts', 'settings:desktop-reminders',
+      'plugins', 'desktop-automations', 'settings:clawclaw-experts',
     ])
     expect(normalizeShortcutItems([
       'desktop-skills', 'desktop-cron-tasks', 'desktop-reminders',
-    ], targets)).toEqual(['plugins', 'desktop-automations', 'settings:clawclaw-experts', 'settings:desktop-reminders'])
+    ], targets)).toEqual(['plugins', 'desktop-automations', 'settings:clawclaw-experts'])
     expect(normalizeShortcutItems([
       'desktop-reminders', 'desktop-cron-tasks',
     ], targets)).toEqual(['settings:desktop-reminders', 'desktop-automations'])

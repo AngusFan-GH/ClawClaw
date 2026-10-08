@@ -10,7 +10,7 @@ export const DESKTOP_SHORTCUTS_SETTINGS_NAMESPACE = 'dsh-desktop-shortcuts'
 export interface DesktopShortcutSettings { items: string[] }
 
 export const DesktopShortcutSettingsSchema: z<DesktopShortcutSettings> = z.object({
-  items: z.array(z.string()).default(['plugins', 'desktop-automations', 'desktop-skills', 'desktop-reminders']),
+  items: z.array(z.string()).default(['plugins', 'desktop-automations', 'settings:clawclaw-experts']),
 })
 
 export function apply(ctx: Context): void {

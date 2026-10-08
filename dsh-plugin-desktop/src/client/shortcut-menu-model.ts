@@ -7,7 +7,7 @@ export const PLUGINS_PANEL_ID = 'plugins' as MainPanelId
 export const AUTOMATIONS_PANEL_ID = 'desktop-automations' as MainPanelId
 export const MAX_SHORTCUTS = 4
 export const SETTINGS_TARGET_PREFIX = 'settings:'
-const DEFAULT_ITEMS: readonly string[] = [PLUGINS_PANEL_ID, AUTOMATIONS_PANEL_ID, 'settings:clawclaw-experts', 'settings:desktop-reminders']
+const DEFAULT_ITEMS: readonly string[] = [PLUGINS_PANEL_ID, AUTOMATIONS_PANEL_ID, 'settings:clawclaw-experts']
 const LEGACY_DEFAULT_ITEMS: readonly string[] = ['desktop-skills', 'desktop-cron-tasks', 'desktop-reminders']
 const INTERIM_DEFAULT_ITEMS: readonly string[] = ['desktop-skills', 'desktop-reminders', 'desktop']
 
@@ -55,4 +55,3 @@ export function reorderShortcutItems(
   next.splice(targetIndex + (placement === 'after' ? 1 : 0), 0, draggedId)
   return next.every((id, index) => id === items[index]) ? items : next
 }
-
