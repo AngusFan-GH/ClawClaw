@@ -1,14 +1,17 @@
 // @ts-nocheck -- ported client compatibility layer; host contracts remain strictly checked.
 import { LibraryConfirm, LibraryEditorFooter } from './library-ui.js'
-import { Button, Drawer, Input } from './antd-ui.js'
+import { Button, Drawer, Input, Select } from './antd-ui.js'
 import { useEscapeLayer } from './escape-layer.js'
 import React from 'react'
 import { CategorySelect } from './category-select.js'
+import { capabilitySelectOptions, selectableExpertCapabilities, updateCapabilityBindings } from './capability-options.js'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { customExpertInputSchema, DEFAULT_EXPERT_EMOJI, type CatalogSnapshot, type CustomExpertInput } from '../expert-contract.js'
 import type { AgencyCatalogRemote } from './remote.js'
 import { EXPERT_AVATAR_URLS } from './avatars.js'
 import { EN_DIVISION, ZH_DIVISION } from '../names.js'
+import { createDesktopSkillsApi, type DesktopSkillsApi } from '../../client/skills-api.js'
+import { createDesktopMcpApi, type DesktopMcpApi } from '../../client/mcp-api.js'
 
 import { loadEditorReview, continueEditorReview, type EditorReview } from "./editor-review.js";
 
@@ -19,6 +22,8 @@ export interface CustomEditorProps {
   readonly revision: number
   readonly divisions: readonly string[]
   readonly remote: AgencyCatalogRemote
+  readonly skillsApi?: Pick<DesktopSkillsApi, 'read'>
+  readonly mcpApi?: Pick<DesktopMcpApi, 'read'>
   readonly t: TranslateNS<'agency'>
   readonly locale: 'zh' | 'en'
   readonly onSaved: (catalog: CatalogSnapshot) => void
@@ -43,7 +48,28 @@ export function CustomExpertEditor(props: CustomEditorProps): React.ReactElement
   const saving = React.useRef(false)
   const [error, setError] = React.useState<string | null>(null)
   const [discard, setDiscard] = React.useState(false)
+  const [capabilities, setCapabilities] = React.useState<{ skills: readonly string[], mcpServers: readonly string[] }>({ skills: [], mcpServers: [] })
+  const [capabilitiesLoading, setCapabilitiesLoading] = React.useState(true)
+  const [capabilitiesFailed, setCapabilitiesFailed] = React.useState<{ skills: boolean, mcpServers: boolean }>({ skills: false, mcpServers: false })
+  const [capabilitiesRevision, setCapabilitiesRevision] = React.useState(0)
+  const skillsApi = React.useMemo(() => props.skillsApi ?? createDesktopSkillsApi(), [props.skillsApi])
+  const mcpApi = React.useMemo(() => props.mcpApi ?? createDesktopMcpApi(), [props.mcpApi])
   const form = React.useRef<HTMLFormElement | null>(null)
+  React.useEffect(() => {
+    let cancelled = false
+    setCapabilitiesLoading(true)
+    setCapabilitiesFailed({ skills: false, mcpServers: false })
+    void Promise.allSettled([skillsApi.read(), mcpApi.read()]).then(([skills, mcpServers]) => {
+      if (cancelled) return
+      setCapabilities(selectableExpertCapabilities(
+        skills.status === 'fulfilled' ? skills.value : [],
+        mcpServers.status === 'fulfilled' ? mcpServers.value : [],
+      ))
+      setCapabilitiesFailed({ skills: skills.status === 'rejected', mcpServers: mcpServers.status === 'rejected' })
+      setCapabilitiesLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [skillsApi, mcpApi, capabilitiesRevision])
   const close = (): void => {
     if (saving.current) return
     if (JSON.stringify(draft) !== JSON.stringify(initial)) setDiscard(true)
@@ -54,10 +80,30 @@ export function CustomExpertEditor(props: CustomEditorProps): React.ReactElement
     setDraft(current => ({ ...current, [key]: value }))
     setError(null)
   }
-  const setBindings = (key: 'skills' | 'mcpServers', value: string): void => {
-    const names = [...new Set(value.split(/[,，\n]/u).map(item => item.trim()).filter(Boolean))]
-    setDraft(current => ({ ...current, [key]: names.map(name => ({ name, required: true, enabled: true })) }))
+  const setBindings = (key: 'skills' | 'mcpServers', names: readonly string[]): void => {
+    setDraft(current => ({ ...current, [key]: updateCapabilityBindings(current[key], names) }))
     setError(null)
+  }
+  const capabilitySelect = (key: 'skills' | 'mcpServers'): React.ReactElement => {
+    const selected = draft[key].map(binding => binding.name)
+    const available = capabilities[key]
+    const failed = capabilitiesFailed[key]
+    return h(React.Fragment, null,
+      h(Select, {
+        className: 'aag-capability-select', mode: 'multiple', allowClear: true, showSearch: true,
+        value: selected, options: capabilitySelectOptions(available, selected, props.t('custom.capabilityUnavailable')),
+        maxCount: 32, maxTagCount: 'responsive', optionFilterProp: 'label', disabled: busy,
+        loading: capabilitiesLoading, placeholder: props.t(key === 'skills' ? 'custom.skillsPlaceholder' : 'custom.mcpServersPlaceholder'),
+        notFoundContent: props.t(failed ? 'custom.capabilitiesLoadFailed' : key === 'skills' ? 'custom.noSkills' : 'custom.noMcpServers'),
+        'aria-label': props.t(key === 'skills' ? 'custom.skills' : 'custom.mcpServers'),
+        onChange: (value: unknown) => setBindings(key, Array.isArray(value) ? value.map(String) : []),
+      }),
+      failed ? h('div', { className: 'aag-capability-error', role: 'alert' },
+        h('span', null, props.t('custom.capabilitiesLoadFailed')),
+        h(Button, { type: 'link', size: 'small', disabled: busy || capabilitiesLoading, onClick: () => setCapabilitiesRevision(value => value + 1) }, props.t('custom.retryCapabilities')),
+      ) : null,
+      h('small', { className: 'aag-capability-hint' }, props.t(key === 'skills' ? 'custom.skillsHint' : 'custom.mcpServersHint')),
+    )
   }
   const refreshReview = (): void => {
     if (saving.current) return;
@@ -139,16 +185,8 @@ export function CustomExpertEditor(props: CustomEditorProps): React.ReactElement
       'aria-label': props.t('custom.prompt'), placeholder: props.t('custom.promptPlaceholder'),
       onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => set('prompt', event.currentTarget.value),
     }),
-    label(props.t('custom.skills'), h(React.Fragment, null,
-      h(Input.TextArea, {
-        value: draft.skills.map(binding => binding.name).join(', '), rows: 2, disabled: busy,
-        'aria-label': props.t('custom.skills'), onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => setBindings('skills', event.currentTarget.value),
-      }), h('small', { className: 'aag-capability-hint' }, props.t('custom.skillsHint')))),
-    label(props.t('custom.mcpServers'), h(React.Fragment, null,
-      h(Input.TextArea, {
-        value: draft.mcpServers.map(binding => binding.name).join(', '), rows: 2, disabled: busy,
-        'aria-label': props.t('custom.mcpServers'), onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => setBindings('mcpServers', event.currentTarget.value),
-      }), h('small', { className: 'aag-capability-hint' }, props.t('custom.mcpServersHint')))),
+    label(props.t('custom.skills'), capabilitySelect('skills')),
+    label(props.t('custom.mcpServers'), capabilitySelect('mcpServers')),
     error === null ? null : h('div', { className: 'aag-error', role: 'alert' }, error),
       needsReview ? h("section", { className: "aag-custom-review" },
         h(Button, { disabled: busy, onClick: refreshReview }, props.t("custom.reviewLatest")),
@@ -191,6 +229,9 @@ export const CUSTOM_EDITOR_CSS = `
 .aag-custom-field>span,.aag-custom-field>label{display:block;margin-bottom:8px}
 .aag-custom-field small{font-size:11px;opacity:.65;margin-left:8px}
 .aag-custom-field .aag-capability-hint{display:block;margin:6px 0 0;line-height:18px}
+.aag-capability-select{width:100%}
+.aag-editor-drawer .aag-capability-select .ant-select-selector{min-height:40px;padding-block:4px}
+.aag-capability-error{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px;color:var(--dsw-alias-error-primary);font-size:12px;line-height:18px}
 .aag-custom-avatars{border:0;padding:0;margin:20px 0;display:flex;gap:8px;flex-wrap:wrap}
 .aag-custom-avatars legend{margin-bottom:10px;font-size:13px}
 .aag-custom-avatars button{padding:3px;border:2px solid transparent;background:transparent;border-radius:12px;cursor:pointer}

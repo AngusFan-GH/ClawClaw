@@ -12,6 +12,7 @@ import {
   teamRequiresToolFilter,
 } from '../src/experts/index.ts'
 import { detectTeamEngine, type NativeTeamService } from '../src/experts/team-engine.ts'
+import { capabilitySelectOptions, selectableExpertCapabilities, updateCapabilityBindings } from '../src/experts/client/capability-options.ts'
 
 const catalogRoot = fileURLToPath(new URL('../assets/experts/catalog/', import.meta.url))
 const chineseRoot = fileURLToPath(new URL('../assets/experts/catalog-zh/', import.meta.url))
@@ -77,6 +78,25 @@ describe('ClawClaw experts', () => {
     })
     expect(expert.skills).toEqual([])
     expect(expert.mcpServers).toEqual([])
+  })
+
+  it('offers only live selectable Skills and MCP servers while preserving stale bindings', () => {
+    const available = selectableExpertCapabilities([
+      { name: 'review', description: '', source: 'user', provider: 'desktop', modelInvocable: true, userInvocable: true, editable: true },
+      { name: 'manual-only', description: '', source: 'user', provider: 'desktop', modelInvocable: false, userInvocable: true, editable: true },
+    ], [
+      { serverName: 'docs', transport: 'stdio', command: 'docs', args: [], cwd: '', env: {}, timeoutMs: 1, reconnect: { enabled: true, initialDelayMs: 1, maxDelayMs: 1, maxAttempts: 1 }, enabled: true, state: 'running', tools: [{ name: 'mcp__docs__search', description: '' }], credentialsReady: true },
+      { serverName: 'offline', transport: 'stdio', command: 'offline', args: [], cwd: '', env: {}, timeoutMs: 1, reconnect: { enabled: true, initialDelayMs: 1, maxDelayMs: 1, maxAttempts: 1 }, enabled: true, state: 'error', tools: [], credentialsReady: true },
+    ])
+    expect(available).toEqual({ skills: ['review'], mcpServers: ['docs'] })
+    expect(capabilitySelectOptions(available.skills, ['review', 'old-skill'], 'unavailable')).toEqual([
+      { value: 'review', label: 'review' },
+      { value: 'old-skill', label: 'old-skill (unavailable)' },
+    ])
+    expect(updateCapabilityBindings([{ name: 'old-skill', required: false, enabled: false }], ['old-skill', 'review'])).toEqual([
+      { name: 'old-skill', required: false, enabled: false },
+      { name: 'review', required: true, enabled: true },
+    ])
   })
 
   it('injects bound Skills and denies unbound MCP servers', async () => {
