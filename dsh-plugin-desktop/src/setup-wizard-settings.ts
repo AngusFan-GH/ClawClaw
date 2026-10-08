@@ -187,7 +187,8 @@ function settingsRoot(root: Record<string, unknown> | unknown[]): Record<string,
 
 function hasDesktopPatch(root: Record<string, unknown> | unknown[]): boolean {
   return Array.isArray(root)
-    && (patchRow(root, DESKTOP_ROW_ID) !== undefined || patchRow(root, NOTIFICATIONS_ROW_ID) !== undefined)
+    && root.some(item => isRecord(item)
+      && (item.id === DESKTOP_ROW_ID || item.id === NOTIFICATIONS_ROW_ID))
 }
 
 function legacySettingsPath(path: string): string {

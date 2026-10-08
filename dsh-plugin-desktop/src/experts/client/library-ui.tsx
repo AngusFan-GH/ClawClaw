@@ -49,6 +49,7 @@ export function LibraryCard(props: {
   avatar: React.ReactNode
   metadata: React.ReactNode
   description: string
+  custom?: boolean
   enabled: boolean
   disabled?: boolean
   enabledLabel: string
@@ -59,7 +60,7 @@ export function LibraryCard(props: {
   testId?: string
 }) {
   return (
-    <article className="aag-expert-card" data-testid={props.testId}>
+    <article className={props.custom ? 'aag-expert-card aag-expert-card-custom' : 'aag-expert-card'} data-testid={props.testId}>
       <div className="aag-card-body">
         {props.avatar}
         <div className="aag-card-identity">

@@ -297,6 +297,12 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       },
     },
   )
+  if (typeof ctx.settings.configure === 'function') {
+    ctx.effect(
+      () => ctx.settings.configure({ auto: false }),
+      'dsh-plugin-desktop: hide launcher-owned settings from generic configuration forms',
+    )
+  }
   const rendererOrigin = `http://127.0.0.1:${String(ctx.webServer.port)}`
   registerCronTasksJsonApi(ctx)
   ctx.effect(
@@ -540,6 +546,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         }),
         requestQuit: appExit,
         requestModeChange: async mode => {
+          if (desktopSettings !== undefined) {
+            await desktopSettings.selectMode(mode)
+            return
+          }
           const current = settings.get()
           const storedBrowserCapability = current.openBrowser || current.networkExposure === 'lan'
           await settings.update(mode !== 'compatibility' && storedBrowserCapability

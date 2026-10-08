@@ -471,14 +471,15 @@ export const CARD_SETTINGS_CSS = `
 .aag-search-wrap>.aag-search input::placeholder{color:var(--dsw-alias-label-dimmed)}
 .aag-expert-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:2px}
 .aag-expert-window{position:relative;margin-top:2px;overflow-anchor:none}.aag-expert-window>.aag-expert-grid{position:absolute;right:0;left:0;margin-top:0}
-.aag-expert-card{display:grid;min-width:0;min-height:164px;overflow:hidden;grid-template-rows:minmax(119px,1fr) 44px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);transition:border-color .15s ease,background .15s ease,box-shadow .15s ease}
+.aag-expert-card{display:grid;box-sizing:border-box;min-width:0;min-height:164px;overflow:hidden;grid-template-rows:minmax(119px,1fr) 44px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);transition:border-color .15s ease,background .15s ease,box-shadow .15s ease}.aag-expert-window .aag-expert-card{height:164px;min-height:0;grid-template-rows:minmax(0,1fr) 44px}
 .aag-expert-card:hover{border-color:var(--dsw-alias-border-l3);box-shadow:0 6px 18px color-mix(in srgb,var(--dsw-alias-label-primary) 6%,transparent)}
 .aag-card-body{position:relative;display:grid;min-width:0;grid-template-columns:42px minmax(0,1fr);column-gap:10px;row-gap:8px;padding:12px}
 .aag-expert-avatar{display:block;width:42px;height:42px;border:0;border-radius:10px;background:var(--dsw-alias-bg-layer-3);object-fit:cover;object-position:center 20%}
-.aag-card-identity{display:flex;min-width:0;flex-direction:column;padding-right:42px}
+.aag-card-identity{display:flex;min-width:0;overflow:hidden;flex-direction:column;padding-right:42px}
 .aag-card-name{display:-webkit-box;overflow:hidden;font-size:15px;font-weight:650;line-height:21px;-webkit-box-orient:vertical;-webkit-line-clamp:2}
-.aag-card-division{margin-top:2px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:18px}
+.aag-card-division{display:flex;min-width:0;align-items:center;gap:4px;margin-top:2px;overflow:hidden;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:18px;white-space:nowrap}.aag-card-category{min-width:0;overflow:hidden;text-overflow:ellipsis}.aag-card-division .aag-custom-badge{box-sizing:border-box;height:18px;flex:none;margin-left:0;padding:0 5px;line-height:16px}
 .aag-card-description{grid-column:1/-1;display:-webkit-box;min-height:38px;margin:0;overflow:hidden;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:19px;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.aag-expert-card-custom .aag-card-identity{overflow:visible}.aag-expert-card-custom .aag-card-division{max-height:38px;flex-wrap:wrap;align-content:flex-start;column-gap:4px;row-gap:2px;overflow:hidden;white-space:normal}.aag-expert-card-custom .aag-card-category{flex:none;overflow:visible;text-overflow:clip;white-space:nowrap}.aag-expert-card-custom .aag-card-description{min-height:19px;-webkit-line-clamp:1}
 .aag-card-actions{display:flex;align-items:stretch;min-height:44px;border-top:1px solid var(--dsw-alias-border-l2)}
 .aag-card-action{display:inline-flex;align-items:center;justify-content:center;gap:4px;flex:1 1 0;min-width:0;min-height:44px;padding:4px 6px;border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;line-height:16px;text-align:center;white-space:normal;cursor:pointer}
 .aag-card-action+.aag-card-action{border-left:1px solid var(--dsw-alias-border-l2)}
@@ -912,7 +913,7 @@ interface OpenPrompt {
   readonly returnFocus: HTMLButtonElement
 }
 
-const EXPERT_CARD_GAP = 10
+const EXPERT_CARD_GAP = 12
 const EXPERT_CARD_ROW = 176
 
 function scrollParent(node: HTMLElement): HTMLElement | Window {
@@ -1258,7 +1259,8 @@ function ExpertCardsSettings(props: PropsLocale<'agency'> & {
           key: expert.slug,
           name: displayName(expert, props.getActive()),
           avatar: React.createElement('img', { className: 'aag-expert-avatar', src: avatar, width: 44, height: 44, loading: 'lazy', decoding: 'async', alt: '' }),
-          metadata: React.createElement(React.Fragment, null, inputTriggerSourceName(expert.division, props.getActive()), expert.conflict ? React.createElement('span', { className: 'aag-custom-badge', title: props.t('custom.nameConflictHint') }, props.t('custom.nameConflict')) : null, expert.custom ? React.createElement('span', { className: 'aag-custom-badge' }, props.t('custom.source')) : null,
+          custom: expert.custom,
+          metadata: React.createElement(React.Fragment, null, React.createElement('span', { className: 'aag-card-category' }, inputTriggerSourceName(expert.division, props.getActive())), expert.conflict ? React.createElement('span', { className: 'aag-custom-badge', title: props.t('custom.nameConflictHint') }, props.t('custom.nameConflict')) : null, expert.custom ? React.createElement('span', { className: 'aag-custom-badge' }, props.t('custom.source')) : null,
             health.total > 0 ? React.createElement('span', { className: 'aag-custom-badge', 'data-health': health.state }, props.t(`capability.health.${health.state}`), ` · ${health.ready}/${health.total}`) : null),
           description: displayDescription(expert, props.getActive()),
           enabled, disabled: isSaving || expert.conflict === true,
@@ -1303,10 +1305,6 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
 }) {
   const tx = (key: string) => teamText(props.getActive(), key)
   const [view, setView] = React.useState<'experts' | 'teams' | 'skills' | 'mcp'>('experts')
-  const [expertSummary, setExpertSummary] = React.useState({ total: 0, enabled: 0 })
-  const [teamSummary, setTeamSummary] = React.useState({ total: 0, enabled: 0 })
-  const [skillSummary, setSkillSummary] = React.useState({ total: 0, available: 0 })
-  const [mcpSummary, setMcpSummary] = React.useState({ total: 0, enabled: 0, available: 0 })
   const [settingsCapabilityRegistry, setSettingsCapabilityRegistry] = React.useState(props.capabilityRegistry)
   const expertCatalog = React.useSyncExternalStore(
     listener => subscribeCatalog(props.remote, listener),
@@ -1325,36 +1323,53 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
   const selectSkillsScope = React.useCallback((api: ReturnType<typeof createDesktopSkillsApi>) => {
     setSettingsCapabilityRegistry(new ExpertCapabilityRegistry(api, props.mcpApi))
   }, [props.mcpApi])
-  const tabLabel = (icon: React.ComponentType<{ size?: number; strokeWidth?: number }>, name: string, total: number) => React.createElement('span', { className: 'aag-tab-label' },
-    React.createElement(icon, { size: 19, strokeWidth: 1.8 }),
-    React.createElement('span', null, name),
-    React.createElement('span', { className: 'aag-tab-count', 'aria-hidden': true }, total),
-  )
-  const navigation = React.createElement(Segmented, {
-    block: true, className: 'aag-library-tabs', 'aria-label': tx('专家库类型'), value: view,
-    onChange: (value: unknown) => { if (value === 'experts' || value === 'teams' || value === 'skills' || value === 'mcp') setView(value) },
-    options: [
-      { value: 'experts' as const, label: tabLabel(Bot, tx('专家'), expertSummary.total) },
-      { value: 'teams' as const, label: tabLabel(UsersRound, tx('专家团'), teamSummary.total) },
-      { value: 'skills' as const, label: tabLabel(Wrench, props.skillsT('nav'), skillSummary.total) },
-      { value: 'mcp' as const, label: tabLabel(PlugZap, props.mcpT('nav'), mcpSummary.total) },
-    ],
-  })
+  const tabs = [
+    { value: 'experts' as const, icon: Bot, label: tx('专家') },
+    { value: 'teams' as const, icon: UsersRound, label: tx('专家团') },
+    { value: 'skills' as const, icon: Wrench, label: props.skillsT('nav') },
+    { value: 'mcp' as const, icon: PlugZap, label: props.mcpT('nav') },
+  ]
+  const navigation = React.createElement('div', { className: 'aag-library-tabs', role: 'tablist', 'aria-label': tx('专家库类型') },
+    tabs.map((tab, index) => React.createElement('button', {
+      key: tab.value,
+      id: `aag-library-tab-${tab.value}`,
+      type: 'button',
+      role: 'tab',
+      className: 'aag-library-tab',
+      'aria-selected': view === tab.value,
+      'aria-controls': `aag-library-panel-${tab.value}`,
+      tabIndex: view === tab.value ? 0 : -1,
+      onClick: () => setView(tab.value),
+      onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => {
+        let next = index
+        if (event.key === 'ArrowRight') next = (index + 1) % tabs.length
+        else if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length
+        else if (event.key === 'Home') next = 0
+        else if (event.key === 'End') next = tabs.length - 1
+        else return
+        event.preventDefault()
+        setView(tabs[next]!.value)
+        const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+        requestAnimationFrame(() => buttons?.[next]?.focus())
+      },
+    }, React.createElement('span', { className: 'aag-tab-label' },
+      React.createElement(tab.icon, { size: 18, strokeWidth: 1.8, 'aria-hidden': true }),
+      React.createElement('span', null, tab.label)))))
   // 两个名册都保持挂载，切换时不丢失筛选，也不重新等待第一次加载。
   return React.createElement(AntdProvider, { locale: antdLocale(props.getActive()) }, React.createElement('section', { className: 'aag-section aag-library-shell' },
     React.createElement('div', { className: 'aag-library-sticky' },
       React.createElement('div', { className: 'aag-library-navigation' }, navigation)),
     React.createElement('div', { className: 'aag-library-content' },
-      React.createElement('div', { id: 'aag-library-panel-experts', hidden: view !== 'experts' }, React.createElement(ExpertCardsSettings, { ...props, capabilityRegistry: settingsCapabilityRegistry, sharedHeader: true, onSummary: setExpertSummary })),
-      React.createElement('div', { id: 'aag-library-panel-teams', hidden: view !== 'teams' }, React.createElement(TeamLocaleContext.Provider, { value: props.getActive() }, React.createElement(TeamsPanel, {
-        remote: props.remote as TeamRemote, sharedHeader: true, onSummary: setTeamSummary, prepareSelect: props.prepareTeamSelection,
+      React.createElement('div', { className: 'aag-library-panel', id: 'aag-library-panel-experts', role: 'tabpanel', 'aria-labelledby': 'aag-library-tab-experts', hidden: view !== 'experts' }, React.createElement(ExpertCardsSettings, { ...props, capabilityRegistry: settingsCapabilityRegistry, sharedHeader: true })),
+      React.createElement('div', { className: 'aag-library-panel', id: 'aag-library-panel-teams', role: 'tabpanel', 'aria-labelledby': 'aag-library-tab-teams', hidden: view !== 'teams' }, React.createElement(TeamLocaleContext.Provider, { value: props.getActive() }, React.createElement(TeamsPanel, {
+        remote: props.remote as TeamRemote, sharedHeader: true, prepareSelect: props.prepareTeamSelection,
         onExpertsChanged: () => { void readEnabled(props.remote).then(value => props.onEnabledChange?.(value.enabled)) },
       }))),
-      React.createElement('div', { id: 'aag-library-panel-skills', hidden: view !== 'skills' }, React.createElement(SkillsSettingsSection, {
-        t: props.skillsT, api: props.skillsApi, embedded: true, initialSessionId: props.initialSessionId, onSummary: setSkillSummary, onCatalogChange: invalidateCapabilities, onScopeApiChange: selectSkillsScope, expertUsage: capabilityUsage.skills,
+      React.createElement('div', { className: 'aag-library-panel', id: 'aag-library-panel-skills', role: 'tabpanel', 'aria-labelledby': 'aag-library-tab-skills', hidden: view !== 'skills' }, React.createElement(SkillsSettingsSection, {
+        t: props.skillsT, api: props.skillsApi, embedded: true, initialSessionId: props.initialSessionId, onCatalogChange: invalidateCapabilities, onScopeApiChange: selectSkillsScope, expertUsage: capabilityUsage.skills,
       })),
-      React.createElement('div', { id: 'aag-library-panel-mcp', hidden: view !== 'mcp' }, React.createElement(McpSettingsSection, {
-        t: props.mcpT, api: props.mcpApi, embedded: true, onSummary: setMcpSummary, onCatalogChange: invalidateCapabilities, expertUsage: capabilityUsage.mcp,
+      React.createElement('div', { className: 'aag-library-panel', id: 'aag-library-panel-mcp', role: 'tabpanel', 'aria-labelledby': 'aag-library-tab-mcp', hidden: view !== 'mcp' }, React.createElement(McpSettingsSection, {
+        t: props.mcpT, api: props.mcpApi, embedded: true, onCatalogChange: invalidateCapabilities, expertUsage: capabilityUsage.mcp,
       })))))
 }
 export const inject = ['slots', 'inputTriggers', 'locale', 'remote', 'sessions', 'conversation']

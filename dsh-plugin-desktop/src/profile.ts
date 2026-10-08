@@ -36,7 +36,7 @@ import {
   type ProfileManifest,
 } from '@deepseek-ai/dsh-app-boot'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import { isSeq, parseAllDocuments, parseDocument } from 'yaml'
+import { isSeq, parseAllDocuments, parseDocument, Scalar, visit } from 'yaml'
 import { findOverlayPackage, resolveOverlayPackage } from './package-overlay.ts'
 import { DESKTOP_DEFAULT_WEB_PORT } from './desktop-port.ts'
 import {
@@ -98,15 +98,31 @@ const DESKTOP_CRON_TASKS_ROW_ID = 'desktop-cron-tasks'
 const DESKTOP_CRON_TASKS_PACKAGE = `${DESKTOP_PACKAGE_NAME}/cron-tasks`
 const DESKTOP_SKILLS_ROW_ID = 'desktop-skills'
 const DESKTOP_SKILLS_PACKAGE = `${DESKTOP_PACKAGE_NAME}/skills`
+const DESKTOP_MCP_ROW_ID = 'desktop-mcp'
+const DESKTOP_MCP_PACKAGE = `${DESKTOP_PACKAGE_NAME}/mcp`
+const DESKTOP_REMINDERS_ROW_ID = 'desktop-reminders'
+const DESKTOP_REMINDERS_PACKAGE = `${DESKTOP_PACKAGE_NAME}/reminders`
+const DESKTOP_NOTIFICATIONS_ROW_ID = 'desktop-notifications'
+const DESKTOP_NOTIFICATIONS_PACKAGE = `${DESKTOP_PACKAGE_NAME}/notifications`
+const DESKTOP_DEFAULT_WORKSPACE_ROW_ID = 'desktop-default-workspace'
+const DESKTOP_DEFAULT_WORKSPACE_PACKAGE = `${DESKTOP_PACKAGE_NAME}/default-workspace`
+const DESKTOP_SPIRITX_ROW_ID = 'spiritx'
+const DESKTOP_SPIRITX_PACKAGE = `${DESKTOP_PACKAGE_NAME}/spiritx`
 const DESKTOP_EXPERTS_ROW_ID = 'clawclaw-experts'
 const DESKTOP_EXPERTS_PACKAGE = `${DESKTOP_PACKAGE_NAME}/experts`
 const DESKTOP_EDITABLE_PROFILE_ENTRIES = [
   { id: DESKTOP_SHORTCUTS_ROW_ID, name: DESKTOP_SHORTCUTS_PACKAGE },
   { id: DESKTOP_CRON_TASKS_ROW_ID, name: DESKTOP_CRON_TASKS_PACKAGE },
   { id: DESKTOP_SKILLS_ROW_ID, name: DESKTOP_SKILLS_PACKAGE },
+  { id: DESKTOP_MCP_ROW_ID, name: DESKTOP_MCP_PACKAGE },
+  { id: DESKTOP_REMINDERS_ROW_ID, name: DESKTOP_REMINDERS_PACKAGE },
+  { id: DESKTOP_NOTIFICATIONS_ROW_ID, name: DESKTOP_NOTIFICATIONS_PACKAGE },
+  { id: DESKTOP_DEFAULT_WORKSPACE_ROW_ID, name: DESKTOP_DEFAULT_WORKSPACE_PACKAGE },
+  { id: DESKTOP_SPIRITX_ROW_ID, name: DESKTOP_SPIRITX_PACKAGE },
   { id: DESKTOP_EXPERTS_ROW_ID, name: DESKTOP_EXPERTS_PACKAGE },
 ] as const
 const DESKTOP_EDITABLE_PROFILE_ENTRY_IDS = new Set<string>(DESKTOP_EDITABLE_PROFILE_ENTRIES.map(entry => entry.id))
+const DESKTOP_EDITABLE_PROFILE_PATCH_IDS = new Set<string>(['agent-default-model'])
 const DIRECTORY_PICKER_ROW_ID = 'directory-picker'
 const AUTO_PICKER_PACKAGE = '@deepseek-ai/dsh-host-directory-picker-auto'
 const BROWSE_PICKER_BACKEND = '@deepseek-ai/dsh-host-directory-picker-browse'
@@ -859,9 +875,52 @@ function ensureDesktopEditableProfileEntries(profileDir: string): boolean {
     throw new Error(`${BIN_NAME}: profile patch ${path} must be a YAML sequence`)
   }
   const patches = document.toJS() as unknown[]
+  const desktopPatches = loadOverlayPatches(BIN_NAME, DESKTOP_PATCH_PATH)
+  const insertionSeeds = new Map<string, EntryOptions>()
+  for (const patch of desktopPatches) {
+    if (!Array.isArray(patch.insert)) continue
+    for (const row of patch.insert) {
+      if (typeof row.id === 'string' && DESKTOP_EDITABLE_PROFILE_ENTRY_IDS.has(row.id)) {
+        insertionSeeds.set(row.id, structuredClone(row))
+      }
+    }
+  }
+  const patchSeeds = new Map<string, PatchOptions>()
+  for (const patch of desktopPatches) {
+    if (typeof patch.id === 'string' && DESKTOP_EDITABLE_PROFILE_PATCH_IDS.has(patch.id)) {
+      patchSeeds.set(patch.id, structuredClone(patch))
+    }
+  }
   const present = new Set<string>()
-  for (const patch of patches) {
+  const presentPatches = new Set<string>()
+  let changed = false
+  for (const [patchIndex, patch] of patches.entries()) {
     if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) continue
+    const patchId = (patch as { id?: unknown }).id
+    if (typeof patchId === 'string' && DESKTOP_EDITABLE_PROFILE_PATCH_IDS.has(patchId)) {
+      presentPatches.add(patchId)
+      const config = (patch as { config?: unknown }).config
+      const seedConfig = patchSeeds.get(patchId)?.config
+      if (config !== null && typeof config === 'object' && !Array.isArray(config)
+        && seedConfig !== null && typeof seedConfig === 'object' && !Array.isArray(seedConfig)) {
+        for (const [key, value] of Object.entries(seedConfig)) {
+          if (Object.hasOwn(config, key)) continue
+          document.setIn([patchIndex, 'config', key], document.createNode(value))
+          changed = true
+        }
+      }
+    }
+    if ((patch as { id?: unknown }).id === DESKTOP_DEFAULT_WORKSPACE_ROW_ID) {
+      const config = (patch as { config?: unknown }).config
+      if (config !== null && typeof config === 'object' && !Array.isArray(config)
+        && !Object.hasOwn(config, 'path')) {
+        document.setIn(
+          [patchIndex, 'config', 'path'],
+          document.createNode({ __jsExpr: 'process.env.CLAWCLAW_DEFAULT_WORKSPACE' }),
+        )
+        changed = true
+      }
+    }
     const insert = (patch as { insert?: unknown }).insert
     if (!Array.isArray(insert)) continue
     for (const row of insert) {
@@ -876,10 +935,39 @@ function ensureDesktopEditableProfileEntries(profileDir: string): boolean {
     }
   }
   const missing = DESKTOP_EDITABLE_PROFILE_ENTRIES.filter(entry => !present.has(entry.id))
-  if (missing.length === 0) return false
-  document.contents.items.unshift(document.createNode({
-    insert: missing.map(entry => ({ ...entry })),
-  }) as never)
+  if (missing.length > 0) {
+    const rows = missing.map((entry) => {
+      const seed = insertionSeeds.get(entry.id)
+      if (seed === undefined || seed.name !== entry.name) {
+        throw new Error(`${BIN_NAME}: editable ${entry.id} row is missing its Desktop insertion seed`)
+      }
+      return seed
+    })
+    document.contents.items.unshift(document.createNode({
+      insert: rows,
+    }) as never)
+    changed = true
+  }
+  const missingPatches = [...DESKTOP_EDITABLE_PROFILE_PATCH_IDS]
+    .filter(id => !presentPatches.has(id))
+    .map((id) => {
+      const seed = patchSeeds.get(id)
+      if (seed === undefined) throw new Error(`${BIN_NAME}: editable ${id} patch is missing its Desktop seed`)
+      return seed
+    })
+  if (missingPatches.length > 0) {
+    for (const patch of missingPatches.reverse()) {
+      document.contents.items.unshift(document.createNode(patch) as never)
+    }
+    changed = true
+  }
+  if (!changed) return false
+  visit(document, { Map(_key, node) {
+    if (node.items.length !== 1 || typeof node.get('__jsExpr') !== 'string') return
+    const expression = new Scalar(node.get('__jsExpr'))
+    expression.tag = 'tag:yaml.org,2002:js'
+    return expression
+  } })
   writeFileSync(path, String(document))
   return true
 }
@@ -887,6 +975,7 @@ function ensureDesktopEditableProfileEntries(profileDir: string): boolean {
 /** Remove editable Profile-owned insertions from launcher-owned overlays. */
 function withoutDesktopEditableInsertions(patches: readonly PatchOptions[]): PatchOptions[] {
   return patches.flatMap((patch) => {
+    if (typeof patch.id === 'string' && DESKTOP_EDITABLE_PROFILE_PATCH_IDS.has(patch.id)) return []
     if (!Array.isArray(patch.insert)) return [{ ...patch }]
     const insert = patch.insert.filter(row => !DESKTOP_EDITABLE_PROFILE_ENTRY_IDS.has(row.id))
     return insert.length === 0 ? [] : [{ ...patch, insert }]

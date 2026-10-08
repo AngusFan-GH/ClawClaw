@@ -170,11 +170,26 @@ describe('ClawClaw experts', () => {
       mcpServers: [{ name: 'docs', required: true, enabled: true }],
     }]
     expect(teamRequiresToolFilter({ members: [{ expertSlug: 'reviewer' }] }, experts)).toBe(true)
-    expect(detectTeamEngine(nativeService(), true, true, undefined, 'en', true)).toMatchObject({
+    expect(detectTeamEngine(nativeService(), true, undefined, 'en', true)).toMatchObject({
       state: 'enabled',
       mode: 'subagent',
       reason: expect.stringContaining('isolate tools'),
     })
+  })
+
+  it('does not advertise a plugin toggle when the native team service is absent', () => {
+    expect(detectTeamEngine(undefined)).toEqual(expect.objectContaining({
+      state: 'unsupported',
+      mode: 'subagent',
+      recommendation: '',
+    }))
+  })
+
+  it('only recommends reloading when a mounted native service lacks conversation tools', () => {
+    const status = detectTeamEngine(nativeService(), false, undefined, 'en')
+    expect(status).toMatchObject({ state: 'disabled', mode: 'subagent' })
+    expect(status.recommendation).toContain('Create or reload the conversation')
+    expect(status.recommendation).not.toMatch(/Plugins|Host|Web/u)
   })
 
   it('does not retain the external expert package in manifests or the lockfile', async () => {

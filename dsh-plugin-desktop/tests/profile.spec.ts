@@ -560,7 +560,7 @@ virtualStoreDirMaxLength: 60
     }))
   })
 
-  it('keeps editable shortcuts, Cron tasks, Skills, and experts in the Profile layer instead of launcher overlays', () => {
+  it('keeps every settings-backed Desktop feature in the Profile layer instead of launcher overlays', () => {
     const home = temporaryHome()
     const profileDir = ensureDesktopProfile(home)
     writeFileSync(join(profileDir, 'cordis.patch.yml'), [
@@ -577,6 +577,31 @@ virtualStoreDirMaxLength: 60
       '  config:',
       '    paths:',
       '      - /opt/team-skills',
+      '- id: desktop-mcp',
+      '  config:',
+      '    mcpServers:',
+      '      - serverName: local',
+      '        transport: stdio',
+      '        command: node',
+      '        args: []',
+      '        cwd: ""',
+      '        env: {}',
+      '        timeoutMs: 60000',
+      '        reconnect:',
+      '          enabled: true',
+      '          initialDelayMs: 500',
+      '          maxDelayMs: 30000',
+      '          maxAttempts: 10',
+      '        enabled: true',
+      '- id: desktop-reminders',
+      '  config:',
+      '    reminders: []',
+      '- id: desktop-notifications',
+      '  config:',
+      '    enabled: false',
+      '- id: desktop-default-workspace',
+      '  config:',
+      '    activeWorkspaceId: workspace-2',
       '- id: clawclaw-experts',
       '  config:',
       '    enabled:',
@@ -605,6 +630,31 @@ virtualStoreDirMaxLength: 60
       name: 'dsh-plugin-desktop/skills',
       config: { paths: ['/opt/team-skills'] },
     })
+    expect(rows.find(row => row.id === 'desktop-mcp')).toEqual(expect.objectContaining({
+      id: 'desktop-mcp',
+      name: 'dsh-plugin-desktop/mcp',
+      config: expect.objectContaining({
+        mcpServers: [expect.objectContaining({ serverName: 'local', command: 'node' })],
+      }),
+    }))
+    expect(rows.find(row => row.id === 'desktop-reminders')).toEqual({
+      id: 'desktop-reminders',
+      name: 'dsh-plugin-desktop/reminders',
+      config: { reminders: [] },
+    })
+    expect(rows.find(row => row.id === 'desktop-notifications')).toEqual({
+      id: 'desktop-notifications',
+      name: 'dsh-plugin-desktop/notifications',
+      config: { enabled: false },
+    })
+    expect(rows.find(row => row.id === 'desktop-default-workspace')).toEqual({
+      id: 'desktop-default-workspace',
+      name: 'dsh-plugin-desktop/default-workspace',
+      config: {
+        path: { __jsExpr: 'process.env.CLAWCLAW_DEFAULT_WORKSPACE' },
+        activeWorkspaceId: 'workspace-2',
+      },
+    })
     expect(rows.find(row => row.id === 'clawclaw-experts')).toEqual({
       id: 'clawclaw-experts',
       name: 'dsh-plugin-desktop/experts',
@@ -616,15 +666,33 @@ virtualStoreDirMaxLength: 60
     expect(persisted.match(/id: desktop-shortcuts\n/g)).toHaveLength(2)
     expect(persisted.match(/id: desktop-cron-tasks\n/g)).toHaveLength(2)
     expect(persisted.match(/id: desktop-skills\n/g)).toHaveLength(2)
+    expect(persisted.match(/id: desktop-mcp\n/g)).toHaveLength(2)
+    expect(persisted.match(/id: desktop-reminders\n/g)).toHaveLength(2)
+    expect(persisted.match(/id: desktop-notifications\n/g)).toHaveLength(2)
+    expect(persisted.match(/id: desktop-default-workspace\n/g)).toHaveLength(2)
+    expect(persisted).toContain('path: !!js process.env.CLAWCLAW_DEFAULT_WORKSPACE')
+    expect(persisted.match(/id: spiritx\n/g)).toHaveLength(1)
+    expect(persisted.match(/id: agent-default-model\n/g)).toHaveLength(1)
     expect(persisted.match(/id: clawclaw-experts\n/g)).toHaveLength(2)
     expect(prepared.overlays.some(patch => patch.id === 'desktop-shell')).toBe(true)
     expect(prepared.overlays.some(patch => Array.isArray(patch.insert)
       && patch.insert.some(row => row.id === 'desktop-shortcuts' || row.id === 'desktop-cron-tasks'
-        || row.id === 'desktop-skills' || row.id === 'clawclaw-experts'))).toBe(false)
+        || row.id === 'desktop-skills' || row.id === 'desktop-mcp' || row.id === 'desktop-reminders'
+        || row.id === 'desktop-notifications' || row.id === 'desktop-default-workspace'
+        || row.id === 'spiritx' || row.id === 'clawclaw-experts'))).toBe(false)
+    expect(prepared.overlays.some(patch => patch.id === 'agent-default-model')).toBe(false)
     expect(composeEntries([preparedAgain.patches]).find(row => row.id === 'desktop-cron-tasks'))
       .toEqual(rows.find(row => row.id === 'desktop-cron-tasks'))
     expect(composeEntries([preparedAgain.patches]).find(row => row.id === 'desktop-skills'))
       .toEqual(rows.find(row => row.id === 'desktop-skills'))
+    expect(composeEntries([preparedAgain.patches]).find(row => row.id === 'desktop-mcp'))
+      .toEqual(rows.find(row => row.id === 'desktop-mcp'))
+    expect(composeEntries([preparedAgain.patches]).find(row => row.id === 'desktop-reminders'))
+      .toEqual(rows.find(row => row.id === 'desktop-reminders'))
+    expect(composeEntries([preparedAgain.patches]).find(row => row.id === 'desktop-notifications'))
+      .toEqual(rows.find(row => row.id === 'desktop-notifications'))
+    expect(composeEntries([preparedAgain.patches]).find(row => row.id === 'desktop-default-workspace'))
+      .toEqual(rows.find(row => row.id === 'desktop-default-workspace'))
     expect(composeEntries([preparedAgain.patches]).find(row => row.id === 'clawclaw-experts'))
       .toEqual(rows.find(row => row.id === 'clawclaw-experts'))
   })

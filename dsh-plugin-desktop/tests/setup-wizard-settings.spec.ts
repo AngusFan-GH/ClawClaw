@@ -227,12 +227,17 @@ describe('Desktop Setup Wizard settings document', () => {
       .rejects.toThrow('must be a boolean')
   })
 
-  it('seeds an empty Profile patch from legacy settings without consuming the upstream import file', async () => {
+  it('seeds a declaration-only Profile patch from legacy settings without consuming the upstream import file', async () => {
     const root = temporaryDirectory()
     const profile = join(root, 'profiles', 'desktop')
     const path = join(profile, 'cordis.patch.yml')
     mkdirSync(profile, { recursive: true })
-    writeFileSync(path, '[]\n')
+    writeFileSync(path, [
+      '- insert:',
+      '    - id: desktop-notifications',
+      '      name: dsh-plugin-desktop/notifications',
+      '',
+    ].join('\n'))
     writeFileSync(join(root, 'settings.yaml'), [
       'dsh-desktop:',
       '  mode: extended',

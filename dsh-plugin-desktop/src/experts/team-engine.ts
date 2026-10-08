@@ -1,4 +1,3 @@
-import { resolveHostModule } from './settings-compat.js';
 import { readHostLocale } from './i18n.js';
 import { localizeTeam } from './team-content-en.js';
 import { teamText } from './team-i18n.js';
@@ -68,31 +67,14 @@ export function blocksNativeDelegation(service: unknown, agent: object | undefin
 export function isNativeTeamService(value: unknown): value is NativeTeamService {
     return value !== null && typeof value === 'object' && methods.every(key => typeof (value as Record<string, unknown>)[key] === 'function');
 }
-let agentTeamInstalled: boolean | undefined
-/** 安装探测从宿主启动入口解析，避免插件自身依赖版本冒充宿主能力。同一进程只探测一次。 */
-export function hostHasAgentTeam(): boolean {
-    if (agentTeamInstalled !== undefined)
-        return agentTeamInstalled;
-    if (!process.argv[1])
-        return agentTeamInstalled = false;
-    try {
-        resolveHostModule('@deepseek-ai/dsh-experimental-agent-team');
-        return agentTeamInstalled = true;
-    }
-    catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND')
-            return agentTeamInstalled = false;
-        throw error;
-    }
-}
-export function detectTeamEngine(service: unknown, supported: boolean, toolsReady = true, maxDepth?: number, locale: 'zh' | 'en' = 'zh', requiresToolFilter = false): TeamEngineStatus {
+export function detectTeamEngine(service: unknown, toolsReady = true, maxDepth?: number, locale: 'zh' | 'en' = 'zh', requiresToolFilter = false): TeamEngineStatus {
     const tx = (key: string, values?: readonly unknown[]) => teamText(locale, key, values);
 
     const compatible = isNativeTeamService(service);
-    if (!supported && !compatible)
+    if (!compatible)
         return { state: 'unsupported', mode: 'subagent', reason: tx("当前宿主未检测到兼容的 Agent Team 能力，使用普通子代理。"), recommendation: '' };
-    if (!compatible || !toolsReady)
-        return { state: 'disabled', mode: 'subagent', reason: tx("Agent Team 服务或当前会话工具尚未就绪。"), recommendation: tx("建议在插件页开启 Agent Team 的 Host 与 Web 层，并重新加载会话；未开启也可继续使用普通专家团。") };
+    if (!toolsReady)
+        return { state: 'disabled', mode: 'subagent', reason: tx("Agent Team 服务或当前会话工具尚未就绪。"), recommendation: tx("当前会话尚未加载原生 Agent Team 工具；请新建或重新加载会话。当前仍可继续使用普通专家团。") };
     if (maxDepth !== undefined)
         return { state: 'enabled', mode: 'subagent', reason: tx("原生 Agent Team 暂不支持本插件配置的深度限制，本次使用普通子代理以保留该限制。"), recommendation: '' };
     if (requiresToolFilter)
@@ -102,7 +84,7 @@ export function detectTeamEngine(service: unknown, supported: boolean, toolsRead
 export function resolveTeamEngine(ctx: Context, agent?: Agent, maxDepth?: number, requiresToolFilter = false) {
     const service: unknown = ctx.get('agentTeams');
     const toolsReady = !isNativeTeamService(service) || !agent || ['spawn_teammate', 'send_message', 'wait_agent', 'team_task_create', 'team_task_update', 'team_task_list'].every(name => agent.ctx?.tools?.get?.(name, agent) !== undefined);
-    return { service: isNativeTeamService(service) ? service : undefined, status: detectTeamEngine(service, isNativeTeamService(service) || hostHasAgentTeam(), toolsReady, maxDepth, readHostLocale(ctx), requiresToolFilter) };
+    return { service: isNativeTeamService(service) ? service : undefined, status: detectTeamEngine(service, toolsReady, maxDepth, readHostLocale(ctx), requiresToolFilter) };
 }
 const activeLeads = new WeakSet<object>();
 /** 显示名称可以变化；此持久标识必须保持原算法，以复用已存在的队友。 */
