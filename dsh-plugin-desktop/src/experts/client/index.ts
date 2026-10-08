@@ -1175,7 +1175,7 @@ function ExpertCardsSettings(props: PropsLocale<'agency'> & {
     const total = state.experts.length
     if (state.experts.some(expert => expert.conflict)) nodes.push(React.createElement('div', { key: 'conflicts', className: 'aag-error', role: 'alert' }, props.t('custom.nameConflictHint')))
     const hasFilter = normalizeExpertQuery(query) !== '' || division !== '' || status !== ''
-    const resetFilters = (): void => { setSource('all'); setQuery(''); setDivision(''); setStatus('') }
+    const resetFilters = (): void => { setSource('all'); setQuery(''); setDivision(''); setStatus(''); setNotice(null) }
     if (!props.sharedHeader) nodes.push(React.createElement('div', { key: 'toolbar', className: 'aag-toolbar' },
       React.createElement('div', { className: 'aag-title-row' },
         React.createElement('h2', { className: 'aag-title' }, props.t('settings.title')),
@@ -1187,12 +1187,16 @@ function ExpertCardsSettings(props: PropsLocale<'agency'> & {
           React.createElement('strong', null, enabledCount)))))
     const filterActions = React.createElement('div', { className: 'aag-filter-actions' },
       React.createElement(Button, { type: 'primary', disabled: isSaving, onClick: () => openEditor() }, props.t('custom.new')))
-    if (notice !== null) nodes.push(React.createElement('div', { key: 'notice', className: 'aag-custom-notice', role: 'status' }, notice))
+    if (notice !== null) nodes.push(React.createElement('div', { key: 'notice', className: 'aag-custom-notice', role: 'status' },
+      React.createElement('span', null, notice),
+      React.createElement(Button, {
+        type: 'link', size: 'small', onClick: () => { setSource('all'); setNotice(null) },
+      }, props.t('custom.showAllExperts'))))
     nodes.push(React.createElement('div', { key: 'filters', className: 'aag-filters aag-card-filters' },
       React.createElement('div', { className: 'aag-field aag-field-source' },
         React.createElement(CategorySelect, {
           id: 'aag-filter-source', value: source, label: props.t('settings.filter.source'),
-          onChange: (value) => setSource(value === 'base' || value === 'custom' ? value : 'all'),
+          onChange: (value) => { setSource(value === 'base' || value === 'custom' ? value : 'all'); setNotice(null) },
           options: [
             { value: 'all', label: props.t('settings.filter.allSources') },
             { value: 'base', label: props.t('custom.base') },
@@ -1329,20 +1333,22 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
   })
   // 两个名册都保持挂载，切换时不丢失筛选，也不重新等待第一次加载。
   return React.createElement(AntdProvider, { locale: antdLocale(props.getActive()) }, React.createElement('section', { className: 'aag-section aag-library-shell' },
-    React.createElement('header', { className: 'aag-toolbar' }, React.createElement('div', { className: 'aag-title-row' },
-      React.createElement('h2', { className: 'aag-title' }, props.t('settings.title')))),
-    React.createElement('div', { className: 'aag-library-navigation' }, navigation),
-    React.createElement('div', { id: 'aag-library-panel-experts', hidden: view !== 'experts' }, React.createElement(ExpertCardsSettings, { ...props, capabilityRegistry: settingsCapabilityRegistry, sharedHeader: true, onSummary: setExpertSummary })),
-    React.createElement('div', { id: 'aag-library-panel-teams', hidden: view !== 'teams' }, React.createElement(TeamLocaleContext.Provider, { value: props.getActive() }, React.createElement(TeamsPanel, {
-      remote: props.remote as TeamRemote, sharedHeader: true, onSummary: setTeamSummary, prepareSelect: props.prepareTeamSelection,
-      onExpertsChanged: () => { void readEnabled(props.remote).then(value => props.onEnabledChange?.(value.enabled)) },
-    }))),
-    React.createElement('div', { id: 'aag-library-panel-skills', hidden: view !== 'skills' }, React.createElement(SkillsSettingsSection, {
-      t: props.skillsT, api: props.skillsApi, initialSessionId: props.initialSessionId, onSummary: setSkillSummary, onCatalogChange: invalidateCapabilities, onScopeApiChange: selectSkillsScope, expertUsage: capabilityUsage.skills,
-    })),
-    React.createElement('div', { id: 'aag-library-panel-mcp', hidden: view !== 'mcp' }, React.createElement(McpSettingsSection, {
-      t: props.mcpT, api: props.mcpApi, onSummary: setMcpSummary, onCatalogChange: invalidateCapabilities, expertUsage: capabilityUsage.mcp,
-    }))))
+    React.createElement('div', { className: 'aag-library-sticky' },
+      React.createElement('header', { className: 'aag-toolbar' }, React.createElement('div', { className: 'aag-title-row' },
+        React.createElement('h2', { className: 'aag-title' }, props.t('settings.title')))),
+      React.createElement('div', { className: 'aag-library-navigation' }, navigation)),
+    React.createElement('div', { className: 'aag-library-content' },
+      React.createElement('div', { id: 'aag-library-panel-experts', hidden: view !== 'experts' }, React.createElement(ExpertCardsSettings, { ...props, capabilityRegistry: settingsCapabilityRegistry, sharedHeader: true, onSummary: setExpertSummary })),
+      React.createElement('div', { id: 'aag-library-panel-teams', hidden: view !== 'teams' }, React.createElement(TeamLocaleContext.Provider, { value: props.getActive() }, React.createElement(TeamsPanel, {
+        remote: props.remote as TeamRemote, sharedHeader: true, onSummary: setTeamSummary, prepareSelect: props.prepareTeamSelection,
+        onExpertsChanged: () => { void readEnabled(props.remote).then(value => props.onEnabledChange?.(value.enabled)) },
+      }))),
+      React.createElement('div', { id: 'aag-library-panel-skills', hidden: view !== 'skills' }, React.createElement(SkillsSettingsSection, {
+        t: props.skillsT, api: props.skillsApi, initialSessionId: props.initialSessionId, onSummary: setSkillSummary, onCatalogChange: invalidateCapabilities, onScopeApiChange: selectSkillsScope, expertUsage: capabilityUsage.skills,
+      })),
+      React.createElement('div', { id: 'aag-library-panel-mcp', hidden: view !== 'mcp' }, React.createElement(McpSettingsSection, {
+        t: props.mcpT, api: props.mcpApi, onSummary: setMcpSummary, onCatalogChange: invalidateCapabilities, expertUsage: capabilityUsage.mcp,
+      })))))
 }
 export const inject = ['slots', 'inputTriggers', 'locale', 'remote', 'sessions', 'conversation']
 

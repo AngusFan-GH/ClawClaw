@@ -2,9 +2,12 @@
 /** 团队仅补充成员和主理人字段布局；基础控件统一复用专家页 aag 样式。 */
 export const TEAM_CSS = `
 .aag-team-grid .aag-card-description{min-height:80px;-webkit-line-clamp:unset}
-.aag-library-navigation{display:flex;align-items:center;justify-content:space-between;gap:16px}.aag-library-navigation>.aag-library-tabs{flex:1;width:100%;min-width:0;border-bottom:0}
+.aag-library-shell{max-width:960px;gap:0;padding-bottom:0}
+.aag-library-sticky{position:sticky;top:0;z-index:20;display:flex;flex-direction:column;gap:12px;margin:0 -2px;padding:0 2px 14px;background:var(--dsw-alias-bg-base,var(--dsw-alias-bg-layer-1))}
+.aag-library-navigation{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:16px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin}.aag-library-navigation>.aag-library-tabs{flex:1;width:100%;min-width:max-content;border-bottom:0}
 .aag-library-tabs .aag-tab-count{display:inline-flex;align-items:baseline;gap:3px;margin-left:8px;color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:400;line-height:18px;white-space:nowrap}.aag-library-tabs .aag-tab-count strong{color:var(--dsw-alias-label-primary);font-weight:600}
-.aag-library-shell>.aag-section,.aag-library-shell>div>.aag-section{padding-bottom:0;min-width:0}
+.aag-library-content{display:block;min-width:0;padding:16px 0 32px}.aag-library-content>.aag-section,.aag-library-content>div>.aag-section{padding-bottom:0;min-width:0}
+@media(max-width:560px){.aag-library-sticky{gap:10px;padding-bottom:10px}.aag-library-content{padding-top:12px}.aag-library-tabs .aag-tab-count{margin-left:5px}}
 .aag-team-avatar{width:44px;height:44px;position:relative}
 .agt-stack{display:flex;align-items:center;flex-shrink:0}
 .agt-stack img{object-fit:cover;border-radius:50%;width:44px;height:44px}

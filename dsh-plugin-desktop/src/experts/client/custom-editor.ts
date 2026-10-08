@@ -248,7 +248,8 @@ export const CUSTOM_EDITOR_CSS = `
 .aag-custom-footer>div>button:first-child{margin-right:auto}
 .aag-editor-drawer input:focus-visible,.aag-editor-drawer textarea:focus-visible,.aag-editor-drawer .ant-input:focus,.aag-editor-drawer .ant-input:focus-visible,.ant-modal input:focus-visible,.ant-modal textarea:focus-visible{outline:none}
 .aag-custom-badge{display:inline-block;font-size:10px;padding:1px 5px;border:1px solid var(--dsw-alias-border-l3);border-radius:4px;margin-left:6px;color:var(--dsw-alias-label-secondary)}
-.aag-custom-notice{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0;font-size:13px;color:var(--dsw-alias-label-primary)}
+.aag-custom-notice{display:flex;align-items:center;justify-content:space-between;gap:10px 16px;flex-wrap:wrap;margin:0;padding:10px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;background:var(--dsw-alias-bg-layer-2);font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary)}
+.aag-custom-notice>span{min-width:0;flex:1 1 300px}.aag-custom-notice>.ant-btn{flex:0 0 auto;padding-inline:4px}
 .aag-custom-review{margin-top:16px;padding:14px;border:1px solid var(--dsw-alias-brand-primary);border-radius:8px}
 .aag-custom-review-actions{display:flex;flex-wrap:wrap;gap:8px}
 .aag-custom-review p{overflow-wrap:anywhere}
