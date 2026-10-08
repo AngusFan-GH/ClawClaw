@@ -27,6 +27,7 @@ import { requestDesktopDirectory } from './directory-picker.ts'
 
 export interface SkillsSettingsSectionInjected {
   readonly api: DesktopSkillsApi
+  readonly embedded?: boolean
   readonly initialSessionId?: string
   readonly onSummary?: (summary: { total: number; available: number }) => void
   readonly onCatalogChange?: () => void
@@ -42,7 +43,7 @@ const canRecycle = (skill: DesktopSkillView): boolean => skill.editable
   && (skill.source === 'user-dsh' || skill.source === 'custom') && skill.provider === 'filesystem'
 const canBrowseFiles = (skill: DesktopSkillView): boolean => ['filesystem', 'clawclaw-project-filesystem'].includes(skill.provider)
 
-export function SkillsSettingsSection({ t, api: baseApi, initialSessionId, onSummary, onCatalogChange, onScopeApiChange, expertUsage }: SkillsSettingsSectionProps) {
+export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initialSessionId, onSummary, onCatalogChange, onScopeApiChange, expertUsage }: SkillsSettingsSectionProps) {
   const id = useId()
   const [preset, setPreset] = useState<string>()
   const [presets, setPresets] = useState<readonly { id: string, name: string }[]>([])
@@ -251,15 +252,14 @@ export function SkillsSettingsSection({ t, api: baseApi, initialSessionId, onSum
       setDetail(next); setDetailTab('overview'); setRecycleConfirm(confirmRecycle && canRecycle(next))
     })
   }
+  const catalogActions = <div className="dshIntegrationsRowActions dshSkillsCatalogActions">
+    <button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={event => { returnFocus.current = event.currentTarget; setError(undefined); setImportOpen(true) }}><FileUp />{t('importRaw')}</button>
+    <button type="button" className="dshIntegrationsCommand dshCronPrimary" disabled={disabled} onClick={event => { returnFocus.current = event.currentTarget; beginDraft({ ...EMPTY_DRAFT }) }}><Plus />{t('newSkill')}</button>
+  </div>
 
   return <>
-    <section ref={section} className="dshIntegrations dshSkillsPage" aria-label={t('title')}>
-      <header className="dshIntegrationsHeader"><h2>{t('title')}</h2>
-        <div className="dshIntegrationsRowActions">
-          <button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={event => { returnFocus.current = event.currentTarget; setError(undefined); setImportOpen(true) }}><FileUp />{t('importRaw')}</button>
-          <button type="button" className="dshIntegrationsCommand dshCronPrimary" disabled={disabled} onClick={event => { returnFocus.current = event.currentTarget; beginDraft({ ...EMPTY_DRAFT }) }}><Plus />{t('newSkill')}</button>
-        </div>
-      </header>
+    <section ref={section} className={`dshIntegrations dshSkillsPage${embedded ? ' dshIntegrationsEmbedded' : ''}`} aria-label={t('title')}>
+      {!embedded && <header className="dshIntegrationsHeader"><h2>{t('title')}</h2>{catalogActions}</header>}
       <div className="dshSkillsTabs" role="tablist" aria-label={t('title')}>
         {(['library', 'recycle'] as const).map((value, index) => <button key={value} ref={element => { tabs.current[index] = element }} type="button" role="tab" id={`${id}-${value}`} aria-controls={`${id}-panel`} aria-selected={view === value} tabIndex={view === value ? 0 : -1}
           onClick={() => { setView(value) }} onKeyDown={event => {
@@ -315,6 +315,7 @@ export function SkillsSettingsSection({ t, api: baseApi, initialSessionId, onSum
               <span>{t('agentPreset')} · {presets.find(item => item.id === preset)?.name ?? effectivePresetLabel ?? t('defaultPreset')}</span><IconChevronDownOutlineMedium />
             </button>} />}
           <SettingsIconButton label={t('refresh')} disabled={disabled} onClick={() => { void load() }}><RefreshCw /></SettingsIconButton>
+          {embedded && catalogActions}
           {view === 'recycle' && api.purge && <button type="button" className="dshIntegrationsDanger" disabled={disabled || recycled.length === 0} onClick={event => { returnFocus.current = event.currentTarget; setError(undefined); setPurgeTarget([...recycled]) }}><Trash2 />{t('emptyRecycleBin')}</button>}
         </div>
         {loading ? <p className="dshIntegrationsEmpty" role="status">{t('loading')}</p> : view === 'library' ? <>

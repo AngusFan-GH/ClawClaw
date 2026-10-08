@@ -2,12 +2,12 @@
 /** 团队仅补充成员和主理人字段布局；基础控件统一复用专家页 aag 样式。 */
 export const TEAM_CSS = `
 .aag-team-grid .aag-card-description{min-height:80px;-webkit-line-clamp:unset}
-.aag-library-shell{max-width:960px;gap:0;padding-bottom:0}
-.aag-library-sticky{position:sticky;top:0;z-index:20;display:flex;flex-direction:column;gap:12px;margin:0 -2px;padding:0 2px 14px;background:var(--dsw-alias-bg-base,var(--dsw-alias-bg-layer-1))}
-.aag-library-navigation{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:16px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin}.aag-library-navigation>.aag-library-tabs{flex:1;width:100%;min-width:max-content;border-bottom:0}
-.aag-library-tabs .aag-tab-count{display:inline-flex;align-items:baseline;gap:3px;margin-left:8px;color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:400;line-height:18px;white-space:nowrap}.aag-library-tabs .aag-tab-count strong{color:var(--dsw-alias-label-primary);font-weight:600}
-.aag-library-content{display:block;min-width:0;padding:16px 0 32px}.aag-library-content>.aag-section,.aag-library-content>div>.aag-section{padding-bottom:0;min-width:0}
-@media(max-width:560px){.aag-library-sticky{gap:10px;padding-bottom:10px}.aag-library-content{padding-top:12px}.aag-library-tabs .aag-tab-count{margin-left:5px}}
+.aag-library-shell{max-width:1120px;gap:0;padding-bottom:0}
+.aag-library-sticky{position:sticky;top:0;z-index:20;display:flex;flex-direction:column;margin:0 -4px;padding:0 4px 10px;border-bottom:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base,var(--dsw-alias-bg-layer-1))}
+.aag-library-navigation{display:flex;min-width:0;align-items:center;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin}.aag-library-navigation>.aag-library-tabs{flex:0 0 auto;width:auto;min-width:max-content;border:0;background:transparent;padding:0}.aag-library-tabs .ant-segmented-group{gap:24px}.aag-library-tabs .ant-segmented-thumb{display:none}.aag-library-tabs .ant-segmented-item{border-radius:0;background:transparent;color:var(--dsw-alias-label-secondary);box-shadow:none}.aag-library-tabs .ant-segmented-item:hover{color:var(--dsw-alias-label-primary)}.aag-library-tabs .ant-segmented-item-selected{background:transparent;color:var(--dsw-alias-label-primary);box-shadow:none}.aag-library-tabs .ant-segmented-item-label{min-height:38px;padding:5px 0}
+.aag-tab-label{position:relative;display:inline-flex;align-items:center;gap:7px;min-height:28px;font-size:15px;font-weight:600;white-space:nowrap}.aag-tab-label>svg{flex:none}.aag-library-tabs .ant-segmented-item-selected .aag-tab-label:after{content:'';position:absolute;right:0;bottom:-6px;left:0;height:2px;border-radius:2px;background:currentColor}.aag-library-tabs .aag-tab-count{display:inline-flex;min-width:20px;height:18px;align-items:center;justify-content:center;padding:0 5px;border-radius:9px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:10px;font-weight:500;font-variant-numeric:tabular-nums;line-height:18px}
+.aag-library-content{display:block;min-width:0;padding:18px 0 32px}.aag-library-content>.aag-section,.aag-library-content>div>.aag-section{padding-bottom:0;min-width:0;max-width:none}.aag-library-content .dshIntegrations{max-width:none}.aag-library-content .dshIntegrationsEmbedded{gap:16px}
+@media(max-width:560px){.aag-library-sticky{padding-bottom:7px}.aag-library-content{padding-top:12px}.aag-library-tabs .ant-segmented-group{gap:18px}.aag-tab-label{font-size:14px}.aag-library-tabs .aag-tab-count{display:none}}
 .aag-team-avatar{width:44px;height:44px;position:relative}
 .agt-stack{display:flex;align-items:center;flex-shrink:0}
 .agt-stack img{object-fit:cover;border-radius:50%;width:44px;height:44px}

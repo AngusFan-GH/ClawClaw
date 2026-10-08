@@ -1,6 +1,6 @@
 export const zh = {
   nav: 'MCP 服务', title: 'MCP 服务', intro: '管理当前配置方案中的 MCP 服务及工具连接。',
-  refresh: '刷新', loading: '正在加载…', unavailable: '暂时无法读取 MCP 配置。',
+  refresh: '刷新', loading: '正在加载…', unavailable: '暂时无法读取 MCP 配置。', searchServers: '搜索 MCP 服务或工具', clearSearch: '清除搜索', noMatches: '没有匹配的 MCP 服务。',
   operationFailed: '操作失败，请检查配置后重试。', addServer: '添加 MCP 服务', editServer: '编辑',
   removeServer: '删除', testServer: '测试连接', serverName: '服务名称', transport: '传输方式',
   command: '命令', arguments: '参数（每行一个）', url: 'MCP URL', save: '保存', cancel: '取消',
@@ -23,7 +23,7 @@ export type DesktopMcpLocaleKey = keyof typeof zh
 
 export const en: Record<DesktopMcpLocaleKey, string> = {
   nav: 'MCP Servers', title: 'MCP Servers', intro: 'Manage MCP servers and tool connections for the current Profile.',
-  refresh: 'Refresh', loading: 'Loading…', unavailable: 'MCP configuration is temporarily unavailable.',
+  refresh: 'Refresh', loading: 'Loading…', unavailable: 'MCP configuration is temporarily unavailable.', searchServers: 'Search MCP servers or tools', clearSearch: 'Clear search', noMatches: 'No matching MCP servers.',
   operationFailed: 'The operation failed. Check the configuration and try again.', addServer: 'Add server', editServer: 'Edit',
   removeServer: 'Remove', testServer: 'Test connection', serverName: 'Server name', transport: 'Transport',
   command: 'Command', arguments: 'Arguments (one per line)', url: 'MCP URL', save: 'Save', cancel: 'Cancel',

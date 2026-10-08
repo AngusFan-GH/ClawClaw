@@ -10,6 +10,10 @@ import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw.mjs'
 // @ts-expect-error package subpath has no declaration file
 import RotateCw from 'lucide-react/dist/esm/icons/rotate-cw.mjs'
 // @ts-expect-error package subpath has no declaration file
+import Search from 'lucide-react/dist/esm/icons/search.mjs'
+// @ts-expect-error package subpath has no declaration file
+import PlugZap from 'lucide-react/dist/esm/icons/plug-zap.mjs'
+// @ts-expect-error package subpath has no declaration file
 import Trash2 from 'lucide-react/dist/esm/icons/trash-2.mjs'
 // @ts-expect-error package subpath has no declaration file
 import X from 'lucide-react/dist/esm/icons/x.mjs'
@@ -21,6 +25,7 @@ import { SettingsIconButton, SettingsToggle } from './settings-controls.tsx'
 
 export interface McpSettingsSectionInjected {
   readonly api: DesktopMcpApi
+  readonly embedded?: boolean
   readonly onSummary?: (summary: { total: number; enabled: number; available: number }) => void
   readonly onCatalogChange?: () => void
   readonly expertUsage?: ReadonlyMap<string, number>
@@ -78,7 +83,7 @@ function mcpDraft(server: DesktopMcpServerView): McpDraft {
     reconnectMaxAttempts: String(server.reconnect.maxAttempts), url: server.transport === 'streamable-http' ? server.url : '', enabled: server.enabled }
 }
 
-export function McpSettingsSection({ t, api, onSummary, onCatalogChange, expertUsage }: McpSettingsSectionProps) {
+export function McpSettingsSection({ t, api, embedded = false, onSummary, onCatalogChange, expertUsage }: McpSettingsSectionProps) {
   const [servers, setServers] = useState<readonly DesktopMcpServerView[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
@@ -86,6 +91,7 @@ export function McpSettingsSection({ t, api, onSummary, onCatalogChange, expertU
   const [draft, setDraft] = useState<McpDraft>()
   const [removeName, setRemoveName] = useState<string>()
   const [importText, setImportText] = useState<string>()
+  const [search, setSearch] = useState('')
   const busyRef = useRef(false)
   const mountedRef = useRef(true)
   const applyServers = useCallback((next: readonly DesktopMcpServerView[]): void => {
@@ -150,15 +156,23 @@ export function McpSettingsSection({ t, api, onSummary, onCatalogChange, expertU
       void run('mcp-import', async () => { applyServers(await api.import(document)); setImportText(undefined) })
     } catch { setError(t('invalidImport')) }
   }
+  const query = search.trim().toLocaleLowerCase()
+  const filteredServers = query === '' ? servers : servers.filter(server => {
+    const endpoint = server.transport === 'stdio' ? `${server.command} ${server.args.join(' ')}` : server.url
+    return `${server.serverName} ${endpoint} ${server.tools.map(tool => `${tool.name} ${tool.description}`).join(' ')}`.toLocaleLowerCase().includes(query)
+  })
 
-  return <section className="dshIntegrations" aria-label={t('title')}>
-    <header className="dshIntegrationsHeader"><div><h2>{t('title')}</h2><p>{t('intro')}</p></div>
-      <SettingsIconButton label={t('refresh')} disabled={loading || busy !== undefined} onClick={() => { void load() }}><RefreshCw /></SettingsIconButton></header>
+  return <section className={`dshIntegrations dshMcpPage${embedded ? ' dshIntegrationsEmbedded' : ''}`} aria-label={t('title')}>
+    {!embedded && <header className="dshIntegrationsHeader"><div><h2>{t('title')}</h2><p>{t('intro')}</p></div></header>}
     {error !== undefined && <div className="dshIntegrationsError" role="alert">{error}</div>}
     {loading && servers.length === 0 ? <p className="dshIntegrationsEmpty">{t('loading')}</p> : <div className="dshIntegrationsBody">
-      <div className="dshIntegrationsToolbar"><p>{t('secretNotice')}</p>
-        <div className="dshIntegrationsRowActions"><button type="button" className="dshIntegrationsCommand" onClick={() => { setImportText(importText === undefined ? '' : undefined) }}>{t('importJson')}</button>
-          <button type="button" className="dshIntegrationsCommand" onClick={() => { setDraft({ ...EMPTY_DRAFT }) }}><Plus />{t('addServer')}</button></div></div>
+      <div className="dshMcpCatalogToolbar">
+        <label className="dshIntegrationsSearch"><Search aria-hidden="true" /><input aria-label={t('searchServers')} value={search} onChange={event => { setSearch(event.target.value) }} placeholder={t('searchServers')} /></label>
+        <div className="dshIntegrationsRowActions"><SettingsIconButton label={t('refresh')} disabled={loading || busy !== undefined} onClick={() => { void load() }}><RefreshCw /></SettingsIconButton>
+          <button type="button" className="dshIntegrationsCommand" onClick={() => { setImportText(importText === undefined ? '' : undefined) }}>{t('importJson')}</button>
+          <button type="button" className="dshIntegrationsCommand dshCronPrimary" onClick={() => { setDraft({ ...EMPTY_DRAFT }) }}><Plus />{t('addServer')}</button></div>
+      </div>
+      <p className="dshMcpCredentialNotice">{t('secretNotice')}</p>
       {importText !== undefined && <div className="dshIntegrationsEditor"><div className="dshIntegrationsEditorHeader"><h3>{t('importJson')}</h3><SettingsIconButton label={t('cancel')} onClick={() => { setImportText(undefined) }}><X /></SettingsIconButton></div>
         <textarea rows={8} value={importText} placeholder={t('importJsonHint')} onChange={event => { setImportText(event.target.value) }} />
         <div className="dshIntegrationsEditorFooter"><span /><button type="button" className="dshIntegrationsCommand" disabled={busy !== undefined} onClick={importServers}>{t('import')}</button></div></div>}
@@ -197,8 +211,8 @@ export function McpSettingsSection({ t, api, onSummary, onCatalogChange, expertU
           onChange={event => { setDraft({ ...draft, enabled: event.target.checked }) }} />{t('enabled')}</label>
           <button type="submit" className="dshIntegrationsCommand" disabled={busy !== undefined}>{t('save')}</button></div>
       </form>}
-      <div className="dshIntegrationsList">{servers.map(server => <div className="dshIntegrationsMcp" key={server.serverName}>
-        <div className="dshIntegrationsMcpHeader"><div><span className="dshIntegrationsRowTitle">{server.serverName}</span>
+      <div className="dshIntegrationsList dshMcpGrid">{filteredServers.map(server => <div className="dshIntegrationsMcp" key={server.serverName}>
+        <div className="dshIntegrationsMcpHeader"><span className="dshMcpGlyph" aria-hidden="true"><PlugZap /></span><div className="dshMcpIdentity"><span className="dshIntegrationsRowTitle">{server.serverName}</span>
           <span className="dshIntegrationsMeta"><span>{server.transport === 'stdio' ? server.command : server.url}</span>
             <span data-state={server.state}>{statusLabel(server, t)}</span><span>{server.tools.length} {t('tools')}</span>{(expertUsage?.get(server.serverName) ?? 0) > 0 && <span>{t('usedByExperts').replace('{count}', String(expertUsage?.get(server.serverName) ?? 0))}</span>}</span></div>
           <div className="dshIntegrationsRowActions"><SettingsToggle label={server.enabled ? t('enabled') : t('disabled')} checked={server.enabled}
@@ -213,7 +227,7 @@ export function McpSettingsSection({ t, api, onSummary, onCatalogChange, expertU
         {!server.credentialsReady && <p className="dshIntegrationsServerError">{t('credentialsMissing')}</p>}
         <div className="dshIntegrationsTools">{server.tools.length === 0 ? <span>{t('noTools')}</span>
           : server.tools.map(tool => <span key={tool.name} title={tool.description}>{tool.name}</span>)}</div>
-      </div>)}{servers.length === 0 && <p className="dshIntegrationsEmpty">{t('noServers')}</p>}</div>
+      </div>)}{filteredServers.length === 0 && <p className="dshIntegrationsEmpty dshMcpEmpty">{t(servers.length === 0 ? 'noServers' : 'noMatches')}{servers.length > 0 && <button type="button" className="dshIntegrationsCommand" onClick={() => { setSearch('') }}>{t('clearSearch')}</button>}</p>}</div>
     </div>}
   </section>
 }

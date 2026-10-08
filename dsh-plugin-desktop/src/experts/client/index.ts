@@ -44,6 +44,14 @@ import { ExpertCapabilityRegistry } from './capability-registry.js'
 import { expertCapabilityHealth, type ExpertCapabilityHealth } from './capability-options.js'
 import { SkillsSettingsSection } from '../../client/SkillsSettingsSection.js'
 import { McpSettingsSection } from '../../client/McpSettingsSection.js'
+// @ts-expect-error package subpath has no declaration file
+import Bot from 'lucide-react/dist/esm/icons/bot.mjs'
+// @ts-expect-error package subpath has no declaration file
+import UsersRound from 'lucide-react/dist/esm/icons/users-round.mjs'
+// @ts-expect-error package subpath has no declaration file
+import Wrench from 'lucide-react/dist/esm/icons/wrench.mjs'
+// @ts-expect-error package subpath has no declaration file
+import PlugZap from 'lucide-react/dist/esm/icons/plug-zap.mjs'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -461,26 +469,27 @@ export const CARD_SETTINGS_CSS = `
 .aag-search-wrap{display:flex;align-items:center;width:100%;min-width:0;max-width:100%}
 .aag-search-wrap>.aag-search{width:100%;min-width:0;max-width:100%}
 .aag-search-wrap>.aag-search input::placeholder{color:var(--dsw-alias-label-dimmed)}
-.aag-expert-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;margin-top:2px}
+.aag-expert-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:2px}
 .aag-expert-window{position:relative;margin-top:2px;overflow-anchor:none}.aag-expert-window>.aag-expert-grid{position:absolute;right:0;left:0;margin-top:0}
-.aag-expert-card{display:grid;min-width:0;min-height:190px;overflow:hidden;grid-template-rows:minmax(141px,1fr) 48px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;background:var(--dsw-alias-bg-layer-2)}
-.aag-expert-card:hover{border-color:var(--dsw-alias-border-l3)}
-.aag-card-body{position:relative;display:grid;min-width:0;grid-template-columns:44px minmax(0,1fr);column-gap:10px;row-gap:9px;padding:12px}
-.aag-expert-avatar{display:block;width:44px;height:44px;border:0;border-radius:50%;background:var(--dsw-alias-bg-layer-3);object-fit:cover;object-position:center 20%}
-.aag-card-identity{display:flex;min-width:0;flex-direction:column;padding-right:48px}
-.aag-card-name{display:-webkit-box;overflow:hidden;font-size:16px;font-weight:650;line-height:22px;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.aag-expert-card{display:grid;min-width:0;min-height:164px;overflow:hidden;grid-template-rows:minmax(119px,1fr) 44px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);transition:border-color .15s ease,background .15s ease,box-shadow .15s ease}
+.aag-expert-card:hover{border-color:var(--dsw-alias-border-l3);box-shadow:0 6px 18px color-mix(in srgb,var(--dsw-alias-label-primary) 6%,transparent)}
+.aag-card-body{position:relative;display:grid;min-width:0;grid-template-columns:42px minmax(0,1fr);column-gap:10px;row-gap:8px;padding:12px}
+.aag-expert-avatar{display:block;width:42px;height:42px;border:0;border-radius:10px;background:var(--dsw-alias-bg-layer-3);object-fit:cover;object-position:center 20%}
+.aag-card-identity{display:flex;min-width:0;flex-direction:column;padding-right:42px}
+.aag-card-name{display:-webkit-box;overflow:hidden;font-size:15px;font-weight:650;line-height:21px;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 .aag-card-division{margin-top:2px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:18px}
-.aag-card-description{grid-column:1/-1;display:-webkit-box;min-height:60px;margin:0;overflow:hidden;color:var(--dsw-alias-label-secondary);font-size:14px;line-height:20px;-webkit-box-orient:vertical;-webkit-line-clamp:3}
-.aag-card-actions{display:flex;align-items:stretch;min-height:48px;border-top:1px solid var(--dsw-alias-border-l2)}
-.aag-card-action{display:inline-flex;align-items:center;justify-content:center;gap:4px;flex:1 0 auto;min-height:48px;padding:0 8px;border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;line-height:18px;white-space:nowrap;cursor:pointer}
+.aag-card-description{grid-column:1/-1;display:-webkit-box;min-height:38px;margin:0;overflow:hidden;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:19px;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.aag-card-actions{display:flex;align-items:stretch;min-height:44px;border-top:1px solid var(--dsw-alias-border-l2)}
+.aag-card-action{display:inline-flex;align-items:center;justify-content:center;gap:4px;flex:1 1 0;min-width:0;min-height:44px;padding:4px 6px;border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;line-height:16px;text-align:center;white-space:normal;cursor:pointer}
 .aag-card-action+.aag-card-action{border-left:1px solid var(--dsw-alias-border-l2)}
 .aag-card-action:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .aag-card-action:disabled{opacity:.5;cursor:default}
 .aag-card-action-primary{color:var(--dsw-alias-label-secondary)}
 .aag-card-action-danger{color:var(--dsw-alias-state-error-primary)}
-.aag-switch{position:absolute;top:12px;right:12px;display:flex;align-items:center;flex-direction:column;gap:3px}
-.aag-switch-state{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;white-space:nowrap}
+.aag-switch{position:absolute;top:12px;right:12px;display:flex;align-items:center;flex-direction:column;gap:2px}
+.aag-switch-state{color:var(--dsw-alias-label-secondary);font-size:10px;line-height:16px;white-space:nowrap}
 .ant-modal .aag-prompt-body.ant-input{display:block;box-sizing:border-box;height:min(560px,calc(100vh - 220px));min-height:240px;margin:0;resize:none;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.65}
+@container (max-width:839px){.aag-expert-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @container (max-width:519px){.aag-expert-grid{grid-template-columns:1fr}.aag-title-row{gap:8px 12px}.aag-settings-links{flex-basis:100%}}
 @container (max-width:430px){.aag-card-body{grid-template-columns:40px minmax(0,1fr);column-gap:10px}.aag-expert-avatar{width:40px;height:40px}.aag-card-name{font-size:16px;line-height:22px}}
 `
@@ -904,7 +913,7 @@ interface OpenPrompt {
 }
 
 const EXPERT_CARD_GAP = 10
-const EXPERT_CARD_ROW = 200
+const EXPERT_CARD_ROW = 176
 
 function scrollParent(node: HTMLElement): HTMLElement | Window {
   let current = node.parentElement
@@ -934,7 +943,7 @@ function ExpertCardWindow(props: {
   const ref = React.useRef<HTMLDivElement>(null)
   const countRef = React.useRef(props.items.length)
   countRef.current = props.items.length
-  const [range, setRange] = React.useState({ start: 0, end: 8, columns: 2, row: EXPERT_CARD_ROW, pin: null as number | null, key: props.resetKey })
+  const [range, setRange] = React.useState({ start: 0, end: 8, columns: 3, row: EXPERT_CARD_ROW, pin: null as number | null, key: props.resetKey })
   React.useLayoutEffect(() => {
     setRange((current) => current.key === props.resetKey ? current : { start: 0, end: 8, columns: current.columns, row: current.row, pin: null, key: props.resetKey })
   }, [props.resetKey])
@@ -948,7 +957,7 @@ function ExpertCardWindow(props: {
       const row = card instanceof HTMLElement && card.offsetHeight > 0 ? card.offsetHeight + EXPERT_CARD_GAP : EXPERT_CARD_ROW
       const section = node.closest('.aag-section')
       const width = section instanceof HTMLElement ? section.clientWidth : node.clientWidth
-      const columns = width > 0 && width <= 519 ? 1 : 2
+      const columns = width > 0 && width <= 519 ? 1 : width > 0 && width <= 839 ? 2 : 3
       const viewTop = scroller instanceof HTMLElement ? scroller.getBoundingClientRect().top : 0
       const viewHeight = scroller instanceof HTMLElement ? scroller.clientHeight : window.innerHeight
       const startPx = Math.max(0, viewTop - node.getBoundingClientRect().top)
@@ -1316,26 +1325,24 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
   const selectSkillsScope = React.useCallback((api: ReturnType<typeof createDesktopSkillsApi>) => {
     setSettingsCapabilityRegistry(new ExpertCapabilityRegistry(api, props.mcpApi))
   }, [props.mcpApi])
-  const tabLabel = (name: string, total: number, enabled: number) => React.createElement(React.Fragment, null,
-    name,
-    React.createElement('span', { className: 'aag-tab-count', 'aria-hidden': true }, React.createElement('strong', null, total)),
-    React.createElement('span', { className: 'aag-tab-count', 'aria-hidden': true }, props.t('summary.enabledPrefix'), React.createElement('strong', null, enabled)),
+  const tabLabel = (icon: React.ComponentType<{ size?: number; strokeWidth?: number }>, name: string, total: number) => React.createElement('span', { className: 'aag-tab-label' },
+    React.createElement(icon, { size: 19, strokeWidth: 1.8 }),
+    React.createElement('span', null, name),
+    React.createElement('span', { className: 'aag-tab-count', 'aria-hidden': true }, total),
   )
   const navigation = React.createElement(Segmented, {
     block: true, className: 'aag-library-tabs', 'aria-label': tx('专家库类型'), value: view,
     onChange: (value: unknown) => { if (value === 'experts' || value === 'teams' || value === 'skills' || value === 'mcp') setView(value) },
     options: [
-      { value: 'experts' as const, label: tabLabel(tx('专家'), expertSummary.total, expertSummary.enabled) },
-      { value: 'teams' as const, label: tabLabel(tx('专家团'), teamSummary.total, teamSummary.enabled) },
-      { value: 'skills' as const, label: tabLabel(props.skillsT('nav'), skillSummary.total, skillSummary.available) },
-      { value: 'mcp' as const, label: tabLabel(props.mcpT('nav'), mcpSummary.total, mcpSummary.available) },
+      { value: 'experts' as const, label: tabLabel(Bot, tx('专家'), expertSummary.total) },
+      { value: 'teams' as const, label: tabLabel(UsersRound, tx('专家团'), teamSummary.total) },
+      { value: 'skills' as const, label: tabLabel(Wrench, props.skillsT('nav'), skillSummary.total) },
+      { value: 'mcp' as const, label: tabLabel(PlugZap, props.mcpT('nav'), mcpSummary.total) },
     ],
   })
   // 两个名册都保持挂载，切换时不丢失筛选，也不重新等待第一次加载。
   return React.createElement(AntdProvider, { locale: antdLocale(props.getActive()) }, React.createElement('section', { className: 'aag-section aag-library-shell' },
     React.createElement('div', { className: 'aag-library-sticky' },
-      React.createElement('header', { className: 'aag-toolbar' }, React.createElement('div', { className: 'aag-title-row' },
-        React.createElement('h2', { className: 'aag-title' }, props.t('settings.title')))),
       React.createElement('div', { className: 'aag-library-navigation' }, navigation)),
     React.createElement('div', { className: 'aag-library-content' },
       React.createElement('div', { id: 'aag-library-panel-experts', hidden: view !== 'experts' }, React.createElement(ExpertCardsSettings, { ...props, capabilityRegistry: settingsCapabilityRegistry, sharedHeader: true, onSummary: setExpertSummary })),
@@ -1344,10 +1351,10 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
         onExpertsChanged: () => { void readEnabled(props.remote).then(value => props.onEnabledChange?.(value.enabled)) },
       }))),
       React.createElement('div', { id: 'aag-library-panel-skills', hidden: view !== 'skills' }, React.createElement(SkillsSettingsSection, {
-        t: props.skillsT, api: props.skillsApi, initialSessionId: props.initialSessionId, onSummary: setSkillSummary, onCatalogChange: invalidateCapabilities, onScopeApiChange: selectSkillsScope, expertUsage: capabilityUsage.skills,
+        t: props.skillsT, api: props.skillsApi, embedded: true, initialSessionId: props.initialSessionId, onSummary: setSkillSummary, onCatalogChange: invalidateCapabilities, onScopeApiChange: selectSkillsScope, expertUsage: capabilityUsage.skills,
       })),
       React.createElement('div', { id: 'aag-library-panel-mcp', hidden: view !== 'mcp' }, React.createElement(McpSettingsSection, {
-        t: props.mcpT, api: props.mcpApi, onSummary: setMcpSummary, onCatalogChange: invalidateCapabilities, expertUsage: capabilityUsage.mcp,
+        t: props.mcpT, api: props.mcpApi, embedded: true, onSummary: setMcpSummary, onCatalogChange: invalidateCapabilities, expertUsage: capabilityUsage.mcp,
       })))))
 }
 export const inject = ['slots', 'inputTriggers', 'locale', 'remote', 'sessions', 'conversation']

@@ -7,6 +7,8 @@ describe('expert library UI', () => {
   it('keeps the library navigation visible without creating a nested vertical scroller', () => {
     expect(TEAM_CSS).toContain('.aag-library-sticky{position:sticky;top:0')
     expect(TEAM_CSS).toContain('.aag-library-navigation{')
+    expect(TEAM_CSS).toContain('.aag-tab-label{')
+    expect(TEAM_CSS).toContain('.ant-segmented-item-selected')
     expect(TEAM_CSS).toContain('overflow-x:auto')
     expect(TEAM_CSS).not.toMatch(/\.aag-library-content\{[^}]*overflow-y:/)
   })

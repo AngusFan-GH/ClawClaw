@@ -14,7 +14,7 @@ const server: DesktopMcpServerView = {
   state: 'running', tools: [], credentialsReady: true,
 }
 
-async function mount(configure?: (api: DesktopMcpApi) => void): Promise<DesktopMcpApi> {
+async function mount(configure?: (api: DesktopMcpApi) => void, options: { embedded?: boolean } = {}): Promise<DesktopMcpApi> {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   const api: DesktopMcpApi = {
     read: vi.fn(async () => [server]), save: vi.fn(async saved => [{ ...server, ...saved, state: 'running', tools: [], credentialsReady: true }]),
@@ -22,7 +22,7 @@ async function mount(configure?: (api: DesktopMcpApi) => void): Promise<DesktopM
   }
   configure?.(api)
   const container = document.createElement('div'); document.body.append(container); root = createRoot(container)
-  await act(async () => { root!.render(createElement(McpSettingsSection, { api, t: key => zh[key as keyof typeof zh] } as McpSettingsSectionProps)) })
+  await act(async () => { root!.render(createElement(McpSettingsSection, { api, embedded: options.embedded, t: key => zh[key as keyof typeof zh] } as McpSettingsSectionProps)) })
   return api
 }
 
@@ -43,6 +43,29 @@ afterEach(async () => {
 })
 
 describe('MCP settings UI', () => {
+  it('supports searching embedded MCP cards by server and tool names', async () => {
+    await mount(api => { vi.mocked(api.read).mockResolvedValue([
+      { ...server, serverName: 'documents', tools: [{ name: 'mcp__documents__search', description: 'Search documents' }] },
+      { ...server, serverName: 'calendar', tools: [{ name: 'mcp__calendar__events', description: 'List events' }] },
+    ]) }, { embedded: true })
+    expect(document.querySelector('.dshMcpPage>header')).toBeNull()
+    const search = document.querySelector<HTMLInputElement>(`input[aria-label="${zh.searchServers}"]`)!
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(search, 'events')
+      search.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect([...document.querySelectorAll('.dshIntegrationsMcp')].map(item => item.textContent)).toEqual([expect.stringContaining('calendar')])
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(search, 'missing')
+      search.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(document.querySelectorAll('.dshIntegrationsMcp')).toHaveLength(0)
+    await act(async () => { button(zh.clearSearch).click() })
+    expect(document.querySelectorAll('.dshIntegrationsMcp')).toHaveLength(2)
+  })
+
   it('preserves reconnect settings while editing a server', async () => {
     const api = await mount()
     await act(async () => { button(zh.editServer).click() })

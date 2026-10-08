@@ -9,7 +9,7 @@ import { zh } from '../src/client/skills-locales.ts'
 let root: Root | undefined
 const skill = { name: 'review', description: 'Review code', source: 'user-dsh', provider: 'filesystem', editable: true, modelInvocable: true, userInvocable: true }
 const view = { skills: [skill], recycled: [{ id: 'deleted-id', name: 'removed', deletedAt: '2026-09-21T00:00:00Z' }] }
-async function mount(overrides: Partial<typeof skill> = {}, options: { initialSessionId?: string; configure?: (api: DesktopSkillsApi) => void } = {}) {
+async function mount(overrides: Partial<typeof skill> = {}, options: { initialSessionId?: string; embedded?: boolean; configure?: (api: DesktopSkillsApi) => void } = {}) {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   const current = { ...skill, ...overrides }
   const api: DesktopSkillsApi = {
@@ -24,7 +24,7 @@ async function mount(overrides: Partial<typeof skill> = {}, options: { initialSe
   }
   options.configure?.(api)
   const container = document.createElement('div'); document.body.append(container); root = createRoot(container)
-  await act(async () => { root!.render(createElement(SkillsSettingsSection, { api, ...(options.initialSessionId === undefined ? {} : { initialSessionId: options.initialSessionId }), t: (key: keyof typeof zh) => zh[key] } as SkillsSettingsSectionProps)) })
+  await act(async () => { root!.render(createElement(SkillsSettingsSection, { api, embedded: options.embedded, ...(options.initialSessionId === undefined ? {} : { initialSessionId: options.initialSessionId }), t: (key: keyof typeof zh) => zh[key] } as SkillsSettingsSectionProps)) })
   return api
 }
 function button(text: string): HTMLButtonElement {
@@ -36,6 +36,15 @@ async function click(text: string) { await act(async () => { button(text).click(
 afterEach(async () => { await act(async () => { root?.unmount() }); root = undefined; document.body.replaceChildren(); vi.unstubAllGlobals() })
 
 describe('Skills catalog UI', () => {
+  it('moves catalog actions into the toolbar when embedded in the expert library', async () => {
+    await mount({}, { embedded: true })
+    expect(document.querySelector('.dshSkillsPage>header')).toBeNull()
+    const toolbar = document.querySelector('.dshSkillsToolbar')
+    expect(toolbar?.querySelector('.dshSkillsCatalogActions')).not.toBeNull()
+    expect(toolbar?.textContent).toContain(zh.newSkill)
+    expect(toolbar?.textContent).toContain(zh.importRaw)
+  })
+
   it('adds and removes explicit read-only scan directories', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ path: '/opt/team-skills' }))))
     let scanPaths: readonly string[] = []
