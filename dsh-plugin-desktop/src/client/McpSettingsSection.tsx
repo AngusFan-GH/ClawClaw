@@ -19,7 +19,12 @@ import type { DesktopMcpApi } from './mcp-api.ts'
 import type { DesktopMcpLocaleKey } from './mcp-locales.ts'
 import { SettingsIconButton, SettingsToggle } from './settings-controls.tsx'
 
-export interface McpSettingsSectionInjected { readonly api: DesktopMcpApi }
+export interface McpSettingsSectionInjected {
+  readonly api: DesktopMcpApi
+  readonly onSummary?: (summary: { total: number; enabled: number; available: number }) => void
+  readonly onCatalogChange?: () => void
+  readonly expertUsage?: ReadonlyMap<string, number>
+}
 export type McpSettingsSectionProps = PropsRuntime<'settings.section'>
   & PropsLocale<'desktop.mcp'> & InjectFace<McpSettingsSectionInjected>
 type Translate = McpSettingsSectionProps['t']
@@ -73,7 +78,7 @@ function mcpDraft(server: DesktopMcpServerView): McpDraft {
     reconnectMaxAttempts: String(server.reconnect.maxAttempts), url: server.transport === 'streamable-http' ? server.url : '', enabled: server.enabled }
 }
 
-export function McpSettingsSection({ t, api }: McpSettingsSectionProps) {
+export function McpSettingsSection({ t, api, onSummary, onCatalogChange, expertUsage }: McpSettingsSectionProps) {
   const [servers, setServers] = useState<readonly DesktopMcpServerView[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
@@ -83,17 +88,26 @@ export function McpSettingsSection({ t, api }: McpSettingsSectionProps) {
   const [importText, setImportText] = useState<string>()
   const busyRef = useRef(false)
   const mountedRef = useRef(true)
+  const applyServers = useCallback((next: readonly DesktopMcpServerView[]): void => {
+    setServers(next)
+    onCatalogChange?.()
+  }, [onCatalogChange])
+  useEffect(() => { onSummary?.({
+    total: servers.length,
+    enabled: servers.filter(server => server.enabled).length,
+    available: servers.filter(server => server.enabled && server.state === 'running' && server.tools.length > 0).length,
+  }) }, [onSummary, servers])
 
   const load = useCallback(async (silent = false): Promise<void> => {
     if (busyRef.current) return
     if (!silent) { setLoading(true); setError(undefined) }
     try {
       const next = await api.read()
-      if (mountedRef.current) setServers(next)
+      if (mountedRef.current) applyServers(next)
     } catch (cause) {
       if (mountedRef.current && !silent) setError(cause instanceof Error ? cause.message : t('unavailable'))
     } finally { if (mountedRef.current && !silent) setLoading(false) }
-  }, [api, t])
+  }, [api, applyServers, t])
   useEffect(() => {
     mountedRef.current = true
     void load()
@@ -123,14 +137,17 @@ export function McpSettingsSection({ t, api }: McpSettingsSectionProps) {
         ? { serverName: draft.serverName.trim(), transport: 'stdio', command: draft.command.trim(),
             args: draft.args.split(/\r?\n/u).map(value => value.trim()).filter(Boolean), cwd: draft.cwd.trim(), env: references, timeoutMs, reconnect, enabled: draft.enabled }
         : { serverName: draft.serverName.trim(), transport: 'streamable-http', url: draft.url.trim(), headers: references, timeoutMs, reconnect, enabled: draft.enabled }
-      void run('mcp-save', async () => { setServers(await api.save(server, draft.previousName, Object.keys(secrets).length === 0 ? undefined : secrets)); setDraft(undefined) })
+      if (draft.previousName !== undefined && draft.previousName !== server.serverName && (expertUsage?.get(draft.previousName) ?? 0) > 0) {
+        throw new Error(t('renameBoundServer').replace('{count}', String(expertUsage?.get(draft.previousName) ?? 0)))
+      }
+      void run('mcp-save', async () => { applyServers(await api.save(server, draft.previousName, Object.keys(secrets).length === 0 ? undefined : secrets)); setDraft(undefined) })
     } catch (cause) { setError(cause instanceof Error ? cause.message : t('operationFailed')) }
   }
   const importServers = (): void => {
     if (importText === undefined) { setImportText(''); return }
     try {
       const document = JSON.parse(importText) as unknown
-      void run('mcp-import', async () => { setServers(await api.import(document)); setImportText(undefined) })
+      void run('mcp-import', async () => { applyServers(await api.import(document)); setImportText(undefined) })
     } catch { setError(t('invalidImport')) }
   }
 
@@ -183,14 +200,14 @@ export function McpSettingsSection({ t, api }: McpSettingsSectionProps) {
       <div className="dshIntegrationsList">{servers.map(server => <div className="dshIntegrationsMcp" key={server.serverName}>
         <div className="dshIntegrationsMcpHeader"><div><span className="dshIntegrationsRowTitle">{server.serverName}</span>
           <span className="dshIntegrationsMeta"><span>{server.transport === 'stdio' ? server.command : server.url}</span>
-            <span data-state={server.state}>{statusLabel(server, t)}</span><span>{server.tools.length} {t('tools')}</span></span></div>
+            <span data-state={server.state}>{statusLabel(server, t)}</span><span>{server.tools.length} {t('tools')}</span>{(expertUsage?.get(server.serverName) ?? 0) > 0 && <span>{t('usedByExperts').replace('{count}', String(expertUsage?.get(server.serverName) ?? 0))}</span>}</span></div>
           <div className="dshIntegrationsRowActions"><SettingsToggle label={server.enabled ? t('enabled') : t('disabled')} checked={server.enabled}
-            disabled={busy !== undefined} onChange={enabled => { void run(`mcp-toggle:${server.serverName}`, async () => { setServers(await api.toggle(server.serverName, enabled)) }) }} />
-            <SettingsIconButton label={t('testServer')} disabled={busy !== undefined} onClick={() => { void run(`mcp-test:${server.serverName}`, async () => { setServers(await api.test(server.serverName)) }) }}><RotateCw /></SettingsIconButton>
+            disabled={busy !== undefined} onChange={enabled => { void run(`mcp-toggle:${server.serverName}`, async () => { applyServers(await api.toggle(server.serverName, enabled)) }) }} />
+            <SettingsIconButton label={t('testServer')} disabled={busy !== undefined} onClick={() => { void run(`mcp-test:${server.serverName}`, async () => { applyServers(await api.test(server.serverName)) }) }}><RotateCw /></SettingsIconButton>
             <SettingsIconButton label={t('editServer')} disabled={busy !== undefined} onClick={() => { setDraft(mcpDraft(server)) }}><Pencil /></SettingsIconButton>
             <SettingsIconButton label={removeName === server.serverName ? t('confirmRemove') : t('removeServer')} danger disabled={busy !== undefined}
               onClick={() => { if (removeName !== server.serverName) { setRemoveName(server.serverName); return }
-                void run(`mcp-remove:${server.serverName}`, async () => { setServers(await api.remove(server.serverName)); setRemoveName(undefined) }) }}><Trash2 /></SettingsIconButton>
+                void run(`mcp-remove:${server.serverName}`, async () => { applyServers(await api.remove(server.serverName)); setRemoveName(undefined) }) }}><Trash2 /></SettingsIconButton>
           </div></div>
         {server.error !== undefined && <p className="dshIntegrationsServerError">{server.error}</p>}
         {!server.credentialsReady && <p className="dshIntegrationsServerError">{t('credentialsMissing')}</p>}

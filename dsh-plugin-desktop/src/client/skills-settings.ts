@@ -11,13 +11,13 @@ import { applyConversationSkills } from './conversation-skills.ts'
 export const DESKTOP_SKILLS_LOCALE_NAMESPACE = 'desktop.skills'
 declare module '@deepseek-ai/dsh-client-ui-slots' { interface LocaleNamespaceMap { 'desktop.skills': DesktopSkillsLocaleKey } }
 
-export function applySkillsSettings(ctx: ClientContext): void {
+export function applySkillsSettings(ctx: ClientContext, options: { readonly registerSection?: boolean } = {}): void {
   const api = createDesktopSkillsApi()
   const t = ctx.locale.bind(DESKTOP_SKILLS_LOCALE_NAMESPACE)
   ctx.effect(() => ctx.locale.register(DESKTOP_SKILLS_LOCALE_NAMESPACE, { zh, en }), 'dsh-plugin-desktop: Skills dictionaries')
   ctx.effect(() => installIntegrationsStyles(), 'dsh-plugin-desktop: Skills styles')
   applyConversationSkills(ctx)
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
+  if (options.registerSection !== false) ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'desktop-skills', order: 30,
     label: () => t('nav'), locale: DESKTOP_SKILLS_LOCALE_NAMESPACE, inject: () => {
       const sessionList = (ctx.get('sessions') as unknown as ISessions | undefined)?.list.getSnapshot()

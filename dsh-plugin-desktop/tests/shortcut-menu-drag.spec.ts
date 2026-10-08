@@ -16,7 +16,7 @@ describe('Desktop shortcut drag interaction', () => {
   })
 
   it('uses the whole row and persists a drop at the hovered row half', () => {
-    const items = ['plugins', 'desktop-automations', 'settings:desktop-skills']
+    const items = ['plugins', 'desktop-automations', 'settings:clawclaw-experts']
     const settingsSnapshot = { value: { items } }
     const shortcutSettings = {
       getSnapshot: vi.fn(() => settingsSnapshot),
@@ -26,7 +26,7 @@ describe('Desktop shortcut drag interaction', () => {
     const targets: readonly ShortcutTarget[] = [
       { id: 'plugins', targetId: 'plugins', label: 'Plugins', kind: 'panel' },
       { id: 'desktop-automations', targetId: 'desktop-automations', label: 'Automations', kind: 'panel' },
-      { id: 'settings:desktop-skills', targetId: 'desktop-skills', label: 'Skills', kind: 'settings' },
+      { id: 'settings:clawclaw-experts', targetId: 'clawclaw-experts', label: 'Experts & Capabilities', kind: 'settings' },
     ]
     const shortcutTargets = {
       getSnapshot: () => targets,
@@ -64,7 +64,7 @@ describe('Desktop shortcut drag interaction', () => {
     dispatchDrag(rows[2]!, 'drop', 110)
 
     expect(shortcutSettings.set).toHaveBeenCalledWith('items', [
-      'desktop-automations', 'settings:desktop-skills', 'plugins',
+      'desktop-automations', 'settings:clawclaw-experts', 'plugins',
     ])
   })
 })

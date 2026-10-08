@@ -133,7 +133,7 @@ export function apply(ctx: ClientContext): void {
   applySpiritXProviderPriority(ctx)
   applyCronTasksSettings(ctx)
   applyRemindersSettings(ctx)
-  applySkillsSettings(ctx)
+  applySkillsSettings(ctx, { registerSection: false })
   ctx.effect(() => applyExperts(ctx), 'dsh-plugin-desktop: experts')
   applyShortcutMenu(ctx)
   if (productVersion !== undefined) applyDesktopVersionRow(ctx, productVersion)
@@ -144,7 +144,7 @@ export function apply(ctx: ClientContext): void {
     'dsh-plugin-desktop: native window geometry service',
   )
   applyDefaultWorkspaceSelection(ctx)
-  applyMcpSettings(ctx)
+  applyMcpSettings(ctx, { registerSection: false })
   const desktopSettings = applyDesktopSettings(ctx, environment)
   if (environment.platform === 'win32' || environment.platform === 'darwin') {
     ctx.effect(

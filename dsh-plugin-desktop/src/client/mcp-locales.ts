@@ -16,7 +16,7 @@ export const zh = {
   unreferencedCredentialError: '每个凭证值都必须被当前服务的连接配置引用。',
   initialDelayRangeError: '初始延迟必须是 100 到 60000 之间的整数。', maxDelayRangeError: '最大延迟必须是 100 到 300000 之间的整数。',
   maxAttemptsRangeError: '最大尝试次数必须是 0 到 100 之间的整数。', reconnectDelayOrderError: '最大延迟不能小于初始延迟。',
-  importJson: '导入 JSON', import: '导入', invalidImport: '请输入有效的 mcpServers JSON。', importJsonHint: '{"mcpServers":{"server":{"command":"npx","args":["-y","package"],"env":{"API_KEY":"..."}}}}',
+  importJson: '导入 JSON', import: '导入', invalidImport: '请输入有效的 mcpServers JSON。', importJsonHint: '{"mcpServers":{"server":{"command":"npx","args":["-y","package"],"env":{"API_KEY":"..."}}}}', usedByExperts: '被 {count} 位专家使用', renameBoundServer: '该 MCP 被 {count} 位专家使用。请先更新专家绑定，再修改服务名称。',
 } as const
 
 export type DesktopMcpLocaleKey = keyof typeof zh
@@ -39,5 +39,5 @@ export const en: Record<DesktopMcpLocaleKey, string> = {
   unreferencedCredentialError: 'Every credential value must be referenced by this server connection.',
   initialDelayRangeError: 'Initial delay must be a whole number from 100 to 60000.', maxDelayRangeError: 'Maximum delay must be a whole number from 100 to 300000.',
   maxAttemptsRangeError: 'Maximum attempts must be a whole number from 0 to 100.', reconnectDelayOrderError: 'Maximum delay must not be less than the initial delay.',
-  importJson: 'Import JSON', import: 'Import', invalidImport: 'Enter a valid mcpServers JSON document.', importJsonHint: '{"mcpServers":{"server":{"command":"npx","args":["-y","package"],"env":{"API_KEY":"..."}}}}',
+  importJson: 'Import JSON', import: 'Import', invalidImport: 'Enter a valid mcpServers JSON document.', importJsonHint: '{"mcpServers":{"server":{"command":"npx","args":["-y","package"],"env":{"API_KEY":"..."}}}}', usedByExperts: 'Used by {count} experts', renameBoundServer: 'This MCP server is used by {count} experts. Update those bindings before renaming it.',
 }

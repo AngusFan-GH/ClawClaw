@@ -25,7 +25,14 @@ import { zh } from './skills-locales.ts'
 import { SettingsIconButton, SettingsToggle } from './settings-controls.tsx'
 import { requestDesktopDirectory } from './directory-picker.ts'
 
-export interface SkillsSettingsSectionInjected { readonly api: DesktopSkillsApi; readonly initialSessionId?: string }
+export interface SkillsSettingsSectionInjected {
+  readonly api: DesktopSkillsApi
+  readonly initialSessionId?: string
+  readonly onSummary?: (summary: { total: number; available: number }) => void
+  readonly onCatalogChange?: () => void
+  readonly onScopeApiChange?: (api: DesktopSkillsApi) => void
+  readonly expertUsage?: ReadonlyMap<string, number>
+}
 export type SkillsSettingsSectionProps = PropsRuntime<'settings.section'>
   & PropsLocale<'desktop.skills'> & InjectFace<SkillsSettingsSectionInjected>
 type SkillDraft = DesktopSkillInput & { readonly mode: 'create' | 'edit'; readonly revision?: string | undefined; readonly shared?: boolean }
@@ -35,7 +42,7 @@ const canRecycle = (skill: DesktopSkillView): boolean => skill.editable
   && (skill.source === 'user-dsh' || skill.source === 'custom') && skill.provider === 'filesystem'
 const canBrowseFiles = (skill: DesktopSkillView): boolean => ['filesystem', 'clawclaw-project-filesystem'].includes(skill.provider)
 
-export function SkillsSettingsSection({ t, api: baseApi, initialSessionId }: SkillsSettingsSectionProps) {
+export function SkillsSettingsSection({ t, api: baseApi, initialSessionId, onSummary, onCatalogChange, onScopeApiChange, expertUsage }: SkillsSettingsSectionProps) {
   const id = useId()
   const [preset, setPreset] = useState<string>()
   const [presets, setPresets] = useState<readonly { id: string, name: string }[]>([])
@@ -51,6 +58,7 @@ export function SkillsSettingsSection({ t, api: baseApi, initialSessionId }: Ski
     ? baseApi.forScope({ sessionId: selection.slice(8) }).forPreset()
     : baseApi.forScope(selection.startsWith('workspace:') ? { workspaceId: selection.slice(10) } : {}).forPreset(selectedPreset)
   const api = useMemo(() => scopedApi(scope, preset), [baseApi, scope, preset])
+  useEffect(() => { onScopeApiChange?.(api) }, [api, onScopeApiChange])
   const [skills, setSkills] = useState<readonly DesktopSkillView[]>([])
   const [recycled, setRecycled] = useState<readonly DesktopRecycledSkill[]>([])
   const [locations, setLocations] = useState<DesktopSkillsView['locations']>()
@@ -84,12 +92,14 @@ export function SkillsSettingsSection({ t, api: baseApi, initialSessionId }: Ski
   const tabs = useRef<Array<HTMLButtonElement | null>>([])
   const modalOpen = detail !== undefined || draft !== undefined || importOpen || purgeTarget !== undefined
   const disabled = loading || busy !== undefined
+  useEffect(() => { onSummary?.({ total: skills.length, available: skills.filter(skill => skill.modelInvocable).length }) }, [onSummary, skills])
 
   const applyView = (next: Awaited<ReturnType<DesktopSkillsApi['readView']>>): void => {
     setRefreshPending(next.refreshPending === true)
     if (next.refreshPending) return
     setSkills(next.skills); setRecycled(next.recycled); setLocations(next.locations); setInstalled(next.installed)
     setScanPaths(next.scanPaths ?? [])
+    onCatalogChange?.()
   }
   const sourceLabel = (source: string): string => {
     if (source === 'user-dsh') return t('sourceUserDsh')
@@ -292,7 +302,7 @@ export function SkillsSettingsSection({ t, api: baseApi, initialSessionId }: Ski
               ...workspaces.map(workspace => ({ id: `workspace:${workspace.id}`, label: `${workspace.title} · ${workspace.path}` }))]}
             onSelect={next => {
               setScopeMenuOpen(false)
-              void run('scope', async () => { const result = await scopedApi(next, preset).readView(); setScope(next); applyView(result) })
+              void run('scope', async () => { const nextApi = scopedApi(next, preset); const result = await nextApi.readView(); setScope(next); applyView(result) })
             }} anchor={<button type="button" className="dshIntegrationsCommand" disabled={disabled} aria-label={t('skillScope')} aria-haspopup="menu" aria-expanded={scopeMenuOpen} onClick={() => { setScopeMenuOpen(open => !open) }}>
               <span>{t('scope')} · {scopeLabel}</span><IconChevronDownOutlineMedium />
             </button>} />}
@@ -300,7 +310,7 @@ export function SkillsSettingsSection({ t, api: baseApi, initialSessionId }: Ski
             items={[{ id: '', label: t('defaultPreset') }, ...presets.map(item => ({ id: item.id, label: item.name }))]}
             onSelect={next => {
               setPresetMenuOpen(false)
-              void run('preset', async () => { const selection = next || undefined; const result = await api.forPreset(selection).readView(); setPreset(selection); applyView(result) })
+              void run('preset', async () => { const selection = next || undefined; const nextApi = api.forPreset(selection); const result = await nextApi.readView(); setPreset(selection); applyView(result) })
             }} anchor={<button type="button" className="dshIntegrationsCommand" disabled={disabled} aria-label={t('agentPreset')} aria-haspopup="menu" aria-expanded={presetMenuOpen} onClick={() => { setPresetMenuOpen(open => !open) }}>
               <span>{t('agentPreset')} · {presets.find(item => item.id === preset)?.name ?? effectivePresetLabel ?? t('defaultPreset')}</span><IconChevronDownOutlineMedium />
             </button>} />}
@@ -331,7 +341,7 @@ export function SkillsSettingsSection({ t, api: baseApi, initialSessionId }: Ski
               <button type="button" className="dshSkillsCard" title={skill.name} disabled={disabled} aria-label={`${t('viewDetails')}: ${skill.name}`} onClick={event => { openSkill(skill, event.currentTarget) }}>
                 <span className="dshSkillsCardHeading"><IconSkillOutlineMedium /><strong>{skill.name}</strong>{!skill.editable && <span className="dshSkillsReadOnly">{t('readOnly')}</span>}</span>
                 <span className="dshSkillsSummary">{skill.description}</span>
-                <span className="dshSkillsBadges"><span data-enabled={skill.modelInvocable}>{t(skill.modelInvocable ? 'modelVisible' : 'modelHidden')}</span><span data-enabled={skill.userInvocable}>{t(skill.userInvocable ? 'userVisible' : 'userHidden')}</span></span>
+                <span className="dshSkillsBadges"><span data-enabled={skill.modelInvocable}>{t(skill.modelInvocable ? 'modelVisible' : 'modelHidden')}</span><span data-enabled={skill.userInvocable}>{t(skill.userInvocable ? 'userVisible' : 'userHidden')}</span>{(expertUsage?.get(skill.name) ?? 0) > 0 && <span>{t('usedByExperts').replace('{count}', String(expertUsage?.get(skill.name) ?? 0))}</span>}</span>
               </button>
               {canRecycle(skill) && <span className="dshSkillsCardDelete"><Tooltip side="top" delayMs={350} maxWidth={240} label={t('recycle')}><span>
                 <button type="button" className="dshIntegrationsIconButton" data-danger aria-label={`${t('recycle')}: ${skill.name}`} disabled={disabled} onClick={event => { openSkill(skill, event.currentTarget, true) }}><Trash2 aria-hidden="true" /></button>

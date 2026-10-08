@@ -15,7 +15,7 @@ describe('Desktop sidebar shortcuts', () => {
       { id: 'plugins', targetId: 'plugins', label: 'Plugins', kind: 'panel' as const },
       { id: 'desktop-automations', targetId: 'desktop-automations', label: 'Automations', kind: 'panel' as const },
       { id: 'settings:plugins', targetId: 'plugins', label: 'Built-in plugins', kind: 'settings' as const },
-      { id: 'settings:desktop-skills', targetId: 'desktop-skills', label: 'Skills', kind: 'settings' as const },
+      { id: 'settings:clawclaw-experts', targetId: 'clawclaw-experts', label: 'Experts & Capabilities', kind: 'settings' as const },
       { id: 'settings:desktop-reminders', targetId: 'desktop-reminders', label: 'Reminders', kind: 'settings' as const },
       { id: 'settings:desktop', targetId: 'desktop', label: 'Desktop', kind: 'settings' as const },
     ]
@@ -24,17 +24,17 @@ describe('Desktop sidebar shortcuts', () => {
       items: ['plugins', 'desktop-automations', 'desktop-skills', 'desktop-reminders'],
     })
     expect(normalizeShortcutItems(undefined, targets)).toEqual([
-      'plugins', 'desktop-automations', 'settings:desktop-skills', 'settings:desktop-reminders',
+      'plugins', 'desktop-automations', 'settings:clawclaw-experts', 'settings:desktop-reminders',
     ])
     expect(normalizeShortcutItems([
       'desktop-skills', 'desktop-cron-tasks', 'desktop-reminders',
-    ], targets)).toEqual(['plugins', 'desktop-automations', 'settings:desktop-skills', 'settings:desktop-reminders'])
+    ], targets)).toEqual(['plugins', 'desktop-automations', 'settings:clawclaw-experts', 'settings:desktop-reminders'])
     expect(normalizeShortcutItems([
       'desktop-reminders', 'desktop-cron-tasks',
     ], targets)).toEqual(['settings:desktop-reminders', 'desktop-automations'])
     expect(normalizeShortcutItems([
       'desktop-reminders', 'missing', 'desktop-reminders', 'desktop-skills', 'desktop', 'extra',
-    ], targets)).toEqual(['settings:desktop-reminders', 'settings:desktop-skills', 'settings:desktop'])
+    ], targets)).toEqual(['settings:desktop-reminders', 'settings:clawclaw-experts', 'settings:desktop'])
     expect(normalizeShortcutItems(['plugins', 'settings:plugins'], targets))
       .toEqual(['plugins', 'settings:plugins'])
   })

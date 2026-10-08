@@ -47,7 +47,7 @@ export const zh = {
   whenToUse: '何时使用', whenToUsePlaceholder: '说明适用场景，帮助 Agent 判断何时选择它', instructions: '执行指令', instructionsPlaceholder: '输入 Agent 执行此技能时应遵循的步骤、约束和输出要求',
   importSkill: '导入 SKILL.md', importRaw: '导入技能', importHint: '导入到共享用户技能库；仅包含当前文档，不包含引用的脚本或资源文件。', rawDocument: 'SKILL.md 内容', importPlaceholder: '粘贴完整的 SKILL.md 内容', import: '导入', recycle: '移至回收站', recycleBin: '回收站', restore: '恢复', confirmRecycle: '确定将此技能移至回收站吗？',
   closeDetails: '关闭详情', expand: '展开', collapse: '收起', manage: '管理', source: '来源', provider: '提供方', path: '文件位置', skillContent: '技能指令',
-  sourceUserDsh: 'ClawClaw 技能', sourceUserAgents: '共享技能', sourceBundled: '内置技能', sourcePlugin: '插件技能', sourceOther: '其他来源',
+  sourceUserDsh: 'ClawClaw 技能', sourceUserAgents: '共享技能', sourceBundled: '内置技能', sourcePlugin: '插件技能', sourceOther: '其他来源', usedByExperts: '被 {count} 位专家使用',
 } as const
 
 export type DesktopSkillsLocaleKey = keyof typeof zh
@@ -101,5 +101,5 @@ export const en: Record<DesktopSkillsLocaleKey, string> = {
   whenToUse: 'When to use', whenToUsePlaceholder: 'Describe the situations that should lead the Agent to choose this Skill', instructions: 'Instructions', instructionsPlaceholder: 'Enter the steps, constraints, and output requirements the Agent should follow',
   importSkill: 'Import SKILL.md', importRaw: 'Import Skill', importHint: 'Imports into the shared user library. Referenced scripts and assets are not included.', rawDocument: 'SKILL.md content', importPlaceholder: 'Paste the complete SKILL.md content', import: 'Import', recycle: 'Move to recycle bin', recycleBin: 'Recycle bin', restore: 'Restore', confirmRecycle: 'Move this Skill to the recycle bin?',
   closeDetails: 'Close details', expand: 'Expand', collapse: 'Collapse', manage: 'Manage', source: 'Source', provider: 'Provider', path: 'File location', skillContent: 'Skill instructions',
-  sourceUserDsh: 'ClawClaw Skills', sourceUserAgents: 'Shared Skills', sourceBundled: 'Built-in Skills', sourcePlugin: 'Plugin Skills', sourceOther: 'Other sources',
+  sourceUserDsh: 'ClawClaw Skills', sourceUserAgents: 'Shared Skills', sourceBundled: 'Built-in Skills', sourcePlugin: 'Plugin Skills', sourceOther: 'Other sources', usedByExperts: 'Used by {count} experts',
 }

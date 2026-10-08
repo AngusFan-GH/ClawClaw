@@ -17,7 +17,7 @@ export const PLUGINS_PANEL_ID = 'plugins' as MainPanelId
 export const AUTOMATIONS_PANEL_ID = 'desktop-automations' as MainPanelId
 const MAX_SHORTCUTS = 4
 const SETTINGS_TARGET_PREFIX = 'settings:'
-const DEFAULT_ITEMS: readonly string[] = [PLUGINS_PANEL_ID, AUTOMATIONS_PANEL_ID, 'settings:desktop-skills', 'settings:desktop-reminders']
+const DEFAULT_ITEMS: readonly string[] = [PLUGINS_PANEL_ID, AUTOMATIONS_PANEL_ID, 'settings:clawclaw-experts', 'settings:desktop-reminders']
 const LEGACY_DEFAULT_ITEMS: readonly string[] = ['desktop-skills', 'desktop-cron-tasks', 'desktop-reminders']
 const INTERIM_DEFAULT_ITEMS: readonly string[] = ['desktop-skills', 'desktop-reminders', 'desktop']
 
@@ -70,7 +70,9 @@ export function normalizeShortcutItems(
   )
   const input = items === undefined || legacyDefault
     ? DEFAULT_ITEMS
-    : items.map(item => item === 'desktop-cron-tasks' ? AUTOMATIONS_PANEL_ID : item)
+    : items.map(item => item === 'desktop-cron-tasks' ? AUTOMATIONS_PANEL_ID
+      : item === 'desktop-skills' || item === 'desktop-mcp' || item === 'settings:desktop-skills' || item === 'settings:desktop-mcp'
+        ? 'settings:clawclaw-experts' : item)
   const known = new Set(targets.map(target => target.id))
   const settingsIds = new Map(targets.filter(target => target.kind === 'settings')
     .map(target => [target.targetId, target.id]))

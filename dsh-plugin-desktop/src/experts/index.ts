@@ -600,7 +600,7 @@ export async function resolveExpertComposition(
     diagnostics.push(message)
   }
   const deniedTools: string[] = [...EXPERT_CONTROL_TOOLS]
-  if (expert.mcpServers.length > 0) {
+  if (selectedServers.size > 0) {
     deniedTools.push(...mcpTools.filter(tool => ![...selectedServers].some(server => tool.name.startsWith(`mcp__${server}__`))).map(tool => tool.name))
   }
   const capabilityNote = diagnostics.length === 0 ? '' : `\n\n## Capability diagnostics\n${diagnostics.map(item => `- ${item}`).join('\n')}`

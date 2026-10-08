@@ -38,6 +38,12 @@ import { acceptEnabled, acceptCatalog, catalogState, refreshCatalog, subscribeCa
 import { refreshTeams, teamState } from './team-cache.js'
 import { installNativeTeamNames } from './native-team-names.js'
 import type { AgencyCatalogRemote } from './remote.js'
+import { createDesktopSkillsApi } from '../../client/skills-api.js'
+import { createDesktopMcpApi } from '../../client/mcp-api.js'
+import { ExpertCapabilityRegistry } from './capability-registry.js'
+import { expertCapabilityHealth, type ExpertCapabilityHealth } from './capability-options.js'
+import { SkillsSettingsSection } from '../../client/SkillsSettingsSection.js'
+import { McpSettingsSection } from '../../client/McpSettingsSection.js'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -716,6 +722,7 @@ type ButtonProps = PropsLocale<'agency'> & {
   /** 当前 locale 读取器（locale 切换后框架以新 t 重渲染，名称随之刷新）。 */
   readonly prepareTeamSelection?: () => (team: ExpertTeam, example?: string) => boolean | Promise<boolean>
   readonly getActive: () => 'zh' | 'en'
+  readonly capabilityRegistry: ExpertCapabilityRegistry
 }
 
 export function AgentsButton(props: ButtonProps): React.ReactElement {
@@ -735,6 +742,7 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
     listener => subscribeCatalog(props.remote, listener),
     () => catalogState(props.remote),
   )
+  const capabilitySnapshot = React.useSyncExternalStore(props.capabilityRegistry.subscribe, props.capabilityRegistry.getSnapshot)
   const close = (restoreFocus = false): void => {
     epoch.current++
     setOpen(false)
@@ -821,6 +829,9 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
       let current: EnabledState = catalogState(props.remote)
       const expert = current.experts.find(item => item.slug === slug)
       if (expert === undefined || expert.conflict) throw new Error(props.t('custom.unavailable'))
+      const capabilityState = props.capabilityRegistry.getSnapshot()
+      const health = expertCapabilityHealth(expert, capabilityState.catalog, capabilityState.loading)
+      if (health.state === 'blocked') throw new Error(props.t('capability.health.blocked'))
       if (!current.enabled.has(slug)) {
         current = await writeEnabled(props.remote, new Set([...current.enabled, slug]), current.revision)
         newlyEnabled = current.enabled.has(slug)
@@ -873,6 +884,7 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
       mode === 'teams' && 'getTeams' in props.remote ? React.createElement(TeamLocaleContext.Provider, { value: props.getActive() }, React.createElement(TeamMenu, { remote: props.remote as TeamRemote,
         prepareSelect: props.prepareTeamSelection, onSelected: () => close(), onExpertsChanged: () => { void readEnabled(props.remote).then(value => props.onEnabledChange?.(value.enabled)) } })) :
       React.createElement(ExpertDiscovery, { experts: results, enabled: catalog.enabled, locale: props.getActive(), t: props.t, avatarSrc: menuAvatar,
+        health: new Map(results.map(expert => [expert.slug, expertCapabilityHealth(expert, capabilitySnapshot.catalog, capabilitySnapshot.loading)])),
         query, onQuery: setQuery, busy, hasMore: searching && matches.length > results.length, onPick: slug => { void pick(slug) } }))
     : null
 
@@ -993,6 +1005,7 @@ function ExpertCardsSettings(props: PropsLocale<'agency'> & {
   remote: AgencyAgentsRemoteApi
   getActive: () => 'zh' | 'en'
   onEnabledChange?: (enabled: ReadonlySet<string>) => void
+  capabilityRegistry: ExpertCapabilityRegistry
 }): React.ReactElement {
   const cached = catalogState(props.remote)
   const [state, setState] = React.useState<EnabledState | null>(cached.revision < 0 ? null : cached)
@@ -1015,6 +1028,7 @@ function ExpertCardsSettings(props: PropsLocale<'agency'> & {
   const [deleting, setDeleting] = React.useState<ExpertView | null>(null)
   const [deleteError, setDeleteError] = React.useState<string | null>(null)
   const [notice, setNotice] = React.useState<string | null>(null)
+  const capabilitySnapshot = React.useSyncExternalStore(props.capabilityRegistry.subscribe, props.capabilityRegistry.getSnapshot)
 
   const accept = (catalog: CatalogSnapshot): void => {
     const current = acceptCatalog(props.remote, catalog)
@@ -1226,11 +1240,13 @@ function ExpertCardsSettings(props: PropsLocale<'agency'> & {
         key: 'cards', items: filtered, resetKey: `${source}\0${division}\0${status}\0${query}`, render: (expert: ExpertView) => {
         const enabled = state.enabled.has(expert.slug)
         const avatar = EXPERT_AVATAR_URLS[expert.custom ? expert.avatar ?? 0 : expertAvatarIndexForDivision(expert.slug, expert.division)] ?? EXPERT_AVATAR_URLS[0]
+        const health = expertCapabilityHealth(expert, capabilitySnapshot.catalog, capabilitySnapshot.loading)
         return React.createElement(LibraryCard, {
           key: expert.slug,
           name: displayName(expert, props.getActive()),
           avatar: React.createElement('img', { className: 'aag-expert-avatar', src: avatar, width: 44, height: 44, loading: 'lazy', decoding: 'async', alt: '' }),
-          metadata: React.createElement(React.Fragment, null, inputTriggerSourceName(expert.division, props.getActive()), expert.conflict ? React.createElement('span', { className: 'aag-custom-badge', title: props.t('custom.nameConflictHint') }, props.t('custom.nameConflict')) : null, expert.custom ? React.createElement('span', { className: 'aag-custom-badge' }, props.t('custom.source')) : null),
+          metadata: React.createElement(React.Fragment, null, inputTriggerSourceName(expert.division, props.getActive()), expert.conflict ? React.createElement('span', { className: 'aag-custom-badge', title: props.t('custom.nameConflictHint') }, props.t('custom.nameConflict')) : null, expert.custom ? React.createElement('span', { className: 'aag-custom-badge' }, props.t('custom.source')) : null,
+            health.total > 0 ? React.createElement('span', { className: 'aag-custom-badge', 'data-health': health.state }, props.t(`capability.health.${health.state}`), ` · ${health.ready}/${health.total}`) : null),
           description: displayDescription(expert, props.getActive()),
           enabled, disabled: isSaving || expert.conflict === true,
           enabledLabel: props.t('settings.enabled'), disabledLabel: props.t('settings.disabled'),
@@ -1250,7 +1266,7 @@ function ExpertCardsSettings(props: PropsLocale<'agency'> & {
   }
   return React.createElement('section', { className: 'aag-section', id: 'aag-expert-source-panel' }, nodes,
     editor === null || state === null ? null : React.createElement(CustomExpertEditor, {
-      ...editor, remote: props.remote, t: props.t, locale: props.getActive(),
+      ...editor, remote: props.remote, t: props.t, locale: props.getActive(), capabilityRegistry: props.capabilityRegistry,
       divisions: [...new Set([...Object.keys(ZH_DIVISION), ...state.experts.map(expert => expert.division)])],
       onClose: () => setEditor(null), onSaved: (catalog: CatalogSnapshot) => {
         accept(catalog); setEditor(null); setSource('custom'); setQuery(''); setDivision(''); setStatus(''); setNotice(props.t('custom.saved'))
@@ -1264,11 +1280,38 @@ function ExpertCardsSettings(props: PropsLocale<'agency'> & {
     }))
 }
 
-export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCardsSettings> & { prepareTeamSelection(): (team: ExpertTeam, example?: string) => boolean | Promise<boolean> }) {
+export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCardsSettings> & {
+  prepareTeamSelection(): (team: ExpertTeam, example?: string) => boolean | Promise<boolean>
+  skillsApi: ReturnType<typeof createDesktopSkillsApi>
+  mcpApi: ReturnType<typeof createDesktopMcpApi>
+  skillsT: (key: string, params?: Record<string, unknown>) => string
+  mcpT: (key: string, params?: Record<string, unknown>) => string
+  initialSessionId?: string
+}) {
   const tx = (key: string) => teamText(props.getActive(), key)
-  const [view, setView] = React.useState<'experts' | 'teams'>('experts')
+  const [view, setView] = React.useState<'experts' | 'teams' | 'skills' | 'mcp'>('experts')
   const [expertSummary, setExpertSummary] = React.useState({ total: 0, enabled: 0 })
   const [teamSummary, setTeamSummary] = React.useState({ total: 0, enabled: 0 })
+  const [skillSummary, setSkillSummary] = React.useState({ total: 0, available: 0 })
+  const [mcpSummary, setMcpSummary] = React.useState({ total: 0, enabled: 0, available: 0 })
+  const [settingsCapabilityRegistry, setSettingsCapabilityRegistry] = React.useState(props.capabilityRegistry)
+  const expertCatalog = React.useSyncExternalStore(
+    listener => subscribeCatalog(props.remote, listener),
+    () => catalogState(props.remote),
+  )
+  const capabilityUsage = React.useMemo(() => {
+    const skills = new Map<string, number>()
+    const mcp = new Map<string, number>()
+    for (const expert of expertCatalog.experts) {
+      for (const name of new Set(expert.skills.map(binding => binding.name))) skills.set(name, (skills.get(name) ?? 0) + 1)
+      for (const name of new Set(expert.mcpServers.map(binding => binding.name))) mcp.set(name, (mcp.get(name) ?? 0) + 1)
+    }
+    return { skills, mcp }
+  }, [expertCatalog.experts])
+  const invalidateCapabilities = React.useCallback(() => settingsCapabilityRegistry.invalidate(), [settingsCapabilityRegistry])
+  const selectSkillsScope = React.useCallback((api: ReturnType<typeof createDesktopSkillsApi>) => {
+    setSettingsCapabilityRegistry(new ExpertCapabilityRegistry(api, props.mcpApi))
+  }, [props.mcpApi])
   const tabLabel = (name: string, total: number, enabled: number) => React.createElement(React.Fragment, null,
     name,
     React.createElement('span', { className: 'aag-tab-count', 'aria-hidden': true }, React.createElement('strong', null, total)),
@@ -1276,10 +1319,12 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
   )
   const navigation = React.createElement(Segmented, {
     block: true, className: 'aag-library-tabs', 'aria-label': tx('专家库类型'), value: view,
-    onChange: (value: unknown) => { if (value === 'experts' || value === 'teams') setView(value) },
+    onChange: (value: unknown) => { if (value === 'experts' || value === 'teams' || value === 'skills' || value === 'mcp') setView(value) },
     options: [
       { value: 'experts' as const, label: tabLabel(tx('专家'), expertSummary.total, expertSummary.enabled) },
       { value: 'teams' as const, label: tabLabel(tx('专家团'), teamSummary.total, teamSummary.enabled) },
+      { value: 'skills' as const, label: tabLabel(props.skillsT('nav'), skillSummary.total, skillSummary.available) },
+      { value: 'mcp' as const, label: tabLabel(props.mcpT('nav'), mcpSummary.total, mcpSummary.available) },
     ],
   })
   // 两个名册都保持挂载，切换时不丢失筛选，也不重新等待第一次加载。
@@ -1287,11 +1332,17 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
     React.createElement('header', { className: 'aag-toolbar' }, React.createElement('div', { className: 'aag-title-row' },
       React.createElement('h2', { className: 'aag-title' }, props.t('settings.title')))),
     React.createElement('div', { className: 'aag-library-navigation' }, navigation),
-    React.createElement('div', { id: 'aag-library-panel-experts', hidden: view !== 'experts' }, React.createElement(ExpertCardsSettings, { ...props, sharedHeader: true, onSummary: setExpertSummary })),
+    React.createElement('div', { id: 'aag-library-panel-experts', hidden: view !== 'experts' }, React.createElement(ExpertCardsSettings, { ...props, capabilityRegistry: settingsCapabilityRegistry, sharedHeader: true, onSummary: setExpertSummary })),
     React.createElement('div', { id: 'aag-library-panel-teams', hidden: view !== 'teams' }, React.createElement(TeamLocaleContext.Provider, { value: props.getActive() }, React.createElement(TeamsPanel, {
       remote: props.remote as TeamRemote, sharedHeader: true, onSummary: setTeamSummary, prepareSelect: props.prepareTeamSelection,
       onExpertsChanged: () => { void readEnabled(props.remote).then(value => props.onEnabledChange?.(value.enabled)) },
-    })))))
+    }))),
+    React.createElement('div', { id: 'aag-library-panel-skills', hidden: view !== 'skills' }, React.createElement(SkillsSettingsSection, {
+      t: props.skillsT, api: props.skillsApi, initialSessionId: props.initialSessionId, onSummary: setSkillSummary, onCatalogChange: invalidateCapabilities, onScopeApiChange: selectSkillsScope, expertUsage: capabilityUsage.skills,
+    })),
+    React.createElement('div', { id: 'aag-library-panel-mcp', hidden: view !== 'mcp' }, React.createElement(McpSettingsSection, {
+      t: props.mcpT, api: props.mcpApi, onSummary: setMcpSummary, onCatalogChange: invalidateCapabilities, expertUsage: capabilityUsage.mcp,
+    }))))
 }
 export const inject = ['slots', 'inputTriggers', 'locale', 'remote', 'sessions', 'conversation']
 
@@ -1308,6 +1359,22 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   // framework 以 (namespace, revision) 重新派生注入的 t 并触发重渲染。
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'clawclaw-experts: dictionaries')
   const t = ctx.locale.bind(NS)
+  const skillsApi = createDesktopSkillsApi()
+  const mcpApi = createDesktopMcpApi()
+  const capabilityRegistry = new ExpertCapabilityRegistry(skillsApi, mcpApi)
+  const scopedCapabilityRegistries = new Map<string, ExpertCapabilityRegistry>()
+  const capabilityRegistryFor = (sessionId?: SessionId): ExpertCapabilityRegistry => {
+    if (sessionId === undefined) return capabilityRegistry
+    const key = String(sessionId)
+    let scoped = scopedCapabilityRegistries.get(key)
+    if (scoped === undefined) {
+      scoped = new ExpertCapabilityRegistry(skillsApi.forScope({ sessionId: key }), mcpApi)
+      scopedCapabilityRegistries.set(key, scoped)
+    }
+    return scoped
+  }
+  const skillsT = ctx.locale.bind('desktop.skills')
+  const mcpT = ctx.locale.bind('desktop.mcp')
   const getActive = (): 'zh' | 'en' => ctx.locale.getSnapshot().active === 'en' ? 'en' : 'zh'
 
   // 挂载本插件的 Typert Remote：host 端由 gateway 的 SRC 自动发现（@Remote
@@ -1385,9 +1452,11 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
     readonly insertReference: (reference: ReferenceInsert) => boolean
     readonly prepareInsertion: () => (reference: ReferenceInsert) => boolean
     readonly prepareTeamSelection: () => (team: ExpertTeam, example?: string) => boolean | Promise<boolean>
+    readonly capabilityRegistry: ExpertCapabilityRegistry
   } => {
     const target = (): ReferenceInsertionTarget | undefined => resolveTarget(sessionId)
     return {
+      capabilityRegistry: capabilityRegistryFor(sessionId),
       prepareTeamSelection: () => {
         const current = target()
         return (team, example) => current !== undefined && target() === current && insertTeamTask(current, team, example, sessionId)
@@ -1406,7 +1475,13 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
       name: 'settings.section', id: 'clawclaw-experts', order: 16, label: () => t('settings.nav'), locale: NS,
       ...({ icon: 'expert' } as Record<string, unknown>),
     },
-    (props) => React.createElement(AgencySettingsPanel, { ...props, remote, getActive, onEnabledChange: updateEnabledForMentions, prepareTeamSelection: bindExpertInsertion().prepareTeamSelection }),
+    (props) => {
+      const sessions = ctx.sessions as unknown as { list?: { getSnapshot(): { ids: readonly string[]; byId: Record<string, { retainedBy?: { mainView?: number } }> } } }
+      const list = sessions.list?.getSnapshot()
+      const initialSessionId = list?.ids.find(id => (list.byId[id]?.retainedBy?.mainView ?? 0) > 0)
+      return React.createElement(AgencySettingsPanel, { ...props, remote, getActive, capabilityRegistry: capabilityRegistryFor(initialSessionId as SessionId | undefined), skillsApi, mcpApi, skillsT, mcpT,
+        ...(initialSessionId === undefined ? {} : { initialSessionId }), onEnabledChange: updateEnabledForMentions, prepareTeamSelection: bindExpertInsertion().prepareTeamSelection })
+    },
   ))
 
   ctx.slots.inject('conversation.input.left', () => ctx.slots.register(
@@ -1456,14 +1531,18 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
           name: inputTriggerSourceId(div),
           order: 100 + i,
           showGroupTitle: false,
-          candidates: async (_session, req) => {
+          candidates: async (session, req) => {
             const current = await readEnabled(remote).catch(() => undefined)
             if (current === undefined) return []
             const enabled = current.enabled
             updateEnabledForMentions(enabled)
             const q = String(req.query ?? '').toLowerCase()
+            const scopedCapabilities = capabilityRegistryFor(session.sessionId)
+            await scopedCapabilities.refresh(true)
+            const capabilityState = scopedCapabilities.getSnapshot()
             return current.experts
-              .filter((e) => e.division === div && enabled.has(e.slug) && (q === '' || matchExpertQuery(e, q)))
+              .filter((e) => e.division === div && enabled.has(e.slug) && (q === '' || matchExpertQuery(e, q))
+                && expertCapabilityHealth(e, capabilityState.catalog, capabilityState.loading).state !== 'blocked')
               .map((e) => ({
                 name: inputTriggerCandidateName(e, getActive()),
                 hint: e.slug,
@@ -1491,7 +1570,8 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
             clipboardText: (slug) => expertMentionFromReference(slug, getActive(), catalogState(remote).experts),
             serialize: async (slug) => {
               const current = await readEnabled(remote)
-              if (!current.experts.some(expert => expert.slug === slug) || !current.enabled.has(slug)) throw new Error(t('custom.unavailable'))
+              const expert = current.experts.find(item => item.slug === slug)
+              if (expert === undefined || !current.enabled.has(slug)) throw new Error(t('custom.unavailable'))
               return expertMentionFromReference(slug, getActive(), current.experts)
             },
           },

@@ -79,7 +79,7 @@ describe('Desktop Skills client API', () => {
   })
   it('registers Skills before the Electron-only client boundary', () => {
     const entry = readFileSync('src/client/index.ts', 'utf8')
-    expect(entry.indexOf('applySkillsSettings(ctx)')).toBeLessThan(entry.indexOf('if (!environment) return'))
+    expect(entry.indexOf('applySkillsSettings(ctx,')).toBeLessThan(entry.indexOf('if (!environment) return'))
   })
 
   it('validates an independent Skills response', () => {

@@ -35,6 +35,7 @@ export function DesktopFeatureIcon({ featureId, kind, size = 16, className }: De
   if (featureId === 'agent-presets') return <IconAgentPresetOutlineMedium {...props} />
   if (featureId === 'archived-sessions') return <IconArchiveOutlineMedium {...props} />
   if (featureId === 'desktop-reminders') return <IconListPenOutlineMedium {...props} />
+  if (featureId === 'clawclaw-experts') return <IconAgentPresetOutlineMedium {...props} />
   if (featureId === 'desktop-skills') return <IconSkillOutlineMedium {...props} />
   if (featureId === 'desktop-mcp') return <Cable {...props} strokeWidth={1.5} />
   if (featureId === 'desktop') return <MonitorCog {...props} strokeWidth={1.5} />

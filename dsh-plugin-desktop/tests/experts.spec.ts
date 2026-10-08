@@ -12,7 +12,7 @@ import {
   teamRequiresToolFilter,
 } from '../src/experts/index.ts'
 import { detectTeamEngine, type NativeTeamService } from '../src/experts/team-engine.ts'
-import { capabilitySelectOptions, selectableExpertCapabilities, updateCapabilityBindings } from '../src/experts/client/capability-options.ts'
+import { capabilityCatalogSelectOptions, capabilitySelectOptions, expertCapabilityCatalog, expertCapabilityHealth, selectableExpertCapabilities, updateCapabilityBindings } from '../src/experts/client/capability-options.ts'
 
 const catalogRoot = fileURLToPath(new URL('../assets/experts/catalog/', import.meta.url))
 const chineseRoot = fileURLToPath(new URL('../assets/experts/catalog-zh/', import.meta.url))
@@ -99,6 +99,29 @@ describe('ClawClaw experts', () => {
     ])
   })
 
+  it('keeps the complete capability catalog visible and derives expert health', () => {
+    const catalog = expertCapabilityCatalog([
+      { name: 'ready', description: '', source: 'user', provider: 'desktop', modelInvocable: true, userInvocable: true, editable: true },
+      { name: 'manual', description: '', source: 'user', provider: 'desktop', modelInvocable: false, userInvocable: true, editable: true },
+    ], [
+      { serverName: 'offline', transport: 'stdio', command: 'offline', args: [], cwd: '', env: {}, timeoutMs: 1, reconnect: { enabled: true, initialDelayMs: 1, maxDelayMs: 1, maxAttempts: 1 }, enabled: true, state: 'error', tools: [], credentialsReady: true },
+    ])
+    expect(capabilityCatalogSelectOptions(catalog.skills, ['missing'], state => state)).toEqual([
+      { value: 'manual', label: 'manual (disabled)' },
+      { value: 'ready', label: 'ready' },
+      { value: 'missing', label: 'missing (missing)' },
+    ])
+    expect(expertCapabilityHealth({
+      skills: [{ name: 'ready', required: true, enabled: true }, { name: 'manual', required: false, enabled: true }],
+      mcpServers: [{ name: 'offline', required: true, enabled: true }],
+    }, catalog)).toMatchObject({ state: 'blocked', ready: 1, total: 3 })
+    expect(expertCapabilityHealth({
+      skills: [{ name: 'manual', required: false, enabled: true }], mcpServers: [],
+    }, catalog)).toMatchObject({ state: 'degraded', ready: 0, total: 1 })
+    expect(expertCapabilityHealth({ skills: [{ name: 'missing', required: true, enabled: true }], mcpServers: [] }, catalog, true))
+      .toMatchObject({ state: 'unknown', ready: 0, total: 1 })
+  })
+
   it('injects bound Skills and denies unbound MCP servers', async () => {
     const result = await resolveExpertComposition(compositionContext({
       skill: { name: 'review', content: 'Inspect evidence before making claims.' },
@@ -131,6 +154,14 @@ describe('ClawClaw experts', () => {
       'MCP server unavailable: optional-server',
     ])
     expect(optional.persona).toContain('## Capability diagnostics')
+  })
+
+  it('does not apply an MCP allowlist when every saved binding is disabled', async () => {
+    const result = await resolveExpertComposition(compositionContext({ tools: ['mcp__docs__search', 'mcp__github__issues'] }), {
+      skills: [], mcpServers: [{ name: 'docs', required: true, enabled: false }],
+    }, parent, 'Persona')
+    expect(result.deniedTools).not.toContain('mcp__docs__search')
+    expect(result.deniedTools).not.toContain('mcp__github__issues')
   })
 
   it('uses standard subagents when a team member needs MCP isolation', () => {

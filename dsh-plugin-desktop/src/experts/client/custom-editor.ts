@@ -1,10 +1,11 @@
 // @ts-nocheck -- ported client compatibility layer; host contracts remain strictly checked.
 import { LibraryConfirm, LibraryEditorFooter } from './library-ui.js'
-import { Button, Drawer, Input, Select } from './antd-ui.js'
+import { Button, Drawer, Input, Select, Switch } from './antd-ui.js'
 import { useEscapeLayer } from './escape-layer.js'
 import React from 'react'
 import { CategorySelect } from './category-select.js'
-import { capabilitySelectOptions, selectableExpertCapabilities, updateCapabilityBindings } from './capability-options.js'
+import { capabilityCatalogSelectOptions, updateCapabilityBindings, type ExpertCapabilityState } from './capability-options.js'
+import { ExpertCapabilityRegistry } from './capability-registry.js'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { customExpertInputSchema, DEFAULT_EXPERT_EMOJI, type CatalogSnapshot, type CustomExpertInput } from '../expert-contract.js'
 import type { AgencyCatalogRemote } from './remote.js'
@@ -24,6 +25,7 @@ export interface CustomEditorProps {
   readonly remote: AgencyCatalogRemote
   readonly skillsApi?: Pick<DesktopSkillsApi, 'read'>
   readonly mcpApi?: Pick<DesktopMcpApi, 'read'>
+  readonly capabilityRegistry?: ExpertCapabilityRegistry
   readonly t: TranslateNS<'agency'>
   readonly locale: 'zh' | 'en'
   readonly onSaved: (catalog: CatalogSnapshot) => void
@@ -48,28 +50,11 @@ export function CustomExpertEditor(props: CustomEditorProps): React.ReactElement
   const saving = React.useRef(false)
   const [error, setError] = React.useState<string | null>(null)
   const [discard, setDiscard] = React.useState(false)
-  const [capabilities, setCapabilities] = React.useState<{ skills: readonly string[], mcpServers: readonly string[] }>({ skills: [], mcpServers: [] })
-  const [capabilitiesLoading, setCapabilitiesLoading] = React.useState(true)
-  const [capabilitiesFailed, setCapabilitiesFailed] = React.useState<{ skills: boolean, mcpServers: boolean }>({ skills: false, mcpServers: false })
-  const [capabilitiesRevision, setCapabilitiesRevision] = React.useState(0)
   const skillsApi = React.useMemo(() => props.skillsApi ?? createDesktopSkillsApi(), [props.skillsApi])
   const mcpApi = React.useMemo(() => props.mcpApi ?? createDesktopMcpApi(), [props.mcpApi])
+  const capabilityRegistry = React.useMemo(() => props.capabilityRegistry ?? new ExpertCapabilityRegistry(skillsApi, mcpApi), [props.capabilityRegistry, skillsApi, mcpApi])
+  const capabilities = React.useSyncExternalStore(capabilityRegistry.subscribe, capabilityRegistry.getSnapshot)
   const form = React.useRef<HTMLFormElement | null>(null)
-  React.useEffect(() => {
-    let cancelled = false
-    setCapabilitiesLoading(true)
-    setCapabilitiesFailed({ skills: false, mcpServers: false })
-    void Promise.allSettled([skillsApi.read(), mcpApi.read()]).then(([skills, mcpServers]) => {
-      if (cancelled) return
-      setCapabilities(selectableExpertCapabilities(
-        skills.status === 'fulfilled' ? skills.value : [],
-        mcpServers.status === 'fulfilled' ? mcpServers.value : [],
-      ))
-      setCapabilitiesFailed({ skills: skills.status === 'rejected', mcpServers: mcpServers.status === 'rejected' })
-      setCapabilitiesLoading(false)
-    })
-    return () => { cancelled = true }
-  }, [skillsApi, mcpApi, capabilitiesRevision])
   const close = (): void => {
     if (saving.current) return
     if (JSON.stringify(draft) !== JSON.stringify(initial)) setDiscard(true)
@@ -84,24 +69,39 @@ export function CustomExpertEditor(props: CustomEditorProps): React.ReactElement
     setDraft(current => ({ ...current, [key]: updateCapabilityBindings(current[key], names) }))
     setError(null)
   }
+  const setBindingFlag = (key: 'skills' | 'mcpServers', name: string, field: 'required' | 'enabled', value: boolean): void => {
+    setDraft(current => ({ ...current, [key]: current[key].map(binding => binding.name === name ? { ...binding, [field]: value } : binding) }))
+    setError(null)
+  }
   const capabilitySelect = (key: 'skills' | 'mcpServers'): React.ReactElement => {
     const selected = draft[key].map(binding => binding.name)
-    const available = capabilities[key]
-    const failed = capabilitiesFailed[key]
+    const available = capabilities.catalog[key]
+    const failed = key === 'skills' ? capabilities.skillsError !== undefined : capabilities.mcpError !== undefined
+    const stateLabel = (state: ExpertCapabilityState): string => props.t(`custom.capability.${state}`)
     return h(React.Fragment, null,
       h(Select, {
         className: 'aag-capability-select', mode: 'multiple', allowClear: true, showSearch: true,
-        value: selected, options: capabilitySelectOptions(available, selected, props.t('custom.capabilityUnavailable')),
+        value: selected, options: capabilityCatalogSelectOptions(available, selected, stateLabel),
         maxCount: 32, maxTagCount: 'responsive', optionFilterProp: 'label', disabled: busy,
-        loading: capabilitiesLoading, placeholder: props.t(key === 'skills' ? 'custom.skillsPlaceholder' : 'custom.mcpServersPlaceholder'),
+        loading: capabilities.loading, placeholder: props.t(key === 'skills' ? 'custom.skillsPlaceholder' : 'custom.mcpServersPlaceholder'),
         notFoundContent: props.t(failed ? 'custom.capabilitiesLoadFailed' : key === 'skills' ? 'custom.noSkills' : 'custom.noMcpServers'),
         'aria-label': props.t(key === 'skills' ? 'custom.skills' : 'custom.mcpServers'),
         onChange: (value: unknown) => setBindings(key, Array.isArray(value) ? value.map(String) : []),
       }),
       failed ? h('div', { className: 'aag-capability-error', role: 'alert' },
         h('span', null, props.t('custom.capabilitiesLoadFailed')),
-        h(Button, { type: 'link', size: 'small', disabled: busy || capabilitiesLoading, onClick: () => setCapabilitiesRevision(value => value + 1) }, props.t('custom.retryCapabilities')),
+        h(Button, { type: 'link', size: 'small', disabled: busy || capabilities.loading, onClick: () => { void capabilityRegistry.refresh() } }, props.t('custom.retryCapabilities')),
       ) : null,
+      selected.length === 0 ? null : h('div', { className: 'aag-capability-bindings' }, draft[key].map(binding => h('div', { key: binding.name, className: 'aag-capability-binding' },
+        h('span', { title: binding.name }, binding.name),
+        h('label', null, h(Switch, { size: 'small', checked: binding.enabled, disabled: busy,
+          onChange: (value: boolean) => setBindingFlag(key, binding.name, 'enabled', value) }), props.t(binding.enabled ? 'custom.bindingEnabled' : 'custom.bindingDisabled')),
+        h('label', null, h(Switch, { size: 'small', checked: binding.required, disabled: busy || !binding.enabled,
+          onChange: (value: boolean) => setBindingFlag(key, binding.name, 'required', value) }), props.t(binding.required ? 'custom.bindingRequired' : 'custom.bindingOptional')),
+      ))),
+      h('small', { className: 'aag-capability-count' }, props.t('custom.capabilityCount', {
+        available: available.filter(item => item.available).length, total: available.length,
+      })),
       h('small', { className: 'aag-capability-hint' }, props.t(key === 'skills' ? 'custom.skillsHint' : 'custom.mcpServersHint')),
     )
   }
@@ -229,9 +229,12 @@ export const CUSTOM_EDITOR_CSS = `
 .aag-custom-field>span,.aag-custom-field>label{display:block;margin-bottom:8px}
 .aag-custom-field small{font-size:11px;opacity:.65;margin-left:8px}
 .aag-custom-field .aag-capability-hint{display:block;margin:6px 0 0;line-height:18px}
+.aag-custom-field .aag-capability-count{display:block;margin:6px 0 0;color:var(--dsw-alias-label-secondary);line-height:18px}
 .aag-capability-select{width:100%}
 .aag-editor-drawer .aag-capability-select .ant-select-selector{min-height:40px;padding-block:4px}
 .aag-capability-error{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px;color:var(--dsw-alias-error-primary);font-size:12px;line-height:18px}
+.aag-capability-bindings{display:grid;gap:6px;margin-top:8px}.aag-capability-binding{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:6px 8px;background:var(--dsw-alias-bg-layer-2);border-radius:6px;font-size:12px}.aag-capability-binding>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.aag-capability-binding>label{display:inline-flex;align-items:center;gap:5px;margin:0;white-space:nowrap}
+@media(max-width:520px){.aag-capability-binding{grid-template-columns:minmax(0,1fr) auto}.aag-capability-binding>label:last-child{grid-column:2}}
 .aag-custom-avatars{border:0;padding:0;margin:20px 0;display:flex;gap:8px;flex-wrap:wrap}
 .aag-custom-avatars legend{margin-bottom:10px;font-size:13px}
 .aag-custom-avatars button{padding:3px;border:2px solid transparent;background:transparent;border-radius:12px;cursor:pointer}

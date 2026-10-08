@@ -2,6 +2,7 @@
 import React from 'react'
 import type { ExpertView } from './catalog.js'
 import type { AgencyKey } from './locales.js'
+import type { ExpertCapabilityHealth } from './capability-options.js'
 
 interface DiscoveryProps {
   readonly experts: readonly ExpertView[]
@@ -14,6 +15,7 @@ interface DiscoveryProps {
   readonly onQuery: (query: string) => void
   readonly onPick: (slug: string) => void
   readonly avatarSrc: (expert: ExpertView) => string
+  readonly health: ReadonlyMap<string, ExpertCapabilityHealth>
 }
 
 /** 按分区排列专家，行首使用头像。 */
@@ -38,16 +40,19 @@ export function ExpertDiscovery(props: DiscoveryProps): React.ReactElement {
       [...groups.entries()].map(([division, experts]) => React.createElement('div', { key: division },
         React.createElement('div', { className: 'aag-menu-title' }, props.locale === 'en' ? experts[0].divisionEn : experts[0].divisionZh),
         experts.map(expert => {
-          const action = expert.conflict ? props.t('discovery.conflict') : props.enabled.has(expert.slug) ? '' : props.t('discovery.enableSelect')
+          const health = props.health.get(expert.slug)
+          const blocked = health?.state === 'blocked'
+          const action = expert.conflict ? props.t('discovery.conflict') : blocked ? props.t('capability.health.blocked') : props.enabled.has(expert.slug) ? '' : props.t('discovery.enableSelect')
           return React.createElement('button', {
             key: expert.slug, type: 'button', className: 'aag-menu-item aag-discovery-row',
             'aria-label': action === '' ? name(expert) : `${name(expert)} · ${action}`,
             title: props.locale === 'en' ? expert.descriptionEn || expert.description : expert.description,
-            disabled: props.busy || expert.conflict === true, onClick: () => props.onPick(expert.slug),
+            disabled: props.busy || expert.conflict === true || blocked, onClick: () => props.onPick(expert.slug),
           }, React.createElement('img', {
             className: 'aag-discovery-avatar', src: props.avatarSrc(expert), alt: '', width: 22, height: 22, loading: 'lazy', decoding: 'async',
           }),
           React.createElement('span', { className: 'aag-discovery-name' }, name(expert)),
+          health !== undefined && health.total > 0 ? React.createElement('span', { className: 'aag-discovery-health', 'data-health': health.state }, `${health.ready}/${health.total}`) : null,
           action === '' ? null : React.createElement('span', { className: 'aag-discovery-action' }, action))
         })))))
 }
@@ -59,5 +64,6 @@ export const DISCOVERY_CSS = `
 .aag-discovery input:focus-visible,.aag-discovery button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}
 .aag-discovery button:disabled{opacity:.55;cursor:default}.aag-discovery-results{overflow-y:auto;min-height:0;overscroll-behavior:contain}
 .aag-discovery-avatar{flex:none;width:22px;height:22px;border-radius:50%;object-fit:cover;object-position:center 20%}.aag-discovery-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.aag-discovery-action{flex:none;color:var(--dsw-alias-label-secondary);font-size:11px}
+.aag-discovery-health{flex:none;color:var(--dsw-alias-label-secondary);font-size:11px}.aag-discovery-health[data-health="blocked"]{color:var(--dsw-alias-state-error-primary)}
 .aag-discovery>.aag-error{padding:8px;flex:none}
 `
