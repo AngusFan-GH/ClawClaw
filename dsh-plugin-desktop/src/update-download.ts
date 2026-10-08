@@ -81,6 +81,8 @@ const DMG_TRAILER_MAGIC = Buffer.from('koly', 'ascii')
 const DOS_HEADER_BYTES = 64
 const PE_OFFSET_POSITION = 0x3c
 const PE_MAGIC = Buffer.from([0x50, 0x45, 0x00, 0x00])
+const ARTIFACT_REQUEST_ATTEMPTS = 3
+const CONTENT_RANGE = /^bytes ([0-9]+)-([0-9]+)\/([0-9]+)$/u
 
 interface DownloadPaths {
   readonly completed: string
@@ -118,43 +120,19 @@ export async function downloadDesktopUpdate(options: DownloadDesktopUpdateOption
     throw new UpdateDownloadError('invalid-artifact', 'The selected ClawClaw release is no longer available.')
   }
   const artifact = manifest.artifacts[platform]
-  let response: Response
-  try {
-    response = await options.request(artifact.url, {
-      method: 'GET', cache: 'no-store', redirect: 'error',
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    })
-  } catch (cause) {
-    if (options.signal?.aborted === true || isAbortFailure(cause)) throw aborted(cause)
-    throw new UpdateDownloadError('network', 'The update installer could not be downloaded.', { cause })
-  }
-
-  if (response.status !== 200) {
-    throw new UpdateDownloadError(
-      'http-status',
-      `The update download service returned HTTP ${String(response.status)}.`,
-      { status: response.status },
-    )
-  }
-  if (response.body === null) {
-    throw new UpdateDownloadError('empty-body', 'The update download service returned an empty body.')
-  }
-  try {
-    assertDeclaredSize(response, artifact.size)
-  } catch (cause) {
-    await response.body.cancel(cause).catch(() => undefined)
-    throw cause
+  if (await isValidCompletedArtifact(paths.completed, artifact.size, artifact.sha512, platform)) {
+    return paths.completed
   }
 
   let failure: unknown
   options.progress?.(0)
   try {
-    await writeResponseBody(paths.temporary, response.body, options.signal, artifact.size, options.progress)
+    await downloadArtifactWithResume(paths.temporary, artifact.url, artifact.size, options)
     throwIfAborted(options.signal)
     await validateArtifactChecksum(paths.temporary, artifact.sha512)
     await validateArtifact(paths.temporary, platform)
     throwIfAborted(options.signal)
-    await rename(paths.temporary, paths.completed)
+    await replaceCompletedArtifact(paths.temporary, paths.completed)
     return paths.completed
   } catch (cause) {
     failure = options.signal?.aborted === true || isAbortFailure(cause) ? aborted(cause) : cause
@@ -167,6 +145,37 @@ export async function downloadDesktopUpdate(options: DownloadDesktopUpdateOption
       if (failure === undefined) throw cleanupCause
       throw new AggregateError([failure, cleanupCause], 'Failed to download and clean up the update installer.')
     }
+  }
+}
+
+async function isValidCompletedArtifact(
+  filename: string,
+  expectedSize: number,
+  expectedChecksum: string,
+  platform: DesktopDownloadPlatform,
+): Promise<boolean> {
+  const stat = await lstatOptional(filename)
+  if (stat === undefined || !stat.isFile() || stat.isSymbolicLink() || stat.size !== expectedSize) return false
+  try {
+    await validateArtifactChecksum(filename, expectedChecksum)
+    await validateArtifact(filename, platform)
+    return true
+  } catch (cause) {
+    if (cause instanceof UpdateDownloadError && cause.code === 'invalid-artifact') return false
+    throw cause
+  }
+}
+
+async function replaceCompletedArtifact(temporary: string, completed: string): Promise<void> {
+  try {
+    await rename(temporary, completed)
+  } catch (cause) {
+    const code = (cause as NodeJS.ErrnoException).code
+    if (code !== 'EEXIST' && code !== 'EPERM') throw cause
+    const completedStat = await lstatOptional(completed)
+    if (completedStat === undefined || !completedStat.isFile() || completedStat.isSymbolicLink()) throw cause
+    await unlink(completed)
+    await rename(temporary, completed)
   }
 }
 
@@ -406,6 +415,73 @@ async function lstatOptional(filename: string): Promise<Awaited<ReturnType<typeo
   }
 }
 
+async function downloadArtifactWithResume(
+  filename: string,
+  url: string,
+  expectedSize: number,
+  options: Pick<DownloadDesktopUpdateOptions, 'request' | 'signal' | 'progress'>,
+): Promise<void> {
+  let offset = 0
+  let lastFailure: UpdateDownloadError | undefined
+  for (let attempt = 0; attempt < ARTIFACT_REQUEST_ATTEMPTS; attempt += 1) {
+    throwIfAborted(options.signal)
+    let response: Response
+    try {
+      response = await options.request(url, {
+        method: 'GET', cache: 'no-store', redirect: 'error',
+        ...(offset === 0 ? {} : { headers: { Range: `bytes=${String(offset)}-` } }),
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      })
+    } catch (cause) {
+      if (options.signal?.aborted === true || isAbortFailure(cause)) throw aborted(cause)
+      lastFailure = new UpdateDownloadError('network', 'The update installer could not be downloaded.', { cause })
+      continue
+    }
+
+    const expectedStatus = offset === 0 ? 200 : 206
+    if (response.status !== expectedStatus) {
+      await response.body?.cancel().catch(() => undefined)
+      if (offset > 0 && response.status === 200) {
+        await unlinkIfPresent(filename)
+        offset = 0
+        continue
+      }
+      const failure = new UpdateDownloadError(
+        'http-status',
+        `The update download service returned HTTP ${String(response.status)}.`,
+        { status: response.status },
+      )
+      if (response.status === 408 || response.status === 429 || response.status >= 500) {
+        lastFailure = failure
+        continue
+      }
+      throw failure
+    }
+    if (response.body === null) {
+      lastFailure = new UpdateDownloadError('empty-body', 'The update download service returned an empty body.')
+      continue
+    }
+    try {
+      assertDeclaredSize(response, expectedSize - offset)
+      if (offset > 0) assertContentRange(response, offset, expectedSize)
+      await appendResponseBody(filename, response.body, options.signal, offset, expectedSize, options.progress)
+      return
+    } catch (cause) {
+      await response.body.cancel(cause).catch(() => undefined)
+      if (!(cause instanceof UpdateDownloadError) || cause.code !== 'network') throw cause
+      lastFailure = cause
+      const stat = await lstatOptional(filename)
+      offset = stat?.isFile() === true && !stat.isSymbolicLink() ? Number(stat.size) : 0
+      if (offset > expectedSize) throw new UpdateDownloadError(
+        'invalid-artifact', 'The update installer exceeds its published size.',
+      )
+      if (offset === expectedSize) return
+      if (offset === 0) await unlinkIfPresent(filename)
+    }
+  }
+  throw lastFailure ?? new UpdateDownloadError('network', 'The update installer could not be downloaded.')
+}
+
 function assertDeclaredSize(response: Response, expectedSize: number): void {
   const declared = response.headers.get('content-length')
   if (declared === null || !DECIMAL_BYTES.test(declared)) return
@@ -420,22 +496,43 @@ function assertDeclaredSize(response: Response, expectedSize: number): void {
   }
 }
 
-async function writeResponseBody(
+function assertContentRange(response: Response, expectedStart: number, expectedSize: number): void {
+  const value = response.headers.get('content-range')
+  const match = value === null ? null : CONTENT_RANGE.exec(value)
+  if (match === null
+    || Number(match[1]) !== expectedStart
+    || Number(match[2]) !== expectedSize - 1
+    || Number(match[3]) !== expectedSize) {
+    throw new UpdateDownloadError('invalid-artifact', 'The resumed update response range is invalid.')
+  }
+}
+
+async function appendResponseBody(
   filename: string,
   body: ReadableStream<Uint8Array>,
   signal: AbortSignal | undefined,
+  initialBytes: number,
   expectedSize: number,
   progress?: (fraction: number) => void,
 ): Promise<void> {
-  const handle = await open(filename, 'wx', PRIVATE_FILE_MODE)
+  const handle = await open(filename, initialBytes === 0 ? 'wx' : 'a', PRIVATE_FILE_MODE)
   const reader = body.getReader()
   const cancel = (): void => { void reader.cancel(signal?.reason).catch(() => undefined) }
   signal?.addEventListener('abort', cancel, { once: true })
-  let bytesWritten = 0
+  let bytesWritten = initialBytes
   try {
+    const stat = await handle.stat()
+    if (!stat.isFile() || stat.size !== initialBytes) {
+      throw new UpdateDownloadError('invalid-options', 'The partial update installer changed during download.')
+    }
     while (true) {
       throwIfAborted(signal)
-      const chunk = await reader.read()
+      let chunk: ReadableStreamReadResult<Uint8Array>
+      try {
+        chunk = await reader.read()
+      } catch (cause) {
+        throw new UpdateDownloadError('network', 'The update installer connection was interrupted.', { cause })
+      }
       throwIfAborted(signal)
       if (chunk.done) break
       if (chunk.value.byteLength > MAX_UPDATE_DOWNLOAD_BYTES - bytesWritten) {
@@ -450,9 +547,6 @@ async function writeResponseBody(
       await writeAll(handle, chunk.value)
       bytesWritten += chunk.value.byteLength
       progress?.(bytesWritten / expectedSize)
-    }
-    if (bytesWritten === 0) {
-      throw new UpdateDownloadError('empty-body', 'The update download service returned an empty body.')
     }
     if (bytesWritten !== expectedSize) {
       throw new UpdateDownloadError('invalid-artifact', 'The update installer size does not match the published release.')

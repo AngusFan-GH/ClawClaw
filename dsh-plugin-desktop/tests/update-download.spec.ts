@@ -65,6 +65,64 @@ describe('ClawClaw installer download', () => {
     expect(progress.mock.calls.map(call => call[0])).toEqual([0, 0.25, 1, -1])
   })
 
+  it('resumes an interrupted installer response with a validated byte range', async () => {
+    const directory = await temp(); const artifact = dmg(); let artifactRequests = 0
+    const base = requestFor('2.1.0', { darwin: artifact, win32: exe() })
+    const request: UpdateArtifactRequest = async (url, init) => {
+      if (url.endsWith('release.json')) return base(url, init)
+      artifactRequests += 1
+      if (artifactRequests === 1) {
+        let pull = 0
+        return new Response(new ReadableStream<Uint8Array>({
+          pull(stream) {
+            if (pull++ === 0) stream.enqueue(artifact.subarray(0, 256))
+            else stream.error(new Error('connection reset'))
+          },
+        }))
+      }
+      expect(new Headers(init.headers).get('range')).toBe('bytes=256-')
+      return new Response(artifact.subarray(256), {
+        status: 206,
+        headers: {
+          'content-length': '768',
+          'content-range': 'bytes 256-1023/1024',
+        },
+      })
+    }
+    const destinationPath = join(directory, 'ClawClaw-2.1.0-mac.dmg')
+    await expect(downloadDesktopUpdate({
+      platform: 'darwin', version: '2.1.0', destinationPath, request,
+    })).resolves.toBe(destinationPath)
+    expect(artifactRequests).toBe(2)
+    expect(await readFile(destinationPath)).toEqual(artifact)
+  })
+
+  it('reuses an existing verified installer without downloading it again', async () => {
+    const directory = await temp(); const artifact = exe(); const destinationPath = join(directory, 'update.exe')
+    await writeFile(destinationPath, artifact)
+    const base = requestFor('2.1.0', { darwin: dmg(), win32: artifact })
+    const request = vi.fn<UpdateArtifactRequest>((url, init) => base(url, init))
+    await expect(downloadDesktopUpdate({
+      platform: 'win32', version: '2.1.0', destinationPath, request,
+    })).resolves.toBe(destinationPath)
+    expect(request).toHaveBeenCalledOnce()
+  })
+
+  it('bounds network retries and leaves no partial installer after failure', async () => {
+    const directory = await temp(); const artifact = exe(); let artifactRequests = 0
+    const base = requestFor('2.1.0', { darwin: dmg(), win32: artifact })
+    const request: UpdateArtifactRequest = async (url, init) => {
+      if (url.endsWith('release.json')) return base(url, init)
+      artifactRequests += 1
+      throw new Error('connection reset')
+    }
+    await expect(downloadDesktopUpdate({
+      platform: 'win32', version: '2.1.0', destinationPath: join(directory, 'update.exe'), request,
+    })).rejects.toMatchObject({ code: 'network' })
+    expect(artifactRequests).toBe(3)
+    expect(await readdir(directory)).toEqual([])
+  })
+
   it('rejects an installer whose content does not match the published checksum', async () => {
     const directory = await temp(); const good = dmg(); const bad = Buffer.from(good); bad[0] = 1
     const request = async (url: string): Promise<Response> => url.endsWith('release.json')

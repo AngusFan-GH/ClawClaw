@@ -159,7 +159,16 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       confirmDownload: version => this.confirmUpdateDownload(version),
       showManualCheckResult: result => this.showManualUpdateCheckResult(result),
       showUpdateFailure: reason => this.showUpdateFailure(reason),
-      downloadAndOpen: (version, signal, channel) => this.downloadAndOpenUpdate(version, signal, channel),
+      downloadAndOpen: async (version, signal, channel) => {
+        try {
+          return await this.downloadAndOpenUpdate(version, signal, channel)
+        } catch (cause) {
+          this.logError(
+            `dsh-plugin-desktop: update download or handoff failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+          )
+          throw cause
+        }
+      },
       notify: notification => { this.showNotification(notification) },
       notifyAttention: notification => { this.notifyAttention(notification) },
     }
