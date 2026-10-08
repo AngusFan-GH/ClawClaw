@@ -1,33 +1,25 @@
 /** Configurable panel and Settings shortcuts projected through rc.2 sidebar entries. */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import type { DragEvent, KeyboardEvent } from 'react'
+import type { ComponentType, DragEvent, KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
+import type { StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
 import { Plus, X } from 'lucide-react'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import { PANEL_SETTINGS_PREFIX, registerEntryProjection, ShortcutSettingsShell, settingsMenuSectionId, settingsMenuOrder } from './shortcut-presentation.tsx'
 import { DesktopFeatureIcon } from './desktop-feature-icon.tsx'
 
-export const DESKTOP_SHORTCUTS_LOCALE_NAMESPACE = 'desktop.shortcuts'
-export const DESKTOP_SHORTCUTS_SETTINGS_ENTRY_ID = 'desktop-shortcuts'
-export const PLUGINS_PANEL_ID = 'plugins' as MainPanelId
-export const AUTOMATIONS_PANEL_ID = 'desktop-automations' as MainPanelId
-const MAX_SHORTCUTS = 4
-const SETTINGS_TARGET_PREFIX = 'settings:'
-const DEFAULT_ITEMS: readonly string[] = [PLUGINS_PANEL_ID, AUTOMATIONS_PANEL_ID, 'settings:clawclaw-experts', 'settings:desktop-reminders']
-const LEGACY_DEFAULT_ITEMS: readonly string[] = ['desktop-skills', 'desktop-cron-tasks', 'desktop-reminders']
-const INTERIM_DEFAULT_ITEMS: readonly string[] = ['desktop-skills', 'desktop-reminders', 'desktop']
+import { DESKTOP_SHORTCUTS_LOCALE_NAMESPACE, DESKTOP_SHORTCUTS_SETTINGS_ENTRY_ID, PLUGINS_PANEL_ID, AUTOMATIONS_PANEL_ID,
+  MAX_SHORTCUTS, SETTINGS_TARGET_PREFIX, normalizeShortcutItems, shortcutPanelId, reorderShortcutItems } from './shortcut-menu-model.ts'
+import type { DesktopShortcutSettings, ShortcutTarget } from './shortcut-menu-model.ts'
+export { DESKTOP_SHORTCUTS_LOCALE_NAMESPACE, DESKTOP_SHORTCUTS_SETTINGS_ENTRY_ID, PLUGINS_PANEL_ID, AUTOMATIONS_PANEL_ID,
+  normalizeShortcutItems, shortcutPanelId, reorderShortcutItems } from './shortcut-menu-model.ts'
+export type { DesktopShortcutSettings, ShortcutTarget } from './shortcut-menu-model.ts'
 
-export interface DesktopShortcutSettings { readonly items?: readonly string[] }
-export interface ShortcutTarget {
-  readonly id: string
-  readonly targetId: string
-  readonly label: string
-  readonly kind: 'panel' | 'settings'
-}
 interface ShortcutTargets { getSnapshot(): readonly ShortcutTarget[]; subscribe(listener: () => void): () => void }
 
 interface ShortcutDragState {
@@ -37,6 +29,8 @@ interface ShortcutDragState {
 
 interface SettingsNavIconMount {
   readonly id: string
+  readonly targetId: string
+  readonly kind: ShortcutTarget['kind']
   readonly node: HTMLSpanElement
   readonly className?: string
 }
@@ -49,52 +43,16 @@ function sameShortcutTargets(left: readonly ShortcutTarget[], right: readonly Sh
       && target.targetId === candidate.targetId
       && target.label === candidate.label
       && target.kind === candidate.kind
+      && target.order === candidate.order
   })
 }
 
 export const zh = {
-  title: '快捷入口', intro: '将常用功能和设置固定到侧栏，最多显示 4 项。', selected: '已固定', available: '可添加', add: '添加', remove: '移除', reorder: '拖拽排序', plugins: '插件', automations: '自动化任务', unavailableTitle: '无法打开设置', unavailableHint: '设置外壳尚未就绪，请稍后重试。',
+  title: '快捷入口', intro: '已固定的入口在侧栏直接打开，其余在设置弹框中显示。最多固定 4 项。', selected: '已固定', available: '可添加', add: '添加', remove: '移除', reorder: '拖拽排序', plugins: '插件', automations: '自动化任务',
 } as const
 export type DesktopShortcutsLocaleKey = keyof typeof zh
 export const en: Record<DesktopShortcutsLocaleKey, string> = {
-  title: 'Shortcuts', intro: 'Pin frequently used features and settings to the sidebar. You can show up to 4.', selected: 'Pinned', available: 'Available', add: 'Add', remove: 'Remove', reorder: 'Drag to reorder', plugins: 'Plugins', automations: 'Automations', unavailableTitle: 'Settings unavailable', unavailableHint: 'The Settings shell is not ready yet. Try again shortly.',
-}
-
-export function normalizeShortcutItems(
-  items: readonly string[] | undefined,
-  targets: readonly ShortcutTarget[],
-): readonly string[] {
-  const legacyDefault = items !== undefined && (
-    items.length === LEGACY_DEFAULT_ITEMS.length && items.every((item, index) => item === LEGACY_DEFAULT_ITEMS[index])
-    || items.length === INTERIM_DEFAULT_ITEMS.length && items.every((item, index) => item === INTERIM_DEFAULT_ITEMS[index])
-  )
-  const input = items === undefined || legacyDefault
-    ? DEFAULT_ITEMS
-    : items.map(item => item === 'desktop-cron-tasks' ? AUTOMATIONS_PANEL_ID
-      : item === 'desktop-skills' || item === 'desktop-mcp' || item === 'settings:desktop-skills' || item === 'settings:desktop-mcp'
-        ? 'settings:clawclaw-experts' : item)
-  const known = new Set(targets.map(target => target.id))
-  const settingsIds = new Map(targets.filter(target => target.kind === 'settings')
-    .map(target => [target.targetId, target.id]))
-  const migrated = input.map(item => known.has(item) ? item : settingsIds.get(item) ?? item)
-  return migrated.filter((item, index) => known.has(item) && migrated.indexOf(item) === index).slice(0, MAX_SHORTCUTS)
-}
-
-export function shortcutPanelId(sectionId: string): MainPanelId {
-  return `desktop-shortcut:${sectionId}` as MainPanelId
-}
-
-export function reorderShortcutItems(
-  items: readonly string[],
-  draggedId: string,
-  targetId: string,
-  placement: 'before' | 'after',
-): readonly string[] {
-  if (draggedId === targetId || !items.includes(draggedId) || !items.includes(targetId)) return items
-  const next = items.filter(id => id !== draggedId)
-  const targetIndex = next.indexOf(targetId)
-  next.splice(targetIndex + (placement === 'after' ? 1 : 0), 0, draggedId)
-  return next.every((id, index) => id === items[index]) ? items : next
+  title: 'Shortcuts', intro: 'Pinned entries open in the main area; other entries appear in the Settings dialog. Pin up to 4.', selected: 'Pinned', available: 'Available', add: 'Add', remove: 'Remove', reorder: 'Drag to reorder', plugins: 'Plugins', automations: 'Automations',
 }
 
 function useScope<T>(scope: ConfigForm<T>): T | undefined {
@@ -216,24 +174,15 @@ export function ShortcutSettingsRow({ t, shortcutSettings, shortcutTargets }: Sh
   </section>
 }
 
-interface ShortcutRedirectInjected {
-  readonly sectionId: string
-  readonly openSection: (sectionId: string) => boolean
+interface ShortcutSettingsPanelInjected {
+  readonly sectionComponent: ComponentType<Record<string, unknown>>
   readonly returnToConversation: () => void
 }
-type ShortcutRedirectProps = PropsRuntime<'main'> & PropsLocale<'desktop.shortcuts'> & InjectFace<ShortcutRedirectInjected>
+type ShortcutSettingsPanelProps = PropsRuntime<'main'> & InjectFace<ShortcutSettingsPanelInjected> & Record<string, unknown>
 
-export function ShortcutRedirectPanel({ sectionId, openSection, returnToConversation, t }: ShortcutRedirectProps): JSX.Element | null {
-  const [failed, setFailed] = useState(false)
-  useEffect(() => {
-    if (!openSection(sectionId)) {
-      setFailed(true)
-      return
-    }
-    returnToConversation()
-  }, [openSection, returnToConversation, sectionId])
-  if (!failed) return null
-  return <main className="dshShortcutRedirectError"><h2>{t('unavailableTitle')}</h2><p>{t('unavailableHint')}</p></main>
+/** Render one Settings section as a real main panel while preserving its original runtime shares. */
+export function ShortcutSettingsPanel({ sectionComponent: Section, returnToConversation, ...props }: ShortcutSettingsPanelProps): JSX.Element {
+  return <main className="dshShortcutPage"><Section {...props} close={returnToConversation} /></main>
 }
 
 interface ShortcutPanelIconInjected { readonly target: ShortcutTarget }
@@ -243,21 +192,24 @@ export function ShortcutPanelIcon({ target, size }: ShortcutPanelIconProps): JSX
   return <ShortcutIcon target={target} size={size} />
 }
 
-/**
- * The rc.2 Settings shell does not expose an icon field on settings.section.
- * Mount the canonical icon into each nav row by the slot ledger's stable order,
- * while retaining the shell's own layout, store, shortcuts, and interactions.
- */
-export function SettingsNavIconBridge({ shortcutTargets }: { readonly shortcutTargets: ShortcutTargets }): JSX.Element {
-  const allTargets = useTargets(shortcutTargets)
-  const targets = useMemo(() => allTargets.filter(target => target.kind === 'settings'), [allTargets])
+/** Icons follow the same visible-row projection as the Settings shell. */
+export function SettingsNavIconBridge({ shortcutSettings, shortcutTargets }: {
+  readonly shortcutSettings: ConfigForm<DesktopShortcutSettings>
+  readonly shortcutTargets: ShortcutTargets
+}): JSX.Element {
+  const settings = useScope(shortcutSettings)
+  const targets = useTargets(shortcutTargets)
+  const visible = useMemo(() => {
+    const selected = normalizeShortcutItems(settings?.items, targets)
+    return targets.filter(target => !selected.includes(target.id))
+      .sort((a, b) => settingsMenuOrder(a, targets) - settingsMenuOrder(b, targets))
+  }, [settings?.items, targets])
   const [mounts, setMounts] = useState<readonly SettingsNavIconMount[]>([])
-
   useLayoutEffect(() => {
     const dialog = document.querySelector<HTMLElement>('[data-shortcut-modal="settings"]')
     const buttons = dialog === null ? [] : [...dialog.querySelectorAll<HTMLButtonElement>('nav button')]
     const cleanups: Array<() => void> = []
-    const next = targets.flatMap((target, index): SettingsNavIconMount[] => {
+    setMounts(visible.flatMap((target, index): SettingsNavIconMount[] => {
       const button = buttons[index]
       const previous = button?.querySelector<SVGElement>(':scope > svg')
       if (button === undefined || previous === null || previous === undefined) return []
@@ -265,45 +217,16 @@ export function SettingsNavIconBridge({ shortcutTargets }: { readonly shortcutTa
       node.dataset.desktopSettingsIcon = target.targetId
       node.style.display = 'contents'
       button.insertBefore(node, previous)
-      const previousDisplay = previous.style.display
+      const display = previous.style.display
       previous.style.display = 'none'
-      cleanups.push(() => {
-        previous.style.display = previousDisplay
-        node.remove()
-      })
+      cleanups.push(() => { previous.style.display = display; node.remove() })
       const className = previous.getAttribute('class') ?? undefined
-      return [{ id: target.targetId, node, ...(className === undefined ? {} : { className }) }]
-    })
-    setMounts(next)
-    return () => {
-      cleanups.reverse().forEach(cleanup => { cleanup() })
-    }
-  }, [targets])
-
-  return <>{mounts.map(mount => createPortal(
-    <DesktopFeatureIcon
-      featureId={mount.id}
-      kind="settings"
-      size={16}
-      {...(mount.className === undefined ? {} : { className: mount.className })}
-    />,
-    mount.node,
-    mount.id,
-  ))}</>
-}
-
-interface SettingsShellActions { openSection(id: string): void }
-interface SettingsShellStore { create(): { readonly actions: SettingsShellActions } }
-
-export function openSettingsSection(ctx: ClientContext, sectionId: string): boolean {
-  const declaration = ctx.slots.entriesOfSlot('sidebar.settings')[0]
-  const store = declaration?.store
-  if (store === undefined) return false
-  const handle = typeof store === 'function' ? store() : store
-  const actions = (handle as unknown as SettingsShellStore).create().actions
-  if (typeof actions.openSection !== 'function') return false
-  actions.openSection(sectionId)
-  return true
+      return [{ id: target.id, targetId: target.targetId, kind: target.kind, node, ...(className === undefined ? {} : { className }) }]
+    }))
+    return () => { cleanups.reverse().forEach(cleanup => { cleanup() }) }
+  }, [visible])
+  return <>{mounts.map(mount => createPortal(<DesktopFeatureIcon featureId={mount.targetId} kind={mount.kind} size={16}
+    {...(mount.className === undefined ? {} : { className: mount.className })} />, mount.node, mount.id))}</>
 }
 
 function createShortcutTargets(ctx: ClientContext): ShortcutTargets {
@@ -327,13 +250,13 @@ function createShortcutTargets(ctx: ClientContext): ShortcutTargets {
           { id: AUTOMATIONS_PANEL_ID, targetId: AUTOMATIONS_PANEL_ID, label: t('automations'), kind: 'panel' },
         ]
         const panels = panelCandidates.filter(target => mainPanels.has(target.id))
-        const sections = ctx.slots.entries('settings.section').map(entry => ({
+        const sections = ctx.slots.entriesOfSlot('settings.section').filter(entry => !entry.options.id?.startsWith(PANEL_SETTINGS_PREFIX)).map(entry => ({
           id: entry.options.id ?? '',
           label: resolveSlotLabel(entry.options.label) ?? '',
           order: entry.options.order ?? 0,
         })).filter(section => section.id.length > 0 && section.label.length > 0)
-          .sort((a, b) => a.order - b.order).map(({ id, label }) => ({
-            id: `${SETTINGS_TARGET_PREFIX}${id}`, targetId: id, label, kind: 'settings' as const,
+          .sort((a, b) => a.order - b.order).map(({ id, label, order }) => ({
+            id: `${SETTINGS_TARGET_PREFIX}${id}`, targetId: id, label, order, kind: 'settings' as const,
           }))
         const nextSnapshot = [...panels, ...sections]
         if (!sameShortcutTargets(snapshot, nextSnapshot)) snapshot = nextSnapshot
@@ -371,44 +294,73 @@ export function applyShortcutMenu(ctx: ClientContext): void {
   }, ShortcutSettingsRow))
   ctx.slots.inject('settings.action', () => ctx.slots.register({
     name: 'settings.action', id: 'desktop-semantic-nav-icons', order: -100,
-    inject: () => ({ shortcutTargets }),
+    inject: () => ({ shortcutSettings, shortcutTargets }),
   }, SettingsNavIconBridge))
 
   ctx.inject(['layout'], (scope: ClientContext) => {
     scope.effect(() => {
-      let registrations: Array<() => void> = []
+      const projections = new Map<string, { source: StoredEntry; label: string; dispose: () => void }>()
+      let sidebarDisposers: Array<() => void> = []
+      let sidebarSignature = ''
+      let reconciling = false
       const reconcile = (): void => {
-        registrations.splice(0).reverse().forEach(dispose => { dispose() })
-        const targets = shortcutTargets.getSnapshot()
-        const selected = normalizeShortcutItems(shortcutSettings.getSnapshot().value?.items, targets)
-        const definitions = new Map(targets.map(target => [target.id, target]))
-        selected.forEach((targetId, index) => {
-          const target = definitions.get(targetId)
-          if (target === undefined) return
-          const panelId = target.kind === 'panel' ? target.targetId as MainPanelId : shortcutPanelId(target.targetId)
-          const inject = () => ({
-            sectionId: target.targetId,
-            openSection: (id: string) => openSettingsSection(scope, id),
-            returnToConversation: () => { scope.layout.selectPanel(null) },
-          })
-          if (target.kind === 'settings') {
-            registrations.push(scope.slots.inject('main', () => scope.slots.register({
-              name: 'main', key: panelId, locale: DESKTOP_SHORTCUTS_LOCALE_NAMESPACE, inject,
-            }, ShortcutRedirectPanel)))
+        if (reconciling) return
+        reconciling = true
+        try {
+          const targets = shortcutTargets.getSnapshot()
+          const selected = normalizeShortcutItems(shortcutSettings.getSnapshot().value?.items, targets)
+          const definitions = new Map(targets.map(target => [target.id, target]))
+          const desired = new Map<string, { source: StoredEntry; label: string; install: () => () => void }>()
+          const shell = scope.slots.entries('sidebar.settings').find(entry => entry.component !== ShortcutSettingsShell)
+          if (shell !== undefined) desired.set('shell', { source: shell, label: '', install: () => registerEntryProjection(scope, shell,
+            { name: 'sidebar.settings', priority: -100 }, ShortcutSettingsShell, () => ({ shortcutSettings, shortcutTargets })) })
+          for (const target of targets) {
+            if (target.kind === 'settings' && selected.includes(target.id)) {
+              const source = scope.slots.entriesOfSlot('settings.section').find(entry => entry.options.id === target.targetId)
+              if (source !== undefined) desired.set(target.id, { source, label: target.label, install: () => registerEntryProjection(scope, source,
+                { name: 'main', key: shortcutPanelId(target.targetId) }, ShortcutSettingsPanel,
+                () => ({ returnToConversation: () => { scope.layout.selectPanel(null) } })) })
+            } else if (target.kind === 'panel') {
+              const source = scope.slots.entriesOfSlot('main').find(entry => entry.options.key === target.targetId)
+              if (source !== undefined) desired.set(target.id, { source, label: target.label, install: () => registerEntryProjection(scope, source,
+                { name: 'settings.section', id: settingsMenuSectionId(target), order: settingsMenuOrder(target, targets), label: target.label }) })
+            }
           }
-          registrations.push(scope.slots.inject('sidebar.panellist', () => scope.slots.register({
-            name: 'sidebar.panellist', id: panelId, order: 100 + index, label: target.label,
-            inject: () => ({ target }),
-          }, ShortcutPanelIcon)))
-        })
+          for (const [id, registration] of projections) {
+            const next = desired.get(id)
+            if (next?.source === registration.source && next.label === registration.label) continue
+            registration.dispose()
+            projections.delete(id)
+          }
+          for (const [id, next] of desired) {
+            if (!projections.has(id)) projections.set(id, { source: next.source, label: next.label, dispose: next.install() })
+          }
+          const signature = selected.map(id => `${id}:${definitions.get(id)?.label}`).join('|')
+          if (signature !== sidebarSignature) {
+            sidebarSignature = signature
+            sidebarDisposers.splice(0).reverse().forEach(dispose => { dispose() })
+            selected.forEach((id, index) => {
+              const target = definitions.get(id)!
+              const panelId = target.kind === 'panel' ? target.targetId as MainPanelId : shortcutPanelId(target.targetId)
+              sidebarDisposers.push(scope.slots.inject('sidebar.panellist', () => scope.slots.register({
+                name: 'sidebar.panellist', id: panelId, order: 100 + index, label: target.label,
+                inject: () => ({ target }),
+              }, ShortcutPanelIcon)))
+            })
+          }
+        } finally { reconciling = false }
       }
       const offSettings = shortcutSettings.subscribe(reconcile)
       const offTargets = shortcutTargets.subscribe(reconcile)
+      const offSections = scope.slots.subscribe('settings.section', reconcile)
+      const offPanels = scope.slots.subscribe('main', reconcile)
+      const offShell = scope.slots.subscribe('sidebar.settings', reconcile)
       reconcile()
       return () => {
-        offSettings()
-        offTargets()
-        registrations.splice(0).reverse().forEach(dispose => { dispose() })
+        offSettings(); offTargets(); offSections(); offPanels(); offShell()
+        sidebarDisposers.splice(0).reverse().forEach(dispose => { dispose() })
+        for (const registration of projections.values()) registration.dispose()
+        projections.clear()
       }
     }, 'dsh-plugin-desktop: configurable sidebar shortcuts')
   })

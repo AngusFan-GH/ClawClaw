@@ -1,12 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import {
   applyShortcutMenu,
   normalizeShortcutItems,
-  openSettingsSection,
   reorderShortcutItems,
   shortcutPanelId,
 } from '../src/client/shortcut-menu.tsx'
+import { SlotCore } from '@deepseek-ai/dsh-client-ui-slots'
+import { ShortcutSettingsPanel } from '../src/client/shortcut-menu.tsx'
+import { registerEntryProjection, ShortcutSettingsShell } from '../src/client/shortcut-presentation.tsx'
 import { DesktopShortcutSettingsSchema } from '../src/shortcut-menu.ts'
 
 describe('Desktop sidebar shortcuts', () => {
@@ -39,20 +42,6 @@ describe('Desktop sidebar shortcuts', () => {
       .toEqual(['plugins', 'settings:plugins'])
   })
 
-  it('opens a section through the Settings root store', () => {
-    const openSection = vi.fn()
-    const ctx = {
-      slots: {
-        entriesOfSlot: vi.fn(() => [{
-          store: { create: () => ({ actions: { openSection } }) },
-        }]),
-      },
-    } as unknown as ClientContext
-
-    expect(openSettingsSection(ctx, 'desktop-skills')).toBe(true)
-    expect(openSection).toHaveBeenCalledWith('desktop-skills')
-  })
-
   it('reorders pinned shortcuts at the requested drop edge', () => {
     const items = ['plugins', 'desktop-automations', 'settings:desktop-skills', 'settings:desktop-reminders']
 
@@ -66,80 +55,137 @@ describe('Desktop sidebar shortcuts', () => {
     expect(reorderShortcutItems(items, 'missing', 'plugins', 'before')).toBe(items)
   })
 
-  it('returns false while the Settings root store is unavailable', () => {
-    const ctx = {
-      slots: { entriesOfSlot: vi.fn(() => []) },
-    } as unknown as ClientContext
+})
 
-    expect(openSettingsSection(ctx, 'desktop')).toBe(false)
+function harness() {
+  const core = new SlotCore()
+  const cleanups: Array<() => void> = []
+  const register = (options: Record<string, unknown>, component: unknown = () => null) => core.register(options as never, component as never)
+  register({ name: 'root', children: {
+    main: { kind: 'keyed', scope: 'root' },
+    'sidebar.settings': { kind: 'single', scope: 'root' },
+    'sidebar.panellist': { kind: 'list', scope: 'root' },
+  } })
+  const Shell = () => null
+  register({ name: 'sidebar.settings', children: {
+    'settings.section': { kind: 'list', scope: 'root' },
+    'settings.action': { kind: 'list', scope: 'root' },
+  } }, Shell)
+  const Section = () => null
+  const actions = { save: vi.fn() }
+  const store = { create: () => ({ actions }) }
+  register({ name: 'settings.section', id: 'general', label: 'General', locale: 'settings', store,
+    inject: () => ({ marker: 'general' }), children: { 'settings.general.item': { kind: 'list', scope: 'root' } },
+  }, Section)
+  register({ name: 'settings.section', id: 'desktop-reminders', label: 'Reminders', order: 50 }, Section)
+  register({ name: 'main', key: 'plugins', children: { 'plugins.item': { kind: 'list', scope: 'root' } } })
+  register({ name: 'plugins.item', id: 'feature' })
+  const removeAutomation = register({ name: 'main', key: 'desktop-automations' })
+  let snapshot = { value: { items: ['plugins', 'settings:general'] } }
+  const listeners = new Set<() => void>()
+  const shortcutSettings = {
+    getSnapshot: () => snapshot,
+    subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
+    set: vi.fn(),
+  }
+  const ctx = {
+    slots: {
+      register,
+      entries: (name: string) => core.entries(name),
+      entriesOfSlot: (name: string) => core.entriesOfSlot(name),
+      getVersion: (name: string) => core.getVersion(name),
+      subscribe: (name: string, listener: () => void) => core.subscribe(name, listener),
+      inject: (_name: string, install: () => (() => void) | Iterable<() => void>) => {
+        const result = install()
+        if (typeof result === 'function') return result
+        const disposers = [...result]
+        return () => { disposers.reverse().forEach(dispose => { dispose() }) }
+      },
+    },
+    configForms: { get: () => shortcutSettings },
+    effect: (install: () => (() => void) | void) => { const cleanup = install(); if (cleanup) cleanups.push(cleanup); return cleanup },
+    inject: (_names: string[], install: (scope: ClientContext) => void) => install(ctx as unknown as ClientContext),
+    layout: { selectPanel: vi.fn() },
+    locale: { bind: () => (key: string) => key, getSnapshot: () => ({ revision: 1 }), register: () => () => {}, subscribe: () => () => {} },
+  } as unknown as ClientContext
+  applyShortcutMenu(ctx)
+  return { core, ctx, Section, store, removeAutomation,
+    update: (items: string[]) => { snapshot = { value: { items } }; listeners.forEach(listener => { listener() }) },
+    dispose: () => { cleanups.reverse().forEach(cleanup => { cleanup() }) },
+  }
+}
+
+describe('shortcut presentation lifecycle', () => {
+  it('shares feature state in real pages and adds native panels to the modal', async () => {
+    const h = harness()
+    await Promise.resolve()
+    const page = h.core.entriesOfSlot('main').find(entry => entry.options.key === shortcutPanelId('general'))!
+    expect(page.component).toBe(ShortcutSettingsPanel)
+    expect(page.locale).toBe('settings')
+    expect(page.store).toBe(h.store)
+    expect(page.inject?.()).toMatchObject({ sectionComponent: h.Section, marker: 'general' })
+    expect(h.core.entriesOfSlot('sidebar.settings')[0]?.component).toBe(ShortcutSettingsShell)
+    expect(h.core.entriesOfSlot('settings.section').map(entry => entry.options.id)).toEqual([
+      'general', 'desktop-reminders', 'desktop-panel:plugins', 'desktop-panel:desktop-automations',
+    ])
+    expect(h.core.entriesOfSlot('sidebar.panellist').map(entry => entry.options.id)).toEqual(['plugins', shortcutPanelId('general')])
+
+    h.update(['plugins', 'settings:general', 'settings:desktop-reminders'])
+    expect(h.core.entriesOfSlot('main').find(entry => entry.options.key === shortcutPanelId('general'))).toBe(page)
+    h.update([])
+    await Promise.resolve()
+    expect(h.core.entriesOfSlot('main').some(entry => entry.options.key === shortcutPanelId('general'))).toBe(false)
+    expect(h.core.entriesOfSlot('settings.general.item').some(entry => entry.options.id === 'desktop-shortcuts')).toBe(true)
+    expect(h.core.entriesOfSlot('plugins.item')).toHaveLength(1)
+    h.update(['settings:general'])
+    expect(h.core.entriesOfSlot('settings.general.item')).toHaveLength(1)
+    h.dispose()
+    expect(h.core.entriesOfSlot('plugins.item')).toHaveLength(1)
+    expect(h.core.entriesOfSlot('settings.general.item')).toHaveLength(1)
+    expect(h.core.entriesOfSlot('sidebar.settings')[0]?.component).not.toBe(ShortcutSettingsShell)
   })
 
-  it('registers direct panel shortcuts and redirecting Settings shortcuts', () => {
-    const registrations: Array<Record<string, unknown>> = []
-    const disposers: Array<ReturnType<typeof vi.fn>> = []
-    const settingsListeners = new Set<() => void>()
-    const sectionListeners = new Set<() => void>()
-    const shortcutSettings = {
-      getSnapshot: vi.fn(() => ({ value: { items: ['plugins', 'desktop-reminders', 'missing', 'desktop'] } })),
-      subscribe: vi.fn((listener: () => void) => { settingsListeners.add(listener); return () => { settingsListeners.delete(listener) } }),
-      set: vi.fn(),
-    }
-    const sections = [
-      { options: { id: 'desktop', order: 100, label: 'Desktop settings' } },
-      { options: { id: 'desktop-reminders', order: 50, label: 'Reminders' } },
-    ]
-    const panels = [{ options: { key: 'plugins' } }, { options: { key: 'desktop-automations' } }]
-    const slots = {
-      entries: vi.fn((name: string) => name === 'settings.section' ? sections : []),
-      entriesOfSlot: vi.fn((name: string) => name === 'main' ? panels : []),
-      getVersion: vi.fn(() => 1),
-      subscribe: vi.fn((_name: string, listener: () => void) => { sectionListeners.add(listener); return () => { sectionListeners.delete(listener) } }),
-      inject: vi.fn((_name: string, install: () => () => void) => install()),
-      register: vi.fn((definition: Record<string, unknown>) => {
-        registrations.push(definition)
-        const dispose = vi.fn()
-        disposers.push(dispose)
-        if (definition.name === 'main') {
-          sectionListeners.forEach(listener => { listener() })
-        }
-        return dispose
-      }),
-    }
-    const cleanups: Array<() => void> = []
-    const ctx = {
-      configForms: { get: vi.fn(() => shortcutSettings) },
-      effect: vi.fn((install: () => (() => void) | void) => {
-        const dispose = install()
-        if (typeof dispose === 'function') cleanups.push(dispose)
-      }),
-      inject: vi.fn((_services: string[], install: (scope: ClientContext) => void) => { install(ctx as unknown as ClientContext) }),
-      layout: { selectPanel: vi.fn() },
-      locale: {
-        bind: vi.fn(() => (key: string) => ({ plugins: 'Plugins', automations: 'Automations' })[key] ?? key),
-        getSnapshot: vi.fn(() => ({ revision: 1 })),
-        register: vi.fn(() => vi.fn()),
-        subscribe: vi.fn(() => vi.fn()),
-      },
-      slots,
-    } as unknown as ClientContext
+  it('removes stale adapters when a feature unloads', async () => {
+    const h = harness()
+    h.update(['desktop-automations'])
+    h.removeAutomation()
+    await vi.waitFor(() => {
+      expect(h.core.entriesOfSlot('settings.section').some(entry => entry.options.id === 'desktop-panel:desktop-automations')).toBe(false)
+      expect(h.core.entriesOfSlot('sidebar.panellist')).toHaveLength(0)
+    })
+    h.dispose()
+  })
+})
 
-    applyShortcutMenu(ctx)
-
-    expect(ctx.configForms.get).toHaveBeenCalledWith('desktop-shortcuts')
-    expect(registrations).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: 'settings.general.item', id: 'desktop-shortcuts' }),
-      expect.objectContaining({ name: 'settings.action', id: 'desktop-semantic-nav-icons' }),
-      expect.objectContaining({ name: 'sidebar.panellist', id: 'plugins', order: 100, label: 'Plugins' }),
-      expect.objectContaining({ name: 'main', key: shortcutPanelId('desktop-reminders') }),
-      expect.objectContaining({ name: 'sidebar.panellist', id: shortcutPanelId('desktop-reminders'), order: 101, label: 'Reminders' }),
-      expect.objectContaining({ name: 'main', key: shortcutPanelId('desktop') }),
-      expect.objectContaining({ name: 'sidebar.panellist', id: shortcutPanelId('desktop'), order: 102, label: 'Desktop settings' }),
-    ]))
-    expect(registrations.some(item => item.name === 'main' && item.key === 'plugins')).toBe(false)
-    expect(registrations.some(item => item.id === shortcutPanelId('missing'))).toBe(false)
-    expect(registrations).toHaveLength(7)
-
-    cleanups.reverse().forEach(dispose => { dispose() })
-    expect(disposers.slice(2).every(dispose => dispose.mock.calls.length > 0)).toBe(true)
+describe('presentation alias fiber ownership', () => {
+  it('keeps source children when a dynamically added alias unloads with its fiber', async () => {
+    const ctx = new Context()
+    const core = new SlotCore()
+    const register = (options: Record<string, unknown>, component: unknown = () => null) => core.register(options as never, component as never)
+    const disposeRoot = register({ name: 'root', children: {
+      main: { kind: 'keyed', scope: 'root' },
+      'settings.section': { kind: 'list', scope: 'root' },
+    } })
+    register({ name: 'settings.section', id: 'general', label: 'General', children: {
+      'settings.general.item': { kind: 'list', scope: 'root' },
+    } })
+    register({ name: 'settings.general.item', id: 'child' })
+    let scope: ClientContext = ctx
+    const fiber = ctx.plugin({ apply: (child: ClientContext) => {
+      scope = child.extend({ slots: {
+        // SlotRegistry's register method also owns an automatic Cordis effect.
+        register: (options: Record<string, unknown>, component: unknown) => child.effect(() => register(options, component)),
+        entries: (name: string) => core.entries(name),
+        inject: (_name: string, install: () => (() => void) | Iterable<() => void>) => child.effect(install),
+      } as unknown as ClientContext['slots'] })
+    } })
+    await fiber
+    // Mimic a pin change after startup, outside the initial effect execution.
+    registerEntryProjection(scope, core.entriesOfSlot('settings.section')[0]!, { name: 'main', key: 'desktop-shortcut:general' })
+    expect(core.entriesOfSlot('main')).toHaveLength(1)
+    await fiber.dispose()
+    expect(core.entriesOfSlot('main')).toHaveLength(0)
+    expect(core.entriesOfSlot('settings.general.item')).toHaveLength(1)
+    disposeRoot()
   })
 })

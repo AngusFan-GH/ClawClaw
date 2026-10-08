@@ -53,10 +53,12 @@ describe('Desktop navigation icons', () => {
       { id: 'settings:desktop-mcp', targetId: 'desktop-mcp', label: 'MCP', kind: 'settings' },
     ]
     const source = { getSnapshot: () => targets, subscribe: () => () => {} }
+    const snapshot = { value: { items: [] } }
+    const shortcutSettings = { getSnapshot: () => snapshot, subscribe: () => () => {} } as never
     const root = createRoot(host)
     roots.push(root)
 
-    await act(async () => { root.render(createElement(SettingsNavIconBridge, { shortcutTargets: source })) })
+    await act(async () => { root.render(createElement(SettingsNavIconBridge, { shortcutTargets: source, shortcutSettings })) })
 
     expect(dialog.querySelector('[data-desktop-settings-icon="desktop-reminders"] svg')).not.toBeNull()
     expect(dialog.querySelector('[data-desktop-settings-icon="desktop-mcp"] .lucide-cable')).not.toBeNull()
