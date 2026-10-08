@@ -1,14 +1,19 @@
 /** Read-only compatibility registration for pre-0.1.7 user preset directories. */
 
-import { lstat, readFile, readdir } from 'node:fs/promises'
+import { lstat, readFile, readdir, rm } from 'node:fs/promises'
+import type { Dirent } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-connection'
+import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { PresetDefinition } from '@deepseek-ai/dsh-agent-preset-registry'
 import { entryListProblem } from '@deepseek-ai/dsh-agent-preset-registry'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { parseDocument } from 'yaml'
+import { registerDesktopJsonApi } from './desktop-json-api.ts'
+import { DESKTOP_LEGACY_AGENT_PRESETS_ACTION_PATH, DESKTOP_LEGACY_AGENT_PRESETS_PATH, type DesktopLegacyAgentPreset, type DesktopLegacyAgentPresetsView } from './legacy-agent-presets-contract.ts'
 
 const MAX_PRESET_FILE_BYTES = 4 * 1024 * 1024
 const PRESET_ID = /^[A-Za-z0-9_-]{1,128}$/u
@@ -20,10 +25,18 @@ const require = createRequire(import.meta.url)
 const BUNDLED_SKILL_ROOT = join(dirname(require.resolve('@deepseek-ai/dsh-agent-preset/package.json')), 'skills')
 
 export const name = 'desktop-legacy-agent-presets'
-export const inject = ['agentPresets']
+export const inject = ['agentPresets', 'webServer', 'connection']
 
 export interface LegacyAgentPresetsConfig {
   readonly root?: string
+}
+
+function presetRoot(config: LegacyAgentPresetsConfig): string {
+  return resolve(config.root ?? join(resolveDshHome(), '.agent-presets'))
+}
+
+function assertPresetId(value: unknown): asserts value is string {
+  if (typeof value !== 'string' || !PRESET_ID.test(value)) throw new TypeError('Invalid Agent preset id')
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -125,14 +138,47 @@ export async function readLegacyAgentPreset(directory: string, id: string): Prom
   }
 }
 
+/** List only directories which this compatibility plugin owns and may delete. */
+export async function listLegacyAgentPresets(root: string): Promise<DesktopLegacyAgentPresetsView> {
+  let entries: Dirent[]
+  try { entries = await readdir(root, { withFileTypes: true }) } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return Object.freeze({ presets: Object.freeze([]) })
+    throw cause
+  }
+  const presets: DesktopLegacyAgentPreset[] = []
+  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+    if (!entry.isDirectory() || entry.isSymbolicLink() || !PRESET_ID.test(entry.name)) continue
+    try {
+      const definition = await readLegacyAgentPreset(join(root, entry.name), entry.name)
+      presets.push(Object.freeze({ id: definition.id, name: definition.name ?? definition.id,
+        ...(definition.description === undefined ? {} : { description: definition.description }) }))
+    } catch { /* A broken legacy directory is not a managed preset. */ }
+  }
+  return Object.freeze({ presets: Object.freeze(presets) })
+}
+
+/** Delete exactly one non-symlink legacy preset directory; never follows links. */
+export async function deleteLegacyAgentPreset(root: string, id: string): Promise<void> {
+  assertPresetId(id)
+  const target = resolve(root, id)
+  if (target !== join(root, id)) throw new TypeError('Invalid Agent preset id')
+  let info
+  try { info = await lstat(target) } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === 'ENOENT') throw new TypeError('Agent preset not found')
+    throw cause
+  }
+  if (!info.isDirectory() || info.isSymbolicLink()) throw new TypeError('Agent preset is not a removable directory')
+  await rm(target, { recursive: true, force: false })
+}
+
 export async function apply(ctx: Context, config: LegacyAgentPresetsConfig = {}): Promise<void> {
-  const root = resolve(config.root ?? join(resolveDshHome(), '.agent-presets'))
-  let entries
+  const root = presetRoot(config)
+  let entries: Dirent[]
   try {
     entries = await readdir(root, { withFileTypes: true })
   } catch (cause) {
-    if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return
-    throw cause
+    if ((cause as NodeJS.ErrnoException).code === 'ENOENT') entries = []
+    else throw cause
   }
   const disposers: Array<() => Promise<void>> = []
   for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
@@ -151,5 +197,16 @@ export async function apply(ctx: Context, config: LegacyAgentPresetsConfig = {})
   }
   ctx.effect(() => async () => {
     for (const dispose of disposers.reverse()) await dispose()
+  })
+  registerDesktopJsonApi(ctx, {
+    label: 'Legacy Agent presets', readPath: DESKTOP_LEGACY_AGENT_PRESETS_PATH, actionPath: DESKTOP_LEGACY_AGENT_PRESETS_ACTION_PATH,
+    read: () => listLegacyAgentPresets(root),
+    action: async (value) => {
+      if (!record(value) || value.action !== 'delete') throw new TypeError('Invalid Agent preset action')
+      const id = value.id
+      assertPresetId(id)
+      await deleteLegacyAgentPreset(root, id)
+      return await listLegacyAgentPresets(root)
+    },
   })
 }

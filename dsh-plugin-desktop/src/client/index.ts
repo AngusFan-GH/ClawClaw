@@ -21,6 +21,7 @@ import { applyWorkspaceDirectoryFlow } from './workspace-directory-flow.tsx'
 import { parseDesktopClientEnvironment, resolveDesktopClientProductVersion } from './environment.ts'
 import { applyExtendedShell } from './extended-shell.ts'
 import { applyMcpSettings } from './mcp-settings.ts'
+import { applyLegacyAgentPresetDeleteAction } from './legacy-agent-preset-delete-action.tsx'
 import { applyMarketIntegration } from './market-integration.tsx'
 import { applyManagedPluginManager } from './plugin-manager.ts'
 import { applyCronTasksSettings } from './cron-tasks-settings.ts'
@@ -44,6 +45,7 @@ export {
 } from './default-workspace-selection.ts'
 export { applyExtendedShell, applyFramedShell } from './extended-shell.ts'
 export { applyMcpSettings } from './mcp-settings.ts'
+export { applyLegacyAgentPresetDeleteAction } from './legacy-agent-preset-delete-action.tsx'
 export { applyMarketIntegration } from './market-integration.tsx'
 export { applyManagedPluginManager } from './plugin-manager.ts'
 export { applySpiritXProviderPriority, SpiritXProviderPriorityMarker } from './spiritx-provider-priority.tsx'
@@ -133,6 +135,7 @@ export function apply(ctx: ClientContext): void {
   applySpiritXProviderPriority(ctx)
   applyCronTasksSettings(ctx)
   applyRemindersSettings(ctx)
+  applyLegacyAgentPresetDeleteAction(ctx)
   applySkillsSettings(ctx, { registerSection: false })
   ctx.effect(() => applyExperts(ctx), 'dsh-plugin-desktop: experts')
   applyShortcutMenu(ctx)

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apply, readLegacyAgentPreset } from '../src/legacy-agent-presets.ts'
+import { apply, deleteLegacyAgentPreset, listLegacyAgentPresets, readLegacyAgentPreset } from '../src/legacy-agent-presets.ts'
 
 const roots: string[] = []
 
@@ -63,17 +63,34 @@ describe('legacy Agent preset registrar', () => {
       if (definition.id === 'standard') throw new Error('Duplicate agent preset: standard')
       return dispose
     })
-    let cleanup: (() => Promise<void>) | undefined
+    const cleanups: Array<() => Promise<void> | void> = []
     const warn = vi.fn()
     const ctx = {
       agentPresets: { register },
       logger: { warn },
-      effect: (factory: () => () => Promise<void>) => { cleanup = factory() },
+      webServer: { port: 43120, register: vi.fn(() => () => {}) },
+      connection: { requestRejection: vi.fn() },
+      effect: (factory: () => () => Promise<void> | void) => { cleanups.push(factory()) },
     }
     await apply(ctx as never, { root })
     expect(register.mock.calls.map(([definition]) => definition.id)).toEqual(['custom', 'standard'])
     expect(warn).toHaveBeenCalledTimes(2)
-    await cleanup?.()
+    for (const cleanup of cleanups) await cleanup()
     expect(dispose).toHaveBeenCalledOnce()
+  })
+
+  it('lists and deletes only safe, valid legacy preset directories', async () => {
+    const root = await fixture()
+    const custom = join(root, 'custom')
+    await mkdir(custom)
+    await writeFile(join(custom, 'preset.yml'), 'name: Custom\ndescription: Removable\n')
+    await writeFile(join(custom, 'agent.cordis.yml'), '- name: plugin\n')
+    await mkdir(join(root, 'broken'))
+    await writeFile(join(root, 'broken', 'preset.yml'), 'name: Broken\n')
+    const listed = await listLegacyAgentPresets(root)
+    expect(listed.presets).toEqual([{ id: 'custom', name: 'Custom', description: 'Removable' }])
+    await deleteLegacyAgentPreset(root, 'custom')
+    expect((await listLegacyAgentPresets(root)).presets).toEqual([])
+    await expect(deleteLegacyAgentPreset(root, '../broken')).rejects.toThrow('Invalid Agent preset id')
   })
 })
