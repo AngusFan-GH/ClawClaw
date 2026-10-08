@@ -252,6 +252,43 @@ try {
   if (ctx.get('desktopPnpm') === undefined) {
     throw new Error('assembled desktop profile is missing the desktop pnpm Host capability')
   }
+  const agencyPersona = ctx.get('agencyAgentsPersona')
+  const agencyLibrary = ctx.get('agencyAgentsLibrary')
+  if (agencyPersona === undefined || agencyLibrary === undefined) {
+    throw new Error('assembled desktop profile is missing the ClawClaw Experts Host capabilities')
+  }
+  const agencyCatalog = await agencyLibrary.catalog()
+  if (agencyCatalog.experts.length !== 321) {
+    throw new Error(`assembled desktop profile exposes ${agencyCatalog.experts.length} ClawClaw experts instead of 321`)
+  }
+  const firstExpert = agencyCatalog.experts[0]
+  if (firstExpert === undefined) {
+    throw new Error('assembled desktop profile exposes an empty ClawClaw expert catalog')
+  }
+  const enabledExperts = await agencyLibrary.setEnabled([firstExpert.slug], agencyCatalog.revision)
+  if (!enabledExperts.enabled.includes(firstExpert.slug) || enabledExperts.revision <= agencyCatalog.revision) {
+    throw new Error('assembled desktop profile cannot persist ClawClaw expert enablement')
+  }
+  const refreshedAgencyCatalog = await agencyLibrary.catalog()
+  if (!refreshedAgencyCatalog.enabled.includes(firstExpert.slug)
+    || refreshedAgencyCatalog.revision !== enabledExperts.revision) {
+    throw new Error(`assembled desktop profile loses ClawClaw expert enablement after rereading the catalog: write=${JSON.stringify(enabledExperts)} read=${JSON.stringify({ enabled: refreshedAgencyCatalog.enabled, revision: refreshedAgencyCatalog.revision })}`)
+  }
+  const agencyRemote = ctx.get('agencyAgents')
+  const remoteEnabled = await agencyRemote?.getEnabled?.()
+  if (!remoteEnabled?.enabled.includes(firstExpert.slug)
+    || remoteEnabled.revision !== refreshedAgencyCatalog.revision) {
+    throw new Error('ClawClaw Experts Remote disagrees with the authoritative catalog')
+  }
+  if (!readFileSync(prepared.profile.patchPath, 'utf8').includes(firstExpert.slug)) {
+    throw new Error('ClawClaw expert enablement was not persisted to the active Profile')
+  }
+  const firstPersona = firstExpert === undefined
+    ? undefined
+    : await agencyPersona.getPrompt(firstExpert.slug, firstExpert.division, 'en')
+  if (firstPersona?.prompt.trim() === '') {
+    throw new Error('assembled desktop profile cannot read the bundled ClawClaw expert personas')
+  }
   const selection = ctx.agentDefaultModel.currentSelection()
   if (selection.provider !== 'spiritx' || selection.model !== 'DeepSeek-V4-Flash') {
     throw new Error(`assembled profile selected unexpected default model ${selection.provider}/${selection.model}`)

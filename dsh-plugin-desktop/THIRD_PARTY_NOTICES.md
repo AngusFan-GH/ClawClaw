@@ -2,6 +2,10 @@
 ClawClaw distributes the following third-party packages inside its installers.
 Each package ships with its own license text in the application files; this list records
 the package names, versions, and licenses for transparency.
+
+The ClawClaw Experts catalog includes persona content derived from Agency Agents
+collections under the MIT License. Attribution and license texts ship under
+`assets/experts/`; the implementation itself is maintained as part of ClawClaw.
 | Package | Version | License |
 | --- | --- | --- |
 | @agentclientprotocol/sdk | 1.4.0 | Apache-2.0 |

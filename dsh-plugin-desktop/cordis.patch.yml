@@ -36,6 +36,12 @@
       name: dsh-plugin-desktop/profiles
     - id: desktop-updates
       name: dsh-plugin-desktop/updates
+    # ClawClaw owns both expert faces. Keep the Remote row top-level so the
+    # API gateway discovers its catalog routes before the browser mounts them.
+    - id: clawclaw-experts-remote
+      name: dsh-plugin-desktop/experts-remote
+    - id: clawclaw-experts
+      name: dsh-plugin-desktop/experts
 
 # A desktop launch has no terminal operator waiting for the Web readiness line.
 - id: web-runtime

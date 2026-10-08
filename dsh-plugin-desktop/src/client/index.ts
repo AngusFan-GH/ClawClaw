@@ -31,6 +31,7 @@ import { installShortcutMenuStyles } from './shortcut-menu-styles.ts'
 import { applySpiritXOnboarding } from './spiritx-onboarding.tsx'
 import { applySpiritXProviderPriority } from './spiritx-provider-priority.tsx'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
+import { apply as applyExperts } from '../experts/client/index.ts'
 
 export { applyAdvancedShell } from './advanced-shell.ts'
 export { applyClawClawBrand } from './clawclaw-brand.tsx'
@@ -109,6 +110,8 @@ export const inject = [
   'sessions',
   'theme',
   'uiRenderer',
+  'inputTriggers',
+  'conversation',
 ]
 
 /** Register product identity and, in Electron, native client surfaces. @param ctx - browser Cordis context. */
@@ -131,6 +134,7 @@ export function apply(ctx: ClientContext): void {
   applyCronTasksSettings(ctx)
   applyRemindersSettings(ctx)
   applySkillsSettings(ctx)
+  ctx.effect(() => applyExperts(ctx), 'dsh-plugin-desktop: experts')
   applyShortcutMenu(ctx)
   if (productVersion !== undefined) applyDesktopVersionRow(ctx, productVersion)
   ctx.effect(() => installShortcutMenuStyles(), 'dsh-plugin-desktop: shortcut menu styles')

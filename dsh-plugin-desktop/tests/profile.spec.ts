@@ -455,6 +455,12 @@ virtualStoreDirMaxLength: 60
     expect(rows.find(row => row.id === 'desktop-legacy-agent-presets')).toEqual(expect.objectContaining({
       name: 'dsh-plugin-desktop/legacy-agent-presets',
     }))
+    expect(rows.find(row => row.id === 'clawclaw-experts-remote')).toEqual(expect.objectContaining({
+      name: 'dsh-plugin-desktop/experts-remote',
+    }))
+    expect(rows.find(row => row.id === 'clawclaw-experts')).toEqual(expect.objectContaining({
+      name: 'dsh-plugin-desktop/experts',
+    }))
     expect(rows.find(row => row.id === 'pwsh-sandbox')).toEqual(expect.objectContaining({
       name: '@deepseek-ai/dsh-pwsh-sandbox',
     }))
@@ -554,7 +560,7 @@ virtualStoreDirMaxLength: 60
     }))
   })
 
-  it('keeps editable shortcuts, Cron tasks, and Skill paths in the Profile layer instead of launcher overlays', () => {
+  it('keeps editable shortcuts, Cron tasks, Skills, and experts in the Profile layer instead of launcher overlays', () => {
     const home = temporaryHome()
     const profileDir = ensureDesktopProfile(home)
     writeFileSync(join(profileDir, 'cordis.patch.yml'), [
@@ -571,6 +577,10 @@ virtualStoreDirMaxLength: 60
       '  config:',
       '    paths:',
       '      - /opt/team-skills',
+      '- id: clawclaw-experts',
+      '  config:',
+      '    enabled:',
+      '      - product-manager',
       '',
     ].join('\n'))
 
@@ -595,20 +605,28 @@ virtualStoreDirMaxLength: 60
       name: 'dsh-plugin-desktop/skills',
       config: { paths: ['/opt/team-skills'] },
     })
+    expect(rows.find(row => row.id === 'clawclaw-experts')).toEqual({
+      id: 'clawclaw-experts',
+      name: 'dsh-plugin-desktop/experts',
+      config: { enabled: ['product-manager'] },
+    })
     expect(firstPersisted).toBe(persisted)
     expect(persisted.indexOf('insert:')).toBeLessThan(persisted.indexOf('id: desktop-shortcuts\n  config:'))
     expect(persisted.indexOf('insert:')).toBeLessThan(persisted.indexOf('id: desktop-cron-tasks\n  config:'))
     expect(persisted.match(/id: desktop-shortcuts\n/g)).toHaveLength(2)
     expect(persisted.match(/id: desktop-cron-tasks\n/g)).toHaveLength(2)
     expect(persisted.match(/id: desktop-skills\n/g)).toHaveLength(2)
+    expect(persisted.match(/id: clawclaw-experts\n/g)).toHaveLength(2)
     expect(prepared.overlays.some(patch => patch.id === 'desktop-shell')).toBe(true)
     expect(prepared.overlays.some(patch => Array.isArray(patch.insert)
       && patch.insert.some(row => row.id === 'desktop-shortcuts' || row.id === 'desktop-cron-tasks'
-        || row.id === 'desktop-skills'))).toBe(false)
+        || row.id === 'desktop-skills' || row.id === 'clawclaw-experts'))).toBe(false)
     expect(composeEntries([preparedAgain.patches]).find(row => row.id === 'desktop-cron-tasks'))
       .toEqual(rows.find(row => row.id === 'desktop-cron-tasks'))
     expect(composeEntries([preparedAgain.patches]).find(row => row.id === 'desktop-skills'))
       .toEqual(rows.find(row => row.id === 'desktop-skills'))
+    expect(composeEntries([preparedAgain.patches]).find(row => row.id === 'clawclaw-experts'))
+      .toEqual(rows.find(row => row.id === 'clawclaw-experts'))
   })
 
   it('merges a frozen LAN IPv4 snapshot into existing Web runtime trust', () => {

@@ -35,6 +35,7 @@ vi.mock('../src/client/shortcut-menu.tsx', () => ({ applyShortcutMenu: vi.fn() }
 vi.mock('../src/client/desktop-version-row.tsx', () => ({ applyDesktopVersionRow: vi.fn() }))
 vi.mock('../src/client/plugin-manager.ts', () => ({ applyManagedPluginManager: vi.fn() }))
 vi.mock('../src/client/spiritx-provider-priority.tsx', () => ({ applySpiritXProviderPriority: vi.fn() }))
+vi.mock('../src/experts/client/index.ts', () => ({ apply: vi.fn() }))
 
 describe('desktop client environment', () => {
   it.each(['darwin', 'win32', 'linux'])('keeps compatibility chrome out of the %s client slot tree', platform => {
@@ -72,6 +73,7 @@ describe('desktop client environment', () => {
       apply({ effect, inject } as unknown as ClientContext)
       expect(effect.mock.calls.map(([, label]) => label)).toEqual([
         'dsh-plugin-desktop: market integration dictionaries',
+        'dsh-plugin-desktop: experts',
         'dsh-plugin-desktop: shortcut menu styles',
       ])
       expect(inject).toHaveBeenCalledWith(['market'], expect.any(Function))

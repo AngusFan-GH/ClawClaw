@@ -63,6 +63,8 @@ export default defineConfig([
       'clawclaw-skill-filesystem': 'src/clawclaw-skill-filesystem.ts',
       'legacy-agent-presets': 'src/legacy-agent-presets.ts',
       mcp: 'src/mcp.ts',
+      'experts/index': 'src/experts/index.ts',
+      'experts/remote': 'src/experts/remote.ts',
       spiritx: 'src/spiritx.ts',
       'diagnostic-export-worker': 'src/diagnostic-export-worker.ts',
       'packaged-runtime-smoke': 'src/packaged-runtime-smoke.ts',

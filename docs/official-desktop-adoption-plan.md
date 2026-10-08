@@ -6,7 +6,7 @@
 
 本文指导 ClawClaw 在保持完全独立桌面壳的前提下，选择性借鉴 DeepSeek Harness 官方 Desktop。它既是实施顺序，也是每次变更的验收清单。
 
-- ClawClaw 基线：`dsh-desktop` 分支，产品版本 `0.2.3`。
+- ClawClaw 基线：`dsh-desktop` 分支，产品版本 `0.2.4`。
 - 当前运行时基线：只读子模块和 vendored runtime 均为 DSH `0.1.7-rc.2`。
 - 调研的官方基线：`deepseek-ai/deepseek-harness` `master` 的 `21638c5631`（2026-09-27）。
 - 官方参考目录：`apps/desktop/`。上游采用 MIT 许可证；实质复制代码时必须保留所需归属和许可证说明。

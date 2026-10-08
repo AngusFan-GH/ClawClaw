@@ -17,6 +17,7 @@ vi.mock('../src/client/reminders-settings.ts', () => ({ applyRemindersSettings: 
 vi.mock('../src/client/skills-settings.ts', () => ({ applySkillsSettings: vi.fn() }))
 vi.mock('../src/client/shortcut-menu.tsx', () => ({ applyShortcutMenu: vi.fn() }))
 vi.mock('../src/client/plugin-manager.ts', () => ({ applyManagedPluginManager: vi.fn() }))
+vi.mock('../src/experts/client/index.ts', () => ({ apply: vi.fn() }))
 
 describe('ClawClaw product copy', () => {
   it.each([
@@ -44,6 +45,7 @@ describe('ClawClaw product copy', () => {
       expect(effect.mock.calls.map(([, label]) => label)).toEqual([
         'dsh-plugin-desktop: ClawClaw page identity',
         'dsh-plugin-desktop: market integration dictionaries',
+        'dsh-plugin-desktop: experts',
         'dsh-plugin-desktop: shortcut menu styles',
       ])
 
