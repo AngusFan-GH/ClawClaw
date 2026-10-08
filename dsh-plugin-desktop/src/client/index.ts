@@ -113,7 +113,6 @@ export const inject = [
   'theme',
   'uiRenderer',
   'inputTriggers',
-  'conversation',
 ]
 
 /** Register product identity and, in Electron, native client surfaces. @param ctx - browser Cordis context. */
