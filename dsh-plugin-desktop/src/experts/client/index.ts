@@ -1,5 +1,5 @@
 // @ts-nocheck -- ported client compatibility layer; host contracts remain strictly checked.
-import { AntdProvider, Button, Input, Segmented } from './antd-ui.js'
+import { AntdProvider, Button, Input } from './antd-ui.js'
 import { antdLocale } from './antd-locale.js'
 import { LibraryCard } from './library-ui.js'
 import type { AgencyTeamsRemote } from './remote.js'
@@ -434,7 +434,7 @@ const MENU_NAME_OVERRIDE = EXPERT_MENU_ITEM_SELECTORS
   .map((selector) => `${selector} span:last-child`)
   .join(',')
 const EXPERT_MENU_NAME_STYLE = 'flex:1 1 auto;max-width:none;min-width:0'
-export const COMPOSER_CSS = '.aag-btn-wrap{position:relative;order:1;display:inline-flex;flex:0 0 auto}.aag-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;padding:0 8px;white-space:nowrap;border:none;border-radius:24px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px;font-weight:500;cursor:pointer}.aag-btn:hover,.aag-btn[aria-expanded="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.aag-btn:focus-visible{outline:2px solid var(--dsw-alias-label-secondary);outline-offset:2px}.aag-btn>svg{flex:none}.aag-menu{position:absolute;bottom:calc(100% + 4px);left:0;box-sizing:border-box;padding:4px;display:flex;flex-direction:column;gap:0;width:300px;max-width:360px;max-height:calc(100dvh - 24px);overflow-y:auto;border:0;border-radius:20px;background:var(--dsw-specific-menu);backdrop-filter:var(--dsw-menu-backdrop-filter);box-shadow:var(--dsw-elevation-prominent);z-index:10000}.aag-menu[data-placement="below"]{top:calc(100% + 4px);bottom:auto}.aag-menu-title{padding:8px 10px;font-size:12px;line-height:16px;color:var(--dsw-alias-label-tertiary)}.aag-menu-item{display:flex;align-items:center;gap:8px;width:100%;min-height:40px;padding:8px 10px;border:none;border-radius:10px;background:transparent;cursor:pointer;text-align:left;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);box-sizing:border-box}.aag-menu-item:hover{background:var(--dsw-alias-interactive-bg-hover)}.aag-menu-empty{padding:8px 10px;color:var(--dsw-alias-label-secondary);font-size:13px}'
+export const COMPOSER_CSS = '.aag-btn-wrap{position:relative;order:1;display:inline-flex;flex:0 0 auto}.aag-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;padding:0 8px;white-space:nowrap;border:none;border-radius:24px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px;font-weight:500;cursor:pointer}.aag-btn:hover,.aag-btn[aria-expanded="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.aag-btn:focus-visible{outline:2px solid var(--dsw-alias-label-secondary);outline-offset:2px}.aag-btn>svg{flex:none}.aag-menu{position:absolute;bottom:calc(100% + 4px);left:0;box-sizing:border-box;padding:4px;display:flex;flex-direction:column;gap:0;width:300px;max-width:360px;max-height:calc(100dvh - 24px);overflow-y:auto;border:0;border-radius:20px;background:var(--dsw-specific-menu);backdrop-filter:var(--dsw-menu-backdrop-filter);box-shadow:var(--dsw-elevation-prominent);z-index:10000}.aag-menu[data-placement="below"]{top:calc(100% + 4px);bottom:auto}.aag-menu-title{padding:8px 10px;font-size:12px;line-height:16px;color:var(--dsw-alias-label-tertiary)}.aag-menu-item{display:flex;align-items:center;gap:8px;width:100%;min-height:40px;padding:8px 10px;border:none;border-radius:10px;background:transparent;cursor:pointer;text-align:left;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);box-sizing:border-box}.aag-menu-item:hover{background:var(--dsw-alias-interactive-bg-hover)}.aag-menu-empty{padding:8px 10px;color:var(--dsw-alias-label-secondary);font-size:13px}.aag-menu.aag-discovery{width:560px;max-width:calc(100vw - 24px);overflow:hidden}.aag-capability-picker{display:grid;grid-template-columns:124px minmax(0,1fr);min-height:300px}.aag-capability-nav{display:flex;flex-direction:column;gap:2px;padding:6px 8px 6px 2px;border-right:1px solid var(--dsw-alias-border-l2)}.aag-capability-nav button{width:100%;padding:8px 10px;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:14px;line-height:22px;text-align:left;cursor:pointer}.aag-capability-nav button:hover,.aag-capability-nav button.active{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.aag-capability-results{min-width:0;max-height:348px;padding:2px 0 2px 8px;overflow:auto}.aag-capability-list{display:flex;flex-direction:column;gap:2px}.aag-capability-list button,.aag-capability-row{display:flex;align-items:flex-start;flex-direction:column;gap:2px;width:100%;padding:9px 10px;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;text-align:left}.aag-capability-list button{cursor:pointer}.aag-capability-list button:hover{background:var(--dsw-alias-interactive-bg-hover)}.aag-capability-list small{display:block;overflow:hidden;max-width:100%;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;text-overflow:ellipsis;white-space:nowrap}.aag-capability-row{flex-direction:row;align-items:center;justify-content:space-between}.aag-capability-row>span{min-width:0}.aag-capability-row button{flex:none;border:0;border-radius:8px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;line-height:24px;cursor:pointer}.aag-capability-note{padding:10px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}@media(max-width:560px){.aag-menu.aag-discovery{width:min(420px,calc(100vw - 24px))}.aag-capability-picker{grid-template-columns:104px minmax(0,1fr)}.aag-capability-nav button{padding:8px}.aag-capability-results{padding-left:4px}}'
 // 设置页版式对齐 dsh-skills-manager：工具栏 + 汇总条 + 分组卡片 + 行内启停按钮。
 export const SETTINGS_CSS = `
 .aag-section{box-sizing:border-box;display:flex;min-width:0;max-width:760px;width:100%;margin:0 auto;flex-direction:column;gap:16px;padding:0 0 32px;color:var(--dsw-alias-label-primary)}
@@ -495,7 +495,18 @@ export const CARD_SETTINGS_CSS = `
 @container (max-width:430px){.aag-card-body{grid-template-columns:40px minmax(0,1fr);column-gap:10px}.aag-expert-avatar{width:40px;height:40px}.aag-card-name{font-size:16px;line-height:22px}}
 `
 
-export const CSS = TEAM_CSS + COMPOSER_CSS + SETTINGS_CSS + CARD_SETTINGS_CSS + DISCOVERY_CSS
+export const CAPABILITY_PICKER_CSS = `
+.aag-menu.aag-discovery{width:min(560px,calc(100vw - 24px));max-width:calc(100vw - 24px);padding:4px;overflow:hidden}
+.aag-capability-picker{display:grid;grid-template-columns:124px minmax(0,1fr);height:332px;min-height:0}
+.aag-capability-nav{display:flex;min-width:0;flex-direction:column;gap:2px;padding:6px 8px 6px 2px;border-right:1px solid var(--dsw-alias-border-l2)}
+.aag-capability-nav button{width:100%;padding:8px 10px;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:14px;line-height:22px;text-align:left;cursor:pointer}.aag-capability-nav button:hover,.aag-capability-nav button.active{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.aag-capability-results{display:flex;min-width:0;min-height:0;flex-direction:column;padding:2px 0 2px 8px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain}.aag-capability-results>.agt-compact{min-width:0}.aag-capability-results .agt-compact-list{max-width:100%;overflow-x:hidden}
+.aag-capability-search{padding:4px;flex:none}.aag-capability-search input{box-sizing:border-box;width:100%;min-height:36px;padding:7px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:inherit;font:inherit}.aag-capability-search input:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}
+.aag-capability-list{display:flex;min-width:0;flex-direction:column;gap:2px}.aag-capability-list button,.aag-capability-row{display:flex;align-items:flex-start;flex-direction:column;gap:2px;width:100%;min-width:0;padding:9px 10px;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;text-align:left}.aag-capability-list button{cursor:pointer}.aag-capability-list button:hover{background:var(--dsw-alias-interactive-bg-hover)}.aag-capability-list small{display:block;overflow:hidden;max-width:100%;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;text-overflow:ellipsis;white-space:nowrap}
+.aag-capability-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}.aag-capability-row>span{display:block;min-width:0}.aag-capability-row button{grid-column:2;grid-row:1;flex:none;padding:0 8px;border:0;border-radius:8px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;line-height:24px;cursor:pointer}.aag-capability-note{grid-column:1/-1;padding-top:2px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
+@media(max-width:560px){.aag-menu.aag-discovery{width:min(420px,calc(100vw - 24px))}.aag-capability-picker{grid-template-columns:104px minmax(0,1fr);height:300px}.aag-capability-nav button{padding:8px}.aag-capability-results{padding-left:4px}}
+`
+export const CSS = TEAM_CSS + COMPOSER_CSS + SETTINGS_CSS + CARD_SETTINGS_CSS + DISCOVERY_CSS + CAPABILITY_PICKER_CSS
   + MENU_NAME_OVERRIDE + `{${EXPERT_MENU_NAME_STYLE}}`
 
 /** 本插件 Remote 命名空间的 client 侧 face（ctx.remote.agencyAgents 的形状）。 */
@@ -733,14 +744,19 @@ type ButtonProps = PropsLocale<'agency'> & {
   readonly prepareTeamSelection?: () => (team: ExpertTeam, example?: string) => boolean | Promise<boolean>
   readonly getActive: () => 'zh' | 'en'
   readonly capabilityRegistry: ExpertCapabilityRegistry
+  readonly insertSkill?: (name: string) => boolean
 }
 
 export function AgentsButton(props: ButtonProps): React.ReactElement {
-  const [mode, setMode] = React.useState<'experts' | 'teams'>('experts')
+  const [mode, setMode] = React.useState<'experts' | 'teams' | 'skills' | 'mcp'>('experts')
   const [open, setOpen] = React.useState(false)
   const [insertError, setInsertError] = React.useState<string | null>(null)
   const [query, setQuery] = React.useState('')
+  const [capabilityQuery, setCapabilityQuery] = React.useState('')
   const [busy, setBusy] = React.useState(false)
+  const [skills, setSkills] = React.useState<readonly { name: string, description: string }[]>([])
+  const [mcpServers, setMcpServers] = React.useState<readonly { serverName: string, state: string, enabled: boolean, tools: readonly { name: string }[] }[]>([])
+  const [capabilityError, setCapabilityError] = React.useState<string | null>(null)
   const working = React.useRef(false)
   const epoch = React.useRef(0)
   const triggerRef = React.useRef<HTMLSpanElement | null>(null)
@@ -759,6 +775,16 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
     if (restoreFocus) triggerRef.current?.querySelector('button')?.focus()
   }
   React.useEffect(() => () => { epoch.current++ }, [])
+  React.useEffect(() => {
+    if (!open || (mode !== 'skills' && mode !== 'mcp')) return
+    let alive = true
+    setCapabilityError(null)
+    const load = mode === 'skills'
+      ? createDesktopSkillsApi().read().then(value => { if (alive) setSkills(value.filter(skill => skill.userInvocable)) })
+      : createDesktopMcpApi().read().then(value => { if (alive) setMcpServers(value) })
+    void load.catch(() => { if (alive) setCapabilityError(props.getActive() === 'zh' ? '暂时无法读取能力列表。' : 'Capabilities are temporarily unavailable.') })
+    return () => { alive = false }
+  }, [open, mode])
 
   React.useLayoutEffect(() => {
     if (!open) return
@@ -769,7 +795,7 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
       const next = resolveExpertMenuPosition(root.getBoundingClientRect(), viewportHeight)
       const rect = root.getBoundingClientRect()
       const viewportWidth = window.visualViewport?.width ?? window.innerWidth
-      const width = Math.min(340, viewportWidth - 24)
+      const width = Math.min(560, viewportWidth - 24)
       setMenuLeft(Math.max(12 - rect.left, Math.min(0, viewportWidth - 12 - width - rect.left)))
       setMenuPosition((current) => current?.placement === next.placement && current.maxHeight === next.maxHeight ? current : next)
     }
@@ -822,6 +848,7 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
     if (working.current) return
     epoch.current++
     setQuery('')
+    setCapabilityQuery('')
     setOpen(true)
     load()
   }
@@ -872,6 +899,33 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
     return nameMatch(b) - nameMatch(a)
   })
   const results = searching ? matches.slice(0, 8) : groupByDivision(matches, props.getActive()).flatMap(group => group.experts)
+  const capabilityNeedle = capabilityQuery.trim().toLocaleLowerCase()
+  const filteredSkills = capabilityNeedle === '' ? skills : skills.filter(skill => `${skill.name} ${skill.description}`.toLocaleLowerCase().includes(capabilityNeedle))
+  const filteredMcpServers = capabilityNeedle === '' ? mcpServers : mcpServers.filter(server => `${server.serverName} ${server.state} ${server.tools.map(tool => tool.name).join(' ')}`.toLocaleLowerCase().includes(capabilityNeedle))
+  const capabilitySearch = (placeholder: string): React.ReactElement => React.createElement('div', { className: 'aag-capability-search' },
+    React.createElement('input', { type: 'search', autoFocus: true, value: capabilityQuery, 'aria-label': placeholder, placeholder,
+      onChange: (event: React.ChangeEvent<HTMLInputElement>) => setCapabilityQuery(event.target.value) }))
+  const capabilityContent = mode === 'teams' && 'getTeams' in props.remote
+    ? React.createElement(TeamLocaleContext.Provider, { value: props.getActive() }, React.createElement(TeamMenu, { remote: props.remote as TeamRemote,
+      prepareSelect: props.prepareTeamSelection, onSelected: () => close(), onExpertsChanged: () => { void readEnabled(props.remote).then(value => props.onEnabledChange?.(value.enabled)) } }))
+    : mode === 'skills'
+      ? React.createElement(React.Fragment, null,
+        capabilitySearch(props.getActive() === 'zh' ? '搜索技能' : 'Search skills'),
+        React.createElement('div', { className: 'aag-capability-list' }, filteredSkills.length === 0
+          ? React.createElement('div', { className: 'aag-menu-empty' }, capabilityNeedle === '' ? (props.getActive() === 'zh' ? '没有可由用户选择的技能。' : 'No user-selectable skills.') : (props.getActive() === 'zh' ? '未找到匹配的技能。' : 'No matching skills.'))
+          : filteredSkills.map(skill => React.createElement('button', { type: 'button', key: skill.name, disabled: busy, onClick: () => { if (props.insertSkill?.(skill.name)) close() } }, React.createElement('strong', null, skill.name), React.createElement('small', null, skill.description)))))
+      : mode === 'mcp'
+        ? React.createElement(React.Fragment, null,
+          capabilitySearch(props.getActive() === 'zh' ? '搜索连接器或工具' : 'Search connectors or tools'),
+          React.createElement('div', { className: 'aag-capability-list' }, filteredMcpServers.length === 0
+            ? React.createElement('div', { className: 'aag-menu-empty' }, capabilityNeedle === '' ? (props.getActive() === 'zh' ? '尚未配置连接器。' : 'No connectors configured.') : (props.getActive() === 'zh' ? '未找到匹配的连接器。' : 'No matching connectors.'))
+            : filteredMcpServers.map(server => React.createElement('div', { className: 'aag-capability-row', key: server.serverName },
+            React.createElement('span', null, React.createElement('strong', null, server.serverName), React.createElement('small', null, `${server.state} · ${server.tools.length} ${props.getActive() === 'zh' ? '个工具' : 'tools'}`)),
+            React.createElement('button', { type: 'button', onClick: () => { void createDesktopMcpApi().toggle(server.serverName, !server.enabled).then(setMcpServers).catch(() => setCapabilityError(props.getActive() === 'zh' ? '连接器状态更新失败。' : 'Could not update connector status.')) } }, server.enabled ? (props.getActive() === 'zh' ? '停用' : 'Disable') : (props.getActive() === 'zh' ? '启用' : 'Enable')),
+            React.createElement('div', { className: 'aag-capability-note' }, props.getActive() === 'zh' ? '已启用的连接器会将工具提供给当前对话。' : 'Enabled connectors make their tools available to this conversation.')))))
+        : React.createElement(ExpertDiscovery, { experts: results, enabled: catalog.enabled, locale: props.getActive(), t: props.t, avatarSrc: menuAvatar,
+          health: new Map(results.map(expert => [expert.slug, expertCapabilityHealth(expert, capabilitySnapshot.catalog, capabilitySnapshot.loading)])),
+          query, onQuery: setQuery, busy, hasMore: searching && matches.length > results.length, onPick: slug => { void pick(slug) } })
   const menu = open
     ? React.createElement('div', {
       className: 'aag-menu aag-discovery', id: menuId, role: 'dialog', 'aria-label': props.t('settings.nav'),
@@ -883,19 +937,15 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
     },
       insertError === null ? null : React.createElement('div', { className: 'aag-error', role: 'alert' }, insertError,
         React.createElement('button', { type: 'button', disabled: busy, onClick: () => load() }, props.t('btn.refresh'))),
-      'getTeams' in props.remote ? React.createElement(Segmented, {
-        block: true, 'aria-label': teamText(props.getActive(), '专家'), value: mode,
-        options: [
-          { value: 'experts' as const, label: teamText(props.getActive(), '专家') },
-          { value: 'teams' as const, label: teamText(props.getActive(), '专家团') },
-        ],
-        onChange: (value: unknown) => setMode(value === 'teams' ? 'teams' : 'experts'),
-      }) : null,
-      mode === 'teams' && 'getTeams' in props.remote ? React.createElement(TeamLocaleContext.Provider, { value: props.getActive() }, React.createElement(TeamMenu, { remote: props.remote as TeamRemote,
-        prepareSelect: props.prepareTeamSelection, onSelected: () => close(), onExpertsChanged: () => { void readEnabled(props.remote).then(value => props.onEnabledChange?.(value.enabled)) } })) :
-      React.createElement(ExpertDiscovery, { experts: results, enabled: catalog.enabled, locale: props.getActive(), t: props.t, avatarSrc: menuAvatar,
-        health: new Map(results.map(expert => [expert.slug, expertCapabilityHealth(expert, capabilitySnapshot.catalog, capabilitySnapshot.loading)])),
-        query, onQuery: setQuery, busy, hasMore: searching && matches.length > results.length, onPick: slug => { void pick(slug) } }))
+      React.createElement('div', { className: 'aag-capability-picker' },
+        React.createElement('nav', { className: 'aag-capability-nav', 'aria-label': props.getActive() === 'zh' ? '能力分类' : 'Capability categories' },
+          [['experts', props.getActive() === 'zh' ? '专家' : 'Experts'], ['teams', props.getActive() === 'zh' ? '专家团' : 'Teams'], ['skills', props.getActive() === 'zh' ? '技能' : 'Skills'], ['mcp', props.getActive() === 'zh' ? '连接器' : 'Connectors']].map(([value, label]) => React.createElement('button', { type: 'button', key: value, className: mode === value ? 'active' : undefined, onClick: () => { setMode(value as typeof mode); setCapabilityQuery('') } }, label))),
+        React.createElement('div', { className: 'aag-capability-results' },
+      capabilityError === null ? null : React.createElement('div', { className: 'aag-error', role: 'alert' }, capabilityError),
+      capabilityContent
+      )
+      )
+      )
     : null
 
   return React.createElement(AntdProvider, { locale: antdLocale(props.getActive()) }, React.createElement('div', { className: 'aag-btn-wrap', ref: rootRef, onBlur: (event: React.FocusEvent) => {
@@ -903,7 +953,7 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
     if (next instanceof Element && (event.currentTarget.contains(next) || next.closest('.ant-modal, .ant-drawer, .ant-select-dropdown, .ant-dropdown'))) return
     if (next instanceof Node && !event.currentTarget.contains(next)) close()
   } },
-    React.createElement('span', { ref: triggerRef }, React.createElement('button', { type: 'button', className: 'aag-btn', title: props.t('button.title'), 'aria-expanded': open, 'aria-haspopup': 'dialog', 'aria-controls': open ? menuId : undefined, onMouseDown: keepComposerFocus, onClick }, expertIcon(), props.t('settings.nav'))),
+    React.createElement('span', { ref: triggerRef }, React.createElement('button', { type: 'button', className: 'aag-btn', title: props.getActive() === 'zh' ? '选择能力' : 'Choose capabilities', 'aria-expanded': open, 'aria-haspopup': 'dialog', 'aria-controls': open ? menuId : undefined, onMouseDown: keepComposerFocus, onClick }, expertIcon(), props.getActive() === 'zh' ? '能力' : 'Capabilities')),
     menu))
 }
 
@@ -1478,6 +1528,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   }
   const bindExpertInsertion = (sessionId?: SessionId): {
     readonly insertReference: (reference: ReferenceInsert) => boolean
+    readonly insertSkill: (name: string) => boolean
     readonly prepareInsertion: () => (reference: ReferenceInsert) => boolean
     readonly prepareTeamSelection: () => (team: ExpertTeam, example?: string) => boolean | Promise<boolean>
     readonly capabilityRegistry: ExpertCapabilityRegistry
@@ -1485,6 +1536,19 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
     const target = (): ReferenceInsertionTarget | undefined => resolveTarget(sessionId)
     return {
       capabilityRegistry: capabilityRegistryFor(sessionId),
+      insertSkill: (name) => {
+        if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(name)) return false
+        const current = target()
+        if (current === undefined) return false
+        const snapshot = current.state.getSnapshot()
+        const sessions = ctx.sessions as unknown as ReferenceSessionAccess
+        const id = resolveTargetSessionId(sessions, sessionId)
+        const actx = id === undefined ? undefined : sessions.scope?.(id) ?? sessions.binding?.(id)?.ctx
+        return actx?.bail(actx, 'slash/input-insert-text', {
+          text: `/${name} `,
+          span: { start: 0, end: 0, draftRev: snapshot.draftRev },
+        }) === true
+      },
       prepareTeamSelection: () => {
         const current = target()
         return (team, example) => current !== undefined && target() === current && insertTeamTask(current, team, example, sessionId)
