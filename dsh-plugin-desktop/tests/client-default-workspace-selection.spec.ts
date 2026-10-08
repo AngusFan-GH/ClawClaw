@@ -14,6 +14,20 @@ const defaultId = 'workspace-default' as WorkspaceId
 const projectId = 'workspace-project' as WorkspaceId
 
 describe('Desktop default Workspace display name', () => {
+  it('uses the localized product title before the default Workspace settings arrive', () => {
+    const base = workspaceSnapshot()
+    const source = { getSnapshot: () => base, subscribe: (_listener: () => void) => () => {} }
+    const dispose = installDefaultWorkspaceLocale({
+      source,
+      defaultId: () => undefined,
+      title: () => 'Default',
+      subscribeLocale: () => () => {},
+      subscribeSettings: () => () => {},
+    })
+    expect(source.getSnapshot().items.map(item => item.title)).toEqual(['Default', 'Project'])
+    dispose()
+  })
+
   it('updates on language switches without renaming stored or user-created workspaces', () => {
     let title = '默认'
     let base = workspaceSnapshot()

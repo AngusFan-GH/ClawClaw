@@ -2,7 +2,7 @@ import { existsSync, lstatSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { protectDefaultWorkspace, provisionDefaultWorkspace } from '../src/default-workspace.ts'
+import { DEFAULT_WORKSPACE_TITLE, protectDefaultWorkspace, provisionDefaultWorkspace } from '../src/default-workspace.ts'
 import { WorkspaceId } from '@deepseek-ai/dsh-workspace'
 import { Context, Service } from '@deepseek-ai/cordis'
 
@@ -63,7 +63,7 @@ describe('ClawClaw default Workspace', () => {
 
   it('creates and registers the product default when it is missing', async () => {
     const path = temporaryPath()
-    const workspace = { id: 'default-id', title: '默认' }
+    const workspace = { id: 'default-id', title: DEFAULT_WORKSPACE_TITLE }
     const registry = {
       resolveByPath: vi.fn(async () => undefined),
       create: vi.fn(async () => workspace),
@@ -72,14 +72,14 @@ describe('ClawClaw default Workspace', () => {
       workspace,
       created: true,
     })
-    expect(registry.create).toHaveBeenCalledWith(path, '默认')
+    expect(registry.create).toHaveBeenCalledWith(path, DEFAULT_WORKSPACE_TITLE)
     expect(existsSync(path)).toBe(true)
     expect(lstatSync(path).isDirectory()).toBe(true)
   })
 
-  it('reuses and renames the Workspace already registered for the default path', async () => {
+  it('reuses and migrates the Workspace already registered for the default path to the locale-neutral title', async () => {
     const path = temporaryPath()
-    const workspace = { id: 'default-id', title: 'ClawClaw', setTitle: vi.fn(async () => {}) }
+    const workspace = { id: 'default-id', title: '默认', setTitle: vi.fn(async () => {}) }
     const registry = {
       resolveByPath: vi.fn(async () => workspace),
       create: vi.fn(),
@@ -88,7 +88,7 @@ describe('ClawClaw default Workspace', () => {
       workspace,
       created: false,
     })
-    expect(workspace.setTitle).toHaveBeenCalledWith('默认')
+    expect(workspace.setTitle).toHaveBeenCalledWith(DEFAULT_WORKSPACE_TITLE)
     expect(registry.create).not.toHaveBeenCalled()
     expect(existsSync(path)).toBe(true)
   })

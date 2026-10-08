@@ -7,6 +7,23 @@ export const DEFAULT_WORKSPACE_LOCALES = {
   en: { title: 'Default' },
 }
 
+const DEFAULT_WORKSPACE_TITLES = new Set(Object.values(DEFAULT_WORKSPACE_LOCALES).map(copy => copy.title))
+
+/**
+ * Resolve the product row even while its settings form is still loading.
+ *
+ * A fresh renderer can receive the Workspace follow baseline before the
+ * settings document. During that interval the default id is unavailable, so
+ * relying on it alone leaks the durable fallback title into the UI. A unique
+ * known product title is safe to use only as that short-lived fallback; once
+ * settings are ready, identity always wins.
+ */
+function resolveDefaultWorkspaceId(base: WorkspaceSnapshot, configuredId: string | undefined): string | undefined {
+  if (configuredId !== undefined && configuredId !== '') return configuredId
+  const candidates = base.items.filter(item => DEFAULT_WORKSPACE_TITLES.has(item.title))
+  return candidates.length === 1 ? candidates[0]?.workspaceId : undefined
+}
+
 export function installDefaultWorkspaceLocale(options: {
   readonly source: IWorkspaces['list']
   readonly defaultId: () => string | undefined
@@ -22,12 +39,12 @@ export function installDefaultWorkspaceLocale(options: {
   const listeners = new Set<() => void>()
   const getSnapshot = (): WorkspaceSnapshot => {
     const base = originalSnapshot.call(source)
-    const id = options.defaultId()
+    const id = resolveDefaultWorkspaceId(base, options.defaultId())
     const title = options.title()
     if (cached?.base === base && cached.id === id && cached.title === title) return cached.value
     const items = base.items.map(item => item.workspaceId === id && item.title !== title
       // Respect explicit user renames; only the product name is dictionary copy.
-      && ['默认', 'Default'].includes(item.title) ? { ...item, title } : item)
+      && DEFAULT_WORKSPACE_TITLES.has(item.title) ? { ...item, title } : item)
     const value = items.every((item, index) => item === base.items[index]) ? base : { ...base, items }
     cached = { base, id, title, value }
     return value

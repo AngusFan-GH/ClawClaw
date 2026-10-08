@@ -4,24 +4,23 @@ import type { MessageBoxOptions, MessageBoxReturnValue } from 'electron'
 import type { DesktopLocale } from './runtime.ts'
 import {
   hasDesktopActiveInterruptions,
-  hasDesktopScheduledInterruptions,
   type DesktopInterruptionSnapshot,
 } from './interruption-inspection.ts'
 import { desktopNativeCopy } from './native-dialog-copy.ts'
 
-export type DesktopQuitPrompt = 'active' | 'scheduled' | 'active-and-scheduled' | undefined
+export type DesktopQuitPrompt = 'active' | undefined
 
-/** Unknown inspection is deliberately treated as possibly active work. */
+/** Unknown inspection is deliberately treated as possibly active work.
+ *
+ * Armed future cron tasks do not need confirmation: they are persisted and will
+ * resume when ClawClaw starts again. Only work that is active right now can be
+ * interrupted by an immediate quit.
+ */
 export function resolveDesktopQuitPrompt(
   snapshot: DesktopInterruptionSnapshot | 'unknown',
 ): DesktopQuitPrompt {
   if (snapshot === 'unknown') return 'active'
-  const active = hasDesktopActiveInterruptions(snapshot)
-  const scheduled = hasDesktopScheduledInterruptions(snapshot)
-  if (active && scheduled) return 'active-and-scheduled'
-  if (active) return 'active'
-  if (scheduled) return 'scheduled'
-  return undefined
+  return hasDesktopActiveInterruptions(snapshot) ? 'active' : undefined
 }
 
 export interface DesktopQuitConfirmationOptions {
@@ -62,16 +61,11 @@ export class DesktopQuitConfirmation {
     const prompt = resolveDesktopQuitPrompt(await inspection.catch(() => 'unknown' as const))
     if (this.disposed || prompt === undefined) return !this.disposed
     const copy = desktopNativeCopy(this.options.locale())
-    const detail = prompt === 'active-and-scheduled'
-      ? copy.quitActiveAndScheduledTasks
-      : prompt === 'scheduled'
-        ? copy.quitScheduledTasks
-        : copy.quitActiveTasks
     const result = await this.options.show({
       type: 'warning',
       title: copy.quitTitle,
       message: copy.quitMessage,
-      detail,
+      detail: copy.quitActiveTasks,
       buttons: [copy.quit, copy.cancel],
       defaultId: 1,
       cancelId: 1,

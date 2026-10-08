@@ -21,8 +21,8 @@ describe('Desktop quit confirmation', () => {
   it.each([
     [idle, undefined],
     [{ ...idle, activeAgents: 1 }, 'active'],
-    [{ ...idle, scheduledCronTasks: 1 }, 'scheduled'],
-    [{ ...idle, activeJobs: 1, scheduledCronTasks: 1 }, 'active-and-scheduled'],
+    [{ ...idle, scheduledCronTasks: 1 }, undefined],
+    [{ ...idle, activeJobs: 1, scheduledCronTasks: 1 }, 'active'],
     ['unknown', 'active'],
   ] as const)('classifies %j as %s', (snapshot, prompt) => {
     expect(resolveDesktopQuitPrompt(snapshot)).toBe(prompt)
@@ -31,11 +31,14 @@ describe('Desktop quit confirmation', () => {
   it('quits silently before a Host exists or while it is idle', async () => {
     const beforeHost = setup(() => undefined)
     const idleHost = setup(async () => idle)
+    const scheduledOnly = setup(async () => ({ ...idle, scheduledCronTasks: 1 }))
 
     await expect(beforeHost.confirmation.confirm()).resolves.toBe(true)
     await expect(idleHost.confirmation.confirm()).resolves.toBe(true)
+    await expect(scheduledOnly.confirmation.confirm()).resolves.toBe(true)
     expect(beforeHost.show).not.toHaveBeenCalled()
     expect(idleHost.show).not.toHaveBeenCalled()
+    expect(scheduledOnly.show).not.toHaveBeenCalled()
   })
 
   it('uses conservative copy after inspection failure and honors cancellation', async () => {
@@ -66,7 +69,7 @@ describe('Desktop quit confirmation', () => {
     await expect(first).resolves.toBe(true)
     expect(f.show).toHaveBeenCalledOnce()
     expect(f.show).toHaveBeenCalledWith(expect.objectContaining({
-      detail: 'Active or queued tasks will stop immediately, and scheduled tasks will not run while ClawClaw is closed.',
+      detail: 'Active or queued tasks will stop immediately.',
     }))
   })
 

@@ -10,6 +10,14 @@ import type { DesktopWorkspaceSettings } from './workspace-settings.ts'
 import { DESKTOP_WORKSPACE_SETTINGS_NAMESPACE } from './workspace-settings.ts'
 
 const DIRECTORY_MODE = 0o700
+/**
+ * Durable fallback for the product-owned Workspace.
+ *
+ * The client projects this to the active language. Keeping the stored value
+ * English prevents the Host (which has no renderer locale) from imposing a
+ * Chinese label on every locale at startup.
+ */
+export const DEFAULT_WORKSPACE_TITLE = 'Default'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
@@ -72,10 +80,10 @@ export async function provisionDefaultWorkspace(
   if (process.platform !== 'win32') chmodSync(target, DIRECTORY_MODE)
   const existing = await registry.resolveByPath(target)
   if (existing !== undefined) {
-    if (existing.title !== '默认') await existing.setTitle('默认')
+    if (existing.title !== DEFAULT_WORKSPACE_TITLE) await existing.setTitle(DEFAULT_WORKSPACE_TITLE)
     return Object.freeze({ workspace: existing, created: false })
   }
-  const workspace = await registry.create(target, '默认')
+  const workspace = await registry.create(target, DEFAULT_WORKSPACE_TITLE)
   return Object.freeze({ workspace, created: true })
 }
 
