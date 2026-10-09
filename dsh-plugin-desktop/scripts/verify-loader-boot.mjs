@@ -41,20 +41,6 @@ const BROWSER_ACCESS = Object.freeze({
   },
   setOrdinaryBrowserEnabled(enabled) { ordinaryBrowserEnabled = enabled },
 })
-const LAN_HTTPS_SNAPSHOT = Object.freeze({
-  state: 'inactive',
-  actualPort: null,
-  addresses: Object.freeze([]),
-  caFingerprint: null,
-  errorCode: null,
-})
-const LAN_HTTPS = Object.freeze({
-  caCertificate: null,
-  attach() {},
-  snapshot() { return LAN_HTTPS_SNAPSHOT },
-  async setEnabled() { return LAN_HTTPS_SNAPSHOT },
-  async stop() { return LAN_HTTPS_SNAPSHOT },
-})
 const RUNNER_ENVIRONMENT_NAMES = new Set([
   'ELECTRON_RUN_AS_NODE',
   'NPM_CONFIG_RUNTIME',
@@ -165,7 +151,6 @@ try {
       host.loader.internal = undefined
       host.provide(DSH_LAUNCH_ENVIRONMENT_KEY, launchEnvironment)
       host.provide('desktopBrowserAccess', BROWSER_ACCESS)
-      host.provide('desktopLanHttps', LAN_HTTPS)
       host.provide('desktopRuntime', runtime)
       host.provide('webServer', {
         host: '127.0.0.1',

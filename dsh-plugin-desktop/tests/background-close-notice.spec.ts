@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   DesktopBackgroundCloseNotice,
   desktopBackgroundCloseNoticePath,
+  resetDesktopBackgroundCloseNotice,
 } from '../src/background-close-notice.ts'
 
 function setup() {
@@ -58,6 +59,17 @@ describe('background close notice', () => {
     fixture.response.resolve({ response: 0, checkboxChecked: false })
     await vi.waitFor(() => { expect(existsSync(fixture.markerPath)).toBe(true) })
     fixture.notice.reset()
+    expect(existsSync(fixture.markerPath)).toBe(false)
+  })
+
+  it('resets a persisted acknowledgement before a window generation exists', async () => {
+    const fixture = setup()
+    fixture.notice.close(fixture.hide)
+    fixture.response.resolve({ response: 0, checkboxChecked: false })
+    await vi.waitFor(() => { expect(existsSync(fixture.markerPath)).toBe(true) })
+
+    resetDesktopBackgroundCloseNotice(fixture.root, 'desktop')
+
     expect(existsSync(fixture.markerPath)).toBe(false)
   })
 

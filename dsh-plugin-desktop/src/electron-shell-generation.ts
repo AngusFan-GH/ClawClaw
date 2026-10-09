@@ -289,7 +289,7 @@ export class ElectronShellGeneration {
     } catch (cause) {
       this.options.logError(`dsh-plugin-desktop: failed to restore main-window state: ${cause instanceof Error ? cause.message : String(cause)}`)
     }
-    const isolated = spec.mode !== 'advanced' && platform.platform !== 'linux'
+    const isolated = platform.platform !== 'linux'
     const windowOptions = desktopWindowOptions(spec, icon, platform.platform, this.options.preloadPath)
     const window = new BrowserWindow({
       ...windowOptions,

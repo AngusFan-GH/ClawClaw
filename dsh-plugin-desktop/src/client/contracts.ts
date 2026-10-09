@@ -1,16 +1,5 @@
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 
-/** Sidebar geometry passed by the desktop root slot. */
-export interface DesktopSidebarOwnerProps {
-  /** Whether the sidebar is showing its compact rail. */
-  collapsed: boolean
-  /** Current rendered sidebar width. */
-  width: number
-}
-
-/** Public panel transitions consumed by conversation and sidebar plugins. */
-export type DesktopLayoutService = import('@deepseek-ai/dsh-client-ui-layout/client').ILayout
-
 /** Insets reserved by Desktop-owned native chrome in CSS pixels. */
 export interface DesktopWindowInsets {
   readonly top: number
@@ -33,7 +22,7 @@ export interface DesktopWindowDragRegion {
 export interface DesktopWindowService {
   /** Installed Desktop product version for this renderer generation. */
   readonly version: string
-  readonly mode: 'compatibility' | 'extended' | 'advanced'
+  readonly mode: 'compatibility'
   readonly platform: 'darwin' | 'win32' | 'linux'
   /** Capability-gated native material active behind this renderer. */
   readonly material: 'off' | 'transparent' | 'mica'

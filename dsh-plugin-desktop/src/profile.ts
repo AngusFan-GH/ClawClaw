@@ -16,7 +16,6 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
-import { isIP } from 'node:net'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { evaluate, isJsExpr, type EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
@@ -40,8 +39,6 @@ import { isSeq, parseAllDocuments, parseDocument, Scalar, visit } from 'yaml'
 import { findOverlayPackage, resolveOverlayPackage } from './package-overlay.ts'
 import { DESKTOP_DEFAULT_WEB_PORT } from './desktop-port.ts'
 import {
-  desktopBrowserAccessEnabled,
-  desktopNetworkExposureForBrowserAccess,
   desktopWebServerHost,
   parseDesktopNetworkExposure,
   parseDesktopOpenBrowser,
@@ -137,9 +134,6 @@ const DESKTOP_WEB_SERVER_ROW_ID = 'desktop-webserver'
 const DESKTOP_WEB_SERVER_PACKAGE = `${DESKTOP_PACKAGE_NAME}/webserver`
 const DESKTOP_SETTINGS_NAMESPACE = 'dsh-desktop'
 const MAX_FALLBACK_MANIFEST_BYTES = 1024 * 1024
-const UI_LAYOUT_PACKAGE = '@deepseek-ai/dsh-client-ui-layout'
-const UI_SIDEBAR_PACKAGE = '@deepseek-ai/dsh-client-ui-sidebar'
-const UI_CONVERSATION_PACKAGE = '@deepseek-ai/dsh-client-ui-conversation'
 const DEFAULT_DESKTOP_MARKET_SNAPSHOT: DesktopMarketSnapshot = Object.freeze({
   requested: 'disabled',
   effective: 'disabled',
@@ -169,8 +163,8 @@ const BUNDLED_AGENT_SKILL_ROOT = {
  */
 export function parseDesktopShellMode(value: unknown): DesktopShellMode {
   if (value === undefined) return DEFAULT_DESKTOP_SHELL_MODE
-  if (value === 'compatibility' || value === 'extended' || value === 'advanced') return value
-  throw new Error(`${BIN_NAME}: ${DESKTOP_SETTINGS_NAMESPACE}.mode must be "compatibility", "extended", or "advanced"`)
+  if (value === 'compatibility' || value === 'extended' || value === 'advanced') return 'compatibility'
+  throw new Error(`${BIN_NAME}: ${DESKTOP_SETTINGS_NAMESPACE}.mode must be "compatibility"`)
 }
 
 /** Parse the requested loopback Web port and reject values Node cannot listen on. */
@@ -218,19 +212,15 @@ export function desktopStartupSettingsFromSettings(document: unknown): DesktopSt
   }
   const values = section as Record<string, unknown>
   const mode = parseDesktopShellMode(values.mode)
-  const networkExposure = parseDesktopNetworkExposure(values.networkExposure)
-  const openBrowser = desktopBrowserAccessEnabled(
-    mode,
-    parseDesktopOpenBrowser(values.openBrowser),
-    networkExposure,
-  )
+  parseDesktopNetworkExposure(values.networkExposure)
+  parseDesktopOpenBrowser(values.openBrowser)
   return {
     mode,
     port: parseDesktopPort(values.port),
     macosMaterial: parseMacosWindowMaterial(values.macosMaterial),
     windowsMaterial: parseWindowsWindowMaterial(values.windowsMaterial),
-    openBrowser,
-    networkExposure: desktopNetworkExposureForBrowserAccess(openBrowser, networkExposure),
+    openBrowser: false,
+    networkExposure: 'loopback',
   }
 }
 
@@ -310,8 +300,6 @@ export interface PreparedDesktopProfile {
   openBrowser: boolean
   /** Listener scope applied to the Desktop-owned WebServer. */
   networkExposure: DesktopNetworkExposure
-  /** Frozen LAN IPv4 snapshot trusted by this profile generation and its HTTPS edge. */
-  lanAddresses: readonly string[]
   /** Resolved file-backed settings document used by this generation. */
   settingsDocument: string
   /** Requested provider and the fail-closed provider effective for this generation. */
@@ -326,8 +314,6 @@ export interface PreparedDesktopProfile {
 export interface DesktopProfilePreparationHooks {
   /** Receive the trusted settings path before its contents are parsed. */
   onSettingsDocumentResolved?: (path: string) => void
-  /** LAN IPv4 literals sampled once before this profile generation is composed. */
-  lanAddresses?: readonly string[]
 }
 
 /** User patch entry skipped to keep a profile bootable. */
@@ -598,28 +584,13 @@ function rowConfig(row: EntryOptions | undefined): Record<string, unknown> {
     : {}
 }
 
-/** Snapshot, validate, and deduplicate the LAN allowlist supplied by the launcher. */
-function preparedLanAddresses(addresses: readonly string[] | undefined): readonly string[] {
-  const unique = new Set<string>()
-  for (const address of addresses ?? []) {
-    if (isIP(address) !== 4) {
-      throw new Error(`${BIN_NAME}: LAN address ${JSON.stringify(address)} is not an IPv4 literal`)
-    }
-    unique.add(address)
-  }
-  return Object.freeze([...unique])
-}
-
-/** Merge launcher-derived LAN literals with a profile's explicit Web trust entries. */
-function webRuntimeTrustedHosts(
-  configured: unknown,
-  lanAddresses: readonly string[],
-): string[] {
-  if (configured === undefined) return [...lanAddresses]
+/** Validate the profile's explicit Web trust entries without adding network peers. */
+function webRuntimeTrustedHosts(configured: unknown): string[] {
+  if (configured === undefined) return []
   if (!Array.isArray(configured) || configured.some(entry => typeof entry !== 'string')) {
     throw new Error(`${BIN_NAME}: web-runtime trustedHosts must be an array of strings`)
   }
-  return [...new Set([...configured, ...lanAddresses])]
+  return [...new Set(configured)]
 }
 
 /** Resolve a Loader row's platform gate without mutating the host process. */
@@ -1000,7 +971,6 @@ export function prepareDesktopProfile(
   marketSelection: DesktopMarketSnapshot = DEFAULT_DESKTOP_MARKET_SNAPSHOT,
   hooks: DesktopProfilePreparationHooks = {},
 ): PreparedDesktopProfile {
-  const lanAddresses = preparedLanAddresses(hooks.lanAddresses)
   const profileDir = profileName === DESKTOP_PROFILE_NAME
     ? ensureDesktopProfile(home)
     : resolveProfileDir(profileName, home)
@@ -1126,25 +1096,9 @@ export function prepareDesktopProfile(
       // Browser access is an advertised Desktop capability, never an
       // instruction to launch the operating system's default browser.
       openBrowser: false,
-      trustedHosts: webRuntimeTrustedHosts(webRuntimeConfig.trustedHosts, lanAddresses),
+      trustedHosts: webRuntimeTrustedHosts(webRuntimeConfig.trustedHosts),
     },
   })
-  if (mode === 'advanced' || mode === 'extended') {
-    for (const [id, packageName] of [
-      ['ui-layout', UI_LAYOUT_PACKAGE],
-      ['ui-sidebar', UI_SIDEBAR_PACKAGE],
-      ['ui-conversation', UI_CONVERSATION_PACKAGE],
-    ] as const) {
-      if (rows.get(id)?.name !== packageName) {
-        throw new Error(`${BIN_NAME}: ${mode} desktop mode must use ${packageName} in the ${id} row`)
-      }
-    }
-    patches.push(
-      { id: 'ui-layout', disabled: true },
-      { id: 'ui-sidebar', disabled: false },
-      { id: 'ui-conversation', disabled: false },
-    )
-  }
   const webserver = rows.get('webserver')
   if (webserver === undefined) {
     throw new Error(`${BIN_NAME}: desktop profile has no webserver row`)
@@ -1272,7 +1226,6 @@ export function prepareDesktopProfile(
     windowsMaterial,
     openBrowser,
     networkExposure,
-    lanAddresses,
     settingsDocument,
     market: desktopMarketSnapshotWithEffective(marketSelection, effectiveMarket),
     requiresDependencyMigration,

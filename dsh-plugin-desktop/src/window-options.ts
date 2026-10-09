@@ -1,10 +1,8 @@
-/** BrowserWindow construction for compatibility and advanced shells. */
+/** BrowserWindow construction for the ClawClaw shell. */
 
 import type { BrowserWindowConstructorOptions, NativeImage } from 'electron'
 import type { DesktopPlatform, DesktopShellSpec } from './runtime.ts'
 import {
-  ADVANCED_MACOS_TRAFFIC_LIGHT_TOP,
-  ADVANCED_WINDOWS_TITLEBAR_HEIGHT,
   DESKTOP_FRAME_HEIGHT,
   DESKTOP_FRAME_MACOS_TRAFFIC_LIGHT_TOP,
 } from './window-chrome.ts'
@@ -64,44 +62,6 @@ export function compatibilityWindowOptions(
   const options = baseWindowOptions(spec, icon, platform, preload)
   if (platform === 'linux') return options
   throw new Error('dsh-plugin-desktop: compatibility mode is unsupported on this platform')
-}
-
-/**
- * Build the native material window used by the desktop-owned advanced shell.
- * @param spec - shell values resolved from the active Cordis row.
- * @param icon - validated application icon.
- * @param platform - current Electron platform.
- * @returns platform-native glass and window-control options.
- */
-export function advancedWindowOptions(
-  spec: DesktopShellSpec,
-  icon: NativeImage,
-  platform: DesktopPlatform,
-  preload: string,
-): BrowserWindowConstructorOptions {
-  if (spec.mode !== 'advanced') {
-    throw new Error(`dsh-plugin-desktop: unsupported enhanced window mode ${spec.mode}`)
-  }
-  return customChromeWindowOptions(spec, icon, platform, preload, {
-    titlebarHeight: ADVANCED_WINDOWS_TITLEBAR_HEIGHT,
-    macosTrafficLightTop: ADVANCED_MACOS_TRAFFIC_LIGHT_TOP,
-  })
-}
-
-/** Build the visible command-bar window used by extended mode. */
-export function extendedWindowOptions(
-  spec: DesktopShellSpec,
-  icon: NativeImage,
-  platform: DesktopPlatform,
-  preload: string,
-): BrowserWindowConstructorOptions {
-  if (spec.mode !== 'extended') {
-    throw new Error(`dsh-plugin-desktop: unsupported extended window mode ${spec.mode}`)
-  }
-  return customChromeWindowOptions(spec, icon, platform, preload, {
-    titlebarHeight: DESKTOP_FRAME_HEIGHT,
-    macosTrafficLightTop: DESKTOP_FRAME_MACOS_TRAFFIC_LIGHT_TOP,
-  })
 }
 
 interface CustomChromeGeometry {
@@ -170,7 +130,5 @@ export function desktopWindowOptions(
   platform: DesktopPlatform,
   preload: string,
 ): BrowserWindowConstructorOptions {
-  if (spec.mode === 'compatibility') return compatibilityWindowOptions(spec, icon, platform, preload)
-  if (spec.mode === 'extended') return extendedWindowOptions(spec, icon, platform, preload)
-  return advancedWindowOptions(spec, icon, platform, preload)
+  return compatibilityWindowOptions(spec, icon, platform, preload)
 }

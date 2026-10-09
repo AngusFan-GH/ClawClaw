@@ -1,7 +1,7 @@
 /** Data contract shared by the isolated native Setup Wizard and its owner. */
 
 export type DesktopSetupWizardPlatform = 'darwin' | 'win32' | 'linux'
-export type DesktopSetupWizardMode = 'compatibility' | 'extended' | 'advanced'
+export type DesktopSetupWizardMode = 'compatibility'
 export type DesktopSetupWizardMacosMaterial = 'off' | 'transparent'
 export type DesktopSetupWizardWindowsMaterial = 'off' | 'mica'
 export type DesktopSetupWizardNetworkExposure = 'loopback' | 'lan'
@@ -73,7 +73,7 @@ function hasExactKeys(value: Record<string, unknown>, expected: readonly string[
 }
 
 function isMode(value: unknown): value is DesktopSetupWizardMode {
-  return value === 'compatibility' || value === 'extended' || value === 'advanced'
+  return value === 'compatibility'
 }
 
 function isMacosMaterial(value: unknown): value is DesktopSetupWizardMacosMaterial {
@@ -153,30 +153,9 @@ export function desktopSetupWizardSelectionIsAvailable(
   selection: DesktopSetupWizardSelection,
   capabilities: Pick<DesktopSetupWizardInput, 'platform' | 'micaSupported'>,
 ): boolean {
-  if (selection.openBrowser && selection.mode !== 'compatibility') return false
-  if (!selection.openBrowser && selection.networkExposure === 'lan') return false
-  if (capabilities.platform === 'linux' && selection.mode !== 'compatibility') return false
   return capabilities.platform !== 'win32'
     || selection.windowsMaterial !== 'mica'
     || capabilities.micaSupported
-}
-
-/** LAN always needs a fresh confirmation when moving away from loopback-only access. */
-export function desktopSetupWizardRequiresLanConfirmation(
-  current: DesktopSetupWizardNetworkExposure,
-  requested: DesktopSetupWizardNetworkExposure,
-): boolean {
-  return current === 'loopback' && requested === 'lan'
-}
-
-/** A first-run Wizard must record a fresh acknowledgement before it can expose LAN. */
-export function desktopSetupWizardRequiresLanAcknowledgement(
-  current: DesktopSetupWizardNetworkExposure,
-  requested: DesktopSetupWizardNetworkExposure,
-  acknowledged: boolean,
-): boolean {
-  return requested === 'lan'
-    && (!acknowledged || desktopSetupWizardRequiresLanConfirmation(current, requested))
 }
 
 /** Freeze a complete result before it crosses back into launcher orchestration. */

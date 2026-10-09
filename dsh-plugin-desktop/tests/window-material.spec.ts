@@ -27,25 +27,25 @@ describe('desktop window material capabilities', () => {
       'compatibility', 'darwin', 'transparent', 'mica', undefined,
     )).toBe('transparent')
     expect(effectiveDesktopWindowMaterial(
-      'extended', 'darwin', 'transparent', 'mica', undefined,
+      'compatibility', 'darwin', 'transparent', 'mica', undefined,
     )).toBe('transparent')
     expect(effectiveDesktopWindowMaterial(
-      'extended', 'win32', 'transparent', 'mica', 19_045,
+      'compatibility', 'win32', 'transparent', 'mica', 19_045,
     )).toBe('off')
     expect(effectiveDesktopWindowMaterial(
-      'extended', 'win32', 'transparent', 'mica', 22_000,
+      'compatibility', 'win32', 'transparent', 'mica', 22_000,
     )).toBe('off')
     expect(effectiveDesktopWindowMaterial(
-      'extended', 'win32', 'transparent', 'acrylic', 22_000,
+      'compatibility', 'win32', 'transparent', 'acrylic', 22_000,
     )).toBe('off')
     expect(effectiveDesktopWindowMaterial(
-      'extended', 'win32', 'transparent', 'mica', 22_631,
+      'compatibility', 'win32', 'transparent', 'mica', 22_631,
     )).toBe('mica')
     expect(effectiveDesktopWindowMaterial(
-      'extended', 'win32', 'transparent', 'acrylic', 22_631,
+      'compatibility', 'win32', 'transparent', 'acrylic', 22_631,
     )).toBe('off')
     expect(effectiveDesktopWindowMaterial(
-      'extended', 'win32', 'transparent', 'acrylic', 10_240,
+      'compatibility', 'win32', 'transparent', 'acrylic', 10_240,
     )).toBe('off')
   })
 

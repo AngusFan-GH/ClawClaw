@@ -15,10 +15,6 @@ export type DesktopTrayLabelKey =
   | 'openTerminal'
   | 'profile'
   | 'quit'
-  | 'shellMode'
-  | 'advanced'
-  | 'compatibility'
-  | 'extended'
   | 'unavailableForDesktop'
   | 'updateAvailable'
 
@@ -35,10 +31,6 @@ const labels: Record<DesktopLocale, Record<DesktopTrayLabelKey, (value: string) 
     openTerminal: () => 'Open DSH Terminal',
     profile: profileName => `Profile: ${profileName}`,
     quit: () => 'Quit',
-    shellMode: mode => `Mode: ${mode}`,
-    advanced: () => 'Enhanced Mode',
-    compatibility: () => 'Compatibility Mode',
-    extended: () => 'Extended Window',
     unavailableForDesktop: profileName => `${profileName} (Unavailable for Desktop)`,
     updateAvailable: version => `ClawClaw ${version} Available`,
   },
@@ -54,10 +46,6 @@ const labels: Record<DesktopLocale, Record<DesktopTrayLabelKey, (value: string) 
     openTerminal: () => '打开 DSH 终端',
     profile: profileName => `Profile：${profileName}`,
     quit: () => '退出',
-    shellMode: mode => `模式：${mode}`,
-    advanced: () => '增强模式',
-    compatibility: () => '兼容模式',
-    extended: () => '扩展窗口',
     unavailableForDesktop: profileName => `${profileName}（不可用于桌面端）`,
     updateAvailable: version => `ClawClaw ${version} 可用`,
   },

@@ -1,5 +1,5 @@
 /** Desktop renderer modes accepted from the Electron-owned page URL. */
-export type DesktopClientMode = 'compatibility' | 'extended' | 'advanced'
+export type DesktopClientMode = 'compatibility'
 
 /** Host platforms whose native chrome has a desktop presentation. */
 export type DesktopClientPlatform = 'darwin' | 'win32' | 'linux'
@@ -21,7 +21,7 @@ export interface DesktopClientEnvironment {
   micaSupported: boolean
 }
 
-const MODES = new Set<DesktopClientMode>(['compatibility', 'extended', 'advanced'])
+const MODES = new Set<DesktopClientMode>(['compatibility'])
 const PLATFORMS = new Set<DesktopClientPlatform>(['darwin', 'win32', 'linux'])
 const MATERIAL_MARKERS = new Set(['off', 'transparent', 'acrylic', 'mica'])
 const VERSION_PATTERN = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u

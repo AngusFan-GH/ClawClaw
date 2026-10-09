@@ -53,7 +53,7 @@ export class DesktopWebServer extends WebServer {
 
   constructor(ctx: ConstructorParameters<typeof WebServer>[0], config: Config) {
     if (config.host !== '127.0.0.1') {
-      throw new Error('dsh-plugin-desktop: Desktop WebServer requires loopback until LAN HTTPS is available')
+      throw new Error('dsh-plugin-desktop: Desktop WebServer only supports loopback')
     }
     super(ctx, config)
     this.desktopConfig = config

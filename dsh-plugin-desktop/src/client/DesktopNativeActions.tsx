@@ -1,4 +1,4 @@
-/** Shared launcher-backed actions rendered in settings and extended title bars. */
+/** Shared launcher-backed actions rendered in settings and the Desktop titlebar. */
 
 import { Bug, ChevronDown, LifeBuoy, RefreshCw, RotateCw, SquareTerminal, Wrench } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'

@@ -34,6 +34,40 @@ vi.mock('../src/desktop-dialog-window.ts', async (importOriginal) => ({
 }))
 
 describe('Desktop startup recovery confirmations', () => {
+  it('executes local maintenance actions through the bounded recovery authority', async () => {
+    let journalEnabled = false
+    const maintenanceActions = {
+      readUpdateQualificationJournal: vi.fn(() => journalEnabled),
+      setUpdateQualificationJournal: vi.fn(async (enabled: boolean) => {
+        journalEnabled = enabled
+      }),
+      clearUpdateQualificationJournal: vi.fn(async () => {}),
+      resetBackgroundCloseNotice: vi.fn(async () => {}),
+    }
+    const recovery = new DesktopStartupRecoveryWindow({
+      locale: 'zh',
+      failureStage: 'host-boot',
+      failureDetail: 'maintenance test',
+      exportDiagnostics: async () => '/tmp/diagnostics.zip',
+      maintenanceActions,
+    })
+    const parent = { isDestroyed: () => false, loadFile: vi.fn(async () => {}) }
+    ;(recovery as unknown as { window: typeof parent }).window = parent
+    const handleAction = (action: string) => (recovery as unknown as {
+      handleAction: (value: { readonly action: string }) => Promise<void>
+    }).handleAction({ action })
+
+    await handleAction('enable-update-journal')
+    await handleAction('clear-update-journal')
+    await handleAction('reset-background-notice')
+
+    expect(maintenanceActions.setUpdateQualificationJournal)
+      .toHaveBeenCalledExactlyOnceWith(true)
+    expect(maintenanceActions.clearUpdateQualificationJournal).toHaveBeenCalledOnce()
+    expect(maintenanceActions.resetBackgroundCloseNotice).toHaveBeenCalledOnce()
+    expect(maintenanceActions.readUpdateQualificationJournal).toHaveBeenCalled()
+  })
+
   it('executes a plugin mutation only after the Desktop dialog accepts its preview', async () => {
     desktopDialog.show.mockClear()
     const previewUninstall = vi.fn(async () => ({
@@ -730,6 +764,10 @@ describe('Desktop startup recovery action parser', () => {
       'cancel-change-data-directory',
       'browse-data-directory',
       'factory-reset',
+      'enable-update-journal',
+      'disable-update-journal',
+      'clear-update-journal',
+      'reset-background-notice',
       'restart',
       'quit',
     ]) {

@@ -14,8 +14,8 @@ import type {
 /** Electron platforms supported by the ClawClaw native adapter. */
 export type DesktopPlatform = 'darwin' | 'win32' | 'linux'
 
-/** Native presentation modes selected by the desktop-shell Cordis row. */
-export type DesktopShellMode = 'compatibility' | 'extended' | 'advanced'
+/** The single native presentation owned by ClawClaw. */
+export type DesktopShellMode = 'compatibility'
 
 /** Electron appearance source used by native frame and material rendering. */
 export type DesktopThemeSource = 'system' | 'light' | 'dark'
@@ -178,8 +178,6 @@ export interface DesktopShellSpec extends DesktopWindowConfig {
   readThemeSource(): DesktopThemeSource
   /** Request Cordis teardown followed by native application exit. */
   requestQuit(code: number): void
-  /** Persist another mode through the registered desktop settings scope. */
-  requestModeChange(mode: DesktopShellMode): Promise<void>
 }
 
 /** Electron bootstrap capability supplied before the profile tree mounts. */

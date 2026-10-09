@@ -1,11 +1,6 @@
 /** Pre-Host reader and atomic writer for Desktop Setup Wizard preferences. */
 
 import {
-  desktopBrowserAccessAvailable,
-  desktopBrowserAccessEnabled,
-  desktopNetworkExposureForBrowserAccess,
-} from './desktop-network.ts'
-import {
   closeSync,
   constants,
   fstatSync,
@@ -54,7 +49,7 @@ export interface DesktopSetupWizardSettings {
   readonly windowsMaterial: DesktopSetupWizardWindowsMaterial
   /** Persisted compatibility key for ordinary-browser access permission. */
   readonly openBrowser: boolean
-  /** Native Web listener exposure; LAN requires browser access permission. */
+  /** Persisted compatibility key for the retired listener exposure setting. */
   readonly networkExposure: DesktopSetupWizardNetworkExposure
   readonly notifications: DesktopSetupWizardNotificationSettings
 }
@@ -211,8 +206,8 @@ function optionalBoolean(values: Record<string, unknown>, key: string, fallback:
 
 function parseMode(value: unknown): DesktopSetupWizardMode {
   if (value === undefined) return 'compatibility'
-  if (value === 'compatibility' || value === 'extended' || value === 'advanced') return value
-  throw invalid('dsh-desktop.mode must be compatibility, extended, or advanced')
+  if (value === 'compatibility' || value === 'extended' || value === 'advanced') return 'compatibility'
+  throw invalid('dsh-desktop.mode must be compatibility')
 }
 
 function parseExposure(value: unknown): DesktopSetupWizardNetworkExposure {
@@ -236,18 +231,14 @@ function projectSettings(root: Record<string, unknown> | unknown[]): DesktopSetu
   const desktop = section(root, DESKTOP_NAMESPACE)
   const notifications = section(root, NOTIFICATIONS_NAMESPACE)
   const mode = parseMode(desktop.mode)
-  const networkExposure = parseExposure(desktop.networkExposure)
-  const openBrowser = desktopBrowserAccessEnabled(
-    mode,
-    optionalBoolean(desktop, 'openBrowser', false),
-    networkExposure,
-  )
+  parseExposure(desktop.networkExposure)
+  optionalBoolean(desktop, 'openBrowser', false)
   return Object.freeze({
     mode,
     macosMaterial: parseMacosWindowMaterial(desktop.macosMaterial),
     windowsMaterial: parseWindowsWindowMaterial(desktop.windowsMaterial),
-    openBrowser,
-    networkExposure: desktopNetworkExposureForBrowserAccess(openBrowser, networkExposure),
+    openBrowser: false,
+    networkExposure: 'loopback',
     notifications: notificationSettings(notifications),
   })
 }
@@ -266,11 +257,7 @@ function normalizedUpdate(
   if (typeof value.openBrowser !== 'boolean') {
     throw new TypeError(`${BIN_NAME}: Setup Wizard openBrowser must be a boolean`)
   }
-  const openBrowser = desktopBrowserAccessAvailable(requestedMode) && value.openBrowser
-  const networkExposure = desktopNetworkExposureForBrowserAccess(
-    openBrowser,
-    parseExposure(value.networkExposure),
-  )
+  parseExposure(value.networkExposure)
   if (!isRecord(value.notifications)) {
     throw new TypeError(`${BIN_NAME}: Setup Wizard notifications must be a map`)
   }
@@ -289,8 +276,8 @@ function normalizedUpdate(
     mode: requestedMode,
     macosMaterial: value.macosMaterial,
     windowsMaterial: value.windowsMaterial,
-    openBrowser,
-    networkExposure,
+    openBrowser: false,
+    networkExposure: 'loopback',
     notifications: Object.freeze({
       enabled: value.notifications.enabled,
       notifyOnTurnCompletion: value.notifications.notifyOnTurnCompletion,
@@ -562,15 +549,12 @@ export async function migrateDesktopBrowserAccessSettings(
     // Validate every known Wizard-owned value before migrating any leaf.
     projectSettings(loaded.root)
     const desktop = section(settingsRoot(loaded.root), DESKTOP_NAMESPACE)
-    const storedMode = parseMode(desktop.mode)
+    const legacyMode = desktop.mode === 'extended' || desktop.mode === 'advanced'
+    parseMode(desktop.mode)
     const storedOpenBrowser = optionalBoolean(desktop, 'openBrowser', false)
     const storedExposure = parseExposure(desktop.networkExposure)
-    const browserAccess = desktopBrowserAccessEnabled(storedMode, storedOpenBrowser, storedExposure)
-    const networkExposure = desktopNetworkExposureForBrowserAccess(browserAccess, storedExposure)
     return {
-      browserAccess,
-      needed: storedOpenBrowser !== browserAccess || storedExposure !== networkExposure,
-      networkExposure,
+      needed: legacyMode || storedOpenBrowser || storedExposure !== 'loopback',
     }
   }
 
@@ -588,14 +572,14 @@ export async function migrateDesktopBrowserAccessSettings(
   if (loaded.format === 'yaml') {
     output = applyYamlUpdate(loaded.yaml!, {
       ...projectSettings(loaded.root),
-      openBrowser: migration.browserAccess,
-      networkExposure: migration.networkExposure,
+      openBrowser: false,
+      networkExposure: 'loopback',
     })
   } else {
     output = applyJsonUpdate(loaded.root, {
       ...projectSettings(loaded.root),
-      openBrowser: migration.browserAccess,
-      networkExposure: migration.networkExposure,
+      openBrowser: false,
+      networkExposure: 'loopback',
     })
   }
   await writeFileAtomic(path, output, {

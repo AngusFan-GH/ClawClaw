@@ -8,17 +8,8 @@ import {
   DesktopNativeActions,
   DesktopRestartMenuItems,
 } from '../src/client/DesktopNativeActions.tsx'
-import {
-  DesktopModeControl,
-  DesktopVersionControl,
-  selectDesktopFrameMode,
-} from '../src/client/ExtendedTitlebar.tsx'
-import {
-  desktopBrowserUrlsShouldRender,
-  DesktopSettingsSection,
-  readDesktopSettingsUntilLanSettled,
-  resolveDesktopLanConfirmation,
-} from '../src/client/DesktopSettingsSection.tsx'
+import { DesktopVersionControl } from '../src/client/DesktopFrameTitlebarView.tsx'
+import { DesktopSettingsSection } from '../src/client/DesktopSettingsSection.tsx'
 import { DesktopTerminalSettingsAction } from '../src/client/DesktopTerminalSettingsAction.tsx'
 import {
   createDesktopSettingsApi,
@@ -37,9 +28,6 @@ import {
 import { en, zh, type DesktopSettingsLocaleKey } from '../src/client/desktop-settings-locales.ts'
 import { installDesktopSettingsStyles } from '../src/client/desktop-settings-styles.ts'
 
-const BROWSER_AUTH_TOKEN = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-const CA_FINGERPRINT = 'a'.repeat(64)
-
 const VIEW: DesktopSettingsView = {
   current: 'desktop',
   profiles: [
@@ -52,8 +40,6 @@ const VIEW: DesktopSettingsView = {
     mode: 'compatibility',
     macosMaterial: 'transparent',
     windowsMaterial: 'off',
-    openBrowser: false,
-    networkExposure: 'loopback',
     notifications: {
       enabled: true,
       notifyOnTurnCompletion: true,
@@ -62,14 +48,6 @@ const VIEW: DesktopSettingsView = {
       notifyOnJobFailure: true,
     },
     updateQualificationJournal: false,
-  },
-  web: {
-    localUrl: `http://127.0.0.1:43120/?token=${BROWSER_AUTH_TOKEN}`,
-    lanUrls: [],
-    lanState: 'inactive',
-    lanError: null,
-    lanCaFingerprint: CA_FINGERPRINT,
-    lanCaUrls: ['https://192.168.1.20:43121/.well-known/dsh-desktop-ca.crt'],
   },
 }
 
@@ -87,8 +65,6 @@ describe('Desktop settings API', () => {
       .toThrow('duplicate profile')
     expect(() => parseDesktopSettingsView({ ...VIEW, market: { ...VIEW.market, requested: 'unknown' } }))
       .toThrow('invalid Desktop settings response')
-    expect(() => parseDesktopSettingsView({ ...VIEW, web: { ...VIEW.web, localUrl: 'https://example.com/' } }))
-      .toThrow('invalid browser URL')
     expect(parseDesktopRestartAcceptance({ accepted: true, restartRequired: true }))
       .toEqual({ accepted: true, restartRequired: true })
     expect(parseDesktopRestartAcceptance({ accepted: true, restartRequired: false }))
@@ -99,192 +75,15 @@ describe('Desktop settings API', () => {
       .toThrow('invalid Desktop action response')
   })
 
-  it('accepts only authenticated root browser URLs with a canonical token query', () => {
-    const authenticatedView = {
-      ...VIEW,
-      web: {
-        ...VIEW.web,
-        lanUrls: [`https://192.168.1.20:43120/?token=${BROWSER_AUTH_TOKEN}`],
-        lanState: 'ready' as const,
-      },
-    }
-    expect(parseDesktopSettingsView(authenticatedView).web).toEqual(authenticatedView.web)
-
-    const invalidLocalUrls = [
-      `https://127.0.0.1:43120/?token=${BROWSER_AUTH_TOKEN}`,
-      'http://127.0.0.1:43120/',
-      'ftp://127.0.0.1:43120/?token=' + BROWSER_AUTH_TOKEN,
-      'http://user@127.0.0.1:43120/?token=' + BROWSER_AUTH_TOKEN,
-      'http://127.0.0.1:43120/client?token=' + BROWSER_AUTH_TOKEN,
-      'http://127.0.0.1:43120/?token=' + BROWSER_AUTH_TOKEN + '#fragment',
-      'http://127.0.0.1:43120/?token=' + BROWSER_AUTH_TOKEN + '&token=' + BROWSER_AUTH_TOKEN,
-      'http://127.0.0.1:43120/?token=' + BROWSER_AUTH_TOKEN + '&extra=true',
-      'http://127.0.0.1:43120/?token=short',
-      'http://127.0.0.1:43120/?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+',
-      'http://localhost:43120/?token=' + BROWSER_AUTH_TOKEN,
-      'http://127.0.0.1/?token=' + BROWSER_AUTH_TOKEN,
-    ]
-    for (const localUrl of invalidLocalUrls) {
-      expect(() => parseDesktopSettingsView({ ...VIEW, web: { ...VIEW.web, localUrl } }))
-        .toThrow('invalid browser URL')
-    }
-
-    const invalidLanUrls = [
-      `http://192.168.1.20:43120/?token=${BROWSER_AUTH_TOKEN}`,
-      `https://desktop.local:43120/?token=${BROWSER_AUTH_TOKEN}`,
-      `https://192.168.1.20/?token=${BROWSER_AUTH_TOKEN}`,
-    ]
-    for (const lanUrl of invalidLanUrls) {
-      expect(() => parseDesktopSettingsView({
-        ...VIEW,
-        web: { ...VIEW.web, lanUrls: [lanUrl], lanState: 'ready' },
-      })).toThrow('invalid browser URL')
-    }
-  })
-
-  it('strictly validates live LAN HTTPS state and public CA URLs', () => {
-    const ready = {
-      ...VIEW,
-      web: {
-        ...VIEW.web,
-        lanState: 'ready',
-        lanUrls: [`https://192.168.1.20:43121/?token=${BROWSER_AUTH_TOKEN}`],
-      },
-    }
-    expect(parseDesktopSettingsView(ready).web).toEqual(ready.web)
-
-    const invalidCaUrls = [
-      'http://192.168.1.20:43121/.well-known/dsh-desktop-ca.crt',
-      `https://192.168.1.20:43121/.well-known/dsh-desktop-ca.crt?token=${BROWSER_AUTH_TOKEN}`,
-      'https://192.168.1.20:43121/ca.crt',
-      'https://desktop.local:43121/.well-known/dsh-desktop-ca.crt',
-      'https://127.0.0.1:43121/.well-known/dsh-desktop-ca.crt',
-    ]
-    for (const lanCaUrl of invalidCaUrls) {
-      expect(() => parseDesktopSettingsView({
-        ...VIEW,
-        web: { ...VIEW.web, lanCaUrls: [lanCaUrl] },
-      })).toThrow('invalid LAN CA URL')
-    }
-
-    expect(() => parseDesktopSettingsView({
-      ...VIEW,
-      web: { ...VIEW.web, lanState: 'unknown' },
-    })).toThrow('invalid Desktop settings response')
-    expect(() => parseDesktopSettingsView({
-      ...VIEW,
-      web: { ...VIEW.web, lanError: '/Users/private/certificate.pem', lanState: 'failed' },
-    })).toThrow('invalid LAN HTTPS error')
-    expect(() => parseDesktopSettingsView({
-      ...VIEW,
-      web: { ...VIEW.web, lanCaFingerprint: 'AA:BB' },
-    })).toThrow('invalid LAN CA fingerprint')
-    expect(() => parseDesktopSettingsView({
-      ...VIEW,
-      web: { ...VIEW.web, unexpected: true },
-    })).toThrow('invalid Desktop settings response')
-    expect(() => parseDesktopSettingsView({
-      ...VIEW,
-      web: { ...VIEW.web, lanUrls: [`https://192.168.1.20:43121/?token=${BROWSER_AUTH_TOKEN}`] },
-    })).toThrow('inconsistent LAN HTTPS state')
-  })
-
-  it('names the section Desktop settings and describes browser opening as permission', () => {
+  it('names the section Desktop settings without browser-access copy', () => {
     expect(zh.nav).toBe('桌面设置')
     expect(en.nav).toBe('Desktop settings')
     expect(Object.values(zh)).not.toContain('将在启动时创建')
     expect(Object.values(en)).not.toContain('Created when first started')
-    expect(zh.openBrowser).toBe('允许在浏览器中打开')
-    expect(zh.openBrowser).not.toMatch(/启动后|自动/u)
-    expect(zh.webIntro).not.toMatch(/启动后|自动/u)
-    expect(zh.browserCompatibilityNotice).toContain('兼容模式')
-    expect(zh.browserCompatibilityNotice).toContain('仅在')
-    expect(zh.browserCompatibilityNotice).toContain('先选择')
-    expect(zh.browserCompatibilityNotice).not.toContain('切换到兼容模式')
-    expect(en.openBrowser).toMatch(/allow.+(?:open|opening).+browser/iu)
-    expect(en.openBrowser).not.toMatch(/after startup|automatically/iu)
-    expect(en.webIntro).not.toMatch(/after startup|automatically/iu)
-    expect(en.browserCompatibilityNotice).toMatch(/only.+compatibility mode/iu)
-    expect(en.browserCompatibilityNotice).toMatch(/select compatibility mode first/iu)
-    expect(en.browserCompatibilityNotice).not.toMatch(/switch(?:es|ing)?.+profile/iu)
-    expect(zh.lanTrustNotice).toContain('安装并信任')
-    expect(zh.lanTrustNotice).toContain('不能保证')
-    expect(en.lanTrustNotice).toContain('Install and trust')
-    expect(en.lanTrustNotice).toContain('does not guarantee')
     expect(zh.beta).toBe('Beta')
     expect(en.beta).toBe('Beta')
-    expect(zh.lanWarningBody).toContain('持有访问链接')
-    expect(zh.lanWarningBody).toContain('HTTPS')
-    expect(zh.lanWarningBody).toContain('证书')
-    expect(en.lanWarningBody).toContain('access link')
-    expect(en.lanWarningBody).toContain('HTTPS')
-    expect(en.lanWarningBody).toContain('certificate')
-    expect(Object.keys(zh)).not.toContain('lanHttpsUnavailable')
-    expect(Object.keys(zh)).not.toContain('lanUrlsAfterRestart')
-  })
-
-  it('briefly polls a starting LAN edge and stops at its first terminal state', async () => {
-    const starting = { ...VIEW, web: { ...VIEW.web, lanState: 'starting' as const } }
-    const ready = {
-      ...VIEW,
-      web: {
-        ...VIEW.web,
-        lanState: 'ready' as const,
-        lanUrls: [`https://192.168.1.20:43121/?token=${BROWSER_AUTH_TOKEN}`],
-      },
-    }
-    const read = vi.fn()
-      .mockResolvedValueOnce(starting)
-      .mockResolvedValueOnce(starting)
-      .mockResolvedValueOnce(ready)
-    const publish = vi.fn()
-    const wait = vi.fn(async () => {})
-
-    await expect(readDesktopSettingsUntilLanSettled(
-      { read },
-      publish,
-      new AbortController().signal,
-      wait,
-    )).resolves.toBe(ready)
-    expect(read).toHaveBeenCalledTimes(3)
-    expect(wait).toHaveBeenCalledTimes(2)
-    expect(publish.mock.calls.map(call => call[0].web.lanState)).toEqual(['starting', 'starting', 'ready'])
-  })
-
-  it('clears its pending LAN poll timer when the settings section is disposed', async () => {
-    vi.useFakeTimers()
-    try {
-      const controller = new AbortController()
-      const read = vi.fn(async () => ({ ...VIEW, web: { ...VIEW.web, lanState: 'starting' as const } }))
-      const polling = readDesktopSettingsUntilLanSettled({ read }, vi.fn(), controller.signal)
-      await Promise.resolve()
-      await Promise.resolve()
-      expect(vi.getTimerCount()).toBe(1)
-
-      controller.abort()
-      await expect(polling).rejects.toMatchObject({ name: 'AbortError' })
-      expect(vi.getTimerCount()).toBe(0)
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('shows actual URLs only when browser access is permitted and requires explicit LAN confirmation', () => {
-    expect(desktopBrowserUrlsShouldRender(false, 'loopback')).toBe(false)
-    expect(desktopBrowserUrlsShouldRender(true, 'loopback')).toBe(true)
-    expect(desktopBrowserUrlsShouldRender(true, 'lan')).toBe(true)
-    expect(desktopBrowserUrlsShouldRender(false, 'lan')).toBe(false)
-
-    const dismiss = vi.fn()
-    const enableLan = vi.fn()
-    resolveDesktopLanConfirmation(false, dismiss, enableLan)
-    expect(dismiss).toHaveBeenCalledOnce()
-    expect(enableLan).not.toHaveBeenCalled()
-
-    dismiss.mockClear()
-    resolveDesktopLanConfirmation(true, dismiss, enableLan)
-    expect(dismiss).toHaveBeenCalledOnce()
-    expect(enableLan).toHaveBeenCalledOnce()
+    expect(Object.keys(zh)).not.toContain('openBrowser')
+    expect(Object.keys(zh)).not.toContain('lanAccess')
   })
 
   it('uses the strict same-origin routes and request bodies', async () => {
@@ -298,7 +97,6 @@ describe('Desktop settings API', () => {
         || path === desktopSettingsPaths.updateCheck
         || path === desktopSettingsPaths.updateJournalClear
         || path === desktopSettingsPaths.backgroundNoticeReset
-        || path === desktopSettingsPaths.modeSelect
         || path === desktopSettingsPaths.diagnosticsExport) {
         return json({ accepted: true })
       }
@@ -316,8 +114,10 @@ describe('Desktop settings API', () => {
     await expect(api.selectProfile('work')).resolves.toEqual({ accepted: true, restartRequired: true })
     await expect(api.deleteProfile('work')).resolves.toEqual(VIEW)
     await expect(api.selectMarket('dsh-market')).resolves.toEqual({ accepted: true, restartRequired: true })
-    await expect(api.selectMode('extended')).resolves.toBeUndefined()
-    await expect(api.updatePreference({ field: 'openBrowser', value: true })).resolves.toEqual(VIEW)
+    await expect(api.updatePreference({
+      field: 'notifications',
+      value: VIEW.preferences.notifications,
+    })).resolves.toEqual(VIEW)
     await expect(api.openTerminal()).resolves.toBeUndefined()
     await expect(api.restart()).resolves.toBeUndefined()
     await expect(api.restartToRecovery()).resolves.toBeUndefined()
@@ -334,7 +134,6 @@ describe('Desktop settings API', () => {
       desktopSettingsPaths.profileSelect,
       desktopSettingsPaths.profileDelete,
       desktopSettingsPaths.marketSelect,
-      desktopSettingsPaths.modeSelect,
       desktopSettingsPaths.preferenceUpdate,
       desktopSettingsPaths.terminalOpen,
       desktopSettingsPaths.restart,
@@ -359,10 +158,11 @@ describe('Desktop settings API', () => {
       body: JSON.stringify({ provider: 'dsh-market' }),
     })
     expect(fetcher.mock.calls[5]?.[1]).toMatchObject({
-      body: JSON.stringify({ mode: 'extended' }),
+      body: JSON.stringify({ field: 'notifications', value: VIEW.preferences.notifications }),
     })
     expect(fetcher.mock.calls[6]?.[1]).toMatchObject({
-      body: JSON.stringify({ field: 'openBrowser', value: true }),
+      method: 'POST',
+      body: JSON.stringify({}),
     })
     expect(fetcher.mock.calls[7]?.[1]).toMatchObject({
       method: 'POST',
@@ -381,10 +181,6 @@ describe('Desktop settings API', () => {
       body: JSON.stringify({}),
     })
     expect(fetcher.mock.calls[11]?.[1]).toMatchObject({
-      method: 'POST',
-      body: JSON.stringify({}),
-    })
-    expect(fetcher.mock.calls[12]?.[1]).toMatchObject({
       method: 'POST',
       body: JSON.stringify({}),
     })
@@ -409,7 +205,7 @@ describe('Desktop native action presentation', () => {
   }
   const t = (key: DesktopSettingsLocaleKey): string => en[key]
 
-  it('uses accessible icon actions in the extended title bar', () => {
+  it('uses accessible icon actions in the desktop title bar', () => {
     const markup = renderToStaticMarkup(createElement(DesktopNativeActions, {
       api,
       t,
@@ -432,29 +228,6 @@ describe('Desktop native action presentation', () => {
     expect(markup).toContain('v2.0.3')
     expect(markup).toContain('aria-label="Current version v2.0.3"')
     expect(markup).toContain('data-slot="hover-card-trigger"')
-  })
-
-  it('renders the active presentation pill through a shadcn hover-card trigger', () => {
-    const markup = renderToStaticMarkup(createElement(DesktopModeControl, {
-      mode: 'extended',
-      setMode: vi.fn(async () => {}),
-      restart: vi.fn(async () => {}),
-      t,
-    }))
-
-    expect(markup).toContain('Extended mode')
-    expect(markup).toContain('aria-label="Window mode: Extended mode"')
-    expect(markup).toContain('data-slot="hover-card-trigger"')
-  })
-
-  it('persists a presentation change before requesting the confirmed restart', async () => {
-    const order: string[] = []
-    const setMode = vi.fn(async (mode: string) => { order.push(`mode:${mode}`) })
-    const restart = vi.fn(async () => { order.push('restart') })
-
-    await selectDesktopFrameMode('advanced', setMode, restart)
-
-    expect(order).toEqual(['mode:advanced', 'restart'])
   })
 
   it('keeps explicit text labels in settings', () => {
@@ -558,7 +331,7 @@ describe('Desktop settings Slot registration', () => {
       slots: { inject, register },
     } as unknown as ClientContext
 
-    const control = applyDesktopSettings(ctx, {
+    applyDesktopSettings(ctx, {
       version: '2.0.3',
       mode: 'compatibility',
       platform: 'darwin',
@@ -582,9 +355,7 @@ describe('Desktop settings Slot registration', () => {
     expect(options.label()).toBe(`${DESKTOP_SETTINGS_LOCALE_NAMESPACE}:nav`)
     expect(options.inject()).toMatchObject({
       platform: 'darwin',
-      initialMode: 'compatibility',
       micaSupported: false,
-      setMode: expect.any(Function),
     })
     expect(component).toBe(DesktopSettingsSection)
 
@@ -600,11 +371,6 @@ describe('Desktop settings Slot registration', () => {
     })
     expect(actionOptions.inject()).toHaveProperty('api')
     expect(actionComponent).toBe(DesktopTerminalSettingsAction)
-    await control.setMode('extended')
-    expect(fetcher).toHaveBeenCalledWith(desktopSettingsPaths.modeSelect, expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({ mode: 'extended' }),
-    }))
     expect(scope.set).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
   })

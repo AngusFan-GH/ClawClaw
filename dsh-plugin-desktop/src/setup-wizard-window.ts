@@ -54,7 +54,7 @@ function exactBoolean(value: string | null): boolean | undefined {
 }
 
 function exactMode(value: string | null): DesktopSetupWizardMode | undefined {
-  return value === 'compatibility' || value === 'extended' || value === 'advanced' ? value : undefined
+  return value === 'compatibility' ? value : undefined
 }
 
 function exactMacosMaterial(value: string | null): DesktopSetupWizardMacosMaterial | undefined {

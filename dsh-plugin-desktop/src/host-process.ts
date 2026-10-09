@@ -7,7 +7,6 @@ import { bindNativeRuntime, runtimeSnapshot } from './host-runtime-bridge.ts'
 import type { DesktopHostOptions } from './host-bootstrap.ts'
 import type { DesktopRuntime } from './runtime.ts'
 import type { DesktopStartupGenerationHost } from './startup-generation.ts'
-import type { DesktopLanHttpsRuntimeOptions } from './lan-https-runtime.ts'
 import { parseDesktopInterruptionSnapshot } from './interruption-inspection.ts'
 
 export const DESKTOP_INTERRUPTION_INSPECTION_TIMEOUT_MS = 2_000
@@ -16,7 +15,6 @@ export interface IsolatedHostOptions {
   host: DesktopHostOptions
   runtime: DesktopRuntime
   rendererToken: string
-  prepareCertificate: NonNullable<DesktopLanHttpsRuntimeOptions['prepareCertificate']>
   bindHost(host: DesktopStartupGenerationHost): void
   requestQuit(code: number): void
   onFailure(error: Error): void
@@ -34,7 +32,6 @@ export async function startIsolatedDesktopHost(options: IsolatedHostOptions): Pr
     listen: receive => { child.on('message', receive); return () => { child.removeListener('message', receive) } },
   }, 120_000)
   const releaseNative = bindNativeRuntime(rpc, options.runtime)
-  rpc.handle('certificate', () => options.prepareCertificate())
   rpc.handle('quit', ([code]) => { setImmediate(() => options.requestQuit(code)) })
   let stopping = false
   let exited = false

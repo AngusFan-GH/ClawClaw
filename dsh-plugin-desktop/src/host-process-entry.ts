@@ -4,7 +4,6 @@ import { HostRpc } from './host-rpc.ts'
 import { createHostRuntime, type RuntimeSnapshot } from './host-runtime-bridge.ts'
 import { bootDesktopHost, type DesktopHostOptions } from './host-bootstrap.ts'
 import { createDesktopBrowserAccess } from './desktop-browser-access.ts'
-import { DesktopLanHttpsRuntime } from './lan-https-runtime.ts'
 import type { DesktopStartupGenerationHost } from './startup-generation.ts'
 
 const parentPort = process.parentPort
@@ -26,11 +25,9 @@ rpc.handle('inspect-interruptions', async () => {
 })
 let starting = false
 let stopping = false
-let lan: DesktopLanHttpsRuntime | undefined
 rpc.handle('stop', async () => {
   stopping = true
   await host?.fiber.dispose()
-  await lan?.stop()
 })
 rpc.handle('boot', async args => {
   const [wire, snapshot, token] = args as [Omit<DesktopHostOptions, 'desktopLaunchEnvironment'> & { launchEnvironmentLayers: LaunchEnvironmentLayerInput[] }, RuntimeSnapshot, string]
@@ -38,12 +35,8 @@ rpc.handle('boot', async args => {
   if (starting || stopping) throw new Error('DSH Host generation already started or stopped')
   starting = true
   const runtime = createHostRuntime(rpc, snapshot)
-  const browser = createDesktopBrowserAccess(options.prepared.mode === 'compatibility' && options.prepared.openBrowser, token)
-  lan = new DesktopLanHttpsRuntime({
-    addresses: options.prepared.lanAddresses, requestedPort: 0,
-    prepareCertificate: () => rpc.call('certificate'),
-  })
-  inspectServices = await bootDesktopHost(options, runtime, browser, lan,
+  const browser = createDesktopBrowserAccess(token)
+  inspectServices = await bootDesktopHost(options, runtime, browser,
     value => { host = value }, code => { void rpc.call('quit', [code]).catch(() => {}) })
   if (stopping) { await host?.fiber.dispose(); throw new Error('DSH Host stopped during startup') }
   await runtime.mountScheduled()

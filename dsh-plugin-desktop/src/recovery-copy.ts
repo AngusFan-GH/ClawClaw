@@ -64,6 +64,16 @@ export interface DesktopRecoveryCopy {
   readonly saveDiagnostics: string
   readonly showDiagnostics: string
   readonly privacy: string
+  readonly updateJournalTitle: string
+  readonly updateJournalBody: string
+  readonly updateJournalEnabled: string
+  readonly clearUpdateJournal: string
+  readonly updateJournalCleared: string
+  readonly updateJournalChanged: string
+  readonly backgroundNoticeTitle: string
+  readonly backgroundNoticeBody: string
+  readonly resetBackgroundNotice: string
+  readonly backgroundNoticeReset: string
   readonly configurationFiles: string
   readonly configurationFilesBody: string
   readonly openSettingsDocument: string
@@ -205,6 +215,16 @@ const COPY: Record<DesktopLocale, DesktopRecoveryCopy> = {
     saveDiagnostics: 'Export diagnostics',
     showDiagnostics: 'Show in folder',
     privacy: 'The archive may contain local paths, logs, system information, structured fatal reports, opt-in update qualification evidence, and crash-memory fragments. Review it before sharing.',
+    updateJournalTitle: 'Update qualification evidence',
+    updateJournalBody: 'Record update stages, versions, classified outcomes, durations, and artifact summaries locally. URLs, raw errors, device identity, and user content are excluded.',
+    updateJournalEnabled: 'Record local update qualification evidence',
+    clearUpdateJournal: 'Clear update qualification evidence',
+    updateJournalCleared: 'Local update qualification evidence was cleared.',
+    updateJournalChanged: 'The update qualification preference was saved.',
+    backgroundNoticeTitle: 'Background close notice',
+    backgroundNoticeBody: 'Reset the acknowledgement so the next window close explains that ClawClaw remains available from the system tray.',
+    resetBackgroundNotice: 'Reset background close notice',
+    backgroundNoticeReset: 'The background close notice was reset.',
     configurationFiles: 'Configuration files',
     configurationFilesBody: 'View or edit the current Profile configuration and shared configuration in the DSH data directory. Restart the app to apply changes.',
     openSettingsDocument: 'Open settings.yaml',
@@ -348,6 +368,16 @@ const COPY: Record<DesktopLocale, DesktopRecoveryCopy> = {
     saveDiagnostics: '导出诊断信息',
     showDiagnostics: '在文件夹中显示',
     privacy: '诊断包可能包含本地路径、日志、系统信息、结构化 fatal report、选择启用的更新资格记录和崩溃内存片段，分享前请先检查。',
+    updateJournalTitle: '更新资格记录',
+    updateJournalBody: '在本机记录更新阶段、版本、分类结果、耗时和制品摘要；不会记录 URL、错误原文、设备身份或用户内容。',
+    updateJournalEnabled: '启用本地更新资格记录',
+    clearUpdateJournal: '清除更新资格记录',
+    updateJournalCleared: '本地更新资格记录已清除。',
+    updateJournalChanged: '更新资格记录偏好已保存。',
+    backgroundNoticeTitle: '后台驻留提示',
+    backgroundNoticeBody: '重置确认状态；下次关闭窗口时，会再次说明 ClawClaw 仍可从系统托盘打开。',
+    resetBackgroundNotice: '重置后台驻留提示',
+    backgroundNoticeReset: '后台驻留提示已重置。',
     configurationFiles: '配置文件',
     configurationFilesBody: '查看或编辑当前 Profile 的配置与 DSH 数据目录中的共享配置。更改后需重启应用才能生效。',
     openSettingsDocument: '打开 settings.yaml',

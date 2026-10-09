@@ -5,7 +5,6 @@ const PROFILE_CREATE_PATH = '/api/desktop/profiles/create'
 const PROFILE_SELECT_PATH = '/api/desktop/profiles/select'
 const PROFILE_DELETE_PATH = '/api/desktop/profiles/delete'
 const MARKET_SELECT_PATH = '/api/desktop/market/select'
-const MODE_SELECT_PATH = '/api/desktop/mode/select'
 const PREFERENCE_UPDATE_PATH = '/api/desktop/preferences/update'
 const TERMINAL_OPEN_PATH = '/api/desktop/terminal/open'
 const RESTART_PATH = '/api/desktop/restart'
@@ -18,12 +17,6 @@ const BACKGROUND_NOTICE_RESET_PATH = '/api/desktop/background-notice/reset'
 const DIAGNOSTICS_EXPORT_PATH = '/api/desktop/diagnostics/export'
 const MAX_PROFILES = 256
 const MAX_PROFILE_NAME_LENGTH = 255
-const MAX_LAN_URLS = 32
-const MAX_LAN_ERROR_LENGTH = 128
-const BROWSER_AUTH_TOKEN_QUERY = /^\?token=[A-Za-z0-9_-]{43}$/u
-const LAN_CA_PATH = '/.well-known/dsh-desktop-ca.crt'
-const LAN_ERROR_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u
-const SHA256_FINGERPRINT_PATTERN = /^[a-f0-9]{64}$/u
 
 /** Launcher-supported plugin market implementations. */
 export type DesktopMarketProvider = 'disabled' | 'dsh-market'
@@ -44,30 +37,15 @@ export interface DesktopMarketView {
   readonly legacyDefaulted: boolean
 }
 
-/** Authenticated ordinary-browser URLs for the running Desktop generation. */
-export type DesktopLanState = 'inactive' | 'starting' | 'ready' | 'failed'
-
-/** Authenticated browser URLs and live LAN HTTPS edge state. */
-export interface DesktopWebView {
-  readonly localUrl: string
-  readonly lanUrls: readonly string[]
-  readonly lanState: DesktopLanState
-  readonly lanError: string | null
-  readonly lanCaFingerprint: string | null
-  readonly lanCaUrls: readonly string[]
-}
-
 /** Complete launcher-owned settings projection. */
 export interface DesktopSettingsView {
   readonly current: string
   readonly profiles: readonly DesktopProfileView[]
   readonly market: DesktopMarketView
   readonly preferences: {
-    readonly mode: 'compatibility' | 'extended' | 'advanced'
+    readonly mode: 'compatibility'
     readonly macosMaterial: 'off' | 'transparent'
     readonly windowsMaterial: 'off' | 'acrylic' | 'mica'
-    readonly openBrowser: boolean
-    readonly networkExposure: 'loopback' | 'lan'
     readonly notifications: {
       readonly enabled: boolean
       readonly notifyOnTurnCompletion: boolean
@@ -77,14 +55,11 @@ export interface DesktopSettingsView {
     }
     readonly updateQualificationJournal: boolean
   }
-  readonly web: DesktopWebView
 }
 
 export type DesktopPreferenceUpdate =
   | { readonly field: 'macosMaterial'; readonly value: 'off' | 'transparent' }
   | { readonly field: 'windowsMaterial'; readonly value: 'off' | 'acrylic' | 'mica' }
-  | { readonly field: 'openBrowser'; readonly value: boolean }
-  | { readonly field: 'networkExposure'; readonly value: 'loopback' | 'lan' }
   | { readonly field: 'notifications'; readonly value: DesktopSettingsView['preferences']['notifications'] }
   | { readonly field: 'updateQualificationJournal'; readonly value: boolean }
 
@@ -101,7 +76,6 @@ export interface DesktopSettingsApi {
   selectProfile(name: string): Promise<DesktopRestartAcceptance>
   deleteProfile(name: string): Promise<DesktopSettingsView>
   selectMarket(provider: DesktopMarketProvider): Promise<DesktopRestartAcceptance>
-  selectMode(mode: 'compatibility' | 'extended' | 'advanced'): Promise<void>
   updatePreference(update: DesktopPreferenceUpdate): Promise<DesktopSettingsView>
   openTerminal(): Promise<void>
   restart(): Promise<void>
@@ -124,21 +98,14 @@ function isMarketProvider(value: unknown): value is DesktopMarketProvider {
   return value === 'disabled' || value === 'dsh-market'
 }
 
-function isLanState(value: unknown): value is DesktopLanState {
-  return value === 'inactive' || value === 'starting' || value === 'ready' || value === 'failed'
-}
-
 function parsePreferences(value: unknown): DesktopSettingsView['preferences'] {
   if (!isObject(value)
     || !hasExactKeys(value, [
-      'mode', 'macosMaterial', 'windowsMaterial', 'openBrowser', 'networkExposure',
-      'notifications', 'updateQualificationJournal',
+      'mode', 'macosMaterial', 'windowsMaterial', 'notifications', 'updateQualificationJournal',
     ])
-    || (value.mode !== 'compatibility' && value.mode !== 'extended' && value.mode !== 'advanced')
+    || value.mode !== 'compatibility'
     || (value.macosMaterial !== 'off' && value.macosMaterial !== 'transparent')
     || (value.windowsMaterial !== 'off' && value.windowsMaterial !== 'acrylic' && value.windowsMaterial !== 'mica')
-    || typeof value.openBrowser !== 'boolean'
-    || (value.networkExposure !== 'loopback' && value.networkExposure !== 'lan')
     || typeof value.updateQualificationJournal !== 'boolean'
     || !isObject(value.notifications)
     || !hasExactKeys(value.notifications, [
@@ -152,8 +119,6 @@ function parsePreferences(value: unknown): DesktopSettingsView['preferences'] {
     mode: value.mode,
     macosMaterial: value.macosMaterial,
     windowsMaterial: value.windowsMaterial,
-    openBrowser: value.openBrowser,
-    networkExposure: value.networkExposure,
     notifications: Object.freeze({
       enabled: value.notifications.enabled as boolean,
       notifyOnTurnCompletion: value.notifications.notifyOnTurnCompletion as boolean,
@@ -170,15 +135,6 @@ function hasExactKeys(value: Record<string, unknown>, expected: readonly string[
   const sortedExpected = [...expected].sort()
   return actual.length === sortedExpected.length
     && actual.every((key, index) => key === sortedExpected[index])
-}
-
-function isCanonicalIpv4(value: string): boolean {
-  const parts = value.split('.')
-  return parts.length === 4 && parts.every((part) => {
-    if (!/^(?:0|[1-9][0-9]{0,2})$/u.test(part)) return false
-    const octet = Number(part)
-    return octet >= 0 && octet <= 255
-  })
 }
 
 function parseProfile(value: unknown): DesktopProfileView {
@@ -201,67 +157,6 @@ function parseProfile(value: unknown): DesktopProfileView {
   })
 }
 
-function parseBrowserUrl(value: unknown, loopback: boolean): string {
-  if (typeof value !== 'string' || value.length > 2_048) {
-    throw new Error('dsh-plugin-desktop: invalid browser URL in settings response')
-  }
-  let url: URL
-  try {
-    url = new URL(value)
-  } catch {
-    throw new Error('dsh-plugin-desktop: invalid browser URL in settings response')
-  }
-  if (url.protocol !== (loopback ? 'http:' : 'https:')
-    || url.username !== '' || url.password !== ''
-    || url.pathname !== '/' || !BROWSER_AUTH_TOKEN_QUERY.test(url.search)
-    || url.hash !== '' || url.port === '' || url.href !== value) {
-    throw new Error('dsh-plugin-desktop: invalid browser URL in settings response')
-  }
-  if (loopback
-    ? url.hostname !== '127.0.0.1'
-    : !isCanonicalIpv4(url.hostname) || url.hostname.startsWith('127.') || url.hostname === '0.0.0.0') {
-    throw new Error('dsh-plugin-desktop: invalid browser URL in settings response')
-  }
-  return url.href
-}
-
-function parseLanCaUrl(value: unknown): string {
-  if (typeof value !== 'string' || value.length > 2_048) {
-    throw new Error('dsh-plugin-desktop: invalid LAN CA URL in settings response')
-  }
-  let url: URL
-  try {
-    url = new URL(value)
-  } catch {
-    throw new Error('dsh-plugin-desktop: invalid LAN CA URL in settings response')
-  }
-  if (url.protocol !== 'https:'
-    || url.username !== '' || url.password !== ''
-    || !isCanonicalIpv4(url.hostname) || url.hostname.startsWith('127.') || url.hostname === '0.0.0.0'
-    || url.port === '' || url.pathname !== LAN_CA_PATH
-    || url.search !== '' || url.hash !== '' || url.href !== value) {
-    throw new Error('dsh-plugin-desktop: invalid LAN CA URL in settings response')
-  }
-  return url.href
-}
-
-function parseLanError(value: unknown): string | null {
-  if (value === null) return null
-  if (typeof value !== 'string' || value.length === 0 || value.length > MAX_LAN_ERROR_LENGTH
-    || !LAN_ERROR_PATTERN.test(value)) {
-    throw new Error('dsh-plugin-desktop: invalid LAN HTTPS error in settings response')
-  }
-  return value
-}
-
-function parseLanCaFingerprint(value: unknown): string | null {
-  if (value === null) return null
-  if (typeof value !== 'string' || !SHA256_FINGERPRINT_PATTERN.test(value)) {
-    throw new Error('dsh-plugin-desktop: invalid LAN CA fingerprint in settings response')
-  }
-  return value
-}
-
 /** Validate the bounded settings projection before it reaches React state. */
 export function parseDesktopSettingsView(value: unknown): DesktopSettingsView {
   if (!isObject(value)
@@ -274,41 +169,13 @@ export function parseDesktopSettingsView(value: unknown): DesktopSettingsView {
     || !isMarketProvider(value.market.requested)
     || !isMarketProvider(value.market.effective)
     || typeof value.market.legacyDefaulted !== 'boolean'
-    || !isObject(value.preferences)
-    || !isObject(value.web)
-    || !hasExactKeys(value.web, [
-      'localUrl',
-      'lanUrls',
-      'lanState',
-      'lanError',
-      'lanCaFingerprint',
-      'lanCaUrls',
-    ])
-    || !Array.isArray(value.web.lanUrls)
-    || value.web.lanUrls.length > MAX_LAN_URLS
-    || !Array.isArray(value.web.lanCaUrls)
-    || value.web.lanCaUrls.length > MAX_LAN_URLS
-    || !isLanState(value.web.lanState)) {
+    || !isObject(value.preferences)) {
     throw new Error('dsh-plugin-desktop: invalid Desktop settings response')
   }
   const profiles = value.profiles.map(parseProfile)
   const preferences = parsePreferences(value.preferences)
-  const localUrl = parseBrowserUrl(value.web.localUrl, true)
-  const lanUrls = value.web.lanUrls.map(url => parseBrowserUrl(url, false))
-  const lanCaUrls = value.web.lanCaUrls.map(parseLanCaUrl)
-  const lanError = parseLanError(value.web.lanError)
-  const lanCaFingerprint = parseLanCaFingerprint(value.web.lanCaFingerprint)
   if (new Set(profiles.map(profile => profile.name)).size !== profiles.length) {
     throw new Error('dsh-plugin-desktop: duplicate profile in settings response')
-  }
-  if (new Set(lanUrls).size !== lanUrls.length || new Set(lanCaUrls).size !== lanCaUrls.length) {
-    throw new Error('dsh-plugin-desktop: duplicate LAN URL in settings response')
-  }
-  if ((value.web.lanState === 'ready') !== (lanUrls.length > 0)) {
-    throw new Error('dsh-plugin-desktop: inconsistent LAN HTTPS state in settings response')
-  }
-  if (value.web.lanState !== 'failed' && lanError !== null) {
-    throw new Error('dsh-plugin-desktop: inconsistent LAN HTTPS error in settings response')
   }
   return Object.freeze({
     current: value.current,
@@ -319,14 +186,6 @@ export function parseDesktopSettingsView(value: unknown): DesktopSettingsView {
       legacyDefaulted: value.market.legacyDefaulted,
     }),
     preferences,
-    web: Object.freeze({
-      localUrl,
-      lanUrls: Object.freeze(lanUrls),
-      lanState: value.web.lanState,
-      lanError,
-      lanCaFingerprint,
-      lanCaUrls: Object.freeze(lanCaUrls),
-    }),
   })
 }
 
@@ -396,9 +255,6 @@ export function createDesktopSettingsApi(fetcher: FetchLike = globalThis.fetch.b
     async selectMarket(provider: DesktopMarketProvider) {
       return parseDesktopRestartAcceptance(await readResponse(await post(fetcher, MARKET_SELECT_PATH, { provider })))
     },
-    async selectMode(mode: 'compatibility' | 'extended' | 'advanced') {
-      parseDesktopActionAcceptance(await readResponse(await post(fetcher, MODE_SELECT_PATH, { mode })))
-    },
     async updatePreference(update: DesktopPreferenceUpdate) {
       return parseDesktopSettingsView(await readResponse(await post(fetcher, PREFERENCE_UPDATE_PATH, update)))
     },
@@ -438,7 +294,6 @@ export const desktopSettingsPaths = Object.freeze({
   profileSelect: PROFILE_SELECT_PATH,
   profileDelete: PROFILE_DELETE_PATH,
   marketSelect: MARKET_SELECT_PATH,
-  modeSelect: MODE_SELECT_PATH,
   preferenceUpdate: PREFERENCE_UPDATE_PATH,
   terminalOpen: TERMINAL_OPEN_PATH,
   restart: RESTART_PATH,

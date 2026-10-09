@@ -30,20 +30,6 @@ const BROWSER_ACCESS = Object.freeze({
   }),
   setOrdinaryBrowserEnabled(enabled) { ordinaryBrowserEnabled = enabled },
 })
-const LAN_HTTPS_SNAPSHOT = Object.freeze({
-  state: 'inactive',
-  actualPort: null,
-  addresses: Object.freeze([]),
-  caFingerprint: null,
-  errorCode: null,
-})
-const LAN_HTTPS = Object.freeze({
-  caCertificate: null,
-  attach() {},
-  snapshot() { return LAN_HTTPS_SNAPSHOT },
-  async setEnabled() { return LAN_HTTPS_SNAPSHOT },
-  async stop() { return LAN_HTTPS_SNAPSHOT },
-})
 const home = mkdtempSync(join(tmpdir(), 'dsh-desktop-profile-'))
 let ctx
 let releasePackageResolver
@@ -195,7 +181,6 @@ try {
       host.loader.internal = undefined
       host.provide(DSH_LAUNCH_ENVIRONMENT_KEY, createLaunchEnvironmentSnapshot([]))
       host.provide('desktopBrowserAccess', BROWSER_ACCESS)
-      host.provide('desktopLanHttps', LAN_HTTPS)
       host.provide('desktopRuntime', runtime)
       host.provide('desktopPnpmBootstrap', {
         activeProfileName: 'desktop',
@@ -380,11 +365,11 @@ try {
     throw new Error(`assembled Windows browse picker listed ${listing.path} instead of ${home}`)
   }
 
-  const expectedUrl = `http://127.0.0.1:${String(ctx.webServer.port)}/?dsh-desktop-mode=advanced&dsh-desktop-platform=win32&dsh-desktop-version=2.0.0&dsh-desktop-material=off&dsh-desktop-mica=1`
+  const expectedUrl = `http://127.0.0.1:${String(ctx.webServer.port)}/?dsh-desktop-mode=compatibility&dsh-desktop-platform=win32&dsh-desktop-version=2.0.0&dsh-desktop-material=off&dsh-desktop-titlebar-inset=36&dsh-desktop-mica=1`
   if (mountedSpec?.url !== expectedUrl) {
     throw new Error(`desktop plugin produced an unexpected renderer URL: ${String(mountedSpec?.url)}`)
   }
-  if (mountedSpec?.mode !== 'advanced') {
+  if (mountedSpec?.mode !== 'compatibility') {
     throw new Error(`desktop plugin produced an unexpected shell mode: ${String(mountedSpec?.mode)}`)
   }
   if (mountedSpec?.rendererAccessHeader !== BROWSER_ACCESS.rendererHeader) {
@@ -394,8 +379,8 @@ try {
     throw new Error(`desktop plugin produced an unexpected native theme source: ${nativeThemeSource}`)
   }
   const desktopSettings = ctx.settings.get(DESKTOP_SETTINGS_NAMESPACE)
-  if (desktopSettings?.mode !== 'advanced') {
-    throw new Error('assembled Host settings are missing the advanced dsh-desktop mode')
+  if (desktopSettings?.mode !== 'compatibility') {
+    throw new Error('assembled Host settings are missing the compatibility dsh-desktop mode')
   }
   if (!trayItems.some(item => item.label() === 'Check for Updates…')) {
     throw new Error('assembled desktop profile is missing the update tray command')
@@ -468,21 +453,21 @@ try {
   const ids = new Set(graph.entries.map(entry => entry.id))
   for (const id of [
     'dsh-plugin-desktop',
+    '@deepseek-ai/dsh-client-ui-layout',
     '@deepseek-ai/dsh-client-ui-conversation',
     '@deepseek-ai/dsh-client-ui-sidebar',
     '@deepseek-ai/dsh-client-ui-directory-picker-browse',
   ]) {
     if (!ids.has(id)) {
       throw new Error(
-        `assembled advanced Web graph is missing ${id}; received ${[...ids].sort().join(', ')}`,
+        `assembled compatibility Web graph is missing ${id}; received ${[...ids].sort().join(', ')}`,
       )
     }
   }
   for (const id of [
-    '@deepseek-ai/dsh-client-ui-layout',
     '@deepseek-ai/dsh-client-ui-directory-picker-native',
   ]) {
-    if (ids.has(id)) throw new Error(`assembled advanced Web graph unexpectedly includes ${id}`)
+    if (ids.has(id)) throw new Error(`assembled compatibility Web graph unexpectedly includes ${id}`)
   }
 } finally {
   await ctx?.fiber.dispose()

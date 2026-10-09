@@ -2,15 +2,11 @@ import type { NativeImage } from 'electron'
 import { describe, expect, it } from 'vitest'
 import type { DesktopShellSpec } from '../src/runtime.ts'
 import {
-  advancedWindowOptions,
   compatibilityWindowOptions,
   DESKTOP_RENDERER_SESSION_PARTITION,
   desktopWindowOptions,
-  extendedWindowOptions,
 } from '../src/window-options.ts'
 import {
-  ADVANCED_MACOS_TRAFFIC_LIGHT_TOP,
-  ADVANCED_WINDOWS_TITLEBAR_HEIGHT,
   DESKTOP_FRAME_HEIGHT,
   DESKTOP_FRAME_MACOS_TRAFFIC_LIGHT_TOP,
 } from '../src/window-chrome.ts'
@@ -41,7 +37,6 @@ const spec: DesktopShellSpec = {
   readLocalePreference: () => undefined,
   readThemeSource: () => 'system',
   requestQuit: () => {},
-  requestModeChange: async () => {},
 }
 
 const preload = '/tmp/preload.cjs'
@@ -111,105 +106,16 @@ describe('compatibility BrowserWindow options', () => {
 
   it('rejects an advanced spec before BrowserWindow construction', () => {
     expect(() => compatibilityWindowOptions(
-      { ...spec, mode: 'advanced' },
+      { ...spec, mode: 'advanced' } as unknown as DesktopShellSpec,
       {} as NativeImage,
       'darwin',
       preload,
     )).toThrow('unsupported compatibility window mode advanced')
   })
 
-  it('uses hidden-inset transparent vibrancy on macOS enhanced windows', () => {
-    const advanced = { ...spec, mode: 'advanced' as const, material: 'transparent' as const }
-    const options = advancedWindowOptions(advanced, {} as NativeImage, 'darwin', preload)
-
-    expect(options).toEqual(expect.objectContaining({
-      titleBarStyle: 'hiddenInset',
-      trafficLightPosition: { x: 16, y: ADVANCED_MACOS_TRAFFIC_LIGHT_TOP },
-      transparent: true,
-      backgroundColor: '#00000000',
-      vibrancy: 'sidebar',
-      visualEffectState: 'followWindow',
-    }))
-    expect(desktopWindowOptions(advanced, {} as NativeImage, 'darwin', preload)).toEqual(options)
-  })
-
-  it('uses native Windows controls, Mica, shadow, and rounded corners in enhanced mode', () => {
-    const options = advancedWindowOptions(
-      { ...spec, mode: 'advanced', material: 'mica', windowsBuild: 22_621 },
-      {} as NativeImage,
-      'win32',
-      preload,
+  it('uses compatibility options for the fixed desktop presentation', () => {
+    expect(desktopWindowOptions(spec, {} as NativeImage, 'win32', preload)).toEqual(
+      compatibilityWindowOptions(spec, {} as NativeImage, 'win32', preload),
     )
-
-    expect(options).toEqual(expect.objectContaining({
-      titleBarStyle: 'hidden',
-      titleBarOverlay: {
-        color: '#00000000',
-        symbolColor: '#7f858f',
-        height: ADVANCED_WINDOWS_TITLEBAR_HEIGHT,
-      },
-      backgroundMaterial: 'mica',
-      hasShadow: true,
-      roundedCorners: true,
-      thickFrame: true,
-    }))
-  })
-
-  it('keeps a Windows window opaque when material is off', () => {
-    const options = advancedWindowOptions(
-      { ...spec, mode: 'advanced', material: 'off', windowsBuild: 22_000 },
-      {} as NativeImage,
-      'win32',
-      preload,
-    )
-
-    expect(options).toEqual(expect.objectContaining({
-      backgroundColor: '#202124',
-      roundedCorners: true,
-      thickFrame: true,
-    }))
-    expect(options).not.toHaveProperty('transparent')
-    expect(options).not.toHaveProperty('backgroundMaterial')
-  })
-
-  it('uses the taller native caption and capability-gated material in extended mode', () => {
-    const extended = {
-      ...spec,
-      mode: 'extended' as const,
-      material: 'off' as const,
-      windowsBuild: 19_045,
-    }
-    const options = extendedWindowOptions(extended, {} as NativeImage, 'win32', preload)
-
-    expect(options).toEqual(expect.objectContaining({
-      titleBarStyle: 'hidden',
-      titleBarOverlay: expect.objectContaining({ height: DESKTOP_FRAME_HEIGHT }),
-      backgroundColor: '#202124',
-    }))
-    expect(options).not.toHaveProperty('transparent')
-    expect(options).not.toHaveProperty('backgroundMaterial')
-    expect(DESKTOP_FRAME_HEIGHT).toBe(36)
-    expect(desktopWindowOptions(extended, {} as NativeImage, 'win32', preload)).toEqual(options)
-  })
-
-  it('centers macOS traffic lights in the 36px extended command bar', () => {
-    const options = extendedWindowOptions(
-      { ...spec, mode: 'extended', material: 'transparent' },
-      {} as NativeImage,
-      'darwin',
-      preload,
-    )
-
-    expect(options.trafficLightPosition).toEqual({ x: 16, y: DESKTOP_FRAME_MACOS_TRAFFIC_LIGHT_TOP })
-    expect(DESKTOP_FRAME_HEIGHT).toBe(36)
-  })
-
-  it('rejects enhanced mode on Linux', () => {
-    expect(() => advancedWindowOptions(
-      { ...spec, mode: 'advanced' },
-      {} as NativeImage,
-      'linux',
-      preload,
-    )).toThrow('supported on macOS and Windows')
   })
 })

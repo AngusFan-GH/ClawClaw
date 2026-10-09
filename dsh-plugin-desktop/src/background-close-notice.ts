@@ -51,6 +51,14 @@ function hasValidMarker(path: string): boolean {
   }
 }
 
+/** Forget one Profile's acknowledgement so the next background close explains tray behavior again. */
+export function resetDesktopBackgroundCloseNotice(userDataDir: string, profileName: string): void {
+  const path = desktopBackgroundCloseNoticePath(userDataDir, profileName)
+  try { unlinkSync(path) } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause
+  }
+}
+
 /** Coalesces repeated close requests and remembers only explicit acknowledgement. */
 export class DesktopBackgroundCloseNotice {
   private acknowledged = false

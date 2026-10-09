@@ -4,12 +4,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { assertDesktopProfileName } from './profile-manager.ts'
 import type { DesktopMarketProvider } from './desktop-market.ts'
 import type { DesktopNotificationSettings } from './notifications.ts'
-import type { DesktopShellMode } from './runtime.ts'
 import type DesktopSettingsController from './desktop-settings-controller.ts'
 import type { DesktopSettingsPostResponse } from './desktop-settings-controller.ts'
 import type {
   DesktopMarketSelectRequest,
-  DesktopModeSelectRequest,
   DesktopPreferenceUpdateRequest,
   DesktopProfileCreateRequest,
   DesktopProfileDeleteRequest,
@@ -152,15 +150,6 @@ function parseMarketRequest(value: unknown): DesktopMarketSelectRequest | undefi
   return { provider: value.provider }
 }
 
-function isDesktopShellMode(value: unknown): value is DesktopShellMode {
-  return value === 'compatibility' || value === 'extended' || value === 'advanced'
-}
-
-function parseModeRequest(value: unknown): DesktopModeSelectRequest | undefined {
-  if (!isExactRecord(value, 'mode') || !isDesktopShellMode(value.mode)) return undefined
-  return { mode: value.mode }
-}
-
 function isNotificationSettings(value: unknown): boolean {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     && Object.keys(value).sort().join(',') === [
@@ -181,11 +170,8 @@ function parsePreferenceRequest(value: unknown): DesktopPreferenceUpdateRequest 
     && (request.value === 'off' || request.value === 'acrylic' || request.value === 'mica')) {
     return { field: request.field, value: request.value }
   }
-  if ((request.field === 'openBrowser' || request.field === 'updateQualificationJournal')
+  if (request.field === 'updateQualificationJournal'
     && typeof request.value === 'boolean') return { field: request.field, value: request.value }
-  if (request.field === 'networkExposure' && (request.value === 'loopback' || request.value === 'lan')) {
-    return { field: request.field, value: request.value }
-  }
   if (request.field === 'notifications' && isNotificationSettings(request.value)) {
     return { field: request.field, value: request.value as DesktopNotificationSettings }
   }
@@ -360,30 +346,6 @@ export async function handleDesktopMarketSelectRequest(
   } catch (cause) {
     reportError('select Market provider', cause)
     finishJson(res, 500, error('Market selection could not be saved'))
-  }
-}
-
-/** Persist one window mode before the renderer requests a confirmed restart. */
-export async function handleDesktopModeSelectRequest(
-  req: IncomingMessage,
-  res: ServerResponse,
-  expectedOrigin: string,
-  controller: DesktopSettingsController,
-  reportError: (operation: string, cause: unknown) => void = () => {},
-): Promise<void> {
-  if (req.method !== 'POST') return finishJson(res, 405, error('method not allowed'), 'POST')
-  if (!isSameOriginLoopbackRequest(req, expectedOrigin, true)) {
-    return finishJson(res, 403, error('forbidden'))
-  }
-  const value = await parsePostBody(req, res)
-  if (value === INVALID_BODY) return
-  const request = parseModeRequest(value)
-  if (request === undefined) return finishJson(res, 400, error('invalid window mode request'))
-  try {
-    finishJson(res, 200, await controller.selectMode(request.mode))
-  } catch (cause) {
-    reportError('select window mode', cause)
-    finishJson(res, 500, error('window mode could not be saved'))
   }
 }
 

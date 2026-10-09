@@ -81,24 +81,10 @@ export function desktopProfilePreferencesFromSettings(
 ): DesktopProfilePreferences {
   return Object.freeze({
     mode: desktop.mode,
-    openBrowser: desktop.openBrowser,
-    networkExposure: desktop.networkExposure,
+    openBrowser: false,
+    networkExposure: 'loopback',
     notifications: Object.freeze({ ...notifications }),
     market,
-  })
-}
-
-/** Select a startup mode while preserving the browser-access invariant. */
-export function desktopProfilePreferencesWithMode(
-  current: DesktopProfilePreferences,
-  mode: DesktopShellMode,
-): DesktopProfilePreferences {
-  return Object.freeze({
-    mode,
-    openBrowser: mode === 'compatibility' ? current.openBrowser : false,
-    networkExposure: mode === 'compatibility' ? current.networkExposure : 'loopback',
-    notifications: Object.freeze({ ...current.notifications }),
-    market: current.market,
   })
 }
 
@@ -129,8 +115,8 @@ function assertAbsolutePath(label: string, value: string): string {
 }
 
 function assertMode(value: unknown, error: ErrorFactory): DesktopShellMode {
-  if (value === 'compatibility' || value === 'extended' || value === 'advanced') return value
-  throw error('mode must be compatibility, extended, or advanced')
+  if (value === 'compatibility' || value === 'extended' || value === 'advanced') return 'compatibility'
+  throw error('mode must be compatibility')
 }
 
 function assertExposure(value: unknown, error: ErrorFactory): DesktopNetworkExposure {
@@ -181,9 +167,6 @@ function normalizedPreferences(
   const mode = assertMode(value.mode, error)
   if (typeof value.openBrowser !== 'boolean') throw error('openBrowser must be a boolean')
   const networkExposure = assertExposure(value.networkExposure, error)
-  if (value.openBrowser && mode !== 'compatibility') {
-    throw error('openBrowser requires compatibility mode')
-  }
   if (networkExposure === 'lan' && !value.openBrowser) {
     throw error('LAN exposure requires openBrowser')
   }
@@ -344,6 +327,33 @@ export function readDesktopProfilePreferences(
     // parseState below retains the strict diagnostic for malformed state.
   }
   return parseState(text, desktopProfilePreferencesProfileHash(profileDir))
+}
+
+/** Read one Profile and atomically retire removed presentation and browser-access state. */
+export async function readAndMigrateDesktopProfilePreferences(
+  userDataDir: string,
+  profileDir: string,
+): Promise<DesktopProfilePreferencesStateV1 | undefined> {
+  const current = readDesktopProfilePreferences(userDataDir, profileDir)
+  if (current === undefined) return undefined
+  const text = readStateBytes(desktopProfilePreferencesStatePath(userDataDir, profileDir))
+  const stored = text === undefined ? undefined : JSON.parse(text) as {
+    mode?: unknown
+    openBrowser?: unknown
+    networkExposure?: unknown
+  }
+  const needsMigration = stored?.mode === 'extended'
+    || stored?.mode === 'advanced'
+    || current.openBrowser
+    || current.networkExposure !== 'loopback'
+  if (!needsMigration) return current
+  return await writeDesktopProfilePreferences(userDataDir, profileDir, {
+    mode: current.mode,
+    openBrowser: false,
+    networkExposure: 'loopback',
+    notifications: current.notifications,
+    market: current.market,
+  }, current.recordedAt)
 }
 
 /** Atomically replace one Profile's validated preferences. */

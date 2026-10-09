@@ -16,8 +16,6 @@
     "tests/client-workspace-directory-flow.spec.ts",
     "tests/client-aa-settings.spec.ts",
     "tests/client-desktop-settings.spec.ts",
-    "tests/client-environment.spec.ts",
-    "tests/client-layout-service.spec.ts",
-    "tests/theme-presenter.spec.ts"
+    "tests/client-environment.spec.ts"
   ]
 }

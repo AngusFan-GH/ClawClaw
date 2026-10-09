@@ -33,7 +33,6 @@ import {
   DESKTOP_DIAGNOSTICS_EXPORT_PATH,
   DESKTOP_DEVELOPER_TOOLS_TOGGLE_PATH,
   DESKTOP_MARKET_SELECT_PATH,
-  DESKTOP_MODE_SELECT_PATH,
   DESKTOP_PREFERENCE_UPDATE_PATH,
   DESKTOP_PROFILE_CREATE_PATH,
   DESKTOP_PROFILE_DELETE_PATH,
@@ -50,7 +49,6 @@ import {
   handleDesktopDiagnosticsExportRequest,
   handleDesktopDeveloperToolsToggleRequest,
   handleDesktopMarketSelectRequest,
-  handleDesktopModeSelectRequest,
   handleDesktopPreferenceUpdateRequest,
   handleDesktopProfileCreateRequest,
   handleDesktopProfileDeleteRequest,
@@ -64,15 +62,11 @@ import {
   handleDesktopBackgroundNoticeResetRequest,
 } from './desktop-settings-route.ts'
 import type {} from './desktop-settings-controller.ts'
-import { DESKTOP_LAN_HTTPS_CA_PATH } from './lan-https-runtime.ts'
 import { desktopBootRecoveryInjections } from './desktop-boot-recovery.ts'
 import type { DesktopLocale, DesktopShellMode } from './runtime.ts'
 import type {} from './runtime.ts'
 import { DESKTOP_DEFAULT_WEB_PORT } from './desktop-port.ts'
 import {
-  desktopBrowserAccessEnabled,
-  desktopBrowserAccessAvailable,
-  desktopNetworkExposureForBrowserAccess,
   desktopWebServerHost,
   type DesktopNetworkExposure,
 } from './desktop-network.ts'
@@ -144,7 +138,7 @@ export interface DesktopSettings {
 
 /** Schema registered with the standard settings service. */
 export const DesktopSettingsSchema: z<DesktopSettings> = z.object({
-  mode: z.union(['compatibility', 'extended', 'advanced'] as const).default('compatibility'),
+  mode: z.union(['compatibility'] as const).default('compatibility'),
   macosMaterial: z.union(['off', 'transparent'] as const).default(DEFAULT_MACOS_WINDOW_MATERIAL),
   windowsMaterial: z.union(['off', 'acrylic', 'mica'] as const).default(DEFAULT_WINDOWS_WINDOW_MATERIAL),
   port: z.number().step(1).min(0).max(65_535).default(DESKTOP_DEFAULT_WEB_PORT),
@@ -178,7 +172,7 @@ export interface Config {
 
 /** Validated native window configuration. */
 export const Config: z<Config> = z.object({
-  mode: z.union(['compatibility', 'extended', 'advanced'] as const).default('compatibility'),
+  mode: z.union(['compatibility'] as const).default('compatibility'),
   macosMaterial: z.union(['off', 'transparent'] as const).default(DEFAULT_MACOS_WINDOW_MATERIAL),
   windowsMaterial: z.union(['off', 'acrylic', 'mica'] as const).default(DEFAULT_WINDOWS_WINDOW_MATERIAL),
   port: z.number().step(1).min(0).max(65_535).default(DESKTOP_DEFAULT_WEB_PORT),
@@ -209,7 +203,7 @@ export function desktopRendererUrl(
   url.searchParams.set('dsh-desktop-platform', platform)
   url.searchParams.set('dsh-desktop-version', appVersion)
   url.searchParams.set('dsh-desktop-material', material)
-  if (mode === 'extended' || (mode === 'compatibility' && platform !== 'linux')) {
+  if (platform !== 'linux') {
     // Body-level plugin portals do not inherit the framed root's geometry.
     // Publish the exact content boundary so they can yield Desktop chrome.
     url.searchParams.set('dsh-desktop-titlebar-inset', String(DESKTOP_FRAME_HEIGHT))
@@ -243,10 +237,6 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   if (browserAccess === undefined) {
     throw new Error('dsh-plugin-desktop: the launcher did not provide ctx.desktopBrowserAccess')
   }
-  const lanHttps = ctx.get('desktopLanHttps')
-  if (lanHttps === undefined) {
-    throw new Error('dsh-plugin-desktop: the launcher did not provide ctx.desktopLanHttps')
-  }
   if (ctx.webServer.host !== desktopWebServerHost(config.networkExposure)) {
     throw new Error('dsh-plugin-desktop: desktop shell WebServer host does not match networkExposure')
   }
@@ -275,7 +265,6 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       )
     }
   }
-  lanHttps.attach(ctx.webServer.port)
   const iconFilename = process.platform === 'darwin' ? 'app-icon-mac.png' : 'app-icon.png'
   const iconPath = fileURLToPath(new URL(`../build/${iconFilename}`, import.meta.url))
   const trayIcons = {
@@ -287,14 +276,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     DesktopSettingsSchema,
     {
       applies: 'restart',
-      validate: (value) => {
-        if (!desktopBrowserAccessAvailable(value.mode) && value.openBrowser) {
-          throw new Error('dsh-plugin-desktop: browser access requires compatibility mode')
-        }
-        if (value.mode !== 'compatibility' && runtime.platform === 'linux') {
-          throw new Error('dsh-plugin-desktop: custom desktop shell modes are supported on macOS and Windows')
-        }
-      },
+      validate: () => {},
     },
   )
   if (typeof ctx.settings.configure === 'function') {
@@ -305,36 +287,6 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
   const rendererOrigin = `http://127.0.0.1:${String(ctx.webServer.port)}`
   registerCronTasksJsonApi(ctx)
-  ctx.effect(
-    () => ctx.webServer.register({
-      kind: 'exact',
-      path: DESKTOP_LAN_HTTPS_CA_PATH,
-      handler: (req, res) => {
-        if (req.method !== 'GET' && req.method !== 'HEAD') {
-          res.statusCode = 405
-          res.setHeader('allow', 'GET, HEAD')
-          res.setHeader('cache-control', 'no-store')
-          res.end('method not allowed')
-          return
-        }
-        const caCertificate = lanHttps.caCertificate
-        if (caCertificate === null) {
-          res.statusCode = 503
-          res.setHeader('cache-control', 'no-store')
-          res.end(req.method === 'HEAD' ? undefined : 'LAN HTTPS certificate unavailable')
-          return
-        }
-        res.statusCode = 200
-        res.setHeader('cache-control', 'no-store')
-        res.setHeader('content-type', 'application/x-x509-ca-cert')
-        res.setHeader('content-disposition', 'attachment; filename="dsh-desktop-local-ca.crt"')
-        res.setHeader('content-length', String(Buffer.byteLength(caCertificate)))
-        res.setHeader('x-content-type-options', 'nosniff')
-        res.end(req.method === 'HEAD' ? undefined : caCertificate)
-      },
-    }),
-    'dsh-plugin-desktop: public LAN HTTPS CA route',
-  )
   ctx.on('webserver/index-inject', table => {
     table.push(...desktopBootRecoveryInjections())
   })
@@ -351,7 +303,6 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       [DESKTOP_PROFILE_DELETE_PATH, handleDesktopProfileDeleteRequest],
       [DESKTOP_PROFILE_SELECT_PATH, handleDesktopProfileSelectRequest],
       [DESKTOP_MARKET_SELECT_PATH, handleDesktopMarketSelectRequest],
-      [DESKTOP_MODE_SELECT_PATH, handleDesktopModeSelectRequest],
       [DESKTOP_PREFERENCE_UPDATE_PATH, handleDesktopPreferenceUpdateRequest],
       [DESKTOP_TERMINAL_OPEN_PATH, handleDesktopTerminalOpenRequest],
       [DESKTOP_RESTART_PATH, handleDesktopRestartRequest],
@@ -440,35 +391,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
   ctx.effect(() => {
     let pending: ReturnType<typeof setImmediate> | undefined
-    const updateLiveWebAccess = (
-      browserEnabled: boolean,
-      exposure: DesktopNetworkExposure,
-    ): void => {
-      browserAccess.setOrdinaryBrowserEnabled(browserEnabled)
-      void lanHttps.setEnabled(browserEnabled && exposure === 'lan').then((snapshot) => {
-        if (snapshot.state === 'failed') {
-          ctx.logger.error(
-            `dsh-plugin-desktop: LAN HTTPS edge failed to start (${snapshot.errorCode ?? 'unknown'})`,
-          )
-        }
-      }).catch((cause: unknown) => {
-        ctx.logger.error(
-          `dsh-plugin-desktop: LAN HTTPS edge transition failed: ${cause instanceof Error ? cause.message : String(cause)}`,
-        )
-      })
-    }
-    updateLiveWebAccess(browserAccess.ordinaryBrowserEnabled, config.networkExposure)
     const stopWatching = settings.watch((next) => {
-      const nextBrowserAccess = desktopBrowserAccessEnabled(
-        next.mode,
-        next.openBrowser,
-        next.networkExposure,
-      )
-      const nextNetworkExposure = desktopNetworkExposureForBrowserAccess(
-        nextBrowserAccess,
-        next.networkExposure,
-      )
-      updateLiveWebAccess(nextBrowserAccess, nextNetworkExposure)
       if (next.mode === config.mode
         && next.port === config.port
         && next.macosMaterial === config.macosMaterial
@@ -488,9 +411,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     return () => {
       stopWatching()
       if (pending !== undefined) clearImmediate(pending)
-      void lanHttps.stop()
     }
-  }, 'dsh-plugin-desktop: live browser access and restart-applied native settings')
+  }, 'dsh-plugin-desktop: disabled browser access and restart-applied native settings')
   if (runtime.platform !== 'linux') {
     ctx.on('settings/updated', (namespace, next) => {
       if (namespace !== UI_THEME_SETTINGS_NAMESPACE) return
@@ -542,20 +464,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
           }
           return theme.preference
         },
-        ...(desktopSettings === undefined ? {} : {
-        }),
         requestQuit: appExit,
-        requestModeChange: async mode => {
-          if (desktopSettings !== undefined) {
-            await desktopSettings.selectMode(mode)
-            return
-          }
-          const current = settings.get()
-          const storedBrowserCapability = current.openBrowser || current.networkExposure === 'lan'
-          await settings.update(mode !== 'compatibility' && storedBrowserCapability
-            ? { mode, openBrowser: false, networkExposure: 'loopback' }
-            : { mode })
-        },
       })
     },
     'dsh-plugin-desktop: native shell generation',

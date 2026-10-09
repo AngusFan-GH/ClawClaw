@@ -37,7 +37,7 @@ describe('Desktop factory reset', () => {
     const unrelated = join(root, 'other-home', 'profiles', 'desktop')
     const versions = { desktopVersion: '2.0.6', dshVersion: '0.1.5-rc.2', setupRevision: 1 }
     const oldPreferences = {
-      mode: 'advanced' as const,
+      mode: 'compatibility' as const,
       openBrowser: false,
       networkExposure: 'loopback' as const,
       market: 'dsh-market' as const,

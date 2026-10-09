@@ -2,7 +2,7 @@
 
 English | [中文](plugin-services.zh.md)
 
-This document is the supported Stable integration contract for plugin authors. It covers public Host services `desktopProfiles` and `desktopPnpm`, plus Client service `desktopWindow`, exported by ClawClaw 0.2.x in compatibility, extended, and advanced presentation modes. It does not grant third-party access to raw Electron APIs or launcher bootstrap state.
+This document is the supported Stable integration contract for plugin authors. It covers public Host services `desktopProfiles` and `desktopPnpm`, plus Client service `desktopWindow`, exported by ClawClaw 0.2.x in its fixed compatibility presentation. It does not grant third-party access to raw Electron APIs or launcher bootstrap state.
 
 ## Layers and data flow
 
@@ -40,7 +40,7 @@ flowchart LR
   Client --> Window
 ```
 
-The launcher resolves one profile before the Loader tree mounts. `desktopProfiles.current` remains fixed until that whole Cordis generation is disposed. The `desktop-pnpm` Host row builds `desktopPnpm` from launcher-private facts and the upstream subprocess service. A profile or mode switch disposes the current generation and starts a new one; service references must not cross that boundary.
+The launcher resolves one profile before the Loader tree mounts. `desktopProfiles.current` remains fixed until that whole Cordis generation is disposed. The `desktop-pnpm` Host row builds `desktopPnpm` from launcher-private facts and the upstream subprocess service. A profile switch disposes the current generation and starts a new one; service references must not cross that boundary.
 
 The renderer receives ordinary Web Client modules over the existing loopback carrier. It cannot read Host services directly, and ClawClaw adds no preload or general Electron IPC bridge for them. The Desktop Client provides immutable native-layout facts through `desktopWindow` for its Cordis-fiber lifetime. Browser UI continues to use normal DSH Host routes, RPC, client metadata, services, and slots.
 
@@ -67,7 +67,7 @@ export function apply(ctx: ClientContext): void {
 
 ```ts
 interface DesktopWindowService {
-  readonly mode: 'compatibility' | 'extended' | 'advanced'
+  readonly mode: 'compatibility'
   readonly platform: 'darwin' | 'win32' | 'linux'
   readonly material: 'off' | 'transparent' | 'mica'
   readonly micaSupported: boolean
@@ -88,13 +88,13 @@ interface DesktopWindowService {
 
 All values remain fixed for one renderer generation, and geometry uses CSS pixels. `material` is the effective, capability-gated backdrop rather than merely the persisted preference. `availableMaterials` is `off/transparent` on macOS, `off` on Windows 10, and `off/mica` on Windows 11 build 22621 or newer. The removed legacy `acrylic` preference is read as `off` and migrated when the settings document is writable.
 
-Compatibility and extended modes report the same 36-pixel top reservation and drag band on macOS and Windows; they exclude 80 pixels on the left for macOS traffic lights or 138 pixels on the right for Windows caption controls. Desktop shifts the complete official frame below this reservation in compatibility mode. Extended instead owns the root layout/sidebar surface and hosts the official sidebar, conversation, and details occupants below the same reservation, so ordinary occupants must not add it again. Linux compatibility keeps its ordinary native frame and therefore reports zero insets and a zero-height drag region. Advanced mode has independent compact geometry: macOS reports a 20-pixel content inset and 32-pixel drag band with an 80-pixel left exclusion, while Windows reports a 32-pixel content inset and drag band with a 138-pixel right exclusion.
+On macOS and Windows, Desktop places the complete official upstream client below its independent 36-pixel native titlebar document. Because the content view already starts below that boundary, `safeAreaInsets` and `dragRegion` are both zero. Linux retains its ordinary native frame and reports the same zero geometry.
 
 `safeAreaInsets` describes where Desktop starts the complete upstream content surfaces. `dragRegion` separately describes the native caption hit area, so consumers must not assume that the two heights are equal. Interactive elements inside that band must apply `-webkit-app-region: no-drag`; Desktop already applies this exclusion to standard buttons, links, inputs, editable fields, menus, tabs, switches, and dialogs. The service reports geometry only: it does not expose window mutation, focus, Electron, or IPC capabilities. It is absent from an ordinary browser boot.
 
-Compatibility and extended modes keep the command bar private to Desktop. They do not declare a titlebar action slot, and the first-party icon group is rendered directly by the Desktop frame: on the right on macOS and on the left on Windows. Web Client plugins must use their documented content slots and cannot place controls beside these native actions. Renderer reload and Developer Tools toggling remain private first-party launcher operations, not additions to the public `desktopWindow` service.
+The fixed compatibility presentation keeps the command bar private to Desktop. It does not declare a titlebar action slot, and the first-party icon group is rendered directly by the Desktop frame. Web Client plugins must use their documented content slots and cannot place controls beside these native actions. Renderer reload and Developer Tools toggling remain private first-party launcher operations, not additions to the public `desktopWindow` service.
 
-Desktop marks the command bar with `data-dsh-desktop-frame="titlebar"` and the upstream root with `data-dsh-desktop-content-viewport`. The root is a separate fixed viewport below the command bar, so fixed descendants cannot escape into Desktop chrome. Full-viewport dialogs portalled directly to `document.body` receive the same content offset. Body-level plugin portals can read the `dsh-desktop-titlebar-inset` URL contract; framed modes publish the exact 36-pixel reservation. Plugins must not compensate for a boundary they already consume.
+Desktop marks the command bar with `data-dsh-desktop-frame="titlebar"`. The upstream root lives in a separate content view below the command bar, so fixed descendants and body portals cannot escape into Desktop chrome. Plugins must not compensate for a boundary the native view layout already consumes.
 
 ## Public Host Cordis services
 

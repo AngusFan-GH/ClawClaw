@@ -4,9 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { apply } from '../src/client/index.ts'
 
 // Keep native UI dependencies outside this browser-entry regression test.
-vi.mock('../src/client/advanced-shell.ts', () => ({ applyAdvancedShell: vi.fn() }))
-vi.mock('../src/client/extended-shell.ts', () => ({ applyExtendedShell: vi.fn(), applyFramedShell: vi.fn() }))
 vi.mock('../src/client/desktop-settings.ts', () => ({ applyDesktopSettings: vi.fn() }))
+vi.mock('../src/client/legacy-agent-preset-delete-action.tsx', () => ({ applyLegacyAgentPresetDeleteAction: vi.fn() }))
 vi.mock('../src/client/DesktopSettingsSection.tsx', () => ({ DesktopSettingsSection: vi.fn() }))
 vi.mock('../src/client/DesktopTerminalSettingsAction.tsx', () => ({ DesktopTerminalSettingsAction: vi.fn() }))
 vi.mock('../src/client/spiritx-onboarding.tsx', () => ({ applySpiritXOnboarding: vi.fn() }))

@@ -59,9 +59,8 @@ export function createHostRuntime(rpc: HostRpc, snapshot: RuntimeSnapshot): Desk
       notifyAttention: notification => { void send('update:notifyAttention', [notification]) },
     },
     schedule(spec) {
-      const callback = callbacks({ quit: spec.requestQuit, mode: spec.requestModeChange,
-      })
-      const { readLocalePreference, readThemeSource, requestQuit: _quit, requestModeChange: _mode, ...data } = spec
+      const callback = callbacks({ quit: spec.requestQuit })
+      const { readLocalePreference, readThemeSource, requestQuit: _quit, ...data } = spec
       shellSpecs.set(callback.id, spec)
       trackSetup(send('shell:schedule', [callback.id, data, readLocalePreference(), readThemeSource()]))
       return async () => { try { await send('shell:dispose', [callback.id]) } finally { shellSpecs.delete(callback.id); callback.release() } }
@@ -148,7 +147,6 @@ export function bindNativeRuntime(rpc: HostRpc, runtime: DesktopRuntime): () => 
     shells.set(id, runtime.schedule({ ...data,
       readLocalePreference: () => state.locale, readThemeSource: () => state.theme,
       requestQuit: code => report(callback(`${id}:quit`, [code])),
-      requestModeChange: mode => callback(`${id}:mode`, [mode]),
     } as DesktopShellSpec))
   })
   handle('shell:preferences', ([id, locale, theme]) => {

@@ -13,12 +13,10 @@ import { clearDesktopProfilePluginState } from './desktop-plugins.ts'
 import { desktopMarketSnapshotWithEffective, selectDesktopMarketProvider, type DesktopMarketProvider, type DesktopMarketSnapshot } from './desktop-market.ts'
 import DesktopSettingsController from './desktop-settings-controller.ts'
 import type { DesktopPreferenceUpdateRequest, DesktopSettingsPreferencesView } from './desktop-settings-contract.ts'
-import { clearDesktopProfilePreferences, desktopProfilePreferencesFromSettings, desktopProfilePreferencesWithMode, writeDesktopProfilePreferences, type DesktopProfilePreferences, type DesktopProfilePreferencesStateV1 } from './profile-preferences.ts'
+import { clearDesktopProfilePreferences, desktopProfilePreferencesFromSettings, writeDesktopProfilePreferences, type DesktopProfilePreferences, type DesktopProfilePreferencesStateV1 } from './profile-preferences.ts'
 import { clearDesktopProfileCheckpoint } from './profile-checkpoint.ts'
 import { clearDesktopSetupWizardStateSync } from './setup-wizard-state.ts'
 import { desktopHarnessProfileContext, type PreparedDesktopProfile } from './profile.ts'
-import { desktopLanBrowserUrls, desktopLoopbackBrowserUrl } from './desktop-network.ts'
-import { DESKTOP_LAN_HTTPS_CA_PATH, type DesktopLanHttpsRuntime } from './lan-https-runtime.ts'
 import type { DesktopBrowserAccess } from './desktop-browser-access.ts'
 import type { DesktopPnpmBootstrap } from './pnpm.ts'
 import type { DesktopRuntime } from './runtime.ts'
@@ -50,7 +48,7 @@ export interface DesktopHostOptions {
 }
 
 export async function bootDesktopHost(options: DesktopHostOptions, runtime: DesktopRuntime,
-  browserAccess: DesktopBrowserAccess, lanHttps: DesktopLanHttpsRuntime,
+  browserAccess: DesktopBrowserAccess,
   bindHost: (host: DesktopStartupGenerationHost) => void, requestQuit: (code: number) => void,
 ): Promise<() => object> {
   const { prepared, profilePreferences, homeDir, activeProfileName, pluginManagementStatePath,
@@ -125,7 +123,6 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
         )
         hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, desktopLaunchEnvironment)
         hostCtx.provide('desktopBrowserAccess', browserAccess)
-        hostCtx.provide('desktopLanHttps', lanHttps)
         hostCtx.provide('desktopRuntime', runtime)
         hostCtx.provide('desktopPnpmBootstrap', desktopPnpmBootstrap)
         await hostCtx.plugin(DesktopActionsService, {
@@ -193,8 +190,6 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
           mode: currentProfilePreferences.mode,
           macosMaterial: currentMacosMaterial,
           windowsMaterial: currentWindowsMaterial,
-          openBrowser: currentProfilePreferences.openBrowser,
-          networkExposure: currentProfilePreferences.networkExposure,
           notifications: Object.freeze({ ...currentProfilePreferences.notifications }),
           updateQualificationJournal,
         })
@@ -229,55 +224,10 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
             hostCtx.get('desktopNotificationSettings')?.update(update.value)
             return
           }
-          if (update.field === 'openBrowser') {
-            if (update.value && currentProfilePreferences.mode !== 'compatibility') {
-              throw new Error(`${BIN_NAME}: ordinary browser access requires compatibility mode`)
-            }
-            const next = await enqueueProfilePreferencesWrite(current => desktopProfilePreferencesFromSettings(
-              {
-                ...current,
-                openBrowser: update.value,
-                networkExposure: update.value ? current.networkExposure : 'loopback',
-              },
-              current.notifications,
-              current.market,
-            ))
-            browserAccess.setOrdinaryBrowserEnabled(next.openBrowser)
-            await lanHttps.setEnabled(next.openBrowser && next.networkExposure === 'lan')
-            return
-          }
-          if (update.value === 'lan'
-            && (currentProfilePreferences.mode !== 'compatibility' || !currentProfilePreferences.openBrowser)) {
-            throw new Error(`${BIN_NAME}: LAN exposure requires compatibility browser access`)
-          }
-          const next = await enqueueProfilePreferencesWrite(current => desktopProfilePreferencesFromSettings(
-            { ...current, networkExposure: update.value },
-            current.notifications,
-            current.market,
-          ))
-          await lanHttps.setEnabled(next.openBrowser && next.networkExposure === 'lan')
         }
         hostCtx.provide('desktopSettingsController', new DesktopSettingsController({
           profiles: hostCtx.desktopProfiles,
           readMarket,
-          readWeb: () => {
-            const lan = lanHttps.snapshot()
-            const lanOrigins = lan.state === 'ready' && lan.actualPort !== null
-              ? desktopLanBrowserUrls(lan.actualPort, lan.addresses)
-              : []
-            return {
-              localUrl: hostCtx.connection.authenticatedUrl(
-                desktopLoopbackBrowserUrl(hostCtx.webServer.port),
-              ),
-              lanUrls: lanOrigins.map(url => hostCtx.connection.authenticatedUrl(url)),
-              lanState: lan.state,
-              lanError: lan.errorCode,
-              lanCaFingerprint: lan.caFingerprint,
-              lanCaUrls: lanOrigins.map((origin) => {
-                return new URL(DESKTOP_LAN_HTTPS_CA_PATH, origin).href
-              }),
-            }
-          },
           selectMarket: async provider => {
             await enqueueProfilePreferencesWrite(current => desktopProfilePreferencesFromSettings(
               current,
@@ -288,9 +238,6 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
               await selectDesktopMarketProvider(marketUserDataDir, provider),
               prepared.market.effective,
             )
-          },
-          selectMode: async mode => {
-            await enqueueProfilePreferencesWrite(current => desktopProfilePreferencesWithMode(current, mode))
           },
           readPreferences,
           updatePreference,

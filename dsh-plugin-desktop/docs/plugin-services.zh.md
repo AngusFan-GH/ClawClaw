@@ -2,7 +2,7 @@
 
 [English](plugin-services.md) | 中文
 
-本文档是面向插件作者的 Stable 受支持集成 contract，覆盖 ClawClaw 0.2.x 在兼容、扩展窗口与增强三种呈现模式下导出的 Host 公开 service `desktopProfiles`、`desktopPnpm`，以及 Client 公开 service `desktopWindow`。它不会授予第三方访问原始 Electron API 或 launcher bootstrap 状态的能力。
+本文档是面向插件作者的 Stable 受支持集成 contract，覆盖 ClawClaw 0.2.x 在固定兼容呈现下导出的 Host 公开 service `desktopProfiles`、`desktopPnpm`，以及 Client 公开 service `desktopWindow`。它不会授予第三方访问原始 Electron API 或 launcher bootstrap 状态的能力。
 
 ## 分层与数据流
 
@@ -40,7 +40,7 @@ flowchart LR
   Client --> Window
 ```
 
-Launcher 会在 Loader tree 挂载前解析一个 profile。`desktopProfiles.current` 在整个 Cordis generation dispose 前保持不变。`desktop-pnpm` Host row 会根据 launcher 私有 fact 与上游 subprocess service 构造 `desktopPnpm`。切换 profile 或模式会 dispose 当前 generation 并启动新 generation；service reference 不能跨越该边界。
+Launcher 会在 Loader tree 挂载前解析一个 profile。`desktopProfiles.current` 在整个 Cordis generation dispose 前保持不变。`desktop-pnpm` Host row 会根据 launcher 私有 fact 与上游 subprocess service 构造 `desktopPnpm`。切换 profile 会 dispose 当前 generation 并启动新 generation；service reference 不能跨越该边界。
 
 Renderer 通过现有 loopback carrier 接收普通 Web Client module，无法直接读取这些 Host service；ClawClaw 不为它们增加 preload 或通用 Electron IPC bridge。Desktop Client 会在自己的 Cordis fiber 生命周期内，通过 `desktopWindow` 提供不可变的原生布局信息。包含浏览器 UI 的插件继续使用普通 DSH Host route、RPC、client metadata、service 与 slot。
 
@@ -67,7 +67,7 @@ export function apply(ctx: ClientContext): void {
 
 ```ts
 interface DesktopWindowService {
-  readonly mode: 'compatibility' | 'extended' | 'advanced'
+  readonly mode: 'compatibility'
   readonly platform: 'darwin' | 'win32' | 'linux'
   readonly material: 'off' | 'transparent' | 'mica'
   readonly micaSupported: boolean
@@ -88,13 +88,13 @@ interface DesktopWindowService {
 
 所有值都会在一个 renderer generation 内保持不变，几何值使用 CSS 像素。`material` 是经过系统能力门槛解析后的实际材质，而不只是持久化的偏好。macOS 的 `availableMaterials` 为 `off/transparent`；Windows 10 为 `off`；Windows 11 build 22621 及以上为 `off/mica`。已移除的旧 `acrylic` 偏好会按 `off` 读取，并在设置文件可写时自动迁移。
 
-兼容模式与扩展窗口在 macOS 与 Windows 上都报告顶部 36 像素的预留区与拖动带，并在 macOS 左侧为红绿灯排除 80 像素，或在 Windows 右侧为原生标题栏按钮排除 138 像素。兼容模式会把完整官方 frame 下移到该区域下方。扩展窗口则由 Desktop 持有 root layout/sidebar surface，并在同一预留区下方承载官方 sidebar、conversation 与 details occupant，因此普通 occupant 不能再次叠加这一 inset。Linux 兼容模式保留普通原生 frame，因此报告零 inset 和零高度拖动区域。增强模式使用独立的紧凑几何：macOS 报告 20 像素内容 inset、32 像素拖动带与 80 像素左侧排除；Windows 报告 32 像素内容 inset、32 像素拖动带与 138 像素右侧排除。
+在 macOS 与 Windows 上，Desktop 会把完整的官方上游客户端放在独立的 36 像素原生标题栏文档下方。由于内容 view 已经从该边界下方开始，`safeAreaInsets` 与 `dragRegion` 均为零。Linux 保留普通原生 frame，也报告零几何值。
 
 `safeAreaInsets` 描述 Desktop 从哪里开始放置完整的上游内容 surface；`dragRegion` 则单独描述原生标题栏命中区域，consumer 不能假设两者高度相同。拖动带内的交互元素必须设置 `-webkit-app-region: no-drag`；Desktop 已经为标准按钮、链接、输入框、可编辑字段、菜单、标签页、开关与对话框设置该排除规则。该 service 只报告几何信息，不提供窗口 mutation、焦点、Electron 或 IPC capability；普通浏览器启动中不存在该 service。
 
-兼容模式与扩展窗口都会让操作栏保持 Desktop 私有。它们不会声明标题栏 action slot；第一方图标组由 Desktop frame 直接渲染，在 macOS 位于右侧、在 Windows 位于左侧。Web Client 插件必须使用各自已有文档的内容 slot，不能把控件放到这些原生操作旁边。Renderer 重载与开发者工具切换仍是第一方私有 launcher 操作，不会加入公开的 `desktopWindow` service。
+固定兼容呈现会让操作栏保持 Desktop 私有。它不声明标题栏 action slot；第一方图标组由 Desktop frame 直接渲染。Web Client 插件必须使用各自已有文档的内容 slot，不能把控件放到这些原生操作旁边。Renderer 重载与开发者工具切换仍是第一方私有 launcher 操作，不会加入公开的 `desktopWindow` service。
 
-Desktop 会用 `data-dsh-desktop-frame="titlebar"` 标记操作栏，并用 `data-dsh-desktop-content-viewport` 标记上游 root。Root 会成为操作栏下方独立的 fixed viewport，因此 fixed descendant 不能逃逸到 Desktop chrome；直接 portal 到 `document.body` 的全视口对话框会获得相同的内容偏移。Body 级插件 portal 可以读取 `dsh-desktop-titlebar-inset` URL contract，带 frame 的模式会发布精确的 36px 预留。插件不能重复补偿已经消费的边界。
+Desktop 会用 `data-dsh-desktop-frame="titlebar"` 标记操作栏。上游 root 位于操作栏下方独立的内容 view 中，因此 fixed descendant 与 body portal 都不能逃逸到 Desktop chrome。插件不能重复补偿 native view 布局已经消费的边界。
 
 ## 公开 Host Cordis service
 

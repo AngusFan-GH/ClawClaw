@@ -1,9 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
-  desktopProfilePreferencesWithMode,
+  desktopProfilePreferencesStatePath,
+  readAndMigrateDesktopProfilePreferences,
+  writeDesktopProfilePreferences,
   type DesktopProfilePreferences,
-  type DesktopProfilePreferencesStateV1,
 } from '../src/profile-preferences.ts'
+
+const roots: string[] = []
 
 const CURRENT: DesktopProfilePreferences = {
   mode: 'compatibility',
@@ -19,31 +25,30 @@ const CURRENT: DesktopProfilePreferences = {
   market: 'dsh-market',
 }
 
-describe('Desktop Profile mode preferences', () => {
-  it('withdraws browser and LAN access for custom window modes', () => {
-    expect(desktopProfilePreferencesWithMode(CURRENT, 'extended')).toEqual({
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map(async root => { await rm(root, { recursive: true, force: true }) }))
+})
+
+describe('Desktop Profile mode migration', () => {
+  it.each(['extended', 'advanced'] as const)('normalizes and rewrites legacy %s state', async legacyMode => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-mode-migration-'))
+    roots.push(root)
+    const userDataDir = join(root, 'user-data')
+    const profileDir = join(root, 'profiles', 'desktop')
+    const state = await writeDesktopProfilePreferences(userDataDir, profileDir, CURRENT)
+    const path = desktopProfilePreferencesStatePath(userDataDir, profileDir)
+    await writeFile(path, `${JSON.stringify({ ...state, mode: legacyMode }, undefined, 2)}\n`, { mode: 0o600 })
+
+    const migrated = await readAndMigrateDesktopProfilePreferences(userDataDir, profileDir)
+    expect(migrated).toMatchObject({
       ...CURRENT,
-      mode: 'extended',
       openBrowser: false,
       networkExposure: 'loopback',
     })
-  })
 
-  it('preserves browser preferences when selecting compatibility mode', () => {
-    expect(desktopProfilePreferencesWithMode(CURRENT, 'compatibility')).toEqual(CURRENT)
-  })
-
-  it('projects persisted state metadata out of the next preferences update', () => {
-    const stored: DesktopProfilePreferencesStateV1 = {
-      ...CURRENT,
-      version: 1,
-      profileHash: 'a'.repeat(64),
-      recordedAt: '2026-09-29T00:00:00.000Z',
-    }
-
-    expect(desktopProfilePreferencesWithMode(stored, 'advanced')).toEqual({
-      ...CURRENT,
-      mode: 'advanced',
+    const persisted = JSON.parse(await readFile(path, 'utf8')) as { mode: string }
+    expect(persisted).toMatchObject({
+      mode: 'compatibility',
       openBrowser: false,
       networkExposure: 'loopback',
     })

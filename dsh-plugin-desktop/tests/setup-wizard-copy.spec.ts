@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  desktopSetupWizardRequiresLanAcknowledgement,
-  desktopSetupWizardRequiresLanConfirmation,
   desktopSetupWizardSelectionIsAvailable,
   isDesktopSetupWizardInput,
   type DesktopSetupWizardInput,
@@ -37,25 +35,6 @@ describe('Desktop Setup Wizard copy and contract', () => {
     expect(Object.values(chinese).every(value => value.length > 0)).toBe(true)
   })
 
-  it('explains LAN access-link permissions, HTTPS, and certificate trust in both locales', () => {
-    const chinese = desktopSetupWizardCopy('zh')
-    const english = desktopSetupWizardCopy('en')
-    expect(chinese.beta).toBe('Beta')
-    expect(english.beta).toBe('Beta')
-    expect(chinese.lanWarningBody).toContain('持有访问链接')
-    expect(chinese.lanWarningBody).toContain('操作这台电脑')
-    expect(chinese.lanWarningBody).toContain('HTTPS')
-    expect(chinese.lanWarningBody).toContain('安装并信任')
-    expect(english.lanWarningBody).toContain('who has the access link')
-    expect(english.lanWarningBody).toContain('operate this computer')
-    expect(english.lanWarningBody).toContain('HTTPS')
-    expect(english.lanWarningBody).toContain('install and trust')
-    expect(chinese.networkExposureBody).toContain('HTTPS')
-    expect(chinese.lanBody).toContain('访问设备')
-    expect(english.networkExposureBody).toContain('HTTPS')
-    expect(english.lanBody).toContain('each device')
-  })
-
   it('describes the sequential navigation, skip confirmation, and final success action', () => {
     const english = desktopSetupWizardCopy('en')
     const chinese = desktopSetupWizardCopy('zh')
@@ -87,38 +66,6 @@ describe('Desktop Setup Wizard copy and contract', () => {
     expect(english.startSetup).toBe('Start setup')
   })
 
-  it('treats browser opening as permission, not an automatic startup action', () => {
-    const english = desktopSetupWizardCopy('en')
-    const chinese = desktopSetupWizardCopy('zh')
-    expect(chinese.openBrowser).toBe('允许在浏览器中打开')
-    expect(chinese.openBrowser).not.toMatch(/启动后|自动/u)
-    expect(chinese.browserCompatibilityNotice).toContain('兼容模式')
-    expect(chinese.browserCompatibilityNotice).toContain('仅在')
-    expect(chinese.browserCompatibilityDialogBody).toContain('只能使用兼容模式')
-    expect(chinese.browserCompatibilityDialogBody).toContain('切换为兼容模式')
-    expect(chinese.confirmBrowserCompatibility).toBe('切换并开启')
-    expect(chinese.cancelBrowserCompatibility).toBe('取消')
-    expect(english.openBrowser).toMatch(/allow.+(?:open|opening).+browser/iu)
-    expect(english.openBrowser).not.toMatch(/after startup|automatically/iu)
-    expect(english.browserCompatibilityNotice).toMatch(/only.+compatibility mode/iu)
-    expect(english.browserCompatibilityDialogBody).toMatch(/requires compatibility mode/iu)
-    expect(english.browserCompatibilityDialogBody).toMatch(/switch.+window mode/iu)
-  })
-
-  it('requires confirmation only when loopback access is changed to LAN', () => {
-    expect(desktopSetupWizardRequiresLanConfirmation('loopback', 'lan')).toBe(true)
-    expect(desktopSetupWizardRequiresLanConfirmation('lan', 'loopback')).toBe(false)
-    expect(desktopSetupWizardRequiresLanConfirmation('lan', 'lan')).toBe(false)
-    expect(desktopSetupWizardRequiresLanConfirmation('loopback', 'loopback')).toBe(false)
-  })
-
-  it('requires a fresh first-run acknowledgement even when persisted settings already request LAN', () => {
-    expect(desktopSetupWizardRequiresLanAcknowledgement('lan', 'lan', false)).toBe(true)
-    expect(desktopSetupWizardRequiresLanAcknowledgement('lan', 'lan', true)).toBe(false)
-    expect(desktopSetupWizardRequiresLanAcknowledgement('loopback', 'lan', true)).toBe(true)
-    expect(desktopSetupWizardRequiresLanAcknowledgement('lan', 'loopback', false)).toBe(false)
-  })
-
   it('strictly validates complete input and platform capability gates', () => {
     expect(isDesktopSetupWizardInput(input)).toBe(true)
     expect(isDesktopSetupWizardInput({ ...input, unexpected: true })).toBe(false)
@@ -129,25 +76,7 @@ describe('Desktop Setup Wizard copy and contract', () => {
     expect(isDesktopSetupWizardInput({ ...input, profileName: 'CON' })).toBe(false)
     expect(desktopSetupWizardSelectionIsAvailable(input, input)).toBe(true)
     expect(desktopSetupWizardSelectionIsAvailable(input, { platform: 'win32', micaSupported: false })).toBe(false)
-    expect(desktopSetupWizardSelectionIsAvailable(
-      { ...input, mode: 'extended', windowsMaterial: 'off' },
-      { platform: 'linux', micaSupported: false },
-    )).toBe(false)
-    expect(desktopSetupWizardSelectionIsAvailable(
-      { ...input, mode: 'advanced', openBrowser: true },
-      { platform: 'win32', micaSupported: true },
-    )).toBe(false)
-    expect(desktopSetupWizardSelectionIsAvailable(
-      { ...input, openBrowser: false, networkExposure: 'lan' },
-      { platform: 'win32', micaSupported: true },
-    )).toBe(false)
-    expect(desktopSetupWizardSelectionIsAvailable(
-      { ...input, openBrowser: true, networkExposure: 'lan' },
-      { platform: 'win32', micaSupported: true },
-    )).toBe(true)
-    expect(desktopSetupWizardSelectionIsAvailable(
-      { ...input, mode: 'advanced', openBrowser: true, networkExposure: 'lan' },
-      { platform: 'win32', micaSupported: true },
-    )).toBe(false)
+    expect(isDesktopSetupWizardInput({ ...input, mode: 'extended' })).toBe(false)
+    expect(isDesktopSetupWizardInput({ ...input, mode: 'advanced' })).toBe(false)
   })
 })

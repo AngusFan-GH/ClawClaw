@@ -1,7 +1,7 @@
 /** ClawClaw executable: minimal Electron bootstrap around the Host Cordis root. */
 
 import { startIsolatedDesktopHost } from './host-process.ts'
-import { app, crashReporter, dialog, safeStorage, shell } from 'electron'
+import { app, crashReporter, dialog, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -52,16 +52,6 @@ import type {
 } from './lifecycle-events.ts'
 import { FileExporter } from './file-exporter.ts'
 import { DESKTOP_SETTINGS_NAMESPACE, type DesktopSettings } from './index.ts'
-import {
-  desktopLanBrowserUrls,
-  desktopLoopbackBrowserUrl,
-} from './desktop-network.ts'
-import { desktopLanAddresses } from './lan-addresses.ts'
-import type { DesktopLanHttpsPrivateKeyProtector } from './lan-https-certificate.ts'
-import {
-  DESKTOP_LAN_HTTPS_CA_PATH,
-  DesktopLanHttpsRuntime,
-} from './lan-https-runtime.ts'
 import { LogFileSink } from './log-files.ts'
 import { maskSecrets } from './mask-secrets.ts'
 import { writeDesktopFatalReport, type DesktopFatalSource } from './fatal-crash-report.ts'
@@ -98,11 +88,12 @@ import {
 import { clawClawDataLayout, prepareClawClawDataLayout } from './product-data-layout.ts'
 import { acquireDesktopDataOperationLock } from './desktop-data-operation-lock.ts'
 import { resetDesktopDataDirectory } from './desktop-factory-reset.ts'
+import { resetDesktopBackgroundCloseNotice } from './background-close-notice.ts'
+import { clearDesktopUpdateQualificationJournals } from './update-qualification-journal.ts'
 import {
   clearDesktopProfilePreferences,
   desktopProfilePreferencesFromSettings,
-  desktopProfilePreferencesWithMode,
-  readDesktopProfilePreferences,
+  readAndMigrateDesktopProfilePreferences,
   writeDesktopProfilePreferences,
   type DesktopProfilePreferences,
   type DesktopProfilePreferencesStateV1,
@@ -116,6 +107,7 @@ import {
   type RecoveryWindowResult,
   type DesktopStartupRecoveryConfigurationPaths,
   type DesktopStartupRecoveryDataActions,
+  type DesktopStartupRecoveryMaintenanceActions,
   type DesktopStartupRecoveryProfileActions,
   type DesktopStartupFailureStage,
 } from './startup-recovery-window.ts'
@@ -236,20 +228,6 @@ function withDesktopDshHome(
       return environment.getFrom(name, sources)
     },
   })
-}
-
-/** Require OS-backed secret storage; Linux's plaintext fallback is not sufficient for a CA key. */
-function desktopLanHttpsPrivateKeyProtector(): DesktopLanHttpsPrivateKeyProtector {
-  return {
-    available: () => {
-      if (!safeStorage.isEncryptionAvailable()) return false
-      if (process.platform !== 'linux') return true
-      const backend = safeStorage.getSelectedStorageBackend()
-      return backend !== 'basic_text' && backend !== 'unknown'
-    },
-    seal: plaintext => safeStorage.encryptString(Buffer.from(plaintext).toString('utf8')),
-    open: sealed => Buffer.from(safeStorage.decryptString(Buffer.from(sealed)), 'utf8'),
-  }
 }
 
 class RendererStartupFailure extends Error {
@@ -421,6 +399,8 @@ async function start(): Promise<void> {
   let profileCheckpoint: DesktopProfileCheckpoint | undefined
   let startupRecoveryProfileActions: DesktopStartupRecoveryProfileActions | undefined
   let startupRecoveryDataActions: DesktopStartupRecoveryDataActions | undefined
+  let startupRecoveryMaintenanceActions: DesktopStartupRecoveryMaintenanceActions | undefined
+  let startupRecoverySettingsDocument: string | undefined
   let safeModePaths: DesktopSafeModePaths | undefined
   let prepareSafeMode: (() => void) | undefined
   let sessionProjectionCacheRecovery:
@@ -636,6 +616,9 @@ async function start(): Promise<void> {
         ...(recoveryTerminalAvailable ? { openTerminal: () => { runtime.openTerminal() } } : {}),
         ...(startupRecoveryProfileActions === undefined ? {} : { profileActions: startupRecoveryProfileActions }),
         ...(startupRecoveryDataActions === undefined ? {} : { dataActions: startupRecoveryDataActions }),
+        ...(startupRecoveryMaintenanceActions === undefined
+          ? {}
+          : { maintenanceActions: startupRecoveryMaintenanceActions }),
         ...(prepareSafeMode === undefined ? {} : { enterSafeMode: prepareSafeMode }),
         ...(safeModePaths === undefined ? {} : { safeModeActive: true }),
       })
@@ -902,6 +885,26 @@ async function start(): Promise<void> {
       profileManifest: join(activeProfileDir, 'package.json'),
       profileDirectory: activeProfileDir,
     }
+    startupRecoverySettingsDocument = join(activeProfileDir, PROFILE_PATCH_FILENAME)
+    startupRecoveryMaintenanceActions = {
+      readUpdateQualificationJournal: () => {
+        if (startupRecoverySettingsDocument === undefined) return false
+        return readDesktopQualificationJournalSetting(startupRecoverySettingsDocument)
+      },
+      setUpdateQualificationJournal: async enabled => {
+        if (startupRecoverySettingsDocument === undefined) {
+          throw new Error(`${BIN_NAME}: recovery settings document is unavailable`)
+        }
+        await updateDesktopQualificationJournalSetting(startupRecoverySettingsDocument, enabled)
+      },
+      clearUpdateQualificationJournal: () => {
+        clearDesktopUpdateQualificationJournals(runtime.updates.qualificationJournalDirectory)
+      },
+      resetBackgroundCloseNotice: () => {
+        resetDesktopBackgroundCloseNotice(desktopUserDataDir, activeProfileName)
+        runtime.resetBackgroundCloseNotice()
+      },
+    }
     if (dataDirectoryLocation !== undefined) {
       const recoveryDataLocation = dataDirectoryLocation
       const selectRecoveryDataDirectory = async (
@@ -1082,15 +1085,14 @@ async function start(): Promise<void> {
     }
     startupStage = 'profile-composition'
     lifecycleRecorder.transitionStartupStage(startupStage)
-    const lanAddresses = desktopLanAddresses()
     const legacyMarketSelection = readDesktopMarketStateForUserData(marketUserDataDir)
-    let profilePreferences = readDesktopProfilePreferences(marketUserDataDir, activeProfileDir)
+    let profilePreferences = await readAndMigrateDesktopProfilePreferences(marketUserDataDir, activeProfileDir)
     let marketSelection = profilePreferences === undefined
       ? legacyMarketSelection
       : desktopProfileMarketSnapshot(profilePreferences.market)
     const preparationHooks = {
-      lanAddresses,
       onSettingsDocumentResolved: (settingsDocument: string) => {
+        startupRecoverySettingsDocument = settingsDocument
         if (startupRecoveryConfigurationPaths === undefined) return
         startupRecoveryConfigurationPaths = {
           ...startupRecoveryConfigurationPaths,
@@ -1344,30 +1346,7 @@ async function start(): Promise<void> {
         `${BIN_NAME}: requested Market provider ${prepared.market.requested} was disabled for this generation: ${prepared.marketFailure}`,
       )
     }
-    const prepareHostCertificate = async () => {
-      if (prepared.lanAddresses.length === 0) return { failureCode: 'no-address' }
-      const { createLanHttpsCertificate, DesktopLanHttpsCertificateError } = await import('./lan-https-certificate.ts')
-      try {
-        const certificate = await createLanHttpsCertificate(
-          marketUserDataDir,
-          prepared.lanAddresses,
-          desktopLanHttpsPrivateKeyProtector(),
-        )
-        return { certificate }
-      } catch (cause) {
-        const failureCode = cause instanceof DesktopLanHttpsCertificateError ? cause.code : 'certificate-state'
-        electronLogger.error(
-          `${BIN_NAME}: LAN HTTPS certificate setup is unavailable: ${cause instanceof Error ? cause.message : String(cause)}`,
-        )
-        return { failureCode }
-      }
-    }
-    const lanHttps = new DesktopLanHttpsRuntime({
-      addresses: prepared.lanAddresses, prepareCertificate: prepareHostCertificate, requestedPort: 0,
-    })
-    const browserAccess = createDesktopBrowserAccess(
-      prepared.mode === 'compatibility' && prepared.openBrowser,
-    )
+    const browserAccess = createDesktopBrowserAccess()
     const desktopPnpmBootstrap: DesktopPnpmBootstrap = {
       activeProfileName,
       activeProfileDir: prepared.profile.dir,
@@ -1392,7 +1371,6 @@ async function start(): Promise<void> {
           selectionStatePath, marketUserDataDir, desktopLaunchEnvironment,
           desktopPnpmBootstrap, logDirectory: join(desktopUserDataDir, 'logs', 'host') },
         runtime, rendererToken: browserAccess.rendererHeader.value,
-        prepareCertificate: prepareHostCertificate,
         bindHost: host => generation.bindHost(host), requestQuit,
         onFailure: error => {
           recordFatal('host', error)
@@ -1472,7 +1450,6 @@ async function start(): Promise<void> {
           )
           hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, desktopLaunchEnvironment)
           hostCtx.provide('desktopBrowserAccess', browserAccess)
-          hostCtx.provide('desktopLanHttps', lanHttps)
           hostCtx.provide('desktopRuntime', runtime)
           hostCtx.provide('desktopPnpmBootstrap', desktopPnpmBootstrap)
           await hostCtx.plugin(DesktopActionsService, {
@@ -1540,8 +1517,6 @@ async function start(): Promise<void> {
             mode: currentProfilePreferences.mode,
             macosMaterial: currentMacosMaterial,
             windowsMaterial: currentWindowsMaterial,
-            openBrowser: currentProfilePreferences.openBrowser,
-            networkExposure: currentProfilePreferences.networkExposure,
             notifications: Object.freeze({ ...currentProfilePreferences.notifications }),
             updateQualificationJournal,
           })
@@ -1576,55 +1551,10 @@ async function start(): Promise<void> {
               hostCtx.get('desktopNotificationSettings')?.update(update.value)
               return
             }
-            if (update.field === 'openBrowser') {
-              if (update.value && currentProfilePreferences.mode !== 'compatibility') {
-                throw new Error(`${BIN_NAME}: ordinary browser access requires compatibility mode`)
-              }
-              const next = await enqueueProfilePreferencesWrite(current => desktopProfilePreferencesFromSettings(
-                {
-                  ...current,
-                  openBrowser: update.value,
-                  networkExposure: update.value ? current.networkExposure : 'loopback',
-                },
-                current.notifications,
-                current.market,
-              ))
-              browserAccess.setOrdinaryBrowserEnabled(next.openBrowser)
-              await lanHttps.setEnabled(next.openBrowser && next.networkExposure === 'lan')
-              return
-            }
-            if (update.value === 'lan'
-              && (currentProfilePreferences.mode !== 'compatibility' || !currentProfilePreferences.openBrowser)) {
-              throw new Error(`${BIN_NAME}: LAN exposure requires compatibility browser access`)
-            }
-            const next = await enqueueProfilePreferencesWrite(current => desktopProfilePreferencesFromSettings(
-              { ...current, networkExposure: update.value },
-              current.notifications,
-              current.market,
-            ))
-            await lanHttps.setEnabled(next.openBrowser && next.networkExposure === 'lan')
           }
           hostCtx.provide('desktopSettingsController', new DesktopSettingsController({
             profiles: hostCtx.desktopProfiles,
             readMarket,
-            readWeb: () => {
-              const lan = lanHttps.snapshot()
-              const lanOrigins = lan.state === 'ready' && lan.actualPort !== null
-                ? desktopLanBrowserUrls(lan.actualPort, lan.addresses)
-                : []
-              return {
-                localUrl: hostCtx.connection.authenticatedUrl(
-                  desktopLoopbackBrowserUrl(hostCtx.webServer.port),
-                ),
-                lanUrls: lanOrigins.map(url => hostCtx.connection.authenticatedUrl(url)),
-                lanState: lan.state,
-                lanError: lan.errorCode,
-                lanCaFingerprint: lan.caFingerprint,
-                lanCaUrls: lanOrigins.map((origin) => {
-                  return new URL(DESKTOP_LAN_HTTPS_CA_PATH, origin).href
-                }),
-              }
-            },
             selectMarket: async provider => {
               await enqueueProfilePreferencesWrite(current => desktopProfilePreferencesFromSettings(
                 current,
@@ -1635,9 +1565,6 @@ async function start(): Promise<void> {
                 await selectDesktopMarketProvider(marketUserDataDir, provider),
                 prepared.market.effective,
               )
-            },
-            selectMode: async mode => {
-              await enqueueProfilePreferencesWrite(current => desktopProfilePreferencesWithMode(current, mode))
             },
             readPreferences,
             updatePreference,

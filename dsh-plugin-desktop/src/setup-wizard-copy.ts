@@ -3,22 +3,12 @@
 import type { DesktopLocale } from './runtime.ts'
 
 export interface DesktopSetupWizardCopy {
-  readonly beta: string
   readonly title: string
   readonly profile: string
   readonly welcomeTitle: string
   readonly welcomeBody: string
   readonly firstProfileSetup: string
   readonly startSetup: string
-  readonly presentationTitle: string
-  readonly presentationBody: string
-  readonly compatibilityMode: string
-  readonly compatibilityModeBody: string
-  readonly extendedMode: string
-  readonly extendedModeBody: string
-  readonly advancedMode: string
-  readonly advancedModeBody: string
-  readonly unavailableOnLinux: string
   readonly windowMaterial: string
   readonly windowMaterialBody: string
   readonly materialOff: string
@@ -27,24 +17,7 @@ export interface DesktopSetupWizardCopy {
   readonly materialTransparentBody: string
   readonly materialMica: string
   readonly materialMicaBody: string
-  readonly browserTitle: string
-  readonly browserBody: string
-  readonly openBrowser: string
-  readonly browserCompatibilityNotice: string
-  readonly browserCompatibilityDialogTitle: string
-  readonly browserCompatibilityDialogBody: string
-  readonly confirmBrowserCompatibility: string
-  readonly cancelBrowserCompatibility: string
-  readonly networkExposure: string
-  readonly networkExposureBody: string
-  readonly loopback: string
-  readonly loopbackBody: string
-  readonly lan: string
-  readonly lanBody: string
-  readonly lanWarningTitle: string
-  readonly lanWarningBody: string
-  readonly confirmLan: string
-  readonly cancelLan: string
+  readonly unavailableOnLinux: string
   readonly marketTitle: string
   readonly marketBody: string
   readonly marketDisabled: string
@@ -74,22 +47,12 @@ export interface DesktopSetupWizardCopy {
 const COPY: Record<DesktopLocale, DesktopSetupWizardCopy> = {
   en: {
 
-    beta: 'Beta',
     title: 'Set up ClawClaw',
     profile: 'Profile',
     welcomeTitle: 'Welcome to ClawClaw',
-    welcomeBody: 'Set up window appearance, phone connection, and notifications for the current Profile.',
+    welcomeBody: 'Set up window appearance and notifications for the current Profile.',
     firstProfileSetup: 'Complete Desktop setup before using this configuration environment (Profile) for the first time.',
     startSetup: 'Start setup',
-    presentationTitle: 'Choose a window mode',
-    presentationBody: 'Choose a window layout and desktop controls.',
-    compatibilityMode: 'Compatibility mode',
-    compatibilityModeBody: 'Use the official client layout with an independent Desktop control bar above it. This mode offers the best compatibility.',
-    extendedMode: 'Extended mode',
-    extendedModeBody: 'Add an independent titlebar and sidebar around the official content area, with optional glass effects.',
-    advancedMode: 'Enhanced mode',
-    advancedModeBody: 'Use a desktop layout with adjusted sidebars, content panels, and window controls.',
-    unavailableOnLinux: 'This mode is currently available on macOS and Windows.',
     windowMaterial: 'Choose a window material',
     windowMaterialBody: 'Choose a window background effect.',
     materialOff: 'Solid background',
@@ -98,24 +61,7 @@ const COPY: Record<DesktopLocale, DesktopSetupWizardCopy> = {
     materialTransparentBody: 'Show a blurred view of the content behind the window.',
     materialMica: 'Mica',
     materialMicaBody: 'Use the native Windows Mica material when it is supported.',
-    browserTitle: 'Set up browser access',
-    browserBody: 'Allow browser access to the current Profile and choose which devices can reach it.',
-    openBrowser: 'Allow opening this Profile in a browser',
-    browserCompatibilityNotice: 'Browser access is only available in compatibility mode.',
-    browserCompatibilityDialogTitle: 'Switch to compatibility mode?',
-    browserCompatibilityDialogBody: 'Opening this Profile in a browser requires compatibility mode. Continue to switch the window mode and enable browser access.',
-    confirmBrowserCompatibility: 'Switch and enable',
-    cancelBrowserCompatibility: 'Cancel',
-    networkExposure: 'Network access',
-    networkExposureBody: 'Allow access from this computer only, or from other devices on the same local network over HTTPS.',
-    loopback: 'This computer only',
-    loopbackBody: 'Only browsers on this computer can connect.',
-    lan: 'Local network',
-    lanBody: 'Other devices on the same local network can connect using the access link. First install and trust the certificate provided by this computer on each device.',
-    lanWarningTitle: 'Enable local-network access?',
-    lanWarningBody: 'Anyone on the same local network who has the access link can use DSH to operate this computer. Share the link only with people you trust. Connections use HTTPS; each device must install and trust the certificate provided by this computer.',
-    confirmLan: 'Enable local-network access',
-    cancelLan: 'Keep this computer only',
+    unavailableOnLinux: 'Window materials are currently available on macOS and Windows.',
     marketTitle: 'Choose a plugin market',
     marketBody: 'Choose a plugin market for the current Profile. Only one can be enabled at a time.',
     marketDisabled: 'Turn off plugin market',
@@ -143,22 +89,12 @@ const COPY: Record<DesktopLocale, DesktopSetupWizardCopy> = {
   },
   zh: {
 
-    beta: 'Beta',
     title: '设置 ClawClaw',
     profile: 'Profile',
     welcomeTitle: '欢迎使用 ClawClaw',
-    welcomeBody: '为当前 Profile 设置窗口外观、手机连接和桌面通知。',
+    welcomeBody: '为当前 Profile 设置窗口外观和桌面通知。',
     firstProfileSetup: '首次使用此配置环境（Profile），请先完成桌面设置。',
     startSetup: '开始设置',
-    presentationTitle: '选择窗口模式',
-    presentationBody: '选择窗口布局和桌面操作方式。',
-    compatibilityMode: '兼容模式',
-    compatibilityModeBody: '使用官方客户端布局，顶部提供独立的桌面控制栏。兼容性最好。',
-    extendedMode: '扩展模式',
-    extendedModeBody: '在官方内容区域外提供独立顶栏和侧边栏，可搭配玻璃背景。',
-    advancedMode: '增强模式',
-    advancedModeBody: '使用桌面专用布局，调整侧边栏、内容面板和窗口操作方式。',
-    unavailableOnLinux: '此模式目前支持 macOS 和 Windows。',
     windowMaterial: '选择窗口材质',
     windowMaterialBody: '选择窗口背景效果。',
     materialOff: '纯色背景',
@@ -167,24 +103,7 @@ const COPY: Record<DesktopLocale, DesktopSetupWizardCopy> = {
     materialTransparentBody: '透出窗口背后的内容，并呈现模糊效果。',
     materialMica: 'Mica',
     materialMicaBody: '在系统支持时使用 Windows 原生 Mica 材质。',
-    browserTitle: '设置浏览器访问',
-    browserBody: '允许在浏览器中打开当前 Profile，并选择可访问的设备范围。',
-    openBrowser: '允许在浏览器中打开',
-    browserCompatibilityNotice: '浏览器访问仅在兼容模式下可用。',
-    browserCompatibilityDialogTitle: '切换到兼容模式？',
-    browserCompatibilityDialogBody: '在浏览器中打开只能使用兼容模式。继续将把这个 Profile 的窗口模式切换为兼容模式，并开启浏览器访问。',
-    confirmBrowserCompatibility: '切换并开启',
-    cancelBrowserCompatibility: '取消',
-    networkExposure: '网络访问范围',
-    networkExposureBody: '选择仅允许这台电脑访问，或允许同一局域网中的其他设备通过 HTTPS 访问。',
-    loopback: '仅这台电脑',
-    loopbackBody: '只有这台电脑上的浏览器可以访问。',
-    lan: '局域网',
-    lanBody: '同一局域网中的其他设备可通过访问链接连接。请先在访问设备上安装并信任本机提供的证书。',
-    lanWarningTitle: '开启局域网访问？',
-    lanWarningBody: '同一局域网中，持有访问链接的人可以通过 DSH 操作这台电脑。请仅与可信任的人共享链接。连接使用 HTTPS；访问设备需要安装并信任本机提供的证书。',
-    confirmLan: '开启局域网访问',
-    cancelLan: '保持仅本机访问',
+    unavailableOnLinux: '窗口材质目前支持 macOS 和 Windows。',
     marketTitle: '选择插件市场',
     marketBody: '为当前 Profile 选择一个插件市场。一次只能启用一个。',
     marketDisabled: '关闭插件市场',

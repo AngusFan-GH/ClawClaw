@@ -71,6 +71,15 @@ export interface DesktopStartupRecoveryWindowOptions {
   readonly enterSafeMode?: () => void | Promise<void>
   /** True when this process already uses the disposable Safe Mode environment. */
   readonly safeModeActive?: boolean
+  /** Host-independent maintenance for local notices and opt-in update evidence. */
+  readonly maintenanceActions?: DesktopStartupRecoveryMaintenanceActions
+}
+
+export interface DesktopStartupRecoveryMaintenanceActions {
+  readonly readUpdateQualificationJournal: () => boolean
+  readonly setUpdateQualificationJournal: (enabled: boolean) => void | Promise<void>
+  readonly clearUpdateQualificationJournal: () => void | Promise<void>
+  readonly resetBackgroundCloseNotice: () => void | Promise<void>
 }
 
 export interface DesktopStartupRecoveryProfile {
@@ -206,6 +215,9 @@ export interface DesktopStartupRecoveryViewModel {
   readonly profileCreatorAvailable?: boolean
   readonly safeModeAvailable?: boolean
   readonly safeModeActive?: boolean
+  readonly maintenance?: {
+    readonly updateQualificationJournal: boolean
+  }
 }
 
 /** Parse only the fixed action origin used by the local shadcn recovery document. */
@@ -241,6 +253,10 @@ export function parseDesktopStartupRecoveryAction(
     'apply-data-directory',
     'factory-reset',
     'switch-profile',
+    'enable-update-journal',
+    'disable-update-journal',
+    'clear-update-journal',
+    'reset-background-notice',
     'restart',
     'quit',
   ])
@@ -520,6 +536,25 @@ export class DesktopStartupRecoveryWindow {
       } else if (action.action === 'open-profile-directory') {
         this.activeTab = 'diagnostics'
         await this.openConfigurationPath('profileDirectory')
+      } else if (action.action === 'enable-update-journal' || action.action === 'disable-update-journal') {
+        this.activeTab = 'diagnostics'
+        const actions = this.requireMaintenanceActions()
+        await this.runBusy(async () => {
+          await actions.setUpdateQualificationJournal(action.action === 'enable-update-journal')
+          this.notice = { tone: 'success', title: copy.updateJournalTitle, body: copy.updateJournalChanged }
+        })
+      } else if (action.action === 'clear-update-journal') {
+        this.activeTab = 'diagnostics'
+        await this.runBusy(async () => {
+          await this.requireMaintenanceActions().clearUpdateQualificationJournal()
+          this.notice = { tone: 'success', title: copy.updateJournalTitle, body: copy.updateJournalCleared }
+        })
+      } else if (action.action === 'reset-background-notice') {
+        this.activeTab = 'diagnostics'
+        await this.runBusy(async () => {
+          await this.requireMaintenanceActions().resetBackgroundCloseNotice()
+          this.notice = { tone: 'success', title: copy.backgroundNoticeTitle, body: copy.backgroundNoticeReset }
+        })
       } else if (action.action === 'restart') {
         const copy = desktopRestartConfirmationCopy(this.options.locale)
         const window = this.window
@@ -789,6 +824,16 @@ export class DesktopStartupRecoveryWindow {
     const window = this.window
     if (window === undefined || window.isDestroyed()) return
     const notice = this.notice
+    let maintenance: DesktopStartupRecoveryViewModel['maintenance']
+    try {
+      if (this.options.maintenanceActions !== undefined) {
+        maintenance = {
+          updateQualificationJournal: this.options.maintenanceActions.readUpdateQualificationJournal(),
+        }
+      }
+    } catch {
+      maintenance = undefined
+    }
     const model: DesktopStartupRecoveryViewModel = {
       locale: this.options.locale,
       failureStage: this.options.failureStage,
@@ -821,6 +866,7 @@ export class DesktopStartupRecoveryWindow {
       ...(this.options.profileActions === undefined ? {} : { profileCreatorAvailable: true }),
       ...(this.options.enterSafeMode === undefined ? {} : { safeModeAvailable: true }),
       ...(this.options.safeModeActive === true ? { safeModeActive: true } : {}),
+      ...(maintenance === undefined ? {} : { maintenance }),
     }
     const state = Buffer.from(JSON.stringify(model), 'utf8').toString('base64url')
     await window.loadFile(RECOVERY_DOCUMENT, {
@@ -877,6 +923,13 @@ export class DesktopStartupRecoveryWindow {
     }
     const error = await shell.openPath(path)
     if (error.length > 0) throw new Error(error)
+  }
+
+  private requireMaintenanceActions(): DesktopStartupRecoveryMaintenanceActions {
+    if (this.options.maintenanceActions === undefined) {
+      throw new Error('Desktop maintenance is unavailable for this startup stage.')
+    }
+    return this.options.maintenanceActions
   }
 }
 

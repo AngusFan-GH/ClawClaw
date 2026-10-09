@@ -19,9 +19,6 @@ export const DESKTOP_PROFILE_DELETE_PATH = '/api/desktop/profiles/delete'
 
 export const DESKTOP_MARKET_SELECT_PATH = '/api/desktop/market/select'
 
-/** Persist the window mode used by the next Desktop generation. */
-export const DESKTOP_MODE_SELECT_PATH = '/api/desktop/mode/select'
-
 /** Persist one Desktop-owned preference without using the root Config editor. */
 export const DESKTOP_PREFERENCE_UPDATE_PATH = '/api/desktop/preferences/update'
 
@@ -76,29 +73,11 @@ export interface DesktopSettingsMarketView {
   readonly legacyDefaulted: boolean
 }
 
-/** Marker-free ordinary-browser URLs for the running Web generation. */
-export interface DesktopSettingsWebView {
-  /** Always-available loopback URL using the actual listening port. */
-  readonly localUrl: string
-  /** Authenticated HTTPS URLs; non-empty only while the LAN edge is ready. */
-  readonly lanUrls: readonly string[]
-  /** Actual hot edge state, distinct from the persisted LAN preference. */
-  readonly lanState: 'inactive' | 'starting' | 'ready' | 'failed'
-  /** Stable certificate/bind failure category, present only for a failed edge. */
-  readonly lanError: string | null
-  /** SHA-256 identity for the installation-local CA, when available. */
-  readonly lanCaFingerprint: string | null
-  /** Public CA downloads on each ready HTTPS authority, without auth tokens. */
-  readonly lanCaUrls: readonly string[]
-}
-
 /** Profile-owned values shown and edited by the Desktop settings page. */
 export interface DesktopSettingsPreferencesView {
   readonly mode: DesktopShellMode
   readonly macosMaterial: MacosWindowMaterial
   readonly windowsMaterial: PersistedWindowsWindowMaterial
-  readonly openBrowser: boolean
-  readonly networkExposure: 'loopback' | 'lan'
   readonly notifications: Readonly<DesktopNotificationSettings>
   readonly updateQualificationJournal: boolean
 }
@@ -111,8 +90,6 @@ export interface DesktopSettingsResponse {
   readonly profiles: readonly DesktopSettingsProfileView[]
   readonly market: DesktopSettingsMarketView
   readonly preferences: DesktopSettingsPreferencesView
-  /** Actual browser URLs for the current WebServer generation. */
-  readonly web: DesktopSettingsWebView
 }
 
 /** Exact body accepted by the profile-creation endpoint. */
@@ -153,21 +130,9 @@ export interface DesktopMarketSelectRequest {
 /** Successful Market selection handoff. */
 export type DesktopMarketSelectResponse = DesktopRestartAcceptance
 
-/** Exact body accepted by the window-mode endpoint. */
-export interface DesktopModeSelectRequest {
-  readonly mode: DesktopShellMode
-}
-
-/** Successful window-mode persistence. Restart is requested separately. */
-export interface DesktopModeSelectResponse {
-  readonly accepted: true
-}
-
 export type DesktopPreferenceUpdateRequest =
   | { readonly field: 'macosMaterial'; readonly value: MacosWindowMaterial }
   | { readonly field: 'windowsMaterial'; readonly value: PersistedWindowsWindowMaterial }
-  | { readonly field: 'openBrowser'; readonly value: boolean }
-  | { readonly field: 'networkExposure'; readonly value: 'loopback' | 'lan' }
   | { readonly field: 'notifications'; readonly value: DesktopNotificationSettings }
   | { readonly field: 'updateQualificationJournal'; readonly value: boolean }
 

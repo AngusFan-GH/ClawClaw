@@ -44,7 +44,6 @@ export function Chrome() {
     api={api}
     t={key => copy[key]}
     environment={{ ...state, material: state.material === 'off' ? 'off' : state.platform === 'darwin' ? 'transparent' : 'mica', micaSupported: state.material === 'mica' }}
-    setMode={mode => mode === state.mode ? Promise.resolve() : invoke(`mode-${mode}`)}
   />
 }
 

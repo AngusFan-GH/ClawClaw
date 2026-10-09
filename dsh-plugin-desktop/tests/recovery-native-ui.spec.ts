@@ -40,6 +40,11 @@ describe('Recovery native terminal action', () => {
     )
     expect(source).toContain('{copy.currentProfileDirectory}:&nbsp;')
     expect(source).toContain('title={state.profileDirectory}')
+    expect(source).toContain(
+      "href(enabled ? 'enable-update-journal' : 'disable-update-journal')",
+    )
+    expect(source).toContain('action="clear-update-journal"')
+    expect(source).toContain('action="reset-background-notice"')
   })
 
   it('renders a labelled pill opposite each platform native-control group', () => {

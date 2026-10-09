@@ -18,8 +18,6 @@ const VIEW: DesktopSettingsView = {
     mode: 'compatibility',
     macosMaterial: 'transparent',
     windowsMaterial: 'off',
-    openBrowser: false,
-    networkExposure: 'loopback',
     notifications: {
       enabled: true,
       notifyOnTurnCompletion: true,
@@ -28,14 +26,6 @@ const VIEW: DesktopSettingsView = {
       notifyOnJobFailure: true,
     },
     updateQualificationJournal: false,
-  },
-  web: {
-    localUrl: 'http://127.0.0.1:43120/?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-    lanUrls: [],
-    lanState: 'inactive',
-    lanError: null,
-    lanCaFingerprint: null,
-    lanCaUrls: [],
   },
 }
 
@@ -46,7 +36,6 @@ function desktopApi(): DesktopSettingsApi {
     selectProfile: vi.fn(async () => ({ accepted: true as const, restartRequired: false })),
     deleteProfile: vi.fn(async () => VIEW),
     selectMarket: vi.fn(async () => ({ accepted: true as const, restartRequired: false })),
-    selectMode: vi.fn(async () => {}),
     updatePreference: vi.fn(async () => VIEW),
     openTerminal: vi.fn(async () => {}),
     restart: vi.fn(async () => {}),
@@ -62,7 +51,7 @@ function desktopApi(): DesktopSettingsApi {
 
 let root: Root | undefined
 
-async function renderSettings(api: DesktopSettingsApi, setMode = vi.fn(async () => {})): Promise<void> {
+async function renderSettings(api: DesktopSettingsApi): Promise<void> {
   const container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -70,9 +59,7 @@ async function renderSettings(api: DesktopSettingsApi, setMode = vi.fn(async () 
     root!.render(createElement(DesktopSettingsSection, {
       api,
       platform: 'darwin',
-      initialMode: 'compatibility',
       micaSupported: false,
-      setMode,
       close: vi.fn(),
       t: key => en[key as keyof typeof en],
     } as DesktopSettingsSectionProps))
@@ -94,24 +81,7 @@ afterEach(async () => {
   vi.unstubAllGlobals()
 })
 
-describe('Desktop settings window mode', () => {
-  it('persists the choice, opens the standard restart confirmation, and stays selectable', async () => {
-    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
-    const api = desktopApi()
-    const setMode = vi.fn(async () => {})
-    await renderSettings(api, setMode)
-
-    const extended = [...document.querySelectorAll<HTMLElement>('[role="radio"]')]
-      .find(choice => choice.textContent?.includes(en.extendedMode))
-    expect(extended).toBeDefined()
-    await act(async () => { extended!.click() })
-
-    expect(setMode).toHaveBeenCalledWith('extended')
-    expect(api.restart).toHaveBeenCalledOnce()
-    expect(extended!.getAttribute('aria-disabled')).toBeNull()
-    expect(document.body.textContent).not.toContain(en.restartRequired)
-  })
-
+describe('Desktop settings window appearance', () => {
   it('persists material through the launcher API before opening restart confirmation', async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     const api = desktopApi()
@@ -128,13 +98,10 @@ describe('Desktop settings window mode', () => {
     expect(api.restart).toHaveBeenCalledOnce()
   })
 
-  it('writes browser, notification, and journal choices through the launcher API', async () => {
+  it('writes notification choices and omits browser access controls', async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     const api = desktopApi()
     await renderSettings(api)
-
-    await act(async () => { toggleFor(en.openBrowser).click() })
-    expect(api.updatePreference).toHaveBeenCalledWith({ field: 'openBrowser', value: true })
 
     await act(async () => { toggleFor(en.notificationsEnabled).click() })
     expect(api.updatePreference).toHaveBeenCalledWith({
@@ -142,11 +109,11 @@ describe('Desktop settings window mode', () => {
       value: { ...VIEW.preferences.notifications, enabled: false },
     })
 
-    await act(async () => { toggleFor(en.updateJournalEnabled).click() })
-    expect(api.updatePreference).toHaveBeenCalledWith({
-      field: 'updateQualificationJournal',
-      value: true,
-    })
     expect(document.body.textContent).not.toContain(en.readOnly)
+    expect(document.body.textContent).not.toContain('后台驻留提示')
+    expect(document.body.textContent).not.toContain('更新资格记录')
+    expect(document.body.textContent).not.toContain('浏览器与局域网')
+    expect(document.body.textContent).not.toContain('Profile')
+    expect(document.querySelector('input[placeholder="For example: work"]')).toBeNull()
   })
 })

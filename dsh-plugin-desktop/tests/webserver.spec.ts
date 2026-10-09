@@ -70,12 +70,12 @@ async function requestUpgrade(
 }
 
 describe('Desktop WebServer port policy', () => {
-  it('fails closed when asked to bind all interfaces before LAN HTTPS exists', async () => {
+  it('fails closed when asked to bind all interfaces', async () => {
     const context = new Context()
     contexts.push(context)
 
     await expect(context.plugin(DesktopWebServer, { host: '0.0.0.0', port: 0 }))
-      .rejects.toThrow('requires loopback until LAN HTTPS is available')
+      .rejects.toThrow('only supports loopback')
   })
 
   it('increments only after the requested loopback bind reports EADDRINUSE', async () => {
@@ -112,7 +112,7 @@ describe('Desktop WebServer browser gate', () => {
   })
 
   it('requires the exact Electron capability while ordinary browser access is disabled', async () => {
-    const access = createDesktopBrowserAccess(false, Buffer.alloc(32, 3).toString('base64url'))
+    const access = createDesktopBrowserAccess(Buffer.alloc(32, 3).toString('base64url'))
     const server = await startWebServer(access)
     server.register({
       kind: 'exact',
@@ -138,22 +138,21 @@ describe('Desktop WebServer browser gate', () => {
     await expect(fallback.text()).resolves.toBe('fallback')
   })
 
-  it('allows marker-free browser routes but rejects Desktop marker impersonation', async () => {
-    const access = createDesktopBrowserAccess(true, Buffer.alloc(32, 4).toString('base64url'))
+  it('rejects ordinary browser routes including Desktop marker impersonation', async () => {
+    const access = createDesktopBrowserAccess(Buffer.alloc(32, 4).toString('base64url'))
     const server = await startWebServer(access)
     server.registerFallback((_req, res) => { res.end('browser') })
     const root = `http://127.0.0.1:${String(server.port)}`
 
     const browser = await fetch(`${root}/?workspace=one`)
-    expect(browser.status).toBe(200)
-    await expect(browser.text()).resolves.toBe('browser')
+    expect(browser.status).toBe(403)
     const forged = await fetch(`${root}/?dsh-desktop-mode=compatibility`)
     expect(forged.status).toBe(403)
     expect(forged.headers.get('cache-control')).toBe('no-store')
   })
 
   it('applies the same gate to WebSocket upgrades', async () => {
-    const access = createDesktopBrowserAccess(false, Buffer.alloc(32, 5).toString('base64url'))
+    const access = createDesktopBrowserAccess(Buffer.alloc(32, 5).toString('base64url'))
     const server = await startWebServer(access)
     server.registerUpgrade({
       path: '/socket',

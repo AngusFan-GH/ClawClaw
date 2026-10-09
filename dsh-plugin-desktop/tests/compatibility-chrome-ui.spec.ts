@@ -5,22 +5,18 @@ import { installChromeOverlay } from '../src/native-ui/compatibility-chrome/over
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('compatibility HTML chrome', () => {
-  it('uses the same controls and frame rules as extended mode', () => {
+  it('uses the shared fixed titlebar without exposing presentation controls', () => {
     const read = (file: string): string => readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8')
-    expect(read('client/ExtendedTitlebar.tsx')).toContain('<DesktopFrameTitlebarView {...props} />')
     expect(read('native-ui/compatibility-chrome/main.tsx')).toContain('<DesktopFrameTitlebarView')
-    const shared = read('client/extended-styles.ts').split('.dshDesktopFrameTitlebar {')[1]?.split('\n`')[0]
-    expect(shared).toBeDefined()
-    const frame = '.dshDesktopFrameTitlebar {' + shared
-    expect(read('native-ui/compatibility-chrome/style.css')).toContain(frame
-      .replaceAll('${DESKTOP_FRAME_HEIGHT}', '36')
-      .replaceAll('${MACOS_TRAFFIC_LIGHT_SAFE_WIDTH + 8}', '88')
-      .replaceAll('${WINDOWS_CAPTION_CONTROLS_WIDTH + 8}', '146'))
+    const style = read('native-ui/compatibility-chrome/style.css')
+    expect(style).toContain('height: 36px')
+    expect(style).toContain('padding: 0 8px 0 88px')
+    expect(style).toContain('padding: 0 146px 0 8px')
     const view = read('client/DesktopFrameTitlebarView.tsx')
     expect(view).toContain('delay={150}')
     expect(view).toContain('closeDelay={200}')
-    expect(view).toContain('MODE_OPTIONS.filter(option => option.mode !== mode)')
-    expect(view).toContain("t(option.body)")
+    expect(view).not.toContain('setMode')
+    expect(view).not.toContain('MODE_OPTIONS')
   })
 
   it('expands only for popup DOM and collapses again after removal or disposal', async () => {

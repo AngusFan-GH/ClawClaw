@@ -10,16 +10,13 @@ import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-api-settings-controller/remote'
 import type {} from '@deepseek-ai/dsh-llm/remote'
-import { applyAdvancedShell } from './advanced-shell.ts'
 import { applyClawClawBrand } from './clawclaw-brand.tsx'
 import { startRendererBootReporter } from './boot-health.ts'
 import { applyDesktopSettings } from './desktop-settings.ts'
 import { applyDesktopVersionRow } from './desktop-version-row.tsx'
 import { applyDefaultWorkspaceSelection } from './default-workspace-selection.ts'
 import { installDesktopDirectoryPickerBridge } from './directory-picker.ts'
-import { applyWorkspaceDirectoryFlow } from './workspace-directory-flow.tsx'
 import { parseDesktopClientEnvironment, resolveDesktopClientProductVersion } from './environment.ts'
-import { applyExtendedShell } from './extended-shell.ts'
 import { applyMcpSettings } from './mcp-settings.ts'
 import { applyLegacyAgentPresetDeleteAction } from './legacy-agent-preset-delete-action.tsx'
 import { applyMarketIntegration } from './market-integration.tsx'
@@ -34,7 +31,6 @@ import { applySpiritXProviderPriority } from './spiritx-provider-priority.tsx'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
 import { apply as applyExperts } from '../experts/client/index.ts'
 
-export { applyAdvancedShell } from './advanced-shell.ts'
 export { applyClawClawBrand } from './clawclaw-brand.tsx'
 export { applyDesktopSettings } from './desktop-settings.ts'
 export { applyDesktopVersionRow, DesktopCurrentVersionRow } from './desktop-version-row.tsx'
@@ -43,7 +39,6 @@ export {
   installDesktopWorkspaceSelection,
   resolveDesktopWorkspaceSelection,
 } from './default-workspace-selection.ts'
-export { applyExtendedShell, applyFramedShell } from './extended-shell.ts'
 export { applyMcpSettings } from './mcp-settings.ts'
 export { applyLegacyAgentPresetDeleteAction } from './legacy-agent-preset-delete-action.tsx'
 export { applyMarketIntegration } from './market-integration.tsx'
@@ -147,14 +142,11 @@ export function apply(ctx: ClientContext): void {
   )
   applyDefaultWorkspaceSelection(ctx)
   applyMcpSettings(ctx, { registerSection: false })
-  const desktopSettings = applyDesktopSettings(ctx, environment)
+  applyDesktopSettings(ctx, environment)
   if (environment.platform === 'win32' || environment.platform === 'darwin') {
     ctx.effect(
       () => installDesktopDirectoryPickerBridge(),
       'dsh-plugin-desktop: native directory picker bridge',
     )
   }
-  if (environment.mode !== 'compatibility') applyWorkspaceDirectoryFlow(ctx)
-  if (environment.mode === 'advanced') applyAdvancedShell(ctx, environment)
-  if (environment.mode === 'extended') applyExtendedShell(ctx, environment, desktopSettings)
 }

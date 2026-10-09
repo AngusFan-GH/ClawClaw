@@ -3,15 +3,14 @@ import {
   createDesktopBrowserAccess,
   decideDesktopBrowserAccess,
   DESKTOP_RENDERER_ACCESS_HEADER,
-  desktopBrowserUrlHasRendererMarkers,
 } from '../src/desktop-browser-access.ts'
 
 const RENDERER_TOKEN = Buffer.alloc(32, 7).toString('base64url')
 
 describe('Desktop browser access policy', () => {
   it('creates an opaque generation-scoped renderer capability', () => {
-    const first = createDesktopBrowserAccess(false)
-    const second = createDesktopBrowserAccess(false)
+    const first = createDesktopBrowserAccess()
+    const second = createDesktopBrowserAccess()
 
     expect(first.rendererHeader.name).toBe(DESKTOP_RENDERER_ACCESS_HEADER)
     expect(first.rendererHeader.value).toMatch(/^[A-Za-z0-9_-]{43}$/u)
@@ -21,24 +20,11 @@ describe('Desktop browser access policy', () => {
   })
 
   it('rejects invalid injected test tokens', () => {
-    expect(() => createDesktopBrowserAccess(false, 'short')).toThrow('32 base64url bytes')
-  })
-
-  it('changes ordinary-browser access without replacing the renderer capability', () => {
-    const access = createDesktopBrowserAccess(false, RENDERER_TOKEN)
-
-    expect(decideDesktopBrowserAccess(access, { headers: {}, url: '/' })).toBe('denied')
-    access.setOrdinaryBrowserEnabled(true)
-    expect(decideDesktopBrowserAccess(access, { headers: {}, url: '/' })).toBe('browser')
-    expect(access.rendererHeader.value).toBe(RENDERER_TOKEN)
-    access.setOrdinaryBrowserEnabled(false)
-    expect(decideDesktopBrowserAccess(access, { headers: {}, url: '/' })).toBe('denied')
-    expect(() => access.setOrdinaryBrowserEnabled('yes' as unknown as boolean))
-      .toThrow('ordinary browser access must be a boolean')
+    expect(() => createDesktopBrowserAccess('short')).toThrow('32 base64url bytes')
   })
 
   it('always permits an Electron request carrying the exact capability', () => {
-    const access = createDesktopBrowserAccess(false, RENDERER_TOKEN)
+    const access = createDesktopBrowserAccess(RENDERER_TOKEN)
 
     expect(decideDesktopBrowserAccess(access, {
       headers: { [DESKTOP_RENDERER_ACCESS_HEADER]: RENDERER_TOKEN },
@@ -62,24 +48,10 @@ describe('Desktop browser access policy', () => {
     })).toBe('denied')
   })
 
-  it('allows only marker-free ordinary-browser traffic when enabled', () => {
-    const access = createDesktopBrowserAccess(true, RENDERER_TOKEN)
-
+  it('rejects every ordinary browser request', () => {
+    const access = createDesktopBrowserAccess(RENDERER_TOKEN)
     for (const url of ['/', '/assets/index.js', '/api/events.sse', '/?workspace=one']) {
-      expect(decideDesktopBrowserAccess(access, { headers: {}, url })).toBe('browser')
-    }
-    for (const url of [
-      '/?dsh-desktop-mode=compatibility',
-      '/?dsh-desktop-platform=win32',
-      '/?other=1&dsh-desktop-future=value',
-    ]) {
       expect(decideDesktopBrowserAccess(access, { headers: {}, url })).toBe('denied')
     }
-  })
-
-  it('fails closed for malformed URLs and Desktop marker attempts', () => {
-    expect(desktopBrowserUrlHasRendererMarkers('http://[')).toBe(true)
-    expect(desktopBrowserUrlHasRendererMarkers('/?desktop-mode=compatibility')).toBe(false)
-    expect(desktopBrowserUrlHasRendererMarkers('/?dsh-desktop-mode=compatibility')).toBe(true)
   })
 })

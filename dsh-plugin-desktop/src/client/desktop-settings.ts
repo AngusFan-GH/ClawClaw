@@ -2,7 +2,7 @@
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import { DesktopSettingsSection, type DesktopShellSettings } from './DesktopSettingsSection.tsx'
+import { DesktopSettingsSection } from './DesktopSettingsSection.tsx'
 import { DesktopTerminalSettingsAction } from './DesktopTerminalSettingsAction.tsx'
 import { createDesktopSettingsApi } from './desktop-settings-api.ts'
 import { en, zh, type DesktopSettingsLocaleKey } from './desktop-settings-locales.ts'
@@ -19,7 +19,6 @@ export const DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE = 'desktop-notifications'
 /** Shared client controls consumed by settings and Desktop-owned window chrome. */
 export interface DesktopSettingsClientControl {
   readonly api: ReturnType<typeof createDesktopSettingsApi>
-  setMode(mode: DesktopShellSettings['mode']): Promise<void>
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -36,10 +35,6 @@ export function applyDesktopSettings(
 ): DesktopSettingsClientControl {
   const api = createDesktopSettingsApi()
   const t = ctx.locale.bind(DESKTOP_SETTINGS_LOCALE_NAMESPACE)
-  const setMode = async (mode: DesktopShellSettings['mode']): Promise<void> => {
-    await api.selectMode(mode)
-  }
-
   ctx.effect(
     () => ctx.locale.register(DESKTOP_SETTINGS_LOCALE_NAMESPACE, { zh, en }),
     'dsh-plugin-desktop: settings dictionaries',
@@ -57,9 +52,7 @@ export function applyDesktopSettings(
     inject: () => ({
       api,
       platform: environment.platform,
-      initialMode: environment.mode,
       micaSupported: environment.micaSupported,
-      setMode,
     }),
   }, DesktopSettingsSection))
   ctx.slots.inject('settings.action', () => ctx.slots.register({
@@ -72,6 +65,5 @@ export function applyDesktopSettings(
 
   return Object.freeze({
     api,
-    setMode,
   })
 }
