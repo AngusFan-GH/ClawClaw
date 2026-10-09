@@ -36,4 +36,13 @@ describe('expert library UI', () => {
     expect(CARD_SETTINGS_CSS).toContain('.aag-expert-card-custom .aag-card-category{flex:none')
     expect(CARD_SETTINGS_CSS).toContain('.aag-expert-card-custom .aag-card-description{min-height:19px;-webkit-line-clamp:1}')
   })
+
+  it('keeps the team editor controls legible and responsive', () => {
+    expect(TEAM_CSS).toContain('.agt-coordinator-toolbar{display:flex')
+    expect(TEAM_CSS).toContain('.agt-segment .ant-btn.agt-segment-active{')
+    expect(TEAM_CSS).toMatch(/\.agt-segment \.ant-btn\.agt-segment-active\{[^}]*color:var\(--dsw-alias-label-primary\)/)
+    expect(TEAM_CSS).toContain('.agt-prompt-meta{display:flex')
+    expect(TEAM_CSS).toContain('.agt-example-list{display:grid')
+    expect(TEAM_CSS).toContain('.agt-coordinator-toolbar{align-items:stretch;flex-direction:column}')
+  })
 })

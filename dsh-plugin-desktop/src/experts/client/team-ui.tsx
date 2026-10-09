@@ -1,6 +1,6 @@
 // @ts-nocheck -- ported client compatibility layer; host contracts remain strictly checked.
 import { catalogState } from './catalog.js';
-import { acceptTeams, refreshTeams, subscribeTeams, teamState } from './team-cache.js';
+import { acceptTeamSnapshot, refreshTeams, subscribeTeams, teamState } from './team-cache.js';
 import { useTeamLocale, localizeTeam, localizedExperts } from './team-locale.js';
 import { LibraryCard } from './library-ui.js';
 import { Button, Input, MaybeAntdProvider } from './antd-ui.js';
@@ -195,7 +195,7 @@ export function TeamsPanel(props: {
             return;
         sequence.current++;
         const next = { ...value, engine: value.engine ?? snapshot?.engine };
-        acceptTeams(props.remote, next);
+        acceptTeamSnapshot(props.remote, next);
         setSnapshot(next);
         props.onExpertsChanged?.();
     };

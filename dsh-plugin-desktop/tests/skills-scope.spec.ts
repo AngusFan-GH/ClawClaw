@@ -111,8 +111,15 @@ describe('Skill discovery scope', () => {
       const host = { skills: ctx.skills, get: (name: string) => name === 'workspaceRegistry' ? registry : undefined } as unknown as Context
       const a = new DesktopSkillsController(host, undefined, { workspaceId: 'a' })
       const b = new DesktopSkillsController(host, undefined, { workspaceId: 'b' })
-      expect((await a.read()).skills).toHaveLength(0)
-      expect((await b.read()).skills).toHaveLength(0)
+      expect((await a.read()).skills.filter(skill => skill.source !== 'bundled')).toHaveLength(0)
+      expect((await b.read()).skills.filter(skill => skill.source !== 'bundled')).toHaveLength(0)
+      const bundled = (await a.read()).skills.filter(skill => skill.source === 'bundled')
+      expect(bundled).toHaveLength(7)
+      expect(bundled.map(skill => skill.name)).toEqual(expect.arrayContaining([
+        'business-operations', 'content-production', 'data-analysis', 'evidence-research',
+        'product-design-review', 'risk-compliance-review', 'software-delivery',
+      ]))
+      expect(bundled).toContainEqual(expect.objectContaining({ name: 'software-delivery', editable: false }))
       const install = async (root: string, name: string, content: string) => {
         const directory = join(root, name)
         await mkdir(directory, { recursive: true })
@@ -176,7 +183,7 @@ describe('Skill discovery scope', () => {
       ctx.provide('settings', { get: () => ({ paths: [] }) } as unknown as Context['settings'])
       await ctx.plugin(SkillRegistry)
       await ctx.plugin(ClawClawSkillFileSystem)
-      expect((await ctx.skills.snapshot({ cwd: nested })).skills.map(skill => skill.name)).toEqual(['nested-only'])
+      expect((await ctx.skills.snapshot({ cwd: nested })).skills.filter(skill => skill.source !== 'bundled').map(skill => skill.name)).toEqual(['nested-only'])
       const throughAlias = await ctx.skills.get('nested-only', { cwd: alias })
       expect(throughAlias?.source).toBe('project-clawclaw')
       expect(throughAlias?.path).toBe(await realpath(join(alias, '.clawclaw', 'skills', 'nested-only', 'SKILL.md')))

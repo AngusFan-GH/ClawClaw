@@ -3,17 +3,17 @@
 [中文](PRIVACY.zh.md)
 
 - **Version:** 2.0
-- **Last updated:** 2026-09-28
+- **Last updated:** 2026-10-09
 
 ClawClaw is a local-first open-source desktop application. This notice describes known local storage and network behavior in this repository's source and builds. It is not a privacy promise for undeployed services, third-party builds, plugins, or platforms. The project is independently maintained at [AngusFan-GH/ClawClaw](https://github.com/AngusFan-GH/ClawClaw) and does not represent DeepSeek, Anywhere Labs, SpiritX, npm, GitHub, or messaging platforms.
 
 ## Local data
 
-Default Harness data is `~/.clawclaw/data`; the default workspace is `~/.clawclaw/workspaces/default`. Data can include profiles, settings, sessions, logs, caches, plugin dependencies, and files saved in workspaces. Electron application data stores windows, logs, update state, and diagnostics. Explicit `DSH_HOME`, an application data-directory choice, and safe mode can change paths.
+Default Harness data is `~/.clawclaw/data`; the default workspace is `~/.clawclaw/workspaces/default`. Data can include profiles, settings, sessions, logs, caches, plugin dependencies, and files saved in workspaces. Electron application data stores windows, logs, update state, and diagnostics. A saved in-app data-directory selection, `CLAWCLAW_HOME` at launch, or safe mode can change the path. ClawClaw exports the selected directory as `DSH_HOME` to the Host, terminal, and plugins.
 
 Update qualification evidence is off by default. When a user enables it in Desktop settings, ClawClaw stores bounded local snapshots containing application and target versions, typed update stages and outcomes, durations, and a digest derived from publisher-provided artifact digests. It excludes full URLs, raw error text, device identity, and user content. At most four 64 KiB files and 256 KiB total are retained. The same settings section can clear recognized evidence immediately.
 
-On first use, a sole `~/.dsh` is moved to the new default. If both exist, they are not merged. Healthy-start recovery checkpoints cover only selected profile declarations and shared settings/patches; they exclude credentials, `.env`, sessions, storage, caches, and workspace files.
+ClawClaw does not read, move, or modify another application's `~/.dsh` data, and it does not merge that directory automatically. Healthy-start recovery checkpoints cover only selected profile declarations and shared settings/patches; they exclude credentials, `.env`, sessions, storage, caches, and workspace files.
 
 ## Network connections
 

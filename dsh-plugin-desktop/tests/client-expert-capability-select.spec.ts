@@ -23,11 +23,11 @@ describe('expert capability selectors', () => {
     const skillsApi = { read: vi.fn(async () => [
       { name: 'review', description: 'Review work', source: 'user', provider: 'desktop', modelInvocable: true, userInvocable: true, editable: true },
     ]) }
-    const mcpApi = { read: vi.fn(async () => [
+    const mcpApi = { read: vi.fn(async () => ({ mcpServers: [
       { serverName: 'docs', transport: 'stdio' as const, command: 'docs', args: [], cwd: '', env: {}, timeoutMs: 1,
         reconnect: { enabled: true, initialDelayMs: 1, maxDelayMs: 1, maxAttempts: 1 }, enabled: true, state: 'running' as const,
         tools: [{ name: 'mcp__docs__search', description: 'Search docs' }], credentialsReady: true },
-    ]) }
+    ], catalog: [] })) }
 
     await act(async () => {
       root!.render(createElement(CustomExpertEditor, {

@@ -1,6 +1,7 @@
 /** Project-scoped Skill discovery for ClawClaw Workspaces. */
 
 import { join, resolve, win32 } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type {
   SkillCandidate,
@@ -15,11 +16,12 @@ import { DESKTOP_SKILL_SCAN_SETTINGS_NAMESPACE, type DesktopSkillScanSettings } 
 
 const PROJECT_CLAWCLAW_RANK = 250
 const MAX_OBSERVED_WORKSPACES = 128
+const BUNDLED_EXPERT_SKILL_ROOT = fileURLToPath(new URL('../assets/skills/', import.meta.url))
 
 interface ProjectLocator {
   readonly owner: FileSystemSkillProvider
   readonly candidate: SkillCandidate
-  readonly source: 'project-clawclaw' | 'external-clawclaw'
+  readonly source: 'bundled' | 'project-clawclaw' | 'external-clawclaw'
 }
 
 interface ProjectProviderEntry {
@@ -86,6 +88,8 @@ function projectLocator(value: unknown): ProjectLocator | undefined {
 export class ClawClawProjectSkillProvider implements SkillProvider {
   readonly name = 'clawclaw-project-filesystem'
   private readonly providers = new Map<string, ProjectProviderEntry>()
+  private readonly bundledLifecycle = new AbortController()
+  private readonly bundled: FileSystemSkillProvider
   private external: (ProjectProviderEntry & { readonly fingerprint: string }) | undefined
   private disposal: Promise<void> | undefined
 
@@ -93,6 +97,15 @@ export class ClawClawProjectSkillProvider implements SkillProvider {
     private readonly ctx: Context,
     private readonly control: SkillProviderControl,
   ) {
+    this.bundled = new FileSystemSkillProvider(ctx, {
+      signal: this.bundledLifecycle.signal,
+      invalidate: control.invalidate,
+    }, {
+      providerName: this.name,
+      includeDefaultRoots: false,
+      bundledSkillDir: BUNDLED_EXPERT_SKILL_ROOT,
+      watch: false,
+    })
     control.signal.addEventListener('abort', () => { void this.dispose() }, { once: true })
     ctx.on('settings/updated', (namespace) => {
       if (namespace !== DESKTOP_SKILL_SCAN_SETTINGS_NAMESPACE) return
@@ -108,27 +121,28 @@ export class ClawClawProjectSkillProvider implements SkillProvider {
 
   async list(options: SkillLookupOptions): Promise<readonly SkillCandidate[] | SkillProviderObservation> {
     options.signal?.throwIfAborted()
-    if (options.cwd === undefined) return []
-    const owner = await this.providerFor(options.cwd)
-    const project = projectObservation(owner, await owner.list(options), 'project-clawclaw', PROJECT_CLAWCLAW_RANK)
+    const bundled = projectObservation(this.bundled, await this.bundled.list(options), 'bundled', 0)
+    const owner = options.cwd === undefined ? undefined : await this.providerFor(options.cwd)
+    const project = owner === undefined ? [] : projectObservation(owner, await owner.list(options), 'project-clawclaw', PROJECT_CLAWCLAW_RANK)
     const paths = (this.ctx.settings.get(DESKTOP_SKILL_SCAN_SETTINGS_NAMESPACE) as DesktopSkillScanSettings | undefined)?.paths ?? []
     const externalOwner = paths.length === 0 ? undefined : await this.externalProvider(paths)
     const external = externalOwner === undefined
       ? []
       : projectObservation(externalOwner, await externalOwner.list(options), 'external-clawclaw', 350)
     options.signal?.throwIfAborted()
+    const bundledCandidates = 'candidates' in bundled ? bundled.candidates : bundled
     const projectCandidates = 'candidates' in project ? project.candidates : project
     const externalCandidates = 'candidates' in external ? external.candidates : external
-    const complete = !('candidates' in project) || project.complete
+    const complete = (!('candidates' in bundled) || bundled.complete) && (!('candidates' in project) || project.complete)
     const externalComplete = !('candidates' in external) || external.complete
-    const candidates = [...projectCandidates, ...externalCandidates]
+    const candidates = [...bundledCandidates, ...projectCandidates, ...externalCandidates]
     return complete && externalComplete ? candidates : { candidates, complete: false }
   }
 
   async get(candidate: SkillCandidate, options: SkillLookupOptions): Promise<SkillDefinition | undefined> {
     options.signal?.throwIfAborted()
     const locator = projectLocator(candidate.locator)
-    if (locator === undefined || (![...this.providers.values()].some(entry => entry.provider === locator.owner)
+    if (locator === undefined || (locator.owner !== this.bundled && ![...this.providers.values()].some(entry => entry.provider === locator.owner)
       && this.external?.provider !== locator.owner)) return undefined
     const definition = await locator.owner.get(locator.candidate, options)
     if (definition === undefined) return undefined
@@ -199,8 +213,9 @@ export class ClawClawProjectSkillProvider implements SkillProvider {
     this.providers.clear()
     if (this.external !== undefined) providers.push(this.external)
     this.external = undefined
+    this.bundledLifecycle.abort()
     for (const entry of providers) entry.lifecycle.abort()
-    await Promise.all(providers.map(async entry => { await entry.provider.dispose() }))
+    await Promise.all([this.bundled.dispose(), ...providers.map(async entry => { await entry.provider.dispose() })])
   }
 }
 

@@ -130,6 +130,7 @@
     "build/tray-icon.svg",
     "build/tray-icon*.png",
     "assets/experts/**",
+    "assets/skills/**",
     "cordis.patch.yml",
     "docs/**",
     "lib/**/*.js",

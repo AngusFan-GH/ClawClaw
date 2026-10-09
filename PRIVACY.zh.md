@@ -3,17 +3,17 @@
 [English](PRIVACY.md)
 
 - **版本：** 2.0
-- **最近更新：** 2026-09-28
+- **最近更新：** 2026-10-09
 
 ClawClaw 是本地优先的开源桌面应用。本说明覆盖此仓库源码与其构建产物已知的本地存储和网络行为；它不是对未部署服务、第三方构建、插件或平台的隐私承诺。项目由 [AngusFan-GH/ClawClaw](https://github.com/AngusFan-GH/ClawClaw) 独立维护，不代表 DeepSeek、Anywhere Labs、SpiritX、npm、GitHub 或消息平台。
 
 ## 本地数据
 
-默认 Harness 数据目录为 `~/.clawclaw/data`，默认工作区为 `~/.clawclaw/workspaces/default`。数据可能包括 profile、设置、会话、日志、缓存、插件依赖和用户在工作区保存的文件。Electron 应用数据目录保存窗口、日志、更新状态和诊断状态。显式 `DSH_HOME`、应用数据目录选择和安全模式可改变路径。
+默认 Harness 数据目录为 `~/.clawclaw/data`，默认工作区为 `~/.clawclaw/workspaces/default`。数据可能包括 profile、设置、会话、日志、缓存、插件依赖和用户在工作区保存的文件。Electron 应用数据目录保存窗口、日志、更新状态和诊断状态。应用中保存的数据目录、启动时的 `CLAWCLAW_HOME` 和安全模式可改变路径；ClawClaw 会把最终选择的数据目录作为 `DSH_HOME` 传给 Host、终端和插件。
 
 更新资格记录默认关闭。用户在桌面设置中明确开启后，ClawClaw 才会保存限额本地快照，其中只包含应用与目标版本、类型化更新阶段和结果、耗时，以及根据发布者提供的制品摘要派生的 digest；不包含完整 URL、错误原文、设备身份或用户内容。最多保留 4 个 64 KiB 文件且合计不超过 256 KiB，可在同一设置区立即清除识别到的记录。
 
-首次使用时，若只有 `~/.dsh`，应用会移动该目录到新默认目录；若两处都存在，不合并。健康启动的恢复检查点只覆盖部分 profile 声明和共享设置/patch，不包括凭据、`.env`、会话、storage、缓存或工作区文件。
+ClawClaw 不读取、移动或修改其他应用的 `~/.dsh` 数据，也不会自动合并该目录。健康启动的恢复检查点只覆盖部分 profile 声明和共享设置/patch，不包括凭据、`.env`、会话、storage、缓存或工作区文件。
 
 ## 网络连接
 

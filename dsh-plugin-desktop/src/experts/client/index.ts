@@ -781,7 +781,7 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
     setCapabilityError(null)
     const load = mode === 'skills'
       ? createDesktopSkillsApi().read().then(value => { if (alive) setSkills(value.filter(skill => skill.userInvocable)) })
-      : createDesktopMcpApi().read().then(value => { if (alive) setMcpServers(value) })
+      : createDesktopMcpApi().read().then(value => { if (alive) setMcpServers(value.mcpServers) })
     void load.catch(() => { if (alive) setCapabilityError(props.getActive() === 'zh' ? '暂时无法读取能力列表。' : 'Capabilities are temporarily unavailable.') })
     return () => { alive = false }
   }, [open, mode])
@@ -1059,7 +1059,7 @@ function ExpertCardWindow(props: {
       }, props.render(props.items[index]!)))))
 }
 
-function ExpertCardsSettings(props: PropsLocale<'agency'> & {
+export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
   sharedHeader?: boolean
   onSummary?: (value: { total: number; enabled: number }) => void
   remote: AgencyAgentsRemoteApi
@@ -1067,12 +1067,17 @@ function ExpertCardsSettings(props: PropsLocale<'agency'> & {
   onEnabledChange?: (enabled: ReadonlySet<string>) => void
   capabilityRegistry: ExpertCapabilityRegistry
 }): React.ReactElement {
-  const cached = catalogState(props.remote)
-  const [state, setState] = React.useState<EnabledState | null>(cached.revision < 0 ? null : cached)
+  const subscribe = React.useCallback((listener: () => void) => subscribeCatalog(props.remote, listener), [props.remote])
+  const getSnapshot = React.useCallback(() => catalogState(props.remote), [props.remote])
+  const catalog = React.useSyncExternalStore(subscribe, getSnapshot)
+  const state: EnabledState | null = catalog.revision < 0 ? null : catalog
   React.useEffect(() => {
     props.onSummary?.({ total: state?.experts.length ?? 0, enabled: state?.enabled.size ?? 0 })
   }, [state?.experts.length, state?.enabled.size, props.onSummary])
-  const [initialOrder, setInitialOrder] = React.useState<ReadonlyArray<string> | null>(cached.revision < 0 ? null : sortExpertsByEnabled(cached.experts, cached.enabled).map(expert => expert.slug))
+  React.useEffect(() => {
+    if (state !== null) props.onEnabledChange?.(state.enabled)
+  }, [state?.revision, state?.enabled, props.onEnabledChange])
+  const [initialOrder, setInitialOrder] = React.useState<ReadonlyArray<string> | null>(catalog.revision < 0 ? null : sortExpertsByEnabled(catalog.experts, catalog.enabled).map(expert => expert.slug))
   const [error, setError] = React.useState<string | null>(null)
   const [query, setQuery] = React.useState('')
   const [division, setDivision] = React.useState('')
@@ -1091,9 +1096,7 @@ function ExpertCardsSettings(props: PropsLocale<'agency'> & {
   const capabilitySnapshot = React.useSyncExternalStore(props.capabilityRegistry.subscribe, props.capabilityRegistry.getSnapshot)
 
   const accept = (catalog: CatalogSnapshot): void => {
-    const current = acceptCatalog(props.remote, catalog)
-    setState(current)
-    props.onEnabledChange?.(current.enabled)
+    acceptCatalog(props.remote, catalog)
     setError(null)
   }
   const openEditor = (expert?: ExpertView): void => {
@@ -1138,9 +1141,7 @@ function ExpertCardsSettings(props: PropsLocale<'agency'> & {
   React.useEffect(() => {
     let alive = true
     const applySnapshot = (current: EnabledState): void => {
-      setState(current)
       setInitialOrder((order) => order ?? sortExpertsByEnabled(current.experts, current.enabled).map((expert) => expert.slug))
-      props.onEnabledChange?.(current.enabled)
     }
     const loadCatalog = (): Promise<void> => readEnabled(props.remote).then((current) => { if (alive) applySnapshot(current) })
     const known = catalogState(props.remote)
@@ -1154,7 +1155,7 @@ function ExpertCardsSettings(props: PropsLocale<'agency'> & {
       if (alive && catalogState(props.remote).revision < 0) setError(err instanceof Error ? err.message : String(err))
     })
     return () => { alive = false }
-  }, [props.onEnabledChange, props.remote])
+  }, [props.remote])
 
   React.useEffect(() => () => {
     if (copiedResetTimer.current !== undefined) clearTimeout(copiedResetTimer.current)
@@ -1168,23 +1169,17 @@ function ExpertCardsSettings(props: PropsLocale<'agency'> & {
     else next.add(slug)
     saving.current = true
     setIsSaving(true)
-    setState({ ...state, enabled: next })
-    props.onEnabledChange?.(next)
+    acceptEnabled(props.remote, { enabled: [...next], revision: state.revision })
     void writeEnabled(props.remote, next, state.revision)
-      .then((current) => {
-        setState(current)
+      .then(() => {
         setError(null)
-        props.onEnabledChange?.(current.enabled)
       })
       .catch(async (err: unknown) => {
         try {
-          const refreshed = await readEnabled(props.remote)
-          setState(refreshed)
-          props.onEnabledChange?.(refreshed.enabled)
+          await readEnabled(props.remote)
           setError(writeErrorMessage(err, { refreshed: true, t: props.t }))
         } catch {
-          setState(previous)
-          props.onEnabledChange?.(previous.enabled)
+          acceptEnabled(props.remote, { enabled: [...previous.enabled], revision: previous.revision })
           setError(writeErrorMessage(err, { refreshed: false, t: props.t }))
         }
       })

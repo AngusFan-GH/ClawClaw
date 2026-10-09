@@ -4,6 +4,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { describe, expect, it, vi } from 'vitest'
 import { customExpertSchema } from '../src/experts/expert-contract.ts'
+import { builtinExpertCapabilities } from '../src/experts/builtin-capabilities.ts'
+import { BUILTIN_TEAMS } from '../src/experts/team-contract.ts'
 import {
   DEFAULT_DIVISIONS,
   loadCatalog,
@@ -64,6 +66,39 @@ describe('ClawClaw experts', () => {
     expect(english.prompt).toContain('UX Researcher Agent Personality')
     expect(chinese.prompt).toContain('UX 研究员 Agent 人格')
     expect(chinese.prompt).not.toBe(english.prompt)
+    expect(catalog.get('engineering-software-architect')?.skills).toContainEqual({ name: 'software-delivery', required: true, enabled: true })
+  })
+
+  it('declares a product capability baseline independently of this machine', () => {
+    expect(builtinExpertCapabilities('engineering-code-reviewer', 'engineering')).toMatchObject({
+      skills: expect.arrayContaining([{ name: 'software-delivery', required: true, enabled: true }]),
+      mcpServers: expect.arrayContaining([{ name: 'github', required: false, enabled: true }]),
+    })
+    expect(builtinExpertCapabilities('engineering-code-reviewer', 'engineering', ['GitLab'])).toMatchObject({
+      mcpServers: expect.arrayContaining([{ name: 'GitLab', required: false, enabled: true }]),
+    })
+    expect(builtinExpertCapabilities('finance-investment-researcher', 'finance').mcpServers.map(item => item.name))
+      .toEqual(expect.arrayContaining(['postgres', 'playwright', 'market-data']))
+  })
+
+  it('prefers declared MCP capabilities over legacy server-name aliases', () => {
+    expect(builtinExpertCapabilities('engineering-code-reviewer', 'engineering', [
+      { serverName: 'company-git', capabilities: ['source-control.github'] },
+      'github',
+    ]).mcpServers).toContainEqual({ name: 'company-git', required: false, enabled: true })
+  })
+
+  it('ships expanded teams whose members resolve to bundled experts', async () => {
+    const catalog = await loadCatalog(catalogRoot, DEFAULT_DIVISIONS)
+    expect(BUILTIN_TEAMS).toHaveLength(13)
+    expect(BUILTIN_TEAMS.map(team => team.id)).toEqual(expect.arrayContaining([
+      'team-delivery', 'team-design', 'team-hr', 'team-campaign',
+      'team-sales', 'team-legal', 'team-finance', 'team-operations',
+    ]))
+    for (const team of BUILTIN_TEAMS) {
+      expect(new Set(team.members.map(member => member.expertSlug)).size).toBe(team.members.length)
+      for (const member of team.members) expect(catalog.has(member.expertSlug), `${team.id}: ${member.expertSlug}`).toBe(true)
+    }
   })
 
   it('defaults capability bindings for records saved before Skill and MCP support', () => {
@@ -85,8 +120,8 @@ describe('ClawClaw experts', () => {
       { name: 'review', description: '', source: 'user', provider: 'desktop', modelInvocable: true, userInvocable: true, editable: true },
       { name: 'manual-only', description: '', source: 'user', provider: 'desktop', modelInvocable: false, userInvocable: true, editable: true },
     ], [
-      { serverName: 'docs', transport: 'stdio', command: 'docs', args: [], cwd: '', env: {}, timeoutMs: 1, reconnect: { enabled: true, initialDelayMs: 1, maxDelayMs: 1, maxAttempts: 1 }, enabled: true, state: 'running', tools: [{ name: 'mcp__docs__search', description: '' }], credentialsReady: true },
-      { serverName: 'offline', transport: 'stdio', command: 'offline', args: [], cwd: '', env: {}, timeoutMs: 1, reconnect: { enabled: true, initialDelayMs: 1, maxDelayMs: 1, maxAttempts: 1 }, enabled: true, state: 'error', tools: [], credentialsReady: true },
+      { serverName: 'docs', transport: 'stdio', command: 'docs', args: [], cwd: '', env: {}, timeoutMs: 1, reconnect: { enabled: true, initialDelayMs: 1, maxDelayMs: 1, maxAttempts: 1 }, enabled: true, state: 'running', tools: [{ name: 'mcp__docs__search', description: '' }], credentialsReady: true, diagnostic: { code: 'ready', stage: 'ready' } },
+      { serverName: 'offline', transport: 'stdio', command: 'offline', args: [], cwd: '', env: {}, timeoutMs: 1, reconnect: { enabled: true, initialDelayMs: 1, maxDelayMs: 1, maxAttempts: 1 }, enabled: true, state: 'error', tools: [], credentialsReady: true, diagnostic: { code: 'connection-failed', stage: 'connection' } },
     ])
     expect(available).toEqual({ skills: ['review'], mcpServers: ['docs'] })
     expect(capabilitySelectOptions(available.skills, ['review', 'old-skill'], 'unavailable')).toEqual([
@@ -104,7 +139,7 @@ describe('ClawClaw experts', () => {
       { name: 'ready', description: '', source: 'user', provider: 'desktop', modelInvocable: true, userInvocable: true, editable: true },
       { name: 'manual', description: '', source: 'user', provider: 'desktop', modelInvocable: false, userInvocable: true, editable: true },
     ], [
-      { serverName: 'offline', transport: 'stdio', command: 'offline', args: [], cwd: '', env: {}, timeoutMs: 1, reconnect: { enabled: true, initialDelayMs: 1, maxDelayMs: 1, maxAttempts: 1 }, enabled: true, state: 'error', tools: [], credentialsReady: true },
+      { serverName: 'offline', transport: 'stdio', command: 'offline', args: [], cwd: '', env: {}, timeoutMs: 1, reconnect: { enabled: true, initialDelayMs: 1, maxDelayMs: 1, maxAttempts: 1 }, enabled: true, state: 'error', tools: [], credentialsReady: true, diagnostic: { code: 'connection-failed', stage: 'connection' } },
     ])
     expect(capabilityCatalogSelectOptions(catalog.skills, ['missing'], state => state)).toEqual([
       { value: 'manual', label: 'manual (disabled)' },
@@ -139,7 +174,7 @@ describe('ClawClaw experts', () => {
   })
 
   it('fails required capabilities and reports missing optional capabilities', async () => {
-    const ctx = compositionContext({ tools: [] })
+    const ctx = compositionContext({ tools: ['mcp__available__search'] })
     await expect(resolveExpertComposition(ctx, {
       skills: [{ name: 'required-skill', required: true, enabled: true }],
       mcpServers: [],
@@ -154,6 +189,7 @@ describe('ClawClaw experts', () => {
       'MCP server unavailable: optional-server',
     ])
     expect(optional.persona).toContain('## Capability diagnostics')
+    expect(optional.deniedTools).not.toContain('mcp__available__search')
   })
 
   it('does not apply an MCP allowlist when every saved binding is disabled', async () => {

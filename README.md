@@ -50,7 +50,7 @@ gh workflow run release.yml --ref dsh-desktop -f publish=false
 
 ## 数据与配置
 
-默认数据目录是 `~/.clawclaw/data`，默认工作区是 `~/.clawclaw/workspaces/default`。已有 `~/.dsh` 且新数据目录不存在时，会迁移旧目录；两者都存在时保留两者并使用新目录，不自动合并。显式 `DSH_HOME`、应用中选择的数据目录和安全模式有各自的覆盖规则，见[用户指南](docs/user-guide.md)。
+默认数据目录是 `~/.clawclaw/data`，默认工作区是 `~/.clawclaw/workspaces/default`。ClawClaw 不读取、移动或修改其他应用的 `~/.dsh` 数据。应用中保存的数据目录、启动时的 `CLAWCLAW_HOME` 和安全模式可以覆盖默认位置；ClawClaw 会把最终选择的数据目录作为 `DSH_HOME` 传给 Host、终端和插件。详见[用户指南](docs/user-guide.md)。
 
 ## 文档
 

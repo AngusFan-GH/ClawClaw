@@ -17,7 +17,7 @@ An uninitialized profile first opens Setup Wizard for mode, material, market, no
 | Application state and logs on macOS | `~/Library/Application Support/ClawClaw` |
 | Application state and logs on Windows | `%APPDATA%\ClawClaw` |
 
-`~` is the current user's home. Without another data location, a sole legacy `~/.dsh` is moved into `~/.clawclaw/data`. If both directories exist, both are preserved, the new directory is used, and a conflict is logged without merging. Back up important data before migration. A data-directory selection saved in the application takes precedence over startup defaults; without a saved selection, explicit `DSH_HOME` can override the default. Safe mode uses separate temporary data and workspace locations.
+`~` is the current user's home. ClawClaw does not read, move, or modify another application's `~/.dsh`. To continue using data stored there, explicitly select that directory in the application after inspecting and backing it up; ClawClaw does not merge directories automatically. A data-directory selection saved in the application takes precedence over launch defaults; without a saved selection, `CLAWCLAW_HOME` can override the default data directory. Safe mode uses separate temporary data and workspace locations. After startup, ClawClaw exports the selected data directory as `DSH_HOME` to the Host, built-in terminal, and plugins; an external `DSH_HOME` is not a Launcher data-directory input.
 
 Harness data and workspace files are separate: changing the data directory does not move the default workspace. Portable ZIPs do not provide self-contained data storage.
 

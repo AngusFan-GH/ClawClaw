@@ -5,6 +5,7 @@ export const zh = {
   removeServer: '删除', testServer: '测试连接', serverName: '服务名称', transport: '传输方式',
   command: '命令', arguments: '参数（每行一个）', url: 'MCP URL', save: '保存', cancel: '取消',
   enabled: '已启用', disabled: '已停用', starting: '正在连接', running: '工具已注册', error: '连接失败',
+  diagnosticCredentials: '等待凭证', diagnosticAuthorization: '等待授权', diagnosticFailed: '连接失败', diagnosticToolsPending: '已连接，等待工具', diagnosticReady: '连接正常', lastChecked: '检查于 {time}',
   tools: '工具', noTools: '尚未发现工具', noServers: '尚未配置 MCP 服务。',
   secretNotice: '连接配置只保存凭证引用。输入的凭证值会写入 DSH 凭证库，之后不会显示或导出。',
   confirmRemove: '确认删除', serverNameHint: '1-32 个字母、数字、下划线或连字符', commandHint: '例如 npx',
@@ -17,6 +18,9 @@ export const zh = {
   initialDelayRangeError: '初始延迟必须是 100 到 60000 之间的整数。', maxDelayRangeError: '最大延迟必须是 100 到 300000 之间的整数。',
   maxAttemptsRangeError: '最大尝试次数必须是 0 到 100 之间的整数。', reconnectDelayOrderError: '最大延迟不能小于初始延迟。',
   importJson: '导入 JSON', import: '导入', invalidImport: '请输入有效的 mcpServers JSON。', importJsonHint: '{"mcpServers":{"server":{"command":"npx","args":["-y","package"],"env":{"API_KEY":"..."}}}}', usedByExperts: '被 {count} 位专家使用', renameBoundServer: '该 MCP 被 {count} 位专家使用。请先更新专家绑定，再修改服务名称。',
+  mcpViews: 'MCP 视图', installed: '已连接', connectorCatalog: '连接器目录', installConnector: '安装连接器', noCatalogMatches: '没有匹配的连接器。',
+  oauthPkce: '使用 OAuth 2.0 PKCE', oauthIssuer: 'OAuth 发行方（可选，留空自动发现）', oauthScope: 'OAuth 权限范围', oauthResource: 'OAuth 资源（可选）', authorize: '授权', reauthorize: '重新授权',
+  identityAndTransport: '基本信息', connection: '连接配置', authentication: '身份验证', credentials: '凭据与请求参数', advancedSettings: '高级连接设置', viewSource: '查看来源',
 } as const
 
 export type DesktopMcpLocaleKey = keyof typeof zh
@@ -28,6 +32,7 @@ export const en: Record<DesktopMcpLocaleKey, string> = {
   removeServer: 'Remove', testServer: 'Test connection', serverName: 'Server name', transport: 'Transport',
   command: 'Command', arguments: 'Arguments (one per line)', url: 'MCP URL', save: 'Save', cancel: 'Cancel',
   enabled: 'Enabled', disabled: 'Disabled', starting: 'Connecting', running: 'Tools registered', error: 'Connection failed',
+  diagnosticCredentials: 'Credentials required', diagnosticAuthorization: 'Authorization required', diagnosticFailed: 'Connection failed', diagnosticToolsPending: 'Connected, waiting for tools', diagnosticReady: 'Ready', lastChecked: 'Checked {time}',
   tools: 'Tools', noTools: 'No tools discovered yet', noServers: 'No MCP servers configured.',
   secretNotice: 'Connection settings store credential references only. Entered values are written to the DSH credential store and are never displayed or exported.',
   confirmRemove: 'Confirm removal', serverNameHint: '1-32 letters, numbers, underscores, or hyphens', commandHint: 'For example, npx',
@@ -40,4 +45,7 @@ export const en: Record<DesktopMcpLocaleKey, string> = {
   initialDelayRangeError: 'Initial delay must be a whole number from 100 to 60000.', maxDelayRangeError: 'Maximum delay must be a whole number from 100 to 300000.',
   maxAttemptsRangeError: 'Maximum attempts must be a whole number from 0 to 100.', reconnectDelayOrderError: 'Maximum delay must not be less than the initial delay.',
   importJson: 'Import JSON', import: 'Import', invalidImport: 'Enter a valid mcpServers JSON document.', importJsonHint: '{"mcpServers":{"server":{"command":"npx","args":["-y","package"],"env":{"API_KEY":"..."}}}}', usedByExperts: 'Used by {count} experts', renameBoundServer: 'This MCP server is used by {count} experts. Update those bindings before renaming it.',
+  mcpViews: 'MCP views', installed: 'Connected', connectorCatalog: 'Connector catalog', installConnector: 'Install connector', noCatalogMatches: 'No matching connectors.',
+  oauthPkce: 'Use OAuth 2.0 PKCE', oauthIssuer: 'OAuth issuer (optional; discovered when empty)', oauthScope: 'OAuth scope', oauthResource: 'OAuth resource (optional)', authorize: 'Authorize', reauthorize: 'Reauthorize',
+  identityAndTransport: 'Identity and transport', connection: 'Connection', authentication: 'Authentication', credentials: 'Credentials and request values', advancedSettings: 'Advanced connection settings', viewSource: 'View source',
 }

@@ -52,7 +52,7 @@ export class ExpertCapabilityRegistry {
     const pending = Promise.allSettled([this.skillsApi.read(), this.mcpApi.read()]).then(([skills, mcp]) => {
       if (generation !== this.generation) return
       if (skills.status === 'fulfilled') this.skills = skills.value
-      if (mcp.status === 'fulfilled') this.mcpServers = mcp.value
+      if (mcp.status === 'fulfilled') this.mcpServers = mcp.value.mcpServers
       const catalog = expertCapabilityCatalog(this.skills, this.mcpServers)
       this.publish(Object.freeze({
         catalog,

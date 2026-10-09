@@ -50,6 +50,7 @@ import { createHostLocaleReader, formatHost, localizedExpertDescription, localiz
 import { hasLegacySettingsInstall, installSettingsSectionCompat, isLiveValue, loadHostModule, readAgencySettings, recoverImportedAgencySettings, settingsNamespaceCompat } from './settings-compat.js'
 import { AGENCY_LIBRARY_SERVICE, agencySettingsSchema, createExpertLibrary, validateAgencySettings, type AgencySettings } from './expert-library.js'
 import type { ExpertCapabilityBinding, ExpertSummary } from './expert-contract.js'
+import { builtinExpertCapabilities } from './builtin-capabilities.js'
 
 export const name = 'clawclaw-experts'
 export const inject = ['tools', 'subagents', 'systemPrompt', 'settings', 'webServer', 'skills']
@@ -511,8 +512,7 @@ export async function loadCatalog(root: string, divisions: readonly string[], lo
         emoji: parsed.emoji ?? '',
         division: source.division,
         divisionZh: ZH_DIVISION[source.division] ?? source.division,
-        skills: [],
-        mcpServers: [],
+        ...builtinExpertCapabilities(slug, source.division),
       };
       personaPaths.set(expert, filePath);
       map.set(slug, expert);
@@ -591,10 +591,13 @@ export async function resolveExpertComposition(
 
   const schemas = ctx.tools.schemas()
   const mcpTools = schemas.filter(tool => tool.name.startsWith('mcp__'))
-  const selectedServers = new Set(expert.mcpServers.filter(binding => binding.enabled).map(binding => binding.name))
+  const selectedServers = new Set<string>()
   for (const binding of expert.mcpServers.filter(binding => binding.enabled)) {
     const prefix = `mcp__${binding.name}__`
-    if (mcpTools.some(tool => tool.name.startsWith(prefix))) continue
+    if (mcpTools.some(tool => tool.name.startsWith(prefix))) {
+      selectedServers.add(binding.name)
+      continue
+    }
     const message = `MCP server unavailable: ${binding.name}`
     if (binding.required) throw new Error(message)
     diagnostics.push(message)
@@ -637,11 +640,25 @@ export function apply(ctx: Context, config: Config): void {
     if (loadError !== null) throw new Error(formatHost(activeLocale(), 'error.catalogLoad', { detail: loadError }))
   }
 
-  let baseSummaries: Array<Expert & { custom: false }> | undefined
+  const configuredMcpServers = (): Array<{ serverName: string; capabilities: readonly string[] }> => {
+    try {
+      const value = ctx.settings.get('dsh-desktop-mcp') as { mcpServers?: Array<{ serverName?: unknown; capabilities?: unknown }> } | undefined
+      return (value?.mcpServers ?? [])
+        .filter((server): server is { serverName: string; capabilities?: unknown } => typeof server.serverName === 'string' && server.serverName !== '')
+        .map(server => ({ serverName: server.serverName, capabilities: Array.isArray(server.capabilities)
+          ? server.capabilities.filter((item): item is string => typeof item === 'string') : [] }))
+    } catch {
+      return []
+    }
+  }
   const library = createExpertLibrary(async () => {
     await ensureReady()
-    baseSummaries ??= [...experts.values()].map(expert => ({ ...expert, custom: false }))
-    return baseSummaries
+    const mcpServers = configuredMcpServers()
+    return [...experts.values()].map(expert => ({
+      ...expert,
+      ...builtinExpertCapabilities(expert.slug, expert.division, mcpServers),
+      custom: false as const,
+    }))
   }, {
     read: () => settingsSource(),
     revision: () => {

@@ -312,26 +312,26 @@ export function TeamEditor(props: {
                 </>)}
               {section(tx("主理人提示词"), <>
                   <p className="agt-help">{tx("定义如何分配任务、处理分歧并汇总专家结果")}</p>
-                  <div className="agt-row">
-                    <div className="agt-segment">
-                      <Button type={draft.coordinatorMode === 'template' ? 'primary' : 'default'} aria-pressed={draft.coordinatorMode === 'template'} onClick={() => patch({ coordinatorMode: 'template' })}>{tx("团队模板")}</Button>
-                      <Button type={draft.coordinatorMode === 'custom' ? 'primary' : 'default'} aria-pressed={draft.coordinatorMode === 'custom'} onClick={() => patch({
+                  <div className="agt-coordinator-toolbar">
+                    <div className="agt-segment" role="group" aria-label={tx("主理人提示词")}>
+                      <Button className={draft.coordinatorMode === 'template' ? 'agt-segment-active' : ''} aria-pressed={draft.coordinatorMode === 'template'} onClick={() => patch({ coordinatorMode: 'template' })}>{tx("团队模板")}</Button>
+                      <Button className={draft.coordinatorMode === 'custom' ? 'agt-segment-active' : ''} aria-pressed={draft.coordinatorMode === 'custom'} onClick={() => patch({
                 coordinatorMode: 'custom',
                 coordinatorPrompt: draft.coordinatorPrompt ||
                     effectiveCoordinator(draft, locale),
             })}>{tx("自定义")}</Button>
                     </div>
-                    <Button onClick={() => setConfirm('restore')}>
+                    <Button className="agt-restore-template" onClick={() => setConfirm('restore')}>
                       <IconRefresh />{tx("恢复团队模板")}</Button>
                   </div>
                   <Input.TextArea name="coordinatorPrompt" className="agt-prompt" aria-label={tx("主理人提示词正文")} readOnly={draft.coordinatorMode === 'template'} value={effectiveCoordinator(draft, locale)} onChange={(e) => patch({ coordinatorPrompt: e.target.value })}/>
-                  <p className="agt-help">{tx("目标、约束、成员分工和交付要求会自动加入，无需重复填写。")}<span className="agt-count">
+                  <p className="agt-help agt-prompt-meta"><span>{tx("目标、约束、成员分工和交付要求会自动加入，无需重复填写。")}</span><span className="agt-count">
                       {Array.from(effectiveCoordinator(draft, locale)).length} / 12000
                     </span>
                   </p>
                 </>)}
               {section(tx("任务示例"), <>
-                  {draft.examples.map((example, i) => (<label key={i} className="aag-custom-field">
+                  <div className="agt-example-list">{draft.examples.map((example, i) => (<label key={i} className="aag-custom-field agt-example">
                       <span>{tx("任务示例")}{i + 1}</span>
                       <Input.TextArea aria-label={`${tx("任务示例")}${i + 1}`} value={example} maxLength={1000} rows={2} onChange={(e) => patch({
                     examples: draft.examples.map((v, n) => n === i ? e.target.value : v),
@@ -339,8 +339,8 @@ export function TeamEditor(props: {
                       <Button disabled={draft.examples.length <= 1} onClick={() => patch({
                     examples: draft.examples.filter((_, n) => n !== i),
                 })}>{tx("移除此示例")}</Button>
-                    </label>))}
-                  <Button disabled={draft.examples.length >= 3} onClick={() => patch({ examples: [...draft.examples, ''] })}>
+                    </label>))}</div>
+                  <Button className="agt-add-example" disabled={draft.examples.length >= 3} onClick={() => patch({ examples: [...draft.examples, ''] })}>
                     <IconPlus />{tx("添加示例")}</Button>
                 </>)}
             </fieldset>

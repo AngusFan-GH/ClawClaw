@@ -1,6 +1,7 @@
 // @ts-nocheck -- ported client compatibility layer; host contracts remain strictly checked.
 import type { TeamSnapshot } from '../team-contract.js'
-import type { AgencyTeamsRemote } from './remote.js'
+import { acceptEnabled } from './catalog.js'
+import type { AgencyCatalogRemote, AgencyTeamsRemote } from './remote.js'
 
 interface TeamCache {
   value: TeamSnapshot | null
@@ -54,6 +55,16 @@ export function acceptTeams(remote: AgencyTeamsRemote, value: TeamSnapshot): Tea
   if (entry.value !== null && value.revision < entry.value.revision) return entry.value
   entry.pending = undefined
   return publishTeams(remote, value)
+}
+
+/** 团队写回执与专家启用名册来自同一事务，必须以同一 revision 原子发布。 */
+export function acceptTeamSnapshot(
+  remote: AgencyTeamsRemote & AgencyCatalogRemote,
+  value: TeamSnapshot,
+): TeamSnapshot {
+  const next = acceptTeams(remote, value)
+  acceptEnabled(remote, { enabled: next.enabledExperts, revision: next.revision })
+  return next
 }
 
 /** 菜单、设置页和 @ 候选共用一次请求，已有结果时先显示再后台刷新。 */

@@ -53,10 +53,22 @@ export const TEAM_CSS = `
 .agt-editor-fields fieldset{border:0;padding:0;margin:0;min-width:0}
 .agt-section{border-bottom:1px solid var(--dsw-alias-border-l2);padding:0 0 20px;margin-bottom:20px}
 .agt-section:last-child{border:0;margin-bottom:0}
-.agt-editor .agt-prompt{display:block;width:100%;min-height:300px;margin:12px 0 8px;font-size:13px;line-height:1.6}
-.agt-segment{display:flex;gap:8px;flex-wrap:wrap}
-.agt-segment button[aria-pressed=true]{border-color:var(--dsw-alias-label-tertiary);background:var(--dsw-alias-bg-layer-3)}
-.agt-count{float:right;font-size:12px}
+.agt-editor .agt-prompt.ant-input{display:block;width:100%;min-height:300px;margin:12px 0 8px;padding:10px 12px;resize:vertical;font-size:13px;line-height:1.6}
+.agt-coordinator-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.agt-segment{display:inline-flex;align-items:center;gap:2px;padding:3px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-2)}
+.agt-segment .ant-btn{height:30px;padding-inline:12px;border:0;border-radius:5px;background:transparent;color:var(--dsw-alias-label-secondary);box-shadow:none}
+.agt-segment .ant-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.agt-segment .ant-btn.agt-segment-active{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);box-shadow:0 1px 3px color-mix(in srgb,var(--dsw-alias-label-primary) 12%,transparent)}
+.agt-restore-template.ant-btn{display:inline-flex;align-items:center;gap:6px;white-space:normal}
+.agt-prompt-meta{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:0!important}
+.agt-prompt-meta>span:first-child{min-width:0}
+.agt-count{flex:none;font-size:12px;white-space:nowrap}
+.agt-example-list{display:grid;gap:16px;margin-bottom:16px}
+.agt-example.aag-custom-field{display:grid;gap:8px;margin:0}
+.agt-example.aag-custom-field>span{margin:0}
+.agt-example .ant-input{width:100%;resize:vertical}
+.agt-example .ant-btn{justify-self:start}
+.agt-add-example.ant-btn{display:inline-flex;align-items:center;gap:6px}
 .agt-edit-member{padding:12px 0;border-bottom:1px solid var(--dsw-alias-border-l2)}
 .agt-edit-member .agt-row strong{margin-right:auto}
 .agt-editor .aag-custom-footer{flex-shrink:0}
@@ -76,6 +88,6 @@ export const TEAM_CSS = `
 .agt-compact-row>button:first-child>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .agt-compact-row small{margin-left:8px;opacity:.65}
 .agt-compact-row>button:last-child{background:transparent;border:0;color:inherit;cursor:pointer}
-@media(max-width:560px){.agt-detail-head{align-items:flex-start;flex-wrap:wrap}.agt-editor .agt-prompt{min-height:240px}}
+@media(max-width:560px){.agt-detail-head{align-items:flex-start;flex-wrap:wrap}.agt-editor .agt-prompt.ant-input{min-height:240px}.agt-coordinator-toolbar{align-items:stretch;flex-direction:column}.agt-segment{align-self:flex-start}.agt-restore-template.ant-btn{align-self:flex-start}.agt-prompt-meta{flex-direction:column;gap:4px}.agt-count{align-self:flex-end}}
 @media(prefers-reduced-motion:reduce){.agt-dialog *{transition:none!important}}
 `

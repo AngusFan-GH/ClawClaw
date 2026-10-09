@@ -8,7 +8,7 @@ describe('ExpertCapabilityRegistry', () => {
       reconnect: { enabled: true, initialDelayMs: 1, maxDelayMs: 1, maxAttempts: 1 }, enabled: true, state: 'running' as const,
       tools: [{ name: 'mcp__docs__search', description: '' }], credentialsReady: true }]
     const skillsApi = { read: vi.fn().mockResolvedValueOnce(skills).mockRejectedValueOnce(new Error('skill offline')) }
-    const mcpApi = { read: vi.fn().mockResolvedValue(mcp) }
+    const mcpApi = { read: vi.fn().mockResolvedValue({ mcpServers: mcp, catalog: [] }) }
     const registry = new ExpertCapabilityRegistry(skillsApi, mcpApi)
     const listener = vi.fn()
     const dispose = registry.subscribe(listener)

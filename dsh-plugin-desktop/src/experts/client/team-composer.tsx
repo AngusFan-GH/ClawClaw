@@ -1,6 +1,6 @@
 // @ts-nocheck -- ported client compatibility layer; host contracts remain strictly checked.
 import { catalogState } from './catalog.js';
-import { acceptTeams, refreshTeams, subscribeTeams, teamState } from './team-cache.js';
+import { acceptTeamSnapshot, refreshTeams, subscribeTeams, teamState } from './team-cache.js';
 import { useTeamLocale, localizeTeam, localizedExperts } from './team-locale.js';
 import React from 'react';
 import type { ExpertTeam, TeamSnapshot } from '../team-contract.js';
@@ -83,7 +83,7 @@ export function TeamMenu(props: {
                 const next = await unwrap(props.remote.setTeamEnabled(team.id, true, snapshot.revision));
                 if (!alive.current)
                     return;
-                acceptTeams(props.remote, next);
+                acceptTeamSnapshot(props.remote, next);
                 setSnapshot(next);
                 props.onExpertsChanged?.();
             }

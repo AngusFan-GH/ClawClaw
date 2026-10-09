@@ -50,7 +50,7 @@ After the macOS, Windows, and `Assemble release` jobs all succeed, push a `clawc
 
 ## Data and configuration
 
-The default data directory is `~/.clawclaw/data`; the default workspace is `~/.clawclaw/workspaces/default`. An existing `~/.dsh` is moved when the new data directory does not exist. If both exist, both are preserved and the new directory is used without merging. Explicit `DSH_HOME`, a directory selected in the application, and safe mode have separate override rules; see the [user guide](docs/user-guide.en.md).
+The default data directory is `~/.clawclaw/data`; the default workspace is `~/.clawclaw/workspaces/default`. ClawClaw does not read, move, or modify another application's `~/.dsh` data. A saved in-app data-directory selection, `CLAWCLAW_HOME` at launch, or safe mode can override the default. ClawClaw exports the selected directory as `DSH_HOME` to the Host, terminal, and plugins. See the [user guide](docs/user-guide.en.md).
 
 ## Documentation
 
