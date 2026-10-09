@@ -2,7 +2,7 @@
 
 [中文](README.zh.md)
 
-`dsh-plugin-desktop` is the ClawClaw Desktop package, version `0.2.4`. It supplies Electron bootstrap, an isolated DSH Host, native windows/tray, profile and pnpm services, workspaces, recovery, updates, Market selection, and the ClawClaw client presentation. Its installed product identity is **ClawClaw** (`com.clawclaw.desktop`).
+`dsh-plugin-desktop` is the ClawClaw Desktop package, version `0.2.5`. It supplies Electron bootstrap, an isolated DSH Host, native windows/tray, profile and pnpm services, workspaces, recovery, updates, Market selection, and the ClawClaw client presentation. Its installed product identity is **ClawClaw** (`com.clawclaw.desktop`).
 
 This package is part of the root pnpm workspace. Do not install it as a standalone npm application: it depends on the root vendored DSH runtime, overrides, patches, sibling Market, and Channels workspace package.
 
@@ -138,7 +138,7 @@ Require `Build macos`, `Build windows`, and `Assemble release` to succeed on the
 Update `dsh-plugin-desktop/package.json` and the root README version text together, run the complete gate, commit, and repeat the non-publishing prebuild. Then tag that exact validated commit:
 
 ```sh
-version=0.2.4
+version=0.2.5
 git tag -a "clawclaw-v$version" -m "Release ClawClaw $version"
 git push origin "clawclaw-v$version"
 ```

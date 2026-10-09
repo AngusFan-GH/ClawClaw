@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-`dsh-plugin-desktop` 是 ClawClaw Desktop 包，当前版本 `0.2.4`。它提供 Electron bootstrap、隔离 DSH Host、原生窗口/托盘、profile 与 pnpm service、工作区、恢复、更新、Market 选择和 ClawClaw Client 呈现层。安装后的产品身份是 **ClawClaw**（`com.clawclaw.desktop`）。
+`dsh-plugin-desktop` 是 ClawClaw Desktop 包，当前版本 `0.2.5`。它提供 Electron bootstrap、隔离 DSH Host、原生窗口/托盘、profile 与 pnpm service、工作区、恢复、更新、Market 选择和 ClawClaw Client 呈现层。安装后的产品身份是 **ClawClaw**（`com.clawclaw.desktop`）。
 
 该包属于根 pnpm workspace，不应作为独立 npm 应用安装：它依赖根目录的 vendored DSH runtime、override、patch、同级 Market 与 Channels workspace 包。
 
@@ -138,7 +138,7 @@ gh run download "$run_id" --repo AngusFan-GH/ClawClaw --name desktop-release --d
 同时更新 `dsh-plugin-desktop/package.json` 与根 README 中的版本，运行完整门禁、提交，并再次执行不发布的预构建。随后给这个已经验证的准确 commit 创建 tag：
 
 ```sh
-version=0.2.4
+version=0.2.5
 git tag -a "clawclaw-v$version" -m "Release ClawClaw $version"
 git push origin "clawclaw-v$version"
 ```
