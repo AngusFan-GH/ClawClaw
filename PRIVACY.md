@@ -28,7 +28,7 @@ Connections depend on user choices, profiles, and plugins. Known endpoints in th
 | Channels | Relevant Weixin, WeCom, Feishu, DingTalk, QQ, iMessage, Telegram, WhatsApp, Discord, or Slack services; credentials, authorization/QR data, message content, attachment references, and protocol metadata depend on platform/configuration. |
 | Other plugins/tools | Plugin- or user-configured models, MCP servers, websites, registries, and APIs; their own implementation and policies control scope. |
 
-The default Desktop patch disables upstream session telemetry, DeepSeek session log, DeepSeek model API extensions, DeepSeek web search, and official package inventory. User profiles or plugins can enable other network behavior; inspect the active profile rather than relying only on this default.
+ClawClaw always disables the upstream feedback command, message-feedback storage and Remote API, feedback controls, and session telemetry backend. Profiles and machine patches cannot re-enable that collection chain. The default Desktop patch also disables DeepSeek session log, DeepSeek model API extensions, DeepSeek web search, and official package inventory. User profiles or plugins can enable other network behavior; inspect the active profile for those features.
 
 ## Local Web and LAN
 
@@ -36,7 +36,7 @@ The Web carrier listens on loopback by default. Opening a system browser still a
 
 ## Diagnostics and sharing
 
-Diagnostic ZIPs are created only when a user exports them. They can include application logs, Crashpad dumps, run markers, structured fatal reports, system information, and update qualification evidence when that opt-in produced files. Recognized credentials are masked where possible, but paths, session text, tool output, plugin messages, or memory fragments can remain. Exports are never uploaded automatically. Review them and use trusted sharing channels.
+Diagnostic ZIPs are local support artifacts, not telemetry or in-product feedback. They are created only when a user exports them. They can include application logs, Crashpad dumps, run markers, structured fatal reports, system information, and update qualification evidence when that opt-in produced files. Recognized credentials are masked where possible, but paths, session text, tool output, plugin messages, or memory fragments can remain. Exports are never uploaded automatically. Review them and use trusted sharing channels.
 
 ## Choices and responsibility
 

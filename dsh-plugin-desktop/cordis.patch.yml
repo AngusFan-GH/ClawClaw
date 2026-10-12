@@ -51,8 +51,18 @@
     surfaceContext: true
     trustedHosts: []
 
-# ClawClaw does not upload user feedback or session history to an upstream
-# telemetry endpoint. Products may opt in through an explicit profile override.
+# ClawClaw does not collect feedback or upload session history. Keep the Host
+# command, persistence/Remote service, browser controls, and telemetry backend
+# disabled together so no feedback surface or collection interface remains.
+- id: command-feedback
+  disabled: true
+
+- id: message-feedback
+  disabled: true
+
+- id: ui-message-feedback
+  disabled: true
+
 - id: session-telemetry-otel
   disabled: true
 

@@ -955,7 +955,7 @@ function withoutDesktopEditableInsertions(patches: readonly PatchOptions[]): Pat
 
 /**
  * Load and compose one desktop profile generation.
- * @param telemetryDisabled - inherited DSH telemetry opt-out value.
+ * @param _telemetryDisabled - retained for launcher call compatibility; ClawClaw always disables telemetry.
  * @param home - Harness home containing profiles and the machine-wide patch.
  * @param platform - native platform selecting launcher-owned safety overlays.
  * @param profileName - existing or lazily available Web profile to compose.
@@ -963,7 +963,7 @@ function withoutDesktopEditableInsertions(patches: readonly PatchOptions[]): Pat
  * @returns root config, profile metadata, and ordered patches.
  */
 export function prepareDesktopProfile(
-  telemetryDisabled: string | undefined = process.env.DSH_TELEMETRY_DISABLED,
+  _telemetryDisabled: string | undefined = process.env.DSH_TELEMETRY_DISABLED,
   home: string = resolveDshHome(),
   platform: NodeJS.Platform = process.platform,
   profileName: string = DESKTOP_PROFILE_NAME,
@@ -1190,8 +1190,16 @@ export function prepareDesktopProfile(
       })
     }
   }
-  if ((telemetryDisabled ?? '') !== '' && rows.has('session-telemetry-otel')) {
-    patches.push({ id: 'session-telemetry-otel', disabled: true })
+  // Feedback authorizes upstream's on-demand telemetry capture, so the entire
+  // collection chain is a launcher-owned product policy rather than an
+  // overridable Profile preference.
+  for (const id of [
+    'command-feedback',
+    'message-feedback',
+    'ui-message-feedback',
+    'session-telemetry-otel',
+  ]) {
+    if (rows.has(id)) patches.push({ id, disabled: true })
   }
   const desktopShell = rows.get('desktop-shell')
   if (desktopShell === undefined) {

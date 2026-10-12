@@ -549,6 +549,9 @@ virtualStoreDirMaxLength: 60
       'plugin-package-inventory-deepseek',
       'web-search-deepseek',
       'ui-brand-official',
+      'command-feedback',
+      'message-feedback',
+      'ui-message-feedback',
       'session-telemetry-otel',
     ]) {
       expect(rows.find(row => row.id === id)?.disabled).toBe(true)
@@ -556,6 +559,32 @@ virtualStoreDirMaxLength: 60
     expect(rows.find(row => row.id === 'web')).toEqual(expect.objectContaining({
       config: { fetchProvider: 'http' },
     }))
+  })
+
+  it('keeps feedback and telemetry disabled across Profile and machine overrides', () => {
+    const home = temporaryHome()
+    const profileDir = ensureDesktopProfile(home)
+    const enabledRows = [
+      'command-feedback',
+      'message-feedback',
+      'ui-message-feedback',
+      'session-telemetry-otel',
+    ]
+    writeFileSync(join(profileDir, 'cordis.patch.yml'), [
+      ...enabledRows.flatMap(id => [`- id: ${id}`, '  disabled: false']),
+      '',
+    ].join('\n'))
+    writeFileSync(join(home, 'cordis.patch.yml'), [
+      ...enabledRows.flatMap(id => [`- id: ${id}`, '  disabled: false']),
+      '',
+    ].join('\n'))
+
+    const prepared = prepareDesktopProfile(undefined, home, 'darwin')
+    const rows = composeEntries([prepared.patches])
+
+    for (const id of enabledRows) {
+      expect(rows.find(row => row.id === id)?.disabled).toBe(true)
+    }
   })
 
   it('keeps every settings-backed Desktop feature in the Profile layer instead of launcher overlays', () => {

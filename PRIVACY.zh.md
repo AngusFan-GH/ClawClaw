@@ -28,7 +28,7 @@ ClawClaw 不读取、移动或修改其他应用的 `~/.dsh` 数据，也不会�
 | Channels | 对应微信、企业微信、飞书、钉钉、QQ、iMessage、Telegram、WhatsApp、Discord、Slack 服务；凭据、授权/扫码数据、消息内容、附件引用及其协议元数据由平台和配置决定。 |
 | 其他插件和工具 | 插件或用户配置的模型、MCP、网页、registry 和 API；范围以其实现与服务政策为准。 |
 
-默认 Desktop patch 禁用上游 session telemetry、DeepSeek session log、DeepSeek 模型 API extensions、DeepSeek web search 与官方 package inventory。用户 profile 或插件可以重新启用其他网络功能；检查当前 profile 配置，而不是只依赖此默认说明。
+ClawClaw 始终禁用上游反馈命令、消息反馈存储与 Remote API、反馈控件和 session telemetry backend；profile 与机器级 patch 无法重新启用这条收集链。默认 Desktop patch 还会禁用 DeepSeek session log、DeepSeek 模型 API extensions、DeepSeek web search 与官方 package inventory。用户 profile 或插件仍可启用其他网络功能；这些功能应以当前 profile 配置为准。
 
 ## 本地 Web 与局域网
 
@@ -36,7 +36,7 @@ Web carrier 默认仅监听本机回环地址。打开系统浏览器仍访问�
 
 ## 诊断与分享
 
-诊断 ZIP 仅在用户主动导出时创建，可能包含应用日志、Crashpad dump、运行标记、结构化 fatal report、系统信息，以及启用后产生的更新资格记录。日志会尝试屏蔽已识别凭据，但仍可能包含路径、会话文本、工具输出、插件消息或内存片段。导出不会自动上传；分享前自行检查并通过可信渠道发送。
+诊断 ZIP 是保存在本地的支持材料，不属于遥测或应用内反馈。它仅在用户主动导出时创建，可能包含应用日志、Crashpad dump、运行标记、结构化 fatal report、系统信息，以及启用后产生的更新资格记录。日志会尝试屏蔽已识别凭据，但仍可能包含路径、会话文本、工具输出、插件消息或内存片段。导出不会自动上传；分享前自行检查并通过可信渠道发送。
 
 ## 选择与责任
 
