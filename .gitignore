@@ -5,6 +5,7 @@ node_modules/
 
 dsh-plugin-desktop/dist/
 dsh-plugin-desktop/lib/
+dsh-plugin-desktop/.playwright-mcp/
 dsh-community-market/lib/
 
 .env.pnpm
