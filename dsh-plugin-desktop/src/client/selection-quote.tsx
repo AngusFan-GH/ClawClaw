@@ -7,6 +7,8 @@ import LocateFixed from 'lucide-react/dist/esm/icons/locate-fixed.mjs'
 // @ts-expect-error package subpath has no declaration file
 import Quote from 'lucide-react/dist/esm/icons/quote.mjs'
 // @ts-expect-error package subpath has no declaration file
+import MessageSquareText from 'lucide-react/dist/esm/icons/message-square-text.mjs'
+// @ts-expect-error package subpath has no declaration file
 import X from 'lucide-react/dist/esm/icons/x.mjs'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -34,6 +36,7 @@ import {
   type SelectionQuoteSource,
 } from './selection-quote-source.ts'
 import { installSelectionQuoteStyles } from './selection-quote-styles.ts'
+import { applySelectionSideChat, startSelectionSideChat } from './selection-sidechat.tsx'
 
 const MAX_SELECTION_LENGTH = 4_000
 const VIEWPORT_GAP = 8
@@ -95,11 +98,11 @@ export function readConversationSelection(selection: Selection | null = window.g
   return { text, left: rect.left + rect.width / 2, top: rect.top, bottom: rect.bottom, ...(source === undefined ? {} : { source }) }
 }
 
-function labels(): { add: string; copied: string; copy: string; locate: string; quote: string; remove: string; toolbar: string } {
+function labels(): { add: string; askSide: string; copied: string; copy: string; locate: string; quote: string; remove: string; toolbar: string } {
   const chinese = (document.documentElement.lang || navigator.language).toLocaleLowerCase().startsWith('zh')
   return chinese
-    ? { add: '添加引用', copied: '已复制', copy: '复制', locate: '定位原文', quote: '引用内容', remove: '移除引用', toolbar: '划词操作' }
-    : { add: 'Add quote', copied: 'Copied', copy: 'Copy', locate: 'Show source', quote: 'Quoted context', remove: 'Remove quote', toolbar: 'Selection actions' }
+    ? { add: '添加引用', askSide: '侧边提问', copied: '已复制', copy: '复制', locate: '定位原文', quote: '引用内容', remove: '移除引用', toolbar: '划词操作' }
+    : { add: 'Add quote', askSide: 'Ask in side chat', copied: 'Copied', copy: 'Copy', locate: 'Show source', quote: 'Quoted context', remove: 'Remove quote', toolbar: 'Selection actions' }
 }
 
 function quoteReference(snapshot: Pick<SelectionSnapshot, 'text' | 'source'>): ReferenceInsert {
@@ -124,6 +127,7 @@ export function occurrenceDetectSpan(target: Occurrence, occurrences: readonly O
 
 interface SelectionQuoteInjected {
   readonly actx: Context
+  readonly sessionId: string
 }
 
 export type SelectionQuoteOverlayProps = PropsRuntime<'conversation.input.overlay'> & SelectionQuoteInjected
@@ -181,7 +185,7 @@ function PendingQuoteCards({ actx, draftRev, occurrences }: {
   </div>
 }
 
-export function SelectionQuoteOverlay({ actx, useInput }: SelectionQuoteOverlayProps) {
+export function SelectionQuoteOverlay({ actx, sessionId, useInput }: SelectionQuoteOverlayProps) {
   const state = useInput(value => value)
   const quotes = selectionQuoteOccurrences(state.occurrences)
   const [snapshot, setSnapshot] = useState<SelectionSnapshot | null>(null)
@@ -253,12 +257,19 @@ export function SelectionQuoteOverlay({ actx, useInput }: SelectionQuoteOverlayP
   const preventSelectionLoss = (event: ReactPointerEvent) => { event.preventDefault(); event.stopPropagation() }
   let toolbar: ReactNode = null
   if (snapshot !== null && state.phase === 'plain') {
-    const position = placeSelectionPopover(snapshot, 164, 40, window.innerWidth, window.innerHeight)
+    const position = placeSelectionPopover(snapshot, copy.askSide === '侧边提问' ? 268 : 338, 40, window.innerWidth, window.innerHeight)
     const style: CSSProperties = { left: position.left, top: position.top }
     toolbar = createPortal(<div ref={toolbarRef} className="clawSelectionQuoteToolbar" data-claw-selection-quote role="toolbar" aria-label={copy.toolbar} style={style} onPointerDown={preventSelectionLoss}>
       <button type="button" title={copy.copy} onClick={() => { void copySelectionText(snapshot.text).then(close, close) }}><Copy aria-hidden="true" />{copy.copy}</button>
       <span className="clawSelectionQuoteDivider" aria-hidden="true" />
       <button type="button" className="clawSelectionQuotePrimary" title={copy.add} onClick={addQuote}><Quote aria-hidden="true" />{copy.add}</button>
+      <span className="clawSelectionQuoteDivider" aria-hidden="true" />
+      <button type="button" className="clawSelectionQuotePrimary" title={copy.askSide} onClick={() => {
+        if (snapshot === null) return
+        startSelectionSideChat(actx, sessionId, snapshot)
+        window.getSelection()?.removeAllRanges()
+        close()
+      }}><MessageSquareText aria-hidden="true" />{copy.askSide}</button>
     </div>, document.body)
   }
 
@@ -426,13 +437,14 @@ export function createSelectionQuoteSource(): InputTriggerSource {
 
 export function applySelectionQuote(ctx: Context): void {
   installSelectionQuoteStyles()
+  applySelectionSideChat(ctx)
   ctx.effect(() => ctx.inputTriggers.registerSource(createSelectionQuoteSource()), 'desktop: selection quote reference codec')
   ctx.slots.inject('conversation.input.overlay', () => ctx.slots.register({
     name: 'conversation.input.overlay', id: 'desktop-selection-quote', order: 40,
     inject: (sessionId) => {
       const actx = (ctx.get('sessions') as unknown as ISessions).scope(sessionId)
       if (actx === undefined) throw new Error(`selection quote resolved no scope for session "${sessionId}"`)
-      return { actx }
+      return { actx, sessionId: String(sessionId) }
     },
   }, SelectionQuoteOverlay))
   ctx.slots.inject('conversation.chat.node', () => {

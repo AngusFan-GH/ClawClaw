@@ -126,6 +126,7 @@ describe('selection quote', () => {
     const effect = vi.fn((install: () => unknown) => install())
     applySelectionQuote({
       effect,
+      inject: vi.fn(),
       inputTriggers: { registerSource },
       sessions: { scope: vi.fn() },
       slots: { inject, register },

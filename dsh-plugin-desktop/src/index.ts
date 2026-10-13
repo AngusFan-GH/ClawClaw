@@ -83,6 +83,7 @@ import {
 import { DESKTOP_PRODUCT_NAME } from './product-identity.ts'
 import { rebuildLegacyBlankSessionProjections } from './legacy-session-projection-rebuild.ts'
 import { registerCronTasksJsonApi } from './cron-tasks.ts'
+import { registerSelectionSideChatApi } from './selection-sidechat.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'desktop-shell'
@@ -287,6 +288,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
   const rendererOrigin = `http://127.0.0.1:${String(ctx.webServer.port)}`
   registerCronTasksJsonApi(ctx)
+  registerSelectionSideChatApi(ctx, { rendererOrigin, authorize: (req, res) => rejectDesktopRequest(ctx, req, res) })
   ctx.on('webserver/index-inject', table => {
     table.push(...desktopBootRecoveryInjections())
   })
