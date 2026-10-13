@@ -1,104 +1,122 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import type { CreateAgentOptions } from '@deepseek-ai/dsh-agent'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import {
-  parseSelectionSideChatCreateRequest,
-  parseSelectionSideChatCreateResult,
+  isSelectionSideChatSessionId,
+  parseSelectionSideChatStartRequest,
+  parseSelectionSideChatStartResult,
+  selectionSideChatLabel,
 } from '../src/selection-sidechat-contract.ts'
 import {
-  createSelectionSideChat,
+  startSelectionSideChat,
+  suppressSelectionSideChatSettlement,
   type SelectionSideChatRuntime,
 } from '../src/selection-sidechat.ts'
 
 const PARENT = SessionId('parent-session')
-
-function fixture(options: { attachFailure?: Error } = {}) {
-  const parentCtx = {} as Context
-  const parentSession = {
-    header: { id: PARENT, cwd: '/workspace/project' },
-    requestHeader: () => ({ config: { provider: 'provider-next', model: 'model-next', reasoningEffort: 'high' } }),
-  }
-  const parent = {
-    id: PARENT,
-    ctx: parentCtx,
-    options: { provider: 'provider-old', model: 'model-old', maxTokens: 4096 },
-    session: parentSession,
-  }
-  const append = vi.fn()
-  const childSession = { append }
-  const dispose = vi.fn(async () => undefined)
-  const create = vi.fn(async (_options: CreateAgentOptions) => ({ agent: { session: childSession }, dispose }))
-  const attachSession = options.attachFailure === undefined
-    ? vi.fn(async () => undefined)
-    : vi.fn(async () => { throw options.attachFailure })
-  const workspace = {
-    id: 'workspace-1',
-    path: '/workspace/project',
-    sessionIds: [PARENT],
-    attachSession,
-  }
-  const composeFrom = vi.fn(() => 'inherited-preset')
-  const composedPreset = vi.fn(() => 'inherited-preset')
-  const current = vi.fn(() => 'workspace-write')
-  const set = vi.fn()
-  const runtime = {
-    agents: { get: vi.fn(() => parent), create },
-    agentPresets: { composeFrom, composedPreset },
-    permissionPresets: { current, set },
-    workspaceRegistry: { list: vi.fn(() => [workspace]) },
-  } as unknown as SelectionSideChatRuntime
-  return { runtime, parentCtx, parentSession, childSession, create, dispose, attachSession, append, composeFrom, current, set }
+const REQUEST = {
+  parentSessionId: PARENT,
+  question: 'What does this mean?',
+  quote: {
+    text: 'selected text',
+    context: 'Surrounding source message',
+    source: { messageKey: 'assistant:1', startOffset: 2, endOffset: 15 },
+  },
 }
 
-describe('selection side-chat creation', () => {
-  it('validates the small host contract', () => {
-    expect(parseSelectionSideChatCreateRequest({ parentSessionId: PARENT })).toEqual({ parentSessionId: PARENT })
-    expect(parseSelectionSideChatCreateResult({ sessionId: 'child-session' })).toEqual({ sessionId: 'child-session' })
-    expect(() => parseSelectionSideChatCreateRequest({ parentSessionId: '' })).toThrow(/parentSessionId/)
-    expect(() => parseSelectionSideChatCreateResult({})).toThrow(/sessionId/)
+function fixture(options: { parent?: Agent } = {}) {
+  const getTool = vi.fn((name: string) => name === 'send_message' ? {} : undefined)
+  const parent = options.parent ?? ({
+    id: PARENT,
+    ctx: { get: (name: string) => name === 'tools' ? { get: getTool } : undefined } as unknown as Context,
+  } as Agent)
+  const startContinuable = vi.fn(async (spec: { childId: SessionId }) => ({
+    childId: spec.childId,
+    messageId: 'message-1',
+  }))
+  const runtime = {
+    agents: { get: vi.fn(() => parent) },
+    subagents: { startContinuable },
+  } as unknown as SelectionSideChatRuntime
+  return { getTool, parent, runtime, startContinuable }
+}
+
+describe('selection side-chat contract', () => {
+  it('validates a bounded structured first question', () => {
+    expect(parseSelectionSideChatStartRequest(REQUEST)).toEqual(REQUEST)
+    expect(parseSelectionSideChatStartResult({
+      childSessionId: 'child', parentSessionId: PARENT, mode: 'continuable',
+    })).toEqual({ childSessionId: 'child', parentSessionId: PARENT, mode: 'continuable' })
+    expect(() => parseSelectionSideChatStartRequest({ ...REQUEST, question: ' ' })).toThrow(/question/)
+    expect(() => parseSelectionSideChatStartRequest({ ...REQUEST, quote: { text: '' } })).toThrow(/quote text/)
+    expect(() => parseSelectionSideChatStartRequest({
+      ...REQUEST, quote: { text: 'x', source: { messageKey: 'm', startOffset: 4, endOffset: 2 } },
+    })).toThrow(/source/)
+    expect(() => parseSelectionSideChatStartResult({ childSessionId: 'child' })).toThrow(/response/)
   })
 
-  it('creates an empty ordinary child with inherited composition and workspace', async () => {
+  it('normalizes labels and identifies only owned children', () => {
+    expect(selectionSideChatLabel('  first\n  second  ')).toBe('first second')
+    expect(selectionSideChatLabel('文'.repeat(140))).toBe(`${'文'.repeat(117)}...`)
+    expect(isSelectionSideChatSessionId('selection-sidechat-child')).toBe(true)
+    expect(isSelectionSideChatSessionId('ordinary-child')).toBe(false)
+  })
+})
+
+describe('selection continuable subagent', () => {
+  it('starts a fresh addressed child with the quote and question as its first prompt', async () => {
     const value = fixture()
 
-    const result = await createSelectionSideChat(value.runtime, PARENT)
+    const result = await startSelectionSideChat(value.runtime, REQUEST)
 
-    expect(result.sessionId).toMatch(/^selection-sidechat-/)
-    expect(value.create).toHaveBeenCalledOnce()
-    const creation = value.create.mock.calls[0]![0]
-    expect(creation).toEqual(expect.objectContaining({
-      sessionId: result.sessionId,
-      meta: {
-        cwd: '/workspace/project',
-        parentSession: PARENT,
-        agentPreset: 'inherited-preset',
-      },
-      agentOptions: {
-        provider: 'provider-next',
-        model: 'model-next',
-        reasoningEffort: 'high',
-        maxTokens: 4096,
-      },
-    }))
-    expect(creation).not.toHaveProperty('seed')
-    const childCtx = {} as Context
-    creation.setup?.(childCtx, {} as never)
-    expect(value.composeFrom).toHaveBeenCalledWith(childCtx, value.parentCtx)
-    expect(value.current).toHaveBeenCalledWith(value.parentSession)
-    expect(value.append).toHaveBeenCalledWith('model/selection', {
-      provider: 'provider-next', model: 'model-next', reasoningEffort: 'high',
+    expect(result).toEqual({
+      childSessionId: expect.stringMatching(/^selection-sidechat-/),
+      parentSessionId: PARENT,
+      mode: 'continuable',
     })
-    expect(value.set).toHaveBeenCalledWith(value.childSession, 'workspace-write')
-    expect(value.attachSession).toHaveBeenCalledWith(result.sessionId)
-    expect(value.dispose).not.toHaveBeenCalled()
+    expect(value.startContinuable).toHaveBeenCalledOnce()
+    const spec = value.startContinuable.mock.calls[0]![0] as unknown as {
+      provider: string
+      childId: SessionId
+      label: string
+      request: { parent: Agent; prompt: Array<{ type: string; text: string }>; toolFilter?: unknown }
+      signal: AbortSignal
+    }
+    expect(spec.provider).toBe('spawn')
+    expect(spec.childId).toBe(result.childSessionId)
+    expect(spec.label).toBe('selected text')
+    expect(spec.request.parent).toBe(value.parent)
+    expect(spec.request.toolFilter).toEqual({ deny: ['send_message'] })
+    expect(spec.request.prompt).toEqual([{ type: 'text', text: expect.stringContaining('What does this mean?') }])
+    expect(spec.request.prompt[0]?.text).toContain('<clawclaw-selection-quote>')
+    expect(spec.request.prompt[0]?.text).toContain('Surrounding source message')
+    expect(spec.signal).toBeInstanceOf(AbortSignal)
   })
 
-  it('disposes a newly created agent when workspace attachment fails', async () => {
-    const failure = new Error('attach failed')
-    const value = fixture({ attachFailure: failure })
+  it('fails before creating anything when the visible parent is no longer active', async () => {
+    const value = fixture()
+    vi.mocked(value.runtime.agents.get).mockReturnValue(undefined)
+    await expect(startSelectionSideChat(value.runtime, REQUEST)).rejects.toThrow(/not active/)
+    expect(value.startContinuable).not.toHaveBeenCalled()
+  })
 
-    await expect(createSelectionSideChat(value.runtime, PARENT)).rejects.toBe(failure)
-    expect(value.dispose).toHaveBeenCalledOnce()
+  it('removes only selection-sidechat settlement messages from the parent inbox', () => {
+    const remove = vi.fn(() => true)
+    const agent = { inbox: { remove } } as unknown as Agent
+    const sideMessage = {
+      id: 'message-1',
+      source: { kind: 'subagent-settled', senderSessionId: 'selection-sidechat-child' },
+    } as unknown as UserMessage
+    const ordinaryMessage = {
+      id: 'message-2',
+      source: { kind: 'subagent-settled', senderSessionId: 'other-child' },
+    } as unknown as UserMessage
+
+    expect(suppressSelectionSideChatSettlement(agent, sideMessage)).toBe(true)
+    expect(remove).toHaveBeenCalledWith('message-1')
+    expect(suppressSelectionSideChatSettlement(agent, ordinaryMessage)).toBe(false)
+    expect(remove).toHaveBeenCalledOnce()
   })
 })

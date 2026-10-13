@@ -41,8 +41,6 @@ import {
 import { installSelectionQuoteStyles } from './selection-quote-styles.ts'
 import {
   applySelectionSideChat,
-  consumeSelectionSideChatContext,
-  pendingSelectionSideChatContext,
   startSelectionSideChat,
 } from './selection-sidechat.tsx'
 
@@ -232,11 +230,10 @@ function PendingQuoteCards({ actx, draftRev, occurrences }: {
   </div>
 }
 
-export function SelectionQuoteOverlay({ actx, sidebarRight, sessionId, useInput }: SelectionQuoteOverlayProps) {
+export function SelectionQuoteOverlay({ actx, sidebarRight, sessionId, useInput, useSession }: SelectionQuoteOverlayProps) {
   const state = useInput(value => value)
-  const stateRef = useRef(state)
+  const isSubagent = useSession(value => value.subagent !== undefined && value.subagent !== null)
   const overlayRef = useRef<HTMLSpanElement>(null)
-  stateRef.current = state
   const quotes = selectionQuoteOccurrences(state.occurrences)
   const [snapshot, setSnapshot] = useState<SelectionSnapshot | null>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
@@ -250,15 +247,6 @@ export function SelectionQuoteOverlay({ actx, sidebarRight, sessionId, useInput 
   }, [])
 
   useEffect(() => { installSelectionQuoteStyles() }, [])
-  useEffect(() => {
-    const pending = pendingSelectionSideChatContext(sessionId)
-    if (pending === undefined || !insertSelectionQuote(actx, pending, state.draftRev)) return
-    consumeSelectionSideChatContext(sessionId)
-    window.requestAnimationFrame(() => {
-      const editors = document.querySelectorAll<HTMLElement>('[data-composer-card] [contenteditable="true"]')
-      editors.item(editors.length - 1)?.focus()
-    })
-  }, [actx, sessionId, state.draftRev])
   useEffect(() => {
     let selecting = false
     let timer = 0
@@ -314,23 +302,28 @@ export function SelectionQuoteOverlay({ actx, sidebarRight, sessionId, useInput 
   const preventSelectionLoss = (event: ReactPointerEvent) => { event.preventDefault(); event.stopPropagation() }
   let toolbar: ReactNode = null
   if (snapshot !== null && state.phase === 'plain') {
-    const position = placeSelectionPopover(snapshot, copy.askSide === '侧边提问' ? 268 : 338, 40, window.innerWidth, window.innerHeight)
+    const toolbarWidth = isSubagent ? (copy.askSide === '侧边提问' ? 172 : 214) : (copy.askSide === '侧边提问' ? 268 : 338)
+    const position = placeSelectionPopover(snapshot, toolbarWidth, 40, window.innerWidth, window.innerHeight)
     const style: CSSProperties = { left: position.left, top: position.top }
     toolbar = createPortal(<div ref={toolbarRef} className="clawSelectionQuoteToolbar" data-claw-selection-quote role="toolbar" aria-label={copy.toolbar} style={style} onPointerDown={preventSelectionLoss}>
       <button type="button" title={copy.copy} onClick={() => { void copySelectionText(snapshot.text).then(close, close) }}><Copy aria-hidden="true" />{copy.copy}</button>
       <span className="clawSelectionQuoteDivider" aria-hidden="true" />
       <button type="button" className="clawSelectionQuotePrimary" title={copy.add} onClick={addQuote}><Quote aria-hidden="true" />{copy.add}</button>
-      <span className="clawSelectionQuoteDivider" aria-hidden="true" />
-      <button type="button" className="clawSelectionQuotePrimary" title={copy.askSide} onClick={() => {
-        if (snapshot === null) return
-        const selected = snapshot
-        void startSelectionSideChat(sidebarRight, sessionId, selected).catch(() => {
-          const inserted = insertSelectionQuote(actx, selected, stateRef.current.draftRev)
-          if (inserted) window.requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-composer-card] [contenteditable="true"]')?.focus())
-        })
-        window.getSelection()?.removeAllRanges()
-        close()
-      }}><MessageSquareText aria-hidden="true" />{copy.askSide}</button>
+      {!isSubagent && <>
+        <span className="clawSelectionQuoteDivider" aria-hidden="true" />
+        <button type="button" className="clawSelectionQuotePrimary" title={copy.askSide} onClick={() => {
+          if (snapshot === null) return
+          const selected = snapshot
+          try {
+            startSelectionSideChat(sidebarRight, sessionId, selected)
+          } catch {
+            const inserted = insertSelectionQuote(actx, selected, state.draftRev)
+            if (inserted) window.requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-composer-card] [contenteditable="true"]')?.focus())
+          }
+          window.getSelection()?.removeAllRanges()
+          close()
+        }}><MessageSquareText aria-hidden="true" />{copy.askSide}</button>
+      </>}
     </div>, document.body)
   }
 
