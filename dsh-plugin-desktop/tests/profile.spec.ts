@@ -495,6 +495,11 @@ virtualStoreDirMaxLength: 60
       name: '@deepseek-ai/dsh-client-ui-plugin-manager',
       disabled: true,
     })
+    expect(rows.find(row => row.id === 'ui-settings-account')).toEqual({
+      id: 'ui-settings-account',
+      name: '@deepseek-ai/dsh-client-ui-settings-account',
+      disabled: true,
+    })
     expect(rows.find(row => row.id === 'desktop-shortcuts')).toEqual({
       id: 'desktop-shortcuts',
       name: 'dsh-plugin-desktop/shortcut-menu',

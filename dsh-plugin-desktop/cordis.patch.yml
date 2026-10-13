@@ -81,6 +81,12 @@
 - id: ui-plugin-manager
   disabled: true
 
+# ClawClaw does not expose the upstream DeepSeek account surface. The desktop
+# marker is still required to suppress browser-only onboarding, so disable the
+# account client explicitly instead of relying on browser-mode detection.
+- id: ui-settings-account
+  disabled: true
+
 # SpiritX is the product-owned default route. The official dormant llm-pi-ai
 # instance remains enabled so the Models page retains its third-party catalog
 # and custom API flow under the canonical llm-pi-ai settings namespace.
