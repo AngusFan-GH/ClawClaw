@@ -15,6 +15,7 @@ import {
   SELECTION_SIDECHAT_SESSION_PREFIX,
   selectionSideChatLabel,
   type SelectionSideChatQuote,
+  type SelectionSideChatStartRequest,
   type SelectionSideChatStartResult,
 } from './selection-sidechat-contract.ts'
 
@@ -40,7 +41,7 @@ function selectionSideChatToolFilter(parent: Agent): { readonly deny: readonly s
 /** Start a fresh, continuable child whose first turn is the user's side question. */
 export async function startSelectionSideChat(
   runtime: SelectionSideChatRuntime,
-  request: ReturnType<typeof parseSelectionSideChatStartRequest>,
+  request: SelectionSideChatStartRequest,
 ): Promise<SelectionSideChatStartResult> {
   const parent = runtime.agents.get(request.parentSessionId)
   if (parent === undefined) throw new Error('The parent conversation is not active')
@@ -57,11 +58,7 @@ export async function startSelectionSideChat(
     },
     signal: new AbortController().signal,
   })
-  return {
-    childSessionId: started.childId,
-    parentSessionId: request.parentSessionId,
-    mode: 'continuable',
-  }
+  return { childSessionId: started.childId }
 }
 
 /** Prevent selection side chats from waking and writing their result into the parent conversation. */

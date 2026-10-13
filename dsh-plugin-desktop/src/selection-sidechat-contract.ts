@@ -29,8 +29,6 @@ export interface SelectionSideChatStartRequest {
 
 export interface SelectionSideChatStartResult {
   readonly childSessionId: SessionId
-  readonly mode: 'continuable'
-  readonly parentSessionId: SessionId
 }
 
 function record(value: unknown, label: string): Record<string, unknown> {
@@ -83,16 +81,10 @@ export function parseSelectionSideChatStartRequest(value: unknown): SelectionSid
 
 export function parseSelectionSideChatStartResult(value: unknown): SelectionSideChatStartResult {
   const output = record(value, 'Selection side-chat response')
-  if (typeof output.childSessionId !== 'string' || output.childSessionId === ''
-    || typeof output.parentSessionId !== 'string' || output.parentSessionId === ''
-    || output.mode !== 'continuable') {
+  if (typeof output.childSessionId !== 'string' || output.childSessionId === '') {
     throw new TypeError('Selection side-chat response is invalid')
   }
-  return {
-    childSessionId: output.childSessionId as SessionId,
-    parentSessionId: output.parentSessionId as SessionId,
-    mode: 'continuable',
-  }
+  return { childSessionId: output.childSessionId as SessionId }
 }
 
 export function selectionSideChatLabel(text: string): string {

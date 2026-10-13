@@ -110,8 +110,7 @@ export function installSelectionQuoteStyles(): void {
 }
 body[data-ds-dark-theme] .clawSelectionQuoteToolbar { box-shadow: 0 8px 24px rgba(0, 0, 0, .4); }
 .clawSelectionSideChat { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; }
-.clawSelectionSideChatDraft { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; padding: 16px; box-sizing: border-box; }
-.clawSelectionSideChatDraftSpace { flex: 1; min-height: 24px; }
+.clawSelectionSideChatDraft { display: flex; flex: 1; flex-direction: column; justify-content: flex-end; min-width: 0; min-height: 0; padding: 16px; box-sizing: border-box; }
 .clawSelectionSideChatDraftComposer {
   flex: none;
   box-sizing: border-box;

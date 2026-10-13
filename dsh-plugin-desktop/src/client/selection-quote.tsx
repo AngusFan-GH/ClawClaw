@@ -23,6 +23,10 @@ import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ISidebarRight } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
+  MAX_SELECTION_SIDECHAT_CONTEXT_LENGTH,
+  MAX_SELECTION_SIDECHAT_TEXT_LENGTH,
+} from '../selection-sidechat-contract.ts'
+import {
   decodeSelectionQuote,
   decodeSelectionQuotePayload,
   encodeSelectionQuote,
@@ -44,8 +48,6 @@ import {
   startSelectionSideChat,
 } from './selection-sidechat.tsx'
 
-const MAX_SELECTION_LENGTH = 4_000
-const MAX_SOURCE_CONTEXT_LENGTH = 12_000
 const VIEWPORT_GAP = 8
 export const SELECTION_QUOTE_SOURCE = 'desktop-selection-quote'
 type Occurrence = InputState['occurrences'][number]
@@ -60,7 +62,7 @@ export interface SelectionSnapshot {
 }
 
 export function normalizeSelectedText(value: string): string {
-  return value.replace(/\u00a0/gu, ' ').replace(/[\t ]+\n/gu, '\n').replace(/\n{3,}/gu, '\n\n').trim().slice(0, MAX_SELECTION_LENGTH)
+  return value.replace(/\u00a0/gu, ' ').replace(/[\t ]+\n/gu, '\n').replace(/\n{3,}/gu, '\n\n').trim().slice(0, MAX_SELECTION_SIDECHAT_TEXT_LENGTH)
 }
 
 function sourceMessageContext(range: Range): string | undefined {
@@ -68,7 +70,7 @@ function sourceMessageContext(range: Range): string | undefined {
   if (flow === null || flow === undefined || !flow.contains(range.endContainer)) return undefined
   const context = collectQuoteSourceText(flow).map(entry => entry.node.nodeValue ?? '').join('')
     .replace(/\u00a0/gu, ' ').replace(/[\t ]+\n/gu, '\n').replace(/\n{3,}/gu, '\n\n').trim()
-    .slice(0, MAX_SOURCE_CONTEXT_LENGTH)
+    .slice(0, MAX_SELECTION_SIDECHAT_CONTEXT_LENGTH)
   return context === '' ? undefined : context
 }
 
@@ -246,7 +248,6 @@ export function SelectionQuoteOverlay({ actx, sidebarRight, sessionId, useInput,
     if (next !== null) setSnapshot(next)
   }, [])
 
-  useEffect(() => { installSelectionQuoteStyles() }, [])
   useEffect(() => {
     let selecting = false
     let timer = 0

@@ -56,7 +56,6 @@ describe('selection side-chat draft resource', () => {
       kind: SELECTION_SIDECHAT_KIND,
       revealIfOpened: false,
     })
-    expect(openResource.mock.calls.flatMap(call => Object.keys(call[1] as object))).not.toContain('preferNewPane')
   })
 
   it('registers the draft body and live titles, and releases draft data on close', async () => {
@@ -91,7 +90,7 @@ describe('selection side-chat draft resource', () => {
     const stream = provider!.open(address, { signal: controller.signal })[Symbol.asyncIterator]()
     expect(await stream.next()).toEqual({
       done: false,
-      value: { ok: true, value: { draftId, draft: { context: CONTEXT, draftId, parentSessionId: PARENT } } },
+      value: { ok: true, value: { draft: { context: CONTEXT, parentSessionId: PARENT } } },
     })
     const completion = stream.next()
     controller.abort()
@@ -102,11 +101,11 @@ describe('selection side-chat draft resource', () => {
 describe('selection side-chat first question', () => {
   it('posts the quote and question to the host start endpoint', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({
-      childSessionId: CHILD, parentSessionId: PARENT, mode: 'continuable',
+      childSessionId: CHILD,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
 
     await expect(startSelectionSideChatSession(PARENT, 'What is this?', CONTEXT, undefined, fetcher as typeof fetch))
-      .resolves.toEqual({ childSessionId: CHILD, parentSessionId: PARENT, mode: 'continuable' })
+      .resolves.toEqual({ childSessionId: CHILD })
     expect(fetcher).toHaveBeenCalledWith('/api/desktop/selection-sidechat/start', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ parentSessionId: PARENT, question: 'What is this?', quote: CONTEXT }),
@@ -119,11 +118,10 @@ describe('selection side-chat first question', () => {
     const root = createRoot(host)
     const actions = { close: vi.fn(), openResource: vi.fn() }
     const abort = new AbortController()
-    const startChild = vi.fn(async () => ({ childSessionId: CHILD, parentSessionId: PARENT, mode: 'continuable' as const }))
+    const startChild = vi.fn(async () => ({ childSessionId: CHILD }))
     const draftId = 'draft-1'
     const resource: SelectionSideChatResource = {
-      draftId,
-      draft: { context: CONTEXT, draftId, parentSessionId: PARENT },
+      draft: { context: CONTEXT, parentSessionId: PARENT },
     }
     const props = {
       startChild,

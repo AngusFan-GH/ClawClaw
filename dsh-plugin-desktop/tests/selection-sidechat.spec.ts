@@ -46,15 +46,13 @@ function fixture(options: { parent?: Agent } = {}) {
 describe('selection side-chat contract', () => {
   it('validates a bounded structured first question', () => {
     expect(parseSelectionSideChatStartRequest(REQUEST)).toEqual(REQUEST)
-    expect(parseSelectionSideChatStartResult({
-      childSessionId: 'child', parentSessionId: PARENT, mode: 'continuable',
-    })).toEqual({ childSessionId: 'child', parentSessionId: PARENT, mode: 'continuable' })
+    expect(parseSelectionSideChatStartResult({ childSessionId: 'child' })).toEqual({ childSessionId: 'child' })
     expect(() => parseSelectionSideChatStartRequest({ ...REQUEST, question: ' ' })).toThrow(/question/)
     expect(() => parseSelectionSideChatStartRequest({ ...REQUEST, quote: { text: '' } })).toThrow(/quote text/)
     expect(() => parseSelectionSideChatStartRequest({
       ...REQUEST, quote: { text: 'x', source: { messageKey: 'm', startOffset: 4, endOffset: 2 } },
     })).toThrow(/source/)
-    expect(() => parseSelectionSideChatStartResult({ childSessionId: 'child' })).toThrow(/response/)
+    expect(() => parseSelectionSideChatStartResult({})).toThrow(/response/)
   })
 
   it('normalizes labels and identifies only owned children', () => {
@@ -73,8 +71,6 @@ describe('selection continuable subagent', () => {
 
     expect(result).toEqual({
       childSessionId: expect.stringMatching(/^selection-sidechat-/),
-      parentSessionId: PARENT,
-      mode: 'continuable',
     })
     expect(value.startContinuable).toHaveBeenCalledOnce()
     const spec = value.startContinuable.mock.calls[0]![0] as unknown as {

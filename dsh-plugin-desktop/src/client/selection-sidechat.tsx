@@ -20,8 +20,9 @@ import {
   MAX_SELECTION_SIDECHAT_QUESTION_LENGTH,
   parseSelectionSideChatStartResult,
   selectionSideChatLabel,
+  type SelectionSideChatQuote,
+  type SelectionSideChatStartResult,
 } from '../selection-sidechat-contract.ts'
-import type { SelectionQuoteSource } from './selection-quote-source.ts'
 
 export const SELECTION_SIDECHAT_KIND = 'desktop-selection-sidechat'
 export const SELECTION_SIDECHAT_ADDRESS = 'dsh-resource://selection-sidechat/draft/'
@@ -30,21 +31,13 @@ const SUBAGENT_CHAT_SLOT_KEY = '@deepseek-ai/dsh-client-ui-subagent'
 const SUBAGENT_CHAT_ADDRESS = 'dsh-resource://subagentchat/session/'
 const MAX_REMEMBERED_TITLES = 200
 
-export interface SelectionSideChatContext {
-  readonly context?: string
-  readonly source?: SelectionQuoteSource
-  readonly text: string
-}
-
 interface SelectionSideChatDraft {
-  readonly context: SelectionSideChatContext
-  readonly draftId: string
+  readonly context: SelectionSideChatQuote
   readonly parentSessionId: SessionId
 }
 
 export interface SelectionSideChatResource {
   readonly draft?: SelectionSideChatDraft
-  readonly draftId: string
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -59,14 +52,14 @@ const childTitles = new Map<SessionId, string>()
 export type SelectionSideChatStarter = (
   parentSessionId: SessionId,
   question: string,
-  context: SelectionSideChatContext,
+  context: SelectionSideChatQuote,
   signal?: AbortSignal,
-) => Promise<{ childSessionId: SessionId; mode: 'continuable'; parentSessionId: SessionId }>
+) => Promise<SelectionSideChatStartResult>
 
 export async function startSelectionSideChatSession(
   parentSessionId: SessionId,
   question: string,
-  context: SelectionSideChatContext,
+  context: SelectionSideChatQuote,
   signal?: AbortSignal,
   fetcher: typeof fetch = globalThis.fetch,
 ): ReturnType<SelectionSideChatStarter> {
@@ -140,7 +133,7 @@ function resourceProvider(): ResourceProvider<'selection-sidechat'> {
       if (draftId === undefined) throw new Error(`selection side chat: invalid resource address "${address}"`)
       if (signal.aborted) return
       const draft = drafts.get(draftId)
-      yield { ok: true, value: { draftId, ...(draft === undefined ? {} : { draft }) } }
+      yield { ok: true, value: draft === undefined ? {} : { draft } }
       await waitForAbort(signal)
       drafts.delete(draftId)
     },
@@ -176,7 +169,7 @@ export type SelectionSideChatTabProps = PropsRuntime<'sidebar.right.pane.tab'> &
 }
 
 function DraftComposer({ draft, signal, actions, startChild = startSelectionSideChatSession }: {
-  readonly actions: { close(): void; openResource(address: string, options?: object): void }
+  readonly actions: { openResource(address: string, options?: object): void }
   readonly draft: SelectionSideChatDraft
   readonly signal: AbortSignal
   readonly startChild?: SelectionSideChatStarter
@@ -185,7 +178,7 @@ function DraftComposer({ draft, signal, actions, startChild = startSelectionSide
   const [question, setQuestion] = useState('')
   const [failure, setFailure] = useState<string>()
   const [submitting, setSubmitting] = useState(false)
-  const [created, setCreated] = useState<Awaited<ReturnType<SelectionSideChatStarter>>>()
+  const createdRef = useRef<SelectionSideChatStartResult>()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const submittingRef = useRef(false)
 
@@ -199,11 +192,11 @@ function DraftComposer({ draft, signal, actions, startChild = startSelectionSide
 
   const openChild = useCallback((child: Awaited<ReturnType<SelectionSideChatStarter>>) => {
     rememberChildTitle(child.childSessionId, draft.context.text)
-    actions.openResource(subagentChatAddress(child.parentSessionId, child.childSessionId), {
+    actions.openResource(subagentChatAddress(draft.parentSessionId, child.childSessionId), {
       kind: SUBAGENT_CHAT_KIND,
       replaceTab: true,
     })
-  }, [actions, draft.context.text])
+  }, [actions, draft.context.text, draft.parentSessionId])
 
   const submit = useCallback(async () => {
     const prompt = question.trim()
@@ -212,13 +205,13 @@ function DraftComposer({ draft, signal, actions, startChild = startSelectionSide
     setFailure(undefined)
     setSubmitting(true)
     try {
-      if (created !== undefined) {
-        openChild(created)
+      if (createdRef.current !== undefined) {
+        openChild(createdRef.current)
         return
       }
       const child = await startChild(draft.parentSessionId, prompt, draft.context, signal)
       if (signal.aborted) return
-      setCreated(child)
+      createdRef.current = child
       openChild(child)
     } catch (cause) {
       if (!signal.aborted) setFailure(cause instanceof Error ? cause.message : copy.error)
@@ -226,7 +219,7 @@ function DraftComposer({ draft, signal, actions, startChild = startSelectionSide
       submittingRef.current = false
       if (!signal.aborted) setSubmitting(false)
     }
-  }, [copy.error, created, draft, openChild, question, signal, startChild])
+  }, [copy.error, draft, openChild, question, signal, startChild])
 
   const onSubmit = (event: FormEvent) => { event.preventDefault(); void submit() }
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -237,7 +230,6 @@ function DraftComposer({ draft, signal, actions, startChild = startSelectionSide
 
   return (
     <form className="clawSelectionSideChatDraft" onSubmit={onSubmit}>
-      <div className="clawSelectionSideChatDraftSpace" />
       <div className="clawSelectionSideChatDraftComposer" data-composer-card="">
         <div className="clawSelectionSideChatDraftQuote">
           <Quote aria-hidden="true" />
@@ -246,7 +238,7 @@ function DraftComposer({ draft, signal, actions, startChild = startSelectionSide
         {failure !== undefined && (
           <div className="clawSelectionSideChatDraftError" role="alert">
             <span>{failure}</span>
-            <button type="button" onClick={() => { created === undefined ? void submit() : openChild(created) }}>
+            <button type="button" onClick={() => { void submit() }}>
               <RotateCcw aria-hidden="true" />{copy.retry}
             </button>
           </div>
@@ -323,10 +315,10 @@ export function SubagentSideChatTitle({ useSessions, useTabInfo }: PropsRuntime<
 export function startSelectionSideChat(
   sidebarRight: Pick<ISidebarRight, 'openResource'>,
   parentSessionId: SessionId,
-  context: SelectionSideChatContext,
+  context: SelectionSideChatQuote,
 ): string {
   const draftId = globalThis.crypto.randomUUID()
-  drafts.set(draftId, { context, draftId, parentSessionId })
+  drafts.set(draftId, { context, parentSessionId })
   try {
     sidebarRight.openResource(selectionSideChatAddress(draftId), {
       kind: SELECTION_SIDECHAT_KIND,
