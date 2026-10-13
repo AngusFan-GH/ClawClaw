@@ -29,6 +29,11 @@ export interface ExpertCapabilityHealth {
   readonly issues: ReadonlyArray<{ readonly type: 'skill' | 'mcp'; readonly name: string; readonly required: boolean; readonly state: ExpertCapabilityState }>
 }
 
+export interface ExpertCapabilityAvailability {
+  readonly skills: boolean
+  readonly mcpServers: boolean
+}
+
 function uniqueSorted(values: readonly string[]): string[] {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right))
 }
@@ -79,9 +84,12 @@ export function expertCapabilityHealth(
   expert: Pick<{ skills: readonly ExpertCapabilityBinding[]; mcpServers: readonly ExpertCapabilityBinding[] }, 'skills' | 'mcpServers'>,
   catalog: ExpertCapabilityCatalog,
   loading = false,
+  availability: ExpertCapabilityAvailability = { skills: true, mcpServers: true },
 ): ExpertCapabilityHealth {
   const activeTotal = [...expert.skills, ...expert.mcpServers].filter(item => item.enabled).length
-  if (loading) return { state: 'unknown', ready: 0, total: activeTotal, issues: [] }
+  const sourceUnavailable = (!availability.skills && expert.skills.some(item => item.enabled))
+    || (!availability.mcpServers && expert.mcpServers.some(item => item.enabled))
+  if (loading || sourceUnavailable) return { state: 'unknown', ready: 0, total: activeTotal, issues: [] }
   const skillStates = new Map(catalog.skills.map(item => [item.value, item]))
   const mcpStates = new Map(catalog.mcpServers.map(item => [item.value, item]))
   const issues: Array<{ type: 'skill' | 'mcp'; name: string; required: boolean; state: ExpertCapabilityState }> = []

@@ -190,6 +190,10 @@ describe('ClawClaw experts', () => {
     }, catalog)).toMatchObject({ state: 'degraded', ready: 0, total: 1 })
     expect(expertCapabilityHealth({ skills: [{ name: 'missing', required: true, enabled: true }], mcpServers: [] }, catalog, true))
       .toMatchObject({ state: 'unknown', ready: 0, total: 1 })
+    expect(expertCapabilityHealth({
+      skills: [{ name: 'missing', required: true, enabled: true }], mcpServers: [],
+    }, catalog, false, { skills: false, mcpServers: true }))
+      .toMatchObject({ state: 'unknown', ready: 0, total: 1 })
   })
 
   it('injects bound Skills and denies unbound MCP servers', async () => {

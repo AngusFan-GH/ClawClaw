@@ -885,7 +885,9 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
       const expert = current.experts.find(item => item.slug === slug)
       if (expert === undefined || expert.conflict) throw new Error(props.t('custom.unavailable'))
       const capabilityState = props.capabilityRegistry.getSnapshot()
-      const health = expertCapabilityHealth(expert, capabilityState.catalog, capabilityState.loading)
+      const health = expertCapabilityHealth(expert, capabilityState.catalog, capabilityState.loading, {
+        skills: capabilityState.skillsLoaded, mcpServers: capabilityState.mcpLoaded,
+      })
       if (health.state === 'blocked') throw new Error(props.t('capability.health.blocked'))
       if (!current.enabled.has(slug)) {
         current = await writeEnabled(props.remote, new Set([...current.enabled, slug]), current.revision)
@@ -964,7 +966,9 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
                   } }, React.createElement('span', { 'aria-hidden': true })))
             })))
         : React.createElement(ExpertDiscovery, { experts: results, enabled: catalog.enabled, locale: props.getActive(), t: props.t, avatarSrc: menuAvatar,
-          health: new Map(results.map(expert => [expert.slug, expertCapabilityHealth(expert, capabilitySnapshot.catalog, capabilitySnapshot.loading)])),
+          health: new Map(results.map(expert => [expert.slug, expertCapabilityHealth(expert, capabilitySnapshot.catalog, capabilitySnapshot.loading, {
+            skills: capabilitySnapshot.skillsLoaded, mcpServers: capabilitySnapshot.mcpLoaded,
+          })])),
           query, onQuery: setQuery, busy, hasMore: searching && matches.length > results.length, onPick: slug => { void pick(slug) } })
   const menu = open
     ? React.createElement('div', {
@@ -1339,7 +1343,9 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
         key: 'cards', items: filtered, resetKey: `${source}\0${division}\0${status}\0${query}`, render: (expert: ExpertView) => {
         const enabled = state.enabled.has(expert.slug)
         const avatar = EXPERT_AVATAR_URLS[expert.custom ? expert.avatar ?? 0 : expertAvatarIndexForDivision(expert.slug, expert.division)] ?? EXPERT_AVATAR_URLS[0]
-        const health = expertCapabilityHealth(expert, capabilitySnapshot.catalog, capabilitySnapshot.loading)
+        const health = expertCapabilityHealth(expert, capabilitySnapshot.catalog, capabilitySnapshot.loading, {
+          skills: capabilitySnapshot.skillsLoaded, mcpServers: capabilitySnapshot.mcpLoaded,
+        })
         return React.createElement(LibraryCard, {
           key: expert.slug,
           name: displayName(expert, props.getActive()),
@@ -1670,7 +1676,9 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
             const capabilityState = scopedCapabilities.getSnapshot()
             return current.experts
               .filter((e) => e.division === div && enabled.has(e.slug) && (q === '' || matchExpertQuery(e, q))
-                && expertCapabilityHealth(e, capabilityState.catalog, capabilityState.loading).state !== 'blocked')
+                && expertCapabilityHealth(e, capabilityState.catalog, capabilityState.loading, {
+                  skills: capabilityState.skillsLoaded, mcpServers: capabilityState.mcpLoaded,
+                }).state !== 'blocked')
               .map((e) => ({
                 name: inputTriggerCandidateName(e, getActive()),
                 hint: e.slug,

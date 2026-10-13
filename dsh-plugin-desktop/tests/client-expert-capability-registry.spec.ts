@@ -15,10 +15,27 @@ describe('ExpertCapabilityRegistry', () => {
     await registry.refresh()
     expect(registry.getSnapshot().catalog.skills.map(item => item.value)).toEqual(['review'])
     expect(registry.getSnapshot().catalog.mcpServers.map(item => item.value)).toEqual(['docs'])
+    expect(registry.getSnapshot()).toMatchObject({ skillsLoaded: true, mcpLoaded: true })
     await registry.refresh()
     expect(registry.getSnapshot().skillsError).toBe('skill offline')
     expect(registry.getSnapshot().catalog.skills.map(item => item.value)).toEqual(['review'])
     expect(listener).toHaveBeenCalled()
+    dispose()
+  })
+
+  it('distinguishes an unavailable source from a successful empty catalog', async () => {
+    const registry = new ExpertCapabilityRegistry(
+      { read: vi.fn().mockRejectedValue(new Error('skill offline')) },
+      { read: vi.fn().mockResolvedValue({ mcpServers: [], catalog: [] }) },
+    )
+    const dispose = registry.subscribe(() => {})
+    await registry.refresh()
+    expect(registry.getSnapshot()).toMatchObject({
+      loading: false,
+      skillsLoaded: false,
+      mcpLoaded: true,
+      skillsError: 'skill offline',
+    })
     dispose()
   })
 })

@@ -14,9 +14,14 @@ it('discovers and reads shipped Cordis skills through fs-local in a plain app di
     const require = createRequire(import.meta.url)
     cpSync(join(dirname(require.resolve('@deepseek-ai/dsh-agent-preset/package.json')), 'skills'),
       join(preset, 'skills'), { recursive: true })
+    cpSync(new URL('../assets/skills/', import.meta.url), join(app, 'assets', 'skills'), { recursive: true })
     await expect(verifyBundledSkills(app)).resolves.toBeUndefined()
     rmSync(join(preset, 'skills', 'cordis-plugin-development'), { recursive: true })
     await expect(verifyBundledSkills(app)).rejects.toThrow('bundled skill is unavailable: cordis-plugin-development')
+    cpSync(join(dirname(require.resolve('@deepseek-ai/dsh-agent-preset/package.json')), 'skills', 'cordis-plugin-development'),
+      join(preset, 'skills', 'cordis-plugin-development'), { recursive: true })
+    rmSync(join(app, 'assets', 'skills', 'software-delivery'), { recursive: true })
+    await expect(verifyBundledSkills(app)).rejects.toThrow('expert skill is unavailable: software-delivery')
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

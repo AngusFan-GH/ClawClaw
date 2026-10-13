@@ -7,10 +7,11 @@ import { dirname, join } from 'node:path'
 
 export async function verifyBundledSkills(applicationRoot: string): Promise<void> {
   const skillsRoot = join(applicationRoot, 'node_modules', '@deepseek-ai', 'dsh-agent-preset', 'skills')
+  const expertSkillsRoot = join(applicationRoot, 'assets', 'skills')
   const ctx = new Context()
   try {
     await ctx.plugin(LocalFileSystem, { cwd: applicationRoot })
-    for (const path of [dirname(applicationRoot), applicationRoot, skillsRoot]) {
+    for (const path of [dirname(applicationRoot), applicationRoot, skillsRoot, expertSkillsRoot]) {
       const target = await ctx.fs.resolve(path)
       const first = await ctx.fs.stat(target)
       const second = await ctx.fs.stat(target)
@@ -26,12 +27,32 @@ export async function verifyBundledSkills(applicationRoot: string): Promise<void
     await ctx.plugin(SkillFileSystem, {
       includeDefaultRoots: false, bundledSkillDir: skillsRoot, watch: false,
     })
+    await ctx.plugin(SkillFileSystem, {
+      providerName: 'clawclaw-packaged-skills-smoke',
+      includeDefaultRoots: false,
+      bundledSkillDir: expertSkillsRoot,
+      watch: false,
+    })
     const snapshot = await ctx.skills.snapshot()
     if (!snapshot.complete) throw new Error('packaged skill discovery was incomplete')
     for (const name of ['editing-cordis-compositions', 'cordis-plugin-development']) {
       if (!snapshot.skills.some(skill => skill.name === name)
         || !(await ctx.skills.get(name))?.content.trim()) {
         throw new Error(`bundled skill is unavailable: ${name}`)
+      }
+    }
+    for (const name of [
+      'business-operations',
+      'content-production',
+      'data-analysis',
+      'evidence-research',
+      'product-design-review',
+      'risk-compliance-review',
+      'software-delivery',
+    ]) {
+      if (!snapshot.skills.some(skill => skill.name === name)
+        || !(await ctx.skills.get(name))?.content.trim()) {
+        throw new Error(`expert skill is unavailable: ${name}`)
       }
     }
   } finally {

@@ -7,6 +7,8 @@ import { expertCapabilityCatalog, type ExpertCapabilityCatalog } from './capabil
 export interface CapabilityRegistrySnapshot {
   readonly catalog: ExpertCapabilityCatalog
   readonly loading: boolean
+  readonly skillsLoaded: boolean
+  readonly mcpLoaded: boolean
   readonly skillsError?: string
   readonly mcpError?: string
   readonly revision: number
@@ -15,7 +17,13 @@ export interface CapabilityRegistrySnapshot {
 const EMPTY_CATALOG: ExpertCapabilityCatalog = Object.freeze({ skills: Object.freeze([]), mcpServers: Object.freeze([]) })
 
 export class ExpertCapabilityRegistry {
-  private snapshot: CapabilityRegistrySnapshot = Object.freeze({ catalog: EMPTY_CATALOG, loading: true, revision: 0 })
+  private snapshot: CapabilityRegistrySnapshot = Object.freeze({
+    catalog: EMPTY_CATALOG,
+    loading: true,
+    skillsLoaded: false,
+    mcpLoaded: false,
+    revision: 0,
+  })
   private readonly listeners = new Set<() => void>()
   private pending: Promise<void> | undefined
   private timer: ReturnType<typeof setInterval> | undefined
@@ -57,6 +65,8 @@ export class ExpertCapabilityRegistry {
       this.publish(Object.freeze({
         catalog,
         loading: false,
+        skillsLoaded: this.snapshot.skillsLoaded || skills.status === 'fulfilled',
+        mcpLoaded: this.snapshot.mcpLoaded || mcp.status === 'fulfilled',
         ...(skills.status === 'rejected' ? { skillsError: errorMessage(skills.reason) } : {}),
         ...(mcp.status === 'rejected' ? { mcpError: errorMessage(mcp.reason) } : {}),
         revision: this.snapshot.revision + 1,
