@@ -131,6 +131,7 @@ describe('selection side-chat first question', () => {
 
     await act(async () => { root.render(createElement(SelectionSideChatTab, props)) })
     const textarea = host.querySelector('textarea')!
+    expect(textarea.style.height).toBe('36px')
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
       setter?.call(textarea, 'Explain this quote')

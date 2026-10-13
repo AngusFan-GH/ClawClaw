@@ -187,7 +187,7 @@ function DraftComposer({ draft, signal, actions, startChild = startSelectionSide
     const textarea = textareaRef.current
     if (textarea === null) return
     textarea.style.height = '0px'
-    textarea.style.height = `${Math.min(180, Math.max(44, textarea.scrollHeight))}px`
+    textarea.style.height = `${Math.min(180, Math.max(36, textarea.scrollHeight))}px`
   }, [question])
 
   const openChild = useCallback((child: Awaited<ReturnType<SelectionSideChatStarter>>) => {

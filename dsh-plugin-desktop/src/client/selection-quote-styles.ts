@@ -109,25 +109,42 @@ export function installSelectionQuoteStyles(): void {
   :is([data-chat-flow-kind='user'], [data-chat-flow-kind='steering']):has(~ :is([data-chat-flow-kind='user'], [data-chat-flow-kind='steering'])):is(:hover, :focus-within) .clawSelectionQuoteHistoryActions { opacity: 1; }
 }
 body[data-ds-dark-theme] .clawSelectionQuoteToolbar { box-shadow: 0 8px 24px rgba(0, 0, 0, .4); }
-.clawSelectionSideChat { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; }
-.clawSelectionSideChatDraft { display: flex; flex: 1; flex-direction: column; justify-content: flex-end; min-width: 0; min-height: 0; padding: 16px; box-sizing: border-box; }
+.clawSelectionSideChat { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; font-family: var(--dsw-font-family); letter-spacing: 0; }
+.clawSelectionSideChatDraft {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 8px 4px;
+  box-sizing: border-box;
+}
 .clawSelectionSideChatDraftComposer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   flex: none;
+  gap: 12px;
   box-sizing: border-box;
   width: 100%;
-  padding: 10px;
-  border: 1px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, .14));
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1, #fff);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, .06);
+  padding-top: 8px;
+  border: 0;
+  border-radius: var(--dsw-radius-panel, 28px);
+  color: var(--dsw-alias-label-primary, #171717);
+  background: var(--dsw-specific-input-major, #fff);
+  box-shadow: var(--dsw-elevation-soft, 0 4px 18px rgba(0, 0, 0, .06));
+  font-size: var(--dsh-content-font-size, 14px);
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
 }
 .clawSelectionSideChatDraftQuote {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
   gap: 8px;
-  padding: 8px 10px;
+  margin: 0 12px;
+  padding: 6px 8px;
   border-left: 3px solid var(--dsw-alias-state-business-primary, #2563eb);
-  border-radius: 6px;
+  border-radius: var(--dsw-radius-sm, 8px);
   background: var(--dsw-alias-bg-layer-2, #f7f7f7);
 }
 .clawSelectionSideChatDraftQuote > svg { width: 15px; height: 15px; margin-top: 2px; color: var(--dsw-alias-state-business-primary, #2563eb); }
@@ -137,40 +154,45 @@ body[data-ds-dark-theme] .clawSelectionQuoteToolbar { box-shadow: 0 8px 24px rgb
   display: block;
   box-sizing: border-box;
   width: 100%;
-  min-height: 44px;
+  min-height: 36px;
   max-height: 180px;
-  margin-top: 8px;
-  padding: 8px 6px;
+  margin: 0;
+  padding: 4px 12px 0 14px;
   resize: none;
   overflow-y: auto;
   border: 0;
   outline: 0;
   color: var(--dsw-alias-label-primary, #171717);
   background: transparent;
-  font: inherit;
-  line-height: 1.55;
+  font-family: var(--dsw-font-family);
+  font-size: inherit;
+  line-height: inherit;
   letter-spacing: 0;
+  caret-color: var(--dsw-alias-state-business-primary, #2563eb);
 }
 .clawSelectionSideChatDraft textarea::placeholder { color: var(--dsw-alias-label-tertiary, #929292); }
-.clawSelectionSideChatDraftActions { display: flex; justify-content: flex-end; min-height: 36px; }
+.clawSelectionSideChatDraftActions { display: flex; justify-content: flex-end; min-height: 34px; padding: 2px 8px 6px; }
 .clawSelectionSideChatDraftSend {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
   padding: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: 999px;
   color: #fff;
-  background: var(--dsw-alias-state-business-primary, #2563eb);
+  background: var(--dsw-alias-button-info-fill, #3964fe);
   cursor: pointer;
+  transform: translateY(-2px);
+  transition: background-color 100ms ease;
 }
+.clawSelectionSideChatDraftSend:hover:not(:disabled) { background: var(--dsw-alias-button-info-hover, #3158e6); }
 .clawSelectionSideChatDraftSend:disabled { opacity: .42; cursor: default; }
 .clawSelectionSideChatDraftSend:focus-visible { outline: 2px solid var(--dsw-focus-ring-color, #2563eb); outline-offset: 2px; }
-.clawSelectionSideChatDraftSend svg { width: 18px; height: 18px; }
+.clawSelectionSideChatDraftSend svg { width: 16px; height: 16px; }
 .clawSelectionSideChatSpinner { animation: claw-selection-sidechat-spin .8s linear infinite; }
-.clawSelectionSideChatDraftError { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 4px 0; color: var(--dsw-alias-label-error, #b42318); font-size: 12px; }
+.clawSelectionSideChatDraftError { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 14px; color: var(--dsw-alias-label-error, #b42318); font-size: 12px; line-height: 18px; }
 .clawSelectionSideChatDraftError button,
 .clawSelectionSideChatExpired button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border: 0; border-radius: 6px; color: inherit; background: transparent; cursor: pointer; font: inherit; letter-spacing: 0; }
 .clawSelectionSideChatDraftError button:hover,
@@ -179,6 +201,10 @@ body[data-ds-dark-theme] .clawSelectionQuoteToolbar { box-shadow: 0 8px 24px rgb
 .clawSelectionSideChatExpired { display: grid; place-content: center; gap: 10px; width: 100%; height: 100%; padding: 24px; box-sizing: border-box; color: var(--dsw-alias-label-secondary, #666); text-align: center; }
 .clawSelectionSideChatExpired p { margin: 0; }
 .clawSelectionSideChatTabTitle { display: block; min-width: 0; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A running continuable selection child uses one primary action in the narrow
+   Sidebar: Stop. Its Send action returns after streaming has finished. */
+[data-sidebar-chat] [data-conversation-session^='selection-sidechat-'] [data-composer-card]
+  div:has(> button:nth-of-type(2)) > button:last-of-type { display: none; }
 @keyframes claw-selection-sidechat-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   .clawSelectionQuoteSourceFlash,
