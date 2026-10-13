@@ -5,9 +5,11 @@ import type { InputState } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import {
   applySelectionQuote,
   createSelectionQuoteSource,
+  insertSelectionQuote,
   normalizeSelectedText,
   occurrenceDetectSpan,
   placeSelectionPopover,
+  readConversationSelection,
   SELECTION_QUOTE_SOURCE,
   selectionQuoteOccurrences,
 } from '../src/client/selection-quote.tsx'
@@ -63,10 +65,12 @@ describe('selection quote', () => {
 
   it('keeps source coordinates in new references and reads legacy references', () => {
     const source = { messageKey: 'assistant:7', startOffset: 4, endOffset: 8 }
-    const ref = encodeSelectionQuote({ text: '引用内容', source })
-    expect(decodeSelectionQuotePayload(ref)).toEqual({ text: '引用内容', source })
+    const context = '这是引用内容所在的完整消息。'
+    const ref = encodeSelectionQuote({ text: '引用内容', context, source })
+    expect(decodeSelectionQuotePayload(ref)).toEqual({ text: '引用内容', context, source })
     expect(decodeSelectionQuotePayload(encodeURIComponent('旧引用'))).toEqual({ text: '旧引用' })
-    expect(scanSelectionQuotes(serializeSelectionQuote(ref))).toEqual({ quotes: [{ text: '引用内容', source }], rest: '' })
+    expect(serializeSelectionQuote(ref)).toContain('完整消息')
+    expect(scanSelectionQuotes(serializeSelectionQuote(ref))).toEqual({ quotes: [{ text: '引用内容', context, source }], rest: '' })
   })
 
   it('captures a same-message range and marks and restores its source text', () => {
@@ -87,6 +91,24 @@ describe('selection quote', () => {
     removeSelectionQuoteMarks(['quote:1'])
     expect(document.querySelector('mark')).toBeNull()
     expect(document.querySelector('[data-chat-flow-key]')?.textContent).toBe('Hello quoted value worldCopy')
+  })
+
+  it('captures surrounding message context without including action controls', () => {
+    document.body.innerHTML = '<div data-chat-flow data-chat-flow-key="assistant:8"><p>Desktop folders: <strong>金秒充</strong></p><button>Copy</button></div>'
+    const selected = document.querySelector('strong')?.firstChild
+    if (!(selected instanceof Text)) throw new Error('missing fixture text')
+    const range = document.createRange()
+    range.setStart(selected, 0)
+    range.setEnd(selected, selected.length)
+    Object.defineProperty(range, 'getClientRects', {
+      value: () => [{ width: 20, height: 10, left: 10, top: 10, bottom: 20 } as DOMRect],
+    })
+    const selection = { isCollapsed: false, rangeCount: 1, toString: () => '金秒充', getRangeAt: () => range } as unknown as Selection
+
+    expect(readConversationSelection(selection)).toEqual(expect.objectContaining({
+      text: '金秒充',
+      context: 'Desktop folders: 金秒充',
+    }))
   })
 
   it('does not attach a misleading source to cross-message selections', () => {
@@ -119,6 +141,44 @@ describe('selection quote', () => {
     expect(placeSelectionPopover({ left: 310, top: 180, bottom: 196 }, 200, 40, 320, 200)).toEqual({ left: 112, top: 132 })
   })
 
+  it('ignores selections owned by another conversation occurrence', () => {
+    document.body.innerHTML = [
+      '<section data-conversation-content="first"><div data-chat-flow><p>first conversation</p></div></section>',
+      '<section data-conversation-content="second"><div data-chat-flow><p>second conversation</p></div></section>',
+    ].join('')
+    const first = document.querySelector<HTMLElement>('[data-conversation-content="first"]')!
+    const second = document.querySelector<HTMLElement>('[data-conversation-content="second"]')!
+    const text = first.querySelector('p')!.firstChild!
+    const range = document.createRange()
+    range.setStart(text, 0)
+    range.setEnd(text, 5)
+    Object.defineProperty(range, 'getClientRects', {
+      value: () => [{ width: 20, height: 10, left: 10, top: 10, bottom: 20 } as DOMRect],
+    })
+    const selection = { isCollapsed: false, rangeCount: 1, toString: () => 'first', getRangeAt: () => range } as unknown as Selection
+
+    expect(readConversationSelection(selection, second)).toBeNull()
+    expect(readConversationSelection(selection, first)?.text).toBe('first')
+  })
+
+  it('inserts the existing structured quote into a standard composer', () => {
+    const bail = vi.fn(() => true)
+    const actx = { bail } as unknown as Context
+    expect(insertSelectionQuote(actx, {
+      context: 'source message containing selected text',
+      text: 'selected text',
+      source: { messageKey: 'assistant:7', startOffset: 2, endOffset: 15 },
+    }, 4)).toBe(true)
+    expect(bail).toHaveBeenCalledWith(actx, 'slash/input-insert-reference', {
+      reference: expect.objectContaining({
+        source: SELECTION_QUOTE_SOURCE,
+        label: 'selected text',
+        ref: expect.stringContaining('source%20message'),
+      }),
+      span: { start: 0, end: 0, draftRev: 4 },
+    })
+  })
+
   it('registers the reference codec, composer overlay, and protocol-cleaning history views', () => {
     const registerSource = vi.fn(() => () => undefined)
     let overlayRegistration: { inject: (sessionId: string) => unknown } | undefined
@@ -128,18 +188,21 @@ describe('selection quote', () => {
     })
     const inject = vi.fn((_name: string, install: () => unknown) => { install(); return () => undefined })
     const effect = vi.fn((install: () => unknown) => install())
-    const sessions = { scope: vi.fn(() => ({ bail: vi.fn() })) }
-    const sidebarRight = { openTab: vi.fn() }
+    const sessions = { scope: vi.fn(() => ({ bail: vi.fn() })), retain: vi.fn() }
+    const sidebarRight = { openResource: vi.fn() }
+    const scope = {
+      effect,
+      get: vi.fn((name: string) => name === 'sessions' ? sessions : undefined),
+      resources: { register: vi.fn(() => () => undefined) },
+      sessions,
+      sidebarRight,
+      sidebarRightTabs: { register: vi.fn(() => () => undefined) },
+      slots: { inject, register },
+    } as unknown as Context
     const clientCtx = {
       effect,
       get: vi.fn((name: string) => name === 'sessions' ? sessions : undefined),
-      inject: vi.fn((_faces: readonly string[], install: (scope: Context) => unknown) => install({
-        effect,
-        get: vi.fn((name: string) => name === 'sessions' ? sessions : undefined),
-        sidebarRight,
-        sidebarRightTabs: { register: vi.fn(() => () => undefined) },
-        slots: { inject, register },
-      } as unknown as Context)),
+      inject: vi.fn((_faces: readonly string[], install: (injected: Context) => unknown) => install(scope)),
       inputTriggers: { registerSource },
       sessions,
       slots: { inject, register },

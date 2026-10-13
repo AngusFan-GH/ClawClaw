@@ -1,144 +1,225 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent } from 'react'
-// @ts-expect-error package subpath has no declaration file
-import Copy from 'lucide-react/dist/esm/icons/copy.mjs'
-// @ts-expect-error package subpath has no declaration file
-import CornerDownLeft from 'lucide-react/dist/esm/icons/corner-down-left.mjs'
-// @ts-expect-error package subpath has no declaration file
-import MessageSquareText from 'lucide-react/dist/esm/icons/message-square-text.mjs'
-// @ts-expect-error package subpath has no declaration file
-import Quote from 'lucide-react/dist/esm/icons/quote.mjs'
-// @ts-expect-error package subpath has no declaration file
-import RotateCcw from 'lucide-react/dist/esm/icons/rotate-ccw.mjs'
 import type { Context } from '@deepseek-ai/cordis'
-import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ISidebarRight } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
-import { MarkdownText, writeClipboard, type MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
-import { DESKTOP_SELECTION_SIDECHAT_PATH } from '../selection-sidechat.ts'
-import type { SelectionSnapshot } from './selection-quote.tsx'
+import type {
+  ISessions, SessionReference,
+} from '@deepseek-ai/dsh-api-session-controller/client'
+import type { ResourceProvider } from '@deepseek-ai/dsh-client-resources/client'
+import type { ConversationViewsProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ISidebarRight, SidebarRightTabDefinition } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
+import type {
+  PropsRenderFactories, PropsRenderSlots, PropsRuntime,
+} from '@deepseek-ai/dsh-client-ui-slots'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import {
+  DESKTOP_SELECTION_SIDECHAT_CREATE_PATH,
+  parseSelectionSideChatCreateResult,
+} from '../selection-sidechat-contract.ts'
+import type { SelectionQuoteSource } from './selection-quote-source.ts'
 
-const TAB_KIND = 'desktop-selection-sidechat'
-interface SideChatTurn { readonly answer: string; readonly question: string }
-interface SideChatState {
-  readonly error?: string
-  readonly pending: boolean
-  readonly revision: number
-  readonly retryQuestion?: string
-  readonly selection: string
-  readonly turns: readonly SideChatTurn[]
-}
-const states = new Map<string, SideChatState>()
-const EMPTY_STATE: SideChatState = { pending: false, revision: 0, selection: '', turns: [] }
-const listeners = new Set<() => void>()
-const publish = () => { for (const listener of listeners) listener() }
-const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
-const stateOf = (sessionId: string): SideChatState => states.get(sessionId) ?? EMPTY_STATE
-const update = (sessionId: string, state: SideChatState) => { states.set(sessionId, state); publish() }
+export const SELECTION_SIDECHAT_KIND = 'desktop-selection-sidechat'
+export const SELECTION_SIDECHAT_ADDRESS = 'dsh-resource://selection-sidechat/session/'
 
-export function startSelectionSideChat(sidebarRight: Pick<ISidebarRight, 'openTab'>, sessionId: string, snapshot: SelectionSnapshot): void {
-  update(sessionId, { pending: false, revision: stateOf(sessionId).revision + 1, selection: snapshot.text, turns: [] })
-  sidebarRight.openTab(TAB_KIND)
+export interface SelectionSideChatContext {
+  readonly context?: string
+  readonly source?: SelectionQuoteSource
+  readonly text: string
 }
 
-async function ask(sessionId: string, question: string): Promise<void> {
-  const current = stateOf(sessionId)
-  if (current.pending || current.selection === '') return
-  const { error: _error, ...ready } = current
-  update(sessionId, { ...ready, pending: true, retryQuestion: question })
+export interface SelectionSideChatResource {
+  readonly reference: SessionReference
+  readonly sessionId: SessionId
+}
+
+declare module '@deepseek-ai/dsh-api-session-controller/client' {
+  interface SessionReferenceSourceMap {
+    selectionSideChat: unknown
+  }
+}
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface ResourceProtocolMap {
+    'selection-sidechat': SelectionSideChatResource
+  }
+
+  interface SlotMap {
+    'desktop.selection-sidechat.conversation': { kind: 'single'; scope: 'session' }
+  }
+}
+
+const pendingContexts = new Map<SessionId, SelectionSideChatContext>()
+const creatingByParent = new Map<SessionId, Promise<SessionId>>()
+
+export type SelectionSideChatCreator = (parentSessionId: SessionId) => Promise<SessionId>
+
+/** Ask the Desktop Host to create an empty ordinary Session linked to the parent. */
+export async function createSelectionSideChatSession(
+  parentSessionId: SessionId,
+  fetcher: typeof fetch = globalThis.fetch,
+): Promise<SessionId> {
+  const response = await fetcher(DESKTOP_SELECTION_SIDECHAT_CREATE_PATH, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parentSessionId }),
+  })
+  const value: unknown = await response.json()
+  if (!response.ok) {
+    const message = value !== null && typeof value === 'object' && !Array.isArray(value)
+      && typeof (value as Record<string, unknown>).error === 'string'
+      ? (value as Record<string, unknown>).error as string
+      : `Selection side-chat creation failed (HTTP ${String(response.status)})`
+    throw new Error(message)
+  }
+  return parseSelectionSideChatCreateResult(value).sessionId
+}
+
+export function selectionSideChatAddress(sessionId: SessionId): string {
+  return `${SELECTION_SIDECHAT_ADDRESS}${encodeURIComponent(sessionId)}`
+}
+
+export function parseSelectionSideChatAddress(value: string): SessionId | undefined {
+  let url: URL
   try {
-    const response = await fetch(DESKTOP_SELECTION_SIDECHAT_PATH, {
-      method: 'POST', credentials: 'same-origin', redirect: 'error',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId, selection: current.selection, question, history: current.turns }),
-    })
-    const value = await response.json() as { answer?: unknown; error?: unknown }
-    if (!response.ok || typeof value.answer !== 'string') throw new Error(typeof value.error === 'string' ? value.error : `HTTP ${response.status}`)
-    if (stateOf(sessionId).revision !== current.revision) return
-    update(sessionId, { revision: current.revision, selection: current.selection, pending: false, turns: [...current.turns, { question, answer: value.answer }] })
-  } catch (cause) {
-    if (stateOf(sessionId).revision !== current.revision) return
-    update(sessionId, { ...current, pending: false, retryQuestion: question, error: cause instanceof Error ? cause.message : String(cause) })
+    url = new URL(value)
+  } catch {
+    return undefined
+  }
+  if (url.protocol !== 'dsh-resource:' || url.hostname.toLowerCase() !== 'selection-sidechat') return undefined
+  const parts = url.pathname.split('/').filter(Boolean)
+  if (parts.length !== 2 || parts[0] !== 'session' || url.search !== '' || url.hash !== '') return undefined
+  try {
+    const sessionId = decodeURIComponent(parts[1] as string)
+    return sessionId === '' ? undefined : sessionId as SessionId
+  } catch {
+    return undefined
   }
 }
 
-function markdownLabels(): MarkdownLabels {
-  const chinese = (document.documentElement.lang || navigator.language).toLocaleLowerCase().startsWith('zh')
+/** Read the selected context waiting for this Session's standard composer. */
+export function pendingSelectionSideChatContext(sessionId: SessionId): SelectionSideChatContext | undefined {
+  return pendingContexts.get(sessionId)
+}
+
+/** Clear selected context only after the standard composer accepted it. */
+export function consumeSelectionSideChatContext(sessionId: SessionId): void {
+  pendingContexts.delete(sessionId)
+}
+
+function waitForAbort(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve()
+  return new Promise(resolve => signal.addEventListener('abort', () => { resolve() }, { once: true }))
+}
+
+function resourceProvider(sessions: ISessions): ResourceProvider<'selection-sidechat'> {
   return {
-    code: {
-      copyLabel: chinese ? '复制代码' : 'Copy code',
-      copiedLabel: chinese ? '已复制' : 'Copied',
-      toolbarLabels: { codeLabel: chinese ? '代码' : 'Code', wrapLabel: chinese ? '自动换行' : 'Wrap', unwrapLabel: chinese ? '取消换行' : 'Unwrap' },
+    protocol: 'selection-sidechat',
+    async *open(address, { signal }) {
+      const sessionId = parseSelectionSideChatAddress(address)
+      if (sessionId === undefined) throw new Error(`selection side chat: invalid resource address "${address}"`)
+      if (signal.aborted) return
+      const reference = sessions.retain(sessionId, { source: 'selectionSideChat', signal })
+      try {
+        yield { ok: true, value: { reference, sessionId } }
+        await waitForAbort(signal)
+      } finally {
+        reference.release()
+      }
     },
-    footnotes: chinese ? '脚注' : 'Footnotes',
   }
 }
 
-function sideChatLabels() {
-  const chinese = (document.documentElement.lang || navigator.language).toLocaleLowerCase().startsWith('zh')
-  return chinese ? {
-    answer: '回答', copyAnswer: '复制回答', empty: '在对话中选择文本，然后点击“侧边提问”。',
-    firstPlaceholder: '针对引用内容提问', followPlaceholder: '继续追问', quote: '引用内容', retry: '重试', send: '发送',
-    suggestions: ['解释一下', '总结要点', '有什么风险？'], tab: '侧边对话', thinking: '正在思考',
-  } : {
-    answer: 'Answer', copyAnswer: 'Copy answer', empty: 'Select text in the conversation, then choose “Ask in side chat”.',
-    firstPlaceholder: 'Ask about the selected text', followPlaceholder: 'Ask a follow-up', quote: 'Quoted context', retry: 'Retry', send: 'Send',
-    suggestions: ['Explain this', 'Summarize', 'What are the risks?'], tab: 'Side chat', thinking: 'Thinking',
-  }
+export type SelectionSideChatTabProps =
+  PropsRuntime<'sidebar.right.pane.tab'> & PropsRenderSlots<'desktop.selection-sidechat.conversation'>
+
+export function SelectionSideChatView(props: ConversationViewsProps) {
+  return <>{props.renderSlot('conversation.session', { view: 'chat' })}</>
 }
 
-type SideChatProps = PropsRuntime<'sidebar.right.pane.tab'> & { readonly sessionId: string }
-export function SelectionSideChatPanel({ sessionId }: SideChatProps) {
-  const state = useSyncExternalStore(subscribe, () => stateOf(sessionId), () => stateOf(sessionId))
-  const [draft, setDraft] = useState('')
-  const copy = useMemo(sideChatLabels, [])
-  const answerLabels = useMemo(markdownLabels, [])
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const composerRef = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => {
-    setDraft('')
-    scrollRef.current?.scrollTo({ top: 0 })
-    const frame = window.requestAnimationFrame(() => { composerRef.current?.focus() })
-    return () => { window.cancelAnimationFrame(frame) }
-  }, [state.revision])
-  useEffect(() => {
-    if (state.turns.length === 0 && !state.pending && state.error === undefined) return
-    const frame = window.requestAnimationFrame(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }) })
-    return () => { window.cancelAnimationFrame(frame) }
-  }, [state.error, state.pending, state.turns.length])
-  const submit = (question: string) => {
-    const value = question.trim()
-    if (value === '' || state.pending) return
-    setDraft('')
-    void ask(sessionId, value)
-  }
-  const onSubmit = (event: FormEvent) => { event.preventDefault(); submit(draft) }
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(draft) }
-  }
-  if (state.selection === '') return <div className="clawSideChatEmpty"><MessageSquareText aria-hidden="true" /><p>{copy.empty}</p></div>
-  return <div className="clawSideChat">
-    <div ref={scrollRef} className="clawSideChatScroll">
-      <section className="clawSideChatQuote"><Quote aria-hidden="true" /><div><span>{copy.quote}</span><p>{state.selection}</p></div></section>
-      {state.turns.length === 0 && !state.pending && <div className="clawSideChatSuggestions">{copy.suggestions.map(item => <button type="button" key={item} onClick={() => { submit(item) }}>{item}</button>)}</div>}
-      {state.turns.map((turn, index) => <div className="clawSideChatTurn" key={`${index}:${turn.question}`}>
-        <p className="clawSideChatQuestion">{turn.question}</p>
-        <div className="clawSideChatAnswer"><div className="clawSideChatAnswerLabel"><MessageSquareText aria-hidden="true" /><span>{copy.answer}</span><button type="button" title={copy.copyAnswer} aria-label={copy.copyAnswer} onClick={() => { void writeClipboard(turn.answer) }}><Copy aria-hidden="true" /></button></div><div className="clawSideChatAnswerBody"><MarkdownText text={turn.answer} labels={answerLabels} variant="compact" /></div></div>
-      </div>)}
-      {state.pending && <div className="clawSideChatThinking" role="status"><span /><span /><span />{copy.thinking}</div>}
-      {state.error !== undefined && <div className="clawSideChatError" role="alert"><p>{state.error}</p><button type="button" onClick={() => { submit(state.retryQuestion ?? '') }}><RotateCcw aria-hidden="true" />{copy.retry}</button></div>}
+export type SelectionSideChatConversationProps =
+  PropsRuntime<'desktop.selection-sidechat.conversation'> & PropsRenderFactories
+
+/** Adapt the standard Conversation shell to a compact, explicitly bound child Session. */
+export function SelectionSideChatConversation({
+  useSession, renderFactorySlot,
+}: SelectionSideChatConversationProps) {
+  const session = useSession(value => value)
+  const phase = session.openState === 'loading' ? 'settling' : 'active'
+  return renderFactorySlot('conversation.content', { variant: 'embedded', phase, hero: false }, {
+    slots: { views: SelectionSideChatView },
+  })
+}
+
+/** Bind a Desktop-created Session to the upstream embedded Conversation slot. */
+export function SelectionSideChatTab({
+  useResource, useTabInfo, SessionProvider, renderSlot,
+}: SelectionSideChatTabProps) {
+  const { tab } = useTabInfo()
+  const resource = useResource<'selection-sidechat'>(tab.contentId)
+  if (resource.value === undefined) return null
+  return (
+    <div className="clawSelectionSideChat" data-selection-sidechat="">
+      <SessionProvider session={resource.value.reference}>
+        {renderSlot('desktop.selection-sidechat.conversation', {})}
+      </SessionProvider>
     </div>
-    <form onSubmit={onSubmit}><textarea ref={composerRef} value={draft} disabled={state.pending} rows={3} placeholder={state.turns.length === 0 ? copy.firstPlaceholder : copy.followPlaceholder} onChange={event => { setDraft(event.target.value) }} onKeyDown={onKeyDown} /><div><button type="submit" title={copy.send} aria-label={copy.send} disabled={state.pending || draft.trim() === ''}><CornerDownLeft aria-hidden="true" /></button></div></form>
-  </div>
+  )
+}
+
+function labels(): { tab: string } {
+  const chinese = (document.documentElement.lang || navigator.language).toLocaleLowerCase().startsWith('zh')
+  return { tab: chinese ? '侧边聊天' : 'Side chat' }
+}
+
+/** Create a child conversation, attach the selected quote to its composer, and open it aside. */
+export function startSelectionSideChat(
+  sidebarRight: Pick<ISidebarRight, 'openResource'>,
+  parentSessionId: SessionId,
+  context: SelectionSideChatContext,
+  createChild: SelectionSideChatCreator = createSelectionSideChatSession,
+): Promise<SessionId> {
+  const existing = creatingByParent.get(parentSessionId)
+  if (existing !== undefined) return existing
+  const creation = (async () => {
+    const sessionId = await createChild(parentSessionId)
+    pendingContexts.set(sessionId, context)
+    try {
+      sidebarRight.openResource(selectionSideChatAddress(sessionId), {
+        kind: SELECTION_SIDECHAT_KIND,
+        preferNewPane: true,
+      })
+      return sessionId
+    } catch (cause) {
+      pendingContexts.delete(sessionId)
+      throw cause
+    }
+  })()
+  creatingByParent.set(parentSessionId, creation)
+  void creation.finally(() => {
+    if (creatingByParent.get(parentSessionId) === creation) creatingByParent.delete(parentSessionId)
+  }).catch(() => undefined)
+  return creation
 }
 
 export function applySelectionSideChat(ctx: Context): void {
-  ctx.inject(['sidebarRightTabs', 'sidebarRight'], (scope: Context) => {
-    scope.effect(() => scope.sidebarRightTabs.register({ id: TAB_KIND, kind: TAB_KIND, keepMounted: true, title: () => sideChatLabels().tab }), 'desktop: selection side-chat tab type')
+  ctx.inject(['resources', 'sidebarRightTabs'], (scope: Context) => {
+    scope.effect(
+      () => scope.resources.register(resourceProvider(scope.get('sessions') as unknown as ISessions)),
+      'desktop: selection side-chat resources',
+    )
+    scope.effect(() => scope.sidebarRightTabs.register({
+      id: SELECTION_SIDECHAT_KIND,
+      kind: SELECTION_SIDECHAT_KIND,
+      patterns: [`${SELECTION_SIDECHAT_ADDRESS}**`],
+      priority: 'builtin',
+      canOpen: address => parseSelectionSideChatAddress(address) !== undefined,
+      title: () => labels().tab,
+    } satisfies SidebarRightTabDefinition), 'desktop: selection side-chat type')
     scope.effect(() => scope.slots.inject('sidebar.right.pane.tab', () => scope.slots.register({
-      name: 'sidebar.right.pane.tab', key: TAB_KIND, inject: sessionId => ({ sessionId: String(sessionId) }),
-    }, SelectionSideChatPanel)), 'desktop: selection side-chat body')
-    scope.effect(() => scope.slots.inject('sidebar.right.pane.tab.title', () => scope.slots.register(
-      { name: 'sidebar.right.pane.tab.title', key: TAB_KIND },
-      () => <span>{sideChatLabels().tab}</span>,
-    )), 'desktop: selection side-chat title')
+      name: 'sidebar.right.pane.tab',
+      key: SELECTION_SIDECHAT_KIND,
+      children: { 'desktop.selection-sidechat.conversation': { kind: 'single', scope: 'session' } },
+    }, SelectionSideChatTab)), 'desktop: selection side-chat body')
+    scope.effect(() => scope.slots.inject('desktop.selection-sidechat.conversation', () => scope.slots.register({
+      name: 'desktop.selection-sidechat.conversation',
+    }, SelectionSideChatConversation)), 'desktop: selection side-chat Conversation')
   })
 }

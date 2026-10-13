@@ -91,6 +91,7 @@ export const name = 'desktop-shell'
 /** Services required by the desktop shell; `desktopRuntime` is probed, not required. */
 export const inject = [
   'webServer', 'webRuntime', 'appExit', 'settings', 'connection', 'sessionQuery', 'sessionProjectionCache', 'agents',
+  'agentPresets', 'permissionPresets', 'workspaceRegistry',
 ]
 
 /** Standard settings namespace shared by tray and configuration surfaces. */
@@ -288,7 +289,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
   const rendererOrigin = `http://127.0.0.1:${String(ctx.webServer.port)}`
   registerCronTasksJsonApi(ctx)
-  registerSelectionSideChatApi(ctx, { rendererOrigin, authorize: (req, res) => rejectDesktopRequest(ctx, req, res) })
+  registerSelectionSideChatApi(ctx)
   ctx.on('webserver/index-inject', table => {
     table.push(...desktopBootRecoveryInjections())
   })

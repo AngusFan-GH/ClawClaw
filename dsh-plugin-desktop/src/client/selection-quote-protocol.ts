@@ -4,6 +4,8 @@ const QUOTE_OPEN = '<clawclaw-selection-quote>'
 const QUOTE_CLOSE = '</clawclaw-selection-quote>'
 
 export interface SelectionQuotePayload {
+  /** Surrounding source message for resolving pronouns; quote cards only render `text`. */
+  readonly context?: string
   readonly text: string
   readonly source?: SelectionQuoteSource
 }
@@ -21,17 +23,21 @@ export function decodeSelectionQuote(ref: string): string {
 export function decodeSelectionQuotePayload(ref: string): SelectionQuotePayload {
   const decoded = decodeURIComponent(ref)
   if (!decoded.startsWith('{')) return { text: decoded }
-  const parsed = JSON.parse(decoded) as { text?: unknown; source?: unknown }
+  const parsed = JSON.parse(decoded) as { context?: unknown; text?: unknown; source?: unknown }
   if (typeof parsed.text !== 'string') throw new Error('selection quote has no text')
   const source = parsed.source
-  if (source === undefined) return { text: parsed.text }
-  if (source === null || typeof source !== 'object') return { text: parsed.text }
+  const context = typeof parsed.context === 'string' && parsed.context !== ''
+    ? parsed.context
+    : undefined
+  const base = { text: parsed.text, ...(context === undefined ? {} : { context }) }
+  if (source === undefined) return base
+  if (source === null || typeof source !== 'object') return base
   const candidate = source as Partial<SelectionQuoteSource>
   if (typeof candidate.messageKey !== 'string'
     || typeof candidate.startOffset !== 'number'
-    || typeof candidate.endOffset !== 'number') return { text: parsed.text }
+    || typeof candidate.endOffset !== 'number') return base
   return {
-    text: parsed.text,
+    ...base,
     source: {
       messageKey: candidate.messageKey,
       startOffset: candidate.startOffset,
@@ -57,11 +63,12 @@ export function scanSelectionQuotes(value: string): ScannedSelectionQuotes {
   const pattern = new RegExp(`${QUOTE_OPEN}([\\s\\S]*?)${QUOTE_CLOSE}`, 'gu')
   const rest = value.replace(pattern, (_whole, body: string) => {
     try {
-      const parsed = JSON.parse(body) as { text?: unknown; source?: unknown }
+      const parsed = JSON.parse(body) as { context?: unknown; text?: unknown; source?: unknown }
       if (typeof parsed.text === 'string' && parsed.text.trim() !== '') {
         const source = parsed.source as Partial<SelectionQuoteSource> | undefined
         quotes.push({
           text: parsed.text,
+          ...(typeof parsed.context === 'string' && parsed.context !== '' ? { context: parsed.context } : {}),
           ...(source !== undefined
             && typeof source.messageKey === 'string'
             && typeof source.startOffset === 'number'

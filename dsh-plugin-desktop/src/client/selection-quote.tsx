@@ -21,6 +21,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ISidebarRight } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
   decodeSelectionQuote,
   decodeSelectionQuotePayload,
@@ -30,6 +31,7 @@ import {
 } from './selection-quote-protocol.ts'
 import {
   applySelectionQuoteMark,
+  collectQuoteSourceText,
   quoteSourceFromRange,
   removeSelectionQuoteMarks,
   revealSelectionQuoteSource,
@@ -37,14 +39,21 @@ import {
   type SelectionQuoteSource,
 } from './selection-quote-source.ts'
 import { installSelectionQuoteStyles } from './selection-quote-styles.ts'
-import { applySelectionSideChat, startSelectionSideChat } from './selection-sidechat.tsx'
+import {
+  applySelectionSideChat,
+  consumeSelectionSideChatContext,
+  pendingSelectionSideChatContext,
+  startSelectionSideChat,
+} from './selection-sidechat.tsx'
 
 const MAX_SELECTION_LENGTH = 4_000
+const MAX_SOURCE_CONTEXT_LENGTH = 12_000
 const VIEWPORT_GAP = 8
 export const SELECTION_QUOTE_SOURCE = 'desktop-selection-quote'
 type Occurrence = InputState['occurrences'][number]
 
 export interface SelectionSnapshot {
+  readonly context?: string
   readonly text: string
   readonly left: number
   readonly top: number
@@ -54,6 +63,15 @@ export interface SelectionSnapshot {
 
 export function normalizeSelectedText(value: string): string {
   return value.replace(/\u00a0/gu, ' ').replace(/[\t ]+\n/gu, '\n').replace(/\n{3,}/gu, '\n\n').trim().slice(0, MAX_SELECTION_LENGTH)
+}
+
+function sourceMessageContext(range: Range): string | undefined {
+  const flow = nodeElement(range.startContainer)?.closest<HTMLElement>('[data-chat-flow-key]')
+  if (flow === null || flow === undefined || !flow.contains(range.endContainer)) return undefined
+  const context = collectQuoteSourceText(flow).map(entry => entry.node.nodeValue ?? '').join('')
+    .replace(/\u00a0/gu, ' ').replace(/[\t ]+\n/gu, '\n').replace(/\n{3,}/gu, '\n\n').trim()
+    .slice(0, MAX_SOURCE_CONTEXT_LENGTH)
+  return context === '' ? undefined : context
 }
 
 export async function copySelectionText(text: string): Promise<void> {
@@ -82,7 +100,10 @@ function nodeElement(node: Node | null): Element | null {
   return node instanceof Element ? node : node?.parentElement ?? null
 }
 
-export function readConversationSelection(selection: Selection | null = window.getSelection()): SelectionSnapshot | null {
+export function readConversationSelection(
+  selection: Selection | null = window.getSelection(),
+  owner?: Element | null,
+): SelectionSnapshot | null {
   if (selection === null || selection.isCollapsed || selection.rangeCount === 0) return null
   const text = normalizeSelectedText(selection.toString())
   if (text === '') return null
@@ -91,12 +112,21 @@ export function readConversationSelection(selection: Selection | null = window.g
   const end = nodeElement(range.endContainer)
   const conversation = start?.closest('[data-chat-flow]')
   if (conversation === null || conversation === undefined || !conversation.contains(end)) return null
+  if (owner !== undefined && start?.closest('[data-conversation-content]') !== owner) return null
   if (start?.closest('[contenteditable="true"], input, textarea, [data-claw-selection-quote]') !== null) return null
   const rects = [...range.getClientRects()].filter(rect => rect.width > 0 && rect.height > 0)
   const rect = rects.at(-1) ?? range.getBoundingClientRect()
   if (rect.width <= 0 && rect.height <= 0) return null
   const source = quoteSourceFromRange(range)
-  return { text, left: rect.left + rect.width / 2, top: rect.top, bottom: rect.bottom, ...(source === undefined ? {} : { source }) }
+  const context = sourceMessageContext(range)
+  return {
+    text,
+    left: rect.left + rect.width / 2,
+    top: rect.top,
+    bottom: rect.bottom,
+    ...(context === undefined || context === text ? {} : { context }),
+    ...(source === undefined ? {} : { source }),
+  }
 }
 
 function labels(): { add: string; askSide: string; copied: string; copy: string; locate: string; quote: string; remove: string; toolbar: string } {
@@ -106,9 +136,24 @@ function labels(): { add: string; askSide: string; copied: string; copy: string;
     : { add: 'Add quote', askSide: 'Ask in side chat', copied: 'Copied', copy: 'Copy', locate: 'Show source', quote: 'Quoted context', remove: 'Remove quote', toolbar: 'Selection actions' }
 }
 
-function quoteReference(snapshot: Pick<SelectionSnapshot, 'text' | 'source'>): ReferenceInsert {
-  const ref = encodeSelectionQuote({ text: snapshot.text, ...(snapshot.source === undefined ? {} : { source: snapshot.source }) })
+export function selectionQuoteReference(snapshot: Pick<SelectionSnapshot, 'context' | 'text' | 'source'>): ReferenceInsert {
+  const ref = encodeSelectionQuote({
+    text: snapshot.text,
+    ...(snapshot.context === undefined ? {} : { context: snapshot.context }),
+    ...(snapshot.source === undefined ? {} : { source: snapshot.source }),
+  })
   return { source: SELECTION_QUOTE_SOURCE, ref, label: snapshot.text, clipboardText: ' ' }
+}
+
+export function insertSelectionQuote(
+  actx: Context,
+  snapshot: Pick<SelectionSnapshot, 'context' | 'text' | 'source'>,
+  draftRev: number,
+): boolean {
+  return actx.bail(actx, 'slash/input-insert-reference', {
+    reference: selectionQuoteReference(snapshot),
+    span: { start: 0, end: 0, draftRev },
+  }) === true
 }
 
 export function selectionQuoteOccurrences(occurrences: readonly Occurrence[]): readonly Occurrence[] {
@@ -128,8 +173,8 @@ export function occurrenceDetectSpan(target: Occurrence, occurrences: readonly O
 
 interface SelectionQuoteInjected {
   readonly actx: Context
-  readonly sidebarRight: Pick<ISidebarRight, 'openTab'>
-  readonly sessionId: string
+  readonly sidebarRight: Pick<ISidebarRight, 'openResource'>
+  readonly sessionId: SessionId
 }
 
 export type SelectionQuoteOverlayProps = PropsRuntime<'conversation.input.overlay'> & SelectionQuoteInjected
@@ -189,6 +234,9 @@ function PendingQuoteCards({ actx, draftRev, occurrences }: {
 
 export function SelectionQuoteOverlay({ actx, sidebarRight, sessionId, useInput }: SelectionQuoteOverlayProps) {
   const state = useInput(value => value)
+  const stateRef = useRef(state)
+  const overlayRef = useRef<HTMLSpanElement>(null)
+  stateRef.current = state
   const quotes = selectionQuoteOccurrences(state.occurrences)
   const [snapshot, setSnapshot] = useState<SelectionSnapshot | null>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
@@ -196,11 +244,21 @@ export function SelectionQuoteOverlay({ actx, sidebarRight, sessionId, useInput 
 
   const close = useCallback(() => { setSnapshot(null) }, [])
   const refresh = useCallback(() => {
-    const next = readConversationSelection()
+    const owner = overlayRef.current?.closest('[data-conversation-content]')
+    const next = readConversationSelection(window.getSelection(), owner)
     if (next !== null) setSnapshot(next)
   }, [])
 
   useEffect(() => { installSelectionQuoteStyles() }, [])
+  useEffect(() => {
+    const pending = pendingSelectionSideChatContext(sessionId)
+    if (pending === undefined || !insertSelectionQuote(actx, pending, state.draftRev)) return
+    consumeSelectionSideChatContext(sessionId)
+    window.requestAnimationFrame(() => {
+      const editors = document.querySelectorAll<HTMLElement>('[data-composer-card] [contenteditable="true"]')
+      editors.item(editors.length - 1)?.focus()
+    })
+  }, [actx, sessionId, state.draftRev])
   useEffect(() => {
     let selecting = false
     let timer = 0
@@ -247,10 +305,7 @@ export function SelectionQuoteOverlay({ actx, sidebarRight, sessionId, useInput 
       close()
       return
     }
-    const inserted = actx.bail(actx, 'slash/input-insert-reference', {
-      reference: quoteReference(snapshot),
-      span: { start: 0, end: 0, draftRev: state.draftRev },
-    }) === true
+    const inserted = insertSelectionQuote(actx, snapshot, state.draftRev)
     window.getSelection()?.removeAllRanges()
     close()
     if (inserted) window.requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-composer-card] [contenteditable="true"]')?.focus())
@@ -268,17 +323,21 @@ export function SelectionQuoteOverlay({ actx, sidebarRight, sessionId, useInput 
       <span className="clawSelectionQuoteDivider" aria-hidden="true" />
       <button type="button" className="clawSelectionQuotePrimary" title={copy.askSide} onClick={() => {
         if (snapshot === null) return
-        startSelectionSideChat(sidebarRight, sessionId, snapshot)
+        const selected = snapshot
+        void startSelectionSideChat(sidebarRight, sessionId, selected).catch(() => {
+          const inserted = insertSelectionQuote(actx, selected, stateRef.current.draftRev)
+          if (inserted) window.requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-composer-card] [contenteditable="true"]')?.focus())
+        })
         window.getSelection()?.removeAllRanges()
         close()
       }}><MessageSquareText aria-hidden="true" />{copy.askSide}</button>
     </div>, document.body)
   }
 
-  return <Fragment>
+  return <span ref={overlayRef} className="clawSelectionQuoteOverlay">
     <PendingQuoteCards actx={actx} draftRev={state.draftRev} occurrences={state.occurrences} />
     {toolbar}
-  </Fragment>
+  </span>
 }
 
 function messageParts(content: readonly unknown[]) {
@@ -444,9 +503,10 @@ export function applySelectionQuote(ctx: Context): void {
   ctx.inject(['sidebarRight'], scope => scope.slots.inject('conversation.input.overlay', () => scope.slots.register({
     name: 'conversation.input.overlay', id: 'desktop-selection-quote', order: 40,
     inject: (sessionId) => {
-      const actx = (scope.get('sessions') as unknown as ISessions).scope(sessionId)
+      const sessions = scope.get('sessions') as unknown as ISessions
+      const actx = sessions.scope(sessionId)
       if (actx === undefined) throw new Error(`selection quote resolved no scope for session "${sessionId}"`)
-      return { actx, sidebarRight: scope.sidebarRight, sessionId: String(sessionId) }
+      return { actx, sidebarRight: scope.sidebarRight, sessionId }
     },
   }, SelectionQuoteOverlay)))
   ctx.slots.inject('conversation.chat.node', () => {
