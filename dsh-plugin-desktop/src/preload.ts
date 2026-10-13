@@ -3,6 +3,10 @@
 import { contextBridge, webUtils } from 'electron'
 import { DESKTOP_FILE_PATH_BRIDGE } from './file-path-bridge-contract.ts'
 
+// Upstream client plugins use this inert marker to distinguish the native
+// shell from a browser before any Cordis client module is activated.
+contextBridge.exposeInMainWorld('dshDesktop', { protocolVersion: 1 })
+
 contextBridge.exposeInMainWorld(DESKTOP_FILE_PATH_BRIDGE, {
   /** Resolve only genuine disk-backed Web File objects selected by the operator. */
   getPathForFile(file: File): string {
