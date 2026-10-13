@@ -34,16 +34,25 @@ describe('ClawClaw product copy', () => {
     const slotInject = vi.fn()
     const inject = vi.fn()
     try {
-      apply({ effect, inject, locale: { register: vi.fn() }, slots: { inject: slotInject } } as unknown as ClientContext)
+      apply({
+        effect,
+        inject,
+        inputTriggers: { registerSource: vi.fn(() => () => undefined) },
+        locale: { register: vi.fn() },
+        slots: { inject: slotInject },
+      } as unknown as ClientContext)
       expect(document.title).toBe('ClawClaw')
       expect(document.querySelector('link[rel="icon"]')?.getAttribute('href')).toMatch(/^data:image\/png;base64,/u)
       expect(document.querySelector('h1')?.textContent).toBe(brandedHero)
       expect(document.getElementById('preview')?.style.display).toBe('none')
-      expect(slotInject.mock.calls.map(([name]) => name)).toEqual(['sidebar.brand.mark', 'sidebar.brand.name'])
+      expect(slotInject.mock.calls.map(([name]) => name)).toEqual([
+        'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.input.overlay', 'conversation.chat.node',
+      ])
       expect(inject).toHaveBeenCalledWith(['market'], expect.any(Function))
       expect(effect.mock.calls.map(([, label]) => label)).toEqual([
         'dsh-plugin-desktop: ClawClaw page identity',
         'dsh-plugin-desktop: market integration dictionaries',
+        'desktop: selection quote reference codec',
         'dsh-plugin-desktop: experts',
         'dsh-plugin-desktop: shortcut menu styles',
       ])

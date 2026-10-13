@@ -28,6 +28,7 @@ import { applyShortcutMenu } from './shortcut-menu.tsx'
 import { installShortcutMenuStyles } from './shortcut-menu-styles.ts'
 import { applySpiritXOnboarding } from './spiritx-onboarding.tsx'
 import { applySpiritXProviderPriority } from './spiritx-provider-priority.tsx'
+import { applySelectionQuote } from './selection-quote.tsx'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
 import { apply as applyExperts } from '../experts/client/index.ts'
 
@@ -47,6 +48,7 @@ export { applySpiritXProviderPriority, SpiritXProviderPriorityMarker } from './s
 export { applyRemindersSettings } from './reminders-settings.ts'
 export { applySkillsSettings } from './skills-settings.ts'
 export { applyShortcutMenu } from './shortcut-menu.tsx'
+export { applySelectionQuote } from './selection-quote.tsx'
 export {
   createDesktopSettingsApi,
   desktopSettingsPaths,
@@ -132,6 +134,7 @@ export function apply(ctx: ClientContext): void {
   applyRemindersSettings(ctx)
   applyLegacyAgentPresetDeleteAction(ctx)
   applySkillsSettings(ctx, { registerSection: false })
+  applySelectionQuote(ctx)
   ctx.effect(() => applyExperts(ctx), 'dsh-plugin-desktop: experts')
   applyShortcutMenu(ctx)
   if (productVersion !== undefined) applyDesktopVersionRow(ctx, productVersion)
