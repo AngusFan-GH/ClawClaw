@@ -732,6 +732,7 @@ patchedDependencies:
   "@vscode/ripgrep@1.18.0": patches/vscode-ripgrep@1.18.0.patch
   "@deepseek-ai/dsh-settings": patches/@deepseek-ai__dsh-settings.patch
   "@deepseek-ai/dsh-host-directory-picker-browse": patches/dsh-host-directory-picker-browse@0.1.7-rc.2.patch
+  "@deepseek-ai/dsh-subprocess-local@0.1.7-rc.2": patches/dsh-subprocess-local@0.1.7-rc.2.patch
   "@deepseek-ai/dsh": patches/dsh@0.1.7-rc.2.patch
 allowBuilds:
   "@deepseek-ai/dsh-subprocess-local": false

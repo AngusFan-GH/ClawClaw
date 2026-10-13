@@ -1,0 +1,26 @@
+diff --git a/lib/runner-launch-B2zsQ1Dz.js b/lib/runner-launch-B2zsQ1Dz.js
+--- a/lib/runner-launch-B2zsQ1Dz.js
++++ b/lib/runner-launch-B2zsQ1Dz.js
+@@ -1303,6 +1303,7 @@
+ const WINDOWS_RUNNER_SELECTION = "windows";
+ const SOURCE_TSCONFIG_PATH = fileURLToPath(new URL("../../../../tsconfig.base.json", import.meta.url));
+ const RUNNER_CONTROL_ENV_PREFIXES = ["NODE_", "TSX_"];
++const ELECTRON_RUN_AS_NODE = "ELECTRON_RUN_AS_NODE";
+ /**
+ * Resolve the source, built, or packaged entry that calls the same runner core.
+ * @returns executable and arguments for the active runtime form.
+@@ -1345,12 +1346,13 @@
+ 	const env = childEnv();
+ 	for (const name of Object.keys(env)) {
+ 		const normalized = name.toUpperCase();
+-		if (RUNNER_CONTROL_ENV_PREFIXES.some((prefix) => normalized.startsWith(prefix))) Reflect.deleteProperty(env, name);
++		if (normalized === ELECTRON_RUN_AS_NODE || RUNNER_CONTROL_ENV_PREFIXES.some((prefix) => normalized.startsWith(prefix))) Reflect.deleteProperty(env, name);
+ 	}
+ 	return {
+ 		...env,
+ 		[SUBPROCESS_RUNNER_ENV]: selection,
+ 		SYSTEMD_LOG_TARGET: "null",
++		...process.versions.electron === void 0 ? {} : { [ELECTRON_RUN_AS_NODE]: "1" },
+ 		...entry?.endsWith(".ts") === true ? { TSX_TSCONFIG_PATH: SOURCE_TSCONFIG_PATH } : {}
+ 	};
+ }

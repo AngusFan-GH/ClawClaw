@@ -113,6 +113,41 @@ async function smokeDiagnosticExportWorker(): Promise<void> {
   }
 }
 
+/** Prove an Electron-hosted Windows Job runner boots as Node and completes its IPC result. */
+async function smokeWindowsManagedSubprocess(): Promise<void> {
+  if (process.platform !== 'win32') return
+  const runAsNodeEntries = Object.entries(process.env)
+    .filter(([key]) => key.toUpperCase() === 'ELECTRON_RUN_AS_NODE')
+  for (const [key] of runAsNodeEntries) delete process.env[key]
+  const { Context } = await import('@deepseek-ai/cordis')
+  const { default: LocalSubprocessRuntime } = await import('@deepseek-ai/dsh-subprocess-local')
+  const ctx = new Context()
+  const fiber = await ctx.plugin(LocalSubprocessRuntime)
+  try {
+    const command = process.env.ComSpec ?? join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe')
+    const handle = ctx.subprocess.spawn({
+      argv: [command, '/d', '/s', '/c', 'echo DSH_WINDOWS_RUNNER_OK'],
+      cwd: tmpdir(),
+      stdio: {
+        stdin: 'ignore',
+        stdout: { maxBytes: 16_384 },
+        stderr: { maxBytes: 16_384 },
+      },
+      graceMs: 1_000,
+    })
+    const outcome = await handle.done
+    assert(outcome.exitCode === 0, `Windows managed subprocess exited with ${String(outcome.exitCode)}`)
+    assert(
+      handle.collected.stdout?.readFrom(0).text.includes('DSH_WINDOWS_RUNNER_OK') === true,
+      'Windows managed subprocess returned no runner output',
+    )
+    assert(await handle.waitForExit(), 'Windows managed subprocess did not prove its Job empty')
+  } finally {
+    await fiber.dispose()
+    for (const [key, value] of runAsNodeEntries) process.env[key] = value
+  }
+}
+
 const root = mkdtempSync(join(tmpdir(), 'dsh-packaged-profile-resolver-'))
 try {
   const profileDir = join(root, 'profiles', 'smoke')
@@ -229,5 +264,6 @@ try {
 await verifyBundledSkills(fileURLToPath(new URL('./', installAnchor)))
 await smokeSessionMigration()
 await smokeDiagnosticExportWorker()
+await smokeWindowsManagedSubprocess()
 
 process.stdout.write(OK_MARKER)
