@@ -46,7 +46,7 @@ describe('ClawClaw product copy', () => {
       expect(document.querySelector('h1')?.textContent).toBe(brandedHero)
       expect(document.getElementById('preview')?.style.display).toBe('none')
       expect(slotInject.mock.calls.map(([name]) => name)).toEqual([
-        'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.input.overlay', 'conversation.chat.node',
+        'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.chat.node',
       ])
       expect(inject).toHaveBeenCalledWith(['market'], expect.any(Function))
       expect(effect.mock.calls.map(([, label]) => label)).toEqual([

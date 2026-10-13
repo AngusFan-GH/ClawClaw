@@ -121,16 +121,30 @@ describe('selection quote', () => {
 
   it('registers the reference codec, composer overlay, and protocol-cleaning history views', () => {
     const registerSource = vi.fn(() => () => undefined)
-    const register = vi.fn(() => () => undefined)
+    let overlayRegistration: { inject: (sessionId: string) => unknown } | undefined
+    const register = vi.fn((definition: { inject?: (sessionId: string) => unknown; name: string }) => {
+      if (definition.name === 'conversation.input.overlay' && definition.inject !== undefined) overlayRegistration = { inject: definition.inject }
+      return () => undefined
+    })
     const inject = vi.fn((_name: string, install: () => unknown) => { install(); return () => undefined })
     const effect = vi.fn((install: () => unknown) => install())
-    applySelectionQuote({
+    const sessions = { scope: vi.fn(() => ({ bail: vi.fn() })) }
+    const sidebarRight = { openTab: vi.fn() }
+    const clientCtx = {
       effect,
-      inject: vi.fn(),
+      get: vi.fn((name: string) => name === 'sessions' ? sessions : undefined),
+      inject: vi.fn((_faces: readonly string[], install: (scope: Context) => unknown) => install({
+        effect,
+        get: vi.fn((name: string) => name === 'sessions' ? sessions : undefined),
+        sidebarRight,
+        sidebarRightTabs: { register: vi.fn(() => () => undefined) },
+        slots: { inject, register },
+      } as unknown as Context)),
       inputTriggers: { registerSource },
-      sessions: { scope: vi.fn() },
+      sessions,
       slots: { inject, register },
-    } as unknown as Context)
+    } as unknown as Context
+    applySelectionQuote(clientCtx)
 
     expect(registerSource).toHaveBeenCalledWith(expect.objectContaining({ name: SELECTION_QUOTE_SOURCE }))
     expect(inject).toHaveBeenCalledWith('conversation.input.overlay', expect.any(Function))
@@ -138,5 +152,8 @@ describe('selection quote', () => {
     expect(register).toHaveBeenCalledWith(expect.objectContaining({ name: 'conversation.input.overlay', id: 'desktop-selection-quote' }), expect.any(Function))
     expect(register).toHaveBeenCalledWith(expect.objectContaining({ name: 'conversation.chat.node', key: 'user', priority: -10 }), expect.any(Function))
     expect(register).toHaveBeenCalledWith(expect.objectContaining({ name: 'conversation.chat.node', key: 'steering', priority: -10 }), expect.any(Function))
+
+    if (overlayRegistration === undefined) throw new Error('missing overlay registration')
+    expect(overlayRegistration.inject('session-1')).toEqual(expect.objectContaining({ sidebarRight, sessionId: 'session-1' }))
   })
 })

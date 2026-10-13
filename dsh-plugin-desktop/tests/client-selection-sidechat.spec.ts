@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
+import { act, createElement } from 'react'
+import { createRoot } from 'react-dom/client'
 import type { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
-import { applySelectionSideChat, startSelectionSideChat } from '../src/client/selection-sidechat.tsx'
+import { applySelectionSideChat, SelectionSideChatPanel, startSelectionSideChat } from '../src/client/selection-sidechat.tsx'
 
 describe('selection side chat client', () => {
   it('registers a native right-sidebar tab body and title', () => {
@@ -28,9 +30,23 @@ describe('selection side chat client', () => {
 
   it('opens the side chat without touching the main composer', () => {
     const openTab = vi.fn()
-    startSelectionSideChat({ sidebarRight: { openTab } } as unknown as Context, 'session-1', {
+    startSelectionSideChat({ openTab } as never, 'session-1', {
       text: 'selected text', left: 10, top: 20, bottom: 30,
     })
     expect(openTab).toHaveBeenCalledWith('desktop-selection-sidechat')
+  })
+
+  it('renders a stable empty state before a selection is attached to the session', async () => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+
+    await act(async () => {
+      root.render(createElement(SelectionSideChatPanel, { sessionId: 'missing-session' } as never))
+    })
+
+    expect(host.textContent).toContain('Select text in the conversation')
+    await act(async () => { root.unmount() })
+    host.remove()
   })
 })

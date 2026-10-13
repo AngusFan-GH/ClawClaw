@@ -11,7 +11,7 @@ import Quote from 'lucide-react/dist/esm/icons/quote.mjs'
 import RotateCcw from 'lucide-react/dist/esm/icons/rotate-ccw.mjs'
 import type { Context } from '@deepseek-ai/cordis'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
+import type { ISidebarRight } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import { MarkdownText, writeClipboard, type MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 import { DESKTOP_SELECTION_SIDECHAT_PATH } from '../selection-sidechat.ts'
 import type { SelectionSnapshot } from './selection-quote.tsx'
@@ -27,15 +27,16 @@ interface SideChatState {
   readonly turns: readonly SideChatTurn[]
 }
 const states = new Map<string, SideChatState>()
+const EMPTY_STATE: SideChatState = { pending: false, revision: 0, selection: '', turns: [] }
 const listeners = new Set<() => void>()
 const publish = () => { for (const listener of listeners) listener() }
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
-const stateOf = (sessionId: string): SideChatState => states.get(sessionId) ?? { pending: false, revision: 0, selection: '', turns: [] }
+const stateOf = (sessionId: string): SideChatState => states.get(sessionId) ?? EMPTY_STATE
 const update = (sessionId: string, state: SideChatState) => { states.set(sessionId, state); publish() }
 
-export function startSelectionSideChat(ctx: Context, sessionId: string, snapshot: SelectionSnapshot): void {
+export function startSelectionSideChat(sidebarRight: Pick<ISidebarRight, 'openTab'>, sessionId: string, snapshot: SelectionSnapshot): void {
   update(sessionId, { pending: false, revision: stateOf(sessionId).revision + 1, selection: snapshot.text, turns: [] })
-  ctx.sidebarRight.openTab(TAB_KIND)
+  sidebarRight.openTab(TAB_KIND)
 }
 
 async function ask(sessionId: string, question: string): Promise<void> {
@@ -132,9 +133,12 @@ export function SelectionSideChatPanel({ sessionId }: SideChatProps) {
 export function applySelectionSideChat(ctx: Context): void {
   ctx.inject(['sidebarRightTabs', 'sidebarRight'], (scope: Context) => {
     scope.effect(() => scope.sidebarRightTabs.register({ id: TAB_KIND, kind: TAB_KIND, keepMounted: true, title: () => sideChatLabels().tab }), 'desktop: selection side-chat tab type')
-    scope.slots.inject('sidebar.right.pane.tab', () => scope.slots.register({
+    scope.effect(() => scope.slots.inject('sidebar.right.pane.tab', () => scope.slots.register({
       name: 'sidebar.right.pane.tab', key: TAB_KIND, inject: sessionId => ({ sessionId: String(sessionId) }),
-    }, SelectionSideChatPanel))
-    scope.slots.inject('sidebar.right.pane.tab.title', () => scope.slots.register({ name: 'sidebar.right.pane.tab.title', key: TAB_KIND }, () => <span>{sideChatLabels().tab}</span>))
+    }, SelectionSideChatPanel)), 'desktop: selection side-chat body')
+    scope.effect(() => scope.slots.inject('sidebar.right.pane.tab.title', () => scope.slots.register(
+      { name: 'sidebar.right.pane.tab.title', key: TAB_KIND },
+      () => <span>{sideChatLabels().tab}</span>,
+    )), 'desktop: selection side-chat title')
   })
 }

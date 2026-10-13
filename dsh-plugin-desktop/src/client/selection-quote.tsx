@@ -20,6 +20,7 @@ import {
   fileSizeText, projectUserText, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ISidebarRight } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import {
   decodeSelectionQuote,
   decodeSelectionQuotePayload,
@@ -127,6 +128,7 @@ export function occurrenceDetectSpan(target: Occurrence, occurrences: readonly O
 
 interface SelectionQuoteInjected {
   readonly actx: Context
+  readonly sidebarRight: Pick<ISidebarRight, 'openTab'>
   readonly sessionId: string
 }
 
@@ -185,7 +187,7 @@ function PendingQuoteCards({ actx, draftRev, occurrences }: {
   </div>
 }
 
-export function SelectionQuoteOverlay({ actx, sessionId, useInput }: SelectionQuoteOverlayProps) {
+export function SelectionQuoteOverlay({ actx, sidebarRight, sessionId, useInput }: SelectionQuoteOverlayProps) {
   const state = useInput(value => value)
   const quotes = selectionQuoteOccurrences(state.occurrences)
   const [snapshot, setSnapshot] = useState<SelectionSnapshot | null>(null)
@@ -266,7 +268,7 @@ export function SelectionQuoteOverlay({ actx, sessionId, useInput }: SelectionQu
       <span className="clawSelectionQuoteDivider" aria-hidden="true" />
       <button type="button" className="clawSelectionQuotePrimary" title={copy.askSide} onClick={() => {
         if (snapshot === null) return
-        startSelectionSideChat(actx, sessionId, snapshot)
+        startSelectionSideChat(sidebarRight, sessionId, snapshot)
         window.getSelection()?.removeAllRanges()
         close()
       }}><MessageSquareText aria-hidden="true" />{copy.askSide}</button>
@@ -439,14 +441,14 @@ export function applySelectionQuote(ctx: Context): void {
   installSelectionQuoteStyles()
   applySelectionSideChat(ctx)
   ctx.effect(() => ctx.inputTriggers.registerSource(createSelectionQuoteSource()), 'desktop: selection quote reference codec')
-  ctx.slots.inject('conversation.input.overlay', () => ctx.slots.register({
+  ctx.inject(['sidebarRight'], scope => scope.slots.inject('conversation.input.overlay', () => scope.slots.register({
     name: 'conversation.input.overlay', id: 'desktop-selection-quote', order: 40,
     inject: (sessionId) => {
-      const actx = (ctx.get('sessions') as unknown as ISessions).scope(sessionId)
+      const actx = (scope.get('sessions') as unknown as ISessions).scope(sessionId)
       if (actx === undefined) throw new Error(`selection quote resolved no scope for session "${sessionId}"`)
-      return { actx, sessionId: String(sessionId) }
+      return { actx, sidebarRight: scope.sidebarRight, sessionId: String(sessionId) }
     },
-  }, SelectionQuoteOverlay))
+  }, SelectionQuoteOverlay)))
   ctx.slots.inject('conversation.chat.node', () => {
     const user = ctx.slots.register({ name: 'conversation.chat.node', key: 'user', priority: -10, locale: 'chat' }, SelectionQuoteUserMessage)
     const steering = ctx.slots.register({ name: 'conversation.chat.node', key: 'steering', priority: -10, locale: 'chat' }, SelectionQuoteSteeringMessage)
