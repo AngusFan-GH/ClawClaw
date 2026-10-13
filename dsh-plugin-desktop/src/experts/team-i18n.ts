@@ -115,6 +115,7 @@ export const TEAM_EN = {
   '查看{0}详情': 'View {0} details', '搜索并启用一个专家团。': 'Search for a team to enable.', '正在加载…': 'Loading…', '启用专家团': 'Enable team',
   '启用“': 'Enable “', '”及所需成员：': '” and required experts: ', '关闭{0}': 'Close {0}', '关闭': 'Close', '正在处理…': 'Working…',
   '成员失效，需替换': 'Unavailable members need replacement', '有成员未启用': 'Some members are disabled', '@专家团：{0}\u00a0': '@Team: {0}\u00a0',
+  '[专家团：{0}]\u00a0': '[Expert team: {0}]\u00a0',
   '草稿已有专家团，请先移除原团队再通过 @ 选择。': 'A team is already selected. Remove it before choosing another with @.',
   '草稿已有专家团，是否替换为当前团队？正文和附件将保留。': 'Replace the team already in this draft? Text and attachments will be preserved.',
   '草稿已有正文，是否保留正文并追加所选示例？取消则仅选择团队。': 'Keep the existing text and append this example? Cancel to select only the team.',

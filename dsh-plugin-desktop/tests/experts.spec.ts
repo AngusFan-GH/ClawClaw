@@ -13,6 +13,7 @@ import {
   resolveExpertComposition,
   teamRequiresToolFilter,
 } from '../src/experts/index.ts'
+import { REQUIRED_PACKAGED_RUNTIME_ENTRIES } from '../scripts/verify-packaged-runtime.ts'
 import { detectTeamEngine, type NativeTeamService } from '../src/experts/team-engine.ts'
 import { capabilityCatalogSelectOptions, capabilitySelectOptions, expertCapabilityCatalog, expertCapabilityHealth, selectableExpertCapabilities, updateCapabilityBindings } from '../src/experts/client/capability-options.ts'
 
@@ -56,6 +57,21 @@ function nativeService(): NativeTeamService {
 }
 
 describe('ClawClaw experts', () => {
+  it('includes expert and skill assets in Electron packages and the afterPack gate', async () => {
+    const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as {
+      build?: { files?: string[] }
+    }
+    expect(manifest.build?.files).toEqual(expect.arrayContaining([
+      'assets/experts/**',
+      'assets/skills/**',
+    ]))
+    expect(REQUIRED_PACKAGED_RUNTIME_ENTRIES).toEqual(expect.arrayContaining([
+      'assets/experts/catalog/engineering/engineering-software-architect.md',
+      'assets/experts/catalog-zh/engineering/engineering-software-architect.md',
+      'assets/skills/software-delivery/SKILL.md',
+    ]))
+  })
+
   it('ships the complete 321-expert catalog and localized personas', async () => {
     const catalog = await loadCatalog(catalogRoot, DEFAULT_DIVISIONS)
     expect(catalog.size).toBe(321)
@@ -78,7 +94,7 @@ describe('ClawClaw experts', () => {
       mcpServers: expect.arrayContaining([{ name: 'GitLab', required: false, enabled: true }]),
     })
     expect(builtinExpertCapabilities('finance-investment-researcher', 'finance').mcpServers.map(item => item.name))
-      .toEqual(expect.arrayContaining(['postgres', 'playwright', 'market-data']))
+      .toEqual(expect.arrayContaining(['postgresql', 'playwright', 'market-data']))
   })
 
   it('prefers declared MCP capabilities over legacy server-name aliases', () => {
@@ -86,6 +102,25 @@ describe('ClawClaw experts', () => {
       { serverName: 'company-git', capabilities: ['source-control.github'] },
       'github',
     ]).mcpServers).toContainEqual({ name: 'company-git', required: false, enabled: true })
+  })
+
+  it('maps specialist and team roles to purpose-built connectors', () => {
+    expect(builtinExpertCapabilities('research-synthesist', 'research').mcpServers.map(item => item.name))
+      .toEqual(expect.arrayContaining(['world-bank-data360']))
+    expect(builtinExpertCapabilities('engineering-data-visualization-engineer', 'engineering').mcpServers.map(item => item.name))
+      .toEqual(expect.arrayContaining(['drawio']))
+    expect(builtinExpertCapabilities('engineering-software-architect', 'engineering').mcpServers.map(item => item.name))
+      .toEqual(expect.arrayContaining(['context7']))
+    expect(builtinExpertCapabilities('healthcare-clinical-evidence-agent', 'healthcare').mcpServers.map(item => item.name))
+      .toEqual(expect.arrayContaining(['rcsb-pdb']))
+    expect(builtinExpertCapabilities('marketing-ecommerce-operator', 'marketing').mcpServers.map(item => item.name))
+      .toEqual(expect.arrayContaining(['shopline-developer-mcp']))
+  })
+
+  it('uses configured connector declarations for specialist capabilities', () => {
+    expect(builtinExpertCapabilities('research-synthesist', 'research', [
+      { serverName: 'organization-data', capabilities: ['public-data.research'] },
+    ]).mcpServers).toContainEqual({ name: 'organization-data', required: false, enabled: true })
   })
 
   it('ships expanded teams whose members resolve to bundled experts', async () => {

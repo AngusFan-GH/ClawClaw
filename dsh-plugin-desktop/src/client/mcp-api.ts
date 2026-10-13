@@ -47,13 +47,23 @@ function parseMcpServer(value: unknown): DesktopMcpServerView {
     maxDelayMs: value.reconnect.maxDelayMs as number, maxAttempts: value.reconnect.maxAttempts as number })
   if (value.connectorId !== undefined && !text(value.connectorId, 128)) throw new Error('dsh-plugin-desktop: invalid MCP connector identity')
   if (value.capabilities !== undefined && !stringArray(value.capabilities)) throw new Error('dsh-plugin-desktop: invalid MCP capabilities')
+  if (value.managedCredentialRefs !== undefined && !stringArray(value.managedCredentialRefs, 64)) throw new Error('dsh-plugin-desktop: invalid managed MCP credentials')
   if (value.oauth !== undefined && (!isRecord(value.oauth) || (value.oauth.issuer !== undefined && !text(value.oauth.issuer, 4_096)) || !text(value.oauth.scope, 2_048)
-    || (value.oauth.resource !== undefined && !text(value.oauth.resource, 4_096)))) throw new Error('dsh-plugin-desktop: invalid MCP OAuth configuration')
+    || (value.oauth.resource !== undefined && !text(value.oauth.resource, 4_096))
+    || (value.oauth.clientId !== undefined && !text(value.oauth.clientId, 2_048))
+    || (value.oauth.clientSecretRef !== undefined && !text(value.oauth.clientSecretRef, 256))
+    || (value.oauth.tokenEndpointAuthMethod !== undefined && !['none', 'client_secret_post', 'client_secret_basic'].includes(String(value.oauth.tokenEndpointAuthMethod))))) {
+    throw new Error('dsh-plugin-desktop: invalid MCP OAuth configuration')
+  }
   const metadata = { ...(value.connectorId === undefined ? {} : { connectorId: value.connectorId }),
     ...(value.capabilities === undefined ? {} : { capabilities: Object.freeze([...(value.capabilities as string[])]) }),
+    ...(value.managedCredentialRefs === undefined ? {} : { managedCredentialRefs: Object.freeze([...(value.managedCredentialRefs as string[])]) }),
     ...(value.oauth === undefined ? {} : { oauth: Object.freeze({
       ...(value.oauth.issuer === undefined ? {} : { issuer: value.oauth.issuer as string }), scope: value.oauth.scope as string,
-      ...(value.oauth.resource === undefined ? {} : { resource: value.oauth.resource as string }) }) }) }
+      ...(value.oauth.resource === undefined ? {} : { resource: value.oauth.resource as string }),
+      ...(value.oauth.clientId === undefined ? {} : { clientId: value.oauth.clientId as string }),
+      ...(value.oauth.clientSecretRef === undefined ? {} : { clientSecretRef: value.oauth.clientSecretRef as string }),
+      ...(value.oauth.tokenEndpointAuthMethod === undefined ? {} : { tokenEndpointAuthMethod: value.oauth.tokenEndpointAuthMethod as 'none' | 'client_secret_post' | 'client_secret_basic' }) }) }) }
   const status = { state: value.state as DesktopMcpServerView['state'], tools: Object.freeze(tools), credentialsReady: value.credentialsReady,
     diagnostic: parseDiagnostic(value.diagnostic),
     ...(value.error === undefined ? {} : { error: value.error }) }

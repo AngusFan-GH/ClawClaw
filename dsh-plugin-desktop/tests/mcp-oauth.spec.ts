@@ -28,6 +28,17 @@ describe('MCP OAuth', () => {
     expect(fetcher).toHaveBeenCalledWith('https://identity.example.com/.well-known/oauth-authorization-server/tenant', expect.anything())
   })
 
+  it('accepts metadata without dynamic registration and requires a pre-registered client', async () => {
+    const metadata = await discoverMcpOAuthMetadata('https://identity.example.com', async () => json({
+      issuer: 'https://identity.example.com', authorization_endpoint: 'https://identity.example.com/authorize',
+      token_endpoint: 'https://identity.example.com/token', code_challenge_methods_supported: ['S256'],
+      token_endpoint_auth_methods_supported: ['none'],
+    }))
+    expect(metadata.registrationEndpoint).toBeUndefined()
+    await expect(registerMcpOAuthClient(metadata, 'http://127.0.0.1/callback', 'ClawClaw', 'mcp:tools', vi.fn()))
+      .rejects.toThrow(/pre-registered client/)
+  })
+
   it('rejects insecure issuers and metadata substitution', async () => {
     await expect(discoverMcpOAuthMetadata('http://identity.example.com', vi.fn())).rejects.toThrow(/HTTPS/)
     await expect(discoverMcpOAuthMetadata('https://identity.example.com', async () => json({ issuer: 'https://evil.example.com' }))).rejects.toThrow(/issuer mismatch/)

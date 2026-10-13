@@ -44,9 +44,37 @@ const MCP_PROFILES = {
   web: 'browser.automation',
   communication: 'communication.team',
   market: 'market-data.finance',
+  diagram: 'diagram.authoring',
+  publicData: 'public-data.research',
+  proteinData: 'scientific-data.protein',
+  developerDocs: 'developer.documentation',
+  shopline: 'commerce.shopline',
 } as const
 
 type McpProfile = keyof typeof MCP_PROFILES
+
+const EXPERT_MCP_PROFILES: Readonly<Record<string, readonly McpProfile[]>> = {
+  'academic-geographer': ['publicData'],
+  'academic-statistician': ['publicData'],
+  'research-synthesist': ['publicData'],
+  'product-trend-researcher': ['publicData'],
+  'engineering-data-visualization-engineer': ['diagram'],
+  'design-ux-architect': ['diagram'],
+  'design-visual-storyteller': ['diagram'],
+  'gis-cartography-designer': ['diagram'],
+  'specialized-workflow-architect': ['diagram'],
+  'healthcare-clinical-evidence-agent': ['proteinData'],
+  'engineering-api-platform-engineer': ['developerDocs'],
+  'engineering-technical-writer': ['developerDocs'],
+  'engineering-developer-tooling-engineer': ['developerDocs'],
+  'engineering-software-architect': ['developerDocs'],
+  'engineering-minimal-change-engineer': ['developerDocs'],
+  'engineering-rapid-prototyper': ['developerDocs'],
+  'testing-test-automation-engineer': ['developerDocs'],
+  'marketing-china-ecommerce-operator': ['shopline'],
+  'marketing-cross-border-ecommerce': ['shopline'],
+  'marketing-ecommerce-operator': ['shopline'],
+}
 
 function skillNames(slug: string, division: string): string[] {
   const names = [...(DIVISION_SKILLS[division] ?? ['business-operations'])]
@@ -58,7 +86,7 @@ function skillNames(slug: string, division: string): string[] {
 }
 
 function mcpProfiles(slug: string, division: string): McpProfile[] {
-  const profiles: McpProfile[] = []
+  const profiles: McpProfile[] = [...(EXPERT_MCP_PROFILES[slug] ?? [])]
   if (division === 'engineering' || division === 'testing' || division === 'security'
     || /(?:developer|code|software|devops|sre|api|repository)/u.test(slug)) profiles.push('sourceCode')
   if (division === 'project-management' || /(?:project|jira|operations|product-manager|workflow)/u.test(slug)) profiles.push('workManagement')

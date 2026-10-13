@@ -7,6 +7,10 @@ export interface DesktopMcpOAuthConfig {
   readonly issuer?: string
   readonly scope: string
   readonly resource?: string
+  /** Pre-registered clients are used when the authorization server does not support dynamic registration. */
+  readonly clientId?: string
+  readonly clientSecretRef?: string
+  readonly tokenEndpointAuthMethod?: 'none' | 'client_secret_post' | 'client_secret_basic'
 }
 
 export type DesktopMcpServerConfig = {
@@ -22,6 +26,8 @@ export type DesktopMcpServerConfig = {
   readonly enabled: boolean
   readonly connectorId?: string
   readonly capabilities?: readonly string[]
+  /** Credential references created by this MCP entry and eligible for lifecycle cleanup. */
+  readonly managedCredentialRefs?: readonly string[]
 } | {
   readonly serverName: string
   readonly transport: 'streamable-http'
@@ -33,6 +39,7 @@ export type DesktopMcpServerConfig = {
   readonly enabled: boolean
   readonly connectorId?: string
   readonly capabilities?: readonly string[]
+  readonly managedCredentialRefs?: readonly string[]
   readonly oauth?: DesktopMcpOAuthConfig
 }
 

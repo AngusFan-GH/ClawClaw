@@ -14,6 +14,15 @@ describe('Desktop MCP client API', () => {
     expect(() => parseDesktopMcpView({ ...view, mcpServers: [{ ...view.mcpServers[0], diagnostic: { code: 'unknown', stage: 'ready' } }] })).toThrow(/diagnostic/)
   })
 
+  it('preserves managed credentials and pre-registered OAuth metadata', () => {
+    const remote = { ...view.mcpServers[0], transport: 'streamable-http' as const, url: 'https://mcp.example.com/mcp', headers: {},
+      managedCredentialRefs: ['MCP_CLIENT_SECRET'], oauth: { scope: 'mcp:tools', clientId: 'desktop-client',
+        clientSecretRef: 'MCP_CLIENT_SECRET', tokenEndpointAuthMethod: 'client_secret_post' as const } }
+    expect(parseDesktopMcpView({ mcpServers: [remote], catalog: [] }).mcpServers[0]).toMatchObject({
+      managedCredentialRefs: ['MCP_CLIENT_SECRET'], oauth: { clientId: 'desktop-client', clientSecretRef: 'MCP_CLIENT_SECRET' },
+    })
+  })
+
   it('uses only the MCP routes', async () => {
     const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       new Response(JSON.stringify(view), { status: 200 }))

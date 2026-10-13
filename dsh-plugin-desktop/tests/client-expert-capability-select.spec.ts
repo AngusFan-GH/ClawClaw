@@ -42,9 +42,9 @@ describe('expert capability selectors', () => {
     expect(mcpApi.read).toHaveBeenCalledOnce()
     expect(document.querySelectorAll('.aag-capability-select')).toHaveLength(2)
     expect(document.querySelector('[aria-label="组合技能"]')?.getAttribute('role')).toBe('combobox')
-    expect(document.querySelector('[aria-label="可用 MCP"]')?.getAttribute('role')).toBe('combobox')
+    expect(document.querySelector('[aria-label="可用连接器"]')?.getAttribute('role')).toBe('combobox')
     expect(document.querySelector('textarea[aria-label="组合技能"]')).toBeNull()
-    expect(document.querySelector('textarea[aria-label="可用 MCP"]')).toBeNull()
+    expect(document.querySelector('textarea[aria-label="可用连接器"]')).toBeNull()
   })
 
   it('keeps the Skill selector available when the MCP catalog fails', async () => {

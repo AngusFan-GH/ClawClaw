@@ -1,6 +1,7 @@
 // @ts-nocheck -- ported client compatibility layer; host contracts remain strictly checked.
 /** 团队仅补充成员和主理人字段布局；基础控件统一复用专家页 aag 样式。 */
 export const TEAM_CSS = `
+button[data-aag-team-reference="legacy"]{opacity:1!important;cursor:default!important;text-decoration:none!important}button[data-aag-team-reference="legacy"]>svg{display:none}
 .aag-team-grid .aag-card-description{min-height:80px;-webkit-line-clamp:unset}
 .aag-library-shell{max-width:1120px;height:100%;max-height:100%;gap:0;padding-bottom:0;overflow:hidden}
 .aag-library-sticky{z-index:20;display:flex;flex:none;flex-direction:column;padding:0 0 8px;border-bottom:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base,var(--dsw-alias-bg-layer-1))}

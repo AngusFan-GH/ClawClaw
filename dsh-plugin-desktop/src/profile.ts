@@ -103,8 +103,8 @@ const DESKTOP_NOTIFICATIONS_ROW_ID = 'desktop-notifications'
 const DESKTOP_NOTIFICATIONS_PACKAGE = `${DESKTOP_PACKAGE_NAME}/notifications`
 const DESKTOP_DEFAULT_WORKSPACE_ROW_ID = 'desktop-default-workspace'
 const DESKTOP_DEFAULT_WORKSPACE_PACKAGE = `${DESKTOP_PACKAGE_NAME}/default-workspace`
-const DESKTOP_SPIRITX_ROW_ID = 'spiritx'
-const DESKTOP_SPIRITX_PACKAGE = `${DESKTOP_PACKAGE_NAME}/spiritx`
+const RETIRED_DESKTOP_SPIRITX_ROW_ID = 'spiritx'
+const RETIRED_DESKTOP_SPIRITX_PACKAGE = `${DESKTOP_PACKAGE_NAME}/spiritx`
 const DESKTOP_EXPERTS_ROW_ID = 'clawclaw-experts'
 const DESKTOP_EXPERTS_PACKAGE = `${DESKTOP_PACKAGE_NAME}/experts`
 const DESKTOP_EDITABLE_PROFILE_ENTRIES = [
@@ -115,11 +115,10 @@ const DESKTOP_EDITABLE_PROFILE_ENTRIES = [
   { id: DESKTOP_REMINDERS_ROW_ID, name: DESKTOP_REMINDERS_PACKAGE },
   { id: DESKTOP_NOTIFICATIONS_ROW_ID, name: DESKTOP_NOTIFICATIONS_PACKAGE },
   { id: DESKTOP_DEFAULT_WORKSPACE_ROW_ID, name: DESKTOP_DEFAULT_WORKSPACE_PACKAGE },
-  { id: DESKTOP_SPIRITX_ROW_ID, name: DESKTOP_SPIRITX_PACKAGE },
   { id: DESKTOP_EXPERTS_ROW_ID, name: DESKTOP_EXPERTS_PACKAGE },
 ] as const
 const DESKTOP_EDITABLE_PROFILE_ENTRY_IDS = new Set<string>(DESKTOP_EDITABLE_PROFILE_ENTRIES.map(entry => entry.id))
-const DESKTOP_EDITABLE_PROFILE_PATCH_IDS = new Set<string>(['agent-default-model'])
+const DESKTOP_EDITABLE_PROFILE_PATCH_IDS = new Set<string>(['agent-default-model', 'llm-pi-ai'])
 const DIRECTORY_PICKER_ROW_ID = 'directory-picker'
 const AUTO_PICKER_PACKAGE = '@deepseek-ai/dsh-host-directory-picker-auto'
 const BROWSE_PICKER_BACKEND = '@deepseek-ai/dsh-host-directory-picker-browse'
@@ -864,6 +863,10 @@ function ensureDesktopEditableProfileEntries(profileDir: string): boolean {
   }
   const present = new Set<string>()
   const presentPatches = new Set<string>()
+  const retiredSpiritXRows: Array<readonly [number, number]> = []
+  let retiredSpiritXProvider: unknown
+  let piAiPatchIndex: number | undefined
+  let piAiProviders: Record<string, unknown> | undefined
   let changed = false
   for (const [patchIndex, patch] of patches.entries()) {
     if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) continue
@@ -872,6 +875,15 @@ function ensureDesktopEditableProfileEntries(profileDir: string): boolean {
       presentPatches.add(patchId)
       const config = (patch as { config?: unknown }).config
       const seedConfig = patchSeeds.get(patchId)?.config
+      if (patchId === 'llm-pi-ai') {
+        piAiPatchIndex = patchIndex
+        const providers = config !== null && typeof config === 'object' && !Array.isArray(config)
+          ? (config as Record<string, unknown>).providers
+          : undefined
+        if (providers !== null && typeof providers === 'object' && !Array.isArray(providers)) {
+          piAiProviders = providers as Record<string, unknown>
+        }
+      }
       if (config !== null && typeof config === 'object' && !Array.isArray(config)
         && seedConfig !== null && typeof seedConfig === 'object' && !Array.isArray(seedConfig)) {
         for (const [key, value] of Object.entries(seedConfig)) {
@@ -894,9 +906,21 @@ function ensureDesktopEditableProfileEntries(profileDir: string): boolean {
     }
     const insert = (patch as { insert?: unknown }).insert
     if (!Array.isArray(insert)) continue
-    for (const row of insert) {
+    for (const [rowIndex, row] of insert.entries()) {
       if (row === null || typeof row !== 'object' || Array.isArray(row)) continue
       const id = (row as { id?: unknown }).id
+      if (id === RETIRED_DESKTOP_SPIRITX_ROW_ID
+        && (row as { name?: unknown }).name === RETIRED_DESKTOP_SPIRITX_PACKAGE) {
+        const config = (row as { config?: unknown }).config
+        const providers = config !== null && typeof config === 'object' && !Array.isArray(config)
+          ? (config as Record<string, unknown>).providers
+          : undefined
+        if (providers !== null && typeof providers === 'object' && !Array.isArray(providers)) {
+          retiredSpiritXProvider = (providers as Record<string, unknown>).spiritx
+        }
+        retiredSpiritXRows.push([patchIndex, rowIndex])
+        continue
+      }
       const entry = DESKTOP_EDITABLE_PROFILE_ENTRIES.find(candidate => candidate.id === id)
       if (entry === undefined) continue
       if ((row as { name?: unknown }).name !== entry.name) {
@@ -904,6 +928,30 @@ function ensureDesktopEditableProfileEntries(profileDir: string): boolean {
       }
       present.add(entry.id)
     }
+  }
+  for (const [patchIndex, rowIndex] of retiredSpiritXRows.reverse()) {
+    document.deleteIn([patchIndex, 'insert', rowIndex])
+    changed = true
+  }
+  const seedProviders = patchSeeds.get('llm-pi-ai')?.config?.providers
+  const seedSpiritX = seedProviders !== null && typeof seedProviders === 'object' && !Array.isArray(seedProviders)
+    ? (seedProviders as Record<string, unknown>).spiritx
+    : undefined
+  const migratedSpiritXProvider = retiredSpiritXProvider !== null
+    && typeof retiredSpiritXProvider === 'object' && !Array.isArray(retiredSpiritXProvider)
+    ? {
+        ...(seedSpiritX !== null && typeof seedSpiritX === 'object' && !Array.isArray(seedSpiritX)
+          ? seedSpiritX as Record<string, unknown>
+          : {}),
+        ...retiredSpiritXProvider as Record<string, unknown>,
+      }
+    : seedSpiritX
+  if (piAiPatchIndex !== undefined && piAiProviders !== undefined && !Object.hasOwn(piAiProviders, 'spiritx')) {
+    document.setIn(
+      [piAiPatchIndex, 'config', 'providers', 'spiritx'],
+      document.createNode(migratedSpiritXProvider),
+    )
+    changed = true
   }
   const missing = DESKTOP_EDITABLE_PROFILE_ENTRIES.filter(entry => !present.has(entry.id))
   if (missing.length > 0) {
@@ -924,7 +972,12 @@ function ensureDesktopEditableProfileEntries(profileDir: string): boolean {
     .map((id) => {
       const seed = patchSeeds.get(id)
       if (seed === undefined) throw new Error(`${BIN_NAME}: editable ${id} patch is missing its Desktop seed`)
-      return seed
+      if (id !== 'llm-pi-ai' || migratedSpiritXProvider === undefined) return seed
+      const migrated = structuredClone(seed)
+      const config = migrated.config as Record<string, unknown>
+      const providers = config.providers as Record<string, unknown>
+      providers.spiritx = migratedSpiritXProvider
+      return migrated
     })
   if (missingPatches.length > 0) {
     for (const patch of missingPatches.reverse()) {

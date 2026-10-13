@@ -156,4 +156,20 @@ describe('MCP settings UI', () => {
     expect(api.authorize).toHaveBeenCalledWith('local')
     expect(open).toHaveBeenCalledWith('https://identity.example.com/authorize', '_blank', 'noopener,noreferrer')
   })
+
+  it('edits a pre-registered OAuth client without exposing its secret', async () => {
+    const oauthServer: DesktopMcpServerView = { ...server, transport: 'streamable-http', url: 'https://mcp.example.com/mcp', headers: {},
+      oauth: { scope: 'mcp:tools', clientId: 'desktop-client', clientSecretRef: 'MCP_CLIENT_SECRET',
+        tokenEndpointAuthMethod: 'client_secret_post' }, managedCredentialRefs: ['MCP_CLIENT_SECRET'] }
+    const api = await mount(candidate => { vi.mocked(candidate.read).mockResolvedValue({ mcpServers: [oauthServer], catalog: [] }) })
+    await act(async () => { button(zh.editServer).click() })
+    expect(field(zh.oauthClientId).value).toBe('desktop-client')
+    expect(field(zh.oauthClientSecretRef).value).toBe('MCP_CLIENT_SECRET')
+    expect(document.querySelector<HTMLSelectElement>('select')?.value).toBe('client_secret_post')
+    expect(document.body.textContent).not.toContain('client-secret-value')
+    await act(async () => { document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) })
+    expect(api.save).toHaveBeenCalledWith(expect.objectContaining({ oauth: expect.objectContaining({
+      clientId: 'desktop-client', clientSecretRef: 'MCP_CLIENT_SECRET', tokenEndpointAuthMethod: 'client_secret_post',
+    }) }), 'local', undefined)
+  })
 })

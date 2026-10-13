@@ -6,7 +6,7 @@ import type { AgencyTeamsRemote } from './remote.js'
 import { TeamsPanel, unwrap, type TeamRemote } from './team-ui.js'
 import { TEAM_CSS } from './team-style.js'
 import { TeamMenu } from './team-composer.js'
-import { TEAM_REFERENCE_SOURCE, insertTeamReference, teamReference } from './team-reference.js'
+import { TEAM_REFERENCE_SOURCE, insertTeamReference, teamReference, teamSubmissionText } from './team-reference.js'
 import { TeamLocaleContext } from './team-locale.js'
 import { localizeTeam } from '../team-content-en.js'
 import { teamText } from '../team-i18n.js'
@@ -37,6 +37,7 @@ import { CustomExpertEditor, CustomDeleteDialog, CUSTOM_EDITOR_CSS } from './cus
 import { acceptEnabled, acceptCatalog, catalogState, refreshCatalog, subscribeCatalog } from './catalog.js'
 import { refreshTeams, teamState } from './team-cache.js'
 import { installNativeTeamNames } from './native-team-names.js'
+import { installLegacyTeamReferenceGuard } from './legacy-team-reference.js'
 import type { AgencyCatalogRemote } from './remote.js'
 import { createDesktopSkillsApi } from '../../client/skills-api.js'
 import { createDesktopMcpApi } from '../../client/mcp-api.js'
@@ -496,15 +497,19 @@ export const CARD_SETTINGS_CSS = `
 `
 
 export const CAPABILITY_PICKER_CSS = `
-.aag-menu.aag-discovery{width:min(560px,calc(100vw - 24px));max-width:calc(100vw - 24px);padding:4px;overflow:hidden}
-.aag-capability-picker{display:grid;grid-template-columns:124px minmax(0,1fr);height:332px;min-height:0}
-.aag-capability-nav{display:flex;min-width:0;flex-direction:column;gap:2px;padding:6px 8px 6px 2px;border-right:1px solid var(--dsw-alias-border-l2)}
+.aag-menu.aag-discovery{width:min(600px,calc(100vw - 24px));max-width:calc(100vw - 24px);padding:6px;overflow:hidden}
+.aag-capability-picker{display:grid;grid-template-columns:112px minmax(0,1fr);height:348px;min-height:0}
+.aag-capability-nav{display:flex;min-width:0;flex-direction:column;gap:2px;padding:6px 10px 6px 2px;border-right:1px solid var(--dsw-alias-border-l2)}
 .aag-capability-nav button{width:100%;padding:8px 10px;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:14px;line-height:22px;text-align:left;cursor:pointer}.aag-capability-nav button:hover,.aag-capability-nav button.active{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-.aag-capability-results{display:flex;min-width:0;min-height:0;flex-direction:column;padding:2px 0 2px 8px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain}.aag-capability-results>.agt-compact{min-width:0}.aag-capability-results .agt-compact-list{max-width:100%;overflow-x:hidden}
-.aag-capability-search{padding:4px;flex:none}.aag-capability-search input{box-sizing:border-box;width:100%;min-height:36px;padding:7px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:inherit;font:inherit}.aag-capability-search input:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}
-.aag-capability-list{display:flex;min-width:0;flex-direction:column;gap:2px}.aag-capability-list button,.aag-capability-row{display:flex;align-items:flex-start;flex-direction:column;gap:2px;width:100%;min-width:0;padding:9px 10px;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;text-align:left}.aag-capability-list button{cursor:pointer}.aag-capability-list button:hover{background:var(--dsw-alias-interactive-bg-hover)}.aag-capability-list small{display:block;overflow:hidden;max-width:100%;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;text-overflow:ellipsis;white-space:nowrap}
-.aag-capability-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}.aag-capability-row>span{display:block;min-width:0}.aag-capability-row button{grid-column:2;grid-row:1;flex:none;padding:0 8px;border:0;border-radius:8px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;line-height:24px;cursor:pointer}.aag-capability-note{grid-column:1/-1;padding-top:2px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
-@media(max-width:560px){.aag-menu.aag-discovery{width:min(420px,calc(100vw - 24px))}.aag-capability-picker{grid-template-columns:104px minmax(0,1fr);height:300px}.aag-capability-nav button{padding:8px}.aag-capability-results{padding-left:4px}}
+.aag-capability-results{display:flex;min-width:0;min-height:0;flex-direction:column;padding:2px 2px 2px 10px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain}.aag-capability-results>.agt-compact{min-width:0}.aag-capability-results .agt-compact-list{max-width:100%;overflow-x:hidden}
+.aag-capability-search{padding:4px 4px 6px;flex:none}.aag-capability-search input{box-sizing:border-box;width:100%;min-height:38px;padding:7px 11px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:inherit;font:inherit}.aag-capability-search input:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}
+.aag-capability-summary{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:8px;padding:2px 6px 8px;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}.aag-capability-summary span{min-width:0}.aag-capability-summary span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+.aag-capability-list{display:flex;min-width:0;flex-direction:column}.aag-capability-list>button{display:flex;align-items:flex-start;flex-direction:column;gap:2px;width:100%;min-width:0;padding:9px 10px;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;text-align:left;cursor:pointer}.aag-capability-list>button:hover{background:var(--dsw-alias-interactive-bg-hover)}.aag-capability-list small{display:flex;min-width:0;align-items:center;gap:7px;overflow:hidden;max-width:100%;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;text-overflow:ellipsis;white-space:nowrap}
+.aag-capability-row{display:grid;box-sizing:border-box;grid-template-columns:30px minmax(0,1fr) 38px;align-items:center;gap:10px;min-width:0;min-height:62px;padding:9px 10px;border-bottom:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-primary)}.aag-capability-row:last-child{border-bottom:0}.aag-capability-row:hover{border-radius:8px;background:var(--dsw-alias-interactive-bg-hover)}
+.aag-connector-icon{display:flex;width:30px;height:30px;align-items:center;justify-content:center;border-radius:8px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary)}.aag-capability-row[data-enabled="true"] .aag-connector-icon{color:var(--dsw-alias-brand-primary)}
+.aag-connector-identity{display:flex;min-width:0;flex-direction:column;gap:2px}.aag-connector-identity strong{overflow:hidden;font-size:14px;line-height:20px;text-overflow:ellipsis;white-space:nowrap}.aag-connector-state{display:inline-flex;align-items:center;gap:5px}.aag-connector-state::before{width:6px;height:6px;flex:none;border-radius:50%;background:var(--dsw-alias-label-dimmed);content:""}.aag-connector-state[data-state="running"]::before{background:var(--dsw-alias-state-success-primary)}.aag-connector-state[data-state="starting"]::before{background:var(--dsw-alias-brand-primary)}.aag-connector-state[data-state="error"]{color:var(--dsw-alias-state-error-primary)}.aag-connector-state[data-state="error"]::before{background:var(--dsw-alias-state-error-primary)}
+.aag-capability-row>.aag-connector-toggle{grid-column:3;grid-row:1;position:relative;width:36px;height:20px;padding:2px;border:0;border-radius:999px;background:var(--dsw-alias-border-l2);cursor:pointer;transition:background-color .15s ease}.aag-capability-row>.aag-connector-toggle>span{display:block;width:16px;height:16px;border-radius:50%;background:var(--dsw-alias-label-primary-foreground);box-shadow:0 1px 2px rgba(0,0,0,.22);transition:transform .15s ease}.aag-capability-row>.aag-connector-toggle[aria-checked="true"]{background:var(--dsw-alias-brand-primary)}.aag-capability-row>.aag-connector-toggle[aria-checked="true"]>span{transform:translateX(16px)}.aag-capability-row>.aag-connector-toggle:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
+@media(max-width:560px){.aag-menu.aag-discovery{width:min(440px,calc(100vw - 24px))}.aag-capability-picker{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);height:340px}.aag-capability-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));padding:2px 2px 6px;border-right:0;border-bottom:1px solid var(--dsw-alias-border-l2)}.aag-capability-nav button{padding:7px 4px;text-align:center}.aag-capability-results{padding:6px 2px 2px}.aag-capability-summary span:last-child{display:none}}
 `
 export const CSS = TEAM_CSS + COMPOSER_CSS + SETTINGS_CSS + CARD_SETTINGS_CSS + DISCOVERY_CSS + CAPABILITY_PICKER_CSS
   + MENU_NAME_OVERRIDE + `{${EXPERT_MENU_NAME_STYLE}}`
@@ -574,6 +579,19 @@ export type ExpertMenuPlacement = 'above' | 'below'
 export interface ExpertMenuPosition {
   readonly placement: ExpertMenuPlacement
   readonly maxHeight: number
+}
+
+const CAPABILITY_MENU_WIDTH = 600
+
+export function connectorStateLabel(state: string, locale: 'zh' | 'en'): string {
+  const labels: Readonly<Record<string, readonly [string, string]>> = {
+    disabled: ['已停用', 'Disabled'],
+    starting: ['正在连接', 'Connecting'],
+    running: ['已连接', 'Connected'],
+    error: ['连接失败', 'Connection failed'],
+  }
+  const label = labels[state]
+  return label === undefined ? state : label[locale === 'zh' ? 0 : 1]
 }
 
 /**
@@ -795,7 +813,7 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
       const next = resolveExpertMenuPosition(root.getBoundingClientRect(), viewportHeight)
       const rect = root.getBoundingClientRect()
       const viewportWidth = window.visualViewport?.width ?? window.innerWidth
-      const width = Math.min(560, viewportWidth - 24)
+      const width = Math.min(CAPABILITY_MENU_WIDTH, viewportWidth - 24)
       setMenuLeft(Math.max(12 - rect.left, Math.min(0, viewportWidth - 12 - width - rect.left)))
       setMenuPosition((current) => current?.placement === next.placement && current.maxHeight === next.maxHeight ? current : next)
     }
@@ -902,6 +920,7 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
   const capabilityNeedle = capabilityQuery.trim().toLocaleLowerCase()
   const filteredSkills = capabilityNeedle === '' ? skills : skills.filter(skill => `${skill.name} ${skill.description}`.toLocaleLowerCase().includes(capabilityNeedle))
   const filteredMcpServers = capabilityNeedle === '' ? mcpServers : mcpServers.filter(server => `${server.serverName} ${server.state} ${server.tools.map(tool => tool.name).join(' ')}`.toLocaleLowerCase().includes(capabilityNeedle))
+  const enabledConnectorCount = mcpServers.filter(server => server.enabled).length
   const capabilitySearch = (placeholder: string): React.ReactElement => React.createElement('div', { className: 'aag-capability-search' },
     React.createElement('input', { type: 'search', autoFocus: true, value: capabilityQuery, 'aria-label': placeholder, placeholder,
       onChange: (event: React.ChangeEvent<HTMLInputElement>) => setCapabilityQuery(event.target.value) }))
@@ -917,12 +936,33 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
       : mode === 'mcp'
         ? React.createElement(React.Fragment, null,
           capabilitySearch(props.getActive() === 'zh' ? '搜索连接器或工具' : 'Search connectors or tools'),
+          React.createElement('div', { className: 'aag-capability-summary' },
+            React.createElement('span', null, props.getActive() === 'zh'
+              ? `${mcpServers.length} 个连接器 · ${enabledConnectorCount} 个已启用`
+              : `${mcpServers.length} connectors · ${enabledConnectorCount} enabled`),
+            React.createElement('span', null, props.getActive() === 'zh'
+              ? '已启用连接器的工具可用于当前对话'
+              : 'Tools from enabled connectors are available in this conversation')),
           React.createElement('div', { className: 'aag-capability-list' }, filteredMcpServers.length === 0
             ? React.createElement('div', { className: 'aag-menu-empty' }, capabilityNeedle === '' ? (props.getActive() === 'zh' ? '尚未配置连接器。' : 'No connectors configured.') : (props.getActive() === 'zh' ? '未找到匹配的连接器。' : 'No matching connectors.'))
-            : filteredMcpServers.map(server => React.createElement('div', { className: 'aag-capability-row', key: server.serverName },
-            React.createElement('span', null, React.createElement('strong', null, server.serverName), React.createElement('small', null, `${server.state} · ${server.tools.length} ${props.getActive() === 'zh' ? '个工具' : 'tools'}`)),
-            React.createElement('button', { type: 'button', onClick: () => { void createDesktopMcpApi().toggle(server.serverName, !server.enabled).then(setMcpServers).catch(() => setCapabilityError(props.getActive() === 'zh' ? '连接器状态更新失败。' : 'Could not update connector status.')) } }, server.enabled ? (props.getActive() === 'zh' ? '停用' : 'Disable') : (props.getActive() === 'zh' ? '启用' : 'Enable')),
-            React.createElement('div', { className: 'aag-capability-note' }, props.getActive() === 'zh' ? '已启用的连接器会将工具提供给当前对话。' : 'Enabled connectors make their tools available to this conversation.')))))
+            : filteredMcpServers.map(server => {
+              const action = server.enabled
+                ? (props.getActive() === 'zh' ? `停用 ${server.serverName}` : `Disable ${server.serverName}`)
+                : (props.getActive() === 'zh' ? `启用 ${server.serverName}` : `Enable ${server.serverName}`)
+              return React.createElement('div', { className: 'aag-capability-row', key: server.serverName, 'data-enabled': server.enabled || undefined },
+                React.createElement('span', { className: 'aag-connector-icon', 'aria-hidden': true }, React.createElement(PlugZap, { size: 16 })),
+                React.createElement('span', { className: 'aag-connector-identity' },
+                  React.createElement('strong', { title: server.serverName }, server.serverName),
+                  React.createElement('small', null,
+                    React.createElement('span', { className: 'aag-connector-state', 'data-state': server.state }, connectorStateLabel(server.state, props.getActive())),
+                    React.createElement('span', null, `${server.tools.length} ${props.getActive() === 'zh' ? '个工具' : server.tools.length === 1 ? 'tool' : 'tools'}`))),
+                React.createElement('button', { type: 'button', role: 'switch', className: 'aag-connector-toggle', 'aria-label': action,
+                  'aria-checked': server.enabled, title: action, onClick: () => {
+                    setCapabilityError(null)
+                    void createDesktopMcpApi().toggle(server.serverName, !server.enabled).then(setMcpServers)
+                      .catch(() => setCapabilityError(props.getActive() === 'zh' ? '连接器状态更新失败。' : 'Could not update connector status.'))
+                  } }, React.createElement('span', { 'aria-hidden': true })))
+            })))
         : React.createElement(ExpertDiscovery, { experts: results, enabled: catalog.enabled, locale: props.getActive(), t: props.t, avatarSrc: menuAvatar,
           health: new Map(results.map(expert => [expert.slug, expertCapabilityHealth(expert, capabilitySnapshot.catalog, capabilitySnapshot.loading)])),
           query, onQuery: setQuery, busy, hasMore: searching && matches.length > results.length, onPick: slug => { void pick(slug) } })
@@ -1476,6 +1516,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   }), 'clawclaw-experts: catalog changes')
   if (typeof remote.getTeams === 'function') void refreshTeams(remote as TeamRemote).catch((error: unknown) => console.warn('[clawclaw-experts] 专家团预加载失败：', error))
   await readEnabled(remote).catch((error: unknown) => console.warn('[clawclaw-experts] 初始名册读取失败，设置页可重试：', error))
+  ctx.effect(() => installLegacyTeamReferenceGuard(), 'clawclaw-experts: legacy team message references')
   ctx.effect(() => {
     const names = installNativeTeamNames(async () => {
       if (!remote.getTeams) return new Map<string, string>()
@@ -1607,7 +1648,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
             teamCache = snapshot.teams.map(team => localizeTeam(team, active))
             const team = teamCache.find(team => team.id === id)
             if (!team || !snapshot.enabledTeams.includes(id) || team.members.some(member => !catalog.enabled.includes(member.expertSlug) || !catalog.experts.some(e => e.slug === member.expertSlug && !e.conflict))) throw new Error(teamText(active, '团队已停用或成员失效，请修复后再发送。'))
-            return teamText(active, '@专家团：{0}\u00a0', [team.name])
+            return teamSubmissionText(team, active)
           },
         },
       }))

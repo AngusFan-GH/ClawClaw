@@ -9,8 +9,8 @@ import { applySkillsSettings } from '../src/client/skills-settings.ts'
 
 describe('Desktop Skills and MCP settings registration', () => {
   it('localizes the MCP settings label and title in Chinese', () => {
-    expect(mcpZh.nav).toBe('MCP 服务')
-    expect(mcpZh.title).toBe('MCP 服务')
+    expect(mcpZh.nav).toBe('连接器')
+    expect(mcpZh.title).toBe('连接器')
   })
 
   it('registers independent menu entries and sections', () => {

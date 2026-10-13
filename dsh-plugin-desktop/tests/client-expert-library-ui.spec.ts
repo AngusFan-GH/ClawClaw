@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CUSTOM_EDITOR_CSS } from '../src/experts/client/custom-editor.ts'
 import { customEn, customZh } from '../src/experts/client/custom-locales.ts'
-import { CARD_SETTINGS_CSS } from '../src/experts/client/index.ts'
+import { CAPABILITY_PICKER_CSS, CARD_SETTINGS_CSS, connectorStateLabel } from '../src/experts/client/index.ts'
 import { TEAM_CSS } from '../src/experts/client/team-style.ts'
 
 describe('expert library UI', () => {
@@ -35,6 +35,16 @@ describe('expert library UI', () => {
     expect(CARD_SETTINGS_CSS).toContain('column-gap:4px;row-gap:2px')
     expect(CARD_SETTINGS_CSS).toContain('.aag-expert-card-custom .aag-card-category{flex:none')
     expect(CARD_SETTINGS_CSS).toContain('.aag-expert-card-custom .aag-card-description{min-height:19px;-webkit-line-clamp:1}')
+  })
+
+  it('keeps the conversation connector picker compact and responsive', () => {
+    expect(connectorStateLabel('running', 'zh')).toBe('已连接')
+    expect(connectorStateLabel('error', 'en')).toBe('Connection failed')
+    expect(connectorStateLabel('vendor-state', 'zh')).toBe('vendor-state')
+    expect(CAPABILITY_PICKER_CSS).toContain('grid-template-columns:30px minmax(0,1fr) 38px')
+    expect(CAPABILITY_PICKER_CSS).toContain('.aag-capability-row>.aag-connector-toggle{grid-column:3')
+    expect(CAPABILITY_PICKER_CSS).toContain('grid-template-columns:repeat(4,minmax(0,1fr))')
+    expect(CAPABILITY_PICKER_CSS).toContain('.aag-capability-summary span:last-child{display:none}')
   })
 
   it('keeps the team editor controls legible and responsive', () => {

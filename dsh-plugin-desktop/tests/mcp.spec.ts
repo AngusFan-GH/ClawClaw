@@ -6,6 +6,7 @@ import {
   type DesktopMcpSettings,
 } from '../src/mcp.ts'
 import { DESKTOP_MCP_CATALOG } from '../src/mcp-catalog.ts'
+import { MCP_CAPABILITY_IDS } from '../src/mcp-capabilities.ts'
 
 const reconnect = { enabled: true, initialDelayMs: 500, maxDelayMs: 30_000, maxAttempts: 10 }
 
@@ -36,6 +37,49 @@ function controllerFixture(initial: DesktopMcpSettings, options: { failUpdate?: 
 }
 
 describe('Desktop MCP', () => {
+  it('keeps every catalog connector valid, unique, and reference-only', () => {
+    const capabilities = new Set<string>(MCP_CAPABILITY_IDS)
+    expect(new Set(DESKTOP_MCP_CATALOG.map(entry => entry.id)).size).toBe(DESKTOP_MCP_CATALOG.length)
+    expect(new Set(DESKTOP_MCP_CATALOG.map(entry => entry.server.serverName)).size).toBe(DESKTOP_MCP_CATALOG.length)
+    for (const entry of DESKTOP_MCP_CATALOG) {
+      expect(entry.server.connectorId).toBe(entry.id)
+      expect(entry.server.capabilities).toEqual(entry.capabilities)
+      expect(entry.capabilities.every(capability => capabilities.has(capability))).toBe(true)
+      expect(() => new URL(entry.sourceUrl)).not.toThrow()
+      expect(entry.credentials.every(field => field.target === (entry.server.transport === 'stdio' ? 'env' : 'header'))).toBe(true)
+      const values = Object.fromEntries(entry.credentials.map(field => [field.id, `secret-${entry.id}-${field.id}`]))
+      const materialized = materializeCatalogConnector(entry, values)
+      expect(() => parseDesktopMcpServer(materialized.server)).not.toThrow()
+      expect(JSON.stringify(materialized.server)).not.toContain(`secret-${entry.id}`)
+      expect(Object.keys(materialized.secrets)).toHaveLength(entry.credentials.length)
+    }
+  })
+
+  it('installs every catalog connector through the real settings schema', async () => {
+    const fixture = controllerFixture({ mcpServers: [] }, { validateSchema: true })
+    for (const entry of DESKTOP_MCP_CATALOG) {
+      const values = Object.fromEntries(entry.credentials.map(field => [field.id, `secret-${entry.id}-${field.id}`]))
+      const view = await fixture.controller.install(entry.id, values)
+      expect(view.mcpServers.find(server => server.connectorId === entry.id)).toBeDefined()
+      expect(view.catalog.find(item => item.id === entry.id)?.installedServerName).toBe(entry.server.serverName)
+    }
+    expect(fixture.update).toHaveBeenCalledTimes(DESKTOP_MCP_CATALOG.length)
+    await fixture.controller.dispose()
+  })
+
+  it('installs PostgreSQL without an inline connection string for local profile discovery', () => {
+    const postgres = DESKTOP_MCP_CATALOG.find(entry => entry.id === 'postgresql')!
+    const materialized = materializeCatalogConnector(postgres, {})
+    expect(materialized.server).toEqual(expect.objectContaining({
+      serverName: 'postgresql',
+      command: 'npx',
+      args: ['-y', '@microsoft/postgres-mcp@0.2.0', 'run'],
+      env: {},
+      capabilities: ['database.sql'],
+    }))
+    expect(materialized.secrets).toEqual({})
+  })
+
   it('accepts bounded credential-free configurations', () => {
     expect(parseDesktopMcpServer({
       serverName: 'local_files', transport: 'stdio', command: 'node', args: ['server.js'], enabled: true,
@@ -52,6 +96,15 @@ describe('Desktop MCP', () => {
     expect(() => parseDesktopMcpServer({
       serverName: 'remote', transport: 'streamable-http', url: 'https://user:secret@example.com/mcp', enabled: true,
     })).toThrow(/without embedded credentials/)
+    expect(() => parseDesktopMcpServer({
+      serverName: 'remote', transport: 'streamable-http', url: 'http://example.com/mcp', enabled: true,
+    })).toThrow(/must use HTTPS/)
+    expect(() => parseDesktopMcpServer({
+      serverName: 'deceptive', transport: 'streamable-http', url: 'http://127.example.com/mcp', enabled: true,
+    })).toThrow(/must use HTTPS/)
+    expect(() => parseDesktopMcpServer({
+      serverName: 'local_http', transport: 'streamable-http', url: 'http://127.0.0.1:3000/mcp', enabled: true,
+    })).not.toThrow()
   })
 
   it('imports standard mcpServers JSON without persisting credential values in configuration', () => {
@@ -126,6 +179,33 @@ describe('Desktop MCP', () => {
       serverName: 'local', transport: 'stdio', command: 'node', env: {}, reconnect, enabled: false,
     }, undefined, { UNRELATED_SECRET: 'secret' })).rejects.toThrow(/not referenced/)
     expect(fixture.set).not.toHaveBeenCalled()
+  })
+
+  it('cleans up only MCP-managed credentials after edit and removal', async () => {
+    const fixture = controllerFixture({ mcpServers: [] })
+    await fixture.controller.save({
+      serverName: 'local', transport: 'stdio', command: 'node', env: { TOKEN: 'OWNED_TOKEN', SHARED: 'SHARED_TOKEN' }, reconnect, enabled: false,
+    }, undefined, { OWNED_TOKEN: 'owned', SHARED_TOKEN: 'shared' })
+    await fixture.controller.save({
+      serverName: 'consumer', transport: 'stdio', command: 'node', env: { TOKEN: 'SHARED_TOKEN' }, reconnect, enabled: false,
+    })
+    await fixture.controller.save({
+      serverName: 'local', transport: 'stdio', command: 'node', env: {}, reconnect, enabled: false,
+    }, 'local')
+    expect(fixture.stored.has('OWNED_TOKEN')).toBe(false)
+    expect(fixture.stored.get('SHARED_TOKEN')).toBe('shared')
+    await fixture.controller.remove('consumer')
+    expect(fixture.stored.has('SHARED_TOKEN')).toBe(false)
+  })
+
+  it('removes managed credentials when their owning MCP server is removed', async () => {
+    const fixture = controllerFixture({ mcpServers: [] })
+    await fixture.controller.save({
+      serverName: 'local', transport: 'stdio', command: 'node', env: { TOKEN: 'OWNED_TOKEN' }, reconnect, enabled: false,
+    }, undefined, { OWNED_TOKEN: 'owned' })
+    expect((await fixture.controller.read()).mcpServers[0]?.managedCredentialRefs).toEqual(['OWNED_TOKEN'])
+    await fixture.controller.remove('local')
+    expect(fixture.stored.has('OWNED_TOKEN')).toBe(false)
   })
 
   it('stops reporting tools after the underlying registration disappears', async () => {
@@ -206,6 +286,30 @@ describe('Desktop MCP', () => {
     const started = await fixture.controller.beginOAuth('oauth', 'http://127.0.0.1:3210/api/desktop/mcp/oauth/callback')
     expect(started.authorizationUrl).toMatch(/^https:\/\/identity\.example\.com\/authorize/u)
     expect(new URL(started.authorizationUrl).searchParams.get('resource')).toBe('https://mcp.example.com/')
+    vi.unstubAllGlobals()
+  })
+
+  it('uses a pre-registered OAuth client when dynamic registration is unavailable', async () => {
+    const secretRef = 'MCP_OAUTH_CLIENT_SECRET'
+    const server = parseDesktopMcpServer({ serverName: 'oauth', transport: 'streamable-http', url: 'https://mcp.example.com/mcp', headers: {},
+      oauth: { issuer: 'https://identity.example.com', scope: 'mcp:tools', clientId: 'desktop-client',
+        clientSecretRef: secretRef, tokenEndpointAuthMethod: 'client_secret_basic' }, reconnect, enabled: false })
+    const fixture = controllerFixture({ mcpServers: [server] })
+    fixture.stored.set(secretRef, 'client-secret')
+    const fetcher = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('.well-known')) return new Response(JSON.stringify({ issuer: 'https://identity.example.com',
+        authorization_endpoint: 'https://identity.example.com/authorize', token_endpoint: 'https://identity.example.com/token',
+        code_challenge_methods_supported: ['S256'], token_endpoint_auth_methods_supported: ['client_secret_basic'] }), { status: 200 })
+      expect(init?.headers).toMatchObject({ Authorization: expect.stringMatching(/^Basic /u) })
+      return new Response(JSON.stringify({ access_token: 'access-secret', token_type: 'Bearer', expires_in: 3600 }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetcher)
+    const started = await fixture.controller.beginOAuth('oauth', 'http://127.0.0.1:3210/api/desktop/mcp/oauth/callback')
+    expect(new URL(started.authorizationUrl).searchParams.get('client_id')).toBe('desktop-client')
+    expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('/register'))).toBe(false)
+    await fixture.controller.completeOAuth(new URL(started.authorizationUrl).searchParams.get('state')!, 'code')
+    expect(fixture.stored.get(mcpCredentialReference('oauth', 'OAUTH_GRANT'))).toContain('access-secret')
     vi.unstubAllGlobals()
   })
 

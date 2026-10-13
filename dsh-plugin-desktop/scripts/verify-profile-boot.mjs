@@ -275,7 +275,7 @@ try {
     throw new Error('assembled desktop profile cannot read the bundled ClawClaw expert personas')
   }
   const selection = ctx.agentDefaultModel.currentSelection()
-  if (selection.provider !== 'spiritx' || selection.model !== 'DeepSeek-V4-Flash') {
+  if (selection.provider !== 'spiritx' || selection.model !== '__unconfigured__') {
     throw new Error(`assembled profile selected unexpected default model ${selection.provider}/${selection.model}`)
   }
   const providers = ctx.llm.listProviders()
@@ -286,8 +286,7 @@ try {
   const configurableProviders = ctx.llm.listConfigurableProviders()
   const spiritxDirectory = configurableProviders.find(provider => provider.provider === 'spiritx')
   if (spiritxDirectory?.displayName !== 'SpiritX'
-    || spiritxDirectory.declared !== false
-    || spiritxDirectory.settingsNs !== 'spiritx') {
+    || spiritxDirectory.settingsNs !== 'llm-pi-ai') {
     throw new Error(`assembled profile does not present SpiritX as built in: ${JSON.stringify(configurableProviders)}`)
   }
   const officialCatalog = configurableProviders.filter(provider => provider.settingsNs === 'llm-pi-ai')
@@ -300,8 +299,8 @@ try {
     throw new Error(`assembled profile has duplicate configurable providers: ${JSON.stringify(configurableProviders)}`)
   }
   const spiritxModels = await ctx.llm.listModels('spiritx')
-  if (!spiritxModels.some(model => model.id === 'DeepSeek-V4-Flash')) {
-    throw new Error(`assembled profile is missing the SpiritX default model: ${JSON.stringify(spiritxModels)}`)
+  if (spiritxModels.length !== 0) {
+    throw new Error(`assembled profile unexpectedly materialized SpiritX models before setup: ${JSON.stringify(spiritxModels)}`)
   }
   if (ctx.desktopProfiles.current.name !== 'desktop'
     || ctx.desktopProfiles.current.dir !== prepared.profile.dir) {

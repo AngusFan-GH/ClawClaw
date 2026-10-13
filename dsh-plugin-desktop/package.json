@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-desktop",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "ClawClaw: an Electron shell composed as a DeepSeek Harness Cordis plugin",
   "license": "MIT",
   "publishConfig": {
@@ -528,6 +528,8 @@
       "build/app-icon-mac.png",
       "build/tray-icon.svg",
       "build/tray-icon*.png",
+      "assets/experts/**",
+      "assets/skills/**",
       "cordis.patch.yml",
       "lib/**",
       "package.json",

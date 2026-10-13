@@ -21,13 +21,25 @@ describe('SpiritX provider directory', () => {
     ])).toEqual([expect.objectContaining({ provider: 'spiritx', declared: false })])
   })
 
-  it('publishes no catalog entries when the product route is absent', () => {
+  it('publishes the dormant SpiritX row before a key materializes its profile', () => {
+    expect(productProviderDirectory([])).toEqual([{
+      provider: 'spiritx',
+      displayName: 'SpiritX',
+      settingsNs: 'spiritx',
+      settingsPath: ['providers', 'spiritx'],
+      declared: false,
+    }])
+  })
+
+  it('keeps the dormant product entry when unrelated catalog rows are present', () => {
     expect(productProviderDirectory([{
       provider: 'anthropic',
       displayName: 'Anthropic',
       settingsNs: 'llm-pi-ai',
       settingsPath: ['providers', 'anthropic'],
       declared: false,
-    }])).toEqual([])
+    }])).toEqual([expect.objectContaining({
+      provider: 'spiritx', settingsNs: 'spiritx', settingsPath: ['providers', 'spiritx'], declared: false,
+    })])
   })
 })

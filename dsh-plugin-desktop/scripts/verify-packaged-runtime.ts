@@ -139,6 +139,10 @@ export interface PackagedRuntimeContext {
 export const REQUIRED_PACKAGED_RUNTIME_ENTRIES = [
   'package.json',
   'cordis.patch.yml',
+  'assets/experts/LICENSE',
+  'assets/experts/catalog/engineering/engineering-software-architect.md',
+  'assets/experts/catalog-zh/engineering/engineering-software-architect.md',
+  'assets/skills/software-delivery/SKILL.md',
   ...REQUIRED_DSH_CLI_RUNTIME_ENTRIES,
   'node_modules/@deepseek-ai/dsh-subprocess-local/lib/index.js',
   'node_modules/@deepseek-ai/dsh-web-frontend/dist/index.html',

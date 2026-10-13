@@ -12,6 +12,12 @@ export const teamReference = (team: ExpertTeam, locale: TeamLocale = 'zh'): Refe
     clipboardText: teamText(locale, "@专家团：{0}\u00A0", [team.name]),
     ...{ appearance: 'session' },
 });
+/**
+ * Sent messages must not use a bare `@name` form: the host transcript treats
+ * every unknown @ token as a workspace file and makes it openable. Keep the
+ * composer chip's @ projection above, but serialize a distinct team marker.
+ */
+export const teamSubmissionText = (team: Pick<ExpertTeam, 'name'>, locale: TeamLocale = 'zh'): string => teamText(locale, '[专家团：{0}]\u00A0', [team.name]);
 /** 团队只保留一个原生标签；替换需要明确操作，正文和附件不清空。 */
 export async function insertTeamReference(target: ReferenceInsertionTarget | undefined, team: ExpertTeam, example?: string, triggerSpan?: TokenSpan, locale: TeamLocale = 'zh', confirm = confirmTeamAction): Promise<boolean> {
     const tx = (key: string, values?: readonly unknown[]) => teamText(locale, key, values);

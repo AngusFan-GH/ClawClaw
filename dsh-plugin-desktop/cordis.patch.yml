@@ -87,57 +87,23 @@
 - id: ui-settings-account
   disabled: true
 
-# SpiritX is the product-owned default route. The official dormant llm-pi-ai
-# instance remains enabled so the Models page retains its third-party catalog
-# and custom API flow under the canonical llm-pi-ai settings namespace.
-- insert:
-    - id: spiritx
-      name: dsh-plugin-desktop/spiritx
-      config:
-        providers:
-          spiritx:
-            displayName: SpiritX
-            apiKeyEnv: SPIRITX_API_KEY
-            api: openai-responses
-            baseURL: https://ai.xzinfra.com/spiritx-api/v1
-            models:
-              - id: DeepSeek-V4-Flash
-                name: DeepSeek-V4-Flash
-              - id: DeepSeek-V4-Flash-0731
-                name: DeepSeek-V4-Flash-0731
-              - id: gpt-6-Astra
-                name: gpt-6-Astra
-              - id: Qwen3Guard-Gen-4B
-                name: Qwen3Guard-Gen-4B
-              - id: Qwen3.8-Flash-Next-NVFP4
-                name: Qwen3.8-Flash-Next-NVFP4
-              - id: gpt-5.6-terra
-                name: gpt-5.6-terra
-              - id: gpt-image-2
-                name: gpt-image-2
-              - id: Qwen3.8-27B-FP8
-                name: Qwen3.8-27B-FP8
-              - id: Qwen3.8-27B
-                name: Qwen3.8-27B
-              - id: gpt-5.6-sol
-                name: gpt-5.6-sol
-              - id: gpt-5.6-luna
-                name: gpt-5.6-luna
-              - id: gpt-5.6
-                name: gpt-5.6
-              - id: glm-5.2
-                name: glm-5.2
-              - id: MiniMax-M2.7-NVFP4
-                name: MiniMax-M2.7-NVFP4
-              - id: Qwen3.6-27B
-                name: Qwen3.6-27B
-              - id: gpt-6-astra
-                name: gpt-6-astra
+# SpiritX is owned by the single official pi-ai instance. The empty catalog
+# keeps the route visible without registering a second adapter or auth flows;
+# a verified key materializes the live catalog through Models or onboarding.
+- id: llm-pi-ai
+  config:
+    providers:
+      spiritx:
+        displayName: SpiritX
+        apiKeyEnv: SPIRITX_API_KEY
+        api: openai-responses
+        baseURL: https://ai.xzinfra.com/spiritx-api/v1
+        models: []
 
 - id: agent-default-model
   config:
     provider: spiritx
-    model: DeepSeek-V4-Flash
+    model: __unconfigured__
 
 - id: llm-deepseek
   disabled: true

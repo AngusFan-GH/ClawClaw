@@ -518,32 +518,27 @@ virtualStoreDirMaxLength: 60
     }))
   })
 
-  it('uses SpiritX as the product model default without DeepSeek-owned defaults', () => {
+  it('starts SpiritX without a built-in model catalog', () => {
     const prepared = prepareDesktopProfile(undefined, temporaryHome(), 'darwin')
     const rows = composeEntries([prepared.patches])
 
     expect(rows.find(row => row.id === 'agent-default-model')).toEqual(expect.objectContaining({
-      config: { provider: 'spiritx', model: 'DeepSeek-V4-Flash' },
+      config: { provider: 'spiritx', model: '__unconfigured__' },
     }))
-    expect(rows.find(row => row.id === 'spiritx')).toEqual(expect.objectContaining({
-      name: 'dsh-plugin-desktop/spiritx',
+    expect(rows.find(row => row.id === 'spiritx')).toBeUndefined()
+    expect(rows.find(row => row.id === 'llm-pi-ai')).toEqual(expect.objectContaining({
+      name: '@deepseek-ai/dsh-llm-pi-ai',
       config: {
         providers: {
-          spiritx: expect.objectContaining({
+          spiritx: {
             displayName: 'SpiritX',
             apiKeyEnv: 'SPIRITX_API_KEY',
             api: 'openai-responses',
             baseURL: 'https://ai.xzinfra.com/spiritx-api/v1',
-            models: expect.arrayContaining([
-              { id: 'DeepSeek-V4-Flash', name: 'DeepSeek-V4-Flash' },
-              { id: 'gpt-6-astra', name: 'gpt-6-astra' },
-            ]),
-          }),
+            models: [],
+          },
         },
       },
-    }))
-    expect(rows.find(row => row.id === 'llm-pi-ai')).toEqual(expect.objectContaining({
-      name: '@deepseek-ai/dsh-llm-pi-ai',
     }))
     expect(rows.find(row => row.id === 'llm-pi-ai')?.disabled).not.toBe(true)
     for (const id of [
@@ -596,6 +591,20 @@ virtualStoreDirMaxLength: 60
     const home = temporaryHome()
     const profileDir = ensureDesktopProfile(home)
     writeFileSync(join(profileDir, 'cordis.patch.yml'), [
+      '- insert:',
+      '    - id: spiritx',
+      '      name: dsh-plugin-desktop/spiritx',
+      '      config:',
+      '        providers:',
+      '          spiritx:',
+      '            models:',
+      '              - id: legacy-chat',
+      '                name: Legacy Chat',
+      '- id: llm-pi-ai',
+      '  config:',
+      '    providers:',
+      '      minimax-cn:',
+      '        apiKeyEnv: MINIMAX_CN_API_KEY',
       '- id: desktop-shortcuts',
       '  config:',
       '    items:',
@@ -692,6 +701,18 @@ virtualStoreDirMaxLength: 60
       name: 'dsh-plugin-desktop/experts',
       config: { enabled: ['product-manager'] },
     })
+    expect(rows.find(row => row.id === 'llm-pi-ai')?.config).toEqual({
+      providers: {
+        'minimax-cn': { apiKeyEnv: 'MINIMAX_CN_API_KEY' },
+        spiritx: {
+          displayName: 'SpiritX',
+          apiKeyEnv: 'SPIRITX_API_KEY',
+          api: 'openai-responses',
+          baseURL: 'https://ai.xzinfra.com/spiritx-api/v1',
+          models: [{ id: 'legacy-chat', name: 'Legacy Chat' }],
+        },
+      },
+    })
     expect(firstPersisted).toBe(persisted)
     expect(persisted.indexOf('insert:')).toBeLessThan(persisted.indexOf('id: desktop-shortcuts\n  config:'))
     expect(persisted.indexOf('insert:')).toBeLessThan(persisted.indexOf('id: desktop-cron-tasks\n  config:'))
@@ -703,7 +724,8 @@ virtualStoreDirMaxLength: 60
     expect(persisted.match(/id: desktop-notifications\n/g)).toHaveLength(2)
     expect(persisted.match(/id: desktop-default-workspace\n/g)).toHaveLength(2)
     expect(persisted).toContain('path: !!js process.env.CLAWCLAW_DEFAULT_WORKSPACE')
-    expect(persisted.match(/id: spiritx\n/g)).toHaveLength(1)
+    expect(persisted.match(/id: spiritx\n/g) ?? []).toHaveLength(0)
+    expect(persisted.match(/id: llm-pi-ai\n/g)).toHaveLength(1)
     expect(persisted.match(/id: agent-default-model\n/g)).toHaveLength(1)
     expect(persisted.match(/id: clawclaw-experts\n/g)).toHaveLength(2)
     expect(prepared.overlays.some(patch => patch.id === 'desktop-shell')).toBe(true)
@@ -711,7 +733,7 @@ virtualStoreDirMaxLength: 60
       && patch.insert.some(row => row.id === 'desktop-shortcuts' || row.id === 'desktop-cron-tasks'
         || row.id === 'desktop-skills' || row.id === 'desktop-mcp' || row.id === 'desktop-reminders'
         || row.id === 'desktop-notifications' || row.id === 'desktop-default-workspace'
-        || row.id === 'spiritx' || row.id === 'clawclaw-experts'))).toBe(false)
+        || row.id === 'clawclaw-experts'))).toBe(false)
     expect(prepared.overlays.some(patch => patch.id === 'agent-default-model')).toBe(false)
     expect(composeEntries([preparedAgain.patches]).find(row => row.id === 'desktop-cron-tasks'))
       .toEqual(rows.find(row => row.id === 'desktop-cron-tasks'))

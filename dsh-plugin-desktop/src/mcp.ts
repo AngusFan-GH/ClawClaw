@@ -41,12 +41,14 @@ const StdioServerSchema = z.object({
   reconnect: z.object({ enabled: z.boolean().default(true), initialDelayMs: z.number().min(100).max(60_000).default(500), maxDelayMs: z.number().min(100).max(300_000).default(30_000), maxAttempts: z.number().min(0).max(100).default(10) }).default(DEFAULT_RECONNECT),
   enabled: z.boolean().default(true),
   connectorId: z.string().max(128).pattern(CONNECTOR_ID), capabilities: z.array(z.string().max(128).pattern(CAPABILITY_ID)).max(32).default([]),
+  managedCredentialRefs: z.array(z.string().max(256)).max(64).default([]),
 })
 const HttpServerSchema = z.object({
   serverName: z.string().required().pattern(SERVER_NAME), transport: z.const('streamable-http'),
   url: z.string().required().max(4_096), headers: z.dict(z.string().max(256)).default({}), timeoutMs: z.number().min(1_000).max(600_000).default(60_000),
   reconnect: z.object({ enabled: z.boolean().default(true), initialDelayMs: z.number().min(100).max(60_000).default(500), maxDelayMs: z.number().min(100).max(300_000).default(30_000), maxAttempts: z.number().min(0).max(100).default(10) }).default(DEFAULT_RECONNECT), enabled: z.boolean().default(true),
-  connectorId: z.string().max(128).pattern(CONNECTOR_ID), capabilities: z.array(z.string().max(128).pattern(CAPABILITY_ID)).max(32).default([]), oauth: z.any(),
+  connectorId: z.string().max(128).pattern(CONNECTOR_ID), capabilities: z.array(z.string().max(128).pattern(CAPABILITY_ID)).max(32).default([]),
+  managedCredentialRefs: z.array(z.string().max(256)).max(64).default([]), oauth: z.any(),
 })
 const McpServerSchema = z.union([StdioServerSchema, HttpServerSchema])
 export const DesktopMcpSettingsSchema: z<DesktopMcpSettings> = z.object({
@@ -67,6 +69,16 @@ function assertHttpUrl(value: string): void {
   if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username !== '' || url.password !== '') {
     throw new TypeError('MCP URL must be an HTTP or HTTPS URL without embedded credentials')
   }
+  const hostname = url.hostname.toLocaleLowerCase()
+  const loopback = hostname === 'localhost' || hostname === '[::1]' || /^127(?:\.\d{1,3}){3}$/u.test(hostname)
+  if (url.protocol === 'http:' && !loopback) {
+    throw new TypeError('Remote MCP URLs must use HTTPS; HTTP is allowed only for loopback addresses')
+  }
+}
+function serverCredentialReferences(server: DesktopMcpServerConfig): ReadonlySet<string> {
+  const refs = Object.values(server.transport === 'stdio' ? server.env : server.headers)
+  if (server.transport === 'streamable-http' && server.oauth?.clientSecretRef !== undefined) refs.push(server.oauth.clientSecretRef)
+  return new Set(refs)
 }
 export function parseDesktopMcpServer(value: unknown): DesktopMcpServerConfig {
   const parsed = McpServerSchema(mutableSchemaInput(value) as never) as DesktopMcpServerConfig
@@ -75,7 +87,10 @@ export function parseDesktopMcpServer(value: unknown): DesktopMcpServerConfig {
     if (parsed.oauth !== undefined) {
       if (!isRecord(parsed.oauth) || (parsed.oauth.issuer !== undefined && (typeof parsed.oauth.issuer !== 'string' || parsed.oauth.issuer.length > 4_096))
         || typeof parsed.oauth.scope !== 'string' || parsed.oauth.scope.length > 2_048
-        || (parsed.oauth.resource !== undefined && (typeof parsed.oauth.resource !== 'string' || parsed.oauth.resource.length > 4_096))) {
+        || (parsed.oauth.resource !== undefined && (typeof parsed.oauth.resource !== 'string' || parsed.oauth.resource.length > 4_096))
+        || (parsed.oauth.clientId !== undefined && (typeof parsed.oauth.clientId !== 'string' || parsed.oauth.clientId.trim().length === 0 || parsed.oauth.clientId.length > 2_048))
+        || (parsed.oauth.clientSecretRef !== undefined && (typeof parsed.oauth.clientSecretRef !== 'string' || !isCredentialRefName(parsed.oauth.clientSecretRef)))
+        || (parsed.oauth.tokenEndpointAuthMethod !== undefined && !['none', 'client_secret_post', 'client_secret_basic'].includes(String(parsed.oauth.tokenEndpointAuthMethod)))) {
         throw new TypeError('Invalid OAuth configuration')
       }
       if (typeof parsed.oauth.issuer === 'string' && parsed.oauth.issuer !== '') assertSecureOAuthUrl(parsed.oauth.issuer, 'OAuth issuer')
@@ -84,27 +99,45 @@ export function parseDesktopMcpServer(value: unknown): DesktopMcpServerConfig {
       if (Object.keys(parsed.headers).some(key => key.toLocaleLowerCase() === 'authorization')) {
         throw new TypeError('OAuth servers must not also configure an Authorization header')
       }
+      const method = parsed.oauth.tokenEndpointAuthMethod ?? 'none'
+      if (parsed.oauth.clientId === undefined && (parsed.oauth.clientSecretRef !== undefined || parsed.oauth.tokenEndpointAuthMethod !== undefined)) {
+        throw new TypeError('OAuth client authentication requires a pre-registered client ID')
+      }
+      if (method !== 'none' && parsed.oauth.clientId !== undefined && parsed.oauth.clientSecretRef === undefined) {
+        throw new TypeError('OAuth confidential clients require a client secret credential reference')
+      }
+      if (method === 'none' && parsed.oauth.clientSecretRef !== undefined) throw new TypeError('OAuth public clients must not configure a client secret')
     }
   }
   else if (parsed.command.trim() === '') throw new TypeError('MCP command is required')
   const references = parsed.transport === 'stdio' ? parsed.env : parsed.headers
+  const managedCredentialRefs = parsed.managedCredentialRefs ?? []
   for (const [key, ref] of Object.entries(references)) {
     if (!(parsed.transport === 'stdio' ? ENV_NAME : HTTP_HEADER).test(key) || !isCredentialRefName(ref)) {
       throw new TypeError(`Invalid ${parsed.transport === 'stdio' ? 'environment variable' : 'HTTP header'} credential reference`)
     }
+  }
+  const allReferences = serverCredentialReferences(parsed)
+  if (managedCredentialRefs.some(ref => !isCredentialRefName(ref) || !allReferences.has(ref))) {
+    throw new TypeError('Managed MCP credentials must be referenced by this server')
   }
   if (parsed.reconnect.maxDelayMs < parsed.reconnect.initialDelayMs) throw new TypeError('MCP reconnect max delay must not be less than its initial delay')
   return Object.freeze(parsed.transport === 'stdio'
     ? { serverName: parsed.serverName, transport: parsed.transport, command: parsed.command.trim(),
         args: Object.freeze([...parsed.args]), cwd: parsed.cwd, env: Object.freeze({ ...parsed.env }), timeoutMs: parsed.timeoutMs,
         reconnect: Object.freeze({ ...parsed.reconnect }), enabled: parsed.enabled,
-        ...(parsed.connectorId === undefined ? {} : { connectorId: parsed.connectorId }), capabilities: Object.freeze([...new Set(parsed.capabilities)]) }
+        ...(parsed.connectorId === undefined ? {} : { connectorId: parsed.connectorId }), capabilities: Object.freeze([...new Set(parsed.capabilities)]),
+        managedCredentialRefs: Object.freeze([...new Set(managedCredentialRefs)]) }
     : { serverName: parsed.serverName, transport: parsed.transport, url: parsed.url, headers: Object.freeze({ ...parsed.headers }), timeoutMs: parsed.timeoutMs,
         reconnect: Object.freeze({ ...parsed.reconnect }), enabled: parsed.enabled,
         ...(parsed.connectorId === undefined ? {} : { connectorId: parsed.connectorId }), capabilities: Object.freeze([...new Set(parsed.capabilities)]),
+        managedCredentialRefs: Object.freeze([...new Set(managedCredentialRefs)]),
         ...(parsed.oauth === undefined ? {} : { oauth: Object.freeze({
           ...(typeof parsed.oauth.issuer !== 'string' || parsed.oauth.issuer.trim() === '' ? {} : { issuer: parsed.oauth.issuer }), scope: parsed.oauth.scope.trim(),
-          ...(parsed.oauth.resource === undefined ? {} : { resource: parsed.oauth.resource }) }) }) })
+          ...(parsed.oauth.resource === undefined ? {} : { resource: parsed.oauth.resource }),
+          ...(parsed.oauth.clientId === undefined ? {} : { clientId: parsed.oauth.clientId.trim(),
+            tokenEndpointAuthMethod: parsed.oauth.tokenEndpointAuthMethod ?? 'none' }),
+          ...(parsed.oauth.clientSecretRef === undefined ? {} : { clientSecretRef: parsed.oauth.clientSecretRef }) }) }) })
 }
 function mutableMcpSettings(servers: readonly DesktopMcpServerConfig[]): DesktopMcpSettings {
   return { mcpServers: servers.map(server => server.transport === 'stdio'
@@ -113,17 +146,38 @@ function mutableMcpSettings(servers: readonly DesktopMcpServerConfig[]): Desktop
         env: { ...server.env }, timeoutMs: server.timeoutMs, reconnect: { ...server.reconnect }, enabled: server.enabled,
         ...(server.connectorId === undefined ? {} : { connectorId: server.connectorId }),
         ...(server.capabilities === undefined ? {} : { capabilities: [...server.capabilities] }),
+        ...(server.managedCredentialRefs === undefined ? {} : { managedCredentialRefs: [...server.managedCredentialRefs] }),
       }
     : {
         serverName: server.serverName, transport: server.transport, url: server.url, headers: { ...server.headers },
         timeoutMs: server.timeoutMs, reconnect: { ...server.reconnect }, enabled: server.enabled,
         ...(server.connectorId === undefined ? {} : { connectorId: server.connectorId }),
         ...(server.capabilities === undefined ? {} : { capabilities: [...server.capabilities] }),
+        ...(server.managedCredentialRefs === undefined ? {} : { managedCredentialRefs: [...server.managedCredentialRefs] }),
         ...(server.oauth === undefined ? {} : { oauth: {
           ...(server.oauth.issuer === undefined ? {} : { issuer: server.oauth.issuer }), scope: server.oauth.scope,
           ...(server.oauth.resource === undefined ? {} : { resource: server.oauth.resource }),
+          ...(server.oauth.clientId === undefined ? {} : { clientId: server.oauth.clientId }),
+          ...(server.oauth.clientSecretRef === undefined ? {} : { clientSecretRef: server.oauth.clientSecretRef }),
+          ...(server.oauth.tokenEndpointAuthMethod === undefined ? {} : { tokenEndpointAuthMethod: server.oauth.tokenEndpointAuthMethod }),
         } }),
       }) }
+}
+function withManagedCredentialRefs(server: DesktopMcpServerConfig, refs: ReadonlySet<string>): DesktopMcpServerConfig {
+  return parseDesktopMcpServer({ ...server, managedCredentialRefs: [...refs] })
+}
+function retainManagedCredentialOwnership(
+  servers: readonly DesktopMcpServerConfig[],
+  candidates: readonly string[],
+): readonly DesktopMcpServerConfig[] {
+  const claimed = new Set(servers.flatMap(server => [...(server.managedCredentialRefs ?? [])]))
+  const pending = new Set(candidates.filter(ref => !claimed.has(ref)))
+  return servers.map(server => {
+    const additions = [...pending].filter(ref => serverCredentialReferences(server).has(ref))
+    if (additions.length === 0) return server
+    additions.forEach(ref => { pending.delete(ref) })
+    return withManagedCredentialRefs(server, new Set([...(server.managedCredentialRefs ?? []), ...additions]))
+  })
 }
 function validateSettings(settings: DesktopMcpSettings): void {
   const names = new Set<string>()
@@ -264,9 +318,14 @@ export class DesktopMcpController {
     if (current.some((item, itemIndex) => item.serverName === server.serverName && itemIndex !== index)) {
       throw new Error(`MCP server already exists: ${server.serverName}`)
     }
-    const next = index < 0 ? [...current, server] : current.map((item, itemIndex) => itemIndex === index ? server : item)
-    const referenced = new Set(Object.values(server.transport === 'stdio' ? server.env : server.headers))
+    const referenced = serverCredentialReferences(server)
     const writes = this.validateCredentialWrites(secrets, referenced)
+    const managed = new Set([...(previous?.managedCredentialRefs ?? []).filter(ref => referenced.has(ref)), ...writes.map(([ref]) => ref)])
+    const savedServer = withManagedCredentialRefs(server, managed)
+    const next = retainManagedCredentialOwnership(
+      index < 0 ? [...current, savedServer] : current.map((item, itemIndex) => itemIndex === index ? savedServer : item),
+      previous?.managedCredentialRefs ?? [],
+    )
     await this.commitCredentials(writes, async () => { await this.settings.update(mutableMcpSettings(next)) })
     if (previous?.transport === 'streamable-http' && previous.oauth !== undefined
       && (server.transport !== 'streamable-http' || server.serverName !== previous.serverName
@@ -274,6 +333,7 @@ export class DesktopMcpController {
       await this.stop(previous.serverName)
       await this.disconnectOAuth(previous.serverName)
     }
+    await this.cleanupManagedCredentials(previous?.managedCredentialRefs ?? [], next)
     await this.reconcile()
     return await this.read()
   }
@@ -281,8 +341,10 @@ export class DesktopMcpController {
     const current = this.settings.get().mcpServers
     const removed = current.find(server => server.serverName === serverName)
     if (removed === undefined) throw new Error(`MCP server not found: ${serverName}`)
-    await this.settings.update(mutableMcpSettings(current.filter(server => server.serverName !== serverName))); await this.reconcile()
+    const next = retainManagedCredentialOwnership(current.filter(server => server.serverName !== serverName), removed.managedCredentialRefs ?? [])
+    await this.settings.update(mutableMcpSettings(next)); await this.reconcile()
     if (removed.transport === 'streamable-http' && removed.oauth !== undefined) await this.disconnectOAuth(serverName)
+    await this.cleanupManagedCredentials(removed.managedCredentialRefs ?? [], next)
     return await this.read()
   }
   async import(value: unknown): Promise<DesktopMcpView> {
@@ -299,8 +361,9 @@ export class DesktopMcpController {
       }
       names.add(server.serverName)
     }
+    const importedServers = imported.map(item => withManagedCredentialRefs(item.server, new Set(Object.keys(item.secrets))))
     await this.commitCredentials([...mergedSecrets], async () => {
-      await this.settings.update(mutableMcpSettings([...current, ...imported.map(item => item.server)]))
+      await this.settings.update(mutableMcpSettings([...current, ...importedServers]))
     })
     await this.reconcile()
     return await this.read()
@@ -324,7 +387,20 @@ export class DesktopMcpController {
     if (metadata.codeChallengeMethodsSupported.length > 0 && !metadata.codeChallengeMethodsSupported.includes('S256')) {
       throw new Error('OAuth server does not support PKCE S256')
     }
-    const registration = await registerMcpOAuthClient(metadata, redirectUri, 'ClawClaw Desktop', server.oauth.scope)
+    let registration: McpOAuthClientRegistration
+    if (server.oauth.clientId === undefined) {
+      registration = await registerMcpOAuthClient(metadata, redirectUri, 'ClawClaw Desktop', server.oauth.scope)
+    } else {
+      const method = server.oauth.tokenEndpointAuthMethod ?? 'none'
+      if (metadata.tokenEndpointAuthMethodsSupported.length > 0 && !metadata.tokenEndpointAuthMethodsSupported.includes(method)) {
+        throw new Error(`OAuth server does not support ${method} client authentication`)
+      }
+      const secret = server.oauth.clientSecretRef === undefined ? undefined
+        : await this.ctx.credentials.resolve(credentialRef(server.oauth.clientSecretRef))
+      if (method !== 'none' && secret === undefined) throw new Error('OAuth client secret credential is not configured')
+      registration = Object.freeze({ clientId: server.oauth.clientId, tokenEndpointAuthMethod: method,
+        ...(secret === undefined ? {} : { clientSecret: secret.value }) })
+    }
     const { verifier, challenge } = createMcpPkce()
     const state = randomBytes(32).toString('base64url')
     for (const [key, flow] of this.pendingOAuth) if (flow.serverName === serverName || flow.expiresAt <= Date.now()) this.deletePendingOAuth(key)
@@ -419,9 +495,13 @@ export class DesktopMcpController {
       ...(previous?.lastSuccessfulAt === undefined ? {} : { lastSuccessfulAt: previous.lastSuccessfulAt }) })
     try {
       const credentials = await this.resolveCredentials(server.transport === 'stdio' ? server.env : server.headers)
-      this.status.set(server.serverName, { state: 'starting', credentialsReady: credentials.ready, checkedAt,
+      const oauthClientSecret = server.transport === 'streamable-http' && server.oauth?.clientSecretRef !== undefined
+        ? await this.ctx.credentials.resolve(credentialRef(server.oauth.clientSecretRef)) : undefined
+      const credentialsReady = credentials.ready && (server.transport !== 'streamable-http'
+        || server.oauth?.clientSecretRef === undefined || oauthClientSecret !== undefined)
+      this.status.set(server.serverName, { state: 'starting', credentialsReady, checkedAt,
         ...(previous?.lastSuccessfulAt === undefined ? {} : { lastSuccessfulAt: previous.lastSuccessfulAt }) })
-      if (!credentials.ready) throw new Error('One or more credential references are not configured')
+      if (!credentialsReady) throw new Error('One or more credential references are not configured')
       const oauthHeaders = server.transport === 'streamable-http' && server.oauth !== undefined
         ? await this.resolveOAuthHeaders(server.serverName, server.oauth.issuer) : {}
       const config: McpClient.Config = server.transport === 'stdio'
@@ -532,6 +612,10 @@ export class DesktopMcpController {
       if (!referenced.has(ref)) throw new TypeError(`MCP credential is not referenced by this server: ${ref}`)
       return [ref, secret] as const
     })
+  }
+  private async cleanupManagedCredentials(candidates: readonly string[], remaining: readonly DesktopMcpServerConfig[]): Promise<void> {
+    const retained = new Set(remaining.flatMap(server => [...serverCredentialReferences(server)]))
+    for (const ref of new Set(candidates)) if (!retained.has(ref)) await this.ctx.credentials.unset(credentialRef(ref))
   }
   private async commitCredentials(writes: readonly (readonly [string, string])[], commit: () => Promise<void>): Promise<void> {
     const previous = new Map<string, string | undefined>()

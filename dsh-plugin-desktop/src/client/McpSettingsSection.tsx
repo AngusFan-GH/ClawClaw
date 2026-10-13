@@ -55,6 +55,9 @@ interface McpDraft {
   oauthIssuer: string
   oauthScope: string
   oauthResource: string
+  oauthClientId: string
+  oauthClientSecretRef: string
+  oauthTokenEndpointAuthMethod: 'none' | 'client_secret_post' | 'client_secret_basic'
   enabled: boolean
 }
 interface CatalogInstallDraft {
@@ -63,7 +66,8 @@ interface CatalogInstallDraft {
 }
 const EMPTY_DRAFT: McpDraft = { serverName: '', transport: 'stdio', command: '', args: '', cwd: '', references: '', secrets: '', timeoutMs: '60000',
   reconnectEnabled: true, reconnectInitialDelayMs: '500', reconnectMaxDelayMs: '30000', reconnectMaxAttempts: '10', url: '',
-  oauthEnabled: false, oauthIssuer: '', oauthScope: 'mcp:tools', oauthResource: '', enabled: true }
+  oauthEnabled: false, oauthIssuer: '', oauthScope: 'mcp:tools', oauthResource: '', oauthClientId: '', oauthClientSecretRef: '',
+  oauthTokenEndpointAuthMethod: 'none', enabled: true }
 
 function linesToMap(value: string, t: Translate): Record<string, string> {
   const entries = value.split(/\r?\n/u).map(line => line.trim()).filter(Boolean).map(line => {
@@ -100,7 +104,10 @@ function mcpDraft(server: DesktopMcpServerView): McpDraft {
     oauthEnabled: server.transport === 'streamable-http' && server.oauth !== undefined,
     oauthIssuer: server.transport === 'streamable-http' ? server.oauth?.issuer ?? '' : '',
     oauthScope: server.transport === 'streamable-http' ? server.oauth?.scope ?? 'mcp:tools' : 'mcp:tools',
-    oauthResource: server.transport === 'streamable-http' ? server.oauth?.resource ?? '' : '', enabled: server.enabled }
+    oauthResource: server.transport === 'streamable-http' ? server.oauth?.resource ?? '' : '',
+    oauthClientId: server.transport === 'streamable-http' ? server.oauth?.clientId ?? '' : '',
+    oauthClientSecretRef: server.transport === 'streamable-http' ? server.oauth?.clientSecretRef ?? '' : '',
+    oauthTokenEndpointAuthMethod: server.transport === 'streamable-http' ? server.oauth?.tokenEndpointAuthMethod ?? 'none' : 'none', enabled: server.enabled }
 }
 
 export function McpSettingsSection({ t, api, embedded = false, onSummary, onCatalogChange, expertUsage }: McpSettingsSectionProps) {
@@ -157,6 +164,9 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
       const references = linesToMap(draft.references, t)
       const secrets = linesToMap(draft.secrets, t)
       const referenced = new Set(Object.values(references))
+      if (draft.oauthEnabled && draft.oauthTokenEndpointAuthMethod !== 'none' && draft.oauthClientSecretRef.trim() !== '') {
+        referenced.add(draft.oauthClientSecretRef.trim())
+      }
       if (Object.keys(secrets).some(ref => !referenced.has(ref))) throw new Error(t('unreferencedCredentialError'))
       const timeoutMs = integer(draft.timeoutMs, 1_000, 600_000, t('timeoutRangeError'))
       const reconnect = { enabled: draft.reconnectEnabled,
@@ -170,7 +180,9 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
             ...(draft.connectorId === undefined ? {} : { connectorId: draft.connectorId }), ...(draft.capabilities === undefined ? {} : { capabilities: draft.capabilities }) }
         : { serverName: draft.serverName.trim(), transport: 'streamable-http', url: draft.url.trim(), headers: references, timeoutMs, reconnect, enabled: draft.enabled,
             ...(draft.oauthEnabled ? { oauth: { ...(draft.oauthIssuer.trim() === '' ? {} : { issuer: draft.oauthIssuer.trim() }), scope: draft.oauthScope.trim(),
-              ...(draft.oauthResource.trim() === '' ? {} : { resource: draft.oauthResource.trim() }) } } : {}),
+              ...(draft.oauthResource.trim() === '' ? {} : { resource: draft.oauthResource.trim() }),
+              ...(draft.oauthClientId.trim() === '' ? {} : { clientId: draft.oauthClientId.trim(), tokenEndpointAuthMethod: draft.oauthTokenEndpointAuthMethod,
+                ...(draft.oauthTokenEndpointAuthMethod === 'none' || draft.oauthClientSecretRef.trim() === '' ? {} : { clientSecretRef: draft.oauthClientSecretRef.trim() }) }) } } : {}),
             ...(draft.connectorId === undefined ? {} : { connectorId: draft.connectorId }), ...(draft.capabilities === undefined ? {} : { capabilities: draft.capabilities }) }
       if (draft.previousName !== undefined && draft.previousName !== server.serverName && (expertUsage?.get(draft.previousName) ?? 0) > 0) {
         throw new Error(t('renameBoundServer').replace('{count}', String(expertUsage?.get(draft.previousName) ?? 0)))
@@ -314,7 +326,16 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
             <label><span>{t('oauthScope')}</span><input required value={draft.oauthScope}
               onChange={event => { setDraft({ ...draft, oauthScope: event.target.value }) }} /></label>
             <label><span>{t('oauthResource')}</span><input type="url" value={draft.oauthResource}
-              onChange={event => { setDraft({ ...draft, oauthResource: event.target.value }) }} /></label></div>}
+              onChange={event => { setDraft({ ...draft, oauthResource: event.target.value }) }} /></label>
+            <label className="dshMcpFieldFull"><span>{t('oauthClientId')}</span><input value={draft.oauthClientId} placeholder={t('oauthClientIdHint')}
+              onChange={event => { setDraft({ ...draft, oauthClientId: event.target.value }) }} /></label>
+            {draft.oauthClientId.trim() !== '' && <><label><span>{t('oauthClientAuthMethod')}</span><select value={draft.oauthTokenEndpointAuthMethod}
+              onChange={event => { const method = event.target.value as McpDraft['oauthTokenEndpointAuthMethod']; setDraft({ ...draft,
+                oauthTokenEndpointAuthMethod: method, ...(method === 'none' ? { oauthClientSecretRef: '' } : {}) }) }}>
+              <option value="none">none</option><option value="client_secret_post">client_secret_post</option><option value="client_secret_basic">client_secret_basic</option>
+            </select></label>{draft.oauthTokenEndpointAuthMethod !== 'none' && <label><span>{t('oauthClientSecretRef')}</span><input required value={draft.oauthClientSecretRef}
+              placeholder="MCP_OAUTH_CLIENT_SECRET" onChange={event => { setDraft({ ...draft, oauthClientSecretRef: event.target.value }) }} /></label>}</>}
+          </div>}
         </section>}
         <details className="dshMcpFormDisclosure"><summary>{t('credentials')}</summary>
           <p className="dshMcpCredentialNotice">{t('secretNotice')}</p><div className="dshMcpFormGrid">

@@ -6,6 +6,11 @@ export const MCP_CAPABILITY_IDS = [
   'browser.automation',
   'communication.team',
   'market-data.finance',
+  'diagram.authoring',
+  'public-data.research',
+  'scientific-data.protein',
+  'developer.documentation',
+  'commerce.shopline',
 ] as const
 
 export type McpCapabilityId = typeof MCP_CAPABILITY_IDS[number]
@@ -23,16 +28,26 @@ const CAPABILITY_ALIASES: Readonly<Record<McpCapabilityId, readonly string[]>> =
   'browser.automation': ['browser', 'playwright', 'chrome', 'search', 'web'],
   'communication.team': ['slack', 'teams', 'lark', 'feishu'],
   'market-data.finance': ['market', 'market-data', 'finance', 'stocks', 'tdx'],
+  'diagram.authoring': ['drawio', 'draw-io', 'diagrams'],
+  'public-data.research': ['world-bank-data360', 'data360', 'public-data'],
+  'scientific-data.protein': ['rcsb-pdb', 'pdb', 'protein-data'],
+  'developer.documentation': ['context7', 'developer-docs', 'api-docs'],
+  'commerce.shopline': ['shopline-developer-mcp', 'shopline'],
 }
 
 export const MCP_CAPABILITY_DEFAULT_SERVER: Readonly<Record<McpCapabilityId, string>> = {
   'source-control.github': 'github',
   'work-management.issues': 'jira',
   'knowledge.search': 'notion',
-  'database.sql': 'postgres',
+  'database.sql': 'postgresql',
   'browser.automation': 'playwright',
   'communication.team': 'slack',
   'market-data.finance': 'market-data',
+  'diagram.authoring': 'drawio',
+  'public-data.research': 'world-bank-data360',
+  'scientific-data.protein': 'rcsb-pdb',
+  'developer.documentation': 'context7',
+  'commerce.shopline': 'shopline-developer-mcp',
 }
 
 function normalize(value: string): string {

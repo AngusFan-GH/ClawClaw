@@ -7,7 +7,7 @@ export interface McpOAuthMetadata {
   readonly issuer: string
   readonly authorizationEndpoint: string
   readonly tokenEndpoint: string
-  readonly registrationEndpoint: string
+  readonly registrationEndpoint?: string
   readonly revocationEndpoint?: string
   readonly codeChallengeMethodsSupported: readonly string[]
   readonly tokenEndpointAuthMethodsSupported: readonly string[]
@@ -190,15 +190,17 @@ export async function discoverMcpOAuthMetadata(issuer: string, fetcher: OAuthFet
       if (!record(body) || body.issuer !== issuer) throw new Error('OAuth metadata issuer mismatch')
       const authorizationEndpoint = requiredText(body.authorization_endpoint, 'authorization_endpoint')
       const tokenEndpoint = requiredText(body.token_endpoint, 'token_endpoint')
-      const registrationEndpoint = requiredText(body.registration_endpoint, 'registration_endpoint')
+      const registrationEndpoint = typeof body.registration_endpoint === 'string' && body.registration_endpoint !== ''
+        ? body.registration_endpoint : undefined
       assertSecureOAuthUrl(authorizationEndpoint, 'OAuth authorization endpoint')
       assertSecureOAuthUrl(tokenEndpoint, 'OAuth token endpoint')
-      assertSecureOAuthUrl(registrationEndpoint, 'OAuth registration endpoint')
+      if (registrationEndpoint !== undefined) assertSecureOAuthUrl(registrationEndpoint, 'OAuth registration endpoint')
       const revocationEndpoint = typeof body.revocation_endpoint === 'string' && body.revocation_endpoint !== '' ? body.revocation_endpoint : undefined
       if (revocationEndpoint !== undefined) assertSecureOAuthUrl(revocationEndpoint, 'OAuth revocation endpoint')
       const strings = (value: unknown): readonly string[] => Array.isArray(value)
         ? Object.freeze(value.filter((item): item is string => typeof item === 'string').slice(0, 64)) : Object.freeze([])
-      return Object.freeze({ issuer, authorizationEndpoint, tokenEndpoint, registrationEndpoint,
+      return Object.freeze({ issuer, authorizationEndpoint, tokenEndpoint,
+        ...(registrationEndpoint === undefined ? {} : { registrationEndpoint }),
         ...(revocationEndpoint === undefined ? {} : { revocationEndpoint }),
         codeChallengeMethodsSupported: strings(body.code_challenge_methods_supported),
         tokenEndpointAuthMethodsSupported: strings(body.token_endpoint_auth_methods_supported) })
@@ -220,6 +222,9 @@ export async function registerMcpOAuthClient(
   scope: string,
   fetcher: OAuthFetch = globalThis.fetch,
 ): Promise<McpOAuthClientRegistration> {
+  if (metadata.registrationEndpoint === undefined) {
+    throw new Error('OAuth server does not support dynamic client registration; configure a pre-registered client')
+  }
   const supported = new Set(metadata.tokenEndpointAuthMethodsSupported)
   const tokenEndpointAuthMethod: OAuthTokenEndpointAuthMethod = supported.has('none') || supported.size === 0
     ? 'none' : supported.has('client_secret_post') ? 'client_secret_post' : supported.has('client_secret_basic') ? 'client_secret_basic'
