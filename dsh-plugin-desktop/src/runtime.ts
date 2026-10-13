@@ -99,6 +99,20 @@ export interface DesktopNotification {
   body: string
 }
 
+/** Renderer-safe state for the current Desktop update operation. */
+export interface DesktopUpdatePresentation {
+  readonly phase: 'idle' | 'checking' | 'available' | 'downloading' | 'verifying' | 'ready' | 'installing' | 'error'
+  readonly version?: string
+  readonly percent?: number
+  readonly failedOperation?: 'check' | 'download'
+}
+
+/** Progress emitted by the native installer download and verification path. */
+export interface DesktopUpdateProgress {
+  readonly phase: 'downloading' | 'verifying'
+  readonly percent: number
+}
+
 /** Electron capabilities used by the headless update plugin. */
 export interface DesktopUpdateAdapter {
   /** Whether the running executable came from an Electron package. */
@@ -128,7 +142,10 @@ export interface DesktopUpdateAdapter {
     version: string,
     signal: AbortSignal,
     channel?: DesktopReleaseChannel,
+    onProgress?: (progress: DesktopUpdateProgress) => void,
   ): Promise<DesktopUpdateHandoffResult | void>
+  /** Publish semantic update state to Desktop-owned chrome. */
+  present?(state: DesktopUpdatePresentation): void
   /** Present a native status notification without blocking the Host tree. */
   notify(notification: DesktopNotification): void
   /** Request non-focusing taskbar/tray attention for an update while backgrounded. */

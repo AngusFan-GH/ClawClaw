@@ -196,6 +196,9 @@ export class ElectronShellGeneration {
     if (this.window !== undefined && !this.window.isDestroyed()) this.window.setProgressBar(fraction)
   }
 
+  /** Push fresh Desktop-owned state into the isolated title bar. */
+  refreshChrome(): void { this.compatibilityShell?.refresh() }
+
   private window: BrowserWindow | undefined
   private renderer: WebContents | undefined
   private compatibilityShell: CompatibilityShell | undefined

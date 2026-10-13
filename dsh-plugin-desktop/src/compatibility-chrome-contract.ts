@@ -1,4 +1,4 @@
-import type { DesktopLocale, DesktopPlatform } from './runtime.ts'
+import type { DesktopLocale, DesktopPlatform, DesktopUpdatePresentation } from './runtime.ts'
 
 export const COMPATIBILITY_CHROME_CHANNEL = 'dsh-desktop:compatibility-chrome'
 export const COMPATIBILITY_CHROME_STATE = 'dsh-desktop:compatibility-chrome-state'
@@ -11,6 +11,7 @@ export interface CompatibilityChromeState {
   readonly platform: DesktopPlatform
   readonly version: string
   readonly material: string
+  readonly update: DesktopUpdatePresentation
 }
 
 export interface CompatibilityChromeBridge {

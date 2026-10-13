@@ -47,6 +47,7 @@ interface Harness {
   readonly showUpdateFailure: ReturnType<typeof vi.fn>
   readonly showManualCheckResult: ReturnType<typeof vi.fn>
   readonly downloadAndOpen: ReturnType<typeof vi.fn>
+  readonly present: ReturnType<typeof vi.fn>
   readonly refresh: ReturnType<typeof vi.fn>
   readonly registrationDispose: ReturnType<typeof vi.fn>
   readonly requestRejection: ReturnType<typeof vi.fn<(
@@ -87,6 +88,7 @@ async function createHarness(options: {
   const showUpdateFailure = vi.fn(async () => {})
   const showManualCheckResult = vi.fn(options.showManualCheckResult ?? (async () => {}))
   const downloadAndOpen = vi.fn(options.downloadAndOpen ?? (async () => {}))
+  const present = vi.fn()
   const requestRejection = vi.fn<(
     request: ConnectionTrustRequest,
   ) => ConnectionRequestRejection>(() => undefined)
@@ -108,6 +110,7 @@ async function createHarness(options: {
       showManualCheckResult,
       showUpdateFailure,
       downloadAndOpen,
+      present,
       notify: options.notify ?? ((notification: DesktopNotification) => { notifications.push(notification) }),
       notifyAttention: options.notifyAttention
         ?? ((notification: DesktopNotification) => { notifications.push(notification) }),
@@ -154,6 +157,7 @@ async function createHarness(options: {
     showManualCheckResult,
     showUpdateFailure,
     downloadAndOpen,
+    present,
     refresh,
     registrationDispose,
     requestRejection,
@@ -396,7 +400,11 @@ describe('desktop update Host plugin', () => {
       packaged: false,
       request: async () => versionResponse('2.1.0'),
       confirmDownload: async () => true,
-      downloadAndOpen: async () => download,
+      downloadAndOpen: async (_version, _signal, _channel, progress) => {
+        progress?.({ phase: 'downloading', percent: 37 })
+        progress?.({ phase: 'verifying', percent: 100 })
+        return download
+      },
     })
 
     const pending = harness.tray.invoke()
@@ -406,10 +414,13 @@ describe('desktop update Host plugin', () => {
     expect(signal).toBeInstanceOf(AbortSignal)
     expect(signal.aborted).toBe(false)
     expect(harness.tray.label()).toBe('Downloading ClawClaw 2.1.0…')
+    expect(harness.present).toHaveBeenCalledWith({ phase: 'downloading', version: '2.1.0', percent: 37 })
+    expect(harness.present).toHaveBeenCalledWith({ phase: 'verifying', version: '2.1.0', percent: 100 })
     expect(harness.notifications).toEqual([])
 
     resolveDownload()
     await pending
+    expect(harness.present).toHaveBeenLastCalledWith({ phase: 'ready', version: '2.1.0' })
     await vi.waitFor(() => { expect(harness.tray.label()).toBe('ClawClaw 2.1.0 Available') })
     expect(harness.notifications).toEqual([])
     expect(harness.tray.label()).toBe('ClawClaw 2.1.0 Available')
@@ -434,6 +445,22 @@ describe('desktop update Host plugin', () => {
     expect(confirmDownload).toHaveBeenCalledTimes(2)
     expect(harness.downloadAndOpen).toHaveBeenCalledOnce()
     expect(harness.showManualCheckResult).not.toHaveBeenCalled()
+  })
+
+  it('reopens a prepared installer without asking to download it again', async () => {
+    const harness = await createHarness({
+      packaged: false,
+      request: async () => versionResponse('2.1.0'),
+      confirmDownload: async () => true,
+      downloadAndOpen: async () => ({ status: 'deferred' }),
+    })
+
+    await harness.tray.invoke()
+    expect(harness.present).toHaveBeenLastCalledWith({ phase: 'ready', version: '2.1.0' })
+    await harness.tray.invoke()
+
+    expect(harness.confirmDownload).toHaveBeenCalledOnce()
+    expect(harness.downloadAndOpen).toHaveBeenCalledTimes(2)
   })
 
   it('rechecks the version after confirmation and skips a rotated download', async () => {

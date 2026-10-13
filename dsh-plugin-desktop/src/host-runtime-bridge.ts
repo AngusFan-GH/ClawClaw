@@ -4,7 +4,7 @@ import { readDesktopReleaseBody } from './update-checker.ts'
 import { HostRpc } from './host-rpc.ts'
 
 export type RuntimeSnapshot = Pick<DesktopRuntime, 'platform' | 'windowsBuild' | 'locale'> & {
-  updates: Omit<DesktopUpdateAdapter, 'request' | 'confirmDownload' | 'showManualCheckResult' | 'showUpdateFailure' | 'downloadAndOpen' | 'notify' | 'notifyAttention'>
+  updates: Omit<DesktopUpdateAdapter, 'request' | 'confirmDownload' | 'showManualCheckResult' | 'showUpdateFailure' | 'downloadAndOpen' | 'present' | 'notify' | 'notifyAttention'>
 }
 export function runtimeSnapshot(runtime: DesktopRuntime): RuntimeSnapshot {
   const {
@@ -54,7 +54,15 @@ export function createHostRuntime(rpc: HostRpc, snapshot: RuntimeSnapshot): Desk
       confirmDownload: (version, channel) => send('update:confirmDownload', [version, channel]),
       showManualCheckResult: result => send('update:showManualCheckResult', [result]),
       showUpdateFailure: reason => send('update:showUpdateFailure', [reason]),
-      downloadAndOpen: (version, signal, channel) => send('update:downloadAndOpen', [version, channel], signal),
+      downloadAndOpen: async (version, signal, channel, onProgress) => {
+        const progress = onProgress === undefined ? undefined : callbacks({ progress: onProgress })
+        try {
+          return await send('update:downloadAndOpen', [version, channel, progress?.id], signal)
+        } finally {
+          progress?.release()
+        }
+      },
+      present: state => { void send('update:present', [state]) },
       notify: notification => { void send('update:notify', [notification]) },
       notifyAttention: notification => { void send('update:notifyAttention', [notification]) },
     },
@@ -171,7 +179,15 @@ export function bindNativeRuntime(rpc: HostRpc, runtime: DesktopRuntime): () => 
   handle('update:confirmDownload', ([version, channel]) => runtime.updates.confirmDownload(version, channel))
   handle('update:showManualCheckResult', ([result]) => runtime.updates.showManualCheckResult(result))
   handle('update:showUpdateFailure', ([reason]) => runtime.updates.showUpdateFailure(reason))
-  handle('update:downloadAndOpen', ([version, channel], signal) => runtime.updates.downloadAndOpen(version, signal, channel))
+  handle('update:downloadAndOpen', ([version, channel, progress], signal) => runtime.updates.downloadAndOpen(
+    version,
+    signal,
+    channel,
+    typeof progress === 'string'
+      ? value => { report(callback(`${progress}:progress`, [value])) }
+      : undefined,
+  ))
+  handle('update:present', ([state]) => runtime.updates.present?.(state))
   handle('update:notify', ([value]) => runtime.updates.notify(value))
   handle('update:notifyAttention', ([value]) => runtime.updates.notifyAttention(value))
   return async () => {

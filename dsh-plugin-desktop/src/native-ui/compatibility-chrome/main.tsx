@@ -43,6 +43,7 @@ export function Chrome() {
     key={generation}
     api={api}
     t={key => copy[key]}
+    update={state.update}
     environment={{ ...state, material: state.material === 'off' ? 'off' : state.platform === 'darwin' ? 'transparent' : 'mica', micaSupported: state.material === 'mica' }}
   />
 }

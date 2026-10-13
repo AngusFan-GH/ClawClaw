@@ -31,6 +31,8 @@ import type {
   DesktopTrayItemRegistration,
   DesktopUpdateAdapter,
   DesktopUpdateHandoffResult,
+  DesktopUpdatePresentation,
+  DesktopUpdateProgress,
 } from './runtime.ts'
 import type { RendererBootReport } from './renderer-boot-contract.ts'
 import {
@@ -118,6 +120,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   private rendererBootHealthy = false
   private profileCreateWindow: ProfileCreateWindow | undefined
   private restartRequest: Promise<void> | undefined
+  private updatePresentation: DesktopUpdatePresentation = { phase: 'idle' }
 
   constructor(
     private readonly restart: (target?: 'recovery' | 'safe-mode') => Promise<void>,
@@ -159,15 +162,19 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       confirmDownload: version => this.confirmUpdateDownload(version),
       showManualCheckResult: result => this.showManualUpdateCheckResult(result),
       showUpdateFailure: reason => this.showUpdateFailure(reason),
-      downloadAndOpen: async (version, signal, channel) => {
+      downloadAndOpen: async (version, signal, channel, onProgress) => {
         try {
-          return await this.downloadAndOpenUpdate(version, signal, channel)
+          return await this.downloadAndOpenUpdate(version, signal, channel, onProgress)
         } catch (cause) {
           this.logError(
             `dsh-plugin-desktop: update download or handoff failed: ${cause instanceof Error ? cause.message : String(cause)}`,
           )
           throw cause
         }
+      },
+      present: state => {
+        this.updatePresentation = state
+        this.generation?.refreshChrome()
       },
       notify: notification => { this.showNotification(notification) },
       notifyAttention: notification => { this.notifyAttention(notification) },
@@ -270,6 +277,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
         chromeActions: {
           locale: () => this.locale,
           version: PRODUCT_VERSION,
+          update: () => this.updatePresentation,
           openTerminal: () => { this.openTerminal() },
           restart: () => this.requestRestart(),
           restartToRecovery: () => this.requestRecoveryRestart(),
@@ -713,12 +721,14 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     version: string,
     signal: AbortSignal,
     channel: DesktopReleaseChannel = 'stable',
+    onProgress?: (progress: DesktopUpdateProgress) => void,
   ): Promise<DesktopUpdateHandoffResult> {
     if (!this.updates.canDownload) throw new Error('Updates require a packaged macOS or Windows application')
     const platform = this.platformStrategy.updateDownloadPlatform
     if (platform === undefined) throw new Error(`dsh-plugin-desktop: updates are unavailable on ${this.platform}`)
     const userDataPath = app.getPath('userData')
     const destinationPath = await desktopUpdateDestination(userDataPath, platform, version, channel)
+    onProgress?.({ phase: 'downloading', percent: 0 })
     const artifactPath = await downloadDesktopUpdate({
       platform,
       version,
@@ -726,7 +736,14 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       destinationPath,
       request: (url, init) => net.fetch(url, init),
       signal,
-      progress: fraction => { this.generation?.setProgressBar(fraction) },
+      progress: fraction => {
+        this.generation?.setProgressBar(fraction)
+        if (fraction < 0) return
+        onProgress?.({
+          phase: fraction >= 1 ? 'verifying' : 'downloading',
+          percent: Math.min(100, Math.max(0, Math.floor(fraction * 100))),
+        })
+      },
     })
     signal.throwIfAborted()
     const artifact: DesktopUpdateArtifact = { platform, version, path: artifactPath }

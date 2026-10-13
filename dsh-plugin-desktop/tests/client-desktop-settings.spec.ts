@@ -230,6 +230,19 @@ describe('Desktop native action presentation', () => {
     expect(markup).toContain('data-slot="hover-card-trigger"')
   })
 
+  it('renders persistent download progress in the title bar and popover', () => {
+    const markup = renderToStaticMarkup(createElement(DesktopVersionControl, {
+      version: '2.0.3',
+      update: { phase: 'downloading', version: '2.1.0', percent: 42 },
+      checkForUpdates: api.checkForUpdates,
+      t,
+    }))
+
+    expect(markup).toContain('Downloading 42%')
+    expect(markup).toContain('data-update-phase="downloading"')
+    expect(markup).toContain('dshDesktopUpdateSpinner')
+  })
+
   it('keeps explicit text labels in settings', () => {
     const markup = renderToStaticMarkup(createElement(DesktopNativeActions, {
       api,

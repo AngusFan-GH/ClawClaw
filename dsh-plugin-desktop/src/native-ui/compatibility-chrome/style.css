@@ -59,6 +59,10 @@ html, body, #root { background: transparent; font-size: 13px; }
 }
 .dshDesktopFrameProduct { font-size: 13px; font-weight: 600; white-space: nowrap; }
 .dshDesktopFrameVersion {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: clamp(72px, calc(100vw - 360px), 240px);
   min-height: 22px;
   padding: 2px 5px;
   border: 0;
@@ -71,6 +75,15 @@ html, body, #root { background: transparent; font-size: 13px; }
   pointer-events: auto;
   white-space: nowrap;
   -webkit-app-region: no-drag;
+}
+.dshDesktopFrameVersion > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dshDesktopFrameVersion > svg { flex: none; width: 12px; height: 12px; }
+.dshDesktopFrameVersion:not([data-update-phase="idle"]) {
+  color: var(--dsw-alias-brand-primary);
 }
 .dshDesktopFrameVersion:hover,
 .dshDesktopFrameVersion[data-popup-open],
@@ -121,6 +134,27 @@ html, body, #root { background: transparent; font-size: 13px; }
   font-size: 12px;
   font-weight: 600;
 }
+.dshDesktopVersionUpdateDetail {
+  display: grid;
+  gap: 7px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.dshDesktopVersionUpdateDetail progress {
+  width: 100%;
+  height: 5px;
+  border: 0;
+  border-radius: 3px;
+  overflow: hidden;
+  accent-color: var(--dsw-alias-brand-primary);
+}
+.dshDesktopVersionUpdateDetail progress::-webkit-progress-bar {
+  background: var(--dsw-alias-border-l1);
+}
+.dshDesktopVersionUpdateDetail progress::-webkit-progress-value {
+  background: var(--dsw-alias-brand-primary);
+}
 .dshDesktopVersionCheckButton {
   display: inline-flex;
   align-items: center;
@@ -144,6 +178,11 @@ html, body, #root { background: transparent; font-size: 13px; }
 }
 .dshDesktopVersionCheckButton:disabled { cursor: default; opacity: .55; }
 .dshDesktopVersionCheckButton svg { width: 14px; height: 14px; stroke-width: 1.8; }
+.dshDesktopUpdateSpinner { animation: dshDesktopUpdateSpin 1s linear infinite; }
+@keyframes dshDesktopUpdateSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .dshDesktopUpdateSpinner { animation: none; }
+}
 .dshDesktopVersionCheckError {
   color: var(--dsw-alias-state-error-primary);
   font-size: 11px;

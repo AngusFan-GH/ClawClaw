@@ -2402,7 +2402,9 @@ describe('Electron desktop runtime', () => {
     electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 0, checkboxChecked: false })
     await expect(runtime.updates.confirmDownload('2.1.0')).resolves.toBe(true)
     const controller = new AbortController()
-    await expect(runtime.updates.downloadAndOpen('2.1.0', controller.signal)).resolves.toEqual({ status: 'deferred' })
+    const progress = vi.fn()
+    await expect(runtime.updates.downloadAndOpen('2.1.0', controller.signal, undefined, progress)).resolves.toEqual({ status: 'deferred' })
+    expect(progress).toHaveBeenCalledWith({ phase: 'downloading', percent: 0 })
     expect(updater.destination).toHaveBeenCalledWith(
       '/tmp/dsh-desktop-user-data', 'darwin', '2.1.0', 'stable',
     )

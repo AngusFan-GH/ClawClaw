@@ -58,6 +58,12 @@ it('preserves the Web URL and authentication while projecting shell and tray cal
     expect(await response.json()).toEqual({ version: '2.0.8-beta.1' })
     await runtime.updates.showUpdateFailure('download-failed')
     expect(native.updates.showUpdateFailure).toHaveBeenCalledWith('download-failed')
+    const progress = vi.fn()
+    ;(native.updates as DesktopRuntime['updates']).downloadAndOpen = vi.fn(async (_version, _signal, _channel, publish) => {
+      publish?.({ phase: 'downloading', percent: 42 })
+    })
+    await runtime.updates.downloadAndOpen('2.0.8-beta.1', new AbortController().signal, 'stable', progress)
+    await vi.waitFor(() => { expect(progress).toHaveBeenCalledWith({ phase: 'downloading', percent: 42 }) })
     const attention = { title: 'ClawClaw Update Available', body: 'Version 2.0.8 is ready.' }
     runtime.notifyAttention(attention)
     runtime.resetBackgroundCloseNotice()

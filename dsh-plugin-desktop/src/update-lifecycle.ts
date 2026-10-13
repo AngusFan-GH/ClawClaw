@@ -8,6 +8,7 @@ import type {
   DesktopTrayItem,
   DesktopTrayItemRegistration,
   DesktopUpdateAdapter,
+  DesktopUpdatePresentation,
 } from './runtime.ts'
 import { desktopTrayLabel } from './tray-locale.ts'
 import {
@@ -76,6 +77,7 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
   private checking = false
   private availableVersion: string | undefined
   private downloadingVersion: string | undefined
+  private presentation: DesktopUpdatePresentation | undefined
   private state: UpdateStateV3 = EMPTY_STATE
   private pollTimer: ReturnType<typeof setTimeout> | undefined
   private requestTimer: ReturnType<typeof setTimeout> | undefined
@@ -105,6 +107,7 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
       label: () => this.trayLabel(),
       invoke: () => this.checkNow(),
     })
+    this.present({ phase: 'idle' })
     if (options.adapter.isPackaged && options.policy.enabled) {
       this.scheduleBackgroundCheck(options.policy.initialDelayMs)
     }
@@ -163,13 +166,20 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
     }
   }
 
-  private startCheck(channel: DesktopReleaseChannel = 'stable'): Promise<UpdateCheckResult | null> {
+  private startCheck(
+    channel: DesktopReleaseChannel = 'stable',
+    presentChecking = true,
+  ): Promise<UpdateCheckResult | null> {
     if (this.disposed) return Promise.resolve(null)
     if (this.checkTask !== undefined) {
-      if (this.checkChannel === channel) return this.checkTask
+      if (this.checkChannel === channel) {
+        if (presentChecking) this.present({ phase: 'checking' })
+        return this.checkTask
+      }
       return this.checkTask.then(() => this.startCheck(channel))
     }
     this.checking = true
+    if (presentChecking) this.present({ phase: 'checking' })
     this.checkChannel = channel
     this.registration.refresh()
     const controller = new AbortController()
@@ -225,6 +235,9 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
     this.availableVersion = result.status === 'update-available' && this.options.adapter.canDownload
       ? result.latestVersion
       : undefined
+    this.present(this.availableVersion === undefined
+      ? { phase: 'idle' }
+      : { phase: 'available', version: this.availableVersion })
     this.registration.refresh()
     return this.availableVersion
   }
@@ -237,9 +250,10 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
     const task = (async () => {
       let confirmed: boolean
       try {
-        confirmed = this.options.adapter.releaseChannel === undefined && channel === 'stable'
+        const prepared = this.presentation?.phase === 'ready' && this.presentation.version === version
+        confirmed = prepared || (this.options.adapter.releaseChannel === undefined && channel === 'stable'
           ? await this.options.adapter.confirmDownload(version)
-          : await this.options.adapter.confirmDownload(version, channel)
+          : await this.options.adapter.confirmDownload(version, channel))
       } catch {
         return
       }
@@ -262,6 +276,9 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
           : confirmedVersion === version ? 'available' : 'up-to-date',
       })
       if (confirmedVersion !== version) {
+        if (confirmedResult === null) {
+          this.present({ phase: 'error', version, failedOperation: 'check' })
+        }
         if (confirmedResult === null || confirmedResult.status === 'up-to-date') {
           await this.options.adapter.showManualCheckResult(confirmedResult)
         } else {
@@ -278,15 +295,29 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
       const controller = new AbortController()
       this.downloadController = controller
       this.downloadingVersion = version
+      this.present({ phase: 'downloading', version, percent: 0 })
       this.registration.refresh()
       const startedAt = this.monotonicNow()
       try {
         let result: Awaited<ReturnType<DesktopUpdateAdapter['downloadAndOpen']>>
         if (this.options.adapter.releaseChannel === undefined && channel === 'stable') {
-          result = await this.options.adapter.downloadAndOpen(version, controller.signal)
+          result = await this.options.adapter.downloadAndOpen(
+            version,
+            controller.signal,
+            undefined,
+            progress => { this.present({ ...progress, version }) },
+          )
         } else {
-          result = await this.options.adapter.downloadAndOpen(version, controller.signal, channel)
+          result = await this.options.adapter.downloadAndOpen(
+            version,
+            controller.signal,
+            channel,
+            progress => { this.present({ ...progress, version }) },
+          )
         }
+        this.present(result?.status === 'install-requested'
+          ? { phase: 'installing', version }
+          : { phase: 'ready', version })
         this.record({
           phase: 'stage-completed',
           targetVersion: version,
@@ -303,6 +334,9 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
           })
         }
       } catch {
+        this.present(controller.signal.aborted
+          ? { phase: 'available', version }
+          : { phase: 'error', version, failedOperation: 'download' })
         this.record({
           phase: 'operation-failed',
           targetVersion: version,
@@ -343,6 +377,7 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
         await this.offerDownload(version)
         return
       }
+      if (result === null) this.present({ phase: 'error', failedOperation: 'check' })
       await this.options.adapter.showManualCheckResult(result)
     })().catch(() => undefined).finally(() => {
       this.manualTask = undefined
@@ -352,8 +387,10 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
 
   private async runBackgroundCheck(): Promise<boolean> {
     if (this.disposed) return false
+    if (this.presentation !== undefined
+      && ['downloading', 'verifying', 'ready', 'installing'].includes(this.presentation.phase)) return false
     try {
-      const result = await this.startCheck()
+      const result = await this.startCheck('stable', false)
       const version = this.observeResult(result)
       if (version !== undefined) await this.announceBackgroundUpdate(version)
       return result === null
@@ -394,6 +431,15 @@ class DesktopUpdateLifecycleOwner implements DesktopUpdateLifecycle {
 
   private record(event: DesktopUpdateQualificationEvent): void {
     try { this.options.journal?.record(event) } catch { /* qualification evidence cannot block updates */ }
+  }
+
+  private present(state: DesktopUpdatePresentation): void {
+    if (this.presentation?.phase === state.phase
+      && this.presentation.version === state.version
+      && this.presentation.percent === state.percent
+      && this.presentation.failedOperation === state.failedOperation) return
+    this.presentation = state
+    try { this.options.adapter.present?.(state) } catch { /* presentation cannot block updates */ }
   }
 
   private trayLabel(): string {

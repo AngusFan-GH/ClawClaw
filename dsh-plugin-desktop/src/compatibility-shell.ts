@@ -1,13 +1,14 @@
 import { WebContentsView, type BrowserWindow, type WebContents } from 'electron'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { COMPATIBILITY_CHROME_CHANNEL, COMPATIBILITY_CHROME_STATE, type CompatibilityChromeState } from './compatibility-chrome-contract.ts'
-import type { DesktopLocale, DesktopPlatform, DesktopShellSpec } from './runtime.ts'
+import type { DesktopLocale, DesktopPlatform, DesktopShellSpec, DesktopUpdatePresentation } from './runtime.ts'
 import { DESKTOP_FRAME_HEIGHT } from './window-chrome.ts'
 import { DESKTOP_RENDERER_SESSION_PARTITION } from './window-options.ts'
 
 export interface CompatibilityShellActions {
   locale(): DesktopLocale
   version: string
+  update(): DesktopUpdatePresentation
   openTerminal(): void
   restart(): Promise<void>
   restartToRecovery(): Promise<void>
@@ -93,7 +94,14 @@ export class CompatibilityShell {
 
 
   private state(): CompatibilityChromeState {
-    return { mode: 'compatibility', locale: this.actions.locale(), version: this.actions.version, platform: this.platform, material: this.spec.material }
+    return {
+      mode: 'compatibility',
+      locale: this.actions.locale(),
+      version: this.actions.version,
+      platform: this.platform,
+      material: this.spec.material,
+      update: this.actions.update(),
+    }
   }
 
   private readonly resize = (): void => {
