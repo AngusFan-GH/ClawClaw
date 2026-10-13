@@ -98,9 +98,24 @@ describe('selection continuable subagent', () => {
     expect(value.startContinuable).not.toHaveBeenCalled()
   })
 
-  it('removes only selection-sidechat settlement messages from the parent inbox', () => {
-    const remove = vi.fn(() => true)
-    const agent = { inbox: { remove } } as unknown as Agent
+  it('removes only selection-sidechat settlements and holds an idle parent wake', async () => {
+    const remove = vi.fn((_id: string) => true)
+    const state: { phase: 'idle' | 'maintenance' | 'running' } = { phase: 'idle' }
+    let pending = true
+    let wakeRequested = false
+    let turnStarted = false
+    const runMaintenance = vi.fn(async (job: () => Promise<void>) => {
+      if (state.phase !== 'idle') throw new Error('agent already has active work')
+      state.phase = 'maintenance'
+      await job()
+      state.phase = 'idle'
+      if (wakeRequested && pending) turnStarted = true
+    })
+    const agent = {
+      get status() { return state.phase === 'running' ? 'running' : 'idle' },
+      inbox: { remove: vi.fn((id: string) => { pending = false; return remove(id) }) },
+      runMaintenance,
+    } as unknown as Agent
     const sideMessage = {
       id: 'message-1',
       source: { kind: 'subagent-settled', senderSessionId: 'selection-sidechat-child' },
@@ -111,8 +126,32 @@ describe('selection continuable subagent', () => {
     } as unknown as UserMessage
 
     expect(suppressSelectionSideChatSettlement(agent, sideMessage)).toBe(true)
+    // Upstream followup continues to its wake call after the inserted listener.
+    if (state.phase === 'maintenance') wakeRequested = true
+    else turnStarted = true
+    await Promise.resolve()
+    await Promise.resolve()
+
     expect(remove).toHaveBeenCalledWith('message-1')
+    expect(runMaintenance).toHaveBeenCalledOnce()
+    expect(turnStarted).toBe(false)
     expect(suppressSelectionSideChatSettlement(agent, ordinaryMessage)).toBe(false)
     expect(remove).toHaveBeenCalledOnce()
+  })
+
+  it('does not interrupt a parent turn while removing a steered settlement', () => {
+    const remove = vi.fn(() => true)
+    const runMaintenance = vi.fn()
+    const agent = {
+      status: 'running', inbox: { remove }, runMaintenance,
+    } as unknown as Agent
+    const message = {
+      id: 'message-1',
+      source: { kind: 'subagent-settled', senderSessionId: 'selection-sidechat-child' },
+    } as unknown as UserMessage
+
+    expect(suppressSelectionSideChatSettlement(agent, message)).toBe(true)
+    expect(remove).toHaveBeenCalledWith('message-1')
+    expect(runMaintenance).not.toHaveBeenCalled()
   })
 })

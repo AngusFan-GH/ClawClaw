@@ -61,11 +61,30 @@ export async function startSelectionSideChat(
   return { childSessionId: started.childId }
 }
 
-/** Prevent selection side chats from waking and writing their result into the parent conversation. */
+/**
+ * Keep an idle parent in maintenance until the upstream followup call finishes.
+ * The loop then sees an empty inbox and drops its latched wake without opening
+ * a contentless turn. A parent already running needs no barrier: removing the
+ * synchronous insertion is enough because steer does not schedule another turn.
+ */
+function holdSelectionSideChatSettlementWake(agent: Agent): void {
+  if (agent.status !== 'idle') return
+  try {
+    void agent.runMaintenance(async () => { await Promise.resolve() })
+  } catch (cause) {
+    // Agent status also reports idle during maintenance, where an existing
+    // maintenance boundary already provides the required wake barrier.
+    if (!(cause instanceof Error) || !cause.message.endsWith('already has active work')) throw cause
+  }
+}
+
+/** Prevent selection side chats from waking or writing their result into the parent conversation. */
 export function suppressSelectionSideChatSettlement(agent: Agent, message: UserMessage): boolean {
   const source = message.source
   if (source.kind !== 'subagent-settled' || !isSelectionSideChatSessionId(source.senderSessionId)) return false
-  return agent.inbox.remove(message.id)
+  if (!agent.inbox.remove(message.id)) return false
+  holdSelectionSideChatSettlementWake(agent)
+  return true
 }
 
 export function registerSelectionSideChatApi(ctx: Context): void {
