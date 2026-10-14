@@ -142,7 +142,7 @@ describe('Desktop default Workspace selection', () => {
     expect(resolveDesktopWorkspaceSelection(workspaces, settingsSnapshot('missing'))).toBe(defaultId)
   })
 
-  it('opens the default initially and keeps using the Workspace selected by the user', async () => {
+  it('leaves initial Session restoration to upstream and keeps using the Workspace selected by the user', async () => {
     let workspace = workspaceSnapshot()
     let settingsState = settingsSnapshot()
     const workspaceListeners = new Set<() => void>()
@@ -180,13 +180,13 @@ describe('Desktop default Workspace selection', () => {
       settings: settings as never,
     })
     await Promise.resolve()
-    expect(opened).toEqual([defaultId])
+    expect(opened).toEqual([])
 
     await uiWorkspace.openWorkspace(projectId)
     expect(persisted).toEqual([projectId])
     uiWorkspace.startSession()
     await Promise.resolve()
-    expect(opened).toEqual([defaultId, projectId, projectId])
+    expect(opened).toEqual([projectId, projectId])
 
     workspace = workspaceSnapshot([defaultId])
     for (const listener of workspaceListeners) listener()

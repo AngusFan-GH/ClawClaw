@@ -56,7 +56,6 @@ export function installDesktopWorkspaceSelection(options: WorkspaceSelectionOpti
   const originalStartSession = uiWorkspace.startSession.bind(uiWorkspace)
   let selected: WorkspaceId | undefined
   let disposed = false
-  let initialTargetOpened = false
 
   const persistSelection = (workspaceId: WorkspaceId): void => {
     void settings.set('activeWorkspaceId', workspaceId).catch((reason: unknown) => {
@@ -109,15 +108,8 @@ export function installDesktopWorkspaceSelection(options: WorkspaceSelectionOpti
       selected = target
       persistSelection(target)
     }
-    if (initialTargetOpened) return
-    initialTargetOpened = true
-    queueMicrotask(() => {
-      if (disposed) return
-      void originalOpenWorkspace(target).catch((reason: unknown) => {
-        initialTargetOpened = false
-        warn('initial default Workspace selection failed:', reason)
-      })
-    })
+    // UiWorkspace owns initial Session restoration. Opening a Workspace here
+    // would race it and may replace the saved Session after a renderer reload.
   }
   const unsubscribeWorkspaces = workspaces.list.subscribe(reconcile)
   const unsubscribeSettings = settings.subscribe(reconcile)
