@@ -45,6 +45,8 @@ import {
 import { installSelectionQuoteStyles } from './selection-quote-styles.ts'
 import {
   applySelectionSideChat,
+  consumeSelectionSideChatContext,
+  pendingSelectionSideChatContext,
   startSelectionSideChat,
 } from './selection-sidechat.tsx'
 
@@ -240,6 +242,17 @@ export function SelectionQuoteOverlay({ actx, sidebarRight, sessionId, useInput,
   const [snapshot, setSnapshot] = useState<SelectionSnapshot | null>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const copy = labels()
+
+  useEffect(() => {
+    const pending = pendingSelectionSideChatContext(sessionId)
+    if (pending === undefined || !insertSelectionQuote(actx, pending, state.draftRev)) return
+    consumeSelectionSideChatContext(sessionId)
+    const frame = window.requestAnimationFrame(() => {
+      const editors = document.querySelectorAll<HTMLElement>('[data-composer-card] [contenteditable="true"]')
+      editors.item(editors.length - 1)?.focus()
+    })
+    return () => { window.cancelAnimationFrame(frame) }
+  }, [actx, sessionId, state.draftRev])
 
   const close = useCallback(() => { setSnapshot(null) }, [])
   const refresh = useCallback(() => {

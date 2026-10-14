@@ -6,14 +6,19 @@ import type { ResourceProvider } from '@deepseek-ai/dsh-client-resources/client'
 import type { SidebarRightTabDefinition } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { SelectionQuoteOverlay, type SelectionQuoteOverlayProps } from '../src/client/selection-quote.tsx'
+import { installSelectionQuoteStyles } from '../src/client/selection-quote-styles.ts'
 import {
   applySelectionSideChat,
+  consumeSelectionSideChatContext,
   parseSelectionSideChatAddress,
+  pendingSelectionSideChatContext,
+  prepareSelectionSideChatSession,
   selectionSideChatAddress,
+  SelectionSideChatConversation,
   SelectionSideChatTab,
   SELECTION_SIDECHAT_KIND,
   startSelectionSideChat,
-  startSelectionSideChatSession,
   subagentChatAddress,
   type SelectionSideChatResource,
   type SelectionSideChatTabProps,
@@ -84,6 +89,7 @@ describe('selection side-chat draft resource', () => {
       { name: 'sidebar.right.pane.tab', key: SELECTION_SIDECHAT_KIND },
       { name: 'sidebar.right.pane.tab.title', key: SELECTION_SIDECHAT_KIND },
       { name: 'sidebar.right.pane.tab.title', key: '@deepseek-ai/dsh-client-ui-subagent' },
+      { name: 'sidebar.chat.conversation', priority: -10 },
     ])
 
     const controller = new AbortController()
@@ -98,51 +104,171 @@ describe('selection side-chat draft resource', () => {
   })
 })
 
-describe('selection side-chat first question', () => {
-  it('posts the quote and question to the host start endpoint', async () => {
+describe('selection side-chat conversation layout', () => {
+  function renderPhase(sessionId: SessionId) {
+    const renderFactorySlot = vi.fn(() => null)
+    const content = SelectionSideChatConversation({
+      sessionId,
+      useSession: (select: (state: unknown) => unknown) => select({
+        blank: true,
+        awaitingFirstTurn: true,
+        running: false,
+        openState: 'open',
+        subagent: { address: { mode: 'continuable' }, parentAvailable: true },
+      }),
+      useConversation: (select: (state: unknown) => unknown) => select({ activeTargets: new Set() }),
+      useSessions: (select: (state: unknown) => unknown) => select({
+        byId: { [sessionId]: { blank: true } },
+      }),
+      renderFactorySlot,
+    } as never)
+    return { content, renderFactorySlot }
+  }
+
+  it('docks the shared composer for a blank selection child', () => {
+    const { content, renderFactorySlot } = renderPhase('selection-sidechat-child' as SessionId)
+    expect(renderFactorySlot).toHaveBeenCalledWith(
+      'conversation.content',
+      { variant: 'embedded', phase: 'active', hero: false },
+      expect.objectContaining({ slots: expect.any(Object) }),
+    )
+    expect(content).toMatchObject({
+      type: 'div',
+      props: {
+        className: 'clawSelectionSideChatConversation',
+        style: expect.objectContaining({
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          minHeight: 0,
+        }),
+      },
+    })
+  })
+
+  it('pushes the shared composer to the bottom when the blank child has no message view', () => {
+    const stale = document.createElement('style')
+    stale.id = 'clawclaw-selection-quote-styles'
+    stale.textContent = 'stale'
+    document.head.append(stale)
+
+    installSelectionQuoteStyles()
+
+    expect(stale.textContent).toContain(
+      '.clawSelectionSideChatConversation [data-composer-seat] { margin-top: auto; }',
+    )
+    stale.remove()
+  })
+
+  it('preserves the upstream hero phase for other blank subagents', () => {
+    const { content, renderFactorySlot } = renderPhase('ordinary-child' as SessionId)
+    expect(renderFactorySlot).toHaveBeenCalledWith(
+      'conversation.content',
+      { variant: 'embedded', phase: 'hero', hero: true },
+      expect.objectContaining({ slots: expect.any(Object) }),
+    )
+    expect(content).toBeNull()
+  })
+})
+
+describe('selection side-chat preparation', () => {
+  it('posts the quote to the host preparation endpoint', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({
       childSessionId: CHILD,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
 
-    await expect(startSelectionSideChatSession(PARENT, 'What is this?', CONTEXT, undefined, fetcher as typeof fetch))
+    await expect(prepareSelectionSideChatSession(PARENT, CONTEXT, undefined, fetcher as typeof fetch))
       .resolves.toEqual({ childSessionId: CHILD })
-    expect(fetcher).toHaveBeenCalledWith('/api/desktop/selection-sidechat/start', expect.objectContaining({
+    expect(fetcher).toHaveBeenCalledWith('/api/desktop/selection-sidechat/prepare', expect.objectContaining({
       method: 'POST',
-      body: JSON.stringify({ parentSessionId: PARENT, question: 'What is this?', quote: CONTEXT }),
+      body: JSON.stringify({ parentSessionId: PARENT, quote: CONTEXT }),
     }))
   })
 
-  it('replaces the draft tab with the standard addressed subagent chat after submit', async () => {
+  it('prepares automatically and replaces the draft with the standard subagent composer', async () => {
     const host = document.createElement('div')
     document.body.append(host)
     const root = createRoot(host)
     const actions = { close: vi.fn(), openResource: vi.fn() }
     const abort = new AbortController()
-    const startChild = vi.fn(async () => ({ childSessionId: CHILD }))
+    const prepareChild = vi.fn(async () => ({ childSessionId: CHILD }))
     const draftId = 'draft-1'
     const resource: SelectionSideChatResource = {
       draft: { context: CONTEXT, parentSessionId: PARENT },
     }
     const props = {
-      startChild,
+      prepareChild,
       useTabInfo: () => ({ tab: { actions, contentId: selectionSideChatAddress(draftId), signal: abort.signal } }),
       useResource: () => ({ status: 'live', value: resource, failure: undefined }),
     } as unknown as SelectionSideChatTabProps
 
     await act(async () => { root.render(createElement(SelectionSideChatTab, props)) })
-    const textarea = host.querySelector('textarea')!
-    expect(textarea.style.height).toBe('36px')
-    await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
-      setter?.call(textarea, 'Explain this quote')
-      textarea.dispatchEvent(new Event('input', { bubbles: true }))
-    })
-    await act(async () => { host.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) })
 
-    expect(startChild).toHaveBeenCalledWith(PARENT, 'Explain this quote', CONTEXT, abort.signal)
+    expect(host.querySelector('textarea, [contenteditable="true"]')).toBeNull()
+    expect(prepareChild).toHaveBeenCalledWith(PARENT, CONTEXT, abort.signal)
     expect(actions.openResource).toHaveBeenCalledWith(subagentChatAddress(PARENT, CHILD), {
       kind: 'subagentchat', replaceTab: true,
     })
+    expect(pendingSelectionSideChatContext(CHILD)).toEqual(CONTEXT)
+
+    const quoteHost = document.createElement('div')
+    document.body.append(quoteHost)
+    const quoteRoot = createRoot(quoteHost)
+    const bail = vi.fn(() => true)
+    const quoteProps = {
+      actx: { bail },
+      sessionId: CHILD,
+      sidebarRight: { openResource: vi.fn() },
+      useInput: (select: (state: unknown) => unknown) => select({ draftRev: 3, occurrences: [] }),
+      useSession: (select: (state: unknown) => unknown) => select({ subagent: { mode: 'continuable' } }),
+    } as unknown as SelectionQuoteOverlayProps
+    await act(async () => { quoteRoot.render(createElement(SelectionQuoteOverlay, quoteProps)) })
+    expect(bail).toHaveBeenCalledWith(expect.anything(), 'slash/input-insert-reference', expect.objectContaining({
+      reference: expect.objectContaining({ label: CONTEXT.text }),
+      span: { start: 0, end: 0, draftRev: 3 },
+    }))
+    expect(pendingSelectionSideChatContext(CHILD)).toBeUndefined()
+    await act(async () => { quoteRoot.render(createElement(SelectionQuoteOverlay, {
+      ...quoteProps,
+      useInput: (select: (state: unknown) => unknown) => select({ draftRev: 4, occurrences: [] }),
+    } as unknown as SelectionQuoteOverlayProps)) })
+    expect(bail).toHaveBeenCalledOnce()
+    await act(async () => { quoteRoot.unmount() })
+    quoteHost.remove()
+    await act(async () => { root.unmount() })
+    host.remove()
+  })
+
+  it('shows a retry state without provisioning a second child after navigation fails', async () => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    const actions = {
+      close: vi.fn(),
+      openResource: vi.fn()
+        .mockImplementationOnce(() => { throw new Error('navigation failed') })
+        .mockImplementationOnce(() => undefined),
+    }
+    const abort = new AbortController()
+    const prepareChild = vi.fn(async () => ({ childSessionId: CHILD }))
+    const props = {
+      prepareChild,
+      useTabInfo: () => ({ tab: { actions, contentId: selectionSideChatAddress('draft-retry'), signal: abort.signal } }),
+      useResource: () => ({
+        status: 'live', failure: undefined,
+        value: { draft: { context: CONTEXT, parentSessionId: PARENT } },
+      }),
+    } as unknown as SelectionSideChatTabProps
+
+    await act(async () => { root.render(createElement(SelectionSideChatTab, props)) })
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('navigation failed')
+    await act(async () => { (host.querySelector('[role="alert"] button') as HTMLButtonElement).click() })
+
+    expect(prepareChild).toHaveBeenCalledOnce()
+    expect(actions.openResource).toHaveBeenCalledTimes(2)
+    consumeSelectionSideChatContext(CHILD)
     await act(async () => { root.unmount() })
     host.remove()
   })

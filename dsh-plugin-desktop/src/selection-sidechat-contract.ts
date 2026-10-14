@@ -1,10 +1,9 @@
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 export const DESKTOP_SELECTION_SIDECHAT_PATH = '/api/desktop/selection-sidechat'
-export const DESKTOP_SELECTION_SIDECHAT_START_PATH = `${DESKTOP_SELECTION_SIDECHAT_PATH}/start`
+export const DESKTOP_SELECTION_SIDECHAT_PREPARE_PATH = `${DESKTOP_SELECTION_SIDECHAT_PATH}/prepare`
 export const SELECTION_SIDECHAT_SESSION_PREFIX = 'selection-sidechat-'
 
-export const MAX_SELECTION_SIDECHAT_QUESTION_LENGTH = 16_000
 export const MAX_SELECTION_SIDECHAT_TEXT_LENGTH = 4_000
 export const MAX_SELECTION_SIDECHAT_CONTEXT_LENGTH = 12_000
 export const MAX_SELECTION_SIDECHAT_LABEL_LENGTH = 120
@@ -21,13 +20,12 @@ export interface SelectionSideChatQuote {
   readonly text: string
 }
 
-export interface SelectionSideChatStartRequest {
+export interface SelectionSideChatPrepareRequest {
   readonly parentSessionId: SessionId
-  readonly question: string
   readonly quote: SelectionSideChatQuote
 }
 
-export interface SelectionSideChatStartResult {
+export interface SelectionSideChatPrepareResult {
   readonly childSessionId: SessionId
 }
 
@@ -61,7 +59,7 @@ function parseSource(value: unknown): SelectionSideChatSource | undefined {
   }
 }
 
-export function parseSelectionSideChatStartRequest(value: unknown): SelectionSideChatStartRequest {
+export function parseSelectionSideChatPrepareRequest(value: unknown): SelectionSideChatPrepareRequest {
   const input = record(value, 'Selection side-chat payload')
   const quote = record(input.quote, 'Selection side-chat quote')
   const context = quote.context === undefined
@@ -70,7 +68,6 @@ export function parseSelectionSideChatStartRequest(value: unknown): SelectionSid
   const source = parseSource(quote.source)
   return {
     parentSessionId: boundedText(input.parentSessionId, 'Selection side-chat parentSessionId', 512) as SessionId,
-    question: boundedText(input.question, 'Selection side-chat question', MAX_SELECTION_SIDECHAT_QUESTION_LENGTH),
     quote: {
       text: boundedText(quote.text, 'Selection side-chat quote text', MAX_SELECTION_SIDECHAT_TEXT_LENGTH),
       ...(context === undefined ? {} : { context }),
@@ -79,7 +76,7 @@ export function parseSelectionSideChatStartRequest(value: unknown): SelectionSid
   }
 }
 
-export function parseSelectionSideChatStartResult(value: unknown): SelectionSideChatStartResult {
+export function parseSelectionSideChatPrepareResult(value: unknown): SelectionSideChatPrepareResult {
   const output = record(value, 'Selection side-chat response')
   if (typeof output.childSessionId !== 'string' || output.childSessionId === '') {
     throw new TypeError('Selection side-chat response is invalid')

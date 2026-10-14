@@ -91,7 +91,7 @@ export const name = 'desktop-shell'
 /** Services required by the desktop shell; `desktopRuntime` is probed, not required. */
 export const inject = [
   'webServer', 'webRuntime', 'appExit', 'settings', 'connection', 'sessionQuery', 'sessionProjectionCache', 'agents',
-  'agentPresets', 'permissionPresets', 'workspaceRegistry', 'subagents',
+  'agentPresets', 'permissionPresets', 'workspaceRegistry', 'sessions', 'sessionProjections', 'subagents',
 ]
 
 /** Standard settings namespace shared by tray and configuration surfaces. */

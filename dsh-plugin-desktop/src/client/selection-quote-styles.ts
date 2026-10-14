@@ -1,8 +1,8 @@
 const STYLE_ID = 'clawclaw-selection-quote-styles'
 
 export function installSelectionQuoteStyles(): void {
-  if (document.getElementById(STYLE_ID) !== null) return
-  const style = document.createElement('style')
+  const installed = document.getElementById(STYLE_ID)
+  const style = installed instanceof HTMLStyleElement ? installed : document.createElement('style')
   style.id = STYLE_ID
   style.textContent = `
 .clawSelectionQuoteToolbar {
@@ -110,94 +110,44 @@ export function installSelectionQuoteStyles(): void {
 }
 body[data-ds-dark-theme] .clawSelectionQuoteToolbar { box-shadow: 0 8px 24px rgba(0, 0, 0, .4); }
 .clawSelectionSideChat { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; font-family: var(--dsw-font-family); letter-spacing: 0; }
-.clawSelectionSideChatDraft {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  justify-content: flex-end;
-  min-width: 0;
-  min-height: 0;
-  padding: 0 8px 4px;
-  box-sizing: border-box;
-}
-.clawSelectionSideChatDraftComposer {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  flex: none;
-  gap: 12px;
+.clawSelectionSideChatConversation [data-composer-seat] { margin-top: auto; }
+.clawSelectionSideChatPreparing {
+  display: grid;
+  align-content: center;
+  gap: 14px;
   box-sizing: border-box;
   width: 100%;
-  padding-top: 8px;
-  border: 0;
-  border-radius: var(--dsw-radius-panel, 28px);
+  min-height: 100%;
+  padding: 24px;
   color: var(--dsw-alias-label-primary, #171717);
-  background: var(--dsw-specific-input-major, #fff);
-  box-shadow: var(--dsw-elevation-soft, 0 4px 18px rgba(0, 0, 0, .06));
   font-size: var(--dsh-content-font-size, 14px);
-  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
+  line-height: 20px;
 }
-.clawSelectionSideChatDraftQuote {
+.clawSelectionSideChatPreparingQuote {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
   gap: 8px;
-  margin: 0 12px;
-  padding: 6px 8px;
+  width: min(100%, 480px);
+  margin: 0 auto;
+  padding: 9px 10px;
+  box-sizing: border-box;
   border-left: 3px solid var(--dsw-alias-state-business-primary, #2563eb);
   border-radius: var(--dsw-radius-sm, 8px);
   background: var(--dsw-alias-bg-layer-2, #f7f7f7);
 }
-.clawSelectionSideChatDraftQuote > svg { width: 15px; height: 15px; margin-top: 2px; color: var(--dsw-alias-state-business-primary, #2563eb); }
-.clawSelectionSideChatDraftQuote span { color: var(--dsw-alias-label-caption, #777); font-size: 11px; line-height: 16px; }
-.clawSelectionSideChatDraftQuote p { display: -webkit-box; margin: 1px 0 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; font-size: 12px; line-height: 18px; overflow-wrap: anywhere; white-space: pre-wrap; }
-.clawSelectionSideChatDraft textarea {
-  display: block;
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 36px;
-  max-height: 180px;
-  margin: 0;
-  padding: 4px 12px 0 14px;
-  resize: none;
-  overflow-y: auto;
-  border: 0;
-  outline: 0;
-  color: var(--dsw-alias-label-primary, #171717);
-  background: transparent;
-  font-family: var(--dsw-font-family);
-  font-size: inherit;
-  line-height: inherit;
-  letter-spacing: 0;
-  caret-color: var(--dsw-alias-state-business-primary, #2563eb);
-}
-.clawSelectionSideChatDraft textarea::placeholder { color: var(--dsw-alias-label-tertiary, #929292); }
-.clawSelectionSideChatDraftActions { display: flex; justify-content: flex-end; min-height: 34px; padding: 2px 8px 6px; }
-.clawSelectionSideChatDraftSend {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  color: #fff;
-  background: var(--dsw-alias-button-info-fill, #3964fe);
-  cursor: pointer;
-  transform: translateY(-2px);
-  transition: background-color 100ms ease;
-}
-.clawSelectionSideChatDraftSend:hover:not(:disabled) { background: var(--dsw-alias-button-info-hover, #3158e6); }
-.clawSelectionSideChatDraftSend:disabled { opacity: .42; cursor: default; }
-.clawSelectionSideChatDraftSend:focus-visible { outline: 2px solid var(--dsw-focus-ring-color, #2563eb); outline-offset: 2px; }
-.clawSelectionSideChatDraftSend svg { width: 16px; height: 16px; }
+.clawSelectionSideChatPreparingQuote > svg { width: 15px; height: 15px; margin-top: 2px; color: var(--dsw-alias-state-business-primary, #2563eb); }
+.clawSelectionSideChatPreparingQuote span { color: var(--dsw-alias-label-caption, #777); font-size: 11px; line-height: 16px; }
+.clawSelectionSideChatPreparingQuote p { display: -webkit-box; margin: 1px 0 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; font-size: 12px; line-height: 18px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .clawSelectionSideChatSpinner { animation: claw-selection-sidechat-spin .8s linear infinite; }
-.clawSelectionSideChatDraftError { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 14px; color: var(--dsw-alias-label-error, #b42318); font-size: 12px; line-height: 18px; }
-.clawSelectionSideChatDraftError button,
+.clawSelectionSideChatPreparingStatus,
+.clawSelectionSideChatPreparingError { display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--dsw-alias-label-secondary, #666); font-size: 12px; line-height: 18px; }
+.clawSelectionSideChatPreparingStatus svg { width: 14px; height: 14px; }
+.clawSelectionSideChatPreparingError { color: var(--dsw-alias-label-error, #b42318); }
+.clawSelectionSideChatPreparingError button,
 .clawSelectionSideChatExpired button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border: 0; border-radius: 6px; color: inherit; background: transparent; cursor: pointer; font: inherit; letter-spacing: 0; }
-.clawSelectionSideChatDraftError button:hover,
+.clawSelectionSideChatPreparingError button:hover,
 .clawSelectionSideChatExpired button:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .06)); }
-.clawSelectionSideChatDraftError svg { width: 13px; height: 13px; }
+.clawSelectionSideChatPreparingError svg { width: 13px; height: 13px; }
 .clawSelectionSideChatExpired { display: grid; place-content: center; gap: 10px; width: 100%; height: 100%; padding: 24px; box-sizing: border-box; color: var(--dsw-alias-label-secondary, #666); text-align: center; }
 .clawSelectionSideChatExpired p { margin: 0; }
 .clawSelectionSideChatTabTitle { display: block; min-width: 0; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -215,5 +165,5 @@ body[data-ds-dark-theme] .clawSelectionQuoteToolbar { box-shadow: 0 8px 24px rgb
   .clawSelectionQuoteCards { left: 8px; right: 8px; }
 }
 `
-  document.head.append(style)
+  if (!style.isConnected) document.head.append(style)
 }

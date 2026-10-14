@@ -3,33 +3,37 @@
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { ContentBlock, UserMessage } from '@deepseek-ai/dsh-llm'
-import { SessionId } from '@deepseek-ai/dsh-session'
-import type { SubagentRuntime } from '@deepseek-ai/dsh-subagent'
+import type { UserMessage } from '@deepseek-ai/dsh-llm'
+import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
+import {
+  appendDelegatedPolicyOverrides,
+  applyChildComposition,
+  captureDelegatedPolicyOverrides,
+  childSessionMeta,
+  resolveChildAgentOptions,
+  resolveChildDepth,
+  snapshotSubagentDescriptor,
+  type SubagentRuntime,
+} from '@deepseek-ai/dsh-subagent'
 import { registerDesktopJsonApi } from './desktop-json-api.ts'
 import {
   DESKTOP_SELECTION_SIDECHAT_PATH,
-  DESKTOP_SELECTION_SIDECHAT_START_PATH,
+  DESKTOP_SELECTION_SIDECHAT_PREPARE_PATH,
   isSelectionSideChatSessionId,
-  parseSelectionSideChatStartRequest,
+  parseSelectionSideChatPrepareRequest,
   SELECTION_SIDECHAT_SESSION_PREFIX,
   selectionSideChatLabel,
-  type SelectionSideChatQuote,
-  type SelectionSideChatStartRequest,
-  type SelectionSideChatStartResult,
+  type SelectionSideChatPrepareRequest,
+  type SelectionSideChatPrepareResult,
 } from './selection-sidechat-contract.ts'
 
-const QUOTE_OPEN = '<clawclaw-selection-quote>'
-const QUOTE_CLOSE = '</clawclaw-selection-quote>'
+const SUBAGENT_CATALOG_VERSION = 0
 
 export interface SelectionSideChatRuntime {
   readonly agents: Context['agents']
+  readonly sessions: Context['sessions']
+  readonly sessionProjections: Context['sessionProjections']
   readonly subagents: SubagentRuntime
-}
-
-function selectionSideChatPrompt(quote: SelectionSideChatQuote, question: string): ContentBlock[] {
-  const payload = JSON.stringify(quote).replace(/</gu, '\\u003c')
-  return [{ type: 'text', text: `${QUOTE_OPEN}${payload}${QUOTE_CLOSE}\n\n${question.trim()}` }]
 }
 
 function selectionSideChatToolFilter(parent: Agent): { readonly deny: readonly string[] } | undefined {
@@ -38,27 +42,84 @@ function selectionSideChatToolFilter(parent: Agent): { readonly deny: readonly s
   return tools.get('send_message', parent) === undefined ? undefined : { deny: ['send_message'] }
 }
 
-/** Start a fresh, continuable child whose first turn is the user's side question. */
-export async function startSelectionSideChat(
+/** Provision a dormant native continuable child for the standard conversation composer. */
+export async function prepareSelectionSideChat(
   runtime: SelectionSideChatRuntime,
-  request: SelectionSideChatStartRequest,
-): Promise<SelectionSideChatStartResult> {
+  request: SelectionSideChatPrepareRequest,
+): Promise<SelectionSideChatPrepareResult> {
   const parent = runtime.agents.get(request.parentSessionId)
   if (parent === undefined) throw new Error('The parent conversation is not active')
+  const provider = runtime.subagents.getProvider('spawn')
+  if (provider?.prepareContinuable === undefined) {
+    throw new Error('Continuable side chats are unavailable')
+  }
   const childId = SessionId(`${SELECTION_SIDECHAT_SESSION_PREFIX}${randomUUID()}`)
+  const childDepth = resolveChildDepth(parent, undefined)
+  const agentOptions = resolveChildAgentOptions(parent, undefined, childDepth)
   const toolFilter = selectionSideChatToolFilter(parent)
-  const started = await runtime.subagents.startContinuable({
+  const label = selectionSideChatLabel(request.quote.text)
+  const descriptor = snapshotSubagentDescriptor({
+    mode: 'continuable',
     provider: 'spawn',
-    childId,
-    label: selectionSideChatLabel(request.quote.text),
-    request: {
-      parent,
-      prompt: selectionSideChatPrompt(request.quote, request.question),
-      ...(toolFilter === undefined ? {} : { toolFilter }),
-    },
-    signal: new AbortController().signal,
+    label,
+    ...(agentOptions.provider === undefined ? {} : { agentProvider: agentOptions.provider }),
+    ...(agentOptions.model === undefined ? {} : { agentModel: agentOptions.model }),
+    ...(agentOptions.reasoningEffort === undefined ? {} : { agentReasoningEffort: agentOptions.reasoningEffort }),
+    ...(toolFilter === undefined ? {} : { toolFilter }),
   })
-  return { childSessionId: started.childId }
+  const delegatedPolicies = captureDelegatedPolicyOverrides(parent)
+  const signal = new AbortController().signal
+  const prepared = await provider.prepareContinuable({ sessionId: childId, parent, signal })
+  const inheritedEventCount = SessionLogOffset(prepared.seed?.length ?? 0)
+  const handle = await runtime.agents.create({
+    sessionId: childId,
+    parentAgent: parent,
+    meta: childSessionMeta(parent, childDepth, prepared.seed !== undefined),
+    ...(prepared.seed === undefined ? {} : { seed: prepared.seed }),
+    inheritedEventCount,
+    agentOptions,
+    signal,
+    setup(childCtx, child) {
+      child.session.append('subagent/descriptor', descriptor)
+      appendDelegatedPolicyOverrides(child.session, delegatedPolicies)
+      applyChildComposition(childCtx, parent, { toolFilter })
+    },
+  })
+  try {
+    await runtime.sessions.flush(handle.agent.session)
+  } catch (cause) {
+    await handle.dispose().catch(() => undefined)
+    throw cause
+  }
+  await handle.dispose()
+  return { childSessionId: childId }
+}
+
+/** Publish a prepared selection child only when its first real prompt is submitted. */
+export async function publishSelectionSideChat(
+  runtime: SelectionSideChatRuntime,
+  child: Agent,
+  message: UserMessage,
+): Promise<boolean> {
+  if (!isSelectionSideChatSessionId(child.id) || message.source.kind !== 'user') return false
+  const parentSessionId = child.session.header.parentSession
+  if (parentSessionId === undefined) return false
+  const parent = runtime.agents.get(parentSessionId)
+  if (parent === undefined) return false
+  const existing = runtime.sessionProjections.snapshot(parent.session).values.subagentCatalog
+    ?.some(entry => entry.id === child.id) === true
+  if (existing) return false
+  const identity = runtime.sessionProjections.snapshot(child.session).values.subagent
+  if (identity?.mode !== 'continuable' || !child.session.isOwnSeq(identity.seq)) return false
+  parent.session.append('subagent/catalog', {
+    version: SUBAGENT_CATALOG_VERSION,
+    childId: child.id,
+    childCreatedAt: child.session.header.createdAt,
+    mode: 'continuable',
+    label: identity.label,
+  })
+  await runtime.sessions.flush(parent.session)
+  return true
 }
 
 /**
@@ -89,16 +150,35 @@ export function suppressSelectionSideChatSettlement(agent: Agent, message: UserM
 
 export function registerSelectionSideChatApi(ctx: Context): void {
   ctx.on('agent/inbox/inserted', ({ agent, message }) => {
-    suppressSelectionSideChatSettlement(agent, message)
+    if (suppressSelectionSideChatSettlement(agent, message)) return
+    void publishSelectionSideChat(
+      {
+        agents: ctx.agents,
+        sessions: ctx.sessions,
+        sessionProjections: ctx.sessionProjections,
+        subagents: ctx.subagents,
+      },
+      agent,
+      message,
+    ).catch((cause) => {
+      ctx.logger.warn(
+        `dsh-plugin-desktop: failed to publish selection side chat: ${cause instanceof Error ? cause.message : String(cause)}`,
+      )
+    })
   })
   registerDesktopJsonApi(ctx, {
     label: 'Selection side chat',
     readPath: DESKTOP_SELECTION_SIDECHAT_PATH,
-    actionPath: DESKTOP_SELECTION_SIDECHAT_START_PATH,
+    actionPath: DESKTOP_SELECTION_SIDECHAT_PREPARE_PATH,
     read: async () => ({ available: ctx.subagents.getProvider('spawn')?.prepareContinuable !== undefined }),
-    action: async value => await startSelectionSideChat(
-      { agents: ctx.agents, subagents: ctx.subagents },
-      parseSelectionSideChatStartRequest(value),
+    action: async value => await prepareSelectionSideChat(
+      {
+        agents: ctx.agents,
+        sessions: ctx.sessions,
+        sessionProjections: ctx.sessionProjections,
+        subagents: ctx.subagents,
+      },
+      parseSelectionSideChatPrepareRequest(value),
     ),
   })
 }

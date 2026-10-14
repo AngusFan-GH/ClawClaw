@@ -1,9 +1,7 @@
 import {
-  useCallback, useLayoutEffect, useRef, useState,
-  type FormEvent, type KeyboardEvent,
+  useCallback, useEffect, useRef, useState,
+  type CSSProperties,
 } from 'react'
-// @ts-expect-error package subpath has no declaration file
-import ArrowUp from 'lucide-react/dist/esm/icons/arrow-up.mjs'
 // @ts-expect-error package subpath has no declaration file
 import LoaderCircle from 'lucide-react/dist/esm/icons/loader-circle.mjs'
 // @ts-expect-error package subpath has no declaration file
@@ -12,16 +10,17 @@ import Quote from 'lucide-react/dist/esm/icons/quote.mjs'
 import RotateCcw from 'lucide-react/dist/esm/icons/rotate-ccw.mjs'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ResourceProvider } from '@deepseek-ai/dsh-client-resources/client'
+import type { ConversationViewsProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ISidebarRight, SidebarRightTabDefinition } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
-import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
-  DESKTOP_SELECTION_SIDECHAT_START_PATH,
-  MAX_SELECTION_SIDECHAT_QUESTION_LENGTH,
-  parseSelectionSideChatStartResult,
+  DESKTOP_SELECTION_SIDECHAT_PREPARE_PATH,
+  isSelectionSideChatSessionId,
+  parseSelectionSideChatPrepareResult,
   selectionSideChatLabel,
   type SelectionSideChatQuote,
-  type SelectionSideChatStartResult,
+  type SelectionSideChatPrepareResult,
 } from '../selection-sidechat-contract.ts'
 
 export const SELECTION_SIDECHAT_KIND = 'desktop-selection-sidechat'
@@ -30,6 +29,17 @@ const SUBAGENT_CHAT_KIND = 'subagentchat'
 const SUBAGENT_CHAT_SLOT_KEY = '@deepseek-ai/dsh-client-ui-subagent'
 const SUBAGENT_CHAT_ADDRESS = 'dsh-resource://subagentchat/session/'
 const MAX_REMEMBERED_TITLES = 200
+const SIDE_CHAT_CONVERSATION_STYLE = {
+  position: 'absolute',
+  inset: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  width: '100%',
+  height: '100%',
+  minWidth: 0,
+  minHeight: 0,
+  overflow: 'hidden',
+} satisfies CSSProperties
 
 interface SelectionSideChatDraft {
   readonly context: SelectionSideChatQuote
@@ -44,30 +54,33 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface ResourceProtocolMap {
     'selection-sidechat': SelectionSideChatResource
   }
+
+  interface SlotMap {
+    'sidebar.chat.conversation': { kind: 'single'; scope: 'session' }
+  }
 }
 
 const drafts = new Map<string, SelectionSideChatDraft>()
 const childTitles = new Map<SessionId, string>()
+const pendingContexts = new Map<SessionId, SelectionSideChatQuote>()
 
-export type SelectionSideChatStarter = (
+export type SelectionSideChatPreparer = (
   parentSessionId: SessionId,
-  question: string,
   context: SelectionSideChatQuote,
   signal?: AbortSignal,
-) => Promise<SelectionSideChatStartResult>
+) => Promise<SelectionSideChatPrepareResult>
 
-export async function startSelectionSideChatSession(
+export async function prepareSelectionSideChatSession(
   parentSessionId: SessionId,
-  question: string,
   context: SelectionSideChatQuote,
   signal?: AbortSignal,
   fetcher: typeof fetch = globalThis.fetch,
-): ReturnType<SelectionSideChatStarter> {
-  const response = await fetcher(DESKTOP_SELECTION_SIDECHAT_START_PATH, {
+): ReturnType<SelectionSideChatPreparer> {
+  const response = await fetcher(DESKTOP_SELECTION_SIDECHAT_PREPARE_PATH, {
     method: 'POST',
     credentials: 'same-origin',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ parentSessionId, question, quote: context }),
+    body: JSON.stringify({ parentSessionId, quote: context }),
     ...(signal === undefined ? {} : { signal }),
   })
   const value: unknown = await response.json()
@@ -78,7 +91,15 @@ export async function startSelectionSideChatSession(
       : `Selection side-chat creation failed (HTTP ${String(response.status)})`
     throw new Error(message)
   }
-  return parseSelectionSideChatStartResult(value)
+  return parseSelectionSideChatPrepareResult(value)
+}
+
+export function pendingSelectionSideChatContext(sessionId: SessionId): SelectionSideChatQuote | undefined {
+  return pendingContexts.get(sessionId)
+}
+
+export function consumeSelectionSideChatContext(sessionId: SessionId): void {
+  pendingContexts.delete(sessionId)
 }
 
 export function selectionSideChatAddress(draftId: string): string {
@@ -144,13 +165,12 @@ function labels() {
   const chinese = (document.documentElement.lang || navigator.language).toLocaleLowerCase().startsWith('zh')
   return chinese
     ? {
-        ask: '发送', close: '关闭', error: '发送失败', expired: '该未发送的侧边提问已失效', placeholder: '针对引用内容提问',
-        quote: '引用内容', retry: '重试', sending: '正在创建侧边对话', tab: '侧边聊天',
+        close: '关闭', error: '无法创建侧边对话', expired: '该侧边提问已失效',
+        quote: '引用内容', retry: '重试', sending: '正在准备侧边对话', tab: '侧边聊天',
       }
     : {
-        ask: 'Send', close: 'Close', error: 'Could not send', expired: 'This unsent side-chat draft has expired',
-        placeholder: 'Ask about the quoted text', quote: 'Quoted context', retry: 'Retry',
-        sending: 'Creating side chat', tab: 'Side chat',
+        close: 'Close', error: 'Could not create side chat', expired: 'This side-chat request has expired',
+        quote: 'Quoted context', retry: 'Retry', sending: 'Preparing side chat', tab: 'Side chat',
       }
 }
 
@@ -165,111 +185,83 @@ function rememberChildTitle(childSessionId: SessionId, title: string): void {
 }
 
 export type SelectionSideChatTabProps = PropsRuntime<'sidebar.right.pane.tab'> & {
-  readonly startChild?: SelectionSideChatStarter
+  readonly prepareChild?: SelectionSideChatPreparer
 }
 
-function DraftComposer({ draft, signal, actions, startChild = startSelectionSideChatSession }: {
+function PreparingSideChat({ draft, signal, actions, prepareChild = prepareSelectionSideChatSession }: {
   readonly actions: { openResource(address: string, options?: object): void }
   readonly draft: SelectionSideChatDraft
   readonly signal: AbortSignal
-  readonly startChild?: SelectionSideChatStarter
+  readonly prepareChild?: SelectionSideChatPreparer
 }) {
   const copy = labels()
-  const [question, setQuestion] = useState('')
   const [failure, setFailure] = useState<string>()
-  const [submitting, setSubmitting] = useState(false)
-  const createdRef = useRef<SelectionSideChatStartResult>()
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const submittingRef = useRef(false)
+  const createdRef = useRef<SelectionSideChatPrepareResult>()
+  const preparingRef = useRef(false)
+  const startedRef = useRef(false)
 
-  useLayoutEffect(() => { textareaRef.current?.focus() }, [])
-  useLayoutEffect(() => {
-    const textarea = textareaRef.current
-    if (textarea === null) return
-    textarea.style.height = '0px'
-    textarea.style.height = `${Math.min(180, Math.max(36, textarea.scrollHeight))}px`
-  }, [question])
-
-  const openChild = useCallback((child: Awaited<ReturnType<SelectionSideChatStarter>>) => {
+  const openChild = useCallback((child: SelectionSideChatPrepareResult) => {
     rememberChildTitle(child.childSessionId, draft.context.text)
-    actions.openResource(subagentChatAddress(draft.parentSessionId, child.childSessionId), {
-      kind: SUBAGENT_CHAT_KIND,
-      replaceTab: true,
-    })
-  }, [actions, draft.context.text, draft.parentSessionId])
+    pendingContexts.set(child.childSessionId, draft.context)
+    try {
+      actions.openResource(subagentChatAddress(draft.parentSessionId, child.childSessionId), {
+        kind: SUBAGENT_CHAT_KIND,
+        replaceTab: true,
+      })
+    } catch (cause) {
+      pendingContexts.delete(child.childSessionId)
+      throw cause
+    }
+  }, [actions, draft.context, draft.parentSessionId])
 
-  const submit = useCallback(async () => {
-    const prompt = question.trim()
-    if (prompt === '' || submittingRef.current) return
-    submittingRef.current = true
+  const prepare = useCallback(async () => {
+    if (preparingRef.current) return
+    preparingRef.current = true
     setFailure(undefined)
-    setSubmitting(true)
     try {
       if (createdRef.current !== undefined) {
         openChild(createdRef.current)
         return
       }
-      const child = await startChild(draft.parentSessionId, prompt, draft.context, signal)
+      const child = await prepareChild(draft.parentSessionId, draft.context, signal)
       if (signal.aborted) return
       createdRef.current = child
       openChild(child)
     } catch (cause) {
       if (!signal.aborted) setFailure(cause instanceof Error ? cause.message : copy.error)
     } finally {
-      submittingRef.current = false
-      if (!signal.aborted) setSubmitting(false)
+      preparingRef.current = false
     }
-  }, [copy.error, draft, openChild, question, signal, startChild])
+  }, [copy.error, draft, openChild, prepareChild, signal])
 
-  const onSubmit = (event: FormEvent) => { event.preventDefault(); void submit() }
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
-    event.preventDefault()
-    void submit()
-  }
+  useEffect(() => {
+    if (startedRef.current) return
+    startedRef.current = true
+    void prepare()
+  }, [prepare])
 
   return (
-    <form className="clawSelectionSideChatDraft" onSubmit={onSubmit}>
-      <div className="clawSelectionSideChatDraftComposer" data-composer-card="">
-        <div className="clawSelectionSideChatDraftQuote">
-          <Quote aria-hidden="true" />
-          <div><span>{copy.quote}</span><p title={draft.context.text}>{draft.context.text}</p></div>
-        </div>
-        {failure !== undefined && (
-          <div className="clawSelectionSideChatDraftError" role="alert">
-            <span>{failure}</span>
-            <button type="button" onClick={() => { void submit() }}>
-              <RotateCcw aria-hidden="true" />{copy.retry}
-            </button>
-          </div>
-        )}
-        <textarea
-          ref={textareaRef}
-          value={question}
-          maxLength={MAX_SELECTION_SIDECHAT_QUESTION_LENGTH}
-          placeholder={copy.placeholder}
-          aria-label={copy.placeholder}
-          disabled={submitting}
-          onChange={event => { setQuestion(event.target.value) }}
-          onKeyDown={onKeyDown}
-        />
-        <div className="clawSelectionSideChatDraftActions">
-          <button
-            type="submit"
-            className="clawSelectionSideChatDraftSend"
-            title={submitting ? copy.sending : copy.ask}
-            aria-label={submitting ? copy.sending : copy.ask}
-            disabled={submitting || question.trim() === ''}
-          >
-            {submitting ? <LoaderCircle className="clawSelectionSideChatSpinner" aria-hidden="true" /> : <ArrowUp aria-hidden="true" />}
-          </button>
-        </div>
+    <div className="clawSelectionSideChatPreparing">
+      <div className="clawSelectionSideChatPreparingQuote">
+        <Quote aria-hidden="true" />
+        <div><span>{copy.quote}</span><p title={draft.context.text}>{draft.context.text}</p></div>
       </div>
-    </form>
+      {failure === undefined
+        ? <div className="clawSelectionSideChatPreparingStatus" role="status">
+          <LoaderCircle className="clawSelectionSideChatSpinner" aria-hidden="true" />
+          <span>{copy.sending}</span>
+        </div>
+        : <div className="clawSelectionSideChatPreparingError" role="alert">
+          <span>{failure}</span>
+          <button type="button" onClick={() => { void prepare() }}>
+            <RotateCcw aria-hidden="true" />{copy.retry}
+          </button>
+        </div>}
+    </div>
   )
 }
 
-export function SelectionSideChatTab({ useResource, useTabInfo, startChild }: SelectionSideChatTabProps) {
+export function SelectionSideChatTab({ useResource, useTabInfo, prepareChild }: SelectionSideChatTabProps) {
   const { tab } = useTabInfo()
   const resource = useResource<'selection-sidechat'>(tab.contentId)
   const copy = labels()
@@ -284,11 +276,11 @@ export function SelectionSideChatTab({ useResource, useTabInfo, startChild }: Se
   }
   return (
     <div className="clawSelectionSideChat" data-selection-sidechat="">
-      <DraftComposer
+      <PreparingSideChat
         draft={resource.value.draft}
         signal={tab.signal}
         actions={tab.actions}
-        {...startChild === undefined ? {} : { startChild }}
+        {...prepareChild === undefined ? {} : { prepareChild }}
       />
     </div>
   )
@@ -308,7 +300,49 @@ export function SubagentSideChatTitle({ useSessions, useTabInfo }: PropsRuntime<
     ? undefined
     : state.byId[childId]?.projectionValues?.subagent?.label)
   const title = childId === undefined ? tab.title : childTitles.get(childId) ?? projected ?? tab.title
-  return <span className="clawSelectionSideChatTabTitle" title={title}>{title}</span>
+  return <span className="clawSelectionSideChatTabTitle" title={title}>{selectionSideChatLabel(title)}</span>
+}
+
+function SideChatConversationView({ renderSlot }: ConversationViewsProps) {
+  return <>{renderSlot('conversation.session', { view: 'chat' })}</>
+}
+
+export type SelectionSideChatConversationProps =
+  PropsRuntime<'sidebar.chat.conversation'> & PropsRenderFactories
+
+/** Keep a new selection child in the docked embedded layout before its first prompt. */
+export function SelectionSideChatConversation({
+  sessionId, useSession, useConversation, useSessions, renderFactorySlot,
+}: SelectionSideChatConversationProps) {
+  const session = useSession(value => value)
+  const conversation = useConversation(value => value)
+  const selectionSideChat = isSelectionSideChatSessionId(sessionId)
+  const active = selectionSideChat
+    || conversation.activeTargets.size > 0
+    || (!session.blank && !session.awaitingFirstTurn)
+    || session.running
+  const shellPhase = active ? 'active' : session.promptAttempted ? 'engaging' : 'blank'
+  const summaryBlank = useSessions(state => state.byId[sessionId]?.blank)
+  const parentAvailabilityPending = session.subagent?.address.mode === 'continuable'
+    && session.subagent.parentAvailable === undefined
+  const settling = !selectionSideChat && (
+    (shellPhase === 'blank' && session.openState === 'loading' && summaryBlank !== true)
+    || parentAvailabilityPending
+  )
+  const hero = !selectionSideChat
+    && shellPhase === 'blank'
+    && (session.openState === 'open' || summaryBlank === true)
+  const phase = settling ? 'settling' : hero ? 'hero' : 'active'
+  const content = renderFactorySlot('conversation.content', { variant: 'embedded', phase, hero }, {
+    slots: { views: SideChatConversationView },
+  })
+  return selectionSideChat
+    ? (
+      <div className="clawSelectionSideChatConversation" style={SIDE_CHAT_CONVERSATION_STYLE}>
+        {content}
+      </div>
+    )
+    : content
 }
 
 /** Open a unique draft as another tab in the current pane; the user controls tab switching. */
@@ -355,5 +389,8 @@ export function applySelectionSideChat(ctx: Context): void {
     scope.effect(() => scope.slots.inject('sidebar.right.pane.tab.title', () => scope.slots.register({
       name: 'sidebar.right.pane.tab.title', key: SUBAGENT_CHAT_SLOT_KEY,
     }, SubagentSideChatTitle)), 'desktop: subagent side-chat title')
+    scope.effect(() => scope.slots.inject('sidebar.chat.conversation', () => scope.slots.register({
+      name: 'sidebar.chat.conversation', priority: -10,
+    }, SelectionSideChatConversation)), 'desktop: selection side-chat conversation layout')
   })
 }
