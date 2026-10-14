@@ -30,7 +30,7 @@ On DSH 0.1.7-rc.2, `sidebar.panellist` is the sole extension point for top-level
 
 ## Workspaces, data, and models
 
-Default Harness home is `~/.clawclaw/data`; the default workspace is `~/.clawclaw/workspaces/default`. See the [user guide](user-guide.en.md) for migration, overrides, and channel sharing. The default workspace is registered through the upstream registry and protected against deletion in Host. Client persists active selection and supplies a bilingual directory flow. A workspace is neither a profile nor a recovery checkpoint.
+The default ClawClaw data directory is `~/.clawclaw/data`; the default workspace is `~/.clawclaw/workspaces/default`. See the [user guide](user-guide.en.md) for migration, overrides, and channel sharing. The default workspace is registered through the upstream registry and protected against deletion in Host. Client persists active selection and supplies a bilingual directory flow. A workspace is neither a profile nor a recovery checkpoint.
 
 The Desktop patch composes `spiritx` by default using the upstream pi-ai transport with OpenAI Responses at `https://ai.xzinfra.com/spiritx-api/v1`. Credentials use `SPIRITX_API_KEY`; the default model is `DeepSeek-V4-Flash`. The declared catalog is in `cordis.patch.yml` and does not guarantee server availability. The default composition disables the original DeepSeek model adapter, its API extensions, session log reporting, official package inventory, session telemetry, and DeepSeek web search; HTTP fetch remains available. User profiles may explicitly change composition.
 

@@ -9,7 +9,7 @@ ClawClaw is a local-first open-source desktop application. This notice describes
 
 ## Local data
 
-Default Harness data is `~/.clawclaw/data`; the default workspace is `~/.clawclaw/workspaces/default`. Data can include profiles, settings, sessions, logs, caches, plugin dependencies, and files saved in workspaces. Electron application data stores windows, logs, update state, and diagnostics. A saved in-app data-directory selection, `CLAWCLAW_HOME` at launch, or safe mode can change the path. ClawClaw exports the selected directory as `DSH_HOME` to the Host, terminal, and plugins.
+Default ClawClaw data is stored in `~/.clawclaw/data`; the default workspace is `~/.clawclaw/workspaces/default`. Data can include profiles, settings, sessions, logs, caches, plugin dependencies, and files saved in workspaces. Electron application data stores windows, logs, update state, and diagnostics. A saved in-app data-directory selection, `CLAWCLAW_HOME` at launch, or safe mode can change the path. For compatibility with the bundled runtime and plugins, ClawClaw exports the selected directory as `DSH_HOME` to the Host, terminal, and plugins.
 
 Update qualification evidence is off by default. When a user enables it in Desktop settings, ClawClaw stores bounded local snapshots containing application and target versions, typed update stages and outcomes, durations, and a digest derived from publisher-provided artifact digests. It excludes full URLs, raw error text, device identity, and user content. At most four 64 KiB files and 256 KiB total are retained. The same settings section can clear recognized evidence immediately.
 

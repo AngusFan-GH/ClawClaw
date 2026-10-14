@@ -372,7 +372,7 @@ describe('Desktop startup recovery confirmations', () => {
 
     expect(desktopDialog.show).toHaveBeenCalledWith(expect.objectContaining({
       title: '更改数据目录？',
-      detail: '请选择空文件夹或已有的 DSH 数据目录。空文件夹将用于创建新环境；原数据目录会保留。',
+      detail: '请选择空文件夹或已有的 ClawClaw 数据目录。空文件夹将用于创建新环境；原数据目录会保留。',
       buttons: ['选择目录', '取消'],
       defaultId: 1,
       cancelId: 1,
@@ -431,7 +431,7 @@ describe('Desktop startup recovery confirmations', () => {
 
     await privateRecovery.handleAction({ action: 'browse-data-directory' })
     expect(electronDialog.showOpenDialog).toHaveBeenCalledWith(parent, expect.objectContaining({
-      title: 'Select a DSH data directory',
+      title: 'Select a ClawClaw data directory',
       properties: ['openDirectory', 'createDirectory', 'dontAddToRecent'],
     }))
     expect(changeDirectory).not.toHaveBeenCalled()

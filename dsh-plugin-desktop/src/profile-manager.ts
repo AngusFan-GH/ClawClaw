@@ -45,7 +45,7 @@ const INTERNAL_PROFILE_STAGING_PATTERN = /^\..+\.(?:creating|deleting|incomplete
 export interface DesktopProfileSummary {
   /** Profile name passed to `dsh --profile`. */
   readonly name: string
-  /** Absolute profile directory under the active Harness home. */
+  /** Absolute profile directory under the active ClawClaw data directory. */
   readonly dir: string
   /** Whether the profile manifest already exists on disk. */
   readonly exists: boolean
@@ -247,7 +247,7 @@ function compareProfiles(left: DesktopProfileSummary, right: DesktopProfileSumma
 
 /**
  * List profile manifests without initializing or modifying any profile.
- * @param home - Harness home containing the shared profile directory.
+ * @param home - ClawClaw data directory containing the shared profile directory.
  * @returns only profiles whose manifests currently exist on disk.
  */
 export function listDesktopProfiles(home: string): DesktopProfileSummary[] {
@@ -466,7 +466,7 @@ export function readDesktopProfileState(statePath: string): DesktopProfileStateV
 /**
  * Request a compatible profile for the next application restart.
  * @param statePath - desktop-owned state file outside the Harness profile tree.
- * @param home - Harness home used only for read-only profile discovery.
+ * @param home - ClawClaw data directory used only for read-only profile discovery.
  * @param name - profile selected by the user.
  * @returns persisted active selection.
  */
@@ -483,7 +483,7 @@ export function selectDesktopProfile(statePath: string, home: string, name: stri
  * selection is otherwise left for the Recovery window instead of being
  * silently replaced while another Profile remains available.
  * @param statePath - desktop-owned state file outside the Harness profile tree.
- * @param home - Harness home used for discovery and zero-Profile default materialization.
+ * @param home - ClawClaw data directory used for discovery and zero-Profile default materialization.
  * @returns profile decision persisted before profile preparation starts.
  */
 export function beginDesktopProfileStartup(statePath: string, home: string): DesktopProfileStartup {

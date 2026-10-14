@@ -3,7 +3,7 @@
  *
  * Exactly three rotating slots are retained. Restoring a slot never launches
  * pnpm and never copies node_modules; it only restores the fixed declarative
- * Profile and Harness-home files listed below. The first healthy startup after
+ * Profile and shared ClawClaw data-directory files listed below. The first healthy startup after
  * a restore intentionally consumes a skip marker instead of replacing a
  * checkpoint.
  */

@@ -116,8 +116,8 @@ function settingsModuleFromHost(): object {
 
 function installSectionMissing(locale: 'zh' | 'en'): string {
   return locale === 'en'
-    ? 'This DSH settings service has no installSection.'
-    : '当前 DSH settings 服务不支持 installSection。'
+    ? 'The current settings service has no installSection.'
+    : '当前设置服务不支持 installSection。'
 }
 
 /**

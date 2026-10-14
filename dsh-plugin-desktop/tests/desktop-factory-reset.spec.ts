@@ -112,7 +112,7 @@ describe('Desktop factory reset', () => {
     expect(existsSync(profile)).toBe(true)
   })
 
-  it('moves only the validated DSH Home to trash and recreates an empty root', async () => {
+  it('moves only the validated ClawClaw data directory to trash and recreates an empty root', async () => {
     const { root, home } = await fixture()
     const trashed = join(root, 'trashed-dsh')
     const trashItem = vi.fn(async (path: string) => { await rename(path, trashed) })
@@ -137,7 +137,8 @@ describe('Desktop factory reset', () => {
       .toThrow('contains protected')
     const empty = join(root, 'empty')
     mkdirSync(empty)
-    expect(() => assertDesktopFactoryResetTarget(empty, [root], 'darwin')).toThrow('not an initialized DSH Home')
+    expect(() => assertDesktopFactoryResetTarget(empty, [root], 'darwin'))
+      .toThrow('not an initialized ClawClaw data directory')
     expect(assertDesktopFactoryResetTarget(home, [root], 'darwin')).toBe(home)
   })
 })

@@ -149,7 +149,7 @@ export async function materializeProfile(
     ['pnpm entry', options.pnpmBinPath],
     ['Node command directory', options.nodeBinDir],
     ['Node command', options.nodeShimPath],
-    ['Harness home', options.homeDir],
+    ['ClawClaw data directory', options.homeDir],
     ['profile directory', options.profileDir],
   ] as const) assertAbsolutePath(label, value)
   if (options.electronVersion.length === 0 || options.electronVersion.includes('\0')) {

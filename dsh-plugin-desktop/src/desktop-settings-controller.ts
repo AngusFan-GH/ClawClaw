@@ -41,7 +41,7 @@ export interface DesktopSettingsControllerBootstrap {
   scheduleRestart(): void
   /** Queue an orderly restart into the pre-Host recovery assistant. */
   scheduleRecoveryRestart(): void
-  /** Open the launcher-owned DSH terminal. */
+  /** Open the launcher-owned ClawClaw terminal. */
   openTerminal(): void
   /** Reload the mounted renderer after its HTTP acknowledgement is delivered. */
   reloadRenderer(): void

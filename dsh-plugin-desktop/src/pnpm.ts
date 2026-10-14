@@ -118,7 +118,7 @@ function validateBootstrap(bootstrap: DesktopPnpmBootstrap): void {
   assertDesktopProfileName(bootstrap.activeProfileName)
   for (const [label, value] of [
     ['active Profile directory', bootstrap.activeProfileDir],
-    ['Harness home', bootstrap.homeDir],
+    ['ClawClaw data directory', bootstrap.homeDir],
     ['application executable', bootstrap.appExecutable],
     ['pnpm entry', bootstrap.pnpmBinPath],
     ['Node command directory', bootstrap.nodeBinDir],

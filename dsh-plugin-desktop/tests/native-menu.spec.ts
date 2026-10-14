@@ -55,7 +55,7 @@ describe('native macOS application menu', () => {
   it('places trusted desktop actions in the application submenu', () => {
     const invokeTerminal = vi.fn()
     const template = macApplicationMenuTemplate('ClawClaw', 'en', [{
-      label: 'Open DSH Terminal',
+      label: 'Open ClawClaw Terminal',
       click: invokeTerminal,
     }, {
       label: 'Profile: desktop',
@@ -63,7 +63,7 @@ describe('native macOS application menu', () => {
     }])
 
     expect(submenu(template[0]!)).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: 'Open DSH Terminal' }),
+      expect.objectContaining({ label: 'Open ClawClaw Terminal' }),
       expect.objectContaining({
         label: 'Profile: desktop',
         submenu: [expect.objectContaining({ label: 'web', type: 'radio', checked: false })],

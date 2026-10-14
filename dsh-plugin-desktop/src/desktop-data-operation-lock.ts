@@ -1,4 +1,4 @@
-/** Cross-process exclusion for DSH data mutations owned by Desktop. */
+/** Cross-process exclusion for ClawClaw data-directory mutations owned by Desktop. */
 
 import { randomUUID } from 'node:crypto'
 import {

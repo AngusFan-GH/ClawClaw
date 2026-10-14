@@ -519,7 +519,7 @@ export function installDesktopDshRuntime(options: DesktopDshRuntimeOptions): Des
   for (const [label, value] of [
     ['application executable', options.appExecutable],
     ['DSH bootstrap', options.dshBootstrapPath],
-    ['Harness home', options.homeDir],
+    ['ClawClaw data directory', options.homeDir],
     ['state directory', options.stateDir],
   ] as const) assertScriptValue(label, value)
 

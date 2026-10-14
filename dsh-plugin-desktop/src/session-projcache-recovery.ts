@@ -29,7 +29,7 @@ export type SessionProjectionCacheRecoveryResult =
 
 function assertAbsoluteHome(homeDir: string): void {
   if (!isAbsolute(homeDir) || homeDir.includes('\0')) {
-    throw new Error(`${BIN_NAME}: session projection cache recovery requires an absolute DSH home path`)
+    throw new Error(`${BIN_NAME}: session projection cache recovery requires an absolute ClawClaw data-directory path`)
   }
 }
 

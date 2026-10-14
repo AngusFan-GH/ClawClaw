@@ -104,8 +104,9 @@ export function formatRecoveryPluginRemoveFailure(cause: unknown): string {
     return cause instanceof Error ? cause.stack ?? cause.message : String(cause)
   }
   return [
-    'DSH plugin uninstall failed.',
-    `Command: dsh plugin --profile ${cause.result.profileName} remove ${cause.result.packageName}`,
+    'Plugin uninstall failed.',
+    `Plugin operation: remove ${cause.result.packageName} from Profile ${cause.result.profileName}`,
+    `Internal command: dsh plugin --profile ${cause.result.profileName} remove ${cause.result.packageName}`,
     `Package-manager policy: ${PNPM_IGNORE_MINIMUM_RELEASE_AGE}`,
     `Exit status: ${String(cause.result.exitCode)}`,
     `Signal: ${cause.result.signal ?? 'none'}`,
@@ -127,9 +128,9 @@ export async function removeRecoveryPlugin(
   }
   for (const [label, value] of [
     ['application executable', options.appExecutable],
-    ['DSH bootstrap', options.dshBootstrapPath],
+    ['ClawClaw runtime', options.dshBootstrapPath],
     ['Profile directory', options.profileDir],
-    ['Harness home', options.homeDir],
+    ['ClawClaw data directory', options.homeDir],
     ['Node command directory', options.nodeBinDir],
     ['Node command', options.nodeShimPath],
     ['pnpm command directory', options.pnpmBinDir],

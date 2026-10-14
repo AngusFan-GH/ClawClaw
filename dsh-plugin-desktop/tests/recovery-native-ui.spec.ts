@@ -64,7 +64,7 @@ describe('Recovery native terminal action', () => {
     expect(windows).not.toContain('right-3')
     for (const markup of [mac, windows]) {
       expect(markup).toContain('rounded-full')
-      expect(markup).toContain('Open DSH Terminal')
+      expect(markup).toContain('Open ClawClaw Terminal')
       expect(markup).toContain('dsh-recovery://open-terminal')
     }
   })

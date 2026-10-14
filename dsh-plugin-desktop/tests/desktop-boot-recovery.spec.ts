@@ -25,8 +25,8 @@ describe('Desktop early-boot recovery injection', () => {
     expect(DESKTOP_BOOT_RECOVERY_SCRIPT).toContain(DESKTOP_RECOVERY_RESTART_PATH)
     expect(DESKTOP_BOOT_RECOVERY_SCRIPT).toContain(JSON.stringify(DESKTOP_RECOVERY_RESTART_REQUEST))
     expect(DESKTOP_BOOT_RECOVERY_SCRIPT).toContain('打开恢复模式 / Open Recovery Mode')
-    expect(DESKTOP_BOOT_RECOVERY_SCRIPT).toContain('部分插件加载失败，可能与当前 DSH 版本不兼容')
-    expect(DESKTOP_BOOT_RECOVERY_SCRIPT).toContain('Some plugins failed to load and may be incompatible with this DSH version')
+    expect(DESKTOP_BOOT_RECOVERY_SCRIPT).toContain('部分插件加载失败，可能与当前 ClawClaw 版本不兼容')
+    expect(DESKTOP_BOOT_RECOVERY_SCRIPT).toContain('Some plugins failed to load and may be incompatible with this ClawClaw version')
     expect(DESKTOP_BOOT_RECOVERY_SCRIPT).toContain("'aria-label': label")
     expect(DESKTOP_BOOT_RECOVERY_SCRIPT).toContain('report.append(panel)')
     expect(DESKTOP_BOOT_RECOVERY_SCRIPT).not.toContain('replaceChildren')
@@ -42,7 +42,7 @@ describe('Desktop early-boot recovery injection', () => {
       '/api/desktop/diagnostics/export',
       '/api/desktop/settings',
       '/api/desktop/profiles/select',
-      '打开 DSH 终端 / Open DSH Terminal',
+      '打开 ClawClaw 终端 / Open ClawClaw Terminal',
       '导出诊断 / Export Diagnostics',
       '切换 Profile / Switch Profile',
       'Restart in Recovery Mode',

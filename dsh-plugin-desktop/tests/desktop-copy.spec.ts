@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { desktopNativeCopy } from '../src/native-dialog-copy.ts'
 import { desktopProfileCreateCopy } from '../src/profile-create-copy.ts'
 import { desktopRecoveryCopy } from '../src/recovery-copy.ts'
+import { desktopSetupWizardCopy } from '../src/setup-wizard-copy.ts'
 import { desktopRestartConfirmationCopy, desktopTrayLabel } from '../src/tray-locale.ts'
+import { en as desktopSettingsEn, zh as desktopSettingsZh } from '../src/client/desktop-settings-locales.ts'
+import { en as mcpEn, zh as mcpZh } from '../src/client/mcp-locales.ts'
 
 describe('Desktop product copy', () => {
   it.each(['en', 'zh'] as const)('reuses the Safe Mode confirmation in %s native menus', locale => {
@@ -36,7 +39,7 @@ describe('Desktop product copy', () => {
     expect(copy.rollbackCheckpoint).toBe('恢复此检查点')
     expect(copy.back).toBe('返回')
     const confirmation = copy.confirmRollbackBody('2026/8/25 10:00:00')
-    for (const scope of ['2026/8/25 10:00:00', 'Profile', 'settings.yaml', 'DSH 数据目录补丁']) expect(confirmation).toContain(scope)
+    for (const scope of ['2026/8/25 10:00:00', 'Profile', 'settings.yaml', 'ClawClaw 数据目录补丁']) expect(confirmation).toContain(scope)
     expect(copy.safeModeBody).toContain('原有数据会保留')
     expect(copy.safeModeBody).toContain('下次正常启动时会自动清理临时环境')
     expect(copy.safeModeActiveBody).toContain('配置操作仅针对临时环境')
@@ -61,8 +64,32 @@ describe('Desktop product copy', () => {
   it('ships localized native update and failure dialogs', () => {
     const copy = desktopNativeCopy('zh')
     expect(copy.updateCheckFailedTitle).toBe('无法检查更新')
-    expect(copy.terminalErrorTitle).toBe('无法打开 DSH 终端')
+    expect(copy.terminalErrorTitle).toBe('无法打开 ClawClaw 终端')
     expect(copy.diagnosticsErrorTitle).toBe('无法导出诊断信息')
     expect(copy.updateAvailableMessage('2.1.0')).toBe('ClawClaw 2.1.0 已可用。')
+  })
+
+  it('keeps upstream implementation brands out of product-owned copy', () => {
+    const staticCopy = JSON.stringify([
+      desktopNativeCopy('en'),
+      desktopNativeCopy('zh'),
+      desktopRecoveryCopy('en'),
+      desktopRecoveryCopy('zh'),
+      desktopSetupWizardCopy('en'),
+      desktopSetupWizardCopy('zh'),
+      desktopSettingsEn,
+      desktopSettingsZh,
+      mcpEn,
+      mcpZh,
+    ])
+    const dynamicCopy = (['en', 'zh'] as const).flatMap(locale => {
+      const recovery = desktopRecoveryCopy(locale)
+      return [
+        recovery.confirmFactoryResetBody('/Users/example/.clawclaw/data'),
+        recovery.confirmRollbackBody('2026-10-14 10:00:00'),
+        recovery.rollbackSuccess('Slot 1'),
+      ]
+    }).join('\n')
+    expect(`${staticCopy}\n${dynamicCopy}`).not.toMatch(/DeepSeek Harness|Harness[- ]home|\bDSH\b|dsh-market/u)
   })
 })

@@ -12,14 +12,14 @@ An uninitialized profile first opens Setup Wizard for mode, material, market, no
 
 | Content | Default location |
 | --- | --- |
-| Harness data, profiles, settings, sessions | `~/.clawclaw/data` |
+| ClawClaw data, profiles, settings, sessions | `~/.clawclaw/data` |
 | Default workspace files | `~/.clawclaw/workspaces/default` |
 | Application state and logs on macOS | `~/Library/Application Support/ClawClaw` |
 | Application state and logs on Windows | `%APPDATA%\ClawClaw` |
 
 `~` is the current user's home. ClawClaw does not read, move, or modify another application's `~/.dsh`. To continue using data stored there, explicitly select that directory in the application after inspecting and backing it up; ClawClaw does not merge directories automatically. A data-directory selection saved in the application takes precedence over launch defaults; without a saved selection, `CLAWCLAW_HOME` can override the default data directory. Safe mode uses separate temporary data and workspace locations. After startup, ClawClaw exports the selected data directory as `DSH_HOME` to the Host, built-in terminal, and plugins; an external `DSH_HOME` is not a Launcher data-directory input.
 
-Harness data and workspace files are separate: changing the data directory does not move the default workspace. Portable ZIPs do not provide self-contained data storage.
+ClawClaw data and workspace files are separate: changing the data directory does not move the default workspace. Portable ZIPs do not provide self-contained data storage.
 
 ClawClaw uses a conservative data-retention policy when the desktop application is uninstalled:
 
@@ -27,7 +27,7 @@ ClawClaw uses a conservative data-retention policy when the desktop application 
 | --- | --- |
 | Program files in the installation directory, uninstall entry, and shortcuts | Remove |
 | Application cache, update state, and logs | Preserve |
-| Harness data, Profiles, settings, sessions, and plugin state | Preserve |
+| ClawClaw data, Profiles, settings, sessions, and plugin state | Preserve |
 | Workspaces and user files inside them | Preserve |
 
 Uninstalling is therefore not the same as deleting local data. For complete removal, back up anything needed and then explicitly delete those data directories; never rely on the installer to delete a workspace.
@@ -48,7 +48,7 @@ Channel workspace resolution uses the channel's `workspace`, plugin `defaultWork
 
 A profile combines bundles, dependencies, and patches. The tray discovers existing profiles and the lazily created `desktop` and `web` defaults. Switching persists the target before an orderly restart and does not copy plugins from the old profile.
 
-Startup failure does not automatically select a previous profile. Recovery provides plugin management, rollback, profile switching, and diagnostics. Healthy starts maintain three rotating checkpoints covering active-profile declarations and shared Harness-home `settings.yaml` and `cordis.patch.yml`. Restore requires selecting an exact slot. Checkpoints exclude credentials, `.env`, sessions, storage, caches, and workspace files; they are not full backups.
+Startup failure does not automatically select a previous profile. Recovery provides plugin management, rollback, profile switching, and diagnostics. Healthy starts maintain three rotating checkpoints covering active-profile declarations and shared `settings.yaml` and `cordis.patch.yml` in the ClawClaw data directory. Restore requires selecting an exact slot. Checkpoints exclude credentials, `.env`, sessions, storage, caches, and workspace files; they are not full backups.
 
 ## Windows and local access
 
@@ -74,12 +74,12 @@ Plugins in the sidebar is the single entry point: it manages installed bundles a
 Open the desktop terminal to run commands against its active profile:
 
 ```sh
-dsh plugin add <plugin>
-dsh plugin remove <plugin>
-dsh plugin update
+clawclaw plugin add <plugin>
+clawclaw plugin remove <plugin>
+clawclaw plugin update
 ```
 
-An explicit `--profile <name>` takes precedence. Restart after plugin changes. Private `dsh`, `pnpm`, and `node` shims and `DSH_HOME` apply to that terminal, not global PATH. Existing terminals retain the profile selected when they opened.
+An explicit `--profile <name>` takes precedence. Restart after plugin changes. Private `clawclaw`, `pnpm`, and `node` shims apply only to that terminal, and a `dsh` compatibility alias remains available. `DSH_HOME` is the compatibility environment variable passed to the bundled runtime and plugins. Existing terminals retain the profile selected when they opened.
 
 ## Automations and reminders
 

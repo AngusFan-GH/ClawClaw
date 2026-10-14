@@ -161,7 +161,7 @@ interface DesktopPluginPreviewRecord {
 export interface DesktopPluginsBootstrap {
   /** Active profile name for this generation. */
   readonly profileName: string
-  /** Harness home containing the active profile. */
+  /** ClawClaw data directory containing the active profile. */
   readonly homeDir: string
   /** Desktop-private state file outside the user's profile manifests. */
   readonly statePath: string
@@ -199,7 +199,7 @@ function safePackageName(value: unknown): value is string {
 function assertStateBootstrap(bootstrap: DesktopPluginStateBootstrap): void {
   assertDesktopProfileName(bootstrap.profileName)
   for (const [label, value] of [
-    ['Harness home', bootstrap.homeDir],
+    ['ClawClaw data directory', bootstrap.homeDir],
     ['state path', bootstrap.statePath],
   ] as const) {
     if (!isAbsolute(value) || value.includes('\0')) {
@@ -619,7 +619,7 @@ function renderState(state: DesktopPluginStateV1): string {
 function assertBootstrap(bootstrap: DesktopPluginsBootstrap): void {
   assertDesktopProfileName(bootstrap.profileName)
   for (const [label, value] of [
-    ['Harness home', bootstrap.homeDir],
+    ['ClawClaw data directory', bootstrap.homeDir],
     ['state path', bootstrap.statePath],
     ['install anchor', bootstrap.installAnchor],
   ] as const) {

@@ -64,7 +64,7 @@ function fixture(): {
   return { root, userData, source, emptyTarget, existingTarget }
 }
 
-describe('Desktop DSH data directory', () => {
+describe('ClawClaw data directory', () => {
   it('keeps fallback precedence until Desktop selects a private locator', () => {
     const { userData, source } = fixture()
     expect(resolveDesktopDataDirectory(userData, source, 'default')).toEqual({
@@ -76,7 +76,7 @@ describe('Desktop DSH data directory', () => {
     expect(resolveDesktopDataDirectory(userData, source, 'environment').source).toBe('environment')
   })
 
-  it('accepts an empty folder or existing Desktop-compatible DSH Home', () => {
+  it('accepts an empty folder or existing ClawClaw-compatible data directory', () => {
     const { source, emptyTarget, existingTarget } = fixture()
     expect(inspectDesktopDataDirectoryTarget(source, emptyTarget)).toEqual({
       targetHome: emptyTarget,
@@ -90,7 +90,7 @@ describe('Desktop DSH data directory', () => {
 
   it('rejects non-DSH, overlapping, root, and symlink targets', () => {
     const { root, source, emptyTarget } = fixture()
-    writeFileSync(join(emptyTarget, 'ordinary.txt'), 'not a DSH Home\n')
+    writeFileSync(join(emptyTarget, 'ordinary.txt'), 'not a ClawClaw data directory\n')
     expect(() => inspectDesktopDataDirectoryTarget(source, emptyTarget)).toThrowError(
       expect.objectContaining({ code: 'target-invalid' }),
     )
@@ -140,7 +140,7 @@ describe('Desktop DSH data directory', () => {
     })
   })
 
-  it('loads an existing DSH Home as-is without copying data from the old directory', async () => {
+  it('loads an existing ClawClaw data directory as-is without copying data from the old directory', async () => {
     const { userData, source, existingTarget } = fixture()
     const initial = resolveDesktopDataDirectory(userData, source, 'default')
 
@@ -152,7 +152,7 @@ describe('Desktop DSH data directory', () => {
     expect(existsSync(join(existingTarget, 'settings.yaml'))).toBe(false)
     assertDesktopDataDirectoryCommandGeneration(userData, existingTarget, 1)
     expect(() => assertDesktopDataDirectoryCommandGeneration(userData, source, 0)).toThrow(
-      'older DSH data directory',
+      'older ClawClaw data directory',
     )
   })
 
@@ -200,7 +200,7 @@ describe('Desktop DSH data directory', () => {
     await selectDesktopDataDirectory(userData, initial, emptyTarget)
     rmSync(emptyTarget, { recursive: true })
     expect(() => resolveDesktopDataDirectory(userData, source, 'default')).toThrow(
-      'configured DSH home is unavailable',
+      'configured ClawClaw data directory is unavailable',
     )
   })
 

@@ -122,6 +122,7 @@ describe('desktop terminal environment', () => {
 
     expect(launch).toMatchObject({
       shimDir: join(stateDir, 'bin'),
+      clawclawShimPath: join(stateDir, 'bin', 'clawclaw'),
       dshShimPath: join(stateDir, 'bin', 'dsh'),
       pnpmShimPath: join(stateDir, 'bin', 'pnpm'),
       nodeShimPath: join(stateDir, 'bin', 'node'),
@@ -131,12 +132,14 @@ describe('desktop terminal environment', () => {
     if (process.platform !== 'win32') {
       expect(lstatSync(stateDir).mode & 0o777).toBe(0o700)
       expect(lstatSync(launch.shimDir).mode & 0o777).toBe(0o700)
-      for (const filename of [launch.dshShimPath, launch.pnpmShimPath, launch.nodeShimPath, launch.welcomePath]) {
+      for (const filename of [launch.clawclawShimPath, launch.dshShimPath, launch.pnpmShimPath, launch.nodeShimPath, launch.welcomePath]) {
         expect(lstatSync(filename).mode & 0o777).toBe(0o700)
       }
     }
 
+    const clawclawShim = readFileSync(launch.clawclawShimPath, 'utf8')
     const dshShim = readFileSync(launch.dshShimPath, 'utf8')
+    expect(clawclawShim).toBe(dshShim)
     expect(dshShim).toContain("DSH_DESKTOP_DEFAULT_PROFILE='desktop' ELECTRON_RUN_AS_NODE=1 exec")
     expect(dshShim).toContain('--expose-internals')
     expect(dshShim).toContain("'/Applications/DSH O'\"'\"'Brien.app/Contents/MacOS/ClawClaw'")
@@ -164,10 +167,12 @@ describe('desktop terminal environment', () => {
     expect(welcome).toContain('ClawClaw 2.0.0 terminal')
     expect(welcome).toContain('Profile: desktop')
     expect(welcome).toContain('Plugin commands without --profile modify the desktop profile.')
-    expect(welcome).toContain('dsh --dump-config')
-    expect(welcome).toContain('dsh plugin add <third-party-plugin>')
-    expect(welcome).toContain('dsh plugin remove <third-party-plugin>')
-    expect(welcome).toContain('dsh plugin update')
+    expect(welcome).toContain('ClawClaw data directory: /Users/example/Library/Application Support/DSH O')
+    expect(welcome).toContain('clawclaw --dump-config')
+    expect(welcome).toContain('clawclaw plugin add <third-party-plugin>')
+    expect(welcome).toContain('clawclaw plugin remove <third-party-plugin>')
+    expect(welcome).toContain('clawclaw plugin update')
+    expect(welcome).not.toContain('Harness home')
     expect(welcome).toContain('Restart ClawClaw after plugin changes.')
     expect(welcome).not.toContain(' -l')
     expect(welcome).toContain("DSH O'\"'\"'Brien")
@@ -184,6 +189,7 @@ describe('desktop terminal environment', () => {
       bashRc.indexOf(`export PATH='${launch.shimDir}'`),
     )
     if (process.platform === 'darwin') {
+      expect(spawnSync('/bin/sh', ['-n', launch.clawclawShimPath]).status).toBe(0)
       expect(spawnSync('/bin/sh', ['-n', launch.dshShimPath]).status).toBe(0)
       expect(spawnSync('/bin/sh', ['-n', launch.pnpmShimPath]).status).toBe(0)
       expect(spawnSync('/bin/sh', ['-n', launch.nodeShimPath]).status).toBe(0)
@@ -225,6 +231,9 @@ describe('desktop terminal environment', () => {
 
     const launch = openDesktopTerminal(options)
 
+    expect(readFileSync(launch.clawclawShimPath, 'utf8')).toBe(
+      readFileSync(launch.dshShimPath, 'utf8'),
+    )
     expect(readFileSync(launch.dshShimPath, 'utf8')).toContain([
       '@echo off',
       'setlocal DisableDelayedExpansion',
@@ -245,10 +254,12 @@ describe('desktop terminal environment', () => {
     expect(welcome).toContain('Set-Location -LiteralPath $env:DSH_DESKTOP_PROFILE_DIRECTORY')
     expect(welcome).toContain('"ClawClaw {0} terminal" -f $env:DSH_DESKTOP_PRODUCT_VERSION')
     expect(welcome).toContain('"Plugin commands without --profile modify the {0} profile."')
-    expect(welcome).toContain('dsh --dump-config')
-    expect(welcome).toContain('dsh plugin add <third-party-plugin>')
-    expect(welcome).toContain('dsh plugin remove <third-party-plugin>')
-    expect(welcome).toContain('dsh plugin update')
+    expect(welcome).toContain('"ClawClaw data directory: {0}" -f $env:DSH_HOME')
+    expect(welcome).toContain('clawclaw --dump-config')
+    expect(welcome).toContain('clawclaw plugin add <third-party-plugin>')
+    expect(welcome).toContain('clawclaw plugin remove <third-party-plugin>')
+    expect(welcome).toContain('clawclaw plugin update')
+    expect(welcome).not.toContain('Harness home')
     expect(welcome).toContain('Restart ClawClaw after plugin changes.')
 
     expect(launch.windowsLauncherPath).toBe(join(stateDir, 'launch.cmd'))
@@ -361,6 +372,9 @@ describe('desktop terminal environment', () => {
     expect(welcome).toContain('set "ELECTRON_RUN_AS_NODE="')
     expect(welcome).toContain('cd /d "!DSH_DESKTOP_PROFILE_DIRECTORY!"')
     expect(welcome).toContain('echo(Profile directory: !DSH_DESKTOP_PROFILE_DIRECTORY!')
+    expect(welcome).toContain('echo(ClawClaw data directory: !DSH_HOME!')
+    expect(welcome).toContain('clawclaw plugin remove ^<third-party-plugin^>')
+    expect(welcome).not.toContain('Harness home')
     const launcher = readFileSync(launch.windowsLauncherPath!, 'utf8')
     expect(launcher).toContain('"!DSH_DESKTOP_SHELL_EXECUTABLE!" /D /K call')
     expect(launcher).toContain('"!DSH_DESKTOP_CMD_WELCOME!"')
@@ -448,6 +462,7 @@ describe('desktop terminal environment', () => {
     const launcherPath = launch.windowsLauncherPath
     expect(launcherPath).toBe(join(stateDir, 'launch.cmd'))
     for (const filename of [
+      launch.clawclawShimPath,
       launch.dshShimPath,
       launch.pnpmShimPath,
       launch.nodeShimPath,

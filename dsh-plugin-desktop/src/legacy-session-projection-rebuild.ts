@@ -116,7 +116,7 @@ export async function findLegacyBlankProjectionCandidates(
   options: Pick<LegacyProjectionRebuildOptions, 'maxRecordBytes' | 'warn'> = {},
 ): Promise<LegacyBlankProjectionCandidate[]> {
   if (!isAbsolute(homeDir) || homeDir.includes('\0')) {
-    throw new Error(`${BIN_NAME}: legacy projection rebuild requires an absolute DSH home path`)
+    throw new Error(`${BIN_NAME}: legacy projection rebuild requires an absolute ClawClaw data-directory path`)
   }
   const directory = join(homeDir, ...CACHE_DIRECTORY)
   let entries

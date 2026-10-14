@@ -94,7 +94,7 @@ export interface DesktopTerminalOptions {
   productVersion: string
   /** Absolute working directory of the selected profile. */
   profileDir: string
-  /** Harness home exported as `DSH_HOME` inside the terminal. */
+  /** ClawClaw data directory exported as `DSH_HOME` for runtime compatibility. */
   homeDir: string
   /** Private directory receiving the generated terminal files. */
   stateDir: string
@@ -116,6 +116,8 @@ export interface DesktopTerminalOptions {
 export interface DesktopTerminalLaunch {
   /** Private directory prepended to this terminal's `PATH`. */
   shimDir: string
+  /** Generated platform-specific `clawclaw` command shim. */
+  clawclawShimPath: string
   /** Generated platform-specific `dsh` shim. */
   dshShimPath: string
   /** Generated platform-specific `pnpm` shim. */
@@ -145,6 +147,7 @@ export function desktopTerminalStateDirectory(userDataDir: string, profileName: 
 
 interface DesktopTerminalFiles {
   shimDir: string
+  clawclawShimPath: string
   dshShimPath: string
   pnpmShimPath: string
   nodeShimPath: string
@@ -329,10 +332,10 @@ function macWelcome(
   shimDir: string,
   bashRcPath: string,
 ): string {
-  const commandHelp = 'dsh --dump-config'
-  const pluginAdd = 'dsh plugin add <third-party-plugin>'
-  const pluginRemove = 'dsh plugin remove <third-party-plugin>'
-  const pluginUpdate = 'dsh plugin update'
+  const commandHelp = 'clawclaw --dump-config'
+  const pluginAdd = 'clawclaw plugin add <third-party-plugin>'
+  const pluginRemove = 'clawclaw plugin remove <third-party-plugin>'
+  const pluginUpdate = 'clawclaw plugin update'
   return [
     '#!/bin/sh',
     `unset ${RUN_AS_NODE}`,
@@ -343,7 +346,7 @@ function macWelcome(
     `printf '%s\\n' ${quoteSh(`ClawClaw ${options.productVersion} terminal`)}`,
     `printf '%s\\n' ${quoteSh(`Profile: ${options.profileName}`)}`,
     `printf '%s\\n' ${quoteSh(`Profile directory: ${options.profileDir}`)}`,
-    `printf '%s\\n' ${quoteSh(`Harness home: ${options.homeDir}`)}`,
+    `printf '%s\\n' ${quoteSh(`ClawClaw data directory: ${options.homeDir}`)}`,
     `printf '%s\\n' ${quoteSh(`Plugin commands without --profile modify the ${options.profileName} profile.`)}`,
     `printf '%s\\n' ${quoteSh('Commands:')}`,
     `printf '  %s\\n' ${quoteSh(commandHelp)}`,
@@ -373,10 +376,10 @@ function macWelcome(
 
 /** Build the PowerShell script that remains active in the new console. */
 function windowsWelcome(): string {
-  const commandHelp = 'dsh --dump-config'
-  const pluginAdd = 'dsh plugin add <third-party-plugin>'
-  const pluginRemove = 'dsh plugin remove <third-party-plugin>'
-  const pluginUpdate = 'dsh plugin update'
+  const commandHelp = 'clawclaw --dump-config'
+  const pluginAdd = 'clawclaw plugin add <third-party-plugin>'
+  const pluginRemove = 'clawclaw plugin remove <third-party-plugin>'
+  const pluginUpdate = 'clawclaw plugin update'
   return [
     `Remove-Item Env:${RUN_AS_NODE} -ErrorAction SilentlyContinue`,
     `$dshDesktopShimDir = $env:${WINDOWS_SHIM_DIRECTORY}`,
@@ -386,7 +389,7 @@ function windowsWelcome(): string {
     `Write-Host ("ClawClaw {0} terminal" -f $env:${WINDOWS_PRODUCT_VERSION})`,
     `Write-Host ("Profile: {0}" -f $env:${DEFAULT_PROFILE})`,
     `Write-Host ("Profile directory: {0}" -f $env:${WINDOWS_PROFILE_DIRECTORY})`,
-    `Write-Host ("Harness home: {0}" -f $env:${DSH_HOME})`,
+    `Write-Host ("ClawClaw data directory: {0}" -f $env:${DSH_HOME})`,
     `Write-Host ("Plugin commands without --profile modify the {0} profile." -f $env:${DEFAULT_PROFILE})`,
     `Write-Host 'Commands:'`,
     `Write-Host '  ${commandHelp}'`,
@@ -400,10 +403,10 @@ function windowsWelcome(): string {
 
 /** Build the fallback batch welcome script used when PowerShell is unavailable. */
 function windowsCmdWelcome(): string {
-  const commandHelp = 'dsh --dump-config'
-  const pluginAdd = 'dsh plugin add <third-party-plugin>'
-  const pluginRemove = 'dsh plugin remove <third-party-plugin>'
-  const pluginUpdate = 'dsh plugin update'
+  const commandHelp = 'clawclaw --dump-config'
+  const pluginAdd = 'clawclaw plugin add <third-party-plugin>'
+  const pluginRemove = 'clawclaw plugin remove <third-party-plugin>'
+  const pluginUpdate = 'clawclaw plugin update'
   return [
     '@echo off',
     'setlocal EnableDelayedExpansion',
@@ -412,7 +415,7 @@ function windowsCmdWelcome(): string {
     `echo(ClawClaw !${WINDOWS_PRODUCT_VERSION}! terminal`,
     `echo(Profile: !${DEFAULT_PROFILE}!`,
     `echo(Profile directory: !${WINDOWS_PROFILE_DIRECTORY}!`,
-    `echo(Harness home: !${DSH_HOME}!`,
+    `echo(ClawClaw data directory: !${DSH_HOME}!`,
     `echo(Plugin commands without --profile modify the !${DEFAULT_PROFILE}! profile.`,
     'echo(Commands:',
     `echo(  ${escapeBatchText(commandHelp)}`,
@@ -437,7 +440,7 @@ function prepareDesktopTerminalFiles(options: DesktopTerminalOptions): DesktopTe
     ['pnpm entry', options.pnpmBinPath],
     ['Electron version', options.electronVersion],
     ['profile directory', options.profileDir],
-    ['Harness home', options.homeDir],
+    ['ClawClaw data directory', options.homeDir],
     ['state directory', options.stateDir],
     ['product version', options.productVersion],
   ] as const) assertScriptValue(label, value)
@@ -448,13 +451,16 @@ function prepareDesktopTerminalFiles(options: DesktopTerminalOptions): DesktopTe
   if (options.platform === 'darwin') {
     const files: DesktopTerminalFiles = {
       shimDir,
+      clawclawShimPath: join(shimDir, 'clawclaw'),
       dshShimPath: join(shimDir, 'dsh'),
       pnpmShimPath: join(shimDir, 'pnpm'),
       nodeShimPath: join(shimDir, 'node'),
       welcomePath: join(options.stateDir, 'welcome.command'),
     }
     const bashRcPath = join(options.stateDir, 'bashrc')
-    replacePrivateFile(files.dshShimPath, macDshShim(options), EXECUTABLE_FILE_MODE)
+    const cliShim = macDshShim(options)
+    replacePrivateFile(files.clawclawShimPath, cliShim, EXECUTABLE_FILE_MODE)
+    replacePrivateFile(files.dshShimPath, cliShim, EXECUTABLE_FILE_MODE)
     replacePrivateFile(files.pnpmShimPath, macPnpmShim(options), EXECUTABLE_FILE_MODE)
     replacePrivateFile(files.nodeShimPath, macShim(options.appExecutable), EXECUTABLE_FILE_MODE)
     replacePrivateFile(join(options.stateDir, '.zshrc'), macZshRc(options, shimDir), PRIVATE_FILE_MODE)
@@ -466,13 +472,16 @@ function prepareDesktopTerminalFiles(options: DesktopTerminalOptions): DesktopTe
     const windowsCmdWelcomePath = join(options.stateDir, 'welcome.cmd')
     const files: DesktopTerminalFiles = {
       shimDir,
+      clawclawShimPath: join(shimDir, 'clawclaw.cmd'),
       dshShimPath: join(shimDir, 'dsh.cmd'),
       pnpmShimPath: join(shimDir, 'pnpm.cmd'),
       nodeShimPath: join(shimDir, 'node.cmd'),
       welcomePath: join(options.stateDir, 'welcome.ps1'),
       windowsCmdWelcomePath,
     }
-    replacePrivateFile(files.dshShimPath, windowsDshShim(), PRIVATE_FILE_MODE)
+    const cliShim = windowsDshShim()
+    replacePrivateFile(files.clawclawShimPath, cliShim, PRIVATE_FILE_MODE)
+    replacePrivateFile(files.dshShimPath, cliShim, PRIVATE_FILE_MODE)
     replacePrivateFile(files.pnpmShimPath, windowsPnpmShim(), PRIVATE_FILE_MODE)
     replacePrivateFile(files.nodeShimPath, windowsShim(), PRIVATE_FILE_MODE)
     replacePrivateFile(files.welcomePath, windowsWelcome(), PRIVATE_FILE_MODE)
@@ -722,6 +731,7 @@ export function openDesktopTerminal(options: DesktopTerminalOptions): DesktopTer
   child.unref()
   return {
     shimDir: files.shimDir,
+    clawclawShimPath: files.clawclawShimPath,
     dshShimPath: files.dshShimPath,
     pnpmShimPath: files.pnpmShimPath,
     nodeShimPath: files.nodeShimPath,

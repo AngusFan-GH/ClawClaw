@@ -371,7 +371,7 @@ export async function handleDesktopPreferenceUpdateRequest(
   }
 }
 
-/** Open the launcher-owned DSH terminal from an exact empty request. */
+/** Open the launcher-owned ClawClaw terminal from an exact empty request. */
 export async function handleDesktopTerminalOpenRequest(
   req: IncomingMessage,
   res: ServerResponse,

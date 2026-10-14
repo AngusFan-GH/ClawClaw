@@ -59,6 +59,8 @@ function replaceCollapsedSidebarBrand(): void {
 }
 
 const CLAWCLAW_COPY_REPLACEMENTS = new Map([
+  ['DeepSeek Harness', 'ClawClaw'],
+  ['DSH', 'ClawClaw'],
   ['探索未至之境', 'ClawClaw，万物皆有回响'],
   ['Into the Unknown', 'ClawClaw, every thought finds an answer'],
   ['深度求索中...', '正在思考...'],

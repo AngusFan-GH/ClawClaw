@@ -365,7 +365,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
 
   /**
    * Fix the profile identity before Cordis plugins can contribute terminal commands.
-   * @param spec - launcher-resolved desktop profile and Harness home.
+   * @param spec - launcher-resolved desktop profile and ClawClaw data directory.
    */
   configureTerminal(spec: DesktopTerminalSpec): void {
     if (this.terminalSpec !== undefined) {

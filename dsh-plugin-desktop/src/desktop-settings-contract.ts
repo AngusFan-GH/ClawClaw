@@ -22,7 +22,7 @@ export const DESKTOP_MARKET_SELECT_PATH = '/api/desktop/market/select'
 /** Persist one Desktop-owned preference without using the root Config editor. */
 export const DESKTOP_PREFERENCE_UPDATE_PATH = '/api/desktop/preferences/update'
 
-/** Open the launcher-owned DSH terminal without accepting command text. */
+/** Open the launcher-owned ClawClaw terminal without accepting command text. */
 export const DESKTOP_TERMINAL_OPEN_PATH = '/api/desktop/terminal/open'
 
 /** Queue an orderly Desktop relaunch after acknowledging the renderer. */

@@ -2055,7 +2055,7 @@ describe('Electron desktop runtime', () => {
       expect(() => { runtime.openTerminal() }).not.toThrow()
       await vi.waitFor(() => { expect(electron.dialog.showMessageBox).toHaveBeenCalledWith(expect.objectContaining({
         type: 'error',
-        title: 'Unable to Open DSH Terminal',
+        title: 'Unable to Open ClawClaw Terminal',
         detail: 'cannot create launcher',
       })) })
 
@@ -2065,7 +2065,7 @@ describe('Electron desktop runtime', () => {
       runtime.openTerminal()
       await vi.waitFor(() => { expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
         type: 'error',
-        title: 'Unable to Open DSH Terminal',
+        title: 'Unable to Open ClawClaw Terminal',
         detail: 'launcher exited with code 1',
       })) })
       expect(stderr).toHaveBeenCalledWith(expect.stringContaining('failed to open terminal'))
@@ -2100,7 +2100,7 @@ describe('Electron desktop runtime', () => {
       title: 'Plugin Load Failed',
       message: 'Some plugins could not be loaded.',
       detail: expect.stringContaining('dsh-vision-router'),
-      buttons: ['Open DSH Terminal', 'Restart ClawClaw', 'Dismiss'],
+      buttons: ['Open ClawClaw Terminal', 'Restart ClawClaw', 'Dismiss'],
     }))
     const recoveryCalls = electron.dialog.showMessageBox.mock.calls as unknown as Array<[{ detail?: string }]>
     expect(recoveryCalls[0]?.[0].detail).toContain('vision_crop')

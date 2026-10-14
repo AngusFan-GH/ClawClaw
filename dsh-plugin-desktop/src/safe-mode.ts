@@ -51,7 +51,7 @@ export const DESKTOP_SAFE_MODE_DEFAULTS: Readonly<{
 export interface DesktopSafeModePaths {
   /** Root removed during Safe Mode shutdown and retried on the next normal launch. */
   readonly rootDir: string
-  /** Isolated Harness home; Safe Mode never reads the normal DSH data directory. */
+  /** Isolated runtime home; Safe Mode never reads the normal ClawClaw data directory. */
   readonly homeDir: string
   /** Isolated Desktop state for selection, setup, checkpoints, and preferences. */
   readonly userDataDir: string

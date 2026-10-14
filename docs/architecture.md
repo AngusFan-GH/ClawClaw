@@ -30,7 +30,7 @@ DSH 0.1.7-rc.2 的 `sidebar.panellist` 是一级产品入口的唯一扩展点�
 
 ## 工作区、数据与模型
 
-默认 Harness home 是 `~/.clawclaw/data`，默认工作区是 `~/.clawclaw/workspaces/default`。迁移、覆盖和通道共享规则见[用户指南](user-guide.md)。默认工作区通过上游 registry 注册，Host 阻止删除该注册；Client 持久化活动选择并提供中英文目录流程。工作区不是 profile，也不是恢复检查点。
+默认 ClawClaw 数据目录是 `~/.clawclaw/data`，默认工作区是 `~/.clawclaw/workspaces/default`。迁移、覆盖和通道共享规则见[用户指南](user-guide.md)。默认工作区通过上游 registry 注册，Host 阻止删除该注册；Client 持久化活动选择并提供中英文目录流程。工作区不是 profile，也不是恢复检查点。
 
 Desktop patch 默认组合 `spiritx`，通过上游 pi-ai transport 的 OpenAI Responses 协议访问 `https://ai.xzinfra.com/spiritx-api/v1`，凭据环境变量为 `SPIRITX_API_KEY`，默认模型为 `DeepSeek-V4-Flash`。支持目录以 `cordis.patch.yml` 为准，不代表服务端每个模型都可用。默认禁用原 DeepSeek 模型适配器、其 API extensions、session 日志上报、官方 package inventory、session telemetry 和 DeepSeek web search；HTTP fetch 保持可用。用户 profile 可以显式改变组合。
 

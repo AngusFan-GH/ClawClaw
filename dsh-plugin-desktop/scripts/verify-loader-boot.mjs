@@ -176,6 +176,22 @@ try {
           throw new Error('loader smoke must not resume an Agent')
         },
       })
+      host.provide('agentPresets', {})
+      host.provide('permissionPresets', {})
+      host.provide('workspaceRegistry', {})
+      host.provide('sessions', {
+        async flush() {
+          throw new Error('loader smoke must not flush a Session')
+        },
+      })
+      host.provide('sessionProjections', {
+        snapshot() {
+          throw new Error('loader smoke must not read a Session projection')
+        },
+      })
+      host.provide('subagents', {
+        getProvider() { return undefined },
+      })
       host.provide('webRuntime', {})
       host.provide('appExit', () => {})
       host.provide('sessionQuery', {

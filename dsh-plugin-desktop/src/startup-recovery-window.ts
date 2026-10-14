@@ -65,7 +65,7 @@ export interface DesktopStartupRecoveryWindowOptions {
   readonly openTerminal?: () => void | Promise<void>
   /** Main-process validated actions available from the failure generation. */
   readonly profileActions?: DesktopStartupRecoveryProfileActions
-  /** Launcher-owned DSH Home mutation capabilities, absent before path resolution or in Safe Mode. */
+  /** Launcher-owned ClawClaw data-directory capabilities, absent before path resolution or in Safe Mode. */
   readonly dataActions?: DesktopStartupRecoveryDataActions
   /** Prepare a fresh isolated environment before a Safe Mode relaunch. */
   readonly enterSafeMode?: () => void | Promise<void>
@@ -98,12 +98,12 @@ export interface DesktopStartupRecoveryProfileActions {
 }
 
 export interface DesktopStartupRecoveryDataActions {
-  /** Exact active DSH Home shown to the user and used by every selection check. */
+  /** Exact active ClawClaw data directory shown to the user and used by every selection check. */
   readonly currentDirectory: string
   readonly usingDefaultDirectory: boolean
-  /** Re-check the platform-default DSH Home at click time so confirmation copy matches the action. */
+  /** Re-check the platform-default ClawClaw data directory at click time so confirmation copy matches the action. */
   readonly defaultDirectoryMissing: () => boolean
-  /** Select an empty or existing valid DSH Home without changing the current directory. */
+  /** Select an empty or existing valid ClawClaw data directory without changing the current directory. */
   readonly changeDirectory: (
     targetDirectory: string,
     signal: AbortSignal,
@@ -113,7 +113,7 @@ export interface DesktopStartupRecoveryDataActions {
     signal: AbortSignal,
     createIfMissing: boolean,
   ) => Promise<void>
-  /** Move the exact active DSH Home to the operating-system trash and recreate an empty root. */
+  /** Move the exact active ClawClaw data directory to the operating-system trash and recreate an empty root. */
   readonly resetDirectory: () => Promise<void>
 }
 
@@ -418,7 +418,7 @@ export class DesktopStartupRecoveryWindow {
         this.activeTab = 'diagnostics'
         shell.showItemInFolder(this.diagnosticPath)
       } else if (action.action === 'open-terminal') {
-        if (this.options.openTerminal === undefined) throw new Error('DSH Terminal is unavailable for this startup stage.')
+        if (this.options.openTerminal === undefined) throw new Error('ClawClaw Terminal is unavailable for this startup stage.')
         await this.options.openTerminal()
       } else if (action.action === 'open-profile-creator') {
         this.activeTab = 'profiles'
@@ -462,7 +462,7 @@ export class DesktopStartupRecoveryWindow {
         }
       } else if (action.action === 'begin-change-data-directory') {
         this.activeTab = 'data'
-        if (this.options.dataActions === undefined) throw new Error('DSH data management is unavailable for this startup stage.')
+        if (this.options.dataActions === undefined) throw new Error('ClawClaw data management is unavailable for this startup stage.')
         if (await this.confirmDataDirectoryChange()) {
           this.dataDirectoryEditing = true
           this.dataDirectoryDraft = undefined
@@ -470,7 +470,7 @@ export class DesktopStartupRecoveryWindow {
       } else if (action.action === 'restore-default-data-directory') {
         this.activeTab = 'data'
         const actions = this.options.dataActions
-        if (actions === undefined) throw new Error('DSH data management is unavailable for this startup stage.')
+        if (actions === undefined) throw new Error('ClawClaw data management is unavailable for this startup stage.')
         if (actions.usingDefaultDirectory) return
         const createIfMissing = actions.defaultDirectoryMissing()
         if (await this.confirmRestoreDefaultDirectory(createIfMissing)) {
@@ -489,7 +489,7 @@ export class DesktopStartupRecoveryWindow {
         const actions = this.options.dataActions
         const window = this.window
         if (actions === undefined || window === undefined || window.isDestroyed()) {
-          throw new Error('DSH data management is unavailable for this startup stage.')
+          throw new Error('ClawClaw data management is unavailable for this startup stage.')
         }
         const selected = await dialog.showOpenDialog(window, {
           title: copy.selectDataDirectory,
@@ -504,7 +504,7 @@ export class DesktopStartupRecoveryWindow {
         this.activeTab = 'data'
         const actions = this.options.dataActions
         if (actions === undefined || !this.dataDirectoryEditing) {
-          throw new Error('DSH data-directory change is not active.')
+          throw new Error('ClawClaw data-directory change is not active.')
         }
         this.dataDirectoryDraft = action.path.trim()
         await this.runBusy(async () => {
@@ -518,7 +518,7 @@ export class DesktopStartupRecoveryWindow {
       } else if (action.action === 'factory-reset') {
         this.activeTab = 'data'
         const actions = this.options.dataActions
-        if (actions === undefined) throw new Error('DSH data management is unavailable for this startup stage.')
+        if (actions === undefined) throw new Error('ClawClaw data management is unavailable for this startup stage.')
         if (await this.confirmFactoryReset(actions.currentDirectory)) {
           await this.runBusy(async () => { await actions.resetDirectory() })
           this.finish('restart')

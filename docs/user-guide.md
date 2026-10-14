@@ -12,14 +12,14 @@
 
 | 内容 | 默认位置 |
 | --- | --- |
-| Harness 数据、profiles、settings、sessions | `~/.clawclaw/data` |
+| ClawClaw 数据、profiles、settings、sessions | `~/.clawclaw/data` |
 | 默认工作区的实际文件 | `~/.clawclaw/workspaces/default` |
 | 应用状态和日志（macOS） | `~/Library/Application Support/ClawClaw` |
 | 应用状态和日志（Windows） | `%APPDATA%\ClawClaw` |
 
 `~` 指当前用户主目录。ClawClaw 不读取、移动或修改其他应用的 `~/.dsh`；如需继续使用其中的数据，请在确认内容和备份后通过应用的数据目录设置显式选择，ClawClaw 不会自动合并目录。设置中保存的数据目录选择优先于启动默认值；未保存选择时，`CLAWCLAW_HOME` 可以覆盖默认数据目录。安全模式使用单独的临时数据和工作区。启动完成后，ClawClaw 会把最终选择的数据目录作为 `DSH_HOME` 传给 Host、内置终端和插件；外部 `DSH_HOME` 不是 Launcher 的数据目录选择入口。
 
-数据目录和工作区是不同概念：更改 Harness 数据位置不会自动搬移默认工作区的文件。便携 ZIP 也不是自包含的数据目录。
+数据目录和工作区是不同概念：更改 ClawClaw 数据位置不会自动搬移默认工作区的文件。便携 ZIP 也不是自包含的数据目录。
 
 卸载桌面应用时，ClawClaw 采用保守的数据保留策略：
 
@@ -27,7 +27,7 @@
 | --- | --- |
 | 安装目录中的程序文件、卸载入口和快捷方式 | 删除 |
 | 应用缓存、更新状态和日志 | 保留 |
-| Harness 数据、Profile、设置、会话和插件状态 | 保留 |
+| ClawClaw 数据、Profile、设置、会话和插件状态 | 保留 |
 | 工作区及其中的用户文件 | 保留 |
 
 因此卸载不等于删除本地数据。需要彻底清理时，应先备份，再由用户明确删除上述数据目录；不要依赖安装程序代为删除工作区。
@@ -48,7 +48,7 @@
 
 Profile 是 bundle、依赖和 patch 的组合。托盘可发现现有 profile 以及可按需创建的 `desktop`、`web`。切换先持久保存目标，再有序重启；不会把旧 profile 插件复制过去。
 
-启动失败不会自动换成上一次 profile。使用恢复窗口的插件管理、回滚、切换配置或诊断功能处理。健康启动维护三个轮换检查点，覆盖当前 profile 的声明文件及共享 Harness home 的 `settings.yaml`、`cordis.patch.yml`。恢复需要明确选择槽位；检查点不含凭据、`.env`、会话、storage、缓存或工作区文件，也不是完整备份。
+启动失败不会自动换成上一次 profile。使用恢复窗口的插件管理、回滚、切换配置或诊断功能处理。健康启动维护三个轮换检查点，覆盖当前 profile 的声明文件及 ClawClaw 数据目录中的共享 `settings.yaml`、`cordis.patch.yml`。恢复需要明确选择槽位；检查点不含凭据、`.env`、会话、storage、缓存或工作区文件，也不是完整备份。
 
 ## 窗口与本地访问
 
@@ -74,12 +74,12 @@ dsh-desktop:
 从桌面终端入口打开终端后，以下命令默认作用于当前 profile：
 
 ```sh
-dsh plugin add <plugin>
-dsh plugin remove <plugin>
-dsh plugin update
+clawclaw plugin add <plugin>
+clawclaw plugin remove <plugin>
+clawclaw plugin update
 ```
 
-使用 `--profile <name>` 可显式指定。插件改变后重启应用。终端带有私有 `dsh`、`pnpm`、`node` shim 和 `DSH_HOME`，不会修改全局 PATH；已打开终端保留打开时的 profile。
+使用 `--profile <name>` 可显式指定。插件改变后重启应用。终端带有私有 `clawclaw`、`pnpm`、`node` shim，并保留 `dsh` 兼容入口；`DSH_HOME` 是传给底层 runtime 和插件的兼容环境变量。这些入口不会修改全局 PATH；已打开终端保留打开时的 profile。
 
 ## 自动化任务与叮嘱
 

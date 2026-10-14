@@ -273,7 +273,7 @@ function requiredWebBundles(): string[] {
 
 /** Prepared profile inputs consumed by app-boot. */
 export interface PreparedDesktopProfile {
-  /** Harness home shared by the launcher and generated command environment. */
+  /** ClawClaw data directory shared by the launcher and generated command environment. */
   homeDir: string
   /** Resolved profile and its persistent user layer. */
   profile: Profile
@@ -343,7 +343,7 @@ function sameList(left: readonly string[], right: readonly string[]): boolean {
 
 /**
  * Initialize or repair the persistent desktop profile.
- * @param home - Harness home containing the profiles directory.
+ * @param home - ClawClaw data directory containing the profiles directory.
  * @returns the absolute profile directory.
  */
 export function ensureDesktopProfile(home: string = resolveDshHome()): string {
@@ -1009,7 +1009,7 @@ function withoutDesktopEditableInsertions(patches: readonly PatchOptions[]): Pat
 /**
  * Load and compose one desktop profile generation.
  * @param _telemetryDisabled - retained for launcher call compatibility; ClawClaw always disables telemetry.
- * @param home - Harness home containing profiles and the machine-wide patch.
+ * @param home - ClawClaw data directory containing profiles and the machine-wide patch.
  * @param platform - native platform selecting launcher-owned safety overlays.
  * @param profileName - existing or lazily available Web profile to compose.
  * @param marketSelection - machine-level provider request fixed for this generation.

@@ -184,7 +184,7 @@ export class DesktopStartupRecoveryController {
       throw new Error(`${BIN_NAME}: invalid startup recovery generation id`)
     }
     for (const [label, value] of [
-      ['Harness home', options.pluginState.homeDir],
+      ['ClawClaw data directory', options.pluginState.homeDir],
       ['plugin state path', options.pluginState.statePath],
     ] as const) {
       if (!isAbsolute(value) || value.includes('\0')) {
@@ -259,7 +259,7 @@ export class DesktopStartupRecoveryController {
         .some(bundle => bundle.packageName === preview.packageName)) {
         throw new DesktopStartupRecoveryControllerError(
           'operation-failed',
-          'The DSH plugin command completed, but the plugin remains in the current Profile.',
+          'The plugin command completed, but the plugin remains in the current Profile.',
         )
       }
       return { action: 'uninstall', packageName: preview.packageName }

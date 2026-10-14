@@ -292,7 +292,7 @@ function notifyWindowsVolumeConcerns(
   const label = runtime.locale === 'zh'
     ? concernLabel === 'application install' ? '应用安装目录'
       : concernLabel === 'desktop user data' ? '桌面用户数据'
-        : concernLabel === 'DSH home' ? 'DSH 主目录'
+        : concernLabel === 'ClawClaw data' ? 'ClawClaw 数据目录'
           : '某个配置路径'
     : concernLabel ?? 'A configured path'
   try {
@@ -754,7 +754,7 @@ async function start(): Promise<void> {
     const windowsVolumeConcerns = diagnoseWindowsVolumes(process.platform, [
       { label: 'application install', path: process.execPath },
       { label: 'desktop user data', path: desktopUserDataDir },
-      { label: 'DSH home', path: homeDir },
+      { label: 'ClawClaw data', path: homeDir },
     ])
     warnWindowsVolumeConcerns(electronLogger, windowsVolumeConcerns)
     const selectionStatePath = join(profileUserDataDir, 'profile-selection', 'state.json')
@@ -964,21 +964,21 @@ async function start(): Promise<void> {
           await selectRecoveryDataDirectory(
             targetDirectory,
             signal,
-            'change DSH data directory from Recovery Assistant',
+            'change ClawClaw data directory from Recovery Assistant',
           )
         },
         restoreDefaultDirectory: async (signal: AbortSignal, createIfMissing: boolean) => {
           await selectRecoveryDataDirectory(
             defaultHome,
             signal,
-            'restore default DSH data directory from Recovery Assistant',
+            'restore default ClawClaw data directory from Recovery Assistant',
             createIfMissing,
           )
         },
         resetDirectory: async () => {
           const lease = acquireDesktopDataOperationLock(
             desktopUserDataDir,
-            'factory reset DSH data directory from Recovery Assistant',
+            'factory reset ClawClaw data directory from Recovery Assistant',
           )
           try {
             await resetDesktopDataDirectory({

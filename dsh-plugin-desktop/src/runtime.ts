@@ -163,7 +163,7 @@ export interface DesktopTerminalSpec {
   profileName: string
   /** Absolute directory containing the profile manifest and dependencies. */
   profileDir: string
-  /** Active DSH home shared with the desktop launcher. */
+  /** Active ClawClaw data directory shared with the desktop launcher. */
   homeDir: string
 }
 

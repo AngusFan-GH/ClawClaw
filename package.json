@@ -1,7 +1,7 @@
 {
-  "name": "deepseek-harness-desktop",
+  "name": "clawclaw",
   "private": true,
-  "description": "DSH Desktop product workspace",
+  "description": "ClawClaw desktop agent application workspace",
   "license": "MIT",
   "packageManager": "pnpm@11.8.0",
   "engines": {
