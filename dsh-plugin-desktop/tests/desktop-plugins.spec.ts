@@ -139,7 +139,11 @@ describe('desktop direct bundle management', () => {
     expect(first.find(item => item.packageName === '@clawclaw/dsh-im')).toEqual(
       expect.objectContaining({ status: 'active', mutable: false, uninstallable: false }),
     )
+    expect(first.find(item => item.packageName === 'dsh-free-search')).toEqual(
+      expect.objectContaining({ status: 'active', mutable: false, uninstallable: false }),
+    )
     expect(desktopPluginBundleMutable('@clawclaw/dsh-im')).toBe(false)
+    expect(desktopPluginBundleMutable('dsh-free-search')).toBe(false)
     expect(desktopPluginBundleMutable('dsh-plugin-desktop')).toBe(false)
     expect(desktopPluginBundleMutable('../third-party-plugin')).toBe(false)
     expect(desktopPluginBundleMutable('Third-Party-Plugin')).toBe(false)

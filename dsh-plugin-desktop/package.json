@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-desktop",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "ClawClaw desktop agent application",
   "license": "MIT",
   "publishConfig": {
@@ -439,6 +439,7 @@
     "adm-zip": "^0.6.0",
     "antd": "^6.6.5",
     "cron-parser": "5.7.0",
+    "dsh-free-search": "0.8.10",
     "dshmarket": "1.38.1",
     "fs-ext": "2.1.1",
     "koffi": "3.1.5",

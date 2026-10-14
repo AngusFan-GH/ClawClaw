@@ -8,11 +8,12 @@ This repository is maintained at [AngusFan-GH/ClawClaw](https://github.com/Angus
 
 ## Current status
 
-The source version is **0.2.7**, with **0.1.7-rc.2** for the pinned DSH source and runtime. Stable installers are published through the project's own [update origin](https://clawclaw.xzinfra.com/updates/dsh/stable/release.json). Downloads from the original DSH Desktop website are not ClawClaw releases.
+The source version is **0.2.9**, with **0.1.7-rc.2** for the pinned DSH source and runtime. Stable installers are published through the project's own [update origin](https://clawclaw.xzinfra.com/updates/dsh/stable/release.json). Downloads from the original DSH Desktop website are not ClawClaw releases.
 
 - **Desktop runtime**: native windows, tray, isolated Host process, three presentation modes, terminal, and recovery tools.
 - **Workspaces**: a protected default workspace, directory browsing, direct path entry, folder creation, and a system directory picker.
 - **Channels**: configuration surfaces for Weixin, WeCom, Feishu, DingTalk, QQ, iMessage, Telegram, WhatsApp, Discord, and Slack. Each platform still requires accounts, credentials, or QR authorization.
+- **Native search**: bundled `dsh-free-search` with keyless Bing by default, automatic fallback, multi-engine search, Web fetch, platform and video search, and research tools. Engines and optional API keys are configured from the Plugins page.
 - **Plugins**: one top-level Plugins page combines installed-plugin management with the bundled `dshmarket`; select or disable the provider in Desktop settings. Listing does not imply a security review.
 - **Automations**: one top-level entry manages ClawClaw scheduled tasks while preserving existing task data and conversation history.
 - **Shortcuts**: configure Plugins, Automations, and Settings sections in one list, with up to four ordered sidebar entries.
@@ -69,6 +70,6 @@ The default data directory is `~/.clawclaw/data`; the default workspace is `~/.c
 
 ## Attribution and license
 
-The desktop product derives from [DSH Desktop](https://github.com/anywhere-labs/deepseek-harness-desktop). `deepseek-harness/` is a read-only official upstream submodule. The application consumes vendored DSH runtime packages with explicit compatibility patches under `patches/`; an unchanged submodule does not mean an unpatched runtime. Channels builds on `@xmanrui/dsh-im` 4.20.2 with attribution and third-party notices preserved.
+The desktop product derives from [DSH Desktop](https://github.com/anywhere-labs/deepseek-harness-desktop). `deepseek-harness/` is a read-only official upstream submodule. The application consumes vendored DSH runtime packages with explicit compatibility patches under `patches/`; an unchanged submodule does not mean an unpatched runtime. Native search builds on MIT-licensed [dsh-free-search](https://github.com/DDDMUC/dsh-free-search), and Channels builds on `@xmanrui/dsh-im` 4.20.2, with attribution and third-party notices preserved.
 
 The project uses the [MIT License](LICENSE). Dependency licenses are recorded in the desktop packages and [Channels notices](channels/dsh-im/THIRD_PARTY_NOTICES.md). Report issues at [ClawClaw Issues](https://github.com/AngusFan-GH/ClawClaw/issues) and submit pull requests to this repository.

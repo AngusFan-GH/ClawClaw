@@ -1493,6 +1493,9 @@ importers:
       cron-parser:
         specifier: 5.7.0
         version: 5.7.0
+      dsh-free-search:
+        specifier: 0.8.10
+        version: 0.8.10(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-client-ui-commands@file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-client-ui-commands-0.1.7-rc.2.tgz(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-client-ui-plugin-manager@file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-client-ui-plugin-manager-0.1.7-rc.2.tgz(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-client-ui-renderer@file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-client-ui-renderer-0.1.7-rc.2.tgz(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-settings@file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-settings-0.1.7-rc.2.tgz(patch_hash=d8c2f27469951c87e8579080279d6cb9cc21f086b4b609e3d2ee88f6aff54ca9)(e1866110c7335ab3365e8302d6fc4025))(@deepseek-ai/dsh-tools@file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-tools-0.1.7-rc.2.tgz(3aa7e9b56420226eb171ffbc8941ab09))(@deepseek-ai/schemastery@3.18.4)(react@18.3.1)
       dshmarket:
         specifier: 1.38.1
         version: 1.38.1(patch_hash=5d431487c633bdba7a79e97da131692d5f150b4718b112ac8f4ed61cd290626a)(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-settings@file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-settings-0.1.7-rc.2.tgz(patch_hash=d8c2f27469951c87e8579080279d6cb9cc21f086b4b609e3d2ee88f6aff54ca9)(e1866110c7335ab3365e8302d6fc4025))(@deepseek-ai/schemastery@3.18.4)
@@ -7082,6 +7085,37 @@ packages:
   dotenv@17.4.2:
     resolution: {integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==}
     engines: {node: '>=12'}
+
+  dsh-free-search@0.8.10:
+    resolution: {integrity: sha512-1euVPD968XiclLJGZMdE/zZxCA0GexPCWrHBx0LYDOd/CoPIBA9zflOgCXYZY59j69Zp5s3QT29nls82S3wLbA==}
+    version: 0.8.10
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@deepseek-ai/cordis': ^4.0.1
+      '@deepseek-ai/dsh-client-ui-commands': ^0.1.7-rc.1 || ^0.2.0-rc.1
+      '@deepseek-ai/dsh-client-ui-plugin-manager': ^0.1.7-rc.1 || ^0.2.0-rc.1
+      '@deepseek-ai/dsh-client-ui-renderer': ^0.1.7-rc.1 || ^0.2.0-rc.1
+      '@deepseek-ai/dsh-settings': ^0.1.7-rc.1 || ^0.2.0-rc.1
+      '@deepseek-ai/dsh-tools': ^0.1.7-rc.1 || ^0.2.0-rc.1
+      '@deepseek-ai/schemastery': ^3.18.4
+      react: ^18.2.0
+    peerDependenciesMeta:
+      '@deepseek-ai/cordis':
+        optional: true
+      '@deepseek-ai/dsh-client-ui-commands':
+        optional: true
+      '@deepseek-ai/dsh-client-ui-plugin-manager':
+        optional: true
+      '@deepseek-ai/dsh-client-ui-renderer':
+        optional: true
+      '@deepseek-ai/dsh-settings':
+        optional: true
+      '@deepseek-ai/dsh-tools':
+        optional: true
+      '@deepseek-ai/schemastery':
+        optional: true
+      react:
+        optional: true
 
   dshmarket@1.38.1:
     resolution: {integrity: sha512-Z9VleLtCXwk5OlbSJKayWtbMaKACL8JUMyb/JHpErS4N3q//GJS+cgOhhxNkZYmXxB8/lv9IbhX1CBzlMhJeJg==}
@@ -15821,6 +15855,17 @@ snapshots:
   dotenv@16.6.1: {}
 
   dotenv@17.4.2: {}
+
+  dsh-free-search@0.8.10(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-client-ui-commands@file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-client-ui-commands-0.1.7-rc.2.tgz(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-client-ui-plugin-manager@file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-client-ui-plugin-manager-0.1.7-rc.2.tgz(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-client-ui-renderer@file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-client-ui-renderer-0.1.7-rc.2.tgz(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-settings@file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-settings-0.1.7-rc.2.tgz(patch_hash=d8c2f27469951c87e8579080279d6cb9cc21f086b4b609e3d2ee88f6aff54ca9)(e1866110c7335ab3365e8302d6fc4025))(@deepseek-ai/dsh-tools@file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-tools-0.1.7-rc.2.tgz(3aa7e9b56420226eb171ffbc8941ab09))(@deepseek-ai/schemastery@3.18.4)(react@18.3.1):
+    optionalDependencies:
+      '@deepseek-ai/cordis': 4.0.4(@deepseek-ai/cordis-plugin-include@1.0.9)(@deepseek-ai/cordis-plugin-loader@1.0.5)
+      '@deepseek-ai/dsh-client-ui-commands': file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-client-ui-commands-0.1.7-rc.2.tgz(@deepseek-ai/cordis@4.0.4)
+      '@deepseek-ai/dsh-client-ui-plugin-manager': file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-client-ui-plugin-manager-0.1.7-rc.2.tgz(@deepseek-ai/cordis@4.0.4)
+      '@deepseek-ai/dsh-client-ui-renderer': file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-client-ui-renderer-0.1.7-rc.2.tgz(@deepseek-ai/cordis@4.0.4)
+      '@deepseek-ai/dsh-settings': file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-settings-0.1.7-rc.2.tgz(patch_hash=d8c2f27469951c87e8579080279d6cb9cc21f086b4b609e3d2ee88f6aff54ca9)(e1866110c7335ab3365e8302d6fc4025)
+      '@deepseek-ai/dsh-tools': file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-tools-0.1.7-rc.2.tgz(3aa7e9b56420226eb171ffbc8941ab09)
+      '@deepseek-ai/schemastery': 3.18.4
+      react: 18.3.1
 
   dshmarket@1.38.1(patch_hash=5d431487c633bdba7a79e97da131692d5f150b4718b112ac8f4ed61cd290626a)(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-settings@file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-settings-0.1.7-rc.2.tgz(patch_hash=d8c2f27469951c87e8579080279d6cb9cc21f086b4b609e3d2ee88f6aff54ca9)(e1866110c7335ab3365e8302d6fc4025))(@deepseek-ai/schemastery@3.18.4):
     dependencies:

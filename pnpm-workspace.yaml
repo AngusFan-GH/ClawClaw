@@ -752,3 +752,5 @@ supportedArchitectures:
     - current
     - x64
     - arm64
+minimumReleaseAgeExclude:
+  - dsh-free-search@0.8.10

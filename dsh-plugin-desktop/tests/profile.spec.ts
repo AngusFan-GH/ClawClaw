@@ -211,6 +211,7 @@ describe('desktop profile composition', {
     ])).toEqual([
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
+      'dsh-free-search',
       '@clawclaw/dsh-im',
       'third-party-one',
       'third-party-two',
@@ -238,6 +239,7 @@ describe('desktop profile composition', {
     expect(repaired.dsh.profile.bundles).toEqual([
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
+      'dsh-free-search',
       '@clawclaw/dsh-im',
       'third-party-plugin',
     ])
@@ -270,6 +272,7 @@ describe('desktop profile composition', {
     expect(repaired.dsh.profile.bundles).toEqual([
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
+      'dsh-free-search',
       '@clawclaw/dsh-im',
     ])
   })
@@ -559,6 +562,18 @@ virtualStoreDirMaxLength: 60
     expect(rows.find(row => row.id === 'web')).toEqual(expect.objectContaining({
       config: { fetchProvider: 'http' },
     }))
+  })
+
+  it('loads native search with the keyless Bing default', () => {
+    const prepared = prepareDesktopProfile(undefined, temporaryHome(), 'darwin')
+    const rows = composeEntries([prepared.patches])
+
+    expect(prepared.profile.layers.some(layer => layer.packageName === 'dsh-free-search')).toBe(true)
+    expect(rows.find(row => row.id === 'web-search-free')).toEqual(expect.objectContaining({
+      name: 'dsh-free-search',
+      config: expect.objectContaining({ provider: 'bing', bingMarket: 'zh-CN' }),
+    }))
+    expect(rows.find(row => row.id === 'web-search-deepseek')?.disabled).toBe(true)
   })
 
   it('keeps feedback and telemetry disabled across Profile and machine overrides', () => {

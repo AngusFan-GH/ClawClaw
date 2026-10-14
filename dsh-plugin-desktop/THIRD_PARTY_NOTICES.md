@@ -2,13 +2,16 @@
 ClawClaw distributes the following third-party packages inside its installers.
 Each package ships with its own license text in the application files; this list records
 the package names, versions, and licenses for transparency.
-
-The ClawClaw Experts catalog includes persona content derived from Agency Agents
-collections under the MIT License. Attribution and license texts ship under
-`assets/experts/`; the implementation itself is maintained as part of ClawClaw.
 | Package | Version | License |
 | --- | --- | --- |
 | @agentclientprotocol/sdk | 1.4.0 | Apache-2.0 |
+| @ant-design/colors | 8.0.1 | MIT |
+| @ant-design/cssinjs | 2.1.2 | MIT |
+| @ant-design/cssinjs-utils | 2.1.2 | MIT |
+| @ant-design/fast-color | 3.0.1 | MIT |
+| @ant-design/icons | 6.3.4 | MIT |
+| @ant-design/icons-svg | 4.6.0 | MIT |
+| @ant-design/react-slick | 2.0.0 | MIT |
 | @anthropic-ai/sdk | 0.123.0 | MIT |
 | @aws-crypto/sha256-browser | 5.2.0 | Apache-2.0 |
 | @aws-crypto/sha256-js | 5.2.0 | Apache-2.0 |
@@ -330,6 +333,8 @@ collections under the MIT License. Attribution and license texts ship under
 | @deepseek-ai/schemastery | 3.18.4 | MIT |
 | @earendil-works/pi-ai | 0.85.1 | MIT |
 | @earendil-works/pi-telemetry | 0.85.1 | MIT |
+| @emotion/hash | 0.8.0 | MIT |
+| @emotion/unitless | 0.7.5 | MIT |
 | @eslint-community/regexpp | 4.12.2 | MIT |
 | @google/genai | 1.52.0 | Apache-2.0 |
 | @hapi/boom | 9.1.4 | BSD-3-Clause |
@@ -388,6 +393,49 @@ collections under the MIT License. Attribution and license texts ship under
 | @protobufjs/path | 1.1.2 | BSD-3-Clause |
 | @protobufjs/pool | 1.1.0 | BSD-3-Clause |
 | @protobufjs/utf8 | 1.1.2 | BSD-3-Clause |
+| @rc-component/async-validator | 6.0.0 | MIT |
+| @rc-component/cascader | 1.22.0 | MIT |
+| @rc-component/checkbox | 2.0.0 | MIT |
+| @rc-component/collapse | 1.2.0 | MIT |
+| @rc-component/color-picker | 3.1.1 | MIT |
+| @rc-component/context | 2.0.2 | MIT |
+| @rc-component/dialog | 1.10.0 | MIT |
+| @rc-component/drawer | 1.4.2 | MIT |
+| @rc-component/dropdown | 1.0.3 | MIT |
+| @rc-component/form | 1.8.6 | MIT |
+| @rc-component/image | 1.10.0 | MIT |
+| @rc-component/input | 1.3.1 | MIT |
+| @rc-component/input-number | 1.6.2 | MIT |
+| @rc-component/listy | 1.2.3 | MIT |
+| @rc-component/mentions | 1.12.0 | MIT |
+| @rc-component/menu | 1.5.0 | MIT |
+| @rc-component/mini-decimal | 1.1.4 | MIT |
+| @rc-component/motion | 1.3.3 | MIT |
+| @rc-component/mutate-observer | 2.0.1 | MIT |
+| @rc-component/notification | 2.0.9 | MIT |
+| @rc-component/overflow | 1.0.1 | MIT |
+| @rc-component/pagination | 1.4.0 | MIT |
+| @rc-component/picker | 1.12.2 | MIT |
+| @rc-component/portal | 2.2.1 | MIT |
+| @rc-component/progress | 1.0.3 | MIT |
+| @rc-component/qrcode | 2.0.0 | MIT |
+| @rc-component/rate | 1.0.1 | MIT |
+| @rc-component/resize-observer | 1.1.2 | MIT |
+| @rc-component/segmented | 1.4.0 | MIT |
+| @rc-component/select | 1.10.1 | MIT |
+| @rc-component/slider | 1.1.1 | MIT |
+| @rc-component/steps | 1.2.3 | MIT |
+| @rc-component/switch | 1.0.3 | MIT |
+| @rc-component/table | 1.11.1 | MIT |
+| @rc-component/tabs | 1.13.0 | MIT |
+| @rc-component/tooltip | 1.5.2 | MIT |
+| @rc-component/tour | 2.4.0 | MIT |
+| @rc-component/tree | 1.4.0 | MIT |
+| @rc-component/tree-select | 1.16.1 | MIT |
+| @rc-component/trigger | 3.10.1 | MIT |
+| @rc-component/upload | 1.1.1 | MIT |
+| @rc-component/util | 1.13.0 | MIT |
+| @rc-component/virtual-list | 1.5.2 | MIT |
 | @sec-ant/readable-stream | 0.4.1 | MIT |
 | @sindresorhus/merge-streams | 4.0.0 | MIT |
 | @smithy/core | 3.34.1 | Apache-2.0 |
@@ -402,6 +450,8 @@ collections under the MIT License. Attribution and license texts ship under
 | @stablelib/base64 | 1.0.1 | MIT |
 | @standard-schema/spec | 1.1.0 | MIT |
 | @swc/helpers | 0.5.23 | Apache-2.0 |
+| @tabler/icons | 3.49.0 | MIT |
+| @tabler/icons-react | 3.49.0 | MIT |
 | @tencent-connect/qqbot-connector | 1.2.0 | UNLICENSED |
 | @tencent-connect/qqbot-nodejs | 1.0.4 | MIT |
 | @tokenizer/inflate | 0.4.1 | MIT |
@@ -420,6 +470,7 @@ collections under the MIT License. Attribution and license texts ship under
 | ajv | 8.20.0 | MIT |
 | ansi-regex | 5.0.1 | MIT |
 | ansi-styles | 4.3.0 | MIT |
+| antd | 6.6.5 | MIT |
 | argparse | 2.0.1 | Python-2.0 |
 | asn1js | 3.0.10 | BSD-3-Clause |
 | async-mutex | 0.5.0 | MIT |
@@ -440,17 +491,21 @@ collections under the MIT License. Attribution and license texts ship under
 | chokidar | 4.0.3 | MIT |
 | cliui | 6.0.0 | ISC |
 | clone | 2.1.2 | MIT |
+| clsx | 2.1.1 | MIT |
 | color-convert | 2.0.1 | MIT |
 | color-name | 1.1.4 | MIT |
 | combined-stream | 1.0.8 | MIT |
 | commander | 15.0.0 | MIT |
 | compressible | 2.0.18 | MIT |
 | compression | 1.8.2 | MIT |
+| compute-scroll-into-view | 3.1.1 | MIT |
 | content-type | 2.1.0 | MIT |
 | cron-parser | 5.7.0 | MIT |
 | cross-spawn | 7.0.6 | MIT |
+| csstype | 3.2.3 | MIT |
 | curve25519-js | 0.0.4 | MIT |
 | data-uri-to-buffer | 4.0.1 | MIT |
+| dayjs | 1.11.23 | MIT |
 | debug | 4.4.3 | MIT |
 | decamelize | 1.2.0 | MIT |
 | default-browser | 5.5.1 | MIT |
@@ -463,6 +518,7 @@ collections under the MIT License. Attribution and license texts ship under
 | diff | 9.0.0 | BSD-3-Clause |
 | dijkstrajs | 1.0.3 | MIT |
 | dingtalk-stream | 2.1.4 | MIT |
+| dsh-free-search | 0.8.10 | MIT |
 | dshmarket | 1.38.1 | MIT |
 | dunder-proto | 1.0.1 | MIT |
 | ecdsa-sig-formatter | 1.0.11 | Apache-2.0 |
@@ -513,6 +569,7 @@ collections under the MIT License. Attribution and license texts ship under
 | is-fullwidth-code-point | 3.0.0 | MIT |
 | is-in-ssh | 1.0.0 | MIT |
 | is-inside-container | 1.0.0 | MIT |
+| is-mobile | 5.0.0 | MIT |
 | is-plain-obj | 4.1.0 | MIT |
 | is-stream | 4.0.1 | MIT |
 | is-unicode-supported | 2.1.0 | MIT |
@@ -525,6 +582,7 @@ collections under the MIT License. Attribution and license texts ship under
 | json-bigint | 1.0.0 | MIT |
 | json-schema-to-ts | 3.1.1 | MIT |
 | json-schema-traverse | 1.0.0 | MIT |
+| json2mq | 0.2.0 | MIT |
 | jwa | 2.0.1 | MIT |
 | jws | 4.0.1 | MIT |
 | keyv | 5.6.0 | MIT |
@@ -588,6 +646,7 @@ collections under the MIT License. Attribution and license texts ship under
 | qrcode-terminal | 0.12.0 | Apache 2.0 |
 | quick-format-unescaped | 4.0.4 | MIT |
 | react | 18.3.1 | MIT |
+| react-is | 19.3.0 | MIT |
 | readdirp | 4.1.2 | MIT |
 | real-require | 0.2.0 | MIT |
 | reflect-metadata | 0.2.2 | Apache-2.0 |
@@ -601,6 +660,7 @@ collections under the MIT License. Attribution and license texts ship under
 | safe-buffer | 5.2.1 | MIT |
 | safe-stable-stringify | 2.5.0 | MIT |
 | saxes | 6.0.0 | ISC |
+| scroll-into-view-if-needed | 3.1.0 | MIT |
 | selfsigned | 5.5.0 | MIT |
 | semver | 7.8.5 | ISC |
 | set-blocking | 2.0.0 | ISC |
@@ -615,11 +675,14 @@ collections under the MIT License. Attribution and license texts ship under
 | sonner | 2.0.8 | MIT |
 | split2 | 4.2.0 | ISC |
 | standardwebhooks | 1.1.1 | MIT |
+| string-convert | 0.2.1 | MIT |
 | string-width | 4.2.3 | MIT |
 | strip-ansi | 6.0.1 | MIT |
 | strip-final-newline | 4.0.0 | MIT |
 | strtok3 | 10.3.5 | MIT |
+| stylis | 4.4.0 | MIT |
 | thread-stream | 3.2.0 | MIT |
+| throttle-debounce | 5.0.2 | MIT |
 | tiny-inflate | 1.0.3 | MIT |
 | token-types | 6.1.2 | MIT |
 | ts-algebra | 2.0.0 | MIT |
@@ -650,4 +713,4 @@ collections under the MIT License. Attribution and license texts ship under
 | yargs-parser | 18.1.3 | ISC |
 | yoctocolors | 2.2.0 | MIT |
 | zod | 4.6.4 | MIT |
-> Notice-required licenses in use: GPL-3.0, LGPL-3.0-or-later. Their license texts ship inside node_modules; see the package LICENSE files for the full terms.
+> Notice-required licenses in use: LGPL-3.0-or-later, GPL-3.0. Their license texts ship inside node_modules; see the package LICENSE files for the full terms.

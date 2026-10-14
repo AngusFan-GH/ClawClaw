@@ -8,11 +8,12 @@
 
 ## 当前状态
 
-当前源码版本为 **0.2.7**，固定 DSH 源码和运行时版本为 **0.1.7-rc.2**。稳定版安装包由项目自己的[更新源](https://clawclaw.xzinfra.com/updates/dsh/stable/release.json)发布；原 DSH Desktop 官网的安装包不属于本项目。
+当前源码版本为 **0.2.9**，固定 DSH 源码和运行时版本为 **0.1.7-rc.2**。稳定版安装包由项目自己的[更新源](https://clawclaw.xzinfra.com/updates/dsh/stable/release.json)发布；原 DSH Desktop 官网的安装包不属于本项目。
 
 - **桌面运行**：原生窗口、托盘、隔离 Host 进程、三种窗口模式、终端和恢复工具。
 - **工作区**：内置受保护的默认工作区，支持浏览目录、输入路径、新建文件夹和系统目录选择器。
 - **Channels**：微信、企业微信、飞书、钉钉、QQ、iMessage、Telegram、WhatsApp、Discord 和 Slack 的配置入口；各平台仍需账号、凭据或扫码授权。
+- **原生搜索**：内置 `dsh-free-search`，默认使用免 API Key 的 Bing，并提供自动回退、多引擎搜索、网页抓取、平台搜索、视频搜索和研究工具；可在“插件”页配置引擎与可选 API Key。
 - **插件**：一级“插件”页面统一承载已安装插件管理和 `dshmarket` 市场；市场提供方可在桌面设置中选择或关闭，目录收录不等于安全审核。
 - **自动化任务**：一级入口管理 ClawClaw 定时任务，继续使用现有任务数据与会话记录。
 - **快捷入口**：统一配置插件、自动化任务和 Settings section，最多固定 4 项到侧栏并自由排序。
@@ -69,6 +70,6 @@ gh workflow run release.yml --ref dsh-desktop -f publish=false
 
 ## 来源与许可
 
-桌面产品沿用 [DSH Desktop](https://github.com/anywhere-labs/deepseek-harness-desktop) 的基础；`deepseek-harness/` 是只读的官方上游子模块。应用使用仓库内打包的 DSH runtime，并通过 `patches/` 应用显式兼容修补；“不修改子模块”不等于“运行时没有补丁”。Channels 基于 `@xmanrui/dsh-im` 4.20.2，保留来源说明与第三方许可。
+桌面产品沿用 [DSH Desktop](https://github.com/anywhere-labs/deepseek-harness-desktop) 的基础；`deepseek-harness/` 是只读的官方上游子模块。应用使用仓库内打包的 DSH runtime，并通过 `patches/` 应用显式兼容修补；“不修改子模块”不等于“运行时没有补丁”。原生搜索基于 MIT 许可的 [dsh-free-search](https://github.com/DDDMUC/dsh-free-search)，Channels 基于 `@xmanrui/dsh-im` 4.20.2，均保留来源说明与第三方许可。
 
 项目采用 [MIT License](LICENSE)。依赖许可见 Desktop 包和 [Channels 的第三方声明](channels/dsh-im/THIRD_PARTY_NOTICES.md)。问题和贡献请提交到 [ClawClaw Issues](https://github.com/AngusFan-GH/ClawClaw/issues) 和本仓库的 Pull Request。

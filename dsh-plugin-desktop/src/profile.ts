@@ -83,6 +83,8 @@ const REQUIRED_BUNDLES = requiredWebBundles()
 const REQUIRED_BUNDLE_SET = new Set(REQUIRED_BUNDLES)
 /** Product-pinned IM integration shared by every Desktop profile. */
 export const DESKTOP_IM_BUNDLE = '@clawclaw/dsh-im'
+/** Product-pinned native Web search shared by every Desktop profile. */
+export const DESKTOP_SEARCH_BUNDLE = 'dsh-free-search'
 const OBSOLETE_DESKTOP_BUNDLE_SET = new Set(['@deepseek-ai/dsh-desktop-app'])
 // Electron's patched fs/module APIs read this logical ASAR path directly. The
 // Desktop resolver bridges out-of-tree Profile plugins back into this virtual
@@ -331,9 +333,10 @@ export interface SkippedOptionalEntry {
 export function desktopBundleList(current: readonly string[]): string[] {
   const thirdParty = current.filter(name => !REQUIRED_BUNDLE_SET.has(name)
     && name !== DESKTOP_IM_BUNDLE
+    && name !== DESKTOP_SEARCH_BUNDLE
     && !DESKTOP_PACKAGE_NAMES.has(name)
     && !OBSOLETE_DESKTOP_BUNDLE_SET.has(name))
-  return [...REQUIRED_BUNDLES, DESKTOP_IM_BUNDLE, ...thirdParty]
+  return [...REQUIRED_BUNDLES, DESKTOP_SEARCH_BUNDLE, DESKTOP_IM_BUNDLE, ...thirdParty]
 }
 
 /** Return whether two ordered string lists are identical. */

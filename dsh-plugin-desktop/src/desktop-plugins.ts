@@ -43,6 +43,7 @@ const IMMUTABLE_BUNDLES = new Set([
   ...(PROFILE_TEMPLATES.web?.bundles ?? []),
   '@deepseek-ai/dsh-desktop-app',
   '@clawclaw/dsh-im',
+  'dsh-free-search',
   ...DESKTOP_PACKAGE_NAMES,
 ])
 
