@@ -1,12 +1,12 @@
 // @ts-nocheck -- ported client compatibility layer; host contracts remain strictly checked.
-import { AntdProvider, Button, Input } from './antd-ui.js'
+import { AntdProvider, Button, Drawer, Input } from './antd-ui.js'
 import { antdLocale } from './antd-locale.js'
 import { LibraryCard } from './library-ui.js'
 import type { AgencyTeamsRemote } from './remote.js'
 import { TeamsPanel, unwrap, type TeamRemote } from './team-ui.js'
 import { TEAM_CSS } from './team-style.js'
 import { TeamMenu } from './team-composer.js'
-import { TEAM_REFERENCE_SOURCE, insertTeamReference, teamReference, teamSubmissionText } from './team-reference.js'
+import { TEAM_REFERENCE_SOURCE, insertTeamReference, teamReference, teamSubmissionText, type TeamReferenceTarget } from './team-reference.js'
 import { TeamLocaleContext } from './team-locale.js'
 import { localizeTeam } from '../team-content-en.js'
 import { teamText } from '../team-i18n.js'
@@ -34,7 +34,7 @@ import { zh, en, type AgencyKey } from './locales.js'
 import { TYPERT_REMOTE, type AgencyAgentsEnabledState, type AgencyAgentsPrompt } from './remote.js'
 import { DEFAULT_EXPERT_EMOJI, type CustomExpertInput, type CatalogSnapshot } from '../expert-contract.js'
 import { CustomExpertEditor, CustomDeleteDialog, CUSTOM_EDITOR_CSS } from './custom-editor.js'
-import { acceptEnabled, acceptCatalog, catalogState, refreshCatalog, subscribeCatalog } from './catalog.js'
+import { acceptEnabled, acceptCatalog, catalogState, refreshCatalog, subscribeCatalog, type ExpertView as CatalogExpertView } from './catalog.js'
 import { refreshTeams, teamState } from './team-cache.js'
 import { installNativeTeamNames } from './native-team-names.js'
 import { installLegacyTeamReferenceGuard } from './legacy-team-reference.js'
@@ -53,6 +53,8 @@ import UsersRound from 'lucide-react/dist/esm/icons/users-round.mjs'
 import Wrench from 'lucide-react/dist/esm/icons/wrench.mjs'
 // @ts-expect-error package subpath has no declaration file
 import PlugZap from 'lucide-react/dist/esm/icons/plug-zap.mjs'
+// @ts-expect-error package subpath has no declaration file
+import Info from 'lucide-react/dist/esm/icons/info.mjs'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -95,12 +97,6 @@ function Copy(props: LineIconProps): React.ReactElement {
     React.createElement('path', { d: 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1' }))
 }
 
-function Eye(props: LineIconProps): React.ReactElement {
-  return lineIcon(props,
-    React.createElement('path', { d: 'M2.06 12a10.7 10.7 0 0 1 19.88 0 10.7 10.7 0 0 1-19.88 0' }),
-    React.createElement('circle', { cx: 12, cy: 12, r: 3 }))
-}
-
 function Search(props: LineIconProps): React.ReactElement {
   return lineIcon(props,
     React.createElement('circle', { cx: 11, cy: 11, r: 8 }),
@@ -138,19 +134,19 @@ const AVATAR_CATEGORY_DIVISIONS: Readonly<Record<AvatarCategory, ReadonlySet<str
   writing: new Set(['marketing', 'paid-media', 'specialized']),
 }
 
-interface ExpertView {
-  readonly slug: string
-  readonly name: string
-  readonly nameEn: string
-  readonly emoji: string
-  readonly division: string
-  readonly divisionZh: string
-  readonly divisionEn: string
-  readonly description: string
-  readonly descriptionEn: string
-  readonly conflict?: boolean
-  readonly custom?: boolean
-  readonly avatar?: number
+type ExpertView = CatalogExpertView
+
+export type ExpertSource = 'base' | 'plugin' | 'custom'
+
+/** Package experts are stored in ClawClaw's library, but remain distinguishable from bundled experts. */
+export function expertSource(expert: Pick<ExpertView, 'custom' | 'packageFormat'>): ExpertSource {
+  if (expert.custom) return 'custom'
+  return expert.packageFormat === 'clawclaw-plugin' ? 'plugin' : 'base'
+}
+
+/** An enabled expert can always be disabled; enabling requires all mandatory capabilities. */
+export function canToggleExpert(enabled: boolean, health: ExpertCapabilityHealth): boolean {
+  return enabled || health.state !== 'blocked'
 }
 
 interface ExpertGroup<T extends ExpertView> {
@@ -479,6 +475,7 @@ export const CARD_SETTINGS_CSS = `
 .aag-card-identity{display:flex;min-width:0;overflow:hidden;flex-direction:column;padding-right:42px}
 .aag-card-name{display:-webkit-box;overflow:hidden;font-size:15px;font-weight:650;line-height:21px;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 .aag-card-division{display:flex;min-width:0;align-items:center;gap:4px;margin-top:2px;overflow:hidden;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:18px;white-space:nowrap}.aag-card-category{min-width:0;overflow:hidden;text-overflow:ellipsis}.aag-card-division .aag-custom-badge{box-sizing:border-box;height:18px;flex:none;margin-left:0;padding:0 5px;line-height:16px}
+.aag-source-badge{box-sizing:border-box;height:18px;flex:none;padding:0 5px;border:1px solid var(--dsw-alias-border-l2);border-radius:4px;color:var(--dsw-alias-label-secondary);font-size:10px;line-height:16px}.aag-source-badge[data-source="plugin"]{border-color:color-mix(in srgb,var(--dsw-alias-brand-primary) 42%,var(--dsw-alias-border-l2));color:var(--dsw-alias-brand-primary)}
 .aag-card-description{grid-column:1/-1;display:-webkit-box;min-height:38px;margin:0;overflow:hidden;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:19px;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 .aag-expert-card-custom .aag-card-identity{overflow:visible}.aag-expert-card-custom .aag-card-division{max-height:38px;flex-wrap:wrap;align-content:flex-start;column-gap:4px;row-gap:2px;overflow:hidden;white-space:normal}.aag-expert-card-custom .aag-card-category{flex:none;overflow:visible;text-overflow:clip;white-space:nowrap}.aag-expert-card-custom .aag-card-description{min-height:19px;-webkit-line-clamp:1}
 .aag-card-actions{display:flex;align-items:stretch;min-height:44px;border-top:1px solid var(--dsw-alias-border-l2)}
@@ -490,6 +487,7 @@ export const CARD_SETTINGS_CSS = `
 .aag-card-action-danger{color:var(--dsw-alias-state-error-primary)}
 .aag-switch{position:absolute;top:12px;right:12px;display:flex;align-items:center;flex-direction:column;gap:2px}
 .aag-switch-state{color:var(--dsw-alias-label-secondary);font-size:10px;line-height:16px;white-space:nowrap}
+.aag-expert-details{display:flex;flex-direction:column;gap:20px}.aag-detail-hero{display:grid;grid-template-columns:64px minmax(0,1fr);gap:14px;align-items:center}.aag-detail-hero .aag-expert-avatar{width:64px;height:64px}.aag-detail-hero h3{margin:0 0 4px;font-size:20px;line-height:28px}.aag-detail-description{margin:0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:21px}.aag-detail-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0}.aag-detail-facts>div{min-width:0;padding:10px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px}.aag-detail-facts dt{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}.aag-detail-facts dd{margin:3px 0 0;overflow-wrap:anywhere;font-size:13px;line-height:19px}.aag-detail-section{display:flex;flex-direction:column;gap:8px}.aag-detail-section h4{margin:0;font-size:13px;line-height:20px}.aag-capability-chips{display:flex;flex-wrap:wrap;gap:6px}.aag-capability-chip{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:4px 7px;border:1px solid var(--dsw-alias-border-l2);border-radius:5px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}.aag-capability-chip strong{overflow:hidden;color:var(--dsw-alias-label-primary);font-weight:500;text-overflow:ellipsis}.aag-capability-chip[data-issue="true"]{border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 45%,var(--dsw-alias-border-l2));color:var(--dsw-alias-state-error-primary)}.aag-detail-warning{margin:0;padding:10px;border-radius:6px;background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 9%,transparent);color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:19px}.aag-detail-actions{display:flex;gap:8px;flex-wrap:wrap}
 .ant-modal .aag-prompt-body.ant-input{display:block;box-sizing:border-box;height:min(560px,calc(100vh - 220px));min-height:240px;margin:0;resize:none;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.65}
 @container (max-width:839px){.aag-expert-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @container (max-width:519px){.aag-expert-grid{grid-template-columns:1fr}.aag-title-row{gap:8px 12px}.aag-settings-links{flex-basis:100%}}
@@ -759,7 +757,7 @@ type ButtonProps = PropsLocale<'agency'> & {
   /** 异步启用前锁定目标编辑器，避免切换会话后把标签插入其他草稿。 */
   readonly prepareInsertion?: () => (reference: ReferenceInsert) => boolean
   /** 当前 locale 读取器（locale 切换后框架以新 t 重渲染，名称随之刷新）。 */
-  readonly prepareTeamSelection?: () => (team: ExpertTeam, example?: string) => boolean | Promise<boolean>
+  readonly prepareTeamSelection?: () => (team: TeamReferenceTarget, example?: string) => boolean | Promise<boolean>
   readonly getActive: () => 'zh' | 'en'
   readonly capabilityRegistry: ExpertCapabilityRegistry
   readonly insertSkill?: (name: string) => boolean
@@ -911,7 +909,7 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
     }
   }
 
-  const matches = sortExpertsByEnabled(filterExperts(catalog.experts, { query })
+  const matches = sortExpertsByEnabled(filterExperts(catalog.experts.filter(expert => expert.packageType !== 'team'), { query })
     .filter(expert => normalizeExpertQuery(query) !== '' || catalog.enabled.has(expert.slug)), catalog.enabled)
   const searching = normalizeExpertQuery(query) !== ''
   if (searching) matches.sort((a, b) => {
@@ -1005,6 +1003,66 @@ interface OpenPrompt {
   readonly name: string
   readonly prompt: string
   readonly returnFocus: HTMLButtonElement
+}
+
+interface OpenExpertDetails {
+  readonly expert: ExpertView
+  readonly returnFocus: HTMLButtonElement
+}
+
+function ExpertDetailsDrawer(props: {
+  value: OpenExpertDetails
+  health: ExpertCapabilityHealth
+  locale: 'zh' | 'en'
+  t: (key: AgencyKey, params?: Record<string, unknown>) => string
+  avatar: string
+  close(): void
+  viewPrompt(): void
+  manageConnectors?(): void
+}): React.ReactElement {
+  const { expert } = props.value
+  React.useEffect(() => () => {
+    const node = props.value.returnFocus
+    queueMicrotask(() => { if (node.isConnected) node.focus({ preventScroll: true }) })
+  }, [props.value.returnFocus])
+  const source = expertSource(expert)
+  const sourceLabel = props.t(source === 'plugin' ? 'settings.source.plugin' : source === 'custom' ? 'settings.source.custom' : 'settings.source.builtin')
+  const issueKeys = new Set(props.health.issues.map(issue => `${issue.type}\0${issue.name}`))
+  const capabilityList = (kind: 'skill' | 'mcp', bindings: ExpertView['skills']): React.ReactNode => bindings.length === 0
+    ? React.createElement('span', { className: 'aag-note' }, props.t('capability.none'))
+    : React.createElement('div', { className: 'aag-capability-chips' }, bindings.map(binding => React.createElement('span', {
+      key: binding.name,
+      className: 'aag-capability-chip',
+      'data-issue': issueKeys.has(`${kind}\0${binding.name}`) || undefined,
+      title: binding.required ? props.t('capability.required') : props.t('capability.optional'),
+    }, React.createElement('strong', null, binding.name), binding.required ? props.t('capability.required') : props.t('capability.optional'))))
+  return React.createElement(Drawer, {
+    open: true,
+    placement: 'right',
+    size: 'min(520px, 100vw)',
+    title: props.t('settings.detailsTitle'),
+    rootClassName: 'aag-expert-details-drawer',
+    destroyOnHidden: true,
+    onClose: props.close,
+  }, React.createElement('div', { className: 'aag-expert-details' },
+    React.createElement('div', { className: 'aag-detail-hero' },
+      React.createElement('img', { className: 'aag-expert-avatar', src: props.avatar, alt: '', width: 64, height: 64 }),
+      React.createElement('div', null,
+        React.createElement('h3', null, displayName(expert, props.locale)),
+        React.createElement('p', { className: 'aag-detail-description' }, displayDescription(expert, props.locale)))),
+    React.createElement('dl', { className: 'aag-detail-facts' },
+      React.createElement('div', null, React.createElement('dt', null, props.t('settings.filter.source')), React.createElement('dd', null, sourceLabel)),
+      React.createElement('div', null, React.createElement('dt', null, props.t('settings.category')), React.createElement('dd', null, inputTriggerSourceName(expert.division, props.locale))),
+      expert.packageFormat === undefined ? null : React.createElement('div', null, React.createElement('dt', null, props.t('settings.packageFormat')), React.createElement('dd', null, 'ClawClaw Plugin')),
+      expert.packageVersion === undefined ? null : React.createElement('div', null, React.createElement('dt', null, props.t('settings.version')), React.createElement('dd', null, expert.packageVersion))),
+    React.createElement('section', { className: 'aag-detail-section' }, React.createElement('h4', null, `${props.t('capability.skills')} · ${expert.skills.length}`), capabilityList('skill', expert.skills)),
+    React.createElement('section', { className: 'aag-detail-section' }, React.createElement('h4', null, `${props.t('capability.connectors')} · ${expert.mcpServers.length}`), capabilityList('mcp', expert.mcpServers)),
+    props.health.state === 'blocked' ? React.createElement('p', { className: 'aag-detail-warning', role: 'alert' }, props.t('capability.missingHint')) : null,
+    React.createElement('div', { className: 'aag-detail-actions' },
+      React.createElement(Button, { onClick: props.viewPrompt }, props.t('settings.viewPromptTitle')),
+      props.health.issues.some(issue => issue.type === 'mcp') && props.manageConnectors !== undefined
+        ? React.createElement(Button, { type: 'primary', onClick: props.manageConnectors }, props.t('capability.manageConnectors'))
+        : null)))
 }
 
 const EXPERT_CARD_GAP = 12
@@ -1110,6 +1168,7 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
   getActive: () => 'zh' | 'en'
   onEnabledChange?: (enabled: ReadonlySet<string>) => void
   capabilityRegistry: ExpertCapabilityRegistry
+  onOpenConnectors?: () => void
 }): React.ReactElement {
   const subscribe = React.useCallback((listener: () => void) => subscribeCatalog(props.remote, listener), [props.remote])
   const getSnapshot = React.useCallback(() => catalogState(props.remote), [props.remote])
@@ -1127,12 +1186,13 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
   const [division, setDivision] = React.useState('')
   const [status, setStatus] = React.useState('')
   const [openPrompt, setOpenPrompt] = React.useState<OpenPrompt | null>(null)
+  const [details, setDetails] = React.useState<OpenExpertDetails | null>(null)
   const promptLock = React.useRef(false)
   const [copiedSlug, setCopiedSlug] = React.useState<string | null>(null)
   const copiedResetTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const saving = React.useRef(false)
   const [isSaving, setIsSaving] = React.useState(false)
-  const [source, setSource] = React.useState<'all' | 'base' | 'custom'>('all')
+  const [source, setSource] = React.useState<'all' | ExpertSource>('all')
   const [editor, setEditor] = React.useState<{ expert?: CustomExpertInput; enabled: boolean; revision: number } | null>(null)
   const [deleting, setDeleting] = React.useState<ExpertView | null>(null)
   const [deleteError, setDeleteError] = React.useState<string | null>(null)
@@ -1207,6 +1267,15 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
 
   const toggle = (slug: string): void => {
     if (state === null || saving.current) return
+    const expert = state.experts.find(item => item.slug === slug)
+    if (expert === undefined) return
+    const health = expertCapabilityHealth(expert, capabilitySnapshot.catalog, capabilitySnapshot.loading, {
+      skills: capabilitySnapshot.skillsLoaded, mcpServers: capabilitySnapshot.mcpLoaded,
+    })
+    if (!canToggleExpert(state.enabled.has(slug), health)) {
+      setError(props.t('capability.missingHint'))
+      return
+    }
     const previous = state
     const next = new Set(state.enabled)
     if (next.has(slug)) next.delete(slug)
@@ -1265,13 +1334,14 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
   if (state === null) {
     nodes.push(React.createElement('div', { key: 'loading', className: 'aag-note' }, props.t('settings.loading')))
   } else {
+    const visibleExperts = state.experts.filter(expert => expert.packageType !== 'team')
     const ordered = initialOrder === null
-      ? sortExpertsByEnabled(state.experts, state.enabled)
-      : sortExpertsByOrder(state.experts, initialOrder)
-    const filtered = filterExperts(ordered.filter(expert => source === 'all' || (source === 'custom' ? expert.custom : !expert.custom)), { query, division })
+      ? sortExpertsByEnabled(visibleExperts, state.enabled)
+      : sortExpertsByOrder(visibleExperts, initialOrder)
+    const filtered = filterExperts(ordered.filter(expert => source === 'all' || expertSource(expert) === source), { query, division })
       .filter(expert => status === '' || state.enabled.has(expert.slug) === (status === 'enabled'))
-    const enabledCount = state.enabled.size
-    const total = state.experts.length
+    const enabledCount = visibleExperts.filter(expert => state.enabled.has(expert.slug)).length
+    const total = visibleExperts.length
     if (state.experts.some(expert => expert.conflict)) nodes.push(React.createElement('div', { key: 'conflicts', className: 'aag-error', role: 'alert' }, props.t('custom.nameConflictHint')))
     const hasFilter = normalizeExpertQuery(query) !== '' || division !== '' || status !== ''
     const resetFilters = (): void => { setSource('all'); setQuery(''); setDivision(''); setStatus(''); setNotice(null) }
@@ -1295,11 +1365,12 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
       React.createElement('div', { className: 'aag-field aag-field-source' },
         React.createElement(CategorySelect, {
           id: 'aag-filter-source', value: source, label: props.t('settings.filter.source'),
-          onChange: (value) => { setSource(value === 'base' || value === 'custom' ? value : 'all'); setNotice(null) },
+          onChange: (value) => { setSource(value === 'base' || value === 'plugin' || value === 'custom' ? value : 'all'); setNotice(null) },
           options: [
             { value: 'all', label: props.t('settings.filter.allSources') },
-            { value: 'base', label: props.t('custom.base') },
-            { value: 'custom', label: props.t('custom.source') },
+            { value: 'base', label: props.t('settings.source.builtin') },
+            { value: 'plugin', label: props.t('settings.source.plugin') },
+            { value: 'custom', label: props.t('settings.source.custom') },
           ],
         })),
       React.createElement('div', { className: 'aag-field aag-field-category' },
@@ -1346,15 +1417,18 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
         const health = expertCapabilityHealth(expert, capabilitySnapshot.catalog, capabilitySnapshot.loading, {
           skills: capabilitySnapshot.skillsLoaded, mcpServers: capabilitySnapshot.mcpLoaded,
         })
+        const sourceKind = expertSource(expert)
+        const blockedFromEnable = !canToggleExpert(enabled, health)
         return React.createElement(LibraryCard, {
           key: expert.slug,
           name: displayName(expert, props.getActive()),
           avatar: React.createElement('img', { className: 'aag-expert-avatar', src: avatar, width: 44, height: 44, loading: 'lazy', decoding: 'async', alt: '' }),
           custom: expert.custom,
-          metadata: React.createElement(React.Fragment, null, React.createElement('span', { className: 'aag-card-category' }, inputTriggerSourceName(expert.division, props.getActive())), expert.conflict ? React.createElement('span', { className: 'aag-custom-badge', title: props.t('custom.nameConflictHint') }, props.t('custom.nameConflict')) : null, expert.custom ? React.createElement('span', { className: 'aag-custom-badge' }, props.t('custom.source')) : null,
+          metadata: React.createElement(React.Fragment, null, React.createElement('span', { className: 'aag-card-category' }, inputTriggerSourceName(expert.division, props.getActive())), expert.conflict ? React.createElement('span', { className: 'aag-custom-badge', title: props.t('custom.nameConflictHint') }, props.t('custom.nameConflict')) : null, React.createElement('span', { className: 'aag-source-badge', 'data-source': sourceKind }, props.t(sourceKind === 'plugin' ? 'settings.source.plugin' : sourceKind === 'custom' ? 'settings.source.custom' : 'settings.source.builtin'), sourceKind === 'plugin' && expert.packageVersion ? ` · v${expert.packageVersion}` : ''),
             health.total > 0 ? React.createElement('span', { className: 'aag-custom-badge', 'data-health': health.state }, props.t(`capability.health.${health.state}`), ` · ${health.ready}/${health.total}`) : null),
           description: displayDescription(expert, props.getActive()),
-          enabled, disabled: isSaving || expert.conflict === true,
+          enabled, disabled: isSaving || expert.conflict === true || blockedFromEnable,
+          disabledReason: blockedFromEnable ? props.t('capability.missingHint') : undefined,
           enabledLabel: props.t('settings.enabled'), disabledLabel: props.t('settings.disabled'),
           toggle: () => toggle(expert.slug),
           moreItems: [
@@ -1362,8 +1436,8 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
             ...(expert.custom ? [{ id: 'delete', label: props.t('custom.delete'), danger: true, disabled: isSaving, onSelect: () => { setDeleting(expert); setDeleteError(null) } }] : []),
           ],
           actions: React.createElement(React.Fragment, null,
-            React.createElement('button', { type: 'button', className: 'aag-card-action', title: props.t('settings.viewPromptTitle'), 'aria-label': props.t('settings.viewPromptTitle'), 'aria-haspopup': 'dialog', onClick: (event: React.MouseEvent<HTMLButtonElement>) => viewPrompt(expert, event.currentTarget) },
-              React.createElement(Eye, { size: 18, strokeWidth: 1.7, 'aria-hidden': true }), props.t('settings.viewPrompt')),
+            React.createElement('button', { type: 'button', className: 'aag-card-action', title: props.t('settings.details'), 'aria-label': props.t('settings.details'), 'aria-haspopup': 'dialog', onClick: (event: React.MouseEvent<HTMLButtonElement>) => setDetails({ expert, returnFocus: event.currentTarget }) },
+              React.createElement(Info, { size: 18, strokeWidth: 1.7, 'aria-hidden': true }), props.t('settings.details')),
             React.createElement('button', { type: 'button', className: 'aag-card-action aag-card-action-primary', title: copiedSlug === expert.slug ? props.t('settings.copySuccess') : props.t('settings.copyPromptTitle'), 'aria-label': copiedSlug === expert.slug ? props.t('settings.copySuccess') : props.t('settings.copyPromptTitle'), onClick: () => copyPrompt(expert) },
               React.createElement(Copy, { size: 18, strokeWidth: 1.7, 'aria-hidden': true }), copiedSlug === expert.slug ? props.t('settings.copySuccess') : props.t('settings.copyPrompt'))),
         })
@@ -1383,11 +1457,23 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
     }),
     openPrompt === null ? null : React.createElement(PromptDialog, {
       value: openPrompt, title: props.t('settings.promptTitle', { name: openPrompt.name }), closeLabel: props.t('settings.promptClose'), returnFocus: openPrompt.returnFocus, onClose: () => setOpenPrompt(null),
+    }),
+    details === null ? null : React.createElement(ExpertDetailsDrawer, {
+      value: details,
+      health: expertCapabilityHealth(details.expert, capabilitySnapshot.catalog, capabilitySnapshot.loading, {
+        skills: capabilitySnapshot.skillsLoaded, mcpServers: capabilitySnapshot.mcpLoaded,
+      }),
+      locale: props.getActive(),
+      t: props.t,
+      avatar: EXPERT_AVATAR_URLS[details.expert.custom ? details.expert.avatar ?? 0 : expertAvatarIndexForDivision(details.expert.slug, details.expert.division)] ?? EXPERT_AVATAR_URLS[0],
+      close: () => setDetails(null),
+      viewPrompt: () => { const current = details; setDetails(null); viewPrompt(current.expert, current.returnFocus) },
+      manageConnectors: props.onOpenConnectors === undefined ? undefined : () => { setDetails(null); props.onOpenConnectors?.() },
     }))
 }
 
 export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCardsSettings> & {
-  prepareTeamSelection(): (team: ExpertTeam, example?: string) => boolean | Promise<boolean>
+  prepareTeamSelection(): (team: TeamReferenceTarget, example?: string) => boolean | Promise<boolean>
   skillsApi: ReturnType<typeof createDesktopSkillsApi>
   mcpApi: ReturnType<typeof createDesktopMcpApi>
   skillsT: (key: string, params?: Record<string, unknown>) => string
@@ -1404,7 +1490,7 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
   const capabilityUsage = React.useMemo(() => {
     const skills = new Map<string, number>()
     const mcp = new Map<string, number>()
-    for (const expert of expertCatalog.experts) {
+    for (const expert of expertCatalog.experts.filter(item => item.packageType !== 'team')) {
       for (const name of new Set(expert.skills.map(binding => binding.name))) skills.set(name, (skills.get(name) ?? 0) + 1)
       for (const name of new Set(expert.mcpServers.map(binding => binding.name))) mcp.set(name, (mcp.get(name) ?? 0) + 1)
     }
@@ -1451,9 +1537,10 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
     React.createElement('div', { className: 'aag-library-sticky' },
       React.createElement('div', { className: 'aag-library-navigation' }, navigation)),
     React.createElement('div', { className: 'aag-library-content' },
-      React.createElement('div', { className: 'aag-library-panel', id: 'aag-library-panel-experts', role: 'tabpanel', 'aria-labelledby': 'aag-library-tab-experts', hidden: view !== 'experts' }, React.createElement(ExpertCardsSettings, { ...props, capabilityRegistry: settingsCapabilityRegistry, sharedHeader: true })),
+      React.createElement('div', { className: 'aag-library-panel', id: 'aag-library-panel-experts', role: 'tabpanel', 'aria-labelledby': 'aag-library-tab-experts', hidden: view !== 'experts' }, React.createElement(ExpertCardsSettings, { ...props, capabilityRegistry: settingsCapabilityRegistry, sharedHeader: true, onOpenConnectors: () => setView('mcp') })),
       React.createElement('div', { className: 'aag-library-panel', id: 'aag-library-panel-teams', role: 'tabpanel', 'aria-labelledby': 'aag-library-tab-teams', hidden: view !== 'teams' }, React.createElement(TeamLocaleContext.Provider, { value: props.getActive() }, React.createElement(TeamsPanel, {
-        remote: props.remote as TeamRemote, sharedHeader: true, prepareSelect: props.prepareTeamSelection,
+        remote: props.remote as TeamRemote, sharedHeader: true, prepareSelect: props.prepareTeamSelection, preparePluginSelect: props.prepareTeamSelection,
+        onOpenConnectors: () => setView('mcp'),
         onExpertsChanged: () => { void readEnabled(props.remote).then(value => props.onEnabledChange?.(value.enabled)) },
       }))),
       React.createElement('div', { className: 'aag-library-panel', id: 'aag-library-panel-skills', role: 'tabpanel', 'aria-labelledby': 'aag-library-tab-skills', hidden: view !== 'skills' }, React.createElement(SkillsSettingsSection, {
@@ -1557,8 +1644,8 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
     }, reference, example, span, t('discovery.exampleFailed'))
   }
   // 同一缓存供工具栏和 @ 标签使用，语言切换不丢失已插入团队名称。
-  let teamCache: ExpertTeam[] = []
-  const insertTeamTask = async (current: ReferenceInsertionTarget | undefined, team: ExpertTeam, example?: string, sessionId?: SessionId, span?: TokenSpan): Promise<boolean> => {
+  let teamCache: TeamReferenceTarget[] = []
+  const insertTeamTask = async (current: ReferenceInsertionTarget | undefined, team: TeamReferenceTarget, example?: string, sessionId?: SessionId, span?: TokenSpan): Promise<boolean> => {
     if (!current) return false
     teamCache = [...teamCache.filter(item => item.id !== team.id), team]
     const sessions = ctx.sessions as unknown as ReferenceSessionAccess
@@ -1572,7 +1659,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
     readonly insertReference: (reference: ReferenceInsert) => boolean
     readonly insertSkill: (name: string) => boolean
     readonly prepareInsertion: () => (reference: ReferenceInsert) => boolean
-    readonly prepareTeamSelection: () => (team: ExpertTeam, example?: string) => boolean | Promise<boolean>
+    readonly prepareTeamSelection: () => (team: TeamReferenceTarget, example?: string) => boolean | Promise<boolean>
     readonly capabilityRegistry: ExpertCapabilityRegistry
   } => {
     const target = (): ReferenceInsertionTarget | undefined => resolveTarget(sessionId)
@@ -1636,8 +1723,12 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
           const cached = teamState(teamRemote)
           const snapshot = cached ?? await refreshTeams(teamRemote)
           if (cached) void refreshTeams(teamRemote).catch((error: unknown) => console.warn('[clawclaw-experts] 专家团刷新失败：', error))
-          teamCache = snapshot.teams.map(team => localizeTeam(team, active))
-          return teamCache.filter(team => snapshot.enabledTeams.includes(team.id) && `${team.name} ${team.description}`.toLowerCase().includes(String(request.query ?? '').toLowerCase())).map(team => ({ name: `${team.name} · ${teamText(active, '专家团')}`, hint: team.id, section: teamText(active, '专家团') }))
+          const pluginSnapshot = typeof teamRemote.getPluginTeams === 'function' ? await unwrap(teamRemote.getPluginTeams()) : undefined
+          teamCache = [
+            ...snapshot.teams.filter(team => snapshot.enabledTeams.includes(team.id)).map(team => localizeTeam(team, active)),
+            ...(pluginSnapshot?.teams.filter(team => team.enabled).map(team => ({ id: team.id, name: team.name, examples: team.quickPrompts })) ?? []),
+          ]
+          return teamCache.filter(team => `${team.name}`.toLowerCase().includes(String(request.query ?? '').toLowerCase())).map(team => ({ name: `${team.name} · ${teamText(active, '专家团')}`, hint: team.id, section: teamText(active, '专家团') }))
         },
         onPick: pick => {
           const team = teamCache.find(team => team.id === pick.candidate.hint)
@@ -1650,10 +1741,14 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
         codec: {
           clipboardText: id => teamText(active, '@专家团：{0}\u00a0', [teamCache.find(team => team.id === id)?.name ?? teamText(active, '已移除团队（请重新选择）')]),
           serialize: async id => {
-            const [snapshot, catalog] = await Promise.all([refreshTeams(teamRemote), unwrap(teamRemote.getCatalog())])
-            teamCache = snapshot.teams.map(team => localizeTeam(team, active))
+            const [snapshot, catalog, pluginSnapshot] = await Promise.all([refreshTeams(teamRemote), unwrap(teamRemote.getCatalog()), typeof teamRemote.getPluginTeams === 'function' ? unwrap(teamRemote.getPluginTeams()) : Promise.resolve(undefined)])
+            teamCache = [
+              ...snapshot.teams.filter(team => snapshot.enabledTeams.includes(team.id)).map(team => localizeTeam(team, active)),
+              ...(pluginSnapshot?.teams.filter(team => team.enabled).map(team => ({ id: team.id, name: team.name, examples: team.quickPrompts })) ?? []),
+            ]
             const team = teamCache.find(team => team.id === id)
-            if (!team || !snapshot.enabledTeams.includes(id) || team.members.some(member => !catalog.enabled.includes(member.expertSlug) || !catalog.experts.some(e => e.slug === member.expertSlug && !e.conflict))) throw new Error(teamText(active, '团队已停用或成员失效，请修复后再发送。'))
+            const legacy = snapshot.teams.find(candidate => candidate.id === id)
+            if (!team || (legacy !== undefined && (!snapshot.enabledTeams.includes(id) || legacy.members.some(member => !catalog.enabled.includes(member.expertSlug) || !catalog.experts.some(e => e.slug === member.expertSlug && !e.conflict))))) throw new Error(teamText(active, '团队已停用或成员失效，请修复后再发送。'))
             return teamSubmissionText(team, active)
           },
         },
@@ -1675,7 +1770,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
             await scopedCapabilities.refresh(true)
             const capabilityState = scopedCapabilities.getSnapshot()
             return current.experts
-              .filter((e) => e.division === div && enabled.has(e.slug) && (q === '' || matchExpertQuery(e, q))
+              .filter((e) => e.packageType !== 'team' && e.division === div && enabled.has(e.slug) && (q === '' || matchExpertQuery(e, q))
                 && expertCapabilityHealth(e, capabilityState.catalog, capabilityState.loading, {
                   skills: capabilityState.skillsLoaded, mcpServers: capabilityState.mcpLoaded,
                 }).state !== 'blocked')

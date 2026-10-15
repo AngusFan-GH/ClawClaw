@@ -10,7 +10,7 @@ import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-tools'
 import { registerDesktopJsonApi } from './desktop-json-api.ts'
 import {
-  DESKTOP_MCP_ACTION_PATH, DESKTOP_MCP_OAUTH_CALLBACK_PATH, DESKTOP_MCP_PATH,
+  DESKTOP_MCP_ACTION_PATH, DESKTOP_MCP_LIFECYCLE_SERVICE, DESKTOP_MCP_OAUTH_CALLBACK_PATH, DESKTOP_MCP_PATH,
   type DesktopMcpServerConfig, type DesktopMcpServerView, type DesktopMcpView,
 } from './mcp-contract.ts'
 import { DESKTOP_MCP_CATALOG, type DesktopMcpCatalogDefinition } from './mcp-catalog.ts'
@@ -704,6 +704,7 @@ export function apply(ctx: Context): void {
     { applies: 'live', validate: validateSettings })
   const controller = new DesktopMcpController(ctx, settings)
   controller.start()
+  ctx.reflect.provide(DESKTOP_MCP_LIFECYCLE_SERVICE, controller)
   ctx.effect(() => () => controller.dispose(), 'dsh-plugin-desktop: MCP runtimes')
   const rendererOrigin = `http://127.0.0.1:${String(ctx.webServer.port)}`
   registerDesktopJsonApi(ctx, { label: 'MCP', readPath: DESKTOP_MCP_PATH, actionPath: DESKTOP_MCP_ACTION_PATH,

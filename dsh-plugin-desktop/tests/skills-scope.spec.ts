@@ -114,12 +114,16 @@ describe('Skill discovery scope', () => {
       expect((await a.read()).skills.filter(skill => skill.source !== 'bundled')).toHaveLength(0)
       expect((await b.read()).skills.filter(skill => skill.source !== 'bundled')).toHaveLength(0)
       const bundled = (await a.read()).skills.filter(skill => skill.source === 'bundled')
-      expect(bundled).toHaveLength(7)
+      expect(bundled).toHaveLength(8)
       expect(bundled.map(skill => skill.name)).toEqual(expect.arrayContaining([
         'business-operations', 'content-production', 'data-analysis', 'evidence-research',
         'product-design-review', 'risk-compliance-review', 'software-delivery',
+        'expert-manager',
       ]))
       expect(bundled).toContainEqual(expect.objectContaining({ name: 'software-delivery', editable: false }))
+      const expertManager = await a.detail('expert-manager')
+      expect(expertManager.content).toContain('$DSH_HOME/plugins/marketplaces/my-experts')
+      expect(expertManager.content).toContain('~/.clawclaw/data/plugins/marketplaces/my-experts/plugins')
       const install = async (root: string, name: string, content: string) => {
         const directory = join(root, name)
         await mkdir(directory, { recursive: true })

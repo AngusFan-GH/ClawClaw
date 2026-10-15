@@ -1,0 +1,8 @@
+{
+  "id": "skill-expert-manager",
+  "version": "5.7.6-wb.40488862.g3e43260f.he0b77ffa23f7",
+  "license": "Apache-2.0",
+  "origin": "WorkBuddy expert-manager resource",
+  "importedAt": "2026-10-15",
+  "adaptation": "ClawClaw-owned derivative using DSH_HOME and ClawClaw data paths; not a byte-for-byte upstream mirror"
+}

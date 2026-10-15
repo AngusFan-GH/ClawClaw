@@ -2,6 +2,7 @@ import { teamInputSchema, teamSnapshotSchema } from './team-contract.js'
 import type { InvocationDescriptor, InvocationParameterDescriptor, TypertCodec } from '@deepseek-ai/dsh-typert-protocol'
 import { z } from 'zod'
 import { CUSTOM_EXPERT_SLUG, catalogSnapshotSchema, customExpertInputSchema, expertEditSchema } from './expert-contract.js'
+import { pluginTeamSnapshotSchema } from './plugin-team-contract.js'
 
 const enabledArraySchema = z.array(z.string())
 const enabledStateSchema = z.object({
@@ -40,6 +41,32 @@ const customSlugParameter = jsonParameter('slug', 'string', z.string().regex(CUS
 
 /** Host 与 Client 共用的专家启用状态 Remote 严格契约。 */
 export const AGENCY_AGENTS_DESCRIPTORS = [
+  {
+    id: 'dsh-plugin-desktop/experts#agencyAgents/getPluginTeams', service: 'agencyAgents', namespace: 'agencyAgents', method: 'getPluginTeams',
+    invocation: { kind: 'direct' }, parameters: [], result: strictCodec('AgencyPluginTeamsSnapshot', pluginTeamSnapshotSchema),
+  },
+  {
+    id: 'dsh-plugin-desktop/experts#agencyAgents/setPluginTeamEnabled', service: 'agencyAgents', namespace: 'agencyAgents', method: 'setPluginTeamEnabled',
+    invocation: { kind: 'direct' }, parameters: [jsonParameter('id', 'string', z.string().startsWith('plugin-team:')), jsonParameter('enabled', 'boolean', z.boolean()), revisionParameter],
+    result: strictCodec('AgencyPluginTeamsSnapshot', pluginTeamSnapshotSchema),
+  },
+  ...[
+    {
+      method: 'setPluginTeamConnectorEnabled',
+      parameters: [jsonParameter('id', 'string', z.string().startsWith('plugin-team:')), jsonParameter('dependency', 'string', z.string().min(1)), jsonParameter('enabled', 'boolean', z.boolean())],
+    },
+    {
+      method: 'testPluginTeamConnector',
+      parameters: [jsonParameter('id', 'string', z.string().startsWith('plugin-team:')), jsonParameter('dependency', 'string', z.string().min(1))],
+    },
+    {
+      method: 'installPluginTeamConnector',
+      parameters: [jsonParameter('id', 'string', z.string().startsWith('plugin-team:')), jsonParameter('dependency', 'string', z.string().min(1)), jsonParameter('values', 'Record<string,string>', z.record(z.string(), z.string()))],
+    },
+  ].map(({ method, parameters }): InvocationDescriptor => ({
+    id: `dsh-plugin-desktop/experts#agencyAgents/${method}`, service: 'agencyAgents', namespace: 'agencyAgents', method,
+    invocation: { kind: 'direct' }, parameters, result: strictCodec('AgencyPluginTeamsSnapshot', pluginTeamSnapshotSchema),
+  })),
   ...[
     { method: 'getTeams', parameters: [] },
     { method: 'saveTeam', parameters: [jsonParameter('team', 'ExpertTeamInput', teamInputSchema), jsonParameter('enabled', 'boolean', z.boolean()), revisionParameter] },

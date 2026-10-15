@@ -2,10 +2,10 @@
 import { teamText, type TeamLocale } from '../team-i18n.js';
 import { confirmTeamAction } from './team-confirmation.js';
 import type { ReferenceInsert, TokenSpan, } from '@deepseek-ai/dsh-client-ui-input-trigger/client';
-import type { ExpertTeam } from '../team-contract.js';
 import { expertDetectText, insertExpertReference, type ReferenceInsertionTarget, } from './index.js';
 export const TEAM_REFERENCE_SOURCE = 'clawclaw-experts:teams';
-export const teamReference = (team: ExpertTeam, locale: TeamLocale = 'zh'): ReferenceInsert => ({
+export interface TeamReferenceTarget { readonly id: string; readonly name: string; readonly examples?: readonly string[] }
+export const teamReference = (team: TeamReferenceTarget, locale: TeamLocale = 'zh'): ReferenceInsert => ({
     source: TEAM_REFERENCE_SOURCE,
     ref: team.id,
     label: team.name,
@@ -17,9 +17,9 @@ export const teamReference = (team: ExpertTeam, locale: TeamLocale = 'zh'): Refe
  * every unknown @ token as a workspace file and makes it openable. Keep the
  * composer chip's @ projection above, but serialize a distinct team marker.
  */
-export const teamSubmissionText = (team: Pick<ExpertTeam, 'name'>, locale: TeamLocale = 'zh'): string => teamText(locale, '[专家团：{0}]\u00A0', [team.name]);
+export const teamSubmissionText = (team: Pick<TeamReferenceTarget, 'name'>, locale: TeamLocale = 'zh'): string => teamText(locale, '[专家团：{0}]\u00A0', [team.name]);
 /** 团队只保留一个原生标签；替换需要明确操作，正文和附件不清空。 */
-export async function insertTeamReference(target: ReferenceInsertionTarget | undefined, team: ExpertTeam, example?: string, triggerSpan?: TokenSpan, locale: TeamLocale = 'zh', confirm = confirmTeamAction): Promise<boolean> {
+export async function insertTeamReference(target: ReferenceInsertionTarget | undefined, team: TeamReferenceTarget, example?: string, triggerSpan?: TokenSpan, locale: TeamLocale = 'zh', confirm = confirmTeamAction): Promise<boolean> {
     const tx = (key: string, values?: readonly unknown[]) => teamText(locale, key, values);
     if (!target)
         return false;
@@ -58,7 +58,7 @@ export async function insertTeamReference(target: ReferenceInsertionTarget | und
         target.notify?.('error', tx('草稿已变化，请重新选择专家团。'));
         return false;
     }
-    const selected = insertExpertReference(target, teamReference(team, locale), body === '' ? (example ?? team.examples[0]) : undefined, span, tx("专家团已选择，但示例填入失败，请补充任务。"));
+    const selected = insertExpertReference(target, teamReference(team, locale), body === '' ? (example ?? team.examples?.[0]) : undefined, span, tx("专家团已选择，但示例填入失败，请补充任务。"));
     if (selected && append) {
         setTimeout(() => {
             try {

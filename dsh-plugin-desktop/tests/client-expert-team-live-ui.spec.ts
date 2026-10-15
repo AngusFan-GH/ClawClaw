@@ -18,6 +18,11 @@ const capabilitySnapshot = Object.freeze({
   loading: false,
   revision: 1,
 })
+const pluginCapabilitySnapshot = Object.freeze({
+  ...capabilitySnapshot,
+  skillsLoaded: true,
+  mcpLoaded: true,
+})
 
 let root: Root | undefined
 afterEach(async () => {
@@ -35,7 +40,6 @@ describe('expert team live UI state', () => {
     const host = document.createElement('div')
     document.body.append(host)
     root = createRoot(host)
-
     await act(async () => root!.render(React.createElement(ExpertCardsSettings, {
       remote,
       getActive: () => 'zh',
@@ -78,5 +82,62 @@ describe('expert team live UI state', () => {
 
     expect(host.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true')
     expect(host.textContent).toContain('已启用')
+  })
+
+  it('shows package provenance and blocks enable while a required connector is missing', async () => {
+    const remote = {
+      getEnabled: vi.fn(async () => ({ ok: true, value: { enabled: [], revision: 1 } })),
+    } as unknown as TeamRemote
+    acceptCatalog(remote, { experts: [{
+      ...expert,
+      slug: 'plugin-reviewer',
+      packageFormat: 'clawclaw-plugin',
+      packageVersion: '1.4.0',
+      packageType: 'agent',
+      mcpServers: [{ name: 'private-docs', required: true, enabled: true }],
+    }], enabled: [], revision: 1 })
+    const host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+
+    await act(async () => root!.render(React.createElement(ExpertCardsSettings, {
+      remote,
+      getActive: () => 'en',
+      t: ((key: string) => ({
+        'settings.enabled': 'Enabled',
+        'settings.disabled': 'Disabled',
+        'settings.filter.source': 'Source',
+        'settings.filter.allSources': 'All sources',
+        'settings.source.builtin': 'Built-in',
+        'settings.source.plugin': 'Plugin',
+        'settings.source.custom': 'Custom',
+        'settings.filter.category': 'Category',
+        'settings.filter.allCategories': 'All categories',
+        'settings.filter.status': 'Status',
+        'settings.filter.allStatuses': 'All statuses',
+        'settings.search': 'Search',
+        'settings.search.placeholder': 'Search',
+        'settings.search.clear': 'Clear',
+        'custom.new': 'New expert',
+        'custom.copy': 'Copy',
+        'settings.details': 'Details',
+        'settings.copyPromptTitle': 'Copy prompt',
+        'settings.copyPrompt': 'Copy',
+        'capability.health.blocked': 'Required capability missing',
+        'capability.missingHint': 'Configure required capabilities first.',
+      } as Record<string, string>)[key] ?? key) as never,
+      capabilityRegistry: {
+        subscribe: () => () => {},
+        getSnapshot: () => pluginCapabilitySnapshot,
+      } as never,
+      sharedHeader: true,
+    } as unknown as React.ComponentProps<typeof ExpertCardsSettings>)))
+
+    const source = host.querySelector('[data-source="plugin"]')
+    const toggle = host.querySelector<HTMLButtonElement>('[role="switch"]')
+    expect(source?.textContent).toBe('Plugin · v1.4.0')
+    expect(host.textContent).toContain('Required capability missing · 0/1')
+    expect(toggle?.disabled).toBe(true)
+    expect(toggle?.getAttribute('title')).toBe('Configure required capabilities first.')
   })
 })

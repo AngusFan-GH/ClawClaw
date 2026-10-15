@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CUSTOM_EDITOR_CSS } from '../src/experts/client/custom-editor.ts'
 import { customEn, customZh } from '../src/experts/client/custom-locales.ts'
-import { CAPABILITY_PICKER_CSS, CARD_SETTINGS_CSS, connectorStateLabel } from '../src/experts/client/index.ts'
+import { CAPABILITY_PICKER_CSS, CARD_SETTINGS_CSS, canToggleExpert, connectorStateLabel, expertSource } from '../src/experts/client/index.ts'
 import { TEAM_CSS } from '../src/experts/client/team-style.ts'
 
 describe('expert library UI', () => {
@@ -35,6 +35,20 @@ describe('expert library UI', () => {
     expect(CARD_SETTINGS_CSS).toContain('column-gap:4px;row-gap:2px')
     expect(CARD_SETTINGS_CSS).toContain('.aag-expert-card-custom .aag-card-category{flex:none')
     expect(CARD_SETTINGS_CSS).toContain('.aag-expert-card-custom .aag-card-description{min-height:19px;-webkit-line-clamp:1}')
+  })
+
+  it('distinguishes ClawClaw plugin packages without treating them as custom experts', () => {
+    expect(expertSource({ custom: false, packageFormat: 'clawclaw-plugin' })).toBe('plugin')
+    expect(expertSource({ custom: true })).toBe('custom')
+    expect(expertSource({ custom: false })).toBe('base')
+    expect(CARD_SETTINGS_CSS).toContain('.aag-source-badge[data-source="plugin"]')
+    expect(CARD_SETTINGS_CSS).toContain('.aag-expert-details{')
+  })
+
+  it('blocks enabling when a required capability is missing but still permits disabling', () => {
+    const blocked = { state: 'blocked', ready: 0, total: 1, issues: [{ type: 'mcp', name: 'docs', required: true, state: 'missing' }] } as const
+    expect(canToggleExpert(false, blocked)).toBe(false)
+    expect(canToggleExpert(true, blocked)).toBe(true)
   })
 
   it('keeps the conversation connector picker compact and responsive', () => {

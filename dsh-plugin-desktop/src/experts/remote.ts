@@ -11,6 +11,8 @@ import { AGENCY_PERSONA_SERVICE, type AgencyPersonaSource } from './index.js'
 import { formatHost, readHostLocale } from './i18n.js'
 import { AGENCY_LIBRARY_SERVICE, type AgencyExpertLibrary } from './expert-library.js'
 import type { CatalogSnapshot, CustomExpertInput } from './expert-contract.js'
+import { AGENCY_PLUGIN_TEAM_SERVICE, type AgencyPluginTeamLibrary } from './plugin-team-library.js'
+import type { PluginTeamSnapshot } from './plugin-team-contract.js'
 
 export { readExpertPrompt, readLocalizedExpertPrompt } from './index.js'
 
@@ -49,6 +51,24 @@ export default class AgencyAgentsRemote extends TypertRemoteService {
     const library = this.ctx.get(AGENCY_TEAM_SERVICE) as AgencyTeamLibrary | undefined
     if (!library) throw new Error(teamText(readHostLocale(this.ctx), '专家团服务不可用，请重新加载插件。'))
     return library
+  }
+  private pluginTeams(): AgencyPluginTeamLibrary {
+    const library = this.ctx.get(AGENCY_PLUGIN_TEAM_SERVICE) as AgencyPluginTeamLibrary | undefined
+    if (!library) throw new Error('Plugin Team service is unavailable. Reload the plugin.')
+    return library
+  }
+  async getPluginTeams(): Promise<PluginTeamSnapshot> { return this.pluginTeams().snapshot() }
+  async setPluginTeamEnabled(id: string, enabled: boolean, expectedRevision: number): Promise<PluginTeamSnapshot> {
+    return this.pluginTeams().setEnabled(id, enabled, expectedRevision)
+  }
+  async setPluginTeamConnectorEnabled(id: string, dependency: string, enabled: boolean): Promise<PluginTeamSnapshot> {
+    return this.pluginTeams().setConnectorEnabled(id, dependency, enabled)
+  }
+  async testPluginTeamConnector(id: string, dependency: string): Promise<PluginTeamSnapshot> {
+    return this.pluginTeams().testConnector(id, dependency)
+  }
+  async installPluginTeamConnector(id: string, dependency: string, values: Readonly<Record<string, string>>): Promise<PluginTeamSnapshot> {
+    return this.pluginTeams().installConnector(id, dependency, values)
   }
   async getTeams(): Promise<TeamSnapshot> {
     const snapshot = await this.teams().snapshot()
@@ -108,6 +128,11 @@ Object.defineProperty(AgencyAgentsRemote.prototype, '@deepseek-ai/dsh-typert-pro
     version: 1,
     methods: Object.freeze([
       'getTeams',
+      'getPluginTeams',
+      'setPluginTeamEnabled',
+      'setPluginTeamConnectorEnabled',
+      'testPluginTeamConnector',
+      'installPluginTeamConnector',
       'saveTeam',
       'setTeamEnabled',
       'deleteTeam',

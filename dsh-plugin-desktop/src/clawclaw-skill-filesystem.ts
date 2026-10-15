@@ -133,7 +133,8 @@ export class ClawClawProjectSkillProvider implements SkillProvider {
     const bundledCandidates = 'candidates' in bundled ? bundled.candidates : bundled
     const projectCandidates = 'candidates' in project ? project.candidates : project
     const externalCandidates = 'candidates' in external ? external.candidates : external
-    const complete = (!('candidates' in bundled) || bundled.complete) && (!('candidates' in project) || project.complete)
+    const complete = (!('candidates' in bundled) || bundled.complete)
+      && (!('candidates' in project) || project.complete)
     const externalComplete = !('candidates' in external) || external.complete
     const candidates = [...bundledCandidates, ...projectCandidates, ...externalCandidates]
     return complete && externalComplete ? candidates : { candidates, complete: false }
@@ -146,7 +147,12 @@ export class ClawClawProjectSkillProvider implements SkillProvider {
       && this.external?.provider !== locator.owner)) return undefined
     const definition = await locator.owner.get(locator.candidate, options)
     if (definition === undefined) return undefined
-    return { ...definition, source: locator.source, provider: this.name }
+    return {
+      ...definition,
+      content: definition.content,
+      source: locator.source,
+      provider: this.name,
+    }
   }
 
   async dispose(): Promise<void> {

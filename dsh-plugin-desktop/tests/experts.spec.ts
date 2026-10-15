@@ -8,6 +8,7 @@ import { builtinExpertCapabilities } from '../src/experts/builtin-capabilities.t
 import { BUILTIN_TEAMS } from '../src/experts/team-contract.ts'
 import {
   DEFAULT_DIVISIONS,
+  clawClawPluginLibraryRoot,
   loadCatalog,
   readLocalizedExpertPrompt,
   resolveExpertComposition,
@@ -57,6 +58,11 @@ function nativeService(): NativeTeamService {
 }
 
 describe('ClawClaw experts', () => {
+  it('keeps expert plugin packages in the ClawClaw data directory', () => {
+    expect(clawClawPluginLibraryRoot('/clawclaw-data')).toBe('/clawclaw-data/plugins/marketplaces')
+    expect(clawClawPluginLibraryRoot('/clawclaw-data')).toBe('/clawclaw-data/plugins/marketplaces')
+  })
+
   it('includes expert and skill assets in Electron packages and the afterPack gate', async () => {
     const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as {
       build?: { files?: string[] }
@@ -69,6 +75,7 @@ describe('ClawClaw experts', () => {
       'assets/experts/catalog/engineering/engineering-software-architect.md',
       'assets/experts/catalog-zh/engineering/engineering-software-architect.md',
       'assets/skills/software-delivery/SKILL.md',
+      'assets/skills/expert-manager/SKILL.md',
     ]))
   })
 

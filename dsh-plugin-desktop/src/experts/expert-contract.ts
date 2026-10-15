@@ -51,6 +51,12 @@ export const expertSummarySchema = z.object({
   custom: z.boolean().default(false), avatar: z.number().int().min(0).max(35).optional(),
   skills: z.array(expertCapabilityBindingSchema).default([]),
   mcpServers: z.array(expertCapabilityBindingSchema).default([]),
+  packageFormat: z.literal('clawclaw-plugin').optional(),
+  packageVersion: z.string().optional(),
+  packageType: z.enum(['agent', 'team']).optional(),
+  packageName: z.string().optional(),
+  packageAgentId: z.string().optional(),
+  packageRole: z.enum(['agent', 'lead', 'member']).optional(),
 })
 export type ExpertSummary = z.infer<typeof expertSummarySchema>
 export const catalogSnapshotSchema = z.object({

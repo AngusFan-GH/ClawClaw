@@ -55,6 +55,10 @@ export async function verifyBundledSkills(applicationRoot: string): Promise<void
         throw new Error(`expert skill is unavailable: ${name}`)
       }
     }
+    if (!snapshot.skills.some(skill => skill.name === 'expert-manager')
+      || !(await ctx.skills.get('expert-manager'))?.content.trim()) {
+      throw new Error('bundled ClawClaw skill is unavailable: expert-manager')
+    }
   } finally {
     await ctx.fiber.dispose()
   }

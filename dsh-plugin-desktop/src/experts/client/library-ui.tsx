@@ -8,6 +8,7 @@ export interface LibraryMenuItem {
   id: string
   label: string
   disabled?: boolean
+  disabledReason?: string
   danger?: boolean
   onSelect(): void
 }
@@ -77,7 +78,7 @@ export function LibraryCard(props: {
             checked={props.enabled}
             disabled={props.disabled}
             aria-label={`${props.name}：${props.enabled ? props.enabledLabel : props.disabledLabel}`}
-            title={props.enabled ? props.enabledLabel : props.disabledLabel}
+            title={props.disabledReason ?? (props.enabled ? props.enabledLabel : props.disabledLabel)}
             onChange={() => props.toggle()}
           />
           <span className="aag-switch-state">

@@ -1,6 +1,7 @@
 export const DESKTOP_MCP_PATH = '/api/desktop/mcp'
 export const DESKTOP_MCP_ACTION_PATH = '/api/desktop/mcp/action'
 export const DESKTOP_MCP_OAUTH_CALLBACK_PATH = '/api/desktop/mcp/oauth/callback'
+export const DESKTOP_MCP_LIFECYCLE_SERVICE = 'desktopMcpLifecycle'
 
 export interface DesktopMcpOAuthConfig {
   /** Optional explicit issuer. When omitted, it is discovered from the MCP protected resource. */

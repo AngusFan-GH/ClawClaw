@@ -9,11 +9,13 @@ import { CategorySelect } from './category-select.js';
 import React from 'react';
 import { effectiveCoordinator, type ExpertTeam, type TeamInput, type TeamSnapshot, } from '../team-contract.js';
 import type { ExpertSummary } from '../expert-contract.js';
-import type { AgencyCatalogRemote, AgencyTeamsRemote } from './remote.js';
+import type { AgencyCatalogRemote, AgencyPluginTeamsRemote, AgencyTeamsRemote } from './remote.js';
+import type { PluginTeamSnapshot, PluginTeamSummary } from '../plugin-team-contract.js';
+import type { TeamReferenceTarget } from './team-reference.js';
 import { TeamEditor } from './team-editor.js';
 import { TeamDialog, TeamConfirm, TeamAvatars, MemberList, Avatar, teamIssue, IconUsers, IconFileText, IconPlus, IconArrowRight, IconBulb, IconCopy, IconSend, IconSearch, IconEye, } from './team-shared.js';
 export { TEAM_CSS } from './team-style.js';
-export type TeamRemote = AgencyCatalogRemote & AgencyTeamsRemote;
+export type TeamRemote = AgencyCatalogRemote & AgencyTeamsRemote & Partial<AgencyPluginTeamsRemote>;
 export async function unwrap<T>(promise: Promise<{
     ok: true;
     value: T;
@@ -108,6 +110,8 @@ export function TeamsPanel(props: {
     remote: TeamRemote;
     prepareSelect?(): (team: ExpertTeam, example?: string) => boolean | Promise<boolean>;
     onSelect?(team: ExpertTeam, example?: string): boolean | Promise<boolean>;
+    preparePluginSelect?(): (team: TeamReferenceTarget, example?: string) => boolean | Promise<boolean>;
+    onOpenConnectors?(): void;
     onExpertsChanged?(): void;
     headerLinks?: React.ReactNode;
     sharedHeader?: boolean;
@@ -120,16 +124,17 @@ export function TeamsPanel(props: {
     const { locale, tx } = useTeamLocale();
 
     const [snapshot, setSnapshot] = React.useState<TeamSnapshot | null>(() => teamState(props.remote));
+    const [pluginSnapshot, setPluginSnapshot] = React.useState<PluginTeamSnapshot | null>(null);
     React.useEffect(() => {
-        props.onSummary?.({ total: snapshot?.teams.length ?? 0, enabled: snapshot?.enabledTeams.length ?? 0 });
-    }, [snapshot?.teams.length, snapshot?.enabledTeams.length, props.onSummary]);
+        props.onSummary?.({ total: (snapshot?.teams.length ?? 0) + (pluginSnapshot?.teams.length ?? 0), enabled: (snapshot?.enabledTeams.length ?? 0) + (pluginSnapshot?.teams.filter(team => team.enabled).length ?? 0) });
+    }, [snapshot?.teams.length, snapshot?.enabledTeams.length, pluginSnapshot, props.onSummary]);
     const [rawExperts, setExperts] = React.useState<ExpertSummary[]>(() => {
         const catalog = catalogState(props.remote);
         return catalog.revision < 0 ? [] : [...catalog.experts];
     });
     const experts = localizedExperts(rawExperts, locale);
     const [query, setQuery] = React.useState('');
-    const [filter, setFilter] = React.useState<'all' | 'builtin' | 'custom'>('all');
+    const [filter, setFilter] = React.useState<'all' | 'builtin' | 'custom' | 'plugin'>('all');
     const [status, setStatus] = React.useState('');
     const [error, setError] = React.useState('');
     const [notice, setNotice] = React.useState('');
@@ -150,6 +155,7 @@ export function TeamsPanel(props: {
     React.useEffect(() => {
         alive.current = true;
         void load();
+        const timer = setInterval(() => { if (!busy) void load(); }, 3000);
         const unsubscribe = subscribeTeams(props.remote, () => {
             if (!alive.current)
                 return;
@@ -162,13 +168,16 @@ export function TeamsPanel(props: {
         return () => {
             alive.current = false;
             sequence.current++;
+            clearInterval(timer);
             unsubscribe();
         };
-    }, [props.remote]);
+    }, [props.remote, busy]);
     const load = async () => {
         const generation = ++sequence.current;
         try {
             const teams = await refreshTeams(props.remote);
+            if (typeof props.remote.getPluginTeams === 'function')
+                setPluginSnapshot(await unwrap(props.remote.getPluginTeams()));
             if (!alive.current)
                 return;
             // 团队缓存通知会推进 sequence，避免旧查询覆盖新快照；专家名册仍要落到当前面板。
@@ -188,6 +197,82 @@ export function TeamsPanel(props: {
         catch (cause) {
             if (alive.current)
                 setError(cause instanceof Error ? tx(cause.message) : tx("加载失败。"));
+        }
+    };
+    const changePlugin = async (id: string, enabled: boolean) => {
+        if (busy || !pluginSnapshot || typeof props.remote.setPluginTeamEnabled !== 'function')
+            return;
+        setBusy(true);
+        setError('');
+        try {
+            setPluginSnapshot(await unwrap(props.remote.setPluginTeamEnabled(id, enabled, pluginSnapshot.revision)));
+            accept(await unwrap(props.remote.getTeams()));
+            props.onExpertsChanged?.();
+        }
+        catch (cause) {
+            setError(cause instanceof Error ? tx(cause.message) : tx("操作失败。"));
+        }
+        finally {
+            setBusy(false);
+        }
+    };
+    const changeConnector = async (team: PluginTeamSummary, dependency: string, action: 'install' | 'enable' | 'disable' | 'test') => {
+        if (busy)
+            return;
+        const connector = team.connectorStates.find(item => item.dependency === dependency);
+        if (!connector)
+            return;
+        if (action === 'install' && connector.credentialsRequired) {
+            props.onOpenConnectors?.();
+            return;
+        }
+        setBusy(true);
+        setError('');
+        try {
+            let next;
+            if (action === 'install' && typeof props.remote.installPluginTeamConnector === 'function')
+                next = await unwrap(props.remote.installPluginTeamConnector(team.id, dependency, {}));
+            else if (action === 'test' && typeof props.remote.testPluginTeamConnector === 'function')
+                next = await unwrap(props.remote.testPluginTeamConnector(team.id, dependency));
+            else if ((action === 'enable' || action === 'disable') && typeof props.remote.setPluginTeamConnectorEnabled === 'function')
+                next = await unwrap(props.remote.setPluginTeamConnectorEnabled(team.id, dependency, action === 'enable'));
+            else
+                throw new Error(tx("当前版本不支持 Connector 生命周期操作。"));
+            setPluginSnapshot(next);
+            setNotice(action === 'test' ? tx("Connector 测试完成。") : tx("Connector 状态已更新。"));
+        }
+        catch (cause) {
+            setError(cause instanceof Error ? tx(cause.message) : tx("操作失败。"));
+        }
+        finally {
+            setBusy(false);
+        }
+    };
+    const selectPlugin = async (team: PluginTeamSummary, example?: string) => {
+        if (busy || !pluginSnapshot)
+            return;
+        setBusy(true);
+        setError('');
+        try {
+            let selected = team;
+            if (!team.enabled && typeof props.remote.setPluginTeamEnabled === 'function') {
+                const next = await unwrap(props.remote.setPluginTeamEnabled(team.id, true, pluginSnapshot.revision));
+                setPluginSnapshot(next);
+                accept(await unwrap(props.remote.getTeams()));
+                selected = next.teams.find(item => item.id === team.id) ?? { ...team, enabled: true };
+                props.onExpertsChanged?.();
+            }
+            const insert = props.preparePluginSelect?.();
+            if (!insert || !(await insert({ id: selected.id, name: selected.name, examples: selected.quickPrompts }, example)))
+                setError(tx("团队已启用，但无法写入当前聊天草稿。请关闭设置后，在聊天的专家团入口选择。"));
+            else
+                setNotice(tx("专家团已加入草稿，确认需求后发送。"));
+        }
+        catch (cause) {
+            setError(cause instanceof Error ? tx(cause.message) : tx("操作失败。"));
+        }
+        finally {
+            setBusy(false);
         }
     };
     const accept = (value: TeamSnapshot) => {
@@ -256,13 +341,16 @@ export function TeamsPanel(props: {
             revision: snapshot!.revision,
         });
     };
-    const filtered = snapshot?.teams.map(team => localizeTeam(team, locale)).filter((team) => (filter === 'all' ||
+    const filtered = snapshot?.teams.map(team => localizeTeam(team, locale)).filter((team) => filter !== 'plugin' && (filter === 'all' ||
         (filter === 'builtin' ? team.builtin : !team.builtin)) &&
         (!status ||
             snapshot.enabledTeams.includes(team.id) === (status === 'enabled')) &&
         `${team.name} ${team.description} ${team.members.map((m) => experts.find((e) => e.slug === m.expertSlug)?.name ?? '').join(' ')}`
             .toLowerCase()
             .includes(query.toLowerCase())) ?? [];
+    const filteredPlugins = pluginSnapshot?.teams.filter(team => (filter === 'all' || filter === 'plugin') &&
+        (!status || team.enabled === (status === 'enabled')) &&
+        `${team.name} ${team.description} ${team.lead.name} ${team.members.map(member => member.name).join(' ')}`.toLowerCase().includes(query.toLowerCase())) ?? [];
     const edit = (team: ExpertTeam) => setEditor({
         value: team,
         enabled: snapshot!.enabledTeams.includes(team.id),
@@ -274,18 +362,19 @@ export function TeamsPanel(props: {
           {!props.sharedHeader && <h2 className="aag-title">{props.title ?? tx("专家团")}</h2>}
           {!props.sharedHeader && props.headerLinks}
           <span className="aag-header-stat">
-            <strong>{snapshot?.teams.length ?? 0}</strong>{tx("个专家团")}</span>
-          <span className="aag-header-stat">{tx("已启用")}<strong>{snapshot?.enabledTeams.length ?? 0}</strong>
+            <strong>{(snapshot?.teams.length ?? 0) + (pluginSnapshot?.teams.length ?? 0)}</strong>{tx("个专家团")}</span>
+          <span className="aag-header-stat">{tx("已启用")}<strong>{(snapshot?.enabledTeams.length ?? 0) + (pluginSnapshot?.teams.filter(team => team.enabled).length ?? 0)}</strong>
           </span>
         </div>
       </div>}
 
       <div className="aag-filters aag-card-filters">
         <div className="aag-field aag-field-source">
-          <CategorySelect id="aag-team-source" label={tx("来源")} value={filter} onChange={(value) => { if (value === 'builtin' || value === 'custom' || value === 'all') setFilter(value) }} options={[
+          <CategorySelect id="aag-team-source" label={tx("来源")} value={filter} onChange={(value) => { if (value === 'builtin' || value === 'custom' || value === 'plugin' || value === 'all') setFilter(value) }} options={[
             { value: 'all', label: tx("全部来源") },
             { value: 'builtin', label: tx("内置") },
             { value: 'custom', label: tx("自定义") },
+            { value: 'plugin', label: 'ClawClaw Plugin' },
           ]}/>
         </div>
         <div className="aag-field aag-field-status">
@@ -314,6 +403,16 @@ export function TeamsPanel(props: {
         </p>)}
       {!snapshot && !error && <p role="status">{tx("正在加载专家团…")}</p>}
       <div className="aag-expert-grid aag-team-grid">
+        {filteredPlugins.map((team) => (<LibraryCard key={team.id} testId="plugin-team-card" name={team.name} avatar={<div className="aag-team-avatar">
+              <div className="agt-stack">{[team.lead, ...team.members].slice(0, 3).map(agent => <Avatar key={agent.slug} expert={experts.find(expert => expert.slug === agent.slug)}/>)}</div>
+            </div>} metadata={<>Plugin Team · v{team.installedVersion} · Lead Runtime</>} description={`${team.description} Lead: ${team.lead.name}; Members: ${team.members.map(member => member.name).join(locale === 'en' ? ', ' : '、')}. Skills: ${team.skills.map(skill => skill.name).join(', ') || '-'}; Connectors: ${team.connectorStates.map(connector => `${connector.dependency} (${connector.state})`).join(', ') || '-'}.`} enabled={team.enabled} disabled={busy || typeof props.remote.setPluginTeamEnabled !== 'function'} enabledLabel={tx("已启用")} disabledLabel={tx("已停用")} toggle={() => void changePlugin(team.id, !team.enabled)} moreItems={team.connectorStates.flatMap(connector => {
+                if (!connector.installed)
+                    return [{ id: `connector-install-${connector.dependency}`, label: connector.credentialsRequired ? tx("配置 Connector：{0}", [connector.dependency]) : tx("安装 Connector：{0}", [connector.dependency]), disabled: busy || (!connector.installable && !connector.credentialsRequired), onSelect: () => connector.credentialsRequired ? props.onOpenConnectors?.() : void changeConnector(team, connector.dependency, 'install') }];
+                return [
+                    { id: `connector-toggle-${connector.dependency}`, label: connector.enabled ? tx("停用 Connector：{0}", [connector.dependency]) : tx("启用 Connector：{0}", [connector.dependency]), disabled: busy, onSelect: () => void changeConnector(team, connector.dependency, connector.enabled ? 'disable' : 'enable') },
+                    { id: `connector-test-${connector.dependency}`, label: tx("测试 Connector：{0}", [connector.dependency]), disabled: busy, onSelect: () => void changeConnector(team, connector.dependency, 'test') },
+                ];
+            })} actions={<><button type="button" className="aag-card-action" disabled={busy} onClick={() => void selectPlugin(team)}><IconSend size={18}/>{tx("召唤专家团")}</button><span className="aag-card-action">{team.lead.name} + {team.members.length}</span></>}/>))}
         {filtered.map((team) => {
             const issue = teamIssue(team, experts, snapshot!.enabledExperts);
             const enabled = snapshot!.enabledTeams.includes(team.id);
@@ -330,7 +429,7 @@ export function TeamsPanel(props: {
                 </>}/>);
         })}
       </div>{' '}
-      {snapshot && !filtered.length && (<div className="aag-empty">
+      {snapshot && !filtered.length && !filteredPlugins.length && (<div className="aag-empty">
           <IconUsers size={40}/>
           <h3>{tx("没有找到专家团")}</h3>
           <p>{tx("换个关键词，或创建自己的专家团。")}</p>
