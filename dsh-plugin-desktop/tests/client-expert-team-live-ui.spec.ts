@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { acceptCatalog } from '../src/experts/client/catalog.ts'
 import { ExpertCardsSettings } from '../src/experts/client/index.ts'
 import { acceptTeamSnapshot } from '../src/experts/client/team-cache.ts'
-import type { TeamRemote } from '../src/experts/client/team-ui.tsx'
+import { TeamLocaleContext } from '../src/experts/client/team-locale.ts'
+import { TeamsPanel, type TeamRemote } from '../src/experts/client/team-ui.tsx'
 
 const expert = {
   slug: 'reviewer', name: '评审专家', nameEn: 'Reviewer',
@@ -29,9 +30,50 @@ afterEach(async () => {
   await act(async () => root?.unmount())
   root = undefined
   document.body.replaceChildren()
+  vi.unstubAllGlobals()
 })
 
 describe('expert team live UI state', () => {
+  it('keeps the settings library management-only instead of summoning a team', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    const team = {
+      id: 'team-review', builtin: true, name: '评审专家团', description: '联合评审', tags: ['评审'],
+      goal: '评审交付物', constraints: '', deliveryRequirements: '输出评审结论',
+      members: [
+        { expertSlug: 'reviewer', duty: '主审', instructions: '检查问题' },
+        { expertSlug: 'writer', duty: '记录', instructions: '整理结论' },
+      ],
+      examples: ['评审当前方案'], coordinatorMode: 'template' as const,
+      coordinatorTemplateId: 'general' as const, coordinatorTemplateVersion: 1 as const, coordinatorPrompt: '',
+    }
+    const writer = { ...expert, slug: 'writer', name: '记录专家', nameEn: 'Writer' }
+    const snapshot = { teams: [team], enabledTeams: ['team-review'], enabledExperts: ['reviewer', 'writer'], revision: 1 }
+    const remote = {
+      getTeams: vi.fn(async () => ({ ok: true, value: snapshot })),
+      getCatalog: vi.fn(async () => ({ ok: true, value: { experts: [expert, writer], enabled: snapshot.enabledExperts, revision: 1 } })),
+    } as unknown as TeamRemote
+    acceptCatalog(remote, { experts: [expert, writer], enabled: snapshot.enabledExperts, revision: 1 })
+    acceptTeamSnapshot(remote, snapshot)
+    const host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+
+    await act(async () => {
+      root!.render(React.createElement(TeamLocaleContext.Provider, { value: 'zh' },
+        React.createElement(TeamsPanel, { remote, sharedHeader: true })))
+      await Promise.resolve()
+    })
+
+    expect(host.textContent).not.toContain('召唤专家团')
+    expect(host.querySelector('[data-testid="team-card"]')?.textContent).toContain('查看详情')
+    const details = [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('查看详情'))
+    await act(async () => details?.click())
+    expect(document.body.textContent).toContain('评审当前方案')
+    expect(document.body.textContent).not.toContain('召唤专家团')
+    expect(document.body.textContent).not.toContain('选择后填入聊天草稿')
+  })
+
   it('updates a mounted expert card directly from a team enable receipt', async () => {
     const remote = {
       getEnabled: vi.fn(async () => ({ ok: true, value: { enabled: [], revision: 1 } })),
@@ -134,7 +176,7 @@ describe('expert team live UI state', () => {
 
     const source = host.querySelector('[data-source="base"]')
     const toggle = host.querySelector<HTMLButtonElement>('[role="switch"]')
-    expect(source?.textContent).toBe('Built-in · v1.4.0')
+    expect(source?.textContent).toBe('Built-in')
     expect(host.textContent).toContain('Required capability missing · 0/1')
     expect(toggle?.disabled).toBe(true)
     expect(toggle?.getAttribute('title')).toBe('Configure required capabilities first.')

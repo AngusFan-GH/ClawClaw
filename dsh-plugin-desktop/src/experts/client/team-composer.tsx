@@ -150,7 +150,7 @@ export function TeamMenu(props: {
         {teams.map((team) => isPluginLeadTeam(team) ? (<div className="agt-compact-row" key={team.id}>
             <button type="button" disabled={busy} onClick={() => void pickPlugin(team)}>
               <div className="agt-stack">{[team.lead, ...team.members].slice(0, 3).map(agent => <Avatar key={agent.expertSlug} expert={experts.find(expert => expert.slug === agent.expertSlug)}/>)}</div>
-              <span>{team.name}</span><small>{tx("内置")} · v{team.packageVersion}{snapshot?.enabledTeams.includes(team.id) ? '' : tx(" · 启用并选择")}</small>
+              <span>{team.name}</span><small>{team.members.length + 1}{tx("人")}{snapshot?.enabledTeams.includes(team.id) ? '' : tx(" · 启用并选择")}</small>
             </button>
           </div>) : (<div className="agt-compact-row" key={team.id}>
             <button type="button" disabled={busy} onClick={() => void pick(team)}>

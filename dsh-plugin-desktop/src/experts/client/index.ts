@@ -1053,8 +1053,7 @@ function ExpertDetailsDrawer(props: {
     React.createElement('dl', { className: 'aag-detail-facts' },
       React.createElement('div', null, React.createElement('dt', null, props.t('settings.filter.source')), React.createElement('dd', null, sourceLabel)),
       React.createElement('div', null, React.createElement('dt', null, props.t('settings.category')), React.createElement('dd', null, inputTriggerSourceName(expert.division, props.locale))),
-      expert.packageFormat === undefined ? null : React.createElement('div', null, React.createElement('dt', null, props.t('settings.packageFormat')), React.createElement('dd', null, 'ClawClaw Plugin')),
-      expert.packageVersion === undefined ? null : React.createElement('div', null, React.createElement('dt', null, props.t('settings.version')), React.createElement('dd', null, expert.packageVersion))),
+      ),
     React.createElement('section', { className: 'aag-detail-section' }, React.createElement('h4', null, `${props.t('capability.skills')} · ${expert.skills.length}`), capabilityList('skill', expert.skills)),
     React.createElement('section', { className: 'aag-detail-section' }, React.createElement('h4', null, `${props.t('capability.connectors')} · ${expert.mcpServers.length}`), capabilityList('mcp', expert.mcpServers)),
     props.health.state === 'blocked' ? React.createElement('p', { className: 'aag-detail-warning', role: 'alert' }, props.t('capability.missingHint')) : null,
@@ -1423,7 +1422,7 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
           name: displayName(expert, props.getActive()),
           avatar: React.createElement('img', { className: 'aag-expert-avatar', src: avatar, width: 44, height: 44, loading: 'lazy', decoding: 'async', alt: '' }),
           custom: expert.custom,
-          metadata: React.createElement(React.Fragment, null, React.createElement('span', { className: 'aag-card-category' }, inputTriggerSourceName(expert.division, props.getActive())), expert.conflict ? React.createElement('span', { className: 'aag-custom-badge', title: props.t('custom.nameConflictHint') }, props.t('custom.nameConflict')) : null, React.createElement('span', { className: 'aag-source-badge', 'data-source': sourceKind }, props.t(sourceKind === 'custom' ? 'settings.source.custom' : 'settings.source.builtin'), sourceKind === 'base' && expert.packageVersion ? ` · v${expert.packageVersion}` : ''),
+          metadata: React.createElement(React.Fragment, null, React.createElement('span', { className: 'aag-card-category' }, inputTriggerSourceName(expert.division, props.getActive())), expert.conflict ? React.createElement('span', { className: 'aag-custom-badge', title: props.t('custom.nameConflictHint') }, props.t('custom.nameConflict')) : null, React.createElement('span', { className: 'aag-source-badge', 'data-source': sourceKind }, props.t(sourceKind === 'custom' ? 'settings.source.custom' : 'settings.source.builtin')),
             health.total > 0 ? React.createElement('span', { className: 'aag-custom-badge', 'data-health': health.state }, props.t(`capability.health.${health.state}`), ` · ${health.ready}/${health.total}`) : null),
           description: displayDescription(expert, props.getActive()),
           enabled, disabled: isSaving || expert.conflict === true || blockedFromEnable,
@@ -1472,7 +1471,6 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
 }
 
 export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCardsSettings> & {
-  prepareTeamSelection(): (team: TeamReferenceTarget, example?: string) => boolean | Promise<boolean>
   skillsApi: ReturnType<typeof createDesktopSkillsApi>
   mcpApi: ReturnType<typeof createDesktopMcpApi>
   skillsT: (key: string, params?: Record<string, unknown>) => string
@@ -1538,7 +1536,7 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
     React.createElement('div', { className: 'aag-library-content' },
       React.createElement('div', { className: 'aag-library-panel', id: 'aag-library-panel-experts', role: 'tabpanel', 'aria-labelledby': 'aag-library-tab-experts', hidden: view !== 'experts' }, React.createElement(ExpertCardsSettings, { ...props, capabilityRegistry: settingsCapabilityRegistry, sharedHeader: true, onOpenConnectors: () => setView('mcp') })),
       React.createElement('div', { className: 'aag-library-panel', id: 'aag-library-panel-teams', role: 'tabpanel', 'aria-labelledby': 'aag-library-tab-teams', hidden: view !== 'teams' }, React.createElement(TeamLocaleContext.Provider, { value: props.getActive() }, React.createElement(TeamsPanel, {
-        remote: props.remote as TeamRemote, sharedHeader: true, prepareSelect: props.prepareTeamSelection, preparePluginSelect: props.prepareTeamSelection,
+        remote: props.remote as TeamRemote, sharedHeader: true,
         onOpenConnectors: () => setView('mcp'),
         onExpertsChanged: () => { void readEnabled(props.remote).then(value => props.onEnabledChange?.(value.enabled)) },
       }))),
@@ -1700,7 +1698,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
       const list = sessions.list?.getSnapshot()
       const initialSessionId = list?.ids.find(id => (list.byId[id]?.retainedBy?.mainView ?? 0) > 0)
       return React.createElement(AgencySettingsPanel, { ...props, remote, getActive, capabilityRegistry: capabilityRegistryFor(initialSessionId as SessionId | undefined), skillsApi, mcpApi, skillsT, mcpT,
-        ...(initialSessionId === undefined ? {} : { initialSessionId }), onEnabledChange: updateEnabledForMentions, prepareTeamSelection: bindExpertInsertion().prepareTeamSelection })
+        ...(initialSessionId === undefined ? {} : { initialSessionId }), onEnabledChange: updateEnabledForMentions })
     },
   ))
 
