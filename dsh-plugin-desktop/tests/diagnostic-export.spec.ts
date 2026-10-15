@@ -115,6 +115,20 @@ describe('exportDiagnosticsZip', () => {
     expect(existsSync(join(root, 'logs'))).toBe(true)
   })
 
+  it('records inherited SpiritX credential presence without exporting its value', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-dx-spiritx-env-'))
+    const secret = 'must-not-appear-in-diagnostics'
+
+    const out = await exportDesktopDiagnostics(root, {
+      appVersion: APP_VERSION,
+      environment: { spiritx_api_key: secret },
+    })
+
+    const info = new AdmZip(out).readAsText('system-info.txt')
+    expect(info).toContain('spiritx-launch-credential: present')
+    expect(info).not.toContain(secret)
+  })
+
   it('includes bounded structured fatal reports in an explicit diagnostic export', async () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-dx-fatal-'))
     const reportPath = writeDesktopFatalReport(join(root, 'crash-evidence', 'fatal'), {

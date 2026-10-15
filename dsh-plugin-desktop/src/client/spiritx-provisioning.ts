@@ -203,6 +203,11 @@ export async function provisionSpiritX(
 ): Promise<string | undefined> {
   const apiKey = rawKey.trim()
   if (apiKey.length === 0) return '请输入 SpiritX API 密钥。'
+  const credentialState = await ctx.remote.credentials.describe([SPIRITX_API_KEY_REF])
+  if (!credentialState.ok) return credentialState.error.message
+  if (credentialState.value[SPIRITX_API_KEY_REF]?.writable === false) {
+    return 'SpiritX API 密钥由启动环境只读提供，无法在 ClawClaw 中替换。请先移除系统环境变量 SPIRITX_API_KEY，完全退出并重新启动 ClawClaw。'
+  }
   const discovered = await discoverSpiritXModels(ctx, apiKey)
   if (!discovered.ok) return discovered.error
   const editedModels = models !== undefined && models.length > 0

@@ -10,6 +10,12 @@ import {
 } from '../src/client/spiritx-provisioning.ts'
 
 describe('SpiritX provisioning', () => {
+  const writableCredential = () => ({
+    describe: vi.fn(async () => ({
+      ok: true, value: { SPIRITX_API_KEY: { configured: false, writable: true } },
+    })),
+  })
+
   it('declares the settings remote required by every save path', () => {
     const entry = readFileSync(new URL('../src/client/index.ts', import.meta.url), 'utf8')
     const topLevelInject = entry.match(/export const inject = \[([\s\S]*?)\]/)?.[1]
@@ -42,7 +48,7 @@ describe('SpiritX provisioning', () => {
     const mutate = vi.fn(async () => ({ ok: true, value: {} }))
     const ensure = vi.fn(async () => {})
     const ctx = {
-      remote: { llm: { discoverModels }, credentials: { set }, settings: { mutate } },
+      remote: { llm: { discoverModels }, credentials: { ...writableCredential(), set }, settings: { mutate } },
       configForms: { describe: () => ({ ensure, getSnapshot: () => ({ view: { namespaces: [
         { ns: 'llm-pi-ai', revision: 2 }, { ns: 'agent-default-model', revision: 7 },
       ] } }) }) },
@@ -76,7 +82,7 @@ describe('SpiritX provisioning', () => {
     const ctx = {
       remote: {
         llm: { discoverModels: vi.fn(async () => ({ ok: true, value: [{ id: 'chat-first' }] })) },
-        credentials: { set }, settings: { mutate },
+        credentials: { ...writableCredential(), set }, settings: { mutate },
       },
       configForms: { describe: () => ({
         ensure: vi.fn(async () => {}),
@@ -96,12 +102,35 @@ describe('SpiritX provisioning', () => {
     const ctx = {
       remote: {
         llm: { discoverModels: vi.fn(async () => ({ ok: false, error: { message: 'unauthorized' } })) },
-        credentials: { set }, settings: { mutate },
+        credentials: { ...writableCredential(), set }, settings: { mutate },
       },
     } as never
     await expect(provisionSpiritX(ctx, 'wrong')).resolves.toBe('unauthorized')
     expect(set).not.toHaveBeenCalled()
     expect(mutate).not.toHaveBeenCalled()
+  })
+
+  it('rejects a read-only launch credential before discovery or settings changes', async () => {
+    const discoverModels = vi.fn()
+    const mutate = vi.fn()
+    const set = vi.fn()
+    const ctx = {
+      remote: {
+        llm: { discoverModels },
+        credentials: {
+          describe: vi.fn(async () => ({
+            ok: true, value: { SPIRITX_API_KEY: { configured: true, writable: false } },
+          })),
+          set,
+        },
+        settings: { mutate },
+      },
+    } as never
+
+    await expect(provisionSpiritX(ctx, 'replacement')).resolves.toContain('系统环境变量 SPIRITX_API_KEY')
+    expect(discoverModels).not.toHaveBeenCalled()
+    expect(mutate).not.toHaveBeenCalled()
+    expect(set).not.toHaveBeenCalled()
   })
 
   it('uses the stored credential for refresh and passes a typed replacement key explicitly', async () => {
@@ -165,7 +194,7 @@ describe('SpiritX provisioning', () => {
     const ctx = {
       remote: {
         llm: { discoverModels: vi.fn(async () => ({ ok: true, value: [{ id: 'server-model' }] })) },
-        credentials: { set }, settings: { mutate },
+        credentials: { ...writableCredential(), set }, settings: { mutate },
       },
       configForms: { describe: () => ({
         ensure: vi.fn(async () => {}),

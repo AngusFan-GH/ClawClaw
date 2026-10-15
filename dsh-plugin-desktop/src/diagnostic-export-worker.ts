@@ -40,6 +40,7 @@ interface DiagnosticExportWorkerData {
   readonly lifecycleEvidencePath?: string
   readonly fatalReportsDir?: string
   readonly updateJournalsDir?: string
+  readonly spiritXLaunchCredentialPresent?: boolean
 }
 
 export type DiagnosticExportWorkerResult =
@@ -279,6 +280,9 @@ async function createDiagnosticsArchive(data: DiagnosticExportWorkerData): Promi
     `node: ${process.version}`,
     `electron: ${process.versions.electron ?? 'unknown'}`,
     `exported: ${new Date().toISOString()}`,
+    `spiritx-launch-credential: ${data.spiritXLaunchCredentialPresent === undefined
+      ? 'unknown'
+      : data.spiritXLaunchCredentialPresent ? 'present' : 'absent'}`,
     `included-log-files: ${String(candidates.length - omittedFiles)}`,
     `included-evidence-bytes: ${String(includedBytes)}`,
     `omitted-log-files: ${String(omittedFiles)}`,
@@ -291,7 +295,7 @@ async function createDiagnosticsArchive(data: DiagnosticExportWorkerData): Promi
     `included-lifecycle-summary: ${String(includedLifecycleSummary)}`,
     `omitted-lifecycle-summary: ${String(omittedLifecycleSummary)}`,
     `evidence-byte-limit: ${String(data.maxEvidenceBytes)}`,
-    'privacy: logs may contain local paths, workspace IDs, and session IDs; crash dumps may contain process memory; lifecycle evidence contains startup timings and bounded plugin IDs; opt-in update qualification contains versions, classified outcomes, timings, and artifact digests',
+    'privacy: logs may contain local paths, workspace IDs, and session IDs; crash dumps may contain process memory; lifecycle evidence contains startup timings and bounded plugin IDs; credential diagnostics record presence only and never values; opt-in update qualification contains versions, classified outcomes, timings, and artifact digests',
   ].join('\n')
   zip.addFile('system-info.txt', Buffer.from(`${info}\n`, 'utf8'))
 

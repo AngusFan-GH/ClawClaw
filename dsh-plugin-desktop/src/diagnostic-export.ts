@@ -29,6 +29,8 @@ export interface DiagnosticExportOptions {
   readonly updateJournalsDir?: string
   /** Cancels the short-lived worker when its owning UI or process operation ends. */
   readonly signal?: AbortSignal
+  /** Whether the Desktop process inherited a non-empty SpiritX credential; never includes its value. */
+  readonly spiritXLaunchCredentialPresent?: boolean
 }
 
 export interface DesktopDiagnosticExportOptions {
@@ -37,6 +39,13 @@ export interface DesktopDiagnosticExportOptions {
   readonly crashDumpsDir?: string
   readonly maxEvidenceBytes?: number
   readonly signal?: AbortSignal
+  /** Test seam for deriving presence without transferring environment values to the worker. */
+  readonly environment?: Readonly<NodeJS.ProcessEnv>
+}
+
+function hasSpiritXLaunchCredential(environment: Readonly<NodeJS.ProcessEnv>): boolean {
+  return Object.entries(environment).some(([name, value]) =>
+    name.toUpperCase() === 'SPIRITX_API_KEY' && value !== undefined && value.length > 0)
 }
 
 function workerEntryUrl(): URL {
@@ -119,6 +128,9 @@ export function exportDiagnosticsZip(
       ...(options.lifecycleEvidencePath === undefined ? {} : { lifecycleEvidencePath: options.lifecycleEvidencePath }),
       ...(options.fatalReportsDir === undefined ? {} : { fatalReportsDir: options.fatalReportsDir }),
       ...(options.updateJournalsDir === undefined ? {} : { updateJournalsDir: options.updateJournalsDir }),
+      ...(options.spiritXLaunchCredentialPresent === undefined
+        ? {}
+        : { spiritXLaunchCredentialPresent: options.spiritXLaunchCredentialPresent }),
     },
     resourceLimits: { maxOldGenerationSizeMb: 256 },
   })
@@ -139,6 +151,7 @@ export function exportDesktopDiagnostics(
     lifecycleEvidencePath: desktopLifecycleEvidencePath(userDataDir),
     fatalReportsDir: join(userDataDir, 'crash-evidence', 'fatal'),
     updateJournalsDir: join(userDataDir, 'updates', 'qualification-journal'),
+    spiritXLaunchCredentialPresent: hasSpiritXLaunchCredential(options.environment ?? process.env),
     ...(options.maxEvidenceBytes === undefined ? {} : { maxEvidenceBytes: options.maxEvidenceBytes }),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })

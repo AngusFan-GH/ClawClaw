@@ -17,7 +17,6 @@ import {
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
 import {
   DSH_LAUNCH_ENVIRONMENT_KEY,
-  type LaunchEnvironmentSnapshot,
 } from '@deepseek-ai/dsh-launch-environment'
 import type {} from '@deepseek-ai/dsh-web-app'
 import type {} from '@deepseek-ai/dsh-client-connection'
@@ -202,33 +201,11 @@ import {
   DESKTOP_RELEASE_CHANNEL,
 } from './product-identity.ts'
 import { desktopRecoveryCopy } from './recovery-copy.ts'
+import { withDesktopLaunchEnvironment } from './launch-environment.ts'
 
 const BIN_NAME = DESKTOP_PACKAGE_NAME
 const PRODUCT_NAME = DESKTOP_PRODUCT_NAME
 const CLAWCLAW_HOME = 'CLAWCLAW_HOME'
-const DSH_HOME = 'DSH_HOME'
-const DSH_AGENTS_HOME = 'DSH_AGENTS_HOME'
-
-function withDesktopDshHome(
-  environment: LaunchEnvironmentSnapshot,
-  homeDir: string,
-): LaunchEnvironmentSnapshot {
-  const entry = Object.freeze({ value: homeDir, source: 'process' as const })
-  return Object.freeze({
-    get: (name: string) => {
-      const normalized = name.toUpperCase()
-      if (normalized === DSH_HOME) return entry
-      if (normalized === DSH_AGENTS_HOME) return undefined
-      return environment.get(name)
-    },
-    getFrom: (name: string, sources: Parameters<LaunchEnvironmentSnapshot['getFrom']>[1]) => {
-      const normalized = name.toUpperCase()
-      if (normalized === DSH_HOME) return sources.includes('process') ? entry : undefined
-      if (normalized === DSH_AGENTS_HOME) return undefined
-      return environment.getFrom(name, sources)
-    },
-  })
-}
 
 class RendererStartupFailure extends Error {
   constructor(
@@ -742,7 +719,7 @@ async function start(): Promise<void> {
     process.env.CLAWCLAW_DEFAULT_WORKSPACE = safeModePaths === undefined
       ? productLayout.defaultWorkspace
       : join(safeModePaths.rootDir, 'workspace')
-    const desktopLaunchEnvironment = withDesktopDshHome(environment, homeDir)
+    const desktopLaunchEnvironment = withDesktopLaunchEnvironment(environment, homeDir)
     const projectionCacheRecovery = recoverOversizedSessionProjectionCache(homeDir)
     if (projectionCacheRecovery.status === 'quarantined') {
       sessionProjectionCacheRecovery = projectionCacheRecovery
