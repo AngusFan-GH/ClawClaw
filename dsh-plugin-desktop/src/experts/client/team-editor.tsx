@@ -7,7 +7,7 @@ import type { ExpertSummary } from '../expert-contract.js';
 import { Button, Input } from './antd-ui.js';
 import { CategorySelect } from './category-select.js';
 import { EN_DIVISION, ZH_DIVISION } from '../names.js';
-import { TeamDialog, TeamConfirm, Avatar, IconPlus, IconTrash, IconRefresh, IconSearch, } from './team-shared.js';
+import { TeamDialog, TeamConfirm, Avatar, teamIssue, IconPlus, IconTrash, IconRefresh, IconSearch, } from './team-shared.js';
 import { TeamDetails } from './team-ui.js';
 
 const PICKER_ROW = 72
@@ -108,9 +108,8 @@ const fresh = (tx: (key: string) => string): TeamInput => ({
 export function TeamEditor(props: {
     initial?: TeamInput;
     experts: readonly ExpertSummary[];
-    enabled: boolean;
     enabledExperts: readonly string[];
-    save(value: TeamInput, enabled: boolean, revision?: number): Promise<void>;
+    save(value: TeamInput, revision?: number): Promise<void>;
     close(): void;
     refresh(): Promise<TeamSnapshot>;
 }) {
@@ -127,13 +126,12 @@ export function TeamEditor(props: {
     const [needsReview, setNeedsReview] = React.useState(false);
     const [review, setReview] = React.useState<TeamSnapshot | null>(null);
     const [reviewedRevision, setReviewedRevision] = React.useState<number>();
-    const [currentEnabled, setCurrentEnabled] = React.useState(props.enabled);
     const latestTeam = review?.teams.find((team) => team.id === draft.id);
     const [picker, setPicker] = React.useState<number | null>(null);
     const [query, setQuery] = React.useState('');
     const [pickerSource, setPickerSource] = React.useState<'all' | 'base' | 'custom'>('all');
     const [pickerDivision, setPickerDivision] = React.useState('');
-    const [confirm, setConfirm] = React.useState<'discard' | 'restore' | 'enable' | null>(null);
+    const [confirm, setConfirm] = React.useState<'discard' | 'restore' | null>(null);
     const [preview, setPreview] = React.useState(false);
     const patch = (next: Partial<TeamInput>) => setDraft((value) => ({ ...value, ...next }));
     const close = () => {
@@ -144,9 +142,7 @@ export function TeamEditor(props: {
         else
             props.close();
     };
-    const missing = props.experts.filter((e) => draft.members.some((m) => m.expertSlug === e.slug) &&
-        !props.enabledExperts.includes(e.slug));
-    const submit = async (enabled: boolean, confirmed = false) => {
+    const submit = async () => {
         if (busy || needsReview)
             return;
         if (form.current?.reportValidity() === false)
@@ -169,14 +165,10 @@ export function TeamEditor(props: {
             form.current?.querySelector<HTMLElement>(`[name="${key}"]`)?.focus();
             return;
         }
-        if (enabled && missing.length && !confirmed) {
-            setConfirm('enable');
-            return;
-        }
         setError('');
         setBusy(true);
         try {
-            await props.save(parsed.data, enabled, reviewedRevision);
+            await props.save(parsed.data, reviewedRevision);
         }
         catch (cause) {
             const message = cause instanceof Error ? tx(cause.message) : tx("保存失败，请重试。");
@@ -204,7 +196,6 @@ export function TeamEditor(props: {
             const { id: _id, builtin: _builtin, ...copy } = draft;
             setDraft(copy);
         }
-        setCurrentEnabled(latest ? review.enabledTeams.includes(latest.id) : false);
         setReviewedRevision(review.revision);
         setNeedsReview(false);
         setReview(null);
@@ -221,7 +212,7 @@ export function TeamEditor(props: {
     return (<TeamDialog title={props.initial?.id ? tx("编辑专家团") : tx("新建专家团")} close={close} className="agt-editor">
       <form ref={form} onSubmit={(e) => {
             e.preventDefault();
-            void submit(currentEnabled);
+            void submit();
         }}>
         <div className="aag-custom-body agt-editor-scroll">
           <div className="agt-editor-fields">
@@ -361,8 +352,7 @@ export function TeamEditor(props: {
                     {latestTeam ? (<>
                         <p>
                           <strong>{latestTeam.name}</strong> ·{' '}
-                          {review.enabledTeams.includes(latestTeam.id)
-                        ? tx("已启用") : tx("已停用")}
+                          {teamIssue(latestTeam, props.experts, review.enabledExperts) ? tx("需修复") : tx("可用")}
                         </p>
                         <p>{latestTeam.description}</p>
                         <p>{tx("目标：")}{latestTeam.goal}</p>
@@ -383,26 +373,20 @@ export function TeamEditor(props: {
               </section>)}{' '}
           </div>
         </div>
-        <LibraryEditorFooter editing={!!draft.id} busy={busy} blocked={needsReview} help={tx("保存配置不会发送任务。")} cancelLabel={tx("取消")} saveLabel={tx("保存")} primaryLabel={busy ? tx("正在保存…") : draft.id ? tx("保存修改") : tx("保存并启用")} close={close} save={() => void submit(false)} primary={() => void submit(draft.id ? currentEnabled : true)}/>{' '}
+        <LibraryEditorFooter editing={!!draft.id} busy={busy} blocked={needsReview} help={tx("保存配置不会发送任务。")} cancelLabel={tx("取消")} saveLabel={tx("保存")} primaryLabel={busy ? tx("正在保存…") : draft.id ? tx("保存修改") : tx("保存专家团")} close={close} save={() => void submit()} primary={() => void submit()}/>{' '}
       </form>
       {confirm && (<TeamConfirm busy={busy} error={error} cancelLabel={confirm === 'discard' ? tx("继续编辑") : tx("取消")} title={confirm === 'discard'
-                ? tx("放弃未保存修改？") : confirm === 'restore'
-                ? tx("恢复团队模板？") : tx("启用团队成员")} label={confirm === 'discard'
-                ? tx("放弃修改") : confirm === 'restore'
-                ? tx("确认恢复") : tx("启用团队及所需成员")} onCancel={() => setConfirm(null)} onConfirm={() => {
+                ? tx("放弃未保存修改？") : tx("恢复团队模板？")} label={confirm === 'discard'
+                ? tx("放弃修改") : tx("确认恢复")} onCancel={() => setConfirm(null)} onConfirm={() => {
                 const action = confirm;
-                if (action !== 'enable')
-                    setConfirm(null);
+                setConfirm(null);
                 if (action === 'discard')
                     props.close();
                 else if (action === 'restore')
                     patch({ coordinatorMode: 'template', coordinatorPrompt: '' });
-                else
-                    void submit(true, true);
             }}>
           <p>
-            {confirm === 'enable'
-                ? tx("同时启用：{0}。停用团队时不会停用这些专家。", [missing.map((e) => e.name).join(locale === 'en' ? ', ' : '、')]) : confirm === 'restore'
+            {confirm === 'restore'
                 ? tx("只恢复主理人规则，不修改成员分工、目标或交付要求。") : tx("未保存的表单改动将丢弃。")}
           </p>
         </TeamConfirm>)}

@@ -52,11 +52,11 @@ export function LibraryCard(props: {
   description: string
   content?: React.ReactNode
   custom?: boolean
-  enabled: boolean
+  enabled?: boolean
   disabled?: boolean
   enabledLabel: string
   disabledLabel: string
-  toggle(): void
+  toggle?(): void
   actions: React.ReactNode
   moreItems: readonly LibraryMenuItem[]
   testId?: string
@@ -72,7 +72,7 @@ export function LibraryCard(props: {
           <div className="aag-card-division">{props.metadata}</div>
         </div>
         {props.content ?? <div className="aag-card-description" title={props.description}>{props.description}</div>}
-        <div className="aag-switch">
+        {props.enabled !== undefined && props.toggle !== undefined && <div className="aag-switch">
           <Switch
             checked={props.enabled}
             disabled={props.disabled}
@@ -83,7 +83,7 @@ export function LibraryCard(props: {
           <span className="aag-switch-state">
             {props.enabled ? props.enabledLabel : props.disabledLabel}
           </span>
-        </div>
+        </div>}
       </div>
       <div className="aag-card-actions">
         {props.actions}

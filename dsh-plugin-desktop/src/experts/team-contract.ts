@@ -14,8 +14,7 @@ export const TEAM_CUSTOM_ID =
 export const teamMemberSchema = z
   .object({ expertSlug: text(128), duty: text(100), instructions: text(2000) })
   .strict()
-export const teamInputSchema = z
-  .object({
+const teamInputFields = {
     id: z
       .string()
       .regex(/^team-(?:[a-z]+|custom-[0-9a-f-]+)$/u)
@@ -49,7 +48,9 @@ export const teamInputSchema = z
     coordinatorPrompt: z
       .string()
       .refine((value) => Array.from(value).length <= 12000),
-  })
+} as const
+export const teamInputSchema = z
+  .object(teamInputFields)
   .strict()
   .refine(
     (value) =>
@@ -57,10 +58,6 @@ export const teamInputSchema = z
       value.coordinatorPrompt.trim().length > 0,
   )
 export type TeamInput = z.infer<typeof teamInputSchema>
-export type ExpertTeam = TeamInput & { id: string; builtin: boolean }
-export const teamSchema = teamInputSchema.and(
-  z.object({ id: z.string(), builtin: z.boolean() }),
-)
 export const teamEngineStatusSchema = z.object({
   state: z.enum(['unsupported', 'disabled', 'enabled']),
   mode: z.enum(['subagent', 'native']),
@@ -82,40 +79,31 @@ export const teamConnectorSchema = z.object({
   error: z.string().optional(),
 })
 export type TeamConnector = z.infer<typeof teamConnectorSchema>
-export const leadTeamMemberSchema = z.object({
-  expertSlug: z.string().min(1).max(256),
-  packageAgentId: z.string().min(1).max(128),
-  name: z.string().min(1),
-  description: z.string(),
-  role: z.enum(['lead', 'member']),
+export const teamRuntimeSchema = z.object({
+  mode: z.enum(['coordinator', 'lead']),
+  leadExpertSlug: z.string().optional(),
+  initPrompt: z.string(),
+}).superRefine((value, context) => {
+  if (value.mode === 'lead' && !value.leadExpertSlug) context.addIssue({ code: 'custom', message: 'Lead runtime requires a lead expert.' })
 })
-export const leadTeamSchema = z.object({
-  id: z.string().startsWith('plugin-team:'),
-  builtin: z.literal(true),
-  runtime: z.literal('plugin-lead'),
+export const teamProvenanceSchema = z.object({
   packageName: z.string(),
   packageVersion: z.string(),
   source: z.enum(['local', 'project', 'user', 'github', 'marketplace']),
-  status: z.enum(['installed', 'update-available', 'error']),
-  name: z.string(),
-  description: z.string(),
-  defaultInitPrompt: z.string(),
-  tags: z.array(z.string()),
-  examples: z.array(z.string()),
-  lead: leadTeamMemberSchema,
-  members: z.array(leadTeamMemberSchema),
+}).optional()
+export const teamSchema = z.object({
+  ...teamInputFields,
+  id: z.string(),
+  builtin: z.boolean(),
+  runtime: teamRuntimeSchema,
   skills: z.array(expertCapabilityBindingSchema),
   connectors: z.array(expertCapabilityBindingSchema),
   connectorStates: z.array(teamConnectorSchema),
-})
-export type LeadExpertTeam = z.infer<typeof leadTeamSchema>
-export type CatalogTeam = ExpertTeam | LeadExpertTeam
-export const isPluginLeadTeam = (team: CatalogTeam): team is LeadExpertTeam =>
-  'runtime' in team && team.runtime === 'plugin-lead'
-export const isCoordinatorTeam = (team: CatalogTeam): team is ExpertTeam => !isPluginLeadTeam(team)
+  provenance: teamProvenanceSchema,
+}).strict()
+export type ExpertTeam = z.infer<typeof teamSchema>
 export const teamSnapshotSchema = z.object({
-  teams: z.array(z.union([teamSchema, leadTeamSchema])),
-  enabledTeams: z.array(z.string()),
+  teams: z.array(teamSchema),
   enabledExperts: z.array(z.string()),
   revision: z.number().int().min(0),
   engine: teamEngineStatusSchema.optional(),
@@ -162,6 +150,10 @@ const define = (
 ): ExpertTeam => ({
   id: `team-${id}`,
   builtin: true,
+  runtime: { mode: 'coordinator', initPrompt: '' },
+  skills: [],
+  connectors: [],
+  connectorStates: [],
   name,
   description: TEAM_DESCRIPTIONS[id],
   tags,

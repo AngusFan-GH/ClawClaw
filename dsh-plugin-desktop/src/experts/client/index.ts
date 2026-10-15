@@ -10,7 +10,7 @@ import { TEAM_REFERENCE_SOURCE, insertTeamReference, teamReference, teamSubmissi
 import { TeamLocaleContext } from './team-locale.js'
 import { localizeTeam } from '../team-content-en.js'
 import { teamText } from '../team-i18n.js'
-import { isPluginLeadTeam, type ExpertTeam } from '../team-contract.js'
+import type { ExpertTeam } from '../team-contract.js'
 import { PromptDialog } from "./prompt-dialog.js";
 import React from 'react'
 import { CategorySelect } from './category-select.js'
@@ -41,6 +41,7 @@ import { installLegacyTeamReferenceGuard } from './legacy-team-reference.js'
 import type { AgencyCatalogRemote } from './remote.js'
 import { createDesktopSkillsApi } from '../../client/skills-api.js'
 import { createDesktopMcpApi } from '../../client/mcp-api.js'
+import { skillInsertion } from '../../client/conversation-skills.js'
 import { ExpertCapabilityRegistry } from './capability-registry.js'
 import { expertCapabilityHealth, type ExpertCapabilityHealth } from './capability-options.js'
 import { SkillsSettingsSection } from '../../client/SkillsSettingsSection.js'
@@ -503,10 +504,10 @@ export const CAPABILITY_PICKER_CSS = `
 .aag-capability-search{padding:4px 4px 6px;flex:none}.aag-capability-search input{box-sizing:border-box;width:100%;min-height:38px;padding:7px 11px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:inherit;font:inherit}.aag-capability-search input:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}
 .aag-capability-summary{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:8px;padding:2px 6px 8px;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}.aag-capability-summary span{min-width:0}.aag-capability-summary span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
 .aag-capability-list{display:flex;min-width:0;flex-direction:column}.aag-capability-list>button{display:flex;align-items:flex-start;flex-direction:column;gap:2px;width:100%;min-width:0;padding:9px 10px;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;text-align:left;cursor:pointer}.aag-capability-list>button:hover{background:var(--dsw-alias-interactive-bg-hover)}.aag-capability-list small{display:flex;min-width:0;align-items:center;gap:7px;overflow:hidden;max-width:100%;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;text-overflow:ellipsis;white-space:nowrap}
-.aag-capability-row{display:grid;box-sizing:border-box;grid-template-columns:30px minmax(0,1fr) 38px;align-items:center;gap:10px;min-width:0;min-height:62px;padding:9px 10px;border-bottom:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-primary)}.aag-capability-row:last-child{border-bottom:0}.aag-capability-row:hover{border-radius:8px;background:var(--dsw-alias-interactive-bg-hover)}
+.aag-capability-row{display:grid;box-sizing:border-box;grid-template-columns:30px minmax(0,1fr) minmax(64px,112px);align-items:center;gap:10px;min-width:0;min-height:62px;padding:9px 10px;border-bottom:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-primary)}.aag-capability-row:last-child{border-bottom:0}.aag-capability-row:hover{border-radius:8px;background:var(--dsw-alias-interactive-bg-hover)}
 .aag-connector-icon{display:flex;width:30px;height:30px;align-items:center;justify-content:center;border-radius:8px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary)}.aag-capability-row[data-enabled="true"] .aag-connector-icon{color:var(--dsw-alias-brand-primary)}
 .aag-connector-identity{display:flex;min-width:0;flex-direction:column;gap:2px}.aag-connector-identity strong{overflow:hidden;font-size:14px;line-height:20px;text-overflow:ellipsis;white-space:nowrap}.aag-connector-state{display:inline-flex;align-items:center;gap:5px}.aag-connector-state::before{width:6px;height:6px;flex:none;border-radius:50%;background:var(--dsw-alias-label-dimmed);content:""}.aag-connector-state[data-state="running"]::before{background:var(--dsw-alias-state-success-primary)}.aag-connector-state[data-state="starting"]::before{background:var(--dsw-alias-brand-primary)}.aag-connector-state[data-state="error"]{color:var(--dsw-alias-state-error-primary)}.aag-connector-state[data-state="error"]::before{background:var(--dsw-alias-state-error-primary)}
-.aag-capability-row>.aag-connector-toggle{grid-column:3;grid-row:1;position:relative;width:36px;height:20px;padding:2px;border:0;border-radius:999px;background:var(--dsw-alias-border-l2);cursor:pointer;transition:background-color .15s ease}.aag-capability-row>.aag-connector-toggle>span{display:block;width:16px;height:16px;border-radius:50%;background:var(--dsw-alias-label-primary-foreground);box-shadow:0 1px 2px rgba(0,0,0,.22);transition:transform .15s ease}.aag-capability-row>.aag-connector-toggle[aria-checked="true"]{background:var(--dsw-alias-brand-primary)}.aag-capability-row>.aag-connector-toggle[aria-checked="true"]>span{transform:translateX(16px)}.aag-capability-row>.aag-connector-toggle:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
+.aag-connector-readiness{grid-column:3;grid-row:1;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;text-align:right}
 @media(max-width:560px){.aag-menu.aag-discovery{width:min(440px,calc(100vw - 24px))}.aag-capability-picker{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);height:340px}.aag-capability-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));padding:2px 2px 6px;border-right:0;border-bottom:1px solid var(--dsw-alias-border-l2)}.aag-capability-nav button{padding:7px 4px;text-align:center}.aag-capability-results{padding:6px 2px 2px}.aag-capability-summary span:last-child{display:none}}
 `
 export const CSS = TEAM_CSS + COMPOSER_CSS + SETTINGS_CSS + CARD_SETTINGS_CSS + DISCOVERY_CSS + CAPABILITY_PICKER_CSS
@@ -754,13 +755,14 @@ type ButtonProps = PropsLocale<'agency'> & {
   readonly onEnabledChange?: (enabled: ReadonlySet<string>) => void
   /** 由 session slot 的 inject 回调注入，永远绑定当前编辑器所属会话。 */
   readonly insertReference?: (reference: ReferenceInsert) => boolean
-  /** 异步启用前锁定目标编辑器，避免切换会话后把标签插入其他草稿。 */
+  /** 选择前锁定目标编辑器，避免切换会话后把标签插入其他草稿。 */
   readonly prepareInsertion?: () => (reference: ReferenceInsert) => boolean
   /** 当前 locale 读取器（locale 切换后框架以新 t 重渲染，名称随之刷新）。 */
   readonly prepareTeamSelection?: () => (team: TeamReferenceTarget, example?: string) => boolean | Promise<boolean>
   readonly getActive: () => 'zh' | 'en'
   readonly capabilityRegistry: ExpertCapabilityRegistry
-  readonly insertSkill?: (name: string) => boolean
+  readonly skillsApi: DesktopSkillsApi
+  readonly insertSkill?: (name: string) => boolean | Promise<boolean>
 }
 
 export function AgentsButton(props: ButtonProps): React.ReactElement {
@@ -796,11 +798,11 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
     let alive = true
     setCapabilityError(null)
     const load = mode === 'skills'
-      ? createDesktopSkillsApi().read().then(value => { if (alive) setSkills(value.filter(skill => skill.userInvocable)) })
+      ? props.skillsApi.read().then(value => { if (alive) setSkills(value.filter(skill => skill.userInvocable)) })
       : createDesktopMcpApi().read().then(value => { if (alive) setMcpServers(value.mcpServers) })
     void load.catch(() => { if (alive) setCapabilityError(props.getActive() === 'zh' ? '暂时无法读取能力列表。' : 'Capabilities are temporarily unavailable.') })
     return () => { alive = false }
-  }, [open, mode])
+  }, [open, mode, props.skillsApi])
 
   React.useLayoutEffect(() => {
     if (!open) return
@@ -875,7 +877,6 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
     setBusy(true)
     setInsertError(null)
     const request = epoch.current
-    let newlyEnabled = false
     try {
       const insert = props.prepareInsertion?.() ?? props.insertReference
       // 使用当前快照的修订号写入；冲突后刷新并交还用户重试，不静默覆盖。
@@ -887,14 +888,10 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
         skills: capabilityState.skillsLoaded, mcpServers: capabilityState.mcpLoaded,
       })
       if (health.state === 'blocked') throw new Error(props.t('capability.health.blocked'))
-      if (!current.enabled.has(slug)) {
-        current = await writeEnabled(props.remote, new Set([...current.enabled, slug]), current.revision)
-        newlyEnabled = current.enabled.has(slug)
-        props.onEnabledChange?.(current.enabled)
-      }
+      if (!current.enabled.has(slug)) throw new Error(props.t('custom.unavailable'))
       if (request !== epoch.current) return
       if (!current.enabled.has(slug) || !insertSelectedExpert(slug, props.getActive(), insert, current.experts)) {
-        setInsertError(props.t(newlyEnabled ? 'discovery.enabledInsertFailed' : 'error.insertFailed'))
+        setInsertError(props.t('error.insertFailed'))
         return
       }
       // 宿主插入操作负责把光标交还编辑器；不要再抢回工具栏按钮焦点。
@@ -909,8 +906,7 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
     }
   }
 
-  const matches = sortExpertsByEnabled(filterExperts(catalog.experts.filter(expert => expert.packageType !== 'team'), { query })
-    .filter(expert => normalizeExpertQuery(query) !== '' || catalog.enabled.has(expert.slug)), catalog.enabled)
+  const matches = sortExpertsByEnabled(filterExperts(catalog.experts.filter(expert => expert.packageType !== 'team' && catalog.enabled.has(expert.slug)), { query }), catalog.enabled)
   const searching = normalizeExpertQuery(query) !== ''
   if (searching) matches.sort((a, b) => {
     const nameMatch = (expert: ExpertView): number => matchExpertQuery({ ...expert, slug: '', division: '', divisionZh: '', divisionEn: '', description: '', descriptionEn: '' }, query) ? 1 : 0
@@ -932,7 +928,13 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
         capabilitySearch(props.getActive() === 'zh' ? '搜索技能' : 'Search skills'),
         React.createElement('div', { className: 'aag-capability-list' }, filteredSkills.length === 0
           ? React.createElement('div', { className: 'aag-menu-empty' }, capabilityNeedle === '' ? (props.getActive() === 'zh' ? '没有可由用户选择的技能。' : 'No user-selectable skills.') : (props.getActive() === 'zh' ? '未找到匹配的技能。' : 'No matching skills.'))
-          : filteredSkills.map(skill => React.createElement('button', { type: 'button', key: skill.name, disabled: busy, onClick: () => { if (props.insertSkill?.(skill.name)) close() } }, React.createElement('strong', null, skill.name), React.createElement('small', null, skill.description)))))
+          : filteredSkills.map(skill => React.createElement('button', { type: 'button', key: skill.name, disabled: busy, onClick: () => {
+            setBusy(true); setCapabilityError(null)
+            void Promise.resolve(props.insertSkill?.(skill.name) ?? false).then(inserted => {
+              if (inserted) close()
+              else setCapabilityError(props.getActive() === 'zh' ? '技能无法插入当前草稿。' : 'The skill could not be inserted into this draft.')
+            }).catch((error: unknown) => setCapabilityError(error instanceof Error ? error.message : String(error))).finally(() => setBusy(false))
+          } }, React.createElement('strong', null, skill.name), React.createElement('small', null, skill.description)))))
       : mode === 'mcp'
         ? React.createElement(React.Fragment, null,
           capabilitySearch(props.getActive() === 'zh' ? '搜索连接器或工具' : 'Search connectors or tools'),
@@ -946,9 +948,6 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
           React.createElement('div', { className: 'aag-capability-list' }, filteredMcpServers.length === 0
             ? React.createElement('div', { className: 'aag-menu-empty' }, capabilityNeedle === '' ? (props.getActive() === 'zh' ? '尚未配置连接器。' : 'No connectors configured.') : (props.getActive() === 'zh' ? '未找到匹配的连接器。' : 'No matching connectors.'))
             : filteredMcpServers.map(server => {
-              const action = server.enabled
-                ? (props.getActive() === 'zh' ? `停用 ${server.serverName}` : `Disable ${server.serverName}`)
-                : (props.getActive() === 'zh' ? `启用 ${server.serverName}` : `Enable ${server.serverName}`)
               return React.createElement('div', { className: 'aag-capability-row', key: server.serverName, 'data-enabled': server.enabled || undefined },
                 React.createElement('span', { className: 'aag-connector-icon', 'aria-hidden': true }, React.createElement(PlugZap, { size: 16 })),
                 React.createElement('span', { className: 'aag-connector-identity' },
@@ -956,12 +955,9 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
                   React.createElement('small', null,
                     React.createElement('span', { className: 'aag-connector-state', 'data-state': server.state }, connectorStateLabel(server.state, props.getActive())),
                     React.createElement('span', null, `${server.tools.length} ${props.getActive() === 'zh' ? '个工具' : server.tools.length === 1 ? 'tool' : 'tools'}`))),
-                React.createElement('button', { type: 'button', role: 'switch', className: 'aag-connector-toggle', 'aria-label': action,
-                  'aria-checked': server.enabled, title: action, onClick: () => {
-                    setCapabilityError(null)
-                    void createDesktopMcpApi().toggle(server.serverName, !server.enabled).then(setMcpServers)
-                      .catch(() => setCapabilityError(props.getActive() === 'zh' ? '连接器状态更新失败。' : 'Could not update connector status.'))
-                  } }, React.createElement('span', { 'aria-hidden': true })))
+                React.createElement('span', { className: 'aag-connector-readiness' }, server.enabled && server.state === 'running'
+                  ? (props.getActive() === 'zh' ? '可用' : 'Ready')
+                  : (props.getActive() === 'zh' ? '到设置中管理' : 'Manage in Settings')))
             })))
         : React.createElement(ExpertDiscovery, { experts: results, enabled: catalog.enabled, locale: props.getActive(), t: props.t, avatarSrc: menuAvatar,
           health: new Map(results.map(expert => [expert.slug, expertCapabilityHealth(expert, capabilitySnapshot.catalog, capabilitySnapshot.loading, {
@@ -1628,6 +1624,10 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   )
   const insertTask = (current: ReferenceInsertionTarget | undefined, reference: ReferenceInsert, sessionId?: SessionId, span?: TokenSpan): boolean => {
     if (current === undefined) return false
+    if ((current.state.getSnapshot().occurrences ?? []).some(occurrence => occurrence.source === TEAM_REFERENCE_SOURCE)) {
+      current.notify?.('error', teamText(getActive(), '草稿已有专家团，请先移除专家团再选择专家。'))
+      return false
+    }
     const sessions = ctx.sessions as unknown as ReferenceSessionAccess
     const id = resolveTargetSessionId(sessions, sessionId)
     const actx = id === undefined ? undefined : sessions.scope?.(id) ?? sessions.binding?.(id)?.ctx
@@ -1654,15 +1654,17 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   }
   const bindExpertInsertion = (sessionId?: SessionId): {
     readonly insertReference: (reference: ReferenceInsert) => boolean
-    readonly insertSkill: (name: string) => boolean
+    readonly insertSkill: (name: string) => Promise<boolean>
     readonly prepareInsertion: () => (reference: ReferenceInsert) => boolean
     readonly prepareTeamSelection: () => (team: TeamReferenceTarget, example?: string) => boolean | Promise<boolean>
     readonly capabilityRegistry: ExpertCapabilityRegistry
+    readonly skillsApi: DesktopSkillsApi
   } => {
     const target = (): ReferenceInsertionTarget | undefined => resolveTarget(sessionId)
     return {
       capabilityRegistry: capabilityRegistryFor(sessionId),
-      insertSkill: (name) => {
+      skillsApi: sessionId === undefined ? skillsApi : skillsApi.forScope({ sessionId: String(sessionId) }),
+      insertSkill: async (name) => {
         if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(name)) return false
         const current = target()
         if (current === undefined) return false
@@ -1670,10 +1672,18 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
         const sessions = ctx.sessions as unknown as ReferenceSessionAccess
         const id = resolveTargetSessionId(sessions, sessionId)
         const actx = id === undefined ? undefined : sessions.scope?.(id) ?? sessions.binding?.(id)?.ctx
-        return actx?.bail(actx, 'slash/input-insert-text', {
-          text: `/${name} `,
-          span: { start: 0, end: 0, draftRev: snapshot.draftRev },
-        }) === true
+        if (id === undefined || actx === undefined) return false
+        const [view, commandResult] = await Promise.all([
+          skillsApi.forScope({ sessionId: String(id) }).read(),
+          (ctx.remote as unknown as { commands: { list(id: SessionId): Promise<{ ok: true; value: readonly { name: string }[] } | { ok: false; error: { message: string } }> } }).commands.list(id),
+        ])
+        if (!commandResult.ok) throw new Error(commandResult.error.message)
+        if (target() !== current) return false
+        const request = skillInsertion(name, snapshot, {
+          skills: view.filter(skill => skill.userInvocable),
+          commands: commandResult.value.map(command => command.name),
+        })
+        return actx.bail(actx, 'slash/input-insert-text', request) === true
       },
       prepareTeamSelection: () => {
         const current = target()
@@ -1720,9 +1730,9 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
           const cached = teamState(teamRemote)
           const snapshot = cached ?? await refreshTeams(teamRemote)
           if (cached) void refreshTeams(teamRemote).catch((error: unknown) => console.warn('[clawclaw-experts] 专家团刷新失败：', error))
-          teamCache = snapshot.teams.filter(team => snapshot.enabledTeams.includes(team.id)).map(team => isPluginLeadTeam(team)
-            ? { id: team.id, name: team.name, examples: team.examples }
-            : localizeTeam(team, active))
+          teamCache = snapshot.teams
+            .filter(team => team.members.every(member => snapshot.enabledExperts.includes(member.expertSlug)))
+            .map(team => localizeTeam(team, active))
           return teamCache.filter(team => `${team.name}`.toLowerCase().includes(String(request.query ?? '').toLowerCase())).map(team => ({ name: `${team.name} · ${teamText(active, '专家团')}`, hint: team.id, section: teamText(active, '专家团') }))
         },
         onPick: pick => {
@@ -1737,15 +1747,13 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
           clipboardText: id => teamText(active, '@专家团：{0}\u00a0', [teamCache.find(team => team.id === id)?.name ?? teamText(active, '已移除团队（请重新选择）')]),
           serialize: async id => {
             const [snapshot, catalog] = await Promise.all([refreshTeams(teamRemote), unwrap(teamRemote.getCatalog())])
-            teamCache = snapshot.teams.filter(team => snapshot.enabledTeams.includes(team.id)).map(team => isPluginLeadTeam(team)
-              ? { id: team.id, name: team.name, examples: team.examples }
-              : localizeTeam(team, active))
+            teamCache = snapshot.teams
+              .filter(team => team.members.every(member => snapshot.enabledExperts.includes(member.expertSlug)))
+              .map(team => localizeTeam(team, active))
             const team = teamCache.find(team => team.id === id)
             const legacy = snapshot.teams.find(candidate => candidate.id === id)
-            const memberSlugs = legacy === undefined ? [] : isPluginLeadTeam(legacy)
-              ? [legacy.lead.expertSlug, ...legacy.members.map(member => member.expertSlug)]
-              : legacy.members.map(member => member.expertSlug)
-            if (!team || (legacy !== undefined && (!snapshot.enabledTeams.includes(id) || memberSlugs.some(slug => !catalog.enabled.includes(slug) || !catalog.experts.some(e => e.slug === slug && !e.conflict))))) throw new Error(teamText(active, '团队已停用或成员失效，请修复后再发送。'))
+            const memberSlugs = legacy?.members.map(member => member.expertSlug) ?? []
+            if (!team || memberSlugs.some(slug => !catalog.enabled.includes(slug) || !catalog.experts.some(e => e.slug === slug && !e.conflict))) throw new Error(teamText(active, '团队成员未就绪，请修复后再发送。'))
             return teamSubmissionText(team, active)
           },
         },

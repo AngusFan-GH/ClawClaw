@@ -13,7 +13,6 @@ import {
   type TeamInput,
   type TeamSnapshot,
   type ExpertTeam,
-  type LeadExpertTeam,
 } from './team-contract.js'
 export const AGENCY_TEAM_SERVICE = 'agencyAgentsTeams'
 export interface TeamConnectorLifecycle {
@@ -31,10 +30,16 @@ export function createTeamLibrary(
 ) {
   const tx = (key: string) => teamText(locale(), key)
   const read = () => ({
-    custom: (store.read().customTeams ?? []).map((team) =>
-      teamSchema.parse(team),
-    ),
-    enabled: [...(store.read().enabledTeams ?? [])],
+    custom: (store.read().customTeams ?? []).map((team) => {
+      const input = teamInputSchema.parse(team)
+      if (input.id === undefined || input.builtin !== false) throw new Error(tx('自定义专家团配置无效。'))
+      return teamSchema.parse({
+      ...input,
+      runtime: { mode: 'coordinator', initPrompt: '' },
+      skills: [],
+      connectors: [],
+      connectorStates: [],
+    })}),
   })
   const check = (revision: number) => {
     if (!Number.isSafeInteger(revision) || revision !== store.revision())
@@ -53,7 +58,7 @@ export function createTeamLibrary(
     description: locale() === 'en' ? expert.descriptionEn || expert.description : expert.description || expert.descriptionEn,
     role,
   })
-  const connectorStates = (team: ExpertPluginTeamDefinition, view: DesktopMcpView | undefined): LeadExpertTeam['connectorStates'] =>
+  const connectorStates = (team: ExpertPluginTeamDefinition, view: DesktopMcpView | undefined): ExpertTeam['connectorStates'] =>
     team.connectors.map(binding => {
       const server = view?.mcpServers.find(item => item.serverName === binding.name || item.connectorId === binding.name)
       const entry = view?.catalog.find(item => item.id === binding.name)
@@ -71,7 +76,7 @@ export function createTeamLibrary(
         ...(server?.error === undefined ? {} : { error: server.error }),
       }
     })
-  const packagedTeams = async (all: CatalogSnapshot, items: readonly ExpertPluginTeamDefinition[]): Promise<LeadExpertTeam[]> => {
+  const packagedTeams = async (all: CatalogSnapshot, items: readonly ExpertPluginTeamDefinition[]): Promise<ExpertTeam[]> => {
     const connectorView = await (connectors?.()?.read() ?? Promise.resolve(undefined))
     const bySlug = new Map(all.experts.map(expert => [expert.slug, expert]))
     return items.map(team => {
@@ -81,18 +86,24 @@ export function createTeamLibrary(
       return {
         id: team.id,
         builtin: true,
-        runtime: 'plugin-lead',
-        packageName: team.packageName,
-        packageVersion: team.packageVersion,
-        source: 'local',
-        status: 'installed',
+        runtime: { mode: 'lead', leadExpertSlug: lead.slug, initPrompt: localized(team.defaultInitPrompt) },
+        provenance: { packageName: team.packageName, packageVersion: team.packageVersion, source: 'local' },
         name: localized(team.name),
         description: localized(team.description),
-        defaultInitPrompt: localized(team.defaultInitPrompt),
         tags: team.tags.map(localized),
         examples: team.quickPrompts.map(localized),
-        lead: packageMember(lead, 'lead'),
-        members: members.map(member => packageMember(member!, 'member')),
+        goal: localized(team.defaultInitPrompt),
+        constraints: '',
+        deliveryRequirements: localized(team.defaultInitPrompt),
+        coordinatorMode: 'custom',
+        coordinatorTemplateId: 'general',
+        coordinatorTemplateVersion: 1,
+        coordinatorPrompt: localized(team.defaultInitPrompt),
+        members: [packageMember(lead, 'lead'), ...members.map(member => packageMember(member!, 'member'))].map(member => ({
+          expertSlug: member.expertSlug,
+          duty: member.role === 'lead' ? 'Lead' : member.name,
+          instructions: member.description || localized(team.defaultInitPrompt),
+        })),
         skills: [...team.skills],
         connectors: [...team.connectors],
         connectorStates: connectorStates(team, connectorView),
@@ -118,10 +129,8 @@ export function createTeamLibrary(
       // 读取名册期间可能有其他窗口写入，不能混用两个修订的配置。
       check(all.revision)
       const catalogTeams = [...teams(), ...packaged]
-      const catalogIds = new Set(catalogTeams.map(team => team.id))
       return {
         teams: catalogTeams,
-        enabledTeams: read().enabled.filter(id => catalogIds.has(id)),
         enabledExperts: all.enabled,
         revision: all.revision,
       }
@@ -133,11 +142,10 @@ export function createTeamLibrary(
     },
     async save(
       input: TeamInput,
-      enabled: boolean,
       revision: number,
     ): Promise<TeamSnapshot> {
       const parsed = teamInputSchema.safeParse(input)
-      if (!parsed.success || typeof enabled !== 'boolean')
+      if (!parsed.success)
         throw new Error(tx('请检查团队名称、成员分工、任务示例和主理人提示词。'))
       const value = parsed.data
       const all = await catalog()
@@ -158,86 +166,25 @@ export function createTeamLibrary(
       )
         throw new Error(tx('团队名称已被使用。'))
       requireMembers(value, all)
-      const team = {
+      const storedTeam = {
         ...value,
         id: value.id ?? `team-custom-${randomUUID()}`,
         builtin: false,
+      }
+      const team: ExpertTeam = {
+        ...storedTeam,
+        runtime: { mode: 'coordinator' as const, initPrompt: '' },
+        skills: [],
+        connectors: [],
+        connectorStates: [],
       }
       await store.mutate(
         [
           {
             op: 'set',
             path: ['customTeams'],
-            value: [...state.custom.filter((t) => t.id !== team.id), team],
+            value: [...state.custom.filter((t) => t.id !== team.id).map(({ runtime: _runtime, skills: _skills, connectors: _connectors, connectorStates: _connectorStates, provenance: _provenance, ...input }) => input), storedTeam],
           },
-          {
-            op: 'set',
-            path: ['enabledTeams'],
-            value: [
-              ...state.enabled.filter((id) => id !== team.id),
-              ...(enabled ? [team.id] : []),
-            ],
-          },
-          ...(enabled
-            ? [
-                {
-                  op: 'set' as const,
-                  path: ['enabled'],
-                  value: [
-                    ...new Set([
-                      ...store.read().enabled,
-                      ...team.members.map((m) => m.expertSlug),
-                    ]),
-                  ],
-                },
-              ]
-            : []),
-        ],
-        revision,
-      )
-      return library.snapshot()
-    },
-    async setEnabled(
-      id: string,
-      enabled: boolean,
-      revision: number,
-    ): Promise<TeamSnapshot> {
-      const definitionsSnapshot = await definitions()
-      const all = await catalog()
-      const packaged = await packagedTeams(all, definitionsSnapshot)
-      const team = id.startsWith('plugin-team:') ? packaged.find(item => item.id === id) : await library.get(id)
-      if (team === undefined) throw new Error(tx('专家团不存在，请重新选择。'))
-      check(revision)
-      if (typeof enabled !== 'boolean') throw new Error(tx('启用状态无效。'))
-      const memberSlugs = 'runtime' in team
-        ? [team.lead.expertSlug, ...team.members.map(member => member.expertSlug)]
-        : team.members.map(member => member.expertSlug)
-      if (enabled && memberSlugs.some(slug => !all.experts.some(expert => expert.slug === slug && !expert.conflict)))
-        throw new Error(tx('团队成员已删除或名称冲突，请替换后重试。'))
-      await store.mutate(
-        [
-          {
-            op: 'set',
-            path: ['enabledTeams'],
-            value: [
-              ...read().enabled.filter((item) => item !== id),
-              ...(enabled ? [id] : []),
-            ],
-          },
-          ...(enabled
-            ? [
-                {
-                  op: 'set' as const,
-                  path: ['enabled'],
-                  value: [
-                    ...new Set([
-                      ...store.read().enabled,
-                      ...memberSlugs,
-                    ]),
-                  ],
-                },
-              ]
-            : []),
         ],
         revision,
       )
@@ -283,11 +230,6 @@ export function createTeamLibrary(
             op: 'set',
             path: ['customTeams'],
             value: read().custom.filter((t) => t.id !== id),
-          },
-          {
-            op: 'set',
-            path: ['enabledTeams'],
-            value: read().enabled.filter((t) => t !== id),
           },
         ],
         revision,

@@ -26,7 +26,6 @@ describe('expert team client cache', () => {
 
     acceptTeamSnapshot(remote, {
       teams: [],
-      enabledTeams: ['review-team'],
       enabledExperts: ['reviewer'],
       revision: 2,
     })
@@ -48,7 +47,6 @@ describe('expert team client cache', () => {
 
     acceptTeamSnapshot(remote, {
       teams: [],
-      enabledTeams: ['review-team'],
       enabledExperts: ['reviewer'],
       revision: 2,
     })

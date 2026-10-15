@@ -175,7 +175,6 @@ export function hasAgencySettingsData(value: AgencySettings): boolean {
   return value.enabled.length > 0
     || (value.customExperts?.length ?? 0) > 0
     || (value.customTeams?.length ?? 0) > 0
-    || (value.enabledTeams?.length ?? 0) > 0
 }
 
 /** 从插件配置读取启用名单。volatile 引用每次调用都重新取值，并复制冻结快照。 */
@@ -184,13 +183,11 @@ export function readAgencySettings(config: object, locale: 'zh' | 'en' = 'zh'): 
     enabled?: unknown
     customExperts?: unknown
     customTeams?: unknown
-    enabledTeams?: unknown
   }
   const value: AgencySettings = {
     enabled: stringList(unwrapLive(record.enabled)),
     customExperts: objectList(unwrapLive(record.customExperts)) as AgencySettings['customExperts'],
     customTeams: objectList(unwrapLive(record.customTeams)) as AgencySettings['customTeams'],
-    enabledTeams: stringList(unwrapLive(record.enabledTeams)),
   }
   validateAgencySettings(value, locale)
   try {
@@ -210,7 +207,6 @@ export function agencySettingsFromLegacyDocument(document: unknown): AgencySetti
     enabled: stringList(record.enabled),
     customExperts: objectList(record.customExperts) as AgencySettings['customExperts'],
     customTeams: objectList(record.customTeams) as AgencySettings['customTeams'],
-    enabledTeams: stringList(record.enabledTeams),
   }
 }
 
@@ -318,7 +314,6 @@ export async function recoverImportedAgencySettings(
       { op: 'set', path: ['enabled'], value: section.enabled },
       { op: 'set', path: ['customExperts'], value: section.customExperts ?? [] },
       { op: 'set', path: ['customTeams'], value: section.customTeams ?? [] },
-      { op: 'set', path: ['enabledTeams'], value: section.enabledTeams ?? [] },
     ], revision)
   })
 }

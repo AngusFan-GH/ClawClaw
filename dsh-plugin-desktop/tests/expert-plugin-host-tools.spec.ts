@@ -68,7 +68,7 @@ async function hostFixture() {
   let revision = 7
   let state = {
     enabled: ['research-team--lead', 'research-team--analyst'],
-    customExperts: [], customTeams: [], enabledTeams: ['plugin-team:research-team'],
+    customExperts: [], customTeams: [],
   }
   let connectorState: 'running' | 'error' = 'running'
   const connectorView = (): DesktopMcpView => ({
@@ -133,12 +133,12 @@ describe('Plugin Team Host tools', () => {
 
     const first = await writeTeamPackage(fixture.home, '1.0.0')
     const listed = JSON.parse(String((await fixture.execute('list_expert_teams')).report))
-    expect(listed).toEqual([expect.objectContaining({ id: 'plugin-team:research-team', packageVersion: '1.0.0', runtime: 'plugin-lead' })])
+    expect(listed).toEqual([expect.objectContaining({ id: 'plugin-team:research-team', provenance: expect.objectContaining({ packageVersion: '1.0.0' }), runtime: 'lead' })])
 
     await rm(first, { recursive: true, force: true })
     await writeTeamPackage(fixture.home, '2.0.0')
     const updated = JSON.parse(String((await fixture.execute('get_expert_team', { team: 'plugin-team:research-team' })).report))
-    expect(updated).toMatchObject({ packageVersion: '2.0.0', runtime: 'plugin-lead', connectorStates: [expect.objectContaining({ serverName: 'company-browser', state: 'running' })] })
+    expect(updated).toMatchObject({ provenance: { packageVersion: '2.0.0' }, runtime: { mode: 'lead' }, connectorStates: [expect.objectContaining({ serverName: 'company-browser', state: 'running' })] })
 
     await rm(join(fixture.home, 'plugins/marketplaces/research-team'), { recursive: true, force: true })
     expect(JSON.parse(String((await fixture.execute('list_expert_teams')).report))).toEqual([])
@@ -149,7 +149,7 @@ describe('Plugin Team Host tools', () => {
     await writeTeamPackage(fixture.home, '1.0.0')
     const result = JSON.parse(String((await fixture.execute('summon_expert_team', { team: 'plugin-team:research-team', task: 'Investigate the evidence.' })).report))
 
-    expect(result).toMatchObject({ runtime: 'plugin-lead', plan: 'lead plan', answer: 'lead final', members: [{ ok: true, answer: 'member evidence' }] })
+    expect(result).toMatchObject({ runtime: 'lead', plan: 'lead plan', answer: 'lead final', members: [{ ok: true, answer: 'member evidence' }] })
     expect(fixture.starts).toHaveLength(3)
     expect(fixture.starts.map(call => String((call.prompt as Array<{ text: string }>)[0]?.text))).toEqual([
       expect.stringContaining('Create a concise execution plan'),
@@ -161,11 +161,6 @@ describe('Plugin Team Host tools', () => {
     const child = { session: { header: { parentSession: 'parent' } } } as unknown as Agent
     await expect(fixture.execute('summon_expert_team', { team: 'plugin-team:research-team', task: 'Nested.' }, child)).rejects.toThrow('cannot invoke additional teams')
 
-    const library = fixture.services.get(AGENCY_TEAM_SERVICE) as AgencyTeamLibrary
-    await library.setEnabled('plugin-team:research-team', false, 7)
-    await expect(fixture.execute('summon_expert_team', { team: 'plugin-team:research-team', task: 'Disabled.' })).rejects.toThrow('missing, conflicting, or disabled')
-    await library.setEnabled('plugin-team:research-team', true, 8)
-
     fixture.setConnectorState('error')
     await expect(fixture.execute('summon_expert_team', { team: 'plugin-team:research-team', task: 'Blocked.' })).rejects.toThrow('Required Team Connectors are not ready')
   })
@@ -174,7 +169,7 @@ describe('Plugin Team Host tools', () => {
     const fixture = await hostFixture()
     await writeTeamPackage(fixture.home, '1.0.0')
     const library = fixture.services.get(AGENCY_TEAM_SERVICE) as AgencyTeamLibrary
-    expect((await library.snapshot()).teams.find(team => team.id === 'plugin-team:research-team')).toMatchObject({ id: 'plugin-team:research-team', runtime: 'plugin-lead' })
+    expect((await library.snapshot()).teams.find(team => team.id === 'plugin-team:research-team')).toMatchObject({ id: 'plugin-team:research-team', runtime: { mode: 'lead' } })
     expect([...fixture.tools.keys()]).toEqual(expect.arrayContaining(['list_expert_teams', 'get_expert_team', 'summon_expert_team']))
   })
 })

@@ -1,4 +1,4 @@
-import { BUILTIN_TEAMS, TEAM_CUSTOM_ID, teamSchema, type ExpertTeam } from './team-contract.js'
+import { BUILTIN_TEAMS, TEAM_CUSTOM_ID, teamInputSchema, type TeamInput } from './team-contract.js'
 import { randomUUID } from 'node:crypto'
 import { teamText } from './team-i18n.js'
 import schema from '@deepseek-ai/schemastery'
@@ -8,22 +8,21 @@ import { CUSTOM_EXPERT_LIMIT, CUSTOM_EXPERT_SLUG, customError, customExpertInput
 import { ZH_DIVISION } from './names.js'
 
 export const AGENCY_LIBRARY_SERVICE = 'agencyAgentsLibrary'
-export interface AgencySettings { enabled: string[]; customExperts?: CustomExpert[]; customTeams?: ExpertTeam[]; enabledTeams?: string[] }
+export interface AgencySettings { enabled: string[]; customExperts?: CustomExpert[]; customTeams?: TeamInput[] }
 
 /** 兼容只有 enabled 的旧配置；内容与启用状态在同一 namespace 原子持久化。 */
 export const agencySettingsSchema = schema.object({
   enabled: schema.array(schema.string()).default([]),
   customExperts: schema.array(schema.any()).default([]),
   customTeams: schema.array(schema.any()).default([]),
-  enabledTeams: schema.array(schema.string()).default([]),
 })
 
 export function validateAgencySettings(value: AgencySettings, locale: 'zh' | 'en' = 'zh'): void {
-  const teams = z.array(teamSchema).max(100).parse(value.customTeams ?? [])
+  const teams = z.array(teamInputSchema).max(100).parse(value.customTeams ?? [])
   const teamIds = new Set<string>()
   const teamNames = new Set(BUILTIN_TEAMS.map(team => normalizeName(team.name)))
   for (const team of teams) {
-    if (team.builtin || !TEAM_CUSTOM_ID.test(team.id) || teamIds.has(team.id) || teamNames.has(normalizeName(team.name))) {
+    if (team.builtin || team.id === undefined || !TEAM_CUSTOM_ID.test(team.id) || teamIds.has(team.id) || teamNames.has(normalizeName(team.name))) {
       throw new Error(teamText(locale, '自定义专家团标识或名称重复，或使用了内置团队标识。'))
     }
     teamIds.add(team.id)

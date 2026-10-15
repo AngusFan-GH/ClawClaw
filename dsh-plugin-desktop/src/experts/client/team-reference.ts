@@ -24,6 +24,10 @@ export async function insertTeamReference(target: ReferenceInsertionTarget | und
     if (!target)
         return false;
     const state = target.state.getSnapshot();
+    if ((state.occurrences ?? []).some((occurrence) => occurrence.source.startsWith('dsh-plugin-desktop/experts:'))) {
+        target.notify?.('error', tx("草稿已有专家，请先移除专家再选择专家团。"));
+        return false;
+    }
     const existing = (state.occurrences ?? []).filter((o) => o.source === TEAM_REFERENCE_SOURCE);
     let span = triggerSpan;
     if (existing.length) {

@@ -59,8 +59,7 @@ export const AGENCY_AGENTS_DESCRIPTORS = [
   })),
   ...[
     { method: 'getTeams', parameters: [] },
-    { method: 'saveTeam', parameters: [jsonParameter('team', 'ExpertTeamInput', teamInputSchema), jsonParameter('enabled', 'boolean', z.boolean()), revisionParameter] },
-    { method: 'setTeamEnabled', parameters: [jsonParameter('id', 'string', z.string().min(1).max(128)), jsonParameter('enabled', 'boolean', z.boolean()), revisionParameter] },
+    { method: 'saveTeam', parameters: [jsonParameter('team', 'ExpertTeamInput', teamInputSchema), revisionParameter] },
     { method: 'deleteTeam', parameters: [jsonParameter('id', 'string', z.string().min(1).max(128)), revisionParameter] },
   ].map(({ method, parameters }): InvocationDescriptor => ({
     id: `dsh-plugin-desktop/experts#agencyAgents/${method}`, service: 'agencyAgents', namespace: 'agencyAgents', method,

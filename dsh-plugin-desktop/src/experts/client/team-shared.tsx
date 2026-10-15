@@ -87,5 +87,8 @@ export const teamIssue = (team: ExpertTeam, experts: readonly ExpertSummary[], e
         return "成员失效，需替换";
     if (team.members.some((m) => !enabled.includes(m.expertSlug)))
         return "有成员未启用";
+    if ((team.connectors ?? []).some((binding) => binding.enabled && binding.required &&
+        (team.connectorStates ?? []).find((connector) => connector.dependency === binding.name)?.state !== 'running'))
+        return "必需连接器未就绪";
     return undefined;
 };

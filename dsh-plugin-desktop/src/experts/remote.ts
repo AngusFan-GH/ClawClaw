@@ -1,7 +1,7 @@
 import { AGENCY_TEAM_SERVICE, type AgencyTeamLibrary } from './team-library.js'
 import { nativeTeamMemberName } from './team-engine.js'
 import { teamText } from './team-i18n.js'
-import { isPluginLeadTeam, type TeamInput, type TeamSnapshot, type TeamEngineStatus } from './team-contract.js'
+import type { TeamInput, TeamSnapshot, TeamEngineStatus } from './team-contract.js'
 import type { Context } from '@deepseek-ai/cordis'
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { TypertContribution } from '@deepseek-ai/dsh-typert-registry'
@@ -54,15 +54,12 @@ export default class AgencyAgentsRemote extends TypertRemoteService {
     const snapshot = await this.teams().snapshot()
     const engine = this.ctx.get('agencyAgentsTeamEngine') as (() => TeamEngineStatus) | undefined
     const nativeMembers = Object.fromEntries(snapshot.teams.flatMap(team => {
-      const slugs = isPluginLeadTeam(team)
-        ? [team.lead, ...team.members].map(member => member.expertSlug)
-        : team.members.map(member => member.expertSlug)
+      const slugs = team.members.map(member => member.expertSlug)
       return slugs.map(slug => [nativeTeamMemberName(team.id, slug), slug])
     }))
     return { ...snapshot, nativeMembers, ...(engine ? { engine: engine() } : {}) }
   }
-  async saveTeam(team: TeamInput, enabled: boolean, expectedRevision: number): Promise<TeamSnapshot> { return this.teams().save(team, enabled, expectedRevision) }
-  async setTeamEnabled(id: string, enabled: boolean, expectedRevision: number): Promise<TeamSnapshot> { return this.teams().setEnabled(id, enabled, expectedRevision) }
+  async saveTeam(team: TeamInput, expectedRevision: number): Promise<TeamSnapshot> { return this.teams().save(team, expectedRevision) }
   async setTeamConnectorEnabled(id: string, dependency: string, enabled: boolean): Promise<TeamSnapshot> {
     return this.teams().setConnectorEnabled(id, dependency, enabled)
   }
@@ -123,7 +120,6 @@ Object.defineProperty(AgencyAgentsRemote.prototype, '@deepseek-ai/dsh-typert-pro
     methods: Object.freeze([
       'getTeams',
       'saveTeam',
-      'setTeamEnabled',
       'setTeamConnectorEnabled',
       'testTeamConnector',
       'installTeamConnector',

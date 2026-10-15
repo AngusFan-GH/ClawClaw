@@ -46,9 +46,10 @@ describe('expert team live UI state', () => {
       ],
       examples: ['评审当前方案'], coordinatorMode: 'template' as const,
       coordinatorTemplateId: 'general' as const, coordinatorTemplateVersion: 1 as const, coordinatorPrompt: '',
+      runtime: { mode: 'coordinator' as const, initPrompt: '' }, skills: [], connectors: [], connectorStates: [],
     }
     const writer = { ...expert, slug: 'writer', name: '记录专家', nameEn: 'Writer' }
-    const snapshot = { teams: [team], enabledTeams: ['team-review'], enabledExperts: ['reviewer', 'writer'], revision: 1 }
+    const snapshot = { teams: [team], enabledExperts: ['reviewer', 'writer'], revision: 1 }
     const remote = {
       getTeams: vi.fn(async () => ({ ok: true, value: snapshot })),
       getCatalog: vi.fn(async () => ({ ok: true, value: { experts: [expert, writer], enabled: snapshot.enabledExperts, revision: 1 } })),
@@ -74,7 +75,7 @@ describe('expert team live UI state', () => {
     expect(document.body.textContent).not.toContain('选择后填入聊天草稿')
   })
 
-  it('updates a mounted expert card directly from a team enable receipt', async () => {
+  it('updates a mounted expert card directly from a team snapshot receipt', async () => {
     const remote = {
       getEnabled: vi.fn(async () => ({ ok: true, value: { enabled: [], revision: 1 } })),
     } as unknown as TeamRemote
@@ -118,7 +119,7 @@ describe('expert team live UI state', () => {
 
     await act(async () => {
       acceptTeamSnapshot(remote, {
-        teams: [], enabledTeams: ['review-team'], enabledExperts: ['reviewer'], revision: 2,
+        teams: [], enabledExperts: ['reviewer'], revision: 2,
       })
     })
 

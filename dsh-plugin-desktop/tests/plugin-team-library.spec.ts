@@ -59,27 +59,26 @@ describe('unified team library', () => {
     const snapshot = await library.snapshot()
     const team = snapshot.teams.find(item => item.id === definition.id)
     expect(team).toMatchObject({
-      id: 'plugin-team:research-pack', packageName: 'research-pack', packageVersion: '1.2.3', builtin: true,
-      source: 'local', status: 'installed', runtime: 'plugin-lead',
-      lead: { expertSlug: 'research-pack--lead', role: 'lead' },
+      id: 'plugin-team:research-pack', builtin: true,
+      provenance: { packageName: 'research-pack', packageVersion: '1.2.3', source: 'local' },
+      runtime: { mode: 'lead', leadExpertSlug: 'research-pack--lead' },
     })
-    expect(team?.members).toHaveLength(1)
+    expect(team?.members).toHaveLength(2)
   })
 
-  it('uses enabledTeams as the only team enablement state', async () => {
+  it('does not persist an independent team enablement state', async () => {
     const { library, state } = fixture()
-    const enabled = await library.setEnabled(definition.id, true, 4)
-    expect(enabled.enabledTeams).toContain(definition.id)
-    expect(state().enabled).toEqual(['research-pack--lead', 'research-pack--analyst'])
-
-    const disabled = await library.setEnabled(definition.id, false, 5)
-    expect(disabled.enabledTeams).not.toContain(definition.id)
-    expect(state().enabled).toEqual(['research-pack--lead', 'research-pack--analyst'])
+    const snapshot = await library.snapshot()
+    expect(snapshot).not.toHaveProperty('enabledTeams')
+    expect(library).not.toHaveProperty('setEnabled')
+    expect(state().enabled).toEqual([])
   })
 
-  it('does not derive team state from expert state', async () => {
-    const { library } = fixture({ enabled: ['research-pack--lead', 'research-pack--analyst'], enabledTeams: [] })
-    expect((await library.snapshot()).enabledTeams).not.toContain(definition.id)
+  it('exposes expert readiness without duplicating it as team state', async () => {
+    const { library } = fixture({ enabled: ['research-pack--lead', 'research-pack--analyst'] })
+    const snapshot = await library.snapshot()
+    expect(snapshot.enabledExperts).toEqual(['research-pack--lead', 'research-pack--analyst'])
+    expect(snapshot).not.toHaveProperty('enabledTeams')
   })
 
   it('projects and controls declared Connector dependencies through the Host lifecycle', async () => {

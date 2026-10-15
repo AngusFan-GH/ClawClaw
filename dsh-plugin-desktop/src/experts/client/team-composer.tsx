@@ -1,13 +1,13 @@
 // @ts-nocheck -- ported client compatibility layer; host contracts remain strictly checked.
 import { catalogState } from './catalog.js';
-import { acceptTeamSnapshot, refreshTeams, subscribeTeams, teamState } from './team-cache.js';
+import { refreshTeams, subscribeTeams, teamState } from './team-cache.js';
 import { useTeamLocale, localizeTeam, localizedExperts } from './team-locale.js';
 import React from 'react';
-import { isPluginLeadTeam, type ExpertTeam, type TeamSnapshot } from '../team-contract.js';
+import type { ExpertTeam, TeamSnapshot } from '../team-contract.js';
 import type { ExpertSummary } from '../expert-contract.js';
 import type { TeamReferenceTarget } from './team-reference.js';
 import { TeamDetails, unwrap, type TeamRemote } from './team-ui.js';
-import { Avatar, TeamAvatars, TeamConfirm, teamIssue, IconEye } from './team-shared.js';
+import { TeamAvatars, teamIssue, IconEye } from './team-shared.js';
 export function TeamMenu(props: {
     remote: TeamRemote;
     prepareSelect?(): (team: TeamReferenceTarget, example?: string) => boolean | Promise<boolean>;
@@ -26,10 +26,6 @@ export function TeamMenu(props: {
     const [error, setError] = React.useState('');
     const [busy, setBusy] = React.useState(false);
     const [detail, setDetail] = React.useState<ExpertTeam | null>(null);
-    const [confirm, setConfirm] = React.useState<{
-        team: ExpertTeam;
-        example?: string;
-    } | null>(null);
     const alive = React.useRef(true);
     React.useEffect(() => {
         alive.current = true;
@@ -70,57 +66,16 @@ export function TeamMenu(props: {
                 setError(cause instanceof Error ? tx(cause.message) : tx("专家团加载失败"));
         }
     };
-    const pickPlugin = async (team) => {
+    const pick = async (team: ExpertTeam, example?: string) => {
         if (busy || !snapshot)
             return;
-        const insert = props.prepareSelect?.();
-        setBusy(true);
-        try {
-            let current = team;
-            if (!snapshot.enabledTeams.includes(team.id)) {
-                const next = await unwrap(props.remote.setTeamEnabled(team.id, true, snapshot.revision));
-                if (!alive.current)
-                    return;
-                acceptTeamSnapshot(props.remote, next);
-                setSnapshot(next);
-                current = next.teams.find(item => item.id === team.id && isPluginLeadTeam(item)) ?? { ...team, enabled: true };
-                props.onExpertsChanged?.();
-            }
-            if (!await insert?.({ id: current.id, name: current.name, examples: current.examples }))
-                throw new Error(tx("无法插入团队，请确认当前聊天草稿后重试。"));
-            props.onSelected();
-        }
-        catch (cause) {
-            if (alive.current)
-                setError(cause instanceof Error ? tx(cause.message) : tx("选择失败。"));
-        }
-        finally {
-            if (alive.current)
-                setBusy(false);
-        }
-    };
-    const pick = async (team: ExpertTeam, example?: string, confirmed = false) => {
-        if (busy || !snapshot)
-            return;
-        if (!confirmed &&
-            (!snapshot.enabledTeams.includes(team.id) ||
-                teamIssue(team, experts, snapshot.enabledExperts))) {
-            setConfirm({ team, example });
+        if (teamIssue(team, experts, snapshot.enabledExperts) || team.connectorStates.some(connector => team.connectors.some(binding => binding.name === connector.dependency && binding.required && binding.enabled) && connector.state !== 'running')) {
+            setError(tx("专家团成员或必需能力尚未就绪，请先在设置中修复。"));
             return;
         }
         const insert = props.prepareSelect?.();
         setBusy(true);
         try {
-            if (confirmed) {
-                const next = await unwrap(props.remote.setTeamEnabled(team.id, true, snapshot.revision));
-                if (!alive.current)
-                    return;
-                acceptTeamSnapshot(props.remote, next);
-                setSnapshot(next);
-                props.onExpertsChanged?.();
-            }
-            if (!alive.current)
-                return;
             if (!await insert?.(team, example))
                 throw new Error(tx("无法插入团队，请确认当前聊天草稿后重试。"));
             props.onSelected();
@@ -134,7 +89,7 @@ export function TeamMenu(props: {
                 setBusy(false);
         }
     };
-    const teams = snapshot?.teams.map(team => isPluginLeadTeam(team) ? team : localizeTeam(team, locale)).filter((t) => (query !== '' || snapshot.enabledTeams.includes(t.id)) &&
+    const teams = snapshot?.teams.map(team => localizeTeam(team, locale)).filter((t) =>
         `${t.name} ${t.description}`
             .toLowerCase()
             .includes(query.toLowerCase())) ?? [];
@@ -147,40 +102,23 @@ export function TeamMenu(props: {
           <button type="button" onClick={() => void load()}>{tx("刷新")}</button>
         </div>)}
       <div className="agt-compact-list">
-        {teams.map((team) => isPluginLeadTeam(team) ? (<div className="agt-compact-row" key={team.id}>
-            <button type="button" disabled={busy} onClick={() => void pickPlugin(team)}>
-              <div className="agt-stack">{[team.lead, ...team.members].slice(0, 3).map(agent => <Avatar key={agent.expertSlug} expert={experts.find(expert => expert.slug === agent.expertSlug)}/>)}</div>
-              <span>{team.name}</span><small>{team.members.length + 1}{tx("人")}{snapshot?.enabledTeams.includes(team.id) ? '' : tx(" · 启用并选择")}</small>
-            </button>
-          </div>) : (<div className="agt-compact-row" key={team.id}>
-            <button type="button" disabled={busy} onClick={() => void pick(team)}>
+        {teams.map((team) => {
+          const blocked = !!snapshot && !!teamIssue(team, experts, snapshot.enabledExperts);
+          return (<div className="agt-compact-row" key={team.id}>
+            <button type="button" disabled={busy || blocked} onClick={() => void pick(team)}>
               <TeamAvatars team={team} experts={experts}/>
               <span>{team.name}</span>
-              <small>
-                {team.members.length}{tx("人")}{snapshot?.enabledTeams.includes(team.id)
-                ? ''
-                : tx(" \u00B7 启用并选择")}
-              </small>
+              <small>{team.members.length}{tx("人")}{blocked ? tx(" · 需修复") : ''}</small>
             </button>
             <button type="button" aria-label={tx("查看{0}详情", [team.name])} onClick={() => setDetail(team)}>
               <IconEye size={16}/>
             </button>
-          </div>))}
+          </div>);
+        })}
         {!teams.length && (<p className="aag-menu-empty" role="status">
-            {snapshot ? tx("搜索并启用一个专家团。") : tx("正在加载…")}
+            {snapshot ? tx("没有匹配的专家团。") : tx("正在加载…")}
           </p>)}
       </div>
       {detail && (<TeamDetails team={detail} experts={experts} close={() => setDetail(null)} onSelect={(example) => void pick(detail, example)}/>)}
-      {confirm && (<TeamConfirm title={tx("启用专家团")} label={tx("启用团队及所需成员")} onCancel={() => setConfirm(null)} onConfirm={() => {
-                const value = confirm;
-                setConfirm(null);
-                void pick(value.team, value.example, true);
-            }}>
-          <p>{tx("启用“")}{confirm.team.name}{tx("”及所需成员：")}{confirm.team.members
-                .map((m) => experts.find((e) => e.slug === m.expertSlug)?.name ?? tx("失效成员"))
-                .join(locale === 'en' ? ', ' : '、')}
-            。
-          </p>
-        </TeamConfirm>)}
     </div>);
 }

@@ -3,7 +3,7 @@ import { PersonaError } from './persona-error.js'
 import { teamText } from './team-i18n.js'
 import { teamCollaboration } from './team-collaboration.js'
 import { createTeamLibrary, AGENCY_TEAM_SERVICE, type TeamConnectorLifecycle } from './team-library.js'
-import { effectiveCoordinator, isCoordinatorTeam, isPluginLeadTeam } from './team-contract.js'
+import { effectiveCoordinator } from './team-contract.js'
 import { executeTeam, type TeamMemberRun } from './team-runtime.js'
 import { localizeTeam } from './team-content-en.js'
 /**
@@ -261,7 +261,6 @@ for (const [key, field] of [
   ['enabled', schema.array(schema.string()).default([])],
   ['customExperts', schema.array(schema.any()).default([])],
   ['customTeams', schema.array(schema.any()).default([])],
-  ['enabledTeams', schema.array(schema.string()).default([])],
 ] as const) {
   const live = markLiveFields ? liveSchemaField(field) : undefined
   if (live !== undefined) configFields[key] = live
@@ -1025,34 +1024,18 @@ const requireParent = (exec: ToolRunContext): void => {
 };
 const pluginText = (value: ExpertPluginLocalizedText, locale: LocaleId): string =>
     value[locale] ?? value[locale === 'zh' ? 'en' : 'zh'] ?? '';
-const pluginTeamView = (team: ExpertPluginTeamDefinition, locale: LocaleId) => ({
-    id: team.id,
-    name: pluginText(team.name, locale),
-    description: pluginText(team.description, locale),
-    packageName: team.packageName,
-    packageVersion: team.packageVersion,
-    leadAgentSlug: team.leadAgentSlug,
-    memberAgentSlugs: team.memberAgentSlugs,
-    defaultInitPrompt: pluginText(team.defaultInitPrompt, locale),
-    quickPrompts: team.quickPrompts.map(prompt => pluginText(prompt, locale)),
-    tags: team.tags.map(tag => pluginText(tag, locale)),
-    skills: team.skills,
-    connectors: team.connectors,
-    runtime: 'plugin-lead' as const,
-});
 const teamOutput = { schema: { type: 'object' as const, additionalProperties: false, properties: { report: { type: 'string' as const, required: true as const } } }, render: (_args: unknown, value: {
         report?: unknown;
     }) => [{ type: 'text' as const, text: String(value.report ?? '') }] };
-ctx.tools.register(localizeTeamTool(defineTool({ name: 'list_expert_teams', description: teamTx("列出已启用专家团。召唤前使用 get_expert_team 读取主理人规则及成员分工。"), parameters: {}, output: teamOutput,
+ctx.tools.register(localizeTeamTool(defineTool({ name: 'list_expert_teams', description: teamTx("列出当前可用的专家团。执行前使用 get_expert_team 读取主理人规则及成员分工。"), parameters: {}, output: teamOutput,
     async execute(_args, exec) {
         requireParent(exec);
         const snapshot = await teamLibrary.snapshot();
-        const teams = snapshot.teams.filter(team => snapshot.enabledTeams.includes(team.id)).map(team => isPluginLeadTeam(team)
-            ? { id: team.id, name: team.name, description: team.description, runtime: team.runtime, packageVersion: team.packageVersion }
-            : { ...localizeTeam(team, activeLocale()), runtime: 'coordinator' });
+        const teams = snapshot.teams.filter(team => team.members.every(member => snapshot.enabledExperts.includes(member.expertSlug)))
+            .map(team => ({ ...localizeTeam(team, activeLocale()), runtime: team.runtime.mode }));
         return { report: JSON.stringify(teams) };
     }, }), activeLocale));
-ctx.tools.register(localizeTeamTool(defineTool({ name: 'get_expert_team', description: teamTx("读取已启用专家团的目标、分工和运行策略。部分内置专家团由独立主理人负责规划与汇总。"),
+ctx.tools.register(localizeTeamTool(defineTool({ name: 'get_expert_team', description: teamTx("读取专家团的目标、分工和运行策略。部分内置专家团由独立主理人负责规划与汇总。"),
     parameters: { team: { type: 'string', required: true, description: teamTx("专家团稳定标识或完整名称。") } }, output: teamOutput,
     async execute(args, exec) {
         requireParent(exec);
@@ -1060,14 +1043,13 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'get_expert_team', descri
         const pluginTeam = [...pluginTeams.values()].find(team => team.id === args.team || pluginText(team.name, activeLocale()) === args.team);
         if (pluginTeam !== undefined) {
             const candidate = snapshot.teams.find(team => team.id === pluginTeam.id);
-            if (!candidate || !isPluginLeadTeam(candidate) || !snapshot.enabledTeams.includes(candidate.id)) throw new Error(teamTx("专家团成员不存在、冲突或已停用，请修复后重新召唤。"));
-            const summary = candidate;
-            return { report: JSON.stringify({ ...pluginTeamView(pluginTeam, activeLocale()), connectorStates: summary.connectorStates, revision: catalog.revision,
+            if (!candidate || candidate.runtime.mode !== 'lead' || candidate.members.some(member => !snapshot.enabledExperts.includes(member.expertSlug))) throw new Error(teamTx("专家团成员不存在、冲突或未就绪，请修复后重试。"));
+            return { report: JSON.stringify({ ...localizeTeam(candidate, activeLocale()), revision: catalog.revision,
                 instruction: teamTx("该专家团由独立主理人规划和汇总；主会话只负责发起任务并交付最终结果。") }) };
         }
-        const team = snapshot.teams.filter(isCoordinatorTeam).map(t => localizeTeam(t, activeLocale())).find(t => t.id === args.team || t.name === args.team || snapshot.teams.find(original => original.id === t.id)?.name === args.team);
-        if (!team || !snapshot.enabledTeams.includes(team.id))
-            throw new Error(teamTx("专家团未启用或不存在。"));
+        const team = snapshot.teams.filter(candidate => candidate.runtime.mode === 'coordinator').map(t => localizeTeam(t, activeLocale())).find(t => t.id === args.team || t.name === args.team || snapshot.teams.find(original => original.id === t.id)?.name === args.team);
+        if (!team || team.members.some(member => !snapshot.enabledExperts.includes(member.expertSlug)))
+            throw new Error(teamTx("专家团不存在或成员未就绪。"));
         const engine = resolveTeamEngine(ctx, exec.agent, maxDepth, teamRequiresToolFilter(team, catalog.experts)).status;
         return { report: JSON.stringify({ ...team, engine, coordinator: effectiveCoordinator(team, activeLocale()), collaboration: teamCollaboration(team, activeLocale()), revision: snapshot.revision, instruction: teamTx("确认目标与评审范围后立即将简报传给 summon_expert_team，相关资料路径可直接交给专家阅读，主理人不要预先读完整个项目。只有确实无法确定评审对象时才询问；用户已明确整体评审后不再反复确认。若 engine.recommendation 非空，简短转述其中的会话恢复建议，但不阻断普通调用、不自行修改配置。原生模式返回的是启动确认，必须等待实际成员结论后才汇总。") }) };
     },
@@ -1082,8 +1064,8 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
         const pluginTeam = [...pluginTeams.values()].find(team => team.id === args.team || pluginText(team.name, activeLocale()) === args.team);
         if (pluginTeam !== undefined) {
             const candidate = snapshot.teams.find(team => team.id === pluginTeam.id);
-            if (!candidate || !isPluginLeadTeam(candidate) || !snapshot.enabledTeams.includes(candidate.id))
-                throw new Error(teamTx("专家团成员不存在、冲突或已停用，请修复后重新召唤。"));
+            if (!candidate || candidate.runtime.mode !== 'lead' || candidate.members.some(member => !snapshot.enabledExperts.includes(member.expertSlug)))
+                throw new Error(teamTx("专家团成员不存在、冲突或未就绪，请修复后重试。"));
             const summary = candidate;
             const unavailable = summary.connectorStates.filter(connector => {
                 const binding = pluginTeam.connectors.find(item => item.name === connector.dependency);
@@ -1110,11 +1092,11 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
                     } finally { await run.dispose(); }
                 },
             });
-            return { report: JSON.stringify({ ...result, runtime: 'plugin-lead' }) };
+            return { report: JSON.stringify({ ...result, runtime: 'lead' }) };
         }
-        const team = snapshot.teams.filter(isCoordinatorTeam).map(t => localizeTeam(t, activeLocale())).find(t => t.id === args.team || t.name === args.team || snapshot.teams.find(original => original.id === t.id)?.name === args.team);
-        if (!team || !snapshot.enabledTeams.includes(team.id))
-            throw new Error(teamTx("专家团未启用或不存在。"));
+        const team = snapshot.teams.filter(candidate => candidate.runtime.mode === 'coordinator').map(t => localizeTeam(t, activeLocale())).find(t => t.id === args.team || t.name === args.team || snapshot.teams.find(original => original.id === t.id)?.name === args.team);
+        if (!team || team.members.some(member => !snapshot.enabledExperts.includes(member.expertSlug)))
+            throw new Error(teamTx("专家团不存在或成员未就绪。"));
         const engine = resolveTeamEngine(ctx, exec.agent, maxDepth, teamRequiresToolFilter(team, catalog.experts));
         const locale = activeLocale();
         if (engine.status.mode === 'native' && engine.service) {
