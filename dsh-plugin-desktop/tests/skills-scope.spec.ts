@@ -1,6 +1,7 @@
-import { mkdtemp, mkdir, rename, readFile, realpath, rm, symlink, writeFile, access } from 'node:fs/promises'
+import { mkdtemp, mkdir, rename, readFile, readdir, realpath, rm, symlink, writeFile, access } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import * as SkillFileSystem from '@deepseek-ai/dsh-skill-filesystem'
@@ -11,6 +12,12 @@ import * as ClawClawSkillFileSystem from '../src/clawclaw-skill-filesystem.ts'
 import { clawClawProjectSkillRoot, windowsWorkspaceKey } from '../src/clawclaw-skill-filesystem.ts'
 
 describe('Skill discovery scope', () => {
+  it('keeps bundled Skill paths independent from legacy product names', async () => {
+    const root = fileURLToPath(new URL('../assets/skills/', import.meta.url))
+    const paths = await readdir(root, { recursive: true })
+    expect(paths.filter(path => /(?:work|code)buddy|(?:^|\/)wb(?:\/|$)/iu.test(path))).toEqual([])
+  })
+
   it.each([false, true])('keeps installation, discovery and recycle in the isolated active data directory (relocated: %s)', async relocated => {
     const home = await mkdtemp(join(tmpdir(), 'clawclaw-skill-layout-'))
     const ctx = new Context()
@@ -114,11 +121,11 @@ describe('Skill discovery scope', () => {
       expect((await a.read()).skills.filter(skill => skill.source !== 'bundled')).toHaveLength(0)
       expect((await b.read()).skills.filter(skill => skill.source !== 'bundled')).toHaveLength(0)
       const bundled = (await a.read()).skills.filter(skill => skill.source === 'bundled')
-      expect(bundled).toHaveLength(8)
+      expect(bundled).toHaveLength(64)
       expect(bundled.map(skill => skill.name)).toEqual(expect.arrayContaining([
         'business-operations', 'content-production', 'data-analysis', 'evidence-research',
         'product-design-review', 'risk-compliance-review', 'software-delivery',
-        'expert-manager',
+        'expert-manager', 'skill-creator', 'sites', 'tencent-docx', 'clawclaw-finance-skill',
       ]))
       expect(bundled).toContainEqual(expect.objectContaining({ name: 'software-delivery', editable: false }))
       const expertManager = await a.detail('expert-manager')
@@ -163,7 +170,7 @@ describe('Skill discovery scope', () => {
       await expect(a.setUserInvocable('project-review', false)).rejects.toThrow('Only Skills')
       await install(join(second, '.clawclaw', 'skills'), 'only-b', 'Project B instructions')
       await vi.waitFor(async () => { expect((await b.read()).skills.some(skill => skill.name === 'only-b')).toBe(true) }, { timeout: 5000 })
-      expect((await a.read()).skills.some(skill => skill.name === 'only-b')).toBe(false)
+      await vi.waitFor(async () => { expect((await a.read()).skills.some(skill => skill.name === 'only-b')).toBe(false) }, { timeout: 5000 })
       expect((await a.read()).skills.some(skill => skill.name === 'ignored-agents' || skill.name === 'ignored-dsh')).toBe(false)
     } finally {
       await ctx.fiber.dispose(); vi.unstubAllEnvs(); await rm(home, { recursive: true, force: true })

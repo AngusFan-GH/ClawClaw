@@ -1,0 +1,17 @@
+{
+  "description": "tencent-docx plugin hooks (clawclaw/local 通道专用)",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAWCLAW_PLUGIN_ROOT}/scripts/clawclaw/local/setup.sh\" </dev/null >/dev/null 2>&1 &",
+            "description": "clawclaw/local 通道运行时依赖幂等预热（Node 检查 + html-to-docx venv）；后台异步执行，首次冷启动不阻塞会话",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

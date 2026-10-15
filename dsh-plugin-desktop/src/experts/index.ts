@@ -219,6 +219,15 @@ function bundledAssetRoot(name: 'catalog' | 'catalog-zh'): string {
 }
 const BUNDLED_ROOT = bundledAssetRoot('catalog')
 const BUNDLED_CHINESE_ROOT = bundledAssetRoot('catalog-zh')
+function bundledExpertPluginRoot(): string {
+  const candidates = [
+    new URL('../assets/expert-plugins/', import.meta.url),
+    new URL('../../assets/expert-plugins/', import.meta.url),
+  ]
+  const found = candidates.find(candidate => existsSync(fileURLToPath(candidate)))
+  return fileURLToPath(found ?? candidates[0]!)
+}
+const BUNDLED_PLUGIN_ROOT = bundledExpertPluginRoot()
 export const AGENCY_PERSONA_SERVICE = 'agencyAgentsPersona'
 
 /** 仅当宿主 schemastery 提供 volatile() 时，把字段标成可实时更新。插件自己的新版本不能代替宿主判断。 */
@@ -673,10 +682,12 @@ export function apply(ctx: Context, config: Config): void {
     if (!force && now - lastPluginRefresh < 250) return refreshTail
     lastPluginRefresh = now
     const refresh = refreshTail.then(async () => {
-      const [legacy, packages] = await Promise.all([
+      const [legacy, bundledPackages, installedPackages] = await Promise.all([
         legacyReady,
+        existsSync(BUNDLED_PLUGIN_ROOT) ? discoverExpertPluginPackages(BUNDLED_PLUGIN_ROOT) : Promise.resolve([]),
         existsSync(pluginLibraryRoot) ? discoverExpertPluginPackages(pluginLibraryRoot) : Promise.resolve([]),
       ])
+      const packages = [...new Map([...bundledPackages, ...installedPackages].map(pkg => [pkg.manifest.name, pkg])).values()]
       const nextExperts = new Map(legacy)
       const nextTeams = new Map<string, ExpertPluginTeamDefinition>()
       for (const pkg of packages) {

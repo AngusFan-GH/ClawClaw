@@ -11,6 +11,7 @@ export const MCP_CAPABILITY_IDS = [
   'scientific-data.protein',
   'developer.documentation',
   'commerce.shopline',
+  'mail.gmail',
 ] as const
 
 export type McpCapabilityId = typeof MCP_CAPABILITY_IDS[number]
@@ -33,6 +34,7 @@ const CAPABILITY_ALIASES: Readonly<Record<McpCapabilityId, readonly string[]>> =
   'scientific-data.protein': ['rcsb-pdb', 'pdb', 'protein-data'],
   'developer.documentation': ['context7', 'developer-docs', 'api-docs'],
   'commerce.shopline': ['shopline-developer-mcp', 'shopline'],
+  'mail.gmail': ['gmail', 'google-mail'],
 }
 
 export const MCP_CAPABILITY_DEFAULT_SERVER: Readonly<Record<McpCapabilityId, string>> = {
@@ -48,6 +50,7 @@ export const MCP_CAPABILITY_DEFAULT_SERVER: Readonly<Record<McpCapabilityId, str
   'scientific-data.protein': 'rcsb-pdb',
   'developer.documentation': 'context7',
   'commerce.shopline': 'shopline-developer-mcp',
+  'mail.gmail': 'gmail',
 }
 
 function normalize(value: string): string {

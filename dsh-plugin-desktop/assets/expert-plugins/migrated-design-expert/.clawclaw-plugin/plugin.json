@@ -1,0 +1,57 @@
+{
+  "name": "migrated-design-expert",
+  "version": "5.7.10",
+  "description": "面向产品体验、视觉系统和设计交付的设计专家。",
+  "author": "ClawClaw migration",
+  "agents": [
+    "./agents/design.md"
+  ],
+  "expertType": "agent",
+  "agentName": "design",
+  "displayName": {
+    "zh": "设计专家",
+    "en": "Design Expert"
+  },
+  "profession": {
+    "zh": "产品与视觉设计",
+    "en": "Product and visual design"
+  },
+  "displayDescription": {
+    "zh": "面向产品体验、视觉系统和设计交付的设计专家。",
+    "en": "面向产品体验、视觉系统和设计交付的设计专家。"
+  },
+  "avatar": "./avatar.png",
+  "categoryId": "productivity",
+  "defaultInitPrompt": {
+    "zh": "请以设计专家身份处理当前任务。",
+    "en": "Handle this task as Design Expert."
+  },
+  "tags": [
+    {
+      "zh": "内置迁移",
+      "en": "Built-in"
+    },
+    {
+      "zh": "专业工作流",
+      "en": "Workflow"
+    },
+    {
+      "zh": "本地资产",
+      "en": "Local asset"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "分析当前任务并给出执行方案",
+      "en": "Analyze the task and propose an execution plan"
+    },
+    {
+      "zh": "直接开始完成当前任务",
+      "en": "Start completing the task"
+    },
+    {
+      "zh": "复核结果并指出风险",
+      "en": "Review the result and identify risks"
+    }
+  ]
+}

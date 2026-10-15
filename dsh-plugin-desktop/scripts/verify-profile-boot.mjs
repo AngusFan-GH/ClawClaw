@@ -243,8 +243,24 @@ try {
     throw new Error('assembled desktop profile is missing the ClawClaw Experts Host capabilities')
   }
   const agencyCatalog = await agencyLibrary.catalog()
-  if (agencyCatalog.experts.length !== 321) {
-    throw new Error(`assembled desktop profile exposes ${agencyCatalog.experts.length} ClawClaw experts instead of 321`)
+  const migratedExpertSlugs = [
+    'migrated-code-expert',
+    'migrated-design-expert',
+    'migrated-document-production-team--doc-converter',
+    'migrated-document-production-team--doc-formatter',
+    'migrated-document-production-team--doc-writer',
+    'migrated-spreadsheet-expert',
+    'migrated-work-expert',
+  ]
+  const missingMigratedExperts = migratedExpertSlugs.filter(
+    slug => !agencyCatalog.experts.some(expert => expert.slug === slug),
+  )
+  if (missingMigratedExperts.length > 0) {
+    throw new Error(`assembled desktop profile is missing migrated ClawClaw experts: ${missingMigratedExperts.join(', ')}`)
+  }
+  const expectedExpertCount = 321 + migratedExpertSlugs.length
+  if (agencyCatalog.experts.length !== expectedExpertCount) {
+    throw new Error(`assembled desktop profile exposes ${agencyCatalog.experts.length} ClawClaw experts instead of ${expectedExpertCount}`)
   }
   const firstExpert = agencyCatalog.experts[0]
   if (firstExpert === undefined) {

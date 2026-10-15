@@ -1,0 +1,57 @@
+{
+  "name": "migrated-code-expert",
+  "version": "5.7.10",
+  "description": "面向代码分析、实现、调试和交付的工程专家。",
+  "author": "ClawClaw migration",
+  "agents": [
+    "./agents/code.md"
+  ],
+  "expertType": "agent",
+  "agentName": "code",
+  "displayName": {
+    "zh": "代码专家",
+    "en": "Code Expert"
+  },
+  "profession": {
+    "zh": "软件工程与交付",
+    "en": "Software engineering and delivery"
+  },
+  "displayDescription": {
+    "zh": "面向代码分析、实现、调试和交付的工程专家。",
+    "en": "面向代码分析、实现、调试和交付的工程专家。"
+  },
+  "avatar": "./avatar.png",
+  "categoryId": "productivity",
+  "defaultInitPrompt": {
+    "zh": "请以代码专家身份处理当前任务。",
+    "en": "Handle this task as Code Expert."
+  },
+  "tags": [
+    {
+      "zh": "内置迁移",
+      "en": "Built-in"
+    },
+    {
+      "zh": "专业工作流",
+      "en": "Workflow"
+    },
+    {
+      "zh": "本地资产",
+      "en": "Local asset"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "分析当前任务并给出执行方案",
+      "en": "Analyze the task and propose an execution plan"
+    },
+    {
+      "zh": "直接开始完成当前任务",
+      "en": "Start completing the task"
+    },
+    {
+      "zh": "复核结果并指出风险",
+      "en": "Review the result and identify risks"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "sourceProduct": "WorkBuddy AI",
+  "sourceVersion": "5.7.10",
+  "sourceAsset": "builtin-plugins/tencent-docx/agents",
+  "migration": "ClawClaw-owned Team package",
+  "runtimeDependency": "No WorkBuddy filesystem dependency"
+}

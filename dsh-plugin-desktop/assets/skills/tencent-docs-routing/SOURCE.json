@@ -1,0 +1,9 @@
+{
+  "sourceProduct": "WorkBuddy AI",
+  "sourceVersion": "5.7.10",
+  "sourceAsset": "skills/tencent-docs-routing",
+  "importedAs": "tencent-docs-routing",
+  "migration": "ClawClaw-owned portable copy",
+  "license": "Not declared in source asset",
+  "runtimeDependency": "No WorkBuddy filesystem dependency"
+}

@@ -6,6 +6,25 @@ export interface DesktopMcpCatalogDefinition extends Omit<DesktopMcpCatalogEntry
 
 export const DESKTOP_MCP_CATALOG: readonly DesktopMcpCatalogDefinition[] = Object.freeze([
   Object.freeze({
+    id: 'gmail',
+    name: 'Gmail',
+    description: 'Search, read, draft, send, label, and manage Gmail messages through a local OAuth-authenticated MCP server.',
+    category: 'productivity',
+    sourceUrl: 'https://github.com/gongrzhe/server-gmail-autoauth-mcp',
+    license: 'ISC',
+    capabilities: Object.freeze(['mail.gmail']),
+    credentials: Object.freeze([
+      Object.freeze({ id: 'oauth-keys-path', label: 'Google OAuth keys file path', target: 'env', targetName: 'GMAIL_OAUTH_PATH', secret: false, required: true }),
+      Object.freeze({ id: 'credentials-path', label: 'Gmail credentials file path', target: 'env', targetName: 'GMAIL_CREDENTIALS_PATH', secret: false, required: true }),
+    ]),
+    server: Object.freeze({
+      serverName: 'gmail', transport: 'stdio', command: 'npx', args: Object.freeze(['-y', '@gongrzhe/server-gmail-autoauth-mcp@1.1.11']),
+      cwd: '', env: Object.freeze({}), timeoutMs: 60_000,
+      reconnect: Object.freeze({ enabled: true, initialDelayMs: 500, maxDelayMs: 30_000, maxAttempts: 10 }), enabled: true,
+      connectorId: 'gmail', capabilities: Object.freeze(['mail.gmail']),
+    }),
+  }),
+  Object.freeze({
     id: 'playwright',
     name: 'Playwright Browser',
     description: 'Browser automation for navigation, inspection, screenshots, and web workflows.',

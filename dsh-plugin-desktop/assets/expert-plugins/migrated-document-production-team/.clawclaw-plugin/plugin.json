@@ -1,0 +1,107 @@
+{
+  "name": "migrated-document-production-team",
+  "version": "5.7.10",
+  "description": "文档内容创作、排版审校与 DOCX 交付专家团。",
+  "author": "ClawClaw migration",
+  "agents": [
+    "./agents/doc-writer.md",
+    "./agents/doc-formatter.md",
+    "./agents/doc-converter.md"
+  ],
+  "expertType": "team",
+  "agentName": "doc-writer",
+  "teamInfo": {
+    "leadAgent": "doc-writer",
+    "memberAgents": [
+      "doc-formatter",
+      "doc-converter"
+    ]
+  },
+  "members": [
+    {
+      "id": "doc-writer",
+      "displayName": {
+        "zh": "文档主笔",
+        "en": "Document Writer"
+      },
+      "profession": {
+        "zh": "内容策划与写作",
+        "en": "Content planning and writing"
+      },
+      "avatar": "./avatar.png",
+      "role": "lead"
+    },
+    {
+      "id": "doc-formatter",
+      "displayName": {
+        "zh": "排版设计师",
+        "en": "Document Formatter"
+      },
+      "profession": {
+        "zh": "结构与视觉排版",
+        "en": "Structure and visual formatting"
+      },
+      "avatar": "./avatar.png",
+      "role": "member"
+    },
+    {
+      "id": "doc-converter",
+      "displayName": {
+        "zh": "文档交付工程师",
+        "en": "Document Converter"
+      },
+      "profession": {
+        "zh": "格式转换与质量校验",
+        "en": "Format conversion and quality validation"
+      },
+      "avatar": "./avatar.png",
+      "role": "member"
+    }
+  ],
+  "displayName": {
+    "zh": "文档生产专家团",
+    "en": "Document Production Team"
+  },
+  "profession": {
+    "zh": "专业文档生产",
+    "en": "Professional document production"
+  },
+  "displayDescription": {
+    "zh": "由主笔、排版设计师和交付工程师协作完成专业文档。",
+    "en": "A writer, formatter, and delivery engineer collaborate on professional documents."
+  },
+  "avatar": "./avatar.png",
+  "categoryId": "writing",
+  "defaultInitPrompt": {
+    "zh": "先明确文档目标与受众，再由主笔创作、排版设计师优化、交付工程师校验并汇总。",
+    "en": "Clarify the document goal and audience, then coordinate writing, formatting, validation, and final delivery."
+  },
+  "tags": [
+    {
+      "zh": "文档",
+      "en": "Documents"
+    },
+    {
+      "zh": "写作",
+      "en": "Writing"
+    },
+    {
+      "zh": "排版",
+      "en": "Formatting"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "创建一份结构完整的专业报告",
+      "en": "Create a complete professional report"
+    },
+    {
+      "zh": "优化现有文档的内容和排版",
+      "en": "Improve the content and layout of an existing document"
+    },
+    {
+      "zh": "检查文档质量并生成可交付版本",
+      "en": "Review document quality and produce a deliverable version"
+    }
+  ]
+}

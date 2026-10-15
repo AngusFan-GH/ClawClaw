@@ -1,0 +1,57 @@
+{
+  "name": "migrated-work-expert",
+  "version": "5.7.10",
+  "description": "面向研究、写作、整理与日常业务执行的通用专家。",
+  "author": "ClawClaw migration",
+  "agents": [
+    "./agents/work.md"
+  ],
+  "expertType": "agent",
+  "agentName": "work",
+  "displayName": {
+    "zh": "工作助理专家",
+    "en": "Work Expert"
+  },
+  "profession": {
+    "zh": "知识工作与业务执行",
+    "en": "Knowledge work and business execution"
+  },
+  "displayDescription": {
+    "zh": "面向研究、写作、整理与日常业务执行的通用专家。",
+    "en": "面向研究、写作、整理与日常业务执行的通用专家。"
+  },
+  "avatar": "./avatar.png",
+  "categoryId": "productivity",
+  "defaultInitPrompt": {
+    "zh": "请以工作助理专家身份处理当前任务。",
+    "en": "Handle this task as Work Expert."
+  },
+  "tags": [
+    {
+      "zh": "内置迁移",
+      "en": "Built-in"
+    },
+    {
+      "zh": "专业工作流",
+      "en": "Workflow"
+    },
+    {
+      "zh": "本地资产",
+      "en": "Local asset"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "分析当前任务并给出执行方案",
+      "en": "Analyze the task and propose an execution plan"
+    },
+    {
+      "zh": "直接开始完成当前任务",
+      "en": "Start completing the task"
+    },
+    {
+      "zh": "复核结果并指出风险",
+      "en": "Review the result and identify risks"
+    }
+  ]
+}

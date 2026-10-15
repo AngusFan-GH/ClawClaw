@@ -142,6 +142,7 @@ export const REQUIRED_PACKAGED_RUNTIME_ENTRIES = [
   'assets/experts/LICENSE',
   'assets/experts/catalog/engineering/engineering-software-architect.md',
   'assets/experts/catalog-zh/engineering/engineering-software-architect.md',
+  'assets/expert-plugins/migrated-document-production-team/.clawclaw-plugin/plugin.json',
   'assets/skills/software-delivery/SKILL.md',
   'assets/skills/expert-manager/SKILL.md',
   ...REQUIRED_DSH_CLI_RUNTIME_ENTRIES,

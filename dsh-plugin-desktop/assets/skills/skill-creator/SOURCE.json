@@ -1,0 +1,9 @@
+{
+  "sourceProduct": "WorkBuddy AI",
+  "sourceVersion": "5.7.10",
+  "sourceAsset": "skills/skill-creator",
+  "importedAs": "skill-creator",
+  "migration": "ClawClaw-owned portable copy",
+  "license": "See LICENSE.txt",
+  "runtimeDependency": "No WorkBuddy filesystem dependency"
+}

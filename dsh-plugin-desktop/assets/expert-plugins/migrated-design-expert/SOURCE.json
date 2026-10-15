@@ -1,0 +1,7 @@
+{
+  "sourceProduct": "WorkBuddy AI",
+  "sourceVersion": "5.7.10",
+  "sourceAsset": "welcomemode/design/agents/design.md",
+  "migration": "ClawClaw-owned Agent package",
+  "runtimeDependency": "No WorkBuddy filesystem dependency"
+}

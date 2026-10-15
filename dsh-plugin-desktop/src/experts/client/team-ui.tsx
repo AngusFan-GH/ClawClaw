@@ -106,6 +106,55 @@ export function TeamDetails(props: {
       {props.onDelete && (<Button danger style={{ margin: '0 16px 16px', alignSelf: 'flex-start' }} onClick={props.onDelete}>{tx("删除专家团")}</Button>)}
     </TeamDialog>);
 }
+
+function connectorStatus(connector: PluginTeamSummary['connectorStates'][number], tx: (key: string, values?: readonly unknown[]) => string): string {
+    if (!connector.installed)
+        return tx("未安装");
+    if (!connector.enabled)
+        return tx("已停用");
+    if (!connector.credentialsReady)
+        return tx("待配置");
+    if (connector.state === 'starting')
+        return tx("连接中");
+    if (connector.state === 'running')
+        return tx("可用");
+    return tx("故障");
+}
+
+function PluginTeamDetails(props: {
+    team: PluginTeamSummary;
+    experts: readonly ExpertSummary[];
+    busy: boolean;
+    close(): void;
+    select(example?: string): void;
+    connector(dependency: string, action: 'install' | 'enable' | 'disable' | 'test'): void;
+    openConnectors?(): void;
+}) {
+    const { tx } = useTeamLocale();
+    const agents = [props.team.lead, ...props.team.members];
+    return (<TeamDialog title={tx("{0}详情", [props.team.name])} close={props.close} className="agt-detail agt-plugin-detail">
+      <header className="agt-detail-head">
+        <div className="aag-team-avatar"><div className="agt-stack">{agents.slice(0, 3).map(agent => <Avatar key={agent.slug} expert={props.experts.find(expert => expert.slug === agent.slug)}/>)}</div></div>
+        <div><div className="agt-name-line"><h2>{props.team.name}</h2><span className="agt-tag">v{props.team.installedVersion}</span><span className="agt-tag">Lead Runtime</span></div>
+          <p>ClawClaw Plugin · {props.team.packageName}</p>
+          <div className="agt-row"><Button type="primary" disabled={props.busy} onClick={() => props.select()}><IconSend size={16}/>{tx("召唤专家团")}</Button></div>
+        </div>
+      </header>
+      <p className="agt-description">{props.team.description}</p>
+      {props.team.tags.length > 0 && <div className="agt-tags">{props.team.tags.map(tag => <span className="agt-tag" key={tag}>{tag}</span>)}</div>}
+      <section><h3><IconUsers />{tx("团队成员")}</h3><div className="agt-plugin-roster">{agents.map(agent => <div key={agent.slug}>
+        <Avatar expert={props.experts.find(expert => expert.slug === agent.slug)}/><div><strong>{agent.name}</strong><span>{agent.role === 'lead' ? 'Lead' : tx("成员")}</span><p>{agent.description}</p></div>
+      </div>)}</div></section>
+      <section><h3>{tx("技能")}</h3>{props.team.skills.length === 0 ? <p className="agt-help">{tx("无")}</p> : <div className="agt-plugin-chips">{props.team.skills.map(skill => <span key={skill.name}>{skill.name}{skill.required ? ` · ${tx("必需")}` : ''}</span>)}</div>}</section>
+      <section><h3>{tx("连接器")}</h3>{props.team.connectorStates.length === 0 ? <p className="agt-help">{tx("无")}</p> : <div className="agt-connector-list">{props.team.connectorStates.map(connector => <div key={connector.dependency}>
+        <span className="agt-connector-state" data-state={connector.state} data-ready={connector.installed && connector.enabled && connector.credentialsReady}><i aria-hidden="true"/><strong>{connector.dependency}</strong><small>{connectorStatus(connector, tx)}</small></span>
+        <div className="agt-row">{!connector.installed ? <Button disabled={props.busy || (!connector.installable && !connector.credentialsRequired)} onClick={() => connector.credentialsRequired ? props.openConnectors?.() : props.connector(connector.dependency, 'install')}>{connector.credentialsRequired ? tx("配置") : tx("安装")}</Button> : <>
+          <Button disabled={props.busy} onClick={() => props.connector(connector.dependency, connector.enabled ? 'disable' : 'enable')}>{connector.enabled ? tx("停用") : tx("启用")}</Button>
+          <Button disabled={props.busy} onClick={() => props.connector(connector.dependency, 'test')}>{tx("测试")}</Button></>}</div>
+      </div>)}</div>}</section>
+      {props.team.quickPrompts.length > 0 && <section><h3><IconBulb />{tx("团队帮你做")}</h3><div className="agt-examples">{props.team.quickPrompts.map(prompt => <Button key={prompt} block disabled={props.busy} onClick={() => props.select(prompt)}><span>“{prompt}”</span><IconSend size={16}/></Button>)}</div></section>}
+    </TeamDialog>);
+}
 export function TeamsPanel(props: {
     remote: TeamRemote;
     prepareSelect?(): (team: ExpertTeam, example?: string) => boolean | Promise<boolean>;
@@ -140,6 +189,7 @@ export function TeamsPanel(props: {
     const [notice, setNotice] = React.useState('');
     const [busy, setBusy] = React.useState(false);
     const [details, setDetails] = React.useState<ExpertTeam | null>(null);
+    const [pluginDetails, setPluginDetails] = React.useState<PluginTeamSummary | null>(null);
     const [editor, setEditor] = React.useState<{
         value?: TeamInput;
         enabled: boolean;
@@ -239,6 +289,8 @@ export function TeamsPanel(props: {
             else
                 throw new Error(tx("当前版本不支持 Connector 生命周期操作。"));
             setPluginSnapshot(next);
+            if (pluginDetails?.id === id)
+                setPluginDetails(next.teams.find(item => item.id === id) ?? null);
             setNotice(action === 'test' ? tx("Connector 测试完成。") : tx("Connector 状态已更新。"));
         }
         catch (cause) {
@@ -405,14 +457,18 @@ export function TeamsPanel(props: {
       <div className="aag-expert-grid aag-team-grid">
         {filteredPlugins.map((team) => (<LibraryCard key={team.id} testId="plugin-team-card" name={team.name} avatar={<div className="aag-team-avatar">
               <div className="agt-stack">{[team.lead, ...team.members].slice(0, 3).map(agent => <Avatar key={agent.slug} expert={experts.find(expert => expert.slug === agent.slug)}/>)}</div>
-            </div>} metadata={<>Plugin Team · v{team.installedVersion} · Lead Runtime</>} description={`${team.description} Lead: ${team.lead.name}; Members: ${team.members.map(member => member.name).join(locale === 'en' ? ', ' : '、')}. Skills: ${team.skills.map(skill => skill.name).join(', ') || '-'}; Connectors: ${team.connectorStates.map(connector => `${connector.dependency} (${connector.state})`).join(', ') || '-'}.`} enabled={team.enabled} disabled={busy || typeof props.remote.setPluginTeamEnabled !== 'function'} enabledLabel={tx("已启用")} disabledLabel={tx("已停用")} toggle={() => void changePlugin(team.id, !team.enabled)} moreItems={team.connectorStates.flatMap(connector => {
+            </div>} metadata={<>ClawClaw Plugin · v{team.installedVersion}</>} description={team.description} content={<div className="agt-plugin-card-content">
+              <p className="aag-card-description" title={team.description}>{team.description}</p>
+              <dl><div><dt>Lead</dt><dd>{team.lead.name}</dd></div><div><dt>{tx("成员")}</dt><dd>{team.members.length}</dd></div><div><dt>{tx("技能")}</dt><dd>{team.skills.length}</dd></div></dl>
+              {team.connectorStates.length > 0 && <div className="agt-plugin-connectors">{team.connectorStates.map(connector => <span key={connector.dependency} data-state={connector.state} data-ready={connector.installed && connector.enabled && connector.credentialsReady}><i aria-hidden="true"/>{connector.dependency} · {connectorStatus(connector, tx)}</span>)}</div>}
+            </div>} enabled={team.enabled} disabled={busy || typeof props.remote.setPluginTeamEnabled !== 'function'} enabledLabel={tx("已启用")} disabledLabel={tx("已停用")} toggle={() => void changePlugin(team.id, !team.enabled)} moreItems={team.connectorStates.flatMap(connector => {
                 if (!connector.installed)
                     return [{ id: `connector-install-${connector.dependency}`, label: connector.credentialsRequired ? tx("配置 Connector：{0}", [connector.dependency]) : tx("安装 Connector：{0}", [connector.dependency]), disabled: busy || (!connector.installable && !connector.credentialsRequired), onSelect: () => connector.credentialsRequired ? props.onOpenConnectors?.() : void changeConnector(team, connector.dependency, 'install') }];
                 return [
                     { id: `connector-toggle-${connector.dependency}`, label: connector.enabled ? tx("停用 Connector：{0}", [connector.dependency]) : tx("启用 Connector：{0}", [connector.dependency]), disabled: busy, onSelect: () => void changeConnector(team, connector.dependency, connector.enabled ? 'disable' : 'enable') },
                     { id: `connector-test-${connector.dependency}`, label: tx("测试 Connector：{0}", [connector.dependency]), disabled: busy, onSelect: () => void changeConnector(team, connector.dependency, 'test') },
                 ];
-            })} actions={<><button type="button" className="aag-card-action" disabled={busy} onClick={() => void selectPlugin(team)}><IconSend size={18}/>{tx("召唤专家团")}</button><span className="aag-card-action">{team.lead.name} + {team.members.length}</span></>}/>))}
+            })} actions={<><button type="button" className="aag-card-action" aria-haspopup="dialog" disabled={busy} onClick={() => setPluginDetails(team)}><IconEye size={18}/>{tx("查看详情")}</button><button type="button" className="aag-card-action" disabled={busy} onClick={() => void selectPlugin(team)}><IconSend size={18}/>{tx("召唤专家团")}</button></>}/>))}
         {filtered.map((team) => {
             const issue = teamIssue(team, experts, snapshot!.enabledExperts);
             const enabled = snapshot!.enabledTeams.includes(team.id);
@@ -448,6 +504,8 @@ export function TeamsPanel(props: {
                     setDetails(null);
                 }
                 : undefined} onDelete={!details.builtin ? () => void change(details, 'delete') : undefined}/>)}
+      {pluginDetails && <PluginTeamDetails team={pluginDetails} experts={experts} busy={busy} close={() => setPluginDetails(null)} select={example => void selectPlugin(pluginDetails, example)}
+        connector={(dependency, action) => void changeConnector(pluginDetails, dependency, action)} openConnectors={props.onOpenConnectors}/>}
       {editor && (<TeamEditor initial={editor.value} experts={experts} enabled={editor.enabled} enabledExperts={snapshot!.enabledExperts} close={() => setEditor(null)} refresh={async () => {
                 const latest = await unwrap(props.remote.getTeams());
                 accept(latest);

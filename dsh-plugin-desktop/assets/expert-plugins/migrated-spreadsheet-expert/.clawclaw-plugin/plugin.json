@@ -1,0 +1,57 @@
+{
+  "name": "migrated-spreadsheet-expert",
+  "version": "5.7.10",
+  "description": "面向电子表格读取、分析、清洗、公式和可视化的专家。",
+  "author": "ClawClaw migration",
+  "agents": [
+    "./agents/sheet-agent.md"
+  ],
+  "expertType": "agent",
+  "agentName": "sheet-agent",
+  "displayName": {
+    "zh": "表格专家",
+    "en": "Spreadsheet Expert"
+  },
+  "profession": {
+    "zh": "表格分析与自动化",
+    "en": "Spreadsheet analysis and automation"
+  },
+  "displayDescription": {
+    "zh": "面向电子表格读取、分析、清洗、公式和可视化的专家。",
+    "en": "面向电子表格读取、分析、清洗、公式和可视化的专家。"
+  },
+  "avatar": "./avatar.png",
+  "categoryId": "productivity",
+  "defaultInitPrompt": {
+    "zh": "请以表格专家身份处理当前任务。",
+    "en": "Handle this task as Spreadsheet Expert."
+  },
+  "tags": [
+    {
+      "zh": "内置迁移",
+      "en": "Built-in"
+    },
+    {
+      "zh": "专业工作流",
+      "en": "Workflow"
+    },
+    {
+      "zh": "本地资产",
+      "en": "Local asset"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "分析当前任务并给出执行方案",
+      "en": "Analyze the task and propose an execution plan"
+    },
+    {
+      "zh": "直接开始完成当前任务",
+      "en": "Start completing the task"
+    },
+    {
+      "zh": "复核结果并指出风险",
+      "en": "Review the result and identify risks"
+    }
+  ]
+}

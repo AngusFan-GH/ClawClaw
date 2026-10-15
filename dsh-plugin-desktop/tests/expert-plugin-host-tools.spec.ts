@@ -175,7 +175,7 @@ describe('Plugin Team Host tools', () => {
     const fixture = await hostFixture()
     await writeTeamPackage(fixture.home, '1.0.0')
     const library = fixture.services.get(AGENCY_PLUGIN_TEAM_SERVICE) as AgencyPluginTeamLibrary
-    expect((await library.snapshot()).teams[0]).toMatchObject({ id: 'plugin-team:research-team', runtime: 'plugin-lead' })
+    expect((await library.snapshot()).teams.find(team => team.id === 'plugin-team:research-team')).toMatchObject({ id: 'plugin-team:research-team', runtime: 'plugin-lead' })
     expect([...fixture.tools.keys()]).toEqual(expect.arrayContaining(['list_expert_teams', 'get_expert_team', 'summon_expert_team']))
   })
 })

@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   discoverExpertPluginPackages,
@@ -24,6 +25,7 @@ async function writeJson(path: string, value: unknown): Promise<void> {
 }
 
 const localized = (zh: string, en: string) => ({ zh, en })
+const bundledPluginRoot = fileURLToPath(new URL('../assets/expert-plugins/', import.meta.url))
 
 function agentManifest() {
   return {
@@ -60,6 +62,20 @@ afterEach(async () => {
 })
 
 describe('ClawClaw expert plugin packages', () => {
+  it('ships valid migrated expert and Team packages', async () => {
+    const packages = await discoverExpertPluginPackages(bundledPluginRoot)
+    expect(packages.map(pkg => pkg.manifest.name).sort()).toEqual([
+      'migrated-code-expert',
+      'migrated-design-expert',
+      'migrated-document-production-team',
+      'migrated-spreadsheet-expert',
+      'migrated-work-expert',
+    ])
+    expect(packages.find(pkg => pkg.manifest.name === 'migrated-document-production-team')?.manifest).toMatchObject({
+      expertType: 'team',
+      teamInfo: { leadAgent: 'doc-writer', memberAgents: ['doc-formatter', 'doc-converter'] },
+    })
+  })
   it('loads and projects an Agent package without rewriting its fields', async () => {
     const library = await temporaryRoot()
     const root = await createAgentPackage(library)

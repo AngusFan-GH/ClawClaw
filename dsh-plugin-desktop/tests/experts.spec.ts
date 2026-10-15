@@ -69,11 +69,13 @@ describe('ClawClaw experts', () => {
     }
     expect(manifest.build?.files).toEqual(expect.arrayContaining([
       'assets/experts/**',
+      'assets/expert-plugins/**',
       'assets/skills/**',
     ]))
     expect(REQUIRED_PACKAGED_RUNTIME_ENTRIES).toEqual(expect.arrayContaining([
       'assets/experts/catalog/engineering/engineering-software-architect.md',
       'assets/experts/catalog-zh/engineering/engineering-software-architect.md',
+      'assets/expert-plugins/migrated-document-production-team/.clawclaw-plugin/plugin.json',
       'assets/skills/software-delivery/SKILL.md',
       'assets/skills/expert-manager/SKILL.md',
     ]))

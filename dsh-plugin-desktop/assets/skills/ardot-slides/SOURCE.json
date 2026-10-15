@@ -1,0 +1,9 @@
+{
+  "sourceProduct": "WorkBuddy AI",
+  "sourceVersion": "5.7.10",
+  "sourceAsset": "builtin-plugins/ardot/skills/ardot-slides",
+  "importedAs": "ardot-slides",
+  "migration": "ClawClaw-owned portable copy",
+  "license": "Not declared in source asset",
+  "runtimeDependency": "No WorkBuddy filesystem dependency"
+}
