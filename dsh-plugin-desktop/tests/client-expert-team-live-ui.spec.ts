@@ -109,7 +109,6 @@ describe('expert team live UI state', () => {
         'settings.filter.source': 'Source',
         'settings.filter.allSources': 'All sources',
         'settings.source.builtin': 'Built-in',
-        'settings.source.plugin': 'Plugin',
         'settings.source.custom': 'Custom',
         'settings.filter.category': 'Category',
         'settings.filter.allCategories': 'All categories',
@@ -133,9 +132,9 @@ describe('expert team live UI state', () => {
       sharedHeader: true,
     } as unknown as React.ComponentProps<typeof ExpertCardsSettings>)))
 
-    const source = host.querySelector('[data-source="plugin"]')
+    const source = host.querySelector('[data-source="base"]')
     const toggle = host.querySelector<HTMLButtonElement>('[role="switch"]')
-    expect(source?.textContent).toBe('Plugin · v1.4.0')
+    expect(source?.textContent).toBe('Built-in · v1.4.0')
     expect(host.textContent).toContain('Required capability missing · 0/1')
     expect(toggle?.disabled).toBe(true)
     expect(toggle?.getAttribute('title')).toBe('Configure required capabilities first.')

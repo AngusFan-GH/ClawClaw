@@ -8,20 +8,14 @@ import type { TeamInput, TeamSnapshot } from '../team-contract.js'
 import type { RemoteResult, TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 import { AGENCY_AGENTS_DESCRIPTORS } from '../remote-contract.js'
 import type { CatalogSnapshot, CustomExpertInput } from '../expert-contract.js'
-import type { PluginTeamSnapshot } from '../plugin-team-contract.js'
-
-export interface AgencyPluginTeamsRemote {
-  getPluginTeams(): Promise<RemoteResult<PluginTeamSnapshot>>
-  setPluginTeamEnabled(id: string, enabled: boolean, expectedRevision: number): Promise<RemoteResult<PluginTeamSnapshot>>
-  setPluginTeamConnectorEnabled(id: string, dependency: string, enabled: boolean): Promise<RemoteResult<PluginTeamSnapshot>>
-  testPluginTeamConnector(id: string, dependency: string): Promise<RemoteResult<PluginTeamSnapshot>>
-  installPluginTeamConnector(id: string, dependency: string, values: Readonly<Record<string, string>>): Promise<RemoteResult<PluginTeamSnapshot>>
-}
 
 export interface AgencyTeamsRemote {
   getTeams(): Promise<RemoteResult<TeamSnapshot>>
   saveTeam(team: TeamInput, enabled: boolean, expectedRevision: number): Promise<RemoteResult<TeamSnapshot>>
   setTeamEnabled(id: string, enabled: boolean, expectedRevision: number): Promise<RemoteResult<TeamSnapshot>>
+  setTeamConnectorEnabled(id: string, dependency: string, enabled: boolean): Promise<RemoteResult<TeamSnapshot>>
+  testTeamConnector(id: string, dependency: string): Promise<RemoteResult<TeamSnapshot>>
+  installTeamConnector(id: string, dependency: string, values: Readonly<Record<string, string>>): Promise<RemoteResult<TeamSnapshot>>
   deleteTeam(id: string, expectedRevision: number): Promise<RemoteResult<TeamSnapshot>>
 }
 export interface AgencyCatalogRemote {
@@ -41,20 +35,18 @@ export interface AgencyAgentsPrompt {
 }
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
-  interface TypertRemoteNamespace$agencyAgents extends AgencyCatalogRemote, AgencyTeamsRemote, AgencyPluginTeamsRemote {
+  interface TypertRemoteNamespace$agencyAgents extends AgencyCatalogRemote, AgencyTeamsRemote {
     getEnabled: () => Promise<RemoteResult<AgencyAgentsEnabledState>>
     setEnabled: (enabled: string[], expectedRevision: number) => Promise<RemoteResult<AgencyAgentsEnabledState>>
     getPrompt: (slug: string, division: string) => Promise<RemoteResult<AgencyAgentsPrompt>>
   }
   interface TypertRemoteMap {
     'agencyAgents/getTeams': AgencyTeamsRemote['getTeams']
-    'agencyAgents/getPluginTeams': AgencyPluginTeamsRemote['getPluginTeams']
-    'agencyAgents/setPluginTeamEnabled': AgencyPluginTeamsRemote['setPluginTeamEnabled']
-    'agencyAgents/setPluginTeamConnectorEnabled': AgencyPluginTeamsRemote['setPluginTeamConnectorEnabled']
-    'agencyAgents/testPluginTeamConnector': AgencyPluginTeamsRemote['testPluginTeamConnector']
-    'agencyAgents/installPluginTeamConnector': AgencyPluginTeamsRemote['installPluginTeamConnector']
     'agencyAgents/saveTeam': AgencyTeamsRemote['saveTeam']
     'agencyAgents/setTeamEnabled': AgencyTeamsRemote['setTeamEnabled']
+    'agencyAgents/setTeamConnectorEnabled': AgencyTeamsRemote['setTeamConnectorEnabled']
+    'agencyAgents/testTeamConnector': AgencyTeamsRemote['testTeamConnector']
+    'agencyAgents/installTeamConnector': AgencyTeamsRemote['installTeamConnector']
     'agencyAgents/deleteTeam': AgencyTeamsRemote['deleteTeam']
     'agencyAgents/getCatalog': AgencyCatalogRemote['getCatalog']
     'agencyAgents/getCustomExpert': AgencyCatalogRemote['getCustomExpert']

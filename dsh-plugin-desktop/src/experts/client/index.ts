@@ -10,7 +10,7 @@ import { TEAM_REFERENCE_SOURCE, insertTeamReference, teamReference, teamSubmissi
 import { TeamLocaleContext } from './team-locale.js'
 import { localizeTeam } from '../team-content-en.js'
 import { teamText } from '../team-i18n.js'
-import type { ExpertTeam } from '../team-contract.js'
+import { isPluginLeadTeam, type ExpertTeam } from '../team-contract.js'
 import { PromptDialog } from "./prompt-dialog.js";
 import React from 'react'
 import { CategorySelect } from './category-select.js'
@@ -136,12 +136,12 @@ const AVATAR_CATEGORY_DIVISIONS: Readonly<Record<AvatarCategory, ReadonlySet<str
 
 type ExpertView = CatalogExpertView
 
-export type ExpertSource = 'base' | 'plugin' | 'custom'
+export type ExpertSource = 'base' | 'custom'
 
 /** Package experts are stored in ClawClaw's library, but remain distinguishable from bundled experts. */
 export function expertSource(expert: Pick<ExpertView, 'custom' | 'packageFormat'>): ExpertSource {
   if (expert.custom) return 'custom'
-  return expert.packageFormat === 'clawclaw-plugin' ? 'plugin' : 'base'
+  return 'base'
 }
 
 /** An enabled expert can always be disabled; enabling requires all mandatory capabilities. */
@@ -475,7 +475,7 @@ export const CARD_SETTINGS_CSS = `
 .aag-card-identity{display:flex;min-width:0;overflow:hidden;flex-direction:column;padding-right:42px}
 .aag-card-name{display:-webkit-box;overflow:hidden;font-size:15px;font-weight:650;line-height:21px;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 .aag-card-division{display:flex;min-width:0;align-items:center;gap:4px;margin-top:2px;overflow:hidden;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:18px;white-space:nowrap}.aag-card-category{min-width:0;overflow:hidden;text-overflow:ellipsis}.aag-card-division .aag-custom-badge{box-sizing:border-box;height:18px;flex:none;margin-left:0;padding:0 5px;line-height:16px}
-.aag-source-badge{box-sizing:border-box;height:18px;flex:none;padding:0 5px;border:1px solid var(--dsw-alias-border-l2);border-radius:4px;color:var(--dsw-alias-label-secondary);font-size:10px;line-height:16px}.aag-source-badge[data-source="plugin"]{border-color:color-mix(in srgb,var(--dsw-alias-brand-primary) 42%,var(--dsw-alias-border-l2));color:var(--dsw-alias-brand-primary)}
+.aag-source-badge{box-sizing:border-box;height:18px;flex:none;padding:0 5px;border:1px solid var(--dsw-alias-border-l2);border-radius:4px;color:var(--dsw-alias-label-secondary);font-size:10px;line-height:16px}
 .aag-card-description{grid-column:1/-1;display:-webkit-box;min-height:38px;margin:0;overflow:hidden;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:19px;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 .aag-expert-card-custom .aag-card-identity{overflow:visible}.aag-expert-card-custom .aag-card-division{max-height:38px;flex-wrap:wrap;align-content:flex-start;column-gap:4px;row-gap:2px;overflow:hidden;white-space:normal}.aag-expert-card-custom .aag-card-category{flex:none;overflow:visible;text-overflow:clip;white-space:nowrap}.aag-expert-card-custom .aag-card-description{min-height:19px;-webkit-line-clamp:1}
 .aag-card-actions{display:flex;align-items:stretch;min-height:44px;border-top:1px solid var(--dsw-alias-border-l2)}
@@ -1026,7 +1026,7 @@ function ExpertDetailsDrawer(props: {
     queueMicrotask(() => { if (node.isConnected) node.focus({ preventScroll: true }) })
   }, [props.value.returnFocus])
   const source = expertSource(expert)
-  const sourceLabel = props.t(source === 'plugin' ? 'settings.source.plugin' : source === 'custom' ? 'settings.source.custom' : 'settings.source.builtin')
+  const sourceLabel = props.t(source === 'custom' ? 'settings.source.custom' : 'settings.source.builtin')
   const issueKeys = new Set(props.health.issues.map(issue => `${issue.type}\0${issue.name}`))
   const capabilityList = (kind: 'skill' | 'mcp', bindings: ExpertView['skills']): React.ReactNode => bindings.length === 0
     ? React.createElement('span', { className: 'aag-note' }, props.t('capability.none'))
@@ -1365,11 +1365,10 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
       React.createElement('div', { className: 'aag-field aag-field-source' },
         React.createElement(CategorySelect, {
           id: 'aag-filter-source', value: source, label: props.t('settings.filter.source'),
-          onChange: (value) => { setSource(value === 'base' || value === 'plugin' || value === 'custom' ? value : 'all'); setNotice(null) },
+          onChange: (value) => { setSource(value === 'base' || value === 'custom' ? value : 'all'); setNotice(null) },
           options: [
             { value: 'all', label: props.t('settings.filter.allSources') },
             { value: 'base', label: props.t('settings.source.builtin') },
-            { value: 'plugin', label: props.t('settings.source.plugin') },
             { value: 'custom', label: props.t('settings.source.custom') },
           ],
         })),
@@ -1424,7 +1423,7 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
           name: displayName(expert, props.getActive()),
           avatar: React.createElement('img', { className: 'aag-expert-avatar', src: avatar, width: 44, height: 44, loading: 'lazy', decoding: 'async', alt: '' }),
           custom: expert.custom,
-          metadata: React.createElement(React.Fragment, null, React.createElement('span', { className: 'aag-card-category' }, inputTriggerSourceName(expert.division, props.getActive())), expert.conflict ? React.createElement('span', { className: 'aag-custom-badge', title: props.t('custom.nameConflictHint') }, props.t('custom.nameConflict')) : null, React.createElement('span', { className: 'aag-source-badge', 'data-source': sourceKind }, props.t(sourceKind === 'plugin' ? 'settings.source.plugin' : sourceKind === 'custom' ? 'settings.source.custom' : 'settings.source.builtin'), sourceKind === 'plugin' && expert.packageVersion ? ` · v${expert.packageVersion}` : ''),
+          metadata: React.createElement(React.Fragment, null, React.createElement('span', { className: 'aag-card-category' }, inputTriggerSourceName(expert.division, props.getActive())), expert.conflict ? React.createElement('span', { className: 'aag-custom-badge', title: props.t('custom.nameConflictHint') }, props.t('custom.nameConflict')) : null, React.createElement('span', { className: 'aag-source-badge', 'data-source': sourceKind }, props.t(sourceKind === 'custom' ? 'settings.source.custom' : 'settings.source.builtin'), sourceKind === 'base' && expert.packageVersion ? ` · v${expert.packageVersion}` : ''),
             health.total > 0 ? React.createElement('span', { className: 'aag-custom-badge', 'data-health': health.state }, props.t(`capability.health.${health.state}`), ` · ${health.ready}/${health.total}`) : null),
           description: displayDescription(expert, props.getActive()),
           enabled, disabled: isSaving || expert.conflict === true || blockedFromEnable,
@@ -1723,11 +1722,9 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
           const cached = teamState(teamRemote)
           const snapshot = cached ?? await refreshTeams(teamRemote)
           if (cached) void refreshTeams(teamRemote).catch((error: unknown) => console.warn('[clawclaw-experts] 专家团刷新失败：', error))
-          const pluginSnapshot = typeof teamRemote.getPluginTeams === 'function' ? await unwrap(teamRemote.getPluginTeams()) : undefined
-          teamCache = [
-            ...snapshot.teams.filter(team => snapshot.enabledTeams.includes(team.id)).map(team => localizeTeam(team, active)),
-            ...(pluginSnapshot?.teams.filter(team => team.enabled).map(team => ({ id: team.id, name: team.name, examples: team.quickPrompts })) ?? []),
-          ]
+          teamCache = snapshot.teams.filter(team => snapshot.enabledTeams.includes(team.id)).map(team => isPluginLeadTeam(team)
+            ? { id: team.id, name: team.name, examples: team.examples }
+            : localizeTeam(team, active))
           return teamCache.filter(team => `${team.name}`.toLowerCase().includes(String(request.query ?? '').toLowerCase())).map(team => ({ name: `${team.name} · ${teamText(active, '专家团')}`, hint: team.id, section: teamText(active, '专家团') }))
         },
         onPick: pick => {
@@ -1741,14 +1738,16 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
         codec: {
           clipboardText: id => teamText(active, '@专家团：{0}\u00a0', [teamCache.find(team => team.id === id)?.name ?? teamText(active, '已移除团队（请重新选择）')]),
           serialize: async id => {
-            const [snapshot, catalog, pluginSnapshot] = await Promise.all([refreshTeams(teamRemote), unwrap(teamRemote.getCatalog()), typeof teamRemote.getPluginTeams === 'function' ? unwrap(teamRemote.getPluginTeams()) : Promise.resolve(undefined)])
-            teamCache = [
-              ...snapshot.teams.filter(team => snapshot.enabledTeams.includes(team.id)).map(team => localizeTeam(team, active)),
-              ...(pluginSnapshot?.teams.filter(team => team.enabled).map(team => ({ id: team.id, name: team.name, examples: team.quickPrompts })) ?? []),
-            ]
+            const [snapshot, catalog] = await Promise.all([refreshTeams(teamRemote), unwrap(teamRemote.getCatalog())])
+            teamCache = snapshot.teams.filter(team => snapshot.enabledTeams.includes(team.id)).map(team => isPluginLeadTeam(team)
+              ? { id: team.id, name: team.name, examples: team.examples }
+              : localizeTeam(team, active))
             const team = teamCache.find(team => team.id === id)
             const legacy = snapshot.teams.find(candidate => candidate.id === id)
-            if (!team || (legacy !== undefined && (!snapshot.enabledTeams.includes(id) || legacy.members.some(member => !catalog.enabled.includes(member.expertSlug) || !catalog.experts.some(e => e.slug === member.expertSlug && !e.conflict))))) throw new Error(teamText(active, '团队已停用或成员失效，请修复后再发送。'))
+            const memberSlugs = legacy === undefined ? [] : isPluginLeadTeam(legacy)
+              ? [legacy.lead.expertSlug, ...legacy.members.map(member => member.expertSlug)]
+              : legacy.members.map(member => member.expertSlug)
+            if (!team || (legacy !== undefined && (!snapshot.enabledTeams.includes(id) || memberSlugs.some(slug => !catalog.enabled.includes(slug) || !catalog.experts.some(e => e.slug === slug && !e.conflict))))) throw new Error(teamText(active, '团队已停用或成员失效，请修复后再发送。'))
             return teamSubmissionText(team, active)
           },
         },

@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Context } from '@deepseek-ai/cordis'
 import { apply } from '../src/experts/index.ts'
-import { AGENCY_PLUGIN_TEAM_SERVICE, type AgencyPluginTeamLibrary } from '../src/experts/plugin-team-library.ts'
+import { AGENCY_TEAM_SERVICE, type AgencyTeamLibrary } from '../src/experts/team-library.ts'
 import { DESKTOP_MCP_LIFECYCLE_SERVICE, type DesktopMcpView } from '../src/mcp-contract.ts'
 
 const roots: string[] = []
@@ -68,8 +68,7 @@ async function hostFixture() {
   let revision = 7
   let state = {
     enabled: ['research-team--lead', 'research-team--analyst'],
-    customExperts: [], customTeams: [], enabledTeams: [],
-    pluginTeamStates: [{ packageName: 'research-team', enabled: true }],
+    customExperts: [], customTeams: [], enabledTeams: ['plugin-team:research-team'],
   }
   let connectorState: 'running' | 'error' = 'running'
   const connectorView = (): DesktopMcpView => ({
@@ -134,7 +133,7 @@ describe('Plugin Team Host tools', () => {
 
     const first = await writeTeamPackage(fixture.home, '1.0.0')
     const listed = JSON.parse(String((await fixture.execute('list_expert_teams')).report))
-    expect(listed).toEqual([expect.objectContaining({ id: 'plugin-team:research-team', installedVersion: '1.0.0', runtime: 'plugin-lead' })])
+    expect(listed).toEqual([expect.objectContaining({ id: 'plugin-team:research-team', packageVersion: '1.0.0', runtime: 'plugin-lead' })])
 
     await rm(first, { recursive: true, force: true })
     await writeTeamPackage(fixture.home, '2.0.0')
@@ -162,7 +161,7 @@ describe('Plugin Team Host tools', () => {
     const child = { session: { header: { parentSession: 'parent' } } } as unknown as Agent
     await expect(fixture.execute('summon_expert_team', { team: 'plugin-team:research-team', task: 'Nested.' }, child)).rejects.toThrow('cannot invoke additional teams')
 
-    const library = fixture.services.get(AGENCY_PLUGIN_TEAM_SERVICE) as AgencyPluginTeamLibrary
+    const library = fixture.services.get(AGENCY_TEAM_SERVICE) as AgencyTeamLibrary
     await library.setEnabled('plugin-team:research-team', false, 7)
     await expect(fixture.execute('summon_expert_team', { team: 'plugin-team:research-team', task: 'Disabled.' })).rejects.toThrow('missing, conflicting, or disabled')
     await library.setEnabled('plugin-team:research-team', true, 8)
@@ -174,7 +173,7 @@ describe('Plugin Team Host tools', () => {
   it('registers the Plugin Team library as a first-class Host service', async () => {
     const fixture = await hostFixture()
     await writeTeamPackage(fixture.home, '1.0.0')
-    const library = fixture.services.get(AGENCY_PLUGIN_TEAM_SERVICE) as AgencyPluginTeamLibrary
+    const library = fixture.services.get(AGENCY_TEAM_SERVICE) as AgencyTeamLibrary
     expect((await library.snapshot()).teams.find(team => team.id === 'plugin-team:research-team')).toMatchObject({ id: 'plugin-team:research-team', runtime: 'plugin-lead' })
     expect([...fixture.tools.keys()]).toEqual(expect.arrayContaining(['list_expert_teams', 'get_expert_team', 'summon_expert_team']))
   })

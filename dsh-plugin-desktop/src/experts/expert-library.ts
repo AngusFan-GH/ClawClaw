@@ -6,10 +6,9 @@ import type { SettingsPathOp } from '@deepseek-ai/dsh-settings'
 import { z } from 'zod'
 import { CUSTOM_EXPERT_LIMIT, CUSTOM_EXPERT_SLUG, customError, customExpertInputSchema, customExpertSchema, type CatalogSnapshot, type CustomExpert, type CustomExpertInput, type ExpertSummary } from './expert-contract.js'
 import { ZH_DIVISION } from './names.js'
-import { pluginTeamStateSchema, type PluginTeamState } from './plugin-team-contract.js'
 
 export const AGENCY_LIBRARY_SERVICE = 'agencyAgentsLibrary'
-export interface AgencySettings { enabled: string[]; customExperts?: CustomExpert[]; customTeams?: ExpertTeam[]; enabledTeams?: string[]; pluginTeamStates?: PluginTeamState[] }
+export interface AgencySettings { enabled: string[]; customExperts?: CustomExpert[]; customTeams?: ExpertTeam[]; enabledTeams?: string[] }
 
 /** 兼容只有 enabled 的旧配置；内容与启用状态在同一 namespace 原子持久化。 */
 export const agencySettingsSchema = schema.object({
@@ -17,12 +16,9 @@ export const agencySettingsSchema = schema.object({
   customExperts: schema.array(schema.any()).default([]),
   customTeams: schema.array(schema.any()).default([]),
   enabledTeams: schema.array(schema.string()).default([]),
-  pluginTeamStates: schema.array(schema.any()).default([]),
 })
 
 export function validateAgencySettings(value: AgencySettings, locale: 'zh' | 'en' = 'zh'): void {
-  const pluginStates = z.array(pluginTeamStateSchema).max(500).parse(value.pluginTeamStates ?? [])
-  if (new Set(pluginStates.map(item => item.packageName)).size !== pluginStates.length) throw new Error('Plugin Team state contains duplicate packages.')
   const teams = z.array(teamSchema).max(100).parse(value.customTeams ?? [])
   const teamIds = new Set<string>()
   const teamNames = new Set(BUILTIN_TEAMS.map(team => normalizeName(team.name)))

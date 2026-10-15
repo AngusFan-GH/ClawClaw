@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { TEAM_PROMPTS_EN } from './team-prompts-en.js'
 import { TEAM_PROMPTS } from './team-prompts.js'
+import { expertCapabilityBindingSchema } from './expert-contract.js'
 export { TEAM_PROMPTS }
 const text = (max: number) =>
   z
@@ -67,8 +68,53 @@ export const teamEngineStatusSchema = z.object({
   recommendation: z.string(),
 })
 export type TeamEngineStatus = z.infer<typeof teamEngineStatusSchema>
+export const teamConnectorSchema = z.object({
+  dependency: z.string(),
+  installed: z.boolean(),
+  installable: z.boolean(),
+  credentialsRequired: z.boolean(),
+  serverName: z.string().optional(),
+  connectorId: z.string().optional(),
+  enabled: z.boolean(),
+  state: z.enum(['missing', 'disabled', 'starting', 'running', 'error']),
+  credentialsReady: z.boolean(),
+  diagnosticCode: z.string(),
+  error: z.string().optional(),
+})
+export type TeamConnector = z.infer<typeof teamConnectorSchema>
+export const leadTeamMemberSchema = z.object({
+  expertSlug: z.string().min(1).max(256),
+  packageAgentId: z.string().min(1).max(128),
+  name: z.string().min(1),
+  description: z.string(),
+  role: z.enum(['lead', 'member']),
+})
+export const leadTeamSchema = z.object({
+  id: z.string().startsWith('plugin-team:'),
+  builtin: z.literal(true),
+  runtime: z.literal('plugin-lead'),
+  packageName: z.string(),
+  packageVersion: z.string(),
+  source: z.enum(['local', 'project', 'user', 'github', 'marketplace']),
+  status: z.enum(['installed', 'update-available', 'error']),
+  name: z.string(),
+  description: z.string(),
+  defaultInitPrompt: z.string(),
+  tags: z.array(z.string()),
+  examples: z.array(z.string()),
+  lead: leadTeamMemberSchema,
+  members: z.array(leadTeamMemberSchema),
+  skills: z.array(expertCapabilityBindingSchema),
+  connectors: z.array(expertCapabilityBindingSchema),
+  connectorStates: z.array(teamConnectorSchema),
+})
+export type LeadExpertTeam = z.infer<typeof leadTeamSchema>
+export type CatalogTeam = ExpertTeam | LeadExpertTeam
+export const isPluginLeadTeam = (team: CatalogTeam): team is LeadExpertTeam =>
+  'runtime' in team && team.runtime === 'plugin-lead'
+export const isCoordinatorTeam = (team: CatalogTeam): team is ExpertTeam => !isPluginLeadTeam(team)
 export const teamSnapshotSchema = z.object({
-  teams: z.array(teamSchema),
+  teams: z.array(z.union([teamSchema, leadTeamSchema])),
   enabledTeams: z.array(z.string()),
   enabledExperts: z.array(z.string()),
   revision: z.number().int().min(0),

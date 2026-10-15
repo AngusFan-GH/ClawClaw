@@ -40,7 +40,7 @@ function memberEvidence(results: readonly ExpertPluginMemberResult[]): string {
     : `## ${result.name} (${result.slug})\nFAILED: ${result.error ?? 'Unknown failure'}`).join('\n\n')
 }
 
-/** Execute a Plugin Team with a real lead identity before and after member work. */
+/** Execute a lead-runtime team with a real lead identity before and after member work. */
 export async function executeExpertPluginTeam(args: {
   readonly team: ExpertPluginTeamDefinition
   readonly experts: readonly ExpertSummary[]
@@ -51,7 +51,7 @@ export async function executeExpertPluginTeam(args: {
   runAgent(run: ExpertPluginAgentRun): Promise<string>
 }): Promise<ExpertPluginTeamResult> {
   const task = args.task.trim()
-  if (task.length === 0 || Array.from(task).length > 24_000) throw new Error('Plugin Team task must contain 1 to 24000 characters')
+  if (task.length === 0 || Array.from(task).length > 24_000) throw new Error('Team task must contain 1 to 24000 characters')
   args.signal?.throwIfAborted()
   const enabled = new Set(args.enabled)
   const lead = requireExpert(args.team.leadAgentSlug, args.experts)
@@ -66,13 +66,13 @@ export async function executeExpertPluginTeam(args: {
     expert: lead,
     persona: leadPersona,
     prompt: [
-      `You are the lead Agent for Plugin Team ${args.team.packageName}.`,
+      `You are the lead Agent for team ${args.team.packageName}.`,
       `Task:\n${task}`,
       `Members:\n${members.map(member => `- ${member.name} (${member.slug})`).join('\n')}`,
       'Create a concise execution plan and a specific brief for each member. Do not answer the task yet.',
     ].join('\n\n'),
   })
-  if (plan.trim() === '') throw new Error(`Plugin Team lead returned an empty plan: ${lead.slug}`)
+  if (plan.trim() === '') throw new Error(`Team lead returned an empty plan: ${lead.slug}`)
 
   const results = await Promise.all(members.map(async (member): Promise<ExpertPluginMemberResult> => {
     try {
@@ -83,7 +83,7 @@ export async function executeExpertPluginTeam(args: {
         expert: member,
         persona,
         prompt: [
-          `You are a member of Plugin Team ${args.team.packageName}.`,
+          `You are a member of team ${args.team.packageName}.`,
           `Task:\n${task}`,
           `Lead plan:\n${plan}`,
           `Your identity: ${member.name} (${member.slug}). Complete only the work assigned to your identity and return evidence, conclusions, and unresolved gaps.`,
@@ -103,14 +103,14 @@ export async function executeExpertPluginTeam(args: {
     expert: lead,
     persona: leadPersona,
     prompt: [
-      `You are the lead Agent for Plugin Team ${args.team.packageName}.`,
+      `You are the lead Agent for team ${args.team.packageName}.`,
       `Task:\n${task}`,
       `Your approved plan:\n${plan}`,
       `Member evidence:\n${memberEvidence(results)}`,
       'Produce the final team answer. Reconcile disagreements, identify failed coverage, and do not invent missing member evidence.',
     ].join('\n\n'),
   })
-  if (answer.trim() === '') throw new Error(`Plugin Team lead returned an empty final answer: ${lead.slug}`)
+  if (answer.trim() === '') throw new Error(`Team lead returned an empty final answer: ${lead.slug}`)
   return {
     teamId: args.team.id,
     packageName: args.team.packageName,

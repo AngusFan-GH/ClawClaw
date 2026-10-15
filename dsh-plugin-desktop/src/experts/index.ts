@@ -2,8 +2,8 @@ import { localizeTeamTool } from './team-tool-locale.js'
 import { PersonaError } from './persona-error.js'
 import { teamText } from './team-i18n.js'
 import { teamCollaboration } from './team-collaboration.js'
-import { createTeamLibrary, AGENCY_TEAM_SERVICE } from './team-library.js'
-import { effectiveCoordinator } from './team-contract.js'
+import { createTeamLibrary, AGENCY_TEAM_SERVICE, type TeamConnectorLifecycle } from './team-library.js'
+import { effectiveCoordinator, isCoordinatorTeam, isPluginLeadTeam } from './team-contract.js'
 import { executeTeam, type TeamMemberRun } from './team-runtime.js'
 import { localizeTeam } from './team-content-en.js'
 /**
@@ -54,7 +54,6 @@ import type { ExpertCapabilityBinding, ExpertSummary } from './expert-contract.j
 import { builtinExpertCapabilities } from './builtin-capabilities.js'
 import { discoverExpertPluginPackages, projectExpertPluginAgents, projectExpertPluginTeam, type ExpertPluginLocalizedText, type ExpertPluginTeamDefinition } from './expert-plugin-package.js'
 import { executeExpertPluginTeam, type ExpertPluginAgentRun } from './expert-plugin-runtime.js'
-import { AGENCY_PLUGIN_TEAM_SERVICE, createPluginTeamLibrary, type PluginTeamConnectorLifecycle } from './plugin-team-library.js'
 import { DESKTOP_MCP_LIFECYCLE_SERVICE } from '../mcp-contract.js'
 
 export const name = 'clawclaw-experts'
@@ -263,7 +262,6 @@ for (const [key, field] of [
   ['customExperts', schema.array(schema.any()).default([])],
   ['customTeams', schema.array(schema.any()).default([])],
   ['enabledTeams', schema.array(schema.string()).default([])],
-  ['pluginTeamStates', schema.array(schema.any()).default([])],
 ] as const) {
   const live = markLiveFields ? liveSchemaField(field) : undefined
   if (live !== undefined) configFields[key] = live
@@ -766,6 +764,13 @@ export function apply(ctx: Context, config: Config): void {
     },
     mutate: (ops, revision) => ctx.settings.mutate(settingsNamespace, ops, revision),
   }, expertDivisions, activeLocale)
+  const connectorLifecycle = (): TeamConnectorLifecycle | undefined => {
+    try {
+      return ctx.get(DESKTOP_MCP_LIFECYCLE_SERVICE) as TeamConnectorLifecycle | undefined
+    } catch {
+      return undefined
+    }
+  }
   const teamLibrary = createTeamLibrary(() => library.catalog(), {
     read: () => settingsSource(),
     revision: () => {
@@ -774,28 +779,11 @@ export function apply(ctx: Context, config: Config): void {
       return descriptor.revision
     },
     mutate: (ops, revision) => ctx.settings.mutate(settingsNamespace, ops, revision),
-  }, activeLocale)
-  const connectorLifecycle = (): PluginTeamConnectorLifecycle | undefined => {
-    try {
-      return ctx.get(DESKTOP_MCP_LIFECYCLE_SERVICE) as PluginTeamConnectorLifecycle | undefined
-    } catch {
-      return undefined
-    }
-  }
-  const pluginTeamLibrary = createPluginTeamLibrary(async () => {
+  }, activeLocale, async () => {
     await refreshPlugins(true)
     return [...pluginTeams.values()]
-  }, () => library.catalog(), {
-    read: () => settingsSource(),
-    revision: () => {
-      const descriptor = ctx.settings.describe().find(item => item.ns === settingsNamespace)
-      if (!descriptor) throw new Error(formatHost(activeLocale(), 'error.settingsMissing'))
-      return descriptor.revision
-    },
-    mutate: (ops, revision) => ctx.settings.mutate(settingsNamespace, ops, revision),
-  }, activeLocale, connectorLifecycle)
+  }, connectorLifecycle)
   ctx.reflect.provide(AGENCY_TEAM_SERVICE, teamLibrary)
-  ctx.reflect.provide(AGENCY_PLUGIN_TEAM_SERVICE, pluginTeamLibrary)
   ctx.reflect.provide('agencyAgentsTeamEngine', () => resolveTeamEngine(ctx, undefined, maxDepth).status)
   ctx.on?.('tools/pre-execute', async (exec, next) => {
     if (blocksNativeDelegation(ctx.get('agentTeams'), exec.agent, exec.name)) return { kind: 'deny', reason: teamTx('专家团成员不能继续创建子代理或扩展专家团，请将缺口交给主理人。') }
@@ -1058,42 +1046,45 @@ const teamOutput = { schema: { type: 'object' as const, additionalProperties: fa
 ctx.tools.register(localizeTeamTool(defineTool({ name: 'list_expert_teams', description: teamTx("列出已启用专家团。召唤前使用 get_expert_team 读取主理人规则及成员分工。"), parameters: {}, output: teamOutput,
     async execute(_args, exec) {
         requireParent(exec);
-        const [snapshot, pluginSnapshot] = await Promise.all([teamLibrary.snapshot(), pluginTeamLibrary.snapshot()]);
-        const legacy = snapshot.teams.filter(t => snapshot.enabledTeams.includes(t.id)).map(t => localizeTeam(t, activeLocale())).map(t => ({ id: t.id, name: t.name, description: t.description, runtime: 'coordinator' }));
-        const plugins = pluginSnapshot.teams.filter(team => team.enabled);
-        return { report: JSON.stringify([...legacy, ...plugins]) };
+        const snapshot = await teamLibrary.snapshot();
+        const teams = snapshot.teams.filter(team => snapshot.enabledTeams.includes(team.id)).map(team => isPluginLeadTeam(team)
+            ? { id: team.id, name: team.name, description: team.description, runtime: team.runtime, packageVersion: team.packageVersion }
+            : { ...localizeTeam(team, activeLocale()), runtime: 'coordinator' });
+        return { report: JSON.stringify(teams) };
     }, }), activeLocale));
-ctx.tools.register(localizeTeamTool(defineTool({ name: 'get_expert_team', description: teamTx("读取已启用专家团的目标、分工和运行时。Plugin Team 由独立 Lead Agent 负责规划与汇总。"),
+ctx.tools.register(localizeTeamTool(defineTool({ name: 'get_expert_team', description: teamTx("读取已启用专家团的目标、分工和运行策略。部分内置专家团由独立主理人负责规划与汇总。"),
     parameters: { team: { type: 'string', required: true, description: teamTx("专家团稳定标识或完整名称。") } }, output: teamOutput,
     async execute(args, exec) {
         requireParent(exec);
-        const [snapshot, catalog, pluginSnapshot] = await Promise.all([teamLibrary.snapshot(), library.catalog(), pluginTeamLibrary.snapshot()]);
+        const [snapshot, catalog] = await Promise.all([teamLibrary.snapshot(), library.catalog()]);
         const pluginTeam = [...pluginTeams.values()].find(team => team.id === args.team || pluginText(team.name, activeLocale()) === args.team);
         if (pluginTeam !== undefined) {
-            const summary = pluginSnapshot.teams.find(team => team.id === pluginTeam.id);
-            if (!summary?.enabled) throw new Error(teamTx("专家团成员不存在、冲突或已停用，请修复后重新召唤。"));
+            const candidate = snapshot.teams.find(team => team.id === pluginTeam.id);
+            if (!candidate || !isPluginLeadTeam(candidate) || !snapshot.enabledTeams.includes(candidate.id)) throw new Error(teamTx("专家团成员不存在、冲突或已停用，请修复后重新召唤。"));
+            const summary = candidate;
             return { report: JSON.stringify({ ...pluginTeamView(pluginTeam, activeLocale()), connectorStates: summary.connectorStates, revision: catalog.revision,
-                instruction: teamTx("该 Plugin Team 由独立 Lead Agent 规划和汇总；主会话只负责发起任务并交付 Lead 的最终结果。") }) };
+                instruction: teamTx("该专家团由独立主理人规划和汇总；主会话只负责发起任务并交付最终结果。") }) };
         }
-        const team = snapshot.teams.map(t => localizeTeam(t, activeLocale())).find(t => t.id === args.team || t.name === args.team || snapshot.teams.find(original => original.id === t.id)?.name === args.team);
+        const team = snapshot.teams.filter(isCoordinatorTeam).map(t => localizeTeam(t, activeLocale())).find(t => t.id === args.team || t.name === args.team || snapshot.teams.find(original => original.id === t.id)?.name === args.team);
         if (!team || !snapshot.enabledTeams.includes(team.id))
             throw new Error(teamTx("专家团未启用或不存在。"));
         const engine = resolveTeamEngine(ctx, exec.agent, maxDepth, teamRequiresToolFilter(team, catalog.experts)).status;
         return { report: JSON.stringify({ ...team, engine, coordinator: effectiveCoordinator(team, activeLocale()), collaboration: teamCollaboration(team, activeLocale()), revision: snapshot.revision, instruction: teamTx("确认目标与评审范围后立即将简报传给 summon_expert_team，相关资料路径可直接交给专家阅读，主理人不要预先读完整个项目。只有确实无法确定评审对象时才询问；用户已明确整体评审后不再反复确认。若 engine.recommendation 非空，简短转述其中的会话恢复建议，但不阻断普通调用、不自行修改配置。原生模式返回的是启动确认，必须等待实际成员结论后才汇总。") }) };
     },
 }), activeLocale));
-ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', description: teamTx("按专家团运行时执行任务。Plugin Team 会启动独立 Lead Agent 规划、委派并汇总；传统专家团仍返回成员结果供当前会话汇总。"),
+ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', description: teamTx("按专家团的内部运行策略执行任务。主理人模式负责规划、委派并汇总，协调模式返回成员结果供当前会话汇总。"),
     parameters: { team: { type: 'string', required: true, description: teamTx("专家团稳定标识或完整名称。") }, task: { type: 'string', required: true, description: teamTx("完整、自包含的任务、上下文和可访问资料，最多24000字。") } }, output: teamOutput,
     async execute(args, exec) {
         requireParent(exec);
-        const [snapshot, catalog, pluginSnapshot] = await Promise.all([teamLibrary.snapshot(), library.catalog(), pluginTeamLibrary.snapshot()]);
+        const [snapshot, catalog] = await Promise.all([teamLibrary.snapshot(), library.catalog()]);
         if (snapshot.revision !== catalog.revision)
             throw new Error(teamTx("名册已更新，请重新读取专家团。"));
         const pluginTeam = [...pluginTeams.values()].find(team => team.id === args.team || pluginText(team.name, activeLocale()) === args.team);
         if (pluginTeam !== undefined) {
-            const summary = pluginSnapshot.teams.find(team => team.id === pluginTeam.id);
-            if (!summary?.enabled)
+            const candidate = snapshot.teams.find(team => team.id === pluginTeam.id);
+            if (!candidate || !isPluginLeadTeam(candidate) || !snapshot.enabledTeams.includes(candidate.id))
                 throw new Error(teamTx("专家团成员不存在、冲突或已停用，请修复后重新召唤。"));
+            const summary = candidate;
             const unavailable = summary.connectorStates.filter(connector => {
                 const binding = pluginTeam.connectors.find(item => item.name === connector.dependency);
                 return binding?.required && binding.enabled && connector.state !== 'running';
@@ -1102,7 +1093,7 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
                 throw new Error(teamTx("专家团所需 Connector 未就绪：{0}。", [unavailable.map(item => item.dependency).join(', ')]));
             const provider = ctx.subagents.getProvider(config.provider);
             if (!provider?.capabilities.persona || !provider.capabilities.toolFilter || (maxDepth !== undefined && !provider.capabilities.depthLimit))
-                throw new Error(teamTx("当前子代理服务不支持 Plugin Team 所需的身份、工具过滤或深度限制。"));
+                throw new Error(teamTx("当前子代理服务不支持该专家团所需的身份、工具过滤或深度限制。"));
             const result = await executeExpertPluginTeam({
                 team: pluginTeam, experts: catalog.experts, enabled: catalog.enabled, task: String(args.task ?? ''), signal: exec.signal,
                 readPersona: async expert => (await personaSource.getPrompt(expert.slug, expert.division, activeLocale())).prompt,
@@ -1121,7 +1112,7 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
             });
             return { report: JSON.stringify({ ...result, runtime: 'plugin-lead' }) };
         }
-        const team = snapshot.teams.map(t => localizeTeam(t, activeLocale())).find(t => t.id === args.team || t.name === args.team || snapshot.teams.find(original => original.id === t.id)?.name === args.team);
+        const team = snapshot.teams.filter(isCoordinatorTeam).map(t => localizeTeam(t, activeLocale())).find(t => t.id === args.team || t.name === args.team || snapshot.teams.find(original => original.id === t.id)?.name === args.team);
         if (!team || !snapshot.enabledTeams.includes(team.id))
             throw new Error(teamTx("专家团未启用或不存在。"));
         const engine = resolveTeamEngine(ctx, exec.agent, maxDepth, teamRequiresToolFilter(team, catalog.experts));

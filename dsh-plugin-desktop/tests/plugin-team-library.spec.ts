@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createPluginTeamLibrary } from '../src/experts/plugin-team-library.ts'
+import { createTeamLibrary } from '../src/experts/team-library.ts'
 import type { AgencySettings, ExpertSettingsStore } from '../src/experts/expert-library.ts'
 import type { ExpertPluginTeamDefinition } from '../src/experts/expert-plugin-package.ts'
 import type { DesktopMcpView } from '../src/mcp-contract.ts'
@@ -44,7 +44,7 @@ function fixture(initial: AgencySettings = { enabled: [] }, connector?: {
       revision++
     },
   }
-  const library = createPluginTeamLibrary(async () => [definition], async () => ({ experts, enabled: state.enabled, revision }), store, () => 'zh', connector === undefined ? undefined : () => ({
+  const library = createTeamLibrary(async () => ({ experts, enabled: state.enabled, revision }), store, () => 'zh', async () => [definition], connector === undefined ? undefined : () => ({
     read: async () => connector.view,
     toggle: connector.toggle,
     test: connector.test,
@@ -53,34 +53,33 @@ function fixture(initial: AgencySettings = { enabled: [] }, connector?: {
   return { library, state: () => state }
 }
 
-describe('plugin team library', () => {
-  it('projects Team packages as first-class runtime records', async () => {
+describe('unified team library', () => {
+  it('projects packaged teams into the single team catalog', async () => {
     const { library } = fixture()
     const snapshot = await library.snapshot()
-    expect(snapshot.teams[0]).toMatchObject({
-      id: 'plugin-team:research-pack', packageName: 'research-pack', installedVersion: '1.2.3',
-      source: 'local', status: 'installed', runtime: 'plugin-lead', enabled: false,
-      lead: { slug: 'research-pack--lead', role: 'lead' },
+    const team = snapshot.teams.find(item => item.id === definition.id)
+    expect(team).toMatchObject({
+      id: 'plugin-team:research-pack', packageName: 'research-pack', packageVersion: '1.2.3', builtin: true,
+      source: 'local', status: 'installed', runtime: 'plugin-lead',
+      lead: { expertSlug: 'research-pack--lead', role: 'lead' },
     })
-    expect(snapshot.teams[0]?.members).toHaveLength(1)
+    expect(team?.members).toHaveLength(1)
   })
 
-  it('enables and disables the Team and every packaged Agent in one mutation', async () => {
+  it('uses enabledTeams as the only team enablement state', async () => {
     const { library, state } = fixture()
     const enabled = await library.setEnabled(definition.id, true, 4)
-    expect(enabled.teams[0]?.enabled).toBe(true)
+    expect(enabled.enabledTeams).toContain(definition.id)
     expect(state().enabled).toEqual(['research-pack--lead', 'research-pack--analyst'])
-    expect(state().pluginTeamStates).toEqual([{ packageName: 'research-pack', enabled: true }])
 
     const disabled = await library.setEnabled(definition.id, false, 5)
-    expect(disabled.teams[0]?.enabled).toBe(false)
-    expect(state().enabled).toEqual([])
-    expect(state().pluginTeamStates).toEqual([{ packageName: 'research-pack', enabled: false }])
+    expect(disabled.enabledTeams).not.toContain(definition.id)
+    expect(state().enabled).toEqual(['research-pack--lead', 'research-pack--analyst'])
   })
 
-  it('derives pre-migration Team state from the packaged Agents', async () => {
-    const { library } = fixture({ enabled: ['research-pack--lead', 'research-pack--analyst'] })
-    expect((await library.snapshot()).teams[0]?.enabled).toBe(true)
+  it('does not derive team state from expert state', async () => {
+    const { library } = fixture({ enabled: ['research-pack--lead', 'research-pack--analyst'], enabledTeams: [] })
+    expect((await library.snapshot()).enabledTeams).not.toContain(definition.id)
   })
 
   it('projects and controls declared Connector dependencies through the Host lifecycle', async () => {
@@ -102,7 +101,8 @@ describe('plugin team library', () => {
     }
     const { library } = fixture({ enabled: experts.map(expert => expert.slug) }, lifecycle)
 
-    expect((await library.snapshot()).teams[0]?.connectorStates).toEqual([
+    const team = (await library.snapshot()).teams.find(item => item.id === definition.id)
+    expect(team && 'connectorStates' in team ? team.connectorStates : undefined).toEqual([
       expect.objectContaining({ dependency: 'browser', serverName: 'company-browser', connectorId: 'browser', installed: true, state: 'running' }),
     ])
     await library.setConnectorEnabled(definition.id, 'browser', false)

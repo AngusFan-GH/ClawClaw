@@ -3,9 +3,8 @@ import { catalogState } from './catalog.js';
 import { acceptTeamSnapshot, refreshTeams, subscribeTeams, teamState } from './team-cache.js';
 import { useTeamLocale, localizeTeam, localizedExperts } from './team-locale.js';
 import React from 'react';
-import type { ExpertTeam, TeamSnapshot } from '../team-contract.js';
+import { isPluginLeadTeam, type ExpertTeam, type TeamSnapshot } from '../team-contract.js';
 import type { ExpertSummary } from '../expert-contract.js';
-import type { PluginTeamSnapshot, PluginTeamSummary } from '../plugin-team-contract.js';
 import type { TeamReferenceTarget } from './team-reference.js';
 import { TeamDetails, unwrap, type TeamRemote } from './team-ui.js';
 import { Avatar, TeamAvatars, TeamConfirm, teamIssue, IconEye } from './team-shared.js';
@@ -18,7 +17,6 @@ export function TeamMenu(props: {
     const { locale, tx } = useTeamLocale();
 
     const [snapshot, setSnapshot] = React.useState<TeamSnapshot | null>(() => teamState(props.remote));
-    const [pluginSnapshot, setPluginSnapshot] = React.useState<PluginTeamSnapshot | null>(null);
     const [rawExperts, setExperts] = React.useState<ExpertSummary[]>(() => {
         const catalog = catalogState(props.remote);
         return catalog.revision < 0 ? [] : [...catalog.experts];
@@ -56,8 +54,6 @@ export function TeamMenu(props: {
             if (!alive.current)
                 return;
             setSnapshot(teams);
-            if (typeof props.remote.getPluginTeams === 'function')
-                setPluginSnapshot(await unwrap(props.remote.getPluginTeams()));
             const known = catalogState(props.remote);
             if (known.revision >= 0)
                 setExperts([...known.experts]);
@@ -74,27 +70,23 @@ export function TeamMenu(props: {
                 setError(cause instanceof Error ? tx(cause.message) : tx("专家团加载失败"));
         }
     };
-    const pickPlugin = async (team: PluginTeamSummary) => {
-        if (busy || !pluginSnapshot)
+    const pickPlugin = async (team) => {
+        if (busy || !snapshot)
             return;
         const insert = props.prepareSelect?.();
         setBusy(true);
         try {
             let current = team;
-            if (!team.enabled) {
-                if (typeof props.remote.setPluginTeamEnabled !== 'function')
-                    throw new Error(tx("Plugin Team 服务不可用，请重新加载插件。"));
-                const next = await unwrap(props.remote.setPluginTeamEnabled(team.id, true, pluginSnapshot.revision));
+            if (!snapshot.enabledTeams.includes(team.id)) {
+                const next = await unwrap(props.remote.setTeamEnabled(team.id, true, snapshot.revision));
                 if (!alive.current)
                     return;
-                setPluginSnapshot(next);
-                const legacy = await refreshTeams(props.remote);
-                if (alive.current)
-                    setSnapshot(legacy);
-                current = next.teams.find(item => item.id === team.id) ?? { ...team, enabled: true };
+                acceptTeamSnapshot(props.remote, next);
+                setSnapshot(next);
+                current = next.teams.find(item => item.id === team.id && isPluginLeadTeam(item)) ?? { ...team, enabled: true };
                 props.onExpertsChanged?.();
             }
-            if (!await insert?.({ id: current.id, name: current.name, examples: current.quickPrompts }))
+            if (!await insert?.({ id: current.id, name: current.name, examples: current.examples }))
                 throw new Error(tx("无法插入团队，请确认当前聊天草稿后重试。"));
             props.onSelected();
         }
@@ -142,11 +134,10 @@ export function TeamMenu(props: {
                 setBusy(false);
         }
     };
-    const teams = snapshot?.teams.map(team => localizeTeam(team, locale)).filter((t) => (query !== '' || snapshot.enabledTeams.includes(t.id)) &&
+    const teams = snapshot?.teams.map(team => isPluginLeadTeam(team) ? team : localizeTeam(team, locale)).filter((t) => (query !== '' || snapshot.enabledTeams.includes(t.id)) &&
         `${t.name} ${t.description}`
             .toLowerCase()
             .includes(query.toLowerCase())) ?? [];
-    const pluginTeams = pluginSnapshot?.teams.filter(team => (query !== '' || team.enabled) && `${team.name} ${team.description}`.toLowerCase().includes(query.toLowerCase())) ?? [];
     return (<div className="agt-compact">
       <div className="aag-discovery-tools">
         <input type="search" autoFocus aria-label={tx("搜索专家团")} placeholder={tx("搜索团队或工作目标")} value={query} onChange={(e) => setQuery(e.target.value)}/>
@@ -156,13 +147,12 @@ export function TeamMenu(props: {
           <button type="button" onClick={() => void load()}>{tx("刷新")}</button>
         </div>)}
       <div className="agt-compact-list">
-        {pluginTeams.map((team) => (<div className="agt-compact-row" key={team.id}>
+        {teams.map((team) => isPluginLeadTeam(team) ? (<div className="agt-compact-row" key={team.id}>
             <button type="button" disabled={busy} onClick={() => void pickPlugin(team)}>
-              <div className="agt-stack">{[team.lead, ...team.members].slice(0, 3).map(agent => <Avatar key={agent.slug} expert={experts.find(expert => expert.slug === agent.slug)}/>)}</div>
-              <span>{team.name}</span><small>Plugin Team · v{team.installedVersion}{team.enabled ? '' : tx(" · 启用并选择")}</small>
+              <div className="agt-stack">{[team.lead, ...team.members].slice(0, 3).map(agent => <Avatar key={agent.expertSlug} expert={experts.find(expert => expert.slug === agent.expertSlug)}/>)}</div>
+              <span>{team.name}</span><small>{tx("内置")} · v{team.packageVersion}{snapshot?.enabledTeams.includes(team.id) ? '' : tx(" · 启用并选择")}</small>
             </button>
-          </div>))}
-        {teams.map((team) => (<div className="agt-compact-row" key={team.id}>
+          </div>) : (<div className="agt-compact-row" key={team.id}>
             <button type="button" disabled={busy} onClick={() => void pick(team)}>
               <TeamAvatars team={team} experts={experts}/>
               <span>{team.name}</span>
@@ -176,7 +166,7 @@ export function TeamMenu(props: {
               <IconEye size={16}/>
             </button>
           </div>))}
-        {!teams.length && !pluginTeams.length && (<p className="aag-menu-empty" role="status">
+        {!teams.length && (<p className="aag-menu-empty" role="status">
             {snapshot ? tx("搜索并启用一个专家团。") : tx("正在加载…")}
           </p>)}
       </div>

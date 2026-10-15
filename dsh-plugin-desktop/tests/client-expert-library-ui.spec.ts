@@ -37,11 +37,10 @@ describe('expert library UI', () => {
     expect(CARD_SETTINGS_CSS).toContain('.aag-expert-card-custom .aag-card-description{min-height:19px;-webkit-line-clamp:1}')
   })
 
-  it('distinguishes ClawClaw plugin packages without treating them as custom experts', () => {
-    expect(expertSource({ custom: false, packageFormat: 'clawclaw-plugin' })).toBe('plugin')
+  it('treats bundled packages as built-in experts', () => {
+    expect(expertSource({ custom: false, packageFormat: 'clawclaw-plugin' })).toBe('base')
     expect(expertSource({ custom: true })).toBe('custom')
     expect(expertSource({ custom: false })).toBe('base')
-    expect(CARD_SETTINGS_CSS).toContain('.aag-source-badge[data-source="plugin"]')
     expect(CARD_SETTINGS_CSS).toContain('.aag-expert-details{')
   })
 

@@ -1,7 +1,7 @@
 import { AGENCY_TEAM_SERVICE, type AgencyTeamLibrary } from './team-library.js'
 import { nativeTeamMemberName } from './team-engine.js'
 import { teamText } from './team-i18n.js'
-import type { TeamInput, TeamSnapshot, TeamEngineStatus } from './team-contract.js'
+import { isPluginLeadTeam, type TeamInput, type TeamSnapshot, type TeamEngineStatus } from './team-contract.js'
 import type { Context } from '@deepseek-ai/cordis'
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { TypertContribution } from '@deepseek-ai/dsh-typert-registry'
@@ -11,8 +11,6 @@ import { AGENCY_PERSONA_SERVICE, type AgencyPersonaSource } from './index.js'
 import { formatHost, readHostLocale } from './i18n.js'
 import { AGENCY_LIBRARY_SERVICE, type AgencyExpertLibrary } from './expert-library.js'
 import type { CatalogSnapshot, CustomExpertInput } from './expert-contract.js'
-import { AGENCY_PLUGIN_TEAM_SERVICE, type AgencyPluginTeamLibrary } from './plugin-team-library.js'
-import type { PluginTeamSnapshot } from './plugin-team-contract.js'
 
 export { readExpertPrompt, readLocalizedExpertPrompt } from './index.js'
 
@@ -52,32 +50,28 @@ export default class AgencyAgentsRemote extends TypertRemoteService {
     if (!library) throw new Error(teamText(readHostLocale(this.ctx), '专家团服务不可用，请重新加载插件。'))
     return library
   }
-  private pluginTeams(): AgencyPluginTeamLibrary {
-    const library = this.ctx.get(AGENCY_PLUGIN_TEAM_SERVICE) as AgencyPluginTeamLibrary | undefined
-    if (!library) throw new Error('Plugin Team service is unavailable. Reload the plugin.')
-    return library
-  }
-  async getPluginTeams(): Promise<PluginTeamSnapshot> { return this.pluginTeams().snapshot() }
-  async setPluginTeamEnabled(id: string, enabled: boolean, expectedRevision: number): Promise<PluginTeamSnapshot> {
-    return this.pluginTeams().setEnabled(id, enabled, expectedRevision)
-  }
-  async setPluginTeamConnectorEnabled(id: string, dependency: string, enabled: boolean): Promise<PluginTeamSnapshot> {
-    return this.pluginTeams().setConnectorEnabled(id, dependency, enabled)
-  }
-  async testPluginTeamConnector(id: string, dependency: string): Promise<PluginTeamSnapshot> {
-    return this.pluginTeams().testConnector(id, dependency)
-  }
-  async installPluginTeamConnector(id: string, dependency: string, values: Readonly<Record<string, string>>): Promise<PluginTeamSnapshot> {
-    return this.pluginTeams().installConnector(id, dependency, values)
-  }
   async getTeams(): Promise<TeamSnapshot> {
     const snapshot = await this.teams().snapshot()
     const engine = this.ctx.get('agencyAgentsTeamEngine') as (() => TeamEngineStatus) | undefined
-    const nativeMembers = Object.fromEntries(snapshot.teams.flatMap(team => team.members.map(member => [nativeTeamMemberName(team.id, member.expertSlug), member.expertSlug])))
+    const nativeMembers = Object.fromEntries(snapshot.teams.flatMap(team => {
+      const slugs = isPluginLeadTeam(team)
+        ? [team.lead, ...team.members].map(member => member.expertSlug)
+        : team.members.map(member => member.expertSlug)
+      return slugs.map(slug => [nativeTeamMemberName(team.id, slug), slug])
+    }))
     return { ...snapshot, nativeMembers, ...(engine ? { engine: engine() } : {}) }
   }
   async saveTeam(team: TeamInput, enabled: boolean, expectedRevision: number): Promise<TeamSnapshot> { return this.teams().save(team, enabled, expectedRevision) }
   async setTeamEnabled(id: string, enabled: boolean, expectedRevision: number): Promise<TeamSnapshot> { return this.teams().setEnabled(id, enabled, expectedRevision) }
+  async setTeamConnectorEnabled(id: string, dependency: string, enabled: boolean): Promise<TeamSnapshot> {
+    return this.teams().setConnectorEnabled(id, dependency, enabled)
+  }
+  async testTeamConnector(id: string, dependency: string): Promise<TeamSnapshot> {
+    return this.teams().testConnector(id, dependency)
+  }
+  async installTeamConnector(id: string, dependency: string, values: Readonly<Record<string, string>>): Promise<TeamSnapshot> {
+    return this.teams().installConnector(id, dependency, values)
+  }
   async deleteTeam(id: string, expectedRevision: number): Promise<TeamSnapshot> { return this.teams().remove(id, expectedRevision) }
 
   private library(): AgencyExpertLibrary {
@@ -128,13 +122,11 @@ Object.defineProperty(AgencyAgentsRemote.prototype, '@deepseek-ai/dsh-typert-pro
     version: 1,
     methods: Object.freeze([
       'getTeams',
-      'getPluginTeams',
-      'setPluginTeamEnabled',
-      'setPluginTeamConnectorEnabled',
-      'testPluginTeamConnector',
-      'installPluginTeamConnector',
       'saveTeam',
       'setTeamEnabled',
+      'setTeamConnectorEnabled',
+      'testTeamConnector',
+      'installTeamConnector',
       'deleteTeam',
       'getCatalog',
       'getCustomExpert',

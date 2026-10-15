@@ -7,15 +7,14 @@ import { Button, Input, MaybeAntdProvider } from './antd-ui.js';
 import { antdLocale } from './antd-locale.js';
 import { CategorySelect } from './category-select.js';
 import React from 'react';
-import { effectiveCoordinator, type ExpertTeam, type TeamInput, type TeamSnapshot, } from '../team-contract.js';
+import { effectiveCoordinator, isPluginLeadTeam, type CatalogTeam, type ExpertTeam, type LeadExpertTeam, type TeamInput, type TeamSnapshot, } from '../team-contract.js';
 import type { ExpertSummary } from '../expert-contract.js';
-import type { AgencyCatalogRemote, AgencyPluginTeamsRemote, AgencyTeamsRemote } from './remote.js';
-import type { PluginTeamSnapshot, PluginTeamSummary } from '../plugin-team-contract.js';
+import type { AgencyCatalogRemote, AgencyTeamsRemote } from './remote.js';
 import type { TeamReferenceTarget } from './team-reference.js';
 import { TeamEditor } from './team-editor.js';
 import { TeamDialog, TeamConfirm, TeamAvatars, MemberList, Avatar, teamIssue, IconUsers, IconFileText, IconPlus, IconArrowRight, IconBulb, IconCopy, IconSend, IconSearch, IconEye, } from './team-shared.js';
 export { TEAM_CSS } from './team-style.js';
-export type TeamRemote = AgencyCatalogRemote & AgencyTeamsRemote & Partial<AgencyPluginTeamsRemote>;
+export type TeamRemote = AgencyCatalogRemote & AgencyTeamsRemote;
 export async function unwrap<T>(promise: Promise<{
     ok: true;
     value: T;
@@ -107,7 +106,7 @@ export function TeamDetails(props: {
     </TeamDialog>);
 }
 
-function connectorStatus(connector: PluginTeamSummary['connectorStates'][number], tx: (key: string, values?: readonly unknown[]) => string): string {
+function connectorStatus(connector: LeadExpertTeam['connectorStates'][number], tx: (key: string, values?: readonly unknown[]) => string): string {
     if (!connector.installed)
         return tx("未安装");
     if (!connector.enabled)
@@ -121,8 +120,8 @@ function connectorStatus(connector: PluginTeamSummary['connectorStates'][number]
     return tx("故障");
 }
 
-function PluginTeamDetails(props: {
-    team: PluginTeamSummary;
+function LeadTeamDetails(props: {
+    team: LeadExpertTeam;
     experts: readonly ExpertSummary[];
     busy: boolean;
     close(): void;
@@ -134,16 +133,16 @@ function PluginTeamDetails(props: {
     const agents = [props.team.lead, ...props.team.members];
     return (<TeamDialog title={tx("{0}详情", [props.team.name])} close={props.close} className="agt-detail agt-plugin-detail">
       <header className="agt-detail-head">
-        <div className="aag-team-avatar"><div className="agt-stack">{agents.slice(0, 3).map(agent => <Avatar key={agent.slug} expert={props.experts.find(expert => expert.slug === agent.slug)}/>)}</div></div>
-        <div><div className="agt-name-line"><h2>{props.team.name}</h2><span className="agt-tag">v{props.team.installedVersion}</span><span className="agt-tag">Lead Runtime</span></div>
-          <p>ClawClaw Plugin · {props.team.packageName}</p>
+        <div className="aag-team-avatar"><div className="agt-stack">{agents.slice(0, 3).map(agent => <Avatar key={agent.expertSlug} expert={props.experts.find(expert => expert.slug === agent.expertSlug)}/>)}</div></div>
+        <div><div className="agt-name-line"><h2>{props.team.name}</h2><span className="agt-tag">v{props.team.packageVersion}</span><span className="agt-tag">Lead Runtime</span></div>
+          <p>{tx("内置")} · {props.team.packageName}</p>
           <div className="agt-row"><Button type="primary" disabled={props.busy} onClick={() => props.select()}><IconSend size={16}/>{tx("召唤专家团")}</Button></div>
         </div>
       </header>
       <p className="agt-description">{props.team.description}</p>
       {props.team.tags.length > 0 && <div className="agt-tags">{props.team.tags.map(tag => <span className="agt-tag" key={tag}>{tag}</span>)}</div>}
-      <section><h3><IconUsers />{tx("团队成员")}</h3><div className="agt-plugin-roster">{agents.map(agent => <div key={agent.slug}>
-        <Avatar expert={props.experts.find(expert => expert.slug === agent.slug)}/><div><strong>{agent.name}</strong><span>{agent.role === 'lead' ? 'Lead' : tx("成员")}</span><p>{agent.description}</p></div>
+      <section><h3><IconUsers />{tx("团队成员")}</h3><div className="agt-plugin-roster">{agents.map(agent => <div key={agent.expertSlug}>
+        <Avatar expert={props.experts.find(expert => expert.slug === agent.expertSlug)}/><div><strong>{agent.name}</strong><span>{agent.role === 'lead' ? 'Lead' : tx("成员")}</span><p>{agent.description}</p></div>
       </div>)}</div></section>
       <section><h3>{tx("技能")}</h3>{props.team.skills.length === 0 ? <p className="agt-help">{tx("无")}</p> : <div className="agt-plugin-chips">{props.team.skills.map(skill => <span key={skill.name}>{skill.name}{skill.required ? ` · ${tx("必需")}` : ''}</span>)}</div>}</section>
       <section><h3>{tx("连接器")}</h3>{props.team.connectorStates.length === 0 ? <p className="agt-help">{tx("无")}</p> : <div className="agt-connector-list">{props.team.connectorStates.map(connector => <div key={connector.dependency}>
@@ -152,7 +151,7 @@ function PluginTeamDetails(props: {
           <Button disabled={props.busy} onClick={() => props.connector(connector.dependency, connector.enabled ? 'disable' : 'enable')}>{connector.enabled ? tx("停用") : tx("启用")}</Button>
           <Button disabled={props.busy} onClick={() => props.connector(connector.dependency, 'test')}>{tx("测试")}</Button></>}</div>
       </div>)}</div>}</section>
-      {props.team.quickPrompts.length > 0 && <section><h3><IconBulb />{tx("团队帮你做")}</h3><div className="agt-examples">{props.team.quickPrompts.map(prompt => <Button key={prompt} block disabled={props.busy} onClick={() => props.select(prompt)}><span>“{prompt}”</span><IconSend size={16}/></Button>)}</div></section>}
+      {props.team.examples.length > 0 && <section><h3><IconBulb />{tx("团队帮你做")}</h3><div className="agt-examples">{props.team.examples.map(prompt => <Button key={prompt} block disabled={props.busy} onClick={() => props.select(prompt)}><span>“{prompt}”</span><IconSend size={16}/></Button>)}</div></section>}
     </TeamDialog>);
 }
 export function TeamsPanel(props: {
@@ -173,10 +172,9 @@ export function TeamsPanel(props: {
     const { locale, tx } = useTeamLocale();
 
     const [snapshot, setSnapshot] = React.useState<TeamSnapshot | null>(() => teamState(props.remote));
-    const [pluginSnapshot, setPluginSnapshot] = React.useState<PluginTeamSnapshot | null>(null);
     React.useEffect(() => {
-        props.onSummary?.({ total: (snapshot?.teams.length ?? 0) + (pluginSnapshot?.teams.length ?? 0), enabled: (snapshot?.enabledTeams.length ?? 0) + (pluginSnapshot?.teams.filter(team => team.enabled).length ?? 0) });
-    }, [snapshot?.teams.length, snapshot?.enabledTeams.length, pluginSnapshot, props.onSummary]);
+        props.onSummary?.({ total: snapshot?.teams.length ?? 0, enabled: snapshot?.enabledTeams.length ?? 0 });
+    }, [snapshot?.teams.length, snapshot?.enabledTeams.length, props.onSummary]);
     const [rawExperts, setExperts] = React.useState<ExpertSummary[]>(() => {
         const catalog = catalogState(props.remote);
         return catalog.revision < 0 ? [] : [...catalog.experts];
@@ -188,8 +186,7 @@ export function TeamsPanel(props: {
     const [error, setError] = React.useState('');
     const [notice, setNotice] = React.useState('');
     const [busy, setBusy] = React.useState(false);
-    const [details, setDetails] = React.useState<ExpertTeam | null>(null);
-    const [pluginDetails, setPluginDetails] = React.useState<PluginTeamSummary | null>(null);
+    const [details, setDetails] = React.useState<CatalogTeam | null>(null);
     const [editor, setEditor] = React.useState<{
         value?: TeamInput;
         enabled: boolean;
@@ -226,8 +223,6 @@ export function TeamsPanel(props: {
         const generation = ++sequence.current;
         try {
             const teams = await refreshTeams(props.remote);
-            if (typeof props.remote.getPluginTeams === 'function')
-                setPluginSnapshot(await unwrap(props.remote.getPluginTeams()));
             if (!alive.current)
                 return;
             // 团队缓存通知会推进 sequence，避免旧查询覆盖新快照；专家名册仍要落到当前面板。
@@ -250,13 +245,12 @@ export function TeamsPanel(props: {
         }
     };
     const changePlugin = async (id: string, enabled: boolean) => {
-        if (busy || !pluginSnapshot || typeof props.remote.setPluginTeamEnabled !== 'function')
+        if (busy || !snapshot)
             return;
         setBusy(true);
         setError('');
         try {
-            setPluginSnapshot(await unwrap(props.remote.setPluginTeamEnabled(id, enabled, pluginSnapshot.revision)));
-            accept(await unwrap(props.remote.getTeams()));
+            accept(await unwrap(props.remote.setTeamEnabled(id, enabled, snapshot.revision)));
             props.onExpertsChanged?.();
         }
         catch (cause) {
@@ -266,7 +260,7 @@ export function TeamsPanel(props: {
             setBusy(false);
         }
     };
-    const changeConnector = async (team: PluginTeamSummary, dependency: string, action: 'install' | 'enable' | 'disable' | 'test') => {
+    const changeConnector = async (team: LeadExpertTeam, dependency: string, action: 'install' | 'enable' | 'disable' | 'test') => {
         if (busy)
             return;
         const connector = team.connectorStates.find(item => item.dependency === dependency);
@@ -280,17 +274,17 @@ export function TeamsPanel(props: {
         setError('');
         try {
             let next;
-            if (action === 'install' && typeof props.remote.installPluginTeamConnector === 'function')
-                next = await unwrap(props.remote.installPluginTeamConnector(team.id, dependency, {}));
-            else if (action === 'test' && typeof props.remote.testPluginTeamConnector === 'function')
-                next = await unwrap(props.remote.testPluginTeamConnector(team.id, dependency));
-            else if ((action === 'enable' || action === 'disable') && typeof props.remote.setPluginTeamConnectorEnabled === 'function')
-                next = await unwrap(props.remote.setPluginTeamConnectorEnabled(team.id, dependency, action === 'enable'));
+            if (action === 'install')
+                next = await unwrap(props.remote.installTeamConnector(team.id, dependency, {}));
+            else if (action === 'test')
+                next = await unwrap(props.remote.testTeamConnector(team.id, dependency));
+            else if (action === 'enable' || action === 'disable')
+                next = await unwrap(props.remote.setTeamConnectorEnabled(team.id, dependency, action === 'enable'));
             else
                 throw new Error(tx("当前版本不支持 Connector 生命周期操作。"));
-            setPluginSnapshot(next);
-            if (pluginDetails?.id === id)
-                setPluginDetails(next.teams.find(item => item.id === id) ?? null);
+            accept(next);
+            if (details?.id === team.id)
+                setDetails(next.teams.find(item => item.id === team.id && isPluginLeadTeam(item)) ?? null);
             setNotice(action === 'test' ? tx("Connector 测试完成。") : tx("Connector 状态已更新。"));
         }
         catch (cause) {
@@ -300,22 +294,21 @@ export function TeamsPanel(props: {
             setBusy(false);
         }
     };
-    const selectPlugin = async (team: PluginTeamSummary, example?: string) => {
-        if (busy || !pluginSnapshot)
+    const selectPlugin = async (team: LeadExpertTeam, example?: string) => {
+        if (busy || !snapshot)
             return;
         setBusy(true);
         setError('');
         try {
             let selected = team;
-            if (!team.enabled && typeof props.remote.setPluginTeamEnabled === 'function') {
-                const next = await unwrap(props.remote.setPluginTeamEnabled(team.id, true, pluginSnapshot.revision));
-                setPluginSnapshot(next);
-                accept(await unwrap(props.remote.getTeams()));
-                selected = next.teams.find(item => item.id === team.id) ?? { ...team, enabled: true };
+            if (!snapshot.enabledTeams.includes(team.id)) {
+                const next = await unwrap(props.remote.setTeamEnabled(team.id, true, snapshot.revision));
+                accept(next);
+                selected = next.teams.find(item => item.id === team.id && isPluginLeadTeam(item)) ?? { ...team, enabled: true };
                 props.onExpertsChanged?.();
             }
             const insert = props.preparePluginSelect?.();
-            if (!insert || !(await insert({ id: selected.id, name: selected.name, examples: selected.quickPrompts }, example)))
+            if (!insert || !(await insert({ id: selected.id, name: selected.name, examples: selected.examples }, example)))
                 setError(tx("团队已启用，但无法写入当前聊天草稿。请关闭设置后，在聊天的专家团入口选择。"));
             else
                 setNotice(tx("专家团已加入草稿，确认需求后发送。"));
@@ -393,16 +386,13 @@ export function TeamsPanel(props: {
             revision: snapshot!.revision,
         });
     };
-    const filtered = snapshot?.teams.map(team => localizeTeam(team, locale)).filter((team) => filter !== 'plugin' && (filter === 'all' ||
-        (filter === 'builtin' ? team.builtin : !team.builtin)) &&
-        (!status ||
-            snapshot.enabledTeams.includes(team.id) === (status === 'enabled')) &&
-        `${team.name} ${team.description} ${team.members.map((m) => experts.find((e) => e.slug === m.expertSlug)?.name ?? '').join(' ')}`
-            .toLowerCase()
-            .includes(query.toLowerCase())) ?? [];
-    const filteredPlugins = pluginSnapshot?.teams.filter(team => (filter === 'all' || filter === 'plugin') &&
-        (!status || team.enabled === (status === 'enabled')) &&
-        `${team.name} ${team.description} ${team.lead.name} ${team.members.map(member => member.name).join(' ')}`.toLowerCase().includes(query.toLowerCase())) ?? [];
+    const filteredTeams = snapshot?.teams.map(team => isPluginLeadTeam(team) ? team : localizeTeam(team, locale)).filter(team =>
+        (filter === 'all' || (filter === 'builtin' ? team.builtin : !team.builtin)) &&
+        (!status || snapshot.enabledTeams.includes(team.id) === (status === 'enabled')) &&
+        (isPluginLeadTeam(team)
+            ? `${team.name} ${team.description} ${team.lead.name} ${team.members.map(member => member.name).join(' ')}`
+            : `${team.name} ${team.description} ${team.members.map(member => experts.find(expert => expert.slug === member.expertSlug)?.name ?? '').join(' ')}`)
+            .toLowerCase().includes(query.toLowerCase())) ?? [];
     const edit = (team: ExpertTeam) => setEditor({
         value: team,
         enabled: snapshot!.enabledTeams.includes(team.id),
@@ -414,19 +404,18 @@ export function TeamsPanel(props: {
           {!props.sharedHeader && <h2 className="aag-title">{props.title ?? tx("专家团")}</h2>}
           {!props.sharedHeader && props.headerLinks}
           <span className="aag-header-stat">
-            <strong>{(snapshot?.teams.length ?? 0) + (pluginSnapshot?.teams.length ?? 0)}</strong>{tx("个专家团")}</span>
-          <span className="aag-header-stat">{tx("已启用")}<strong>{(snapshot?.enabledTeams.length ?? 0) + (pluginSnapshot?.teams.filter(team => team.enabled).length ?? 0)}</strong>
+            <strong>{snapshot?.teams.length ?? 0}</strong>{tx("个专家团")}</span>
+          <span className="aag-header-stat">{tx("已启用")}<strong>{snapshot?.enabledTeams.length ?? 0}</strong>
           </span>
         </div>
       </div>}
 
       <div className="aag-filters aag-card-filters">
         <div className="aag-field aag-field-source">
-          <CategorySelect id="aag-team-source" label={tx("来源")} value={filter} onChange={(value) => { if (value === 'builtin' || value === 'custom' || value === 'plugin' || value === 'all') setFilter(value) }} options={[
+          <CategorySelect id="aag-team-source" label={tx("来源")} value={filter} onChange={(value) => { if (value === 'builtin' || value === 'custom' || value === 'all') setFilter(value) }} options={[
             { value: 'all', label: tx("全部来源") },
             { value: 'builtin', label: tx("内置") },
             { value: 'custom', label: tx("自定义") },
-            { value: 'plugin', label: 'ClawClaw Plugin' },
           ]}/>
         </div>
         <div className="aag-field aag-field-status">
@@ -455,21 +444,21 @@ export function TeamsPanel(props: {
         </p>)}
       {!snapshot && !error && <p role="status">{tx("正在加载专家团…")}</p>}
       <div className="aag-expert-grid aag-team-grid">
-        {filteredPlugins.map((team) => (<LibraryCard key={team.id} testId="plugin-team-card" name={team.name} avatar={<div className="aag-team-avatar">
-              <div className="agt-stack">{[team.lead, ...team.members].slice(0, 3).map(agent => <Avatar key={agent.slug} expert={experts.find(expert => expert.slug === agent.slug)}/>)}</div>
-            </div>} metadata={<>ClawClaw Plugin · v{team.installedVersion}</>} description={team.description} content={<div className="agt-plugin-card-content">
+        {filteredTeams.map((team) => {
+          if (isPluginLeadTeam(team)) return (<LibraryCard key={team.id} testId="team-card" name={team.name} avatar={<div className="aag-team-avatar">
+              <div className="agt-stack">{[team.lead, ...team.members].slice(0, 3).map(agent => <Avatar key={agent.expertSlug} expert={experts.find(expert => expert.slug === agent.expertSlug)}/>)}</div>
+            </div>} metadata={<>{tx("内置")} · v{team.packageVersion}</>} description={team.description} content={<div className="agt-plugin-card-content">
               <p className="aag-card-description" title={team.description}>{team.description}</p>
               <dl><div><dt>Lead</dt><dd>{team.lead.name}</dd></div><div><dt>{tx("成员")}</dt><dd>{team.members.length}</dd></div><div><dt>{tx("技能")}</dt><dd>{team.skills.length}</dd></div></dl>
               {team.connectorStates.length > 0 && <div className="agt-plugin-connectors">{team.connectorStates.map(connector => <span key={connector.dependency} data-state={connector.state} data-ready={connector.installed && connector.enabled && connector.credentialsReady}><i aria-hidden="true"/>{connector.dependency} · {connectorStatus(connector, tx)}</span>)}</div>}
-            </div>} enabled={team.enabled} disabled={busy || typeof props.remote.setPluginTeamEnabled !== 'function'} enabledLabel={tx("已启用")} disabledLabel={tx("已停用")} toggle={() => void changePlugin(team.id, !team.enabled)} moreItems={team.connectorStates.flatMap(connector => {
+            </div>} enabled={snapshot!.enabledTeams.includes(team.id)} disabled={busy} enabledLabel={tx("已启用")} disabledLabel={tx("已停用")} toggle={() => void changePlugin(team.id, !snapshot!.enabledTeams.includes(team.id))} moreItems={team.connectorStates.flatMap(connector => {
                 if (!connector.installed)
                     return [{ id: `connector-install-${connector.dependency}`, label: connector.credentialsRequired ? tx("配置 Connector：{0}", [connector.dependency]) : tx("安装 Connector：{0}", [connector.dependency]), disabled: busy || (!connector.installable && !connector.credentialsRequired), onSelect: () => connector.credentialsRequired ? props.onOpenConnectors?.() : void changeConnector(team, connector.dependency, 'install') }];
                 return [
                     { id: `connector-toggle-${connector.dependency}`, label: connector.enabled ? tx("停用 Connector：{0}", [connector.dependency]) : tx("启用 Connector：{0}", [connector.dependency]), disabled: busy, onSelect: () => void changeConnector(team, connector.dependency, connector.enabled ? 'disable' : 'enable') },
                     { id: `connector-test-${connector.dependency}`, label: tx("测试 Connector：{0}", [connector.dependency]), disabled: busy, onSelect: () => void changeConnector(team, connector.dependency, 'test') },
                 ];
-            })} actions={<><button type="button" className="aag-card-action" aria-haspopup="dialog" disabled={busy} onClick={() => setPluginDetails(team)}><IconEye size={18}/>{tx("查看详情")}</button><button type="button" className="aag-card-action" disabled={busy} onClick={() => void selectPlugin(team)}><IconSend size={18}/>{tx("召唤专家团")}</button></>}/>))}
-        {filtered.map((team) => {
+            })} actions={<><button type="button" className="aag-card-action" aria-haspopup="dialog" disabled={busy} onClick={() => setDetails(team)}><IconEye size={18}/>{tx("查看详情")}</button><button type="button" className="aag-card-action" disabled={busy} onClick={() => void selectPlugin(team)}><IconSend size={18}/>{tx("召唤专家团")}</button></>}/>);
             const issue = teamIssue(team, experts, snapshot!.enabledExperts);
             const enabled = snapshot!.enabledTeams.includes(team.id);
             return (<LibraryCard key={team.id} testId="team-card" name={team.name} avatar={<div className="aag-team-avatar">
@@ -485,7 +474,7 @@ export function TeamsPanel(props: {
                 </>}/>);
         })}
       </div>{' '}
-      {snapshot && !filtered.length && !filteredPlugins.length && (<div className="aag-empty">
+      {snapshot && !filteredTeams.length && (<div className="aag-empty">
           <IconUsers size={40}/>
           <h3>{tx("没有找到专家团")}</h3>
           <p>{tx("换个关键词，或创建自己的专家团。")}</p>
@@ -494,7 +483,8 @@ export function TeamsPanel(props: {
                 setFilter('all');
             }}>{tx("清除筛选")}</Button>
         </div>)}
-      {details && (<TeamDetails team={details} experts={experts} close={() => setDetails(null)} onCopy={() => copy(details)} onSelect={(example) => void change(details, 'select', example)} onEdit={!details.builtin
+      {details && (isPluginLeadTeam(details) ? <LeadTeamDetails team={details} experts={experts} busy={busy} close={() => setDetails(null)} select={example => void selectPlugin(details, example)}
+        connector={(dependency, action) => void changeConnector(details, dependency, action)} openConnectors={props.onOpenConnectors}/> : <TeamDetails team={details} experts={experts} close={() => setDetails(null)} onCopy={() => copy(details)} onSelect={(example) => void change(details, 'select', example)} onEdit={!details.builtin
                 ? () => {
                     setEditor({
                         value: details,
@@ -504,8 +494,6 @@ export function TeamsPanel(props: {
                     setDetails(null);
                 }
                 : undefined} onDelete={!details.builtin ? () => void change(details, 'delete') : undefined}/>)}
-      {pluginDetails && <PluginTeamDetails team={pluginDetails} experts={experts} busy={busy} close={() => setPluginDetails(null)} select={example => void selectPlugin(pluginDetails, example)}
-        connector={(dependency, action) => void changeConnector(pluginDetails, dependency, action)} openConnectors={props.onOpenConnectors}/>}
       {editor && (<TeamEditor initial={editor.value} experts={experts} enabled={editor.enabled} enabledExperts={snapshot!.enabledExperts} close={() => setEditor(null)} refresh={async () => {
                 const latest = await unwrap(props.remote.getTeams());
                 accept(latest);
