@@ -7,6 +7,7 @@ import { ExpertCardsSettings } from '../src/experts/client/index.ts'
 import { acceptTeamSnapshot } from '../src/experts/client/team-cache.ts'
 import { TeamLocaleContext } from '../src/experts/client/team-locale.ts'
 import { TeamsPanel, type TeamRemote } from '../src/experts/client/team-ui.tsx'
+import { customZh } from '../src/experts/client/custom-locales.ts'
 
 const expert = {
   slug: 'reviewer', name: '评审专家', nameEn: 'Reviewer',
@@ -34,6 +35,35 @@ afterEach(async () => {
 })
 
 describe('expert team live UI state', () => {
+  it('offers manual and conversation paths before creating an expert', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    const remote = {
+      getEnabled: vi.fn(async () => ({ ok: true, value: { enabled: [], revision: 1 } })),
+    } as unknown as TeamRemote
+    const onCreateWithConversation = vi.fn(async () => {})
+    acceptCatalog(remote, { experts: [expert], enabled: [], revision: 1 })
+    const host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+
+    await act(async () => root!.render(React.createElement(ExpertCardsSettings, {
+      remote, getActive: () => 'zh', t: ((key: string) => (customZh as Record<string, string>)[key] ?? key) as never,
+      capabilityRegistry: { subscribe: () => () => {}, getSnapshot: () => capabilitySnapshot } as never,
+      sharedHeader: true, onCreateWithConversation,
+    } as unknown as React.ComponentProps<typeof ExpertCardsSettings>)))
+
+    const create = [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '新建专家')
+    await act(async () => create?.click())
+    expect(document.body.textContent).toContain('手动创建')
+    expect(document.body.textContent).toContain('通过对话创建')
+
+    const conversation = [...document.body.querySelectorAll<HTMLButtonElement>('button')]
+      .find(button => button.textContent?.includes('通过对话创建'))
+    await act(async () => { conversation?.click(); await Promise.resolve() })
+    expect(onCreateWithConversation).toHaveBeenCalledOnce()
+  })
+
   it('keeps the settings library management-only instead of summoning a team', async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))

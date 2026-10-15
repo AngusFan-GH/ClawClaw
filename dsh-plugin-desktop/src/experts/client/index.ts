@@ -1,5 +1,5 @@
 // @ts-nocheck -- ported client compatibility layer; host contracts remain strictly checked.
-import { AntdProvider, Button, Drawer, Input } from './antd-ui.js'
+import { AntdProvider, Button, Drawer, Input, Modal } from './antd-ui.js'
 import { antdLocale } from './antd-locale.js'
 import { LibraryCard } from './library-ui.js'
 import type { AgencyTeamsRemote } from './remote.js'
@@ -46,6 +46,7 @@ import { ExpertCapabilityRegistry } from './capability-registry.js'
 import { expertCapabilityHealth, type ExpertCapabilityHealth } from './capability-options.js'
 import { SkillsSettingsSection } from '../../client/SkillsSettingsSection.js'
 import { McpSettingsSection } from '../../client/McpSettingsSection.js'
+import { ExpertCreationConversationError, expertCreationWorkspaceId, openExpertCreationConversation } from './expert-conversation-creation.js'
 // @ts-expect-error package subpath has no declaration file
 import Bot from 'lucide-react/dist/esm/icons/bot.mjs'
 // @ts-expect-error package subpath has no declaration file
@@ -56,6 +57,10 @@ import Wrench from 'lucide-react/dist/esm/icons/wrench.mjs'
 import PlugZap from 'lucide-react/dist/esm/icons/plug-zap.mjs'
 // @ts-expect-error package subpath has no declaration file
 import Info from 'lucide-react/dist/esm/icons/info.mjs'
+// @ts-expect-error package subpath has no declaration file
+import MessageSquare from 'lucide-react/dist/esm/icons/message-square.mjs'
+// @ts-expect-error package subpath has no declaration file
+import PencilLine from 'lucide-react/dist/esm/icons/pencil-line.mjs'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -486,13 +491,14 @@ export const CARD_SETTINGS_CSS = `
 .aag-card-action:disabled{opacity:.5;cursor:default}
 .aag-card-action-primary{color:var(--dsw-alias-label-secondary)}
 .aag-card-action-danger{color:var(--dsw-alias-state-error-primary)}
+.aag-create-expert{display:flex;flex-direction:column;gap:16px}.aag-create-expert-hint{margin:0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px}.aag-create-expert-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.aag-create-expert-options>button{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;align-items:start;min-height:112px;padding:16px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;text-align:left;cursor:pointer}.aag-create-expert-options>button:hover:not(:disabled){border-color:var(--dsw-alias-brand-primary);background:var(--dsw-alias-interactive-bg-hover)}.aag-create-expert-options>button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}.aag-create-expert-options>button:disabled{opacity:.55;cursor:default}.aag-create-expert-options svg{margin-top:1px;color:var(--dsw-alias-label-secondary)}.aag-create-expert-options span{display:flex;min-width:0;flex-direction:column;gap:6px}.aag-create-expert-options strong{font-size:15px;line-height:21px}.aag-create-expert-options small{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:19px}.aag-create-expert-footer{display:flex;justify-content:flex-end}.aag-create-expert .aag-error{margin:0}
 .aag-switch{position:absolute;top:12px;right:12px;display:flex;align-items:center;flex-direction:column;gap:2px}
 .aag-switch-state{color:var(--dsw-alias-label-secondary);font-size:10px;line-height:16px;white-space:nowrap}
 .aag-expert-details{display:flex;flex-direction:column;gap:20px}.aag-detail-hero{display:grid;grid-template-columns:64px minmax(0,1fr);gap:14px;align-items:center}.aag-detail-hero .aag-expert-avatar{width:64px;height:64px}.aag-detail-hero h3{margin:0 0 4px;font-size:20px;line-height:28px}.aag-detail-description{margin:0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:21px}.aag-detail-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0}.aag-detail-facts>div{min-width:0;padding:10px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px}.aag-detail-facts dt{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}.aag-detail-facts dd{margin:3px 0 0;overflow-wrap:anywhere;font-size:13px;line-height:19px}.aag-detail-section{display:flex;flex-direction:column;gap:8px}.aag-detail-section h4{margin:0;font-size:13px;line-height:20px}.aag-capability-chips{display:flex;flex-wrap:wrap;gap:6px}.aag-capability-chip{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:4px 7px;border:1px solid var(--dsw-alias-border-l2);border-radius:5px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}.aag-capability-chip strong{overflow:hidden;color:var(--dsw-alias-label-primary);font-weight:500;text-overflow:ellipsis}.aag-capability-chip[data-issue="true"]{border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 45%,var(--dsw-alias-border-l2));color:var(--dsw-alias-state-error-primary)}.aag-detail-warning{margin:0;padding:10px;border-radius:6px;background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 9%,transparent);color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:19px}.aag-detail-actions{display:flex;gap:8px;flex-wrap:wrap}
 .ant-modal .aag-prompt-body.ant-input{display:block;box-sizing:border-box;height:min(560px,calc(100vh - 220px));min-height:240px;margin:0;resize:none;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.65}
 @container (max-width:839px){.aag-expert-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @container (max-width:519px){.aag-expert-grid{grid-template-columns:1fr}.aag-title-row{gap:8px 12px}.aag-settings-links{flex-basis:100%}}
-@container (max-width:430px){.aag-card-body{grid-template-columns:40px minmax(0,1fr);column-gap:10px}.aag-expert-avatar{width:40px;height:40px}.aag-card-name{font-size:16px;line-height:22px}}
+@container (max-width:430px){.aag-card-body{grid-template-columns:40px minmax(0,1fr);column-gap:10px}.aag-expert-avatar{width:40px;height:40px}.aag-card-name{font-size:16px;line-height:22px}.aag-create-expert-options{grid-template-columns:1fr}}
 `
 
 export const CAPABILITY_PICKER_CSS = `
@@ -1164,6 +1170,7 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
   onEnabledChange?: (enabled: ReadonlySet<string>) => void
   capabilityRegistry: ExpertCapabilityRegistry
   onOpenConnectors?: () => void
+  onCreateWithConversation?: () => Promise<void>
 }): React.ReactElement {
   const subscribe = React.useCallback((listener: () => void) => subscribeCatalog(props.remote, listener), [props.remote])
   const getSnapshot = React.useCallback(() => catalogState(props.remote), [props.remote])
@@ -1192,6 +1199,9 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
   const [deleting, setDeleting] = React.useState<ExpertView | null>(null)
   const [deleteError, setDeleteError] = React.useState<string | null>(null)
   const [notice, setNotice] = React.useState<string | null>(null)
+  const [creationOpen, setCreationOpen] = React.useState(false)
+  const [creationBusy, setCreationBusy] = React.useState(false)
+  const [creationError, setCreationError] = React.useState<string | null>(null)
   const capabilitySnapshot = React.useSyncExternalStore(props.capabilityRegistry.subscribe, props.capabilityRegistry.getSnapshot)
 
   const accept = (catalog: CatalogSnapshot): void => {
@@ -1219,6 +1229,24 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
           emoji: expert.emoji || DEFAULT_EXPERT_EMOJI, avatar: expertAvatarIndexForDivision(expert.slug, expert.division), prompt }, enabled: false, revision })
       })
     }
+  }
+  const openCreation = (): void => {
+    if (state === null || isSaving || promptLock.current) return
+    setCreationError(null)
+    setCreationOpen(true)
+  }
+  const createWithConversation = (): void => {
+    if (props.onCreateWithConversation === undefined || creationBusy) return
+    setCreationBusy(true)
+    setCreationError(null)
+    void props.onCreateWithConversation().then(() => {
+      setCreationOpen(false)
+    }).catch((cause: unknown) => {
+      const key = cause instanceof ExpertCreationConversationError
+        ? `custom.create${cause.code[0]!.toUpperCase()}${cause.code.slice(1)}`
+        : undefined
+      setCreationError(key === undefined ? (cause instanceof Error ? cause.message : String(cause)) : props.t(key as AgencyKey))
+    }).finally(() => { setCreationBusy(false) })
   }
   const removeExpert = (slug: string): void => {
     if (state === null || saving.current) return
@@ -1350,7 +1378,7 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
           props.t('summary.enabledPrefix'),
           React.createElement('strong', null, enabledCount)))))
     const filterActions = React.createElement('div', { className: 'aag-filter-actions' },
-      React.createElement(Button, { type: 'primary', disabled: isSaving, onClick: () => openEditor() }, props.t('custom.new')))
+      React.createElement(Button, { type: 'primary', disabled: isSaving, onClick: openCreation }, props.t('custom.new')))
     if (notice !== null) nodes.push(React.createElement('div', { key: 'notice', className: 'aag-custom-notice', role: 'status' },
       React.createElement('span', null, notice),
       React.createElement(Button, {
@@ -1401,7 +1429,7 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
       nodes.push(React.createElement('div', { key: 'empty', className: 'aag-empty' },
         React.createElement('div', null, source === 'custom' && !hasFilter ? props.t('custom.emptyTitle') : props.t('settings.empty', { all: props.t('settings.filter.allCategories') })),
         source === 'custom' && !hasFilter ? React.createElement('p', { className: 'aag-note' }, props.t('custom.emptyHint')) : null,
-        source === 'custom' && !hasFilter ? React.createElement(Button, { type: 'primary', onClick: () => openEditor() }, props.t('custom.new')) : null,
+        source === 'custom' && !hasFilter ? React.createElement(Button, { type: 'primary', onClick: openCreation }, props.t('custom.new')) : null,
         hasFilter ? React.createElement(Button, { onClick: resetFilters }, props.t('settings.empty.reset')) : null))
     } else {
       nodes.push(React.createElement(ExpertCardWindow, {
@@ -1439,6 +1467,22 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
     }
   }
   return React.createElement('section', { className: 'aag-section', id: 'aag-expert-source-panel' }, nodes,
+    React.createElement(Modal, {
+      open: creationOpen, title: props.t('custom.createTitle'), footer: null, centered: true,
+      width: 560, destroyOnHidden: true, closable: !creationBusy, maskClosable: !creationBusy,
+      onCancel: () => { if (!creationBusy) setCreationOpen(false) },
+    }, React.createElement('div', { className: 'aag-create-expert' },
+      React.createElement('p', { className: 'aag-create-expert-hint' }, props.t('custom.createHint')),
+      creationError === null ? null : React.createElement('div', { className: 'aag-error', role: 'alert' }, creationError),
+      React.createElement('div', { className: 'aag-create-expert-options' },
+        React.createElement('button', { type: 'button', disabled: creationBusy, onClick: () => { setCreationOpen(false); openEditor() } },
+          React.createElement(PencilLine, { size: 22, strokeWidth: 1.7, 'aria-hidden': true }),
+          React.createElement('span', null, React.createElement('strong', null, props.t('custom.createManual')), React.createElement('small', null, props.t('custom.createManualHint')))),
+        React.createElement('button', { type: 'button', disabled: creationBusy || props.onCreateWithConversation === undefined, onClick: createWithConversation },
+          React.createElement(MessageSquare, { size: 22, strokeWidth: 1.7, 'aria-hidden': true }),
+          React.createElement('span', null, React.createElement('strong', null, creationBusy ? props.t('custom.createConversationBusy') : props.t('custom.createConversation')), React.createElement('small', null, props.t('custom.createConversationHint'))))),
+      React.createElement('div', { className: 'aag-create-expert-footer' },
+        React.createElement(Button, { disabled: creationBusy, onClick: () => setCreationOpen(false) }, props.t('custom.createCancel'))))),
     editor === null || state === null ? null : React.createElement(CustomExpertEditor, {
       ...editor, remote: props.remote, t: props.t, locale: props.getActive(), capabilityRegistry: props.capabilityRegistry,
       divisions: [...new Set([...Object.keys(ZH_DIVISION), ...state.experts.map(expert => expert.division)])],
@@ -1707,8 +1751,26 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
       const sessions = ctx.sessions as unknown as { list?: { getSnapshot(): { ids: readonly string[]; byId: Record<string, { retainedBy?: { mainView?: number } }> } } }
       const list = sessions.list?.getSnapshot()
       const initialSessionId = list?.ids.find(id => (list.byId[id]?.retainedBy?.mainView ?? 0) > 0)
+      const onCreateWithConversation = async (): Promise<void> => {
+        const workspaces = ctx.get('workspaces') as { list?: { getSnapshot(): Parameters<typeof expertCreationWorkspaceId>[0] } } | undefined
+        const uiWorkspace = ctx.get('uiWorkspace') as { openWorkspace?: (id: Parameters<typeof openExpertCreationConversation>[0]['workspaceId'], beforeOpen: (sessionId: SessionId) => void) => Promise<void> } | undefined
+        const workspaceId = workspaces?.list === undefined
+          ? undefined
+          : expertCreationWorkspaceId(workspaces.list.getSnapshot(), resolveTargetSessionId(ctx.sessions as unknown as ReferenceSessionAccess))
+        await openExpertCreationConversation({
+          locale: getActive(), workspaceId,
+          sessions: ctx.sessions as unknown as ReferenceSessionAccess,
+          conversationFor: actx => (actx.get('conversation') as ReferenceConversationAccess | undefined)?.input.for(actx) as unknown as { actions?: { setDraft(text: string): void } } | undefined,
+          openWorkspace: (id, beforeOpen) => {
+            if (uiWorkspace?.openWorkspace === undefined) throw new ExpertCreationConversationError('workspaceUnavailable')
+            return uiWorkspace.openWorkspace(id, beforeOpen)
+          },
+          closeSettings: props.close,
+          focusComposer: () => document.querySelector<HTMLElement>('[data-composer-card] [contenteditable="true"]')?.focus(),
+        })
+      }
       return React.createElement(AgencySettingsPanel, { ...props, remote, getActive, capabilityRegistry: capabilityRegistryFor(initialSessionId as SessionId | undefined), skillsApi, mcpApi, skillsT, mcpT,
-        ...(initialSessionId === undefined ? {} : { initialSessionId }), onEnabledChange: updateEnabledForMentions })
+        ...(initialSessionId === undefined ? {} : { initialSessionId }), onEnabledChange: updateEnabledForMentions, onCreateWithConversation })
     },
   ))
 
