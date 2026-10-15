@@ -20,57 +20,41 @@
   "members": [
     {
       "id": "doc-writer",
-      "displayName": {
+      "profession": {
         "zh": "文档主笔",
         "en": "Document Writer"
       },
-      "profession": {
-        "zh": "内容策划与写作",
-        "en": "Content planning and writing"
-      },
-      "avatar": "./avatar.png",
+      "avatar": 3,
       "role": "lead"
     },
     {
       "id": "doc-formatter",
-      "displayName": {
+      "profession": {
         "zh": "排版设计师",
         "en": "Document Formatter"
       },
-      "profession": {
-        "zh": "结构与视觉排版",
-        "en": "Structure and visual formatting"
-      },
-      "avatar": "./avatar.png",
+      "avatar": 7,
       "role": "member"
     },
     {
       "id": "doc-converter",
-      "displayName": {
+      "profession": {
         "zh": "文档交付工程师",
         "en": "Document Converter"
       },
-      "profession": {
-        "zh": "格式转换与质量校验",
-        "en": "Format conversion and quality validation"
-      },
-      "avatar": "./avatar.png",
+      "avatar": 1,
       "role": "member"
     }
   ],
-  "displayName": {
+  "profession": {
     "zh": "文档生产专家团",
     "en": "Document Production Team"
-  },
-  "profession": {
-    "zh": "专业文档生产",
-    "en": "Professional document production"
   },
   "displayDescription": {
     "zh": "由主笔、排版设计师和交付工程师协作完成专业文档。",
     "en": "A writer, formatter, and delivery engineer collaborate on professional documents."
   },
-  "avatar": "./avatar.png",
+  "avatar": 3,
   "categoryId": "writing",
   "defaultInitPrompt": {
     "zh": "先明确文档目标与受众，再由主笔创作、排版设计师优化、交付工程师校验并汇总。",

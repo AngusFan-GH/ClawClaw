@@ -35,6 +35,7 @@ describe('expert library UI', () => {
     expect(CARD_SETTINGS_CSS).toContain('column-gap:4px;row-gap:2px')
     expect(CARD_SETTINGS_CSS).toContain('.aag-expert-card-custom .aag-card-category{flex:none')
     expect(CARD_SETTINGS_CSS).toContain('.aag-expert-card-custom .aag-card-description{min-height:19px;-webkit-line-clamp:1}')
+    expect(CARD_SETTINGS_CSS).toContain('.aag-team-summon.is-active')
   })
 
   it('treats bundled packages as built-in experts', () => {

@@ -35,18 +35,22 @@ import { TYPERT_REMOTE, type AgencyAgentsEnabledState, type AgencyAgentsPrompt }
 import { DEFAULT_EXPERT_EMOJI, type CustomExpertInput, type CatalogSnapshot } from '../expert-contract.js'
 import { CustomExpertEditor, CustomDeleteDialog, CUSTOM_EDITOR_CSS } from './custom-editor.js'
 import { acceptEnabled, acceptCatalog, catalogState, refreshCatalog, subscribeCatalog, type ExpertView as CatalogExpertView } from './catalog.js'
-import { refreshTeams, teamState } from './team-cache.js'
+import { acceptTeamSnapshot, refreshTeams, teamState } from './team-cache.js'
 import { installNativeTeamNames } from './native-team-names.js'
 import { installLegacyTeamReferenceGuard } from './legacy-team-reference.js'
 import type { AgencyCatalogRemote } from './remote.js'
 import { createDesktopSkillsApi } from '../../client/skills-api.js'
 import { createDesktopMcpApi } from '../../client/mcp-api.js'
 import { skillInsertion } from '../../client/conversation-skills.js'
+import { capabilitySubmissionMarker } from '../capability-submission.js'
 import { ExpertCapabilityRegistry } from './capability-registry.js'
 import { expertCapabilityHealth, type ExpertCapabilityHealth } from './capability-options.js'
 import { SkillsSettingsSection } from '../../client/SkillsSettingsSection.js'
 import { McpSettingsSection } from '../../client/McpSettingsSection.js'
-import { ExpertCreationConversationError, expertCreationWorkspaceId, openExpertCreationConversation } from './expert-conversation-creation.js'
+import { ExpertCreationConversationError, expertCreationWorkspaceId, openCapabilityConversation as openPreparedCapabilityConversation, openExpertCreationConversation } from './expert-conversation-creation.js'
+import { applyCapabilitySidebar, CAPABILITY_SIDEBAR_CSS, openCapabilitySidebar } from './capability-sidebar.js'
+import { CreationRunGate, observeCreationRun, type RunningSessionSource } from './creation-run-gate.js'
+import type { ISidebarRight } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 // @ts-expect-error package subpath has no declaration file
 import Bot from 'lucide-react/dist/esm/icons/bot.mjs'
 // @ts-expect-error package subpath has no declaration file
@@ -120,6 +124,7 @@ type ClientSlots = Pick<SlotCore, 'register'> & {
 type ClientContext = CordisClientContext & {
   readonly slots: ClientSlots
   readonly sessions: unknown
+  readonly sidebarRight?: ISidebarRight
 }
 
 const DIVISION_ORDER = [
@@ -350,7 +355,7 @@ export function inputTriggerCandidateName(
 }
 
 function menuAvatar(expert: Pick<ExpertView, 'slug' | 'division' | 'custom' | 'avatar'>): string {
-  const index = expert.custom ? expert.avatar ?? 0 : expertAvatarIndexForDivision(expert.slug, expert.division)
+  const index = expert.avatar ?? expertAvatarIndexForDivision(expert.slug, expert.division)
   return EXPERT_AVATAR_URLS[index] ?? EXPERT_AVATAR_URLS[0]
 }
 
@@ -490,6 +495,7 @@ export const CARD_SETTINGS_CSS = `
 .aag-card-action:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .aag-card-action:disabled{opacity:.5;cursor:default}
 .aag-card-action-primary{color:var(--dsw-alias-label-secondary)}
+.aag-team-summon.is-active,.aag-team-summon.is-active:disabled{opacity:1;background:color-mix(in srgb,var(--dsw-alias-brand-primary) 12%,transparent);color:var(--dsw-alias-brand-primary)}
 .aag-card-action-danger{color:var(--dsw-alias-state-error-primary)}
 .aag-create-expert{display:flex;flex-direction:column;gap:16px}.aag-create-expert-hint{margin:0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px}.aag-create-expert-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.aag-create-expert-options>button{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;align-items:start;min-height:112px;padding:16px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;text-align:left;cursor:pointer}.aag-create-expert-options>button:hover:not(:disabled){border-color:var(--dsw-alias-brand-primary);background:var(--dsw-alias-interactive-bg-hover)}.aag-create-expert-options>button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}.aag-create-expert-options>button:disabled{opacity:.55;cursor:default}.aag-create-expert-options svg{margin-top:1px;color:var(--dsw-alias-label-secondary)}.aag-create-expert-options span{display:flex;min-width:0;flex-direction:column;gap:6px}.aag-create-expert-options strong{font-size:15px;line-height:21px}.aag-create-expert-options small{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:19px}.aag-create-expert-footer{display:flex;justify-content:flex-end}.aag-create-expert .aag-error{margin:0}
 .aag-switch{position:absolute;top:12px;right:12px;display:flex;align-items:center;flex-direction:column;gap:2px}
@@ -516,7 +522,7 @@ export const CAPABILITY_PICKER_CSS = `
 .aag-connector-readiness{grid-column:3;grid-row:1;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;text-align:right}
 @media(max-width:560px){.aag-menu.aag-discovery{width:min(440px,calc(100vw - 24px))}.aag-capability-picker{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);height:340px}.aag-capability-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));padding:2px 2px 6px;border-right:0;border-bottom:1px solid var(--dsw-alias-border-l2)}.aag-capability-nav button{padding:7px 4px;text-align:center}.aag-capability-results{padding:6px 2px 2px}.aag-capability-summary span:last-child{display:none}}
 `
-export const CSS = TEAM_CSS + COMPOSER_CSS + SETTINGS_CSS + CARD_SETTINGS_CSS + DISCOVERY_CSS + CAPABILITY_PICKER_CSS
+export const CSS = TEAM_CSS + COMPOSER_CSS + SETTINGS_CSS + CARD_SETTINGS_CSS + DISCOVERY_CSS + CAPABILITY_PICKER_CSS + CAPABILITY_SIDEBAR_CSS
   + MENU_NAME_OVERRIDE + `{${EXPERT_MENU_NAME_STYLE}}`
 
 /** 本插件 Remote 命名空间的 client 侧 face（ctx.remote.agencyAgents 的形状）。 */
@@ -648,7 +654,7 @@ export interface ReferenceSessionAccess {
     getSnapshot(): ReferenceSessionListSnapshot
   }
   scope?(id: SessionId): CordisClientContext | undefined
-  binding?(id: SessionId): { readonly ctx: CordisClientContext } | undefined
+  binding?(id: SessionId): { readonly ctx: CordisClientContext; readonly session?: RunningSessionSource } | undefined
 }
 
 /** slot 未给 sessionId 时：先认旧宿主的 `current`，再按官方主视图 retain 反查。 */
@@ -1171,6 +1177,7 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
   capabilityRegistry: ExpertCapabilityRegistry
   onOpenConnectors?: () => void
   onCreateWithConversation?: () => Promise<void>
+  onCreatedExpert?: (expert: ExpertView) => void
 }): React.ReactElement {
   const subscribe = React.useCallback((listener: () => void) => subscribeCatalog(props.remote, listener), [props.remote])
   const getSnapshot = React.useCallback(() => catalogState(props.remote), [props.remote])
@@ -1435,7 +1442,7 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
       nodes.push(React.createElement(ExpertCardWindow, {
         key: 'cards', items: filtered, resetKey: `${source}\0${division}\0${status}\0${query}`, render: (expert: ExpertView) => {
         const enabled = state.enabled.has(expert.slug)
-        const avatar = EXPERT_AVATAR_URLS[expert.custom ? expert.avatar ?? 0 : expertAvatarIndexForDivision(expert.slug, expert.division)] ?? EXPERT_AVATAR_URLS[0]
+        const avatar = EXPERT_AVATAR_URLS[expert.avatar ?? expertAvatarIndexForDivision(expert.slug, expert.division)] ?? EXPERT_AVATAR_URLS[0]
         const health = expertCapabilityHealth(expert, capabilitySnapshot.catalog, capabilitySnapshot.loading, {
           skills: capabilitySnapshot.skillsLoaded, mcpServers: capabilitySnapshot.mcpLoaded,
         })
@@ -1487,7 +1494,10 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
       ...editor, remote: props.remote, t: props.t, locale: props.getActive(), capabilityRegistry: props.capabilityRegistry,
       divisions: [...new Set([...Object.keys(ZH_DIVISION), ...state.experts.map(expert => expert.division)])],
       onClose: () => setEditor(null), onSaved: (catalog: CatalogSnapshot) => {
+        const existing = new Set(state.experts.map(item => item.slug))
+        const created = catalog.experts.find(item => !existing.has(item.slug))
         accept(catalog); setEditor(null); setSource('custom'); setQuery(''); setDivision(''); setStatus(''); setNotice(props.t('custom.saved'))
+        if (created !== undefined) props.onCreatedExpert?.({ ...created, divisionEn: EN_DIVISION[created.division] ?? created.division })
       },
     }),
     deleting === null ? null : React.createElement(CustomDeleteDialog, {
@@ -1503,7 +1513,7 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
       }),
       locale: props.getActive(),
       t: props.t,
-      avatar: EXPERT_AVATAR_URLS[details.expert.custom ? details.expert.avatar ?? 0 : expertAvatarIndexForDivision(details.expert.slug, details.expert.division)] ?? EXPERT_AVATAR_URLS[0],
+      avatar: EXPERT_AVATAR_URLS[details.expert.avatar ?? expertAvatarIndexForDivision(details.expert.slug, details.expert.division)] ?? EXPERT_AVATAR_URLS[0],
       close: () => setDetails(null),
       viewPrompt: () => { const current = details; setDetails(null); viewPrompt(current.expert, current.returnFocus) },
       manageConnectors: props.onOpenConnectors === undefined ? undefined : () => { setDetails(null); props.onOpenConnectors?.() },
@@ -1516,6 +1526,8 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
   skillsT: (key: string, params?: Record<string, unknown>) => string
   mcpT: (key: string, params?: Record<string, unknown>) => string
   initialSessionId?: string
+  onSelectTeam?(team: ExpertTeam, example?: string): boolean | Promise<boolean>
+  onCreatedTeam?(team: ExpertTeam, experts: readonly ExpertView[]): void
 }) {
   const tx = (key: string) => teamText(props.getActive(), key)
   const [view, setView] = React.useState<'experts' | 'teams' | 'skills' | 'mcp'>('experts')
@@ -1578,6 +1590,8 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
       React.createElement('div', { className: 'aag-library-panel', id: 'aag-library-panel-teams', role: 'tabpanel', 'aria-labelledby': 'aag-library-tab-teams', hidden: view !== 'teams' }, React.createElement(TeamLocaleContext.Provider, { value: props.getActive() }, React.createElement(TeamsPanel, {
         remote: props.remote as TeamRemote, sharedHeader: true,
         onOpenConnectors: () => setView('mcp'),
+        onSelectTeam: props.onSelectTeam,
+        onCreatedTeam: props.onCreatedTeam,
         onExpertsChanged: () => { void readEnabled(props.remote).then(value => props.onEnabledChange?.(value.enabled)) },
       }))),
       React.createElement('div', { className: 'aag-library-panel', id: 'aag-library-panel-skills', role: 'tabpanel', 'aria-labelledby': 'aag-library-tab-skills', hidden: view !== 'skills' }, React.createElement(SkillsSettingsSection, {
@@ -1587,9 +1601,11 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
         t: props.mcpT, api: props.mcpApi, embedded: true, onCatalogChange: invalidateCapabilities, expertUsage: capabilityUsage.mcp,
       })))))
 }
-export const inject = ['slots', 'inputTriggers', 'locale', 'remote', 'sessions', 'conversation']
+export const inject = ['slots', 'inputTriggers', 'locale', 'remote', 'sessions', 'conversation', 'sidebarRight']
+const SKILL_REFERENCE_SOURCE = 'clawclaw-experts:skills'
 
 export async function apply(ctx: ClientContext): Promise<() => void> {
+  applyCapabilitySidebar(ctx as unknown as CordisClientContext)
   ctx.effect(() => {
     const tag = document.createElement('style')
     tag.dataset.plugin = PLUGIN_ID
@@ -1666,7 +1682,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
     ctx.sessions as unknown as ReferenceSessionAccess, sessionId,
     (actx) => actx.get('conversation') as ReferenceConversationAccess | undefined,
   )
-  const insertTask = (current: ReferenceInsertionTarget | undefined, reference: ReferenceInsert, sessionId?: SessionId, span?: TokenSpan): boolean => {
+  const insertTask = (current: ReferenceInsertionTarget | undefined, reference: ReferenceInsert, sessionId?: SessionId, span?: TokenSpan, exampleOverride?: string): boolean => {
     if (current === undefined) return false
     if ((current.state.getSnapshot().occurrences ?? []).some(occurrence => occurrence.source === TEAM_REFERENCE_SOURCE)) {
       current.notify?.('error', teamText(getActive(), '草稿已有专家团，请先移除专家团再选择专家。'))
@@ -1676,7 +1692,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
     const id = resolveTargetSessionId(sessions, sessionId)
     const actx = id === undefined ? undefined : sessions.scope?.(id) ?? sessions.binding?.(id)?.ctx
     const expert = catalogState(remote).experts.find(item => item.slug === reference.ref)
-    const example = expert === undefined ? undefined : expertTaskExample(expert, getActive())
+    const example = exampleOverride ?? (expert === undefined ? undefined : expertTaskExample(expert, getActive()))
     return insertExpertReference({
       state: current.state,
       insertReference: (ref, tokenSpan) => current.insertReference(ref, tokenSpan),
@@ -1727,7 +1743,13 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
           skills: view.filter(skill => skill.userInvocable),
           commands: commandResult.value.map(command => command.name),
         })
-        return actx.bail(actx, 'slash/input-insert-text', request) === true
+        if (request.text === '') return true
+        return current.insertReference({
+          source: SKILL_REFERENCE_SOURCE,
+          ref: name,
+          label: name,
+          clipboardText: `/${name}\u00a0`,
+        }, request.span)
       },
       prepareTeamSelection: () => {
         const current = target()
@@ -1741,6 +1763,152 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
     }
   }
 
+  const focusComposer = (): void => {
+    document.querySelector<HTMLElement>('[data-composer-card] [contenteditable="true"]')?.focus()
+  }
+  const expertExamples = (expert: ExpertView): readonly string[] => {
+    const known = expertTaskExample(expert, getActive())
+    if (known !== undefined) return [known]
+    const name = displayName(expert, getActive())
+    return getActive() === 'en'
+      ? [`Work as ${name} and help me analyze and complete this task.`, `First clarify the information needed for this task, then propose an actionable plan.`]
+      : [`请以${name}的专业方法，帮我分析并完成当前任务。`, '请先澄清完成这项任务所需的信息，再给出可执行的方案。']
+  }
+  const ensureExpertEnabled = async (slug: string): Promise<void> => {
+    let state = catalogState(remote)
+    if (state.revision < 0) state = await refreshCatalog(remote)
+    if (state.enabled.has(slug)) return
+    const result = await remote.setEnabled([...state.enabled, slug], state.revision)
+    if (!result.ok) throw new Error(result.error.message)
+    acceptEnabled(remote, result.value)
+  }
+  const ensureTeamRecalled = async (team: ExpertTeam): Promise<ExpertTeam> => {
+    const teamsRemote = remote as TeamRemote
+    let snapshot = teamState(teamsRemote) ?? await refreshTeams(teamsRemote)
+    let current = snapshot.teams.find(item => item.id === team.id) ?? team
+    if (!current.members.every(member => snapshot.enabledExperts.includes(member.expertSlug))) {
+      const next = await unwrap(teamsRemote.recallTeam(current.id, snapshot.revision))
+      snapshot = acceptTeamSnapshot(teamsRemote, next)
+      current = snapshot.teams.find(item => item.id === team.id) ?? current
+    }
+    return current
+  }
+  const openCapabilityConversation = async (
+    sourceSessionId: SessionId | undefined,
+    prepare: (sessionId: SessionId) => boolean | Promise<boolean>,
+  ): Promise<boolean> => {
+    const sessions = ctx.sessions as unknown as ReferenceSessionAccess
+    const workspaces = ctx.get('workspaces') as { list?: { getSnapshot(): Parameters<typeof expertCreationWorkspaceId>[0] } } | undefined
+    const uiWorkspace = ctx.get('uiWorkspace') as { openWorkspace?: (id: Parameters<typeof openExpertCreationConversation>[0]['workspaceId'], beforeOpen: (sessionId: SessionId) => void) => Promise<void> } | undefined
+    const workspaceId = workspaces?.list === undefined
+      ? undefined
+      : expertCreationWorkspaceId(workspaces.list.getSnapshot(), resolveTargetSessionId(sessions, sourceSessionId))
+    if (uiWorkspace?.openWorkspace === undefined) {
+      throw new ExpertCreationConversationError('workspaceUnavailable')
+    }
+    return openPreparedCapabilityConversation({ workspaceId, openWorkspace: uiWorkspace.openWorkspace.bind(uiWorkspace), prepare })
+  }
+  const showExpertSidebar = (expert: ExpertView, sessionId?: SessionId): boolean => {
+    const sidebarRight = ctx.get('sidebarRight') as ISidebarRight | undefined
+    if (sidebarRight === undefined) return false
+    openCapabilitySidebar(sidebarRight, {
+      kind: 'expert', expert, locale: getActive(),
+      avatar: EXPERT_AVATAR_URLS[expert.avatar ?? expertAvatarIndexForDivision(expert.slug, expert.division)] ?? EXPERT_AVATAR_URLS[0],
+      examples: expertExamples(expert), focusComposer,
+      select: async example => {
+        await ensureExpertEnabled(expert.slug)
+        return openCapabilityConversation(sessionId, newSessionId => insertTask(
+          resolveTarget(newSessionId), buildExpertReference(expert, getActive()), newSessionId, undefined, example,
+        ))
+      },
+    })
+    return true
+  }
+  const showTeamSidebar = (team: ExpertTeam, experts: readonly ExpertView[], sessionId?: SessionId): boolean => {
+    const sidebarRight = ctx.get('sidebarRight') as ISidebarRight | undefined
+    if (sidebarRight === undefined) return false
+    const localized = localizeTeam(team, getActive())
+    openCapabilitySidebar(sidebarRight, {
+      kind: 'team', team: localized, experts, locale: getActive(), examples: localized.examples, focusComposer,
+      select: async example => {
+        const current = await ensureTeamRecalled(team)
+        return openCapabilityConversation(sessionId, newSessionId => insertTeamTask(
+          resolveTarget(newSessionId), current, example, newSessionId,
+        ))
+      },
+    })
+    return true
+  }
+  let pendingCreation: {
+    readonly gate: CreationRunGate<
+      | { readonly kind: 'expert'; readonly expert: ExpertView }
+      | { readonly kind: 'team'; readonly team: ExpertTeam; readonly experts: readonly ExpertView[] }
+    >
+    sessionId?: SessionId
+    observedSessionId?: SessionId
+    disposeSession?: () => void
+    attempts: number
+  } | undefined
+  let creationPoll: ReturnType<typeof setInterval> | undefined
+  const stopCreationWatch = (): void => {
+    if (creationPoll !== undefined) clearInterval(creationPoll)
+    pendingCreation?.disposeSession?.()
+    creationPoll = undefined
+    pendingCreation = undefined
+  }
+  const revealCreatedCapability = (
+    pending: NonNullable<typeof pendingCreation>,
+    created: { readonly kind: 'expert'; readonly expert: ExpertView }
+      | { readonly kind: 'team'; readonly team: ExpertTeam; readonly experts: readonly ExpertView[] },
+  ): void => {
+    if (pendingCreation !== pending) return
+    const sessionId = pending.sessionId
+    stopCreationWatch()
+    if (created.kind === 'team') showTeamSidebar(created.team, created.experts, sessionId)
+    else showExpertSidebar(created.expert, sessionId)
+  }
+  const observeCreationSession = (pending: NonNullable<typeof pendingCreation>): void => {
+    const sessionId = pending.sessionId
+    if (sessionId === undefined || pending.observedSessionId === sessionId) return
+    const source = (ctx.sessions as unknown as ReferenceSessionAccess).binding?.(sessionId)?.session
+    if (source === undefined) return
+    pending.disposeSession?.()
+    pending.observedSessionId = sessionId
+    pending.disposeSession = observeCreationRun(source, pending.gate, created => revealCreatedCapability(pending, created))
+  }
+  const checkCreatedCapability = async (): Promise<void> => {
+    const pending = pendingCreation
+    if (pending === undefined) return
+    observeCreationSession(pending)
+    if (pending.sessionId === undefined) return
+    pending.attempts += 1
+    try {
+      const result = await remote.getCreatedCapability(String(pending.sessionId))
+      if (pendingCreation !== pending) return
+      if (!result.ok) throw new Error(result.error.message)
+      if (result.value.kind !== 'pending') {
+        const created = result.value.kind === 'team'
+          ? { kind: 'team' as const, team: result.value.team, experts: result.value.experts.map(expert => ({ ...expert, divisionEn: EN_DIVISION[expert.division] ?? expert.division })) }
+          : { kind: 'expert' as const, expert: { ...result.value.expert, divisionEn: EN_DIVISION[result.value.expert.division] ?? result.value.expert.division } }
+        const ready = pending.gate.detect(created)
+        if (ready !== undefined) revealCreatedCapability(pending, ready)
+      }
+    } catch (error) {
+      console.warn('[clawclaw-experts] 当前会话创建结果读取失败，将继续重试：', error)
+    }
+    if (pending.attempts >= 600) stopCreationWatch()
+  }
+  const watchCreatedCapability = (): NonNullable<typeof pendingCreation> => {
+    stopCreationWatch()
+    pendingCreation = {
+      gate: new CreationRunGate(),
+      attempts: 0,
+    }
+    creationPoll = setInterval(() => { void checkCreatedCapability() }, 1000)
+    return pendingCreation
+  }
+  ctx.effect(() => stopCreationWatch, 'clawclaw-experts: creation result watch')
+
   ctx.slots.inject('settings.section', () => ctx.slots.register(
     // label 是 thunk：nav 行每渲染读一次，locale 切换后自动跟随。
     {
@@ -1752,6 +1920,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
       const list = sessions.list?.getSnapshot()
       const initialSessionId = list?.ids.find(id => (list.byId[id]?.retainedBy?.mainView ?? 0) > 0)
       const onCreateWithConversation = async (): Promise<void> => {
+        const pending = watchCreatedCapability()
         const workspaces = ctx.get('workspaces') as { list?: { getSnapshot(): Parameters<typeof expertCreationWorkspaceId>[0] } } | undefined
         const uiWorkspace = ctx.get('uiWorkspace') as { openWorkspace?: (id: Parameters<typeof openExpertCreationConversation>[0]['workspaceId'], beforeOpen: (sessionId: SessionId) => void) => Promise<void> } | undefined
         const workspaceId = workspaces?.list === undefined
@@ -1763,14 +1932,33 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
           conversationFor: actx => (actx.get('conversation') as ReferenceConversationAccess | undefined)?.input.for(actx) as unknown as { actions?: { setDraft(text: string): void } } | undefined,
           openWorkspace: (id, beforeOpen) => {
             if (uiWorkspace?.openWorkspace === undefined) throw new ExpertCreationConversationError('workspaceUnavailable')
-            return uiWorkspace.openWorkspace(id, beforeOpen)
+            return uiWorkspace.openWorkspace(id, sessionId => {
+              if (pendingCreation === pending && pending !== undefined) {
+                pending.sessionId = sessionId
+                observeCreationSession(pending)
+              }
+              beforeOpen(sessionId)
+            })
           },
           closeSettings: props.close,
           focusComposer: () => document.querySelector<HTMLElement>('[data-composer-card] [contenteditable="true"]')?.focus(),
-        })
+        }).catch(cause => { if (pendingCreation === pending) stopCreationWatch(); throw cause })
       }
+      const settingsInsertion = bindExpertInsertion(initialSessionId as SessionId | undefined)
+      const capabilitySidebarAvailable = ctx.get('sidebarRight') !== undefined
       return React.createElement(AgencySettingsPanel, { ...props, remote, getActive, capabilityRegistry: capabilityRegistryFor(initialSessionId as SessionId | undefined), skillsApi, mcpApi, skillsT, mcpT,
-        ...(initialSessionId === undefined ? {} : { initialSessionId }), onEnabledChange: updateEnabledForMentions, onCreateWithConversation })
+        ...(initialSessionId === undefined ? {} : { initialSessionId }), onEnabledChange: updateEnabledForMentions, onCreateWithConversation,
+        ...(capabilitySidebarAvailable ? { onCreatedExpert: (expert: ExpertView) => {
+          if (showExpertSidebar(expert, initialSessionId as SessionId | undefined)) props.close()
+        },
+        onCreatedTeam: (team: ExpertTeam, experts: readonly ExpertView[]) => {
+          if (showTeamSidebar(team, experts, initialSessionId as SessionId | undefined)) props.close()
+        } } : {}),
+        onSelectTeam: async (team: ExpertTeam, example?: string) => {
+          const selected = await settingsInsertion.prepareTeamSelection()(team, example)
+          if (selected) props.close()
+          return selected
+        } })
     },
   ))
 
@@ -1785,6 +1973,15 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   const registerInputTriggerSources = (active: 'zh' | 'en'): (() => void) => {
     const disposers: Array<() => void> = []
     try {
+      disposers.push(ctx.inputTriggers.registerSource({
+        trigger: '@', name: SKILL_REFERENCE_SOURCE, order: 98,
+        candidates: async () => [],
+        onPick: () => undefined,
+        codec: {
+          clipboardText: name => `/${name}\u00a0`,
+          serialize: async name => capabilitySubmissionMarker({ expertIds: [], skillNames: [name] }),
+        },
+      }))
       const teamRemote = remote as TeamRemote
       if (typeof teamRemote.getTeams === 'function') disposers.push(ctx.inputTriggers.registerSource({
         trigger: '@', name: TEAM_REFERENCE_SOURCE, order: 99,
@@ -1816,7 +2013,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
             const legacy = snapshot.teams.find(candidate => candidate.id === id)
             const memberSlugs = legacy?.members.map(member => member.expertSlug) ?? []
             if (!team || memberSlugs.some(slug => !catalog.enabled.includes(slug) || !catalog.experts.some(e => e.slug === slug && !e.conflict))) throw new Error(teamText(active, '团队成员未就绪，请修复后再发送。'))
-            return teamSubmissionText(team, active)
+            return teamSubmissionText(team)
           },
         },
       }))
@@ -1870,7 +2067,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
               const current = await readEnabled(remote)
               const expert = current.experts.find(item => item.slug === slug)
               if (expert === undefined || !current.enabled.has(slug)) throw new Error(t('custom.unavailable'))
-              return expertMentionFromReference(slug, getActive(), current.experts)
+              return capabilitySubmissionMarker({ expertIds: [slug], skillNames: [] })
             },
           },
         } as InputTriggerSource & { readonly showGroupTitle?: boolean }

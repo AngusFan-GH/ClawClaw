@@ -8,19 +8,15 @@
   ],
   "expertType": "agent",
   "agentName": "design",
-  "displayName": {
+  "profession": {
     "zh": "设计专家",
     "en": "Design Expert"
-  },
-  "profession": {
-    "zh": "产品与视觉设计",
-    "en": "Product and visual design"
   },
   "displayDescription": {
     "zh": "面向产品体验、视觉系统和设计交付的设计专家。",
     "en": "面向产品体验、视觉系统和设计交付的设计专家。"
   },
-  "avatar": "./avatar.png",
+  "avatar": 6,
   "categoryId": "productivity",
   "defaultInitPrompt": {
     "zh": "请以设计专家身份处理当前任务。",

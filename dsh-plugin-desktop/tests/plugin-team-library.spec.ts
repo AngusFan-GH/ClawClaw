@@ -81,6 +81,14 @@ describe('unified team library', () => {
     expect(snapshot).not.toHaveProperty('enabledTeams')
   })
 
+  it('recalls a team by enabling all of its experts in one revision', async () => {
+    const { library, state } = fixture()
+    const snapshot = await library.recall(definition.id, 4)
+    expect(state().enabled).toEqual(['research-pack--lead', 'research-pack--analyst'])
+    expect(snapshot.enabledExperts).toEqual(['research-pack--lead', 'research-pack--analyst'])
+    expect(snapshot.revision).toBe(5)
+  })
+
   it('projects and controls declared Connector dependencies through the Host lifecycle', async () => {
     const server = {
       serverName: 'company-browser', connectorId: 'browser', transport: 'stdio' as const, command: 'browser', args: [], cwd: '', env: {}, timeoutMs: 60_000,

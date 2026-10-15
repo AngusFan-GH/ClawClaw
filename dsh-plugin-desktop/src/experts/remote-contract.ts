@@ -2,6 +2,7 @@ import { teamInputSchema, teamSnapshotSchema } from './team-contract.js'
 import type { InvocationDescriptor, InvocationParameterDescriptor, TypertCodec } from '@deepseek-ai/dsh-typert-protocol'
 import { z } from 'zod'
 import { CUSTOM_EXPERT_SLUG, catalogSnapshotSchema, customExpertInputSchema, expertEditSchema } from './expert-contract.js'
+import { createdCapabilitySchema } from './created-capability-contract.js'
 
 const enabledArraySchema = z.array(z.string())
 const enabledStateSchema = z.object({
@@ -59,6 +60,7 @@ export const AGENCY_AGENTS_DESCRIPTORS = [
   })),
   ...[
     { method: 'getTeams', parameters: [] },
+    { method: 'recallTeam', parameters: [jsonParameter('id', 'string', z.string().min(1).max(128)), revisionParameter] },
     { method: 'saveTeam', parameters: [jsonParameter('team', 'ExpertTeamInput', teamInputSchema), revisionParameter] },
     { method: 'deleteTeam', parameters: [jsonParameter('id', 'string', z.string().min(1).max(128)), revisionParameter] },
   ].map(({ method, parameters }): InvocationDescriptor => ({
@@ -66,6 +68,13 @@ export const AGENCY_AGENTS_DESCRIPTORS = [
     invocation: { kind: 'direct' }, parameters, result: strictCodec('AgencyTeamsSnapshot', teamSnapshotSchema),
   })),
   catalogMethod('getCatalog', []),
+  {
+    id: 'dsh-plugin-desktop/experts#agencyAgents/getCreatedCapability',
+    service: 'agencyAgents', namespace: 'agencyAgents', method: 'getCreatedCapability',
+    invocation: { kind: 'direct' },
+    parameters: [jsonParameter('sessionId', 'string', z.string().trim().min(1).max(256))],
+    result: strictCodec('CreatedCapability', createdCapabilitySchema),
+  },
   catalogMethod('saveCustomExpert', [
     jsonParameter('expert', 'CustomExpertInput', customExpertInputSchema),
     jsonParameter('enabled', 'boolean', z.boolean()),

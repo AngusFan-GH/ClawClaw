@@ -36,7 +36,8 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SubagentRun } from '@deepseek-ai/dsh-subagent'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
+import { createUserMessage, freezeMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-skill'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import { existsSync } from 'node:fs'
@@ -55,6 +56,19 @@ import { builtinExpertCapabilities } from './builtin-capabilities.js'
 import { discoverExpertPluginPackages, projectExpertPluginAgents, projectExpertPluginTeam, type ExpertPluginLocalizedText, type ExpertPluginTeamDefinition } from './expert-plugin-package.js'
 import { executeExpertPluginTeam, type ExpertPluginAgentRun } from './expert-plugin-runtime.js'
 import { DESKTOP_MCP_LIFECYCLE_SERVICE } from '../mcp-contract.js'
+import { parseCapabilitySubmission } from './capability-submission.js'
+
+interface CapabilityResultSource {
+  readonly kind: 'clawclaw-capability-result'
+  readonly form: 'notice' | 'instructions'
+  readonly summary: string
+}
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'clawclaw-capability-result': CapabilityResultSource
+  }
+}
 
 export const name = 'clawclaw-experts'
 export const inject = ['tools', 'subagents', 'systemPrompt', 'settings', 'webServer', 'skills']
@@ -1135,6 +1149,112 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
         return { report: JSON.stringify({ ...result, engine: engine.status }) };
     },
 }), activeLocale));
+
+async function runSelectedTeam(teamId: string, task: string, agent: Agent, signal: AbortSignal): Promise<unknown> {
+    const locale = activeLocale();
+    const taskText = normalizeTask(task, locale);
+    const [snapshot, catalog] = await Promise.all([teamLibrary.snapshot(), library.catalog()]);
+    if (snapshot.revision !== catalog.revision)
+        throw new Error(teamTx("名册已更新，请重新读取专家团。"));
+    const selected = snapshot.teams.find(team => team.id === teamId);
+    if (!selected || selected.members.some(member => !snapshot.enabledExperts.includes(member.expertSlug)))
+        throw new Error(teamTx("专家团不存在或成员未就绪。"));
+    const provider = ctx.subagents.getProvider(config.provider);
+    if (!provider?.capabilities.persona || !provider.capabilities.toolFilter || (maxDepth !== undefined && !provider.capabilities.depthLimit))
+        throw new Error(teamTx("当前子代理服务不支持专家团所需的身份、工具过滤或深度限制。"));
+    const pluginTeam = [...pluginTeams.values()].find(team => team.id === teamId);
+    if (pluginTeam !== undefined) {
+        const unavailable = selected.connectorStates.filter(connector => {
+            const binding = pluginTeam.connectors.find(item => item.name === connector.dependency);
+            return binding?.required && binding.enabled && connector.state !== 'running';
+        });
+        if (unavailable.length > 0)
+            throw new Error(teamTx("专家团所需 Connector 未就绪：{0}。", [unavailable.map(item => item.dependency).join(', ')]));
+        return executeExpertPluginTeam({
+            team: pluginTeam, experts: catalog.experts, enabled: catalog.enabled, task: taskText, signal,
+            readPersona: async expert => (await personaSource.getPrompt(expert.slug, expert.division, locale)).prompt,
+            runAgent: async (agentRun: ExpertPluginAgentRun) => {
+                signal.throwIfAborted();
+                const composition = await resolveExpertComposition(ctx, agentRun.expert, agent, agentRun.persona, signal);
+                const run = await ctx.subagents.start(config.provider, { label: agentRun.expert.name, parent: agent,
+                    prompt: [{ type: 'text', text: agentRun.prompt }], persona: sanitize(composition.persona),
+                    toolFilter: { deny: composition.deniedTools }, ...(maxDepth === undefined ? {} : { maxDepth }), signal });
+                try {
+                    const value = await run.result;
+                    if (value.stopReason !== 'completed') throw new Error(teamTx("成员未完成：{0}。{1}", [value.stopReason, textBlocks(value.output)]));
+                    return textBlocks(value.output);
+                } finally { await run.dispose(); }
+            },
+        });
+    }
+    const team = localizeTeam(selected, locale);
+    return executeTeam({ team, locale, experts: catalog.experts, enabled: catalog.enabled, task: taskText, revision: snapshot.revision, signal,
+        readPersona: async expert => (await personaSource.getPrompt(expert.slug, expert.division, locale)).prompt,
+        run: async (member: TeamMemberRun) => {
+            signal.throwIfAborted();
+            const expert = catalog.experts.find(item => item.slug === member.slug)!;
+            const composition = await resolveExpertComposition(ctx, expert, agent, member.persona, signal);
+            const run = await ctx.subagents.start(config.provider, { label: member.name, parent: agent,
+                prompt: [{ type: 'text', text: member.prompt }], persona: sanitize(composition.persona),
+                toolFilter: { deny: composition.deniedTools }, ...(maxDepth === undefined ? {} : { maxDepth }), signal });
+            try {
+                const value = await run.result;
+                if (value.stopReason !== 'completed') throw new Error(teamTx("成员未完成：{0}。{1}", [value.stopReason, textBlocks(value.output)]));
+                return textBlocks(value.output);
+            } finally { await run.dispose(); }
+        },
+    });
+}
+
+ctx.on('agent/pre-step', async ({ agent, signal }, next): Promise<PreStepDecision> => {
+    const decision = await next();
+    if (decision.kind === 'reject') return decision;
+    const selections: Array<ReturnType<typeof parseCapabilitySubmission>['selection']> = [];
+    const rewritten = decision.messages.map((message): UserMessage => {
+        if (message.source.kind !== 'user') return message;
+        const content = message.content.map(block => {
+            if (block.type !== 'text') return block;
+            const parsed = parseCapabilitySubmission(block.text);
+            if (parsed.selection.expertIds.length > 0 || parsed.selection.skillNames.length > 0 || parsed.selection.teamId !== undefined)
+                selections.push(parsed.selection);
+            return { ...block, text: parsed.text };
+        });
+        return freezeMessage({ ...message, content });
+    });
+    if (selections.length === 0) return decision;
+    const expertIds = [...new Set(selections.flatMap(value => value.expertIds))];
+    const skillNames = [...new Set(selections.flatMap(value => value.skillNames))];
+    const teamIds = [...new Set(selections.flatMap(value => value.teamId === undefined ? [] : [value.teamId]))];
+    if (teamIds.length > 1 || (teamIds.length > 0 && expertIds.length > 0)) throw new Error(teamTx("一次任务只能选择一个专家团，且不能同时选择单个专家。"));
+    const task = rewritten.filter(message => message.source.kind === 'user').flatMap(message => message.content)
+        .flatMap(block => block.type === 'text' ? [block.text] : []).join('\n').trim();
+    if (task === '') throw new Error(teamTx("请补充需要处理的任务。"));
+    const injections: UserMessage[] = [];
+    for (const name of skillNames) {
+        signal.throwIfAborted();
+        const skill = await ctx.skills.get(name, { cwd: agent.session.header.cwd, signal, scope: agent });
+        if (skill === undefined || skill.invocation.userInvocable !== true) throw new Error(teamTx("技能不可用：{0}。", [name]));
+        injections.push(createUserMessage({
+            source: { kind: 'clawclaw-capability-result', form: 'instructions', summary: teamTx("已加载技能：{0}", [name]) },
+            content: [{ type: 'text', text: `<skill_content name="${name}">\n${skill.content}\n</skill_content>` }],
+        }));
+    }
+    if (teamIds[0] !== undefined) {
+        const result = await runSelectedTeam(teamIds[0], task, agent, signal);
+        injections.push(createUserMessage({
+            source: { kind: 'clawclaw-capability-result', form: 'notice', summary: teamTx("专家团已完成分析") },
+            content: [{ type: 'text', text: `<expert_team_result team="${teamIds[0]}">\n${JSON.stringify(result)}\n</expert_team_result>` }],
+        }));
+    } else if (expertIds.length > 0) {
+        const results = await mapPool(expertIds.map(expert => ({ expert, task })), SUMMON_EXPERTS_CONCURRENCY,
+            spec => runExpert(spec.expert, spec.task, { agent, signal } as ToolRunContext));
+        injections.push(createUserMessage({
+            source: { kind: 'clawclaw-capability-result', form: 'notice', summary: teamTx("专家已完成分析") },
+            content: [{ type: 'text', text: `<expert_results>\n${JSON.stringify(results)}\n</expert_results>` }],
+        }));
+    }
+    return { ...decision, messages: [...rewritten, ...injections] };
+});
 ctx.systemPrompt.section({ name: 'agency:teams', order: 118, text: context => {
         const agent = (context as {
             agent?: {

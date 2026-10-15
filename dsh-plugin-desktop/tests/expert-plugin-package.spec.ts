@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   discoverExpertPluginPackages,
   expertPluginLeadAgent,
+  findExpertPluginPackageBySession,
   projectExpertPluginAgents,
   projectExpertPluginAgent,
   projectExpertPluginTeam,
@@ -32,8 +33,8 @@ function agentManifest() {
     name: 'legal-search-pro', version: '1.0.0', description: 'Legal retrieval', author: { name: 'Test' },
     agents: ['./agents/legal-search-pro.md'], skills: ['./skills/legal-search-engine'],
     dependencies: { connectors: ['pkulaw', 'pkulaw'] }, expertType: 'agent', agentName: 'legal-search-pro',
-    displayName: localized('法检 Pro', 'LexFinder Pro'), profession: localized('法律检索专家', 'Legal Retrieval Expert'),
-    displayDescription: localized('检索法规和类案', 'Retrieves statutes and cases'), avatar: 'avatars/expert.png',
+    profession: localized('法律检索专家', 'Legal Retrieval Expert'),
+    displayDescription: localized('检索法规和类案', 'Retrieves statutes and cases'), avatar: 11,
     categoryId: '11-SecurityCompliance', defaultInitPrompt: localized('检索法规', 'Search statutes'),
     tags: [localized('法规', 'Statutes'), localized('类案', 'Cases'), localized('核验', 'Verification')],
     quickPrompts: [localized('一', 'One'), localized('二', 'Two'), localized('三', 'Three')],
@@ -46,13 +47,11 @@ async function createAgentPackage(parent: string, name = 'legal-search-pro'): Pr
     mkdir(join(root, '.clawclaw-plugin'), { recursive: true }),
     mkdir(join(root, 'agents'), { recursive: true }),
     mkdir(join(root, 'skills/legal-search-engine'), { recursive: true }),
-    mkdir(join(root, 'avatars'), { recursive: true }),
   ])
   await Promise.all([
     writeJson(join(root, '.clawclaw-plugin/plugin.json'), agentManifest()),
     writeFile(join(root, 'agents/legal-search-pro.md'), '---\nname: legal-search-pro\ndescription: Legal retrieval\n---\nPersona\n'),
     writeFile(join(root, 'skills/legal-search-engine/SKILL.md'), '---\nname: legal-search-engine\ndescription: Search law\n---\nSearch.\n'),
-    writeFile(join(root, 'avatars/expert.png'), 'image'),
   ])
   return root
 }
@@ -84,12 +83,28 @@ describe('ClawClaw expert plugin packages', () => {
     expect(pkg.connectorDependencies).toEqual(['pkulaw'])
     expect(expertPluginLeadAgent(pkg).absolutePath).toBe(join(pkg.root, 'agents/legal-search-pro.md'))
     expect(projectExpertPluginAgent(pkg)).toMatchObject({
-      slug: 'legal-search-pro', name: '法检 Pro', nameEn: 'LexFinder Pro', division: 'legal',
+      slug: 'legal-search-pro', name: '法律检索专家', nameEn: 'Legal Retrieval Expert', division: 'legal', avatar: 11,
       skills: [{ name: 'legal-search-engine', required: true, enabled: true }],
       mcpServers: [{ name: 'pkulaw', required: true, enabled: true }],
       packageFormat: 'clawclaw-plugin', packageVersion: '1.0.0', packageType: 'agent',
     })
     expect(JSON.parse(await readFile(join(root, '.clawclaw-plugin/plugin.json'), 'utf8'))).toEqual(agentManifest())
+  })
+
+  it('locates only the package registered by the current creation session', async () => {
+    const library = await temporaryRoot()
+    const current = await createAgentPackage(library, 'current-package')
+    const unrelated = await createAgentPackage(library, 'unrelated-package')
+    await Promise.all([
+      writeFile(join(current, '.created-by-session'), 'session-current'),
+      writeFile(join(unrelated, '.created-by-session'), 'session-other'),
+    ])
+
+    await expect(findExpertPluginPackageBySession(library, 'session-current')).resolves.toMatchObject({
+      root: expect.stringMatching(/current-package$/u),
+      manifest: { name: 'legal-search-pro' },
+    })
+    await expect(findExpertPluginPackageBySession(library, 'missing-session')).resolves.toBeUndefined()
   })
 
   it('discovers versioned packages and validates a Team as a package', async () => {
@@ -98,32 +113,29 @@ describe('ClawClaw expert plugin packages', () => {
     await Promise.all([
       mkdir(join(root, '.clawclaw-plugin'), { recursive: true }),
       mkdir(join(root, 'agents'), { recursive: true }),
-      mkdir(join(root, 'avatars'), { recursive: true }),
     ])
     const manifest = {
       ...agentManifest(), name: 'stock-team', expertType: 'team', agentName: 'stock-team-lead',
       agents: ['./agents/stock-team-lead.md', './agents/analyst.md'], skills: undefined, dependencies: undefined,
       teamInfo: { leadAgent: 'stock-team-lead', memberAgents: ['analyst'] },
       members: [
-        { id: 'stock-team-lead', name: localized('主理人', 'Lead'), profession: localized('主理人', 'Lead'), avatar: './avatars/lead.png', role: 'lead' },
-        { id: 'analyst', name: localized('分析师', 'Analyst'), profession: localized('分析师', 'Analyst'), avatar: './avatars/analyst.png', role: 'member' },
+        { id: 'stock-team-lead', profession: localized('主理人', 'Lead'), avatar: 0, role: 'lead' },
+        { id: 'analyst', profession: localized('分析师', 'Analyst'), avatar: 1, role: 'member' },
       ],
-      avatar: './avatars/team.png', tags: null, quickPrompts: null,
+      avatar: 0, tags: null, quickPrompts: null,
     }
     await Promise.all([
       writeJson(join(root, '.clawclaw-plugin/plugin.json'), manifest),
       writeFile(join(root, 'agents/stock-team-lead.md'), '---\nname: stock-team-lead\ndescription: Lead\n---\nLead.\n'),
       writeFile(join(root, 'agents/analyst.md'), '---\nname: analyst\ndescription: Analyst\n---\nAnalyze.\n'),
-      writeFile(join(root, 'avatars/lead.png'), 'lead'), writeFile(join(root, 'avatars/analyst.png'), 'analyst'),
-      writeFile(join(root, 'avatars/team.png'), 'team'),
     ])
     const packages = await discoverExpertPluginPackages(library)
     expect(packages).toHaveLength(1)
     expect(packages[0]?.manifest).toMatchObject({ name: 'stock-team', expertType: 'team' })
     expect(projectExpertPluginAgent(packages[0]!)).toBeUndefined()
     expect(projectExpertPluginAgents(packages[0]!)).toEqual(expect.arrayContaining([
-      expect.objectContaining({ role: 'lead', expert: expect.objectContaining({ slug: 'stock-team--stock-team-lead', packageRole: 'lead' }) }),
-      expect.objectContaining({ role: 'member', expert: expect.objectContaining({ slug: 'stock-team--analyst', packageRole: 'member' }) }),
+      expect.objectContaining({ role: 'lead', expert: expect.objectContaining({ slug: 'stock-team--stock-team-lead', packageRole: 'lead', avatar: 0 }) }),
+      expect.objectContaining({ role: 'member', expert: expect.objectContaining({ slug: 'stock-team--analyst', packageRole: 'member', avatar: 1 }) }),
     ]))
     expect(projectExpertPluginTeam(packages[0]!)).toMatchObject({
       id: 'plugin-team:stock-team', leadAgentSlug: 'stock-team--stock-team-lead', memberAgentSlugs: ['stock-team--analyst'],
@@ -148,10 +160,21 @@ describe('ClawClaw expert plugin packages', () => {
       ...agentManifest(), expertType: 'team', agentName: 'legal-search-pro',
       teamInfo: { leadAgent: 'legal-search-pro', memberAgents: ['missing-member'] },
       members: [
-        { id: 'legal-search-pro', name: localized('主理人', 'Lead'), profession: localized('主理人', 'Lead'), avatar: './avatars/expert.png', role: 'lead' },
-        { id: 'missing-member', name: localized('成员', 'Member'), profession: localized('成员', 'Member'), avatar: './avatars/expert.png', role: 'member' },
+        { id: 'legal-search-pro', profession: localized('主理人', 'Lead'), avatar: 0, role: 'lead' },
+        { id: 'missing-member', profession: localized('成员', 'Member'), avatar: 1, role: 'member' },
       ],
     })
     await expect(readExpertPluginPackage(team)).rejects.toThrow('teamInfo')
+  })
+
+  it('rejects legacy image paths and invalid preset avatar indices', async () => {
+    const library = await temporaryRoot()
+    const legacy = await createAgentPackage(library, 'legacy-avatar')
+    await writeJson(join(legacy, '.clawclaw-plugin/plugin.json'), { ...agentManifest(), avatar: 'avatars/expert.png' })
+    await expect(readExpertPluginPackage(legacy)).rejects.toThrow('avatar')
+
+    const outOfRange = await createAgentPackage(library, 'out-of-range-avatar')
+    await writeJson(join(outOfRange, '.clawclaw-plugin/plugin.json'), { ...agentManifest(), avatar: 36 })
+    await expect(readExpertPluginPackage(outOfRange)).rejects.toThrow('avatar')
   })
 })

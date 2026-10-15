@@ -8,19 +8,15 @@
   ],
   "expertType": "agent",
   "agentName": "work",
-  "displayName": {
+  "profession": {
     "zh": "工作助理专家",
     "en": "Work Expert"
-  },
-  "profession": {
-    "zh": "知识工作与业务执行",
-    "en": "Knowledge work and business execution"
   },
   "displayDescription": {
     "zh": "面向研究、写作、整理与日常业务执行的通用专家。",
     "en": "面向研究、写作、整理与日常业务执行的通用专家。"
   },
-  "avatar": "./avatar.png",
+  "avatar": 2,
   "categoryId": "productivity",
   "defaultInitPrompt": {
     "zh": "请以工作助理专家身份处理当前任务。",

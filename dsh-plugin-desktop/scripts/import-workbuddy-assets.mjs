@@ -144,29 +144,28 @@ function resetGeneratedPackage(name) {
   }
   mkdirSync(join(target, '.clawclaw-plugin'), { recursive: true })
   mkdirSync(join(target, 'agents'), { recursive: true })
-  cpSync(join(desktopRoot, 'build', 'app-icon.png'), join(target, 'avatar.png'))
   return target
 }
 
-function singleAgentPackage({ packageName, agentId, displayName, profession, description, source }) {
+function singleAgentPackage({ packageName, agentId, expertName, description, source, avatar }) {
   const target = resetGeneratedPackage(packageName)
   writeFileSync(join(target, 'agents', `${agentId}.md`), inlineWelcomeAgent(source))
   writeJson(join(target, '.clawclaw-plugin', 'plugin.json'), {
     name: packageName, version: sourceVersion, description, author: 'ClawClaw migration',
     agents: [`./agents/${agentId}.md`], expertType: 'agent', agentName: agentId,
-    displayName: { zh: displayName.zh, en: displayName.en }, profession: { zh: profession.zh, en: profession.en },
-    displayDescription: { zh: description, en: description }, avatar: './avatar.png', categoryId: 'productivity',
-    defaultInitPrompt: { zh: `请以${displayName.zh}身份处理当前任务。`, en: `Handle this task as ${displayName.en}.` },
+    profession: { zh: expertName.zh, en: expertName.en },
+    displayDescription: { zh: description, en: description }, avatar, categoryId: '12-IndustryConsultant',
+    defaultInitPrompt: { zh: `请以${expertName.zh}身份处理当前任务。`, en: `Handle this task as ${expertName.en}.` },
     tags: [{ zh: '内置迁移', en: 'Built-in' }, { zh: '专业工作流', en: 'Workflow' }, { zh: '本地资产', en: 'Local asset' }],
     quickPrompts: [{ zh: '分析当前任务并给出执行方案', en: 'Analyze the task and propose an execution plan' }, { zh: '直接开始完成当前任务', en: 'Start completing the task' }, { zh: '复核结果并指出风险', en: 'Review the result and identify risks' }],
   })
   writeJson(join(target, 'SOURCE.json'), { sourceProduct: 'WorkBuddy AI', sourceVersion, sourceAsset: relative(sourceRoot, source), migration: 'ClawClaw-owned Agent package', runtimeDependency: 'No WorkBuddy filesystem dependency' })
 }
 
-singleAgentPackage({ packageName: 'migrated-code-expert', agentId: 'code', displayName: { zh: '代码专家', en: 'Code Expert' }, profession: { zh: '软件工程与交付', en: 'Software engineering and delivery' }, description: '面向代码分析、实现、调试和交付的工程专家。', source: join(sourceRoot, 'welcomemode', 'code', 'agents', 'code.md') })
-singleAgentPackage({ packageName: 'migrated-design-expert', agentId: 'design', displayName: { zh: '设计专家', en: 'Design Expert' }, profession: { zh: '产品与视觉设计', en: 'Product and visual design' }, description: '面向产品体验、视觉系统和设计交付的设计专家。', source: join(sourceRoot, 'welcomemode', 'design', 'agents', 'design.md') })
-singleAgentPackage({ packageName: 'migrated-work-expert', agentId: 'work', displayName: { zh: '工作助理专家', en: 'Work Expert' }, profession: { zh: '知识工作与业务执行', en: 'Knowledge work and business execution' }, description: '面向研究、写作、整理与日常业务执行的通用专家。', source: join(sourceRoot, 'welcomemode', 'work', 'agents', 'work.md') })
-singleAgentPackage({ packageName: 'migrated-spreadsheet-expert', agentId: 'sheet-agent', displayName: { zh: '表格专家', en: 'Spreadsheet Expert' }, profession: { zh: '表格分析与自动化', en: 'Spreadsheet analysis and automation' }, description: '面向电子表格读取、分析、清洗、公式和可视化的专家。', source: join(sourceRoot, 'builtin-plugins', 'sheetagent', 'agents', 'sheet-agent.md') })
+singleAgentPackage({ packageName: 'migrated-code-expert', agentId: 'code', expertName: { zh: '代码专家', en: 'Code Expert' }, description: '面向代码分析、实现、调试和交付的工程专家。', source: join(sourceRoot, 'welcomemode', 'code', 'agents', 'code.md'), avatar: 4 })
+singleAgentPackage({ packageName: 'migrated-design-expert', agentId: 'design', expertName: { zh: '设计专家', en: 'Design Expert' }, description: '面向产品体验、视觉系统和设计交付的设计专家。', source: join(sourceRoot, 'welcomemode', 'design', 'agents', 'design.md'), avatar: 7 })
+singleAgentPackage({ packageName: 'migrated-work-expert', agentId: 'work', expertName: { zh: '工作助理专家', en: 'Work Expert' }, description: '面向研究、写作、整理与日常业务执行的通用专家。', source: join(sourceRoot, 'welcomemode', 'work', 'agents', 'work.md'), avatar: 1 })
+singleAgentPackage({ packageName: 'migrated-spreadsheet-expert', agentId: 'sheet-agent', expertName: { zh: '表格专家', en: 'Spreadsheet Expert' }, description: '面向电子表格读取、分析、清洗、公式和可视化的专家。', source: join(sourceRoot, 'builtin-plugins', 'sheetagent', 'agents', 'sheet-agent.md'), avatar: 9 })
 
 const documentTeam = resetGeneratedPackage('migrated-document-production-team')
 const documentAgentsRoot = join(sourceRoot, 'builtin-plugins', 'tencent-docx', 'agents')
@@ -176,13 +175,13 @@ writeJson(join(documentTeam, '.clawclaw-plugin', 'plugin.json'), {
   agents: ['./agents/doc-writer.md', './agents/doc-formatter.md', './agents/doc-converter.md'], expertType: 'team', agentName: 'doc-writer',
   teamInfo: { leadAgent: 'doc-writer', memberAgents: ['doc-formatter', 'doc-converter'] },
   members: [
-    { id: 'doc-writer', displayName: { zh: '文档主笔', en: 'Document Writer' }, profession: { zh: '内容策划与写作', en: 'Content planning and writing' }, avatar: './avatar.png', role: 'lead' },
-    { id: 'doc-formatter', displayName: { zh: '排版设计师', en: 'Document Formatter' }, profession: { zh: '结构与视觉排版', en: 'Structure and visual formatting' }, avatar: './avatar.png', role: 'member' },
-    { id: 'doc-converter', displayName: { zh: '文档交付工程师', en: 'Document Converter' }, profession: { zh: '格式转换与质量校验', en: 'Format conversion and quality validation' }, avatar: './avatar.png', role: 'member' },
+    { id: 'doc-writer', profession: { zh: '文档主笔', en: 'Document Writer' }, avatar: 3, role: 'lead' },
+    { id: 'doc-formatter', profession: { zh: '排版设计师', en: 'Document Formatter' }, avatar: 7, role: 'member' },
+    { id: 'doc-converter', profession: { zh: '文档交付工程师', en: 'Document Converter' }, avatar: 1, role: 'member' },
   ],
-  displayName: { zh: '文档生产专家团', en: 'Document Production Team' }, profession: { zh: '专业文档生产', en: 'Professional document production' },
+  profession: { zh: '文档生产专家团', en: 'Document Production Team' },
   displayDescription: { zh: '由主笔、排版设计师和交付工程师协作完成专业文档。', en: 'A writer, formatter, and delivery engineer collaborate on professional documents.' },
-  avatar: './avatar.png', categoryId: 'writing', defaultInitPrompt: { zh: '先明确文档目标与受众，再由主笔创作、排版设计师优化、交付工程师校验并汇总。', en: 'Clarify the document goal and audience, then coordinate writing, formatting, validation, and final delivery.' },
+  avatar: 3, categoryId: '06-ContentCreative', defaultInitPrompt: { zh: '先明确文档目标与受众，再由主笔创作、排版设计师优化、交付工程师校验并汇总。', en: 'Clarify the document goal and audience, then coordinate writing, formatting, validation, and final delivery.' },
   tags: [{ zh: '文档', en: 'Documents' }, { zh: '写作', en: 'Writing' }, { zh: '排版', en: 'Formatting' }],
   quickPrompts: [{ zh: '创建一份结构完整的专业报告', en: 'Create a complete professional report' }, { zh: '优化现有文档的内容和排版', en: 'Improve the content and layout of an existing document' }, { zh: '检查文档质量并生成可交付版本', en: 'Review document quality and produce a deliverable version' }],
 })

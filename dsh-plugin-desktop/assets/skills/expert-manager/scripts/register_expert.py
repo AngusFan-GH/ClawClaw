@@ -12,7 +12,7 @@ Examples:
     python3 register_expert.py <expert-dir>
     python3 register_expert.py ./my-expert --marketplace-dir <marketplace-dir>
 
-The creating session id is read from CLAWCLAW_SESSION_ID when present.
+The creating session id is read from CLAWCLAW_SESSION_ID or the DSH runtime.
 """
 
 import json
@@ -22,7 +22,11 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 SESSION_ID_ENV_VAR = 'CLAWCLAW_SESSION_ID'
-UNEXPANDED_SESSION_ID_ARGS = {'$CLAWCLAW_SESSION_ID', '${CLAWCLAW_SESSION_ID}'}
+RUNTIME_SESSION_ID_ENV_VAR = 'DSH_SESSION_ID'
+UNEXPANDED_SESSION_ID_ARGS = {
+    '$CLAWCLAW_SESSION_ID', '${CLAWCLAW_SESSION_ID}',
+    '$DSH_SESSION_ID', '${DSH_SESSION_ID}',
+}
 
 
 def get_expert_base_dir():
@@ -67,17 +71,43 @@ def validate_expert_completeness(expert_dir: Path) -> Tuple[bool, List[str]]:
         if not value or '[TODO' in str(value):
             errors.append(f"Field '{field}' is missing or contains [TODO] placeholder")
 
-    # 4. Check displayName is filled
-    display_name = plugin_data.get('displayName', {})
-    if isinstance(display_name, dict):
-        zh_name = display_name.get('zh', '')
-        en_name = display_name.get('en', '')
+    # 4. Check the profession used as the visible expert name.
+    profession = plugin_data.get('profession', {})
+    if isinstance(profession, dict):
+        zh_name = profession.get('zh', '')
+        en_name = profession.get('en', '')
         if (not zh_name or '[TODO' in zh_name) and (not en_name or '[TODO' in en_name):
-            errors.append("displayName (zh or en) is missing or contains [TODO]")
-    elif not display_name or '[TODO' in str(display_name):
-        errors.append("displayName is missing or contains [TODO]")
+            errors.append("profession (zh or en) is missing or contains [TODO]")
+    elif not profession or '[TODO' in str(profession):
+        errors.append("profession is missing or contains [TODO]")
 
-    # 5. Check agents directory has at least one non-template .md file
+    # 5. Use the same preset-avatar contract as the manual expert editor.
+    avatar = plugin_data.get('avatar')
+    if isinstance(avatar, bool) or not isinstance(avatar, int) or not 0 <= avatar <= 35:
+        errors.append("avatar must be an integer from 0 to 35")
+
+    if plugin_data.get('expertType') == 'team':
+        members = plugin_data.get('members')
+        if not isinstance(members, list) or not members:
+            errors.append("Team expert must contain a non-empty members array")
+        else:
+            for index, member in enumerate(members):
+                if not isinstance(member, dict):
+                    errors.append(f"members[{index}] must be an object")
+                    continue
+                member_profession = member.get('profession')
+                if not isinstance(member_profession, dict) or not any(
+                    isinstance(member_profession.get(locale), str)
+                    and member_profession[locale].strip()
+                    and '[TODO' not in member_profession[locale]
+                    for locale in ('zh', 'en')
+                ):
+                    errors.append(f"members[{index}].profession (zh or en) is missing or contains [TODO]")
+                member_avatar = member.get('avatar')
+                if isinstance(member_avatar, bool) or not isinstance(member_avatar, int) or not 0 <= member_avatar <= 35:
+                    errors.append(f"members[{index}].avatar must be an integer from 0 to 35")
+
+    # 6. Check agents directory has at least one non-template .md file
     agents_dir = expert_dir / 'agents'
     if agents_dir.exists():
         md_files = list(agents_dir.glob('*.md'))
@@ -120,7 +150,11 @@ def normalize_session_id(value: Optional[str]) -> Optional[str]:
 
 def get_session_id(explicit_session_id: Optional[str]) -> Optional[str]:
     """Resolve the creating session id from CLI arg or Bash runtime env."""
-    return normalize_session_id(explicit_session_id) or normalize_session_id(os.environ.get(SESSION_ID_ENV_VAR))
+    return (
+        normalize_session_id(explicit_session_id)
+        or normalize_session_id(os.environ.get(SESSION_ID_ENV_VAR))
+        or normalize_session_id(os.environ.get(RUNTIME_SESSION_ID_ENV_VAR))
+    )
 
 
 def get_marketplace_dir(expert_dir: Path, explicit_marketplace_dir: Optional[str]) -> Path:

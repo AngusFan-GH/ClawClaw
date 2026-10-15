@@ -12,12 +12,9 @@
 ---
 name: {与文件名一致，必须有业务语义}
 description: {英文描述，AI 用来判断何时激活}
-displayName:
-  en: "{English display name}"
-  zh: "{中文显示名称}"
 profession:
-  en: "{English profession title}"
-  zh: "{中文职业头衔}"
+  en: "{English expert name}"
+  zh: "{中文专家名称}"
 maxTurns: {默认50}
 ---
 ```
@@ -33,7 +30,7 @@ skills: [{skill-name}]   # 启动时预加载的 Skill
 ## 正文结构：普通 Agent / 团员
 
 ```markdown
-# {角色名称} - {人名}
+# {专家名称}
 
 {角色描述，说明这是谁，擅长什么}
 
@@ -84,12 +81,9 @@ skills: [{skill-name}]   # 启动时预加载的 Skill
 ---
 name: {team}-team-lead
 description: {English description}
-displayName:
-  en: "{English display name}"
-  zh: "{中文显示名称}"
 profession:
-  en: "{English profession title}"
-  zh: "{中文职业头衔}"
+  en: "{English lead role}"
+  zh: "{中文主理人角色}"
 maxTurns: {turns, 建议150-200}
 ---
 ```
@@ -104,9 +98,9 @@ maxTurns: {turns, 建议150-200}
 ## 团队成员
 
 ### {分组名称}
-| 成员 | 名字 | 职责 |
-|------|------|------|
-| {member-id} | {name} | {职责描述} |
+| 成员 | 职业角色 | 职责 |
+|------|----------|------|
+| {member-id} | {profession} | {职责描述} |
 
 ## 标准工作流程（SOP）
 

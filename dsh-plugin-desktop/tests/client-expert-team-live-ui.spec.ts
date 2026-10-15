@@ -64,7 +64,7 @@ describe('expert team live UI state', () => {
     expect(onCreateWithConversation).toHaveBeenCalledOnce()
   })
 
-  it('keeps the settings library management-only instead of summoning a team', async () => {
+  it('opens a team example in the current conversation without summoning from settings', async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
     const team = {
@@ -83,7 +83,9 @@ describe('expert team live UI state', () => {
     const remote = {
       getTeams: vi.fn(async () => ({ ok: true, value: snapshot })),
       getCatalog: vi.fn(async () => ({ ok: true, value: { experts: [expert, writer], enabled: snapshot.enabledExperts, revision: 1 } })),
+      recallTeam: vi.fn(async () => ({ ok: true, value: snapshot })),
     } as unknown as TeamRemote
+    const onSelectTeam = vi.fn(async () => true)
     acceptCatalog(remote, { experts: [expert, writer], enabled: snapshot.enabledExperts, revision: 1 })
     acceptTeamSnapshot(remote, snapshot)
     const host = document.createElement('div')
@@ -92,17 +94,28 @@ describe('expert team live UI state', () => {
 
     await act(async () => {
       root!.render(React.createElement(TeamLocaleContext.Provider, { value: 'zh' },
-        React.createElement(TeamsPanel, { remote, sharedHeader: true })))
+        React.createElement(TeamsPanel, { remote, sharedHeader: true, onSelectTeam })))
       await Promise.resolve()
     })
 
     expect(host.textContent).not.toContain('召唤专家团')
     expect(host.querySelector('[data-testid="team-card"]')?.textContent).toContain('查看详情')
+    expect(host.querySelector('[data-testid="team-card"]')?.textContent).toContain('复制')
+    const summon = host.querySelector<HTMLButtonElement>('.aag-team-summon')
+    expect(summon?.textContent).toBe('召唤')
+    expect(summon?.classList.contains('is-active')).toBe(true)
+    expect(summon?.getAttribute('aria-pressed')).toBe('true')
+    expect(host.querySelector('[data-testid="team-card"]')?.textContent).not.toContain('已召唤')
+    expect(host.querySelector('[data-testid="team-card"]')?.textContent).not.toContain('已召回')
     const details = [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('查看详情'))
     await act(async () => details?.click())
     expect(document.body.textContent).toContain('评审当前方案')
+    expect(document.querySelector('.agt-detail')?.textContent).not.toContain('复制并自定义')
     expect(document.body.textContent).not.toContain('召唤专家团')
-    expect(document.body.textContent).not.toContain('选择后填入聊天草稿')
+    expect(document.body.textContent).toContain('选择后填入聊天草稿')
+    const example = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('评审当前方案'))
+    await act(async () => { example?.click(); await Promise.resolve() })
+    expect(onSelectTeam).toHaveBeenCalledWith(expect.objectContaining({ id: 'team-review' }), '评审当前方案')
   })
 
   it('updates a mounted expert card directly from a team snapshot receipt', async () => {
@@ -211,5 +224,10 @@ describe('expert team live UI state', () => {
     expect(host.textContent).toContain('Required capability missing · 0/1')
     expect(toggle?.disabled).toBe(true)
     expect(toggle?.getAttribute('title')).toBe('Configure required capabilities first.')
+
+    const details = [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Details')
+    await act(async () => details?.click())
+    expect(document.querySelector('.aag-expert-details')).not.toBeNull()
+    expect(host.querySelector('[data-source="base"]')).not.toBeNull()
   })
 })

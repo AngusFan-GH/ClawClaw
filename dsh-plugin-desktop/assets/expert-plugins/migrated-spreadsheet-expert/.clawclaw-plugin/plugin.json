@@ -8,19 +8,15 @@
   ],
   "expertType": "agent",
   "agentName": "sheet-agent",
-  "displayName": {
+  "profession": {
     "zh": "表格专家",
     "en": "Spreadsheet Expert"
-  },
-  "profession": {
-    "zh": "表格分析与自动化",
-    "en": "Spreadsheet analysis and automation"
   },
   "displayDescription": {
     "zh": "面向电子表格读取、分析、清洗、公式和可视化的专家。",
     "en": "面向电子表格读取、分析、清洗、公式和可视化的专家。"
   },
-  "avatar": "./avatar.png",
+  "avatar": 4,
   "categoryId": "productivity",
   "defaultInitPrompt": {
     "zh": "请以表格专家身份处理当前任务。",

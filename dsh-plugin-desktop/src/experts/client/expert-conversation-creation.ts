@@ -61,6 +61,24 @@ export interface ExpertCreationConversationDependencies {
   readonly focusComposer?: () => void
 }
 
+export interface CapabilityConversationDependencies {
+  readonly workspaceId?: WorkspaceId
+  readonly openWorkspace: (workspaceId: WorkspaceId, beforeOpen: (sessionId: SessionId) => void) => Promise<void>
+  readonly prepare: (sessionId: SessionId) => boolean | Promise<boolean>
+}
+
+/** Create a separate conversation and prepare its composer before navigation commits. */
+export async function openCapabilityConversation(
+  dependencies: CapabilityConversationDependencies,
+): Promise<boolean> {
+  if (dependencies.workspaceId === undefined) throw new ExpertCreationConversationError('workspaceUnavailable')
+  let prepared: boolean | Promise<boolean> | undefined
+  await dependencies.openWorkspace(dependencies.workspaceId, sessionId => {
+    prepared = dependencies.prepare(sessionId)
+  })
+  return prepared === undefined ? false : await prepared
+}
+
 /** Open a normal conversation with an editable expert-manager request; never submits it. */
 export async function openExpertCreationConversation(
   dependencies: ExpertCreationConversationDependencies,

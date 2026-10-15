@@ -8,19 +8,15 @@
   ],
   "expertType": "agent",
   "agentName": "code",
-  "displayName": {
+  "profession": {
     "zh": "代码专家",
     "en": "Code Expert"
-  },
-  "profession": {
-    "zh": "软件工程与交付",
-    "en": "Software engineering and delivery"
   },
   "displayDescription": {
     "zh": "面向代码分析、实现、调试和交付的工程专家。",
     "en": "面向代码分析、实现、调试和交付的工程专家。"
   },
-  "avatar": "./avatar.png",
+  "avatar": 1,
   "categoryId": "productivity",
   "defaultInitPrompt": {
     "zh": "请以代码专家身份处理当前任务。",

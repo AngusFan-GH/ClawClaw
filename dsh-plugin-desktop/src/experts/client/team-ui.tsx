@@ -11,7 +11,7 @@ import { effectiveCoordinator, type ExpertTeam, type TeamInput, type TeamSnapsho
 import type { ExpertSummary } from '../expert-contract.js';
 import type { AgencyCatalogRemote, AgencyTeamsRemote } from './remote.js';
 import { TeamEditor } from './team-editor.js';
-import { TeamDialog, TeamConfirm, TeamAvatars, MemberList, teamIssue, IconUsers, IconFileText, IconBulb, IconCopy, IconSend, IconSearch, IconEye, } from './team-shared.js';
+import { TeamDialog, TeamConfirm, TeamAvatars, MemberList, teamIssue, teamRepairIssue, IconUsers, IconFileText, IconBulb, IconCopy, IconSend, IconSearch, IconEye, } from './team-shared.js';
 export { TEAM_CSS } from './team-style.js';
 export type TeamRemote = AgencyCatalogRemote & AgencyTeamsRemote;
 export async function unwrap<T>(promise: Promise<{
@@ -33,7 +33,6 @@ export function TeamDetails(props: {
     experts: readonly ExpertSummary[];
     close(): void;
     onSelect?(example?: string): void;
-    onCopy?(): void;
     onEdit?(): void;
     onDelete?(): void;
     onManageConnectors?(): void;
@@ -42,11 +41,10 @@ export function TeamDetails(props: {
 
     props = { ...props, team: localizeTeam(props.team, locale), experts: localizedExperts(props.experts, locale) };
     const [prompt, setPrompt] = React.useState(false);
-    const selectable = props.onSelect !== undefined;
     return (<TeamDialog title={tx("{0}详情", [props.team.name])} close={props.close} className="agt-detail">
       <header className="agt-detail-head">
         <TeamAvatars team={props.team} experts={props.experts} large/>
-        <div>
+        <div className="agt-detail-identity">
           <div className="agt-name-line">
             <h2>{props.team.name}</h2>
             {props.team.tags.length > 0 && (<div className="agt-tags">
@@ -58,23 +56,17 @@ export function TeamDetails(props: {
           <p>
             {props.team.builtin ? tx("内置专家团") : tx("我的专家团")} ·{' '}
             {props.team.members.length}{tx("位专家")}</p>
-          <div className="agt-row">
-            {props.onSelect && (<Button type="primary" onClick={() => props.onSelect?.()}>
-                <IconSend size={16}/>{tx("选择专家团")}</Button>)}
-            {props.onCopy && (<Button onClick={props.onCopy}>
-                <IconCopy size={16}/>{tx("复制并自定义")}</Button>)}
-            {props.onEdit && (<Button onClick={props.onEdit}>{tx("编辑专家团")}</Button>)}
-          </div>
         </div>
       </header>
-      <p className="agt-description">{props.team.description}</p>
-      <section>
+      <p className="agt-description agt-detail-summary">{props.team.description}</p>
+      <div className="agt-detail-content">
+      <section className="agt-detail-primary">
         <h3>
           <IconBulb />{tx("团队帮你做")}</h3>
-        {selectable
-          ? <><div className="agt-examples">
+        {props.onSelect
+          ? <><div className="agt-examples agt-examples-actionable">
               {props.team.examples.map((example, i) => (<Button key={i} block style={{ height: 'auto', whiteSpace: 'normal', justifyContent: 'space-between' }} onClick={() => props.onSelect?.(example)}>
-                  <span>“{example}”</span>
+                  <span>{example}</span>
                   <IconSend size={16}/>
                 </Button>))}
             </div><p className="agt-help">{tx("选择后填入聊天草稿，由你确认发送。")}</p></>
@@ -84,7 +76,7 @@ export function TeamDetails(props: {
       {(props.team.connectorStates ?? []).length > 0 && <section><h3>{tx("连接器")}</h3><div className="agt-connector-list">{(props.team.connectorStates ?? []).map(connector => <div key={connector.dependency}>
         <span className="agt-connector-state" data-state={connector.state} data-ready={connector.installed && connector.enabled && connector.credentialsReady}><i aria-hidden="true"/><strong>{connector.dependency}</strong><small>{connectorStatus(connector, tx)}</small></span>
       </div>)}</div>{props.onManageConnectors && <Button onClick={props.onManageConnectors}>{tx("管理连接器")}</Button>}</section>}
-      <section>
+      <section className="agt-detail-members">
         <h3>
           <IconUsers />{tx("团队成员")}</h3>
         <MemberList team={props.team} experts={props.experts}/>
@@ -101,14 +93,18 @@ export function TeamDetails(props: {
             </p>))}
         </details>
       </section>
-      <section>
+      <section className="agt-detail-delivery">
         <h3>
           <IconFileText />{tx("你将获得")}</h3>
         <p>{props.team.deliveryRequirements}</p>
         <Button style={{ marginTop: 8 }} onClick={() => setPrompt(!prompt)} aria-expanded={prompt}>{tx("查看主理人提示词")}</Button>
         {prompt && (<Input.TextArea className="agt-read-prompt" readOnly aria-label={tx("主理人提示词正文")} value={effectiveCoordinator(props.team, locale)} style={{ height: 280, resize: 'none', overflow: 'auto' }}/>)}
       </section>
-      {props.onDelete && (<Button danger style={{ margin: '0 16px 16px', alignSelf: 'flex-start' }} onClick={props.onDelete}>{tx("删除专家团")}</Button>)}
+      </div>
+      {(props.onEdit || props.onDelete) && <footer className="agt-detail-actions">
+        {props.onEdit && <Button onClick={props.onEdit}>{tx("编辑专家团")}</Button>}
+        {props.onDelete && <Button danger onClick={props.onDelete}>{tx("删除专家团")}</Button>}
+      </footer>}
     </TeamDialog>);
 }
 
@@ -141,6 +137,8 @@ export function TeamsPanel(props: {
         enabled: number;
     }) => void;
     title?: string;
+    onSelectTeam?(team: ExpertTeam, example?: string): boolean | Promise<boolean>;
+    onCreatedTeam?(team: ExpertTeam, experts: readonly ExpertSummary[]): void;
 }) {
     const { locale, tx } = useTeamLocale();
 
@@ -259,9 +257,29 @@ export function TeamsPanel(props: {
             revision: snapshot!.revision,
         });
     };
+    const summon = async (team: ExpertTeam) => {
+        if (busy || !snapshot)
+            return;
+        setBusy(true);
+        setError('');
+        try {
+            accept(await unwrap(props.remote.recallTeam(team.id, snapshot.revision)));
+            setNotice(tx("专家团现在可在对话中使用。"));
+        }
+        catch (cause) {
+            setError(cause instanceof Error ? tx(cause.message) : tx("操作失败。"));
+        }
+        finally {
+            setBusy(false);
+        }
+    };
     const filteredTeams = snapshot?.teams.map(team => localizeTeam(team, locale)).filter(team =>
         (filter === 'all' || (filter === 'builtin' ? team.builtin : !team.builtin)) &&
-        (!status || (!!teamIssue(team, experts, snapshot.enabledExperts)) === (status === 'blocked')) &&
+        (!status || (() => {
+            const repair = teamRepairIssue(team, experts) !== undefined;
+            const recalled = team.members.every(member => snapshot.enabledExperts.includes(member.expertSlug));
+            return status === 'available' ? recalled && !repair : status === 'recall' ? !recalled && !repair : repair;
+        })()) &&
         `${team.name} ${team.description} ${team.members.map(member => experts.find(expert => expert.slug === member.expertSlug)?.name ?? '').join(' ')}`
             .toLowerCase().includes(query.toLowerCase())) ?? [];
     const edit = (team: ExpertTeam) => setEditor({
@@ -290,6 +308,7 @@ export function TeamsPanel(props: {
           <CategorySelect id="aag-team-status" label={tx("状态")} value={status} onChange={setStatus} options={[
             { value: '', label: tx("全部状态") },
             { value: 'available', label: tx("可用") },
+            { value: 'recall', label: tx("待召唤") },
             { value: 'blocked', label: tx("需修复") },
         ]}/>
         </div>
@@ -313,18 +332,24 @@ export function TeamsPanel(props: {
       {!snapshot && !error && <p role="status">{tx("正在加载专家团…")}</p>}
       <div className="aag-expert-grid aag-team-grid">
         {filteredTeams.map((team) => {
-            const issue = teamIssue(team, experts, snapshot!.enabledExperts);
+            const repairIssue = teamRepairIssue(team, experts);
             const memberCount = team.members.length;
+            const validMembers = team.members.every(member => experts.some(expert => expert.slug === member.expertSlug && !expert.conflict));
+            const recalled = team.members.every(member => snapshot!.enabledExperts.includes(member.expertSlug));
             return (<LibraryCard key={team.id} testId="team-card" name={team.name} avatar={<div className="aag-team-avatar">
                   <TeamAvatars team={team} experts={experts}/>
-                </div>} metadata={<>{tx("{0} 位专家", [memberCount])} · {issue ? tx("需修复") : tx("可用")}</>} description={issue
-                    ? `${team.description} ${tx(issue)}`
+                </div>} metadata={<>{tx("{0} 位专家", [memberCount])}{repairIssue ? <> · {tx("需修复")}</> : null}</>} description={repairIssue
+                    ? `${team.description} ${tx(repairIssue)}`
                     : team.description} moreItems={[
                     ...(!team.builtin ? [{ id: 'edit', label: tx("编辑专家团"), disabled: busy, onSelect: () => edit(team) }] : []),
                     ...(!team.builtin ? [{ id: 'delete', label: tx("删除专家团"), danger: true, disabled: busy, onSelect: () => void change(team, 'delete') }] : []),
                 ]} actions={<>
                   <button type="button" className="aag-card-action" title={tx("查看详情")} aria-label={tx("查看详情")} aria-haspopup="dialog" onClick={() => setDetails(team)}>
                     <IconEye size={18}/>{tx("查看详情")}</button>
+                  <button type="button" className="aag-card-action" disabled={busy} title={tx("复制")} aria-label={tx("复制")} onClick={() => copy(team)}>
+                    <IconCopy size={18}/>{tx("复制")}</button>
+                  <button type="button" className={`aag-card-action aag-card-action-primary aag-team-summon${recalled ? ' is-active' : ''}`} disabled={busy || recalled || !validMembers} title={tx("召唤团队成员")} aria-label={tx("召唤团队成员")} aria-pressed={recalled} onClick={() => void summon(team)}>
+                    <IconUsers size={18}/>{tx("召唤")}</button>
                 </>}/>);
         })}
       </div>{' '}
@@ -337,7 +362,7 @@ export function TeamsPanel(props: {
                 setFilter('all');
             }}>{tx("清除筛选")}</Button>
         </div>)}
-      {details && (<TeamDetails team={details} experts={experts} close={() => setDetails(null)} onCopy={() => copy(details)} onManageConnectors={props.onOpenConnectors} onEdit={!details.builtin
+      {details && (<TeamDetails team={details} experts={experts} close={() => setDetails(null)} onSelect={props.onSelectTeam === undefined || teamIssue(details, experts, snapshot!.enabledExperts) !== undefined ? undefined : (example) => { void Promise.resolve(props.onSelectTeam?.(details, example)).then(selected => { if (selected) setDetails(null) }) }} onManageConnectors={props.onOpenConnectors} onEdit={!details.builtin
                 ? () => {
                     setEditor({
                         value: teamInput(details),
@@ -353,10 +378,14 @@ export function TeamsPanel(props: {
                 setExperts(catalog.experts);
                 return latest;
             }} save={async (value, revision) => {
+                const existing = new Set(snapshot!.teams.map(team => team.id));
                 const next = await unwrap(props.remote.saveTeam(value, revision ?? editor.revision));
+                const created = next.teams.find(team => !existing.has(team.id));
                 accept(next);
                 setEditor(null);
                 setNotice(tx("专家团配置已保存。"));
+                if (created)
+                    props.onCreatedTeam?.(created, rawExperts);
             }}/>)}
       {confirm && (<TeamConfirm title={tx("删除专家团？")} label={tx("确认删除")} busy={busy} error={error} onCancel={() => setConfirm(null)} onConfirm={() => {
                 const current = confirm;

@@ -16,9 +16,8 @@ describe('expert team conversation reference', () => {
       clipboardText: '@专家团：专题研究专家团\u00A0',
     })
 
-    expect(teamSubmissionText(team, 'zh')).toBe('[专家团：专题研究专家团]\u00A0')
-    expect(teamSubmissionText(team, 'en')).toBe('[Expert team: 专题研究专家团]\u00A0')
-    expect(teamSubmissionText(team, 'zh')).not.toMatch(/^@/u)
+    expect(teamSubmissionText(team)).toContain('<!--clawclaw-capabilities:')
+    expect(teamSubmissionText(team)).not.toContain(team.name)
   })
 
   it('rejects mixing a team with individual expert references', async () => {

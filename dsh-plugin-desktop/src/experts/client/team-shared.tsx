@@ -14,11 +14,9 @@ export function Avatar({ expert, size = 40, }: {
     expert?: ExpertSummary;
     size?: number;
 }) {
-    return (<img className="agt-avatar" src={EXPERT_AVATAR_URLS[expert?.custom
-            ? (expert.avatar ?? 0)
-            : expert
-                ? expertAvatarIndexForDivision(expert.slug, expert.division)
-                : 0]} width={size} height={size} alt=""/>);
+    return (<img className="agt-avatar" src={EXPERT_AVATAR_URLS[expert
+            ? (expert.avatar ?? expertAvatarIndexForDivision(expert.slug, expert.division))
+            : 0]} width={size} height={size} alt=""/>);
 }
 export function TeamAvatars({ team, experts, large = false, }: {
     team: TeamInput;
@@ -83,10 +81,16 @@ export function MemberList({ team, experts, }: {
         }}/>);
 }
 export const teamIssue = (team: ExpertTeam, experts: readonly ExpertSummary[], enabled: readonly string[]): string | undefined => {
-    if (team.members.some((m) => !experts.some((e) => e.slug === m.expertSlug && !e.conflict)))
-        return "成员失效，需替换";
+    const repair = teamRepairIssue(team, experts);
+    if (repair)
+        return repair;
     if (team.members.some((m) => !enabled.includes(m.expertSlug)))
         return "有成员未启用";
+    return undefined;
+};
+export const teamRepairIssue = (team: ExpertTeam, experts: readonly ExpertSummary[]): string | undefined => {
+    if (team.members.some((m) => !experts.some((e) => e.slug === m.expertSlug && !e.conflict)))
+        return "成员失效，需替换";
     if ((team.connectors ?? []).some((binding) => binding.enabled && binding.required &&
         (team.connectorStates ?? []).find((connector) => connector.dependency === binding.name)?.state !== 'running'))
         return "必需连接器未就绪";

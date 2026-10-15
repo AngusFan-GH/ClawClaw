@@ -7,10 +7,14 @@ import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { TypertContribution } from '@deepseek-ai/dsh-typert-registry'
 import type {} from '@deepseek-ai/dsh-typert-registry'
 import { AGENCY_AGENTS_DESCRIPTORS } from './remote-contract.js'
-import { AGENCY_PERSONA_SERVICE, type AgencyPersonaSource } from './index.js'
+import { AGENCY_PERSONA_SERVICE, clawClawPluginLibraryRoot, type AgencyPersonaSource } from './index.js'
 import { formatHost, readHostLocale } from './i18n.js'
 import { AGENCY_LIBRARY_SERVICE, type AgencyExpertLibrary } from './expert-library.js'
 import type { CatalogSnapshot, CustomExpertInput } from './expert-contract.js'
+import type { CreatedCapability } from './created-capability-contract.js'
+import { findExpertPluginPackageBySession, projectExpertPluginAgents, projectExpertPluginTeam } from './expert-plugin-package.js'
+import { projectExpertPluginTeamRecord } from './team-library.js'
+import { join } from 'node:path'
 
 export { readExpertPrompt, readLocalizedExpertPrompt } from './index.js'
 
@@ -59,6 +63,7 @@ export default class AgencyAgentsRemote extends TypertRemoteService {
     }))
     return { ...snapshot, nativeMembers, ...(engine ? { engine: engine() } : {}) }
   }
+  async recallTeam(id: string, expectedRevision: number): Promise<TeamSnapshot> { return this.teams().recall(id, expectedRevision) }
   async saveTeam(team: TeamInput, expectedRevision: number): Promise<TeamSnapshot> { return this.teams().save(team, expectedRevision) }
   async setTeamConnectorEnabled(id: string, dependency: string, enabled: boolean): Promise<TeamSnapshot> {
     return this.teams().setConnectorEnabled(id, dependency, enabled)
@@ -79,6 +84,21 @@ export default class AgencyAgentsRemote extends TypertRemoteService {
 
   /** 返回动态名册，不预加载任何专家提示词正文。 */
   async getCatalog(): Promise<CatalogSnapshot> { return this.library().catalog() }
+
+  /** 仅解析当前创建会话注册的专家包，不扫描或返回完整名册。 */
+  async getCreatedCapability(sessionId: string): Promise<CreatedCapability> {
+    const pluginsRoot = join(clawClawPluginLibraryRoot(), 'my-experts', 'plugins')
+    const pkg = await findExpertPluginPackageBySession(pluginsRoot, sessionId)
+    if (pkg === undefined) return { kind: 'pending' }
+    const experts = projectExpertPluginAgents(pkg).map(item => item.expert)
+    const definition = projectExpertPluginTeam(pkg)
+    if (definition === undefined) return { kind: 'expert', expert: experts[0]! }
+    return {
+      kind: 'team',
+      team: projectExpertPluginTeamRecord(definition, experts, readHostLocale(this.ctx)),
+      experts,
+    }
+  }
 
   async getCustomExpert(slug: string): Promise<CustomExpertInput> {
     const { deleted: _deleted, wasEnabled: _wasEnabled, ...expert } = await this.library().getCustom(slug)
@@ -119,12 +139,14 @@ Object.defineProperty(AgencyAgentsRemote.prototype, '@deepseek-ai/dsh-typert-pro
     version: 1,
     methods: Object.freeze([
       'getTeams',
+      'recallTeam',
       'saveTeam',
       'setTeamConnectorEnabled',
       'testTeamConnector',
       'installTeamConnector',
       'deleteTeam',
       'getCatalog',
+      'getCreatedCapability',
       'getCustomExpert',
       'saveCustomExpert',
       'deleteCustomExpert',

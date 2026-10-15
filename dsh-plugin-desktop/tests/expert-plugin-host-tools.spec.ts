@@ -27,31 +27,27 @@ async function writeTeamPackage(home: string, version: string): Promise<string> 
   await Promise.all([
     mkdir(join(root, '.clawclaw-plugin'), { recursive: true }),
     mkdir(join(root, 'agents'), { recursive: true }),
-    mkdir(join(root, 'avatars'), { recursive: true }),
   ])
   const manifest = {
     name: 'research-team', version, description: 'Research workflow', author: { name: 'Test' },
     agents: ['./agents/lead.md', './agents/analyst.md'],
     dependencies: { connectors: ['browser'] }, expertType: 'team', agentName: 'lead',
-    displayName: localized('研究团队', 'Research Team'), profession: localized('研究主理人', 'Research Lead'),
+    profession: localized('研究团队', 'Research Team'),
     displayDescription: localized('规划、研究并汇总', 'Plans, researches, and synthesizes'),
-    avatar: './avatars/team.png', categoryId: '05-ResearchAnalysis',
+    avatar: 0, categoryId: '05-ResearchAnalysis',
     defaultInitPrompt: localized('开始研究', 'Start research'),
     tags: [localized('研究', 'Research'), localized('证据', 'Evidence'), localized('分析', 'Analysis')],
     quickPrompts: [localized('分析主题', 'Analyze a topic'), localized('核验证据', 'Verify evidence'), localized('汇总结论', 'Synthesize findings')],
     teamInfo: { leadAgent: 'lead', memberAgents: ['analyst'] },
     members: [
-      { id: 'lead', name: localized('主理人', 'Lead'), profession: localized('规划与汇总', 'Planning and synthesis'), avatar: './avatars/lead.png', role: 'lead' },
-      { id: 'analyst', name: localized('分析师', 'Analyst'), profession: localized('证据分析', 'Evidence analysis'), avatar: './avatars/analyst.png', role: 'member' },
+      { id: 'lead', profession: localized('研究主理人', 'Research Lead'), avatar: 4, role: 'lead' },
+      { id: 'analyst', profession: localized('证据分析师', 'Evidence Analyst'), avatar: 12, role: 'member' },
     ],
   }
   await Promise.all([
     writeFile(join(root, '.clawclaw-plugin/plugin.json'), `${JSON.stringify(manifest, null, 2)}\n`),
     writeFile(join(root, 'agents/lead.md'), '---\nname: Lead\ndescription: Plans and synthesizes\n---\nLead persona.\n'),
     writeFile(join(root, 'agents/analyst.md'), '---\nname: Analyst\ndescription: Analyzes evidence\n---\nAnalyst persona.\n'),
-    writeFile(join(root, 'avatars/team.png'), 'team'),
-    writeFile(join(root, 'avatars/lead.png'), 'lead'),
-    writeFile(join(root, 'avatars/analyst.png'), 'analyst'),
   ])
   return root
 }

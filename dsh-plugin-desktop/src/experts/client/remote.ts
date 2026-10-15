@@ -8,9 +8,11 @@ import type { TeamInput, TeamSnapshot } from '../team-contract.js'
 import type { RemoteResult, TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 import { AGENCY_AGENTS_DESCRIPTORS } from '../remote-contract.js'
 import type { CatalogSnapshot, CustomExpertInput } from '../expert-contract.js'
+import type { CreatedCapability } from '../created-capability-contract.js'
 
 export interface AgencyTeamsRemote {
   getTeams(): Promise<RemoteResult<TeamSnapshot>>
+  recallTeam(id: string, expectedRevision: number): Promise<RemoteResult<TeamSnapshot>>
   saveTeam(team: TeamInput, expectedRevision: number): Promise<RemoteResult<TeamSnapshot>>
   setTeamConnectorEnabled(id: string, dependency: string, enabled: boolean): Promise<RemoteResult<TeamSnapshot>>
   testTeamConnector(id: string, dependency: string): Promise<RemoteResult<TeamSnapshot>>
@@ -19,6 +21,7 @@ export interface AgencyTeamsRemote {
 }
 export interface AgencyCatalogRemote {
   getCatalog(): Promise<RemoteResult<CatalogSnapshot>>
+  getCreatedCapability(sessionId: string): Promise<RemoteResult<CreatedCapability>>
   getCustomExpert(slug: string): Promise<RemoteResult<CustomExpertInput>>
   saveCustomExpert(expert: CustomExpertInput, enabled: boolean, expectedRevision: number): Promise<RemoteResult<CatalogSnapshot>>
   deleteCustomExpert(slug: string, expectedRevision: number): Promise<RemoteResult<CatalogSnapshot>>
@@ -41,12 +44,14 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   }
   interface TypertRemoteMap {
     'agencyAgents/getTeams': AgencyTeamsRemote['getTeams']
+    'agencyAgents/recallTeam': AgencyTeamsRemote['recallTeam']
     'agencyAgents/saveTeam': AgencyTeamsRemote['saveTeam']
     'agencyAgents/setTeamConnectorEnabled': AgencyTeamsRemote['setTeamConnectorEnabled']
     'agencyAgents/testTeamConnector': AgencyTeamsRemote['testTeamConnector']
     'agencyAgents/installTeamConnector': AgencyTeamsRemote['installTeamConnector']
     'agencyAgents/deleteTeam': AgencyTeamsRemote['deleteTeam']
     'agencyAgents/getCatalog': AgencyCatalogRemote['getCatalog']
+    'agencyAgents/getCreatedCapability': AgencyCatalogRemote['getCreatedCapability']
     'agencyAgents/getCustomExpert': AgencyCatalogRemote['getCustomExpert']
     'agencyAgents/saveCustomExpert': AgencyCatalogRemote['saveCustomExpert']
     'agencyAgents/deleteCustomExpert': AgencyCatalogRemote['deleteCustomExpert']

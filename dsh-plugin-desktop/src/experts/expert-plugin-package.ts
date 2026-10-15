@@ -1,4 +1,4 @@
-import { lstat, readFile, readdir, realpath } from 'node:fs/promises'
+import { lstat, readFile, readdir, realpath, stat } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, sep } from 'node:path'
 import { z } from 'zod'
 import type { ExpertCapabilityBinding, ExpertSummary } from './expert-contract.js'
@@ -10,6 +10,7 @@ const MAX_DISCOVERED_PACKAGES = 500
 const MAX_DISCOVERY_DEPTH = 5
 const packageNameSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)
 const packagePathSchema = z.string().min(3).max(512)
+const presetAvatarSchema = z.number().int().min(0).max(35)
 
 export const expertPluginLocalizedTextSchema = z.object({
   zh: z.string().trim().min(1).optional(),
@@ -23,12 +24,10 @@ const authorSchema = z.union([
 ])
 const memberSchema = z.object({
   id: packageNameSchema,
-  name: expertPluginLocalizedTextSchema.optional(),
-  displayName: expertPluginLocalizedTextSchema.optional(),
   profession: expertPluginLocalizedTextSchema,
-  avatar: packagePathSchema,
+  avatar: presetAvatarSchema,
   role: z.enum(['lead', 'member']),
-}).passthrough().refine(value => value.name !== undefined || value.displayName !== undefined, 'member requires name or displayName')
+}).passthrough()
 
 export const expertPluginManifestSchema = z.object({
   name: packageNameSchema,
@@ -45,10 +44,9 @@ export const expertPluginManifestSchema = z.object({
     memberAgents: z.array(packageNameSchema),
   }).passthrough().optional(),
   members: z.array(memberSchema).optional(),
-  displayName: expertPluginLocalizedTextSchema,
   profession: expertPluginLocalizedTextSchema,
   displayDescription: expertPluginLocalizedTextSchema.optional(),
-  avatar: packagePathSchema,
+  avatar: presetAvatarSchema,
   categoryId: z.string().trim().min(1).max(128),
   defaultInitPrompt: expertPluginLocalizedTextSchema,
   tags: z.array(expertPluginLocalizedTextSchema).length(3).nullish(),
@@ -77,7 +75,6 @@ export interface ExpertPluginPackage {
   readonly manifest: ExpertPluginManifest
   readonly agents: readonly ExpertPluginPackageAgent[]
   readonly skillRoots: readonly string[]
-  readonly avatarPath: string
   readonly connectorDependencies: readonly string[]
 }
 
@@ -182,15 +179,12 @@ export async function readExpertPluginPackage(packageRoot: string): Promise<Expe
     await resolvePackageEntry(root, `${path}/SKILL.md`, 'file')
     return skillRoot
   }))
-  const avatarPath = await resolvePackageEntry(root, manifest.avatar, 'file')
-  if (manifest.members !== undefined) await Promise.all(manifest.members.map(member => resolvePackageEntry(root, member.avatar, 'file')))
   return {
     root,
     manifestPath,
     manifest,
     agents,
     skillRoots,
-    avatarPath,
     connectorDependencies: [...new Set(manifest.dependencies?.connectors ?? [])],
   }
 }
@@ -227,6 +221,29 @@ export async function discoverExpertPluginPackages(root: string): Promise<Expert
     }
   }
   return packages
+}
+
+/** Locate one package created by a conversation without parsing the full library. */
+export async function findExpertPluginPackageBySession(
+  pluginsRoot: string,
+  sessionId: string,
+): Promise<ExpertPluginPackage | undefined> {
+  const rootInfo = await lstat(pluginsRoot).catch(() => undefined)
+  if (rootInfo === undefined || !rootInfo.isDirectory() || rootInfo.isSymbolicLink()) return undefined
+  const canonicalRoot = await realpath(pluginsRoot)
+  const matches: Array<{ readonly root: string; readonly modified: number }> = []
+  for (const entry of await readdir(canonicalRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.isSymbolicLink() || entry.name.startsWith('.')) continue
+    const packageRoot = join(canonicalRoot, entry.name)
+    const marker = join(packageRoot, '.created-by-session')
+    const info = await lstat(marker).catch(() => undefined)
+    if (info === undefined || !info.isFile() || info.isSymbolicLink() || info.size > 512) continue
+    const owner = (await readFile(marker, 'utf8')).trim()
+    if (owner !== sessionId) continue
+    matches.push({ root: packageRoot, modified: (await stat(marker)).mtimeMs })
+  }
+  const match = matches.sort((left, right) => right.modified - left.modified)[0]
+  return match === undefined ? undefined : readExpertPluginPackage(match.root)
 }
 
 const PLUGIN_DIVISIONS: Readonly<Record<string, string>> = {
@@ -269,7 +286,6 @@ export function projectExpertPluginAgents(pkg: ExpertPluginPackage): ProjectedEx
   return pkg.agents.map((agent) => {
     const member = manifest.members?.find(candidate => candidate.id === agent.id)
     const role = manifest.expertType === 'agent' ? 'agent' : member!.role
-    const displayName = member?.displayName ?? member?.name ?? manifest.displayName
     const profession = member?.profession ?? manifest.profession
     const description = manifest.expertType === 'agent' ? manifest.displayDescription : profession
     return {
@@ -278,14 +294,15 @@ export function projectExpertPluginAgents(pkg: ExpertPluginPackage): ProjectedEx
       role,
       expert: {
         slug: projectedAgentSlug(pkg, agent.id),
-        name: localized(displayName, 'zh'),
-        nameEn: localized(displayName, 'en'),
+        name: localized(profession, 'zh'),
+        nameEn: localized(profession, 'en'),
         description: localized(description, 'zh') || manifest.description,
         descriptionEn: localized(description, 'en') || manifest.description,
         emoji: '',
         division,
         divisionZh: ZH_DIVISION[division] ?? division,
         custom: false,
+        avatar: member?.avatar ?? manifest.avatar,
         ...capabilities,
         packageFormat: 'clawclaw-plugin',
         packageVersion: manifest.version,
@@ -312,7 +329,7 @@ export function projectExpertPluginTeam(pkg: ExpertPluginPackage): ExpertPluginT
     id: `plugin-team:${manifest.name}`,
     packageName: manifest.name,
     packageVersion: manifest.version,
-    name: manifest.displayName,
+    name: manifest.profession,
     description: manifest.displayDescription ?? { en: manifest.description },
     defaultInitPrompt: manifest.defaultInitPrompt,
     tags: manifest.tags ?? [],

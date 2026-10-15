@@ -44,19 +44,15 @@ AGENT_PLUGIN_JSON = """{
   "expertType": "agent",
   "agentName": "%(agent_name)s",
 
-  "displayName": {
-    "en": "[TODO: English display name]",
-    "zh": "[TODO: 中文显示名称]"
-  },
   "profession": {
-    "en": "[TODO: English profession]",
-    "zh": "[TODO: 中文职业头衔]"
+    "en": "[TODO: English expert name]",
+    "zh": "[TODO: 中文专家名称]"
   },
   "displayDescription": {
     "en": "[TODO: English detailed description]",
     "zh": "[TODO: 中文详细描述，40-50字]"
   },
-  "avatar": "avatars/expert.png",
+  "avatar": 0,
   "categoryId": "[TODO: XX-CategoryName]",
   "defaultInitPrompt": {
     "zh": "[TODO: 中文首次对话提示]",
@@ -97,19 +93,15 @@ TEAM_PLUGIN_JSON = """{
     "memberAgents": ["[TODO: member-a]"]
   },
 
-  "displayName": {
+  "profession": {
     "en": "[TODO: English team name]",
     "zh": "[TODO: 中文团队名称]"
-  },
-  "profession": {
-    "en": "[TODO: same as displayName.en]",
-    "zh": "[TODO: 同displayName.zh]"
   },
   "displayDescription": {
     "en": "[TODO: English team description]",
     "zh": "[TODO: 中文团队描述，40-50字]"
   },
-  "avatar": "avatars/team.png",
+  "avatar": 0,
   "categoryId": "[TODO: XX-CategoryName]",
   "defaultInitPrompt": {
     "zh": "[TODO: 中文首次问候]",
@@ -129,16 +121,14 @@ TEAM_PLUGIN_JSON = """{
   "members": [
     {
       "id": "%(team)s-team-lead",
-      "displayName": { "en": "[TODO]", "zh": "[TODO]" },
       "profession": { "en": "[TODO]", "zh": "[TODO]" },
-      "avatar": "avatars/%(team)s-team-lead.png",
+      "avatar": 0,
       "role": "lead"
     },
     {
       "id": "[TODO: member-a]",
-      "displayName": { "en": "[TODO]", "zh": "[TODO]" },
       "profession": { "en": "[TODO]", "zh": "[TODO]" },
-      "avatar": "avatars/[TODO: member-a].png",
+      "avatar": 1,
       "role": "member"
     }
   ]
@@ -148,16 +138,13 @@ TEAM_PLUGIN_JSON = """{
 AGENT_MD_TEMPLATE = """---
 name: %(agent_name)s
 description: "[TODO: English description for AI to determine when to activate]"
-displayName:
-  en: "[TODO: English display name]"
-  zh: "[TODO: 中文显示名称]"
 profession:
-  en: "[TODO: English profession title]"
-  zh: "[TODO: 中文职业头衔]"
+  en: "[TODO: English expert name]"
+  zh: "[TODO: 中文专家名称]"
 maxTurns: 50
 ---
 
-# [TODO: 角色名称] - [TODO: 人名]
+# [TODO: 专家名称]
 
 [TODO: 角色描述，说明这是谁，擅长什么]
 
@@ -182,12 +169,9 @@ maxTurns: 50
 TEAM_LEAD_MD_TEMPLATE = """---
 name: %(team)s-team-lead
 description: "[TODO: English description]"
-displayName:
-  en: "[TODO: English display name]"
-  zh: "[TODO: 中文显示名称]"
 profession:
-  en: "[TODO: English profession title]"
-  zh: "[TODO: 中文职业头衔]"
+  en: "[TODO: English lead role]"
+  zh: "[TODO: 中文主理人角色]"
 maxTurns: 150
 ---
 
@@ -197,8 +181,8 @@ maxTurns: 150
 
 ## 团队成员
 
-| 成员 ID | 名字 | 职责 |
-|---------|------|------|
+| 成员 ID | 职业角色 | 职责 |
+|---------|----------|------|
 | %(team)s-team-lead | [TODO] | 编排调度 |
 | [TODO: member-a] | [TODO] | [TODO: 职责] |
 
@@ -240,16 +224,13 @@ maxTurns: 150
 TEAM_MEMBER_MD_TEMPLATE = """---
 name: [TODO: member-id]
 description: "[TODO: English description]"
-displayName:
-  en: "[TODO: English display name]"
-  zh: "[TODO: 中文显示名称]"
 profession:
-  en: "[TODO: English profession title]"
-  zh: "[TODO: 中文职业头衔]"
+  en: "[TODO: English member role]"
+  zh: "[TODO: 中文成员角色]"
 maxTurns: 50
 ---
 
-# [TODO: 角色名称] - [TODO: 人名]
+# [TODO: 成员角色]
 
 [TODO: 角色描述]
 
@@ -290,10 +271,7 @@ README_TEMPLATE = """# %(title)s
 
 ## 头像
 
-头像已自动生成在 `avatars/` 目录下。如需替换为自定义头像，要求：
-- 格式：PNG（推荐）或 JPG
-- 尺寸：512×512 px
-- 大小：单张不超过 500KB
+头像使用 ClawClaw 内置的 36 个预置头像。`plugin.json` 中的 `avatar` 为 0–35 的编号。
 
 ## 安装
 
@@ -341,12 +319,6 @@ def init_agent(expert_dir, name):
     )
     print(f"  ✅ agents/{agent_name}.md")
 
-    # avatars/
-    avatars_dir = expert_dir / 'avatars'
-    avatars_dir.mkdir()
-    (avatars_dir / '.gitkeep').touch()
-    print("  ✅ avatars/ (awaiting ImageGen)")
-
     # README.md
     (expert_dir / 'README.md').write_text(
         README_TEMPLATE % {
@@ -385,12 +357,6 @@ def init_team(expert_dir, name):
 
     (agents_dir / 'member-placeholder.md').write_text(TEAM_MEMBER_MD_TEMPLATE, encoding='utf-8')
     print("  ✅ agents/member-placeholder.md (rename to actual member ID)")
-
-    # avatars/
-    avatars_dir = expert_dir / 'avatars'
-    avatars_dir.mkdir()
-    (avatars_dir / '.gitkeep').touch()
-    print("  ✅ avatars/ (awaiting ImageGen)")
 
     # settings.json
     (expert_dir / 'settings.json').write_text(
@@ -477,7 +443,7 @@ def main():
     print(f"\n✅ Expert '{name}' ({expert_type}) initialized at {expert_dir}")
     print("\nNext steps:")
     print("  1. Fill in all [TODO] placeholders in generated files")
-    print("  2. Generate avatars using ImageGen (see references/avatar-spec.md)")
+    print("  2. Select preset avatar indexes from 0 to 35 (see references/avatar-spec.md)")
     print("  3. Run validate_expert.py to check the package")
     print("  4. Run register_expert.py to register in marketplace.json (makes it visible in ClawClaw)")
     print(f"\n   Note: The expert will NOT appear in ClawClaw until registered.")

@@ -37,10 +37,9 @@
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `displayName` | `{en, zh}` | 展示名称 |
-| `profession` | `{en, zh}` | 职业/定位。**Team 型须与 displayName 一致** |
+| `profession` | `{en, zh}` | 专家或专家团的界面名称，使用清晰的职业定位 |
 | `displayDescription` | `{en, zh}` | 展示描述。**中文 40-50 字，突出核心能力** |
-| `avatar` | string | 头像相对路径 |
+| `avatar` | integer | ClawClaw 预置头像编号，范围 0–35 |
 | `categoryId` | string | 行业分类 ID |
 | `defaultInitPrompt` | `{en, zh}` | 默认引导语。**须与 quickPrompts 第一条一致** |
 | `tags` | `{en, zh}[]` | 擅长领域标签（**固定 3 个**） |
@@ -51,7 +50,7 @@
 
 | 字段 | 说明 |
 |------|------|
-| `members[]` | 每个成员含 `{id, name:{en,zh}, profession:{en,zh}, avatar, role}` |
+| `members[]` | 每个成员含 `{id, profession:{en,zh}, avatar, role}` |
 
 - `role` 取值：`"lead"` 或 `"member"`
 - 主理人也必须在 members 中，role 为 `"lead"`
@@ -77,19 +76,15 @@
   "expertType": "agent",
   "agentName": "{agent-name}",
 
-  "displayName": {
-    "en": "{English display name}",
-    "zh": "{中文显示名称}"
-  },
   "profession": {
-    "en": "{English profession}",
-    "zh": "{中文职业头衔}"
+    "en": "{English expert name}",
+    "zh": "{中文专家名称}"
   },
   "displayDescription": {
     "en": "{English detailed description}",
     "zh": "{中文详细描述，40-50字}"
   },
-  "avatar": "avatars/expert.png",
+  "avatar": 0,
   "categoryId": "{XX-CategoryName}",
   "defaultInitPrompt": {
     "zh": "{中文首次对话提示}",
@@ -138,10 +133,6 @@
     "memberAgents": ["{member-a}", "{member-b}"]
   },
 
-  "displayName": {
-    "en": "{English team name}",
-    "zh": "{中文团队名称}"
-  },
   "profession": {
     "en": "{English team name}",
     "zh": "{中文团队名称}"
@@ -150,7 +141,7 @@
     "en": "{English team description}",
     "zh": "{中文团队描述，40-50字}"
   },
-  "avatar": "avatars/team.png",
+  "avatar": 0,
   "categoryId": "{XX-CategoryName}",
   "defaultInitPrompt": {
     "zh": "{中文首次问候}",
@@ -170,16 +161,14 @@
   "members": [
     {
       "id": "{team}-team-lead",
-      "displayName": { "en": "{EN}", "zh": "{ZH}" },
       "profession": { "en": "{EN}", "zh": "{ZH}" },
-      "avatar": "avatars/{team}-team-lead.png",
+      "avatar": 0,
       "role": "lead"
     },
     {
       "id": "{member-name}",
-      "displayName": { "en": "{EN}", "zh": "{ZH}" },
       "profession": { "en": "{EN}", "zh": "{ZH}" },
-      "avatar": "avatars/{member-name}.png",
+      "avatar": 1,
       "role": "member"
     }
   ]

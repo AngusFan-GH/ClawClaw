@@ -3,6 +3,7 @@ import {
   ExpertCreationConversationError,
   expertCreationDraft,
   expertCreationWorkspaceId,
+  openCapabilityConversation,
   openExpertCreationConversation,
 } from '../src/experts/client/expert-conversation-creation.ts'
 
@@ -56,5 +57,22 @@ describe('expert conversation creation', () => {
       closeSettings: vi.fn(),
     })).rejects.toEqual(new ExpertCreationConversationError('workspaceUnavailable'))
     expect(openWorkspace).not.toHaveBeenCalled()
+  })
+
+  it('prepares the capability in the newly created conversation', async () => {
+    const prepare = vi.fn(async (sessionId: string) => sessionId === 'new-session')
+    const openWorkspace = vi.fn(async (_workspaceId, beforeOpen: (sessionId: string) => void) => {
+      beforeOpen('new-session')
+    })
+
+    await expect(openCapabilityConversation({
+      workspaceId: 'workspace-1' as never,
+      openWorkspace: openWorkspace as never,
+      prepare: prepare as never,
+    })).resolves.toBe(true)
+
+    expect(openWorkspace).toHaveBeenCalledWith('workspace-1', expect.any(Function))
+    expect(prepare).toHaveBeenCalledExactlyOnceWith('new-session')
+    expect(prepare).not.toHaveBeenCalledWith('current-session')
   })
 })

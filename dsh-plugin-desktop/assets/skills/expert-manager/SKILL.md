@@ -30,7 +30,6 @@ description_en: |
 | 展示 | 对应字段 | 变更规则 |
 |---------|---------|---------|
 | **名字（职业）** | `profession`（`{en, zh}`） | 卡片标题，应体现专家职业定位 |
-| **花名** | `displayName`（`{en, zh}`） | 可根据用户要求自由修改 |
 | **类型** | `expertType`（`"agent"` → 显示"专家"，`"team"` → 显示"专家团"） | **不可随意指定/变更**，必须根据实际结构判断：单角色 = `"agent"`，多角色协作 = `"team"` |
 | **行业分类** | `categoryId` | **不可随意指定/变更**，必须根据专家核心能力领域从分类列表中选择，并向用户说明选择理由 |
 | **能力介绍** | `displayDescription`（`{en, zh}`） | 中文 40-50 字，突出核心能力 |
@@ -64,7 +63,7 @@ description_en: |
 2. **专家领域**：擅长什么？
 
 **Agent 型还需要：**
-- 名字（中英文）、职业头衔（中英文）
+- 专家名称/职业定位（中英文）
 - 详细能力描述（中英文，中文 40-50 字）
 - 首次对话问候语（中英文）
 - 行业分类（见下方列表）
@@ -73,9 +72,9 @@ description_en: |
 - 是否需要附带 Skill / bin/，以及依赖哪些 ClawClaw Connector（填写 Connector 目录 ID）
 
 **Team 型还需要：**
-- 团队名称（中英文）、团队职业头衔（中英文，须与团队名称一致）
-- 主理人名字、职责
-- 每个团员的名字、职业头衔、职责
+- 团队名称（中英文，写入 `profession`）
+- 主理人的职业角色、职责
+- 每个团员的职业角色、职责
 - 团队 SOP 工作流程
 - 首次对话问候语、行业分类、标签、推荐提示词
 - 团队级 Skill 与 Connector 依赖（Connector 使用目录 ID，由 Host 统一管理生命周期）
@@ -86,7 +85,7 @@ description_en: |
 
 1. **读取分析** — 从资料中提取角色定义、核心能力、SOP、输出规范、约束、脚本、参考资料、角色分工
 2. **推断 expertType 和 categoryId** — 按"关键展示字段对应关系"中的规则判断，向用户说明理由
-3. **确认补全** — 向用户确认推断结果（displayName、expertType、categoryId），补全展示信息（名称、头衔、描述、标签等）
+3. **确认补全** — 向用户确认推断结果（profession、expertType、categoryId），补全展示信息（名称、描述、标签等）
 4. **生成** — 执行后续的初始化 + 文件生成流程
 
 ### 场景 C：修改已有专家
@@ -107,8 +106,8 @@ description_en: |
 - 修改前先完整读取现有文件，避免丢失已有内容
 - 仅修改用户要求变更的部分，不要重写整个文件
 - 如果用户要修改的专家不存在，提示用户确认【专家中心-我的专家】已有该专家
-- 修改 `displayName`、`expertType`、`categoryId` 时须遵守"关键展示字段对应关系"中的变更规则
-- **可以修改的字段**：`displayName`、`profession`、`displayDescription`、`description`、`tags`、`quickPrompts`、`defaultInitPrompt`、`avatar`、`categoryId`（需说明理由）、`members` 的展示信息、Agent MD 的正文内容等
+- 修改 `profession`、`expertType`、`categoryId` 时须遵守"关键展示字段对应关系"中的变更规则
+- **可以修改的字段**：`profession`、`displayDescription`、`description`、`tags`、`quickPrompts`、`defaultInitPrompt`、`avatar`、`categoryId`（需说明理由）、`members` 的展示信息、Agent MD 的正文内容等
 - **严禁修改以下字段和文件名**（它们是专家的唯一标识，修改会导致专家丢失）：
   - `plugin.json` 中的 `name` 字段（kebab-case 标识符）
   - `plugin.json` 中的 `agentName` 字段
@@ -133,9 +132,9 @@ python3 scripts/init_expert.py <expert-name> --type agent|team --path "$DSH_HOME
 - `@references/agent-md-spec.md` — Agent MD frontmatter 和正文结构
 - `@references/team-spec.md` — Team 型协作铁律、成员命名、SOP 编排
 
-### 第四步：生成头像
+### 第四步：选择预置头像
 
-参考 `@references/avatar-spec.md` 使用 `ImageGen` 工具为每个角色自动生成头像。
+参考 `@references/avatar-spec.md`，从 ClawClaw 手动创建专家所使用的 36 个预置头像中选择编号。不得生成图片、创建 `avatars/` 目录或声明图片路径。
 
 ### 第五步：校验
 
@@ -151,7 +150,7 @@ python3 scripts/validate_expert.py <path/to/expert-dir>
 python3 scripts/register_expert.py <path/to/expert-dir>
 ```
 
-> 此脚本会：1) 再次校验关键字段不含 `[TODO]`；2) 将专家信息写入 `marketplace.json`；3) 在存在 `CLAWCLAW_SESSION_ID` 时记录创建会话到 `.created-by-session`。如果校验不通过会报错并拒绝注册。
+> 此脚本会：1) 再次校验关键字段不含 `[TODO]`；2) 将专家信息写入 `marketplace.json`；3) 使用当前 Bash 运行时的 `DSH_SESSION_ID`（显式 `CLAWCLAW_SESSION_ID` 优先）记录创建会话到 `.created-by-session`。如果校验不通过会报错并拒绝注册。
 
 ### 第七步：打包
 
@@ -218,8 +217,8 @@ python3 scripts/package_expert.py <path/to/expert-dir> [output-dir]
 6. **Agent MD frontmatter 禁止声明 tools 字段**
 7. **主理人文件名必须加专家团前缀**：如 `trading-team-lead.md`，不可用通用 `team-lead.md`
 8. **Team 型 members 数组含主理人**（role=lead），teamInfo.memberAgents 不含主理人
-9. **Team 型 profession 须与 displayName 一致**
-10. **头像自动生成后放入 avatars/**，同一团队头像风格统一
+9. **界面名称统一**：专家与成员统一使用 `profession` 作为界面名称
+10. **头像只使用预置编号**：`avatar` 必须为 0–35 的整数；专家团头像由成员头像自动组合
 11. **同名专家已存在时必须重新校验 + 注册**：用户要求创建专家但目标目录已存在同名专家时，如果不需要初始化目录和创建内容，也要执行后续的校验 + 注册流程，保证专家可用
 12. **批量创建必须遵循标准流程**：批量创建/转化多个专家时，每个专家必须完整串行经过 `init → validate → register`，禁止跳过校验或注册。参考 `scripts/batch_create.py`，核心模式：
     ```python
@@ -236,7 +235,7 @@ python3 scripts/package_expert.py <path/to/expert-dir> [output-dir]
 ## 五、收尾提醒
 
 生成完毕后告知用户：
-1. 🎨 头像已通过 `ImageGen` 生成在 `avatars/`，可手动替换（PNG/JPG，512×512，≤500KB）
+1. 头像已从 ClawClaw 预置头像中选择，可在 `plugin.json` 中改为其他 0–35 编号
 2. 📦 打包分享：`python3 scripts/package_expert.py <expert-dir>`
 3. 📋 请核对内容是否准确
 

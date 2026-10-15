@@ -145,7 +145,6 @@ def validate_plugin_json(plugin_json, expert_dir, result):
                 result.error("plugin.json: agentName must not be generic 'team-lead', add team prefix")
 
         # Display fields
-        check_i18n_field(plugin_json, 'displayName', result)
         check_i18n_field(plugin_json, 'profession', result)
         check_i18n_field(plugin_json, 'displayDescription', result)
         check_i18n_field(plugin_json, 'defaultInitPrompt', result)
@@ -157,14 +156,6 @@ def validate_plugin_json(plugin_json, expert_dir, result):
             zh_len = len(zh_desc)
             if zh_len < 40 or zh_len > 50:
                 result.warn(f"plugin.json: displayDescription.zh is {zh_len} chars (recommended 40-50)")
-
-        # Team profession == displayName
-        if expert_type == 'team':
-            dn = plugin_json.get('displayName', {})
-            prof = plugin_json.get('profession', {})
-            if dn.get('zh') and prof.get('zh') and dn['zh'] != prof['zh']:
-                if not dn['zh'].startswith('[TODO') and not prof['zh'].startswith('[TODO'):
-                    result.error(f"plugin.json: Team 'profession' must equal 'displayName' (zh: '{prof['zh']}' != '{dn['zh']}')")
 
         # categoryId
         cat = plugin_json.get('categoryId', '')
@@ -188,12 +179,20 @@ def validate_plugin_json(plugin_json, expert_dir, result):
                 if not dip['zh'].startswith('[TODO'):
                     result.warn("plugin.json: defaultInitPrompt.zh should match quickPrompts[0].zh")
 
-        # avatar path check
-        avatar = plugin_json.get('avatar', '')
-        if avatar:
-            avatar_path = expert_dir / avatar
-            if not avatar_path.exists() and not (expert_dir / 'avatars' / '.gitkeep').exists():
-                result.warn(f"plugin.json: avatar file not found: {avatar}")
+        # ClawClaw preset avatar index, shared with the manual expert editor.
+        avatar = plugin_json.get('avatar')
+        if not isinstance(avatar, int) or isinstance(avatar, bool) or not 0 <= avatar <= 35:
+            result.error("plugin.json: 'avatar' must be an integer from 0 to 35")
+
+        if expert_type == 'team':
+            for index, member in enumerate(plugin_json.get('members', [])):
+                if not isinstance(member, dict):
+                    result.error(f"plugin.json: members[{index}] must be an object")
+                    continue
+                check_i18n_field(member, 'profession', result, f"plugin.json members[{index}]")
+                member_avatar = member.get('avatar')
+                if not isinstance(member_avatar, int) or isinstance(member_avatar, bool) or not 0 <= member_avatar <= 35:
+                    result.error(f"plugin.json: members[{index}].avatar must be an integer from 0 to 35")
 
     # agents array check
     agents_arr = plugin_json.get('agents', [])
