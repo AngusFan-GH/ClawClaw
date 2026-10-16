@@ -45,6 +45,7 @@ import { capabilitySubmissionMarker } from '../capability-submission.js'
 import { ExpertCapabilityRegistry } from './capability-registry.js'
 import { expertCapabilityHealth, type ExpertCapabilityHealth } from './capability-options.js'
 import { SkillsSettingsSection } from '../../client/SkillsSettingsSection.js'
+import { desktopDirectoryPickerServices } from '../../client/workspace-directory-flow.js'
 import { McpSettingsSection } from '../../client/McpSettingsSection.js'
 import { ExpertCreationConversationError, expertCreationWorkspaceId, openCapabilityConversation as openPreparedCapabilityConversation, openExpertCreationConversation } from './expert-conversation-creation.js'
 import { applyCapabilitySidebar, CAPABILITY_SIDEBAR_CSS, openCapabilitySidebar } from './capability-sidebar.js'
@@ -1516,6 +1517,8 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
   skillsApi: ReturnType<typeof createDesktopSkillsApi>
   mcpApi: ReturnType<typeof createDesktopMcpApi>
   skillsT: (key: string, params?: Record<string, unknown>) => string
+  directoryPicker?: React.ComponentProps<typeof SkillsSettingsSection>['directoryPicker']
+  directoryT?: React.ComponentProps<typeof SkillsSettingsSection>['directoryT']
   mcpT: (key: string, params?: Record<string, unknown>) => string
   initialSessionId?: string
   onSelectTeam?(team: ExpertTeam, example?: string): boolean | Promise<boolean>
@@ -1587,7 +1590,7 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
         onExpertsChanged: () => { void readEnabled(props.remote).then(value => props.onEnabledChange?.(value.enabled)) },
       }))),
       React.createElement('div', { className: 'aag-library-panel', id: 'aag-library-panel-skills', role: 'tabpanel', 'aria-labelledby': 'aag-library-tab-skills', hidden: view !== 'skills' }, React.createElement(SkillsSettingsSection, {
-        t: props.skillsT, api: props.skillsApi, embedded: true, initialSessionId: props.initialSessionId, onCatalogChange: invalidateCapabilities, onScopeApiChange: selectSkillsScope, expertUsage: capabilityUsage.skills,
+        t: props.skillsT, api: props.skillsApi, embedded: true, initialSessionId: props.initialSessionId, onCatalogChange: invalidateCapabilities, onScopeApiChange: selectSkillsScope, expertUsage: capabilityUsage.skills, directoryPicker: props.directoryPicker, directoryT: props.directoryT,
       })),
       React.createElement('div', { className: 'aag-library-panel', id: 'aag-library-panel-mcp', role: 'tabpanel', 'aria-labelledby': 'aag-library-tab-mcp', hidden: view !== 'mcp' }, React.createElement(McpSettingsSection, {
         t: props.mcpT, api: props.mcpApi, embedded: true, onCatalogChange: invalidateCapabilities, expertUsage: capabilityUsage.mcp,
@@ -1624,6 +1627,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
     return scoped
   }
   const skillsT = ctx.locale.bind('desktop.skills')
+  const directoryT = ctx.locale.bind('desktop.directory-picker')
   const mcpT = ctx.locale.bind('desktop.mcp')
   const getActive = (): 'zh' | 'en' => ctx.locale.getSnapshot().active === 'en' ? 'en' : 'zh'
 
@@ -1934,6 +1938,10 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
       const sessions = ctx.sessions as unknown as { list?: { getSnapshot(): { ids: readonly string[]; byId: Record<string, { retainedBy?: { mainView?: number } }> } } }
       const list = sessions.list?.getSnapshot()
       const initialSessionId = list?.ids.find(id => (list.byId[id]?.retainedBy?.mainView ?? 0) > 0)
+      const settingsUiWorkspace = ctx.get('uiWorkspace')
+      const directoryPicker = settingsUiWorkspace?.listDirectory === undefined || settingsUiWorkspace?.createDirectory === undefined
+        ? undefined
+        : desktopDirectoryPickerServices(settingsUiWorkspace)
       const onCreateWithConversation = async (): Promise<void> => {
         const pending = watchCreatedCapability()
         const workspaces = ctx.get('workspaces') as { list?: { getSnapshot(): Parameters<typeof expertCreationWorkspaceId>[0] } } | undefined
@@ -1961,7 +1969,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
       }
       const settingsInsertion = bindExpertInsertion(initialSessionId as SessionId | undefined)
       const capabilitySidebarAvailable = ctx.get('sidebarRight') !== undefined
-      return React.createElement(AgencySettingsPanel, { ...props, remote, getActive, capabilityRegistry: capabilityRegistryFor(initialSessionId as SessionId | undefined), skillsApi, mcpApi, skillsT, mcpT,
+      return React.createElement(AgencySettingsPanel, { ...props, remote, getActive, capabilityRegistry: capabilityRegistryFor(initialSessionId as SessionId | undefined), skillsApi, mcpApi, skillsT, mcpT, directoryPicker, directoryT,
         ...(initialSessionId === undefined ? {} : { initialSessionId }), onEnabledChange: updateEnabledForMentions, onCreateWithConversation,
         ...(capabilitySidebarAvailable ? { onCreatedExpert: (expert: ExpertView) => {
           if (showExpertSidebar(expert, initialSessionId as SessionId | undefined)) props.close()

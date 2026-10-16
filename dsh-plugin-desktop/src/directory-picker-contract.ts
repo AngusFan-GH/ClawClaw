@@ -7,6 +7,7 @@ export const DESKTOP_DIRECTORY_VALIDATOR_PATH = '/_dsh/desktop/validate-director
 /** Display preferences for the native folder chooser. */
 export interface DesktopDirectoryPickerOptions {
   readonly showHiddenFiles?: boolean
+  readonly defaultPath?: string
 }
 
 /** Successful native directory-picker response. */

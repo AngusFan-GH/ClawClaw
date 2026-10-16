@@ -65,10 +65,12 @@ it('native selection navigates without committing and cancellation preserves the
   const pickNative = vi.fn(async (): Promise<string | null> => '/native')
   const props = await mount({ pickNative })
   await click('native')
+  expect(pickNative).toHaveBeenLastCalledWith(false, '/home/test/project')
   expect(props.onPicked).not.toHaveBeenCalled()
   expect((document.querySelector('input') as HTMLInputElement).value).toBe('/native')
   pickNative.mockResolvedValueOnce(null)
   await click('native')
+  expect(pickNative).toHaveBeenLastCalledWith(false, '/native')
   expect((document.querySelector('input') as HTMLInputElement).value).toBe('/native')
 })
 it('creates a child directory then navigates into it before confirmation', async () => {

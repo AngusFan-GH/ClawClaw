@@ -30,6 +30,16 @@ describe('Electron workspace admission', () => {
     }
   })
 
+  it('opens the native chooser at the currently displayed directory', async () => {
+    const { admission: subject, options } = admission({ platform: 'darwin' })
+    await subject.pickDirectory({ defaultPath: '/Users/test/Projects' })
+    expect(options.showOpenDialog).toHaveBeenCalledWith({
+      title: 'Select Workspace Directory',
+      defaultPath: '/Users/test/Projects',
+      properties: ['openDirectory', 'dontAddToRecent'],
+    })
+  })
+
   it.each(['zh', 'en'] as const)('keeps the macOS native picker localized without forcing hidden directories (%s)', async (locale) => {
     const path = '/Users/test/.clawclaw/workspaces/default'
     const { admission: subject, options } = admission({

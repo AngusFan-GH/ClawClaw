@@ -27,10 +27,13 @@ test('Desktop picker failure propagates without opening a second native dialog',
   await assert.rejects(picker.pickDirectory(), /picker unavailable/)
 })
 
-test('forwards hidden-folder preferences to the native Desktop bridge', async () => {
+test('forwards native picker preferences to the Desktop bridge', async () => {
   const calls = []
   const picker = channelDirectoryPicker({}, () => async (options) => { calls.push(options); return null })
-  await picker.pickDirectory({ showHiddenFiles: true })
-  await picker.pickDirectory({ showHiddenFiles: false })
-  assert.deepEqual(calls, [{ showHiddenFiles: true }, { showHiddenFiles: false }])
+  await picker.pickDirectory({ showHiddenFiles: true, defaultPath: '/Users/test' })
+  await picker.pickDirectory({ showHiddenFiles: false, defaultPath: '/Volumes/Work' })
+  assert.deepEqual(calls, [
+    { showHiddenFiles: true, defaultPath: '/Users/test' },
+    { showHiddenFiles: false, defaultPath: '/Volumes/Work' },
+  ])
 })

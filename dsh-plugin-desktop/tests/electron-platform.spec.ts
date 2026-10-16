@@ -129,9 +129,13 @@ describe('electronPlatformStrategy', () => {
         properties: ['openDirectory', 'dontAddToRecent'],
       })
       for (const showHiddenFiles of [true, false]) {
-        await expect(requestDesktopDirectory(request, { showHiddenFiles })).resolves.toBe('/Users/test/.clawclaw')
+        await expect(requestDesktopDirectory(request, {
+          showHiddenFiles,
+          defaultPath: '/Users/test/Projects',
+        })).resolves.toBe('/Users/test/.clawclaw')
         expect(showOpenDialog).toHaveBeenLastCalledWith({
           title: 'Select Workspace Directory',
+          defaultPath: '/Users/test/Projects',
           properties: ['openDirectory', 'dontAddToRecent', ...(showHiddenFiles ? ['showHiddenFiles'] : [])],
         })
       }

@@ -3845,7 +3845,10 @@ function WorkspaceDirectoryPicker({
     setNativePicking(true);
     setError(null);
     try {
-      const path = await picker.pickDirectory({ showHiddenFiles: showHidden });
+      const path = await picker.pickDirectory({
+        showHiddenFiles: showHidden,
+        defaultPath: pathDraft.trim() || listing?.path
+      });
       if (path !== null && request === requestRef.current) await loadDirectory(path);
     } catch (cause) {
       if (request === requestRef.current) setError(pickerErrorMessage(cause));

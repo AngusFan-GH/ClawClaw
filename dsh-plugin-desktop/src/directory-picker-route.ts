@@ -7,6 +7,7 @@ import type {
 } from './directory-picker-contract.ts'
 
 const MAX_VALIDATION_BODY_BYTES = 16 * 1024
+const MAX_DIRECTORY_PATH_LENGTH = 4096
 
 function finishJson(res: ServerResponse, statusCode: number, value: object): void {
   res.statusCode = statusCode
@@ -52,10 +53,16 @@ export async function handleDesktopDirectoryPickerRequest(
       return finishJson(res, 400, { error: 'invalid directory picker request' })
     }
     if (typeof value !== 'object' || value === null || Array.isArray(value)
-      || ('showHiddenFiles' in value && typeof value.showHiddenFiles !== 'boolean')) {
+      || ('showHiddenFiles' in value && typeof value.showHiddenFiles !== 'boolean')
+      || ('defaultPath' in value && (typeof value.defaultPath !== 'string'
+        || value.defaultPath.trim().length === 0
+        || value.defaultPath.length > MAX_DIRECTORY_PATH_LENGTH))) {
       return finishJson(res, 400, { error: 'invalid directory picker request' })
     }
-    options = { showHiddenFiles: 'showHiddenFiles' in value ? value.showHiddenFiles as boolean : false }
+    options = {
+      showHiddenFiles: 'showHiddenFiles' in value ? value.showHiddenFiles as boolean : false,
+      ...('defaultPath' in value ? { defaultPath: value.defaultPath as string } : {}),
+    }
   }
   try {
     const response: DesktopDirectoryPickerResponse = { path: await pickDirectory(options) }

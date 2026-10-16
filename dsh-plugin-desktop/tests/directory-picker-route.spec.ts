@@ -39,7 +39,20 @@ describe('desktop directory picker route', () => {
     expect(res.statusCode).toBe(200)
     expect(pick).toHaveBeenCalledWith({ showHiddenFiles })
   })
-  it.each([null, [], { showHiddenFiles: 'true' }])('rejects invalid preferences without opening a chooser (%j)', async (value) => {
+  it('forwards the native chooser default path', async () => {
+    const pick = vi.fn(async () => null)
+    const res = response()
+    await handleDesktopDirectoryPickerRequest(
+      jsonRequest({ showHiddenFiles: true, defaultPath: '/Users/test/Projects' }),
+      res,
+      'http://127.0.0.1:43120',
+      pick,
+    )
+    expect(res.statusCode).toBe(200)
+    expect(pick).toHaveBeenCalledWith({ showHiddenFiles: true, defaultPath: '/Users/test/Projects' })
+  })
+
+  it.each([null, [], { showHiddenFiles: 'true' }, { defaultPath: '' }, { defaultPath: 42 }, { defaultPath: 'x'.repeat(4097) }])('rejects invalid preferences without opening a chooser (%j)', async (value) => {
     const pick = vi.fn(async () => null)
     const res = response()
     await handleDesktopDirectoryPickerRequest(jsonRequest(value), res, 'http://127.0.0.1:43120', pick)

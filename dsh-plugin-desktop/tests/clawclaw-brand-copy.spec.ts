@@ -2,6 +2,7 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { apply } from '../src/client/index.ts'
+import { applyWorkspaceDirectoryFlow } from '../src/client/workspace-directory-flow.tsx'
 
 // Keep native UI dependencies outside this browser-entry regression test.
 vi.mock('../src/client/desktop-settings.ts', () => ({ applyDesktopSettings: vi.fn() }))
@@ -49,6 +50,7 @@ describe('ClawClaw product copy', () => {
         'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.chat.node',
       ])
       expect(inject).toHaveBeenCalledWith(['market'], expect.any(Function))
+      expect(applyWorkspaceDirectoryFlow).toHaveBeenCalledWith(expect.any(Object))
       expect(effect.mock.calls.map(([, label]) => label)).toEqual([
         'dsh-plugin-desktop: ClawClaw page identity',
         'dsh-plugin-desktop: market integration dictionaries',

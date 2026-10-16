@@ -24,6 +24,7 @@ import type { DesktopSkillBundleFile } from '../skills-contract.ts'
 import { zh } from './skills-locales.ts'
 import { SettingsIconButton, SettingsToggle } from './settings-controls.tsx'
 import { requestDesktopDirectory } from './directory-picker.ts'
+import { DirectoryPickerDialog, type DirectoryPickerLocaleKey, type DirectoryPickerServices } from './workspace-directory-flow.tsx'
 
 export interface SkillsSettingsSectionInjected {
   readonly api: DesktopSkillsApi
@@ -33,6 +34,8 @@ export interface SkillsSettingsSectionInjected {
   readonly onCatalogChange?: () => void
   readonly onScopeApiChange?: (api: DesktopSkillsApi) => void
   readonly expertUsage?: ReadonlyMap<string, number>
+  readonly directoryPicker?: DirectoryPickerServices
+  readonly directoryT?: (key: DirectoryPickerLocaleKey) => string
 }
 export type SkillsSettingsSectionProps = PropsRuntime<'settings.section'>
   & PropsLocale<'desktop.skills'> & InjectFace<SkillsSettingsSectionInjected>
@@ -43,7 +46,7 @@ const canRecycle = (skill: DesktopSkillView): boolean => skill.editable
   && (skill.source === 'user-dsh' || skill.source === 'custom') && skill.provider === 'filesystem'
 const canBrowseFiles = (skill: DesktopSkillView): boolean => ['filesystem', 'clawclaw-project-filesystem'].includes(skill.provider)
 
-export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initialSessionId, onSummary, onCatalogChange, onScopeApiChange, expertUsage }: SkillsSettingsSectionProps) {
+export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initialSessionId, onSummary, onCatalogChange, onScopeApiChange, expertUsage, directoryPicker, directoryT }: SkillsSettingsSectionProps) {
   const id = useId()
   const [preset, setPreset] = useState<string>()
   const [presets, setPresets] = useState<readonly { id: string, name: string }[]>([])
@@ -55,6 +58,7 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
   const [sourceFilter, setSourceFilter] = useState('')
   const [groupExpansion, setGroupExpansion] = useState<ReadonlyMap<string, boolean>>(() => new Map())
   const [directoriesOpen, setDirectoriesOpen] = useState(false)
+  const [directoryPickerOpen, setDirectoryPickerOpen] = useState(false)
   const [detailTab, setDetailTab] = useState<'overview' | 'files'>('overview')
   const scopedApi = (selection: string, selectedPreset?: string): DesktopSkillsApi => selection.startsWith('session:')
     ? baseApi.forScope({ sessionId: selection.slice(8) }).forPreset()
@@ -93,6 +97,7 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
   const returnFocus = useRef<HTMLElement | null>(null)
   const tabs = useRef<Array<HTMLButtonElement | null>>([])
   const modalOpen = detail !== undefined || draft !== undefined || importOpen || purgeTarget !== undefined
+  const anyModalOpen = modalOpen || directoryPickerOpen
   const disabled = loading || busy !== undefined
   useEffect(() => { onSummary?.({ total: skills.length, available: skills.filter(skill => skill.modelInvocable).length }) }, [onSummary, skills])
 
@@ -133,7 +138,7 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
   }
   useEffect(() => { void load(); return () => { readEpoch.current++ } }, [])
   useEffect(() => {
-    if (modalOpen) return
+    if (anyModalOpen) return
     // No spinner or draft replacement while Agent installs change the catalog.
     const refresh = () => { if (document.visibilityState !== 'hidden') void load(true) }
     const timer = window.setInterval(refresh, 5000)
@@ -143,7 +148,7 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
       window.clearInterval(timer); window.removeEventListener('focus', refresh)
       document.removeEventListener('visibilitychange', refresh); readEpoch.current++
     }
-  }, [api, modalOpen])
+  }, [api, anyModalOpen])
   useEffect(() => {
     if (!modalOpen) return
     const dialog = modalBody.current?.closest<HTMLElement>('[role="dialog"]')
@@ -281,12 +286,17 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
       <section className="dshSkillsDirectories" data-open={directoriesOpen} aria-label={t('skillLocations')}>
         <header><div><button type="button" className="dshSkillsDirectoryToggle" aria-label={t('skillLocations')} aria-expanded={directoriesOpen} onClick={() => { setDirectoriesOpen(open => !open) }}><IconChevronDownOutlineMedium /><span>{t('skillLocations')}</span><small>{directoryCount}</small></button>
           {directoriesOpen && <p>{t(view === 'library' ? 'directoriesHint' : 'recycleDirectoryHint')}</p>}</div>
-          {view === 'library' && <button type="button" className="dshIntegrationsCommand" disabled={disabled || scanPaths.length >= 32} onClick={() => {
+          {view === 'library' && <button type="button" className="dshIntegrationsCommand" disabled={disabled || scanPaths.length >= 32} onClick={event => {
+            if (directoryPicker !== undefined && directoryT !== undefined) {
+              returnFocus.current = event.currentTarget
+              setDirectoryPickerOpen(true)
+              return
+            }
             void run('add-scan-path', async () => {
               const path = await requestDesktopDirectory()
               if (path !== null) { await baseApi.addScanPath(path); applyView(await api.readView()); setDirectoriesOpen(true) }
             })
-          }}><FolderPlus />{t('addScanPath')}</button>}</header>
+          }}><FolderPlus aria-hidden="true" />{t('addScanPath')}</button>}</header>
         {directoriesOpen && <ul>
           {locations !== undefined && <li><div><span className="dshSkillsDirectoryName">{t(view === 'recycle' ? 'recycleBin' : 'userLibraryPath')}</span><small>{t('directoryManaged')}</small><code title={view === 'recycle' ? locations.recycleBin : locations.userLibrary}>{view === 'recycle' ? locations.recycleBin : locations.userLibrary}</code></div></li>}
           {view === 'library' && locations?.projectLibrary !== undefined && <li><div><span className="dshSkillsDirectoryName">{t('projectSkillDirectory')}</span><small>{t('directoryAutomatic')}</small><code title={locations.projectLibrary}>{locations.projectLibrary}</code></div></li>}
@@ -369,6 +379,25 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
         </li>)}{filteredRecycled.length === 0 && <li className="dshSkillsEmpty">{t(recycled.length === 0 ? 'recycleEmpty' : 'noMatches')}</li>}</ul>}
       </div>
     </section>
+
+    {directoryPicker !== undefined && directoryT !== undefined && <DirectoryPickerDialog
+      open={directoryPickerOpen}
+      busy={busy === 'add-scan-path'}
+      title={t('addScanPath')}
+      startPath={() => locations?.cwd}
+      t={directoryT}
+      {...directoryPicker}
+      onCancel={() => { setDirectoryPickerOpen(false) }}
+      onError={message => { setError(message) }}
+      onPicked={path => {
+        setDirectoryPickerOpen(false)
+        void run('add-scan-path', async () => {
+          await baseApi.addScanPath(path)
+          applyView(await api.readView())
+          setDirectoriesOpen(true)
+        })
+      }}
+    />}
 
     <Modal open={modalOpen} title={title} closeLabel={t('close')} onClose={requestClose} className={`dshSkillsDialog${detail !== undefined && detailTab === 'files' ? ' dshSkillsFileDialog' : ''}`} contentClassName="dshSkillsDialogContent"
       footer={<div className="dshSkillsDialogFooter">

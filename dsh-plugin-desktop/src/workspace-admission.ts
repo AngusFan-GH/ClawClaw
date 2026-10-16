@@ -91,6 +91,7 @@ export class ElectronWorkspaceAdmission {
   private async showDirectoryPicker(options?: DesktopDirectoryPickerOptions): Promise<string | null> {
     const result = await this.options.showOpenDialog({
       title: this.options.locale() === 'zh' ? '选择工作区目录' : 'Select Workspace Directory',
+      ...(options?.defaultPath ? { defaultPath: options.defaultPath } : {}),
       properties: ['openDirectory', 'dontAddToRecent', ...(options?.showHiddenFiles ? ['showHiddenFiles' as const] : [])],
     })
     return result.canceled ? null : result.filePaths[0] ?? null

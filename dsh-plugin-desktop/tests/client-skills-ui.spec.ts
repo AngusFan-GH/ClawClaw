@@ -5,11 +5,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SkillsSettingsSection, type SkillsSettingsSectionProps } from '../src/client/SkillsSettingsSection.tsx'
 import type { DesktopSkillsApi } from '../src/client/skills-api.ts'
 import { zh } from '../src/client/skills-locales.ts'
+import type { DirectoryPickerServices } from '../src/client/workspace-directory-flow.tsx'
+import type { DirectoryListing } from '@deepseek-ai/dsh-host-directory-picker/types'
 
 let root: Root | undefined
 const skill = { name: 'review', description: 'Review code', source: 'user-dsh', provider: 'filesystem', editable: true, modelInvocable: true, userInvocable: true }
 const view = { skills: [skill], recycled: [{ id: 'deleted-id', name: 'removed', deletedAt: '2026-09-21T00:00:00Z' }] }
-async function mount(overrides: Partial<typeof skill> = {}, options: { initialSessionId?: string; embedded?: boolean; configure?: (api: DesktopSkillsApi) => void } = {}) {
+async function mount(overrides: Partial<typeof skill> = {}, options: { initialSessionId?: string; embedded?: boolean; configure?: (api: DesktopSkillsApi) => void; directoryPicker?: DirectoryPickerServices } = {}) {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   const current = { ...skill, ...overrides }
   const api: DesktopSkillsApi = {
@@ -24,7 +26,7 @@ async function mount(overrides: Partial<typeof skill> = {}, options: { initialSe
   }
   options.configure?.(api)
   const container = document.createElement('div'); document.body.append(container); root = createRoot(container)
-  await act(async () => { root!.render(createElement(SkillsSettingsSection, { api, embedded: options.embedded, ...(options.initialSessionId === undefined ? {} : { initialSessionId: options.initialSessionId }), t: (key: keyof typeof zh) => zh[key] } as SkillsSettingsSectionProps)) })
+  await act(async () => { root!.render(createElement(SkillsSettingsSection, { api, embedded: options.embedded, ...(options.initialSessionId === undefined ? {} : { initialSessionId: options.initialSessionId }), ...(options.directoryPicker === undefined ? {} : { directoryPicker: options.directoryPicker, directoryT: (key: string) => ({ title: '选择工作区目录', home: '主目录', path: '目录路径', directPath: '直接输入路径', pathHint: '支持绝对路径', go: '前往', native: '使用系统选择器', create: '新建文件夹', name: '文件夹名称', save: '创建', cancel: '取消', select: '选择此目录', hidden: '显示隐藏文件夹', loading: '加载中', empty: '此目录中没有子文件夹', truncated: '仅显示部分目录', retry: '重试' } as Record<string, string>)[key]! }), t: (key: keyof typeof zh) => zh[key] } as SkillsSettingsSectionProps)) })
   return api
 }
 function button(text: string): HTMLButtonElement {
@@ -63,6 +65,27 @@ describe('Skills catalog UI', () => {
     await click(`${zh.removeScanPath}: /opt/team-skills`)
     expect(api.removeScanPath).toHaveBeenCalledWith('/opt/team-skills')
     expect(document.body.textContent).toContain(zh.noScanPaths)
+  })
+  it('uses the shared directory dialog when the Host browser is available', async () => {
+    const listing = (path = '/work'): DirectoryListing => ({
+      path, home: '/work', truncated: false,
+      crumbs: [{ name: 'work', path: '/work', hidden: false }, ...(path === '/work' ? [] : [{ name: 'skills', path, hidden: false }])],
+      entries: path === '/work' ? [{ name: 'skills', path: '/work/skills', hidden: false }] : [],
+    })
+    const directoryPicker: DirectoryPickerServices = {
+      listDirectory: vi.fn(async path => listing(path)),
+      createDirectory: vi.fn(async (path, name) => `${path}/${name}`),
+    }
+    const api = await mount({}, { directoryPicker, configure: api => {
+      vi.mocked(api.readView).mockResolvedValue({ ...view, locations: { userLibrary: '/data/skills', recycleBin: '/data/skills/.recycle', cwd: '/work' } })
+    } })
+    await click(zh.addScanPath)
+    expect(document.querySelector('.ccWorkspaceDirectoryPanel')).not.toBeNull()
+    expect(directoryPicker.listDirectory).toHaveBeenCalledWith('/work', expect.any(AbortSignal))
+    await click('skills')
+    await click('选择此目录')
+    expect(api.addScanPath).toHaveBeenCalledWith('/work/skills')
+    expect(document.querySelector('.ccWorkspaceDirectoryPanel')).toBeNull()
   })
   it('groups name-sorted Skills by source and narrows groups when filtered', async () => {
     await mount({}, { configure: api => { vi.mocked(api.readView).mockResolvedValue({ ...view, skills: [

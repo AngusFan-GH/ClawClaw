@@ -16,6 +16,7 @@ import { applyDesktopSettings } from './desktop-settings.ts'
 import { applyDesktopVersionRow } from './desktop-version-row.tsx'
 import { applyDefaultWorkspaceSelection } from './default-workspace-selection.ts'
 import { installDesktopDirectoryPickerBridge } from './directory-picker.ts'
+import { applyWorkspaceDirectoryFlow } from './workspace-directory-flow.tsx'
 import { parseDesktopClientEnvironment, resolveDesktopClientProductVersion } from './environment.ts'
 import { applyMcpSettings } from './mcp-settings.ts'
 import { applyLegacyAgentPresetDeleteAction } from './legacy-agent-preset-delete-action.tsx'
@@ -126,6 +127,7 @@ export function apply(ctx: ClientContext): void {
   // The Desktop-hosted browser client shares the product identity, while
   // native window services and shell effects require the Electron markers.
   applyClawClawBrand(ctx)
+  applyWorkspaceDirectoryFlow(ctx)
   applyMarketIntegration(ctx)
   applyManagedPluginManager(ctx)
   applySpiritXOnboarding(ctx)
