@@ -15,6 +15,33 @@ afterEach(async () => {
 })
 
 describe('expert capability selectors', () => {
+  it('groups the form and keeps avatar choices collapsed until requested', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    const container = document.createElement('div')
+    document.body.append(container)
+    root = createRoot(container)
+
+    await act(async () => {
+      root!.render(createElement(CustomExpertEditor, {
+        enabled: false, revision: 0, divisions: ['specialized'], remote: {} as never,
+        skillsApi: { read: async () => [] }, mcpApi: { read: async () => ({ mcpServers: [], catalog: [] }) },
+        locale: 'zh', t: (key: keyof typeof customZh) => customZh[key], onSaved: vi.fn(), onClose: vi.fn(),
+      } as never))
+      await Promise.resolve()
+    })
+
+    expect(document.querySelectorAll('.aag-custom-section')).toHaveLength(3)
+    expect(document.body.textContent).toContain('基本信息')
+    expect(document.querySelector('.aag-avatar-summary img')).not.toBeNull()
+    expect(document.querySelector('#aag-avatar-options')).toBeNull()
+    const toggle = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('更换头像'))
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false')
+
+    await act(async () => toggle?.click())
+    expect(document.querySelectorAll('#aag-avatar-options button')).toHaveLength(36)
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true')
+  })
+
   it('loads selectable Skills and MCP servers into multi-select controls', async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     const container = document.createElement('div')

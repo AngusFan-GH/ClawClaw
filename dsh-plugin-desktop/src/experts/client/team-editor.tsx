@@ -9,6 +9,7 @@ import { CategorySelect } from './category-select.js';
 import { EN_DIVISION, ZH_DIVISION } from '../names.js';
 import { TeamDialog, TeamConfirm, Avatar, teamIssue, IconPlus, IconTrash, IconRefresh, IconSearch, } from './team-shared.js';
 import { TeamDetails } from './team-ui.js';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 const PICKER_ROW = 72
 
@@ -133,7 +134,11 @@ export function TeamEditor(props: {
     const [pickerDivision, setPickerDivision] = React.useState('');
     const [confirm, setConfirm] = React.useState<'discard' | 'restore' | null>(null);
     const [preview, setPreview] = React.useState(false);
-    const patch = (next: Partial<TeamInput>) => setDraft((value) => ({ ...value, ...next }));
+    const [promptOpen, setPromptOpen] = React.useState(draft.coordinatorMode === 'custom');
+    const patch = (next: Partial<TeamInput>) => {
+        setDraft((value) => ({ ...value, ...next }));
+        setError('');
+    };
     const close = () => {
         if (busy)
             return;
@@ -154,6 +159,7 @@ export function TeamEditor(props: {
         }
         if (draft.coordinatorMode === 'custom' && (!draft.coordinatorPrompt.trim() || Array.from(draft.coordinatorPrompt).length > 12000)) {
             setError(tx("主理人提示词：请填写 1～12000 个字符。"));
+            setPromptOpen(true);
             form.current?.querySelector<HTMLElement>('[name="coordinatorPrompt"]')?.focus();
             return;
         }
@@ -216,6 +222,9 @@ export function TeamEditor(props: {
         }}>
         <div className="aag-custom-body agt-editor-scroll">
           <div className="agt-editor-fields">
+            {error && (<div className="aag-error aag-form-error" role="alert">
+                {error}
+              </div>)}
             <fieldset disabled={busy}>
               {section(tx("团队名片"), <>
                   {field(tx("团队名称"), 'name', 40)}
@@ -306,20 +315,27 @@ export function TeamEditor(props: {
                   <div className="agt-coordinator-toolbar">
                     <div className="agt-segment" role="group" aria-label={tx("主理人提示词")}>
                       <Button className={draft.coordinatorMode === 'template' ? 'agt-segment-active' : ''} aria-pressed={draft.coordinatorMode === 'template'} onClick={() => patch({ coordinatorMode: 'template' })}>{tx("团队模板")}</Button>
-                      <Button className={draft.coordinatorMode === 'custom' ? 'agt-segment-active' : ''} aria-pressed={draft.coordinatorMode === 'custom'} onClick={() => patch({
-                coordinatorMode: 'custom',
-                coordinatorPrompt: draft.coordinatorPrompt ||
-                    effectiveCoordinator(draft, locale),
-            })}>{tx("自定义")}</Button>
+                      <Button className={draft.coordinatorMode === 'custom' ? 'agt-segment-active' : ''} aria-pressed={draft.coordinatorMode === 'custom'} onClick={() => {
+                patch({
+                    coordinatorMode: 'custom',
+                    coordinatorPrompt: draft.coordinatorPrompt || effectiveCoordinator(draft, locale),
+                });
+                setPromptOpen(true);
+            }}>{tx("自定义")}</Button>
                     </div>
                     <Button className="agt-restore-template" onClick={() => setConfirm('restore')}>
                       <IconRefresh />{tx("恢复团队模板")}</Button>
                   </div>
-                  <Input.TextArea name="coordinatorPrompt" className="agt-prompt" aria-label={tx("主理人提示词正文")} readOnly={draft.coordinatorMode === 'template'} value={effectiveCoordinator(draft, locale)} onChange={(e) => patch({ coordinatorPrompt: e.target.value })}/>
-                  <p className="agt-help agt-prompt-meta"><span>{tx("目标、约束、成员分工和交付要求会自动加入，无需重复填写。")}</span><span className="agt-count">
-                      {Array.from(effectiveCoordinator(draft, locale)).length} / 12000
-                    </span>
-                  </p>
+                  <Button className="agt-prompt-toggle" aria-expanded={promptOpen} aria-controls="agt-coordinator-prompt" icon={promptOpen ? <ChevronUp size={16} strokeWidth={1.7} aria-hidden="true"/> : <ChevronDown size={16} strokeWidth={1.7} aria-hidden="true"/>} onClick={() => setPromptOpen(value => !value)}>
+                    {tx(promptOpen ? "收起主理人规则" : "查看主理人规则")}
+                  </Button>
+                  {promptOpen && <>
+                    <Input.TextArea id="agt-coordinator-prompt" name="coordinatorPrompt" className="agt-prompt" aria-label={tx("主理人提示词正文")} readOnly={draft.coordinatorMode === 'template'} value={effectiveCoordinator(draft, locale)} onChange={(e) => patch({ coordinatorPrompt: e.target.value })}/>
+                    <p className="agt-help agt-prompt-meta"><span>{tx("目标、约束、成员分工和交付要求会自动加入，无需重复填写。")}</span><span className="agt-count">
+                        {Array.from(effectiveCoordinator(draft, locale)).length} / 12000
+                      </span>
+                    </p>
+                  </>}
                 </>)}
               {section(tx("任务示例"), <>
                   <div className="agt-example-list">{draft.examples.map((example, i) => (<label key={i} className="aag-custom-field agt-example">
@@ -335,9 +351,6 @@ export function TeamEditor(props: {
                     <IconPlus />{tx("添加示例")}</Button>
                 </>)}
             </fieldset>
-            {error && (<div className="aag-error" role="alert">
-                {error}
-              </div>)}
             {needsReview && (<section className="aag-custom-review">
                 <Button disabled={busy} onClick={() => {
                 setBusy(true);
@@ -373,7 +386,7 @@ export function TeamEditor(props: {
               </section>)}{' '}
           </div>
         </div>
-        <LibraryEditorFooter editing={!!draft.id} busy={busy} blocked={needsReview} help={tx("保存配置不会发送任务。")} cancelLabel={tx("取消")} saveLabel={tx("保存")} primaryLabel={busy ? tx("正在保存…") : draft.id ? tx("保存修改") : tx("保存专家团")} close={close} save={() => void submit()} primary={() => void submit()}/>{' '}
+        <LibraryEditorFooter editing={!!draft.id} showSave={false} busy={busy} blocked={needsReview} help={tx("保存配置不会发送任务。")} cancelLabel={tx("取消")} saveLabel={tx("保存")} primaryLabel={busy ? tx("正在保存…") : draft.id ? tx("保存修改") : tx("保存专家团")} close={close} save={() => void submit()} primary={() => void submit()}/>{' '}
       </form>
       {confirm && (<TeamConfirm busy={busy} error={error} cancelLabel={confirm === 'discard' ? tx("继续编辑") : tx("取消")} title={confirm === 'discard'
                 ? tx("放弃未保存修改？") : tx("恢复团队模板？")} label={confirm === 'discard'

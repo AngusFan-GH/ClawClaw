@@ -3,6 +3,7 @@ import type { SessionId } from '@deepseek-ai/dsh-client-connection/client'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 
 export const EXPERT_MANAGER_SKILL = 'expert-manager'
+export type ExpertCreationKind = 'agent' | 'team'
 
 export type ExpertCreationConversationErrorCode =
   | 'workspaceUnavailable'
@@ -16,7 +17,12 @@ export class ExpertCreationConversationError extends Error {
   }
 }
 
-export function expertCreationDraft(locale: 'zh' | 'en'): string {
+export function expertCreationDraft(locale: 'zh' | 'en', kind: ExpertCreationKind = 'agent'): string {
+  if (kind === 'team') {
+    return locale === 'en'
+      ? '/expert-manager Help me create an [expert team name] expert team for [shared goal], including [roles and responsibilities]. Business context and shared constraints: [add details]'
+      : '/expert-manager 帮我创建一个 [专家团名称] 专家团，用于 [共同目标]，需要包含 [角色与分工]。业务背景和共同约束是：[请补充]'
+  }
   return locale === 'en'
     ? '/expert-manager Help me create a [expert name] expert specializing in [professional capabilities]. My experience is: [add your industry background and relevant experience]'
     : '/expert-manager 帮我创建一个 [专家名称] 专家，擅长 [专业能力]。我的经验是：[请补充你的行业背景、相关经验]'
@@ -50,6 +56,7 @@ interface ConversationDraftTarget {
 
 export interface ExpertCreationConversationDependencies {
   readonly locale: 'zh' | 'en'
+  readonly kind?: ExpertCreationKind
   readonly workspaceId?: WorkspaceId
   readonly sessions: {
     scope?(sessionId: SessionId): CordisClientContext | undefined
@@ -90,7 +97,7 @@ export async function openExpertCreationConversation(
     const actx = dependencies.sessions.scope?.(sessionId) ?? dependencies.sessions.binding?.(sessionId)?.ctx
     const input = actx === undefined ? undefined : dependencies.conversationFor(actx)
     if (input?.actions?.setDraft === undefined) throw new ExpertCreationConversationError('composerUnavailable')
-    input.actions.setDraft(expertCreationDraft(dependencies.locale))
+    input.actions.setDraft(expertCreationDraft(dependencies.locale, dependencies.kind))
   })
   dependencies.closeSettings()
   requestAnimationFrame(() => { dependencies.focusComposer?.() })

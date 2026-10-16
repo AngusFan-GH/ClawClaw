@@ -11,13 +11,17 @@ import { effectiveCoordinator, type ExpertTeam, type TeamInput, type TeamSnapsho
 import type { ExpertSummary } from '../expert-contract.js';
 import type { AgencyCatalogRemote, AgencyTeamsRemote } from './remote.js';
 import { TeamEditor } from './team-editor.js';
+import { CapabilityCreationDialog } from './capability-creation-dialog.js';
+import { ExpertCreationConversationError, type ExpertCreationKind } from './expert-conversation-creation.js';
 import { TeamDialog, TeamConfirm, TeamAvatars, Avatar, teamIssue, teamRepairIssue, IconUsers, IconFileText, IconBulb, IconSend, IconSearch, } from './team-shared.js';
 // @ts-expect-error package subpath has no declaration file
-import Copy from 'lucide-react/dist/esm/icons/copy.mjs';
+import CopyPlus from 'lucide-react/dist/esm/icons/copy-plus.mjs';
 // @ts-expect-error package subpath has no declaration file
 import PencilLine from 'lucide-react/dist/esm/icons/pencil-line.mjs';
 // @ts-expect-error package subpath has no declaration file
 import Trash2 from 'lucide-react/dist/esm/icons/trash-2.mjs';
+// @ts-expect-error package subpath has no declaration file
+import Plus from 'lucide-react/dist/esm/icons/plus.mjs';
 export { TEAM_CSS } from './team-style.js';
 export type TeamRemote = AgencyCatalogRemote & AgencyTeamsRemote;
 export async function unwrap<T>(promise: Promise<{
@@ -146,6 +150,7 @@ export function TeamsPanel(props: {
         enabled: number;
     }) => void;
     title?: string;
+    onCreateWithConversation?(kind: ExpertCreationKind): Promise<void>;
     onSelectTeam?(team: ExpertTeam, example?: string): boolean | Promise<boolean>;
     onCreatedTeam?(team: ExpertTeam, experts: readonly ExpertSummary[]): void;
 }) {
@@ -167,6 +172,7 @@ export function TeamsPanel(props: {
     const [error, setError] = React.useState('');
     const [notice, setNotice] = React.useState('');
     const [busy, setBusy] = React.useState(false);
+    const [creationOpen, setCreationOpen] = React.useState(false);
     const [details, setDetails] = React.useState<ExpertTeam | null>(null);
     const [editor, setEditor] = React.useState<{
         value?: TeamInput;
@@ -327,7 +333,7 @@ export function TeamsPanel(props: {
           </div>
         </div>
         <div className="aag-filter-actions">
-          <Button type="primary" disabled={!snapshot || busy} onClick={() => setEditor({ revision: snapshot!.revision })}>{tx("新建专家团")}</Button>
+          <Button type="primary" icon={<Plus size={17} strokeWidth={1.7} aria-hidden="true"/>} disabled={!snapshot || busy} onClick={() => setCreationOpen(true)}>{tx("新建专家团")}</Button>
         </div>
       </div>
       {error && (<div className="aag-error" role="alert">
@@ -353,11 +359,11 @@ export function TeamsPanel(props: {
                   <button type="button" className={`aag-card-action aag-card-action-primary aag-team-summon${recalled ? ' is-active' : ''}`} disabled={busy || recalled || !validMembers} title={tx("召唤团队成员")} aria-label={tx("召唤团队成员")} aria-pressed={recalled} onClick={() => void summon(team)}>
                     <IconUsers size={18}/>{tx("召唤")}</button>
                   <button type="button" className="aag-card-action aag-team-copy" disabled={busy} onClick={() => copy(team)}>
-                    <Copy size={17} aria-hidden="true"/>{tx("复制")}</button>
+                    <CopyPlus size={17} strokeWidth={1.7} aria-hidden="true"/>{tx("复制")}</button>
                   {!team.builtin && <button type="button" className="aag-card-action aag-team-edit" disabled={busy} onClick={() => edit(team)}>
-                    <PencilLine size={17} aria-hidden="true"/>{tx("编辑")}</button>}
+                    <PencilLine size={17} strokeWidth={1.7} aria-hidden="true"/>{tx("编辑")}</button>}
                   {isDeletableTeam(team) && <button type="button" className="aag-card-action aag-card-action-danger aag-team-delete" disabled={busy} onClick={() => void change(team, 'delete')}>
-                    <Trash2 size={17} aria-hidden="true"/>{tx("删除")}</button>}
+                    <Trash2 size={17} strokeWidth={1.7} aria-hidden="true"/>{tx("删除")}</button>}
                 </>}/>);
         })}
       </div>{' '}
@@ -379,6 +385,25 @@ export function TeamsPanel(props: {
                     setDetails(null);
                 }
                 : undefined} onDelete={isDeletableTeam(details) ? () => void change(details, 'delete') : undefined}/>)}
+      <CapabilityCreationDialog open={creationOpen} copy={{
+            title: tx("新建专家团"),
+            hint: tx("选择创建方式，稍后仍可继续编辑和完善专家团。"),
+            manual: tx("手动创建"),
+            manualHint: tx("创建本地专家团配置，直接填写团队目标、成员和分工。"),
+            conversation: tx("通过对话创建"),
+            conversationHint: tx("让 expert-manager 通过提问梳理并生成完整专家团包。"),
+            conversationBusy: tx("正在打开对话…"),
+            cancel: tx("取消"),
+        }} onClose={() => setCreationOpen(false)} onManual={() => setEditor({ revision: snapshot!.revision })}
+        onConversation={props.onCreateWithConversation === undefined ? undefined : () => props.onCreateWithConversation!('team')}
+        errorMessage={(cause) => {
+            if (cause instanceof ExpertCreationConversationError) {
+                return cause.code === 'workspaceUnavailable'
+                    ? tx("当前没有可用的工作区，请先创建或打开工作区。")
+                    : tx("无法准备新对话的输入框，请重试。");
+            }
+            return cause instanceof Error ? cause.message : String(cause);
+        }}/>
       {editor && (<TeamEditor initial={editor.value} experts={experts} enabledExperts={snapshot!.enabledExperts} close={() => setEditor(null)} refresh={async () => {
                 const latest = await unwrap(props.remote.getTeams());
                 accept(latest);

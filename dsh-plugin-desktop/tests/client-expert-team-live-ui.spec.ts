@@ -7,6 +7,7 @@ import { ExpertCardsSettings } from '../src/experts/client/index.ts'
 import { acceptTeamSnapshot } from '../src/experts/client/team-cache.ts'
 import { TeamLocaleContext } from '../src/experts/client/team-locale.ts'
 import { isDeletableTeam, TeamsPanel, type TeamRemote } from '../src/experts/client/team-ui.tsx'
+import { TeamEditor } from '../src/experts/client/team-editor.tsx'
 import { customZh } from '../src/experts/client/custom-locales.ts'
 
 const expert = {
@@ -60,6 +61,8 @@ describe('expert team live UI state', () => {
     } as unknown as React.ComponentProps<typeof ExpertCardsSettings>)))
 
     const create = [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '新建专家')
+    expect(create?.querySelector('.lucide-plus')).not.toBeNull()
+    expect(host.querySelector('.aag-expert-primary-action .lucide-copy-plus')).not.toBeNull()
     await act(async () => create?.click())
     expect(document.body.textContent).toContain('手动创建')
     expect(document.body.textContent).toContain('通过对话创建')
@@ -67,7 +70,70 @@ describe('expert team live UI state', () => {
     const conversation = [...document.body.querySelectorAll<HTMLButtonElement>('button')]
       .find(button => button.textContent?.includes('通过对话创建'))
     await act(async () => { conversation?.click(); await Promise.resolve() })
-    expect(onCreateWithConversation).toHaveBeenCalledOnce()
+    expect(onCreateWithConversation).toHaveBeenCalledExactlyOnceWith('agent')
+  })
+
+  it('offers manual and conversation paths before creating a team', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    const snapshot = { teams: [], enabledExperts: ['reviewer'], revision: 1 }
+    const remote = {
+      getTeams: vi.fn(async () => ({ ok: true, value: snapshot })),
+      getCatalog: vi.fn(async () => ({ ok: true, value: { experts: [expert], enabled: snapshot.enabledExperts, revision: 1 } })),
+    } as unknown as TeamRemote
+    const onCreateWithConversation = vi.fn(async () => {})
+    acceptCatalog(remote, { experts: [expert], enabled: snapshot.enabledExperts, revision: 1 })
+    acceptTeamSnapshot(remote, snapshot)
+    const host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+
+    await act(async () => {
+      root!.render(React.createElement(TeamLocaleContext.Provider, { value: 'zh' },
+        React.createElement(TeamsPanel, { remote, sharedHeader: true, onCreateWithConversation })))
+      await Promise.resolve()
+    })
+
+    const create = [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '新建专家团')
+    expect(create?.querySelector('.lucide-plus')).not.toBeNull()
+    await act(async () => create?.click())
+    expect(document.body.textContent).toContain('手动创建')
+    expect(document.body.textContent).toContain('通过对话创建')
+    expect(document.body.textContent).toContain('创建本地专家团配置，直接填写团队目标、成员和分工。')
+    expect(document.body.textContent).toContain('生成完整专家团包')
+
+    const conversation = [...document.body.querySelectorAll<HTMLButtonElement>('button')]
+      .find(button => button.textContent?.includes('通过对话创建'))
+    await act(async () => { conversation?.click(); await Promise.resolve() })
+    expect(onCreateWithConversation).toHaveBeenCalledExactlyOnceWith('team')
+  })
+
+  it('keeps team creation compact with one submit action and progressive coordinator rules', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    const host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+
+    await act(async () => root!.render(React.createElement(TeamLocaleContext.Provider, { value: 'zh' },
+      React.createElement(TeamEditor, {
+        experts: [expert], enabledExperts: ['reviewer'], save: vi.fn(async () => {}), close: vi.fn(),
+        refresh: vi.fn(async () => ({ teams: [], enabledExperts: ['reviewer'], revision: 1 })),
+      }))))
+
+    expect(document.querySelector('[aria-label="主理人提示词正文"]')).toBeNull()
+    const footerButtons = [...document.querySelectorAll<HTMLButtonElement>('.aag-custom-footer button')]
+    expect(footerButtons).toHaveLength(2)
+    expect(footerButtons.at(-1)?.textContent).toBe('保存专家团')
+    expect(footerButtons.some(button => button.textContent === '保存')).toBe(false)
+    const viewRules = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('查看主理人规则'))
+    expect(viewRules?.querySelector('.lucide-chevron-down')).not.toBeNull()
+    await act(async () => viewRules?.click())
+    expect(document.querySelector('[aria-label="主理人提示词正文"]')).not.toBeNull()
+
+    const custom = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '自定义')
+    await act(async () => custom?.click())
+    expect(document.querySelector<HTMLTextAreaElement>('[aria-label="主理人提示词正文"]')?.readOnly).toBe(false)
   })
 
   it('opens a team example in the current conversation without summoning from settings', async () => {
@@ -109,6 +175,7 @@ describe('expert team live UI state', () => {
     expect(details).not.toBeNull()
     expect(host.querySelector('.aag-card-more-trigger')).toBeNull()
     expect(host.querySelector<HTMLButtonElement>('.aag-team-copy')?.textContent).toBe('复制')
+    expect(host.querySelector('.aag-team-copy .lucide-copy-plus')).not.toBeNull()
     const summon = host.querySelector<HTMLButtonElement>('.aag-team-summon')
     expect(summon?.textContent).toBe('召唤')
     expect(summon?.classList.contains('is-active')).toBe(true)

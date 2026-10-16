@@ -1,5 +1,5 @@
 // @ts-nocheck -- ported client compatibility layer; host contracts remain strictly checked.
-import { AntdProvider, Button, Drawer, Input, Modal } from './antd-ui.js'
+import { AntdProvider, Button, Drawer, Input } from './antd-ui.js'
 import { antdLocale } from './antd-locale.js'
 import { LibraryCard } from './library-ui.js'
 import type { AgencyTeamsRemote } from './remote.js'
@@ -47,7 +47,8 @@ import { expertCapabilityHealth, type ExpertCapabilityHealth } from './capabilit
 import { SkillsSettingsSection } from '../../client/SkillsSettingsSection.js'
 import { desktopDirectoryPickerServices } from '../../client/workspace-directory-flow.js'
 import { McpSettingsSection } from '../../client/McpSettingsSection.js'
-import { ExpertCreationConversationError, expertCreationWorkspaceId, openCapabilityConversation as openPreparedCapabilityConversation, openExpertCreationConversation } from './expert-conversation-creation.js'
+import { ExpertCreationConversationError, expertCreationWorkspaceId, openCapabilityConversation as openPreparedCapabilityConversation, openExpertCreationConversation, type ExpertCreationKind } from './expert-conversation-creation.js'
+import { CapabilityCreationDialog } from './capability-creation-dialog.js'
 import { applyCapabilitySidebar, CAPABILITY_SIDEBAR_CSS, openCapabilitySidebar } from './capability-sidebar.js'
 import { CreationRunGate, observeCreationRun, type RunningSessionSource } from './creation-run-gate.js'
 import type { ISidebarRight } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
@@ -60,13 +61,13 @@ import Wrench from 'lucide-react/dist/esm/icons/wrench.mjs'
 // @ts-expect-error package subpath has no declaration file
 import PlugZap from 'lucide-react/dist/esm/icons/plug-zap.mjs'
 // @ts-expect-error package subpath has no declaration file
-import MessageSquare from 'lucide-react/dist/esm/icons/message-square.mjs'
-// @ts-expect-error package subpath has no declaration file
 import PencilLine from 'lucide-react/dist/esm/icons/pencil-line.mjs'
 // @ts-expect-error package subpath has no declaration file
 import CopyPlus from 'lucide-react/dist/esm/icons/copy-plus.mjs'
 // @ts-expect-error package subpath has no declaration file
 import Trash2 from 'lucide-react/dist/esm/icons/trash-2.mjs'
+// @ts-expect-error package subpath has no declaration file
+import Plus from 'lucide-react/dist/esm/icons/plus.mjs'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -1190,7 +1191,7 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
   onEnabledChange?: (enabled: ReadonlySet<string>) => void
   capabilityRegistry: ExpertCapabilityRegistry
   onOpenConnectors?: () => void
-  onCreateWithConversation?: () => Promise<void>
+  onCreateWithConversation?: (kind: ExpertCreationKind) => Promise<void>
   onCreatedExpert?: (expert: ExpertView) => void
 }): React.ReactElement {
   const subscribe = React.useCallback((listener: () => void) => subscribeCatalog(props.remote, listener), [props.remote])
@@ -1218,8 +1219,6 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
   const [deleteError, setDeleteError] = React.useState<string | null>(null)
   const [notice, setNotice] = React.useState<string | null>(null)
   const [creationOpen, setCreationOpen] = React.useState(false)
-  const [creationBusy, setCreationBusy] = React.useState(false)
-  const [creationError, setCreationError] = React.useState<string | null>(null)
   const capabilitySnapshot = React.useSyncExternalStore(props.capabilityRegistry.subscribe, props.capabilityRegistry.getSnapshot)
 
   const accept = (catalog: CatalogSnapshot): void => {
@@ -1254,21 +1253,7 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
   }
   const openCreation = (): void => {
     if (state === null || isSaving || promptLock.current) return
-    setCreationError(null)
     setCreationOpen(true)
-  }
-  const createWithConversation = (): void => {
-    if (props.onCreateWithConversation === undefined || creationBusy) return
-    setCreationBusy(true)
-    setCreationError(null)
-    void props.onCreateWithConversation().then(() => {
-      setCreationOpen(false)
-    }).catch((cause: unknown) => {
-      const key = cause instanceof ExpertCreationConversationError
-        ? `custom.create${cause.code[0]!.toUpperCase()}${cause.code.slice(1)}`
-        : undefined
-      setCreationError(key === undefined ? (cause instanceof Error ? cause.message : String(cause)) : props.t(key as AgencyKey))
-    }).finally(() => { setCreationBusy(false) })
   }
   const removeExpert = (slug: string): void => {
     if (state === null || saving.current) return
@@ -1382,7 +1367,7 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
           props.t('summary.enabledPrefix'),
           React.createElement('strong', null, enabledCount)))))
     const filterActions = React.createElement('div', { className: 'aag-filter-actions' },
-      React.createElement(Button, { type: 'primary', disabled: isSaving, onClick: openCreation }, props.t('custom.new')))
+      React.createElement(Button, { type: 'primary', icon: React.createElement(Plus, { size: 17, strokeWidth: 1.7, 'aria-hidden': true }), disabled: isSaving, onClick: openCreation }, props.t('custom.new')))
     if (notice !== null) nodes.push(React.createElement('div', { key: 'notice', className: 'aag-custom-notice', role: 'status' },
       React.createElement('span', null, notice),
       React.createElement(Button, {
@@ -1469,22 +1454,24 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
     }
   }
   return React.createElement('section', { className: 'aag-section', id: 'aag-expert-source-panel' }, nodes,
-    React.createElement(Modal, {
-      open: creationOpen, title: props.t('custom.createTitle'), footer: null, centered: true,
-      width: 560, destroyOnHidden: true, closable: !creationBusy, maskClosable: !creationBusy,
-      onCancel: () => { if (!creationBusy) setCreationOpen(false) },
-    }, React.createElement('div', { className: 'aag-create-expert' },
-      React.createElement('p', { className: 'aag-create-expert-hint' }, props.t('custom.createHint')),
-      creationError === null ? null : React.createElement('div', { className: 'aag-error', role: 'alert' }, creationError),
-      React.createElement('div', { className: 'aag-create-expert-options' },
-        React.createElement('button', { type: 'button', disabled: creationBusy, onClick: () => { setCreationOpen(false); openEditor() } },
-          React.createElement(PencilLine, { size: 22, strokeWidth: 1.7, 'aria-hidden': true }),
-          React.createElement('span', null, React.createElement('strong', null, props.t('custom.createManual')), React.createElement('small', null, props.t('custom.createManualHint')))),
-        React.createElement('button', { type: 'button', disabled: creationBusy || props.onCreateWithConversation === undefined, onClick: createWithConversation },
-          React.createElement(MessageSquare, { size: 22, strokeWidth: 1.7, 'aria-hidden': true }),
-          React.createElement('span', null, React.createElement('strong', null, creationBusy ? props.t('custom.createConversationBusy') : props.t('custom.createConversation')), React.createElement('small', null, props.t('custom.createConversationHint'))))),
-      React.createElement('div', { className: 'aag-create-expert-footer' },
-        React.createElement(Button, { disabled: creationBusy, onClick: () => setCreationOpen(false) }, props.t('custom.createCancel'))))),
+    React.createElement(CapabilityCreationDialog, {
+      open: creationOpen,
+      copy: {
+        title: props.t('custom.createTitle'), hint: props.t('custom.createHint'),
+        manual: props.t('custom.createManual'), manualHint: props.t('custom.createManualHint'),
+        conversation: props.t('custom.createConversation'), conversationHint: props.t('custom.createConversationHint'),
+        conversationBusy: props.t('custom.createConversationBusy'), cancel: props.t('custom.createCancel'),
+      },
+      onClose: () => setCreationOpen(false),
+      onManual: openEditor,
+      onConversation: props.onCreateWithConversation === undefined ? undefined : () => props.onCreateWithConversation!('agent'),
+      errorMessage: (cause: unknown) => {
+        const key = cause instanceof ExpertCreationConversationError
+          ? `custom.create${cause.code[0]!.toUpperCase()}${cause.code.slice(1)}`
+          : undefined
+        return key === undefined ? (cause instanceof Error ? cause.message : String(cause)) : props.t(key as AgencyKey)
+      },
+    }),
     editor === null || state === null ? null : React.createElement(CustomExpertEditor, {
       ...editor, remote: props.remote, t: props.t, locale: props.getActive(), capabilityRegistry: props.capabilityRegistry,
       divisions: [...new Set([...Object.keys(ZH_DIVISION), ...state.experts.map(expert => expert.division)])],
@@ -1585,6 +1572,7 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
       React.createElement('div', { className: 'aag-library-panel', id: 'aag-library-panel-teams', role: 'tabpanel', 'aria-labelledby': 'aag-library-tab-teams', hidden: view !== 'teams' }, React.createElement(TeamLocaleContext.Provider, { value: props.getActive() }, React.createElement(TeamsPanel, {
         remote: props.remote as TeamRemote, sharedHeader: true,
         onOpenConnectors: () => setView('mcp'),
+        onCreateWithConversation: props.onCreateWithConversation,
         onSelectTeam: props.onSelectTeam,
         onCreatedTeam: props.onCreatedTeam,
         onExpertsChanged: () => { void readEnabled(props.remote).then(value => props.onEnabledChange?.(value.enabled)) },
@@ -1942,7 +1930,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
       const directoryPicker = settingsUiWorkspace?.listDirectory === undefined || settingsUiWorkspace?.createDirectory === undefined
         ? undefined
         : desktopDirectoryPickerServices(settingsUiWorkspace)
-      const onCreateWithConversation = async (): Promise<void> => {
+      const onCreateWithConversation = async (kind: ExpertCreationKind): Promise<void> => {
         const pending = watchCreatedCapability()
         const workspaces = ctx.get('workspaces') as { list?: { getSnapshot(): Parameters<typeof expertCreationWorkspaceId>[0] } } | undefined
         const uiWorkspace = ctx.get('uiWorkspace') as { openWorkspace?: (id: Parameters<typeof openExpertCreationConversation>[0]['workspaceId'], beforeOpen: (sessionId: SessionId) => void) => Promise<void> } | undefined
@@ -1950,7 +1938,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
           ? undefined
           : expertCreationWorkspaceId(workspaces.list.getSnapshot(), resolveTargetSessionId(ctx.sessions as unknown as ReferenceSessionAccess))
         await openExpertCreationConversation({
-          locale: getActive(), workspaceId,
+          locale: getActive(), kind, workspaceId,
           sessions: ctx.sessions as unknown as ReferenceSessionAccess,
           conversationFor: actx => (actx.get('conversation') as ReferenceConversationAccess | undefined)?.input.for(actx) as unknown as { actions?: { setDraft(text: string): void } } | undefined,
           openWorkspace: (id, beforeOpen) => {

@@ -58,6 +58,7 @@ button[data-aag-team-reference="legacy"]{opacity:1!important;cursor:default!impo
 .agt-section{border-bottom:1px solid var(--dsw-alias-border-l2);padding:0 0 20px;margin-bottom:20px}
 .agt-section:last-child{border:0;margin-bottom:0}
 .agt-editor .agt-prompt.ant-input{display:block;width:100%;min-height:300px;margin:12px 0 8px;padding:10px 12px;resize:vertical;font-size:13px;line-height:1.6}
+.agt-prompt-toggle.ant-btn{margin-top:12px}
 .agt-coordinator-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .agt-segment{display:inline-flex;align-items:center;gap:2px;padding:3px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-2)}
 .agt-segment .ant-btn{height:30px;padding-inline:12px;border:0;border-radius:5px;background:transparent;color:var(--dsw-alias-label-secondary);box-shadow:none}

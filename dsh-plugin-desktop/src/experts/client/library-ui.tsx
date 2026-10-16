@@ -9,6 +9,7 @@ export function LibraryEditorFooter(props: {
   editing: boolean
   busy: boolean
   blocked?: boolean
+  showSave?: boolean
   help: string
   cancelLabel: string
   saveLabel: string
@@ -26,7 +27,7 @@ export function LibraryEditorFooter(props: {
       <p className="aag-note">{props.help}</p>
       <div>
         <Button disabled={props.busy} onClick={props.close}>{props.cancelLabel}</Button>
-        {!props.editing && (
+        {!props.editing && props.showSave !== false && (
           <Button disabled={props.busy || props.blocked} onClick={props.save}>{props.saveLabel}</Button>
         )}
         <Button type="primary" disabled={props.busy || props.blocked} onClick={props.primary}>{props.primaryLabel}</Button>

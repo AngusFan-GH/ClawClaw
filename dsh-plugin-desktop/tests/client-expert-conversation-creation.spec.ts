@@ -48,6 +48,45 @@ describe('expert conversation creation', () => {
     vi.unstubAllGlobals()
   })
 
+  it('keeps Settings mounted until the new Session draft is prepared', async () => {
+    const navigation = Promise.withResolvers<void>()
+    const closeSettings = vi.fn()
+    const setDraft = vi.fn()
+    let beforeOpen: ((sessionId: string) => void) | undefined
+    const openWorkspace = vi.fn((_workspaceId, prepare: (sessionId: string) => void) => {
+      beforeOpen = prepare
+      return navigation.promise
+    })
+    vi.stubGlobal('requestAnimationFrame', vi.fn())
+
+    const opening = openExpertCreationConversation({
+      locale: 'zh', kind: 'team', workspaceId: 'workspace-1' as never,
+      sessions: { scope: () => ({} as never) },
+      conversationFor: () => ({ actions: { setDraft } }),
+      openWorkspace: openWorkspace as never,
+      closeSettings,
+    })
+
+    expect(openWorkspace).toHaveBeenCalledOnce()
+    expect(closeSettings).not.toHaveBeenCalled()
+
+    beforeOpen?.('created-session')
+    expect(setDraft).toHaveBeenCalledExactlyOnceWith(expertCreationDraft('zh', 'team'))
+    expect(closeSettings).not.toHaveBeenCalled()
+    navigation.resolve()
+    await opening
+    expect(closeSettings).toHaveBeenCalledOnce()
+    vi.unstubAllGlobals()
+  })
+
+  it('prepares distinct editable drafts for expert and team creation', () => {
+    expect(expertCreationDraft('zh', 'agent')).toContain('[专家名称] 专家')
+    expect(expertCreationDraft('zh', 'team')).toContain('[专家团名称] 专家团')
+    expect(expertCreationDraft('zh', 'team')).toContain('[角色与分工]')
+    expect(expertCreationDraft('en', 'agent')).toContain('[expert name] expert')
+    expect(expertCreationDraft('en', 'team')).toContain('[expert team name] expert team')
+  })
+
   it('keeps navigation closed when no Workspace is available', async () => {
     const openWorkspace = vi.fn()
     await expect(openExpertCreationConversation({

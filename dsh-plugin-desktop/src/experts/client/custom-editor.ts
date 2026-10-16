@@ -13,6 +13,7 @@ import { EXPERT_AVATAR_URLS } from './avatars.js'
 import { EN_DIVISION, ZH_DIVISION } from '../names.js'
 import { createDesktopSkillsApi, type DesktopSkillsApi } from '../../client/skills-api.js'
 import { createDesktopMcpApi, type DesktopMcpApi } from '../../client/mcp-api.js'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 
 import { loadEditorReview, continueEditorReview, type EditorReview } from "./editor-review.js";
 
@@ -43,6 +44,7 @@ export function CustomExpertEditor(props: CustomEditorProps): React.ReactElement
     skills: props.expert?.skills ?? [], mcpServers: props.expert?.mcpServers ?? [],
   }))
   const [draft, setDraft] = React.useState(initial)
+  const [avatarOpen, setAvatarOpen] = React.useState(false)
   const [promptOpen, setPromptOpen] = React.useState(props.loadPrompt === undefined)
   const [promptLoading, setPromptLoading] = React.useState(false)
   const promptRequest = React.useRef<Promise<string> | null>(null)
@@ -186,6 +188,8 @@ export function CustomExpertEditor(props: CustomEditorProps): React.ReactElement
     'aria-label': text, onChange: (event: React.ChangeEvent<HTMLInputElement>) => set(key, event.currentTarget.value),
     ...(key === 'name' ? { placeholder: props.t('custom.namePlaceholder') } : {}),
   })
+  const section = (title: string, children: React.ReactNode): React.ReactElement => h('section', { className: 'aag-custom-section', 'aria-label': title },
+    h('h3', null, title), h('div', { className: 'aag-custom-section-content' }, children))
   return h(Drawer, {
     open: true, keyboard: false, placement: 'right', size: 'min(560px, 100vw)', destroyOnHidden: true,
     rootClassName: 'aag-editor-drawer', styles: { body: { padding: 0 } }, title: props.t(draft.slug ? 'custom.edit' : 'custom.new'),
@@ -193,38 +197,45 @@ export function CustomExpertEditor(props: CustomEditorProps): React.ReactElement
   },
   h('form', { ref: form, className: 'aag-custom-body', onSubmit: (event: React.FormEvent) => event.preventDefault(), inert: discard ? '' : undefined },
     h('p', { className: 'aag-editor-intro' }, props.t('custom.intro')),
-    h('fieldset', { className: 'aag-custom-avatars', disabled: busy }, h('legend', null, props.t('custom.avatar')),
-      EXPERT_AVATAR_URLS.map((url, index) => h('button', {
-        key: url, type: 'button', 'aria-label': `${props.t('custom.avatar')} ${index + 1}`,
-        'aria-pressed': draft.avatar === index, className: draft.avatar === index ? 'is-selected' : '',
-        onClick: () => setDraft(current => ({ ...current, avatar: index })),
-      }, h('img', { src: url, width: 36, height: 36, alt: '', loading: 'lazy' })))),
-    label(props.t('custom.name'), input('name', props.t('custom.name'), 40), true),
-    label(props.t('custom.description'), h(Input.TextArea, {
-      value: draft.description, rows: 2, maxLength: 160, required: true, disabled: busy,
-      'aria-label': props.t('custom.description'), placeholder: props.t('custom.descriptionPlaceholder'),
-      onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => set('description', event.currentTarget.value),
-    }), true),
-    h('div', { className: 'aag-custom-field' },
-      h('label', { htmlFor: 'aag-custom-division' }, props.t('custom.division')),
-      h(CategorySelect, {
-        id: 'aag-custom-division', value: draft.division, disabled: busy, label: props.t('custom.division'),
-        onChange: (value: string) => set('division', value),
-        options: props.divisions.map(division => ({ value: division, label: (props.locale === 'en' ? EN_DIVISION : ZH_DIVISION)[division] ?? division })),
-      })),
-    h('div', { className: 'aag-custom-prompt-head' }, h('label', { htmlFor: 'aag-custom-prompt' }, props.t('custom.prompt')),
+    error === null ? null : h('div', { className: 'aag-error aag-form-error', role: 'alert' }, error),
+    section(props.t('custom.section.basic'), h(React.Fragment, null,
+      h('div', { className: 'aag-avatar-summary' },
+        h('img', { src: EXPERT_AVATAR_URLS[draft.avatar] ?? EXPERT_AVATAR_URLS[0], width: 48, height: 48, alt: '' }),
+        h(Button, { disabled: busy, onClick: () => setAvatarOpen(value => !value), 'aria-expanded': avatarOpen, 'aria-controls': 'aag-avatar-options',
+          icon: h(avatarOpen ? ChevronUp : ChevronDown, { size: 16, strokeWidth: 1.7, 'aria-hidden': true }) }, props.t(avatarOpen ? 'custom.hideAvatars' : 'custom.changeAvatar'))),
+      avatarOpen ? h('fieldset', { id: 'aag-avatar-options', className: 'aag-custom-avatars', disabled: busy }, h('legend', null, props.t('custom.avatar')),
+        EXPERT_AVATAR_URLS.map((url, index) => h('button', {
+          key: url, type: 'button', 'aria-label': `${props.t('custom.avatar')} ${index + 1}`,
+          'aria-pressed': draft.avatar === index, className: draft.avatar === index ? 'is-selected' : '',
+          onClick: () => setDraft(current => ({ ...current, avatar: index })),
+        }, h('img', { src: url, width: 36, height: 36, alt: '', loading: 'lazy' })))) : null,
+      label(props.t('custom.name'), input('name', props.t('custom.name'), 40), true),
+      label(props.t('custom.description'), h(Input.TextArea, {
+        value: draft.description, rows: 2, maxLength: 160, required: true, disabled: busy,
+        'aria-label': props.t('custom.description'), placeholder: props.t('custom.descriptionPlaceholder'),
+        onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => set('description', event.currentTarget.value),
+      }), true),
+      h('div', { className: 'aag-custom-field' },
+        h('label', { htmlFor: 'aag-custom-division' }, props.t('custom.division')),
+        h(CategorySelect, {
+          id: 'aag-custom-division', value: draft.division, disabled: busy, label: props.t('custom.division'),
+          onChange: (value: string) => set('division', value),
+          options: props.divisions.map(division => ({ value: division, label: (props.locale === 'en' ? EN_DIVISION : ZH_DIVISION)[division] ?? division })),
+        })))),
+    section(props.t('custom.section.behavior'), h(React.Fragment, null,
+      h('div', { className: 'aag-custom-prompt-head' }, h('label', { htmlFor: 'aag-custom-prompt' }, props.t('custom.prompt')),
       props.loadPrompt !== undefined
         ? h(Button, { disabled: busy, loading: promptLoading, onClick: togglePrompt, 'aria-expanded': promptOpen }, props.t(promptOpen ? 'custom.hidePrompt' : 'custom.viewPrompt'))
         : draft.prompt === '' ? h(Button, { disabled: busy, onClick: () => set('prompt', props.t('custom.templateText')) }, props.t('custom.template')) : null),
-    promptOpen && promptLoading ? h('p', { className: 'aag-note', role: 'status' }, props.t('custom.loadingPrompt')) : null,
-    promptOpen && !promptLoading ? h(Input.TextArea, {
-      id: 'aag-custom-prompt', className: 'aag-custom-prompt', value: draft.prompt, rows: 8, required: true, maxLength: 20_000, disabled: busy,
-      'aria-label': props.t('custom.prompt'), placeholder: props.t('custom.promptPlaceholder'),
-      onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => set('prompt', event.currentTarget.value),
-    }) : null,
-    label(props.t('custom.skills'), capabilitySelect('skills')),
-    label(props.t('custom.mcpServers'), capabilitySelect('mcpServers')),
-    error === null ? null : h('div', { className: 'aag-error', role: 'alert' }, error),
+      promptOpen && promptLoading ? h('p', { className: 'aag-note', role: 'status' }, props.t('custom.loadingPrompt')) : null,
+      promptOpen && !promptLoading ? h(Input.TextArea, {
+        id: 'aag-custom-prompt', className: 'aag-custom-prompt', value: draft.prompt, rows: 8, required: true, maxLength: 20_000, disabled: busy,
+        'aria-label': props.t('custom.prompt'), placeholder: props.t('custom.promptPlaceholder'),
+        onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => set('prompt', event.currentTarget.value),
+      }) : null)),
+    section(props.t('custom.section.capabilities'), h(React.Fragment, null,
+      label(props.t('custom.skills'), capabilitySelect('skills')),
+      label(props.t('custom.mcpServers'), capabilitySelect('mcpServers')))),
       needsReview ? h("section", { className: "aag-custom-review" },
         h(Button, { disabled: busy, onClick: refreshReview }, props.t("custom.reviewLatest")),
         review === null ? null : h(React.Fragment, null,
@@ -262,6 +273,10 @@ export const CUSTOM_EDITOR_CSS = `
 .aag-editor-drawer .ant-drawer-body{padding:0}
 .aag-custom-body{overflow-y:auto;overscroll-behavior:contain;padding:20px 24px;flex:1;min-height:0}
 .aag-editor-intro{margin:0 0 16px;color:var(--dsw-alias-label-secondary);font-size:14px;line-height:22px}
+.aag-custom-section{padding:20px 0;border-top:1px solid var(--dsw-alias-border-l1)}
+.aag-custom-section:first-of-type{border-top:0;padding-top:4px}.aag-custom-section>h3{margin:0 0 14px;font-size:14px;line-height:22px}.aag-custom-section-content{min-width:0}
+.aag-avatar-summary{display:flex;align-items:center;gap:12px;margin-bottom:4px}.aag-avatar-summary>img{border-radius:8px;object-fit:cover}.aag-avatar-summary>.ant-btn{min-height:36px}
+.aag-form-error{position:sticky;top:0;z-index:2;margin:0 0 12px!important}
 .aag-custom-field{display:block;margin:18px 0;font-size:14px}
 .aag-custom-field>span,.aag-custom-field>label{display:block;margin-bottom:8px}
 .aag-custom-field small{font-size:11px;opacity:.65;margin-left:8px}
@@ -272,7 +287,7 @@ export const CUSTOM_EDITOR_CSS = `
 .aag-capability-error{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px;color:var(--dsw-alias-error-primary);font-size:12px;line-height:18px}
 .aag-capability-bindings{display:grid;gap:6px;margin-top:8px}.aag-capability-binding{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:6px 8px;background:var(--dsw-alias-bg-layer-2);border-radius:6px;font-size:12px}.aag-capability-binding>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.aag-capability-binding>label{display:inline-flex;align-items:center;gap:5px;margin:0;white-space:nowrap}
 @media(max-width:520px){.aag-capability-binding{grid-template-columns:minmax(0,1fr) auto}.aag-capability-binding>label:last-child{grid-column:2}}
-.aag-custom-avatars{border:0;padding:0;margin:20px 0;display:flex;gap:8px;flex-wrap:wrap}
+.aag-custom-avatars{border:0;padding:0;margin:14px 0 20px;display:flex;gap:8px;flex-wrap:wrap}
 .aag-custom-avatars legend{margin-bottom:10px;font-size:13px}
 .aag-custom-avatars button{padding:3px;border:2px solid transparent;background:transparent;border-radius:12px;cursor:pointer}
 .aag-custom-avatars img{border-radius:8px;object-fit:cover}
@@ -283,7 +298,7 @@ export const CUSTOM_EDITOR_CSS = `
 .aag-custom-footer{padding:16px 24px 22px;border-top:1px solid var(--dsw-alias-border-l2);flex-shrink:0}
 .aag-custom-footer>div{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
 .aag-custom-footer>div>button:first-child{margin-right:auto}
-.aag-editor-drawer input:focus-visible,.aag-editor-drawer textarea:focus-visible,.aag-editor-drawer .ant-input:focus,.aag-editor-drawer .ant-input:focus-visible,.ant-modal input:focus-visible,.ant-modal textarea:focus-visible{outline:none}
+.aag-editor-drawer input:focus-visible,.aag-editor-drawer textarea:focus-visible,.aag-editor-drawer button:focus-visible,.aag-editor-drawer .ant-input:focus-visible,.ant-modal input:focus-visible,.ant-modal textarea:focus-visible,.ant-modal button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
 .aag-custom-badge{display:inline-block;font-size:10px;padding:1px 5px;border:1px solid var(--dsw-alias-border-l3);border-radius:4px;margin-left:6px;color:var(--dsw-alias-label-secondary)}
 .aag-custom-notice{display:flex;align-items:center;justify-content:space-between;gap:10px 16px;flex-wrap:wrap;margin:0;padding:10px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;background:var(--dsw-alias-bg-layer-2);font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary)}
 .aag-custom-notice>span{min-width:0;flex:1 1 300px}.aag-custom-notice>.ant-btn{flex:0 0 auto;padding-inline:4px}
