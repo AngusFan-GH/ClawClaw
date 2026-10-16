@@ -7,7 +7,7 @@ import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { TypertContribution } from '@deepseek-ai/dsh-typert-registry'
 import type {} from '@deepseek-ai/dsh-typert-registry'
 import { AGENCY_AGENTS_DESCRIPTORS } from './remote-contract.js'
-import { AGENCY_PERSONA_SERVICE, clawClawPluginLibraryRoot, type AgencyPersonaSource } from './index.js'
+import { AGENCY_PERSONA_SERVICE, AGENCY_PLUGIN_PACKAGE_SERVICE, clawClawPluginLibraryRoot, type AgencyPersonaSource, type AgencyPluginPackageService } from './index.js'
 import { formatHost, readHostLocale } from './i18n.js'
 import { AGENCY_LIBRARY_SERVICE, type AgencyExpertLibrary } from './expert-library.js'
 import type { CatalogSnapshot, CustomExpertInput } from './expert-contract.js'
@@ -54,6 +54,11 @@ export default class AgencyAgentsRemote extends TypertRemoteService {
     if (!library) throw new Error(teamText(readHostLocale(this.ctx), '专家团服务不可用，请重新加载插件。'))
     return library
   }
+  private pluginPackages(): AgencyPluginPackageService {
+    const service = this.ctx.get(AGENCY_PLUGIN_PACKAGE_SERVICE) as AgencyPluginPackageService | undefined
+    if (!service) throw new Error('Conversation-created expert package service is unavailable.')
+    return service
+  }
   async getTeams(): Promise<TeamSnapshot> {
     const snapshot = await this.teams().snapshot()
     const engine = this.ctx.get('agencyAgentsTeamEngine') as (() => TeamEngineStatus) | undefined
@@ -74,7 +79,13 @@ export default class AgencyAgentsRemote extends TypertRemoteService {
   async installTeamConnector(id: string, dependency: string, values: Readonly<Record<string, string>>): Promise<TeamSnapshot> {
     return this.teams().installConnector(id, dependency, values)
   }
-  async deleteTeam(id: string, expectedRevision: number): Promise<TeamSnapshot> { return this.teams().remove(id, expectedRevision) }
+  async deleteTeam(id: string, expectedRevision: number): Promise<TeamSnapshot> {
+    const team = (await this.teams().snapshot()).teams.find(candidate => candidate.id === id)
+    if (team?.conversationCreated && team.provenance?.packageName) {
+      return (await this.pluginPackages().removeConversationPackage(team.provenance.packageName, expectedRevision)).teams
+    }
+    return this.teams().remove(id, expectedRevision)
+  }
 
   private library(): AgencyExpertLibrary {
     const library = this.ctx.get(AGENCY_LIBRARY_SERVICE) as AgencyExpertLibrary | undefined
@@ -90,12 +101,12 @@ export default class AgencyAgentsRemote extends TypertRemoteService {
     const pluginsRoot = join(clawClawPluginLibraryRoot(), 'my-experts', 'plugins')
     const pkg = await findExpertPluginPackageBySession(pluginsRoot, sessionId)
     if (pkg === undefined) return { kind: 'pending' }
-    const experts = projectExpertPluginAgents(pkg).map(item => item.expert)
+    const experts = projectExpertPluginAgents(pkg).map(item => ({ ...item.expert, conversationCreated: true }))
     const definition = projectExpertPluginTeam(pkg)
     if (definition === undefined) return { kind: 'expert', expert: experts[0]! }
     return {
       kind: 'team',
-      team: projectExpertPluginTeamRecord(definition, experts, readHostLocale(this.ctx)),
+      team: projectExpertPluginTeamRecord({ ...definition, conversationCreated: true }, experts, readHostLocale(this.ctx)),
       experts,
     }
   }
@@ -111,6 +122,10 @@ export default class AgencyAgentsRemote extends TypertRemoteService {
   }
 
   async deleteCustomExpert(slug: string, expectedRevision: number): Promise<CatalogSnapshot> {
+    const expert = (await this.library().catalog()).experts.find(candidate => candidate.slug === slug)
+    if (expert?.conversationCreated && expert.packageType === 'agent' && expert.packageName) {
+      return (await this.pluginPackages().removeConversationPackage(expert.packageName, expectedRevision)).catalog
+    }
     return this.library().deleteCustom(slug, expectedRevision)
   }
 

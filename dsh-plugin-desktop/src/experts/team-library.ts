@@ -84,6 +84,7 @@ export function projectExpertPluginTeamRecord(
     skills: [...team.skills],
     connectors: [...team.connectors],
     connectorStates,
+    ...(team.conversationCreated ? { conversationCreated: true } : {}),
   }
 }
 

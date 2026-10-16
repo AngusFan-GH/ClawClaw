@@ -11,7 +11,6 @@ import { TeamLocaleContext } from './team-locale.js'
 import { localizeTeam } from '../team-content-en.js'
 import { teamText } from '../team-i18n.js'
 import type { ExpertTeam } from '../team-contract.js'
-import { PromptDialog } from "./prompt-dialog.js";
 import React from 'react'
 import { CategorySelect } from './category-select.js'
 import { ExpertDiscovery, DISCOVERY_CSS } from './expert-discovery.js'
@@ -60,11 +59,13 @@ import Wrench from 'lucide-react/dist/esm/icons/wrench.mjs'
 // @ts-expect-error package subpath has no declaration file
 import PlugZap from 'lucide-react/dist/esm/icons/plug-zap.mjs'
 // @ts-expect-error package subpath has no declaration file
-import Info from 'lucide-react/dist/esm/icons/info.mjs'
-// @ts-expect-error package subpath has no declaration file
 import MessageSquare from 'lucide-react/dist/esm/icons/message-square.mjs'
 // @ts-expect-error package subpath has no declaration file
 import PencilLine from 'lucide-react/dist/esm/icons/pencil-line.mjs'
+// @ts-expect-error package subpath has no declaration file
+import CopyPlus from 'lucide-react/dist/esm/icons/copy-plus.mjs'
+// @ts-expect-error package subpath has no declaration file
+import Trash2 from 'lucide-react/dist/esm/icons/trash-2.mjs'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -76,8 +77,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const PLUGIN_ID = 'dsh-plugin-desktop/experts'
 /** 本插件客户端词条字典命名空间。 */
 const NS = 'agency'
-export const COPY_PROMPT_FEEDBACK_MS = 1_600
-
 interface LineIconProps {
   readonly className?: string
   readonly size?: number
@@ -99,12 +98,6 @@ function lineIcon(props: LineIconProps, ...children: React.ReactNode[]): React.R
     strokeLinejoin: 'round',
     focusable: false,
   }, ...children)
-}
-
-function Copy(props: LineIconProps): React.ReactElement {
-  return lineIcon(props,
-    React.createElement('rect', { x: 9, y: 9, width: 13, height: 13, rx: 2 }),
-    React.createElement('path', { d: 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1' }))
 }
 
 function Search(props: LineIconProps): React.ReactElement {
@@ -150,9 +143,13 @@ type ExpertView = CatalogExpertView
 export type ExpertSource = 'base' | 'custom'
 
 /** Package experts are stored in ClawClaw's library, but remain distinguishable from bundled experts. */
-export function expertSource(expert: Pick<ExpertView, 'custom' | 'packageFormat'>): ExpertSource {
-  if (expert.custom) return 'custom'
+export function expertSource(expert: Pick<ExpertView, 'custom' | 'conversationCreated'>): ExpertSource {
+  if (expert.custom || expert.conversationCreated) return 'custom'
   return 'base'
+}
+
+export function isDeletableExpert(expert: Pick<ExpertView, 'custom' | 'conversationCreated'>): boolean {
+  return expert.custom || expert.conversationCreated === true
 }
 
 /** An enabled expert can always be disabled; enabling requires all mandatory capabilities. */
@@ -471,17 +468,18 @@ export const CARD_SETTINGS_CSS = `
 .aag-card-filters{align-items:center;justify-content:flex-start;flex-wrap:wrap;gap:8px 12px;min-width:0}
 .aag-filter-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex:0 0 auto}
 .aag-card-filters .aag-field-source,.aag-card-filters .aag-field-category,.aag-card-filters .aag-field-status{flex:0 0 auto;width:auto;max-width:none}
-.aag-card-filters .aag-field-search{flex:1 1 0;min-width:0}
+.aag-card-filters .aag-field-search{flex:1 1 320px;min-width:min(280px,100%)}
 .aag-card-filters .aag-field>span{display:inline-flex;width:auto;max-width:none}
+@container(max-width:760px){.aag-card-filters .aag-field-search{flex:1 0 100%;width:100%}}
 @media(max-width:560px){.aag-card-filters{align-items:stretch}.aag-card-filters .aag-field{flex:none;width:100%}}
 .aag-search-wrap{display:flex;align-items:center;width:100%;min-width:0;max-width:100%}
 .aag-search-wrap>.aag-search{width:100%;min-width:0;max-width:100%}
 .aag-search-wrap>.aag-search input::placeholder{color:var(--dsw-alias-label-dimmed)}
-.aag-expert-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:2px}
+.aag-expert-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:12px;margin-top:2px}
 .aag-expert-window{position:relative;margin-top:2px;overflow-anchor:none}.aag-expert-window>.aag-expert-grid{position:absolute;right:0;left:0;margin-top:0}
 .aag-expert-card{display:grid;box-sizing:border-box;min-width:0;min-height:164px;overflow:hidden;grid-template-rows:minmax(119px,1fr) 44px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);transition:border-color .15s ease,background .15s ease,box-shadow .15s ease}.aag-expert-window .aag-expert-card{height:164px;min-height:0;grid-template-rows:minmax(0,1fr) 44px}
 .aag-expert-card:hover{border-color:var(--dsw-alias-border-l3);box-shadow:0 6px 18px color-mix(in srgb,var(--dsw-alias-label-primary) 6%,transparent)}
-.aag-card-body{position:relative;display:grid;min-width:0;grid-template-columns:42px minmax(0,1fr);column-gap:10px;row-gap:8px;padding:12px}
+.aag-card-body{position:relative;display:grid;min-width:0;grid-template-columns:42px minmax(0,1fr);column-gap:10px;row-gap:8px;padding:12px}.aag-card-open{position:absolute;z-index:1;inset:0;border:0;background:transparent;cursor:pointer}.aag-card-open:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-3px;border-radius:7px}.aag-card-body>*:not(.aag-card-open):not(.aag-switch){position:relative;pointer-events:none}.aag-card-body>.aag-switch{z-index:2;pointer-events:auto}
 .aag-expert-avatar{display:block;width:42px;height:42px;border:0;border-radius:10px;background:var(--dsw-alias-bg-layer-3);object-fit:cover;object-position:center 20%}
 .aag-card-identity{display:flex;min-width:0;overflow:hidden;flex-direction:column;padding-right:42px}
 .aag-card-name{display:-webkit-box;overflow:hidden;font-size:15px;font-weight:650;line-height:21px;-webkit-box-orient:vertical;-webkit-line-clamp:2}
@@ -499,11 +497,10 @@ export const CARD_SETTINGS_CSS = `
 .aag-card-action-danger{color:var(--dsw-alias-state-error-primary)}
 .aag-create-expert{display:flex;flex-direction:column;gap:16px}.aag-create-expert-hint{margin:0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px}.aag-create-expert-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.aag-create-expert-options>button{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;align-items:start;min-height:112px;padding:16px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;text-align:left;cursor:pointer}.aag-create-expert-options>button:hover:not(:disabled){border-color:var(--dsw-alias-brand-primary);background:var(--dsw-alias-interactive-bg-hover)}.aag-create-expert-options>button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}.aag-create-expert-options>button:disabled{opacity:.55;cursor:default}.aag-create-expert-options svg{margin-top:1px;color:var(--dsw-alias-label-secondary)}.aag-create-expert-options span{display:flex;min-width:0;flex-direction:column;gap:6px}.aag-create-expert-options strong{font-size:15px;line-height:21px}.aag-create-expert-options small{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:19px}.aag-create-expert-footer{display:flex;justify-content:flex-end}.aag-create-expert .aag-error{margin:0}
 .aag-switch{position:absolute;top:12px;right:12px;display:flex;align-items:center;flex-direction:column;gap:2px}
-.aag-switch-state{color:var(--dsw-alias-label-secondary);font-size:10px;line-height:16px;white-space:nowrap}
-.aag-expert-details{display:flex;flex-direction:column;gap:20px}.aag-detail-hero{display:grid;grid-template-columns:64px minmax(0,1fr);gap:14px;align-items:center}.aag-detail-hero .aag-expert-avatar{width:64px;height:64px}.aag-detail-hero h3{margin:0 0 4px;font-size:20px;line-height:28px}.aag-detail-description{margin:0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:21px}.aag-detail-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0}.aag-detail-facts>div{min-width:0;padding:10px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px}.aag-detail-facts dt{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}.aag-detail-facts dd{margin:3px 0 0;overflow-wrap:anywhere;font-size:13px;line-height:19px}.aag-detail-section{display:flex;flex-direction:column;gap:8px}.aag-detail-section h4{margin:0;font-size:13px;line-height:20px}.aag-capability-chips{display:flex;flex-wrap:wrap;gap:6px}.aag-capability-chip{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:4px 7px;border:1px solid var(--dsw-alias-border-l2);border-radius:5px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}.aag-capability-chip strong{overflow:hidden;color:var(--dsw-alias-label-primary);font-weight:500;text-overflow:ellipsis}.aag-capability-chip[data-issue="true"]{border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 45%,var(--dsw-alias-border-l2));color:var(--dsw-alias-state-error-primary)}.aag-detail-warning{margin:0;padding:10px;border-radius:6px;background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 9%,transparent);color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:19px}.aag-detail-actions{display:flex;gap:8px;flex-wrap:wrap}
+.aag-switch-state{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;white-space:nowrap}
+.aag-expert-details{display:flex;flex-direction:column;gap:20px}.aag-detail-hero{display:grid;grid-template-columns:64px minmax(0,1fr);gap:14px;align-items:center}.aag-detail-hero .aag-expert-avatar{width:64px;height:64px}.aag-detail-hero h3{margin:0 0 4px;font-size:20px;line-height:28px}.aag-detail-description{margin:0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:21px}.aag-detail-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0}.aag-detail-facts>div{min-width:0;padding:10px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px}.aag-detail-facts dt{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}.aag-detail-facts dd{margin:3px 0 0;overflow-wrap:anywhere;font-size:13px;line-height:19px}.aag-detail-section{display:flex;flex-direction:column;gap:8px}.aag-detail-section h4{margin:0;font-size:13px;line-height:20px}.aag-capability-chips{display:flex;flex-wrap:wrap;gap:6px}.aag-capability-chip{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:4px 7px;border:1px solid var(--dsw-alias-border-l2);border-radius:5px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}.aag-capability-chip strong{overflow:hidden;color:var(--dsw-alias-label-primary);font-weight:500;text-overflow:ellipsis}.aag-capability-chip[data-issue="true"]{border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 45%,var(--dsw-alias-border-l2));color:var(--dsw-alias-state-error-primary)}.aag-detail-warning{margin:0;padding:10px;border-radius:6px;background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 9%,transparent);color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:19px}.aag-detail-prompt-section{padding-top:16px;border-top:1px solid var(--dsw-alias-border-l1)}.aag-detail-prompt.ant-input{min-height:260px;resize:vertical;white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;line-height:1.65}.aag-detail-actions{display:flex;gap:8px;flex-wrap:wrap}
 .ant-modal .aag-prompt-body.ant-input{display:block;box-sizing:border-box;height:min(560px,calc(100vh - 220px));min-height:240px;margin:0;resize:none;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.65}
-@container (max-width:839px){.aag-expert-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@container (max-width:519px){.aag-expert-grid{grid-template-columns:1fr}.aag-title-row{gap:8px 12px}.aag-settings-links{flex-basis:100%}}
+@container (max-width:639px){.aag-expert-grid{grid-template-columns:1fr}.aag-title-row{gap:8px 12px}.aag-settings-links{flex-basis:100%}}
 @container (max-width:430px){.aag-card-body{grid-template-columns:40px minmax(0,1fr);column-gap:10px}.aag-expert-avatar{width:40px;height:40px}.aag-card-name{font-size:16px;line-height:22px}.aag-create-expert-options{grid-template-columns:1fr}}
 `
 
@@ -1007,15 +1004,12 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
     menu))
 }
 
-interface OpenPrompt {
-  readonly name: string
-  readonly prompt: string
-  readonly returnFocus: HTMLButtonElement
-}
-
 interface OpenExpertDetails {
   readonly expert: ExpertView
   readonly returnFocus: HTMLButtonElement
+  readonly prompt?: string
+  readonly promptError?: string
+  readonly promptLoading: boolean
 }
 
 function ExpertDetailsDrawer(props: {
@@ -1024,11 +1018,13 @@ function ExpertDetailsDrawer(props: {
   locale: 'zh' | 'en'
   t: (key: AgencyKey, params?: Record<string, unknown>) => string
   avatar: string
+  loadPrompt(): void
   close(): void
-  viewPrompt(): void
   manageConnectors?(): void
+  onDelete?(): void
 }): React.ReactElement {
   const { expert } = props.value
+  const [promptOpen, setPromptOpen] = React.useState(false)
   React.useEffect(() => () => {
     const node = props.value.returnFocus
     queueMicrotask(() => { if (node.isConnected) node.focus({ preventScroll: true }) })
@@ -1065,11 +1061,28 @@ function ExpertDetailsDrawer(props: {
     React.createElement('section', { className: 'aag-detail-section' }, React.createElement('h4', null, `${props.t('capability.skills')} · ${expert.skills.length}`), capabilityList('skill', expert.skills)),
     React.createElement('section', { className: 'aag-detail-section' }, React.createElement('h4', null, `${props.t('capability.connectors')} · ${expert.mcpServers.length}`), capabilityList('mcp', expert.mcpServers)),
     props.health.state === 'blocked' ? React.createElement('p', { className: 'aag-detail-warning', role: 'alert' }, props.t('capability.missingHint')) : null,
+    React.createElement('section', { className: 'aag-detail-section aag-detail-prompt-section' },
+      React.createElement('h4', null, props.t('settings.viewPromptTitle')),
+      React.createElement(Button, {
+        loading: props.value.promptLoading,
+        'aria-expanded': promptOpen,
+        onClick: () => {
+          if (promptOpen) { setPromptOpen(false); return }
+          setPromptOpen(true)
+          if (props.value.prompt === undefined && !props.value.promptLoading) props.loadPrompt()
+        },
+      }, props.t(promptOpen ? 'settings.hidePrompt' : 'settings.viewPromptTitle')),
+      promptOpen && props.value.promptLoading ? React.createElement('p', { className: 'aag-note', role: 'status' }, props.t('settings.promptLoading')) : null,
+      promptOpen && props.value.promptError !== undefined ? React.createElement('p', { className: 'aag-detail-warning', role: 'alert' }, props.value.promptError) : null,
+      promptOpen && props.value.prompt !== undefined ? React.createElement(Input.TextArea, {
+        className: 'aag-detail-prompt', readOnly: true, value: props.value.prompt,
+        'aria-label': props.t('settings.promptTitle', { name: displayName(expert, props.locale) }),
+      }) : null),
     React.createElement('div', { className: 'aag-detail-actions' },
-      React.createElement(Button, { onClick: props.viewPrompt }, props.t('settings.viewPromptTitle')),
       props.health.issues.some(issue => issue.type === 'mcp') && props.manageConnectors !== undefined
         ? React.createElement(Button, { type: 'primary', onClick: props.manageConnectors }, props.t('capability.manageConnectors'))
-        : null)))
+        : null,
+      props.onDelete === undefined ? null : React.createElement(Button, { danger: true, onClick: props.onDelete }, props.t('custom.delete')))))
 }
 
 const EXPERT_CARD_GAP = 12
@@ -1194,15 +1207,12 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
   const [query, setQuery] = React.useState('')
   const [division, setDivision] = React.useState('')
   const [status, setStatus] = React.useState('')
-  const [openPrompt, setOpenPrompt] = React.useState<OpenPrompt | null>(null)
   const [details, setDetails] = React.useState<OpenExpertDetails | null>(null)
   const promptLock = React.useRef(false)
-  const [copiedSlug, setCopiedSlug] = React.useState<string | null>(null)
-  const copiedResetTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const saving = React.useRef(false)
   const [isSaving, setIsSaving] = React.useState(false)
   const [source, setSource] = React.useState<'all' | ExpertSource>('all')
-  const [editor, setEditor] = React.useState<{ expert?: CustomExpertInput; enabled: boolean; revision: number } | null>(null)
+  const [editor, setEditor] = React.useState<{ expert?: CustomExpertInput; enabled: boolean; revision: number; loadPrompt?: () => Promise<string> } | null>(null)
   const [deleting, setDeleting] = React.useState<ExpertView | null>(null)
   const [deleteError, setDeleteError] = React.useState<string | null>(null)
   const [notice, setNotice] = React.useState<string | null>(null)
@@ -1215,27 +1225,31 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
     acceptCatalog(props.remote, catalog)
     setError(null)
   }
-  const openEditor = (expert?: ExpertView): void => {
+  const openEditor = (): void => {
     if (state === null || isSaving || promptLock.current) return
-    if (expert === undefined) { setEditor({ enabled: false, revision: state.revision }); return }
+    setEditor({ enabled: false, revision: state.revision })
+  }
+  const editExpert = (expert: ExpertView): void => {
+    if (state === null || isSaving || promptLock.current || !expert.custom) return
     const revision = state.revision
-    if (expert.custom) {
-      promptLock.current = true
-      void props.remote.getCustomExpert(expert.slug).then(result => {
-        if (!result.ok) throw new Error(result.error.message)
-        setEditor({ expert: result.value, enabled: state.enabled.has(expert.slug), revision })
-      }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
-        .finally(() => { promptLock.current = false })
-    } else {
-      withPrompt(expert, prompt => {
-        const original = displayName(expert, props.getActive())
-        let name = `${original.slice(0, 33)} ${props.getActive() === 'zh' ? '副本' : 'copy'}`
-        let index = 2
-        while (state.experts.some(item => [item.name, item.nameEn].includes(name))) name = `${original.slice(0, 28)} ${props.getActive() === 'zh' ? '副本' : 'copy'} ${index++}`
-        setEditor({ expert: { name, description: displayDescription(expert, props.getActive()).slice(0, 160), division: expert.division,
-          emoji: expert.emoji || DEFAULT_EXPERT_EMOJI, avatar: expertAvatarIndexForDivision(expert.slug, expert.division), prompt }, enabled: false, revision })
-      })
-    }
+    promptLock.current = true
+    void props.remote.getCustomExpert(expert.slug).then(result => {
+      if (!result.ok) throw new Error(result.error.message)
+      setEditor({ expert: result.value, enabled: state.enabled.has(expert.slug), revision })
+    }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
+      .finally(() => { promptLock.current = false })
+  }
+  const copyExpert = (expert: ExpertView): void => {
+    if (state === null || isSaving || promptLock.current) return
+    const revision = state.revision
+    const original = displayName(expert, props.getActive())
+    let name = `${original.slice(0, 33)} ${props.getActive() === 'zh' ? '副本' : 'copy'}`
+    let index = 2
+    while (state.experts.some(item => [item.name, item.nameEn].includes(name))) name = `${original.slice(0, 28)} ${props.getActive() === 'zh' ? '副本' : 'copy'} ${index++}`
+    setEditor({ expert: { name, description: displayDescription(expert, props.getActive()).slice(0, 160), division: expert.division,
+      emoji: expert.emoji || DEFAULT_EXPERT_EMOJI, avatar: expert.avatar ?? expertAvatarIndexForDivision(expert.slug, expert.division),
+      prompt: '', skills: structuredClone(expert.skills), mcpServers: structuredClone(expert.mcpServers) }, enabled: false, revision,
+      loadPrompt: () => readPrompt(props.remote, expert.slug, expert.division) })
   }
   const openCreation = (): void => {
     if (state === null || isSaving || promptLock.current) return
@@ -1291,10 +1305,6 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
     return () => { alive = false }
   }, [props.remote])
 
-  React.useEffect(() => () => {
-    if (copiedResetTimer.current !== undefined) clearTimeout(copiedResetTimer.current)
-  }, [])
-
   const toggle = (slug: string): void => {
     if (state === null || saving.current) return
     const expert = state.experts.find(item => item.slug === slug)
@@ -1332,30 +1342,16 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
       })
   }
 
-  const withPrompt = (expert: ExpertView, action: (prompt: string) => Promise<void> | void): void => {
-    if (promptLock.current) return
-    promptLock.current = true
-    setError(null)
-    void readPrompt(props.remote, expert.slug, expert.division)
-      .then(action)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
-      .finally(() => { promptLock.current = false })
+  const openDetails = (expert: ExpertView, returnFocus: HTMLButtonElement): void => {
+    setDetails({ expert, returnFocus, promptLoading: false })
   }
-
-  const viewPrompt = (expert: ExpertView, returnFocus: HTMLButtonElement): void => {
-    withPrompt(expert, (prompt) => { setOpenPrompt({ name: displayName(expert, props.getActive()), prompt, returnFocus }) })
-  }
-
-  const copyPrompt = (expert: ExpertView): void => {
-    withPrompt(expert, async (prompt) => {
-      if (navigator.clipboard === undefined) throw new Error(props.t('error.promptCopy'))
-      await navigator.clipboard.writeText(prompt)
-      if (copiedResetTimer.current !== undefined) clearTimeout(copiedResetTimer.current)
-      setCopiedSlug(expert.slug)
-      copiedResetTimer.current = setTimeout(() => {
-        copiedResetTimer.current = undefined
-        setCopiedSlug(null)
-      }, COPY_PROMPT_FEEDBACK_MS)
+  const loadDetailsPrompt = (expert: ExpertView): void => {
+    setDetails(current => current?.expert.slug === expert.slug ? { ...current, promptError: undefined, promptLoading: true } : current)
+    void readPrompt(props.remote, expert.slug, expert.division).then(prompt => {
+      setDetails(current => current?.expert.slug === expert.slug ? { ...current, prompt, promptLoading: false } : current)
+    }).catch((cause: unknown) => {
+      const promptError = cause instanceof Error ? cause.message : String(cause)
+      setDetails(current => current?.expert.slug === expert.slug ? { ...current, promptError, promptLoading: false } : current)
     })
   }
 
@@ -1392,6 +1388,15 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
         type: 'link', size: 'small', onClick: () => { setSource('all'); setNotice(null) },
       }, props.t('custom.showAllExperts'))))
     nodes.push(React.createElement('div', { key: 'filters', className: 'aag-filters aag-card-filters' },
+      React.createElement('div', { className: 'aag-field aag-field-search' },
+        React.createElement('div', { className: 'aag-search-wrap' },
+          React.createElement(Input, {
+            id: 'aag-filter-search', className: 'aag-search', allowClear: { clearIcon: React.createElement('span', { 'aria-label': props.t('settings.search.clear') }) },
+            value: query, prefix: React.createElement(Search, { size: 16, strokeWidth: 1.7, 'aria-hidden': true }),
+            autoComplete: 'off', spellCheck: false, placeholder: props.t('settings.search.placeholder'),
+            'aria-label': props.t('settings.search'),
+            onChange: (event: React.ChangeEvent<HTMLInputElement>) => setQuery(event.currentTarget.value),
+          }))),
       React.createElement('div', { className: 'aag-field aag-field-source' },
         React.createElement(CategorySelect, {
           id: 'aag-filter-source', value: source, label: props.t('settings.filter.source'),
@@ -1422,15 +1427,6 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
             { value: 'disabled', label: props.t('settings.disabled') },
           ],
         })),
-      React.createElement('div', { className: 'aag-field aag-field-search' },
-        React.createElement('div', { className: 'aag-search-wrap' },
-          React.createElement(Input, {
-            id: 'aag-filter-search', className: 'aag-search', allowClear: { clearIcon: React.createElement('span', { 'aria-label': props.t('settings.search.clear') }) },
-            value: query, prefix: React.createElement(Search, { size: 16, strokeWidth: 1.7, 'aria-hidden': true }),
-            autoComplete: 'off', spellCheck: false, placeholder: props.t('settings.search.placeholder'),
-            'aria-label': props.t('settings.search'),
-            onChange: (event: React.ChangeEvent<HTMLInputElement>) => setQuery(event.currentTarget.value),
-          }))),
       filterActions))
     if (filtered.length === 0) {
       nodes.push(React.createElement('div', { key: 'empty', className: 'aag-empty' },
@@ -1454,21 +1450,19 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
           avatar: React.createElement('img', { className: 'aag-expert-avatar', src: avatar, width: 44, height: 44, loading: 'lazy', decoding: 'async', alt: '' }),
           custom: expert.custom,
           metadata: React.createElement(React.Fragment, null, React.createElement('span', { className: 'aag-card-category' }, inputTriggerSourceName(expert.division, props.getActive())), expert.conflict ? React.createElement('span', { className: 'aag-custom-badge', title: props.t('custom.nameConflictHint') }, props.t('custom.nameConflict')) : null, React.createElement('span', { className: 'aag-source-badge', 'data-source': sourceKind }, props.t(sourceKind === 'custom' ? 'settings.source.custom' : 'settings.source.builtin')),
-            health.total > 0 ? React.createElement('span', { className: 'aag-custom-badge', 'data-health': health.state }, props.t(`capability.health.${health.state}`), ` · ${health.ready}/${health.total}`) : null),
+            health.total > 0 && health.state === 'blocked' ? React.createElement('span', { className: 'aag-custom-badge', 'data-health': health.state }, props.t('capability.health.blocked'), ` · ${health.ready}/${health.total}`) : null),
           description: displayDescription(expert, props.getActive()),
           enabled, disabled: isSaving || expert.conflict === true || blockedFromEnable,
           disabledReason: blockedFromEnable ? props.t('capability.missingHint') : undefined,
           enabledLabel: props.t('settings.enabled'), disabledLabel: props.t('settings.disabled'),
           toggle: () => toggle(expert.slug),
-          moreItems: [
-            { id: 'edit', label: props.t(expert.custom ? 'custom.edit' : 'custom.copy'), disabled: isSaving, onSelect: () => openEditor(expert) },
-            ...(expert.custom ? [{ id: 'delete', label: props.t('custom.delete'), danger: true, disabled: isSaving, onSelect: () => { setDeleting(expert); setDeleteError(null) } }] : []),
-          ],
+          openLabel: props.t('settings.details'),
+          onOpen: (trigger: HTMLButtonElement) => openDetails(expert, trigger),
           actions: React.createElement(React.Fragment, null,
-            React.createElement('button', { type: 'button', className: 'aag-card-action', title: props.t('settings.details'), 'aria-label': props.t('settings.details'), 'aria-haspopup': 'dialog', onClick: (event: React.MouseEvent<HTMLButtonElement>) => setDetails({ expert, returnFocus: event.currentTarget }) },
-              React.createElement(Info, { size: 18, strokeWidth: 1.7, 'aria-hidden': true }), props.t('settings.details')),
-            React.createElement('button', { type: 'button', className: 'aag-card-action aag-card-action-primary', title: copiedSlug === expert.slug ? props.t('settings.copySuccess') : props.t('settings.copyPromptTitle'), 'aria-label': copiedSlug === expert.slug ? props.t('settings.copySuccess') : props.t('settings.copyPromptTitle'), onClick: () => copyPrompt(expert) },
-              React.createElement(Copy, { size: 18, strokeWidth: 1.7, 'aria-hidden': true }), copiedSlug === expert.slug ? props.t('settings.copySuccess') : props.t('settings.copyPrompt'))),
+            React.createElement('button', { type: 'button', className: 'aag-card-action aag-card-action-primary aag-expert-primary-action', disabled: isSaving, onClick: () => expert.custom ? editExpert(expert) : copyExpert(expert) },
+              React.createElement(expert.custom ? PencilLine : CopyPlus, { size: 17, strokeWidth: 1.7, 'aria-hidden': true }), props.t(expert.custom ? 'custom.edit' : 'custom.copy')),
+            isDeletableExpert(expert) ? React.createElement('button', { type: 'button', className: 'aag-card-action aag-card-action-danger aag-expert-delete', disabled: isSaving, onClick: () => { setDeleting(expert); setDeleteError(null) } },
+              React.createElement(Trash2, { size: 17, strokeWidth: 1.7, 'aria-hidden': true }), props.t('custom.delete')) : null),
         })
       } }))
     }
@@ -1503,9 +1497,6 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
     deleting === null ? null : React.createElement(CustomDeleteDialog, {
       name: deleting.name, busy: isSaving, error: deleteError, t: props.t, close: () => setDeleting(null), confirm: () => removeExpert(deleting.slug),
     }),
-    openPrompt === null ? null : React.createElement(PromptDialog, {
-      value: openPrompt, title: props.t('settings.promptTitle', { name: openPrompt.name }), closeLabel: props.t('settings.promptClose'), returnFocus: openPrompt.returnFocus, onClose: () => setOpenPrompt(null),
-    }),
     details === null ? null : React.createElement(ExpertDetailsDrawer, {
       value: details,
       health: expertCapabilityHealth(details.expert, capabilitySnapshot.catalog, capabilitySnapshot.loading, {
@@ -1514,9 +1505,10 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
       locale: props.getActive(),
       t: props.t,
       avatar: EXPERT_AVATAR_URLS[details.expert.avatar ?? expertAvatarIndexForDivision(details.expert.slug, details.expert.division)] ?? EXPERT_AVATAR_URLS[0],
+      loadPrompt: () => loadDetailsPrompt(details.expert),
       close: () => setDetails(null),
-      viewPrompt: () => { const current = details; setDetails(null); viewPrompt(current.expert, current.returnFocus) },
       manageConnectors: props.onOpenConnectors === undefined ? undefined : () => { setDetails(null); props.onOpenConnectors?.() },
+      onDelete: !isDeletableExpert(details.expert) ? undefined : () => { setDeleting(details.expert); setDeleteError(null); setDetails(null) },
     }))
 }
 
@@ -1605,7 +1597,6 @@ export const inject = ['slots', 'inputTriggers', 'locale', 'remote', 'sessions',
 const SKILL_REFERENCE_SOURCE = 'clawclaw-experts:skills'
 
 export async function apply(ctx: ClientContext): Promise<() => void> {
-  applyCapabilitySidebar(ctx as unknown as CordisClientContext)
   ctx.effect(() => {
     const tag = document.createElement('style')
     tag.dataset.plugin = PLUGIN_ID
@@ -1839,6 +1830,30 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
     })
     return true
   }
+  applyCapabilitySidebar(ctx as unknown as CordisClientContext, (entry, sessionId) => {
+    if (entry.kind === 'expert') {
+      const expert = catalogState(remote).experts.find(item => item.slug === entry.expert.slug)
+      if (expert === undefined) return undefined
+      return {
+        focusComposer,
+        select: async example => {
+          await ensureExpertEnabled(expert.slug)
+          return openCapabilityConversation(sessionId, newSessionId => insertTask(
+            resolveTarget(newSessionId), buildExpertReference(expert, getActive()), newSessionId, undefined, example,
+          ))
+        },
+      }
+    }
+    return {
+      focusComposer,
+      select: async example => {
+        const current = await ensureTeamRecalled(entry.team)
+        return openCapabilityConversation(sessionId, newSessionId => insertTeamTask(
+          resolveTarget(newSessionId), current, example, newSessionId,
+        ))
+      },
+    }
+  })
   let pendingCreation: {
     readonly gate: CreationRunGate<
       | { readonly kind: 'expert'; readonly expert: ExpertView }

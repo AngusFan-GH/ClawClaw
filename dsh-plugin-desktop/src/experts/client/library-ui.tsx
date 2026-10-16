@@ -4,15 +4,6 @@ import { documentAntdLocale } from './antd-locale.js'
 import { useEscapeLayer } from './escape-layer.js'
 import React from 'react'
 
-export interface LibraryMenuItem {
-  id: string
-  label: string
-  disabled?: boolean
-  disabledReason?: string
-  danger?: boolean
-  onSelect(): void
-}
-
 /** 创建可选择保存或保存并启用；编辑只保存修改并保留当前启用状态。 */
 export function LibraryEditorFooter(props: {
   editing: boolean
@@ -57,13 +48,21 @@ export function LibraryCard(props: {
   enabledLabel: string
   disabledLabel: string
   toggle?(): void
+  openLabel?: string
+  onOpen?(trigger: HTMLButtonElement): void
   actions: React.ReactNode
-  moreItems: readonly LibraryMenuItem[]
   testId?: string
 }) {
   return (
     <article className={props.custom ? 'aag-expert-card aag-expert-card-custom' : 'aag-expert-card'} data-testid={props.testId}>
       <div className="aag-card-body">
+        {props.onOpen !== undefined && <button
+          type="button"
+          className="aag-card-open"
+          aria-label={`${props.openLabel ?? props.name}: ${props.name}`}
+          aria-haspopup="dialog"
+          onClick={event => props.onOpen?.(event.currentTarget)}
+        />}
         {props.avatar}
         <div className="aag-card-identity">
           <div className="aag-card-name" title={props.name}>
@@ -87,18 +86,6 @@ export function LibraryCard(props: {
       </div>
       <div className="aag-card-actions">
         {props.actions}
-        {props.moreItems.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={item.danger ? 'aag-card-action aag-card-action-danger' : 'aag-card-action'}
-            disabled={item.disabled}
-            title={item.label}
-            onClick={() => item.onSelect()}
-          >
-            {item.label}
-          </button>
-        ))}
       </div>
     </article>
   )

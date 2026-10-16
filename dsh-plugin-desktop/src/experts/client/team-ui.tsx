@@ -11,7 +11,13 @@ import { effectiveCoordinator, type ExpertTeam, type TeamInput, type TeamSnapsho
 import type { ExpertSummary } from '../expert-contract.js';
 import type { AgencyCatalogRemote, AgencyTeamsRemote } from './remote.js';
 import { TeamEditor } from './team-editor.js';
-import { TeamDialog, TeamConfirm, TeamAvatars, MemberList, teamIssue, teamRepairIssue, IconUsers, IconFileText, IconBulb, IconCopy, IconSend, IconSearch, IconEye, } from './team-shared.js';
+import { TeamDialog, TeamConfirm, TeamAvatars, Avatar, teamIssue, teamRepairIssue, IconUsers, IconFileText, IconBulb, IconSend, IconSearch, } from './team-shared.js';
+// @ts-expect-error package subpath has no declaration file
+import Copy from 'lucide-react/dist/esm/icons/copy.mjs';
+// @ts-expect-error package subpath has no declaration file
+import PencilLine from 'lucide-react/dist/esm/icons/pencil-line.mjs';
+// @ts-expect-error package subpath has no declaration file
+import Trash2 from 'lucide-react/dist/esm/icons/trash-2.mjs';
 export { TEAM_CSS } from './team-style.js';
 export type TeamRemote = AgencyCatalogRemote & AgencyTeamsRemote;
 export async function unwrap<T>(promise: Promise<{
@@ -54,11 +60,16 @@ export function TeamDetails(props: {
             </div>)}
           </div>
           <p>
-            {props.team.builtin ? tx("内置专家团") : tx("我的专家团")} ·{' '}
+            {isDeletableTeam(props.team) ? tx("我的专家团") : tx("内置专家团")} ·{' '}
             {props.team.members.length}{tx("位专家")}</p>
         </div>
       </header>
       <p className="agt-description agt-detail-summary">{props.team.description}</p>
+      <dl className="agt-detail-overview">
+        <div><dt>{tx("团队目标")}</dt><dd>{props.team.goal}</dd></div>
+        {props.team.constraints && <div><dt>{tx("通用约束（选填）")}</dt><dd>{props.team.constraints}</dd></div>}
+        <div><dt>{tx("交付要求")}</dt><dd>{props.team.deliveryRequirements}</dd></div>
+      </dl>
       <div className="agt-detail-content">
       <section className="agt-detail-primary">
         <h3>
@@ -79,24 +90,18 @@ export function TeamDetails(props: {
       <section className="agt-detail-members">
         <h3>
           <IconUsers />{tx("团队成员")}</h3>
-        <MemberList team={props.team} experts={props.experts}/>
+        <div className="agt-detail-roster">{props.team.members.map(member => {
+          const expert = props.experts.find(item => item.slug === member.expertSlug)
+          return <article key={member.expertSlug}>
+            <Avatar expert={expert} size={40}/>
+            <div><strong>{expert?.name ?? tx("成员失效")}</strong><span>{member.duty}</span><p>{member.instructions}</p></div>
+          </article>
+        })}</div>
         <p className="agt-help">{tx("由当前会话协调，成员分别分析后统一汇总。")}</p>
-        <details>
-          <summary>{tx("查看成员完整分工")}</summary>
-          {props.team.members.map((member) => (<p key={member.expertSlug}>
-              <strong>
-                {props.experts.find((e) => e.slug === member.expertSlug)
-                ?.name ?? tx("成员失效")}
-                ：
-              </strong>
-              {member.instructions}
-            </p>))}
-        </details>
       </section>
       <section className="agt-detail-delivery">
         <h3>
-          <IconFileText />{tx("你将获得")}</h3>
-        <p>{props.team.deliveryRequirements}</p>
+          <IconFileText />{tx("主理人提示词")}</h3>
         <Button style={{ marginTop: 8 }} onClick={() => setPrompt(!prompt)} aria-expanded={prompt}>{tx("查看主理人提示词")}</Button>
         {prompt && (<Input.TextArea className="agt-read-prompt" readOnly aria-label={tx("主理人提示词正文")} value={effectiveCoordinator(props.team, locale)} style={{ height: 280, resize: 'none', overflow: 'auto' }}/>)}
       </section>
@@ -122,9 +127,13 @@ function connectorStatus(connector: ExpertTeam['connectorStates'][number], tx: (
     return tx("故障");
 }
 function teamInput(team: ExpertTeam): TeamInput {
-    const { runtime: _runtime, skills: _skills, connectors: _connectors, connectorStates: _connectorStates, provenance: _provenance, ...input } = team;
+    const { runtime: _runtime, skills: _skills, connectors: _connectors, connectorStates: _connectorStates, provenance: _provenance, conversationCreated: _conversationCreated, ...input } = team;
     return input;
 }
+
+export const isConversationCreatedTeam = (team: Pick<ExpertTeam, 'conversationCreated'>): boolean => team.conversationCreated === true;
+export const isDeletableTeam = (team: Pick<ExpertTeam, 'builtin' | 'conversationCreated'>): boolean => !team.builtin || isConversationCreatedTeam(team);
+const teamSource = (team: Pick<ExpertTeam, 'builtin' | 'conversationCreated'>): 'builtin' | 'custom' => isDeletableTeam(team) ? 'custom' : 'builtin';
 
 export function TeamsPanel(props: {
     remote: TeamRemote;
@@ -248,7 +257,7 @@ export function TeamsPanel(props: {
     };
     const copy = (team: ExpertTeam) => {
         setDetails(null);
-        const { id: _id, builtin: _builtin, runtime: _runtime, skills: _skills, connectors: _connectors, connectorStates: _connectorStates, provenance: _provenance, ...value } = team;
+        const { id: _id, builtin: _builtin, runtime: _runtime, skills: _skills, connectors: _connectors, connectorStates: _connectorStates, provenance: _provenance, conversationCreated: _conversationCreated, ...value } = team;
         setEditor({
             value: {
                 ...structuredClone(value),
@@ -274,7 +283,7 @@ export function TeamsPanel(props: {
         }
     };
     const filteredTeams = snapshot?.teams.map(team => localizeTeam(team, locale)).filter(team =>
-        (filter === 'all' || (filter === 'builtin' ? team.builtin : !team.builtin)) &&
+        (filter === 'all' || teamSource(team) === filter) &&
         (!status || (() => {
             const repair = teamRepairIssue(team, experts) !== undefined;
             const recalled = team.members.every(member => snapshot.enabledExperts.includes(member.expertSlug));
@@ -340,16 +349,15 @@ export function TeamsPanel(props: {
                   <TeamAvatars team={team} experts={experts}/>
                 </div>} metadata={<>{tx("{0} 位专家", [memberCount])}{repairIssue ? <> · {tx("需修复")}</> : null}</>} description={repairIssue
                     ? `${team.description} ${tx(repairIssue)}`
-                    : team.description} moreItems={[
-                    ...(!team.builtin ? [{ id: 'edit', label: tx("编辑专家团"), disabled: busy, onSelect: () => edit(team) }] : []),
-                    ...(!team.builtin ? [{ id: 'delete', label: tx("删除专家团"), danger: true, disabled: busy, onSelect: () => void change(team, 'delete') }] : []),
-                ]} actions={<>
-                  <button type="button" className="aag-card-action" title={tx("查看详情")} aria-label={tx("查看详情")} aria-haspopup="dialog" onClick={() => setDetails(team)}>
-                    <IconEye size={18}/>{tx("查看详情")}</button>
-                  <button type="button" className="aag-card-action" disabled={busy} title={tx("复制")} aria-label={tx("复制")} onClick={() => copy(team)}>
-                    <IconCopy size={18}/>{tx("复制")}</button>
+                    : team.description} openLabel={tx("查看详情")} onOpen={() => setDetails(team)} actions={<>
                   <button type="button" className={`aag-card-action aag-card-action-primary aag-team-summon${recalled ? ' is-active' : ''}`} disabled={busy || recalled || !validMembers} title={tx("召唤团队成员")} aria-label={tx("召唤团队成员")} aria-pressed={recalled} onClick={() => void summon(team)}>
                     <IconUsers size={18}/>{tx("召唤")}</button>
+                  <button type="button" className="aag-card-action aag-team-copy" disabled={busy} onClick={() => copy(team)}>
+                    <Copy size={17} aria-hidden="true"/>{tx("复制")}</button>
+                  {!team.builtin && <button type="button" className="aag-card-action aag-team-edit" disabled={busy} onClick={() => edit(team)}>
+                    <PencilLine size={17} aria-hidden="true"/>{tx("编辑")}</button>}
+                  {isDeletableTeam(team) && <button type="button" className="aag-card-action aag-card-action-danger aag-team-delete" disabled={busy} onClick={() => void change(team, 'delete')}>
+                    <Trash2 size={17} aria-hidden="true"/>{tx("删除")}</button>}
                 </>}/>);
         })}
       </div>{' '}
@@ -370,7 +378,7 @@ export function TeamsPanel(props: {
                     });
                     setDetails(null);
                 }
-                : undefined} onDelete={!details.builtin ? () => void change(details, 'delete') : undefined}/>)}
+                : undefined} onDelete={isDeletableTeam(details) ? () => void change(details, 'delete') : undefined}/>)}
       {editor && (<TeamEditor initial={editor.value} experts={experts} enabledExperts={snapshot!.enabledExperts} close={() => setEditor(null)} refresh={async () => {
                 const latest = await unwrap(props.remote.getTeams());
                 accept(latest);

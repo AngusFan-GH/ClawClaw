@@ -1,20 +1,24 @@
 import { describe, expect, it } from 'vitest'
 import { CUSTOM_EDITOR_CSS } from '../src/experts/client/custom-editor.ts'
 import { customEn, customZh } from '../src/experts/client/custom-locales.ts'
-import { CAPABILITY_PICKER_CSS, CARD_SETTINGS_CSS, canToggleExpert, connectorStateLabel, expertSource } from '../src/experts/client/index.ts'
+import { CAPABILITY_PICKER_CSS, CARD_SETTINGS_CSS, canToggleExpert, connectorStateLabel, expertSource, isDeletableExpert } from '../src/experts/client/index.ts'
 import { TEAM_CSS } from '../src/experts/client/team-style.ts'
 
 describe('expert library UI', () => {
   it('keeps the library navigation fixed while each tab owns its scroll position', () => {
-    expect(TEAM_CSS).toContain('.aag-library-shell{max-width:1120px;height:100%;max-height:100%')
+    expect(TEAM_CSS).toContain('.aag-section.aag-library-shell{max-width:1120px;height:100%;max-height:100%;gap:0')
     expect(TEAM_CSS).toContain('.aag-library-sticky{z-index:20;display:flex;flex:none')
     expect(TEAM_CSS).toContain('.aag-library-navigation{')
     expect(TEAM_CSS).toContain('.aag-tab-label{')
+    expect(TEAM_CSS).toContain('.aag-library-tabs{display:flex')
     expect(TEAM_CSS).toContain('grid-template-columns:repeat(4,minmax(0,1fr))')
     expect(TEAM_CSS).toContain('.aag-library-tab[aria-selected=true]')
-    expect(TEAM_CSS).toContain('@container(max-width:430px)')
+    expect(TEAM_CSS).toContain('@container(max-width:560px)')
     expect(TEAM_CSS).toMatch(/\.aag-library-panel\{[^}]*overflow-y:auto/)
-    expect(TEAM_CSS).toMatch(/\.aag-library-panel\{[^}]*padding:8px 2px 32px 0/)
+    expect(TEAM_CSS).toMatch(/\.aag-library-panel\{[^}]*padding:0 12px 32px/)
+    expect(TEAM_CSS).toMatch(/\.aag-library-panel \.aag-card-filters\{[^}]*position:sticky;top:0;z-index:12/)
+    expect(TEAM_CSS).toMatch(/\.aag-library-panel \.aag-card-filters\{[^}]*width:calc\(100% \+ 24px\);margin:0 -12px -8px;padding:8px 12px/)
+    expect(TEAM_CSS).toMatch(/\.aag-library-panel \.aag-card-filters\{[^}]*background:var\(--dsw-alias-bg-layer-1\)/)
     expect(TEAM_CSS).toContain('.aag-library-panel[hidden]{display:none}')
     expect(TEAM_CSS).not.toContain('.aag-tab-count')
   })
@@ -39,10 +43,15 @@ describe('expert library UI', () => {
   })
 
   it('treats bundled packages as built-in experts', () => {
-    expect(expertSource({ custom: false, packageFormat: 'clawclaw-plugin' })).toBe('base')
+    expect(expertSource({ custom: false })).toBe('base')
+    expect(expertSource({ custom: false, conversationCreated: true })).toBe('custom')
     expect(expertSource({ custom: true })).toBe('custom')
     expect(expertSource({ custom: false })).toBe('base')
+    expect(isDeletableExpert({ custom: false })).toBe(false)
+    expect(isDeletableExpert({ custom: false, conversationCreated: true })).toBe(true)
     expect(CARD_SETTINGS_CSS).toContain('.aag-expert-details{')
+    expect(CARD_SETTINGS_CSS).toContain('.aag-card-filters .aag-field-search{flex:1 1 320px;min-width:min(280px,100%)}')
+    expect(CARD_SETTINGS_CSS).toContain('@container(max-width:760px){.aag-card-filters .aag-field-search{flex:1 0 100%;width:100%}}')
   })
 
   it('blocks enabling when a required capability is missing but still permits disabling', () => {
@@ -68,6 +77,9 @@ describe('expert library UI', () => {
     expect(TEAM_CSS).toMatch(/\.agt-segment \.ant-btn\.agt-segment-active\{[^}]*color:var\(--dsw-alias-label-primary\)/)
     expect(TEAM_CSS).toContain('.agt-prompt-meta{display:flex')
     expect(TEAM_CSS).toContain('.agt-example-list{display:grid')
+    expect(TEAM_CSS).toContain('.aag-team-details-drawer .ant-drawer-body{')
+    expect(TEAM_CSS).toContain('.agt-detail-overview{display:grid')
+    expect(TEAM_CSS).toContain('.agt-detail-roster article{display:grid')
     expect(TEAM_CSS).toContain('.agt-coordinator-toolbar{align-items:stretch;flex-direction:column}')
   })
 })

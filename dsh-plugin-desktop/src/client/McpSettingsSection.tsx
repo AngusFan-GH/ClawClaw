@@ -1,23 +1,19 @@
 /** Desktop Settings surface dedicated to MCP servers. */
 
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react'
-import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Menu, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 // @ts-expect-error package subpath has no declaration file
 import ChevronDown from 'lucide-react/dist/esm/icons/chevron-down.mjs'
 // @ts-expect-error package subpath has no declaration file
-import Pencil from 'lucide-react/dist/esm/icons/pencil.mjs'
-// @ts-expect-error package subpath has no declaration file
 import Plus from 'lucide-react/dist/esm/icons/plus.mjs'
 // @ts-expect-error package subpath has no declaration file
-import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw.mjs'
+import MoreHorizontal from 'lucide-react/dist/esm/icons/ellipsis.mjs'
 // @ts-expect-error package subpath has no declaration file
-import RotateCw from 'lucide-react/dist/esm/icons/rotate-cw.mjs'
+import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw.mjs'
 // @ts-expect-error package subpath has no declaration file
 import Search from 'lucide-react/dist/esm/icons/search.mjs'
 // @ts-expect-error package subpath has no declaration file
 import PlugZap from 'lucide-react/dist/esm/icons/plug-zap.mjs'
-// @ts-expect-error package subpath has no declaration file
-import Trash2 from 'lucide-react/dist/esm/icons/trash-2.mjs'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DesktopMcpCatalogEntry, DesktopMcpServerConfig, DesktopMcpServerView } from '../mcp-contract.ts'
 import type { DesktopMcpApi } from './mcp-api.ts'
@@ -124,6 +120,7 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
   const [importText, setImportText] = useState<string>()
   const [search, setSearch] = useState('')
   const [expandedServers, setExpandedServers] = useState<ReadonlySet<string>>(() => new Set())
+  const [openMenuName, setOpenMenuName] = useState<string>()
   const busyRef = useRef(false)
   const mountedRef = useRef(true)
   const applyServers = useCallback((next: readonly DesktopMcpServerView[]): void => {
@@ -262,11 +259,25 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
           {(expertUsage?.get(server.serverName) ?? 0) > 0 && <span>{t('usedByExperts').replace('{count}', String(expertUsage?.get(server.serverName) ?? 0))}</span>}</div>
           <div className="dshMcpServerActions">{server.transport === 'streamable-http' && server.oauth !== undefined && <button type="button" className="dshIntegrationsCommand"
             disabled={busy !== undefined} onClick={() => { authorize(server.serverName) }}>{server.diagnostic.code === 'authorization-required' ? t('authorize') : t('reauthorize')}</button>}
-            <SettingsIconButton label={t('testServer')} disabled={busy !== undefined} onClick={() => { void run(`mcp-test:${server.serverName}`, async () => { applyServers(await api.test(server.serverName)) }) }}><RotateCw /></SettingsIconButton>
-            <SettingsIconButton label={t('editServer')} disabled={busy !== undefined} onClick={() => { setError(undefined); setImportText(undefined); setDraft(mcpDraft(server)) }}><Pencil /></SettingsIconButton>
-            <SettingsIconButton label={removeName === server.serverName ? t('confirmRemove') : t('removeServer')} danger disabled={busy !== undefined}
-              onClick={() => { if (removeName !== server.serverName) { setRemoveName(server.serverName); return }
-                void run(`mcp-remove:${server.serverName}`, async () => { applyServers(await api.remove(server.serverName)); setRemoveName(undefined) }) }}><Trash2 /></SettingsIconButton>
+            <Menu className="dshMcpMore" listClassName="dshMcpMoreMenu" open={openMenuName === server.serverName}
+              onClose={() => { setOpenMenuName(undefined) }} align="end" compact portal selection="fill"
+              items={[
+                { id: 'test', label: t('testServer'), disabled: busy !== undefined },
+                { id: 'edit', label: t('editServer'), disabled: busy !== undefined },
+                { id: 'remove', label: removeName === server.serverName ? t('confirmRemove') : t('removeServer'), disabled: busy !== undefined, danger: true },
+              ]}
+              onSelect={action => {
+                setOpenMenuName(undefined)
+                if (action === 'test') void run(`mcp-test:${server.serverName}`, async () => { applyServers(await api.test(server.serverName)) })
+                if (action === 'edit') { setError(undefined); setImportText(undefined); setDraft(mcpDraft(server)) }
+                if (action === 'remove') {
+                  if (removeName !== server.serverName) { setRemoveName(server.serverName); return }
+                  void run(`mcp-remove:${server.serverName}`, async () => { applyServers(await api.remove(server.serverName)); setRemoveName(undefined) })
+                }
+              }}
+              anchor={<button type="button" className="dshMcpMoreTrigger" aria-label={t('more')} title={t('more')} aria-haspopup="menu"
+                aria-expanded={openMenuName === server.serverName} disabled={busy !== undefined}
+                onClick={() => { setRemoveName(current => current === server.serverName ? current : undefined); setOpenMenuName(current => current === server.serverName ? undefined : server.serverName) }}><MoreHorizontal aria-hidden="true" /></button>} />
           </div></div>
         {server.error !== undefined && <p className="dshIntegrationsServerError">{server.error}</p>}
         {server.diagnostic.code === 'credentials-missing' && <p className="dshIntegrationsServerError">{t('credentialsMissing')}</p>}

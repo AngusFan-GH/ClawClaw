@@ -53,6 +53,7 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
   const [scopeMenuOpen, setScopeMenuOpen] = useState(false)
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false)
   const [sourceFilter, setSourceFilter] = useState('')
+  const [groupExpansion, setGroupExpansion] = useState<ReadonlyMap<string, boolean>>(() => new Map())
   const [directoriesOpen, setDirectoriesOpen] = useState(false)
   const [detailTab, setDetailTab] = useState<'overview' | 'files'>('overview')
   const scopedApi = (selection: string, selectedPreset?: string): DesktopSkillsApi => selection.startsWith('session:')
@@ -232,6 +233,13 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
   const groupedSkills = sources
     .map(source => ({ source, skills: filtered.filter(skill => skill.source === source) }))
     .filter(group => group.skills.length > 0)
+  const toggleGroup = (source: string, expanded: boolean): void => {
+    setGroupExpansion(current => {
+      const next = new Map(current)
+      next.set(source, !expanded)
+      return next
+    })
+  }
   useEffect(() => {
     if (sourceFilter !== '' && !skills.some(skill => skill.source === sourceFilter)) setSourceFilter('')
   }, [skills, sourceFilter])
@@ -337,8 +345,12 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
               </dd>
             </div>)}</dl>
           </details>}
-          <div className="dshSkillsGroups">{groupedSkills.map(group => <section className="dshSkillsGroup" key={group.source} aria-label={sourceLabel(group.source)}><h3>{sourceLabel(group.source)}<span>{group.skills.length}</span></h3>
-            <ul className="dshSkillsGrid">{group.skills.map(skill => <li key={skill.name} data-recyclable={canRecycle(skill)}>
+          <div className="dshSkillsGroups">{groupedSkills.map(group => {
+            const expanded = query !== '' || sourceFilter !== '' || (groupExpansion.get(group.source) ?? group.skills.length < 20)
+            const collapsed = !expanded
+            const groupId = `${id}-skills-${group.source.replace(/[^a-z0-9-]/giu, '-')}`
+            return <section className="dshSkillsGroup" key={group.source} aria-label={sourceLabel(group.source)} data-collapsed={collapsed}><h3><button type="button" aria-expanded={expanded} aria-controls={groupId} onClick={() => toggleGroup(group.source, expanded)}><IconChevronDownOutlineMedium /><span>{sourceLabel(group.source)}</span><small>{group.skills.length}</small></button></h3>
+            {!collapsed && <ul className="dshSkillsGrid" id={groupId}>{group.skills.map(skill => <li key={skill.name} data-recyclable={canRecycle(skill)}>
               <button type="button" className="dshSkillsCard" title={skill.name} disabled={disabled} aria-label={`${t('viewDetails')}: ${skill.name}`} onClick={event => { openSkill(skill, event.currentTarget) }}>
                 <span className="dshSkillsCardHeading"><IconSkillOutlineMedium /><strong>{skill.name}</strong>{!skill.editable && <span className="dshSkillsReadOnly">{t('readOnly')}</span>}</span>
                 <span className="dshSkillsSummary">{skill.description}</span>
@@ -347,7 +359,8 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
               {canRecycle(skill) && <span className="dshSkillsCardDelete"><Tooltip side="top" delayMs={350} maxWidth={240} label={t('recycle')}><span>
                 <button type="button" className="dshIntegrationsIconButton" data-danger aria-label={`${t('recycle')}: ${skill.name}`} disabled={disabled} onClick={event => { openSkill(skill, event.currentTarget, true) }}><Trash2 aria-hidden="true" /></button>
               </span></Tooltip></span>}
-            </li>)}</ul></section>)}</div>
+            </li>)}</ul>}</section>
+          })}</div>
           {filtered.length === 0 && <p className="dshIntegrationsEmpty">{t(skills.length === 0 ? 'noSkills' : 'noMatches')}{(query !== '' || sourceFilter !== '') && <button type="button" className="dshIntegrationsCommand" onClick={() => { setSearch(''); setSourceFilter('') }}>{t('clearFilters')}</button>}</p>}
         </> : <ul className="dshSkillsRecycleList">{filteredRecycled.map(skill => <li key={skill.id}>
           <Trash2 aria-hidden="true" /><div><strong>{skill.name}</strong><span>{t('deletedAt')}: <time dateTime={skill.deletedAt}>{Number.isNaN(Date.parse(skill.deletedAt)) ? '-' : new Date(skill.deletedAt).toLocaleString(t('dateLocale'))}</time></span></div>

@@ -1,5 +1,5 @@
-import { lstat, readFile, readdir, realpath, stat } from 'node:fs/promises'
-import { basename, isAbsolute, join, relative, sep } from 'node:path'
+import { lstat, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
 import { z } from 'zod'
 import type { ExpertCapabilityBinding, ExpertSummary } from './expert-contract.js'
 import { ZH_DIVISION } from './names.js'
@@ -11,6 +11,10 @@ const MAX_DISCOVERY_DEPTH = 5
 const packageNameSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)
 const packagePathSchema = z.string().min(3).max(512)
 const presetAvatarSchema = z.number().int().min(0).max(35)
+const personalMarketplaceSchema = z.object({
+  name: z.literal('my-experts'),
+  plugins: z.array(z.object({ name: packageNameSchema, source: z.string() }).passthrough()),
+}).passthrough()
 
 export const expertPluginLocalizedTextSchema = z.object({
   zh: z.string().trim().min(1).optional(),
@@ -98,6 +102,7 @@ export interface ExpertPluginTeamDefinition {
   readonly memberAgentSlugs: readonly string[]
   readonly skills: readonly ExpertCapabilityBinding[]
   readonly connectors: readonly ExpertCapabilityBinding[]
+  readonly conversationCreated?: boolean
 }
 
 function packageRelativePath(value: string): string {
@@ -244,6 +249,78 @@ export async function findExpertPluginPackageBySession(
   }
   const match = matches.sort((left, right) => right.modified - left.modified)[0]
   return match === undefined ? undefined : readExpertPluginPackage(match.root)
+}
+
+async function personalMarketplaceRecord(
+  pluginsRoot: string,
+  pkg: ExpertPluginPackage,
+): Promise<{ readonly path: string; readonly value: z.infer<typeof personalMarketplaceSchema>; readonly source: string } | undefined> {
+  const path = join(dirname(pluginsRoot), '.clawclaw-plugin', 'marketplace.json')
+  const info = await lstat(path).catch(() => undefined)
+  if (info === undefined || !info.isFile() || info.isSymbolicLink() || info.size > MAX_MANIFEST_BYTES) return undefined
+  let sourceValue: unknown
+  try {
+    sourceValue = JSON.parse(await readFile(path, 'utf8'))
+  } catch {
+    return undefined
+  }
+  const parsed = personalMarketplaceSchema.safeParse(sourceValue)
+  if (!parsed.success) return undefined
+  const source = `./plugins/${basename(pkg.root)}`
+  return parsed.data.plugins.some(entry => entry.name === pkg.manifest.name && entry.source === source)
+    ? { path, value: parsed.data, source }
+    : undefined
+}
+
+/** Every validated direct child of the dedicated my-experts library is user-managed. */
+export async function isConversationCreatedExpertPlugin(
+  pluginsRoot: string,
+  pkg: ExpertPluginPackage,
+): Promise<boolean> {
+  const rootInfo = await lstat(pluginsRoot).catch(() => undefined)
+  if (rootInfo === undefined || !rootInfo.isDirectory() || rootInfo.isSymbolicLink()) return false
+  const canonicalRoot = await realpath(pluginsRoot)
+  const packageRoot = await realpath(pkg.root).catch(() => undefined)
+  if (packageRoot === undefined) return false
+  const child = relative(canonicalRoot, packageRoot)
+  return child !== '' && !child.includes(sep) && isInside(canonicalRoot, packageRoot)
+}
+
+/** Remove one conversation-created package after ownership and path validation. */
+export async function removeConversationCreatedExpertPlugin(
+  pluginsRoot: string,
+  packageName: string,
+): Promise<ExpertPluginPackage> {
+  const name = packageNameSchema.parse(packageName)
+  const rootInfo = await lstat(pluginsRoot).catch(() => undefined)
+  if (rootInfo === undefined || !rootInfo.isDirectory() || rootInfo.isSymbolicLink()) throw new Error('Conversation-created expert library is unavailable.')
+  const canonicalRoot = await realpath(pluginsRoot)
+  const matches: ExpertPluginPackage[] = []
+  for (const entry of await readdir(canonicalRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.isSymbolicLink() || entry.name.startsWith('.')) continue
+    const candidate = join(canonicalRoot, entry.name)
+    const candidateRoot = await realpath(candidate)
+    const child = relative(canonicalRoot, candidateRoot)
+    if (child === '' || child.includes(sep) || !isInside(canonicalRoot, candidateRoot)) continue
+    const pkg = await readExpertPluginPackage(candidateRoot).catch(() => undefined)
+    if (pkg?.manifest.name === name) matches.push(pkg)
+  }
+  if (matches.length !== 1) throw new Error(matches.length === 0
+    ? 'Only experts and teams created through a conversation can be deleted.'
+    : 'Multiple conversation-created packages use the same name; deletion was cancelled.')
+  const match = matches[0]!
+  const marketplace = await personalMarketplaceRecord(canonicalRoot, match)
+  await rm(match.root, { recursive: true })
+  if (marketplace !== undefined) {
+    const next = { ...marketplace.value, plugins: marketplace.value.plugins.filter(entry =>
+      entry.name !== match.manifest.name || entry.source !== marketplace.source) }
+    try {
+      await writeFile(marketplace.path, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
+    } catch (error) {
+      console.warn(`[clawclaw-experts] deleted ${match.manifest.name} but could not update the personal marketplace registry:`, error)
+    }
+  }
+  return match
 }
 
 const PLUGIN_DIVISIONS: Readonly<Record<string, string>> = {

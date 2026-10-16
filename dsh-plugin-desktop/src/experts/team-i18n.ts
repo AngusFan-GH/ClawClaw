@@ -75,7 +75,7 @@ export const TEAM_EN = {
   '团队名称已被使用。': 'This team name is already in use.', '启用状态无效。': 'Invalid enabled state.',
   '只能删除已有的自定义专家团。': 'Only existing custom teams can be deleted.',
   '{0}详情': '{0} details', '内置专家团': 'Built-in team', '我的专家团': 'My team', '位专家': ' experts',
-  '选择专家团': 'Select team', '复制并自定义': 'Copy and customize', '复制': 'Copy', '编辑专家团': 'Edit team',
+  '选择专家团': 'Select team', '复制并自定义': 'Copy and customize', '复制': 'Copy', '编辑': 'Edit', '删除': 'Delete', '编辑专家团': 'Edit team',
   '团队帮你做': 'What this team can do', '选择后填入聊天草稿，由你确认发送。': 'Selecting an example fills the draft. You decide when to send it.',
   '团队成员': 'Team members', '由当前会话协调，成员分别分析后统一汇总。': 'The current conversation coordinates independent analysis and combines the results.',
   '查看成员完整分工': 'View full assignments', '成员失效': 'Unavailable member', '你将获得': 'What you receive',

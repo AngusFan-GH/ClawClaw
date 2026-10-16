@@ -27,7 +27,7 @@ export function TeamAvatars({ team, experts, large = false, }: {
       {team.members.slice(0, 3).map((member) => (<Avatar key={member.expertSlug} expert={experts.find((e) => e.slug === member.expertSlug)} size={large ? 80 : 54}/>))}
     </div>);
 }
-/** 编辑走右侧抽屉，详情和成员选择走默认弹窗。 */
+/** 编辑和详情走右侧抽屉，成员选择保留紧凑弹窗。 */
 export function TeamDialog({ title, children, close, className = '', }: {
     title: string;
     children: React.ReactNode;
@@ -43,6 +43,12 @@ export function TeamDialog({ title, children, close, className = '', }: {
     }, []);
     if (editor) {
         return (<Drawer classNames={{ body: `agt-dialog agt-editor ${className}` }} rootClassName="aag-editor-drawer" keyboard={false} styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1, minHeight: 0 } }} title={title} open placement="right" size="min(560px, 100vw)" destroyOnHidden onClose={close}>
+          {children}
+        </Drawer>);
+    }
+    const detail = className.split(/\s+/u).includes('agt-detail');
+    if (detail) {
+        return (<Drawer classNames={{ body: `agt-dialog ${className}` }} rootClassName="aag-team-details-drawer" keyboard={false} styles={{ body: { overflow: 'auto' } }} title={title} open placement="right" size="min(640px, 100vw)" destroyOnHidden onClose={close}>
           {children}
         </Drawer>);
     }

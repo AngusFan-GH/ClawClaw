@@ -7,10 +7,12 @@ import {
   discoverExpertPluginPackages,
   expertPluginLeadAgent,
   findExpertPluginPackageBySession,
+  isConversationCreatedExpertPlugin,
   projectExpertPluginAgents,
   projectExpertPluginAgent,
   projectExpertPluginTeam,
   readExpertPluginPackage,
+  removeConversationCreatedExpertPlugin,
 } from '../src/experts/expert-plugin-package.ts'
 
 const roots: string[] = []
@@ -105,6 +107,44 @@ describe('ClawClaw expert plugin packages', () => {
       manifest: { name: 'legal-search-pro' },
     })
     await expect(findExpertPluginPackageBySession(library, 'missing-session')).resolves.toBeUndefined()
+  })
+
+  it('deletes a direct personal package even when it predates session markers', async () => {
+    const library = await temporaryRoot()
+    const owned = await createAgentPackage(library, 'owned-package')
+    const pkg = await readExpertPluginPackage(owned)
+    await expect(isConversationCreatedExpertPlugin(library, pkg)).resolves.toBe(true)
+    await expect(removeConversationCreatedExpertPlugin(library, 'legal-search-pro')).resolves.toMatchObject({ manifest: { name: 'legal-search-pro' } })
+    await expect(readFile(join(owned, '.clawclaw-plugin/plugin.json'), 'utf8')).rejects.toThrow()
+  })
+
+  it('recognizes and cleans a legacy package registered in the personal marketplace', async () => {
+    const marketplace = await temporaryRoot()
+    const plugins = join(marketplace, 'plugins')
+    const owned = await createAgentPackage(plugins, 'legacy-owned')
+    const registry = join(marketplace, '.clawclaw-plugin/marketplace.json')
+    await mkdir(join(marketplace, '.clawclaw-plugin'), { recursive: true })
+    await writeJson(registry, {
+      name: 'my-experts', description: 'personal',
+      plugins: [{ name: 'legal-search-pro', source: './plugins/legacy-owned', description: 'legacy' }],
+    })
+    await expect(isConversationCreatedExpertPlugin(plugins, await readExpertPluginPackage(owned))).resolves.toBe(true)
+    await removeConversationCreatedExpertPlugin(plugins, 'legal-search-pro')
+    expect(JSON.parse(await readFile(registry, 'utf8'))).toMatchObject({ plugins: [] })
+  })
+
+  it('refuses nested and symlinked packages outside the personal library boundary', async () => {
+    const library = await temporaryRoot()
+    const nestedParent = join(library, 'nested')
+    const nested = await createAgentPackage(nestedParent, 'nested-package')
+    await writeFile(join(nested, '.created-by-session'), 'session-nested')
+    await expect(isConversationCreatedExpertPlugin(library, await readExpertPluginPackage(nested))).resolves.toBe(false)
+
+    const outside = await temporaryRoot()
+    const linkedTarget = await createAgentPackage(outside, 'linked-target')
+    await writeFile(join(linkedTarget, '.created-by-session'), 'session-linked')
+    await symlink(linkedTarget, join(library, 'linked-package'))
+    await expect(removeConversationCreatedExpertPlugin(library, 'legal-search-pro')).rejects.toThrow('created through a conversation')
   })
 
   it('discovers versioned packages and validates a Team as a package', async () => {

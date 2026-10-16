@@ -19,6 +19,7 @@ import { loadEditorReview, continueEditorReview, type EditorReview } from "./edi
 const h = React.createElement
 export interface CustomEditorProps {
   readonly expert?: CustomExpertInput
+  readonly loadPrompt?: () => Promise<string>
   readonly enabled: boolean
   readonly revision: number
   readonly divisions: readonly string[]
@@ -42,6 +43,9 @@ export function CustomExpertEditor(props: CustomEditorProps): React.ReactElement
     skills: props.expert?.skills ?? [], mcpServers: props.expert?.mcpServers ?? [],
   }))
   const [draft, setDraft] = React.useState(initial)
+  const [promptOpen, setPromptOpen] = React.useState(props.loadPrompt === undefined)
+  const [promptLoading, setPromptLoading] = React.useState(false)
+  const promptRequest = React.useRef<Promise<string> | null>(null)
   const [revision, setRevision] = React.useState(props.revision);
   const [enabled, setEnabled] = React.useState(props.enabled);
   const [needsReview, setNeedsReview] = React.useState(false);
@@ -72,6 +76,30 @@ export function CustomExpertEditor(props: CustomEditorProps): React.ReactElement
   const setBindingFlag = (key: 'skills' | 'mcpServers', name: string, field: 'required' | 'enabled', value: boolean): void => {
     setDraft(current => ({ ...current, [key]: current[key].map(binding => binding.name === name ? { ...binding, [field]: value } : binding) }))
     setError(null)
+  }
+  const requestPrompt = (): Promise<string> => {
+    if (draft.prompt.trim() !== '') return Promise.resolve(draft.prompt)
+    if (props.loadPrompt === undefined) return Promise.resolve(draft.prompt)
+    if (promptRequest.current !== null) return promptRequest.current
+    setPromptLoading(true)
+    const request = props.loadPrompt().then(prompt => {
+      setDraft(current => ({ ...current, prompt }))
+      setError(null)
+      return prompt
+    }).catch((cause: unknown) => {
+      setError(cause instanceof Error ? cause.message : String(cause))
+      throw cause
+    }).finally(() => {
+      promptRequest.current = null
+      setPromptLoading(false)
+    })
+    promptRequest.current = request
+    return request
+  }
+  const togglePrompt = (): void => {
+    if (promptOpen) { setPromptOpen(false); return }
+    setPromptOpen(true)
+    if (draft.prompt.trim() === '') void requestPrompt().catch(() => {})
   }
   const capabilitySelect = (key: 'skills' | 'mcpServers'): React.ReactElement => {
     const selected = draft[key].map(binding => binding.name)
@@ -128,13 +156,19 @@ export function CustomExpertEditor(props: CustomEditorProps): React.ReactElement
   };
   const submit = (enabled: boolean): void => {
     if (saving.current || needsReview || form.current?.reportValidity() !== true) return
-    const parsed = customExpertInputSchema.safeParse(draft)
-    if (!parsed.success) { setError(props.t('custom.invalid')); return }
     // 名称以 Host 当前名册为准；旧本地名册不能拦截已被其他窗口释放的名称。
     saving.current = true
     setBusy(true)
     setError(null)
-    void props.remote.saveCustomExpert(parsed.data, enabled, revision).then(result => {
+    const ready = props.loadPrompt !== undefined && draft.prompt.trim() === ''
+      ? requestPrompt().then(prompt => ({ ...draft, prompt }))
+      : Promise.resolve(draft)
+    void ready.then(candidate => {
+      const parsed = customExpertInputSchema.safeParse(candidate)
+      if (!parsed.success) throw new Error(props.t('custom.invalid'))
+      setDraft(candidate)
+      return props.remote.saveCustomExpert(parsed.data, enabled, revision)
+    }).then(result => {
       if (!result.ok) throw new Error(result.error.message)
       props.onSaved(result.value)
     }).catch((cause: unknown) => {
@@ -179,12 +213,15 @@ export function CustomExpertEditor(props: CustomEditorProps): React.ReactElement
         options: props.divisions.map(division => ({ value: division, label: (props.locale === 'en' ? EN_DIVISION : ZH_DIVISION)[division] ?? division })),
       })),
     h('div', { className: 'aag-custom-prompt-head' }, h('label', { htmlFor: 'aag-custom-prompt' }, props.t('custom.prompt')),
-      draft.prompt === '' ? h(Button, { disabled: busy, onClick: () => set('prompt', props.t('custom.templateText')) }, props.t('custom.template')) : null),
-    h(Input.TextArea, {
+      props.loadPrompt !== undefined
+        ? h(Button, { disabled: busy, loading: promptLoading, onClick: togglePrompt, 'aria-expanded': promptOpen }, props.t(promptOpen ? 'custom.hidePrompt' : 'custom.viewPrompt'))
+        : draft.prompt === '' ? h(Button, { disabled: busy, onClick: () => set('prompt', props.t('custom.templateText')) }, props.t('custom.template')) : null),
+    promptOpen && promptLoading ? h('p', { className: 'aag-note', role: 'status' }, props.t('custom.loadingPrompt')) : null,
+    promptOpen && !promptLoading ? h(Input.TextArea, {
       id: 'aag-custom-prompt', className: 'aag-custom-prompt', value: draft.prompt, rows: 8, required: true, maxLength: 20_000, disabled: busy,
       'aria-label': props.t('custom.prompt'), placeholder: props.t('custom.promptPlaceholder'),
       onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => set('prompt', event.currentTarget.value),
-    }),
+    }) : null,
     label(props.t('custom.skills'), capabilitySelect('skills')),
     label(props.t('custom.mcpServers'), capabilitySelect('mcpServers')),
     error === null ? null : h('div', { className: 'aag-error', role: 'alert' }, error),

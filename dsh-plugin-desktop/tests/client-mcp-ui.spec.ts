@@ -39,6 +39,9 @@ function field(label: string): HTMLInputElement {
   if (!(found instanceof HTMLInputElement)) throw new Error(`Missing field: ${label}`)
   return found
 }
+async function openServerMenu(): Promise<void> {
+  await act(async () => { document.querySelector<HTMLButtonElement>('.dshMcpMoreTrigger')!.click() })
+}
 
 afterEach(async () => {
   await act(async () => { root?.unmount() }); root = undefined
@@ -78,6 +81,7 @@ describe('MCP settings UI', () => {
 
   it('preserves reconnect settings while editing a server', async () => {
     const api = await mount()
+    await openServerMenu()
     await act(async () => { button(zh.editServer).click() })
     const dialog = document.querySelector('[role="dialog"]')
     expect(dialog).not.toBeNull()
@@ -133,6 +137,19 @@ describe('MCP settings UI', () => {
     expect(document.querySelector('.dshMcpInstalledList .dshMcpServerCard')).not.toBeNull()
     expect(document.querySelector('.dshMcpCatalogGrid')).toBeNull()
     expect(document.querySelector('.dshMcpServerStatus [role="switch"]')).not.toBeNull()
+    expect(document.querySelector('.dshMcpMoreTrigger')).not.toBeNull()
+    await openServerMenu()
+    expect(button(zh.testServer).closest('[role="menu"]')).not.toBeNull()
+  })
+
+  it('keeps destructive removal behind a second menu selection', async () => {
+    const api = await mount()
+    await openServerMenu()
+    await act(async () => { button(zh.removeServer).click() })
+    expect(api.remove).not.toHaveBeenCalled()
+    await openServerMenu()
+    await act(async () => { button(zh.confirmRemove).click() })
+    expect(api.remove).toHaveBeenCalledWith('local')
   })
 
   it('opens create and import workflows in dialogs without inserting forms above the list', async () => {
@@ -162,6 +179,7 @@ describe('MCP settings UI', () => {
       oauth: { scope: 'mcp:tools', clientId: 'desktop-client', clientSecretRef: 'MCP_CLIENT_SECRET',
         tokenEndpointAuthMethod: 'client_secret_post' }, managedCredentialRefs: ['MCP_CLIENT_SECRET'] }
     const api = await mount(candidate => { vi.mocked(candidate.read).mockResolvedValue({ mcpServers: [oauthServer], catalog: [] }) })
+    await openServerMenu()
     await act(async () => { button(zh.editServer).click() })
     expect(field(zh.oauthClientId).value).toBe('desktop-client')
     expect(field(zh.oauthClientSecretRef).value).toBe('MCP_CLIENT_SECRET')

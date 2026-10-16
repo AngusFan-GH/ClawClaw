@@ -3,7 +3,7 @@ import { PersonaError } from './persona-error.js'
 import { teamText } from './team-i18n.js'
 import { teamCollaboration } from './team-collaboration.js'
 import { createTeamLibrary, AGENCY_TEAM_SERVICE, type TeamConnectorLifecycle } from './team-library.js'
-import { effectiveCoordinator } from './team-contract.js'
+import { effectiveCoordinator, type TeamSnapshot } from './team-contract.js'
 import { executeTeam, type TeamMemberRun } from './team-runtime.js'
 import { localizeTeam } from './team-content-en.js'
 /**
@@ -51,9 +51,9 @@ export { ZH_NAME }
 import { createHostLocaleReader, formatHost, localizedExpertDescription, localizedExpertName, matchDivision, renderExpertList, renderSummonResults, type LocaleId } from './i18n.js'
 import { hasLegacySettingsInstall, installSettingsSectionCompat, isLiveValue, loadHostModule, readAgencySettings, recoverImportedAgencySettings, settingsNamespaceCompat } from './settings-compat.js'
 import { AGENCY_LIBRARY_SERVICE, agencySettingsSchema, createExpertLibrary, validateAgencySettings, type AgencySettings } from './expert-library.js'
-import type { ExpertCapabilityBinding, ExpertSummary } from './expert-contract.js'
+import type { CatalogSnapshot, ExpertCapabilityBinding, ExpertSummary } from './expert-contract.js'
 import { builtinExpertCapabilities } from './builtin-capabilities.js'
-import { discoverExpertPluginPackages, projectExpertPluginAgents, projectExpertPluginTeam, type ExpertPluginLocalizedText, type ExpertPluginTeamDefinition } from './expert-plugin-package.js'
+import { discoverExpertPluginPackages, isConversationCreatedExpertPlugin, projectExpertPluginAgents, projectExpertPluginTeam, removeConversationCreatedExpertPlugin, type ExpertPluginLocalizedText, type ExpertPluginTeamDefinition } from './expert-plugin-package.js'
 import { executeExpertPluginTeam, type ExpertPluginAgentRun } from './expert-plugin-runtime.js'
 import { DESKTOP_MCP_LIFECYCLE_SERVICE } from '../mcp-contract.js'
 import { parseCapabilitySubmission } from './capability-submission.js'
@@ -72,6 +72,10 @@ declare module '@deepseek-ai/dsh-llm' {
 
 export const name = 'clawclaw-experts'
 export const inject = ['tools', 'subagents', 'systemPrompt', 'settings', 'webServer', 'skills']
+export const AGENCY_PLUGIN_PACKAGE_SERVICE = 'agencyAgentsPluginPackages'
+export interface AgencyPluginPackageService {
+  removeConversationPackage(packageName: string, expectedRevision: number): Promise<{ catalog: CatalogSnapshot; teams: TeamSnapshot }>
+}
 
 export const DEFAULT_DIVISIONS = [
   'academic',
@@ -206,6 +210,7 @@ interface Expert {
   readonly packageFormat?: 'clawclaw-plugin' | undefined
   readonly packageVersion?: string | undefined
   readonly packageType?: 'agent' | 'team' | undefined
+  readonly conversationCreated?: boolean | undefined
 }
 
 /** Plugin config: the persona root, the subagent provider, and the divisions to scan. */
@@ -680,6 +685,7 @@ export function apply(ctx: Context, config: Config): void {
   const teamTx = (key: string, values?: readonly unknown[]) => teamText(activeLocale(), key, values)
   const catalogRoot = resolveCatalogRoot(config.root)
   const pluginLibraryRoot = clawClawPluginLibraryRoot()
+  const conversationPluginRoot = join(pluginLibraryRoot, 'my-experts', 'plugins')
   const expertDivisions = [...new Set([...DEFAULT_DIVISIONS, ...config.divisions])]
   const basePersonaSource = createAgencyPersonaSource(catalogRoot, expertDivisions, async () => { await ensureReady(); return experts; })
   let experts = new Map<string, Expert>()
@@ -699,17 +705,20 @@ export function apply(ctx: Context, config: Config): void {
         existsSync(pluginLibraryRoot) ? discoverExpertPluginPackages(pluginLibraryRoot) : Promise.resolve([]),
       ])
       const packages = [...new Map([...bundledPackages, ...installedPackages].map(pkg => [pkg.manifest.name, pkg])).values()]
+      const conversationPackages = new Set((await Promise.all(packages.map(async pkg =>
+        await isConversationCreatedExpertPlugin(conversationPluginRoot, pkg) ? pkg.root : undefined
+      ))).filter((root): root is string => root !== undefined))
       const nextExperts = new Map(legacy)
       const nextTeams = new Map<string, ExpertPluginTeamDefinition>()
       for (const pkg of packages) {
         for (const projected of projectExpertPluginAgents(pkg)) {
           if (nextExperts.has(projected.expert.slug)) console.warn(`[clawclaw-experts] expert plugin overrides legacy expert: ${projected.expert.slug}`)
-          const expert: Expert = { ...projected.expert }
+          const expert: Expert = { ...projected.expert, ...(conversationPackages.has(pkg.root) ? { conversationCreated: true } : {}) }
           personaPaths.set(expert, projected.personaPath)
           nextExperts.set(expert.slug, expert)
         }
         const team = projectExpertPluginTeam(pkg)
-        if (team !== undefined) nextTeams.set(team.id, team)
+        if (team !== undefined) nextTeams.set(team.id, { ...team, ...(conversationPackages.has(pkg.root) ? { conversationCreated: true } : {}) })
       }
       experts = nextExperts
       pluginTeams = nextTeams
@@ -796,7 +805,26 @@ export function apply(ctx: Context, config: Config): void {
     await refreshPlugins(true)
     return [...pluginTeams.values()]
   }, connectorLifecycle)
+  const pluginPackageService: AgencyPluginPackageService = {
+    async removeConversationPackage(packageName, expectedRevision) {
+      const before = await library.catalog()
+      if (before.revision !== expectedRevision) throw new Error(teamTx('配置已更新，请读取最新内容后重试。'))
+      const removed = await removeConversationCreatedExpertPlugin(conversationPluginRoot, packageName)
+      const removedSlugs = new Set(projectExpertPluginAgents(removed).map(item => item.expert.slug))
+      await refreshPlugins(true)
+      if (before.enabled.some(slug => removedSlugs.has(slug))) {
+        try {
+          const latest = await library.catalog()
+          await library.setEnabled(latest.enabled, latest.revision)
+        } catch (error) {
+          console.warn('[clawclaw-experts] deleted a conversation package but could not clean stale enabled entries:', error)
+        }
+      }
+      return { catalog: await library.catalog(), teams: await teamLibrary.snapshot() }
+    },
+  }
   ctx.reflect.provide(AGENCY_TEAM_SERVICE, teamLibrary)
+  ctx.reflect.provide(AGENCY_PLUGIN_PACKAGE_SERVICE, pluginPackageService)
   ctx.reflect.provide('agencyAgentsTeamEngine', () => resolveTeamEngine(ctx, undefined, maxDepth).status)
   ctx.on?.('tools/pre-execute', async (exec, next) => {
     if (blocksNativeDelegation(ctx.get('agentTeams'), exec.agent, exec.name)) return { kind: 'deny', reason: teamTx('专家团成员不能继续创建子代理或扩展专家团，请将缺口交给主理人。') }

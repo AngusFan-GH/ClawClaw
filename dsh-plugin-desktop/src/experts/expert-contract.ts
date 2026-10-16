@@ -57,6 +57,7 @@ export const expertSummarySchema = z.object({
   packageName: z.string().optional(),
   packageAgentId: z.string().optional(),
   packageRole: z.enum(['agent', 'lead', 'member']).optional(),
+  conversationCreated: z.boolean().optional(),
 })
 export type ExpertSummary = z.infer<typeof expertSummarySchema>
 export const catalogSnapshotSchema = z.object({

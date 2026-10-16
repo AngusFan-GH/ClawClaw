@@ -1,10 +1,10 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Context } from '@deepseek-ai/cordis'
-import { apply } from '../src/experts/index.ts'
+import { AGENCY_PLUGIN_PACKAGE_SERVICE, apply, type AgencyPluginPackageService } from '../src/experts/index.ts'
 import { AGENCY_TEAM_SERVICE, type AgencyTeamLibrary } from '../src/experts/team-library.ts'
 import { DESKTOP_MCP_LIFECYCLE_SERVICE, type DesktopMcpView } from '../src/mcp-contract.ts'
 
@@ -22,8 +22,10 @@ type RegisteredTool = {
   execute(args: Record<string, unknown>, exec: Record<string, unknown>): Promise<Record<string, unknown>>
 }
 
-async function writeTeamPackage(home: string, version: string): Promise<string> {
-  const root = join(home, 'plugins/marketplaces/research-team', version)
+async function writeTeamPackage(home: string, version: string, conversationCreated = false): Promise<string> {
+  const root = conversationCreated
+    ? join(home, 'plugins/marketplaces/my-experts/plugins/research-team')
+    : join(home, 'plugins/marketplaces/research-team', version)
   await Promise.all([
     mkdir(join(root, '.clawclaw-plugin'), { recursive: true }),
     mkdir(join(root, 'agents'), { recursive: true }),
@@ -48,6 +50,7 @@ async function writeTeamPackage(home: string, version: string): Promise<string> 
     writeFile(join(root, '.clawclaw-plugin/plugin.json'), `${JSON.stringify(manifest, null, 2)}\n`),
     writeFile(join(root, 'agents/lead.md'), '---\nname: Lead\ndescription: Plans and synthesizes\n---\nLead persona.\n'),
     writeFile(join(root, 'agents/analyst.md'), '---\nname: Analyst\ndescription: Analyzes evidence\n---\nAnalyst persona.\n'),
+    ...(conversationCreated ? [writeFile(join(root, '.created-by-session'), 'session-research')] : []),
   ])
   return root
 }
@@ -167,5 +170,17 @@ describe('Plugin Team Host tools', () => {
     const library = fixture.services.get(AGENCY_TEAM_SERVICE) as AgencyTeamLibrary
     expect((await library.snapshot()).teams.find(team => team.id === 'plugin-team:research-team')).toMatchObject({ id: 'plugin-team:research-team', runtime: { mode: 'lead' } })
     expect([...fixture.tools.keys()]).toEqual(expect.arrayContaining(['list_expert_teams', 'get_expert_team', 'summon_expert_team']))
+  })
+
+  it('removes a conversation-created Team package and its enabled members', async () => {
+    const fixture = await hostFixture()
+    const root = await writeTeamPackage(fixture.home, '1.0.0', true)
+    const service = fixture.services.get(AGENCY_PLUGIN_PACKAGE_SERVICE) as AgencyPluginPackageService
+    const result = await service.removeConversationPackage('research-team', 7)
+
+    expect(result.catalog.experts.some(expert => expert.packageName === 'research-team')).toBe(false)
+    expect(result.catalog.enabled).toEqual([])
+    expect(result.teams.teams.some(team => team.id === 'plugin-team:research-team')).toBe(false)
+    await expect(stat(root)).rejects.toThrow()
   })
 })

@@ -25,6 +25,8 @@ afterEach(async () => {
   await act(async () => root?.unmount())
   root = undefined
   document.body.replaceChildren()
+  document.documentElement.removeAttribute('lang')
+  localStorage.clear()
   vi.unstubAllGlobals()
 })
 
@@ -101,6 +103,74 @@ describe('capability details sidebar', () => {
     listeners.forEach(listener => listener())
     expect(openResource).toHaveBeenCalledOnce()
     expect(listeners.size).toBe(0)
+  })
+
+  it('keeps the resource available when its provider stream remounts', async () => {
+    let provider: ResourceProvider<'clawclaw-capability'> | undefined
+    const ctx = {
+      resources: { register: (value: ResourceProvider<'clawclaw-capability'>) => { provider = value; return () => undefined } },
+      sidebarRightTabs: { register: () => () => undefined },
+      slots: { inject: (_name: string, install: () => unknown) => install(), register: () => () => undefined },
+      effect: (install: () => unknown) => { install(); return () => undefined },
+      inject: (_names: readonly string[], install: (scope: Context) => unknown) => install(ctx as unknown as Context),
+    } as unknown as Context
+    applyCapabilitySidebar(ctx)
+    const entry: ExpertSidebarEntry = { kind: 'expert', expert, avatar: '/avatar.png', locale: 'zh', examples: [], select: vi.fn(), focusComposer: vi.fn() }
+    const address = openCapabilitySidebar({ openResource: vi.fn() }, entry)
+
+    const firstAbort = new AbortController()
+    const first = provider!.open(address, { signal: firstAbort.signal })[Symbol.asyncIterator]()
+    expect((await first.next()).value).toEqual({ ok: true, value: { entry } })
+    firstAbort.abort()
+    await first.next()
+
+    const secondAbort = new AbortController()
+    const second = provider!.open(address, { signal: secondAbort.signal })[Symbol.asyncIterator]()
+    expect((await second.next()).value).toEqual({ ok: true, value: { entry } })
+    secondAbort.abort()
+    await second.next()
+  })
+
+  it('restores saved details after the client module is reloaded', async () => {
+    const entry: ExpertSidebarEntry = { kind: 'expert', expert, avatar: '/avatar.png', locale: 'zh', examples: ['检查这份方案'], select: vi.fn(), focusComposer: vi.fn() }
+    const address = openCapabilitySidebar({ openResource: vi.fn() }, entry)
+    vi.resetModules()
+    const reloaded = await import('../src/experts/client/capability-sidebar.tsx')
+    let provider: ResourceProvider<'clawclaw-capability'> | undefined
+    const ctx = {
+      resources: { register: (value: ResourceProvider<'clawclaw-capability'>) => { provider = value; return () => undefined } },
+      sidebarRightTabs: { register: () => () => undefined },
+      slots: { inject: (_name: string, install: () => unknown) => install(), register: () => () => undefined },
+      effect: (install: () => unknown) => { install(); return () => undefined },
+      inject: (_names: readonly string[], install: (scope: Context) => unknown) => install(ctx as unknown as Context),
+    } as unknown as Context
+    reloaded.applyCapabilitySidebar(ctx)
+
+    const abort = new AbortController()
+    const stream = provider!.open(address, { signal: abort.signal })[Symbol.asyncIterator]()
+    const frame = await stream.next()
+    expect(frame.value).toEqual({ ok: true, value: { entry: expect.objectContaining({ kind: 'expert', expert, examples: ['检查这份方案'] }) } })
+    expect((frame.value as { value: { entry: Record<string, unknown> } }).value.entry.select).toBeUndefined()
+    abort.abort()
+    await stream.next()
+  })
+
+  it('shows a recoverable empty state when saved details really are unavailable', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    document.documentElement.lang = 'zh'
+    const close = vi.fn()
+    const host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () => root!.render(React.createElement(CapabilitySidebarTab, {
+      sessionId: 'session-1',
+      useResource: () => ({ status: 'live', value: {}, failure: undefined }),
+      useTabInfo: () => ({ tab: { contentId: 'dsh-resource://clawclaw-capability/details/missing', actions: { close } } }),
+    } as never)))
+
+    expect(host.querySelector('.clawCapabilityUnavailable')?.textContent).toContain('能力详情不可用')
+    await act(async () => { host.querySelector<HTMLButtonElement>('button')?.click() })
+    expect(close).toHaveBeenCalledOnce()
   })
 
   it('shows each team member preset avatar instead of a name initial', async () => {

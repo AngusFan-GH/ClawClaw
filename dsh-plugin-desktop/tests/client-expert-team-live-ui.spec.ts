@@ -6,7 +6,7 @@ import { acceptCatalog } from '../src/experts/client/catalog.ts'
 import { ExpertCardsSettings } from '../src/experts/client/index.ts'
 import { acceptTeamSnapshot } from '../src/experts/client/team-cache.ts'
 import { TeamLocaleContext } from '../src/experts/client/team-locale.ts'
-import { TeamsPanel, type TeamRemote } from '../src/experts/client/team-ui.tsx'
+import { isDeletableTeam, TeamsPanel, type TeamRemote } from '../src/experts/client/team-ui.tsx'
 import { customZh } from '../src/experts/client/custom-locales.ts'
 
 const expert = {
@@ -35,6 +35,12 @@ afterEach(async () => {
 })
 
 describe('expert team live UI state', () => {
+  it('allows deleting conversation-created teams without making bundled teams writable', () => {
+    expect(isDeletableTeam({ builtin: true })).toBe(false)
+    expect(isDeletableTeam({ builtin: false })).toBe(true)
+    expect(isDeletableTeam({ builtin: true, conversationCreated: true })).toBe(true)
+  })
+
   it('offers manual and conversation paths before creating an expert', async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
@@ -99,16 +105,20 @@ describe('expert team live UI state', () => {
     })
 
     expect(host.textContent).not.toContain('召唤专家团')
-    expect(host.querySelector('[data-testid="team-card"]')?.textContent).toContain('查看详情')
-    expect(host.querySelector('[data-testid="team-card"]')?.textContent).toContain('复制')
+    const details = host.querySelector<HTMLButtonElement>('.aag-card-open[aria-label^="查看详情:"]')
+    expect(details).not.toBeNull()
+    expect(host.querySelector('.aag-card-more-trigger')).toBeNull()
+    expect(host.querySelector<HTMLButtonElement>('.aag-team-copy')?.textContent).toBe('复制')
     const summon = host.querySelector<HTMLButtonElement>('.aag-team-summon')
     expect(summon?.textContent).toBe('召唤')
     expect(summon?.classList.contains('is-active')).toBe(true)
     expect(summon?.getAttribute('aria-pressed')).toBe('true')
     expect(host.querySelector('[data-testid="team-card"]')?.textContent).not.toContain('已召唤')
     expect(host.querySelector('[data-testid="team-card"]')?.textContent).not.toContain('已召回')
-    const details = [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('查看详情'))
     await act(async () => details?.click())
+    expect(document.querySelector('.aag-team-details-drawer')).not.toBeNull()
+    expect(document.querySelector('.agt-detail-overview')?.textContent).toContain('评审交付物')
+    expect(document.querySelectorAll('.agt-detail-roster article')).toHaveLength(2)
     expect(document.body.textContent).toContain('评审当前方案')
     expect(document.querySelector('.agt-detail')?.textContent).not.toContain('复制并自定义')
     expect(document.body.textContent).not.toContain('召唤专家团')
@@ -147,8 +157,6 @@ describe('expert team live UI state', () => {
         'custom.copy': '复制',
         'settings.viewPromptTitle': '查看提示词',
         'settings.viewPrompt': '查看',
-        'settings.copyPromptTitle': '复制提示词',
-        'settings.copyPrompt': '复制',
       } as Record<string, string>)[key] ?? key) as never,
       capabilityRegistry: {
         subscribe: () => () => {},
@@ -171,8 +179,10 @@ describe('expert team live UI state', () => {
   })
 
   it('shows package provenance and blocks enable while a required connector is missing', async () => {
+    const getPrompt = vi.fn(async () => ({ ok: true, value: { prompt: 'Review every required capability before responding.' } }))
     const remote = {
       getEnabled: vi.fn(async () => ({ ok: true, value: { enabled: [], revision: 1 } })),
+      getPrompt,
     } as unknown as TeamRemote
     acceptCatalog(remote, { experts: [{
       ...expert,
@@ -205,9 +215,13 @@ describe('expert team live UI state', () => {
         'settings.search.clear': 'Clear',
         'custom.new': 'New expert',
         'custom.copy': 'Copy',
+        'custom.viewPrompt': 'View prompt',
+        'custom.hidePrompt': 'Hide prompt',
+        'custom.loadingPrompt': 'Loading prompt...',
         'settings.details': 'Details',
-        'settings.copyPromptTitle': 'Copy prompt',
-        'settings.copyPrompt': 'Copy',
+        'settings.viewPromptTitle': 'View prompt',
+        'settings.hidePrompt': 'Hide prompt',
+        'settings.promptLoading': 'Loading prompt...',
         'capability.health.blocked': 'Required capability missing',
         'capability.missingHint': 'Configure required capabilities first.',
       } as Record<string, string>)[key] ?? key) as never,
@@ -224,10 +238,38 @@ describe('expert team live UI state', () => {
     expect(host.textContent).toContain('Required capability missing · 0/1')
     expect(toggle?.disabled).toBe(true)
     expect(toggle?.getAttribute('title')).toBe('Configure required capabilities first.')
+    expect(host.querySelector('.aag-card-more-trigger')).toBeNull()
+    expect(host.querySelector('.aag-expert-primary-action')).not.toBeNull()
+    expect(host.querySelector('[aria-label="Copy prompt"]')).toBeNull()
+    expect(host.textContent).not.toContain('Capabilities ready')
+    expect(host.textContent).not.toContain('Can run with reduced capabilities')
 
-    const details = [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Details')
-    await act(async () => details?.click())
+    const copy = host.querySelector<HTMLButtonElement>('.aag-expert-primary-action')
+    expect(copy?.textContent).toBe('Copy')
+    await act(async () => { copy?.click(); await Promise.resolve() })
+    expect(getPrompt).not.toHaveBeenCalled()
+    expect(document.querySelector('.aag-editor-drawer .ant-drawer-title')?.textContent).toBe('New expert')
+    expect(document.querySelector<HTMLInputElement>('.aag-editor-drawer input[required]')?.value).toBe('Reviewer copy')
+    expect(document.querySelector('.aag-editor-drawer .aag-custom-prompt')).toBeNull()
+    const viewCopiedPrompt = [...document.querySelectorAll<HTMLButtonElement>('.aag-editor-drawer button')]
+      .find(button => button.textContent?.includes('View prompt'))
+    await act(async () => { viewCopiedPrompt?.click(); await Promise.resolve() })
+    expect(getPrompt).toHaveBeenCalledWith('plugin-reviewer', 'testing')
+    expect(document.querySelector<HTMLTextAreaElement>('.aag-editor-drawer .aag-custom-prompt')?.value).toBe('Review every required capability before responding.')
+    await act(async () => document.querySelector<HTMLButtonElement>('.aag-editor-drawer .ant-drawer-close')?.click())
+
+    getPrompt.mockClear()
+    const details = host.querySelector<HTMLButtonElement>('.aag-card-open[aria-label^="Details:"]')
+    await act(async () => { details?.click(); await Promise.resolve() })
     expect(document.querySelector('.aag-expert-details')).not.toBeNull()
+    expect(getPrompt).not.toHaveBeenCalled()
+    expect(document.querySelector('.aag-detail-prompt')).toBeNull()
+    const viewDetailsPrompt = [...document.querySelectorAll<HTMLButtonElement>('.aag-expert-details-drawer button')]
+      .find(button => button.textContent?.includes('View prompt'))
+    await act(async () => { viewDetailsPrompt?.click(); await Promise.resolve() })
+    expect(getPrompt).toHaveBeenCalledWith('plugin-reviewer', 'testing')
+    expect(document.querySelector<HTMLTextAreaElement>('.aag-detail-prompt')?.value).toBe('Review every required capability before responding.')
+    expect(document.querySelector('.aag-expert-details-drawer .ant-modal')).toBeNull()
     expect(host.querySelector('[data-source="base"]')).not.toBeNull()
   })
 })

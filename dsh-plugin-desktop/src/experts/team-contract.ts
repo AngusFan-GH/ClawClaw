@@ -100,6 +100,7 @@ export const teamSchema = z.object({
   connectors: z.array(expertCapabilityBindingSchema),
   connectorStates: z.array(teamConnectorSchema),
   provenance: teamProvenanceSchema,
+  conversationCreated: z.boolean().optional(),
 }).strict()
 export type ExpertTeam = z.infer<typeof teamSchema>
 export const teamSnapshotSchema = z.object({

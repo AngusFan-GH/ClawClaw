@@ -2,7 +2,7 @@
 /** 自定义专家界面词条，合并到现有 agency 命名空间。 */
 export const customZh = {
   'custom.nameConflict': '名称冲突', 'custom.nameConflictHint': '部分专家名称冲突，已暂停召唤。请编辑或删除冲突的自定义专家；内置专家会随 ClawClaw 版本统一维护。',
-  'custom.new': '新建专家', 'custom.edit': '编辑专家', 'custom.copy': '复制为自定义',
+  'custom.new': '新建专家', 'custom.edit': '编辑专家', 'custom.copy': '复制',
   'custom.createTitle': '新建专家', 'custom.createHint': '选择创建方式，稍后仍可继续编辑和完善。',
   'custom.createManual': '手动创建', 'custom.createManualHint': '直接填写专家名称、能力和提示词。',
   'custom.createConversation': '通过对话创建', 'custom.createConversationHint': '让 expert-manager 通过提问帮你整理并创建专家。',
@@ -22,6 +22,7 @@ export const customZh = {
   'custom.capability.error': '连接失败', 'custom.capability.empty': '没有工具', 'custom.capability.missing': '已丢失',
   'custom.bindingEnabled': '启用', 'custom.bindingDisabled': '停用', 'custom.bindingRequired': '必需', 'custom.bindingOptional': '可选',
   'custom.prompt': '专家提示词', 'custom.template': '使用结构模板',
+  'custom.viewPrompt': '查看提示词', 'custom.hidePrompt': '收起提示词', 'custom.loadingPrompt': '正在加载提示词…',
   'custom.intro': '定义专业职责与工作方式，让专家按你的要求协助。',
   'custom.namePlaceholder': '例如：租赁业务顾问', 'custom.descriptionPlaceholder': '告诉我，这位专家擅长什么？',
   'custom.promptPlaceholder': '描述职责、工作方法和输出要求……', 'custom.required': '必填',
@@ -49,7 +50,7 @@ export const customZh = {
 } as const
 export const customEn = {
   'custom.nameConflict': 'Name conflict', 'custom.nameConflictHint': 'Conflicting experts cannot be summoned. Rename or delete the custom expert; built-in experts are maintained with ClawClaw releases.',
-  'custom.new': 'New expert', 'custom.edit': 'Edit expert', 'custom.copy': 'Create custom copy',
+  'custom.new': 'New expert', 'custom.edit': 'Edit expert', 'custom.copy': 'Copy',
   'custom.createTitle': 'New expert', 'custom.createHint': 'Choose how to begin. You can refine the expert later.',
   'custom.createManual': 'Create manually', 'custom.createManualHint': 'Enter the expert name, capabilities, and prompt directly.',
   'custom.createConversation': 'Create through conversation', 'custom.createConversationHint': 'Let expert-manager ask questions and help shape the expert.',
@@ -69,6 +70,7 @@ export const customEn = {
   'custom.capability.error': 'connection failed', 'custom.capability.empty': 'no tools', 'custom.capability.missing': 'missing',
   'custom.bindingEnabled': 'Enabled', 'custom.bindingDisabled': 'Disabled', 'custom.bindingRequired': 'Required', 'custom.bindingOptional': 'Optional',
   'custom.prompt': 'Expert prompt', 'custom.template': 'Use a template',
+  'custom.viewPrompt': 'View prompt', 'custom.hidePrompt': 'Hide prompt', 'custom.loadingPrompt': 'Loading prompt…',
   'custom.intro': 'Define this expert’s responsibilities and approach.',
   'custom.namePlaceholder': 'For example: Rental business advisor', 'custom.descriptionPlaceholder': 'What does this expert specialize in?',
   'custom.promptPlaceholder': 'Describe responsibilities, methods and expected output…', 'custom.required': 'Required',
