@@ -1,8 +1,8 @@
-# Office runners are started on demand. Use Run pipeline on dsh-desktop;
+# Office runners are started on demand. Use Run pipeline or the API on dsh-desktop;
 # ordinary pushes and historical tags must not start unattended builds.
 workflow:
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "dsh-desktop"'
+    - if: '($CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api") && $CI_COMMIT_BRANCH == "dsh-desktop"'
     - when: never
 
 stages: [package, assemble]

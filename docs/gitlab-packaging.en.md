@@ -6,7 +6,7 @@ Local packaging has been validated separately on Mac and Windows. Reuse those na
 
 ## Pipeline
 
-Select `dsh-desktop` under Build → Pipelines → Run pipeline to start a build manually. Ordinary pushes and historical tags do not start packaging. Historical tags lack the new CI configuration; never move a released tag to run it.
+Select `dsh-desktop` under Build → Pipelines → Run pipeline to start a build manually, or start that branch manually through the authenticated API. Ordinary pushes and historical tags do not start packaging. Historical tags lack the new CI configuration; never move a released tag to run it.
 
 `package-macos` uses the `clawclaw-macos` runner and `package-windows` uses `clawclaw-windows`. Both clone the same pipeline commit, initialize the read-only upstream submodule, install dependencies, prepare the runtime, run the full gate, and package natively. Use Node 22.x at 22.19+ or Node 24.x. The root workspace uses Corepack and pnpm 11.8.0; upstream commands retain their independent pnpm version.
 

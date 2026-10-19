@@ -6,7 +6,7 @@ Mac 与 Windows 已分别验证本地打包。本流程复用这两个原生环�
 
 ## 流水线
 
-仅在 GitLab 的 Build → Pipelines → Run pipeline 中选择 `dsh-desktop` 手动启动。普通 push 和旧 tag 不触发打包。历史 tag 没有新增的 CI 文件，不要为了运行流水线移动已发布 tag。
+在 GitLab 的 Build → Pipelines → Run pipeline 中选择 `dsh-desktop` 手动启动，也可以通过已认证的 API 手动启动该分支。普通 push 和旧 tag 不触发打包。历史 tag 没有新增的 CI 文件，不要为了运行流水线移动已发布 tag。
 
 `package-macos` 使用 `clawclaw-macos` Runner，`package-windows` 使用 `clawclaw-windows` Runner。两者从同一流水线提交重新克隆代码、初始化只读上游子模块、安装依赖、准备 runtime、运行完整门禁和原生打包。Node 使用 22.19+ 的 22.x 或 24.x；根 workspace 固定使用 Corepack 与 pnpm 11.8.0。上游命令保留其独立 pnpm 版本。
 
