@@ -18,47 +18,59 @@ windows-cli-diagnostics:
       $ErrorActionPreference = 'Stop'
       $diagnostic = @'
       import { execFileSync, spawnSync } from 'node:child_process'
-      import { readFileSync, writeFileSync, unlinkSync } from 'node:fs'
-      import { resolve } from 'node:path'
+      import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+      import { join, resolve } from 'node:path'
+      import { tmpdir } from 'node:os'
+      import { createRequire } from 'node:module'
       const root = process.cwd()
       const expected = '2b32703635409b5f3abca04e68e8d5720f0a9774'
-      const actual = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
-      if (actual !== expected) throw new Error(`Expected preserved checkout ${expected}; found ${actual}`)
-      const original = resolve(root, 'dsh-plugin-desktop/scripts/verify-cli-runtime.mjs')
-      execFileSync('git', ['diff', '--exit-code', '--', original], { stdio: 'inherit' })
-      console.log(`Diagnostic only: cached checkout ${actual}; CI=${process.env.CI}; Node ${process.version}`)
-      let failures = 0
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        const result = spawnSync('corepack.cmd', ['pnpm', '--filter', 'dsh-plugin-desktop', 'verify:cli'], {
-          cwd: root, encoding: 'utf8', shell: true, timeout: 90000,
-        })
-        console.log(`Original CLI attempt ${attempt}: status=${result.status}; signal=${result.signal}`)
-        if (result.stdout) process.stdout.write(result.stdout)
-        if (result.stderr) process.stderr.write(result.stderr)
-        if (result.error) console.log(`Spawn error: ${result.error.code ?? result.error.name}`)
-        if (result.status !== 0) failures++
+      if (execFileSync('git', ['rev-parse','HEAD'], {encoding:'utf8'}).trim() !== expected) throw new Error('Preserved checkout changed')
+      const electron = createRequire(join(root,'dsh-plugin-desktop/package.json'))('electron')
+      const base = mkdtempSync(join(tmpdir(),'clawclaw-link-diagnostic-'))
+      const jobId = process.env.CI_JOB_ID
+      const runnerTemporary = resolve(root + '.tmp', 'link-diagnostic-' + jobId)
+      mkdirSync(runnerTemporary, {recursive:true})
+      const script = join(base,'probe.cjs')
+      writeFileSync(script, String.raw`
+      const fs = require('node:fs'); const path = require('node:path')
+      const settings = JSON.parse(process.argv[2])
+      async function main() {
+       const filesystems = [['fs',fs]]
+       try { filesystems.push(['original-fs',require('original-fs')]) } catch {}
+       console.log(JSON.stringify({engine:settings.engine,node:process.version,electron:process.versions.electron,noAsar:process.noAsar}))
+       const target = path.join(settings.base,'target-'+settings.engine);fs.mkdirSync(target)
+       for (const [name,api] of filesystems) {
+        for (const [placement,parent] of settings.parents) {
+         if (!fs.existsSync(parent)) { console.log(JSON.stringify({placement,skip:'parent absent'}));continue }
+         for (const type of ['dir','junction']) {
+          const link = path.join(parent,'.clawclaw-link-'+settings.jobId+'-'+settings.engine+'-'+name+'-'+type)
+          let created = false
+          try {
+           await api.promises.symlink(target,link,type);created=true
+           console.log(JSON.stringify({engine:settings.engine,api:name,placement,type,ok:true}))
+          } catch (error) {
+           console.log(JSON.stringify({engine:settings.engine,api:name,placement,type,ok:false,code:error.code,syscall:error.syscall,message:error.message}))
+          } finally { if (created) await api.promises.unlink(link) }
+         }
+        }
+       }
       }
-      const temporary = resolve(root, `dsh-plugin-desktop/scripts/verify-cli-diagnostic-${process.env.CI_JOB_ID}.mjs`)
-      let source = readFileSync(original, 'utf8')
-      if (!source.includes("['install', '--offline', '--reporter=silent']")) throw new Error('Unexpected lifecycle smoke source')
-      source = source.replace("['install', '--offline', '--reporter=silent']", "['install', '--offline', '--reporter=append-only']")
-      source = source.replace("verifyResult('pnpm lifecycle smoke', result, '')", "verifyResult('pnpm lifecycle smoke', result)")
-      source = source.replace('${result.stderr.trim()}', '${JSON.stringify({ stdout: result.stdout, stderr: result.stderr })}')
+      main().catch(error=>{console.error(error);process.exitCode=1})
+      `)
       try {
-        writeFileSync(temporary, source, { flag: 'wx' })
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          const result = spawnSync(process.execPath, [temporary], {
-            cwd: root, encoding: 'utf8', timeout: 90000,
-          })
-          console.log(`Verbose CLI attempt ${attempt}: status=${result.status}; signal=${result.signal}`)
+        const parents = [['temp',base],['runner-temp',runnerTemporary],['pnpm-registry',join(process.env.LOCALAPPDATA,'pnpm','store','v11','projects')]]
+        for (const [engine,executable] of [['node',process.execPath],['electron',electron]]) {
+          const env = {...process.env}; delete env.ELECTRON_RUN_AS_NODE
+          if (engine==='electron') env.ELECTRON_RUN_AS_NODE='1'
+          const result = spawnSync(executable,[script,JSON.stringify({engine,base,parents,jobId})],{encoding:'utf8',env,timeout:60000})
           if (result.stdout) process.stdout.write(result.stdout)
           if (result.stderr) process.stderr.write(result.stderr)
-          if (result.error) console.log(`Spawn error: ${result.error.code ?? result.error.name}`)
-          if (result.status !== 0) failures++
+          if (result.status!==0) throw result.error ?? new Error(engine+' probe exited '+result.status)
         }
-      } finally { unlinkSync(temporary) }
-      console.log(`CLI diagnostics finished: ${failures} failures; product source unchanged`)
-      process.exitCode = failures === 0 ? 0 : 1
+      } finally {
+        rmSync(base,{recursive:true,force:true,maxRetries:3})
+        rmSync(runnerTemporary,{recursive:true,force:true,maxRetries:3})
+      }
       '@
       $diagnostic | & node --input-type=module -
       if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
