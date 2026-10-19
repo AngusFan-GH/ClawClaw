@@ -39,6 +39,26 @@ test('rejects installer bytes whose SHA-512 differs from release.json', () => {
   } finally { rmSync(directory, { recursive: true, force: true }) }
 })
 
+test('retains CI provenance only when it matches both release artifacts', () => {
+  const directory = fixture()
+  try {
+    const manifest = JSON.parse(readFileSync(join(directory, 'release.json'), 'utf8'))
+    const info = { version: manifest.version, commit: 'a'.repeat(40), pipelineId: '42',
+      artifacts: Object.entries(manifest.artifacts).map(([platform, artifact]) => ({
+        platform, name: new URL(artifact.url).pathname.slice(1), size: artifact.size, sha512: artifact.sha512,
+      })) }
+    const path = join(directory, 'build-info.json')
+    writeFileSync(path, JSON.stringify(info))
+    assert.ok(collectRelease(directory).files.includes(path))
+    info.artifacts[0].sha512 = 'incorrect'
+    writeFileSync(path, JSON.stringify(info))
+    assert.throws(() => collectRelease(directory), /build-info.json differs/u)
+    info.commit = 'unknown'
+    writeFileSync(path, JSON.stringify(info))
+    assert.throws(() => collectRelease(directory), /must identify/u)
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})
+
 test('rejects a manifest for another channel', () => {
   const directory = fixture()
   try {

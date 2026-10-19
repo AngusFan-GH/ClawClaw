@@ -4,29 +4,36 @@
 
 Local packaging has been validated separately on Mac and Windows. Reuse those native environments; this workflow needs no Linux runner and does not deploy to the previous update server.
 
-## Planned publication method
+## Publication method
 
-Both runners will upload installers directly to a company internal server, with GitLab providing scheduling and logs. Server details are pending: operating system, SSH address and port, upload account, publication directory, and download domain. Once configured, staging must isolate each pipeline and commit. Downloads and version metadata become available only after both uploads pass version, commit, size, and SHA-512 checks. This path does not depend on GitLab storing large artifacts.
+Source and pipelines live in company GitLab. After native packaging, the Mac and Windows runners upload installers directly over SSH to `192.168.103.220` as the dedicated `clawclaw-release` user. Large installers do not pass through GitLab artifacts.
 
-The current CI file still uses the artifact assembly workflow below. Direct upload and publication are not connected yet; the existing pipeline does not establish that automated publication works. Raising GitLab's artifact limit is not required for the planned direct publication path.
+- Private staging: `/data/clawclaw/incoming/<pipelineId>-<commit>/<platform>/`.
+- Public download root: `/data/clawclaw/public/`.
+- Immutable version directory: `/releases/dsh/<version>/`, containing DMG, EXE, `release.json`, and `build-info.json`.
+- Stable feed: `https://clawclaw.xzinfra.com/updates/dsh/stable/release.json`.
+
+`deploy/clawclaw-internal.nginx.conf` configures internal HTTPS. Certificates and the private key remain under `/etc/clawclaw/tls/` on the server, outside Git. The migrated wildcard certificate expires at 2026-10-27 07:59:59 Asia/Shanghai and needs renewal. The server's external IP is `218.69.255.22`; public DNS must point `clawclaw.xzinfra.com` there, with external port 443 forwarded to `192.168.103.220:443`. Internal split DNS may resolve directly to `192.168.103.220`. The external 443 endpoint currently presents a different self-signed HTTPD certificate, so forwarding must be corrected before DNS cutover. Clients retain the existing HTTPS domain.
 
 ## Pipeline
 
-Select `dsh-desktop` under Build → Pipelines → Run pipeline to start a build manually, or start that branch manually through the authenticated API. Ordinary pushes and historical tags do not start packaging. Historical tags lack the new CI configuration; never move a released tag to run it.
+Select `dsh-desktop` under Build → Pipelines → Run pipeline, or start that branch through the authenticated API. Ordinary pushes and historical tags do not start packaging; never move released tags.
 
-`package-macos` uses the `clawclaw-macos` runner and `package-windows` uses `clawclaw-windows`. Both clone the same pipeline commit, initialize the read-only upstream submodule, install dependencies, prepare the runtime, run the full gate, and package natively. Use Node 22.x at 22.19+ or Node 24.x. The root workspace uses Corepack and pnpm 11.8.0; upstream commands retain their independent pnpm version.
+`package-macos` uses `clawclaw-macos`; `package-windows` uses `clawclaw-windows`. Both shallow-clone the exact pipeline commit, initialize the read-only upstream submodule, install dependencies, prepare the runtime, run the full gate, and package natively. The root workspace uses Node 22.x at 22.19+ or Node 24.x, Corepack, and pnpm 11.8.0. Upstream retains its independent pnpm version.
 
-Each job uploads its installer with commit, pipeline ID, version, size, and SHA-512 metadata. `assemble` downloads both job artifacts on the Mac runner, rejects mixed commits or pipelines, verifies SHA-512 again, and combines the installers in `release/`. Download the final artifact from the assemble job. Final artifacts expire after 30 days; platform intermediates expire after 7 days.
+Each platform uploads its installer and commit, pipeline, version, size, and SHA-512 metadata to isolated staging. Uploads use temporary names and mark metadata ready last. After both jobs succeed, `assemble` downloads the same pipeline's files on Mac, checks version, provenance, size, and SHA-512 again, generates the update manifest, and uploads the release. The server saves the complete version directory before atomically switching the stable manifest. Existing versions cannot be overwritten; changed contents require a new product version.
 
-The final directory contains a DMG, an EXE, and `build-info.json`. It is not a client update feed. Until the internal download domain is configured, the pipeline generates no `release.json` and uploads nothing to the old server. The installers still contain the old update origin, which needs a separate migration before internal production release.
+Publication first checks the internal `/healthz` marker over trusted HTTPS. DNS pointing to the old server or an untrusted certificate prevents publication without switching the feed. Transfer and transaction smoke tests do not establish that a formal installer release has succeeded; the first full native pipeline must still pass.
 
-## Network and storage
+Download installers from the HTTPS version directory. GitLab retains job logs. Server staging and version directories are not cleaned automatically; check client and rollback requirements before removing history.
 
-Dependencies use `http://192.168.103.203:8081/repository/xzinfra-npm-group/`. If authentication is required, configure repository-specific CI/CD secrets in GitLab; do not copy another project's publishing credentials. Corepack, Electron, and packaging tools still require external access or corresponding internal mirrors. `CLAWCLAW_WINDOWS_UPSTREAM_SOURCE` and `CLAWCLAW_MACOS_UPSTREAM_SOURCE` can point to each runner's validated local `deepseek-harness` Git checkout when GitHub is unreachable. CI clones the pinned commit from that local object source, then restores the official submodule URL before verification; no upstream source or pin is changed.
+## Connection variables, network, and storage
 
-The outer repository uses a depth-1 shallow clone to reduce history downloads over slow internal links while retaining the exact pipeline commit. Validation of the pinned upstream commit in its local object source is unchanged.
+Project CI/CD variables configure `CLAWCLAW_DIRECT_UPLOAD=1`, `UPDATE_HOST`, `UPDATE_USER`, `UPDATE_PORT`, `UPDATE_STAGING_ROOT`, `UPDATE_REMOTE_ROOT`, and `UPDATE_BASE_URL`. SSH private-key and trusted host-key contents use file variables `UPDATE_SSH_KEY_FILE` and `UPDATE_SSH_KNOWN_HOSTS_FILE`; never print or commit their contents. Connections enforce host-key verification. The publishing user owns its deployment directories and does not use root. Both runners need SSH/SCP clients and connectivity to server port 22.
 
-Pipeline #450 generated the Mac DMG and passed its mount verification. The installer is about 465 MiB, but the server rejected its upload with `413 Request Entity Too Large`. GitLab's artifact limit and the ingress reverse-proxy limit must accommodate the combined installer archive; at least 2048 MB is recommended. An administrator must adjust Maximum artifacts size under Admin Settings → CI/CD and check for lower project or group limits. For Omnibus deployments, operations must also check `nginx['client_max_body_size'] = '2048m'` in `/etc/gitlab/gitlab.rb` and run `gitlab-ctl reconfigure` after changes. Check any front proxy's request-size limit as well. Do not repeatedly rebuild before adjusting these limits. Large artifact uploads have not passed yet.
+Dependencies use `http://192.168.103.203:8081/repository/xzinfra-npm-group/`. Configure repository-specific CI/CD secrets if authentication is required; do not copy another project's publishing credentials. Corepack, Electron, and packaging tools still require external access or corresponding internal mirrors. `CLAWCLAW_WINDOWS_UPSTREAM_SOURCE` and `CLAWCLAW_MACOS_UPSTREAM_SOURCE` can point to validated local upstream Git repositories when GitHub is unreliable. CI clones the pinned commit and restores official submodule URLs without changing upstream source or the pin.
+
+Pipeline #450 generated and mount-verified the Mac DMG, but GitLab rejected its artifact upload with `413 Request Entity Too Large`. The direct-upload workflow removes these large GitLab artifacts, so increasing GitLab's artifact limit is no longer required.
 
 ## Mac runner
 

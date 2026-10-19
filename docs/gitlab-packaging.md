@@ -4,29 +4,36 @@
 
 Mac 与 Windows 已分别验证本地打包。本流程复用这两个原生环境，不需要 Linux Runner，也不部署到原有更新服务器。
 
-## 后续发布方式
+## 发布方式
 
-已选择由两个 Runner 直接向公司内部服务器上传安装包，GitLab 负责调度和日志。服务器信息待补充：系统、SSH 地址和端口、上传账号、发布目录、下载域名。目标配置确定后，按流水线和提交隔离暂存产物，两端均上传成功并通过版本、提交、大小和 SHA-512 校验后再开放下载及更新版本信息。此路径不依赖 GitLab 保存大型 artifact。
+源码和流水线位于公司 GitLab。Mac 和 Windows Runner 原生打包后，使用专用账号 `clawclaw-release` 通过 SSH 直接上传到 `192.168.103.220`，不通过 GitLab artifacts 保存或传输大型安装包。
 
-目前 CI 文件仍使用下面的 artifact 汇总流程；直接上传和发布尚未接入，不要将现有流水线视为自动发布已完成。当前无需为后续直接发布路径提高 GitLab artifact 限制。
+- 私有暂存：`/data/clawclaw/incoming/<pipelineId>-<commit>/<platform>/`。
+- 公开下载根目录：`/data/clawclaw/public/`。
+- 不可覆盖的版本目录：`/releases/dsh/<version>/`，包含 DMG、EXE、`release.json` 和 `build-info.json`。
+- 稳定更新清单：`https://clawclaw.xzinfra.com/updates/dsh/stable/release.json`。
+
+`deploy/clawclaw-internal.nginx.conf` 为内网 HTTPS 服务配置；证书和私钥存放在服务器 `/etc/clawclaw/tls/`，不进入 Git。迁移时复制的通配符证书在北京时间 2026-10-27 07:59:59 到期，需及时续期。服务器对外地址为 `218.69.255.22`：公网 DNS 应指向该地址，并将外网 443 转发到 `192.168.103.220:443`；内网可通过分区 DNS 直接解析到 `192.168.103.220`。当前外网 443 返回其他 HTTPD 服务的自签名证书，切换 DNS 前需修正端口映射。客户端继续使用原 HTTPS 域名。
 
 ## 流水线
 
-在 GitLab 的 Build → Pipelines → Run pipeline 中选择 `dsh-desktop` 手动启动，也可以通过已认证的 API 手动启动该分支。普通 push 和旧 tag 不触发打包。历史 tag 没有新增的 CI 文件，不要为了运行流水线移动已发布 tag。
+在 GitLab 的 Build → Pipelines → Run pipeline 中选择 `dsh-desktop` 手动启动，也可以通过已认证的 API 启动该分支。普通 push 和旧 tag 不触发打包；不要移动已发布 tag。
 
-`package-macos` 使用 `clawclaw-macos` Runner，`package-windows` 使用 `clawclaw-windows` Runner。两者从同一流水线提交重新克隆代码、初始化只读上游子模块、安装依赖、准备 runtime、运行完整门禁和原生打包。Node 使用 22.19+ 的 22.x 或 24.x；根 workspace 固定使用 Corepack 与 pnpm 11.8.0。上游命令保留其独立 pnpm 版本。
+`package-macos` 使用 `clawclaw-macos` Runner，`package-windows` 使用 `clawclaw-windows` Runner。两者浅克隆同一流水线的准确提交、初始化只读上游子模块、安装依赖、准备 runtime、执行完整门禁并原生打包。根 workspace 使用 Node 22.19+ 的 22.x 或 24.x、Corepack 和 pnpm 11.8.0。上游保留独立 pnpm 版本。
 
-两个 Job 上传安装包及提交、流水线编号、版本、大小和 SHA-512。`assemble` 在 Mac Runner 上下载两个 Job 的产物，拒绝混用不同提交或不同流水线的文件，重新核对 SHA-512，汇总到 `release/`。在 assemble Job 页面下载最终产物，保存期 30 天；单平台中间产物保存 7 天。
+每个平台将安装包及提交、流水线、版本、大小和 SHA-512 元数据上传到本次流水线专属暂存目录。传输先用临时文件名，最后才将元数据标为就绪。两个平台均成功后，`assemble` 在 Mac 下载同一流水线的暂存产物，重新核对版本、来源、大小和 SHA-512，生成更新清单并上传服务器。服务器先保存完整版本目录，最后原子切换稳定更新清单；已存在版本拒绝覆盖。需要发布不同内容时应提升产品版本。
 
-最终目录包含 DMG、EXE 和 `build-info.json`。它不是客户端更新源；内部下载域名确定前不生成 `release.json`，也不上传至旧服务器。安装包内更新地址仍是旧域名，内部正式发布前需要单独迁移。
+发布前会通过可信 HTTPS 检查 `/healthz` 的内网服务标记。DNS 尚未切换、证书不受信任或仍连接旧服务器时，发布会失败，不更新清单。未完成首次双平台流水线前，传输及发布事务的测试通过不能代表正式安装包已发布。
 
-## 网络和存储
+安装包通过上述 HTTPS 版本目录下载，GitLab 保留 Job 日志。服务器暂存和版本目录不自动清理；删除历史版本前需确认客户端及回退需求。
 
-依赖通过 `http://192.168.103.203:8081/repository/xzinfra-npm-group/` 下载。若需要认证，在 GitLab 配置匹配仓库的 CI/CD 机密变量，不要复制其他项目的发布凭据。Corepack、Electron 和打包工具的下载仍需外网或对应内网镜像。无法稳定访问 GitHub 时，可分别将 `CLAWCLAW_WINDOWS_UPSTREAM_SOURCE` 和 `CLAWCLAW_MACOS_UPSTREAM_SOURCE` 指向各机器已验证的本机 `deepseek-harness` Git 仓库；CI 从本机对象源克隆固定提交，再恢复官方子模块地址后校验，不修改上游源码或 pin。
+## 连接变量、网络和存储
 
-主仓库使用深度为 1 的浅克隆，减少慢速内网链路上的历史数据下载；打包仍使用流水线指定的准确提交。上游固定提交的本机对象源校验不受影响。
+项目 CI/CD 变量已配置 `CLAWCLAW_DIRECT_UPLOAD=1`、`UPDATE_HOST`、`UPDATE_USER`、`UPDATE_PORT`、`UPDATE_STAGING_ROOT`、`UPDATE_REMOTE_ROOT` 和 `UPDATE_BASE_URL`。SSH 私钥与服务器指纹分别使用文件变量 `UPDATE_SSH_KEY_FILE` 和 `UPDATE_SSH_KNOWN_HOSTS_FILE`，不要输出其内容或提交到 Git。连接强制校验服务器指纹，发布账号只拥有其部署目录权限，不使用 root。Mac 和 Windows 均需安装 SSH/SCP 客户端，并能连接服务器的 22 端口。
 
-流水线 #450 的 Mac DMG 已生成并通过挂载校验，大小约 465 MiB，但上传被服务器以 `413 Request Entity Too Large` 拒绝。GitLab 的 artifact 大小限制与入口反向代理限制需要容纳两个安装包的汇总压缩包，建议至少 2048 MB。由管理员在管理中心 Settings → CI/CD 调整 Maximum artifacts size，并检查项目或群组是否有更低限制。Omnibus 部署还需由运维检查 `/etc/gitlab/gitlab.rb` 的 `nginx['client_max_body_size'] = '2048m'`，修改后执行 `gitlab-ctl reconfigure`；有前置代理时也要检查其请求大小限制。调整完成前不要反复重建。大文件上传尚未通过。
+依赖通过 `http://192.168.103.203:8081/repository/xzinfra-npm-group/` 下载。认证需要匹配本仓库的 CI/CD 机密变量，不要复制其他项目的发布凭据。Corepack、Electron 和打包工具仍需外网或对应内网镜像。无法稳定访问 GitHub 时，将 `CLAWCLAW_WINDOWS_UPSTREAM_SOURCE` 和 `CLAWCLAW_MACOS_UPSTREAM_SOURCE` 指向各机器已验证的本机上游 Git 仓库；CI 克隆固定提交后恢复官方子模块地址，不修改上游源码或 pin。
+
+原流水线 #450 的 Mac DMG 已通过挂载校验，但被 GitLab 以 `413 Request Entity Too Large` 拒绝上传。当前直接上传流程已移除大型 GitLab artifacts，因此无需提高 GitLab artifact 限制。
 
 ## Mac Runner
 
@@ -54,6 +61,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-windows-runn
 1. 两台电脑开机、登录原构建用户、连接公司网络；确认两个 Runner Online。
 2. 打包期间禁用休眠，Mac 也要保持登录。无需全天开机。
 3. 手动启动 `dsh-desktop` 流水线。打包脚本每分钟输出仍在运行的命令；Universal 的文件扫描仍可能较慢。
-4. 等整个流水线的 assemble 成功，下载并验证最终安装包，然后再关闭两台电脑。只看到 Mac 的 package Job 成功时不要提前关机，因为汇总仍需 Mac。
+4. 等整个流水线的 assemble 成功，从内网版本目录下载并验证安装包，然后再关闭两台电脑。只看到 Mac 的 package Job 成功时不要提前关机，因为汇总与发布仍需 Mac。
 
 Runner 尚未上线或网络条件未满足时，任务会等待或失败。不要把等待 Runner 误认为编译失败。

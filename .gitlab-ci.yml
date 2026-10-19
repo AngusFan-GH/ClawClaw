@@ -19,6 +19,7 @@ variables:
   GIT_HTTP_LOW_SPEED_LIMIT: "1024"
   GIT_HTTP_LOW_SPEED_TIME: "60"
   npm_config_registry: "http://192.168.103.203:8081/repository/xzinfra-npm-group/"
+  CLAWCLAW_DIRECT_UPLOAD: "1"
 
 default:
   interruptible: false
@@ -33,10 +34,6 @@ package-macos:
     CLAWCLAW_UPSTREAM_SOURCE: "$CLAWCLAW_MACOS_UPSTREAM_SOURCE"
   script:
     - node scripts/gitlab-desktop-release.mjs build darwin
-  artifacts:
-    name: "clawclaw-macos-$CI_PIPELINE_ID-$CI_COMMIT_SHORT_SHA"
-    expire_in: 7 days
-    paths: [ci-artifacts/darwin/]
 
 package-windows:
   stage: package
@@ -49,10 +46,6 @@ package-windows:
     CLAWCLAW_UPSTREAM_SOURCE: "$CLAWCLAW_WINDOWS_UPSTREAM_SOURCE"
   script:
     - node scripts/gitlab-desktop-release.mjs build win32
-  artifacts:
-    name: "clawclaw-windows-$CI_PIPELINE_ID-$CI_COMMIT_SHORT_SHA"
-    expire_in: 7 days
-    paths: [ci-artifacts/win32/]
 
 assemble:
   stage: assemble
@@ -63,12 +56,8 @@ assemble:
     GIT_SUBMODULE_STRATEGY: none
   needs:
     - job: package-macos
-      artifacts: true
+      artifacts: false
     - job: package-windows
-      artifacts: true
+      artifacts: false
   script:
     - node scripts/gitlab-desktop-release.mjs assemble
-  artifacts:
-    name: "clawclaw-release-$CI_PIPELINE_ID-$CI_COMMIT_SHORT_SHA"
-    expire_in: 30 days
-    paths: [release/]

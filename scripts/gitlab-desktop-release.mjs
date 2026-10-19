@@ -5,6 +5,8 @@ import { createReadStream } from 'node:fs'
 import { copyFile, lstat, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { transportOptions, uploadStagedInstaller, downloadStagedInstallers, verifyInternalOrigin } from './gitlab-release-transport.mjs'
+import { uploadUpdate } from './upload-update.mjs'
 
 const platforms = ['darwin', 'win32']
 const readJson = async path => JSON.parse(await readFile(path, 'utf8'))
@@ -116,6 +118,18 @@ async function main() {
   const [action, platform] = process.argv.slice(2)
   const identity = pipelineIdentity(process.env)
   if (action === 'assemble') {
+    if (process.env.CLAWCLAW_DIRECT_UPLOAD === '1') {
+      const { version } = await readJson(join(root, 'dsh-plugin-desktop/package.json'))
+      const options = transportOptions(process.env)
+      await verifyInternalOrigin(process.env.UPDATE_BASE_URL)
+      await downloadStagedInstallers(root, identity, version, options, runCommand)
+      await assembleInstallers(root, identity)
+      await runCommand(root, process.execPath, ['scripts/generate-release-manifest.mjs', '--directory', 'release',
+        '--base-url', `${process.env.UPDATE_BASE_URL.replace(/\/$/u, '')}/releases/dsh/${version}`])
+      uploadUpdate({ directory: join(root, 'release'), channel: 'stable', ...options,
+        root: process.env.UPDATE_REMOTE_ROOT })
+      return
+    }
     await assembleInstallers(root, identity)
     return
   }
@@ -134,6 +148,9 @@ async function main() {
   await runPnpm(root, ['check'])
   await runPnpm(root, [platform === 'darwin' ? 'dist:mac' : 'dist:win'])
   await stageInstaller(root, platform, identity)
+  if (process.env.CLAWCLAW_DIRECT_UPLOAD === '1') {
+    await uploadStagedInstaller(root, platform, identity, transportOptions(process.env), runCommand)
+  }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

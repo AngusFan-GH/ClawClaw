@@ -87,6 +87,23 @@ export function collectRelease(directory, channel = 'stable') {
     if (digest !== artifact.sha512) throw new Error(`${name} SHA-512 differs from release.json`)
     files.push(path)
   }
+  const provenance = join(root, 'build-info.json')
+  if (existsSync(provenance)) {
+    const info = JSON.parse(readFileSync(requiredFile(provenance), 'utf8'))
+    if (info.version !== version || !/^[0-9a-f]{40}$/u.test(info.commit ?? '')
+      || !/^[1-9][0-9]*$/u.test(info.pipelineId ?? '') || !Array.isArray(info.artifacts) || info.artifacts.length !== 2) {
+      throw new Error('build-info.json must identify the release version, commit, pipeline, and both artifacts')
+    }
+    for (const platform of ['darwin', 'win32']) {
+      const entry = info.artifacts.find(entry => entry.platform === platform)
+      const artifact = artifacts[platform]
+      if (!entry || entry.name !== decodeURIComponent(basename(new URL(artifact.url).pathname))
+        || entry.size !== artifact.size || entry.sha512 !== artifact.sha512) {
+        throw new Error('build-info.json differs from release.json')
+      }
+    }
+    files.push(provenance)
+  }
   return { files: [...new Set(files)], version }
 }
 
@@ -111,6 +128,7 @@ version_staging=$(mktemp -d "$versions/.$version.incoming.XXXXXX")
 tar -xzf "$archive" -C "$staging"
 test -f "$staging/release.json"
 find "$staging" -maxdepth 1 -type f -exec install -m 0644 {} "$version_staging" \\;
+chmod 0755 "$version_staging"
 mv -T "$version_staging" "$archive_dir"
 find "$staging" -maxdepth 1 -type f ! -name 'release.json' -exec install -m 0644 {} "$stable" \\;
 install -m 0644 "$staging/release.json" "$stable/release.json.new"
@@ -138,14 +156,19 @@ export function uploadUpdate(options) {
   const archiveName = `clawclaw-dsh-${release.version}-${randomUUID()}.tar.gz`
   const archive = join(temporary, archiveName)
   const destination = `${options.user}@${options.host}`
+  const sshOptions = ['-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
+    ...(options.identityFile ? ['-o', 'IdentitiesOnly=yes', '-i', options.identityFile] : []),
+    ...(options.knownHostsFile ? ['-o', `UserKnownHostsFile=${options.knownHostsFile}`] : [])]
   try {
-    run('tar', ['-C', resolve(options.directory), '-czf', archive, ...release.files.map(file => basename(file))])
-    run('scp', ['-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-P', options.port, archive, `${destination}:/tmp/${archiveName}`])
+    run('tar', [...(process.platform === 'darwin' ? ['--no-xattrs'] : []),
+      '-C', resolve(options.directory), '-czf', archive, ...release.files.map(file => basename(file))],
+    { env: { ...process.env, COPYFILE_DISABLE: '1' } })
+    run('scp', [...sshOptions, '-P', options.port, archive, `${destination}:/tmp/${archiveName}`])
     const remote = Buffer.from(remotePublishScript({
       archive: `/tmp/${archiveName}`, channel: options.channel,
       root: options.root, version: release.version,
     })).toString('base64')
-    run('ssh', ['-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-p', options.port, destination, `printf %s ${shell(remote)} | base64 -d | bash`])
+    run('ssh', [...sshOptions, '-p', options.port, destination, `printf %s ${shell(remote)} | base64 -d | bash`])
   } finally {
     rmSync(temporary, { recursive: true, force: true })
   }
@@ -163,6 +186,8 @@ function main() {
     user: process.env.UPDATE_USER ?? '',
     port: process.env.UPDATE_PORT ?? DEFAULT_PORT,
     root: process.env.UPDATE_REMOTE_ROOT ?? DEFAULT_ROOT,
+    identityFile: process.env.UPDATE_SSH_KEY_FILE,
+    knownHostsFile: process.env.UPDATE_SSH_KNOWN_HOSTS_FILE,
   })
 }
 
