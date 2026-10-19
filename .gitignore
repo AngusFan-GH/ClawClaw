@@ -12,3 +12,8 @@ dsh-community-market/lib/
 
 # Local server credentials
 /.env.server.local
+
+# GitLab build staging and combined installers
+/ci-artifacts/
+/release/
+/Runner/

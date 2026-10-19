@@ -16,6 +16,7 @@ This directory contains current product documentation. The root [README](../READ
 | Plugin ecosystem principles | [Plugin ecosystem](plugin-ecosystem.en.md) |
 | Contribution and validation | [Contributing](../CONTRIBUTING.en.md) |
 | Desktop package operations | [Desktop](../dsh-plugin-desktop/README.md) |
+| GitLab office runners and manual packaging pipelines | [GitLab packaging](gitlab-packaging.en.md) |
 | Channels | [Implementation reference](../channels/dsh-im/README.md) |
 | Community interoperability proposal | [Fabric Draft](../dsh-community-fabric/README.md) |
 

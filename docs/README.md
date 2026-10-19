@@ -16,6 +16,7 @@
 | 插件生态原则 | [插件生态](plugin-ecosystem.md) |
 | 贡献和验证 | [贡献指南](../CONTRIBUTING.md) |
 | Desktop 包级操作 | [Desktop](../dsh-plugin-desktop/README.zh.md) |
+| GitLab 办公电脑 Runner 与手动打包流水线 | [GitLab 打包](gitlab-packaging.md) |
 | Channels | [实现说明](../channels/dsh-im/README.zh.md) |
 | 社区互操作提案 | [Fabric Draft](../dsh-community-fabric/README.zh.md) |
 
