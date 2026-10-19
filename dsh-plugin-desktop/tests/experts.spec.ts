@@ -1,3 +1,4 @@
+import { join, resolve } from 'node:path'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
@@ -59,8 +60,8 @@ function nativeService(): NativeTeamService {
 
 describe('ClawClaw experts', () => {
   it('keeps expert plugin packages in the ClawClaw data directory', () => {
-    expect(clawClawPluginLibraryRoot('/clawclaw-data')).toBe('/clawclaw-data/plugins/marketplaces')
-    expect(clawClawPluginLibraryRoot('/clawclaw-data')).toBe('/clawclaw-data/plugins/marketplaces')
+    expect(clawClawPluginLibraryRoot(resolve('/clawclaw-data'))).toBe(join(resolve('/clawclaw-data'), 'plugins', 'marketplaces'))
+    expect(clawClawPluginLibraryRoot(resolve('/clawclaw-data'))).toBe(join(resolve('/clawclaw-data'), 'plugins', 'marketplaces'))
   })
 
   it('includes expert and skill assets in Electron packages and the afterPack gate', async () => {

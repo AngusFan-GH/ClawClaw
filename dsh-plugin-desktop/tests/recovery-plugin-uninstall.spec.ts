@@ -152,6 +152,12 @@ describe('pre-Host recovery plugin uninstall command', () => {
       dshBootstrapPath,
       environment: {
         PATH: systemBin,
+        // Native cmd shims need the Windows command environment as well as PATH.
+        ...(process.platform === 'win32' ? {
+          SystemRoot: process.env.SystemRoot,
+          ComSpec: process.env.ComSpec,
+          PATHEXT: process.env.PATHEXT,
+        } : {}),
         PNPM_SELECTION_MARKER: selectedMarker,
       },
     })).resolves.toMatchObject({ exitCode: 0 })

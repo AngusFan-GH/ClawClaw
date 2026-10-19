@@ -443,9 +443,11 @@ describe('desktop Host pnpm runtime', () => {
 
   it('publishes a clean sibling instead of trusting a contaminated generation', () => {
     const root = temporaryDirectory()
+    const platform = process.platform === 'win32' ? 'win32' : 'linux'
+    const inheritedPath = process.platform === 'win32' ? 'C:\\Windows' : '/usr/bin'
     const stateDir = join(root, 'runtime')
-    const environment: NodeJS.ProcessEnv = { PATH: '/usr/bin' }
-    const first = installDesktopPnpmRuntime(options(stateDir, 'linux', environment))
+    const environment: NodeJS.ProcessEnv = { PATH: inheritedPath }
+    const first = installDesktopPnpmRuntime(options(stateDir, platform, environment))
     first.dispose()
     const target = join(root, 'outside')
     writeFileSync(target, 'outside')
@@ -453,13 +455,13 @@ describe('desktop Host pnpm runtime', () => {
     symlinkSync(target, first.pnpmShimPath)
     const unknownExecutable = join(first.pathDir, 'bsk.exe')
     writeFileSync(unknownExecutable, 'locked or foreign')
-    environment.PATH = `${first.pathDir}:/usr/bin`
+    environment.PATH = `${first.pathDir}${pathDelimiter}${inheritedPath}`
 
-    const second = installDesktopPnpmRuntime(options(stateDir, 'linux', environment))
+    const second = installDesktopPnpmRuntime(options(stateDir, platform, environment))
 
     expect(second.pathDir).not.toBe(first.pathDir)
-    expect(readdirSync(second.pathDir)).toEqual(['pnpm'])
-    expect(environment.PATH).toBe(`${second.pathDir}:/usr/bin`)
+    expect(readdirSync(second.pathDir)).toEqual([platform === 'win32' ? 'pnpm.cmd' : 'pnpm'])
+    expect(environment.PATH).toBe(`${second.pathDir}${pathDelimiter}${inheritedPath}`)
     expect(readFileSync(unknownExecutable, 'utf8')).toBe('locked or foreign')
     expect(readFileSync(target, 'utf8')).toBe('outside')
     second.dispose()
@@ -467,6 +469,8 @@ describe('desktop Host pnpm runtime', () => {
 
   it('leaves legacy unknown files untouched and excludes their directories from PATH', () => {
     const root = temporaryDirectory()
+    const platform = process.platform === 'win32' ? 'win32' : 'linux'
+    const inheritedPath = process.platform === 'win32' ? 'C:\\Windows' : '/usr/bin'
     const stateDir = join(root, 'runtime')
     const legacyPathDir = join(stateDir, 'bin')
     const legacyNodeBinDir = join(stateDir, 'private', 'node-bin')
@@ -477,13 +481,13 @@ describe('desktop Host pnpm runtime', () => {
     writeFileSync(publicUnknown, 'locked public command')
     writeFileSync(privateUnknown, 'locked private command')
     const environment: NodeJS.ProcessEnv = {
-      PATH: `${legacyPathDir}:${legacyNodeBinDir}:/usr/bin`,
+      PATH: `${legacyPathDir}${pathDelimiter}${legacyNodeBinDir}${pathDelimiter}${inheritedPath}`,
     }
 
-    const installation = installDesktopPnpmRuntime(options(stateDir, 'linux', environment))
+    const installation = installDesktopPnpmRuntime(options(stateDir, platform, environment))
 
     expect(installation.pathDir).not.toBe(legacyPathDir)
-    expect(environment.PATH).toBe(`${installation.pathDir}:/usr/bin`)
+    expect(environment.PATH).toBe(`${installation.pathDir}${pathDelimiter}${inheritedPath}`)
     expect(readFileSync(publicUnknown, 'utf8')).toBe('locked public command')
     expect(readFileSync(privateUnknown, 'utf8')).toBe('locked private command')
     installation.dispose()

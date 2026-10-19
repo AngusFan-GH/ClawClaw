@@ -1,5 +1,5 @@
 import { mkdtemp, mkdir, rename, readFile, readdir, realpath, rm, symlink, writeFile, access } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
@@ -215,6 +215,6 @@ describe('Skill discovery scope', () => {
   it('derives stable Windows roots and case-insensitive watcher keys', () => {
     expect(windowsWorkspaceKey('C:\\Work\\Project')).toBe(windowsWorkspaceKey('c:\\work\\PROJECT'))
     expect(windowsWorkspaceKey('C:\\Work\\Project')).not.toBe(windowsWorkspaceKey('C:\\Work\\Other'))
-    expect(clawClawProjectSkillRoot('/workspace')).toBe(join('/workspace', '.clawclaw', 'skills'))
+    expect(clawClawProjectSkillRoot(resolve('/workspace'))).toBe(join(resolve('/workspace'), '.clawclaw', 'skills'))
   })
 })
