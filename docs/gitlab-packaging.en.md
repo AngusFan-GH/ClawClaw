@@ -18,7 +18,9 @@ The final directory contains a DMG, an EXE, and `build-info.json`. It is not a c
 
 Dependencies use `http://192.168.103.203:8081/repository/xzinfra-npm-group/`. If authentication is required, configure repository-specific CI/CD secrets in GitLab; do not copy another project's publishing credentials. Corepack, Electron, and packaging tools still require external access or corresponding internal mirrors. `CLAWCLAW_WINDOWS_UPSTREAM_SOURCE` and `CLAWCLAW_MACOS_UPSTREAM_SOURCE` can point to each runner's validated local `deepseek-harness` Git checkout when GitHub is unreachable. CI clones the pinned commit from that local object source, then restores the official submodule URL before verification; no upstream source or pin is changed.
 
-The default GitLab artifact limit may be too small. The Mac DMG is already about 464 MB. Both project and reverse-proxy limits must accommodate the combined installer archive; a project limit of at least 2048 MB is recommended. For `413` or `artifact too large`, ask operations to adjust the limits before rebuilding. These are server settings; large artifact uploads have not yet been verified.
+The outer repository uses a depth-1 shallow clone to reduce history downloads over slow internal links while retaining the exact pipeline commit. Validation of the pinned upstream commit in its local object source is unchanged.
+
+Pipeline #450 generated the Mac DMG and passed its mount verification. The installer is about 465 MiB, but the server rejected its upload with `413 Request Entity Too Large`. GitLab's artifact limit and the ingress reverse-proxy limit must accommodate the combined installer archive; at least 2048 MB is recommended. An administrator must adjust Maximum artifacts size under Admin Settings → CI/CD and check for lower project or group limits. For Omnibus deployments, operations must also check `nginx['client_max_body_size'] = '2048m'` in `/etc/gitlab/gitlab.rb` and run `gitlab-ctl reconfigure` after changes. Check any front proxy's request-size limit as well. Do not repeatedly rebuild before adjusting these limits. Large artifact uploads have not passed yet.
 
 ## Mac runner
 

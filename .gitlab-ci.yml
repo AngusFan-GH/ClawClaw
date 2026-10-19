@@ -9,7 +9,8 @@ stages: [package, assemble]
 
 variables:
   GIT_STRATEGY: clone
-  GIT_DEPTH: "0"
+  # Packaging uses the pipeline commit, not the outer repository's full history.
+  GIT_DEPTH: "1"
   GIT_SUBMODULE_STRATEGY: recursive
   DSH_TELEMETRY_DISABLED: "1"
   GIT_TERMINAL_PROMPT: "0"

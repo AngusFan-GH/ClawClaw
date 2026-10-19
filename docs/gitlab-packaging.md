@@ -18,7 +18,9 @@ Mac 与 Windows 已分别验证本地打包。本流程复用这两个原生环�
 
 依赖通过 `http://192.168.103.203:8081/repository/xzinfra-npm-group/` 下载。若需要认证，在 GitLab 配置匹配仓库的 CI/CD 机密变量，不要复制其他项目的发布凭据。Corepack、Electron 和打包工具的下载仍需外网或对应内网镜像。无法稳定访问 GitHub 时，可分别将 `CLAWCLAW_WINDOWS_UPSTREAM_SOURCE` 和 `CLAWCLAW_MACOS_UPSTREAM_SOURCE` 指向各机器已验证的本机 `deepseek-harness` Git 仓库；CI 从本机对象源克隆固定提交，再恢复官方子模块地址后校验，不修改上游源码或 pin。
 
-GitLab 默认 artifact 大小上限可能不足以容纳安装包。Mac DMG 已约 464 MB，项目与反向代理的上传限制需要容纳两个安装包的汇总压缩包，建议项目上限至少 2048 MB。若出现 `413` 或 `artifact too large`，先由运维调整限制；不要反复重建。此项取决于服务器设置，尚未验证大文件上传。
+主仓库使用深度为 1 的浅克隆，减少慢速内网链路上的历史数据下载；打包仍使用流水线指定的准确提交。上游固定提交的本机对象源校验不受影响。
+
+流水线 #450 的 Mac DMG 已生成并通过挂载校验，大小约 465 MiB，但上传被服务器以 `413 Request Entity Too Large` 拒绝。GitLab 的 artifact 大小限制与入口反向代理限制需要容纳两个安装包的汇总压缩包，建议至少 2048 MB。由管理员在管理中心 Settings → CI/CD 调整 Maximum artifacts size，并检查项目或群组是否有更低限制。Omnibus 部署还需由运维检查 `/etc/gitlab/gitlab.rb` 的 `nginx['client_max_body_size'] = '2048m'`，修改后执行 `gitlab-ctl reconfigure`；有前置代理时也要检查其请求大小限制。调整完成前不要反复重建。大文件上传尚未通过。
 
 ## Mac Runner
 
