@@ -21,6 +21,8 @@ Mac 与 Windows 已分别验证本地打包。本流程复用这两个原生环�
 
 切换 DNS 前须用 0.2.6–0.2.10 的原始更新检查代码验证实际 HTTPS 清单，并验证安装包完整下载、SHA-512 和文件格式。保留旧清单引用的安装包路径。
 
+2026-10-20 已将旧服务器现存的 0.2.8、0.2.9、0.2.10 两平台安装包迁移到新服务器，逐个核对原始 SHA-512，并验证六个原下载地址返回可信 HTTPS 200 和正确长度。新服务器已恢复原 0.2.10 稳定清单；通过指定内网解析并保留域名证书校验，0.2.6–0.2.9 的原始检查器均发现 0.2.10，0.2.10 检查器返回当前已最新。0.2.11 仍须完整双平台流水线通过后切换，Mac 单端成功不代表新版本已发布。
+
 ## 流水线
 
 在 GitLab 的 Build → Pipelines → Run pipeline 中选择 `dsh-desktop` 手动启动，也可以通过已认证的 API 启动该分支。普通 push 和旧 tag 不触发打包；不要移动已发布 tag。
@@ -50,6 +52,8 @@ Mac 与 Windows 已分别验证本地打包。本流程复用这两个原生环�
 Runner 作为当前用户的 LaunchAgent 登录后启动，关机或注销后离线。不要另装一份 Homebrew Runner，以免同时领取任务。
 
 ## Windows Runner
+
+Windows OpenSSH 要求发布私钥的 ACL 仅允许构建用户与 SYSTEM。当前 Runner 通过 `pre_build_script` 调用 `Runner/scripts/protect-update-ssh-key.ps1`，为每次生成的私钥文件变量设置受保护 ACL；重新安装 Runner 时须保留该脚本接入。不要依赖单次手工修复临时目录，也不要输出私钥或 Runner 配置中的令牌。
 
 使用已成功打包的 `admin` 用户登录 Windows。Runner 目录为 `D:\Angus\Work\Projects\ClawClaw\Runner`。运行前确认此账号的 Git、x64 Node、Corepack、Python、C++ 工具链和内网访问条件与手动打包一致。
 

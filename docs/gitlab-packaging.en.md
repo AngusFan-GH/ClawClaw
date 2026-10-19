@@ -21,6 +21,8 @@ This migration supports 0.2.x clients starting at 0.2.6. Retain `clawclaw.xzinfr
 
 Before DNS cutover, use the original 0.2.6–0.2.10 update checkers against the live HTTPS manifest and verify complete installer downloads, SHA-512, and file formats. Preserve installer paths referenced by the previous manifest.
 
+On 2026-10-20, the existing Mac and Windows installers for 0.2.8, 0.2.9, and 0.2.10 were migrated with their original SHA-512 values verified. All six original download URLs return trusted HTTPS 200 with exact lengths. The new server now serves the original 0.2.10 stable manifest. With connections pinned to the internal IP while retaining hostname certificate validation, the original 0.2.6–0.2.9 checkers discover 0.2.10 and the 0.2.10 checker reports up-to-date. Switch to 0.2.11 only after the complete two-platform pipeline passes; a successful Mac job alone does not publish the new release.
+
 ## Pipeline
 
 Select `dsh-desktop` under Build → Pipelines → Run pipeline, or start that branch through the authenticated API. Ordinary pushes and historical tags do not start packaging; never move released tags.
@@ -50,6 +52,8 @@ The isolated local installation is `~/.local/share/clawclaw-runner/`, with separ
 The runner starts as the current user's LaunchAgent at login and goes offline after logout or shutdown. Do not install a second Homebrew runner that could poll concurrently.
 
 ## Windows runner
+
+Windows OpenSSH requires the deployment private key ACL to allow only the build user and SYSTEM. The current runner invokes `Runner/scripts/protect-update-ssh-key.ps1` through `pre_build_script` to protect each newly generated key file variable; retain this hook when reinstalling the runner. Do not rely on a one-time temporary-directory repair or print private keys or runner configuration tokens.
 
 Sign in as the `admin` user that successfully built the installer. The runner directory is `D:\Angus\Work\Projects\ClawClaw\Runner`. Its Git, x64 Node, Corepack, Python, C++ tools, and network access must match the validated manual environment.
 
