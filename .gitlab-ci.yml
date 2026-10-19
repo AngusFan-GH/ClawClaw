@@ -1,63 +1,64 @@
-# Office runners are started on demand. Use Run pipeline or the API on dsh-desktop;
-# ordinary pushes and historical tags must not start unattended builds.
+# Diagnostic branch only: preserve the previously built checkout and dependencies.
 workflow:
   rules:
-    - if: '($CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api") && $CI_COMMIT_BRANCH == "dsh-desktop"'
+    - if: '$CI_PIPELINE_SOURCE == "api" && $CI_COMMIT_BRANCH == "codex/windows-cli-diagnostics"'
     - when: never
-
-stages: [package, assemble]
-
-variables:
-  GIT_STRATEGY: clone
-  # Packaging uses the pipeline commit, not the outer repository's full history.
-  GIT_DEPTH: "1"
-  GIT_SUBMODULE_STRATEGY: recursive
-  DSH_TELEMETRY_DISABLED: "1"
-  GIT_TERMINAL_PROMPT: "0"
-  GCM_INTERACTIVE: never
-  GIT_CONFIG_PARAMETERS: "'credential.helper=' 'http.https://gitlab.xzinfra.com/.proxy='"
-  GIT_HTTP_LOW_SPEED_LIMIT: "1024"
-  GIT_HTTP_LOW_SPEED_TIME: "60"
-  npm_config_registry: "http://192.168.103.203:8081/repository/xzinfra-npm-group/"
-  CLAWCLAW_DIRECT_UPLOAD: "1"
-
-default:
-  interruptible: false
-
-package-macos:
-  stage: package
-  tags: [clawclaw-macos]
-  resource_group: clawclaw-macos
-  timeout: 3 hours
-  variables:
-    GIT_SUBMODULE_STRATEGY: none
-    CLAWCLAW_UPSTREAM_SOURCE: "$CLAWCLAW_MACOS_UPSTREAM_SOURCE"
-  script:
-    - node scripts/gitlab-desktop-release.mjs build darwin
-
-package-windows:
-  stage: package
+stages: [diagnose]
+windows-cli-diagnostics:
+  stage: diagnose
   tags: [clawclaw-windows]
   resource_group: clawclaw-windows
-  timeout: 3 hours
+  timeout: 10 minutes
   variables:
-    # Reuse the validated office checkout when GitHub is unreachable from Windows.
+    GIT_STRATEGY: none
     GIT_SUBMODULE_STRATEGY: none
-    CLAWCLAW_UPSTREAM_SOURCE: "$CLAWCLAW_WINDOWS_UPSTREAM_SOURCE"
+    DSH_TELEMETRY_DISABLED: "1"
   script:
-    - node scripts/gitlab-desktop-release.mjs build win32
-
-assemble:
-  stage: assemble
-  tags: [clawclaw-macos]
-  resource_group: clawclaw-macos
-  timeout: 30 minutes
-  variables:
-    GIT_SUBMODULE_STRATEGY: none
-  needs:
-    - job: package-macos
-      artifacts: false
-    - job: package-windows
-      artifacts: false
-  script:
-    - node scripts/gitlab-desktop-release.mjs assemble
+    - |
+      $ErrorActionPreference = 'Stop'
+      $diagnostic = @'
+      import { execFileSync, spawnSync } from 'node:child_process'
+      import { readFileSync, writeFileSync, unlinkSync } from 'node:fs'
+      import { resolve } from 'node:path'
+      const root = process.cwd()
+      const expected = '2b32703635409b5f3abca04e68e8d5720f0a9774'
+      const actual = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+      if (actual !== expected) throw new Error(`Expected preserved checkout ${expected}; found ${actual}`)
+      const original = resolve(root, 'dsh-plugin-desktop/scripts/verify-cli-runtime.mjs')
+      execFileSync('git', ['diff', '--exit-code', '--', original], { stdio: 'inherit' })
+      console.log(`Diagnostic only: cached checkout ${actual}; CI=${process.env.CI}; Node ${process.version}`)
+      let failures = 0
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const result = spawnSync('corepack.cmd', ['pnpm', '--filter', 'dsh-plugin-desktop', 'verify:cli'], {
+          cwd: root, encoding: 'utf8', shell: true, timeout: 90000,
+        })
+        console.log(`Original CLI attempt ${attempt}: status=${result.status}; signal=${result.signal}`)
+        if (result.stdout) process.stdout.write(result.stdout)
+        if (result.stderr) process.stderr.write(result.stderr)
+        if (result.error) console.log(`Spawn error: ${result.error.code ?? result.error.name}`)
+        if (result.status !== 0) failures++
+      }
+      const temporary = resolve(root, `dsh-plugin-desktop/scripts/verify-cli-diagnostic-${process.env.CI_JOB_ID}.mjs`)
+      let source = readFileSync(original, 'utf8')
+      if (!source.includes("['install', '--offline', '--reporter=silent']")) throw new Error('Unexpected lifecycle smoke source')
+      source = source.replace("['install', '--offline', '--reporter=silent']", "['install', '--offline', '--reporter=append-only']")
+      source = source.replace("verifyResult('pnpm lifecycle smoke', result, '')", "verifyResult('pnpm lifecycle smoke', result)")
+      source = source.replace('${result.stderr.trim()}', '${JSON.stringify({ stdout: result.stdout, stderr: result.stderr })}')
+      try {
+        writeFileSync(temporary, source, { flag: 'wx' })
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          const result = spawnSync(process.execPath, [temporary], {
+            cwd: root, encoding: 'utf8', timeout: 90000,
+          })
+          console.log(`Verbose CLI attempt ${attempt}: status=${result.status}; signal=${result.signal}`)
+          if (result.stdout) process.stdout.write(result.stdout)
+          if (result.stderr) process.stderr.write(result.stderr)
+          if (result.error) console.log(`Spawn error: ${result.error.code ?? result.error.name}`)
+          if (result.status !== 0) failures++
+        }
+      } finally { unlinkSync(temporary) }
+      console.log(`CLI diagnostics finished: ${failures} failures; product source unchanged`)
+      process.exitCode = failures === 0 ? 0 : 1
+      '@
+      $diagnostic | & node --input-type=module -
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
