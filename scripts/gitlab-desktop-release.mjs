@@ -1,5 +1,5 @@
 /** Build native installers and combine artifacts from exactly one GitLab pipeline. */
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { copyFile, lstat, mkdir, readFile, writeFile } from 'node:fs/promises'
@@ -76,21 +76,39 @@ export async function assembleInstallers(root, identity) {
   return metadata
 }
 
-async function runPnpm(root, args) {
-  console.log(`[${new Date().toISOString()}] corepack pnpm ${args.join(' ')}`)
-  const command = process.platform === 'win32' ? 'corepack.cmd' : 'corepack'
-  const child = spawn(command, ['pnpm', ...args], {
-    cwd: root, stdio: 'inherit', shell: process.platform === 'win32',
+async function runCommand(root, command, args, shell = false) {
+  console.log(`[${new Date().toISOString()}] ${command} ${args.join(' ')}`)
+  const child = spawn(command, args, {
+    cwd: root, stdio: 'inherit', shell,
   })
   const timer = setInterval(() => {
-    console.log(`[${new Date().toISOString()}] Still running: pnpm ${args.join(' ')}`)
+    console.log(`[${new Date().toISOString()}] Still running: ${command} ${args.join(' ')}`)
   }, 60_000)
   try {
     await new Promise((ok, fail) => {
       child.once('error', fail)
-      child.once('exit', (code, signal) => code === 0 ? ok() : fail(new Error(`pnpm ${args.join(' ')} exited with ${code ?? signal}`)))
+      child.once('exit', (code, signal) => code === 0 ? ok() : fail(new Error(`${command} exited with ${code ?? signal}`)))
     })
   } finally { clearInterval(timer) }
+}
+
+async function runPnpm(root, args) {
+  await runCommand(root, process.platform === 'win32' ? 'corepack.cmd' : 'corepack', ['pnpm', ...args], process.platform === 'win32')
+}
+
+/** Clone exact Git objects from an optional local source, then restore official remotes. */
+export async function prepareUpstream(root, source) {
+  const { commit } = await readJson(join(root, 'upstream.json'))
+  const args = []
+  if (source) {
+    const local = resolve(source)
+    // Verify the fixed commit exists before touching the CI submodule checkout.
+    execFileSync('git', ['-C', local, 'cat-file', '-e', `${commit}^{commit}`], { stdio: 'pipe' })
+    args.push('-c', 'protocol.file.allow=always', '-c', `submodule.deepseek-harness.url=${local}`)
+  }
+  await runCommand(root, 'git', ['submodule', 'init'])
+  await runCommand(root, 'git', [...args, 'submodule', 'update', '--init', '--recursive'])
+  await runCommand(root, 'git', ['submodule', 'sync', '--recursive'])
 }
 
 async function main() {
@@ -108,6 +126,7 @@ async function main() {
   if (!((major === 22 && minor >= 19) || major === 24)) throw new Error('Packaging requires Node 22.19+ or Node 24.x')
   const { version } = await readJson(join(root, 'dsh-plugin-desktop/package.json'))
   installerName(version, platform)
+  await prepareUpstream(root, process.env.CLAWCLAW_UPSTREAM_SOURCE)
   await runPnpm(root, ['--version'])
   await runPnpm(root, ['install', '--frozen-lockfile'])
   await runPnpm(root, ['run', 'upstream:prepare-runtime'])

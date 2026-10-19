@@ -34,6 +34,10 @@ package-windows:
   tags: [clawclaw-windows]
   resource_group: clawclaw-windows
   timeout: 3 hours
+  variables:
+    # Reuse the validated office checkout when GitHub is unreachable from Windows.
+    GIT_SUBMODULE_STRATEGY: none
+    CLAWCLAW_UPSTREAM_SOURCE: "$CLAWCLAW_WINDOWS_UPSTREAM_SOURCE"
   script:
     - node scripts/gitlab-desktop-release.mjs build win32
   artifacts:

@@ -1,9 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { installerName, pipelineIdentity, stageInstaller, assembleInstallers } from './gitlab-desktop-release.mjs'
+import { installerName, pipelineIdentity, stageInstaller, assembleInstallers, prepareUpstream } from './gitlab-desktop-release.mjs'
 
 const identity = { commit: 'a'.repeat(40), pipelineId: '123' }
 
@@ -64,4 +65,34 @@ test('rejects a missing platform instead of assembling a partial release', async
 test('requires an explicit pipeline identity', () => {
   assert.throws(() => pipelineIdentity({}), /required/)
   assert.deepEqual(pipelineIdentity({ CI_COMMIT_SHA: identity.commit, CI_PIPELINE_ID: '123' }), identity)
+})
+
+test('initializes a pinned submodule offline and restores its official origin without changing tracked files', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'clawclaw-offline-upstream-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const source = join(directory, 'source')
+  const root = join(directory, 'product')
+  const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+  const commitFiles = cwd => {
+    git(cwd, 'add', '.')
+    git(cwd, '-c', 'user.name=CI fixture', '-c', 'user.email=ci@example.test', 'commit', '-qm', 'fixture')
+  }
+  await mkdir(source)
+  await mkdir(root)
+  git(source, 'init', '-q')
+  await writeFile(join(source, 'README.md'), 'pinned source')
+  commitFiles(source)
+  const commit = git(source, 'rev-parse', 'HEAD')
+  git(root, 'init', '-q')
+  git(root, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', source, 'deepseek-harness')
+  const official = 'https://example.invalid/upstream.git'
+  git(root, 'config', '-f', '.gitmodules', 'submodule.deepseek-harness.url', official)
+  await writeFile(join(root, 'upstream.json'), JSON.stringify({ commit }))
+  commitFiles(root)
+  git(root, 'submodule', 'deinit', '-f', 'deepseek-harness')
+  await rm(join(root, '.git/modules/deepseek-harness'), { recursive: true, force: true })
+  await prepareUpstream(root, source)
+  assert.equal(git(join(root, 'deepseek-harness'), 'rev-parse', 'HEAD'), commit)
+  assert.equal(git(join(root, 'deepseek-harness'), 'remote', 'get-url', 'origin'), official)
+  assert.equal(git(root, 'status', '--porcelain'), '')
 })
