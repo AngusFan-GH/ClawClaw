@@ -43,6 +43,12 @@ windows-cli-diagnostics:
       const create=kernel.func('uint8_t __stdcall CreateSymbolicLinkW(str16 link, str16 target, uint32_t flags)')
       const lastError=kernel.func('uint32_t __stdcall GetLastError()')
       console.log(JSON.stringify({engine:input.engine,node:process.version,electron:process.versions.electron,uv:process.versions.uv,execArgv:process.execArgv,permission:process.permission?.has('fs.write',input.base)}))
+      const mitigation=kernel.func('int32_t __stdcall GetProcessMitigationPolicy(void *, uint32_t, _Out_ void *, size_t)')
+      const self=kernel.func('void * __stdcall GetCurrentProcess()')
+      for(const policy of [4,16]) {
+       const flags=Buffer.alloc(4);const ok=mitigation(self(),policy,flags,4)
+       console.log(JSON.stringify({engine:input.engine,mitigationPolicy:policy,ok,flags:ok?flags.readUInt32LE(0):null,error:ok?0:lastError()}))
+      }
       const advapi=koffi.load('advapi32.dll')
       const current=kernel.func('void * __stdcall GetCurrentProcess()')
       const open=advapi.func('int32_t __stdcall OpenProcessToken(void *, uint32_t, _Out_ void **)')
