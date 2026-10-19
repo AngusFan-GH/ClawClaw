@@ -13,7 +13,7 @@ Mac 与 Windows 已分别验证本地打包。本流程复用这两个原生环�
 - 不可覆盖的版本目录：`/releases/dsh/<version>/`，包含 DMG、EXE、`release.json` 和 `build-info.json`。
 - 稳定更新清单：`https://clawclaw.xzinfra.com/updates/dsh/stable/release.json`。
 
-`deploy/clawclaw-internal.nginx.conf` 为内网 HTTPS 服务配置；证书和私钥存放在服务器 `/etc/clawclaw/tls/`，不进入 Git。迁移时复制的通配符证书在北京时间 2026-10-27 07:59:59 到期，需及时续期。服务器对外地址为 `218.69.255.22`：公网 DNS 应指向该地址，并将外网 443 转发到 `192.168.103.220:443`；内网可通过分区 DNS 直接解析到 `192.168.103.220`。当前外网 443 返回其他 HTTPD 服务的自签名证书，切换 DNS 前需修正端口映射。客户端继续使用原 HTTPS 域名。
+`deploy/clawclaw-internal.nginx.conf` 为内网 HTTPS 服务配置；证书和私钥存放在服务器 `/etc/clawclaw/tls/`，不进入 Git。迁移时复制的通配符证书在北京时间 2026-10-27 07:59:59 到期，需及时续期。服务器对外地址为 `218.69.255.22`：公网 DNS 应指向该地址，并将外网 443 转发到 `192.168.103.220:443`；内网可通过分区 DNS 直接解析到 `192.168.103.220`。当前从公司网络访问公网 IP 的 443，会进入 H3C SecPath F100 管理页面；从旧阿里云服务器实测该公网 443 连接超时，而 9527 的 File Browser 正常返回 200。两种网络位置的结果不同，不能将内网回流访问等同于真实公网连通。切换 DNS 前，需由网管核查公网 443 的端口映射、安全策略及管理入口。客户端继续使用原 HTTPS 域名。
 
 ## 流水线
 
