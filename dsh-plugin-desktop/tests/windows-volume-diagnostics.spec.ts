@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { existsSync } from 'node:fs'
+import { describe, expect, it, vi } from 'vitest'
 import {
   diagnoseWindowsVolumes,
   evaluateWindowsWorkspaceVolume,
@@ -6,6 +7,11 @@ import {
   windowsVolumeQuery,
   type WindowsVolumeInfo,
 } from '../src/windows-volume-diagnostics.ts'
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return { ...actual, existsSync: vi.fn(actual.existsSync) }
+})
 
 function query(info: WindowsVolumeInfo) {
   return () => info
@@ -103,13 +109,18 @@ describe('Windows volume diagnostics', () => {
     })
   })
 
-  it('blocks a workspace when its volume cannot be inspected', () => {
-    expect(evaluateWindowsWorkspaceVolume('win32', 'E:\\repo', () => {
+  it.each([
+    ['E:\\repo', 'E:\\'],
+    ['\\\\server\\share\\repo', '\\\\server\\share\\'],
+  ])('blocks an uninspectable workspace without probing it again (%s)', (path, root) => {
+    vi.mocked(existsSync).mockClear()
+    expect(evaluateWindowsWorkspaceVolume('win32', path, () => {
       throw new Error('drive disconnected')
     })).toEqual({
       action: 'block',
-      concern: expect.objectContaining({ reason: expect.stringContaining('drive disconnected') }),
+      concern: expect.objectContaining({ root, reason: expect.stringContaining('drive disconnected') }),
     })
+    expect(existsSync).not.toHaveBeenCalled()
   })
 
   it('formats the concern for stderr diagnostics', () => {
