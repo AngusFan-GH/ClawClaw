@@ -25,6 +25,8 @@ Each platform uploads its installer and commit, pipeline, version, size, and SHA
 
 Publication first checks the internal `/healthz` marker over trusted HTTPS. DNS pointing to the old server or an untrusted certificate prevents publication without switching the feed. Transfer and transaction smoke tests do not establish that a formal installer release has succeeded; the first full native pipeline must still pass.
 
+For first-time or early internal publication, add `UPDATE_ORIGIN_VERIFY_IP=192.168.103.220` to that manual pipeline. It must equal `UPDATE_HOST`. The health check connects directly to this IP while retaining certificate trust, hostname verification, and the internal marker check. This permits publishing to the production server directory before DNS cutover. Manifest HTTPS domains remain unchanged; use an explicit address override to verify downloads until DNS is switched. Omit this variable for routine publication.
+
 Download installers from the HTTPS version directory. GitLab retains job logs. Server staging and version directories are not cleaned automatically; check client and rollback requirements before removing history.
 
 ## Connection variables, network, and storage

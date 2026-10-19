@@ -4,7 +4,7 @@ import { copyFile, mkdtemp, mkdir, readFile, rename, rm, writeFile } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { stageInstaller, assembleInstallers, installerName } from './gitlab-desktop-release.mjs'
-import { uploadStagedInstaller, downloadStagedInstallers, transportOptions, verifyInternalOrigin } from './gitlab-release-transport.mjs'
+import { uploadStagedInstaller, downloadStagedInstallers, transportOptions, verifyInternalOrigin, originRequestAtAddress } from './gitlab-release-transport.mjs'
 
 const identity = { commit: 'b'.repeat(40), pipelineId: '456' }
 
@@ -113,4 +113,10 @@ test('publishing requires trusted HTTPS and the internal origin marker', async (
   })
   await assert.rejects(verifyInternalOrigin('https://old.example.test', async () => new Response('old origin')), /check DNS/u)
   await assert.rejects(verifyInternalOrigin('http://internal.test'), /HTTPS origin/u)
+})
+
+test('pre-DNS origin verification requires an explicit literal IP', () => {
+  for (const address of ['', 'server.internal', '192.168.103.220;command']) {
+    assert.throws(() => originRequestAtAddress(address), /literal IP/u)
+  }
 })

@@ -2,6 +2,8 @@
 import { chmod, mkdir, readFile, stat } from 'node:fs/promises'
 import { join, posix } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { get } from 'node:https'
+import { isIP } from 'node:net'
 
 const shell = value => `'${String(value).replaceAll("'", "'\\\"'\\\"'")}'`
 
@@ -74,7 +76,34 @@ export async function downloadStagedInstallers(root, identity, version, options,
   }
 }
 
-/** Fail before publishing when DNS still points to the previous origin. */
+/** Pre-DNS publication still authenticates TLS against the original hostname. */
+export function originRequestAtAddress(address) {
+  const family = isIP(address)
+  if (!family) throw new Error('UPDATE_ORIGIN_VERIFY_IP must be a literal IP address')
+  return async (url, options) => await new Promise((resolve, reject) => {
+    const request = get(url, {
+      signal: options.signal,
+      servername: url.hostname,
+      rejectUnauthorized: true,
+      lookup: (_hostname, settings, callback) => {
+        if (settings.all) callback(null, [{ address, family }])
+        else callback(null, address, family)
+      },
+    }, response => {
+      let body = ''
+      response.setEncoding('utf8')
+      response.on('data', chunk => {
+        body += chunk
+        if (body.length > 256) response.destroy(new Error('Unexpected origin health response'))
+      })
+      response.on('error', reject)
+      response.on('end', () => resolve(new Response(body, { status: response.statusCode })))
+    })
+    request.on('error', reject)
+  })
+}
+
+/** Require trusted HTTPS and the marker of the intended download service. */
 export async function verifyInternalOrigin(baseUrl, request = fetch) {
   const url = new URL(baseUrl)
   if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {

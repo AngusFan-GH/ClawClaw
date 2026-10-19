@@ -5,7 +5,7 @@ import { createReadStream } from 'node:fs'
 import { copyFile, lstat, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { transportOptions, uploadStagedInstaller, downloadStagedInstallers, verifyInternalOrigin } from './gitlab-release-transport.mjs'
+import { transportOptions, uploadStagedInstaller, downloadStagedInstallers, verifyInternalOrigin, originRequestAtAddress } from './gitlab-release-transport.mjs'
 import { uploadUpdate } from './upload-update.mjs'
 
 const platforms = ['darwin', 'win32']
@@ -121,7 +121,12 @@ async function main() {
     if (process.env.CLAWCLAW_DIRECT_UPLOAD === '1') {
       const { version } = await readJson(join(root, 'dsh-plugin-desktop/package.json'))
       const options = transportOptions(process.env)
-      await verifyInternalOrigin(process.env.UPDATE_BASE_URL)
+      const verifyAddress = process.env.UPDATE_ORIGIN_VERIFY_IP
+      if (verifyAddress && verifyAddress !== options.host) {
+        throw new Error('The origin verification IP must match UPDATE_HOST')
+      }
+      await verifyInternalOrigin(process.env.UPDATE_BASE_URL,
+        verifyAddress ? originRequestAtAddress(verifyAddress) : undefined)
       await downloadStagedInstallers(root, identity, version, options, runCommand)
       await assembleInstallers(root, identity)
       await runCommand(root, process.execPath, ['scripts/generate-release-manifest.mjs', '--directory', 'release',
