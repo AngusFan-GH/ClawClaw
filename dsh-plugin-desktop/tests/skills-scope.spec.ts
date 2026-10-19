@@ -153,12 +153,18 @@ describe('Skill discovery scope', () => {
       await vi.waitFor(async () => { expect((await b.detail('project-review')).userInvocable).toBe(false) }, { timeout: 5000 })
       await mkdir(join(home, 'user', 'skills', 'broken'), { recursive: true })
       await writeFile(join(home, 'user', 'skills', 'broken', 'SKILL.md'), 'Not a valid document')
-      expect((await a.read()).installed).toContainEqual(expect.objectContaining({ name: 'broken', status: 'invalid', reason: 'invalid-document' }))
+      await vi.waitFor(async () => {
+        expect((await a.read()).installed).toContainEqual(expect.objectContaining({ name: 'broken', status: 'invalid', reason: 'invalid-document' }))
+      }, { timeout: 5000 })
       await mkdir(join(home, 'user', 'skills', 'missing'), { recursive: true })
-      expect((await a.read()).installed).toContainEqual(expect.objectContaining({ name: 'missing', reason: 'missing-file' }))
+      await vi.waitFor(async () => {
+        expect((await a.read()).installed).toContainEqual(expect.objectContaining({ name: 'missing', reason: 'missing-file' }))
+      }, { timeout: 5000 })
       await mkdir(join(home, 'user', 'skills', 'large'), { recursive: true })
       await writeFile(join(home, 'user', 'skills', 'large', 'SKILL.md'), 'x'.repeat(256 * 1024 + 1))
-      expect((await a.read()).installed).toContainEqual(expect.objectContaining({ name: 'large', status: 'unavailable', reason: 'inspection-limit' }))
+      await vi.waitFor(async () => {
+        expect((await a.read()).installed).toContainEqual(expect.objectContaining({ name: 'large', status: 'unavailable', reason: 'inspection-limit' }))
+      }, { timeout: 5000 })
       expect((await a.read()).skills.some(skill => skill.name === 'broken')).toBe(false)
       await mkdir(join(home, 'user', 'skills', 'external'), { recursive: true })
       await writeFile(join(home, 'user', 'skills', 'external', 'SKILL.md'), `---\nname: external\ndescription: ${'x'.repeat(4001)}\n---\n`)

@@ -12,6 +12,11 @@ variables:
   GIT_DEPTH: "0"
   GIT_SUBMODULE_STRATEGY: recursive
   DSH_TELEMETRY_DISABLED: "1"
+  GIT_TERMINAL_PROMPT: "0"
+  GCM_INTERACTIVE: never
+  GIT_CONFIG_PARAMETERS: "'credential.helper='"
+  GIT_HTTP_LOW_SPEED_LIMIT: "1024"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   npm_config_registry: "http://192.168.103.203:8081/repository/xzinfra-npm-group/"
 
 default:
