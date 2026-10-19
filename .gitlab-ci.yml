@@ -42,14 +42,14 @@ windows-cli-diagnostics:
        for (const [name,api] of filesystems) {
         for (const [placement,parent] of settings.parents) {
          if (!fs.existsSync(parent)) { console.log(JSON.stringify({placement,skip:'parent absent'}));continue }
-         for (const type of ['dir','junction']) {
-          const link = path.join(parent,'.clawclaw-link-'+settings.jobId+'-'+settings.engine+'-'+name+'-'+type)
+         for (const mode of ['async','sync']) for (const type of ['dir','junction']) {
+          const link = path.join(parent,'.clawclaw-link-'+settings.jobId+'-'+settings.engine+'-'+name+'-'+type+'-'+mode)
           let created = false
           try {
-           await api.promises.symlink(target,link,type);created=true
-           console.log(JSON.stringify({engine:settings.engine,api:name,placement,type,ok:true}))
+           if (mode==='sync') api.symlinkSync(target,link,type); else await api.promises.symlink(target,link,type);created=true
+           console.log(JSON.stringify({engine:settings.engine,api:name,placement,type,mode,ok:true}))
           } catch (error) {
-           console.log(JSON.stringify({engine:settings.engine,api:name,placement,type,ok:false,code:error.code,syscall:error.syscall,message:error.message}))
+           console.log(JSON.stringify({engine:settings.engine,api:name,placement,type,mode,ok:false,code:error.code,syscall:error.syscall,message:error.message}))
           } finally { if (created) await api.promises.unlink(link) }
          }
         }
@@ -59,9 +59,10 @@ windows-cli-diagnostics:
       `)
       try {
         const parents = [['temp',base],['runner-temp',runnerTemporary],['pnpm-registry',join(process.env.LOCALAPPDATA,'pnpm','store','v11','projects')]]
-        for (const [engine,executable] of [['node',process.execPath],['electron',electron]]) {
+        for (const [engine,executable] of [['node',process.execPath],['electron',electron],['electron-noasar',electron]]) {
           const env = {...process.env}; delete env.ELECTRON_RUN_AS_NODE
-          if (engine==='electron') env.ELECTRON_RUN_AS_NODE='1'
+          if (engine.startsWith('electron')) env.ELECTRON_RUN_AS_NODE='1'
+          if (engine==='electron-noasar') env.ELECTRON_NO_ASAR='1'
           const result = spawnSync(executable,[script,JSON.stringify({engine,base,parents,jobId})],{encoding:'utf8',env,timeout:60000})
           if (result.stdout) process.stdout.write(result.stdout)
           if (result.stderr) process.stderr.write(result.stderr)
