@@ -266,6 +266,8 @@ describe('Windows NSIS A/B packaging', () => {
       '--reverse',
       '--unsafe-paths',
       '--directory=.',
+      // Git versions differ in whether --directory=. preserves the ./ prefix.
+      '--include=templates/nsis/include/extractAppPackage.nsh',
       '--include=./templates/nsis/include/extractAppPackage.nsh',
       fileURLToPath(new URL('../../patches/app-builder-lib@26.15.7.patch', import.meta.url)),
     ], {
