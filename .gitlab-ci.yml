@@ -18,60 +18,44 @@ windows-cli-diagnostics:
       $ErrorActionPreference = 'Stop'
       $diagnostic = @'
       import { execFileSync, spawnSync } from 'node:child_process'
-      import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
-      import { join, resolve } from 'node:path'
+      import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+      import { join } from 'node:path'
       import { tmpdir } from 'node:os'
       import { createRequire } from 'node:module'
-      const root = process.cwd()
-      const expected = '2b32703635409b5f3abca04e68e8d5720f0a9774'
-      if (execFileSync('git', ['rev-parse','HEAD'], {encoding:'utf8'}).trim() !== expected) throw new Error('Preserved checkout changed')
-      const electron = createRequire(join(root,'dsh-plugin-desktop/package.json'))('electron')
-      const base = mkdtempSync(join(tmpdir(),'clawclaw-link-diagnostic-'))
-      const jobId = process.env.CI_JOB_ID
-      const runnerTemporary = resolve(root + '.tmp', 'link-diagnostic-' + jobId)
-      mkdirSync(runnerTemporary, {recursive:true})
-      const script = join(base,'probe.cjs')
-      writeFileSync(script, String.raw`
-      const fs = require('node:fs'); const path = require('node:path')
-      const settings = JSON.parse(process.argv[2])
-      async function main() {
-       const filesystems = [['fs',fs]]
-       try { filesystems.push(['original-fs',require('original-fs')]) } catch {}
-       console.log(JSON.stringify({engine:settings.engine,node:process.version,electron:process.versions.electron,noAsar:process.noAsar}))
-       const target = path.join(settings.base,'target-'+settings.engine);fs.mkdirSync(target)
-       for (const [name,api] of filesystems) {
-        for (const [placement,parent] of settings.parents) {
-         if (!fs.existsSync(parent)) { console.log(JSON.stringify({placement,skip:'parent absent'}));continue }
-         for (const mode of ['async','sync']) for (const type of ['dir','junction']) {
-          const link = path.join(parent,'.clawclaw-link-'+settings.jobId+'-'+settings.engine+'-'+name+'-'+type+'-'+mode)
-          let created = false
-          try {
-           if (mode==='sync') api.symlinkSync(target,link,type); else await api.promises.symlink(target,link,type);created=true
-           console.log(JSON.stringify({engine:settings.engine,api:name,placement,type,mode,ok:true}))
-          } catch (error) {
-           console.log(JSON.stringify({engine:settings.engine,api:name,placement,type,mode,ok:false,code:error.code,syscall:error.syscall,message:error.message}))
-          } finally { if (created) await api.promises.unlink(link) }
-         }
-        }
-       }
+      const root=process.cwd()
+      if (execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim()!=='2b32703635409b5f3abca04e68e8d5720f0a9774') throw new Error('Preserved checkout changed')
+      const require=createRequire(join(root,'dsh-plugin-desktop/package.json'))
+      const electron=require('electron');const koffi=require.resolve('koffi')
+      const base=mkdtempSync(join(tmpdir(),'clawclaw-winapi-diagnostic-'));const script=join(base,'probe.cjs')
+      writeFileSync(script,String.raw`
+      const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process')
+      const input=JSON.parse(process.argv[2]);const koffi=require(input.koffi)
+      const kernel=koffi.load('kernel32.dll')
+      const create=kernel.func('uint8_t __stdcall CreateSymbolicLinkW(str16 link, str16 target, uint32_t flags)')
+      const lastError=kernel.func('uint32_t __stdcall GetLastError()')
+      console.log(JSON.stringify({engine:input.engine,node:process.version,electron:process.versions.electron,uv:process.versions.uv,execArgv:process.execArgv,permission:process.permission?.has('fs.write',input.base)}))
+      for(const arg of ['/priv','/groups']) {
+       const p=cp.spawnSync('whoami.exe',[arg,'/fo','csv','/nh'],{encoding:'utf8'})
+       console.log(input.engine+' token '+arg+': '+String(p.stdout).split(/\r?\n/).filter(line=>/SeCreateSymbolicLinkPrivilege|S-1-16-|S-1-5-32-544/.test(line)).join('\n'))
       }
-      main().catch(error=>{console.error(error);process.exitCode=1})
+      const target=path.join(input.base,'target-'+input.engine);fs.mkdirSync(target)
+      for(const flags of [1,3]) {
+       const link=path.join(input.base,'link-'+input.engine+'-'+flags)
+       const ok=create(link,target,flags);const error=lastError()
+       console.log(JSON.stringify({engine:input.engine,operation:'CreateSymbolicLinkW',flags,ok,error}))
+       if(ok) fs.unlinkSync(link)
+      }
       `)
       try {
-        const parents = [['temp',base],['runner-temp',runnerTemporary],['pnpm-registry',join(process.env.LOCALAPPDATA,'pnpm','store','v11','projects')]]
-        for (const [engine,executable] of [['node',process.execPath],['electron',electron],['electron-noasar',electron]]) {
-          const env = {...process.env}; delete env.ELECTRON_RUN_AS_NODE
-          if (engine.startsWith('electron')) env.ELECTRON_RUN_AS_NODE='1'
-          if (engine==='electron-noasar') env.ELECTRON_NO_ASAR='1'
-          const result = spawnSync(executable,[script,JSON.stringify({engine,base,parents,jobId})],{encoding:'utf8',env,timeout:60000})
-          if (result.stdout) process.stdout.write(result.stdout)
-          if (result.stderr) process.stderr.write(result.stderr)
-          if (result.status!==0) throw result.error ?? new Error(engine+' probe exited '+result.status)
-        }
-      } finally {
-        rmSync(base,{recursive:true,force:true,maxRetries:3})
-        rmSync(runnerTemporary,{recursive:true,force:true,maxRetries:3})
-      }
+       for(const [engine,exe] of [['node',process.execPath],['electron',electron]]) {
+        const env={...process.env};delete env.ELECTRON_RUN_AS_NODE
+        if(engine==='electron')env.ELECTRON_RUN_AS_NODE='1'
+        const result=spawnSync(exe,[script,JSON.stringify({engine,base,koffi})],{encoding:'utf8',env,timeout:60000})
+        if(result.stdout)process.stdout.write(result.stdout)
+        if(result.stderr)process.stderr.write(result.stderr)
+        console.log(engine+' probe status='+result.status)
+       }
+      } finally {rmSync(base,{recursive:true,force:true,maxRetries:3})}
       '@
       $diagnostic | & node --input-type=module -
       if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
