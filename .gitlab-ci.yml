@@ -16,6 +16,15 @@ windows-cli-diagnostics:
   script:
     - |
       $ErrorActionPreference = 'Stop'
+      try { Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntivirusProduct -ErrorAction Stop | Select-Object -ExpandProperty displayName } catch { Write-Output "Antivirus inventory unavailable" }
+      try { Get-MpPreference -ErrorAction Stop | Select-Object EnableControlledFolderAccess | Format-List } catch { Write-Output "Defender preference unavailable" }
+      foreach ($log in @('Microsoft-Windows-Windows Defender/Operational','Microsoft-Windows-CodeIntegrity/Operational','Microsoft-Windows-AppLocker/EXE and DLL')) {
+        try {
+          $events = Get-WinEvent -FilterHashtable @{LogName=$log; StartTime=(Get-Date).AddMinutes(-45)} -MaxEvents 200 -ErrorAction Stop
+          $events | Where-Object { $_.Message -match 'electron.exe|clawclaw-link-diagnostic' } | Select-Object -First 5 TimeCreated,Id,Message | Format-List
+        } catch { Write-Output ("No matching readable events: " + $log) }
+      }
+      try { Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock' -Name AllowDevelopmentWithoutDevLicense -ErrorAction Stop | Select-Object AllowDevelopmentWithoutDevLicense | Format-List } catch { Write-Output "Developer-mode value unavailable" }
       $diagnostic = @'
       import { execFileSync, spawnSync } from 'node:child_process'
       import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
@@ -34,9 +43,26 @@ windows-cli-diagnostics:
       const create=kernel.func('uint8_t __stdcall CreateSymbolicLinkW(str16 link, str16 target, uint32_t flags)')
       const lastError=kernel.func('uint32_t __stdcall GetLastError()')
       console.log(JSON.stringify({engine:input.engine,node:process.version,electron:process.versions.electron,uv:process.versions.uv,execArgv:process.execArgv,permission:process.permission?.has('fs.write',input.base)}))
-      for(const arg of ['/priv','/groups']) {
-       const p=cp.spawnSync('whoami.exe',[arg,'/fo','csv','/nh'],{encoding:'utf8'})
-       console.log(input.engine+' token '+arg+': '+String(p.stdout).split(/\r?\n/).filter(line=>/SeCreateSymbolicLinkPrivilege|S-1-16-|S-1-5-32-544/.test(line)).join('\n'))
+      const advapi=koffi.load('advapi32.dll')
+      const current=kernel.func('void * __stdcall GetCurrentProcess()')
+      const open=advapi.func('int32_t __stdcall OpenProcessToken(void *, uint32_t, _Out_ void **)')
+      const info=advapi.func('int32_t __stdcall GetTokenInformation(void *, uint32_t, _Out_ void *, uint32_t, _Out_ uint32_t *)')
+      const lookup=advapi.func('int32_t __stdcall LookupPrivilegeValueW(str16, str16, _Out_ void *)')
+      const close=kernel.func('int32_t __stdcall CloseHandle(void *)')
+      const handle=[null]
+      if(open(current(),8,handle)) {
+       try {
+        const luid=Buffer.alloc(8),privileges=Buffer.alloc(4096),length=[0],elevation=Buffer.alloc(4)
+        const gotLookup=lookup(null,'SeCreateSymbolicLinkPrivilege',luid)
+        const gotPrivileges=info(handle[0],3,privileges,privileges.length,length)
+        let attributes=null
+        if(gotLookup && gotPrivileges) for(let i=0;i<privileges.readUInt32LE(0);i++) {
+         const offset=4+i*12
+         if(privileges.subarray(offset,offset+8).equals(luid)) attributes=privileges.readUInt32LE(offset+8)
+        }
+        const gotElevation=info(handle[0],18,elevation,4,length)
+        console.log(JSON.stringify({engine:input.engine,tokenElevation:gotElevation?elevation.readUInt32LE(0):null,symlinkPrivilege:attributes}))
+       } finally {close(handle[0])}
       }
       const target=path.join(input.base,'target-'+input.engine);fs.mkdirSync(target)
       for(const flags of [1,3]) {
