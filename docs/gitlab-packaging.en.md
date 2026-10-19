@@ -19,7 +19,7 @@ Source and pipelines live in company GitLab. After native packaging, the Mac and
 
 Retain `clawclaw.xzinfra.com` and HTTPS port 443. Versions 0.2.0 and 0.2.1 request `/updates/stable/release.json`; 0.2.2–0.2.10 request `/updates/dsh/stable/release.json`. Internal Nginx maps the earlier endpoint directly to the same DSH manifest without a redirect. The manifest retains HTTPS installer URLs, sizes, and SHA-512 fields. The previous server already publishes 0.2.10, so the first new migration release uses 0.2.11 to make an update visible to current clients too.
 
-Earlier 0.1.x uses `/updates/stable/latest.yml`. Preserve that feed and its installer rather than presenting DSH JSON as the old protocol. Cross-generation upgrades need separate validation. Verify historical client requests and files referenced by old manifests before DNS cutover.
+This migration supports 0.2.x and excludes earlier 0.1.x clients using `/updates/stable/latest.yml`. Do not present DSH JSON as that older protocol; supporting 0.1.x requires separate migration and validation. Verify historical 0.2.x client requests and files referenced by old manifests before DNS cutover.
 
 ## Pipeline
 

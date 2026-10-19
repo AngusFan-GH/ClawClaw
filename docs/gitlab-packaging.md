@@ -19,7 +19,7 @@ Mac 与 Windows 已分别验证本地打包。本流程复用这两个原生环�
 
 保持域名 `clawclaw.xzinfra.com` 和 HTTPS 443。0.2.0、0.2.1 请求 `/updates/stable/release.json`，0.2.2–0.2.10 请求 `/updates/dsh/stable/release.json`；内网 Nginx 将前一地址直接映射到同一份 DSH 清单，不使用重定向。清单提供相同的 HTTPS 安装包、大小和 SHA-512 字段。旧服务器已发布 0.2.10，因此迁移后的首次新发布使用 0.2.11，让当前版本也能发现更新。
 
-更早 0.1.x 使用 `/updates/stable/latest.yml`；保留该源及其安装包，不把 DSH 清单伪装成旧协议。跨体系升级需另行验证。切换 DNS 前须验证历史客户端的实际更新请求，以及旧清单引用的下载文件。
+本次兼容范围为 0.2.x，不包含更早使用 `/updates/stable/latest.yml` 的 0.1.x。不会将 DSH 清单伪装成旧协议；如需支持 0.1.x，应单独迁移并验证。切换 DNS 前须验证历史 0.2.x 客户端的实际更新请求，以及旧清单引用的下载文件。
 
 ## 流水线
 
