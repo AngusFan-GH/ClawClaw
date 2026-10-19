@@ -17,9 +17,9 @@ Mac 与 Windows 已分别验证本地打包。本流程复用这两个原生环�
 
 ## 历史客户端兼容
 
-保持域名 `clawclaw.xzinfra.com` 和 HTTPS 443。0.2.0、0.2.1 请求 `/updates/stable/release.json`，0.2.2–0.2.10 请求 `/updates/dsh/stable/release.json`；内网 Nginx 将前一地址直接映射到同一份 DSH 清单，不使用重定向。清单提供相同的 HTTPS 安装包、大小和 SHA-512 字段。旧服务器已发布 0.2.10，因此迁移后的首次新发布使用 0.2.11，让当前版本也能发现更新。
+本次兼容范围为 0.2.6 及以上的 0.2.x 客户端。保持域名 `clawclaw.xzinfra.com`、HTTPS 443 和原更新地址 `/updates/dsh/stable/release.json`，直接返回清单，不使用重定向。清单保留 HTTPS 安装包、大小和 SHA-512 字段。旧服务器已发布 0.2.10，因此迁移后的首次新发布使用 0.2.11，让当前版本也能发现更新。
 
-本次兼容范围为 0.2.x，不包含更早使用 `/updates/stable/latest.yml` 的 0.1.x。不会将 DSH 清单伪装成旧协议；如需支持 0.1.x，应单独迁移并验证。切换 DNS 前须验证历史 0.2.x 客户端的实际更新请求，以及旧清单引用的下载文件。
+切换 DNS 前须用 0.2.6–0.2.10 的原始更新检查代码验证实际 HTTPS 清单，并验证安装包完整下载、SHA-512 和文件格式。保留旧清单引用的安装包路径。
 
 ## 流水线
 
@@ -39,7 +39,7 @@ Mac 与 Windows 已分别验证本地打包。本流程复用这两个原生环�
 
 项目 CI/CD 变量已配置 `CLAWCLAW_DIRECT_UPLOAD=1`、`UPDATE_HOST`、`UPDATE_USER`、`UPDATE_PORT`、`UPDATE_STAGING_ROOT`、`UPDATE_REMOTE_ROOT` 和 `UPDATE_BASE_URL`。SSH 私钥与服务器指纹分别使用文件变量 `UPDATE_SSH_KEY_FILE` 和 `UPDATE_SSH_KNOWN_HOSTS_FILE`，不要输出其内容或提交到 Git。连接强制校验服务器指纹，发布账号只拥有其部署目录权限，不使用 root。Mac 和 Windows 均需安装 SSH/SCP 客户端，并能连接服务器的 22 端口。
 
-依赖通过 `http://192.168.103.203:8081/repository/xzinfra-npm-group/` 下载。认证需要匹配本仓库的 CI/CD 机密变量，不要复制其他项目的发布凭据。Corepack、Electron 和打包工具仍需外网或对应内网镜像。无法稳定访问 GitHub 时，将 `CLAWCLAW_WINDOWS_UPSTREAM_SOURCE` 和 `CLAWCLAW_MACOS_UPSTREAM_SOURCE` 指向各机器已验证的本机上游 Git 仓库；CI 克隆固定提交后恢复官方子模块地址，不修改上游源码或 pin。
+依赖通过 `http://192.168.103.203:8081/repository/xzinfra-npm-group/` 下载。认证需要匹配本仓库的 CI/CD 机密变量，不要复制其他项目的发布凭据。Electron 与打包工具已通过 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` 和 `ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/` 使用 HTTPS 下载镜像，并保留完整性校验；npm 私库不会自动代理这些二进制下载。Corepack 仍需可用下载源或预缓存。无法稳定访问 GitHub 时，将 `CLAWCLAW_WINDOWS_UPSTREAM_SOURCE` 和 `CLAWCLAW_MACOS_UPSTREAM_SOURCE` 指向各机器已验证的本机上游 Git 仓库；CI 克隆固定提交后恢复官方子模块地址，不修改上游源码或 pin。
 
 原流水线 #450 的 Mac DMG 已通过挂载校验，但被 GitLab 以 `413 Request Entity Too Large` 拒绝上传。当前直接上传流程已移除大型 GitLab artifacts，因此无需提高 GitLab artifact 限制。
 

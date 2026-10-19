@@ -17,9 +17,9 @@ Source and pipelines live in company GitLab. After native packaging, the Mac and
 
 ## Historical client compatibility
 
-Retain `clawclaw.xzinfra.com` and HTTPS port 443. Versions 0.2.0 and 0.2.1 request `/updates/stable/release.json`; 0.2.2–0.2.10 request `/updates/dsh/stable/release.json`. Internal Nginx maps the earlier endpoint directly to the same DSH manifest without a redirect. The manifest retains HTTPS installer URLs, sizes, and SHA-512 fields. The previous server already publishes 0.2.10, so the first new migration release uses 0.2.11 to make an update visible to current clients too.
+This migration supports 0.2.x clients starting at 0.2.6. Retain `clawclaw.xzinfra.com`, HTTPS port 443, and the original `/updates/dsh/stable/release.json` endpoint, returning the manifest directly without redirects. Keep HTTPS installer URLs, sizes, and SHA-512 fields. The previous server already publishes 0.2.10, so the first new migration release uses 0.2.11 to make an update visible to current clients too.
 
-This migration supports 0.2.x and excludes earlier 0.1.x clients using `/updates/stable/latest.yml`. Do not present DSH JSON as that older protocol; supporting 0.1.x requires separate migration and validation. Verify historical 0.2.x client requests and files referenced by old manifests before DNS cutover.
+Before DNS cutover, use the original 0.2.6–0.2.10 update checkers against the live HTTPS manifest and verify complete installer downloads, SHA-512, and file formats. Preserve installer paths referenced by the previous manifest.
 
 ## Pipeline
 
@@ -39,7 +39,7 @@ Download installers from the HTTPS version directory. GitLab retains job logs. S
 
 Project CI/CD variables configure `CLAWCLAW_DIRECT_UPLOAD=1`, `UPDATE_HOST`, `UPDATE_USER`, `UPDATE_PORT`, `UPDATE_STAGING_ROOT`, `UPDATE_REMOTE_ROOT`, and `UPDATE_BASE_URL`. SSH private-key and trusted host-key contents use file variables `UPDATE_SSH_KEY_FILE` and `UPDATE_SSH_KNOWN_HOSTS_FILE`; never print or commit their contents. Connections enforce host-key verification. The publishing user owns its deployment directories and does not use root. Both runners need SSH/SCP clients and connectivity to server port 22.
 
-Dependencies use `http://192.168.103.203:8081/repository/xzinfra-npm-group/`. Configure repository-specific CI/CD secrets if authentication is required; do not copy another project's publishing credentials. Corepack, Electron, and packaging tools still require external access or corresponding internal mirrors. `CLAWCLAW_WINDOWS_UPSTREAM_SOURCE` and `CLAWCLAW_MACOS_UPSTREAM_SOURCE` can point to validated local upstream Git repositories when GitHub is unreliable. CI clones the pinned commit and restores official submodule URLs without changing upstream source or the pin.
+Dependencies use `http://192.168.103.203:8081/repository/xzinfra-npm-group/`. Configure repository-specific CI/CD secrets if authentication is required; do not copy another project's publishing credentials. Electron and packaging tools use HTTPS mirrors configured through `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` and `ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/`, with integrity checks retained. The npm registry does not automatically proxy these binary downloads. Corepack still requires an available download source or a prepopulated cache. `CLAWCLAW_WINDOWS_UPSTREAM_SOURCE` and `CLAWCLAW_MACOS_UPSTREAM_SOURCE` can point to validated local upstream Git repositories when GitHub is unreliable. CI clones the pinned commit and restores official submodule URLs without changing upstream source or the pin.
 
 Pipeline #450 generated and mount-verified the Mac DMG, but GitLab rejected its artifact upload with `413 Request Entity Too Large`. The direct-upload workflow removes these large GitLab artifacts, so increasing GitLab's artifact limit is no longer required.
 
