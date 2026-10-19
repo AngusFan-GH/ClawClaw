@@ -4,6 +4,12 @@
 
 Local packaging has been validated separately on Mac and Windows. Reuse those native environments; this workflow needs no Linux runner and does not deploy to the previous update server.
 
+## Planned publication method
+
+Both runners will upload installers directly to a company internal server, with GitLab providing scheduling and logs. Server details are pending: operating system, SSH address and port, upload account, publication directory, and download domain. Once configured, staging must isolate each pipeline and commit. Downloads and version metadata become available only after both uploads pass version, commit, size, and SHA-512 checks. This path does not depend on GitLab storing large artifacts.
+
+The current CI file still uses the artifact assembly workflow below. Direct upload and publication are not connected yet; the existing pipeline does not establish that automated publication works. Raising GitLab's artifact limit is not required for the planned direct publication path.
+
 ## Pipeline
 
 Select `dsh-desktop` under Build → Pipelines → Run pipeline to start a build manually, or start that branch manually through the authenticated API. Ordinary pushes and historical tags do not start packaging. Historical tags lack the new CI configuration; never move a released tag to run it.
