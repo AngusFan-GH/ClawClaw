@@ -22,6 +22,9 @@ package-macos:
   tags: [clawclaw-macos]
   resource_group: clawclaw-macos
   timeout: 3 hours
+  variables:
+    GIT_SUBMODULE_STRATEGY: none
+    CLAWCLAW_UPSTREAM_SOURCE: "$CLAWCLAW_MACOS_UPSTREAM_SOURCE"
   script:
     - node scripts/gitlab-desktop-release.mjs build darwin
   artifacts:
