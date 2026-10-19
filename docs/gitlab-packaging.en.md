@@ -15,6 +15,12 @@ Source and pipelines live in company GitLab. After native packaging, the Mac and
 
 `deploy/clawclaw-internal.nginx.conf` configures internal HTTPS. Certificates and the private key remain under `/etc/clawclaw/tls/` on the server, outside Git. The migrated wildcard certificate expires at 2026-10-27 07:59:59 Asia/Shanghai and needs renewal. The server's external IP is `218.69.255.22`; public DNS must point `clawclaw.xzinfra.com` there, with external port 443 forwarded to `192.168.103.220:443`. Internal split DNS may resolve directly to `192.168.103.220`. From the company network, public-IP port 443 currently reaches the H3C SecPath F100 management page. A separate test from the old Alibaba Cloud server times out on that public 443 endpoint while File Browser on 9527 returns HTTP 200. These vantage points differ; internal hairpin access does not establish external reachability. Network operations must check port forwarding, security policy, and management-service handling before DNS cutover. Clients retain the existing HTTPS domain.
 
+## Historical client compatibility
+
+Retain `clawclaw.xzinfra.com` and HTTPS port 443. Versions 0.2.0 and 0.2.1 request `/updates/stable/release.json`; 0.2.2–0.2.10 request `/updates/dsh/stable/release.json`. Internal Nginx maps the earlier endpoint directly to the same DSH manifest without a redirect. The manifest retains HTTPS installer URLs, sizes, and SHA-512 fields. The previous server already publishes 0.2.10, so the first new migration release uses 0.2.11 to make an update visible to current clients too.
+
+Earlier 0.1.x uses `/updates/stable/latest.yml`. Preserve that feed and its installer rather than presenting DSH JSON as the old protocol. Cross-generation upgrades need separate validation. Verify historical client requests and files referenced by old manifests before DNS cutover.
+
 ## Pipeline
 
 Select `dsh-desktop` under Build → Pipelines → Run pipeline, or start that branch through the authenticated API. Ordinary pushes and historical tags do not start packaging; never move released tags.
