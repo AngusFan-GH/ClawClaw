@@ -1,5 +1,5 @@
 import { mkdtemp, mkdir, rename, readFile, readdir, realpath, rm, symlink, writeFile, access } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
@@ -118,9 +118,12 @@ describe('Skill discovery scope', () => {
       const host = { skills: ctx.skills, get: (name: string) => name === 'workspaceRegistry' ? registry : undefined } as unknown as Context
       const a = new DesktopSkillsController(host, undefined, { workspaceId: 'a' })
       const b = new DesktopSkillsController(host, undefined, { workspaceId: 'b' })
-      expect((await a.read()).skills.filter(skill => skill.source !== 'bundled')).toHaveLength(0)
-      expect((await b.read()).skills.filter(skill => skill.source !== 'bundled')).toHaveLength(0)
-      const bundled = (await a.read()).skills.filter(skill => skill.source === 'bundled')
+      // A late watcher event can invalidate any subsequent snapshot, not only
+      // the first read after a write. Wait for a complete view at every read.
+      const readStable = (controller: DesktopSkillsController) => vi.waitFor(() => controller.read(), { timeout: 5000 })
+      expect((await readStable(a)).skills.filter(skill => skill.source !== 'bundled')).toHaveLength(0)
+      expect((await readStable(b)).skills.filter(skill => skill.source !== 'bundled')).toHaveLength(0)
+      const bundled = (await readStable(a)).skills.filter(skill => skill.source === 'bundled')
       expect(bundled).toHaveLength(64)
       expect(bundled.map(skill => skill.name)).toEqual(expect.arrayContaining([
         'business-operations', 'content-production', 'data-analysis', 'evidence-research',
@@ -142,36 +145,42 @@ describe('Skill discovery scope', () => {
       await install(join(home, 'user', 'skills'), 'project-review', 'Global instructions')
       await install(external, 'external-only', 'External instructions')
       await vi.waitFor(async () => {
-        expect((await a.read()).skills).toContainEqual(expect.objectContaining({ name: 'project-review', source: 'project-clawclaw', provider: 'clawclaw-project-filesystem', editable: false }))
-        expect((await b.read()).skills).toContainEqual(expect.objectContaining({ name: 'project-review', source: 'custom', editable: true }))
-        expect((await b.read()).skills).toContainEqual(expect.objectContaining({ name: 'external-only', source: 'external-clawclaw', editable: false }))
+        expect((await readStable(a)).skills).toContainEqual(expect.objectContaining({ name: 'project-review', source: 'project-clawclaw', provider: 'clawclaw-project-filesystem', editable: false }))
+        expect((await readStable(b)).skills).toContainEqual(expect.objectContaining({ name: 'project-review', source: 'custom', editable: true }))
+        expect((await readStable(b)).skills).toContainEqual(expect.objectContaining({ name: 'external-only', source: 'external-clawclaw', editable: false }))
       }, { timeout: 5000 })
       expect((await a.detail('project-review')).content).toContain('Project A instructions')
-      expect((await a.read()).installed).toContainEqual(expect.objectContaining({ name: 'project-review', status: 'overridden', effectiveSource: 'project-clawclaw', effectivePath: await realpath(join(first, '.clawclaw', 'skills', 'project-review', 'SKILL.md')) }))
-      expect((await b.read()).installed).toContainEqual(expect.objectContaining({ name: 'project-review', status: 'effective' }))
+      expect((await readStable(a)).installed).toContainEqual(expect.objectContaining({ name: 'project-review', status: 'overridden', effectiveSource: 'project-clawclaw', effectivePath: await realpath(join(first, '.clawclaw', 'skills', 'project-review', 'SKILL.md')) }))
+      expect((await readStable(b)).installed).toContainEqual(expect.objectContaining({ name: 'project-review', status: 'effective' }))
       await b.setUserInvocable('project-review', false)
       await vi.waitFor(async () => { expect((await b.detail('project-review')).userInvocable).toBe(false) }, { timeout: 5000 })
       await mkdir(join(home, 'user', 'skills', 'broken'), { recursive: true })
       await writeFile(join(home, 'user', 'skills', 'broken', 'SKILL.md'), 'Not a valid document')
-      expect((await a.read()).installed).toContainEqual(expect.objectContaining({ name: 'broken', status: 'invalid', reason: 'invalid-document' }))
+      await vi.waitFor(async () => {
+        expect((await readStable(a)).installed).toContainEqual(expect.objectContaining({ name: 'broken', status: 'invalid', reason: 'invalid-document' }))
+      }, { timeout: 5000 })
       await mkdir(join(home, 'user', 'skills', 'missing'), { recursive: true })
-      expect((await a.read()).installed).toContainEqual(expect.objectContaining({ name: 'missing', reason: 'missing-file' }))
+      await vi.waitFor(async () => {
+        expect((await readStable(a)).installed).toContainEqual(expect.objectContaining({ name: 'missing', reason: 'missing-file' }))
+      }, { timeout: 5000 })
       await mkdir(join(home, 'user', 'skills', 'large'), { recursive: true })
       await writeFile(join(home, 'user', 'skills', 'large', 'SKILL.md'), 'x'.repeat(256 * 1024 + 1))
-      expect((await a.read()).installed).toContainEqual(expect.objectContaining({ name: 'large', status: 'unavailable', reason: 'inspection-limit' }))
-      expect((await a.read()).skills.some(skill => skill.name === 'broken')).toBe(false)
+      await vi.waitFor(async () => {
+        expect((await readStable(a)).installed).toContainEqual(expect.objectContaining({ name: 'large', status: 'unavailable', reason: 'inspection-limit' }))
+      }, { timeout: 5000 })
+      expect((await readStable(a)).skills.some(skill => skill.name === 'broken')).toBe(false)
       await mkdir(join(home, 'user', 'skills', 'external'), { recursive: true })
       await writeFile(join(home, 'user', 'skills', 'external', 'SKILL.md'), `---\nname: external\ndescription: ${'x'.repeat(4001)}\n---\n`)
       await vi.waitFor(async () => {
-        expect((await b.read()).installed).toContainEqual(expect.objectContaining({ name: 'external', status: 'effective' }))
+        expect((await readStable(b)).installed).toContainEqual(expect.objectContaining({ name: 'external', status: 'effective' }))
       }, { timeout: 5000 })
       expect((await b.detail('project-review')).content).toContain('Global instructions')
       await expect(a.recycle('project-review')).rejects.toThrow('Only Skills')
       await expect(a.setUserInvocable('project-review', false)).rejects.toThrow('Only Skills')
       await install(join(second, '.clawclaw', 'skills'), 'only-b', 'Project B instructions')
-      await vi.waitFor(async () => { expect((await b.read()).skills.some(skill => skill.name === 'only-b')).toBe(true) }, { timeout: 5000 })
-      await vi.waitFor(async () => { expect((await a.read()).skills.some(skill => skill.name === 'only-b')).toBe(false) }, { timeout: 5000 })
-      expect((await a.read()).skills.some(skill => skill.name === 'ignored-agents' || skill.name === 'ignored-dsh')).toBe(false)
+      await vi.waitFor(async () => { expect((await readStable(b)).skills.some(skill => skill.name === 'only-b')).toBe(true) }, { timeout: 5000 })
+      await vi.waitFor(async () => { expect((await readStable(a)).skills.some(skill => skill.name === 'only-b')).toBe(false) }, { timeout: 5000 })
+      expect((await readStable(a)).skills.some(skill => skill.name === 'ignored-agents' || skill.name === 'ignored-dsh')).toBe(false)
     } finally {
       await ctx.fiber.dispose(); vi.unstubAllEnvs(); await rm(home, { recursive: true, force: true })
     }
@@ -206,6 +215,6 @@ describe('Skill discovery scope', () => {
   it('derives stable Windows roots and case-insensitive watcher keys', () => {
     expect(windowsWorkspaceKey('C:\\Work\\Project')).toBe(windowsWorkspaceKey('c:\\work\\PROJECT'))
     expect(windowsWorkspaceKey('C:\\Work\\Project')).not.toBe(windowsWorkspaceKey('C:\\Work\\Other'))
-    expect(clawClawProjectSkillRoot('/workspace')).toBe(join('/workspace', '.clawclaw', 'skills'))
+    expect(clawClawProjectSkillRoot(resolve('/workspace'))).toBe(join(resolve('/workspace'), '.clawclaw', 'skills'))
   })
 })

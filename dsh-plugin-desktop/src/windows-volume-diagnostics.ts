@@ -1,4 +1,4 @@
-import { dirname, parse, resolve } from 'node:path'
+import { dirname, parse, resolve, win32 as windowsPath } from 'node:path'
 import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 
@@ -92,7 +92,9 @@ function concernForPath(
   } catch (cause) {
     return {
       ...entry,
-      root: volumeRoot(entry.path),
+      // A failed query may mean the drive disconnected. Do not probe that
+      // volume again merely to format diagnostics: synchronous I/O can hang.
+      root: windowsPath.parse(windowsPath.resolve(entry.path)).root,
       reason: `could not inspect the Windows volume (${cause instanceof Error ? cause.message : String(cause)})`,
     }
   }
