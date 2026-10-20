@@ -12,7 +12,7 @@ GitHub 托管的 macOS、Windows Runner 原生构建两个安装包。正式版�
 
 在 Actions 中选择 **Release ClawClaw Desktop**，选择要验证的分支，保持 `publish=false`。两个平台分别安装冻结依赖、准备上游运行时、执行完整 `pnpm check`、执行平台打包检查及安装包验证。产物为未签名的 Universal DMG 和 Windows x64 NSIS 安装包。
 
-每个平台保存产品版本、Git 提交、仓库、工作流 run ID、构建 attempt、文件名、大小和 SHA-512。汇总只接受同一仓库、提交、版本和 run ID 的两个平台，重新计算文件校验值；单文件须小于 2 GiB。重试同一次工作流时，可复用此前成功平台的产物，保留各自 attempt。不同工作流的安装包不能混用。
+每个平台保存产品版本、Git 提交、仓库、工作流 run ID、构建 attempt、文件名、大小和 SHA-512。汇总只接受同一仓库、提交、版本和 run ID 的两个平台，重新计算文件校验值；为兼容现有更新客户端，单个安装包不得超过 1 GiB。重试同一次工作流时，可复用此前成功平台的产物，保留各自 attempt。不同工作流的安装包不能混用。
 
 验证完成后下载该次工作流的 `desktop-release` artifact，其中包含两个安装包、`release.json`、`build-info.json`。工作流 artifacts 保留 14 天，不作为长期版本存档。
 

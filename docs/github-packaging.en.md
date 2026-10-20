@@ -12,7 +12,7 @@ GitHub-hosted macOS and Windows runners build both native installers. GitHub Rel
 
 In Actions, select **Release ClawClaw Desktop**, choose the branch to validate, and leave `publish=false`. Both platforms install frozen dependencies, prepare the upstream runtime, run the complete `pnpm check`, and perform platform packaging checks and installer verification. Outputs are an unsigned Universal DMG and Windows x64 NSIS installer.
 
-Each platform records the product version, Git commit, repository, workflow run ID, build attempt, filename, size, and SHA-512. Assembly accepts both platforms only from the same repository, commit, version, and run ID, and recalculates file checksums. Each file must be smaller than 2 GiB. Retrying the same workflow may reuse a previously successful platform artifact while retaining its attempt. Artifacts from separate runs cannot be combined.
+Each platform records the product version, Git commit, repository, workflow run ID, build attempt, filename, size, and SHA-512. Assembly accepts both platforms only from the same repository, commit, version, and run ID, and recalculates file checksums. Each installer must be no larger than 1 GiB to support existing update clients. Retrying the same workflow may reuse a previously successful platform artifact while retaining its attempt. Artifacts from separate runs cannot be combined.
 
 Download `desktop-release` from the successful workflow: it contains both installers, `release.json`, and `build-info.json`. Workflow artifacts expire after 14 days and are not long-term version archives.
 

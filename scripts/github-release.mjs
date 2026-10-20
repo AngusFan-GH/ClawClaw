@@ -25,8 +25,8 @@ function installerName(version, platform) {
 
 async function inspect(file) {
   const info = await lstat(file)
-  if (!info.isFile() || info.size <= 0 || info.size >= 2 ** 31) {
-    throw new Error('Installer must be a nonempty regular file smaller than 2 GiB')
+  if (!info.isFile() || info.size <= 0 || info.size > 1024 ** 3) {
+    throw new Error('Installer must be a nonempty regular file no larger than 1 GiB (legacy client limit)')
   }
   const hash = createHash('sha512')
   for await (const chunk of createReadStream(file)) hash.update(chunk)
