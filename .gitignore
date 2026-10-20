@@ -12,3 +12,10 @@ dsh-community-market/lib/
 
 # Local server credentials
 /.env.server.local
+
+# Retired office Runner files and generated release bundles
+/Runner/
+/ci-artifacts/
+/release/
+/staged/
+/artifacts/

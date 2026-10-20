@@ -18,6 +18,7 @@ This directory contains current product documentation. The root [README](../READ
 | Desktop package operations | [Desktop](../dsh-plugin-desktop/README.md) |
 | Channels | [Implementation reference](../channels/dsh-im/README.md) |
 | Community interoperability proposal | [Fabric Draft](../dsh-community-fabric/README.md) |
+| GitHub packaging, version archives, and server publication boundaries | [Packaging and releases](github-packaging.en.md) |
 
 ## Documentation boundaries
 

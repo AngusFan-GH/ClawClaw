@@ -91,8 +91,9 @@ export function collectRelease(directory, channel = 'stable') {
   if (existsSync(provenance)) {
     const info = JSON.parse(readFileSync(requiredFile(provenance), 'utf8'))
     if (info.version !== version || !/^[0-9a-f]{40}$/u.test(info.commit ?? '')
-      || !/^[1-9][0-9]*$/u.test(info.pipelineId ?? '') || !Array.isArray(info.artifacts) || info.artifacts.length !== 2) {
-      throw new Error('build-info.json must identify the release version, commit, pipeline, and both artifacts')
+      || !/^[1-9][0-9]*$/u.test(info.runId ?? '')
+      || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u.test(info.repository ?? '') || !Array.isArray(info.artifacts) || info.artifacts.length !== 2) {
+      throw new Error('build-info.json must identify the release version, commit, GitHub run, repository, and both artifacts')
     }
     for (const platform of ['darwin', 'win32']) {
       const entry = info.artifacts.find(entry => entry.platform === platform)

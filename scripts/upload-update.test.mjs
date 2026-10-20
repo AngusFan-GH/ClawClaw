@@ -43,7 +43,7 @@ test('retains CI provenance only when it matches both release artifacts', () => 
   const directory = fixture()
   try {
     const manifest = JSON.parse(readFileSync(join(directory, 'release.json'), 'utf8'))
-    const info = { version: manifest.version, commit: 'a'.repeat(40), pipelineId: '42',
+    const info = { version: manifest.version, commit: 'a'.repeat(40), runId: '42', repository: 'owner/repo',
       artifacts: Object.entries(manifest.artifacts).map(([platform, artifact]) => ({
         platform, name: new URL(artifact.url).pathname.slice(1), size: artifact.size, sha512: artifact.sha512,
       })) }
