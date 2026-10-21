@@ -75,6 +75,14 @@ jobs:
         with:
           node-version: 22.23.2
       - run: corepack enable
+      - name: Resolve pnpm store directory
+        id: pnpm-store
+        shell: bash
+        run: echo "dir=$(corepack pnpm store path)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml') }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm run upstream:prepare-runtime
       - name: Refresh desktop runtime dependencies
@@ -83,9 +91,14 @@ jobs:
         run: corepack pnpm check
       - name: Build unsigned macOS Universal DMG
         if: matrix.artifact == 'macos'
+        # The full gate above already built, typechecked and tested this output.
+        env:
+          DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
         run: pnpm --filter dsh-plugin-desktop run dist:mac
       - name: Build unsigned Windows NSIS installer
         if: matrix.artifact == 'windows'
+        env:
+          DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
         run: pnpm --filter dsh-plugin-desktop run dist:win
       - name: Stage installer with build provenance
         shell: bash

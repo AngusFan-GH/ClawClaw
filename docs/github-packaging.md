@@ -8,9 +8,15 @@ GitHub 是主仓库，日常开发分支为 `dsh-desktop`。GitLab 仅保留代�
 
 GitHub 托管的 macOS、Windows Runner 原生构建两个安装包。正式版本保存到 GitHub Releases；客户端仍从公司下载服务器获取更新。构建机使用公网依赖源，不需要公司 npm 私库、本地上游镜像或服务器 SSH 凭据。
 
-## 先验证，再存档
+## 日常 CI
 
-在 Actions 中选择 **Release ClawClaw Desktop**，选择要验证的分支，保持 `publish=false`。两个平台分别安装冻结依赖、准备上游运行时、执行完整 `pnpm check`、执行平台打包检查及安装包验证。产物为未签名的 Universal DMG 和 Windows x64 NSIS 安装包。
+推送到 `dsh-desktop`、`main` 或向它们提交 PR 时运行 CI；也可手动触发。Linux 执行完整门禁，Windows 和 macOS 保留原生构建、类型检查、平台测试及运行时闭包验证，另保留 Windows 上游命令检查。纯文档变更只做文档检查。`check:win-package`、`check:mac-package` 是不生成安装包的预检命令。
+
+日常 CI 不调用 `dist:*`，不生成 DMG、EXE 或便携包，也不发布 Release。安装包只在下面的 Release 工作流中生成。
+
+## 发版打包与存档
+
+在 Actions 中选择 **Release ClawClaw Desktop**，选择要验证的分支，保持 `publish=false`。两个平台分别安装冻结依赖、准备上游运行时、执行完整 `pnpm check` 后打包，并验证实际安装包。完整门禁已经覆盖构建、类型检查、全部单元测试和运行时验证，打包步骤复用该结果，不重复执行平台预检；打包后的安装包验证仍保留。两平台依赖使用按系统、架构和根锁文件隔离的 pnpm 缓存。产物为未签名的 Universal DMG 和 Windows x64 NSIS 安装包。
 
 每个平台保存产品版本、Git 提交、仓库、工作流 run ID、构建 attempt、文件名、大小和 SHA-512。汇总只接受同一仓库、提交、版本和 run ID 的两个平台，重新计算文件校验值；为兼容现有更新客户端，单个安装包不得超过 1 GiB。重试同一次工作流时，可复用此前成功平台的产物，保留各自 attempt。不同工作流的安装包不能混用。
 

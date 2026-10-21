@@ -8,9 +8,15 @@ GitHub is the primary repository, with development on `dsh-desktop`. GitLab reta
 
 GitHub-hosted macOS and Windows runners build both native installers. GitHub Releases archives official versions; clients continue downloading updates from the company server. Builds use public dependency sources and require neither the company npm registry, local upstream mirrors, nor server SSH credentials.
 
-## Validate before archiving
+## Daily CI
 
-In Actions, select **Release ClawClaw Desktop**, choose the branch to validate, and leave `publish=false`. Both platforms install frozen dependencies, prepare the upstream runtime, run the complete `pnpm check`, and perform platform packaging checks and installer verification. Outputs are an unsigned Universal DMG and Windows x64 NSIS installer.
+CI runs for pushes to `dsh-desktop` and `main`, pull requests targeting them, and manual dispatches. Linux runs the complete gate. Windows and macOS retain native builds, type checks, platform tests, and runtime closure verification; Windows upstream command checks also remain. Documentation-only changes run documentation checks. `check:win-package` and `check:mac-package` are headless preflights that do not create installers.
+
+Daily CI never invokes `dist:*`, creates DMG, EXE, or portable archives, or publishes a Release. Only the Release workflow below creates installers.
+
+## Release packaging and archives
+
+In Actions, select **Release ClawClaw Desktop**, choose the branch to validate, and leave `publish=false`. Both platforms install frozen dependencies, prepare the upstream runtime, and run the complete `pnpm check` before packaging. This gate covers builds, type checks, all unit tests, and runtime verification, so packaging reuses its result instead of repeating platform preflights. Verification of the actual installers still runs after packaging. Both platforms cache the pnpm store by operating system, architecture, and root lockfile. Outputs are an unsigned Universal DMG and Windows x64 NSIS installer.
 
 Each platform records the product version, Git commit, repository, workflow run ID, build attempt, filename, size, and SHA-512. Assembly accepts both platforms only from the same repository, commit, version, and run ID, and recalculates file checksums. Each installer must be no larger than 1 GiB to support existing update clients. Retrying the same workflow may reuse a previously successful platform artifact while retaining its attempt. Artifacts from separate runs cannot be combined.
 

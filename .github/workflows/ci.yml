@@ -55,8 +55,8 @@ jobs:
           fi
           echo "product=$product" >> "$GITHUB_OUTPUT"
 
-  # Product gate: AA profile smoke is temporarily paused below.
-  # A documentation-only change already passed diff validation in `changes`.
+  # Daily checks do not produce installers. Documentation-only changes
+  # already passed validation in `changes`.
   check:
     needs: changes
     runs-on: ubuntu-latest
@@ -91,9 +91,8 @@ jobs:
       - if: needs.changes.outputs.product == 'true'
         run: pnpm run check
 
-  # Windows-only logic and unsigned NSIS/portable builds on a real Windows runner:
-  # updates, window options, pwsh sandbox, volume diagnostics, and packaging.
-  # The package gate runs once; both artifacts reuse its build output.
+  # Native Windows build, type checks, focused tests, and runtime closure.
+  # check:win-package is a headless preflight; it does not build an installer.
   desktop-windows:
     needs: changes
     if: needs.changes.outputs.product == 'true'
@@ -117,18 +116,9 @@ jobs:
           key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml') }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter dsh-plugin-desktop run check:win-package
-      - name: Build Windows installer
-        env:
-          DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
-        run: pnpm --filter dsh-plugin-desktop run dist:win
-      - name: Build Windows portable archive
-        env:
-          DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
-        run: pnpm --filter dsh-plugin-desktop run dist:win-portable
 
-  # Build the intentionally unsigned Universal DMG on a real macOS runner and
-  # catch Intel and Apple Silicon packaging regressions. Signing secrets are
-  # neither required nor exposed to this job.
+  # Native macOS build, type checks, focused tests, and runtime closure.
+  # Universal DMG creation belongs exclusively to release.yml.
   desktop-macos:
     needs: changes
     if: needs.changes.outputs.product == 'true'
@@ -153,10 +143,6 @@ jobs:
           key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml') }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter dsh-plugin-desktop run check:mac-package
-      - name: Build unsigned macOS Universal DMG
-        env:
-          DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
-        run: pnpm --filter dsh-plugin-desktop run dist:mac
 
   # Upstream toolchain smoke: the portable-shell scripts must resolve the
   # pinned submodule's own pnpm release on Windows.
