@@ -5,6 +5,7 @@ import type { CatalogSnapshot, ExpertSummary } from './expert-contract.js'
 import type { ExpertSettingsStore } from './expert-library.js'
 import type { ExpertPluginLocalizedText, ExpertPluginTeamDefinition } from './expert-plugin-package.js'
 import type { DesktopMcpView } from '../mcp-contract.js'
+import { teamCapabilityBindings, mergeCapabilityBindings } from './capability-composition.js'
 import {
   BUILTIN_TEAMS,
   TEAM_CUSTOM_ID,
@@ -25,6 +26,28 @@ export interface TeamConnectorLifecycle {
 const localizedPluginText = (value: ExpertPluginLocalizedText, locale: TeamLocale): string =>
   value[locale] ?? value[locale === 'zh' ? 'en' : 'zh'] ?? ''
 
+export function projectTeamCapabilityRecord(team: ExpertTeam, experts: readonly ExpertSummary[], view?: DesktopMcpView): ExpertTeam {
+  const dependencies = teamCapabilityBindings(team, experts)
+  const serverFor = (name: string) => view?.mcpServers.find(server => server.serverName === name || server.connectorId === name)
+  const connectors = mergeCapabilityBindings(dependencies.mcpServers.map(binding => {
+    const server = serverFor(binding.name)
+    const declared = server && team.connectors.find(item => serverFor(item.name)?.serverName === server.serverName)
+    return { ...binding, name: declared?.name ?? binding.name }
+  }))
+  return { ...team, skills: dependencies.skills, connectors, connectorStates: connectors.map(binding => {
+    const server = serverFor(binding.name)
+    const entry = view?.catalog.find(item => item.id === binding.name || item.id === server?.connectorId)
+    return {
+      dependency: binding.name, installed: server !== undefined, installable: entry !== undefined,
+      credentialsRequired: entry?.credentials.some(field => field.required) ?? false,
+      ...(server ? { serverName: server.serverName, ...(server.connectorId ? { connectorId: server.connectorId } : {}) } : {}),
+      enabled: server?.enabled ?? false, state: server?.state ?? 'missing', credentialsReady: server?.credentialsReady ?? false,
+      toolCount: server?.tools.length ?? 0, diagnosticCode: server?.diagnostic.code ?? 'missing',
+      ...(server?.error ? { error: server.error } : {}),
+    }
+  }) }
+}
+
 /** Build the runtime/UI team record for one package and only its own members. */
 export function projectExpertPluginTeamRecord(
   team: ExpertPluginTeamDefinition,
@@ -42,25 +65,8 @@ export function projectExpertPluginTeamRecord(
     description: locale === 'en' ? expert.descriptionEn || expert.description : expert.description || expert.descriptionEn,
     role,
   })
-  const connectorStates: ExpertTeam['connectorStates'] = team.connectors.map(binding => {
-    const server = connectorView?.mcpServers.find(item => item.serverName === binding.name || item.connectorId === binding.name)
-    const entry = connectorView?.catalog.find(item => item.id === binding.name)
-    return {
-      dependency: binding.name,
-      installed: server !== undefined,
-      installable: entry !== undefined,
-      credentialsRequired: entry?.credentials.some(field => field.required) ?? false,
-      ...(server?.serverName === undefined ? {} : { serverName: server.serverName }),
-      ...(server?.connectorId === undefined ? {} : { connectorId: server.connectorId }),
-      enabled: server?.enabled ?? false,
-      state: server?.state ?? 'missing',
-      credentialsReady: server?.credentialsReady ?? false,
-      diagnosticCode: server?.diagnostic.code ?? 'missing',
-      ...(server?.error === undefined ? {} : { error: server.error }),
-    }
-  })
   const initPrompt = localizedPluginText(team.defaultInitPrompt, locale)
-  return {
+  return projectTeamCapabilityRecord({
     id: team.id,
     builtin: true,
     runtime: { mode: 'lead', leadExpertSlug: lead.slug, initPrompt },
@@ -83,9 +89,9 @@ export function projectExpertPluginTeamRecord(
     })),
     skills: [...team.skills],
     connectors: [...team.connectors],
-    connectorStates,
+    connectorStates: [],
     ...(team.conversationCreated ? { conversationCreated: true } : {}),
-  }
+  }, experts, connectorView)
 }
 
 export function createTeamLibrary(
@@ -116,9 +122,12 @@ export function createTeamLibrary(
     ...structuredClone(BUILTIN_TEAMS),
     ...read().custom,
   ]
-  const packagedTeams = async (all: CatalogSnapshot, items: readonly ExpertPluginTeamDefinition[]): Promise<ExpertTeam[]> => {
-    const connectorView = await (connectors?.()?.read() ?? Promise.resolve(undefined))
-    return items.map(team => projectExpertPluginTeamRecord(team, all.experts, locale(), connectorView))
+  const composedTeams = async (all: CatalogSnapshot, items: readonly ExpertPluginTeamDefinition[]): Promise<ExpertTeam[]> => {
+    const view = await (connectors?.()?.read() ?? Promise.resolve(undefined))
+    return [
+      ...teams().map(team => projectTeamCapabilityRecord(team, all.experts, view)),
+      ...items.map(team => projectExpertPluginTeamRecord(team, all.experts, locale(), view)),
+    ]
   }
   const requireMembers = (team: TeamInput, snapshot: CatalogSnapshot) => {
     if (
@@ -135,10 +144,9 @@ export function createTeamLibrary(
     async snapshot(): Promise<TeamSnapshot> {
       const definitionsSnapshot = await definitions()
       const all = await catalog()
-      const packaged = await packagedTeams(all, definitionsSnapshot)
       // 读取名册期间可能有其他窗口写入，不能混用两个修订的配置。
+      const catalogTeams = await composedTeams(all, definitionsSnapshot)
       check(all.revision)
-      const catalogTeams = [...teams(), ...packaged]
       return {
         teams: catalogTeams,
         enabledExperts: all.enabled,
@@ -147,16 +155,14 @@ export function createTeamLibrary(
     },
     async get(id: string): Promise<ExpertTeam> {
       const all = await catalog()
-      const packaged = await packagedTeams(all, await definitions())
-      const team = [...teams(), ...packaged].find((team) => team.id === id)
+      const team = (await composedTeams(all, await definitions())).find((team) => team.id === id)
       if (!team) throw new Error(tx('专家团不存在，请重新选择。'))
       return team
     },
     async recall(id: string, revision: number): Promise<TeamSnapshot> {
       const all = await catalog()
       check(revision)
-      const packaged = await packagedTeams(all, await definitions())
-      const team = [...teams(), ...packaged].find(candidate => candidate.id === id)
+      const team = (await composedTeams(all, await definitions())).find(candidate => candidate.id === id)
       if (team === undefined) throw new Error(tx('专家团不存在，请重新选择。'))
       requireMembers(team, all)
       const next = [...new Set([...all.enabled, ...team.members.map(member => member.expertSlug)])]

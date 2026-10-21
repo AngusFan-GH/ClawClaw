@@ -18,6 +18,7 @@ export type McpCapabilityId = typeof MCP_CAPABILITY_IDS[number]
 
 export interface McpCapabilityServer {
   readonly serverName: string
+  readonly connectorId?: string
   readonly capabilities?: readonly string[]
 }
 
@@ -62,12 +63,12 @@ export function resolveMcpCapabilityServer(
   capability: McpCapabilityId,
   configured: readonly (string | McpCapabilityServer)[],
 ): string {
-  const servers = configured.map(item => typeof item === 'string'
+  const servers: readonly McpCapabilityServer[] = configured.map(item => typeof item === 'string'
     ? { serverName: item, capabilities: [] as readonly string[] }
     : item)
   const declared = servers.find(server => server.capabilities?.includes(capability))
   if (declared !== undefined) return declared.serverName
   const aliases = new Set(CAPABILITY_ALIASES[capability].map(normalize))
-  return servers.find(server => aliases.has(normalize(server.serverName)))?.serverName
+  return servers.find(server => aliases.has(normalize(server.serverName)) || (server.connectorId !== undefined && aliases.has(normalize(server.connectorId))))?.serverName
     ?? MCP_CAPABILITY_DEFAULT_SERVER[capability]
 }

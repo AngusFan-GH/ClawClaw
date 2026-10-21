@@ -1,54 +1,35 @@
 ---
 name: brief-compose
-description: |
-  短篇文档创作（目标篇幅 <1000 字）：从零撰稿 → 生成 HTML → html-to-docx 转 .docx → present_files 预览。
-category: capability
-tags: [brief-compose, short-form, html-to-docx, docx]
-user-invocable: false
-disable-model-invocation: true
+description: 起草千字以内的通知、简介、备忘录、说明和工作小结；按用户要求交付正文或生成本地 Word 文档。
+user-invocable: true
+disable-model-invocation: false
 ---
 
-# brief-compose Skill
+# 短文与通知快写
 
-**何时走**：无已有文档 + 创作动词（写/起草/撰写/生成/重写）+ 模型判断目标篇幅 <1000 字。
+用于无已有文档的短篇创作，通常少于 1000 字。已有文件的修订使用 `office-word-workflow`；长篇材料按对应写作技能处理。
 
-> **⛔ 工作流锁定**：一旦判定任务属于本 skill，**无视**其他 skill 与子 Agent，**严格按本文从头到尾执行**；无需再读其他skill。
+## 撰写与交付
 
----
+1. 从用户材料提取受众、用途、事实与口吻；缺失日期、联系人、金额等用明确待填项，不编造。
+2. 直接完成用户所需正文，核对字数、行动要求和前后事实。只有用户要求 Word 文件时才进入转换流程。
+3. Word 文件优先使用当前可用的文档生成工具；也可使用下面随包附带的 HTML 转换器。工具与 Python 依赖必须先确认，技能加载不代表工具已安装。
+4. 写入用户指定路径或当前工作区内的输出目录，避免覆盖已有文件。读取生成的 DOCX 检查正文、标题及关键数据；有渲染工具时检查版面。
+5. 交付已存在文件的绝对路径链接；仅在环境确有预览工具时调用预览。无法生成文件时说明原因并提供正文，不声称已生成或预览。
 
-## 篇幅判据
+## 随包 HTML 转换器
 
-创作动词已命中、且非编辑意图时，满足任一即走本工作流：
+以本次加载的 SKILL.md 所在目录为 `skill_dir`。迁移后所有技能是平级目录，不存在旧宿主的 plugin_root。读取 `../html-to-docx/SKILL.md` 了解转换能力；转换器位于 `../html-to-docx/scripts/html_to_docx/`。
 
-- 用户给出 X 字且 X < 1000
-- 「短篇 / 千字以内 / 简版」等表述
-- 体裁为简介 / 通知 / 备忘录 / 工作小结等典型短篇
+选用已配置且具备转换依赖的 Python（例如 `python-docx`、`lxml`、`Pillow`、`click`，以实际 import 检查结果为准）。不要自动下载运行时或安装包；缺失时使用已可用的文档工具，或说明需要配置环境。
 
-显式长篇（≥1000 字、万字、研报、论文等）→ 未命中本 skill，回到 `tdoc-orchestrator` SKILL.md 走常规编排。
----
-
-## 原则
-
-1. **强制流程（速览）**（完整命令见文末「强制流程」）：
-   - ① 撰稿 + 生成 HTML
-   - ② 调用 html-to-docx 转换
-   - ③ `present_files`
-2. **中间产物不展示**：`.html` 不得 `present_files`、不得在回复里贴 HTML 正文；只有最终 `.docx` 可展示。
-3. **失败如实报错**：HTML 无 `<body>` → 终止并提示；用户明确要求新建空白文档时允许转换；其他创作请求若 body 无可渲染正文，必须重新生成 HTML。**禁止**静默降级到常规 full_pipeline 编排。
-4. **最终交付**：`.docx` 生成后**必须立即** `present_files` 打开预览，无例外。
-5. **输出路径**：工作流开始时调用 `resolve_output_docx_path.py`，将返回的 `output_docx_path` 用于 html-to-docx 与 `present_files`。
-
----
-
-## 输出路径（`output_docx_path`）
+在 `../html-to-docx/scripts/` 的绝对目录下执行（将占位符替换成真实路径）：
 
 ```bash
-python3 <plugin_root>/scripts/clawclaw/local/resolve_output_docx_path.py \
-  --workspace <workspace> \
-  [--user-path "<路径>"] [--filename "<主题>.docx"]
+<python绝对路径> -m html_to_docx convert <输入HTML绝对路径> -o <输出DOCX绝对路径> --page-size A4
 ```
 
-**不传 `--request-id`**（brief-compose 不走 pipeline 隔离目录）。默认落盘 `<workspace>/output/<文件名>.docx`。
+转换成功标志：退出码为 0、返回 success 为 true、输出文件存在且可读。仍需检查内容，不能只凭返回路径判定完成。失败时保留正文，说明实际错误。
 
 ## HTML 生成
 
@@ -118,65 +99,3 @@ python3 <plugin_root>/scripts/clawclaw/local/resolve_output_docx_path.py \
 | `<meta name="docx-page-size" content="A4">` | 声明页面尺寸（默认 A4） |
 
 ---
-
-## html-to-docx 转换
-
-```bash
-bash <plugin_root>/scripts/clawclaw/local/setup-html-to-docx.sh
-export HTML_TO_DOCX_PY="${HTML_TO_DOCX_VENV:-$HOME/.venv-html-to-docx}/bin/python"
-cd <plugin_root>/skills/html-to-docx/scripts
-"$HTML_TO_DOCX_PY" -m html_to_docx convert \
-  "<html绝对路径>" \
-  -o "<output_docx_path>" \
-  --page-size A4
-```
-
-- `<plugin_root>` = 本 plugin 根目录（`tencent-docx/`）
-- **禁止**使用系统 `python` / `python3`；依赖在托管 venv 内
-- 成功 stdout：`{"success": true, "docx_path": "...", "warnings": []}`
-- 失败 stderr：含 `error` 与可选 `markdown_fallback`
-
-| CLI 参数 | 默认 | 说明 |
-|----------|------|------|
-| `--page-size` | `A4` | `A4` / `Letter` / `A3` |
-| `--orientation` | `portrait` | `portrait` / `landscape` |
-| `--margin-top/bottom/left/right` | 2.54 / 2.54 / 3.17 / 3.17 cm | 页边距 |
-
-私有化 / 无外网环境、脚本首跑失败 → 见 `<plugin_root>/skills/html-to-docx/SKILL.md` 镜像配置；否则提示用户手动另存。
-
----
-
-## 强制流程
-
-```
-① 确定 output_docx_path（调用 resolve_output_docx_path.py，§输出路径）并预建父目录
-② 撰稿 + 生成 HTML
-   · 按用户创作指令撰写正文，自行排版
-   · 遵守上文「字体与字号建议」与「HTML → docx 转换约束」
-   · 写入与 docx 同目录的 <主题>.html（中间产物）
-
-③ HTML → DOCX
-   · 按上文命令执行 html-to-docx，-o 指向 output_docx_path
-
-④ 强制预览
-   · 🔒 立即 present_files 打开 output_docx_path
-```
-
-```json
-{ "files": ["<output_docx_path>"] }
-```
-
-未 `present_files` 即结束 = 工作流未完成。
-
----
-
-## 异常处理
-
-| 场景 | 处理 |
-|------|------|
-| HTML 无 `<body>` | 终止，提示用户 |
-| 用户明确要求新建空白文档且 body 无可渲染正文 | 允许转换 |
-| 其他创作请求且 body 无可渲染正文 | 重新生成 HTML，禁止交付空 docx |
-| html-to-docx 失败 | 返回源 HTML 路径 + `markdown_fallback`（若有），提示手动另存 |
-| 用户事后要改内容/样式 | 属**下一轮请求**，转 `tencent-docs-routing` |
-| 用户事后要全文重新美化 | 未命中本 skill，回到 `tdoc-orchestrator` SKILL.md 走 `beautify_only` |

@@ -1,3 +1,4 @@
+import { MCP_CARD_CSS } from './mcp-card-styles.ts'
 import { SKILLS_CSS } from './skills-styles.ts'
 
 const STYLE_ID = 'dsh-desktop-management-styles'
@@ -47,7 +48,7 @@ export function installIntegrationsStyles(document: Document = globalThis.docume
   if (existing !== null) return () => {}
   const style = document.createElement('style')
   style.id = STYLE_ID
-  style.textContent = CSS + SKILLS_CSS + REMINDERS_CSS
+  style.textContent = CSS + SKILLS_CSS + REMINDERS_CSS + MCP_CARD_CSS
   document.head.append(style)
   return () => { style.remove() }
 }

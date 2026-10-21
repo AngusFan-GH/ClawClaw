@@ -7,6 +7,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { AGENCY_PLUGIN_PACKAGE_SERVICE, apply, type AgencyPluginPackageService } from '../src/experts/index.ts'
 import { AGENCY_TEAM_SERVICE, type AgencyTeamLibrary } from '../src/experts/team-library.ts'
 import { DESKTOP_MCP_LIFECYCLE_SERVICE, type DesktopMcpView } from '../src/mcp-contract.ts'
+import { AGENCY_LIBRARY_SERVICE, type AgencyExpertLibrary } from '../src/experts/expert-library.ts'
 
 const roots: string[] = []
 const originalDshHome = process.env.DSH_HOME
@@ -92,7 +93,7 @@ async function hostFixture() {
   })
   const settings = {
     get: (ns: string) => ns === 'locale' ? { preference: 'en' } : ns === 'dsh-desktop-mcp'
-      ? { mcpServers: [{ serverName: 'company-browser', connectorId: 'browser', capabilities: [] }] } : state,
+      ? { mcpServers: [{ serverName: 'company-browser', connectorId: 'browser', capabilities: [] }, { serverName: 'company-notes', capabilities: ['knowledge.search'] }] } : state,
     describe: () => [{ ns: 'clawclaw-experts', revision, value: state }, { ns: 'locale', revision: 1, value: { preference: 'en' } }],
     installSection: (_owner: unknown, _ns: unknown, _schema: unknown, _entry: unknown, hooks: { setSource(value: () => typeof state): void }) => hooks.setSource(() => state),
     mutate: async (_ns: string, ops: Array<{ op: string; path: unknown[]; value: unknown }>, expected: number) => {
@@ -126,6 +127,27 @@ async function hostFixture() {
 }
 
 describe('Plugin Team Host tools', () => {
+  it('replaces legacy placeholder MCP names with configured capability aliases', async () => {
+    const fixture = await hostFixture()
+    const library = fixture.services.get(AGENCY_LIBRARY_SERVICE) as AgencyExpertLibrary
+    const expert = (await library.catalog()).experts.find(item => item.slug === 'base')!
+    expect(expert.mcpServers.map(item => item.name)).toEqual(['company-notes', 'company-browser'])
+    expect(expert.mcpServers.some(item => item.name === 'notion')).toBe(false)
+  })
+
+  it('rejects a required missing Skill before starting even the team lead', async () => {
+    const fixture = await hostFixture()
+    const root = await writeTeamPackage(fixture.home, '1.0.0')
+    const { readFile } = await import('node:fs/promises')
+    const manifestPath = join(root, '.clawclaw-plugin/plugin.json')
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+    manifest.skills = ['./skills/required-check']
+    await mkdir(join(root, 'skills/required-check'), { recursive: true })
+    await writeFile(join(root, 'skills/required-check/SKILL.md'), '---\nname: required-check\ndescription: Check evidence\n---\nCheck it.\n')
+    await writeFile(manifestPath, JSON.stringify(manifest))
+    await expect(fixture.execute('summon_expert_team', { team: 'plugin-team:research-team', task: 'Investigate.' })).rejects.toThrow('Skill unavailable: required-check')
+    expect(fixture.starts).toHaveLength(0)
+  })
   it('refreshes added, changed, and removed packages without restarting the Host', async () => {
     const fixture = await hostFixture()
     expect(JSON.parse(String((await fixture.execute('list_expert_teams')).report))).toEqual([])

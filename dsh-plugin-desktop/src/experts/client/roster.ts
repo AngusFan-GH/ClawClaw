@@ -10,6 +10,22 @@ export interface RosterEntry {
 }
 
 export const ROSTER: ReadonlyArray<RosterEntry> = [
+{
+  "slug": "support-enterprise-office-assistant",
+  "nameEn": "Enterprise Office Assistant",
+  "emoji": "📝",
+  "division": "support",
+  "description": "处理企业日常问答、文档撰写润色、摘要、工作报告、PPT辅助及信息检索，复核事实和来源，按可用工具交付文件。",
+  "descriptionEn": "Handles enterprise office writing, revisions, summaries, reports, presentation assistance, and traceable research with available tools."
+},
+{
+  "slug": "support-enterprise-business-analyst",
+  "nameEn": "Enterprise Business Analyst",
+  "emoji": "📊",
+  "division": "support",
+  "description": "面向Excel、CSV及授权业务数据，完成清洗对账、指标统计、趋势分析与经营报告，保留可复算依据并指出接入缺口。",
+  "descriptionEn": "Reconciles spreadsheets and authorized business data, calculates KPIs and trends, and produces reproducible operating reports while identifying missing integrations."
+},
   {
     "slug": "academic-anthropologist",
     "nameEn": "Anthropologist",

@@ -61,12 +61,16 @@ export class ExpertCapabilityRegistry {
       if (generation !== this.generation) return
       if (skills.status === 'fulfilled') this.skills = skills.value
       if (mcp.status === 'fulfilled') this.mcpServers = mcp.value.mcpServers
-      const catalog = expertCapabilityCatalog(this.skills, this.mcpServers)
+      const projected = expertCapabilityCatalog(this.skills, this.mcpServers)
+      const catalog: ExpertCapabilityCatalog = {
+        skills: skills.status === 'fulfilled' ? projected.skills : projected.skills.map(item => ({ ...item, available: false, state: 'error' as const })),
+        mcpServers: mcp.status === 'fulfilled' ? projected.mcpServers : projected.mcpServers.map(item => ({ ...item, available: false, state: 'error' as const })),
+      }
       this.publish(Object.freeze({
         catalog,
         loading: false,
-        skillsLoaded: this.snapshot.skillsLoaded || skills.status === 'fulfilled',
-        mcpLoaded: this.snapshot.mcpLoaded || mcp.status === 'fulfilled',
+        skillsLoaded: skills.status === 'fulfilled',
+        mcpLoaded: mcp.status === 'fulfilled',
         ...(skills.status === 'rejected' ? { skillsError: errorMessage(skills.reason) } : {}),
         ...(mcp.status === 'rejected' ? { mcpError: errorMessage(mcp.reason) } : {}),
         revision: this.snapshot.revision + 1,

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
+import { BUNDLED_SKILL_CATEGORIES } from '../src/client/skill-presentation.ts'
 import * as SkillFileSystem from '@deepseek-ai/dsh-skill-filesystem'
 import { describe, expect, it, vi } from 'vitest'
 import { DesktopSkillsController } from '../src/skills.ts'
@@ -124,7 +125,7 @@ describe('Skill discovery scope', () => {
       expect((await readStable(a)).skills.filter(skill => skill.source !== 'bundled')).toHaveLength(0)
       expect((await readStable(b)).skills.filter(skill => skill.source !== 'bundled')).toHaveLength(0)
       const bundled = (await readStable(a)).skills.filter(skill => skill.source === 'bundled')
-      expect(bundled).toHaveLength(64)
+      expect(bundled).toHaveLength(Object.values(BUNDLED_SKILL_CATEGORIES).flat().length)
       expect(bundled.map(skill => skill.name)).toEqual(expect.arrayContaining([
         'business-operations', 'content-production', 'data-analysis', 'evidence-research',
         'product-design-review', 'risk-compliance-review', 'software-delivery',

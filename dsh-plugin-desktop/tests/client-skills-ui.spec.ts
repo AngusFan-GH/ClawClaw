@@ -38,6 +38,50 @@ async function click(text: string) { await act(async () => { button(text).click(
 afterEach(async () => { await act(async () => { root?.unmount() }); root = undefined; document.body.replaceChildren(); vi.unstubAllGlobals() })
 
 describe('Skills catalog UI', () => {
+  it('explains internal references and navigates to their entry without changing invocation policy', async () => {
+    const internal = { ...skill, name: 'html-review', source: 'bundled', editable: false, modelInvocable: false, userInvocable: false }
+    const entry = { ...skill, name: 'tencent-docx', source: 'bundled', editable: false }
+    const api = await mount(internal, { configure: api => {
+      api.readView = vi.fn(async () => ({ skills: [internal, entry], recycled: [] }))
+      api.detail = vi.fn(async (name: string) => ({ ...(name === entry.name ? entry : internal), content: 'Instructions' }))
+    } })
+    const card = [...document.querySelectorAll<HTMLButtonElement>('.dshSkillsCard')].find(card => card.title.includes('html-review'))!
+    expect(card.textContent).toContain('内部流程')
+    expect(card.textContent).not.toContain('自动选用关闭')
+    await act(async () => { card.click() })
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('相应工具、连接与授权')
+    expect(document.querySelector('[role="switch"]')).toBeNull()
+    await click('查看入口技能')
+    expect(api.detail).toHaveBeenLastCalledWith('tencent-docx')
+    expect(api.setModelInvocable).not.toHaveBeenCalled()
+  })
+
+  it('explains a user-disabled Skill without treating it as an internal reference', async () => {
+    await mount({ modelInvocable: false, userInvocable: false })
+    await click('查看详情: review')
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('两种调用方式均已关闭')
+    expect(document.querySelectorAll('[role="switch"]')).toHaveLength(2)
+  })
+
+  it('explains an absent internal entry instead of offering a dead link', async () => {
+    await mount({ name: 'html-review', source: 'bundled', editable: false, modelInvocable: false, userInvocable: false })
+    await click('查看详情: 文档排版质量检查')
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('入口技能在当前范围未加载或已关闭')
+    expect([...document.querySelectorAll('button')].some(item => item.textContent === '查看入口技能')).toBe(false)
+  })
+
+  it('shows a readable built-in name and still opens the canonical Skill', async () => {
+    const api = await mount({ name: 'office-word-workflow', source: 'bundled', editable: false })
+    expect(document.querySelector('.dshSkillsCardHeading strong')?.textContent).toBe('Word文档与模板')
+    expect(document.querySelector('.dshSkillsCardHeading small')?.textContent).toBe('office-word-workflow')
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="搜索技能"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '模板')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await click('查看详情: Word文档与模板')
+    expect(api.detail).toHaveBeenCalledWith('office-word-workflow')
+  })
   it('moves catalog actions into the toolbar when embedded in the expert library', async () => {
     await mount({}, { embedded: true })
     expect(document.querySelector('.dshSkillsPage>header')).toBeNull()
@@ -87,17 +131,46 @@ describe('Skills catalog UI', () => {
     expect(api.addScanPath).toHaveBeenCalledWith('/work/skills')
     expect(document.querySelector('.ccWorkspaceDirectoryPanel')).toBeNull()
   })
-  it('groups name-sorted Skills by source and narrows groups when filtered', async () => {
+  it('groups Skills by purpose while retaining independent source filtering', async () => {
     await mount({}, { configure: api => { vi.mocked(api.readView).mockResolvedValue({ ...view, skills: [
-      { ...skill, name: 'z-local' }, { ...skill, name: 'a-shared', source: 'user-agents' },
+      { ...skill, name: 'software-delivery' }, { ...skill, name: 'data-analysis', source: 'user-agents' },
     ] }) } })
     expect(document.querySelectorAll('.dshSkillsGrid')).toHaveLength(2)
-    expect([...document.querySelectorAll('.dshSkillsCardHeading strong')].map(item => item.textContent)).toEqual(['z-local', 'a-shared'])
-    expect([...document.querySelectorAll('.dshSkillsGroup h3')].map(item => item.textContent)).toEqual([`${zh.sourceUserDsh}1`, `${zh.sourceUserAgents}1`])
+    expect([...document.querySelectorAll('.dshSkillsCardHeading strong')].map(item => item.textContent)).toEqual(['data-analysis', 'software-delivery'])
+    expect([...document.querySelectorAll('.dshSkillsGroup h3')].map(item => item.textContent)).toEqual([`${zh.categoryData}1`, `${zh.categoryDevelopment}1`])
     expect(document.querySelectorAll('.dshSkillsCardDelete')).toHaveLength(1)
     await click(zh.filterSource); await click(`${zh.sourceUserAgents} · 1`)
     expect(document.querySelectorAll('.dshSkillsCard')).toHaveLength(1)
     expect(document.querySelectorAll('.dshSkillsGroup')).toHaveLength(1)
+  })
+  it('combines purpose filters with search and resets them from the empty state', async () => {
+    await mount({}, { configure: api => { vi.mocked(api.readView).mockResolvedValue({ ...view, skills: [
+      { ...skill, name: 'business-data-analysis', description: '经营分析' },
+      { ...skill, name: 'enterprise-office-assistant', description: '办公助理' },
+    ] }) } })
+    await click(zh.categoryData)
+    expect(button(zh.categoryData).getAttribute('aria-pressed')).toBe('true')
+    expect([...document.querySelectorAll('.dshSkillsCardHeading strong')].map(item => item.textContent)).toEqual(['business-data-analysis'])
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="搜索技能"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '办公')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(document.querySelector('.dshSkillsCard')).toBeNull()
+    await click(zh.clearFilters)
+    expect(button(zh.categoryAll).getAttribute('aria-pressed')).toBe('true')
+    expect(input.value).toBe('')
+    expect(document.querySelectorAll('.dshSkillsCard')).toHaveLength(2)
+  })
+  it('shows large built-in catalogs initially and still allows collapsing each category', async () => {
+    await mount({}, { configure: api => { vi.mocked(api.readView).mockResolvedValue({ ...view, skills:
+      Array.from({ length: 24 }, (_, index) => ({ ...skill, name: `skill-${index}`, source: 'bundled', editable: false })),
+    }) } })
+    expect(document.querySelectorAll('.dshSkillsCard')).toHaveLength(24)
+    const toggle = document.querySelector<HTMLButtonElement>('.dshSkillsGroup h3 button')!
+    await act(async () => { toggle.click() })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(document.querySelector('.dshSkillsCard')).toBeNull()
   })
   it('requires confirmation for permanent deletion and supports cancellation', async () => {
     const purge = vi.fn(async (ids: readonly string[]) => ({ deleted: ids, failed: [] }))
@@ -273,7 +346,7 @@ describe('Skills catalog UI', () => {
     expect(button(zh.skillScope).textContent).toContain('standard')
     expect(document.querySelector('.dshSkillsToolbar')?.textContent).not.toContain(zh.sessionPreset)
   })
-  it('switches Workspace scope and groups project Skills separately', async () => {
+  it('switches Workspace scope and preserves project origins within purpose groups', async () => {
     const api = await mount({}, { configure: api => {
       vi.mocked(api.workspaces).mockResolvedValue([{ id: 'a', title: 'Project A', path: '/project/a' }])
       vi.mocked(api.forScope).mockImplementation(scope => scope.workspaceId === 'a'
@@ -282,7 +355,7 @@ describe('Skills catalog UI', () => {
     } })
     await click(zh.skillScope); await click('Project A · /project/a')
     expect(api.forScope).toHaveBeenCalledWith({ workspaceId: 'a' })
-    expect(document.querySelector('.dshSkillsGroup h3')?.textContent).toContain(zh.sourceProjectAgents)
+    expect(document.querySelector('.dshSkillsSource')?.textContent).toBe(zh.sourceProjectAgents)
     expect(button(zh.skillScope).textContent).toContain('Project A')
   })
   it('refreshes in the background without interrupting an open Skill', async () => {
@@ -314,7 +387,7 @@ describe('Skills catalog UI', () => {
   })
   it('explains shared origins and edit impact without offering unsupported deletion', async () => {
     await mount({ source: 'user-agents' })
-    expect(document.querySelector('.dshSkillsGroup h3')?.textContent).toContain(zh.sourceUserAgents)
+    expect(document.querySelector('.dshSkillsSource')?.textContent).toBe(zh.sourceUserAgents)
     expect(document.querySelector('.dshSkillsCardDelete')).toBeNull()
     await click('查看详情: review')
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(zh.recycleSharedRestricted)
@@ -367,7 +440,7 @@ describe('Skills catalog UI', () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     expect(document.body.style.overflow).toBe('')
     expect(document.activeElement).toBe(trigger)
-    expect(trigger.textContent).toContain('模型不可用')
+    expect(trigger.textContent).toContain('自动选用关闭')
   })
   it('does not let Escape reach the underlying settings dialog', async () => {
     await mount()

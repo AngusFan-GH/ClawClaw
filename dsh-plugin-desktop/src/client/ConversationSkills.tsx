@@ -1,3 +1,4 @@
+import { skillDisplayName } from './skill-labels.ts'
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from 'react'
 import { IconSkillOutlineMedium, Modal, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 // @ts-expect-error package subpath has no declaration file
@@ -132,7 +133,7 @@ export function SkillPicker({ api, t, disabled, preset }: { api: ConversationSki
         {catalog && skills.length === 0 && <p role="status">{t(availableCount === 0 && query.trim() === '' ? 'noSessionSkills' : 'noMatches')}</p>}
         {skills.map(skill => {
           return <button type="button" key={skill.name} className="dshSkillPickerItem" disabled={busy} onClick={() => { void select(skill.name) }}>
-            <IconSkillOutlineMedium /><span><strong>{skill.name}</strong><span>{skill.description}</span></span>
+            <IconSkillOutlineMedium /><span><strong title={skill.name}>{skillDisplayName(skill.name, t('dateLocale').startsWith('zh') ? 'zh' : 'en')}</strong><span>{skill.description}</span></span>
           </button>
         })}
       </div>

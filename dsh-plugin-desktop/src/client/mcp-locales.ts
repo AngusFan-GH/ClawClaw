@@ -1,4 +1,5 @@
 export const zh = {
+  categoryProductivity: '办公协作', categoryDevelopment: '开发工具', categoryData: '数据分析', categoryDesign: '设计创作', categoryResearch: '搜索研究', categoryFinance: '金融数据', addedConnector: '已添加', noCredentialsRequired: '无需填写凭据', credentialsRequired: '需配置凭据',
   nav: '连接器', title: '连接器', intro: '管理当前配置方案中的连接器及工具连接。',
   refresh: '刷新', loading: '正在加载…', unavailable: '暂时无法读取连接器配置。', searchServers: '搜索连接器或工具', clearSearch: '清除搜索', noMatches: '没有匹配的连接器。',
   operationFailed: '操作失败，请检查配置后重试。', addServer: '添加连接器', editServer: '编辑',
@@ -18,7 +19,7 @@ export const zh = {
   initialDelayRangeError: '初始延迟必须是 100 到 60000 之间的整数。', maxDelayRangeError: '最大延迟必须是 100 到 300000 之间的整数。',
   maxAttemptsRangeError: '最大尝试次数必须是 0 到 100 之间的整数。', reconnectDelayOrderError: '最大延迟不能小于初始延迟。',
   importJson: '导入 JSON', import: '导入', invalidImport: '请输入有效的 mcpServers JSON。', importJsonHint: '{"mcpServers":{"server":{"command":"npx","args":["-y","package"],"env":{"API_KEY":"..."}}}}', usedByExperts: '被 {count} 位专家使用', renameBoundServer: '该连接器被 {count} 位专家使用。请先更新专家绑定，再修改连接器名称。',
-  mcpViews: '连接器分类', installed: '已连接', connectorCatalog: '连接器目录', installConnector: '安装连接器', noCatalogMatches: '没有匹配的连接器。',
+  mcpViews: '连接器分类', installed: '已添加', connectorCatalog: '连接器目录', installConnector: '安装连接器', noCatalogMatches: '没有匹配的连接器。',
   oauthPkce: '使用 OAuth 2.0 PKCE', oauthIssuer: 'OAuth 发行方（可选，留空自动发现）', oauthScope: 'OAuth 权限范围', oauthResource: 'OAuth 资源（可选）',
   oauthClientId: '预注册客户端 ID（可选）', oauthClientIdHint: '留空时使用动态客户端注册', oauthClientAuthMethod: '客户端认证方式', oauthClientSecretRef: '客户端密钥凭据引用', authorize: '授权', reauthorize: '重新授权',
   identityAndTransport: '基本信息', connection: '连接配置', authentication: '身份验证', credentials: '凭据与请求参数', advancedSettings: '高级连接设置', viewSource: '查看来源',
@@ -27,6 +28,7 @@ export const zh = {
 export type DesktopMcpLocaleKey = keyof typeof zh
 
 export const en: Record<DesktopMcpLocaleKey, string> = {
+  categoryProductivity: 'Office & collaboration', categoryDevelopment: 'Development', categoryData: 'Data analysis', categoryDesign: 'Design', categoryResearch: 'Search & research', categoryFinance: 'Financial data', addedConnector: 'Added', noCredentialsRequired: 'No credentials to enter', credentialsRequired: 'Credentials required',
   nav: 'MCP Servers', title: 'MCP Servers', intro: 'Manage MCP servers and tool connections for the current Profile.',
   refresh: 'Refresh', loading: 'Loading…', unavailable: 'MCP configuration is temporarily unavailable.', searchServers: 'Search MCP servers or tools', clearSearch: 'Clear search', noMatches: 'No matching MCP servers.',
   operationFailed: 'The operation failed. Check the configuration and try again.', addServer: 'Add server', editServer: 'Edit',
@@ -46,7 +48,7 @@ export const en: Record<DesktopMcpLocaleKey, string> = {
   initialDelayRangeError: 'Initial delay must be a whole number from 100 to 60000.', maxDelayRangeError: 'Maximum delay must be a whole number from 100 to 300000.',
   maxAttemptsRangeError: 'Maximum attempts must be a whole number from 0 to 100.', reconnectDelayOrderError: 'Maximum delay must not be less than the initial delay.',
   importJson: 'Import JSON', import: 'Import', invalidImport: 'Enter a valid mcpServers JSON document.', importJsonHint: '{"mcpServers":{"server":{"command":"npx","args":["-y","package"],"env":{"API_KEY":"..."}}}}', usedByExperts: 'Used by {count} experts', renameBoundServer: 'This MCP server is used by {count} experts. Update those bindings before renaming it.',
-  mcpViews: 'MCP views', installed: 'Connected', connectorCatalog: 'Connector catalog', installConnector: 'Install connector', noCatalogMatches: 'No matching connectors.',
+  mcpViews: 'MCP views', installed: 'Configured', connectorCatalog: 'Connector catalog', installConnector: 'Install connector', noCatalogMatches: 'No matching connectors.',
   oauthPkce: 'Use OAuth 2.0 PKCE', oauthIssuer: 'OAuth issuer (optional; discovered when empty)', oauthScope: 'OAuth scope', oauthResource: 'OAuth resource (optional)',
   oauthClientId: 'Pre-registered client ID (optional)', oauthClientIdHint: 'Leave empty to use dynamic client registration', oauthClientAuthMethod: 'Client authentication method', oauthClientSecretRef: 'Client-secret credential reference', authorize: 'Authorize', reauthorize: 'Reauthorize',
   identityAndTransport: 'Identity and transport', connection: 'Connection', authentication: 'Authentication', credentials: 'Credentials and request values', advancedSettings: 'Advanced connection settings', viewSource: 'View source',

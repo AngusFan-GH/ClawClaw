@@ -4,6 +4,14 @@ import type { ExpertSummary } from '../expert-contract.js'
 
 /** 少量人工维护的任务示例；仅指导交代需求，不代表额外工具授权。 */
 export const TASK_EXAMPLES: Readonly<Record<string, { readonly zh: string; readonly en: string }>> = {
+  'support-enterprise-office-assistant': {
+    zh: '请把我提供的项目资料整理成一份Word汇报和8页PPT，附演讲稿；核对数字与来源，并标出需要我补充的信息。',
+    en: 'Turn the project materials I provide into a Word report and an eight-slide presentation with speaker notes. Check figures and sources, and flag missing inputs.',
+  },
+  'support-enterprise-business-analyst': {
+    zh: '合并我提供的月度Excel，检查重复和缺失记录，核对销售总额，计算同比环比并生成分析报告，保留公式与统计口径。',
+    en: 'Combine the monthly Excel files I provide, check duplicates and missing records, reconcile sales totals, and produce a trend report with reproducible formulas and metric definitions.',
+  },
   'engineering-code-reviewer': {
     zh: '审查我提供的代码改动，优先找出会导致错误行为的缺陷。每项说明触发条件、影响和修复建议；没有足够证据的问题不要列为确定缺陷。',
     en: 'Review the code changes I provide for defects that cause incorrect behavior. For each finding, explain the trigger, impact and suggested fix. Do not present unsupported suspicions as confirmed defects.',

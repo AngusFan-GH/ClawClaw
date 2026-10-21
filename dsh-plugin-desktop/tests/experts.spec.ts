@@ -82,9 +82,9 @@ describe('ClawClaw experts', () => {
     ]))
   })
 
-  it('ships the complete 321-expert catalog and localized personas', async () => {
+  it('ships the complete 323-expert catalog and localized personas', async () => {
     const catalog = await loadCatalog(catalogRoot, DEFAULT_DIVISIONS)
-    expect(catalog.size).toBe(321)
+    expect(catalog.size).toBe(323)
     expect(new Set([...catalog.values()].map(expert => expert.division))).toEqual(new Set(DEFAULT_DIVISIONS))
 
     const english = await readLocalizedExpertPrompt(catalogRoot, chineseRoot, 'design-ux-researcher', 'design', 'en')
@@ -93,6 +93,34 @@ describe('ClawClaw experts', () => {
     expect(chinese.prompt).toContain('UX 研究员 Agent 人格')
     expect(chinese.prompt).not.toBe(english.prompt)
     expect(catalog.get('engineering-software-architect')?.skills).toContainEqual({ name: 'software-delivery', required: true, enabled: true })
+  })
+
+  it('loads enterprise personas with packaged Skills and optional data access', async () => {
+    const catalog = await loadCatalog(catalogRoot, DEFAULT_DIVISIONS)
+    for (const [slug, name, skills] of [
+      ['support-enterprise-office-assistant', '企业办公助理', ['enterprise-office-assistant', 'office-word-workflow', 'office-ppt-workflow', 'office-excel-workflow']],
+      ['support-enterprise-business-analyst', '企业经营分析师', ['data-analysis', 'business-data-analysis', 'enterprise-data-query']],
+    ] as const) {
+      const expert = catalog.get(slug)!
+      expect(expert.name).toBe(name)
+      expect(expert.skills).toEqual(skills.map(name => ({ name, required: true, enabled: true })))
+      for (const locale of ['en', 'zh'] as const) {
+        const persona = await readLocalizedExpertPrompt(catalogRoot, chineseRoot, slug, expert.division, locale)
+        expect(persona.prompt.length).toBeGreaterThan(100)
+      }
+      for (const binding of expert.skills) {
+        const text = await readFile(new URL(`../assets/skills/${binding.name}/SKILL.md`, import.meta.url), 'utf8')
+        expect(text).toMatch(new RegExp(`^---\\nname: ${binding.name}\\n`))
+      }
+      const health = expertCapabilityHealth(expert, {
+        skills: expert.skills.map(binding => ({ value: binding.name, label: binding.name, state: 'ready' as const, available: true })),
+        mcpServers: [],
+      })
+      expect(health.state).toBe('degraded')
+    }
+    expect(builtinExpertCapabilities('support-enterprise-business-analyst', 'support', [
+      { serverName: 'company-readonly', capabilities: ['database.sql'] },
+    ]).mcpServers).toEqual([{ name: 'company-readonly', required: false, enabled: true }])
   })
 
   it('declares a product capability baseline independently of this machine', () => {
@@ -238,7 +266,7 @@ describe('ClawClaw experts', () => {
       'MCP server unavailable: optional-server',
     ])
     expect(optional.persona).toContain('## Capability diagnostics')
-    expect(optional.deniedTools).not.toContain('mcp__available__search')
+    expect(optional.deniedTools).toContain('mcp__available__search')
   })
 
   it('does not apply an MCP allowlist when every saved binding is disabled', async () => {

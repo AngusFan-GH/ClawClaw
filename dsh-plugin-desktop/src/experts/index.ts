@@ -53,6 +53,7 @@ import { hasLegacySettingsInstall, installSettingsSectionCompat, isLiveValue, lo
 import { AGENCY_LIBRARY_SERVICE, agencySettingsSchema, createExpertLibrary, validateAgencySettings, type AgencySettings } from './expert-library.js'
 import type { CatalogSnapshot, ExpertCapabilityBinding, ExpertSummary } from './expert-contract.js'
 import { builtinExpertCapabilities } from './builtin-capabilities.js'
+import { isMcpServerReady } from '../mcp-readiness.js'
 import { discoverExpertPluginPackages, isConversationCreatedExpertPlugin, projectExpertPluginAgents, projectExpertPluginTeam, removeConversationCreatedExpertPlugin, type ExpertPluginLocalizedText, type ExpertPluginTeamDefinition } from './expert-plugin-package.js'
 import { executeExpertPluginTeam, type ExpertPluginAgentRun } from './expert-plugin-runtime.js'
 import { DESKTOP_MCP_LIFECYCLE_SERVICE } from '../mcp-contract.js'
@@ -633,9 +634,18 @@ export async function resolveExpertComposition(
   const schemas = ctx.tools.schemas()
   const mcpTools = schemas.filter(tool => tool.name.startsWith('mcp__'))
   const selectedServers = new Set<string>()
-  for (const binding of expert.mcpServers.filter(binding => binding.enabled)) {
+  const activeBindings = expert.mcpServers.filter(binding => binding.enabled)
+  const lifecycle = ctx.get(DESKTOP_MCP_LIFECYCLE_SERVICE) as TeamConnectorLifecycle | undefined
+  // Managed servers must be live and authorized; stale tool schemas are insufficient.
+  let connectionView: Awaited<ReturnType<TeamConnectorLifecycle['read']>> | undefined
+  let connectionReadFailed = false
+  if (activeBindings.length > 0 && lifecycle) {
+    try { connectionView = await lifecycle.read() } catch { connectionReadFailed = true }
+  }
+  for (const binding of activeBindings) {
     const prefix = `mcp__${binding.name}__`
-    if (mcpTools.some(tool => tool.name.startsWith(prefix))) {
+    const managed = connectionView?.mcpServers.find(server => server.serverName === binding.name)
+    if (mcpTools.some(tool => tool.name.startsWith(prefix)) && !connectionReadFailed && (managed === undefined || isMcpServerReady(managed))) {
       selectedServers.add(binding.name)
       continue
     }
@@ -644,7 +654,7 @@ export async function resolveExpertComposition(
     diagnostics.push(message)
   }
   const deniedTools: string[] = [...EXPERT_CONTROL_TOOLS]
-  if (selectedServers.size > 0) {
+  if (activeBindings.length > 0) {
     deniedTools.push(...mcpTools.filter(tool => ![...selectedServers].some(server => tool.name.startsWith(`mcp__${server}__`))).map(tool => tool.name))
   }
   const capabilityNote = diagnostics.length === 0 ? '' : `\n\n## Capability diagnostics\n${diagnostics.map(item => `- ${item}`).join('\n')}`
@@ -661,19 +671,19 @@ export function teamRequiresToolFilter(
     ?.mcpServers.some(binding => binding.enabled))
 }
 
-function mergeCapabilityBindings(
-  ...groups: readonly (readonly ExpertCapabilityBinding[])[]
-): ExpertCapabilityBinding[] {
-  const merged = new Map<string, ExpertCapabilityBinding>()
-  for (const binding of groups.flat()) {
-    const current = merged.get(binding.name)
-    merged.set(binding.name, current === undefined ? { ...binding } : {
-      name: binding.name,
-      required: current.required || binding.required,
-      enabled: current.enabled || binding.enabled,
-    })
-  }
-  return [...merged.values()]
+export async function preflightExpertTeam(
+  ctx: Context,
+  team: { readonly members: readonly { readonly expertSlug: string }[] },
+  experts: readonly ExpertSummary[],
+  parent: Agent,
+  signal?: AbortSignal,
+): Promise<void> {
+  await Promise.all(team.members.map(async member => {
+    signal?.throwIfAborted()
+    const expert = experts.find(candidate => candidate.slug === member.expertSlug && !candidate.conflict)
+    if (!expert) throw new Error(`Expert unavailable: ${member.expertSlug}`)
+    await resolveExpertComposition(ctx, expert, parent, '', signal)
+  }))
 }
 
 export function apply(ctx: Context, config: Config): void {
@@ -772,8 +782,8 @@ export function apply(ctx: Context, config: Config): void {
         : builtinExpertCapabilities(expert.slug, expert.division, mcpServers)
       return {
         ...expert,
-        skills: mergeCapabilityBindings(expert.skills, builtin.skills),
-        mcpServers: mergeCapabilityBindings(resolveConnectorBindings(expert.mcpServers, mcpServers), builtin.mcpServers),
+        skills: expert.packageFormat === 'clawclaw-plugin' ? expert.skills : builtin.skills,
+        mcpServers: expert.packageFormat === 'clawclaw-plugin' ? resolveConnectorBindings(expert.mcpServers, mcpServers) : builtin.mcpServers,
         custom: false as const,
       }
     })
@@ -1111,10 +1121,11 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
             const summary = candidate;
             const unavailable = summary.connectorStates.filter(connector => {
                 const binding = pluginTeam.connectors.find(item => item.name === connector.dependency);
-                return binding?.required && binding.enabled && connector.state !== 'running';
+                return binding?.required && binding.enabled && (!connector.enabled || !connector.credentialsReady || connector.state !== 'running' || connector.toolCount === 0);
             });
             if (unavailable.length > 0)
                 throw new Error(teamTx("专家团所需 Connector 未就绪：{0}。", [unavailable.map(item => item.dependency).join(', ')]));
+            await preflightExpertTeam(ctx, candidate, catalog.experts, exec.agent!, exec.signal);
             const provider = ctx.subagents.getProvider(config.provider);
             if (!provider?.capabilities.persona || !provider.capabilities.toolFilter || (maxDepth !== undefined && !provider.capabilities.depthLimit))
                 throw new Error(teamTx("当前子代理服务不支持该专家团所需的身份、工具过滤或深度限制。"));
@@ -1139,6 +1150,7 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
         const team = snapshot.teams.filter(candidate => candidate.runtime.mode === 'coordinator').map(t => localizeTeam(t, activeLocale())).find(t => t.id === args.team || t.name === args.team || snapshot.teams.find(original => original.id === t.id)?.name === args.team);
         if (!team || team.members.some(member => !snapshot.enabledExperts.includes(member.expertSlug)))
             throw new Error(teamTx("专家团不存在或成员未就绪。"));
+        await preflightExpertTeam(ctx, team, catalog.experts, exec.agent!, exec.signal);
         const engine = resolveTeamEngine(ctx, exec.agent, maxDepth, teamRequiresToolFilter(team, catalog.experts));
         const locale = activeLocale();
         if (engine.status.mode === 'native' && engine.service) {
@@ -1187,6 +1199,7 @@ async function runSelectedTeam(teamId: string, task: string, agent: Agent, signa
     const selected = snapshot.teams.find(team => team.id === teamId);
     if (!selected || selected.members.some(member => !snapshot.enabledExperts.includes(member.expertSlug)))
         throw new Error(teamTx("专家团不存在或成员未就绪。"));
+    await preflightExpertTeam(ctx, selected, catalog.experts, agent, signal);
     const provider = ctx.subagents.getProvider(config.provider);
     if (!provider?.capabilities.persona || !provider.capabilities.toolFilter || (maxDepth !== undefined && !provider.capabilities.depthLimit))
         throw new Error(teamTx("当前子代理服务不支持专家团所需的身份、工具过滤或深度限制。"));
@@ -1194,7 +1207,7 @@ async function runSelectedTeam(teamId: string, task: string, agent: Agent, signa
     if (pluginTeam !== undefined) {
         const unavailable = selected.connectorStates.filter(connector => {
             const binding = pluginTeam.connectors.find(item => item.name === connector.dependency);
-            return binding?.required && binding.enabled && connector.state !== 'running';
+            return binding?.required && binding.enabled && (!connector.enabled || !connector.credentialsReady || connector.state !== 'running' || connector.toolCount === 0);
         });
         if (unavailable.length > 0)
             throw new Error(teamTx("专家团所需 Connector 未就绪：{0}。", [unavailable.map(item => item.dependency).join(', ')]));

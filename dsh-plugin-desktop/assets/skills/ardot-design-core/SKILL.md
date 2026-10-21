@@ -23,9 +23,9 @@ Load on demand based on task type:
 | `{SKILL_ROOT}/rules/design-rules.md` | **Single source of truth** — editing principles, coordinates, flexbox, text, colors, tables, images, effects, SVG, property schema, troubleshooting, post-generation validation |
 | `{SKILL_ROOT}/rules/style-guide.md` | Visual style guide — typography, color, layout, surface treatment, variance levels, forbidden AI patterns, bento grid |
 | `{SKILL_ROOT}/rules/effects-guide.md` | Composite visual effects: glassmorphism, neon glow, metallic, glow border, iridescent, neumorphism — loaded automatically in Step 7 |
-| `{SKILL_ROOT}/func-rule/component-instance/SKILL.md` | **Components, instances, variants** — insert/update refs, `componentProperties`, VARIANT, nested instance overrides, `mainComponent` swap. **MUST load** before editing any `INSTANCE` / `COMPONENT` / `COMPONENT_SET`, or when the user asks to switch state / variant |
-| `{SKILL_ROOT}/func-rule/design-variables/SKILL.md` | Bind/unbind variables (`$:Set:Var` / `$<id>`), `apply_variables`, and node `variableModes` (theme / density). Load when binding tokens or switching modes. |
-| `{SKILL_ROOT}/func-rule/shared-styles/SKILL.md` | Bind/unbind shared styles (`textStyleId` / `fillStyleId` / …). Load when applying style ids. |
+| `{SKILL_ROOT}/../component-instance/SKILL.md` | **Components, instances, variants** — insert/update refs, `componentProperties`, VARIANT, nested instance overrides, `mainComponent` swap. **MUST load** before editing any `INSTANCE` / `COMPONENT` / `COMPONENT_SET`, or when the user asks to switch state / variant |
+| `{SKILL_ROOT}/../design-variables/SKILL.md` | Bind/unbind variables (`$:Set:Var` / `$<id>`), `apply_variables`, and node `variableModes` (theme / density). Load when binding tokens or switching modes. |
+| `{SKILL_ROOT}/../shared-styles/SKILL.md` | Bind/unbind shared styles (`textStyleId` / `fillStyleId` / …). Load when applying style ids. |
 | `{SKILL_ROOT}/workflows/ardot-workflow.md` | End-to-end workflow examples (create, modify, global style update, tokens, form) and detailed operation syntax |
 | `{SKILL_ROOT}/tool-usage/batch-edit.md` | `batch_edit` tool usage guide — load anytime `batch_edit` is used (applies to every Ardot task) |
 | `{SKILL_ROOT}/tool-usage/apply-variables.md` | `apply_variables` tool usage guide — load anytime `apply_variables` is used (applies to every Ardot task) |

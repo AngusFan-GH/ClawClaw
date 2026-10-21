@@ -52,6 +52,8 @@ export const EN_DIVISION: Readonly<Record<string, string>> = {
 
 /** 智能体 slug（文件名去 .md）→ 中文名（现实岗位）。缺省时回退英文 frontmatter name。 */
 export const ZH_NAME: Readonly<Record<string, string>> = {
+  'support-enterprise-office-assistant': '企业办公助理',
+  'support-enterprise-business-analyst': '企业经营分析师',
   'chief-executive-officer': '首席执行官（CEO）',
   'chief-marketing-officer': '首席营销官（CMO）',
   'chief-of-staff': '幕僚长（Chief of Staff）',

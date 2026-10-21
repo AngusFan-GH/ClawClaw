@@ -1,4 +1,6 @@
 export const zh = {
+  categoryCompliance: '法务与合规',
+  filterCategory: '按用途筛选技能', categoryAll: '全部', categoryProductivity: '效率工具', categoryContent: '内容创作', categoryData: '数据分析', categoryBusiness: '商业运营', categoryOffice: '办公协同', categoryLearning: '知识与学习', categoryDevelopment: '开发工具', categoryFinance: '投资理财', categoryDesign: '设计与创意',
   clawclawSkillOrigin: '保存在 ClawClaw 用户技能目录。', sharedSkillOrigin: '来自本机共享 Agents 技能目录，不代表团队共享或云同步。',
   sharedSkillEditImpact: '修改指令或调用设置可能影响使用同一技能目录的其他工具。',
   permanentlyDelete: '永久删除', emptyRecycleBin: '清空回收站', purgeWarning: '以下技能及其全部脚本和资源将被永久删除，无法恢复。',
@@ -33,6 +35,7 @@ export const zh = {
   library: '技能库', recycleEmpty: '回收站为空', deletedAt: '移入时间', dateLocale: 'zh-CN',
   discardChanges: '有未保存的内容，确定放弃吗？', keepEditing: '继续编辑', discard: '放弃更改',
   saving: '正在保存…', importing: '正在导入…', fileLimit: 'Markdown · 最大 256 KiB',
+  internalReference: '内部流程 · 由入口技能加载', internalReferenceHint: '这是供入口技能按需读取的流程或参考资料，不单独加入自动选用或手动调用菜单。入口技能仍需相应工具、连接与授权；此标记不表示工具已就绪。', entrySkill: '入口技能', viewEntrySkill: '查看入口技能', entryUnavailable: '入口技能在当前范围未加载或已关闭，请检查范围、预设及来源。', invocationOffHint: '此技能的两种调用方式均已关闭，可在下方开启。', managedInvocationOffHint: '此来源关闭了两种调用方式，且不支持在此修改。请检查提供方配置。',
   modelInvocation: '允许模型调用', userInvocation: '允许手动调用',
   agentPreset: 'Agent 预设', defaultPreset: '默认预设', chooseFile: '选择文件',
   fileType: '请选择 Markdown（.md）文件。', fileTooLarge: '技能文件不能超过 256 KiB。', fileEmpty: '技能文件为空。', fileReadFailed: '无法读取文件，请重新选择。',
@@ -40,7 +43,7 @@ export const zh = {
   nav: '技能', title: '技能', intro: '创建和维护 Agent 的专业能力，管理每个技能的调用方式与适用场景。',
   refresh: '刷新', loading: '正在加载…', unavailable: '暂时无法读取技能。',
   operationFailed: '操作失败，请重试。', searchSkills: '搜索技能', noSkills: '当前范围和预设中尚未发现技能。', noMatches: '没有匹配的技能。',
-  modelVisible: '模型可用', modelHidden: '模型不可用', userVisible: '可手动调用', userHidden: '不可手动调用', readOnly: '只读来源',
+  modelVisible: '可自动选用', modelHidden: '自动选用关闭', userVisible: '可手动调用', userHidden: '手动调用关闭', readOnly: '只读来源',
   newSkill: '新建技能', create: '创建', edit: '编辑', editSkill: '编辑技能', save: '保存', cancel: '取消',
   createHint: '填写基本信息与 Agent 执行时遵循的指令。', editHint: '名称不可修改，其他内容保存后将在后续调用中生效。',
   name: '名称', namePlaceholder: '例如 release-check', nameHint: '使用小写字母、数字和连字符。', description: '简介', descriptionPlaceholder: '简要说明这个技能能完成什么',
@@ -53,6 +56,8 @@ export const zh = {
 export type DesktopSkillsLocaleKey = keyof typeof zh
 
 export const en: Record<DesktopSkillsLocaleKey, string> = {
+  categoryCompliance: 'Legal & compliance',
+  filterCategory: 'Filter Skills by purpose', categoryAll: 'All', categoryProductivity: 'Productivity', categoryContent: 'Content', categoryData: 'Data analysis', categoryBusiness: 'Business', categoryOffice: 'Office', categoryLearning: 'Knowledge', categoryDevelopment: 'Development', categoryFinance: 'Finance', categoryDesign: 'Design',
   clawclawSkillOrigin: 'Stored in the ClawClaw user Skill directory.', sharedSkillOrigin: 'From the shared Agents directory on this device. This does not imply team sharing or cloud sync.',
   sharedSkillEditImpact: 'Changes to instructions or invocation settings may affect other tools using the same Skill directory.',
   permanentlyDelete: 'Delete permanently', emptyRecycleBin: 'Empty recycle bin', purgeWarning: 'These Skills and all their scripts and resources will be permanently deleted. This cannot be undone.',
@@ -87,6 +92,7 @@ export const en: Record<DesktopSkillsLocaleKey, string> = {
   library: 'Library', recycleEmpty: 'Recycle bin is empty', deletedAt: 'Removed', dateLocale: 'en-US',
   discardChanges: 'Discard unsaved changes?', keepEditing: 'Keep editing', discard: 'Discard changes',
   saving: 'Saving…', importing: 'Importing…', fileLimit: 'Markdown · Up to 256 KiB',
+  internalReference: 'Internal workflow · loaded by an entry Skill', internalReferenceHint: 'This workflow or reference is read on demand by its entry Skill and does not appear in automatic selection or manual invocation menus. The entry still needs its tools, connections and authorization; this label does not confirm runtime readiness.', entrySkill: 'Entry Skill', viewEntrySkill: 'View entry Skill', entryUnavailable: 'The entry Skill is absent or disabled in this scope. Check the scope, preset and source.', invocationOffHint: 'Both invocation methods are off. Enable one below.', managedInvocationOffHint: 'This source disables both invocation methods and cannot be edited here. Check the provider configuration.',
   modelInvocation: 'Allow model invocation', userInvocation: 'Allow manual invocation',
   agentPreset: 'Agent preset', defaultPreset: 'Default preset', chooseFile: 'Choose file',
   fileType: 'Select a Markdown (.md) file.', fileTooLarge: 'Skill files must not exceed 256 KiB.', fileEmpty: 'The Skill file is empty.', fileReadFailed: 'Unable to read the file. Select it again.',
@@ -94,7 +100,7 @@ export const en: Record<DesktopSkillsLocaleKey, string> = {
   nav: 'Skills', title: 'Skills', intro: 'Create and maintain Agent capabilities, invocation behavior, and guidance for when each Skill applies.',
   refresh: 'Refresh', loading: 'Loading…', unavailable: 'Skills are temporarily unavailable.',
   operationFailed: 'The operation failed. Try again.', searchSkills: 'Search Skills', noSkills: 'No Skills were discovered in the selected scope and preset.', noMatches: 'No Skills match.',
-  modelVisible: 'Model visible', modelHidden: 'Hidden from model', userVisible: 'User invocable', userHidden: 'Hidden from users', readOnly: 'Read-only source',
+  modelVisible: 'Automatic selection on', modelHidden: 'Automatic selection off', userVisible: 'Manual invocation on', userHidden: 'Manual invocation off', readOnly: 'Read-only source',
   newSkill: 'New Skill', create: 'Create', edit: 'Edit', editSkill: 'Edit Skill', save: 'Save', cancel: 'Cancel',
   createHint: 'Define the capability and the instructions the Agent should follow.', editHint: 'The name cannot be changed. Saved updates apply to future invocations.',
   name: 'Name', namePlaceholder: 'For example, release-check', nameHint: 'Use lowercase letters, numbers, and hyphens.', description: 'Description', descriptionPlaceholder: 'Briefly explain what this Skill can do',

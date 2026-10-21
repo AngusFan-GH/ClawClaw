@@ -13,15 +13,21 @@ import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw.mjs'
 // @ts-expect-error package subpath has no declaration file
 import Search from 'lucide-react/dist/esm/icons/search.mjs'
 // @ts-expect-error package subpath has no declaration file
+import ArrowUpRight from 'lucide-react/dist/esm/icons/arrow-up-right.mjs'
+// @ts-expect-error package subpath has no declaration file
 import Trash2 from 'lucide-react/dist/esm/icons/trash-2.mjs'
-import { IconChevronDownOutlineMedium, IconSkillOutlineMedium, Menu, Modal, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronDownOutlineMedium, Menu, Modal, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DesktopRecycledSkill, DesktopSkillDetail, DesktopSkillInput, DesktopSkillView, DesktopSkillsView, DesktopSkillsWorkspace } from '../skills-contract.ts'
 import type { DesktopSkillsApi } from './skills-api.ts'
 import { readSkillFile, readSkillFolder } from './skill-file.ts'
 import { SkillFiles } from './SkillFiles.tsx'
+import { SkillCategoryIcon } from './SkillCategoryIcon.tsx'
+import { presentSkill, skillDisplayOrder } from './skill-labels.ts'
+import { SKILL_CATEGORIES, skillCategory, skillCategoryKey, type SkillCategory } from './skill-presentation.ts'
 import type { DesktopSkillBundleFile } from '../skills-contract.ts'
 import { zh } from './skills-locales.ts'
+import { internalSkillEntry } from '../skill-invocation-policy.ts'
 import { SettingsIconButton, SettingsToggle } from './settings-controls.tsx'
 import { requestDesktopDirectory } from './directory-picker.ts'
 import { DirectoryPickerDialog, type DirectoryPickerLocaleKey, type DirectoryPickerServices } from './workspace-directory-flow.tsx'
@@ -47,6 +53,7 @@ const canRecycle = (skill: DesktopSkillView): boolean => skill.editable
 const canBrowseFiles = (skill: DesktopSkillView): boolean => ['filesystem', 'clawclaw-project-filesystem'].includes(skill.provider)
 
 export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initialSessionId, onSummary, onCatalogChange, onScopeApiChange, expertUsage, directoryPicker, directoryT }: SkillsSettingsSectionProps) {
+  const locale = t('dateLocale').startsWith('zh') ? 'zh' : 'en'
   const id = useId()
   const [preset, setPreset] = useState<string>()
   const [presets, setPresets] = useState<readonly { id: string, name: string }[]>([])
@@ -76,6 +83,7 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
   const [busy, setBusy] = useState<string>()
   const [view, setView] = useState<'library' | 'recycle'>('library')
   const [search, setSearch] = useState('')
+  const [category, setCategory] = useState<SkillCategory>('all')
   const [detail, setDetail] = useState<DesktopSkillDetail>()
   const [draft, setDraft] = useState<SkillDraft>()
   const [conflictDetail, setConflictDetail] = useState<DesktopSkillDetail>()
@@ -99,7 +107,7 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
   const modalOpen = detail !== undefined || draft !== undefined || importOpen || purgeTarget !== undefined
   const anyModalOpen = modalOpen || directoryPickerOpen
   const disabled = loading || busy !== undefined
-  useEffect(() => { onSummary?.({ total: skills.length, available: skills.filter(skill => skill.modelInvocable).length }) }, [onSummary, skills])
+  useEffect(() => { onSummary?.({ total: skills.length, available: skills.filter(skill => skill.modelInvocable || skill.userInvocable).length }) }, [onSummary, skills])
 
   const applyView = (next: Awaited<ReturnType<DesktopSkillsApi['readView']>>): void => {
     setRefreshPending(next.refreshPending === true)
@@ -224,19 +232,19 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
       const input: DesktopSkillInput = { name: draft.name.trim(), description: draft.description.trim(),
         ...(whenToUse === undefined || whenToUse === '' ? {} : { whenToUse }), instructions: draft.instructions.trim() }
       applyView(draft.mode === 'create' ? await api.create(input) : await api.update(draft.name, input, draft.revision))
-      if (draft.mode === 'create') { setView('library'); setSearch(''); setSourceFilter('') }
+      if (draft.mode === 'create') { setView('library'); setSearch(''); setSourceFilter(''); setCategory('all') }
       setDraft(undefined); setDiscard(false)
     })
   }
   const query = search.trim().toLocaleLowerCase()
-  const filtered = useMemo(() => skills.filter(skill => (sourceFilter === '' || skill.source === sourceFilter) && `${skill.name}\n${skill.description}\n${skill.whenToUse ?? ''}\n${sourceLabel(skill.source)}`.toLocaleLowerCase().includes(query)).sort((a, b) => a.name.localeCompare(b.name)), [query, sourceFilter, skills, t])
+  const filtered = useMemo(() => skills.filter(skill => (category === 'all' || skillCategory(skill.name) === category) && (sourceFilter === '' || skill.source === sourceFilter) && `${presentSkill(skill, locale).name}\n${presentSkill(skill, locale).description}\n${skill.name}\n${skill.description}\n${skill.whenToUse ?? ''}\n${sourceLabel(skill.source)}`.toLocaleLowerCase().includes(query)).sort((a, b) => skillDisplayOrder(a.name) - skillDisplayOrder(b.name) || presentSkill(a, locale).name.localeCompare(presentSkill(b, locale).name, locale)), [query, sourceFilter, category, skills, t, locale])
   const sourceOrder = ['project-clawclaw', 'project-agents', 'project-dsh', 'custom', 'external-clawclaw', 'user-dsh', 'user-agents', 'bundled', 'global']
   const sources = [...new Set(skills.map(skill => skill.source))].sort((left, right) => {
     const priority = (source: string): number => { const index = sourceOrder.indexOf(source); return index < 0 ? sourceOrder.length : index }
     return priority(left) - priority(right) || sourceLabel(left).localeCompare(sourceLabel(right))
   })
-  const groupedSkills = sources
-    .map(source => ({ source, skills: filtered.filter(skill => skill.source === source) }))
+  const groupedSkills = SKILL_CATEGORIES.filter(value => value !== 'all')
+    .map(category => ({ category, skills: filtered.filter(skill => skillCategory(skill.name) === category) }))
     .filter(group => group.skills.length > 0)
   const toggleGroup = (source: string, expanded: boolean): void => {
     setGroupExpansion(current => {
@@ -256,7 +264,9 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
   const filteredRecycled = recycled.filter(skill => skill.name.toLocaleLowerCase().includes(query))
   const draftValid = draft !== undefined && SKILL_NAME.test(draft.name.trim()) && draft.description.trim() !== '' && draft.instructions.trim() !== ''
   const errorMessage = error === undefined ? null : <div className="dshIntegrationsError" role="alert">{error}</div>
-  const title = purgeTarget !== undefined ? t('permanentlyDelete') : draft !== undefined ? t(draft.mode === 'create' ? 'newSkill' : 'editSkill') : importOpen ? t('importSkill') : detail?.name ?? ''
+  const internalEntry = detail === undefined ? undefined : internalSkillEntry(detail)
+  const entrySkill = skills.find(skill => skill.name === internalEntry && (skill.modelInvocable || skill.userInvocable))
+  const title = purgeTarget !== undefined ? t('permanentlyDelete') : draft !== undefined ? t(draft.mode === 'create' ? 'newSkill' : 'editSkill') : importOpen ? t('importSkill') : detail === undefined ? '' : presentSkill(detail, locale).name
   const recycleReason = (skill: DesktopSkillView): string => t(skill.source.startsWith('project-') ? 'recycleProjectRestricted' : skill.source === 'user-agents' ? 'recycleSharedRestricted' : 'recycleManagedRestricted')
   const openSkill = (skill: DesktopSkillView, trigger: HTMLElement, confirmRecycle = false): void => {
     returnFocus.current = trigger
@@ -336,6 +346,9 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
           {embedded && catalogActions}
           {view === 'recycle' && api.purge && <button type="button" className="dshIntegrationsDanger" disabled={disabled || recycled.length === 0} onClick={event => { returnFocus.current = event.currentTarget; setError(undefined); setPurgeTarget([...recycled]) }}><Trash2 />{t('emptyRecycleBin')}</button>}
         </div>
+        {view === 'library' && <div className="dshSkillsCategories" role="group" aria-label={t('filterCategory')}>
+          {SKILL_CATEGORIES.filter(value => value === 'all' || value === category || skills.some(skill => skillCategory(skill.name) === value)).map(value => <button key={value} type="button" aria-label={t(skillCategoryKey(value))} aria-pressed={category === value} onClick={() => { setCategory(value) }}>{t(skillCategoryKey(value))}<small aria-hidden="true">{value === 'all' ? skills.length : skills.filter(skill => skillCategory(skill.name) === value).length}</small></button>)}
+        </div>}
         {loading ? <p className="dshIntegrationsEmpty" role="status">{t('loading')}</p> : view === 'library' ? <>
           {installed !== undefined && installed.some(item => item.status !== 'effective') && <details className="dshSkillsDiagnostics">
             <summary>{t('installationIssues')} · {installed.filter(item => item.status !== 'effective').length}</summary>
@@ -356,22 +369,24 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
             </div>)}</dl>
           </details>}
           <div className="dshSkillsGroups">{groupedSkills.map(group => {
-            const expanded = query !== '' || sourceFilter !== '' || (groupExpansion.get(group.source) ?? group.skills.length < 20)
+            const expanded = query !== '' || sourceFilter !== '' || category !== 'all' || (groupExpansion.get(group.category) ?? true)
             const collapsed = !expanded
-            const groupId = `${id}-skills-${group.source.replace(/[^a-z0-9-]/giu, '-')}`
-            return <section className="dshSkillsGroup" key={group.source} aria-label={sourceLabel(group.source)} data-collapsed={collapsed}><h3><button type="button" aria-expanded={expanded} aria-controls={groupId} onClick={() => toggleGroup(group.source, expanded)}><IconChevronDownOutlineMedium /><span>{sourceLabel(group.source)}</span><small>{group.skills.length}</small></button></h3>
-            {!collapsed && <ul className="dshSkillsGrid" id={groupId}>{group.skills.map(skill => <li key={skill.name} data-recyclable={canRecycle(skill)}>
-              <button type="button" className="dshSkillsCard" title={skill.name} disabled={disabled} aria-label={`${t('viewDetails')}: ${skill.name}`} onClick={event => { openSkill(skill, event.currentTarget) }}>
-                <span className="dshSkillsCardHeading"><IconSkillOutlineMedium /><strong>{skill.name}</strong>{!skill.editable && <span className="dshSkillsReadOnly">{t('readOnly')}</span>}</span>
-                <span className="dshSkillsSummary">{skill.description}</span>
-                <span className="dshSkillsBadges"><span data-enabled={skill.modelInvocable}>{t(skill.modelInvocable ? 'modelVisible' : 'modelHidden')}</span><span data-enabled={skill.userInvocable}>{t(skill.userInvocable ? 'userVisible' : 'userHidden')}</span>{(expertUsage?.get(skill.name) ?? 0) > 0 && <span>{t('usedByExperts').replace('{count}', String(expertUsage?.get(skill.name) ?? 0))}</span>}</span>
+            const groupId = `${id}-skills-${group.category}`
+            return <section className="dshSkillsGroup" key={group.category} aria-label={t(skillCategoryKey(group.category))} data-collapsed={collapsed}><h3><button type="button" aria-expanded={expanded} aria-controls={groupId} onClick={() => toggleGroup(group.category, expanded)}><IconChevronDownOutlineMedium /><span>{t(skillCategoryKey(group.category))}</span><small>{group.skills.length}</small></button></h3>
+            {!collapsed && <ul className="dshSkillsGrid" id={groupId}>{group.skills.map(skill => { const display = presentSkill(skill, locale); const internal = internalSkillEntry(skill); return <li key={skill.name} data-recyclable={canRecycle(skill)}>
+              <button type="button" className="dshSkillsCard" title={`${display.name} · ${skill.name}`} disabled={disabled} aria-label={`${t('viewDetails')}: ${display.name}`} onClick={event => { openSkill(skill, event.currentTarget) }}>
+                <SkillCategoryIcon category={skillCategory(skill.name)} />
+                <span className="dshSkillsCardHeading"><strong>{display.name}</strong>{display.name !== skill.name && <small>{skill.name}</small>}</span>
+                <span className="dshSkillsSummary" title={display.description}>{display.description}</span>
+                <span className="dshSkillsCardOpen" aria-hidden="true"><ArrowUpRight /></span>
+                <span className="dshSkillsBadges"><span className="dshSkillsCategoryBadge">{t(skillCategoryKey(skillCategory(skill.name)))}</span><span className="dshSkillsSource">{sourceLabel(skill.source)}</span>{internal !== undefined ? <span>{t('internalReference')}</span> : <><span data-enabled={skill.modelInvocable}>{t(skill.modelInvocable ? 'modelVisible' : 'modelHidden')}</span><span data-enabled={skill.userInvocable}>{t(skill.userInvocable ? 'userVisible' : 'userHidden')}</span></>}{!skill.editable && <span className="dshSkillsReadOnly">{t('readOnly')}</span>}{(expertUsage?.get(skill.name) ?? 0) > 0 && <span>{t('usedByExperts').replace('{count}', String(expertUsage?.get(skill.name) ?? 0))}</span>}</span>
               </button>
               {canRecycle(skill) && <span className="dshSkillsCardDelete"><Tooltip side="top" delayMs={350} maxWidth={240} label={t('recycle')}><span>
                 <button type="button" className="dshIntegrationsIconButton" data-danger aria-label={`${t('recycle')}: ${skill.name}`} disabled={disabled} onClick={event => { openSkill(skill, event.currentTarget, true) }}><Trash2 aria-hidden="true" /></button>
               </span></Tooltip></span>}
-            </li>)}</ul>}</section>
+            </li>})}</ul>}</section>
           })}</div>
-          {filtered.length === 0 && <p className="dshIntegrationsEmpty">{t(skills.length === 0 ? 'noSkills' : 'noMatches')}{(query !== '' || sourceFilter !== '') && <button type="button" className="dshIntegrationsCommand" onClick={() => { setSearch(''); setSourceFilter('') }}>{t('clearFilters')}</button>}</p>}
+          {filtered.length === 0 && <p className="dshIntegrationsEmpty">{t(skills.length === 0 ? 'noSkills' : 'noMatches')}{(query !== '' || sourceFilter !== '' || category !== 'all') && <button type="button" className="dshIntegrationsCommand" onClick={() => { setSearch(''); setSourceFilter(''); setCategory('all') }}>{t('clearFilters')}</button>}</p>}
         </> : <ul className="dshSkillsRecycleList">{filteredRecycled.map(skill => <li key={skill.id}>
           <Trash2 aria-hidden="true" /><div><strong>{skill.name}</strong><span>{t('deletedAt')}: <time dateTime={skill.deletedAt}>{Number.isNaN(Date.parse(skill.deletedAt)) ? '-' : new Date(skill.deletedAt).toLocaleString(t('dateLocale'))}</time></span></div>
           <button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={() => { void run(`restore:${skill.id}`, async () => { applyView(await api.restore(skill.id)) }) }}>{t('restore')}</button>
@@ -491,10 +506,19 @@ export function SkillsSettingsSection({ t, api: baseApi, embedded = false, initi
             {detail.whenToUse !== undefined && <div><dt>{t('whenToUse')}</dt><dd>{detail.whenToUse}</dd></div>}
           </dl>
           {detail.source === 'user-agents' && detail.editable && <p className="dshSkillsNote">{t('sharedSkillEditImpact')}</p>}
+          {internalEntry !== undefined ? <div className="dshSkillsNote">
+            <p>{t('internalReferenceHint')}</p>
+            <p>{t('entrySkill')}: {skills.find(skill => skill.name === internalEntry) === undefined ? internalEntry : presentSkill(skills.find(skill => skill.name === internalEntry)!, locale).name}</p>
+            {entrySkill === undefined ? <p>{t('entryUnavailable')}</p> : <button type="button" className="dshIntegrationsCommand" disabled={disabled} onClick={() => {
+              void run(`detail:${entrySkill.name}`, async () => { setDetail(await api.detail(entrySkill.name)); setDetailTab('overview') })
+            }}>{t('viewEntrySkill')}</button>}
+          </div> : <>
+          {!detail.modelInvocable && !detail.userInvocable && <p className="dshSkillsNote">{t(detail.editable ? 'invocationOffHint' : 'managedInvocationOffHint')}</p>}
           <div className="dshSkillsInvocation">
             <div><span>{t('modelInvocation')}</span><SettingsToggle label={t('modelInvocation')} checked={detail.modelInvocable} disabled={disabled || !detail.editable} onChange={enabled => { void run('model-toggle', async () => { setSkills(await api.setModelInvocable(detail.name, enabled)); setDetail({ ...detail, modelInvocable: enabled }) }) }} /></div>
             <div><span>{t('userInvocation')}</span><SettingsToggle label={t('userInvocation')} checked={detail.userInvocable} disabled={disabled || !detail.editable} onChange={enabled => { void run('user-toggle', async () => { setSkills(await api.setUserInvocable(detail.name, enabled)); setDetail({ ...detail, userInvocable: enabled }) }) }} /></div>
           </div>
+          </>}
           <section className="dshSkillsInstructions"><h3>{t('skillContent')}</h3><pre>{detail.content}</pre></section>
           </> : <SkillFiles key={detail.name} name={detail.name} api={api} t={t} />}
           </div>

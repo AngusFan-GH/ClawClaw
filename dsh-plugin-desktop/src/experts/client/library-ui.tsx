@@ -43,6 +43,7 @@ export function LibraryCard(props: {
   metadata: React.ReactNode
   description: string
   content?: React.ReactNode
+  guidance?: React.ReactNode
   custom?: boolean
   enabled?: boolean
   disabled?: boolean
@@ -72,6 +73,7 @@ export function LibraryCard(props: {
           <div className="aag-card-division">{props.metadata}</div>
         </div>
         {props.content ?? <div className="aag-card-description" title={props.description}>{props.description}</div>}
+        {props.guidance && <div className="aag-card-guidance">{props.guidance}</div>}
         {props.enabled !== undefined && props.toggle !== undefined && <div className="aag-switch">
           <Switch
             checked={props.enabled}

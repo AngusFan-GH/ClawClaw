@@ -12,6 +12,7 @@ import {
   DSH_LAUNCH_ENVIRONMENT_KEY,
 } from '@deepseek-ai/dsh-launch-environment'
 import { DESKTOP_SETTINGS_NAMESPACE } from '../lib/index.js'
+import { loadCatalog, DEFAULT_DIVISIONS } from '../lib/experts/index.js'
 import { installDesktopPnpmRuntime } from '../lib/desktop-runtime-environment.js'
 import { installProfilePackageResolver } from '../lib/module-resolution.js'
 import { desktopHarnessProfileContext, prepareDesktopProfile } from '../lib/profile.js'
@@ -258,7 +259,11 @@ try {
   if (missingMigratedExperts.length > 0) {
     throw new Error(`assembled desktop profile is missing migrated ClawClaw experts: ${missingMigratedExperts.join(', ')}`)
   }
-  const expectedExpertCount = 321 + migratedExpertSlugs.length
+  const bundledExperts = await loadCatalog(fileURLToPath(new URL('../assets/experts/catalog/', import.meta.url)), DEFAULT_DIVISIONS)
+  const expectedSlugs = new Set([...bundledExperts.keys(), ...migratedExpertSlugs])
+  const missingBundledExperts = [...expectedSlugs].filter(slug => !agencyCatalog.experts.some(expert => expert.slug === slug))
+  if (missingBundledExperts.length > 0) throw new Error(`assembled desktop profile is missing experts: ${missingBundledExperts.join(', ')}`)
+  const expectedExpertCount = expectedSlugs.size
   if (agencyCatalog.experts.length !== expectedExpertCount) {
     throw new Error(`assembled desktop profile exposes ${agencyCatalog.experts.length} ClawClaw experts instead of ${expectedExpertCount}`)
   }

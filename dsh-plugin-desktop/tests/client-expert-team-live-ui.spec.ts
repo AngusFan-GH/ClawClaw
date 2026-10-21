@@ -9,6 +9,7 @@ import { TeamLocaleContext } from '../src/experts/client/team-locale.ts'
 import { isDeletableTeam, TeamsPanel, type TeamRemote } from '../src/experts/client/team-ui.tsx'
 import { TeamEditor } from '../src/experts/client/team-editor.tsx'
 import { customZh } from '../src/experts/client/custom-locales.ts'
+import { BUILTIN_TEAMS } from '../src/experts/team-contract.ts'
 
 const expert = {
   slug: 'reviewer', name: '评审专家', nameEn: 'Reviewer',
@@ -36,6 +37,24 @@ afterEach(async () => {
 })
 
 describe('expert team live UI state', () => {
+  it('blocks a team with missing member Skills and updates when the shared registry becomes ready', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    const members = [expert, { ...expert, slug: 'writer', name: '写作专家' }].map(item => ({ ...item, skills: [{ name: 'review', required: true, enabled: true }] }))
+    const team = { ...structuredClone(BUILTIN_TEAMS[0]!), members: members.map(item => ({ expertSlug: item.slug, duty: 'Review', instructions: 'Inspect evidence.' })) }
+    const snapshot = { teams: [team], enabledExperts: [], revision: 1 }
+    const remote = { getTeams: vi.fn(async () => ({ ok: true, value: snapshot })), getCatalog: vi.fn(async () => ({ ok: true, value: { experts: members, enabled: [], revision: 1 } })), getEnabled: vi.fn(async () => ({ ok: true, value: { enabled: [], revision: 1 } })) } as unknown as TeamRemote
+    acceptCatalog(remote, { experts: members, enabled: [], revision: 1 })
+    acceptTeamSnapshot(remote, snapshot)
+    const listeners = new Set<() => void>()
+    let capabilities = { ...pluginCapabilitySnapshot, catalog: { skills: [] as Array<{ value: string; label: string; available: boolean; state: 'ready' }>, mcpServers: [] } }
+    const registry = { subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }, getSnapshot: () => capabilities }
+    const host = document.createElement('div'); document.body.append(host); root = createRoot(host)
+    await act(async () => root!.render(React.createElement(TeamLocaleContext.Provider, { value: 'zh' }, React.createElement(TeamsPanel, { remote, sharedHeader: true, capabilityRegistry: registry as never }))))
+    expect(host.querySelector<HTMLButtonElement>('.aag-team-summon')?.disabled).toBe(true)
+    await act(async () => { capabilities = { ...capabilities, catalog: { skills: [{ value: 'review', label: 'review', available: true, state: 'ready' }], mcpServers: [] } }; listeners.forEach(listener => listener()) })
+    expect(host.querySelector<HTMLButtonElement>('.aag-team-summon')?.disabled).toBe(false)
+  })
   it('allows deleting conversation-created teams without making bundled teams writable', () => {
     expect(isDeletableTeam({ builtin: true })).toBe(false)
     expect(isDeletableTeam({ builtin: false })).toBe(true)
@@ -171,6 +190,7 @@ describe('expert team live UI state', () => {
     })
 
     expect(host.textContent).not.toContain('召唤专家团')
+    expect(host.querySelector('.aag-card-guidance')?.textContent).toContain('输出评审结论')
     const details = host.querySelector<HTMLButtonElement>('.aag-card-open[aria-label^="查看详情:"]')
     expect(details).not.toBeNull()
     expect(host.querySelector('.aag-card-more-trigger')).toBeNull()

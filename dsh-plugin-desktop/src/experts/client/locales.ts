@@ -9,8 +9,9 @@ import { customEn, customZh } from './custom-locales.js'
 
 /** 简体中文词条（key 集真相源）。 */
 export const zh = {
+  'settings.canHelpWith': '可用技能', 'settings.taskExample': '试试这样提问',
   ...customZh,
-  'discovery.search': '搜索名称、领域或关键词',
+  'discovery.search': '搜索任务、名称或可用技能',
   'discovery.refine': '仅显示最相关的 8 位专家，请补充关键词缩小范围。',
   'discovery.working': '正在处理…',
   'discovery.exampleFailed': '专家已选择，但示例未能填入，请直接输入任务。',
@@ -94,8 +95,9 @@ export type AgencyKey = keyof typeof zh
 
 /** 英文词条，key 完整性由 satisfies 在编译期保证。 */
 export const en = {
+  'settings.canHelpWith': 'Skills available', 'settings.taskExample': 'Example request',
   ...customEn,
-  'discovery.search': 'Search names, fields or keywords',
+  'discovery.search': 'Search tasks, names or Skills',
   'discovery.refine': 'Showing the 8 most relevant experts. Add keywords to narrow the results.',
   'discovery.working': 'Working…',
   'discovery.exampleFailed': 'The expert is selected, but the example could not be inserted. Please enter your task.',

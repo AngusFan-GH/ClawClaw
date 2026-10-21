@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { CUSTOM_EDITOR_CSS } from '../src/experts/client/custom-editor.ts'
 import { customEn, customZh } from '../src/experts/client/custom-locales.ts'
-import { CAPABILITY_PICKER_CSS, CARD_SETTINGS_CSS, canToggleExpert, connectorStateLabel, expertSource, isDeletableExpert } from '../src/experts/client/index.ts'
+import { CAPABILITY_PICKER_CSS, CARD_SETTINGS_CSS, canToggleExpert, connectorStateLabel, expertSource, isDeletableExpert, matchExpertQuery } from '../src/experts/client/index.ts'
 import { TEAM_CSS } from '../src/experts/client/team-style.ts'
 
 describe('expert library UI', () => {
+  it('finds specialists by the task their bound Skills support', () => {
+    const expert = { slug: 'office-assistant', name: '助理', nameEn: 'Assistant', division: 'support', divisionZh: '支持', divisionEn: 'Support', description: '', descriptionEn: '', skills: [{ name: 'office-ppt-workflow' }] }
+    expect(matchExpertQuery(expert, '讲稿')).toBe(true)
+    expect(matchExpertQuery(expert, '疫苗')).toBe(false)
+    expect(matchExpertQuery({ ...expert, skills: [{ name: 'tencent-pptx' }] }, 'PowerPoint')).toBe(true)
+  })
   it('keeps the library navigation fixed while each tab owns its scroll position', () => {
     expect(TEAM_CSS).toContain('.aag-section.aag-library-shell{max-width:1120px;height:100%;max-height:100%;gap:0')
     expect(TEAM_CSS).toContain('.aag-library-sticky{z-index:20;display:flex;flex:none')
@@ -32,7 +38,7 @@ describe('expert library UI', () => {
   })
 
   it('keeps built-in and custom expert cards the same size', () => {
-    expect(CARD_SETTINGS_CSS).toContain('.aag-expert-window .aag-expert-card{height:164px')
+    expect(CARD_SETTINGS_CSS).toContain('.aag-expert-window .aag-expert-card{height:196px')
     expect(CARD_SETTINGS_CSS).toContain('.aag-card-category{min-width:0;overflow:hidden;text-overflow:ellipsis}')
     expect(CARD_SETTINGS_CSS).toContain('.aag-card-division .aag-custom-badge{box-sizing:border-box;height:18px;flex:none;margin-left:0')
     expect(CARD_SETTINGS_CSS).toContain('.aag-expert-card-custom .aag-card-division{max-height:38px;flex-wrap:wrap')

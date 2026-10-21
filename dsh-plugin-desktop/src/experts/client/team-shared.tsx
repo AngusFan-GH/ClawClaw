@@ -8,6 +8,7 @@ import { IconX, IconUsers, IconUser, IconFileText, IconChevronDown, IconPlus, Ic
 export { IconUsers, IconUser, IconFileText, IconChevronDown, IconPlus, IconArrowRight, IconBulb, IconCopy, IconSend, IconSearch, IconEye, IconCheck, IconTrash, IconRefresh, IconGripVertical, };
 import type { ExpertSummary } from '../expert-contract.js';
 import type { ExpertTeam, TeamInput } from '../team-contract.js';
+import type { ExpertCapabilityHealth } from './capability-options.js';
 import { EXPERT_AVATAR_URLS } from './avatars.js';
 import { expertAvatarIndexForDivision } from './index.js';
 export function Avatar({ expert, size = 40, }: {
@@ -86,19 +87,21 @@ export function MemberList({ team, experts, }: {
             </List.Item>);
         }}/>);
 }
-export const teamIssue = (team: ExpertTeam, experts: readonly ExpertSummary[], enabled: readonly string[]): string | undefined => {
-    const repair = teamRepairIssue(team, experts);
+export const teamIssue = (team: ExpertTeam, experts: readonly ExpertSummary[], enabled: readonly string[], health?: ExpertCapabilityHealth): string | undefined => {
+    const repair = teamRepairIssue(team, experts, health);
     if (repair)
         return repair;
     if (team.members.some((m) => !enabled.includes(m.expertSlug)))
         return "有成员未启用";
     return undefined;
 };
-export const teamRepairIssue = (team: ExpertTeam, experts: readonly ExpertSummary[]): string | undefined => {
+export const teamRepairIssue = (team: ExpertTeam, experts: readonly ExpertSummary[], health?: ExpertCapabilityHealth): string | undefined => {
+    if (health?.state === 'unknown') return '能力检查中';
+    if (health?.state === 'blocked') return '必需能力未就绪';
     if (team.members.some((m) => !experts.some((e) => e.slug === m.expertSlug && !e.conflict)))
         return "成员失效，需替换";
     if ((team.connectors ?? []).some((binding) => binding.enabled && binding.required &&
-        (team.connectorStates ?? []).find((connector) => connector.dependency === binding.name)?.state !== 'running'))
+        (() => { const connector = (team.connectorStates ?? []).find(item => item.dependency === binding.name); return !connector || !connector.enabled || !connector.credentialsReady || connector.state !== 'running' || connector.toolCount === 0; })()))
         return "必需连接器未就绪";
     return undefined;
 };

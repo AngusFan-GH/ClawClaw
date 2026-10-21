@@ -75,6 +75,7 @@ export const teamConnectorSchema = z.object({
   enabled: z.boolean(),
   state: z.enum(['missing', 'disabled', 'starting', 'running', 'error']),
   credentialsReady: z.boolean(),
+  toolCount: z.number().int().min(0).optional(),
   diagnosticCode: z.string(),
   error: z.string().optional(),
 })

@@ -22,6 +22,11 @@ async function click(name: string) { await act(async () => { button(name).click(
 afterEach(async () => { await act(async () => { root?.unmount() }); root = undefined; document.body.replaceChildren(); vi.unstubAllGlobals() })
 
 describe('conversation Skill picker', () => {
+  it('displays a friendly office label while selecting the stable identifier', async () => {
+    const api = { list: vi.fn(async () => ({ skills: [{ name: 'office-ppt-workflow', description: 'Create slides', modelInvocable: true }], commands: [] })), select: vi.fn(async () => {}) }
+    await mount(api); await click('选择技能'); await click('PPT工作汇报与讲稿')
+    expect(api.select).toHaveBeenCalledWith('office-ppt-workflow', expect.any(AbortSignal))
+  })
   it('navigates with arrow keys, skips conflicts and supports Enter from search', async () => {
     const api = { list: vi.fn(async () => ({ skills: [
       { name: 'blocked', description: 'Blocked', modelInvocable: true },

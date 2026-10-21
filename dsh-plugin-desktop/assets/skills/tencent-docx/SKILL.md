@@ -4,9 +4,13 @@ description: "专业 Word 文档（.docx）创作与美化助手。用于生成�
 description_en: "Create and polish professional Word (.docx) documents, including research reports, academic papers, official documents, and contracts. Use to generate a new Word document or improve the layout and visual quality of an existing .docx file."
 version: "0.4.2"
 ---
+## ClawClaw 路径与工具约定
+
+本技能的 base directory 即下文的 `<plugin_root>`；`agents/` 与 `scripts/` 位于本目录，其他技能位于平级目录 `../<技能名>/SKILL.md`。编排及转换技能是内部参考，通过文件读取工具加载，不使用 `skill` 工具调用这些双关闭的技能。入口可调用仅代表指令可加载，不代表文档工具或预览服务已经就绪；先发现当前工具，缺失依赖时说明原因，不虚构调用结果。
+
 # 腾讯文档 Doc 智能体 —— 专业 Word / Docx / DOCX 文档创作与美化
 
-> 端到端 **Word / Docx / DOCX 文档（.docx）** 智能体：从**专业创作 → 专业美化 → 输出交付**全流程自动编排。 覆盖：**生成专业 Word 文档、专业美化 Word / Docx / DOCX 文档、导出 .docx** 全部场景。 必须依赖 [tdoc-orchestrator SKILL](./skills/tdoc-orchestrator/SKILL.md)
+> 端到端 **Word / Docx / DOCX 文档（.docx）** 智能体：从**专业创作 → 专业美化 → 输出交付**全流程自动编排。 覆盖：**生成专业 Word 文档、专业美化 Word / Docx / DOCX 文档、导出 .docx** 全部场景。 必须依赖 [tdoc-orchestrator SKILL](../tdoc-orchestrator/SKILL.md)
 
 ---
 
@@ -14,7 +18,7 @@ version: "0.4.2"
 
 **空白文档例外**：若用户仅要求新建空白本地 Word/DOCX（无内容创作或排版需求），不进入本插件编排，转交 `tencent-local-office-edit` 使用 `create_doc` 创建空白模板。
 
-**本 Skill 被加载后，你的下一步动作必须是：Read `./skills/tdoc-orchestrator/SKILL.md` 并严格按其 Stage 0 流程执行。**
+**本 Skill 被加载后，你的下一步动作必须是：Read `../tdoc-orchestrator/SKILL.md` 并严格按其 Stage 0 流程执行。**
 
 ### 禁止行为（违反即视为 Bug）
 
@@ -25,7 +29,7 @@ version: "0.4.2"
 ### 正确的执行顺序（唯一合法路径）
 
 ```
-1. Read ./skills/tdoc-orchestrator/SKILL.md        ← 你现在必须做这一步
+1. Read ../tdoc-orchestrator/SKILL.md        ← 你现在必须做这一步
 2. 按 orchestrator Stage 0 判断入口类型
 3. 按 Stage 链路由到对应 Agent/Skill
 4. 由下游 Skill（doc-typeset / html-to-docx 等）决定具体工具调用
@@ -38,5 +42,5 @@ version: "0.4.2"
 3. **专业输出交付**：导出本地专业级 .docx / Word 文档，可直接分发或投稿。
 ---
 
-**现在立即执行：Read `./skills/tdoc-orchestrator/SKILL.md`**
+**现在立即执行：Read `../tdoc-orchestrator/SKILL.md`**
 

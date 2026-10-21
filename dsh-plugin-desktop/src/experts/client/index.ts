@@ -15,6 +15,8 @@ import React from 'react'
 import { CategorySelect } from './category-select.js'
 import { ExpertDiscovery, DISCOVERY_CSS } from './expert-discovery.js'
 import { expertTaskExample } from './task-examples.js'
+import { skillDisplayName, skillSearchText } from '../../client/skill-labels.js'
+import { teamCapabilityBindings } from '../capability-composition.js'
 import type { Context as CordisClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-client-connection/client'
 import type { InputTriggerSource, ReferenceInsert, TokenSpan } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
@@ -156,7 +158,7 @@ export function isDeletableExpert(expert: Pick<ExpertView, 'custom' | 'conversat
 
 /** An enabled expert can always be disabled; enabling requires all mandatory capabilities. */
 export function canToggleExpert(enabled: boolean, health: ExpertCapabilityHealth): boolean {
-  return enabled || health.state !== 'blocked'
+  return enabled || health.state === 'ready' || health.state === 'degraded'
 }
 
 interface ExpertGroup<T extends ExpertView> {
@@ -206,6 +208,7 @@ function groupByDivision<T extends ExpertView>(list: ReadonlyArray<T>, active: '
 
 /** 设置页检索用的专家字段，避免把完整视图类型泄漏到筛选逻辑。 */
 export interface ExpertSearchable {
+  readonly skills?: readonly { readonly name: string }[]
   readonly slug: string
   readonly name: string
   readonly nameEn: string
@@ -234,6 +237,7 @@ export function matchExpertQuery(expert: ExpertSearchable, query: string): boole
     expert.divisionEn,
     expert.description,
     expert.descriptionEn,
+    ...(expert.skills ?? []).map(binding => skillSearchText(binding.name)),
   ].map(normalizeExpertQuery)
   return q.split(' ').every((term) => fields.some((field) => /^[a-z0-9]+$/u.test(term)
     ? (field.match(/[a-z0-9]+/gu) ?? []).some(word => term.length <= 2 ? word === term : word.startsWith(term))
@@ -479,7 +483,7 @@ export const CARD_SETTINGS_CSS = `
 .aag-search-wrap>.aag-search input::placeholder{color:var(--dsw-alias-label-dimmed)}
 .aag-expert-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:12px;margin-top:2px}
 .aag-expert-window{position:relative;margin-top:2px;overflow-anchor:none}.aag-expert-window>.aag-expert-grid{position:absolute;right:0;left:0;margin-top:0}
-.aag-expert-card{display:grid;box-sizing:border-box;min-width:0;min-height:164px;overflow:hidden;grid-template-rows:minmax(119px,1fr) 44px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);transition:border-color .15s ease,background .15s ease,box-shadow .15s ease}.aag-expert-window .aag-expert-card{height:164px;min-height:0;grid-template-rows:minmax(0,1fr) 44px}
+.aag-expert-card{display:grid;box-sizing:border-box;min-width:0;min-height:196px;overflow:hidden;grid-template-rows:minmax(151px,1fr) 44px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);transition:border-color .15s ease,background .15s ease,box-shadow .15s ease}.aag-expert-window .aag-expert-card{height:196px;min-height:0;grid-template-rows:minmax(0,1fr) 44px}
 .aag-expert-card:hover{border-color:var(--dsw-alias-border-l3);box-shadow:0 6px 18px color-mix(in srgb,var(--dsw-alias-label-primary) 6%,transparent)}
 .aag-card-body{position:relative;display:grid;min-width:0;grid-template-columns:42px minmax(0,1fr);column-gap:10px;row-gap:8px;padding:12px}.aag-card-open{position:absolute;z-index:1;inset:0;border:0;background:transparent;cursor:pointer}.aag-card-open:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-3px;border-radius:7px}.aag-card-body>*:not(.aag-card-open):not(.aag-switch){position:relative;pointer-events:none}.aag-card-body>.aag-switch{z-index:2;pointer-events:auto}
 .aag-expert-avatar{display:block;width:42px;height:42px;border:0;border-radius:10px;background:var(--dsw-alias-bg-layer-3);object-fit:cover;object-position:center 20%}
@@ -489,6 +493,7 @@ export const CARD_SETTINGS_CSS = `
 .aag-source-badge{box-sizing:border-box;height:18px;flex:none;padding:0 5px;border:1px solid var(--dsw-alias-border-l2);border-radius:4px;color:var(--dsw-alias-label-secondary);font-size:10px;line-height:16px}
 .aag-card-description{grid-column:1/-1;display:-webkit-box;min-height:38px;margin:0;overflow:hidden;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:19px;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 .aag-expert-card-custom .aag-card-identity{overflow:visible}.aag-expert-card-custom .aag-card-division{max-height:38px;flex-wrap:wrap;align-content:flex-start;column-gap:4px;row-gap:2px;overflow:hidden;white-space:normal}.aag-expert-card-custom .aag-card-category{flex:none;overflow:visible;text-overflow:clip;white-space:nowrap}.aag-expert-card-custom .aag-card-description{min-height:19px;-webkit-line-clamp:1}
+.aag-card-guidance{grid-column:1/-1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:18px}.aag-card-guidance>span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .aag-card-actions{display:flex;align-items:stretch;min-height:44px;border-top:1px solid var(--dsw-alias-border-l2)}
 .aag-card-action{display:inline-flex;align-items:center;justify-content:center;gap:4px;flex:1 1 0;min-width:0;min-height:44px;padding:4px 6px;border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;line-height:16px;text-align:center;white-space:normal;cursor:pointer}
 .aag-card-action+.aag-card-action{border-left:1px solid var(--dsw-alias-border-l2)}
@@ -920,7 +925,7 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
   const matches = sortExpertsByEnabled(filterExperts(catalog.experts.filter(expert => expert.packageType !== 'team' && catalog.enabled.has(expert.slug)), { query }), catalog.enabled)
   const searching = normalizeExpertQuery(query) !== ''
   if (searching) matches.sort((a, b) => {
-    const nameMatch = (expert: ExpertView): number => matchExpertQuery({ ...expert, slug: '', division: '', divisionZh: '', divisionEn: '', description: '', descriptionEn: '' }, query) ? 1 : 0
+    const nameMatch = (expert: ExpertView): number => matchExpertQuery({ ...expert, slug: '', division: '', divisionZh: '', divisionEn: '', description: '', descriptionEn: '', skills: [] }, query) ? 1 : 0
     return nameMatch(b) - nameMatch(a)
   })
   const results = searching ? matches.slice(0, 8) : groupByDivision(matches, props.getActive()).flatMap(group => group.experts)
@@ -932,7 +937,7 @@ export function AgentsButton(props: ButtonProps): React.ReactElement {
     React.createElement('input', { type: 'search', autoFocus: true, value: capabilityQuery, 'aria-label': placeholder, placeholder,
       onChange: (event: React.ChangeEvent<HTMLInputElement>) => setCapabilityQuery(event.target.value) }))
   const capabilityContent = mode === 'teams' && 'getTeams' in props.remote
-    ? React.createElement(TeamLocaleContext.Provider, { value: props.getActive() }, React.createElement(TeamMenu, { remote: props.remote as TeamRemote,
+    ? React.createElement(TeamLocaleContext.Provider, { value: props.getActive() }, React.createElement(TeamMenu, { remote: props.remote as TeamRemote, capabilityRegistry: props.capabilityRegistry,
       prepareSelect: props.prepareTeamSelection, onSelected: () => close(), onExpertsChanged: () => { void readEnabled(props.remote).then(value => props.onEnabledChange?.(value.enabled)) } }))
     : mode === 'skills'
       ? React.createElement(React.Fragment, null,
@@ -1041,7 +1046,7 @@ function ExpertDetailsDrawer(props: {
       className: 'aag-capability-chip',
       'data-issue': issueKeys.has(`${kind}\0${binding.name}`) || undefined,
       title: binding.required ? props.t('capability.required') : props.t('capability.optional'),
-    }, React.createElement('strong', null, binding.name), binding.required ? props.t('capability.required') : props.t('capability.optional'))))
+    }, React.createElement('strong', { title: binding.name }, kind === 'skill' ? skillDisplayName(binding.name, props.locale) : binding.name), binding.required ? props.t('capability.required') : props.t('capability.optional'))))
   return React.createElement(Drawer, {
     open: true,
     placement: 'right',
@@ -1056,6 +1061,9 @@ function ExpertDetailsDrawer(props: {
       React.createElement('div', null,
         React.createElement('h3', null, displayName(expert, props.locale)),
         React.createElement('p', { className: 'aag-detail-description' }, displayDescription(expert, props.locale)))),
+    expertTaskExample(expert, props.locale) ? React.createElement('section', { className: 'aag-detail-section' },
+      React.createElement('h4', null, props.t('settings.taskExample')),
+      React.createElement('p', { className: 'aag-detail-description' }, expertTaskExample(expert, props.locale))) : null,
     React.createElement('dl', { className: 'aag-detail-facts' },
       React.createElement('div', null, React.createElement('dt', null, props.t('settings.filter.source')), React.createElement('dd', null, sourceLabel)),
       React.createElement('div', null, React.createElement('dt', null, props.t('settings.category')), React.createElement('dd', null, inputTriggerSourceName(expert.division, props.locale))),
@@ -1088,7 +1096,7 @@ function ExpertDetailsDrawer(props: {
 }
 
 const EXPERT_CARD_GAP = 12
-const EXPERT_CARD_ROW = 176
+const EXPERT_CARD_ROW = 208
 
 function scrollParent(node: HTMLElement): HTMLElement | Window {
   let current = node.parentElement
@@ -1438,6 +1446,9 @@ export function ExpertCardsSettings(props: PropsLocale<'agency'> & {
           metadata: React.createElement(React.Fragment, null, React.createElement('span', { className: 'aag-card-category' }, inputTriggerSourceName(expert.division, props.getActive())), expert.conflict ? React.createElement('span', { className: 'aag-custom-badge', title: props.t('custom.nameConflictHint') }, props.t('custom.nameConflict')) : null, React.createElement('span', { className: 'aag-source-badge', 'data-source': sourceKind }, props.t(sourceKind === 'custom' ? 'settings.source.custom' : 'settings.source.builtin')),
             health.total > 0 && health.state === 'blocked' ? React.createElement('span', { className: 'aag-custom-badge', 'data-health': health.state }, props.t('capability.health.blocked'), ` · ${health.ready}/${health.total}`) : null),
           description: displayDescription(expert, props.getActive()),
+          guidance: expert.skills.filter(binding => binding.enabled).length > 0 ? React.createElement('span', {
+            title: expert.skills.filter(binding => binding.enabled).map(binding => skillDisplayName(binding.name, props.getActive())).join(' · '),
+          }, `${props.t('settings.canHelpWith')} · ${expert.skills.filter(binding => binding.enabled).slice(0, 2).map(binding => skillDisplayName(binding.name, props.getActive())).join(' / ')}`) : undefined,
           enabled, disabled: isSaving || expert.conflict === true || blockedFromEnable,
           disabledReason: blockedFromEnable ? props.t('capability.missingHint') : undefined,
           enabledLabel: props.t('settings.enabled'), disabledLabel: props.t('settings.disabled'),
@@ -1570,7 +1581,7 @@ export function AgencySettingsPanel(props: React.ComponentProps<typeof ExpertCar
     React.createElement('div', { className: 'aag-library-content' },
       React.createElement('div', { className: 'aag-library-panel', id: 'aag-library-panel-experts', role: 'tabpanel', 'aria-labelledby': 'aag-library-tab-experts', hidden: view !== 'experts' }, React.createElement(ExpertCardsSettings, { ...props, capabilityRegistry: settingsCapabilityRegistry, sharedHeader: true, onOpenConnectors: () => setView('mcp') })),
       React.createElement('div', { className: 'aag-library-panel', id: 'aag-library-panel-teams', role: 'tabpanel', 'aria-labelledby': 'aag-library-tab-teams', hidden: view !== 'teams' }, React.createElement(TeamLocaleContext.Provider, { value: props.getActive() }, React.createElement(TeamsPanel, {
-        remote: props.remote as TeamRemote, sharedHeader: true,
+        remote: props.remote as TeamRemote, capabilityRegistry: settingsCapabilityRegistry, sharedHeader: true,
         onOpenConnectors: () => setView('mcp'),
         onCreateWithConversation: props.onCreateWithConversation,
         onSelectTeam: props.onSelectTeam,
@@ -1687,9 +1698,22 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   let teamCache: TeamReferenceTarget[] = []
   const insertTeamTask = async (current: ReferenceInsertionTarget | undefined, team: TeamReferenceTarget, example?: string, sessionId?: SessionId, span?: TokenSpan): Promise<boolean> => {
     if (!current) return false
-    teamCache = [...teamCache.filter(item => item.id !== team.id), team]
     const sessions = ctx.sessions as unknown as ReferenceSessionAccess
     const id = resolveTargetSessionId(sessions, sessionId)
+    try {
+      const registry = capabilityRegistryFor(id)
+      const [snapshot, catalog] = await Promise.all([refreshTeams(remote as TeamRemote), unwrap(remote.getCatalog()), registry.refresh(true)])
+      const candidate = snapshot.teams.find(item => item.id === team.id)
+      const capabilities = registry.getSnapshot()
+      const health = candidate && expertCapabilityHealth(teamCapabilityBindings(candidate, catalog.experts), capabilities.catalog, capabilities.loading, { skills: capabilities.skillsLoaded, mcpServers: capabilities.mcpLoaded })
+      if (!candidate || snapshot.revision !== catalog.revision || candidate.members.some(member => !catalog.enabled.includes(member.expertSlug) || !catalog.experts.some(expert => expert.slug === member.expertSlug && !expert.conflict)) || health?.state === 'blocked' || health?.state === 'unknown')
+        throw new Error(teamText(getActive(), '专家团成员或必需能力尚未就绪，请先在设置中修复。'))
+      team = localizeTeam(candidate, getActive())
+    } catch (cause) {
+      current.notify?.('error', cause instanceof Error ? cause.message : teamText(getActive(), '操作失败。'))
+      return false
+    }
+    teamCache = [...teamCache.filter(item => item.id !== team.id), team]
     const actx = id === undefined ? undefined : sessions.scope?.(id) ?? sessions.binding?.(id)?.ctx
     return insertTeamReference({ state: current.state, insertReference: (ref, tokenSpan) => current.insertReference(ref, tokenSpan),
       insertText: (text, tokenSpan) => actx?.bail(actx, 'slash/input-insert-text', { text, span: tokenSpan }) === true,

@@ -17,6 +17,8 @@ import PlugZap from 'lucide-react/dist/esm/icons/plug-zap.mjs'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DesktopMcpCatalogEntry, DesktopMcpServerConfig, DesktopMcpServerView } from '../mcp-contract.ts'
 import type { DesktopMcpApi } from './mcp-api.ts'
+import { SkillCategoryIcon } from './SkillCategoryIcon.tsx'
+import { isMcpServerReady } from '../mcp-readiness.ts'
 import { SettingsIconButton, SettingsToggle } from './settings-controls.tsx'
 
 export interface McpSettingsSectionInjected {
@@ -64,6 +66,16 @@ const EMPTY_DRAFT: McpDraft = { serverName: '', transport: 'stdio', command: '',
   reconnectEnabled: true, reconnectInitialDelayMs: '500', reconnectMaxDelayMs: '30000', reconnectMaxAttempts: '10', url: '',
   oauthEnabled: false, oauthIssuer: '', oauthScope: 'mcp:tools', oauthResource: '', oauthClientId: '', oauthClientSecretRef: '',
   oauthTokenEndpointAuthMethod: 'none', enabled: true }
+
+const connectorCategories = { productivity: 'office', development: 'development', data: 'data', design: 'design', research: 'learning', finance: 'finance' } as const
+function ConnectorGlyph({ category }: { category?: string | undefined }) {
+  const purpose = category !== undefined && Object.hasOwn(connectorCategories, category) ? connectorCategories[category as keyof typeof connectorCategories] : undefined
+  return purpose === undefined ? <span className="dshMcpGlyph" aria-hidden="true"><PlugZap /></span> : <span className="dshMcpConnectorIcon" aria-hidden="true"><SkillCategoryIcon category={purpose} /></span>
+}
+function connectorCategoryLabel(category: string, t: Translate): string {
+  const keys = { productivity: 'categoryProductivity', development: 'categoryDevelopment', data: 'categoryData', design: 'categoryDesign', research: 'categoryResearch', finance: 'categoryFinance' } as const
+  return Object.hasOwn(keys, category) ? t(keys[category as keyof typeof keys]) : category
+}
 
 function linesToMap(value: string, t: Translate): Record<string, string> {
   const entries = value.split(/\r?\n/u).map(line => line.trim()).filter(Boolean).map(line => {
@@ -130,7 +142,7 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
   useEffect(() => { onSummary?.({
     total: servers.length,
     enabled: servers.filter(server => server.enabled).length,
-    available: servers.filter(server => server.enabled && server.state === 'running' && server.tools.length > 0).length,
+    available: servers.filter(isMcpServerReady).length,
   }) }, [onSummary, servers])
 
   const load = useCallback(async (silent = false): Promise<void> => {
@@ -194,13 +206,15 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
       void run('mcp-import', async () => { applyServers(await api.import(document)); setImportText(undefined) })
     } catch { setError(t('invalidImport')) }
   }
+  const connectorFor = (server: DesktopMcpServerView) => catalog.find(entry => entry.id === server.connectorId || entry.installedServerName === server.serverName)
   const query = search.trim().toLocaleLowerCase()
   const filteredServers = query === '' ? servers : servers.filter(server => {
     const endpoint = server.transport === 'stdio' ? `${server.command} ${server.args.join(' ')}` : server.url
-    return `${server.serverName} ${endpoint} ${server.tools.map(tool => `${tool.name} ${tool.description}`).join(' ')}`.toLocaleLowerCase().includes(query)
+    const connector = connectorFor(server)
+    return `${connector?.name ?? ''} ${connector?.description ?? ''} ${server.serverName} ${endpoint} ${server.tools.map(tool => `${tool.name} ${tool.description}`).join(' ')}`.toLocaleLowerCase().includes(query)
   })
   const filteredCatalog = query === '' ? catalog : catalog.filter(entry =>
-    `${entry.name} ${entry.description} ${entry.category} ${entry.capabilities.join(' ')}`.toLocaleLowerCase().includes(query))
+    `${entry.name} ${entry.description} ${entry.category} ${connectorCategoryLabel(entry.category, t)} ${entry.capabilities.join(' ')}`.toLocaleLowerCase().includes(query))
   const installCatalog = (event: FormEvent): void => {
     event.preventDefault()
     if (catalogInstall === undefined) return
@@ -246,12 +260,14 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
       </div>
       {view === 'installed' ? <div className="dshMcpInstalledList">{filteredServers.map(server => {
         const toolsExpanded = expandedServers.has(server.serverName)
+        const connector = connectorFor(server)
         return <div className="dshIntegrationsMcp dshMcpServerCard" key={server.serverName}>
-        <div className="dshMcpServerMain"><span className="dshMcpGlyph" aria-hidden="true"><PlugZap /></span><div className="dshMcpIdentity"><div className="dshMcpServerTitle"><span className="dshIntegrationsRowTitle">{server.serverName}</span><span className="dshMcpTransport">{server.transport === 'stdio' ? 'stdio' : 'HTTP'}</span></div>
-          <span className="dshMcpEndpoint" title={server.transport === 'stdio' ? `${server.command} ${server.args.join(' ')}` : server.url}>{server.transport === 'stdio' ? `${server.command} ${server.args.join(' ')}` : server.url}</span></div>
+        <div className="dshMcpServerMain"><ConnectorGlyph category={connector?.category} /><div className="dshMcpIdentity"><div className="dshMcpServerTitle"><span className="dshIntegrationsRowTitle" title={connector?.name ?? server.serverName}>{connector?.name ?? server.serverName}</span><span className="dshMcpTransport">{server.transport === 'stdio' ? 'stdio' : 'HTTP'}</span></div>
+          {connector !== undefined && <span className="dshMcpServerId">{server.serverName}</span>}<span className="dshMcpEndpoint" title={server.transport === 'stdio' ? `${server.command} ${server.args.join(' ')}` : server.url}>{server.transport === 'stdio' ? `${server.command} ${server.args.join(' ')}` : server.url}</span></div>
           <div className="dshMcpServerStatus"><span className="dshMcpStatus" data-state={server.state} data-diagnostic={server.diagnostic.code}>{statusLabel(server, t)}</span>
             <SettingsToggle label={server.enabled ? t('enabled') : t('disabled')} checked={server.enabled}
               disabled={busy !== undefined} onChange={enabled => { void run(`mcp-toggle:${server.serverName}`, async () => { applyServers(await api.toggle(server.serverName, enabled)) }) }} /></div></div>
+        {connector !== undefined && <p className="dshMcpServerDescription" title={connector.description}>{connector.description}</p>}
         <div className="dshMcpServerDetails"><div className="dshIntegrationsMeta">{server.tools.length === 0 ? <span>0 {t('tools')}</span> : <button type="button" className="dshMcpToolsToggle"
           aria-expanded={toolsExpanded} aria-label={t(toolsExpanded ? 'collapseTools' : 'expandTools').replace('{count}', String(server.tools.length))}
           onClick={() => { toggleTools(server.serverName) }}><span>{server.tools.length} {t('tools')}</span><ChevronDown aria-hidden="true" /></button>}
@@ -286,15 +302,15 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
       </div>
       })}{filteredServers.length === 0 && <p className="dshIntegrationsEmpty dshMcpEmpty">{t(servers.length === 0 ? 'noServers' : 'noMatches')}{servers.length > 0 && <button type="button" className="dshIntegrationsCommand" onClick={() => { setSearch('') }}>{t('clearSearch')}</button>}</p>}</div>
       : <div className="dshMcpCatalogGrid">{filteredCatalog.map(entry => <div className="dshIntegrationsMcp dshMcpCatalogCard" key={entry.id}>
-          <div className="dshIntegrationsMcpHeader"><span className="dshMcpGlyph" aria-hidden="true"><PlugZap /></span><div className="dshMcpIdentity">
-            <span className="dshIntegrationsRowTitle">{entry.name}</span><span className="dshIntegrationsMeta"><span>{entry.category}</span><span>{entry.license}</span></span></div>
+          <div className="dshIntegrationsMcpHeader"><ConnectorGlyph category={entry.category} /><div className="dshMcpIdentity">
+            <span className="dshIntegrationsRowTitle">{entry.name}</span><span className="dshMcpCategory">{connectorCategoryLabel(entry.category, t)}</span></div>
             <div className="dshIntegrationsRowActions"><button type="button" className="dshIntegrationsCommand" disabled={busy !== undefined || entry.installedServerName !== undefined}
               onClick={() => { if (entry.credentials.length === 0) { void run(`mcp-install:${entry.id}`, async () => {
                 const next = await api.install(entry.id); applyServers(next.mcpServers); setCatalog(next.catalog); setView('installed')
-              }) } else { setError(undefined); setDraft(undefined); setImportText(undefined); setCatalogInstall({ entry, values: {} }) } }}>{entry.installedServerName === undefined ? t('installConnector') : t('installed')}</button></div></div>
-          <p className="dshMcpCatalogDescription">{entry.description}</p>
+              }) } else { setError(undefined); setDraft(undefined); setImportText(undefined); setCatalogInstall({ entry, values: {} }) } }}>{entry.installedServerName === undefined ? t('installConnector') : t('addedConnector')}</button></div></div>
+          <p className="dshMcpCatalogDescription" title={entry.description}>{entry.description}</p>
           <div className="dshIntegrationsTools">{entry.capabilities.map(capability => <span key={capability}>{capability}</span>)}</div>
-          <a className="dshMcpCatalogSource" href={entry.sourceUrl} target="_blank" rel="noreferrer">{t('viewSource')}</a>
+          <div className="dshMcpCatalogFooter"><span className="dshMcpCatalogRequirement">{t(entry.credentials.length === 0 ? 'noCredentialsRequired' : 'credentialsRequired')}</span><span className="dshMcpLicense">{entry.license}</span><a className="dshMcpCatalogSource" href={entry.sourceUrl} target="_blank" rel="noreferrer">{t('viewSource')}</a></div>
         </div>)}{filteredCatalog.length === 0 && <p className="dshIntegrationsEmpty dshMcpEmpty">{t('noCatalogMatches')}</p>}</div>}
     </div>}
   </section>

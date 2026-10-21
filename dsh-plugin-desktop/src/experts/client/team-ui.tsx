@@ -3,6 +3,10 @@ import { catalogState } from './catalog.js';
 import { acceptTeamSnapshot, refreshTeams, subscribeTeams, teamState } from './team-cache.js';
 import { useTeamLocale, localizeTeam, localizedExperts } from './team-locale.js';
 import { LibraryCard } from './library-ui.js';
+import { useTeamCapabilityHealth } from './use-team-capabilities.js';
+import type { ExpertCapabilityRegistry } from './capability-registry.js';
+import type { ExpertCapabilityHealth } from './capability-options.js';
+import { skillDisplayName } from '../../client/skill-labels.js';
 import { Button, Input, MaybeAntdProvider } from './antd-ui.js';
 import { antdLocale } from './antd-locale.js';
 import { CategorySelect } from './category-select.js';
@@ -39,6 +43,7 @@ export async function unwrap<T>(promise: Promise<{
     return result.value;
 }
 export function TeamDetails(props: {
+    health?: ExpertCapabilityHealth;
     team: ExpertTeam;
     experts: readonly ExpertSummary[];
     close(): void;
@@ -69,6 +74,8 @@ export function TeamDetails(props: {
         </div>
       </header>
       <p className="agt-description agt-detail-summary">{props.team.description}</p>
+      {props.health && <p role="status" className="agt-help">{tx(props.health.state === 'ready' ? '能力就绪' : props.health.state === 'degraded' ? '可降级运行' : props.health.state === 'unknown' ? '能力检查中' : '必需能力未就绪')} · {props.health.ready}/{props.health.total}</p>}
+      {props.health?.issues.length > 0 && <ul className="agt-help">{props.health.issues.map(issue => <li key={`${issue.type}:${issue.name}`}>{issue.type === 'skill' ? skillDisplayName(issue.name, locale) : issue.name} · {tx(issue.required ? '必需' : '可选')} · {tx(({ missing: '未安装', disabled: '已停用', starting: '连接中', error: '故障', empty: '未发现工具', ready: '可用' })[issue.state])}</li>)}</ul>}
       <dl className="agt-detail-overview">
         <div><dt>{tx("团队目标")}</dt><dd>{props.team.goal}</dd></div>
         {props.team.constraints && <div><dt>{tx("通用约束（选填）")}</dt><dd>{props.team.constraints}</dd></div>}
@@ -87,9 +94,9 @@ export function TeamDetails(props: {
             </div><p className="agt-help">{tx("选择后填入聊天草稿，由你确认发送。")}</p></>
           : <div className="agt-example-list">{props.team.examples.map(example => <p key={example}>“{example}”</p>)}</div>}
       </section>
-      {(props.team.skills ?? []).length > 0 && <section><h3>{tx("技能")}</h3><div className="agt-plugin-chips">{(props.team.skills ?? []).map(skill => <span key={skill.name}>{skill.name}{skill.required ? ` · ${tx("必需")}` : ''}</span>)}</div></section>}
+      {(props.team.skills ?? []).length > 0 && <section><h3>{tx("技能")}</h3><div className="agt-plugin-chips">{(props.team.skills ?? []).map(skill => <span key={skill.name} title={skill.name}>{skillDisplayName(skill.name, locale)}{skill.required ? ` · ${tx("必需")}` : ''}</span>)}</div></section>}
       {(props.team.connectorStates ?? []).length > 0 && <section><h3>{tx("连接器")}</h3><div className="agt-connector-list">{(props.team.connectorStates ?? []).map(connector => <div key={connector.dependency}>
-        <span className="agt-connector-state" data-state={connector.state} data-ready={connector.installed && connector.enabled && connector.credentialsReady}><i aria-hidden="true"/><strong>{connector.dependency}</strong><small>{connectorStatus(connector, tx)}</small></span>
+        <span className="agt-connector-state" data-state={connector.state} data-ready={connector.installed && connector.enabled && connector.credentialsReady && connector.state === 'running' && connector.toolCount !== 0}><i aria-hidden="true"/><strong>{connector.dependency}</strong><small>{connectorStatus(connector, tx)}</small></span>
       </div>)}</div>{props.onManageConnectors && <Button onClick={props.onManageConnectors}>{tx("管理连接器")}</Button>}</section>}
       <section className="agt-detail-members">
         <h3>
@@ -127,7 +134,7 @@ function connectorStatus(connector: ExpertTeam['connectorStates'][number], tx: (
     if (connector.state === 'starting')
         return tx("连接中");
     if (connector.state === 'running')
-        return tx("可用");
+        return tx(connector.toolCount === 0 ? '未发现工具' : '可用');
     return tx("故障");
 }
 function teamInput(team: ExpertTeam): TeamInput {
@@ -140,6 +147,7 @@ export const isDeletableTeam = (team: Pick<ExpertTeam, 'builtin' | 'conversation
 const teamSource = (team: Pick<ExpertTeam, 'builtin' | 'conversationCreated'>): 'builtin' | 'custom' => isDeletableTeam(team) ? 'custom' : 'builtin';
 
 export function TeamsPanel(props: {
+    capabilityRegistry?: ExpertCapabilityRegistry;
     remote: TeamRemote;
     onOpenConnectors?(): void;
     onExpertsChanged?(): void;
@@ -155,6 +163,7 @@ export function TeamsPanel(props: {
     onCreatedTeam?(team: ExpertTeam, experts: readonly ExpertSummary[]): void;
 }) {
     const { locale, tx } = useTeamLocale();
+    const healthFor = useTeamCapabilityHealth(props.capabilityRegistry);
 
     const [snapshot, setSnapshot] = React.useState<TeamSnapshot | null>(() => teamState(props.remote));
     const [rawExperts, setExperts] = React.useState<ExpertSummary[]>(() => {
@@ -163,9 +172,9 @@ export function TeamsPanel(props: {
     });
     const experts = localizedExperts(rawExperts, locale);
     React.useEffect(() => {
-        const available = snapshot?.teams.filter(team => !teamIssue(team, rawExperts, snapshot.enabledExperts)).length ?? 0;
+        const available = snapshot?.teams.filter(team => !teamIssue(team, rawExperts, snapshot.enabledExperts, healthFor(team, rawExperts))).length ?? 0;
         props.onSummary?.({ total: snapshot?.teams.length ?? 0, enabled: available });
-    }, [snapshot, rawExperts, props.onSummary]);
+    }, [snapshot, rawExperts, props.onSummary, healthFor]);
     const [query, setQuery] = React.useState('');
     const [filter, setFilter] = React.useState<'all' | 'builtin' | 'custom'>('all');
     const [status, setStatus] = React.useState('');
@@ -291,11 +300,11 @@ export function TeamsPanel(props: {
     const filteredTeams = snapshot?.teams.map(team => localizeTeam(team, locale)).filter(team =>
         (filter === 'all' || teamSource(team) === filter) &&
         (!status || (() => {
-            const repair = teamRepairIssue(team, experts) !== undefined;
+            const repair = teamRepairIssue(team, experts, healthFor(team, rawExperts)) !== undefined;
             const recalled = team.members.every(member => snapshot.enabledExperts.includes(member.expertSlug));
             return status === 'available' ? recalled && !repair : status === 'recall' ? !recalled && !repair : repair;
         })()) &&
-        `${team.name} ${team.description} ${team.members.map(member => experts.find(expert => expert.slug === member.expertSlug)?.name ?? '').join(' ')}`
+        `${team.name} ${team.description} ${team.goal} ${team.deliveryRequirements} ${team.tags.join(' ')} ${team.examples.join(' ')} ${team.members.map(member => experts.find(expert => expert.slug === member.expertSlug)?.name ?? '').join(' ')}`
             .toLowerCase().includes(query.toLowerCase())) ?? [];
     const edit = (team: ExpertTeam) => setEditor({
         value: teamInput(team),
@@ -347,16 +356,16 @@ export function TeamsPanel(props: {
       {!snapshot && !error && <p role="status">{tx("正在加载专家团…")}</p>}
       <div className="aag-expert-grid aag-team-grid">
         {filteredTeams.map((team) => {
-            const repairIssue = teamRepairIssue(team, experts);
+            const repairIssue = teamRepairIssue(team, experts, healthFor(team, rawExperts));
             const memberCount = team.members.length;
             const validMembers = team.members.every(member => experts.some(expert => expert.slug === member.expertSlug && !expert.conflict));
             const recalled = team.members.every(member => snapshot!.enabledExperts.includes(member.expertSlug));
             return (<LibraryCard key={team.id} testId="team-card" name={team.name} avatar={<div className="aag-team-avatar">
                   <TeamAvatars team={team} experts={experts}/>
-                </div>} metadata={<>{tx("{0} 位专家", [memberCount])}{repairIssue ? <> · {tx("需修复")}</> : null}</>} description={repairIssue
+                </div>} metadata={<>{tx("{0} 位专家", [memberCount])}{team.tags.slice(0, 2).map(tag => <span key={tag} className="aag-source-badge">{tag}</span>)}{repairIssue ? <> · {tx("需修复")}</> : null}</>} description={repairIssue
                     ? `${team.description} ${tx(repairIssue)}`
-                    : team.description} openLabel={tx("查看详情")} onOpen={() => setDetails(team)} actions={<>
-                  <button type="button" className={`aag-card-action aag-card-action-primary aag-team-summon${recalled ? ' is-active' : ''}`} disabled={busy || recalled || !validMembers} title={tx("召唤团队成员")} aria-label={tx("召唤团队成员")} aria-pressed={recalled} onClick={() => void summon(team)}>
+                    : team.description} guidance={<span title={team.deliveryRequirements}>{tx('交付要求')} · {team.deliveryRequirements}</span>} openLabel={tx("查看详情")} onOpen={() => setDetails(team)} actions={<>
+                  <button type="button" className={`aag-card-action aag-card-action-primary aag-team-summon${recalled ? ' is-active' : ''}`} disabled={busy || recalled || !validMembers || !!repairIssue} title={tx("召唤团队成员")} aria-label={tx("召唤团队成员")} aria-pressed={recalled} onClick={() => void summon(team)}>
                     <IconUsers size={18}/>{tx("召唤")}</button>
                   <button type="button" className="aag-card-action aag-team-copy" disabled={busy} onClick={() => copy(team)}>
                     <CopyPlus size={17} strokeWidth={1.7} aria-hidden="true"/>{tx("复制")}</button>
@@ -376,7 +385,7 @@ export function TeamsPanel(props: {
                 setFilter('all');
             }}>{tx("清除筛选")}</Button>
         </div>)}
-      {details && (<TeamDetails team={details} experts={experts} close={() => setDetails(null)} onSelect={props.onSelectTeam === undefined || teamIssue(details, experts, snapshot!.enabledExperts) !== undefined ? undefined : (example) => { void Promise.resolve(props.onSelectTeam?.(details, example)).then(selected => { if (selected) setDetails(null) }) }} onManageConnectors={props.onOpenConnectors} onEdit={!details.builtin
+      {details && (<TeamDetails team={details} experts={experts} health={healthFor(details, rawExperts)} close={() => setDetails(null)} onSelect={props.onSelectTeam === undefined || teamIssue(details, experts, snapshot!.enabledExperts, healthFor(details, rawExperts)) !== undefined ? undefined : (example) => { void Promise.resolve(props.onSelectTeam?.(details, example)).then(selected => { if (selected) setDetails(null) }) }} onManageConnectors={props.onOpenConnectors} onEdit={!details.builtin
                 ? () => {
                     setEditor({
                         value: teamInput(details),

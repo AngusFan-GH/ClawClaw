@@ -8,6 +8,11 @@ const catalog = { skills: [{ name: 'review', description: 'Review code', modelIn
 const state = { draft: 'Check @file please', draftRev: 7, phase: 'plain' as const }
 
 describe('conversation skill invocation', () => {
+  it('finds office Skills by task names while preserving command names', () => {
+    const skills = [{ name: 'office-word-workflow', description: 'Documents', modelInvocable: true }]
+    expect(rankConversationSkills(skills, '模板').map(item => item.name)).toEqual(['office-word-workflow'])
+    expect(rankConversationSkills(skills, 'Word').map(item => item.name)).toEqual(['office-word-workflow'])
+  })
   it('ranks exact names ahead of prefixes, substrings and descriptions without mutating the catalog', () => {
     const skills = ['other', 'pre-review', 'review-more', 'review'].map(name => ({ name, description: 'review code', modelInvocable: true }))
     const routed = { name: 'release', description: 'Ship changes', whenToUse: 'review a release', modelInvocable: true }

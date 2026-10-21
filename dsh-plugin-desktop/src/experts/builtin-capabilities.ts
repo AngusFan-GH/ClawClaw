@@ -54,6 +54,8 @@ const MCP_PROFILES = {
 type McpProfile = keyof typeof MCP_PROFILES
 
 const EXPERT_MCP_PROFILES: Readonly<Record<string, readonly McpProfile[]>> = {
+  'support-enterprise-office-assistant': ['knowledge'],
+  'support-enterprise-business-analyst': ['data'],
   'academic-geographer': ['publicData'],
   'academic-statistician': ['publicData'],
   'research-synthesist': ['publicData'],
@@ -77,6 +79,8 @@ const EXPERT_MCP_PROFILES: Readonly<Record<string, readonly McpProfile[]>> = {
 }
 
 function skillNames(slug: string, division: string): string[] {
+  if (slug === 'support-enterprise-office-assistant') return ['enterprise-office-assistant', 'office-word-workflow', 'office-ppt-workflow', 'office-excel-workflow']
+  if (slug === 'support-enterprise-business-analyst') return ['data-analysis', 'business-data-analysis', 'enterprise-data-query']
   const names = [...(DIVISION_SKILLS[division] ?? ['business-operations'])]
   if (DATA_SLUG.test(slug)) names.push('data-analysis')
   if (EVIDENCE_SLUG.test(slug)) names.push('evidence-research')
@@ -87,6 +91,7 @@ function skillNames(slug: string, division: string): string[] {
 
 function mcpProfiles(slug: string, division: string): McpProfile[] {
   const profiles: McpProfile[] = [...(EXPERT_MCP_PROFILES[slug] ?? [])]
+  if (slug === 'support-enterprise-office-assistant' || slug === 'support-enterprise-business-analyst') return profiles
   if (division === 'engineering' || division === 'testing' || division === 'security'
     || /(?:developer|code|software|devops|sre|api|repository)/u.test(slug)) profiles.push('sourceCode')
   if (division === 'project-management' || /(?:project|jira|operations|product-manager|workflow)/u.test(slug)) profiles.push('workManagement')

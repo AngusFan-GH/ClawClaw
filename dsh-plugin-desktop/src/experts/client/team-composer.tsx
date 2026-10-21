@@ -8,13 +8,17 @@ import type { ExpertSummary } from '../expert-contract.js';
 import type { TeamReferenceTarget } from './team-reference.js';
 import { TeamDetails, unwrap, type TeamRemote } from './team-ui.js';
 import { TeamAvatars, teamIssue, IconEye } from './team-shared.js';
+import { useTeamCapabilityHealth } from './use-team-capabilities.js';
+import type { ExpertCapabilityRegistry } from './capability-registry.js';
 export function TeamMenu(props: {
+    capabilityRegistry?: ExpertCapabilityRegistry;
     remote: TeamRemote;
     prepareSelect?(): (team: TeamReferenceTarget, example?: string) => boolean | Promise<boolean>;
     onSelected(): void;
     onExpertsChanged?(): void;
 }) {
     const { locale, tx } = useTeamLocale();
+    const healthFor = useTeamCapabilityHealth(props.capabilityRegistry);
 
     const [snapshot, setSnapshot] = React.useState<TeamSnapshot | null>(() => teamState(props.remote));
     const [rawExperts, setExperts] = React.useState<ExpertSummary[]>(() => {
@@ -69,7 +73,7 @@ export function TeamMenu(props: {
     const pick = async (team: ExpertTeam, example?: string) => {
         if (busy || !snapshot)
             return;
-        if (teamIssue(team, experts, snapshot.enabledExperts) || team.connectorStates.some(connector => team.connectors.some(binding => binding.name === connector.dependency && binding.required && binding.enabled) && connector.state !== 'running')) {
+        if (teamIssue(team, experts, snapshot.enabledExperts, healthFor(team, rawExperts))) {
             setError(tx("专家团成员或必需能力尚未就绪，请先在设置中修复。"));
             return;
         }
@@ -103,7 +107,7 @@ export function TeamMenu(props: {
         </div>)}
       <div className="agt-compact-list">
         {teams.map((team) => {
-          const blocked = !!snapshot && !!teamIssue(team, experts, snapshot.enabledExperts);
+          const blocked = !!snapshot && !!teamIssue(team, experts, snapshot.enabledExperts, healthFor(team, rawExperts));
           return (<div className="agt-compact-row" key={team.id}>
             <button type="button" disabled={busy || blocked} onClick={() => void pick(team)}>
               <TeamAvatars team={team} experts={experts}/>
@@ -119,6 +123,6 @@ export function TeamMenu(props: {
             {snapshot ? tx("没有匹配的专家团。") : tx("正在加载…")}
           </p>)}
       </div>
-      {detail && (<TeamDetails team={detail} experts={experts} close={() => setDetail(null)} onSelect={(example) => void pick(detail, example)}/>)}
+      {detail && (<TeamDetails team={detail} experts={experts} health={healthFor(detail, rawExperts)} close={() => setDetail(null)} onSelect={snapshot && !teamIssue(detail, experts, snapshot.enabledExperts, healthFor(detail, rawExperts)) ? (example) => void pick(detail, example) : undefined}/>)}
     </div>);
 }

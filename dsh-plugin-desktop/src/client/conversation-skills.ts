@@ -1,3 +1,4 @@
+import { skillSearchText } from './skill-labels.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SkillEntry } from '@deepseek-ai/dsh-api-remotes/client'
 import type { InputState, InsertTextRequest } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -19,7 +20,7 @@ export function rankConversationSkills(skills: readonly SkillEntry[], query: str
     if (needle === '' || name === needle) return 0
     if (name.startsWith(needle)) return 1
     if (name.includes(needle)) return 2
-    if (skill.description.toLocaleLowerCase().includes(needle)) return 3
+    if (`${skill.description} ${skillSearchText(skill.name)}`.toLocaleLowerCase().includes(needle)) return 3
     return skill.whenToUse?.toLocaleLowerCase().includes(needle) === true ? 4 : 5
   }
   return skills.map(skill => ({ skill, score: score(skill) })).filter(item => item.score < 5)

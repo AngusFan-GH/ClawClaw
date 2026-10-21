@@ -1,6 +1,7 @@
 import type { DesktopMcpServerView } from '../../mcp-contract.js'
 import type { DesktopSkillView } from '../../skills-contract.js'
 import type { ExpertCapabilityBinding } from '../expert-contract.js'
+import { isMcpServerReady } from '../../mcp-readiness.js'
 
 export interface ExpertCapabilityOptions {
   readonly skills: readonly string[]
@@ -46,7 +47,7 @@ export function selectableExpertCapabilities(
   return {
     skills: uniqueSorted(skills.filter(skill => skill.modelInvocable).map(skill => skill.name)),
     mcpServers: uniqueSorted(mcpServers
-      .filter(server => server.enabled && server.state === 'running' && server.tools.length > 0)
+      .filter(isMcpServerReady)
       .map(server => server.serverName)),
   }
 }
@@ -68,7 +69,7 @@ export function expertCapabilityCatalog(
       const state: ExpertCapabilityState = !server.enabled ? 'disabled'
         : server.state === 'starting' ? 'starting'
           : server.state === 'error' || !server.credentialsReady ? 'error'
-            : server.tools.length === 0 ? 'empty' : 'ready'
+            : server.state !== 'running' || server.tools.length === 0 ? 'empty' : 'ready'
       return {
         value: server.serverName,
         label: server.serverName,

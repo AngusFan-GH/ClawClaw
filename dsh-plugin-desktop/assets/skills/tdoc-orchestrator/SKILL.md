@@ -7,6 +7,8 @@ disable-model-invocation: true
 
 # Applied Writing Orchestrator
 
+ClawClaw 路径约定：本文件按需由 `tencent-docx` 读取；`<plugin_root>` 为平级 `../tencent-docx/` 的绝对目录。其他内部技能从 `../<技能名>/SKILL.md` 读取；委派仅在当前确有相应工具时执行，不假定旧宿主注入了 Agent 或预览工具。
+
 > **Orchestrator = 意图识别 + 能力编排（composer，不是 lookup table）。**
 > 它自身不写作/排版/编辑，只做四件事：识别场景 → 组合 stage 能力链 → 分派子 Agent 执行 → 记录溯源。
 > **编排层只拥有"路由 + 跨层数据衔接"；每个能力"内部怎么干、I/O 契约"由对应 `agents/*.md` 负责，本文件不复述。**
@@ -21,7 +23,7 @@ disable-model-invocation: true
 下列 skill **命中条件时完整阅读并严格按步骤执行**；**命中后无需继续读本 SKILL.md 下文，也无需按本 skill 的子 Agent 委派流程操作**——该 skill 即本轮执行的唯一依据。未命中才继续下方「意图识别与编排」。
 | 优先级 | 何时加载 | 文件 |
 |--------|----------|------|
-| P0 | **短篇创作**（无文档 + 创作动词 + 模型判断目标篇幅 <1000 字） | **brief-compose**（路径：`<plugin_root>/skills/brief-compose/SKILL.md`） |
+| P0 | **短篇创作**（无文档 + 创作动词 + 模型判断目标篇幅 <1000 字） | **brief-compose**（路径：`../brief-compose/SKILL.md`） |
 
 ---
 
