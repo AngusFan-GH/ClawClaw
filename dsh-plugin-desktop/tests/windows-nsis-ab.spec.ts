@@ -559,6 +559,9 @@ describe('Windows NSIS A/B packaging', () => {
 
   it.runIf(process.platform === 'win32')('parses in Windows PowerShell before requiring manifests', () => {
     const script = join(process.cwd(), 'scripts', 'run-windows-nsis-ab.ps1')
+    // A fresh hosted Windows worker can take over five seconds to start
+    // PowerShell and parse this integration script. Bound the child process
+    // independently so a hung process still fails before the test deadline.
     const result = spawnSync('powershell.exe', [
       '-NoProfile',
       '-NonInteractive',
@@ -566,9 +569,12 @@ describe('Windows NSIS A/B packaging', () => {
       'Bypass',
       '-File',
       script,
-    ], { encoding: 'utf8' })
+    ], { encoding: 'utf8', timeout: 20_000 })
+    expect(result.error, result.stderr).toBeUndefined()
+    expect(result.signal).toBeNull()
+    expect(result.status, result.stderr).toBe(1)
     expect(`${result.stdout}\n${result.stderr}`).toContain(
       '-BaseManifest and -CandidateManifest are required on Windows.',
     )
-  })
+  }, 30_000)
 })
