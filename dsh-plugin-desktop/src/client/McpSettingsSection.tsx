@@ -18,6 +18,7 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import type { DesktopMcpCatalogEntry, DesktopMcpServerConfig, DesktopMcpServerView } from '../mcp-contract.ts'
 import type { DesktopMcpApi } from './mcp-api.ts'
 import { McpCredentialFields, newMcpCredential, prepareMcpCredentials, type McpCredentialDraft } from './McpCredentialFields.tsx'
+import { validateMcpEditor, type McpEditorField, type McpEditorIssues } from './mcp-editor-validation.ts'
 import { SkillCategoryIcon } from './SkillCategoryIcon.tsx'
 import { isMcpServerReady } from '../mcp-readiness.ts'
 import { SettingsIconButton, SettingsToggle } from './settings-controls.tsx'
@@ -119,6 +120,10 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
   const [catalogInstall, setCatalogInstall] = useState<CatalogInstallDraft>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
+  const [editorIssues, setEditorIssues] = useState<McpEditorIssues>({})
+  const [notice, setNotice] = useState<string>()
+  const editorErrorRef = useRef<HTMLDivElement>(null)
+  const revisionRef = useRef(0)
   const [busy, setBusy] = useState<string>()
   const [draft, setDraft] = useState<McpDraft>()
   const [removeName, setRemoveName] = useState<string>()
@@ -141,11 +146,12 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
   const load = useCallback(async (silent = false): Promise<void> => {
     if (busyRef.current) return
     if (!silent) { setLoading(true); setError(undefined) }
+    const revision = revisionRef.current
     try {
       const next = await api.read()
-      if (mountedRef.current) { applyServers(next.mcpServers); setCatalog(next.catalog) }
+      if (mountedRef.current && !busyRef.current && revision === revisionRef.current) { applyServers(next.mcpServers); setCatalog(next.catalog) }
     } catch (cause) {
-      if (mountedRef.current && !silent) setError(cause instanceof Error ? cause.message : t('unavailable'))
+      if (mountedRef.current && !silent && !busyRef.current && revision === revisionRef.current) setError(cause instanceof Error ? cause.message : t('unavailable'))
     } finally { if (mountedRef.current && !silent) setLoading(false) }
   }, [api, applyServers, t])
   useEffect(() => {
@@ -155,30 +161,36 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
     return () => { mountedRef.current = false; clearInterval(timer) }
   }, [load])
   const run = async (key: string, operation: () => Promise<void>): Promise<void> => {
-    busyRef.current = true; setBusy(key); setError(undefined)
+    if (busyRef.current) return
+    busyRef.current = true; revisionRef.current++; setBusy(key); setError(undefined); setNotice(undefined)
     try { await operation() } catch (cause) { setError(cause instanceof Error ? cause.message : t('operationFailed')) }
     finally { busyRef.current = false; setBusy(undefined) }
   }
   const saveServer = (event: FormEvent): void => {
     event.preventDefault()
-    if (draft === undefined) return
+    if (draft === undefined || busyRef.current) return
+    const issues = validateMcpEditor(draft, servers.map(server => server.serverName), t)
+    setEditorIssues(issues)
+    if (Object.keys(issues).length > 0) { setError(undefined); return }
+    let validationField: McpEditorField = 'credentials'
     try {
-      if (!/^[A-Za-z0-9_-]{1,32}$/u.test(draft.serverName.trim())) throw new Error(t('serverNameHint'))
       const values = prepareMcpCredentials(draft.transport === 'stdio' ? draft.environmentRows : draft.headerRows, t, draft.transport === 'stdio' ? 'environment' : 'header')
       const references = values.references
       const secrets = { ...values.secrets }
       let oauthClientSecretRef: string | undefined
       if (draft.transport !== 'stdio' && draft.oauthEnabled && draft.oauthClientId.trim() !== '' && draft.oauthTokenEndpointAuthMethod !== 'none') {
+        validationField = 'oauthConfig'
         if (draft.oauthSecret.value === '' && draft.oauthSecret.reference.trim() === '') throw new Error(t('oauthSecretRequired'))
         const oauth = prepareMcpCredentials([draft.oauthSecret], t, 'environment')
         oauthClientSecretRef = oauth.references.OAUTH_CLIENT_SECRET
         Object.assign(secrets, oauth.secrets)
       }
+      validationField = 'advanced'
       const timeoutMs = integer(draft.timeoutMs, 1_000, 600_000, t('timeoutRangeError'))
       const reconnect = { enabled: draft.reconnectEnabled,
         initialDelayMs: integer(draft.reconnectInitialDelayMs, 100, 60_000, t('initialDelayRangeError')),
         maxDelayMs: integer(draft.reconnectMaxDelayMs, 100, 300_000, t('maxDelayRangeError')),
-        maxAttempts: integer(draft.reconnectMaxAttempts, 0, 100, t('maxAttemptsRangeError')) }
+        maxAttempts: integer(draft.reconnectMaxAttempts, 1, 100, t('maxAttemptsRangeError')) }
       if (reconnect.maxDelayMs < reconnect.initialDelayMs) throw new Error(t('reconnectDelayOrderError'))
       const server: DesktopMcpServerConfig = draft.transport === 'stdio'
         ? { serverName: draft.serverName.trim(), transport: 'stdio', command: draft.command.trim(),
@@ -190,11 +202,24 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
               ...(draft.oauthClientId.trim() === '' ? {} : { clientId: draft.oauthClientId.trim(), tokenEndpointAuthMethod: draft.oauthTokenEndpointAuthMethod,
                 ...(oauthClientSecretRef === undefined ? {} : { clientSecretRef: oauthClientSecretRef }) }) } } : {}),
             ...(draft.connectorId === undefined ? {} : { connectorId: draft.connectorId }), ...(draft.capabilities === undefined ? {} : { capabilities: draft.capabilities }) }
+      validationField = 'serverName'
       if (draft.previousName !== undefined && draft.previousName !== server.serverName && (expertUsage?.get(draft.previousName) ?? 0) > 0) {
         throw new Error(t('renameBoundServer').replace('{count}', String(expertUsage?.get(draft.previousName) ?? 0)))
       }
-      void run('mcp-save', async () => { applyServers(await api.save(server, draft.previousName, Object.keys(secrets).length === 0 ? undefined : secrets)); setDraft(undefined) })
-    } catch (cause) { setError(cause instanceof Error ? cause.message : t('operationFailed')) }
+      void run('mcp-save', async () => {
+        const next = await api.save(server, draft.previousName, Object.keys(secrets).length === 0 ? undefined : secrets)
+        applyServers(next)
+        const saved = next.find(item => item.serverName === server.serverName)
+        if (saved?.state === 'error' && saved.diagnostic.code !== 'authorization-required') {
+          setDraft(mcpDraft(saved))
+          setError(t('savedConnectionFailed'))
+          return
+        }
+        setDraft(undefined); setSearch(''); setView('installed')
+        setNotice(saved?.diagnostic.code === 'authorization-required' ? t('savedNeedsAuthorization')
+          : !server.enabled ? t('savedDisabled') : saved?.diagnostic.code === 'ready' ? t('savedConnected') : t('savedDiscovering'))
+      })
+    } catch (cause) { setEditorIssues({ [validationField]: cause instanceof Error ? cause.message : t('operationFailed') }) }
   }
   const importServers = (): void => {
     if (importText === undefined) { setImportText(''); return }
@@ -203,6 +228,13 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
       void run('mcp-import', async () => { applyServers(await api.import(document)); setImportText(undefined) })
     } catch { setError(t('invalidImport')) }
   }
+  const editorFieldId = (field: McpEditorField): string => `${id}-mcp-${field}`
+  const inlineError = (field: McpEditorField) => editorIssues[field] === undefined ? null
+    : <small className="dshMcpFieldError" id={`${editorFieldId(field)}-error`}>{editorIssues[field]}</small>
+  useEffect(() => {
+    if (draft === undefined && Object.keys(editorIssues).length > 0) setEditorIssues({})
+    else if (error !== undefined || Object.keys(editorIssues).length > 0) editorErrorRef.current?.focus()
+  }, [draft === undefined, error, editorIssues])
   const connectorFor = (server: DesktopMcpServerView) => catalog.find(entry => entry.id === server.connectorId || entry.installedServerName === server.serverName)
   const query = search.trim().toLocaleLowerCase()
   const filteredServers = query === '' ? servers : servers.filter(server => {
@@ -243,6 +275,7 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
 
   return <><section className={`dshIntegrations dshMcpPage${embedded ? ' dshIntegrationsEmbedded' : ''}`} aria-label={t('title')}>
     {!embedded && <header className="dshIntegrationsHeader"><div><h2>{t('title')}</h2><p>{t('intro')}</p></div></header>}
+    {notice !== undefined && !overlayOpen && <div className="dshMcpSaveNotice" role="status">{notice}</div>}
     {error !== undefined && !overlayOpen && <div className="dshIntegrationsError" role="alert">{error}</div>}
     {loading && servers.length === 0 ? <p className="dshIntegrationsEmpty">{t('loading')}</p> : <div className="dshIntegrationsBody">
       <div className="dshIntegrationsSegments dshMcpTabs" role="tablist" aria-label={t('mcpViews')}>
@@ -253,7 +286,7 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
         <label className="dshIntegrationsSearch"><Search aria-hidden="true" /><input aria-label={t('searchServers')} value={search} onChange={event => { setSearch(event.target.value) }} placeholder={t('searchServers')} /></label>
         <div className="dshIntegrationsRowActions"><SettingsIconButton label={t('refresh')} disabled={loading || busy !== undefined} onClick={() => { void load() }}><RefreshCw /></SettingsIconButton>
           {view === 'installed' && <><button type="button" className="dshIntegrationsCommand" onClick={() => { setError(undefined); setDraft(undefined); setImportText('') }}>{t('importJson')}</button>
-            <button type="button" className="dshIntegrationsCommand dshCronPrimary" onClick={() => { setError(undefined); setImportText(undefined); setDraft({ ...EMPTY_DRAFT }) }}><Plus />{t('addServer')}</button></>}</div>
+            <button type="button" className="dshIntegrationsCommand dshCronPrimary" onClick={() => { setError(undefined); setImportText(undefined); setEditorIssues({}); setNotice(undefined); setDraft({ ...EMPTY_DRAFT }) }}><Plus />{t('addServer')}</button></>}</div>
       </div>
       {view === 'installed' ? <div className="dshMcpInstalledList">{filteredServers.map(server => {
         const toolsExpanded = expandedServers.has(server.serverName)
@@ -314,6 +347,7 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
   <Modal open={importText !== undefined} title={t('importJson')} closeLabel={t('cancel')} onClose={closeImport} className="dshMcpDialog" contentClassName="dshMcpDialogContent"
     footer={<div className="dshMcpDialogFooter"><button type="button" className="dshIntegrationsCommand" disabled={busy !== undefined} onClick={closeImport}>{t('cancel')}</button>
       <button type="submit" form={`${id}-mcp-import`} className="dshIntegrationsCommand dshCronPrimary" disabled={busy !== undefined}>{t('import')}</button></div>}>
+    <p className="dshMcpDialogDescription">{t('importDescription')}</p>
     {error !== undefined && <div className="dshIntegrationsError" role="alert">{error}</div>}
     <form id={`${id}-mcp-import`} className="dshIntegrationsEditor dshMcpDialogForm" onSubmit={event => { event.preventDefault(); importServers() }}>
       <textarea rows={10} value={importText ?? ''} placeholder={t('importJsonHint')} onChange={event => { setImportText(event.target.value) }} />
@@ -321,55 +355,82 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
   </Modal>
   <Modal open={draft !== undefined} title={draft?.previousName === undefined ? t('addServer') : t('editServer')} closeLabel={t('cancel')} onClose={closeDraft} className="dshMcpDialog dshMcpEditorDialog" contentClassName="dshMcpDialogContent"
     footer={draft === undefined ? undefined : <div className="dshMcpDialogFooter"><label className="dshIntegrationsEnabled"><input type="checkbox" checked={draft.enabled}
-      onChange={event => { setDraft({ ...draft, enabled: event.target.checked }) }} />{t('enabled')}</label><div className="dshIntegrationsRowActions">
+      disabled={busy !== undefined} onChange={event => { setDraft({ ...draft, enabled: event.target.checked }) }} />{t('enableAfterSave')}</label><div className="dshIntegrationsRowActions">
         <button type="button" className="dshIntegrationsCommand" disabled={busy !== undefined} onClick={closeDraft}>{t('cancel')}</button>
-        <button type="submit" form={`${id}-mcp-editor`} className="dshIntegrationsCommand dshCronPrimary" disabled={busy !== undefined}>{t('save')}</button></div></div>}>
-    {draft !== undefined && <><div className="dshMcpDialogErrors">{error !== undefined && <div className="dshIntegrationsError" role="alert">{error}</div>}</div>
-      <form id={`${id}-mcp-editor`} className="dshIntegrationsEditor dshMcpEditor dshMcpDialogForm" onSubmit={saveServer}>
-        <section className="dshMcpFormSection" aria-labelledby={`${id}-mcp-identity-heading`}><h4 id={`${id}-mcp-identity-heading`}>{t('identityAndTransport')}</h4>
-          <div className="dshMcpFormGrid"><label><span>{t('serverName')}</span><input required pattern="[A-Za-z0-9_-]{1,32}" value={draft.serverName}
-            placeholder={t('serverNameHint')} onChange={event => { setDraft({ ...draft, serverName: event.target.value }) }} /></label>
-            <fieldset><legend>{t('transport')}</legend><div className="dshIntegrationsSegments">{(['stdio', 'streamable-http', 'sse'] as const).map(transport =>
-              <button key={transport} type="button" aria-pressed={draft.transport === transport}
-                onClick={() => { setDraft({ ...draft, transport }) }}>{transport === 'stdio' ? 'stdio' : transport === 'sse' ? 'SSE' : 'HTTP'}</button>)}</div></fieldset></div>
+        <button type="submit" form={`${id}-mcp-editor`} className="dshIntegrationsCommand dshCronPrimary" disabled={busy !== undefined}>{busy === 'mcp-save' ? t('savingConnector') : t(draft.enabled ? 'saveAndConnect' : 'save')}</button></div></div>}>
+    {draft !== undefined && <>
+      {(error !== undefined || Object.keys(editorIssues).length > 0) && <div className="dshIntegrationsError dshMcpErrorSummary" role="alert" ref={editorErrorRef} tabIndex={-1}>
+        <strong>{t('reviewFields')}</strong>{error !== undefined && <p>{error}</p>}
+        {Object.entries(editorIssues).map(([field, message]) => <a key={field} href={`#${editorFieldId(field as McpEditorField)}`} onClick={event => {
+          event.preventDefault()
+          const target = document.getElementById(editorFieldId(field as McpEditorField))
+          const disclosure = target?.closest('details'); if (disclosure) disclosure.open = true
+          target?.focus()
+        }}>{message}</a>)}
+      </div>}
+      <form id={`${id}-mcp-editor`} className="dshIntegrationsEditor dshMcpEditor dshMcpDialogForm" noValidate aria-busy={busy === 'mcp-save'} onSubmit={saveServer}>
+        <fieldset className="dshMcpEditorFields" disabled={busy !== undefined}>
+        <section className="dshMcpFormSection" aria-label={t('identityAndTransport')}>
+          <fieldset className="dshMcpTransportField"><legend>{t('transport')}</legend><div className="dshMcpTransportChoices">{(['stdio', 'streamable-http', 'sse'] as const).map(transport =>
+            <button key={transport} type="button" aria-label={transport === 'stdio' ? 'stdio' : transport === 'sse' ? 'SSE' : 'HTTP'} aria-pressed={draft.transport === transport}
+              onClick={() => { setEditorIssues({}); setError(undefined); setDraft({ ...draft, transport }) }}>
+              <strong>{transport === 'stdio' ? 'stdio' : transport === 'sse' ? 'SSE' : 'HTTP'}</strong><span>{t(transport === 'stdio' ? 'stdioDescription' : transport === 'sse' ? 'sseDescription' : 'httpDescription')}</span>
+            </button>)}</div></fieldset>
+          <label><span>{t('serverName')}</span><input id={editorFieldId('serverName')} aria-label={t('serverName')} required data-modal-autofocus value={draft.serverName}
+            aria-invalid={editorIssues.serverName !== undefined} aria-describedby={`${id}-name-hint${editorIssues.serverName === undefined ? '' : ` ${editorFieldId('serverName')}-error`}`}
+            placeholder={t('connectorNameExample')} onChange={event => { setDraft({ ...draft, serverName: event.target.value }) }} />
+            <small id={`${id}-name-hint`}>{t('serverNameHint')}</small>{inlineError('serverName')}</label>
+
         </section>
         <section className="dshMcpFormSection" aria-labelledby={`${id}-mcp-connection-heading`}><h4 id={`${id}-mcp-connection-heading`}>{t('connection')}</h4>
-          <div className="dshMcpFormGrid">{draft.transport === 'stdio' ? <><label><span>{t('command')}</span><input required value={draft.command} placeholder={t('commandHint')}
-            onChange={event => { setDraft({ ...draft, command: event.target.value }) }} /></label>
+          <div className="dshMcpFormGrid">{draft.transport === 'stdio' ? <><label><span>{t('command')}</span><input id={editorFieldId('command')} aria-label={t('command')} aria-invalid={editorIssues.command !== undefined} aria-describedby={editorIssues.command === undefined ? undefined : `${editorFieldId('command')}-error`} required value={draft.command} placeholder={t('commandHint')}
+            onChange={event => { setDraft({ ...draft, command: event.target.value }) }} />{inlineError('command')}</label>
             <label><span>{t('workingDirectory')}</span><input value={draft.cwd} placeholder={t('workingDirectoryHint')}
               onChange={event => { setDraft({ ...draft, cwd: event.target.value }) }} /></label>
-            <label className="dshMcpFieldFull"><span>{t('arguments')}</span><textarea rows={3} placeholder={t('argumentsHint')} value={draft.args} onChange={event => { setDraft({ ...draft, args: event.target.value }) }} /></label></>
-            : <label className="dshMcpFieldFull"><span>{t('url')}</span><input required type="url" value={draft.url} placeholder={t(draft.transport === 'sse' ? 'sseUrlHint' : 'urlHint')}
-                onChange={event => { setDraft({ ...draft, url: event.target.value }) }} /></label>}</div>
+            <label className="dshMcpFieldFull"><span>{t('arguments')}</span><textarea rows={3} placeholder={t('argumentsHint')} value={draft.args} onChange={event => { setDraft({ ...draft, args: event.target.value }) }} /><small>{t('commandOnlyHint')}</small></label></>
+            : <label className="dshMcpFieldFull"><span>{t('url')}</span><input id={editorFieldId('url')} aria-label={t('url')} aria-invalid={editorIssues.url !== undefined} aria-describedby={editorIssues.url === undefined ? undefined : `${editorFieldId('url')}-error`} required type="url" value={draft.url} placeholder={t(draft.transport === 'sse' ? 'sseUrlHint' : 'urlHint')}
+                onChange={event => { setDraft({ ...draft, url: event.target.value }) }} /><small>{t('remoteUrlHint')}</small>{inlineError('url')}</label>}</div>
         </section>
-        {draft.transport !== 'stdio' && <section className="dshMcpFormSection" aria-labelledby={`${id}-mcp-auth-heading`}><div className="dshMcpSectionHeading"><h4 id={`${id}-mcp-auth-heading`}>{t('authentication')}</h4>
-          <label className="dshIntegrationsEnabled"><input type="checkbox" checked={draft.oauthEnabled}
-            onChange={event => { setDraft({ ...draft, oauthEnabled: event.target.checked }) }} />{t('oauthPkce')}</label></div>
-          {draft.oauthEnabled && <div className="dshMcpFormGrid"><label className="dshMcpFieldFull"><span>{t('oauthIssuer')}</span><input type="url" value={draft.oauthIssuer}
-            placeholder="https://identity.example.com" onChange={event => { setDraft({ ...draft, oauthIssuer: event.target.value }) }} /></label>
-            <label><span>{t('oauthScope')}</span><input required placeholder="mcp:tools" value={draft.oauthScope}
-              onChange={event => { setDraft({ ...draft, oauthScope: event.target.value }) }} /></label>
-            <label><span>{t('oauthResource')}</span><input type="url" placeholder="https://mcp.example.com/" value={draft.oauthResource}
-              onChange={event => { setDraft({ ...draft, oauthResource: event.target.value }) }} /></label>
-            <label className="dshMcpFieldFull"><span>{t('oauthClientId')}</span><input value={draft.oauthClientId} placeholder={t('oauthClientIdHint')}
-              onChange={event => { setDraft({ ...draft, oauthClientId: event.target.value }) }} /></label>
-            {draft.oauthClientId.trim() !== '' && <><label><span>{t('oauthClientAuthMethod')}</span><select value={draft.oauthTokenEndpointAuthMethod}
-              onChange={event => { const method = event.target.value as McpDraft['oauthTokenEndpointAuthMethod']; setDraft({ ...draft,
-                oauthTokenEndpointAuthMethod: method }) }}>
-              <option value="none">none</option><option value="client_secret_post">client_secret_post</option><option value="client_secret_basic">client_secret_basic</option>
-            </select></label>{draft.oauthTokenEndpointAuthMethod !== 'none' && <div className="dshMcpFieldFull">
-              <McpCredentialFields kind="oauth" rows={[draft.oauthSecret]} t={t} onChange={rows => { setDraft({ ...draft, oauthSecret: rows[0]! }) }} />
-            </div>}</>}
+        {draft.transport !== 'stdio' && <section className="dshMcpFormSection" aria-labelledby={`${id}-mcp-auth-heading`}><h4 id={`${id}-mcp-auth-heading`}>{t('authentication')}</h4>
+          <div className="dshIntegrationsSegments dshMcpAuthChoices" role="group" aria-label={t('authentication')}>
+            <button type="button" aria-pressed={!draft.oauthEnabled} onClick={() => { setDraft({ ...draft, oauthEnabled: false }) }}>{t('headerAuthentication')}</button>
+            <button type="button" aria-pressed={draft.oauthEnabled} onClick={() => { setDraft({ ...draft, oauthEnabled: true }) }}>{t('oauthPkce')}</button>
+          </div><p className="dshMcpFieldHint">{t(draft.oauthEnabled ? 'oauthFlowHint' : 'headerAuthHint')}</p>
+          {draft.oauthEnabled && <>
+            <label><span>{t('oauthScope')}</span><input id={editorFieldId('oauthScope')} aria-invalid={editorIssues.oauthScope !== undefined}
+              aria-describedby={editorIssues.oauthScope === undefined ? undefined : `${editorFieldId('oauthScope')}-error`}
+              required placeholder="mcp:tools" value={draft.oauthScope} onChange={event => { setDraft({ ...draft, oauthScope: event.target.value }) }} />{inlineError('oauthScope')}</label>
+            <details className="dshMcpOauthAdvanced">
+              <summary>{t('oauthAdvanced')}</summary><div id={editorFieldId('oauthConfig')} tabIndex={-1} className="dshMcpFormGrid">{inlineError('oauthConfig')}
+              <label className="dshMcpFieldFull"><span>{t('oauthIssuer')}</span><input type="url" value={draft.oauthIssuer}
+                placeholder="https://identity.example.com" onChange={event => { setDraft({ ...draft, oauthIssuer: event.target.value }) }} /></label>
+              <label><span>{t('oauthResource')}</span><input type="url" placeholder="https://mcp.example.com/" value={draft.oauthResource}
+                onChange={event => { setDraft({ ...draft, oauthResource: event.target.value }) }} /></label>
+              <label><span>{t('oauthClientId')}</span><input value={draft.oauthClientId} placeholder={t('oauthClientIdHint')}
+                onChange={event => { setDraft({ ...draft, oauthClientId: event.target.value }) }} /></label>
+              {draft.oauthClientId.trim() !== '' && <><label><span>{t('oauthClientAuthMethod')}</span><select value={draft.oauthTokenEndpointAuthMethod}
+                onChange={event => { setDraft({ ...draft, oauthTokenEndpointAuthMethod: event.target.value as McpDraft['oauthTokenEndpointAuthMethod'] }) }}>
+                <option value="none">none</option><option value="client_secret_post">client_secret_post</option><option value="client_secret_basic">client_secret_basic</option>
+              </select></label>{draft.oauthTokenEndpointAuthMethod !== 'none' && <div className="dshMcpFieldFull">
+                <McpCredentialFields kind="oauth" rows={[draft.oauthSecret]} t={t} onChange={rows => { setDraft({ ...draft, oauthSecret: rows[0]! }) }} />
+              </div>}</>}
+              </div>
+            </details>
+          </>}
 
-          </div>}
+          <div id={editorFieldId('credentials')} tabIndex={-1}>{inlineError('credentials')}
+            <McpCredentialFields kind="header" rows={draft.headerRows} t={t} showNotice={false}
+              onChange={headerRows => { setDraft({ ...draft, headerRows }) }} />
+          </div>
         </section>}
-        <details className="dshMcpFormDisclosure"><summary>{t('credentials')}</summary>
-          <McpCredentialFields kind={draft.transport === 'stdio' ? 'environment' : 'header'}
-            rows={draft.transport === 'stdio' ? draft.environmentRows : draft.headerRows} t={t}
-            onChange={rows => { setDraft(draft.transport === 'stdio' ? { ...draft, environmentRows: rows } : { ...draft, headerRows: rows }) }} />
+        {draft.transport === 'stdio' && <details open className="dshMcpFormDisclosure"><summary>{t('credentials')}</summary>
+          <div id={editorFieldId('credentials')} tabIndex={-1}>{inlineError('credentials')}
+          <McpCredentialFields kind="environment" rows={draft.environmentRows} t={t}
+            onChange={environmentRows => { setDraft({ ...draft, environmentRows }) }} />
+          </div>
+        </details>}
 
-        </details>
-        <details className="dshMcpFormDisclosure"><summary>{t('advancedSettings')}</summary><div className="dshMcpFormGrid dshMcpAdvancedFields">
+        <details className="dshMcpFormDisclosure"><summary>{t('advancedSettings')}</summary><div id={editorFieldId('advanced')} tabIndex={-1} className="dshMcpFormGrid dshMcpAdvancedFields">
           <label><span>{t('timeout')}</span><input required inputMode="numeric" value={draft.timeoutMs}
             onChange={event => { setDraft({ ...draft, timeoutMs: event.target.value }) }} /></label>
           <fieldset><legend>{t('reconnect')}</legend><label className="dshIntegrationsEnabled"><input type="checkbox" checked={draft.reconnectEnabled}
@@ -378,9 +439,10 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
             onChange={event => { setDraft({ ...draft, reconnectInitialDelayMs: event.target.value }) }} /></label>
           <label><span>{t('maxDelay')}</span><input required type="number" min="100" max="300000" step="1" value={draft.reconnectMaxDelayMs}
             onChange={event => { setDraft({ ...draft, reconnectMaxDelayMs: event.target.value }) }} /></label>
-          <label><span>{t('maxAttempts')}</span><input required type="number" min="0" max="100" step="1" value={draft.reconnectMaxAttempts}
+          <label><span>{t('maxAttempts')}</span><input required type="number" min="1" max="100" step="1" value={draft.reconnectMaxAttempts}
             onChange={event => { setDraft({ ...draft, reconnectMaxAttempts: event.target.value }) }} /></label>
         </div></details>
+        </fieldset>
       </form></>}
   </Modal>
   <Modal open={catalogInstall !== undefined} title={catalogInstall?.entry.name ?? t('installConnector')} closeLabel={t('cancel')} onClose={closeCatalogInstall} className="dshMcpDialog" contentClassName="dshMcpDialogContent"
@@ -391,7 +453,7 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
       {error !== undefined && <div className="dshIntegrationsError" role="alert">{error}</div>}
       <form id={`${id}-mcp-catalog-install`} className="dshIntegrationsEditor dshMcpDialogForm" onSubmit={installCatalog}>
         {catalogInstall.entry.credentials.map(field => <label key={field.id}><span>{field.label}</span><input required={field.required} type={field.secret ? 'password' : 'text'}
-          autoComplete="off" value={catalogInstall.values[field.id] ?? ''} onChange={event => { setCatalogInstall({ ...catalogInstall,
+          placeholder={t(field.secret ? 'catalogSecretExample' : 'catalogValueExample')} autoComplete="off" value={catalogInstall.values[field.id] ?? ''} onChange={event => { setCatalogInstall({ ...catalogInstall,
             values: { ...catalogInstall.values, [field.id]: event.target.value } }) }} /></label>)}
       </form></>}
   </Modal></>

@@ -27,3 +27,5 @@ JSON import accepts raw header values and moves them into the credential store:
 ```
 
 Use `type` or `transport` to select `sse`, `stdio`, or `streamable-http` (`http` is an import alias). Without an explicit type, a command selects stdio and a URL selects Streamable HTTP. Unknown or conflicting types are rejected. Select the transport supported by the server; the client does not infer SSE from the URL path or automatically fall back to it.
+
+The add/edit dialog describes each transport before its connection fields. Credential fields are expanded by default; optional OAuth registration and connection tuning stay in disclosures. Validation errors appear beside fields and in a focusable summary. Saving locks the editor to prevent duplicate submissions. A failed connection keeps the persisted settings open for correction; successful saves report tool readiness, pending discovery, disabled state or required authorization separately.

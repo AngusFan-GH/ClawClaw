@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { DesktopMcpLocaleKey } from './mcp-locales.ts'
 
 export interface McpCredentialDraft {
@@ -45,9 +45,11 @@ export function prepareMcpCredentials(rows: readonly McpCredentialDraft[], t: Tr
 function CredentialRow({ row, kind, t, onChange, onRemove }: { row: McpCredentialDraft; kind: McpCredentialKind; t: Translate; onChange: (row: McpCredentialDraft) => void; onRemove: () => void }) {
   const id = useId()
   const [visible, setVisible] = useState(false)
+  const nameRef = useRef<HTMLInputElement>(null)
+  useEffect(() => { if (row.name === '' && row.value === '' && row.reference === '') nameRef.current?.focus() }, [row.id])
   return <div className="dshMcpCredentialRow">
     <div className="dshMcpCredentialInputs">
-      {kind !== 'oauth' && <label><span>{t(kind === 'header' ? 'headerName' : 'environmentName')}</span><input value={row.name} placeholder={t(kind === 'header' ? 'headerNamePlaceholder' : 'environmentNamePlaceholder')} autoComplete="off" spellCheck={false}
+      {kind !== 'oauth' && <label><span>{t(kind === 'header' ? 'headerName' : 'environmentName')}</span><input ref={nameRef} value={row.name} placeholder={t(kind === 'header' ? 'headerNamePlaceholder' : 'environmentNamePlaceholder')} autoComplete="off" spellCheck={false}
         onChange={event => { onChange({ ...row, name: event.target.value }) }} /></label>}
       <label><span>{row.useReference ? t('existingCredential') : t(kind === 'oauth' ? 'oauthClientSecret' : 'headerValue')}</span><div className="dshMcpSecretInput">
         <input id={id} aria-label={row.useReference ? t('existingCredential') : t(kind === 'oauth' ? 'oauthClientSecret' : 'headerValue')} type={row.useReference || visible ? 'text' : 'password'} autoComplete="off" spellCheck={false}
@@ -66,9 +68,9 @@ function CredentialRow({ row, kind, t, onChange, onRemove }: { row: McpCredentia
   </div>
 }
 
-export function McpCredentialFields({ rows, kind, t, onChange }: { kind: McpCredentialKind; rows: readonly McpCredentialDraft[]; t: Translate; onChange: (rows: readonly McpCredentialDraft[]) => void }) {
+export function McpCredentialFields({ rows, kind, t, onChange, showNotice = true }: { showNotice?: boolean; kind: McpCredentialKind; rows: readonly McpCredentialDraft[]; t: Translate; onChange: (rows: readonly McpCredentialDraft[]) => void }) {
   return <div className={`dshMcpCredentials${kind === 'oauth' ? ' dshMcpCredentialOauth' : ''}`}>
-    {kind !== 'oauth' && <p className="dshMcpCredentialNotice">{t(kind === 'header' ? 'headerSecretNotice' : 'environmentSecretNotice')}</p>}
+    {showNotice && kind !== 'oauth' && <p className="dshMcpCredentialNotice">{t(kind === 'header' ? 'headerSecretNotice' : 'environmentSecretNotice')}</p>}
     {rows.map(row => <CredentialRow key={row.id} row={row} kind={kind} t={t}
       onChange={next => { onChange(rows.map(item => item.id === row.id ? next : item)) }}
       onRemove={() => { onChange(rows.filter(item => item.id !== row.id)) }} />)}

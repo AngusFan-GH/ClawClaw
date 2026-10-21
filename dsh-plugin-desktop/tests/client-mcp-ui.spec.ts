@@ -66,6 +66,120 @@ afterEach(async () => {
 })
 
 describe('MCP settings UI', () => {
+  it('shows transport guidance and focuses linked validation errors before saving', async () => {
+    const api = await mount()
+    await act(async () => { button(zh.addServer).click() })
+    expect(document.body.textContent).toContain(zh.stdioDescription)
+    expect(document.body.textContent).toContain(zh.httpDescription)
+    expect(document.body.textContent).toContain(zh.sseDescription)
+    await act(async () => { button('HTTP').click() })
+    await setField(zh.serverName, '中文名称')
+    await setField(zh.url, 'http://remote.example/mcp')
+    await submit()
+    expect(api.save).not.toHaveBeenCalled()
+    expect(field(zh.serverName).getAttribute('aria-invalid')).toBe('true')
+    expect(field(zh.url).getAttribute('aria-invalid')).toBe('true')
+    const summary = document.querySelector<HTMLDivElement>('.dshMcpErrorSummary')!
+    expect(document.activeElement).toBe(summary)
+    expect(summary.textContent).toContain(zh.remoteUrlError)
+    await act(async () => { [...summary.querySelectorAll('a')].find(link => link.textContent === zh.remoteUrlError)!.click() })
+    expect(document.activeElement).toBe(field(zh.url))
+  })
+
+  it('opens advanced settings from a validation error link', async () => {
+    const api = await mount()
+    await openServerMenu()
+    await act(async () => { button(zh.editServer).click() })
+    await setField(zh.maxAttempts, '0')
+    await submit()
+    expect(api.save).not.toHaveBeenCalled()
+    const link = [...document.querySelectorAll<HTMLAnchorElement>('.dshMcpErrorSummary a')].find(item => item.textContent === zh.maxAttemptsRangeError)!
+    await act(async () => { link.click() })
+    const advanced = field(zh.maxAttempts).closest('details')!
+    expect(advanced.open).toBe(true)
+    expect(advanced.contains(document.activeElement)).toBe(true)
+  })
+
+  it('rejects duplicate IDs before making a save request', async () => {
+    const api = await mount()
+    await act(async () => { button(zh.addServer).click() })
+    await setField(zh.serverName, 'local')
+    await setField(zh.command, 'node')
+    await submit()
+    expect(api.save).not.toHaveBeenCalled()
+    expect(document.querySelector('.dshMcpErrorSummary')?.textContent).toContain(zh.duplicateServerName)
+  })
+
+  it('explains and blocks conflicting OAuth and Authorization headers', async () => {
+    const api = await mountRemoteHeader()
+    await act(async () => { button(zh.oauthPkce).click() })
+    expect(document.body.textContent).toContain(zh.oauthFlowHint)
+    expect(document.querySelector('[aria-labelledby$="-mcp-auth-heading"] .dshMcpCredentials')).not.toBeNull()
+    await submit()
+    expect(api.save).not.toHaveBeenCalled()
+    expect(document.querySelector('.dshMcpErrorSummary')?.textContent).toContain(zh.oauthHeaderConflict)
+  })
+
+  it('locks the editor and prevents duplicate submissions while saving', async () => {
+    let finish!: (servers: readonly DesktopMcpServerView[]) => void
+    const api = await mount(candidate => { vi.mocked(candidate.save).mockImplementation(() => new Promise(resolve => { finish = resolve })) })
+    await openServerMenu()
+    await act(async () => { button(zh.editServer).click() })
+    await submit()
+    await submit()
+    expect(api.save).toHaveBeenCalledTimes(1)
+    expect(document.querySelector<HTMLFieldSetElement>('.dshMcpEditorFields')?.disabled).toBe(true)
+    expect(button(zh.savingConnector).disabled).toBe(true)
+    await act(async () => { finish([{ ...server, diagnostic: { code: 'ready', stage: 'ready' } }]) })
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(document.querySelector('[role="status"]')?.textContent).toBe(zh.savedConnected)
+  })
+
+  it('keeps persisted settings editable after connection failure and clears entered secrets', async () => {
+    const api = await mountRemoteHeader()
+    vi.mocked(api.save).mockImplementation(async saved => [{ ...server, ...saved, state: 'error', diagnostic: { code: 'connection-failed', stage: 'connection' } }])
+    await setField(zh.headerValue, 'Bearer private-value')
+    await submit()
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+    expect(document.querySelector('.dshMcpErrorSummary')?.textContent).toContain(zh.savedConnectionFailed)
+    expect(field(zh.headerValue).value).toBe('')
+    expect(field(zh.headerValue).placeholder).toBe(zh.configuredValue)
+    vi.mocked(api.save).mockImplementation(async saved => [{ ...server, ...saved }])
+    await submit()
+    expect(api.save).toHaveBeenLastCalledWith(expect.objectContaining({ serverName: 'local' }), 'local', undefined)
+  })
+
+  it.each([
+    ['authorization-required', 'authorization', 'error', 'savedNeedsAuthorization'],
+    ['tools-pending', 'discovery', 'running', 'savedDiscovering'],
+    ['disabled', 'configuration', 'disabled', 'savedDisabled'],
+  ] as const)('reports %s separately from successful tool readiness', async (code, stage, state, message) => {
+    const api = await mount(candidate => { vi.mocked(candidate.save).mockImplementation(async saved => [{ ...server, ...saved, state,
+      enabled: code !== 'disabled', diagnostic: { code, stage } }]) })
+    await openServerMenu()
+    await act(async () => { button(zh.editServer).click() })
+    if (code === 'disabled') {
+      await act(async () => { document.querySelector<HTMLInputElement>('.dshMcpDialogFooter input[type="checkbox"]')!.click() })
+    }
+    await submit()
+    expect(api.save).toHaveBeenCalledTimes(1)
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(document.querySelector('[role="status"]')?.textContent).toBe(zh[message])
+  })
+
+  it('does not replace newly saved settings with an older refresh response', async () => {
+    let finishRead!: (value: Awaited<ReturnType<DesktopMcpApi['read']>>) => void
+    const api = await mount()
+    vi.mocked(api.read).mockImplementation(() => new Promise(resolve => { finishRead = resolve }))
+    await act(async () => { button(zh.refresh).click() })
+    await openServerMenu()
+    await act(async () => { button(zh.editServer).click() })
+    await setField(zh.serverName, 'updated')
+    await submit()
+    await act(async () => { finishRead({ mcpServers: [server], catalog: [] }) })
+    expect(document.querySelector('.dshMcpServerTitle')?.textContent).toContain('updated')
+  })
+
   it('renders the actionable diagnostic stage and last check time', async () => {
     await mount()
     expect(document.body.textContent).toContain(zh.diagnosticToolsPending)
@@ -106,7 +220,7 @@ describe('MCP settings UI', () => {
     expect(document.querySelector('.dshMcpPage form.dshMcpEditor')).toBeNull()
     expect(document.querySelector('.dshMcpInstalledList')).not.toBeNull()
     expect([...document.querySelectorAll('.dshMcpFormSection h4')].map(item => item.textContent)).toEqual([
-      zh.identityAndTransport, zh.connection,
+      zh.connection,
     ])
     expect([...document.querySelectorAll('.dshMcpFormDisclosure summary')].map(item => item.textContent)).toEqual([
       zh.credentials, zh.advancedSettings,
