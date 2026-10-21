@@ -1,4 +1,18 @@
 export const zh = {
+  environmentName: '环境变量名称', environmentNamePlaceholder: '例如 API_KEY', environmentValuePlaceholder: '例如 your-api-key', addEnvironment: '添加环境变量',
+  environmentSecretNotice: '直接填写环境变量及其值，ClawClaw 会安全保存，并在启动本地服务时注入。再次编辑时无需重复填写。',
+  environmentNameError: '环境变量名称只能包含字母、数字和下划线，且不能以数字开头。', duplicateEnvironmentError: '环境变量名称不能重复。', environmentValueRequired: '请填写环境变量的值，或引用已有凭据。',
+  oauthClientSecret: '客户端密钥', oauthClientSecretPlaceholder: '例如 your-client-secret', oauthSecretRequired: '请填写客户端密钥，或引用已有凭据。',
+  argumentsHint: '-y\n@modelcontextprotocol/server-filesystem\n/path/to/allowed-directory', sseUrlHint: '例如 http://127.0.0.1:3000/sse',
+
+  headerNamePlaceholder: '例如 Authorization', headerValuePlaceholder: '例如 your-api-key', bearerValuePlaceholder: '例如 Bearer your-token', credentialRefPlaceholder: '例如 MCP_TOKEN',
+  configuredValue: '留空保留原值', enterHeaderValue: '输入实际值', newValueHint: '保存后不会回显实际值。',
+  headerName: '请求头名称', headerValue: '值', addHeader: '添加请求头', removeHeader: '删除', showValue: '显示', hideValue: '隐藏',
+  headerSecretNotice: '直接填写请求头及其值，保存后由 ClawClaw 安全保管。再次编辑时无需重复填写。',
+  headerValueHint: '例如 Bearer 令牌，请包含 Bearer 前缀。', savedValueHint: '已配置 · 留空保留，输入新值可替换',
+  existingCredential: '已有凭据名称', useExistingCredential: '引用已有凭据（高级）', enterValue: '改为直接填写', existingCredentialHint: '填写凭据库中已有的引用名称。',
+  headerNameError: '请填写有效的 HTTP 请求头名称，例如 Authorization。', duplicateHeaderError: '请求头名称不能重复（不区分大小写）。', headerValueRequired: '请填写请求头的值，或引用已有凭据。',
+
   categoryProductivity: '办公协作', categoryDevelopment: '开发工具', categoryData: '数据分析', categoryDesign: '设计创作', categoryResearch: '搜索研究', categoryFinance: '金融数据', addedConnector: '已添加', noCredentialsRequired: '无需填写凭据', credentialsRequired: '需配置凭据',
   nav: '连接器', title: '连接器', intro: '管理当前配置方案中的连接器及工具连接。',
   refresh: '刷新', loading: '正在加载…', unavailable: '暂时无法读取连接器配置。', searchServers: '搜索连接器或工具', clearSearch: '清除搜索', noMatches: '没有匹配的连接器。',
@@ -11,9 +25,10 @@ export const zh = {
   secretNotice: '连接配置只保存凭证引用。输入的凭证值会写入 ClawClaw 凭证库，之后不会显示或导出。',
   confirmRemove: '确认删除', more: '更多操作', serverNameHint: '1-32 个字母、数字、下划线或连字符', commandHint: '例如 npx',
   urlHint: '例如 http://127.0.0.1:3000/mcp', workingDirectory: '工作目录（可选）', workingDirectoryHint: '留空表示默认目录',
-  environmentReferences: '环境变量凭证引用', headerReferences: 'HTTP 请求头凭证引用', referencesHint: 'NAME=MY_CREDENTIAL_REF，每行一个',
+  environmentReferences: '环境变量凭证引用', headerReferences: 'HTTP 请求头凭证引用', referencesHint: 'NAME=MY_CREDENTIAL_REF，每行一个', headerReferencesHint: '例如 Authorization=MCP_TOKEN；右侧填写 MCP_TOKEN=Bearer 实际令牌',
   credentialValues: '要保存的凭证值（可选）', credentialValuesHint: 'MY_CREDENTIAL_REF=实际值，每行一个', timeout: '工具调用超时（毫秒）', credentialsMissing: '缺少一个或多个凭证引用。',
   reconnect: '自动重连', reconnectEnabled: '启用自动重连', initialDelay: '初始延迟（毫秒）', maxDelay: '最大延迟（毫秒）', maxAttempts: '最大尝试次数',
+  credentialReferenceError: '凭据引用名只能包含字母、数字和下划线，且不能以数字开头。实际令牌请填在值字段中。',
   lineFormatError: '请按 NAME=VALUE 格式填写，每行一项。', duplicateCredentialError: '凭证名称不能重复。', timeoutRangeError: '工具调用超时必须是 1000 到 600000 之间的整数。',
   unreferencedCredentialError: '每个凭证值都必须被当前连接器的连接配置引用。',
   initialDelayRangeError: '初始延迟必须是 100 到 60000 之间的整数。', maxDelayRangeError: '最大延迟必须是 100 到 300000 之间的整数。',
@@ -28,6 +43,20 @@ export const zh = {
 export type DesktopMcpLocaleKey = keyof typeof zh
 
 export const en: Record<DesktopMcpLocaleKey, string> = {
+  environmentName: 'Environment variable name', environmentNamePlaceholder: 'For example API_KEY', environmentValuePlaceholder: 'For example your-api-key', addEnvironment: 'Add environment variable',
+  environmentSecretNotice: 'Enter environment variables and their values directly. ClawClaw stores them securely and injects them when starting the local server. No need to re-enter saved values.',
+  environmentNameError: 'Environment names must start with a letter or underscore and contain only letters, numbers or underscores.', duplicateEnvironmentError: 'Environment variable names must be unique.', environmentValueRequired: 'Enter an environment value or reference an existing credential.',
+  oauthClientSecret: 'Client secret', oauthClientSecretPlaceholder: 'For example your-client-secret', oauthSecretRequired: 'Enter a client secret or reference an existing credential.',
+  argumentsHint: '-y\n@modelcontextprotocol/server-filesystem\n/path/to/allowed-directory', sseUrlHint: 'For example http://127.0.0.1:3000/sse',
+
+  headerNamePlaceholder: 'For example Authorization', headerValuePlaceholder: 'For example your-api-key', bearerValuePlaceholder: 'For example Bearer your-token', credentialRefPlaceholder: 'For example MCP_TOKEN',
+  configuredValue: 'Leave blank to keep', enterHeaderValue: 'Enter value', newValueHint: 'Saved values are never displayed again.',
+  headerName: 'Header name', headerValue: 'Value', addHeader: 'Add header', removeHeader: 'Remove', showValue: 'Show', hideValue: 'Hide',
+  headerSecretNotice: 'Enter headers and their values directly. ClawClaw stores them securely; you do not need to re-enter them when editing.',
+  headerValueHint: 'For Bearer tokens, include the Bearer prefix.', savedValueHint: 'Configured · leave blank to keep, enter a new value to replace',
+  existingCredential: 'Existing credential name', useExistingCredential: 'Use existing credential (advanced)', enterValue: 'Enter a value instead', existingCredentialHint: 'Enter a reference name already in the credential store.',
+  headerNameError: 'Enter a valid HTTP header name, such as Authorization.', duplicateHeaderError: 'Header names must be unique (case-insensitive).', headerValueRequired: 'Enter a header value or reference an existing credential.',
+
   categoryProductivity: 'Office & collaboration', categoryDevelopment: 'Development', categoryData: 'Data analysis', categoryDesign: 'Design', categoryResearch: 'Search & research', categoryFinance: 'Financial data', addedConnector: 'Added', noCredentialsRequired: 'No credentials to enter', credentialsRequired: 'Credentials required',
   nav: 'MCP Servers', title: 'MCP Servers', intro: 'Manage MCP servers and tool connections for the current Profile.',
   refresh: 'Refresh', loading: 'Loading…', unavailable: 'MCP configuration is temporarily unavailable.', searchServers: 'Search MCP servers or tools', clearSearch: 'Clear search', noMatches: 'No matching MCP servers.',
@@ -40,9 +69,10 @@ export const en: Record<DesktopMcpLocaleKey, string> = {
   secretNotice: 'Connection settings store credential references only. Entered values are written to the ClawClaw credential store and are never displayed or exported.',
   confirmRemove: 'Confirm removal', more: 'More actions', serverNameHint: '1-32 letters, numbers, underscores, or hyphens', commandHint: 'For example, npx',
   urlHint: 'For example, http://127.0.0.1:3000/mcp', workingDirectory: 'Working directory (optional)', workingDirectoryHint: 'Leave blank for the default directory',
-  environmentReferences: 'Environment credential references', headerReferences: 'HTTP header credential references', referencesHint: 'NAME=MY_CREDENTIAL_REF, one per line',
+  environmentReferences: 'Environment credential references', headerReferences: 'HTTP header credential references', referencesHint: 'NAME=MY_CREDENTIAL_REF, one per line', headerReferencesHint: 'For example Authorization=MCP_TOKEN; enter MCP_TOKEN=Bearer your-token on the right',
   credentialValues: 'Credential values to save (optional)', credentialValuesHint: 'MY_CREDENTIAL_REF=actual value, one per line', timeout: 'Tool-call timeout (milliseconds)', credentialsMissing: 'One or more credential references are not configured.',
   reconnect: 'Automatic reconnection', reconnectEnabled: 'Enable automatic reconnection', initialDelay: 'Initial delay (milliseconds)', maxDelay: 'Maximum delay (milliseconds)', maxAttempts: 'Maximum attempts',
+  credentialReferenceError: 'Credential reference names must start with a letter or underscore and contain only letters, numbers or underscores. Enter actual tokens in the value field.',
   lineFormatError: 'Use NAME=VALUE with one entry per line.', duplicateCredentialError: 'Credential names must be unique.', timeoutRangeError: 'Tool-call timeout must be a whole number from 1000 to 600000.',
   unreferencedCredentialError: 'Every credential value must be referenced by this server connection.',
   initialDelayRangeError: 'Initial delay must be a whole number from 100 to 60000.', maxDelayRangeError: 'Maximum delay must be a whole number from 100 to 300000.',

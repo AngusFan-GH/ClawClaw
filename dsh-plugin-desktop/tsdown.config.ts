@@ -63,6 +63,7 @@ export default defineConfig([
       'clawclaw-skill-filesystem': 'src/clawclaw-skill-filesystem.ts',
       'legacy-agent-presets': 'src/legacy-agent-presets.ts',
       mcp: 'src/mcp.ts',
+      'mcp-sse-bridge': 'src/mcp-sse-bridge.ts',
       'experts/index': 'src/experts/index.ts',
       'experts/remote': 'src/experts/remote.ts',
       spiritx: 'src/spiritx.ts',

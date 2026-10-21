@@ -25,13 +25,13 @@ function parseDiagnostic(value: unknown): DesktopMcpServerView['diagnostic'] {
 }
 function parseMcpServer(value: unknown): DesktopMcpServerView {
   if (!isRecord(value) || !text(value.serverName, 32) || value.serverName.length === 0
-    || (value.transport !== 'stdio' && value.transport !== 'streamable-http') || typeof value.enabled !== 'boolean'
+    || (value.transport !== 'stdio' && value.transport !== 'streamable-http' && value.transport !== 'sse') || typeof value.enabled !== 'boolean'
     || !['disabled', 'starting', 'running', 'error'].includes(String(value.state)) || !Array.isArray(value.tools) || value.tools.length > 1_024
     || (value.command !== undefined && !text(value.command, 2_048)) || (value.url !== undefined && !text(value.url, 4_096))
     || (value.error !== undefined && !text(value.error)) || (value.args !== undefined && (!Array.isArray(value.args)
       || value.args.length > 128 || value.args.some(arg => !text(arg, 4_096))))
     || (value.transport === 'stdio' && (!text(value.command, 2_048) || !Array.isArray(value.args)))
-    || (value.transport === 'streamable-http' && !text(value.url, 4_096))) throw new Error('dsh-plugin-desktop: invalid MCP response')
+    || (value.transport !== 'stdio' && !text(value.url, 4_096))) throw new Error('dsh-plugin-desktop: invalid MCP response')
   const tools = value.tools.map((tool) => {
     if (!isRecord(tool) || !text(tool.name, 256) || !text(tool.description)) throw new Error('dsh-plugin-desktop: invalid MCP tool response')
     return Object.freeze({ name: tool.name, description: tool.description })

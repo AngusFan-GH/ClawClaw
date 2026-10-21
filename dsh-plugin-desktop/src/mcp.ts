@@ -1,5 +1,6 @@
 /** Desktop-owned MCP configuration and runtime management. */
 
+import { fileURLToPath } from 'node:url'
 import { createHash, randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
@@ -44,7 +45,7 @@ const StdioServerSchema = z.object({
   managedCredentialRefs: z.array(z.string().max(256)).max(64).default([]),
 })
 const HttpServerSchema = z.object({
-  serverName: z.string().required().pattern(SERVER_NAME), transport: z.const('streamable-http'),
+  serverName: z.string().required().pattern(SERVER_NAME), transport: z.union(['streamable-http', 'sse']),
   url: z.string().required().max(4_096), headers: z.dict(z.string().max(256)).default({}), timeoutMs: z.number().min(1_000).max(600_000).default(60_000),
   reconnect: z.object({ enabled: z.boolean().default(true), initialDelayMs: z.number().min(100).max(60_000).default(500), maxDelayMs: z.number().min(100).max(300_000).default(30_000), maxAttempts: z.number().min(0).max(100).default(10) }).default(DEFAULT_RECONNECT), enabled: z.boolean().default(true),
   connectorId: z.string().max(128).pattern(CONNECTOR_ID), capabilities: z.array(z.string().max(128).pattern(CAPABILITY_ID)).max(32).default([]),
@@ -77,12 +78,20 @@ function assertHttpUrl(value: string): void {
 }
 function serverCredentialReferences(server: DesktopMcpServerConfig): ReadonlySet<string> {
   const refs = Object.values(server.transport === 'stdio' ? server.env : server.headers)
-  if (server.transport === 'streamable-http' && server.oauth?.clientSecretRef !== undefined) refs.push(server.oauth.clientSecretRef)
+  if (server.transport !== 'stdio' && server.oauth?.clientSecretRef !== undefined) refs.push(server.oauth.clientSecretRef)
   return new Set(refs)
 }
 export function parseDesktopMcpServer(value: unknown): DesktopMcpServerConfig {
+  if (!isRecord(value) || typeof value.serverName !== 'string' || !SERVER_NAME.test(value.serverName)) {
+    throw new TypeError('MCP serverName must contain 1-32 ASCII letters, digits, underscores or hyphens')
+  }
+  // Schema errors include their input. Keep raw credential mistakes out of diagnostics.
+  const rawReferences = value.transport === 'stdio' ? value.env : value.headers
+  if (isRecord(rawReferences) && Object.values(rawReferences).some(ref => typeof ref !== 'string' || !isCredentialRefName(ref))) {
+    throw new TypeError('MCP environment variables and HTTP headers must contain credential reference names, not secret values')
+  }
   const parsed = McpServerSchema(mutableSchemaInput(value) as never) as DesktopMcpServerConfig
-  if (parsed.transport === 'streamable-http') {
+  if (parsed.transport !== 'stdio') {
     assertHttpUrl(parsed.url)
     if (parsed.oauth !== undefined) {
       if (!isRecord(parsed.oauth) || (parsed.oauth.issuer !== undefined && (typeof parsed.oauth.issuer !== 'string' || parsed.oauth.issuer.length > 4_096))
@@ -200,7 +209,14 @@ export function importMcpServersDocument(value: unknown): readonly { server: Des
   const imported: Array<{ server: DesktopMcpServerConfig, secrets: Readonly<Record<string, string>> }> = []
   for (const [serverName, raw] of Object.entries(value.mcpServers)) {
     if (!isRecord(raw) || !SERVER_NAME.test(serverName)) throw new TypeError('Invalid MCP import server name')
-    const stdio = typeof raw.command === 'string'
+    const declared = raw.transport ?? raw.type
+    if (raw.transport !== undefined && raw.type !== undefined && raw.transport !== raw.type) {
+      throw new TypeError('Conflicting MCP import transport and type')
+    }
+    const transport = declared === 'http' ? 'streamable-http' : declared ?? (typeof raw.command === 'string' ? 'stdio' : 'streamable-http')
+    if (transport !== 'stdio' && transport !== 'streamable-http' && transport !== 'sse') throw new TypeError('Unsupported MCP import transport')
+    const stdio = transport === 'stdio'
+    if (!stdio && raw.command !== undefined) throw new TypeError('Remote MCP import must not contain a command')
     const rawValues = stdio ? raw.env : raw.headers
     if (rawValues !== undefined && !isRecord(rawValues)) throw new TypeError('MCP import credentials must be an object')
     const references: Record<string, string> = {}
@@ -212,7 +228,7 @@ export function importMcpServersDocument(value: unknown): readonly { server: Des
     }
     const input = stdio
       ? { serverName, transport: 'stdio' as const, command: raw.command, args: Array.isArray(raw.args) ? raw.args : [], cwd: typeof raw.cwd === 'string' ? raw.cwd : '', env: references, enabled: true }
-      : { serverName, transport: 'streamable-http' as const, url: raw.url, headers: references, enabled: true }
+      : { serverName, transport, url: raw.url, headers: references, enabled: true }
     imported.push({ server: parseDesktopMcpServer(input), secrets: Object.freeze(secrets) })
   }
   return Object.freeze(imported)
@@ -327,8 +343,8 @@ export class DesktopMcpController {
       previous?.managedCredentialRefs ?? [],
     )
     await this.commitCredentials(writes, async () => { await this.settings.update(mutableMcpSettings(next)) })
-    if (previous?.transport === 'streamable-http' && previous.oauth !== undefined
-      && (server.transport !== 'streamable-http' || server.serverName !== previous.serverName
+    if (previous !== undefined && previous.transport !== 'stdio' && previous.oauth !== undefined
+      && (server.transport === 'stdio' || server.serverName !== previous.serverName
         || JSON.stringify(server.oauth) !== JSON.stringify(previous.oauth))) {
       await this.stop(previous.serverName)
       await this.disconnectOAuth(previous.serverName)
@@ -343,7 +359,7 @@ export class DesktopMcpController {
     if (removed === undefined) throw new Error(`MCP server not found: ${serverName}`)
     const next = retainManagedCredentialOwnership(current.filter(server => server.serverName !== serverName), removed.managedCredentialRefs ?? [])
     await this.settings.update(mutableMcpSettings(next)); await this.reconcile()
-    if (removed.transport === 'streamable-http' && removed.oauth !== undefined) await this.disconnectOAuth(serverName)
+    if (removed.transport !== 'stdio' && removed.oauth !== undefined) await this.disconnectOAuth(serverName)
     await this.cleanupManagedCredentials(removed.managedCredentialRefs ?? [], next)
     return await this.read()
   }
@@ -379,7 +395,7 @@ export class DesktopMcpController {
   }
   async beginOAuth(serverName: string, redirectUri: string): Promise<{ readonly authorizationUrl: string }> {
     const server = this.settings.get().mcpServers.find(item => item.serverName === serverName)
-    if (server?.transport !== 'streamable-http' || server.oauth === undefined) throw new Error(`OAuth MCP server not found: ${serverName}`)
+    if (server === undefined || server.transport === 'stdio' || server.oauth === undefined) throw new Error(`OAuth MCP server not found: ${serverName}`)
     const discovered = server.oauth.issuer === undefined ? await discoverMcpOAuthIssuer(server.url) : undefined
     const issuer = server.oauth.issuer ?? discovered?.issuer
     if (issuer === undefined) throw new Error('OAuth issuer discovery failed')
@@ -436,7 +452,7 @@ export class DesktopMcpController {
     if (target === undefined) throw new Error(`MCP server not found: ${serverName}`)
     await this.settings.update(mutableMcpSettings(current.map(server => server.serverName === serverName ? { ...server, enabled } : server)))
     await this.reconcile()
-    if (!enabled && target.transport === 'streamable-http' && target.oauth !== undefined) await this.disconnectOAuth(serverName)
+    if (!enabled && target.transport !== 'stdio' && target.oauth !== undefined) await this.disconnectOAuth(serverName)
     return await this.read()
   }
   async test(serverName: string): Promise<DesktopMcpView> {
@@ -495,21 +511,30 @@ export class DesktopMcpController {
       ...(previous?.lastSuccessfulAt === undefined ? {} : { lastSuccessfulAt: previous.lastSuccessfulAt }) })
     try {
       const credentials = await this.resolveCredentials(server.transport === 'stdio' ? server.env : server.headers)
-      const oauthClientSecret = server.transport === 'streamable-http' && server.oauth?.clientSecretRef !== undefined
+      const oauthClientSecret = server.transport !== 'stdio' && server.oauth?.clientSecretRef !== undefined
         ? await this.ctx.credentials.resolve(credentialRef(server.oauth.clientSecretRef)) : undefined
-      const credentialsReady = credentials.ready && (server.transport !== 'streamable-http'
+      const credentialsReady = credentials.ready && (server.transport === 'stdio'
         || server.oauth?.clientSecretRef === undefined || oauthClientSecret !== undefined)
       this.status.set(server.serverName, { state: 'starting', credentialsReady, checkedAt,
         ...(previous?.lastSuccessfulAt === undefined ? {} : { lastSuccessfulAt: previous.lastSuccessfulAt }) })
       if (!credentialsReady) throw new Error('One or more credential references are not configured')
-      const oauthHeaders = server.transport === 'streamable-http' && server.oauth !== undefined
+      const oauthHeaders = server.transport !== 'stdio' && server.oauth !== undefined
         ? await this.resolveOAuthHeaders(server.serverName, server.oauth.issuer) : {}
       const config: McpClient.Config = server.transport === 'stdio'
         ? { transport: 'stdio', serverName: server.serverName, command: server.command, args: [...server.args],
             env: credentials.values, cwd: server.cwd, toolCallTimeoutMs: server.timeoutMs, reconnect: server.reconnect, failOnStartupError: true }
         : { transport: 'streamable-http', serverName: server.serverName, url: server.url,
             headers: { ...credentials.values, ...oauthHeaders }, toolCallTimeoutMs: server.timeoutMs, reconnect: server.reconnect, failOnStartupError: true }
-      const fiber = this.ctx.plugin(McpClient, config)
+      // The desktop bridge keeps legacy SSE outside the pinned upstream package.
+      // Reuse upstream tool discovery, namespace ownership, calls and reconnects.
+      const runtimeConfig: McpClient.Config = server.transport === 'sse'
+        ? { transport: 'stdio', serverName: server.serverName, command: process.execPath,
+            args: [fileURLToPath(new URL(import.meta.url.endsWith('.ts') ? '../lib/mcp-sse-bridge.js' : './mcp-sse-bridge.js', import.meta.url))], cwd: '',
+            env: { ELECTRON_RUN_AS_NODE: '1', CLAWCLAW_MCP_SSE_URL: server.url,
+              CLAWCLAW_MCP_SSE_HEADERS: JSON.stringify({ ...credentials.values, ...oauthHeaders }) },
+            toolCallTimeoutMs: server.timeoutMs, reconnect: server.reconnect, failOnStartupError: true }
+        : config
+      const fiber = this.ctx.plugin(McpClient, runtimeConfig)
       await fiber
       if (this.disposed) { await fiber.dispose(); return }
       this.runtime.set(server.serverName, { fingerprint: JSON.stringify(server), dispose: () => fiber.dispose() })

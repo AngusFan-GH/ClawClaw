@@ -1478,6 +1478,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: 3.18.4
         version: 3.18.4
+      '@modelcontextprotocol/client':
+        specifier: 2.0.0
+        version: 2.0.0
       '@tabler/icons-react':
         specifier: ^3.47.0
         version: 3.49.0(react@18.3.1)

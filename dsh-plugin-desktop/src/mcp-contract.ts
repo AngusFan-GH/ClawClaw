@@ -31,7 +31,7 @@ export type DesktopMcpServerConfig = {
   readonly managedCredentialRefs?: readonly string[]
 } | {
   readonly serverName: string
-  readonly transport: 'streamable-http'
+  readonly transport: 'streamable-http' | 'sse'
   readonly url: string
   /** HTTP header to credential-reference mapping; values never leave the Host. */
   readonly headers: Readonly<Record<string, string>>

@@ -119,6 +119,40 @@ describe('Desktop MCP', () => {
     expect(JSON.stringify(imported[0]?.server)).not.toContain('ghp_example')
   })
 
+  it.each(['sse', 'streamable-http'] as const)('validates %s URLs and reports configuration mistakes without exposing secrets', transport => {
+    const valid = { serverName: 'kb-matrix', transport, url: 'http://127.0.0.1:6061/sse', headers: { Authorization: 'MCP_TOKEN' } }
+    expect(parseDesktopMcpServer(valid)).toMatchObject({ transport, headers: { Authorization: 'MCP_TOKEN' } })
+    expect(() => parseDesktopMcpServer({ ...valid, url: 'http://remote.example/sse' })).toThrow(/HTTPS/)
+    expect(() => parseDesktopMcpServer({ ...valid, url: 'https://user:secret@example.com/sse' })).toThrow(/embedded credentials/)
+    expect(() => parseDesktopMcpServer({ ...valid, serverName: '数据库和术语库' })).toThrow(/serverName must contain/)
+    expect(() => parseDesktopMcpServer({ ...valid, headers: { Authorization: 'Bearer sensitive-value' } })).toThrow(/credential reference names/)
+    try { parseDesktopMcpServer({ ...valid, headers: { Authorization: 'Bearer sensitive-value' } }) } catch (cause) {
+      expect(String(cause)).not.toContain('sensitive-value')
+    }
+  })
+
+  it.each([{ type: 'sse' }, { transport: 'sse' }, { type: 'http' }, {}])('imports remote transport %j and stores header secrets separately', declaration => {
+    const [imported] = importMcpServersDocument({ mcpServers: { kb: { ...declaration, url: 'https://example.com/sse', headers: { Authorization: 'Bearer test-value' } } } })
+    expect(imported?.server).toMatchObject({ transport: Object.values(declaration)[0] === 'sse' ? 'sse' : 'streamable-http',
+      headers: { Authorization: mcpCredentialReference('kb', 'Authorization') } })
+    expect(imported?.secrets).toEqual({ [mcpCredentialReference('kb', 'Authorization')]: 'Bearer test-value' })
+    expect(JSON.stringify(imported?.server)).not.toContain('test-value')
+  })
+
+  it.each([{ type: 'websocket' }, { type: 'sse', transport: 'stdio' }, { type: 'sse', command: 'node' }])('rejects ambiguous or unsupported imports %j', declaration => {
+    expect(() => importMcpServersDocument({ mcpServers: { kb: { ...declaration, url: 'https://example.com/sse' } } })).toThrow()
+  })
+
+  it('starts SSE through the desktop bridge with resolved headers and preserves its saved transport', async () => {
+    const fixture = controllerFixture({ mcpServers: [] }, { validateSchema: true })
+    const view = await fixture.controller.save({ serverName: 'sse-test', transport: 'sse', url: 'https://example.com/sse', headers: { Authorization: 'MCP_TOKEN' } }, undefined, { MCP_TOKEN: 'Bearer test-secret' })
+    expect(view.mcpServers[0]).toMatchObject({ transport: 'sse', state: 'running', headers: { Authorization: 'MCP_TOKEN' } })
+    expect(fixture.plugin).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ transport: 'stdio', command: process.execPath,
+      args: [expect.stringContaining('mcp-sse-bridge.js')], env: expect.objectContaining({ ELECTRON_RUN_AS_NODE: '1', CLAWCLAW_MCP_SSE_HEADERS: JSON.stringify({ Authorization: 'Bearer test-secret' }) }) }))
+    expect(JSON.stringify(view)).not.toContain('test-secret')
+    await fixture.controller.dispose()
+  })
+
   it('keeps normalized credential references distinct', () => {
     expect(mcpCredentialReference('foo-bar', 'TOKEN')).not.toBe(mcpCredentialReference('foo_bar', 'TOKEN'))
     expect(mcpCredentialReference('Foo', 'TOKEN')).not.toBe(mcpCredentialReference('foo', 'TOKEN'))
@@ -238,8 +272,8 @@ describe('Desktop MCP', () => {
     await fixture.controller.dispose()
   })
 
-  it('completes OAuth PKCE into the credential store and injects only a runtime bearer header', async () => {
-    const server = parseDesktopMcpServer({ serverName: 'oauth', transport: 'streamable-http', url: 'https://mcp.example.com/mcp', headers: {},
+  it.each(['streamable-http', 'sse'] as const)('completes %s OAuth PKCE into the credential store and injects only a runtime bearer header', async transport => {
+    const server = parseDesktopMcpServer({ serverName: 'oauth', transport, url: 'https://mcp.example.com/mcp', headers: {},
       oauth: { issuer: 'https://identity.example.com', scope: 'mcp:tools', resource: 'https://mcp.example.com/' }, reconnect, enabled: true })
     const fixture = controllerFixture({ mcpServers: [server] })
     expect((await fixture.controller.test('oauth')).mcpServers[0]?.diagnostic.code).toBe('authorization-required')
@@ -259,9 +293,9 @@ describe('Desktop MCP', () => {
     const storedGrant = fixture.stored.get(mcpCredentialReference('oauth', 'OAUTH_GRANT'))!
     expect(storedGrant).toContain('access-secret')
     expect(JSON.stringify(server)).not.toMatch(/access-secret|refresh-secret/u)
-    expect(fixture.plugin).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
-      headers: { Authorization: 'Bearer access-secret' },
-    }))
+    expect(fixture.plugin).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining(transport === 'sse'
+      ? { env: expect.objectContaining({ CLAWCLAW_MCP_SSE_HEADERS: JSON.stringify({ Authorization: 'Bearer access-secret' }) }) }
+      : { headers: { Authorization: 'Bearer access-secret' } }))
     await fixture.controller.dispose()
     vi.unstubAllGlobals()
   })

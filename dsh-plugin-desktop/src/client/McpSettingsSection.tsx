@@ -17,6 +17,7 @@ import PlugZap from 'lucide-react/dist/esm/icons/plug-zap.mjs'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DesktopMcpCatalogEntry, DesktopMcpServerConfig, DesktopMcpServerView } from '../mcp-contract.ts'
 import type { DesktopMcpApi } from './mcp-api.ts'
+import { McpCredentialFields, newMcpCredential, prepareMcpCredentials, type McpCredentialDraft } from './McpCredentialFields.tsx'
 import { SkillCategoryIcon } from './SkillCategoryIcon.tsx'
 import { isMcpServerReady } from '../mcp-readiness.ts'
 import { SettingsIconButton, SettingsToggle } from './settings-controls.tsx'
@@ -41,8 +42,8 @@ interface McpDraft {
   command: string
   args: string
   cwd: string
-  references: string
-  secrets: string
+  environmentRows: readonly McpCredentialDraft[]
+  headerRows: readonly McpCredentialDraft[]
   timeoutMs: string
   reconnectEnabled: boolean
   reconnectInitialDelayMs: string
@@ -54,7 +55,7 @@ interface McpDraft {
   oauthScope: string
   oauthResource: string
   oauthClientId: string
-  oauthClientSecretRef: string
+  oauthSecret: McpCredentialDraft
   oauthTokenEndpointAuthMethod: 'none' | 'client_secret_post' | 'client_secret_basic'
   enabled: boolean
 }
@@ -62,9 +63,9 @@ interface CatalogInstallDraft {
   readonly entry: DesktopMcpCatalogEntry
   readonly values: Readonly<Record<string, string>>
 }
-const EMPTY_DRAFT: McpDraft = { serverName: '', transport: 'stdio', command: '', args: '', cwd: '', references: '', secrets: '', timeoutMs: '60000',
+const EMPTY_DRAFT: McpDraft = { serverName: '', transport: 'stdio', command: '', args: '', cwd: '', environmentRows: [], headerRows: [], timeoutMs: '60000',
   reconnectEnabled: true, reconnectInitialDelayMs: '500', reconnectMaxDelayMs: '30000', reconnectMaxAttempts: '10', url: '',
-  oauthEnabled: false, oauthIssuer: '', oauthScope: 'mcp:tools', oauthResource: '', oauthClientId: '', oauthClientSecretRef: '',
+  oauthEnabled: false, oauthIssuer: '', oauthScope: 'mcp:tools', oauthResource: '', oauthClientId: '', oauthSecret: { id: 'oauth-secret', name: 'OAUTH_CLIENT_SECRET', value: '', reference: '', useReference: false },
   oauthTokenEndpointAuthMethod: 'none', enabled: true }
 
 const connectorCategories = { productivity: 'office', development: 'development', data: 'data', design: 'design', research: 'learning', finance: 'finance' } as const
@@ -77,21 +78,11 @@ function connectorCategoryLabel(category: string, t: Translate): string {
   return Object.hasOwn(keys, category) ? t(keys[category as keyof typeof keys]) : category
 }
 
-function linesToMap(value: string, t: Translate): Record<string, string> {
-  const entries = value.split(/\r?\n/u).map(line => line.trim()).filter(Boolean).map(line => {
-    const separator = line.indexOf('=')
-    if (separator < 1 || separator === line.length - 1) throw new Error(t('lineFormatError'))
-    return [line.slice(0, separator).trim(), line.slice(separator + 1).trim()] as const
-  })
-  if (new Set(entries.map(([key]) => key)).size !== entries.length) throw new Error(t('duplicateCredentialError'))
-  return Object.fromEntries(entries)
-}
 function integer(value: string, min: number, max: number, error: string): number {
   const parsed = Number(value)
   if (!Number.isInteger(parsed) || parsed < min || parsed > max) throw new Error(error)
   return parsed
 }
-function mapToLines(value: Readonly<Record<string, string>>): string { return Object.entries(value).map(([key, item]) => `${key}=${item}`).join('\n') }
 
 function statusLabel(server: DesktopMcpServerView, t: Translate): string {
   if (server.diagnostic.code === 'credentials-missing') return t('diagnosticCredentials')
@@ -105,17 +96,19 @@ function mcpDraft(server: DesktopMcpServerView): McpDraft {
   return { previousName: server.serverName, ...(server.connectorId === undefined ? {} : { connectorId: server.connectorId }),
     ...(server.capabilities === undefined ? {} : { capabilities: server.capabilities }), serverName: server.serverName, transport: server.transport,
     command: server.transport === 'stdio' ? server.command : '', args: server.transport === 'stdio' ? server.args.join('\n') : '',
-    cwd: server.transport === 'stdio' ? server.cwd : '', references: mapToLines(server.transport === 'stdio' ? server.env : server.headers), secrets: '',
+    cwd: server.transport === 'stdio' ? server.cwd : '',
+    environmentRows: server.transport === 'stdio' ? Object.entries(server.env).map(([name, reference]) => ({ ...newMcpCredential(), name, reference })) : [],
+    headerRows: server.transport === 'stdio' ? [] : Object.entries(server.headers).map(([name, reference]) => ({ ...newMcpCredential(), name, reference })),
     timeoutMs: String(server.timeoutMs), reconnectEnabled: server.reconnect.enabled,
     reconnectInitialDelayMs: String(server.reconnect.initialDelayMs), reconnectMaxDelayMs: String(server.reconnect.maxDelayMs),
-    reconnectMaxAttempts: String(server.reconnect.maxAttempts), url: server.transport === 'streamable-http' ? server.url : '',
-    oauthEnabled: server.transport === 'streamable-http' && server.oauth !== undefined,
-    oauthIssuer: server.transport === 'streamable-http' ? server.oauth?.issuer ?? '' : '',
-    oauthScope: server.transport === 'streamable-http' ? server.oauth?.scope ?? 'mcp:tools' : 'mcp:tools',
-    oauthResource: server.transport === 'streamable-http' ? server.oauth?.resource ?? '' : '',
-    oauthClientId: server.transport === 'streamable-http' ? server.oauth?.clientId ?? '' : '',
-    oauthClientSecretRef: server.transport === 'streamable-http' ? server.oauth?.clientSecretRef ?? '' : '',
-    oauthTokenEndpointAuthMethod: server.transport === 'streamable-http' ? server.oauth?.tokenEndpointAuthMethod ?? 'none' : 'none', enabled: server.enabled }
+    reconnectMaxAttempts: String(server.reconnect.maxAttempts), url: server.transport !== 'stdio' ? server.url : '',
+    oauthEnabled: server.transport !== 'stdio' && server.oauth !== undefined,
+    oauthIssuer: server.transport !== 'stdio' ? server.oauth?.issuer ?? '' : '',
+    oauthScope: server.transport !== 'stdio' ? server.oauth?.scope ?? 'mcp:tools' : 'mcp:tools',
+    oauthResource: server.transport !== 'stdio' ? server.oauth?.resource ?? '' : '',
+    oauthClientId: server.transport !== 'stdio' ? server.oauth?.clientId ?? '' : '',
+    oauthSecret: { ...newMcpCredential(), name: 'OAUTH_CLIENT_SECRET', reference: server.transport !== 'stdio' ? server.oauth?.clientSecretRef ?? '' : '' },
+    oauthTokenEndpointAuthMethod: server.transport !== 'stdio' ? server.oauth?.tokenEndpointAuthMethod ?? 'none' : 'none', enabled: server.enabled }
 }
 
 export function McpSettingsSection({ t, api, embedded = false, onSummary, onCatalogChange, expertUsage }: McpSettingsSectionProps) {
@@ -170,13 +163,17 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
     event.preventDefault()
     if (draft === undefined) return
     try {
-      const references = linesToMap(draft.references, t)
-      const secrets = linesToMap(draft.secrets, t)
-      const referenced = new Set(Object.values(references))
-      if (draft.oauthEnabled && draft.oauthTokenEndpointAuthMethod !== 'none' && draft.oauthClientSecretRef.trim() !== '') {
-        referenced.add(draft.oauthClientSecretRef.trim())
+      if (!/^[A-Za-z0-9_-]{1,32}$/u.test(draft.serverName.trim())) throw new Error(t('serverNameHint'))
+      const values = prepareMcpCredentials(draft.transport === 'stdio' ? draft.environmentRows : draft.headerRows, t, draft.transport === 'stdio' ? 'environment' : 'header')
+      const references = values.references
+      const secrets = { ...values.secrets }
+      let oauthClientSecretRef: string | undefined
+      if (draft.transport !== 'stdio' && draft.oauthEnabled && draft.oauthClientId.trim() !== '' && draft.oauthTokenEndpointAuthMethod !== 'none') {
+        if (draft.oauthSecret.value === '' && draft.oauthSecret.reference.trim() === '') throw new Error(t('oauthSecretRequired'))
+        const oauth = prepareMcpCredentials([draft.oauthSecret], t, 'environment')
+        oauthClientSecretRef = oauth.references.OAUTH_CLIENT_SECRET
+        Object.assign(secrets, oauth.secrets)
       }
-      if (Object.keys(secrets).some(ref => !referenced.has(ref))) throw new Error(t('unreferencedCredentialError'))
       const timeoutMs = integer(draft.timeoutMs, 1_000, 600_000, t('timeoutRangeError'))
       const reconnect = { enabled: draft.reconnectEnabled,
         initialDelayMs: integer(draft.reconnectInitialDelayMs, 100, 60_000, t('initialDelayRangeError')),
@@ -187,11 +184,11 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
         ? { serverName: draft.serverName.trim(), transport: 'stdio', command: draft.command.trim(),
             args: draft.args.split(/\r?\n/u).map(value => value.trim()).filter(Boolean), cwd: draft.cwd.trim(), env: references, timeoutMs, reconnect, enabled: draft.enabled,
             ...(draft.connectorId === undefined ? {} : { connectorId: draft.connectorId }), ...(draft.capabilities === undefined ? {} : { capabilities: draft.capabilities }) }
-        : { serverName: draft.serverName.trim(), transport: 'streamable-http', url: draft.url.trim(), headers: references, timeoutMs, reconnect, enabled: draft.enabled,
+        : { serverName: draft.serverName.trim(), transport: draft.transport, url: draft.url.trim(), headers: references, timeoutMs, reconnect, enabled: draft.enabled,
             ...(draft.oauthEnabled ? { oauth: { ...(draft.oauthIssuer.trim() === '' ? {} : { issuer: draft.oauthIssuer.trim() }), scope: draft.oauthScope.trim(),
               ...(draft.oauthResource.trim() === '' ? {} : { resource: draft.oauthResource.trim() }),
               ...(draft.oauthClientId.trim() === '' ? {} : { clientId: draft.oauthClientId.trim(), tokenEndpointAuthMethod: draft.oauthTokenEndpointAuthMethod,
-                ...(draft.oauthTokenEndpointAuthMethod === 'none' || draft.oauthClientSecretRef.trim() === '' ? {} : { clientSecretRef: draft.oauthClientSecretRef.trim() }) }) } } : {}),
+                ...(oauthClientSecretRef === undefined ? {} : { clientSecretRef: oauthClientSecretRef }) }) } } : {}),
             ...(draft.connectorId === undefined ? {} : { connectorId: draft.connectorId }), ...(draft.capabilities === undefined ? {} : { capabilities: draft.capabilities }) }
       if (draft.previousName !== undefined && draft.previousName !== server.serverName && (expertUsage?.get(draft.previousName) ?? 0) > 0) {
         throw new Error(t('renameBoundServer').replace('{count}', String(expertUsage?.get(draft.previousName) ?? 0)))
@@ -262,7 +259,7 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
         const toolsExpanded = expandedServers.has(server.serverName)
         const connector = connectorFor(server)
         return <div className="dshIntegrationsMcp dshMcpServerCard" key={server.serverName}>
-        <div className="dshMcpServerMain"><ConnectorGlyph category={connector?.category} /><div className="dshMcpIdentity"><div className="dshMcpServerTitle"><span className="dshIntegrationsRowTitle" title={connector?.name ?? server.serverName}>{connector?.name ?? server.serverName}</span><span className="dshMcpTransport">{server.transport === 'stdio' ? 'stdio' : 'HTTP'}</span></div>
+        <div className="dshMcpServerMain"><ConnectorGlyph category={connector?.category} /><div className="dshMcpIdentity"><div className="dshMcpServerTitle"><span className="dshIntegrationsRowTitle" title={connector?.name ?? server.serverName}>{connector?.name ?? server.serverName}</span><span className="dshMcpTransport">{server.transport === 'stdio' ? 'stdio' : server.transport === 'sse' ? 'SSE' : 'HTTP'}</span></div>
           {connector !== undefined && <span className="dshMcpServerId">{server.serverName}</span>}<span className="dshMcpEndpoint" title={server.transport === 'stdio' ? `${server.command} ${server.args.join(' ')}` : server.url}>{server.transport === 'stdio' ? `${server.command} ${server.args.join(' ')}` : server.url}</span></div>
           <div className="dshMcpServerStatus"><span className="dshMcpStatus" data-state={server.state} data-diagnostic={server.diagnostic.code}>{statusLabel(server, t)}</span>
             <SettingsToggle label={server.enabled ? t('enabled') : t('disabled')} checked={server.enabled}
@@ -273,7 +270,7 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
           onClick={() => { toggleTools(server.serverName) }}><span>{server.tools.length} {t('tools')}</span><ChevronDown aria-hidden="true" /></button>}
           {server.diagnostic.checkedAt !== undefined && <span>{t('lastChecked').replace('{time}', new Date(server.diagnostic.checkedAt).toLocaleString())}</span>}
           {(expertUsage?.get(server.serverName) ?? 0) > 0 && <span>{t('usedByExperts').replace('{count}', String(expertUsage?.get(server.serverName) ?? 0))}</span>}</div>
-          <div className="dshMcpServerActions">{server.transport === 'streamable-http' && server.oauth !== undefined && <button type="button" className="dshIntegrationsCommand"
+          <div className="dshMcpServerActions">{server.transport !== 'stdio' && server.oauth !== undefined && <button type="button" className="dshIntegrationsCommand"
             disabled={busy !== undefined} onClick={() => { authorize(server.serverName) }}>{server.diagnostic.code === 'authorization-required' ? t('authorize') : t('reauthorize')}</button>}
             <Menu className="dshMcpMore" listClassName="dshMcpMoreMenu" open={openMenuName === server.serverName}
               onClose={() => { setOpenMenuName(undefined) }} align="end" compact portal selection="fill"
@@ -332,44 +329,45 @@ export function McpSettingsSection({ t, api, embedded = false, onSummary, onCata
         <section className="dshMcpFormSection" aria-labelledby={`${id}-mcp-identity-heading`}><h4 id={`${id}-mcp-identity-heading`}>{t('identityAndTransport')}</h4>
           <div className="dshMcpFormGrid"><label><span>{t('serverName')}</span><input required pattern="[A-Za-z0-9_-]{1,32}" value={draft.serverName}
             placeholder={t('serverNameHint')} onChange={event => { setDraft({ ...draft, serverName: event.target.value }) }} /></label>
-            <fieldset><legend>{t('transport')}</legend><div className="dshIntegrationsSegments">{(['stdio', 'streamable-http'] as const).map(transport =>
+            <fieldset><legend>{t('transport')}</legend><div className="dshIntegrationsSegments">{(['stdio', 'streamable-http', 'sse'] as const).map(transport =>
               <button key={transport} type="button" aria-pressed={draft.transport === transport}
-                onClick={() => { setDraft({ ...draft, transport }) }}>{transport === 'stdio' ? 'stdio' : 'HTTP'}</button>)}</div></fieldset></div>
+                onClick={() => { setDraft({ ...draft, transport }) }}>{transport === 'stdio' ? 'stdio' : transport === 'sse' ? 'SSE' : 'HTTP'}</button>)}</div></fieldset></div>
         </section>
         <section className="dshMcpFormSection" aria-labelledby={`${id}-mcp-connection-heading`}><h4 id={`${id}-mcp-connection-heading`}>{t('connection')}</h4>
           <div className="dshMcpFormGrid">{draft.transport === 'stdio' ? <><label><span>{t('command')}</span><input required value={draft.command} placeholder={t('commandHint')}
             onChange={event => { setDraft({ ...draft, command: event.target.value }) }} /></label>
             <label><span>{t('workingDirectory')}</span><input value={draft.cwd} placeholder={t('workingDirectoryHint')}
               onChange={event => { setDraft({ ...draft, cwd: event.target.value }) }} /></label>
-            <label className="dshMcpFieldFull"><span>{t('arguments')}</span><textarea rows={3} value={draft.args} onChange={event => { setDraft({ ...draft, args: event.target.value }) }} /></label></>
-            : <label className="dshMcpFieldFull"><span>{t('url')}</span><input required type="url" value={draft.url} placeholder={t('urlHint')}
+            <label className="dshMcpFieldFull"><span>{t('arguments')}</span><textarea rows={3} placeholder={t('argumentsHint')} value={draft.args} onChange={event => { setDraft({ ...draft, args: event.target.value }) }} /></label></>
+            : <label className="dshMcpFieldFull"><span>{t('url')}</span><input required type="url" value={draft.url} placeholder={t(draft.transport === 'sse' ? 'sseUrlHint' : 'urlHint')}
                 onChange={event => { setDraft({ ...draft, url: event.target.value }) }} /></label>}</div>
         </section>
-        {draft.transport === 'streamable-http' && <section className="dshMcpFormSection" aria-labelledby={`${id}-mcp-auth-heading`}><div className="dshMcpSectionHeading"><h4 id={`${id}-mcp-auth-heading`}>{t('authentication')}</h4>
+        {draft.transport !== 'stdio' && <section className="dshMcpFormSection" aria-labelledby={`${id}-mcp-auth-heading`}><div className="dshMcpSectionHeading"><h4 id={`${id}-mcp-auth-heading`}>{t('authentication')}</h4>
           <label className="dshIntegrationsEnabled"><input type="checkbox" checked={draft.oauthEnabled}
             onChange={event => { setDraft({ ...draft, oauthEnabled: event.target.checked }) }} />{t('oauthPkce')}</label></div>
           {draft.oauthEnabled && <div className="dshMcpFormGrid"><label className="dshMcpFieldFull"><span>{t('oauthIssuer')}</span><input type="url" value={draft.oauthIssuer}
             placeholder="https://identity.example.com" onChange={event => { setDraft({ ...draft, oauthIssuer: event.target.value }) }} /></label>
-            <label><span>{t('oauthScope')}</span><input required value={draft.oauthScope}
+            <label><span>{t('oauthScope')}</span><input required placeholder="mcp:tools" value={draft.oauthScope}
               onChange={event => { setDraft({ ...draft, oauthScope: event.target.value }) }} /></label>
-            <label><span>{t('oauthResource')}</span><input type="url" value={draft.oauthResource}
+            <label><span>{t('oauthResource')}</span><input type="url" placeholder="https://mcp.example.com/" value={draft.oauthResource}
               onChange={event => { setDraft({ ...draft, oauthResource: event.target.value }) }} /></label>
             <label className="dshMcpFieldFull"><span>{t('oauthClientId')}</span><input value={draft.oauthClientId} placeholder={t('oauthClientIdHint')}
               onChange={event => { setDraft({ ...draft, oauthClientId: event.target.value }) }} /></label>
             {draft.oauthClientId.trim() !== '' && <><label><span>{t('oauthClientAuthMethod')}</span><select value={draft.oauthTokenEndpointAuthMethod}
               onChange={event => { const method = event.target.value as McpDraft['oauthTokenEndpointAuthMethod']; setDraft({ ...draft,
-                oauthTokenEndpointAuthMethod: method, ...(method === 'none' ? { oauthClientSecretRef: '' } : {}) }) }}>
+                oauthTokenEndpointAuthMethod: method }) }}>
               <option value="none">none</option><option value="client_secret_post">client_secret_post</option><option value="client_secret_basic">client_secret_basic</option>
-            </select></label>{draft.oauthTokenEndpointAuthMethod !== 'none' && <label><span>{t('oauthClientSecretRef')}</span><input required value={draft.oauthClientSecretRef}
-              placeholder="MCP_OAUTH_CLIENT_SECRET" onChange={event => { setDraft({ ...draft, oauthClientSecretRef: event.target.value }) }} /></label>}</>}
+            </select></label>{draft.oauthTokenEndpointAuthMethod !== 'none' && <div className="dshMcpFieldFull">
+              <McpCredentialFields kind="oauth" rows={[draft.oauthSecret]} t={t} onChange={rows => { setDraft({ ...draft, oauthSecret: rows[0]! }) }} />
+            </div>}</>}
+
           </div>}
         </section>}
         <details className="dshMcpFormDisclosure"><summary>{t('credentials')}</summary>
-          <p className="dshMcpCredentialNotice">{t('secretNotice')}</p><div className="dshMcpFormGrid">
-            <label><span>{draft.transport === 'stdio' ? t('environmentReferences') : t('headerReferences')}</span><textarea rows={3} value={draft.references} placeholder={t('referencesHint')}
-              onChange={event => { setDraft({ ...draft, references: event.target.value }) }} /></label>
-            <label><span>{t('credentialValues')}</span><textarea rows={3} value={draft.secrets} placeholder={t('credentialValuesHint')}
-              onChange={event => { setDraft({ ...draft, secrets: event.target.value }) }} /></label></div>
+          <McpCredentialFields kind={draft.transport === 'stdio' ? 'environment' : 'header'}
+            rows={draft.transport === 'stdio' ? draft.environmentRows : draft.headerRows} t={t}
+            onChange={rows => { setDraft(draft.transport === 'stdio' ? { ...draft, environmentRows: rows } : { ...draft, headerRows: rows }) }} />
+
         </details>
         <details className="dshMcpFormDisclosure"><summary>{t('advancedSettings')}</summary><div className="dshMcpFormGrid dshMcpAdvancedFields">
           <label><span>{t('timeout')}</span><input required inputMode="numeric" value={draft.timeoutMs}

@@ -39,6 +39,23 @@ function field(label: string): HTMLInputElement {
   if (!(found instanceof HTMLInputElement)) throw new Error(`Missing field: ${label}`)
   return found
 }
+async function setField(label: string, value: string): Promise<void> {
+  await act(async () => {
+    const input = field(label)
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+async function submit(): Promise<void> {
+  await act(async () => { document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) })
+}
+async function mountRemoteHeader(): Promise<DesktopMcpApi> {
+  const api = await mount(api => { vi.mocked(api.read).mockResolvedValue({ mcpServers: [{ ...server, transport: 'streamable-http', url: 'https://example.com/mcp', headers: { Authorization: 'SHARED_TOKEN' } }], catalog: [] }) })
+  await openServerMenu()
+  await act(async () => { button(zh.editServer).click() })
+  return api
+}
+
 async function openServerMenu(): Promise<void> {
   await act(async () => { document.querySelector<HTMLButtonElement>('.dshMcpMoreTrigger')!.click() })
 }
@@ -100,6 +117,174 @@ describe('MCP settings UI', () => {
     expect(document.querySelector<HTMLInputElement>('.dshIntegrationsEditor fieldset input[type="checkbox"]')?.checked).toBe(false)
     await act(async () => { document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) })
     expect(api.save).toHaveBeenCalledWith(expect.objectContaining({ reconnect: server.reconnect, connectorId: 'local-tools', capabilities: ['knowledge.search'] }), 'local', undefined)
+  })
+
+  it('saves a directly entered SSE header through an automatic credential reference', async () => {
+    const api = await mount()
+    await openServerMenu()
+    await act(async () => { button(zh.editServer).click() })
+    await act(async () => { button('SSE').click() })
+    expect(button('SSE').getAttribute('aria-pressed')).toBe('true')
+    expect(document.body.textContent).not.toContain(zh.headerReferencesHint)
+    await setField(zh.url, 'https://example.com/sse')
+    await act(async () => { button(zh.addHeader).click() })
+    expect(field(zh.headerName).placeholder).toBe(zh.headerNamePlaceholder)
+    expect(field(zh.headerValue).placeholder).toBe(zh.bearerValuePlaceholder)
+    await setField(zh.headerName, 'X-API-Key')
+    expect(field(zh.headerValue).placeholder).toBe(zh.headerValuePlaceholder)
+    await setField(zh.headerName, 'Authorization')
+    await setField(zh.headerValue, 'Bearer test-secret')
+    expect(field(zh.headerValue).type).toBe('password')
+    await act(async () => { button(zh.showValue).click() })
+    expect(field(zh.headerValue).type).toBe('text')
+    await submit()
+    const [saved, previousName, secrets] = vi.mocked(api.save).mock.calls[0]!
+    expect(saved).toMatchObject({ transport: 'sse', url: 'https://example.com/sse' })
+    if (saved.transport === 'stdio') throw new Error('Expected remote server')
+    expect(previousName).toBe('local')
+    expect(saved.headers.Authorization).toMatch(/^MCP_HEADER_/u)
+    expect(secrets).toEqual({ [saved.headers.Authorization!]: 'Bearer test-secret' })
+    expect(JSON.stringify(saved)).not.toContain('test-secret')
+  })
+
+  it('preserves configured values without fetching or re-entering secrets', async () => {
+    const api = await mountRemoteHeader()
+    expect(field(zh.headerValue).value).toBe('')
+    expect(field(zh.headerValue).placeholder).toBe(zh.configuredValue)
+    expect(document.body.textContent).not.toContain('SHARED_TOKEN')
+    await submit()
+    expect(api.save).toHaveBeenCalledWith(expect.objectContaining({ headers: { Authorization: 'SHARED_TOKEN' } }), 'local', undefined)
+  })
+
+  it('uses a fresh credential when replacing a shared value', async () => {
+    const api = await mountRemoteHeader()
+    await setField(zh.headerValue, 'Bearer replacement')
+    await submit()
+    const [saved, , secrets] = vi.mocked(api.save).mock.calls[0]!
+    if (saved.transport === 'stdio') throw new Error('Expected remote server')
+    expect(saved.headers.Authorization).not.toBe('SHARED_TOKEN')
+    expect(secrets).toEqual({ [saved.headers.Authorization!]: 'Bearer replacement' })
+  })
+
+  it('allows using existing credentials through the advanced option', async () => {
+    const api = await mountRemoteHeader()
+    await act(async () => { button(zh.useExistingCredential).click() })
+    expect(field(zh.existingCredential).value).toBe('SHARED_TOKEN')
+    expect(field(zh.existingCredential).placeholder).toBe(zh.credentialRefPlaceholder)
+    await setField(zh.existingCredential, 'MY_EXISTING_TOKEN')
+    await submit()
+    expect(api.save).toHaveBeenCalledWith(expect.objectContaining({ headers: { Authorization: 'MY_EXISTING_TOKEN' } }), 'local', undefined)
+  })
+
+  it('removes a configured header explicitly and does not send its value', async () => {
+    const api = await mountRemoteHeader()
+    await act(async () => { button(zh.removeHeader + ' Authorization').click() })
+    await submit()
+    expect(api.save).toHaveBeenCalledWith(expect.objectContaining({ headers: {} }), 'local', undefined)
+  })
+
+  it('validates new values and case-insensitive duplicate header names', async () => {
+    const api = await mountRemoteHeader()
+    await act(async () => { button(zh.addHeader).click() })
+    const second = document.querySelectorAll<HTMLInputElement>('.dshMcpCredentialInputs input')[2]!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(second, 'X-Api-Key')
+      second.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await submit()
+    expect(document.body.textContent).toContain(zh.headerValueRequired)
+    expect(api.save).not.toHaveBeenCalled()
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(second, 'authorization')
+      second.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await submit()
+    expect(document.body.textContent).toContain(zh.duplicateHeaderError)
+    expect(api.save).not.toHaveBeenCalled()
+  })
+
+  it.each(['stdio', 'streamable-http', 'sse'] as const)('edits %s credentials directly and keeps values out of settings', async transport => {
+    const api = await mount()
+    await openServerMenu()
+    await act(async () => { button(zh.editServer).click() })
+    if (transport !== 'stdio') {
+      await act(async () => { button(transport === 'sse' ? 'SSE' : 'HTTP').click() })
+      expect(field(zh.url).placeholder).toBe(transport === 'sse' ? zh.sseUrlHint : zh.urlHint)
+      await setField(zh.url, 'https://example.com/mcp')
+    } else {
+      expect(document.querySelector<HTMLTextAreaElement>('textarea')?.placeholder).toBe(zh.argumentsHint)
+    }
+    await act(async () => { button(transport === 'stdio' ? zh.addEnvironment : zh.addHeader).click() })
+    await setField(transport === 'stdio' ? zh.environmentName : zh.headerName, transport === 'stdio' ? 'API_KEY' : 'Authorization')
+    await setField(zh.headerValue, 'example-value=with spaces')
+    await submit()
+    const [saved, , secrets] = vi.mocked(api.save).mock.calls[0]!
+    expect(saved.transport).toBe(transport)
+    const references = saved.transport === 'stdio' ? saved.env : saved.headers
+    const ref = references[transport === 'stdio' ? 'API_KEY' : 'Authorization']!
+    expect(ref).toMatch(/^MCP_(ENV|HEADER)_/u)
+    expect(secrets).toEqual({ [ref]: 'example-value=with spaces' })
+    expect(JSON.stringify(saved)).not.toContain('example-value')
+  })
+
+  it('retains stdio environment references without re-entering values', async () => {
+    const api = await mount(candidate => { vi.mocked(candidate.read).mockResolvedValue({ mcpServers: [{ ...server, env: { API_KEY: 'OLD_TOKEN' } }], catalog: [] }) })
+    await openServerMenu()
+    await act(async () => { button(zh.editServer).click() })
+    expect(field(zh.headerValue).value).toBe('')
+    expect(field(zh.headerValue).placeholder).toBe(zh.configuredValue)
+    await submit()
+    expect(api.save).toHaveBeenCalledWith(expect.objectContaining({ env: { API_KEY: 'OLD_TOKEN' } }), 'local', undefined)
+  })
+
+  it('keeps environment and header drafts separate across transport switches', async () => {
+    const api = await mount()
+    await openServerMenu()
+    await act(async () => { button(zh.editServer).click() })
+    await act(async () => { button(zh.addEnvironment).click() })
+    await setField(zh.environmentName, 'API_KEY')
+    await setField(zh.headerValue, 'environment-secret')
+    await act(async () => { button('HTTP').click() })
+    expect(document.querySelectorAll('.dshMcpCredentialRow')).toHaveLength(0)
+    await setField(zh.url, 'https://example.com/mcp')
+    await act(async () => { button(zh.addHeader).click() })
+    await setField(zh.headerName, 'Authorization')
+    await setField(zh.headerValue, 'Bearer header-secret')
+    await act(async () => { button('stdio').click() })
+    expect(field(zh.environmentName).value).toBe('API_KEY')
+    expect(field(zh.headerValue).value).toBe('environment-secret')
+    await act(async () => { button('SSE').click() })
+    expect(field(zh.headerName).value).toBe('Authorization')
+    expect(field(zh.headerValue).value).toBe('Bearer header-secret')
+    await submit()
+    const [saved, , secrets] = vi.mocked(api.save).mock.calls[0]!
+    expect(saved.transport).toBe('sse')
+    expect(JSON.stringify(secrets)).not.toContain('environment-secret')
+  })
+
+  it('rejects invalid environment names without saving credentials', async () => {
+    const api = await mount()
+    await openServerMenu()
+    await act(async () => { button(zh.editServer).click() })
+    await act(async () => { button(zh.addEnvironment).click() })
+    expect(field(zh.environmentName).placeholder).toBe(zh.environmentNamePlaceholder)
+    expect(field(zh.headerValue).placeholder).toBe(zh.environmentValuePlaceholder)
+    await setField(zh.environmentName, 'INVALID-NAME')
+    await setField(zh.headerValue, 'example-secret')
+    await submit()
+    expect(api.save).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain(zh.environmentNameError)
+  })
+
+  it('preserves SSE endpoint and OAuth settings while editing', async () => {
+    const api = await mount(api => { vi.mocked(api.read).mockResolvedValue({ mcpServers: [{ ...server, transport: 'sse', url: 'https://example.com/sse', headers: {}, oauth: { scope: 'mcp:tools' } }], catalog: [] }) })
+    expect(document.querySelector('.dshMcpTransport')?.textContent).toBe('SSE')
+    await openServerMenu()
+    await act(async () => { button(zh.editServer).click() })
+    expect(field(zh.url).value).toBe('https://example.com/sse')
+    expect(button('SSE').getAttribute('aria-pressed')).toBe('true')
+    await act(async () => { document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) })
+    expect(api.save).toHaveBeenCalledWith(expect.objectContaining({ transport: 'sse', oauth: { scope: 'mcp:tools' } }), 'local', undefined)
   })
 
   it('refreshes registered tools silently every five seconds', async () => {
@@ -174,20 +359,30 @@ describe('MCP settings UI', () => {
     expect(open).toHaveBeenCalledWith('https://identity.example.com/authorize', '_blank', 'noopener,noreferrer')
   })
 
-  it('edits a pre-registered OAuth client without exposing its secret', async () => {
-    const oauthServer: DesktopMcpServerView = { ...server, transport: 'streamable-http', url: 'https://mcp.example.com/mcp', headers: {},
+  it.each(['streamable-http', 'sse'] as const)('edits a pre-registered %s OAuth client without exposing its secret', async transport => {
+    const oauthServer: DesktopMcpServerView = { ...server, transport, url: 'https://mcp.example.com/mcp', headers: {},
       oauth: { scope: 'mcp:tools', clientId: 'desktop-client', clientSecretRef: 'MCP_CLIENT_SECRET',
         tokenEndpointAuthMethod: 'client_secret_post' }, managedCredentialRefs: ['MCP_CLIENT_SECRET'] }
     const api = await mount(candidate => { vi.mocked(candidate.read).mockResolvedValue({ mcpServers: [oauthServer], catalog: [] }) })
     await openServerMenu()
     await act(async () => { button(zh.editServer).click() })
     expect(field(zh.oauthClientId).value).toBe('desktop-client')
-    expect(field(zh.oauthClientSecretRef).value).toBe('MCP_CLIENT_SECRET')
+    expect(field(zh.oauthClientSecret).value).toBe('')
+    expect(field(zh.oauthClientSecret).placeholder).toBe(zh.configuredValue)
     expect(document.querySelector<HTMLSelectElement>('select')?.value).toBe('client_secret_post')
     expect(document.body.textContent).not.toContain('client-secret-value')
     await act(async () => { document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) })
     expect(api.save).toHaveBeenCalledWith(expect.objectContaining({ oauth: expect.objectContaining({
       clientId: 'desktop-client', clientSecretRef: 'MCP_CLIENT_SECRET', tokenEndpointAuthMethod: 'client_secret_post',
     }) }), 'local', undefined)
+    await openServerMenu()
+    await act(async () => { button(zh.editServer).click() })
+    await setField(zh.oauthClientSecret, 'new-client-secret')
+    await submit()
+    const [saved, , secrets] = vi.mocked(api.save).mock.calls[1]!
+    if (saved.transport === 'stdio') throw new Error('Expected OAuth server')
+    expect(saved.oauth?.clientSecretRef).not.toBe('MCP_CLIENT_SECRET')
+    expect(secrets).toEqual({ [saved.oauth!.clientSecretRef!]: 'new-client-secret' })
+    expect(JSON.stringify(saved)).not.toContain('new-client-secret')
   })
 })
