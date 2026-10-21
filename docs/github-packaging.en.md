@@ -30,4 +30,6 @@ The client feed remains `https://clawclaw.xzinfra.com/updates/dsh/stable/release
 
 ## Two remotes
 
-`origin` points to GitHub and `gitlab` to the company GitLab. Validate the cleanup branch in GitHub before synchronizing the primary branch and GitLab backup. Their existing histories differ; do not force-push for backup synchronization. The retired office Runner implementation is retained in the local `codex/backup-gitlab-office-runners-20261020` branch and is excluded from the new GitHub cleanup branch.
+`origin` points to GitHub and `gitlab` to the company GitLab. Both remotes retain `main` and `dsh-desktop`: use `dsh-desktop` for daily development and `main` as the integration baseline. After validation, merge development changes into `main` and synchronize each branch to both remotes. Official publication is still triggered by a version tag, not by branch synchronization.
+
+The retired office Runner implementation, Windows diagnostics, and early expert UI alternatives are preserved in merge history and in a local Git bundle created before branch cleanup. The current tree continues to use GitHub-hosted runners; preserving history does not reactivate retired implementations. Synchronize through ordinary fast-forwards or merges without force-overwriting remote history.

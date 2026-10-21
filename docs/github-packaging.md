@@ -30,4 +30,6 @@ GitHub Release 发布不会修改正式更新服务器。服务器主动拉取�
 
 ## 双远端
 
-`origin` 指向 GitHub，`gitlab` 指向公司 GitLab。先在 GitHub 验证整理分支，再安排主分支和 GitLab 备份同步；两边现有历史不同，不要为备份执行强制推送。原办公 Runner 方案保存在本地备份分支 `codex/backup-gitlab-office-runners-20261020`，没有带入新的 GitHub 整理分支。
+`origin` 指向 GitHub，`gitlab` 指向公司 GitLab。两个远端均保留 `main` 与 `dsh-desktop`：`dsh-desktop` 用于日常开发，`main` 作为集成基线。开发分支完成验证后合入 `main`，并将两个分支分别同步到两个远端；正式发布仍由版本 tag 触发，不由分支同步触发。
+
+历史办公 Runner、Windows 诊断和早期专家界面方案已归入合并历史，并在分支清理前保存本地 Git bundle 备份。当前代码继续使用 GitHub 托管 Runner；保留历史不代表重新启用旧方案。同步使用正常快进或合并，不强制覆盖远端历史。
