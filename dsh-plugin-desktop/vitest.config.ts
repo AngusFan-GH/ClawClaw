@@ -18,6 +18,8 @@ export default defineConfig({
     },
     // Profile integration tests create a full package-junction closure; higher
     // Windows file concurrency makes their latency depend on NTFS/Defender load.
-    maxWorkers: process.platform === 'win32' ? 2 : undefined,
+    // Bound file-watcher and package-closure I/O on removable macOS volumes too;
+    // unbounded workers can starve discovery deadlines despite passing in isolation.
+    maxWorkers: process.platform === 'win32' ? 2 : 4,
   },
 })

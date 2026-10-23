@@ -83,7 +83,7 @@ An explicit `--profile <name>` takes precedence. Restart after plugin changes. P
 
 ## Automations and reminders
 
-Automations in the sidebar manages ClawClaw scheduled tasks, including timing, activation, immediate runs, history, and task conversations. Upgrading to DSH 0.1.7-rc.2 does not migrate or delete existing tasks. The Desktop profile does not load upstream Schedule at the same time, avoiding two unrelated task catalogs.
+Automations in the sidebar manages ClawClaw scheduled tasks, including timing, activation, immediate runs, history, and task conversations. The current version combines the official Schedule timer with a Desktop compatibility layer. First launch migrates existing plans while retaining task identities, original conversations, and saved execution history. Tasks execute only while ClawClaw is running; occurrences missed offline and runs interrupted by exit are not automatically replayed or retried. The pre-migration task snapshot is kept in migration-backups under the active Profile; subsequent plans and records use independent persistent storage.
 
 Reminders in Settings are standing instructions that apply across workspaces and conversations, not scheduled tasks. They remain in Settings and are managed separately from Automations.
 

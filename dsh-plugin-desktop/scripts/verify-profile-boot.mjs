@@ -1,3 +1,8 @@
+import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { SessionId } from '@deepseek-ai/dsh-session'
+import { renderRecurringReminderBatchFraming } from '@deepseek-ai/dsh-schedule'
 /** Headless smoke for the complete published DSH Web profile and renderer manifest. */
 
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -19,7 +24,7 @@ import { DesktopPluginPackages } from '../lib/desktop-plugin-packages.js'
 import { desktopHarnessProfileContext, prepareDesktopProfile } from '../lib/profile.js'
 import { DesktopProfileService } from '../lib/profile-service.js'
 import { importLegacyDesktopSetupWizardSettings } from '../lib/setup-wizard-settings.js'
-import { verifyUpgradeExpertRun } from './verify-upgrade-agent.mjs'
+import { verifyUpgradeExpertRun, verifyDesktopSchedule } from './verify-upgrade-agent.mjs'
 
 const BIN_NAME = 'dsh-plugin-desktop-profile-smoke'
 const HOST_SERVICE_PLUGIN_NAME = 'dsh-desktop-host-services-smoke-plugin'
@@ -187,16 +192,20 @@ try {
       }
     },
     openTerminal() {},
+    notifyAttention() {},
     setLocalePreference(preference) { runtime.locale = preference ?? 'en' },
     setThemeSource(source) { nativeThemeSource = source },
     async requestRestart() {},
     prepareToQuit() {},
   }
-  ctx = await boot(
-    BIN_NAME,
-    prepared.rootConfig,
-    patches,
-    async (host) => {
+  let restartGuard = false
+  let unexpectedRestartRequests = 0
+  const prepareHost = async host => {
+    if (restartGuard) host.on('agent/request', async () => {
+      unexpectedRestartRequests++
+      throw new Error('Schedule restart must never invoke a model')
+    }, { global: true, prepend: true })
+
       // Match the public resolver path used by packaged Electron.
       host.loader.internal = undefined
       await host.plugin(DesktopPluginPackages, prepared.bareModuleBaseUrl)
@@ -239,9 +248,9 @@ try {
         args: ['--host', '127.0.0.1', '--port', '0'],
         exit: () => {},
       })
-    },
-    prepared.bareModuleBaseUrl,
-  )
+  }
+  ctx = await boot(BIN_NAME, prepared.rootConfig, patches, prepareHost, prepared.bareModuleBaseUrl)
+
   await runtime.mountScheduled()
   let legacyImportCompleted = false
   for (let attempt = 0; attempt < 100; attempt++) {
@@ -390,6 +399,7 @@ try {
   }
   const hostServiceProbe = ctx.get(HOST_SERVICE_PROBE_KEY)
   await verifyUpgradeExpertRun(ctx, home, firstExpert)
+  await verifyDesktopSchedule(ctx)
   if (hostServiceProbe?.current?.name !== 'desktop'
     || hostServiceProbe.current.dir !== prepared.profile.dir
     || hostServiceProbe.pnpm?.serviceName !== 'desktopPnpm'
@@ -513,6 +523,74 @@ try {
   ]) {
     if (ids.has(id)) throw new Error(`assembled compatibility Web graph unexpectedly includes ${id}`)
   }
+
+  const beforeRestart = await ctx.desktopCronTasksController.read()
+  const savedJobs = JSON.stringify(beforeRestart.jobs)
+  const savedArchive = JSON.stringify(beforeRestart.archivedJobs)
+  const scope = createHash('sha256').update(prepared.profile.dir).digest('hex').slice(0, 20)
+  const corePath = join(home, 'storages', `desktop_schedule_core_${scope}.json`)
+  for (let restart = 0; restart < 2; restart++) {
+    await ctx.fiber.dispose()
+    ctx = undefined
+    if (restart === 0) {
+      // Simulate a crash leaving an overdue upstream row after the compatibility result committed.
+      const document = JSON.parse(readFileSync(corePath, 'utf8'))
+      for (const task of Object.values(document.tables.tasks)) {
+        task.status = 'active'
+        task.record.scheduledAt = '2020-01-01T00:00:00.000Z'
+      }
+      writeFileSync(corePath, JSON.stringify(document))
+    }
+    restartGuard = true
+    prepared = prepareDesktopProfile(undefined, home, 'win32')
+    ctx = await boot(BIN_NAME, prepared.rootConfig, [hostServicePatch, ...prepared.patches], prepareHost, prepared.bareModuleBaseUrl)
+    const afterRestart = await ctx.desktopCronTasksController.read()
+    assert.deepEqual(JSON.parse(JSON.stringify(afterRestart.jobs)), JSON.parse(savedJobs), 'restart changed task identity, Session or result history')
+    assert.deepEqual(JSON.parse(JSON.stringify(afterRestart.archivedJobs)), JSON.parse(savedArchive), 'restart lost deleted-task history')
+    assert.equal((await ctx.schedule.catalog()).length, afterRestart.jobs.length, 'repeated migration duplicated tasks')
+    const recurring = (await ctx.schedule.catalog()).find(record => record.kind === 'cron' && record.status === 'active')
+    assert.ok(recurring)
+    const restored = await ctx.sessionController.resolveAgent(SessionId(recurring.sessionId))
+    assert.ok(!('error' in restored))
+    restored.agent.followup(createUserMessage({ source: { kind: 'schedule' }, content: [{ type: 'text',
+      text: renderRecurringReminderBatchFraming([{ record: recurring, occurrenceAt: '2020-01-01T00:00:00.000Z' }]),
+    }] }))
+    await restored.agent.whenIdle()
+    await ctx.sessions.flush(restored.agent.session)
+    assert.equal(unexpectedRestartRequests, 0, 'restart replayed a stale Schedule delivery')
+  }
+  console.log('verify-desktop-schedule: two persisted restarts retained tasks, Sessions and archives; stale targets were not replayed')
+  // Recreate a pre-migration legacy registry using only this disposable fixture's Sessions.
+  await ctx.fiber.dispose()
+  ctx = undefined
+  rmSync(join(home, 'storages', `desktop_schedule_registry_${scope}.json`))
+  const legacyJobs = JSON.parse(savedJobs).map(task => {
+    const history = Array.from({ length: 20 }, (_, index) => ({
+      scheduledFor: new Date(Date.UTC(2026, 8, 20 - index)).toISOString(), trigger: 'schedule',
+      startedAt: new Date(Date.UTC(2026, 8, 20 - index)).toISOString(),
+      finishedAt: new Date(Date.UTC(2026, 8, 20 - index, 0, 1)).toISOString(),
+      status: 'completed', sessionId: task.activeSessionId,
+    }))
+    return { ...task, history, lastRun: history[0] }
+  })
+  writeFileSync(prepared.profile.patchPath, readFileSync(prepared.profile.patchPath, 'utf8')
+    + `\n- id: desktop-cron-tasks\n  config:\n    jobs: ${JSON.stringify(legacyJobs)}\n`)
+  for (let repeat = 0; repeat < 2; repeat++) {
+    prepared = prepareDesktopProfile(undefined, home, 'win32')
+    ctx = await boot(BIN_NAME, prepared.rootConfig, [hostServicePatch, ...prepared.patches], prepareHost, prepared.bareModuleBaseUrl)
+    const imported = await ctx.desktopCronTasksController.read()
+    assert.equal(imported.jobs.length, legacyJobs.length)
+    for (const old of legacyJobs) {
+      const task = imported.jobs.find(task => task.id === old.id)
+      assert.equal(task.activeSessionId, old.activeSessionId)
+      assert.deepEqual(task.history, old.history, 'legacy result history was lost or rewritten')
+      assert.equal(task.enabled, old.enabled)
+    }
+    assert.equal(unexpectedRestartRequests, 0)
+    if (repeat === 0) { await ctx.fiber.dispose(); ctx = undefined }
+  }
+  console.log('verify-desktop-schedule: legacy first-import and repeat-import retained all 40 history records and original Sessions')
+
 } finally {
   await ctx?.fiber.dispose()
   releasePackageResolver?.()

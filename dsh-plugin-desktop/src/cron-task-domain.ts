@@ -35,6 +35,9 @@ export interface CronTask {
   /** A durably claimed execution. On restart it becomes a failed run instead of being replayed. */
   readonly pendingRunAt: string | null
   readonly pendingRunStartedAt?: string | undefined
+  /** Durable occurrence fence; never replay an admitted occurrence after a crash. */
+  readonly lastClaimedAt?: string | undefined
+  readonly lastClaimedMessageId?: string | undefined
   readonly lastRun?: CronTaskRun
   readonly history: readonly CronTaskRun[]
 }
@@ -137,17 +140,17 @@ function recoveryRun(task: CronTask, now: number, status: 'failed' | 'skipped', 
 }
 
 /** Rebuild the next time after boot without replaying potentially side-effecting work. */
-export function rehydrateCronTask(task: CronTask, now = Date.now()): CronTask {
+export function rehydrateCronTask(task: CronTask, now = Date.now(), historyLimit = CRON_TASK_HISTORY_LIMIT): CronTask {
   const oneTimeAt = task.oneTimeAt?.trim() || undefined
   const interrupted = task.pendingRunAt !== null
   let history = task.history
   if (interrupted) {
     history = Object.freeze([recoveryRun(task, now, 'failed',
       'ClawClaw stopped before this run finished. It was not retried to avoid duplicate side effects.'), ...history]
-      .slice(0, CRON_TASK_HISTORY_LIMIT))
+      .slice(0, historyLimit))
   } else if (task.enabled && task.nextRunAt !== null && Date.parse(task.nextRunAt) <= now) {
     history = Object.freeze([recoveryRun(task, now, 'skipped',
-      'The scheduled time passed while ClawClaw was not running.'), ...history].slice(0, CRON_TASK_HISTORY_LIMIT))
+      'The scheduled time passed while ClawClaw was not running.'), ...history].slice(0, historyLimit))
   }
   if (oneTimeAt !== undefined) {
     const instant = Date.parse(oneTimeAt)

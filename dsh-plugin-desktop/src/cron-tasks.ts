@@ -18,6 +18,10 @@ import type { CronTask, CronTaskRun } from './cron-task-domain.ts'
 import { cronSessionTitle } from './cron-session-title.ts'
 import { DESKTOP_WORKSPACE_SETTINGS_NAMESPACE } from './workspace-settings.ts'
 import type { DesktopCronInterruptionState } from './interruption-inspection.ts'
+import { startDesktopSchedule } from './desktop-schedule.ts'
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap { 'desktop-automation': { kind: 'desktop-automation'; taskId: string } }
+}
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -27,7 +31,7 @@ declare module '@deepseek-ai/cordis' {
 }
 
 export const name = 'desktop-cron-tasks'
-export const inject = ['settings', 'agents', 'sessions', 'sessionTitle', 'agentDefaultModel', 'workspaceRegistry', 'tools', 'desktopCronAgentHost']
+export const inject = ['settings', 'agents', 'sessions', 'sessionTitle', 'agentDefaultModel', 'workspaceRegistry', 'tools', 'desktopCronAgentHost', 'storageDomain', 'sessionController', 'sessionPersistence', 'agentPresets', 'sessionQuery']
 
 export const DESKTOP_CRON_TASKS_SETTINGS_NAMESPACE = 'dsh-desktop-cron-tasks'
 
@@ -43,8 +47,10 @@ export const CRON_EXECUTION_POLICY = [
   'Return only the actual result of the requested work.',
 ].join('\n')
 
-interface CronTasksSettings { jobs: CronTask[] }
-interface CronTasksSettingsScope {
+export interface CronTasksSettings { jobs: CronTask[] }
+export interface CronTasksSettingsScope {
+  readonly durableSchedule?: true
+  archivedJobs?(): readonly CronTask[]
   get(): CronTasksSettings
   watch?(callback: (next: CronTasksSettings, previous: CronTasksSettings) => void | Promise<void>): () => void
   replace(section: object): Promise<void>
@@ -62,6 +68,7 @@ export const CronTasksSettingsSchema = z.object({
     workspaceId: z.string(), activeSessionId: z.string(), activeSessionWorkspaceId: z.string(), enabled: z.boolean(), createdAt: z.string(), updatedAt: z.string(),
     nextRunAt: z.union([z.string(), z.const(null)]), pendingRunAt: z.union([z.string(), z.const(null)]).default(null),
     pendingRunStartedAt: z.string(), lastRun: CronTaskRunSchema,
+    lastClaimedAt: z.string(), lastClaimedMessageId: z.string(),
     history: z.array(CronTaskRunSchema).default([]),
   })).default([]),
 }) as unknown as z<CronTasksSettings>
@@ -79,14 +86,16 @@ function throwIfAborted(signal?: AbortSignal): void {
 }
 
 /** Keep task-management intent out of both the visible prompt and tool surface. */
-function installCronExecutionScope(agentCtx: Context): () => void {
+export function installCronExecutionScope(agentCtx: Context): () => void {
   const liftTools = agentCtx.tools.restrict({ deny: [...CRON_TASK_MANAGEMENT_TOOLS] })
+  const liftScheduleGuard = agentCtx.tools.guard?.(execution => execution.name.startsWith('schedule_')
+    ? 'An automation execution cannot manage schedules' : undefined) ?? (() => {})
   const liftPrompt = agentCtx.systemPrompt.section({
     name: 'desktop-cron-execution-policy',
     order: agentCtx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_SUFFIX') + 1,
     text: CRON_EXECUTION_POLICY,
   })
-  return () => { liftPrompt(); liftTools() }
+  return () => { liftPrompt(); liftScheduleGuard(); liftTools() }
 }
 
 function archivedSessionIds(runtime: CronRuntime): readonly SessionId[] {
@@ -154,6 +163,7 @@ export async function runCronTask(
   task: CronTask,
   signal?: AbortSignal,
   onSessionResolved?: (sessionId: string, workspaceId: string) => Promise<void>,
+  deliveryMessage?: ReturnType<typeof createUserMessage>,
 ): Promise<string> {
   throwIfAborted(signal)
   const workspaceId = task.workspaceId ?? runtime.defaultWorkspaceId?.()
@@ -206,7 +216,7 @@ export async function runCronTask(
     runtime.sessionTitle.rename(agent.session, cronSessionTitle(task.name))
     await workspace.attachSession(sessionId)
     await onSessionResolved?.(String(sessionId), String(workspace.id))
-    const message = createUserMessage({
+    const message = deliveryMessage ?? createUserMessage({
       content: [{ type: 'text', text: task.prompt }],
       source: { kind: 'user' },
     })
@@ -246,16 +256,18 @@ export class CronTaskController {
     private readonly runtime: CronRuntime,
     private readonly settings: CronTasksSettingsScope,
     private readonly now: () => number = Date.now,
-    private readonly execute: (task: CronTask, signal?: AbortSignal, onSessionResolved?: (sessionId: string, workspaceId: string) => Promise<void>) => Promise<string>
-      = (task, signal, onSessionResolved) => runCronTask(runtime, task, signal, onSessionResolved),
+    private readonly execute: (task: CronTask, signal?: AbortSignal, onSessionResolved?: (sessionId: string, workspaceId: string) => Promise<void>, message?: ReturnType<typeof createUserMessage>) => Promise<string>
+      = (task, signal, onSessionResolved, message) => runCronTask(runtime, task, signal, onSessionResolved, message),
     private readonly runTimeoutMs = RUN_TIMEOUT_MS,
+    private readonly scheduleDriver?: { sync(): Promise<void> },
   ) {
     const storedJobs = settings.get().jobs
-    this.jobs = storedJobs.map(job => rehydrateCronTask(job, now()))
+    this.jobs = settings.durableSchedule ? storedJobs : storedJobs.map(job => rehydrateCronTask(job, now()))
     this.persistRehydratedJobs = !deepEqualJson(storedJobs, this.jobs)
   }
 
   start(): void {
+    if (this.scheduleDriver !== undefined) return
     void this.serialized(async () => {
       this.refreshFromSettings()
       if (this.persistRehydratedJobs) await this.settings.replace({ jobs: this.jobs })
@@ -282,7 +294,8 @@ export class CronTaskController {
   async read(): Promise<object> {
     await this.queue
     this.refreshFromSettings()
-    return { jobs: this.jobs, running: [...this.running], archivedSessionIds: archivedSessionIds(this.runtime).map(String),
+    return { jobs: this.jobs, archivedJobs: this.settings.archivedJobs?.() ?? [],
+      running: [...this.running], archivedSessionIds: archivedSessionIds(this.runtime).map(String),
       defaultWorkspaceId: this.runtime.defaultWorkspaceId?.() ?? null,
       policy: { requiresHost: true, missedRuns: 'skip', interruptedRuns: 'do-not-retry', timeoutMinutes: Math.round(this.runTimeoutMs / 60_000) },
       workspaces: this.runtime.workspaceRegistry.list().map(workspace => ({ id: String(workspace.id), title: workspace.title, path: workspace.path })) }
@@ -295,6 +308,105 @@ export class CronTaskController {
       running: this.running.size,
       scheduled: this.jobs.filter(job => job.enabled && job.nextRunAt !== null).length,
     })
+  }
+
+  /** Called by the official Schedule message gate before any model request. */
+  manualMessageAllowed(id: string, messageId: string, sessionId: string): boolean {
+    const task = this.jobs.find(job => job.id === id)
+    return !this.disposed && this.running.has(id) && task?.lastClaimedMessageId === messageId && task.activeSessionId === sessionId
+  }
+
+  /** Commit the user's archive-stop choice before the core removes its rows. */
+  async stopForSessionArchive(sessionId: string): Promise<void> {
+    const ids = this.jobs.filter(job => job.activeSessionId === sessionId).map(job => job.id)
+    for (const id of ids) this.activeAbort.get(id)?.abort(new Error('The task Session was archived'))
+    await Promise.allSettled(ids.flatMap(id => {
+      const run = this.activeByTask.get(id)
+      return run === undefined ? [] : [run]
+    }))
+    await this.serialized(async () => {
+      this.refreshFromSettings()
+      const jobs = this.jobs.map(job => job.activeSessionId === sessionId
+        ? { ...job, enabled: false, nextRunAt: null } : job)
+      await this.settings.replace({ jobs }); this.jobs = jobs
+    })
+  }
+
+  async admitScheduled(id: string, occurrenceAt: string, messageId: string, agent: LiveAgent): Promise<boolean> {
+    const task = await this.serialized(async () => {
+      this.refreshFromSettings()
+      const current = this.jobs.find(job => job.id === id)
+      if (this.disposed || current === undefined || !current.enabled || this.running.has(id)
+        || current.activeSessionId !== String(agent.id)
+        || (current.lastClaimedAt !== undefined && current.lastClaimedAt >= occurrenceAt)) return undefined
+      // The upstream core selects the latest missed occurrence. Desktop never backfills:
+      // require the committed target, and permit only ordinary timer/restore latency.
+      if (current.nextRunAt !== occurrenceAt || this.now() - Date.parse(occurrenceAt) > 60_000) {
+        const run: CronTaskRun = { scheduledFor: occurrenceAt, trigger: 'schedule',
+          startedAt: new Date(this.now()).toISOString(), finishedAt: new Date(this.now()).toISOString(), status: 'skipped',
+          error: 'A missed scheduled occurrence was skipped; Desktop does not backfill tasks.', sessionId: String(agent.id) }
+        const jobs = this.jobs.map(job => job.id === id ? { ...job, lastClaimedAt: occurrenceAt,
+          enabled: job.oneTimeAt === undefined ? job.enabled : false,
+          nextRunAt: job.oneTimeAt === undefined ? nextCronTaskRun(job.expression, job.timeZone, this.now()).toISOString() : null,
+          lastRun: run, history: [run, ...job.history] } : job)
+        await this.settings.replace({ jobs }); this.jobs = jobs
+        return undefined
+      }
+      const next: CronTask = { ...current, pendingRunAt: occurrenceAt,
+        pendingRunStartedAt: new Date(this.now()).toISOString(), lastClaimedAt: occurrenceAt,
+        lastClaimedMessageId: messageId,
+        nextRunAt: current.oneTimeAt === undefined ? nextCronTaskRun(current.expression, current.timeZone, this.now()).toISOString() : null }
+      const jobs = this.jobs.map(job => job.id === id ? next : job)
+      // This durable write MUST precede model admission. Ambiguous attempts are never replayed.
+      await this.settings.replace({ jobs })
+      this.jobs = jobs
+      this.running.add(id)
+      return next
+    })
+    if (task === undefined) return false
+    const abort = new AbortController()
+    this.activeAbort.set(id, abort)
+    const lift = installCronExecutionScope(agent.ctx)
+    const cancel = (): void => { agent.cancel({ kind: 'hook', reason: 'scheduled task cancelled' }, { keepInbox: true }) }
+    abort.signal.addEventListener('abort', cancel, { once: true })
+    let timedOut = false
+    const timer = setTimeout(() => { timedOut = true; abort.abort(new Error('Scheduled task exceeded its time limit')) }, this.runTimeoutMs)
+    const completion = (async (): Promise<object> => {
+      let run: CronTaskRun
+      try {
+        await waitForIdle(agent, abort.signal)
+        await this.runtime.sessions.flush(agent.session)
+        const end = [...agent.session.ownEvents()].reverse().find(event => event.type === 'turn/end')
+        if (end?.type === 'turn/end' && end.data.reason.kind === 'error') throw new Error(end.data.reason.error.message)
+        if (end?.type === 'turn/end' && end.data.reason.kind === 'max-tokens') throw new Error('Agent reached the output token limit')
+        run = { scheduledFor: occurrenceAt, trigger: 'schedule', startedAt: task.pendingRunStartedAt!,
+          finishedAt: new Date(this.now()).toISOString(), status: 'completed', sessionId: String(agent.id) }
+      } catch (error) {
+        run = { scheduledFor: occurrenceAt, trigger: 'schedule', startedAt: task.pendingRunStartedAt!,
+          finishedAt: new Date(this.now()).toISOString(), status: abort.signal.aborted && !timedOut ? 'cancelled' : 'failed',
+          error: safeError(error), sessionId: String(agent.id) }
+      } finally {
+        clearTimeout(timer); abort.signal.removeEventListener('abort', cancel); lift()
+      }
+      try {
+        await this.serialized(async () => {
+          const jobs = this.jobs.map(job => job.id === id ? { ...job,
+            enabled: job.oneTimeAt === undefined ? job.enabled : false,
+            pendingRunAt: null, pendingRunStartedAt: undefined, lastRun: run, history: [run, ...job.history],
+          } : job)
+          await this.settings.replace({ jobs }); this.jobs = jobs
+        })
+        this.runtime.desktopRuntime?.notifyAttention({ title: `Scheduled task ${run.status}`, body: 'Open ClawClaw to view the task result.' })
+        return { id, run }
+      } finally {
+        this.running.delete(id); this.activeAbort.delete(id)
+      }
+    })()
+    this.activePromises.add(completion); this.activeByTask.set(id, completion)
+    void completion.catch(() => {}).finally(() => {
+      this.activePromises.delete(completion); this.activeByTask.delete(id)
+    })
+    return true
   }
 
   async action(value: unknown): Promise<object> {
@@ -347,6 +459,10 @@ export class CronTaskController {
   private async commit(jobs: CronTask[]): Promise<void> {
     await this.settings.replace({ jobs })
     this.jobs = jobs
+    if (this.scheduleDriver !== undefined) {
+      await this.scheduleDriver.sync()
+      this.jobs = this.settings.get().jobs
+    }
     this.arm()
   }
 
@@ -427,7 +543,7 @@ export class CronTaskController {
       // watcher callbacks must therefore not replace a running task with its
       // pre-run persisted snapshot.
       if (this.running.has(job.id)) return this.jobs.find(current => current.id === job.id) ?? job
-      return rehydrateCronTask(job, this.now())
+      return this.settings.durableSchedule ? job : rehydrateCronTask(job, this.now())
     })
     if (deepEqualJson(jobs, this.jobs)) return
     this.jobs = jobs
@@ -478,16 +594,22 @@ export class CronTaskController {
 
   private async runOwned(id: unknown, scheduled: boolean): Promise<object> {
     if (typeof id !== 'string' || !id) throw new TypeError('Task id is required')
+    let deliveryMessage: ReturnType<typeof createUserMessage> | undefined
     const task = await this.serialized(async () => {
       if (this.disposed) throw new Error('Cron task scheduler is stopping')
       const current = this.requireTask(id)
       if (this.running.has(id)) throw new TypeError('Cron task is already running')
       if (!scheduled && !current.enabled) throw new TypeError('Enable the Cron task before running it')
-      const pendingRunAt = current.pendingRunAt ?? current.nextRunAt ?? new Date(this.now()).toISOString()
+      const pendingRunAt = this.settings.durableSchedule && !scheduled ? new Date(this.now()).toISOString()
+        : current.pendingRunAt ?? current.nextRunAt ?? new Date(this.now()).toISOString()
       const nextRunAt = scheduled && current.enabled
         ? current.oneTimeAt === undefined ? nextCronTaskRun(current.expression, current.timeZone, this.now()).toISOString() : null
         : current.nextRunAt
-      const claimed = Object.freeze({ ...current, pendingRunAt, pendingRunStartedAt: new Date(this.now()).toISOString(), nextRunAt })
+      if (this.settings.durableSchedule) deliveryMessage = createUserMessage({ content: [{ type: 'text', text: current.prompt }],
+        source: { kind: 'desktop-automation', taskId: id } })
+      const claimed = Object.freeze({ ...current, pendingRunAt, pendingRunStartedAt: new Date(this.now()).toISOString(), nextRunAt,
+        ...(deliveryMessage === undefined ? {} : { lastClaimedAt: pendingRunAt, lastClaimedMessageId: String(deliveryMessage.id) }) })
+      if (this.settings.durableSchedule) await this.settings.replace({ jobs: this.jobs.map(job => job.id === id ? claimed : job) })
       this.running.add(id)
       this.jobs = this.jobs.map(job => job.id === id ? claimed : job)
       this.arm()
@@ -505,13 +627,16 @@ export class CronTaskController {
     let run: CronTaskRun
     let resolvedSessionId: string | undefined
     try {
-      const sessionId = await this.execute(task, abort.signal, async (sessionIdForRun, workspaceIdForRun) => {
+      const onSessionResolved = async (sessionIdForRun: string, workspaceIdForRun: string): Promise<void> => {
         resolvedSessionId = sessionIdForRun
         const current = this.jobs.find(job => job.id === id)
         if (current !== undefined) this.jobs = this.jobs.map(job => job.id === id
           ? Object.freeze({ ...job, activeSessionId: sessionIdForRun, activeSessionWorkspaceId: workspaceIdForRun })
           : job)
-      })
+      }
+      const sessionId = deliveryMessage === undefined
+        ? await this.execute(task, abort.signal, onSessionResolved)
+        : await this.execute(task, abort.signal, onSessionResolved, deliveryMessage)
       run = { scheduledFor: task.pendingRunAt ?? startedAt, trigger: scheduled ? 'schedule' : 'manual',
         startedAt, finishedAt: new Date(this.now()).toISOString(), status: 'completed', sessionId }
       this.runtime.desktopRuntime?.notifyAttention({ title: 'Scheduled task completed', body: 'A scheduled task has finished.' })
@@ -540,7 +665,7 @@ export class CronTaskController {
             ...(run.sessionId === undefined ? {} : { activeSessionId: run.sessionId }),
             nextRunAt, pendingRunAt: null, pendingRunStartedAt: undefined })
           await this.commit(this.jobs.map(job => job.id === id
-            ? Object.freeze({ ...updated, history: [run, ...current.history].slice(0, CRON_TASK_HISTORY_LIMIT) })
+            ? Object.freeze({ ...updated, history: [run, ...current.history].slice(0, this.settings.durableSchedule ? undefined : CRON_TASK_HISTORY_LIMIT) })
             : job))
         }
         return { id, run }
@@ -564,6 +689,7 @@ export class CronTaskController {
   }
 
   private arm(): void {
+    if (this.scheduleDriver !== undefined) return
     if (this.disposed) return
     if (this.timer !== undefined) clearTimeout(this.timer)
     this.timer = undefined
@@ -609,9 +735,12 @@ export function registerCronTasksJsonApi(ctx: Context): void {
     actionPath: DESKTOP_CRON_TASKS_ACTION_PATH, read: () => current().read(), action: value => current().action(value) })
 }
 
-export function apply(ctx: Context): void {
-  const settings = ctx.settings.register(DESKTOP_CRON_TASKS_SETTINGS_NAMESPACE, CronTasksSettingsSchema,
-    { applies: 'live' })
+export async function apply(ctx: Context, config: Partial<CronTasksSettings> = {}): Promise<void> {
+  const legacySettings = ctx.settings.register(DESKTOP_CRON_TASKS_SETTINGS_NAMESPACE, CronTasksSettingsSchema,
+    // During async startup the settings form does not expose this still-loading
+    // fiber. Seed from its actual Loader config so migration cannot import an empty list.
+    { applies: 'live', base: config })
+  ctx.effect(() => ctx.settings.configure({ auto: false }, ctx.fiber), 'Hide retired legacy automation settings')
   const runtime: CronRuntime = { agents: ctx.agents, sessions: ctx.sessions, sessionTitle: ctx.sessionTitle,
     agentHost: ctx.desktopCronAgentHost,
     agentDefaultModel: ctx.agentDefaultModel, workspaceRegistry: ctx.workspaceRegistry,
@@ -621,9 +750,11 @@ export function apply(ctx: Context): void {
       return typeof value?.defaultWorkspaceId === 'string' && value.defaultWorkspaceId !== '' ? value.defaultWorkspaceId : undefined
     },
     ...(ctx.get('desktopRuntime') === undefined ? {} : { desktopRuntime: ctx.get('desktopRuntime') as DesktopRuntime }) }
-  const controller = new CronTaskController(runtime, settings)
+  const schedule = await startDesktopSchedule(ctx, legacySettings, settings => new CronTaskController(runtime, settings, Date.now,
+    undefined, undefined, { sync: () => schedule.sync() }))
+  const controller = schedule.controller
   ctx.provide('desktopCronTasksController', controller)
-  const stopSettings = settings.watch?.(next => { controller.syncFromSettings(next) }) ?? (() => {})
+  const stopSettings = () => {}
   controller.start()
   const toolDisposers = [
     ctx.tools.register(defineTool({

@@ -73,9 +73,9 @@
 - id: product-analytics
   disabled: true
 
-# ClawClaw keeps its established Desktop Cron model until a lossless Schedule
-# migration protocol exists. Loading both models produces two unrelated task
-# catalogs, so the upstream pair stays disabled in the Desktop profile.
+# The Desktop compatibility plugin owns one official ScheduleService instance
+# after durable migration. Keep the standalone entry and native delivery-only
+# UI disabled: Desktop retains its forms, execution controls and result history.
 - id: schedule
   disabled: true
 

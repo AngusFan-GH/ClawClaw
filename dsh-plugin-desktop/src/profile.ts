@@ -654,7 +654,7 @@ function isolatedSkillPresetPatches(rows: ReadonlyMap<string, EntryOptions>, hom
     }
     const rewritten = plugins
       .filter(plugin => plugin.id !== 'skill-filesystem' && plugin.id !== 'clawclaw-skill-filesystem')
-      // Schedule tools moved into presets in DSH 0.2.1; Desktop retains its Cron model.
+      // Desktop's compatibility tools own management of the wrapped official Schedule core.
       .map(plugin => plugin.name === '@deepseek-ai/dsh-tool-schedule' ? { ...plugin, disabled: true } : plugin)
     const insertion = plugins.findIndex(plugin => plugin.id === 'skill-filesystem')
     rewritten.splice(insertion < 0 ? rewritten.length : insertion, 0, isolated, project)
