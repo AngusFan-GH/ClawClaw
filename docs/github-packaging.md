@@ -54,7 +54,9 @@ corepack pnpm deploy:run <GitHub-run-id>
 corepack pnpm deploy:run <GitHub-run-id> --dry-run
 ```
 
-命令只下载指定成功打包运行的 `desktop-release`，检查工作流、仓库、commit 和 run 来源，验证正式 URL、大小及 SHA-512，上传安装包后原子切换稳定清单，最后验证公网清单、完整安装包校验值及 Range 下载。退出时清理本地临时下载。须在 artifact 保留期（14 天）内执行；失败不自动重试。若上传成功但公网验证失败，先核对线上清单再处理，已有版本目录不会被覆盖。
+在仓库根目录执行，本机需具备 Node.js/Corepack、`gh`、OpenSSH 和 tar。运行 ID 是 Actions 链接 `/actions/runs/<run-id>` 中的数字，不是版本号、Job ID 或 artifact ID。`--dry-run` 仍会下载完整产物，不检查 SSH 连通性；随后真实部署时会重新下载。
+
+命令只下载指定成功打包运行的 `desktop-release`，检查工作流、仓库、commit 和 run 来源，验证正式 URL、大小及 SHA-512，上传安装包后原子切换稳定清单，最后验证公网清单、完整安装包校验值及 Range 下载。退出时清理本地临时下载。须在 artifact 保留期（14 天）内执行；失败不自动重试。若上传成功但公网验证失败，稳定清单已经切换且不会自动回滚，须先核对线上清单再处理；已有版本目录不会被覆盖。该命令始终发布到稳定清单，没有“仅上传、不切换清单”模式。
 
 正式版本 tag 仍自动生成 GitHub Release，服务器部署改为显式执行本机命令。下次正式发布至少使用 0.2.12，不移动已发布标签。不需要 GitHub Actions 部署 Secrets。
 

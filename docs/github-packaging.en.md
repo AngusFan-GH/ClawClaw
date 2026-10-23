@@ -54,7 +54,9 @@ corepack pnpm deploy:run <GitHub-run-id>
 corepack pnpm deploy:run <GitHub-run-id> --dry-run
 ```
 
-The command downloads only that run's `desktop-release` artifact, verifies the successful workflow and matching repository/commit/run provenance, checks canonical installer URLs, sizes and SHA-512, uploads installers, then atomically switches the stable feed. Finally it verifies the public feed, full installer checksums and HTTP Range support. Temporary local downloads are removed on exit. Run while artifacts remain available (14 days); failure does not trigger an automatic retry. If upload succeeds but public verification fails, inspect the live feed before retrying because existing versions cannot be overwritten.
+Run these commands from the repository root with Node.js/Corepack, `gh`, OpenSSH and tar installed. The numeric run ID is the final component of the Actions `/actions/runs/<run-id>` URL; it is not a version, job ID or artifact ID. `--dry-run` still downloads the full bundle and does not test SSH connectivity. A subsequent real deployment downloads again.
+
+The command downloads only that run's `desktop-release` artifact, verifies the successful workflow and matching repository/commit/run provenance, checks canonical installer URLs, sizes and SHA-512, uploads installers, then atomically switches the stable feed. Finally it verifies the public feed, full installer checksums and HTTP Range support. Temporary local downloads are removed on exit. Run while artifacts remain available (14 days); failure does not trigger an automatic retry. If upload succeeds but public verification fails, the stable feed has already switched and is not automatically rolled back. Inspect the live feed before retrying because existing versions cannot be overwritten. This command always publishes to the stable feed; it has no upload-only mode.
 
 Formal tags still archive GitHub Releases automatically; deployment is a separate explicit local command. Increase the product version before each new formal release (next: 0.2.12 or later). Do not recreate or move published tags. No GitHub Actions deployment secrets are needed.
 

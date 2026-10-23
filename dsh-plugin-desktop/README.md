@@ -128,17 +128,28 @@ gh run download "$run_id" --repo AngusFan-GH/ClawClaw --name desktop-release --d
 
 Require `Build macos`, `Build windows`, and `Assemble release` to succeed on the same commit. Download `desktop-release` from that run and verify that it contains one DMG, one EXE, `release.json`, and `build-info.json`. The manifest version, sizes, and SHA-512 values must match the two installers.
 
-### 6. Publish a version
+### 6. Archive and deploy a formal version
 
 Update `dsh-plugin-desktop/package.json` and the root README version text together, run the complete gate, commit, and repeat the non-publishing prebuild. Then tag that exact validated commit:
 
 ```sh
-version=0.2.11
+version="$(node -p "require('./dsh-plugin-desktop/package.json').version")"
 git tag -a "clawclaw-v$version" -m "Release ClawClaw $version"
 git push origin "clawclaw-v$version"
 ```
 
-The tag must exactly match the desktop package version. A matching tag rebuilds macOS and Windows from the same commit, assembles `desktop-release`, and publishes to GitHub Releases; a separate local deployment command uploads both installers and atomically switches the feed before public verification. Never reuse or move a published version tag.
+The tag must exactly match the desktop package version. A matching tag rebuilds macOS and Windows from the same commit, assembles `desktop-release`, and publishes to GitHub Releases; a separate local deployment command uploads both installers and atomically switches the feed before public verification. Never reuse or move a published version tag. The current 0.2.11 is already live; bump to 0.2.12 or later before a new formal release.
+
+Once that tag's workflow succeeds, select its numeric run ID from the Actions URL (`/actions/runs/<run-id>`) and run the following from the repository root on a workstation connected to the company network:
+
+```sh
+corepack pnpm deploy:run <GitHub-run-id> --dry-run
+corepack pnpm deploy:run <GitHub-run-id>
+```
+
+`--dry-run` downloads and validates the bundle without changing the server; it is not a server connectivity check. The second command downloads the bundle again, validates its source and canonical URLs, uploads over LAN SSH, switches the stable feed and verifies public downloads. It deploys the chosen run, not the workstation's uncommitted code. It requires `gh` authentication, Node.js/Corepack, OpenSSH and tar. Both successful trial builds and formal runs can be selected explicitly; selection publishes to the live stable feed. There is no staging-only mode in this command.
+
+GitHub publication alone does not update the company server. The server does not poll GitHub, and hosted runners do not receive SSH credentials. The workstation only needs to stay online while this explicit command runs.
 
 ### 7. Verify the publication
 
@@ -154,7 +165,7 @@ Confirm that the manifest reports the intended version and `stable` channel, bot
 
 ### 8. Recover a failed deployment
 
-If both builds and `Assemble release` succeeded but deployment failed, download that run's `desktop-release`; do not combine artifacts from different commits or rebuild only one platform. Load the dedicated key into an SSH agent, set `UPDATE_HOST`, `UPDATE_USER`, `UPDATE_PORT`, and `UPDATE_REMOTE_ROOT`, then run:
+If both builds and `Assemble release` succeeded but deployment failed, first inspect the failed command and live feed. A public-verification failure occurs after the feed switches and does not automatically roll it back. If no version directory was published, retry `deploy:run` with the same run ID. For manual recovery, download that run's `desktop-release`; do not combine artifacts from different commits or rebuild only one platform. Load the dedicated key into an SSH agent, set `UPDATE_HOST`, `UPDATE_USER`, `UPDATE_PORT`, and `UPDATE_REMOTE_ROOT`, then run:
 
 ```sh
 corepack pnpm run upload:update -- --directory /path/to/desktop-release --channel stable

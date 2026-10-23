@@ -128,17 +128,28 @@ gh run download "$run_id" --repo AngusFan-GH/ClawClaw --name desktop-release --d
 
 必须确认同一 commit 上的 `Build macos`、`Build windows` 和 `Assemble release` 全部成功。下载该次运行的 `desktop-release`，确认其中包含一个 DMG、一个 EXE、`release.json` 和 `build-info.json`；manifest 的版本、大小和 SHA-512 必须与两个安装包一致。
 
-### 6. 正式发布版本
+### 6. 正式存档并部署版本
 
 同时更新 `dsh-plugin-desktop/package.json` 与根 README 中的版本，运行完整门禁、提交，并再次执行不发布的预构建。随后给这个已经验证的准确 commit 创建 tag：
 
 ```sh
-version=0.2.11
+version="$(node -p "require('./dsh-plugin-desktop/package.json').version")"
 git tag -a "clawclaw-v$version" -m "Release ClawClaw $version"
 git push origin "clawclaw-v$version"
 ```
 
-tag 必须与 Desktop package 版本完全一致。匹配的 tag 会从同一 commit 重新构建 macOS 和 Windows，汇总 `desktop-release` 并发布到 GitHub Releases；服务器会自动拉取正式 Release，校验两平台安装包后原子切换清单，并由工作流验证公网下载。不要复用或移动已经发布的版本 tag。
+tag 必须与 Desktop package 版本完全一致。匹配的 tag 会从同一 commit 重新构建 macOS 和 Windows，汇总 `desktop-release` 并存档到 GitHub Releases。不要复用或移动已经发布的版本 tag。当前 0.2.11 已上线，下次正式发版先升到 0.2.12 或更高版本。
+
+等待该 tag 的工作流成功，从 Actions 页面链接 `/actions/runs/<run-id>` 获取数字运行 ID，在能访问公司内网的本机、仓库根目录执行：
+
+```sh
+corepack pnpm deploy:run <GitHub-run-id> --dry-run
+corepack pnpm deploy:run <GitHub-run-id>
+```
+
+`--dry-run` 下载并校验产物，不修改服务器，也不测试服务器连通性。第二条命令会重新下载该次产物、校验来源和正式 URL，通过内网 SSH 上传，切换稳定清单并验证公网下载。部署的是选定运行的产物，不会打包本机未提交代码。需要本机已登录 `gh`，并具备 Node.js/Corepack、OpenSSH 和 tar。可以显式选择成功的试打包或正式运行；执行部署就会更新线上稳定清单，该命令没有“仅上传、不切换清单”模式。
+
+GitHub 发布完成不代表公司服务器已更新。服务器不轮询 GitHub，托管 Runner 不持有 SSH 凭据；本机只需在执行这条部署命令期间保持开机和网络连接。
 
 ### 7. 验证发布结果
 
@@ -154,7 +165,7 @@ curl --fail --show-error --silent \
 
 ### 8. 恢复失败的部署
 
-如果两个构建和 `Assemble release` 已成功，但部署失败，应下载该次运行的 `desktop-release`；不要混用不同 commit 的产物，也不要只重建一个平台。将专用密钥载入 SSH agent，设置 `UPDATE_HOST`、`UPDATE_USER`、`UPDATE_PORT`、`UPDATE_REMOTE_ROOT`，然后执行：
+如果两个构建和 `Assemble release` 已成功，但部署失败，先查看失败步骤和线上清单。公网验证失败发生在清单切换之后，不会自动回滚；若尚未生成正式版本目录，可使用同一运行 ID 重试 `deploy:run`。需要人工恢复时，下载该次运行的 `desktop-release`；不要混用不同 commit 的产物，也不要只重建一个平台。将专用密钥载入 SSH agent，设置 `UPDATE_HOST`、`UPDATE_USER`、`UPDATE_PORT`、`UPDATE_REMOTE_ROOT`，然后执行：
 
 ```sh
 corepack pnpm run upload:update -- --directory /path/to/desktop-release --channel stable

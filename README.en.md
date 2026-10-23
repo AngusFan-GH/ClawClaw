@@ -47,7 +47,7 @@ corepack pnpm check
 gh workflow run release.yml --ref dsh-desktop -f publish=false
 ```
 
-After the macOS, Windows, and `Assemble release` jobs all succeed, push a `clawclaw-v<version>` tag that exactly matches `dsh-plugin-desktop/package.json` to publish. See the [Desktop package release procedure](dsh-plugin-desktop/README.md#complete-build-and-release-procedure) for one-time server and GitHub Environment setup, native packaging, artifact locations, verification, and recovery.
+After the macOS, Windows, and `Assemble release` jobs all succeed, push a `clawclaw-v<version>` tag that exactly matches `dsh-plugin-desktop/package.json` to archive the formal GitHub Release. Then run `corepack pnpm deploy:run <GitHub-run-id>` from the company network to upload both installers, switch the stable feed and verify public downloads. GitHub does not deploy automatically, and the server does not poll GitHub. See the [Desktop package release procedure](dsh-plugin-desktop/README.md#complete-build-and-release-procedure) for one-time server and GitHub Environment setup, native packaging, artifact locations, verification, and recovery.
 
 ## Data and configuration
 

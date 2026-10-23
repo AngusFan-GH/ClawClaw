@@ -47,7 +47,7 @@ corepack pnpm check
 gh workflow run release.yml --ref dsh-desktop -f publish=false
 ```
 
-确认预构建的 macOS、Windows 和 `Assemble release` 三个 job 全部成功后，推送与 `dsh-plugin-desktop/package.json` 版本严格一致的 `clawclaw-v<版本>` tag 即可正式发布。首次服务器与 GitHub Environment 配置、本地分平台打包、产物路径、发布验证和失败恢复的完整步骤见 [Desktop 包发布流程](dsh-plugin-desktop/README.zh.md#完整构建与发布流程)。
+确认预构建的 macOS、Windows 和 `Assemble release` 三个 job 全部成功后，推送与 `dsh-plugin-desktop/package.json` 版本严格一致的 `clawclaw-v<版本>` tag 完成 GitHub 正式存档；之后在公司内网本机执行 `corepack pnpm deploy:run <GitHub-run-id>`，上传双平台安装包、切换稳定清单并验证公网下载。GitHub 不自动部署服务器，服务器也不轮询 GitHub。首次服务器与 GitHub Environment 配置、本地分平台打包、产物路径、发布验证和失败恢复的完整步骤见 [Desktop 包发布流程](dsh-plugin-desktop/README.zh.md#完整构建与发布流程)。
 
 ## 数据与配置
 
