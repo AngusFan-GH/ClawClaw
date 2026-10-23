@@ -21,12 +21,12 @@ vi.mock('../src/experts/client/index.ts', () => ({ apply: vi.fn() }))
 
 describe('ClawClaw product copy', () => {
   it.each([
-    ['探索未至之境', 'ClawClaw，万物皆有回响', '预览版', '深度求索中...', '正在思考...'],
-    ['Into the Unknown', 'ClawClaw, every thought finds an answer', 'Preview', 'Deep diving...', 'Thinking...'],
+    ['探索未至之境', 'ClawClaw，万物皆有回响', '预览版', '深度求索中...', '正在处理'],
+    ['Into the Unknown', 'ClawClaw, every thought finds an answer', 'Preview', 'Deep diving...', 'Working'],
   ])('brands marker-free browser pages (%s) without native shell effects', async (hero, brandedHero, preview, thinking, brandedThinking) => {
     window.history.replaceState(null, '', '/')
     document.head.innerHTML = '<title>DSH</title><link rel="icon" href="/favicon.ico">'
-    document.body.innerHTML = `<h1>${hero}</h1><span id="preview">${preview}</span>`
+    document.body.innerHTML = `<section data-slot="conversation.hero.headline"><h1>${hero}</h1><span id="preview">${preview}</span></section>`
     const disposers: Array<() => void> = []
     const effect = vi.fn((mount: () => void | (() => void), _label: string) => {
       const dispose = mount()
@@ -60,6 +60,7 @@ describe('ClawClaw product copy', () => {
       ])
 
       const status = document.createElement('p')
+      status.setAttribute('data-chat-running', '')
       status.textContent = thinking
       document.body.append(status)
       await Promise.resolve()
