@@ -17,8 +17,10 @@ ${part('popover')} {
 }
 ${part('popoverHero')} {
  position:fixed;position-anchor:--desktop-git-chip;top:calc(anchor(bottom) + 4px);left:anchor(left);
- bottom:16px;height:auto;max-height:440px;position-try-fallbacks:flip-inline;
+ /* Shrink short menus; the maximum still respects both anchored viewport edges. */
+ bottom:16px;height:fit-content;max-height:stretch;position-try-fallbacks:flip-inline;
 }
+${part('list')} { flex:0 1 auto;min-height:0;max-height:240px; }
 ${part('backdrop')} { z-index:1000; }
 ${part('backdrop')}:has(+ ${dialog}) {
  top:var(--dsh-frame-chrome-top,0px);background:var(--dsw-alias-bg-mask-1);
