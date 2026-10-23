@@ -140,11 +140,11 @@ git push origin "clawclaw-v$version"
 
 The tag must exactly match the desktop package version. A matching tag rebuilds macOS and Windows from the same commit, assembles `desktop-release`, and publishes to GitHub Releases; a separate local deployment command uploads both installers and atomically switches the feed before public verification. Never reuse or move a published version tag. The current 0.2.11 is already live; bump to 0.2.12 or later before a new formal release.
 
-Once that tag's workflow succeeds, select its numeric run ID from the Actions URL (`/actions/runs/<run-id>`) and run the following from the repository root on a workstation connected to the company network:
+Once that tag's workflow succeeds, run the following from the repository root on a workstation connected to the company network. Each command lists available successful runs so you can choose one by number (Enter or `q` cancels):
 
 ```sh
-corepack pnpm deploy:run <GitHub-run-id> --dry-run
-corepack pnpm deploy:run <GitHub-run-id>
+corepack pnpm deploy:run --dry-run
+corepack pnpm deploy:run
 ```
 
 `--dry-run` downloads and validates the bundle without changing the server; it is not a server connectivity check. The second command downloads the bundle again, validates its source and canonical URLs, uploads over LAN SSH, switches the stable feed and verifies public downloads. It deploys the chosen run, not the workstation's uncommitted code. It requires `gh` authentication, Node.js/Corepack, OpenSSH and tar. Both successful trial builds and formal runs can be selected explicitly; selection publishes to the live stable feed. There is no staging-only mode in this command.

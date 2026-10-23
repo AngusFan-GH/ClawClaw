@@ -49,10 +49,17 @@ GitHub 托管的 macOS、Windows Runner 原生构建两个安装包。正式版�
 在已忽略的 `.env.server.local` 配置 `UPDATE_HOST=192.168.103.220`、`UPDATE_USER=clawclaw-release`、`UPDATE_PORT=22`、`UPDATE_REMOTE_ROOT=/data/clawclaw/public`，以及现有 `UPDATE_SSH_KEY_FILE` 和 `UPDATE_SSH_KNOWN_HOSTS_FILE` 路径。也可通过 SSH agent 提供私钥；必须保留主机指纹校验。本机 `gh` 需已登录并拥有仓库 Actions 读取权限。
 
 ```sh
-corepack pnpm deploy:run <GitHub-run-id>
-# 仅下载并校验，不修改服务器：
+# 自动列出可用产物，选择后部署：
+corepack pnpm deploy:run
+# 选择后仅下载校验，不部署：
+corepack pnpm deploy:run --dry-run
+# 仅列出，不下载、不部署：
+corepack pnpm deploy:run --list
+# 仍支持显式指定运行 ID：
 corepack pnpm deploy:run <GitHub-run-id> --dry-run
 ```
+
+不填写 ID 时，在交互终端中从最近 30 次成功打包运行筛选仍保留未过期、非空 `desktop-release` 的记录，显示版本、北京时间、分支或标签、提交和运行 ID。输入序号选择，回车或 `q` 直接取消，不默认选择最新记录。版本从对应提交读取，仅供展示；下载后仍独立校验构建来源。版本读取失败时显示 `unknown`。非交互环境须显式提供 ID，或使用 `--list`。超出最近 30 次范围的旧运行仍可通过 ID 指定。
 
 在仓库根目录执行，本机需具备 Node.js/Corepack、`gh`、OpenSSH 和 tar。运行 ID 是 Actions 链接 `/actions/runs/<run-id>` 中的数字，不是版本号、Job ID 或 artifact ID。`--dry-run` 仍会下载完整产物，不检查 SSH 连通性；随后真实部署时会重新下载。
 

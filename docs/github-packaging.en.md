@@ -49,10 +49,17 @@ Before publication, verify trusted HTTPS certificates, LAN and real public 9528 
 Configure ignored `.env.server.local` with `UPDATE_HOST=192.168.103.220`, `UPDATE_USER=clawclaw-release`, `UPDATE_PORT=22`, `UPDATE_REMOTE_ROOT=/data/clawclaw/public`, and the existing `UPDATE_SSH_KEY_FILE` / `UPDATE_SSH_KNOWN_HOSTS_FILE` paths. An SSH agent may provide the private key instead. Retain strict host-key verification. Authenticate `gh` locally with repository Actions read access.
 
 ```sh
-corepack pnpm deploy:run <GitHub-run-id>
-# Download and validate without changing the server:
+# Choose from recent downloadable packaging runs:
+corepack pnpm deploy:run
+# Choose and validate without deploying:
+corepack pnpm deploy:run --dry-run
+# List available runs without downloading or deploying:
+corepack pnpm deploy:run --list
+# An explicit run ID still works:
 corepack pnpm deploy:run <GitHub-run-id> --dry-run
 ```
+
+Without an ID, an interactive terminal lists the latest 30 successful workflow runs that still have a nonexpired, nonempty `desktop-release` artifact. The table shows version, build time in Asia/Shanghai, branch/tag, commit and run ID. Choose a row number; Enter or `q` cancels without selecting a default. The version is read from the exact source commit as a display hint; downloaded provenance is checked independently. If version lookup fails, the row shows `unknown`. Noninteractive automation must supply an ID or use `--list`. An older run outside the latest 30 can still be selected by explicit ID.
 
 Run these commands from the repository root with Node.js/Corepack, `gh`, OpenSSH and tar installed. The numeric run ID is the final component of the Actions `/actions/runs/<run-id>` URL; it is not a version, job ID or artifact ID. `--dry-run` still downloads the full bundle and does not test SSH connectivity. A subsequent real deployment downloads again.
 

@@ -140,11 +140,11 @@ git push origin "clawclaw-v$version"
 
 tag 必须与 Desktop package 版本完全一致。匹配的 tag 会从同一 commit 重新构建 macOS 和 Windows，汇总 `desktop-release` 并存档到 GitHub Releases。不要复用或移动已经发布的版本 tag。当前 0.2.11 已上线，下次正式发版先升到 0.2.12 或更高版本。
 
-等待该 tag 的工作流成功，从 Actions 页面链接 `/actions/runs/<run-id>` 获取数字运行 ID，在能访问公司内网的本机、仓库根目录执行：
+等待该 tag 的工作流成功，在能访问公司内网的本机、仓库根目录执行。每次命令都会列出仍有完整产物的成功运行，输入序号选择（回车或 `q` 取消）：
 
 ```sh
-corepack pnpm deploy:run <GitHub-run-id> --dry-run
-corepack pnpm deploy:run <GitHub-run-id>
+corepack pnpm deploy:run --dry-run
+corepack pnpm deploy:run
 ```
 
 `--dry-run` 下载并校验产物，不修改服务器，也不测试服务器连通性。第二条命令会重新下载该次产物、校验来源和正式 URL，通过内网 SSH 上传，切换稳定清单并验证公网下载。部署的是选定运行的产物，不会打包本机未提交代码。需要本机已登录 `gh`，并具备 Node.js/Corepack、OpenSSH 和 tar。可以显式选择成功的试打包或正式运行；执行部署就会更新线上稳定清单，该命令没有“仅上传、不切换清单”模式。
