@@ -66,6 +66,13 @@
 - id: session-telemetry-otel
   disabled: true
 
+# DSH 0.2.1 adds product analytics independently of Session feedback.
+- id: desktop-product-telemetry
+  disabled: true
+
+- id: product-analytics
+  disabled: true
+
 # ClawClaw keeps its established Desktop Cron model until a lossless Schedule
 # migration protocol exists. Loading both models produces two unrelated task
 # catalogs, so the upstream pair stays disabled in the Desktop profile.

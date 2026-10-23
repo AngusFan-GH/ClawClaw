@@ -11,13 +11,14 @@ import MessageSquareText from 'lucide-react/dist/esm/icons/message-square-text.m
 // @ts-expect-error package subpath has no declaration file
 import X from 'lucide-react/dist/esm/icons/x.mjs'
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-ui-skill/client'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { ChatNodeViewProps } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { InputState, ReferenceInsert } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import {
   FileTypeIcon, IconCheckOutlineRegular, IconCopyOutlineRegular, JsonBlock, Tooltip,
-  fileSizeText, projectUserText, writeClipboard,
+  fileSizeText, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ISidebarRight } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
@@ -440,7 +441,7 @@ function HistoryQuoteCard({ count, index, mark, text }: {
     : <button type="button" className="clawSelectionQuoteHistoryCard clawSelectionQuoteHistoryLink" title={copy.locate} onClick={() => { revealSelectionQuoteSource(mark) }}>{content}</button>
 }
 
-function SelectionQuoteMessage({ node, renderMessageImages, openFile, openSkill, t }: UserQuoteMessageProps | SteeringQuoteMessageProps) {
+function SelectionQuoteMessage({ node, renderFactorySlot, loadImage, t }: UserQuoteMessageProps | SteeringQuoteMessageProps) {
   const { text, images, files, rest } = messageParts(node.data.content)
   const scanned = useMemo(() => scanSelectionQuotes(text), [text])
   const marks = useMemo(() => scanned.quotes.flatMap((quote, index): SelectionQuoteMark[] => quote.source === undefined ? [] : [{
@@ -465,12 +466,12 @@ function SelectionQuoteMessage({ node, renderMessageImages, openFile, openSkill,
           />
         })}
       </div>}
-      {images.length > 0 && <div className="clawSelectionQuoteHistoryAttachments">{renderMessageImages({ images, align: 'end', compact: images.length > 1 })}</div>}
+      {images.length > 0 && <div className="clawSelectionQuoteHistoryAttachments">{renderFactorySlot('conversation.chat.user.content', { content: { text: '', attachments: images.map(image => ({ type: 'image' as const, image })), extraBlocks: [] }, loadImage, facts: {} })}</div>}
       {files.length > 0 && <div className="clawSelectionQuoteHistoryAttachments">{files.map((file, index) => <div className="clawSelectionQuoteFile" key={`${index}:${file.name}`}>
         <FileTypeIcon path={file.name} /><span>{file.name}{file.bytes === undefined ? '' : ` · ${fileSizeText(file.bytes)}`}</span>
       </div>)}</div>}
       {(scanned.rest !== '' || rest.length > 0) && <div className="clawSelectionQuoteHistoryBubble">
-        {projectUserText(scanned.rest, referenceLabels, skillNames, 'skill', { openFile, openSkill })}
+        {renderFactorySlot('conversation.user.text', { text: scanned.rest, facts: { sessionLabels: referenceLabels, skillNames }, interactive: true })}
         {rest.map((block, index) => <JsonBlock key={index} label={t('message.extraBlock')} payload={block} truncatedLabel={total => t('json.truncated', { total })} />)}
       </div>}
       {referenceLabels.length > 0 && <div className="clawSelectionQuoteReferenceSummary">

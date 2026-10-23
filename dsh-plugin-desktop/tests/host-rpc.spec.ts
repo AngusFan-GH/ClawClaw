@@ -20,9 +20,11 @@ describe('private Host control transport', () => {
     child.handle('echo', async ([value]) => { await new Promise(resolve => setTimeout(resolve, 2)); return value })
     parent.handle('native', ([value]) => value + 1)
     child.handle('nested', async ([value]) => child.call('native', [value]))
-    child.handle('fail', () => { throw new Error('fixture failure') })
+    const failure = new Error('fixture failure')
+    child.handle('fail', () => { throw failure })
     expect(await Promise.all([parent.call('echo', ['a']), parent.call('nested', [4])])).toEqual(['a', 5])
     await expect(parent.call('fail')).rejects.toThrow('fixture failure')
+    await expect(parent.call('fail')).rejects.toMatchObject({ stack: failure.stack })
     await expect(parent.call('absent')).rejects.toThrow('Unknown Host operation')
   })
   it('propagates cancellation to active native operations', async () => {

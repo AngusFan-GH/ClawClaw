@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
+import { evaluate } from '@deepseek-ai/cordis-plugin-loader'
 import {
   composeEntries,
   initProfile,
@@ -556,6 +557,8 @@ virtualStoreDirMaxLength: 60
       'message-feedback',
       'ui-message-feedback',
       'session-telemetry-otel',
+      'desktop-product-telemetry',
+      'product-analytics',
     ]) {
       expect(rows.find(row => row.id === id)?.disabled).toBe(true)
     }
@@ -584,6 +587,8 @@ virtualStoreDirMaxLength: 60
       'message-feedback',
       'ui-message-feedback',
       'session-telemetry-otel',
+      'desktop-product-telemetry',
+      'product-analytics',
     ]
     writeFileSync(join(profileDir, 'cordis.patch.yml'), [
       ...enabledRows.flatMap(id => [`- id: ${id}`, '  disabled: false']),
@@ -787,6 +792,10 @@ virtualStoreDirMaxLength: 60
         trustedHosts: ['lab.internal', '192.168.1.5'],
       }),
     }))
+    const connection = rows.find(row => row.id === 'connection')
+    const trust = connection?.config?.trustedHosts as { __jsExpr: string }
+    expect(evaluate({ ctx: { webStartup: { trustedHosts: ['proxy.internal'] } } }, trust.__jsExpr))
+      .toEqual(['proxy.internal', 'lab.internal', '192.168.1.5'])
     expect(rows.find(row => row.id === 'desktop-webserver')).toEqual(expect.objectContaining({
       config: { host: '127.0.0.1', port: 43_120 },
     }))
@@ -1029,6 +1038,16 @@ virtualStoreDirMaxLength: 60
       name: 'dsh-plugin-desktop',
       config: expect.objectContaining({ mode: 'compatibility' }),
     }))
+  })
+
+  it('keeps upstream Schedule tools disabled inside Agent presets', () => {
+    const prepared = prepareDesktopProfile(undefined, temporaryHome(), 'darwin')
+    const rows = composeEntries([prepared.patches])
+    for (const id of ['preset-standard', 'preset-ptc', 'preset-cordis']) {
+      const row = rows.find(row => row.id === id)
+      const plugins = row?.config?.plugins as Array<{ name: string; disabled?: boolean }>
+      expect(plugins.find(plugin => plugin.name === '@deepseek-ai/dsh-tool-schedule')?.disabled).toBe(true)
+    }
   })
 
   it('isolates every Skill-capable preset from Harness and shared Agent roots', () => {

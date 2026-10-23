@@ -90,7 +90,7 @@ export const name = 'desktop-shell'
 
 /** Services required by the desktop shell; `desktopRuntime` is probed, not required. */
 export const inject = [
-  'webServer', 'webRuntime', 'appExit', 'settings', 'connection', 'sessionQuery', 'sessionProjectionCache', 'agents',
+  'webServer', 'appExit', 'settings', 'connection', 'sessionQuery', 'sessionProjectionCache', 'agents',
   'agentPresets', 'permissionPresets', 'workspaceRegistry', 'sessions', 'sessionProjections', 'subagents',
 ]
 
@@ -435,8 +435,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         config.windowsMaterial,
         runtime.windowsBuild,
       )
+      const port = ctx.webServer.port
+      if (port === undefined) throw new Error('ClawClaw WebServer has not bound a port')
       const url = desktopRendererUrl(
-        ctx.webServer.port,
+        port,
         config.mode,
         runtime.platform,
         runtime.updates.currentVersion,

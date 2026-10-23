@@ -654,6 +654,8 @@ function isolatedSkillPresetPatches(rows: ReadonlyMap<string, EntryOptions>, hom
     }
     const rewritten = plugins
       .filter(plugin => plugin.id !== 'skill-filesystem' && plugin.id !== 'clawclaw-skill-filesystem')
+      // Schedule tools moved into presets in DSH 0.2.1; Desktop retains its Cron model.
+      .map(plugin => plugin.name === '@deepseek-ai/dsh-tool-schedule' ? { ...plugin, disabled: true } : plugin)
     const insertion = plugins.findIndex(plugin => plugin.id === 'skill-filesystem')
     rewritten.splice(insertion < 0 ? rewritten.length : insertion, 0, isolated, project)
     return { id, config: { ...config, plugins: rewritten } }
@@ -1145,6 +1147,20 @@ export function prepareDesktopProfile(
     throw new Error(`${BIN_NAME}: desktop profile has no web-runtime row`)
   }
   const webRuntimeConfig = rowConfig(webRuntime)
+  // DSH 0.2.1 moved browser trust from webRuntime to Connection. Preserve
+  // existing Desktop profiles while retaining the new invocation authorities.
+  const legacyTrustedHosts = webRuntimeTrustedHosts(webRuntimeConfig.trustedHosts)
+  if (legacyTrustedHosts.length > 0) {
+    const connectionConfig = rowConfig(rows.get('connection'))
+    const current = connectionConfig.trustedHosts
+    const expression = isJsExpr(current)
+      ? current.__jsExpr
+      : JSON.stringify(webRuntimeTrustedHosts(current))
+    patches.push({ id: 'connection', config: {
+      ...connectionConfig,
+      trustedHosts: { __jsExpr: `Array.from(new Set([...(${expression}), ...${JSON.stringify(legacyTrustedHosts)}]))` },
+    } })
+  }
   patches.push({
     id: 'web-runtime',
     config: {
@@ -1152,7 +1168,7 @@ export function prepareDesktopProfile(
       // Browser access is an advertised Desktop capability, never an
       // instruction to launch the operating system's default browser.
       openBrowser: false,
-      trustedHosts: webRuntimeTrustedHosts(webRuntimeConfig.trustedHosts),
+      trustedHosts: legacyTrustedHosts,
     },
   })
   const webserver = rows.get('webserver')
@@ -1254,6 +1270,8 @@ export function prepareDesktopProfile(
     'message-feedback',
     'ui-message-feedback',
     'session-telemetry-otel',
+    'desktop-product-telemetry',
+    'product-analytics',
   ]) {
     if (rows.has(id)) patches.push({ id, disabled: true })
   }

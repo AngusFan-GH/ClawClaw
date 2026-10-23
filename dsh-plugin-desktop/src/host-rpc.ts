@@ -62,7 +62,11 @@ export class HostRpc {
       const pending = this.pending.get(id)
       if (!pending) return
       this.pending.delete(id); pending.cleanup()
-      if (typeof message.error === 'string') pending.reject(new Error(message.error))
+      if (typeof message.error === 'string') {
+        const error = new Error(message.error)
+        if (typeof message.errorStack === 'string') error.stack = message.errorStack
+        pending.reject(error)
+      }
       else pending.resolve(message.value)
     } else if (message.kind === 'cancel') {
       this.active.get(id)?.abort()
@@ -76,7 +80,10 @@ export class HostRpc {
         if (!this.closed) this.port.send({ kind: 'result', id, value: result })
       } catch (cause) {
         if (!this.closed) {
-          try { this.port.send({ kind: 'result', id, error: cause instanceof Error ? cause.message : String(cause) }) }
+          try {
+            this.port.send({ kind: 'result', id, error: cause instanceof Error ? cause.message : String(cause),
+              ...(cause instanceof Error ? { errorStack: cause.stack } : {}) })
+          }
           catch { /* transport owner handles exit */ }
         }
       } finally { this.active.delete(id) }

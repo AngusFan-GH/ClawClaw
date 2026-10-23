@@ -1,3 +1,4 @@
+import { Session, SessionId, pluginRecordOf } from '@deepseek-ai/dsh-session'
 import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -86,10 +87,17 @@ async function hostFixture() {
   const tools = new Map<string, RegisteredTool>()
   const outputs = ['lead plan', 'member evidence', 'lead final']
   const starts: Array<Record<string, unknown>> = []
-  const start = vi.fn(async (_provider: string, options: Record<string, unknown>) => {
-    starts.push(options)
+  const createdListeners = new Set<(value: { agent: Agent }) => void>()
+  const startActivation = vi.fn(async (spec: { childId: string; request: Record<string, unknown>; delivery: string }) => {
+    expect(spec.delivery).toBe('caller')
+    const session = Session.create(SessionId(spec.childId))
+    const child = { id: spec.childId, session,
+      ctx: { systemPrompt: { section: vi.fn(), getSectionOrder: () => 0 }, tools: { restrict: vi.fn() } } } as unknown as Agent
+    for (const listener of createdListeners) listener({ agent: child })
+    const composition = session.snapshotEvents().map(pluginRecordOf).find(record => record?.type === 'plugin:clawclaw/expert-composition')?.data as { persona: string; deniedTools: string[] }
+    starts.push({ ...spec.request, persona: composition.persona, toolFilter: { deny: composition.deniedTools } })
     const text = outputs[starts.length - 1] ?? 'unexpected'
-    return { result: Promise.resolve({ stopReason: 'completed', output: [{ type: 'text', text }] }), dispose: vi.fn(async () => {}) }
+    return { childId: spec.childId, result: Promise.resolve({ stopReason: 'completed', output: [{ type: 'text', text }] }), dispose: vi.fn(async () => {}) }
   })
   const settings = {
     get: (ns: string) => ns === 'locale' ? { preference: 'en' } : ns === 'dsh-desktop-mcp'
@@ -108,12 +116,15 @@ async function hostFixture() {
       register: (tool: RegisteredTool & { name: string }) => { tools.set(tool.name, tool) },
       schemas: () => [{ name: 'mcp__company-browser__search' }],
     },
-    subagents: { getProvider: () => ({ capabilities: { persona: true, toolFilter: true, depthLimit: true } }), start },
+    subagents: { getProvider: () => ({ prepareContinuable: vi.fn(), capabilities: { depthLimit: true } }), startActivation },
     skills: { get: async () => undefined },
     systemPrompt: { section: vi.fn() },
     reflect: { provide: (name: string, value: unknown) => { services.set(name, value) } },
     get: (name: string) => services.get(name),
-    on: vi.fn(() => () => {}), effect: vi.fn(() => () => {}),
+    on: vi.fn((event: string, callback: (value: { agent: Agent }) => void) => {
+      if (event === 'agent/created') createdListeners.add(callback)
+      return () => { createdListeners.delete(callback) }
+    }), effect: vi.fn(() => () => {}),
     webServer: {}, logger: { warn: vi.fn(), error: vi.fn() },
   } as unknown as Context
   apply(ctx, { root: catalog, provider: 'spawn', divisions: ['research'], maxDepth: 3 })

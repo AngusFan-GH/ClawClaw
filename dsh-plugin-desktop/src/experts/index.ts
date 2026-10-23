@@ -35,7 +35,7 @@ import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import type { SubagentRun } from '@deepseek-ai/dsh-subagent'
+import { startExpertSubagent, installExpertCompositionRecovery, supportsExpertComposition } from './expert-subagent.js'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { createUserMessage, freezeMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-skill'
@@ -687,6 +687,7 @@ export async function preflightExpertTeam(
 }
 
 export function apply(ctx: Context, config: Config): void {
+  installExpertCompositionRecovery(ctx)
   const maxDepth = normalizeMaxDepth(config.maxDepth)
   const settingsNamespace = settingsNamespaceCompat('clawclaw-experts')
   let settingsSource: () => AgencySettings = () => ({ enabled: [], customExperts: [] })
@@ -967,14 +968,13 @@ export function apply(ctx: Context, config: Config): void {
     if (exec.agent === undefined) throw new Error(formatHost(locale, 'error.summonRequiresAgent'))
     const provider = ctx.subagents.getProvider(config.provider)
     if (provider === undefined) throw new Error(formatHost(locale, 'error.providerMissing', { provider: config.provider }))
-    if (!provider.capabilities.persona) throw new Error(formatHost(locale, 'error.providerNoPersona', { provider: config.provider }))
-    if (!provider.capabilities.toolFilter) throw new Error(formatHost(locale, 'error.providerNoToolFilter', { provider: config.provider }))
+    if (!supportsExpertComposition(provider)) throw new Error(formatHost(locale, 'error.providerNoPersona', { provider: config.provider }))
     if (maxDepth !== undefined && !provider.capabilities.depthLimit) throw new Error(formatHost(locale, 'error.providerNoMaxDepth', { provider: config.provider }))
     const expert = resolveExpert((await library.catalog()).experts.filter(expert => !expert.conflict && expert.packageType !== 'team'), query, locale)
     if (!enabledSet().has(expert.slug)) throw new Error(formatHost(locale, 'error.expertDisabled', { name: localizedExpertName(expert, locale) }))
     const { prompt: persona } = await personaSource.getPrompt(expert.slug, expert.division, locale)
     const composition = await resolveExpertComposition(ctx, expert, exec.agent, persona, exec.signal)
-    const run: SubagentRun = await ctx.subagents.start(config.provider, {
+    const run = await startExpertSubagent(ctx, config.provider, {
       label: `expert:${expert.slug}`,
       prompt: [{ type: 'text', text: taskText }],
       parent: exec.agent,
@@ -1127,7 +1127,7 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
                 throw new Error(teamTx("专家团所需 Connector 未就绪：{0}。", [unavailable.map(item => item.dependency).join(', ')]));
             await preflightExpertTeam(ctx, candidate, catalog.experts, exec.agent!, exec.signal);
             const provider = ctx.subagents.getProvider(config.provider);
-            if (!provider?.capabilities.persona || !provider.capabilities.toolFilter || (maxDepth !== undefined && !provider.capabilities.depthLimit))
+            if (provider === undefined || !supportsExpertComposition(provider) || (maxDepth !== undefined && !provider.capabilities.depthLimit))
                 throw new Error(teamTx("当前子代理服务不支持该专家团所需的身份、工具过滤或深度限制。"));
             const result = await executeExpertPluginTeam({
                 team: pluginTeam, experts: catalog.experts, enabled: catalog.enabled, task: String(args.task ?? ''), signal: exec.signal,
@@ -1135,7 +1135,7 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
                 runAgent: async (agentRun: ExpertPluginAgentRun) => {
                     exec.signal?.throwIfAborted();
                     const composition = await resolveExpertComposition(ctx, agentRun.expert, exec.agent!, agentRun.persona, exec.signal);
-                    const run = await ctx.subagents.start(config.provider, { label: agentRun.expert.name, parent: exec.agent!,
+                    const run = await startExpertSubagent(ctx, config.provider, { label: agentRun.expert.name, parent: exec.agent!,
                         prompt: [{ type: 'text', text: agentRun.prompt }], persona: sanitize(composition.persona),
                         toolFilter: { deny: composition.deniedTools }, ...(maxDepth === undefined ? {} : { maxDepth }), signal: exec.signal });
                     try {
@@ -1163,7 +1163,7 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
             return { report: JSON.stringify({ ...result, engine: engine.status }) };
         }
         const provider = ctx.subagents.getProvider(config.provider);
-        if (!provider?.capabilities.persona || !provider.capabilities.toolFilter || (maxDepth !== undefined && !provider.capabilities.depthLimit))
+        if (provider === undefined || !supportsExpertComposition(provider) || (maxDepth !== undefined && !provider.capabilities.depthLimit))
             throw new Error(teamTx("当前子代理服务不支持专家团所需的身份、工具过滤或深度限制。"));
         const result = await executeTeam({ team, locale, experts: catalog.experts, enabled: catalog.enabled, task: String(args.task ?? ''), revision: snapshot.revision, signal: exec.signal,
             readPersona: async (expert) => (await personaSource.getPrompt(expert.slug, expert.division, locale)).prompt,
@@ -1171,7 +1171,7 @@ ctx.tools.register(localizeTeamTool(defineTool({ name: 'summon_expert_team', des
                 exec.signal?.throwIfAborted();
                 const expert = catalog.experts.find(item => item.slug === member.slug)!;
                 const composition = await resolveExpertComposition(ctx, expert, exec.agent!, member.persona, exec.signal);
-                const run = await ctx.subagents.start(config.provider, { label: member.name, parent: exec.agent!,
+                const run = await startExpertSubagent(ctx, config.provider, { label: member.name, parent: exec.agent!,
                     prompt: [{ type: 'text', text: member.prompt }], persona: sanitize(composition.persona),
                     toolFilter: { deny: composition.deniedTools },
                     ...(maxDepth === undefined ? {} : { maxDepth }), signal: exec.signal });
@@ -1201,7 +1201,7 @@ async function runSelectedTeam(teamId: string, task: string, agent: Agent, signa
         throw new Error(teamTx("专家团不存在或成员未就绪。"));
     await preflightExpertTeam(ctx, selected, catalog.experts, agent, signal);
     const provider = ctx.subagents.getProvider(config.provider);
-    if (!provider?.capabilities.persona || !provider.capabilities.toolFilter || (maxDepth !== undefined && !provider.capabilities.depthLimit))
+    if (provider === undefined || !supportsExpertComposition(provider) || (maxDepth !== undefined && !provider.capabilities.depthLimit))
         throw new Error(teamTx("当前子代理服务不支持专家团所需的身份、工具过滤或深度限制。"));
     const pluginTeam = [...pluginTeams.values()].find(team => team.id === teamId);
     if (pluginTeam !== undefined) {
@@ -1217,7 +1217,7 @@ async function runSelectedTeam(teamId: string, task: string, agent: Agent, signa
             runAgent: async (agentRun: ExpertPluginAgentRun) => {
                 signal.throwIfAborted();
                 const composition = await resolveExpertComposition(ctx, agentRun.expert, agent, agentRun.persona, signal);
-                const run = await ctx.subagents.start(config.provider, { label: agentRun.expert.name, parent: agent,
+                const run = await startExpertSubagent(ctx, config.provider, { label: agentRun.expert.name, parent: agent,
                     prompt: [{ type: 'text', text: agentRun.prompt }], persona: sanitize(composition.persona),
                     toolFilter: { deny: composition.deniedTools }, ...(maxDepth === undefined ? {} : { maxDepth }), signal });
                 try {
@@ -1235,7 +1235,7 @@ async function runSelectedTeam(teamId: string, task: string, agent: Agent, signa
             signal.throwIfAborted();
             const expert = catalog.experts.find(item => item.slug === member.slug)!;
             const composition = await resolveExpertComposition(ctx, expert, agent, member.persona, signal);
-            const run = await ctx.subagents.start(config.provider, { label: member.name, parent: agent,
+            const run = await startExpertSubagent(ctx, config.provider, { label: member.name, parent: agent,
                 prompt: [{ type: 'text', text: member.prompt }], persona: sanitize(composition.persona),
                 toolFilter: { deny: composition.deniedTools }, ...(maxDepth === undefined ? {} : { maxDepth }), signal });
             try {

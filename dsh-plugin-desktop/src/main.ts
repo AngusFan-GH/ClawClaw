@@ -1,6 +1,7 @@
 /** ClawClaw executable: minimal Electron bootstrap around the Host Cordis root. */
 
 import { startIsolatedDesktopHost } from './host-process.ts'
+import { DesktopPluginPackages } from './desktop-plugin-packages.ts'
 import { app, crashReporter, dialog, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
@@ -1402,6 +1403,7 @@ async function start(): Promise<void> {
           // Keep Host imports and browser bundle discovery on the same public
           // profile-overlay resolver used by packaged Electron.
           hostCtx.loader.internal = undefined
+          await hostCtx.plugin(DesktopPluginPackages, prepared.bareModuleBaseUrl)
           hostCtx.provide('profileContext', desktopHarnessProfileContext(prepared, desktopPnpmBootstrap))
           generation.bindHost({
             fiber: hostCtx.fiber,

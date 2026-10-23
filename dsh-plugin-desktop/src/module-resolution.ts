@@ -761,13 +761,20 @@ function ensureResolverState(): ProcessResolverState {
   return state
 }
 
-/**
- * Resolve Cordis Loader imports from one selected persistent Profile.
- * The process owns one multiplexed Node hook; repeated/HMR registrations are
- * reference-counted and may be released in any order.
- * @param profileBaseUrl - file URL for the Profile package.json.
- * @returns an idempotent registration disposer.
- */
+/** Resolve metadata through the exact package selection used by Loader imports. */
+export function desktopProfilePackageCandidate(specifier: string, profileBaseUrl: string): PackageOverlayCandidate | undefined {
+  const name = resolvablePackageName(specifier)
+  if (name === undefined) return undefined
+  const registration = currentResolverState()?.registrations.get(profileBaseUrl)
+  if (registration === undefined) throw new Error('Desktop Profile package resolver is not installed')
+  try { return selectedOverlayCandidate(registration, name) }
+  catch (cause) {
+    if (cause instanceof PackageOverlayNotFoundError) return undefined
+    throw cause
+  }
+}
+
+/** Retain one Profile's multiplexed Node resolver until the returned disposer runs. */
 export function installProfilePackageResolver(profileBaseUrl: string): () => void {
   const parsed = new URL(profileBaseUrl)
   if (parsed.protocol !== 'file:' || parsed.search.length > 0 || parsed.hash.length > 0) {

@@ -130,7 +130,6 @@ function settingsSnapshot(activeWorkspaceId = ''): ConfigFormSnapshot<DesktopWor
     user: undefined,
     revision: 1,
     writable: true,
-    mode: 'host',
   }
 }
 

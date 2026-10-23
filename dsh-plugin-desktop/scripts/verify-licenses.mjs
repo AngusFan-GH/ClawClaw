@@ -21,6 +21,8 @@ const rootManifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 
 /** Licenses accepted for redistribution inside the desktop installers. */
 const ALLOWED_LICENSES = new Set([
   'MIT',
+  // type-fest 4.x offers either of these already accepted licenses.
+  '(MIT OR CC0-1.0)',
   'Apache-2.0',
   'Apache 2.0',
   'BSD-2-Clause',

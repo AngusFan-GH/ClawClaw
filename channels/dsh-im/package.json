@@ -31,8 +31,10 @@
       "platform": "web"
     },
     "compatibility": {
-      "dsh": "0.1.7-rc.2",
-      "profiles": ["web"]
+      "dsh": "0.2.1-rc.2",
+      "profiles": [
+        "web"
+      ]
     }
   },
   "scripts": {
@@ -58,6 +60,6 @@
     "react": "18.3.1"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.2"
+    "@deepseek-ai/cordis": "^4.0.5"
   }
 }

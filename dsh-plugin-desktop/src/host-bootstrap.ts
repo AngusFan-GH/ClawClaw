@@ -6,6 +6,7 @@ import { DESKTOP_PACKAGE_NAME as BIN_NAME } from './product-identity.ts'
 import { DESKTOP_SETTINGS_NAMESPACE, type DesktopSettings } from './index.ts'
 import { DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE, type DesktopNotificationSettings } from './notifications.ts'
 import { installProfilePackageResolver } from './module-resolution.ts'
+import { DesktopPluginPackages } from './desktop-plugin-packages.ts'
 import { createDesktopWebProfile, listDesktopProfiles, canDeleteDesktopProfile, deleteDesktopProfile, selectDesktopProfile } from './profile-manager.ts'
 import { DesktopProfileService } from './profile-service.ts'
 import { DesktopActionsService } from './desktop-actions.ts'
@@ -107,6 +108,7 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
         // Keep Host imports and browser bundle discovery on the same public
         // profile-overlay resolver used by packaged Electron.
         hostCtx.loader.internal = undefined
+        await hostCtx.plugin(DesktopPluginPackages, prepared.bareModuleBaseUrl)
         hostCtx.provide('profileContext', desktopHarnessProfileContext(prepared, desktopPnpmBootstrap))
         bindHost({
           fiber: hostCtx.fiber,

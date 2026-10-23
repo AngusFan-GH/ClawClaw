@@ -44,6 +44,7 @@ export default defineConfig([
     entry: {
       index: 'src/index.ts',
       'module-resolution': 'src/module-resolution.ts',
+      'desktop-plugin-packages': 'src/desktop-plugin-packages.ts',
       webserver: 'src/webserver.ts',
       profile: 'src/profile.ts',
       'setup-wizard-settings': 'src/setup-wizard-settings.ts',

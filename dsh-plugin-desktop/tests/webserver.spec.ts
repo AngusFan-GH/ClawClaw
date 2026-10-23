@@ -75,7 +75,7 @@ describe('Desktop WebServer port policy', () => {
     contexts.push(context)
 
     await expect(context.plugin(DesktopWebServer, { host: '0.0.0.0', port: 0 }))
-      .rejects.toThrow('only supports loopback')
+      .rejects.toThrow(/only supports loopback|unspecified \(wildcard\) address/)
   })
 
   it('increments only after the requested loopback bind reports EADDRINUSE', async () => {
@@ -167,8 +167,8 @@ describe('Desktop WebServer browser gate', () => {
       },
     })
 
-    await expect(requestUpgrade(server.port, '/socket')).resolves.toContain('403 Forbidden')
-    await expect(requestUpgrade(server.port, '/socket', {
+    await expect(requestUpgrade(server.port ?? 0, '/socket')).resolves.toContain('403 Forbidden')
+    await expect(requestUpgrade(server.port ?? 0, '/socket', {
       [access.rendererHeader.name]: access.rendererHeader.value,
     })).resolves.toContain('101 Switching Protocols')
   })

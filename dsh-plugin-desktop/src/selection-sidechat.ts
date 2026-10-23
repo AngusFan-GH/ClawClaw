@@ -15,6 +15,7 @@ import {
   snapshotSubagentDescriptor,
   type SubagentRuntime,
 } from '@deepseek-ai/dsh-subagent'
+import type {} from '@deepseek-ai/dsh-working-directory'
 import { registerDesktopJsonApi } from './desktop-json-api.ts'
 import {
   DESKTOP_SELECTION_SIDECHAT_PATH,
@@ -69,12 +70,13 @@ export async function prepareSelectionSideChat(
   })
   const delegatedPolicies = captureDelegatedPolicyOverrides(parent)
   const signal = new AbortController().signal
-  const prepared = await provider.prepareContinuable({ sessionId: childId, parent, signal })
+  const cwd = parent.ctx.get('workingDirectory')?.get(parent.session) ?? parent.session.header.cwd ?? process.cwd()
+  const prepared = await provider.prepareContinuable({ sessionId: childId, cwd, parent, signal })
   const inheritedEventCount = SessionLogOffset(prepared.seed?.length ?? 0)
   const handle = await runtime.agents.create({
     sessionId: childId,
     parentAgent: parent,
-    meta: childSessionMeta(parent, childDepth, prepared.seed !== undefined),
+    meta: { ...childSessionMeta(parent, childDepth, prepared.seed !== undefined), cwd },
     ...(prepared.seed === undefined ? {} : { seed: prepared.seed }),
     inheritedEventCount,
     agentOptions,

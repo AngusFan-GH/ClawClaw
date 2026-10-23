@@ -15,9 +15,11 @@ import { DESKTOP_SETTINGS_NAMESPACE } from '../lib/index.js'
 import { loadCatalog, DEFAULT_DIVISIONS } from '../lib/experts/index.js'
 import { installDesktopPnpmRuntime } from '../lib/desktop-runtime-environment.js'
 import { installProfilePackageResolver } from '../lib/module-resolution.js'
+import { DesktopPluginPackages } from '../lib/desktop-plugin-packages.js'
 import { desktopHarnessProfileContext, prepareDesktopProfile } from '../lib/profile.js'
 import { DesktopProfileService } from '../lib/profile-service.js'
 import { importLegacyDesktopSetupWizardSettings } from '../lib/setup-wizard-settings.js'
+import { verifyUpgradeExpertRun } from './verify-upgrade-agent.mjs'
 
 const BIN_NAME = 'dsh-plugin-desktop-profile-smoke'
 const HOST_SERVICE_PLUGIN_NAME = 'dsh-desktop-host-services-smoke-plugin'
@@ -32,6 +34,8 @@ const BROWSER_ACCESS = Object.freeze({
   setOrdinaryBrowserEnabled(enabled) { ordinaryBrowserEnabled = enabled },
 })
 const home = mkdtempSync(join(tmpdir(), 'dsh-desktop-profile-'))
+const previousDshHome = process.env.DSH_HOME
+process.env.DSH_HOME = home
 let ctx
 let releasePackageResolver
 let pnpmRuntime
@@ -48,6 +52,13 @@ try {
     '',
   ].join('\n'))
   let prepared = prepareDesktopProfile(undefined, home, 'win32')
+  // A legacy shared fallback must never decide admission for the new installed runtime.
+  const staleSettings = join(home, 'profiles', 'node_modules', '@deepseek-ai', 'dsh-settings')
+  mkdirSync(staleSettings, { recursive: true })
+  writeFileSync(join(staleSettings, 'package.json'), JSON.stringify({
+    name: '@deepseek-ai/dsh-settings', version: '0.1.7-rc.2',
+    peerDependencies: { '@deepseek-ai/dsh-session': '0.1.7-rc.2' },
+  }))
   await importLegacyDesktopSetupWizardSettings(prepared.profile.patchPath)
   prepared = prepareDesktopProfile(undefined, home, 'win32')
   const hostServicePluginDir = join(
@@ -61,13 +72,21 @@ try {
     hostServicePluginDir,
     { recursive: true, force: false, errorOnExist: true },
   )
+  const incompatibleName = 'clawclaw-upgrade-incompatible-fixture'
+  const incompatibleDir = join(prepared.profile.dir, 'node_modules', incompatibleName)
+  mkdirSync(incompatibleDir)
+  writeFileSync(join(incompatibleDir, 'package.json'), JSON.stringify({
+    name: incompatibleName, version: '1.0.0', type: 'module', exports: './index.js',
+    engines: { dsh: '0.1.7-rc.2' },
+  }))
+  writeFileSync(join(incompatibleDir, 'index.js'), 'throw new Error("Incompatible fixture must never activate")\n')
   // Deliberately compose the consumer before the desktop-pnpm provider row.
   // Its required injection must keep it pending until that service mounts.
   const hostServicePatch = {
     insert: [{
       id: 'desktop-host-services-smoke-plugin',
       name: HOST_SERVICE_PLUGIN_NAME,
-    }],
+    }, { id: incompatibleName, name: incompatibleName }],
   }
   const patches = [
     hostServicePatch,
@@ -180,6 +199,7 @@ try {
     async (host) => {
       // Match the public resolver path used by packaged Electron.
       host.loader.internal = undefined
+      await host.plugin(DesktopPluginPackages, prepared.bareModuleBaseUrl)
       host.provide(DSH_LAUNCH_ENVIRONMENT_KEY, createLaunchEnvironmentSnapshot([]))
       host.provide('desktopBrowserAccess', BROWSER_ACCESS)
       host.provide('desktopRuntime', runtime)
@@ -234,6 +254,9 @@ try {
     throw new Error('legacy settings import did not complete')
   }
   await ctx.loader.await()
+  if (![...ctx.loader.entries()].some(entry => entry.options.id === incompatibleName && entry.options.disabled === true)) {
+    throw new Error('Desktop package metadata adapter bypassed incompatible third-party admission')
+  }
 
   if (ctx.get('desktopPnpm') === undefined) {
     throw new Error('assembled desktop profile is missing the desktop pnpm Host capability')
@@ -366,6 +389,7 @@ try {
     throw new Error(`assembled Windows profile remapped minimal preset to ${minimalPreset.id}`)
   }
   const hostServiceProbe = ctx.get(HOST_SERVICE_PROBE_KEY)
+  await verifyUpgradeExpertRun(ctx, home, firstExpert)
   if (hostServiceProbe?.current?.name !== 'desktop'
     || hostServiceProbe.current.dir !== prepared.profile.dir
     || hostServiceProbe.pnpm?.serviceName !== 'desktopPnpm'
@@ -494,4 +518,6 @@ try {
   releasePackageResolver?.()
   pnpmRuntime?.dispose()
   rmSync(home, { recursive: true, force: true })
+  if (previousDshHome === undefined) delete process.env.DSH_HOME
+  else process.env.DSH_HOME = previousDshHome
 }

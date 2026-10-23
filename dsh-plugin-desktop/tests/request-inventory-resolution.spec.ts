@@ -16,6 +16,7 @@ it('prepares request inventory for Desktop-owned entries and private-manifest pl
     const desktop = JSON.parse(readFileSync(process.argv[3], 'utf8'));
     const root = mkdtempSync(join(tmpdir(), 'desktop-inventory-'));
     let release;
+    const warnings = [];
     try {
       writeFileSync(join(root, 'package.json'), '{"type":"module"}');
       const baseUrl = pathToFileURL(join(root, 'package.json')).href;
@@ -24,7 +25,7 @@ it('prepares request inventory for Desktop-owned entries and private-manifest pl
         const tree = { ctx: { baseUrl }, entries: () => names.map(name => ({
           options: { name }, fiber: { state: 2 }, parent: { tree }
         })) };
-        apply({ baseUrl, get: () => undefined, loader: tree, deepseekLlmApiExtensions: {
+        apply({ logger: { warn: (...args) => warnings.push(args) }, baseUrl, get: () => undefined, loader: tree, deepseekLlmApiExtensions: {
           register: (key, value) => { assert.equal(key, 'dsh_plugin_packages'); provider = value; }
         } }, {});
         return (await provider.prepare({})).value.packages;
@@ -43,9 +44,10 @@ it('prepares request inventory for Desktop-owned entries and private-manifest pl
       }));
       writeFileSync(join(plugin, 'index.js'), 'throw new Error("inventory evaluated plugin")');
       assert.deepEqual(await collect(['private-manifest-plugin']), [{ name: 'private-manifest-plugin', version: '1.2.3' }]);
-      await assert.rejects(() => collect(['inventory-nonexistent-package']), /cannot resolve.*package/);
+      assert.deepEqual(await collect([desktop.name, 'inventory-nonexistent-package']), [{ name: desktop.name, version: desktop.version }]);
+      assert.match(String(warnings.at(-1)?.at(-1)), /cannot resolve.*package/);
       writeFileSync(join(plugin, 'package.json'), JSON.stringify({ name: 'private-manifest-plugin', exports: './index.js' }));
-      await assert.rejects(() => collect(['private-manifest-plugin']), /non-empty name and version/);
+      assert.deepEqual(await collect(['private-manifest-plugin']), [{ name: 'private-manifest-plugin' }]);
       release(); release = undefined;
       assert.deepEqual(await collect([desktop.name]), [{ name: desktop.name, version: desktop.version }]);
       console.log('request inventory passed');
