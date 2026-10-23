@@ -8,3 +8,10 @@ declare module 'clawclaw:plugin-manager-client' {
   const factory: (require: ClientRequire) => PluginManagerClientExports
   export default factory
 }
+
+declare module 'clawclaw:git-graph-client' {
+  const factory: (require: (id: string) => unknown) => {
+    apply(ctx: import('@deepseek-ai/cordis').Context): void
+  }
+  export default factory
+}

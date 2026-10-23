@@ -2,6 +2,7 @@ import { defineConfig } from 'tsdown'
 import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
+import { gitGraphClientFactorySource } from './scripts/git-graph-client-artifact.ts'
 
 const PACKAGE_NAME = 'dsh-plugin-desktop'
 const PRODUCT_VERSION = (JSON.parse(
@@ -38,6 +39,21 @@ function publishedPluginManagerClient() {
   }
 }
 
+function publishedGitGraphClient() {
+  const name = 'clawclaw:git-graph-client'
+  const resolved = `\0${name}`
+  const path = localRequire.resolve('@linxin666/dsh-client-ui-git-graph/client')
+  return {
+    name: 'clawclaw-pinned-git-graph-client',
+    resolveId(source: string) { return source === name ? resolved : null },
+    async load(id: string) {
+      if (id !== resolved) return null
+      this.addWatchFile(path)
+      return gitGraphClientFactorySource(await readFile(path, 'utf8'))
+    },
+  }
+}
+
 export default defineConfig([
   {
     name: PACKAGE_NAME,
@@ -60,6 +76,7 @@ export default defineConfig([
       'shortcut-menu': 'src/shortcut-menu.ts',
       'plugin-registry-probe': 'src/plugin-registry-probe.ts',
       'default-workspace': 'src/default-workspace.ts',
+      'git-graph': 'src/git-graph.ts',
       skills: 'src/skills.ts',
       'clawclaw-skill-filesystem': 'src/clawclaw-skill-filesystem.ts',
       'legacy-agent-presets': 'src/legacy-agent-presets.ts',
@@ -124,7 +141,7 @@ export default defineConfig([
     dts: false,
     clean: false,
     sourcemap: true,
-    plugins: [publishedPluginManagerClient()],
+    plugins: [publishedPluginManagerClient(), publishedGitGraphClient()],
     deps: {
       neverBundle: [
         'react',

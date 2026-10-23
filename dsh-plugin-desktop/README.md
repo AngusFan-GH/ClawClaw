@@ -2,7 +2,7 @@
 
 [中文](README.zh.md)
 
-`dsh-plugin-desktop` is the ClawClaw Desktop package, version `0.2.11`. It supplies Electron bootstrap, an isolated DSH Host, native windows/tray, profile and pnpm services, workspaces, recovery, updates, Market selection, and the ClawClaw client presentation. Its installed product identity is **ClawClaw** (`com.clawclaw.desktop`).
+`dsh-plugin-desktop` is the ClawClaw Desktop package, version `0.2.12`. It supplies Electron bootstrap, an isolated DSH Host, native windows/tray, profile and pnpm services, workspaces, recovery, updates, Market selection, and the ClawClaw client presentation. Its installed product identity is **ClawClaw** (`com.clawclaw.desktop`).
 
 This package is part of the root pnpm workspace. Do not install it as a standalone npm application: it depends on the root vendored DSH runtime, overrides, patches, sibling Market, and Channels workspace package.
 
@@ -21,6 +21,8 @@ Compatibility and extended modes isolate desktop chrome from content in separate
 ClawClaw skips the upstream preview notice during first-run onboarding. SpiritX API-key setup and the Models settings page remain available.
 
 Sandboxed Electron preloads are built as independent bundles without local chunk imports. The runtime-closure gate executes both preload artifacts with sandbox-compatible module loading.
+
+Git workspaces expose a branch menu in blank Sessions, with local branch search/create/switch, a read-only commit graph, and managed worktree Sessions. Automatic worktree isolation and the Agent tool are disabled by default. The Git UI follows the Desktop theme. See the [integration and validation report](../docs/evidence/desktop-git-graph-integration-audit.md) for data protection and verification details.
 
 ## Commands
 

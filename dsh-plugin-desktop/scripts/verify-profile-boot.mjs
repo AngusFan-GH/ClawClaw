@@ -25,6 +25,7 @@ import { desktopHarnessProfileContext, prepareDesktopProfile } from '../lib/prof
 import { DesktopProfileService } from '../lib/profile-service.js'
 import { importLegacyDesktopSetupWizardSettings } from '../lib/setup-wizard-settings.js'
 import { verifyChannelHarness } from './verify-channel-harness.mjs'
+import { verifyGitGraph } from './verify-git-graph.mjs'
 import { verifyUpgradeExpertRun, verifyDesktopSchedule } from './verify-upgrade-agent.mjs'
 
 const BIN_NAME = 'dsh-plugin-desktop-profile-smoke'
@@ -496,6 +497,10 @@ try {
       [BROWSER_ACCESS.rendererHeader.name]: BROWSER_ACCESS.rendererHeader.value,
       Cookie: cookie,
     },
+  })
+  await verifyGitGraph(ctx, {
+    [BROWSER_ACCESS.rendererHeader.name]: BROWSER_ACCESS.rendererHeader.value,
+    Cookie: cookie,
   })
   const html = await response.text()
   if (response.status !== 200) {

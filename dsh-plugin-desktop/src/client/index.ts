@@ -30,6 +30,7 @@ import { installShortcutMenuStyles } from './shortcut-menu-styles.ts'
 import { applySpiritXOnboarding } from './spiritx-onboarding.tsx'
 import { applySpiritXProviderPriority } from './spiritx-provider-priority.tsx'
 import { applySelectionQuote } from './selection-quote.tsx'
+import { applyDesktopGitGraph } from './git-graph.ts'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
 import { apply as applyExperts } from '../experts/client/index.ts'
 
@@ -137,6 +138,7 @@ export function apply(ctx: ClientContext): void {
   applyLegacyAgentPresetDeleteAction(ctx)
   applySkillsSettings(ctx, { registerSection: false })
   applySelectionQuote(ctx)
+  applyDesktopGitGraph(ctx)
   ctx.effect(() => applyExperts(ctx), 'dsh-plugin-desktop: experts')
   applyShortcutMenu(ctx)
   if (productVersion !== undefined) applyDesktopVersionRow(ctx, productVersion)

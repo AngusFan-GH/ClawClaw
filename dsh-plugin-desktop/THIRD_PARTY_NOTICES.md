@@ -762,3 +762,14 @@ the package names, versions, and licenses for transparency.
 | yoctocolors | 2.2.0 | MIT |
 | zod | 4.4.3 | MIT |
 > Notice-required licenses in use: LGPL-3.0-or-later, GPL-3.0. Their license texts ship inside node_modules; see the package LICENSE files for the full terms.
+
+## dsh-git-graph
+
+ClawClaw integrates `@linxin666/dsh-client-ui-git-graph` version 0.4.8 from
+https://github.com/zhu1090093659/dsh-web/tree/main/packages/dsh-git-graph,
+licensed under Apache-2.0. The original package and its LICENSE are shipped
+in the application dependency closure. Desktop reuses the published Host and
+browser implementation. Desktop's browser build removes the install-telemetry
+module and its invocation, and protects workspace/Session rollback on creation
+failures; a separate adapter adds dialog keyboard handling.
+The original package files are not modified.

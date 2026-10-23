@@ -24,6 +24,12 @@
       name: dsh-plugin-desktop/default-workspace
       config:
         path: !!js process.env.CLAWCLAW_DEFAULT_WORKSPACE
+    - id: desktop-git-graph
+      name: dsh-plugin-desktop/git-graph
+      config:
+        autoIsolate: false
+        autoBaseline: current
+        agentTool: false
     - id: desktop-skills
       name: dsh-plugin-desktop/skills
     - id: desktop-legacy-agent-presets

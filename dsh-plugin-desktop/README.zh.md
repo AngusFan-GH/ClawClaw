@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-`dsh-plugin-desktop` 是 ClawClaw Desktop 包，当前版本 `0.2.11`。它提供 Electron bootstrap、隔离 DSH Host、原生窗口/托盘、profile 与 pnpm service、工作区、恢复、更新、Market 选择和 ClawClaw Client 呈现层。安装后的产品身份是 **ClawClaw**（`com.clawclaw.desktop`）。
+`dsh-plugin-desktop` 是 ClawClaw Desktop 包，当前版本 `0.2.12`。它提供 Electron bootstrap、隔离 DSH Host、原生窗口/托盘、profile 与 pnpm service、工作区、恢复、更新、Market 选择和 ClawClaw Client 呈现层。安装后的产品身份是 **ClawClaw**（`com.clawclaw.desktop`）。
 
 该包属于根 pnpm workspace，不应作为独立 npm 应用安装：它依赖根目录的 vendored DSH runtime、override、patch、同级 Market 与 Channels workspace 包。
 
@@ -21,6 +21,8 @@ macOS/Windows 的兼容、扩展模式用独立 WebContentsView 隔离桌面标�
 ClawClaw 首次引导跳过上游的预览版说明；SpiritX API Key 配置引导和模型设置页仍然保留。
 
 Electron 沙箱预加载脚本分别打包，不引用本地共享分块；运行时依赖检查会以沙箱兼容的模块加载方式执行两个预加载产物。
+
+Git 工作区的空白会话提供分支菜单，支持本地分支搜索、创建和切换、只读提交图谱，以及托管 worktree 会话。自动 worktree 隔离和 Agent 工具默认关闭。Git 界面跟随 Desktop 主题。数据保护与验证结果见[接入与验证报告](../docs/evidence/desktop-git-graph-integration-audit.md)。
 
 ## 命令
 

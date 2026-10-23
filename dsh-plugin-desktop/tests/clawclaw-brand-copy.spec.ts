@@ -17,6 +17,7 @@ vi.mock('../src/client/reminders-settings.ts', () => ({ applyRemindersSettings: 
 vi.mock('../src/client/skills-settings.ts', () => ({ applySkillsSettings: vi.fn() }))
 vi.mock('../src/client/shortcut-menu.tsx', () => ({ applyShortcutMenu: vi.fn() }))
 vi.mock('../src/client/plugin-manager.ts', () => ({ applyManagedPluginManager: vi.fn() }))
+vi.mock('../src/client/git-graph.ts', () => ({ applyDesktopGitGraph: vi.fn() }))
 vi.mock('../src/experts/client/index.ts', () => ({ apply: vi.fn() }))
 
 describe('ClawClaw product copy', () => {
